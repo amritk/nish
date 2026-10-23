@@ -30,8 +30,9 @@
 //   `arraySet(dst, src, at)`, each checked as the native one is.
 //
 // The hook sees no type table, so "a record held inline" is read off the
-// program's struct list: an interface no class implements. A `P | null`
-// element and a `P` one are the same type to that test.
+// program's struct list: an interface no class implements. A generic body is
+// written once for all its instances, so there the runtime's `copyIn` and
+// `storeIdx` decide by looking at the value: any plain object is a record.
 
 import { Operands, Walk } from "./emit-ts-edits"
 import {
@@ -55,7 +56,7 @@ import {
   Node,
 } from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
-import { T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
+import { T_CPTR } from "./types"
 
 /** Whether `type` is a record an array holds inline: an interface no class implements. */
 const inlineRecord = (program: CheckedProgram, type: i32): boolean => {
@@ -176,7 +177,7 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
   const left = operands.at(0)
   const args = idxArguments(left)
   if (node.text === "=") {
-    if (walk.inInstance && args !== "" && hasInlineRecords(walk.program)) {
+    if (args !== "" && (walk.inInstance ? hasInlineRecords(walk.program) : inlineRecord(walk.program, walk.program.nodeTypes[target.id]))) {
       walk.useHelper("storeIdx")
       return `storeIdx(${args}, ${operands.at(1)})`
     }
@@ -223,7 +224,8 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
     method === "set" &&
     args.length > 0 &&
     args.length <= 2 &&
-    walk.program.nodeTypes[args[0].id] > T_CPTR
+    walk.program.nodeTypes[args[0].id] > T_CPTR &&
+    walk.program.nodeTypes[args[0].id] === walk.program.nodeTypes[callee.children[0].id]
   ) {
     walk.useHelper("arraySet")
     return `arraySet(${writtenReceiver(written, method)}, ${operands.at(1)})`
@@ -246,17 +248,6 @@ const literalRow = (walk: Walk, node: Node, operands: Operands): string | null =
     i = i + 1
   }
   return copies ? `[${parts.join(", ")}]` : null
-}
-
-/** The zero of a primitive type id, or the empty string for any other type. */
-const primitiveZero = (type: i32): string => {
-  if (type === T_I64 || type === T_U64) {
-    return "0n"
-  }
-  if (type === T_BOOL) {
-    return "false"
-  }
-  return type >= 1 && type < T_BOOL ? "0" : ""
 }
 
 /** The zero `new Array<T>(n)` fills each slot with, read off the written `T`, or the empty string. */
@@ -305,10 +296,6 @@ const fillZero = (walk: Walk, type: Node): string => {
   const alias = program.alias(name)
   if (alias !== null) {
     return fillZero(walk, alias.decl.children[1])
-  }
-  const instance = program.activeInstance
-  if (instance !== null) {
-    return primitiveZero(instance.bindings.get(name, -1))
   }
   return ""
 }

@@ -2,8 +2,11 @@ import { panicIndex, panicSlice, toIndex } from "./checks.mjs";
 
 // The native check compares the index as an unsigned 64-bit number, so a
 // negative one fails, and prints, as that number: `-1` is 18446744073709551615.
+// A NaN or infinite `number` has no such number and prints as it is.
 function outOfRange(i, len) {
-  const k = typeof i === "bigint" ? i : BigInt(toIndex(i));
+  const n = toIndex(i);
+  if (typeof i !== "bigint" && !Number.isFinite(n)) panicIndex(n, len);
+  const k = typeof i === "bigint" ? i : BigInt(n);
   panicIndex(k < 0n ? BigInt.asUintN(64, k) : k, len);
 }
 
@@ -35,16 +38,6 @@ export function updIdx(a, i, f) {
   const v = f(a[k]);
   a[k] = v;
   return v;
-}
-
-/** `nish:unsafe`'s `uncheckedGet(a, i)`: the element with no bounds check, as the native load is. */
-export function uncheckedGet(a, i) {
-  return a[i];
-}
-
-/** `nish:unsafe`'s `uncheckedSet(a, i, v)`: the store with no bounds check. */
-export function uncheckedSet(a, i, v) {
-  a[i] = v;
 }
 
 // A record an array holds inline is an object literal here, and nothing else
