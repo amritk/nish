@@ -68,9 +68,10 @@ Three things do not change:
   terminal `setRawMode` set up.
 - **`"\n"` still starts a new line**, so `console.log` works as it always does.
 - **The terminal is always put back.** `setRawMode(false)` restores it, and
-  so does returning from `main`, `process.exit`, a panic, and a Ctrl-C or
-  `kill`. Only `kill -9` leaves the terminal in raw mode; type `stty sane` to
-  fix it.
+  so does returning from `main`, `process.exit`, a panic or a
+  crash, and a Ctrl-C or `kill`. Only `kill -9` leaves the
+  terminal in raw mode, and a stack overflow on a thread other than the one
+  that called `setRawMode(true)`; type `stty sane` to fix it.
 
 Ctrl-D is a byte in raw mode, `4`, not the end of stdin. Treat it as a key if
 you want it to quit.

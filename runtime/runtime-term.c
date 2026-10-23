@@ -21,24 +21,29 @@
  * setting it would leave the shell's own stdin non-blocking after a crash.
  * `readStdin` asks `poll` first instead, with a timeout of 0.
  *
- * Raw mode is cfmakeraw's input side without its output side: no echo, no
- * line editing, no CR-to-NL translation, no flow control, 8-bit bytes, a
- * read that answers as soon as one byte is there. `ISIG` stays on, so Ctrl-C
- * is still SIGINT and Ctrl-Z still stops the program, and `OPOST` stays on,
- * so "\n" still moves to the start of the next line. The termios that was
- * there first is saved by the first `setRawMode(true)` and put back by
+ * Raw mode is cfmakeraw's input side without its output side: no echo, no line
+ * editing, no CR-to-NL translation, no flow control, 8-bit bytes, a read that
+ * answers as soon as one byte is there. `ISIG` stays on, so Ctrl-C is still
+ * SIGINT and Ctrl-Z still stops the program, and `OPOST` stays on, so "\n"
+ * still moves to the start of the next line. The termios that was there first
+ * is saved by the first `setRawMode(true)` and put back by
  * `setRawMode(false)`, by an atexit handler, by every panic (runtime.c's
  * `nish_fatal_hook`, because a failed check ends in `_exit`), and by SIGINT,
- * SIGTERM, SIGQUIT and SIGHUP, for each of which a handler is installed only
- * when the program left it at its default: the handler restores the terminal,
- * the default comes back (`SA_RESETHAND`), and the signal is raised again, so
- * the program still dies of it and its parent sees that. SIGTSTP is left
- * alone: a shell with job control saves a stopped job's terminal state and
- * puts its own back, and gives the job its state again on `fg`.
+ * SIGTERM, SIGQUIT and SIGHUP and the faults a program dies of (SIGILL,
+ * SIGTRAP, SIGABRT, SIGFPE, SIGBUS, SIGSEGV), for each of which a handler is
+ * installed only when the program left it at its default: the handler restores
+ * the terminal, the default comes back (`SA_RESETHAND`), and the signal is
+ * raised again, so the program still dies of it and its parent sees that. A
+ * fault's handler runs on an alternate stack of the thread that entered raw
+ * mode, so a stack overflow there restores the terminal too; one on another
+ * thread has no stack to run it on, and the terminal stays raw. SIGTSTP is
+ * left alone: a shell with job control saves a stopped job's terminal state
+ * and puts its own back, and gives the job its state again on `fg`.
  *
  * WASI has `read` and `poll` on stdin and no terminal interface, so there the
  * first two work (`readStdin` waiting, below) and the TTY questions answer
- * "not a terminal": false, `[-25, 0]`, and -25 for entering raw mode. Linux and Darwin only otherwise; the file uses nothing else. */
+ * "not a terminal": false, `[-25, 0]`, and -25 for entering raw mode.
+ * Otherwise Linux and Darwin only; the file uses nothing else. */
 /* `SA_RESETHAND` is XSI, so _POSIX_C_SOURCE alone does not declare it on
    glibc; Darwin hides `TIOCGWINSZ` behind either unless `_DARWIN_C_SOURCE`
    says otherwise. */
@@ -63,14 +68,19 @@
    compiled call has already checked `0 <= off <= off + len <= buf.length`,
    unless the program was built with `--unchecked-indexing`. A `read` that a
    signal interrupts is asked again; one that would block (a descriptor some
-   other program made non-blocking) is -11 too. Under WASI the poll is left
-   out and the read waits: Node's WASI answers a poll of stdin with a timeout
-   of 0 as "nothing waiting" when bytes are, so there the program asks
-   `waitStdin` first. */
+   other program made non-blocking) is -11 too, and so is a `poll` a signal
+   interrupts, which would otherwise fall through to a `read` that waits. A
+   descriptor `poll` calls invalid is that error rather than a read. Under
+   WASI the poll is left out and the read waits: Node's WASI answers a poll of
+   stdin with a timeout of 0 as "nothing waiting" when bytes are, so there the
+   program asks `waitStdin` first. */
 int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len) {
 #ifndef __wasi__
   struct pollfd p = {0, POLLIN, 0};
-  if (poll(&p, 1, 0) == 0) return -11;
+  int ready = poll(&p, 1, 0);
+  if (ready == 0 || (ready < 0 && errno == EINTR)) return -11;
+  if (ready < 0) return -errno;
+  if (p.revents & POLLNVAL) return -EBADF;
 #endif
   ssize_t n;
   do n = read(0, buf->data + off, (size_t)len);
@@ -139,6 +149,9 @@ static void nish_term_restore(void) {
   tcsetattr(0, TCSANOW, &nish_term_saved);
 }
 
+/* Where a fault's handler runs, so a SIGSEGV from an exhausted stack can. */
+static char nish_term_alt_stack[16384];
+
 static void nish_term_on_signal(int sig) {
   nish_term_restore();
   raise(sig);
@@ -165,12 +178,17 @@ int32_t nish_set_raw_mode(bool on) {
   if (!nish_term_armed) {
     nish_term_armed = 1;
     atexit(nish_term_restore);
-    static const int sigs[4] = {SIGINT, SIGTERM, SIGQUIT, SIGHUP};
-    for (int i = 0; i < 4; i++) {
+    stack_t alt = {0};
+    alt.ss_sp = nish_term_alt_stack;
+    alt.ss_size = sizeof nish_term_alt_stack;
+    sigaltstack(&alt, 0);
+    static const int sigs[10] = {SIGINT,  SIGTERM, SIGQUIT, SIGHUP, SIGILL,
+                                 SIGTRAP, SIGABRT, SIGFPE,  SIGBUS, SIGSEGV};
+    for (int i = 0; i < 10; i++) {
       struct sigaction old, sa;
       if (sigaction(sigs[i], 0, &old) != 0 || old.sa_handler != SIG_DFL) continue;
       sa.sa_handler = nish_term_on_signal;
-      sa.sa_flags = SA_RESETHAND;
+      sa.sa_flags = SA_RESETHAND | SA_ONSTACK;
       sigemptyset(&sa.sa_mask);
       sigaction(sigs[i], &sa, 0);
     }

@@ -21,6 +21,7 @@ import {
   isNetBufferLetter,
   isNetExport,
   isNetWrittenLetter,
+  isTermExport,
   isUnsafeExport,
   NET_STRING,
   NET_WORDS,
@@ -164,11 +165,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "waitPid" ||
     name === "availableParallelism" ||
     name === "totalMemory" ||
-    name === "readStdin" ||
-    name === "waitStdin" ||
-    name === "isTerminal" ||
-    name === "terminalSize" ||
-    name === "setRawMode" ||
+    isTermExport(name) ||
     isNetExport(name) ||
     isUnsafeExport(name)
   )

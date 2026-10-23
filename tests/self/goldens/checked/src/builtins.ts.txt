@@ -9,6 +9,7 @@ import checkIndexArgument from "./members" -> function @checkIndexArgument
 import isNetBufferLetter from "./nish-modules" -> function @isNetBufferLetter
 import isNetExport from "./nish-modules" -> function @isNetExport
 import isNetWrittenLetter from "./nish-modules" -> function @isNetWrittenLetter
+import isTermExport from "./nish-modules" -> function @isTermExport
 import isUnsafeExport from "./nish-modules" -> function @isUnsafeExport
 import NET_STRING from "./nish-modules" -> const NET_STRING
 import NET_WORDS from "./nish-modules" -> const NET_WORDS
@@ -66,11 +67,12 @@ function conversionTarget(name: string): i32 -> @conversionTarget
 function isBuiltinFunction(name: string): boolean -> @isBuiltinFunction [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: conversionTarget isNetExport isUnsafeExport nish_str_eq
+  calls: conversionTarget isNetExport isTermExport isUnsafeExport nish_str_eq
   stackSites=0 stackLocals=0
   callee +0:7 conversionTarget -> @conversionTarget
-  callee +45:5 isNetExport -> @isNetExport
-  callee +46:5 isUnsafeExport -> @isUnsafeExport
+  callee +40:5 isTermExport -> @isTermExport
+  callee +41:5 isNetExport -> @isNetExport
+  callee +42:5 isUnsafeExport -> @isUnsafeExport
 function isStringifiable(type: i32): boolean -> @isStringifiable
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

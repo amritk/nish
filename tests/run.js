@@ -1568,7 +1568,8 @@ if (!only || "term".includes(only)) {
 
   // Under a pseudo-terminal. The script saves `stty -g`, runs each mode of
   // term_pty, and compares after each; `hold` is asked about `icanon` while it
-  // waits in raw mode, then sent SIGTERM. Its stdin is `/dev/tty` because a
+  // waits in raw mode, then sent SIGTERM; a second `hold` is sent SIGSEGV, the
+  // fault handlers' path. Its stdin is `/dev/tty` because a
   // background job of a non-interactive shell otherwise reads `/dev/null`.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
@@ -1594,6 +1595,11 @@ if (!only || "term".includes(only)) {
         'echo "held $(stty -a | tr \' ;\' \'\\n\\n\' | grep -x -- \'-\\{0,1\\}icanon\')"',
         'kill -TERM $pid; wait $pid',
         'echo "hold $? stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
+        ': > "$D/hold.out"',
+        '"$E" hold </dev/tty > "$D/hold.out" & pid=$!',
+        "i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        'kill -SEGV $pid; wait $pid',
+        'echo "fault $? stty $(same)"',
         "",
       ].join("\n")
     )
@@ -1614,9 +1620,10 @@ if (!only || "term".includes(only)) {
         "panic 1 stty same",
         "held -icanon",
         "hold 143 stty same said raw 0 ready ",
+        "fault 139 stty same",
       ]
       check(
-        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic and SIGTERM each leave the terminal as it was",
+        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was",
         want.every((line) => lines.includes(line)),
         `want every line of ${JSON.stringify(want)}\n${shown(r)}`
       )

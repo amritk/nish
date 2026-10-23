@@ -20,7 +20,7 @@
 // error. `tests/capabilities.js` enumerates every name the checker accepts and
 // fails the suite when one has no row here, before any program calls it.
 
-import { isNetExport, isUnsafeExport } from "./nish-modules"
+import { isNetExport, isTermExport, isUnsafeExport } from "./nish-modules"
 
 /** A deliberate "none": the builtin has a row, and the row says it reaches nothing. */
 export const CAP_NONE: i32 = -1
@@ -286,13 +286,7 @@ export const builtinCapability = (name: string): i32 => {
   }
   // `setRawMode` changes the terminal's state for every process sharing it,
   // and the four reads ask it; one label for the module, as `net` is.
-  if (
-    name === "readStdin" ||
-    name === "waitStdin" ||
-    name === "isTerminal" ||
-    name === "terminalSize" ||
-    name === "setRawMode"
-  ) {
+  if (isTermExport(name)) {
     return CAP_TTY
   }
   if (name === "process.exit") {

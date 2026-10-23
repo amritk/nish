@@ -7674,21 +7674,26 @@ Two things stay as they were:
 termios that was there, and it comes back on `setRawMode(false)`; when `main`
 returns or `process.exit` is called (an `atexit` handler); on every panic, a
 failed check included, whose path ends in `_exit` and so is given its own hook;
-and on SIGINT, SIGTERM, SIGQUIT and SIGHUP. For each of the four signals a
-handler is installed only when the program left it at its default action: it
-restores the terminal, puts the default back and raises the signal again, so
-the program still dies of it and its parent sees that (exit status 143 for
-SIGTERM in `term_pty`). A program that took SIGTERM or SIGINT through
-`signalFd` keeps it, and puts the terminal back itself, or by returning. Only
-SIGKILL leaves raw mode behind, and `stty sane` undoes it. SIGTSTP is not
+on SIGINT, SIGTERM, SIGQUIT and SIGHUP; and on the faults a program dies of,
+SIGILL, SIGTRAP, SIGABRT, SIGFPE, SIGBUS and SIGSEGV (a stack overflow, or a
+fault in C code a program links). For each of the ten signals a handler is
+installed only when the program left it at its default action: it restores the
+terminal, puts the default back and raises the signal again, so the program
+still dies of it and its parent sees that (exit status 143 for SIGTERM in
+`term_pty`). The handlers run on an alternate stack of the thread that entered
+raw mode, so a stack overflow there restores the terminal too. A program that
+took SIGTERM or SIGINT through `signalFd` keeps it, and puts the terminal back
+itself, or by returning. SIGKILL leaves raw mode behind, and so does a stack
+overflow on a thread other than the one that called `setRawMode(true)`; `stty
+sane` undoes either. SIGTSTP is not
 touched: a shell with job control saves a stopped job's terminal state, puts its
 own back, and gives the job its state again on `fg`.
 
 The `term` block of `tests/run.js` runs `term_pty` under `script(1)`, which
 gives it a pseudo-terminal: it is a terminal on both descriptors with a size,
 enters raw mode twice and leaves twice, each `0`, and after it returns in raw
-mode, panics in raw mode, and is killed by SIGTERM while it waits in raw mode,
-`stty -g` reads what it read before. Where `script` is missing or makes no
+mode, panics in raw mode, and is killed by SIGTERM, and then by SIGSEGV, while
+it waits in raw mode, `stty -g` reads what it read before. Where `script` is missing or makes no
 terminal, that check is a counted skip that says which.
 
 #### Where there is no terminal

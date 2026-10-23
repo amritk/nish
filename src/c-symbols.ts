@@ -667,6 +667,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "setvbuf" ||
   name === "shutdown" ||
   name === "sigaction" ||
+  name === "sigaltstack" ||
   name === "sigemptyset" ||
   name === "sin" ||
   name === "sincos" ||

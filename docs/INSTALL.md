@@ -392,8 +392,8 @@ entropy, file times and signals, `runtime-net.c` the sockets of `nish:net`,
 They are separate so that each carries its own measured size ceiling
 ([docs/wp7-runtime.md](wp7-runtime.md)); nothing in the core calls into the
 others, so a line that names only `runtime.c` and `runtime-os.c` still links a
-program that uses none of the other six. `scripts/build.sh` compiles the other
-seven beside any
+program that uses none of the other seven. `scripts/build.sh` compiles the other
+eight beside any
 `runtime.c` it is handed, so a build that goes through it — every `--link`,
 and every `--profile` recipe in these documents — needs to name only the one.
 
