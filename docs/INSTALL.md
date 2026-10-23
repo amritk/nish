@@ -360,7 +360,7 @@ it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
 skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
-`runtime/` (the C runtime — eight translation units, the wasm subset and their header),
+`runtime/` (the C runtime — nine translation units, the wasm subset and their header),
 `scripts/build.sh` (the link pipeline) and `std/` (the standard library). The
 compiler itself is not in it: it arrives as one prebuilt
 `@amritk/nish-<asset>` package per platform, and `bin/nish` hands over to
