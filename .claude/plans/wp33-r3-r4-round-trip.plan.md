@@ -1,7 +1,31 @@
 ---
-name: WP33 R3 and R4 — the runtime split by host, then --emit-ts with its live differential
-overview: Build the way out of docs/wp33-round-trip.md §4. R3 splits runtime/shim.mjs into a host-agnostic core and per-host adapters, with the prelude a thin layer over them. R4 adds `--emit-ts`, which writes each module's source back out with edits only at class-C sites, and a live differential that runs every corpus program's emitted TypeScript under Node against its native binary. No stage changes a lowering, so no `.ll` golden moves and bench/instructions.json is never raised.
+name: WP33 R3 and R4 — the runtime split by host, then --emit-ts with its live differential; WP34 N7 beside them
+overview: Build the way out of docs/wp33-round-trip.md §4. R3 splits runtime/shim.mjs into a host-agnostic core and per-host adapters, with the prelude a thin layer over them. R4 adds `--emit-ts`, which writes each module's source back out with edits only at class-C sites, and a live differential that runs every corpus program's emitted TypeScript under Node against its native binary. No R3 or R4 stage changes a lowering, so no `.ll` golden moves and bench/instructions.json is never raised. Beside them, N7 (docs/wp34-hosting-cs.md §8) adds the missing Math functions and f32ToBits and gives Math.round, min and max JavaScript's -0 and NaN; it is the one stage that moves goldens, and only those of the float round, min and max cases.
 stages:
+  - id: n7-maths
+    title: N7 — atan2, tan, hypot, sign and imul, JavaScript's -0 and NaN in round, min and max, and f32ToBits
+    goal: Add Math.atan2, tan, hypot, sign and imul and the f32ToBits builtin, and make Math.round, min and max on floats answer JavaScript's -0 and NaN, so tests/differential/known-failures.txt loses f64_minmax_nan and f64_round_negzero and the withdrawn half of NL8010 retires
+    verification: npm run check, npm run lint, node tests/run.js math, node tests/run.js wasi (read its skip line), node tests/run.js performance, node tests/run.js instructions and an undegraded npm test green; the checked goldens regenerated and read; the N7 guard in Verification prints only float round, min and max cases
+    status: pending
+    todos:
+      - id: n7-functions
+        content: Add Math.atan2, tan, hypot, sign and imul to the checker (src/builtins.ts and SUPPORTED_BUILTINS), the emitter (src/emit-builtins.ts) and the declarations they lower to (src/runtime.ts, src/c-symbols.ts), on every target the existing Math functions reach, wasm included — see N7, The functions
+        status: pending
+      - id: n7-zero-nan
+        content: Lower Math.round on f64 and f32 so a value in [-0.5, 0) gives -0 and NaN gives NaN, and Math.min and max on floats so a NaN operand gives NaN and -0 orders below +0; integer min and max keep llvm.smin, smax, umin and umax — see N7, Zero and NaN
+        status: pending
+      - id: n7-bits
+        content: Add f32ToBits(x f32) i32, the f32 sibling of f64ToBits, to the checker, the emitter, runtime/nish.d.ts and the prelude — see N7, f32ToBits
+        status: pending
+      - id: n7-portability
+        content: Retire the sites of NL8010 that N7 withdraws in src/portability-numbers.ts; if the whole row goes, the code stays reserved and tests/wordings/unreachable.txt records it retired — see N7, Portability
+        status: pending
+      - id: n7-tests
+        content: One tests/cases program per function and per zero/NaN rule, each with a golden .ll, an llvm-as pass and a native round trip; negative cases for each wrong-typed call; remove the two known-failures rows and confirm the corpus programs agree under Node — see N7, Tests
+        status: pending
+      - id: n7-docs
+        content: docs/LANGUAGE.md rules, docs/IR_COOKBOOK.md's Math section, the guide's numbers page, wp33 §3.1 and §3.6, and wp34 §8's N7 row marked built — see N7, Docs
+        status: pending
   - id: r3-split
     title: R3a — the core and the Node adapter, behind the prelude unchanged
     goal: Move every host-agnostic export of runtime/shim.mjs into runtime/core/*.mjs behind runtime/core.mjs, every host-bound one into runtime/node.mjs, and turn shim.mjs and nish.mjs into thin layers so every existing prelude and frozen-rewrite check passes unmodified
@@ -90,7 +114,7 @@ stages:
         content: Rewrite the u8, u16, u32 wraps, the i64 and u64 operations as bigint, integer / as idiv and i32 >>> as (a >>> n) | 0 — see R4b, Integers
         status: pending
       - id: r4b-conversions
-        content: Route toI32 and the other conversions and Math.min, max and round through the core's helpers — see R4b, Conversions and Math
+        content: Route toI32, the other conversions and f32ToBits through the core's helpers (Math.min, max and round are class A since n7-maths) — see R4b, Conversions and Math
         status: pending
       - id: r4b-helpers
         content: Add the checked arithmetic helpers to runtime/core/numbers.mjs and its .d.ts, panicking with the native words — see R4b, Integers
@@ -184,12 +208,13 @@ The R4 starting point:
 
 The live differential's predecessor was stage0's rewriter. All that is left of it is the frozen `tests/differential/goldens/rewrites.txt`, which imports `runtime/shim.mjs`.
 
-**§1 rule 6 binds every stage.** No `.ll` golden is modified or deleted, and `bench/instructions.json` is not raised. Every stage's verification runs the guard in [Verification](#verification). `--emit-ts` is a separate output path that returns before `compilation.emit()`, so it cannot reach the IR, and the runtime is JavaScript the native build never links.
+**§1 rule 6 binds every R3 and R4 stage.** `n7-maths` is a WP34 item that changes three lowerings on purpose; its own guard is in [N7](#n7--the-missing-math-functions-zero-and-nan-and-f32tobits). No `.ll` golden is modified or deleted, and `bench/instructions.json` is not raised. Every stage's verification runs the guard in [Verification](#verification). `--emit-ts` is a separate output path that returns before `compilation.emit()`, so it cannot reach the IR, and the runtime is JavaScript the native build never links.
 
 ### Hazards
 
-- **[amritk/nish#742](https://github.com/amritk/nish/pull/742) is open.** It adds 55 lines to `runtime/shim.mjs` and 7 to `runtime/nish.mjs`, for non-blocking spawn, kill, `waitPid`, `availableParallelism` and `totalMemory`. If it lands before `r3-split` merges, `r3-split` merges `main` and sorts the new functions into core or the Node adapter. If `r3-split` lands first, #742's author ports them.
-- **The rolling freeze.** `src/` may use only what the seed (the last release, 0.18.0 at the time of writing) compiles. Run `bash scripts/fetch-seed.sh --force` first.
+- **[amritk/nish#742](https://github.com/amritk/nish/pull/742) has merged**, so `runtime/shim.mjs` (now 988 lines) carries non-blocking spawn, kill, `waitPid`, `availableParallelism` and `totalMemory`; `r3-split` sorts them like everything else. Line numbers quoted in Context are from before it: re-derive them.
+- **`n7-maths` lands first and touches two `r3-split` files.** It adds one export (`f32ToBits`) to `runtime/shim.mjs`, one `provide` line to `runtime/nish.mjs`, and edits the Math rows of `docs/RUN_UNDER_NODE.md`. `r3-split` merges `main` after `n7-maths` merges and sorts `f32ToBits` into `runtime/core/numbers.mjs`. If `n7-maths` escalates, the edge is dropped and `r3-split` merges without it.
+- **The rolling freeze.** `src/` may use only what the seed (the last release, 0.20.0 at the time of writing; the 0.21.0 Release PR is open, and nobody here merges it) compiles. Run `bash scripts/fetch-seed.sh --force` first.
 - **The wasi link.** `src/` is linked whole into the wasi module, so a new `src/` file avoids the builtins `refuseOnWasm` refuses. Plain `writeFileSync` and `mkdirSync` are fine.
 - **The performance ratchet.** It allows no new NL9007 in `src/`.
 
@@ -243,7 +268,8 @@ The live differential's predecessor was stage0's rewriter. All that is left of i
 
 ```mermaid
 graph LR
-  A[r3-split] --> B[r3-browser]
+  N[n7-maths] --> A[r3-split]
+  A --> B[r3-browser]
   A -. dev .-> C[r4-skeleton]
   B --> C
   C --> D[r4-numbers]
@@ -256,12 +282,14 @@ graph LR
   G --> H
 ```
 
-Each solid edge is a merge-order edge. Development waits on it too, except the dotted one:
+Each solid edge is a merge-order edge. Development waits on it too, except the dotted one and `n7-maths → r3-split`:
+- `n7-maths` and `r3-split` develop concurrently from the start; `n7-maths` merges first, then `r3-split` merges `main` and absorbs it (see Hazards).
 - `r4-skeleton` may start once `r3-split` merges, alongside `r3-browser`, but it merges after `r3-browser`.
 - The four row stages develop concurrently and merge one at a time. Each merges `main` and regenerates the generated files before it merges.
 
 | Stage | Owns | Model |
 | --- | --- | --- |
+| `n7-maths` | `src/builtins.ts`, `src/emit-builtins.ts`, `src/runtime.ts`, `src/c-symbols.ts`, `src/bounds.ts`, `src/portability-numbers.ts`, `src/codes.ts`, `runtime/nish.d.ts`, `runtime/runtime-wasm.c`, `tests/cases/math_*`, `tests/cases/f32_to_bits*`, `tests/cases/reject_math_*`, `tests/cases/reject_f32_to_bits*`, `tests/differential/known-failures.txt`, `tests/wordings/**`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`, `docs/guide/language/types.md`, `docs/guide/getting-started/from-typescript.md`, `docs/wp34-hosting-cs.md`, `docs/wp33-round-trip.md` (§3.1 and §3.6 only), and, by the edge to `r3-split`, one export in `runtime/shim.mjs`, one line in `runtime/nish.mjs` and the Math rows of `docs/RUN_UNDER_NODE.md`; plus the generated files | — |
 | `r3-split` | `runtime/core.mjs`, `runtime/core/*.mjs`, `runtime/node.mjs`, `runtime/shim.mjs`, `runtime/nish.mjs`, `tests/runtime/**`, `tests/run.js` (the new `runtime-hosts` section only), `tests/shard-costs.json`, `docs/RUN_UNDER_NODE.md` | — |
 | `r3-browser` | `runtime/browser.mjs`, `runtime/host.d.ts`, `runtime/core.d.ts`, `runtime/core/*.d.ts`, `package.json`, `tests/runtime/**`, `tests/run.js` (the `runtime-hosts` section and the npm-pack `required` list), `docs/RUN_UNDER_NODE.md`, `docs/guide/using-nish/to-typescript.md`, `scalar.config.json` | — |
 | `r4-skeleton` | `src/emit-ts.ts`, `src/emit-ts-edits.ts`, `src/emit-ts-{numbers,strings,records,control}.ts` (stubs only), `src/compile.ts`, `src/options.ts`, `src/codes.ts`, `tests/cases/reject_emit_ts_*`, `tests/emit-ts/**`, `tests/differential/emit-ts.js`, `tests/differential/emit-ts-known.txt`, `tests/nish/cli.ts`, `tests/run.js` (the new `emit-ts` section and the `documented` flag list), `tests/wordings/**`, `tests/self/goldens/**`, `docs/guide/using-nish/cli.md`, `docs/LANGUAGE.md`, `.claude/selfhost.md` | — |
@@ -278,6 +306,9 @@ Each solid edge is a merge-order edge. Development waits on it too, except the d
 - `tests/emit-ts/**/*.expected.ts` (`node tests/run.js emit-ts` with `UPDATE_GOLDENS=1`)
 
 **Shared files with an edge between their writers:**
+- `runtime/shim.mjs`, `runtime/nish.mjs`, `docs/RUN_UNDER_NODE.md` (`n7-maths`'s three small additions, then `r3-split`).
+- `docs/LANGUAGE.md`, `src/codes.ts`, `tests/wordings/**` (`n7-maths`, then `r4-skeleton`, which starts only after `r3-split`, so after `n7-maths`).
+- `docs/wp33-round-trip.md` (`n7-maths`'s §3.1 and §3.6 rows, then `r4-oracle`).
 - `tests/run.js`: separate sections, but `r3-split`, `r3-browser`, `r4-skeleton` and `r4-oracle` all touch it.
 - `tests/runtime/**` (`r3-split`, then `r3-browser`).
 - `docs/RUN_UNDER_NODE.md`.
@@ -285,6 +316,62 @@ Each solid edge is a merge-order edge. Development waits on it too, except the d
 - Every concurrent pair is disjoint apart from these and the generated files.
 
 No stage is `Model: sonnet`. Each one designs an interface or a translation.
+
+## N7 — the missing Math functions, zero and NaN, and f32ToBits
+
+WP34 §8's N7 row, for the simulation, the bots and the renderer. `Math.clz32` is already built (`src/builtins.ts`, `src/bounds.ts`); this stage only lists it in the docs as done.
+
+### The functions
+
+| Builtin | Types | Lowers to |
+| --- | --- | --- |
+| `Math.atan2(y, x)`, `Math.tan(x)`, `Math.hypot(a, b)` | `f64`, as `Math.sin` is (f32 refused like `Math.sqrt`) | libm `atan2`, `tan`, `hypot`, declared the way `sin` and `pow` are, and present on wasm wherever `sin` is |
+| `Math.sign(x)` | the types `Math.abs` takes, answering the same type | integers: `(x > 0) - (x < 0)`; floats: `-1`, `+1`, the zero itself (`±0`) or NaN, as JavaScript does |
+| `Math.imul(a, b)` | `i32` and `u32`, answering `i32` | `mul` with no overflow check, the wrapping product JavaScript's `Math.imul` is |
+
+Each name is added to `SUPPORTED_BUILTINS`. A two-argument `hypot` is the only arity; a call with any other count is refused with the existing arity diagnostic.
+
+### Zero and NaN
+
+- `Math.round(x)` on a float: today's floor/compare/select sequence, with the sign of `x` copied onto a zero result (`llvm.copysign`), so `Math.round(-0.3)` is `-0`; NaN stays NaN.
+- `Math.min` and `Math.max` on floats: `llvm.minimum` and `llvm.maximum` in place of `minnum` and `maxnum`, so a NaN operand gives NaN and `-0 < +0`, which is JavaScript's rule. Integer `min` and `max` are untouched.
+- `Math.min`/`max` with more than two arguments, if the checker admits them, fold through the same intrinsic.
+
+### f32ToBits
+
+`f32ToBits(x: f32): i32` reinterprets the 32 bits, the `f32` sibling of `f64ToBits(x: f64): i64` (`bitcast`). A call on an `f64` is refused with the wording `f64ToBits` uses for the wrong width. The prelude's version is one `export` in `runtime/shim.mjs` over a shared `Float32Array`/`Int32Array` pair and one `provide` in `runtime/nish.mjs`; `runtime/nish.d.ts` declares it.
+
+### Portability
+
+NL8010 flags libm's NaN and signed-zero rules. The `min`, `max` and `round` sites are now class A and stop being reported; whatever of the row remains (the 1-ulp transcendental is stated, not flagged, per wp33 §3.1) stays. If nothing remains, NL8010 is retired as NL8011 was: the code stays in `src/codes.ts`, and `tests/wordings/unreachable.txt` records it.
+
+### The N7 guard
+
+N7 moves goldens by design, so its guard lists them instead of requiring none:
+
+```bash
+git diff --diff-filter=MDR --name-only origin/main...HEAD -- '*.ll' bench/instructions.json
+```
+
+Every path printed is a case whose source calls `Math.round`, `Math.min` or `Math.max` on a float, and the PR body shows each one's IR diff. `bench/instructions.json` never appears: if `node tests/run.js instructions` goes red, the stage does not raise the baseline. It opens its PR as a draft, says which program and by how much, and the lead escalates it.
+
+### Tests
+
+- `tests/cases/math_atan2`, `math_tan`, `math_hypot`, `math_sign` (int and float, `±0` and NaN), `math_imul` (an overflowing product), `math_round_negzero`, `math_minmax_nan`, `f32_to_bits`: each a golden `.ll`, an `llvm-as` pass and a native round trip with expected stdout, printing values whose last bit no libm disagrees on.
+- `tests/cases/reject_math_atan2_f32`, `reject_math_imul_f64`, `reject_math_hypot_arity`, `reject_f32_to_bits_f64`: one negative test each.
+- Remove `corpus/f64_minmax_nan` and `corpus/f64_round_negzero` from `tests/differential/known-failures.txt`; the corpus programs then agree under Node. Register the new positive cases with `node tests/differential/goldens.js --update` and regenerate `tests/self/goldens/checked/`.
+- `Measured:` in the commit gives the instruction delta on a float `min`/`max` loop and a `round` loop, with its noise band.
+
+### Docs
+
+- `docs/LANGUAGE.md`: each new builtin and the three changed rules, with the TypeScript reading now identical.
+- `docs/IR_COOKBOOK.md` → "`Math.*` on `f64`": the new lowerings, with the exact IR.
+- `docs/guide/language/types.md` (numbers) and `docs/guide/getting-started/from-typescript.md` (the deviations a TypeScript user meets): the new functions, and the two withdrawn deviations removed.
+- `docs/wp33-round-trip.md`: §3.1's `Math.min`/`max`/`round` row moves to §3.6 as identical; the libm row stays.
+- `docs/wp34-hosting-cs.md` §8: N7 marked built, with the PR number.
+- `docs/RUN_UNDER_NODE.md`: the two Math rows removed.
+
+Commit as `feat(codegen): give Math.round, min and max JavaScript's -0 and NaN, and add atan2, tan, hypot, sign, imul and f32ToBits`.
 
 ## R3a — the core and the Node adapter
 
@@ -511,7 +598,7 @@ The helpers go in `runtime/core/numbers.mjs` and `.d.ts`. Under `--number-mode f
 
 ### Conversions and Math
 
-`toI32` and the other conversions, and `Math.min`, `max` and `round` with their NaN and `-0` rules, go to the core's helpers. The 1-ulp libm row stays `libm` in the known list.
+`toI32` and the other conversions go to the core's helpers. `Math.min`, `max` and `round` need none: `n7-maths` gave them JavaScript's NaN and `-0` natively, so they are class A and written as the source has them, as are N7's new functions; `f32ToBits` imports its core helper. The 1-ulp libm row stays `libm` in the known list.
 
 ### Tests
 
@@ -660,6 +747,7 @@ This restores the comparison the file's header says R6 lost (:48-52). Add a `.gi
 
 | Stage | New checks (exact names are the stage's to fix; grep them before pushing) |
 | --- | --- |
+| `n7-maths` | the `math_*` and `f32_to_bits` cases and their negatives; the two known-failures rows gone |
 | `r3-split` | `runtime-hosts:` shim export pin, core has no Node reach; every existing prelude and differential check unmodified |
 | `r3-browser` | `runtime-hosts:` web-globals-only run, package resolution, declarations agree; the npm-pack list |
 | `r4-skeleton` | `emit-ts:` byte-for-byte class A, fixture goldens and runs, the live differential with its known list; `reject_emit_ts_ffi`, `reject_emit_ts_net` |
@@ -674,11 +762,12 @@ Every stage, before the PR and after the merge of `main` before it merges:
 bash scripts/fetch-seed.sh --force        # src/ stages
 npm run check && npm run lint             # read the exit status, never a piped tail
 node tests/run.js runtime-hosts           # R3 stages
+node tests/run.js math && node tests/run.js instructions   # n7-maths
 node tests/run.js emit-ts                 # R4 stages
 node tests/run.js wasi && node tests/run.js performance   # every stage touching src/; read the wasi skip line
 node tests/self/goldens.js --update && git diff --stat tests/self/goldens   # src/ stages; read the diff
 npm test > build/npm-test.log 2>&1; echo $?   # undegraded: read the skip count and the DEGRADED banner
-# §1 rule 6 — must print nothing:
+# §1 rule 6 — must print nothing (n7-maths: only its float round/min/max cases, see The N7 guard):
 git diff --diff-filter=MDR --name-only origin/main...HEAD -- '*.ll' bench/instructions.json
 ```
 
@@ -699,7 +788,9 @@ A row stage also runs `node tests/differential/emit-ts.js --update` and commits 
 4. `tsc --strict --noEmit` over the emitted corpus exits 0.
 5. `nish/runtime`, `nish/runtime/node` and `nish/runtime/browser` resolve from the published package. The core and the browser adapter import no `node:` module, and they load and run in a context with only web globals. A file-system call under the browser adapter panics naming the host.
 6. Every program that ran under `node --import runtime/nish.mjs` before R3 prints the same output after it. The existing prelude checks and `unmodified.js` pass unmodified.
-7. Across every merged PR, no existing `.ll` golden is modified or deleted, `bench/instructions.json` is unchanged, and `node tests/run.js instructions` is green on `main`.
+7. Across every merged R3 and R4 PR, no existing `.ll` golden is modified or deleted (N7's moved goldens are exactly its float round/min/max cases), `bench/instructions.json` is unchanged, and `node tests/run.js instructions` is green on `main`.
 8. `--emit-ts` on a program that declares C functions, or that uses `signalFd` or `nish:net`, exits non-zero with a `--json` diagnostic of a registered NL4xxx code, and writes no file.
 9. `node tests/differential/fuzz.js --emit-ts` runs, and CI runs it.
 10. `nish --help` lists `--emit-ts`. The guide has a routed "Back to TypeScript" page covering the runtime entry points and `--emit-ts`.
+11. A native program calling `Math.atan2`, `Math.tan`, `Math.hypot`, `Math.sign`, `Math.imul` and `f32ToBits` compiles, and prints what the same source prints under `node --import runtime/nish.mjs`, except the last bit of a transcendental.
+12. Natively, `Math.round(-0.3)` is `-0`, and `Math.min`/`Math.max` with a NaN operand is NaN, as in JavaScript; `tests/differential/known-failures.txt` no longer lists `f64_minmax_nan` or `f64_round_negzero`.
