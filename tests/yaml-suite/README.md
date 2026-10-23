@@ -41,7 +41,8 @@ of four fields separated by single spaces:
   `in.json` holds (one or more JSON values, one per document). Either field is
   the bytes of the text with every byte outside `!` to `~` (0x21 to 0x7e), and
   every `%`, written as `%XX` (two upper-case hex digits). An empty text is an
-  empty field, so a record can have two spaces in a row.
+  empty field, so a record can have two spaces in a row. A `yaml` that would be
+  a lone `-` is written `%2D` too.
 - `json` is a lone `-` when the case has no expected JSON (every `error` = 1
   case, and 37 valid ones whose events upstream checks instead). A present
   `json` that would be a lone `-` is written `%2D`, so the two never collide.

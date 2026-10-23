@@ -170,10 +170,10 @@ The [yaml-test-suite](https://github.com/yaml/yaml-test-suite), Copyright (c)
 2016-2020 Ingy döt Net, under the MIT licence. The licence text is upstream's
 `License`, verbatim. The 402 cases of the `yaml-test-suite` npm package at
 version `0.1.0` (tarball sha256 `0f39975d…e3f32`, which repackages upstream's
-data release) are packed, byte for byte, into one file, one line per case, by
+data release) are packed, text unchanged, into one file, one line per case, by
 [`tests/yaml-suite/pack.js`](tests/yaml-suite/pack.js), so that their inputs,
-which hold tabs, CRs, NULs and invalid UTF-8, stay what they are without 350
-paths that are not kebab-case; nothing in them is changed. The pack ships in no
+which hold tabs, CRs and NULs, stay what they are without 350 paths that are
+not kebab-case; nothing in them is changed. The pack ships in no
 package: `tests/link/std_yaml_conformance` reads it.
 
 ```notice

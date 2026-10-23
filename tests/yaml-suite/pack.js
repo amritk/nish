@@ -67,10 +67,13 @@ const readCases = (tarball) => {
     .filter(([name]) => /^package\/data\/[0-9A-Z]{4}\.js$/.test(name))
     .sort(([a], [b]) => (a < b ? -1 : 1))
   const cases = []
-  for (const [, bytes] of files) {
+  for (const [name, bytes] of files) {
     // Each module is `export default {...}` followed by a re-export of its name; the object is JSON.
     const text = bytes.toString("utf8")
     const entry = JSON.parse(text.slice(text.indexOf("export default {") + 15, text.lastIndexOf("}") + 1))
+    if (!/^[0-9A-Z]{4}$/.test(entry.id) || name !== `package/data/${entry.id}.js`) {
+      throw new Error(`${name} holds the case ${entry.id}`)
+    }
     entry.cases.forEach((c, i) => {
       cases.push({
         key: entry.cases.length > 1 ? `${entry.id}/${i}` : entry.id,
@@ -102,7 +105,10 @@ const render = (cases, tarballSha) => {
 
 const fetchTarball = () => {
   if (fs.existsSync(cacheFile)) {
-    return fs.readFileSync(cacheFile)
+    const cached = fs.readFileSync(cacheFile)
+    if (sha256(cached) === TARBALL_SHA256) {
+      return cached
+    }
   }
   fs.mkdirSync(path.dirname(cacheFile), { recursive: true })
   const tarball = execFileSync("curl", ["-fsSL", TARBALL_URL], { maxBuffer: 1 << 28 })
