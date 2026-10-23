@@ -545,11 +545,13 @@ if (RETIRED.length > 0) {
 // `--shard <i>/<n>` splits one run between `n` CI jobs, because the link programs
 // below are two thirds of the suite's wall clock and run one at a time. Every
 // shard builds the compiler and runs everything before the link programs, which
-// is under two minutes. Shard 1 then runs every section after them but the WP14
-// self-hosting section, and the link programs a later section reads the output
-// of (`LINK_READ_LATER`). The self-hosting section and the other link programs
-// are dealt by their cost in `tests/shard-costs.json` (see `linkShard`), and
-// every shard but 1 stops once its share is done. What a shard leaves to
+// is under two minutes. Shard 1 then runs every section after them but the
+// dealt ones (`DEALT_SECTIONS`: WP14 self-hosting and crypto-bench), and the
+// link programs a later section reads the output of (`LINK_READ_LATER`). The
+// dealt sections and the other link programs are dealt by their cost in
+// `tests/shard-costs.json` (see `linkShard`), and every shard but 1 stops once
+// its share is done. A filtered run (`node tests/run.js net_ --shard 2/3`)
+// deals only the programs its filter selects. What a shard leaves to
 // another is a delegation, named in its summary, and never a skip that reads as
 // unproven or a check that silently was not made. No `--shard`, or
 // `--shard 1/1`, is the whole suite.
@@ -560,8 +562,12 @@ if (SHARDS < 1 || SHARD < 1 || SHARD > SHARDS) {
   console.error(`tests/run.js: --shard wants <i>/<n> with 1 <= i <= n, not ${shardSpec || "nothing"}`)
   process.exit(2)
 }
-/** The CI job that proves what this shard leaves to shard `i`. */
-const shardJob = (i) => `the \`test\` job's shard ${i}/${SHARDS}`
+/**
+ * The CI job that proves what this shard leaves to shard `i`: the same job's
+ * shard `i`, since more than one job is sharded (the \`test\` job's whole suite
+ * and \`runtime-net\`'s \`net_\` sections).
+ */
+const shardJob = (i) => `shard ${i}/${SHARDS} of this job`
 
 // ---- The compiler under test -----------------------------------------------------
 //
@@ -4323,10 +4329,24 @@ const LINK_READ_LATER = [
   "unsafe_flag_scope",
 ]
 /**
- * The shard each link program runs in, and the shard that runs the WP14
- * self-hosting section: a greedy deal by cost, so that the shards finish
- * together. `tests/shard-costs.json` holds the seconds each piece took in a CI
- * shard -- `link` per program, `selfHosting` for the WP14 section, and
+ * The sections after the link programs that are dealt like them rather than
+ * run by shard 1: each runs in the shard `sectionShard` names, sits before the
+ * point where every other shard stops, and reads nothing a section after that
+ * point writes. The key is its cost's in `tests/shard-costs.json`; `selected`
+ * says whether the run's filter selects it, which is also whether it is dealt.
+ */
+const DEALT_SECTIONS = {
+  selfHosting: {
+    name: "the WP14 self-hosting section",
+    selected: !only || "selfhost".includes(only) || only.includes("self"),
+  },
+  cryptoBench: { name: "the crypto-bench section", selected: !only || "crypto-bench".includes(only) },
+}
+/**
+ * The shard each link program runs in, and the shard each of `DEALT_SECTIONS`
+ * runs in: a greedy deal by cost, so that the shards finish together.
+ * `tests/shard-costs.json` holds the seconds each piece took in a CI shard --
+ * `link` per program, one entry per dealt section under its key, and
  * `shardOne` for what only shard 1 runs: every other section after the link
  * programs and its job's steps after the suite. Shard 1 starts with that and
  * its `LINK_READ_LATER` programs; the rest go largest first, ties by name, each
@@ -4334,16 +4354,26 @@ const LINK_READ_LATER = [
  * program the table does not name yet costs the table's median, so a new one
  * moves the deal without waiting for a measurement. The deal reads nothing a
  * run measures, so every shard of one CI run computes the same one.
+ *
+ * A filtered run deals only what its filter selects, and starts shard 1 at
+ * nothing, since the sections it alone runs are filtered too: dealt from the
+ * whole table, the 188 `net_` programs the macOS `runtime-net` job runs fell
+ * 1.3, 4.2, 7.4 and 7.6 minutes to its four shards rather than about 5 each.
  */
-const { linkShard, selfHostShard } = (() => {
+const { linkShard, sectionShard } = (() => {
   const costs = JSON.parse(fs.readFileSync(path.join(root, "tests", "shard-costs.json"), "utf8"))
   const known = Object.values(costs.link).sort((a, b) => a - b)
   const cost = (name) => costs.link[name] ?? known[known.length >> 1] ?? 1
   const shardOf = new Map()
   const load = Array.from({ length: SHARDS }, () => 0)
-  load[0] = costs.shardOne
-  const items = [{ name: null, cost: costs.selfHosting }]
+  load[0] = only ? 0 : costs.shardOne
+  const items = Object.entries(DEALT_SECTIONS)
+    .filter(([, section]) => section.selected)
+    .map(([key]) => ({ section: key, cost: costs[key] ?? 1 }))
   for (const name of linkTests) {
+    if (only && !name.includes(only)) {
+      continue
+    }
     if (SHARDS === 1 || LINK_READ_LATER.includes(name)) {
       shardOf.set(name, 1)
       load[0] += cost(name)
@@ -4351,18 +4381,19 @@ const { linkShard, selfHostShard } = (() => {
       items.push({ name, cost: cost(name) })
     }
   }
-  items.sort((a, b) => b.cost - a.cost || (a.name ?? "").localeCompare(b.name ?? ""))
-  let selfHosting = 1
+  const label = (item) => item.name ?? item.section
+  items.sort((a, b) => b.cost - a.cost || label(a).localeCompare(label(b)))
+  const sections = new Map()
   for (const item of items) {
     const least = load.indexOf(Math.min(...load))
     load[least] += item.cost
-    if (item.name === null) {
-      selfHosting = least + 1
+    if (item.section !== undefined) {
+      sections.set(item.section, least + 1)
     } else {
       shardOf.set(item.name, least + 1)
     }
   }
-  return { linkShard: (name) => shardOf.get(name), selfHostShard: selfHosting }
+  return { linkShard: (name) => shardOf.get(name), sectionShard: (key) => sections.get(key) }
 })()
 const linkDealtAway = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) !== SHARD)
 
@@ -4415,13 +4446,31 @@ for (const name of linkTests) {
     check(`link/${name}: compiles and links`, false, stderr)
     continue
   }
+  // The `--emit-panics` compile below reads nothing this loop writes, so it
+  // runs while the modules are checked rather than after them. Nothing between
+  // here and its `await` leaves the iteration, so no compile outlives its program.
+  const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
+  fs.rmSync(panicsDir, { recursive: true, force: true })
+  const panicsFile = path.join(panicsDir, "panics.json")
+  const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
+    cwd: root,
+    encoding: "utf8",
+  })
 
   const modules = fs
     .readdirSync(outDir)
     .filter((f) => f.endsWith(".ll"))
     .sort()
     .map((f) => ({ file: f, ir: fs.readFileSync(path.join(outDir, f), "utf8") }))
-  for (const m of modules) {
+  // A program that imports std/net is about a hundred modules, and llvm-as and
+  // opt read each one alone, so they run `defaultJobs()` modules at a time; the
+  // checks are still made in module order, so the output is the sequential
+  // loop's. One at a time they were a fifth of the runtime-net job's wall clock.
+  const verified = await pool(modules, defaultJobs(), async (m) => ({
+    as: HAS_LLVM_AS ? await spawnAsync("llvm-as", [path.join(outDir, m.file), "-o", "/dev/null"]) : null,
+    v: HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)]) : null,
+  }))
+  for (const [i, m] of modules.entries()) {
     if (fs.existsSync(side(m.file))) {
       const actual = stripHeader(m.ir)
       if (UPDATE_LINK_GOLDENS && read(m.file).trim() !== actual) {
@@ -4435,12 +4484,11 @@ for (const name of linkTests) {
         `--- expected\n${expected}\n--- actual\n${actual}`
       )
     }
-    if (HAS_LLVM_AS) {
-      const as = spawnSync("llvm-as", [path.join(outDir, m.file), "-o", "/dev/null"])
+    const { as, v } = verified[i]
+    if (as !== null) {
       check(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
     }
-    if (HAS_OPT) {
-      const v = spawnSync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)])
+    if (v !== null) {
       check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
     }
   }
@@ -4529,13 +4577,8 @@ for (const name of linkTests) {
   // (`tests/panics-oracle.js`), and against `expected.panics` where the
   // program has one. Without `--link`, so the program is not linked twice:
   // the list and the IR come from one compile, which is all the oracle needs.
-  const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
-  fs.rmSync(panicsDir, { recursive: true, force: true })
-  const panicsFile = path.join(panicsDir, "panics.json")
-  const listed = spawnSync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
-    cwd: root,
-    encoding: "utf8",
-  })
+  // That compile was started beside the module checks above (`listing`).
+  const listed = await listing
   if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
     check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
   } else {
@@ -4653,8 +4696,8 @@ const llFilesIn = (dir) =>
 // hold each phase to something outside it and the bootstrap's fixed point. It
 // sits here, where the split of a sharded run ends, because it is the one
 // section after the link programs that is dealt like them: it runs in the shard
-// `selfHostShard` names, and reads nothing the sections after it write.
-if (SHARD === selfHostShard && (!only || "selfhost".includes(only) || only.includes("self"))) {
+// `sectionShard("selfHosting")` names, and reads nothing the sections after it write.
+if (DEALT_SECTIONS.selfHosting.selected && SHARD === sectionShard("selfHosting")) {
   const selfDir = path.join(root, "src")
   const modules = fs.existsSync(selfDir)
     ? fs
@@ -5455,8 +5498,8 @@ if (SHARD === selfHostShard && (!only || "selfhost".includes(only) || only.inclu
   // and the two numbers are written apart. A list shorter than `n` is a green
   // run in which the missing shard's programs ran nowhere; a longer one is a
   // shard the suite refuses. So the list's length is held to `n`, for the
-  // suite's own job and for the Nish runner's.
-  for (const job of ["test", "runner"]) {
+  // suite's own job, the Nish runner's and the macOS `net_` job's.
+  for (const job of ["test", "runner", "runtime-net"]) {
     const text = ciJob(ciYmlText, job)
     const list = /^\s+shard: \[([\d, ]+)\]$/m.exec(text)
     const flag = /^\s+SHARD: \$\{\{ matrix\.shard \}\}$/m.test(text)
@@ -6238,11 +6281,273 @@ if (linkDealtAway.length > 0) {
     delegate(`${count} tests/link program(s)`, shardJob(i))
   }
 }
-if (SHARD !== selfHostShard && (!only || "selfhost".includes(only) || only.includes("self"))) {
-  delegate("the WP14 self-hosting section", shardJob(selfHostShard))
+// ---- crypto-bench: the crypto twins ------------------------------------------------
+// bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a
+// directory with a family.json) in Nish, OpenSSL, Go, Rust and Node, requires
+// every program to print the checksums its expected.txt pins, and proves the
+// portable columns portable. Each family must report every kernel size matched,
+// found by listing the directories, so a new family is checked without an edit
+// here. A missing toolchain is the runner's note and a column of —, not a
+// failure; so is a family that needs a loopback socket the machine refuses, and
+// a portable column this host cannot prove. Those notes and unproved lines are
+// printed under the check on a pass too, so a green run says what it left out.
+//
+// It is dealt like the link programs (`DEALT_SECTIONS`) rather than left to
+// shard 1: it builds every twin of five families, four and a half minutes of
+// a CI shard, and reads nothing another section writes.
+if (DEALT_SECTIONS.cryptoBench.selected && SHARD === sectionShard("cryptoBench")) {
+  if (HAS_CLANG) {
+    const families = fs
+      .readdirSync(path.join(root, "bench", "crypto"))
+      .filter((d) => fs.existsSync(path.join(root, "bench", "crypto", d, "family.json")))
+      .sort()
+    const proved = families.filter(
+      (f) =>
+        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
+          .portableProof !== undefined
+    )
+    const v = spawnSync(
+      "node",
+      [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    // The runner accounts for every column of every family it validated: a
+    // `<family>: ran …` line, and for each other column `<family> has no <id>:`
+    // (the family's own word) or `<family> did not run <id>:` (this machine's
+    // reason). The test takes that account rather than probing toolchains
+    // itself, which disagreed with the runner on a host whose Go was older
+    // than go.mod or whose cargo could not fetch. The column list is the
+    // runner's own `crypto: columns …` line; without it the check fails.
+    const COLUMNS = (/^crypto: columns (.+)$/m.exec(v.stdout)?.[1] ?? "").split(", ").filter((id) => id !== "")
+    const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
+    const unaccounted = validated.flatMap((f) => {
+      const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
+      return COLUMNS.filter(
+        (id) => !ran.includes(id) && !new RegExp(`^${f} (?:has no|did not run) ${id}: `, "m").test(v.stdout)
+      ).map((id) => `${f} ${id}`)
+    })
+    // GitHub's x86-64 Linux runner has every twin's toolchain and the
+    // extensions their portable builds give up, so there a column this machine
+    // did not run, or an `unproved` line, means a gate failed open: every twin
+    // must run and the OpenSSL and Go proofs must be measured ones.
+    const strict =
+      process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
+    const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
+    check(
+      `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
+      v.status === 0 &&
+        families.length > 0 &&
+        COLUMNS.length > 0 &&
+        families.every((f) =>
+          new RegExp(
+            `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
+            "m"
+          ).test(v.stdout)
+        ) &&
+        unaccounted.length === 0 &&
+        proved.every((f) =>
+          ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
+            new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
+          )
+        ) &&
+        (!strict ||
+          (validated.length === families.length &&
+            !/ did not run /.test(v.stdout) &&
+            proved.every((f) =>
+              ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
+            ))),
+      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
+    )
+    for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
+      if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
+        console.log(`      ${line}`)
+      }
+    }
+    // --validate fails, not only passes: a copy of the curves family, read
+    // through --families, passes as committed and fails once one line of its
+    // expected.txt is altered. Nish and OpenSSL alone, at x25519's one size.
+    const copies = path.join(buildDir, "crypto-bench", "families")
+    const copyCurves = (name, edit) => {
+      const dir = path.join(copies, name)
+      fs.rmSync(dir, { recursive: true, force: true })
+      // main.ts imports ../lib/gen, so the shared library comes along.
+      for (const d of ["curves", "lib"]) {
+        fs.cpSync(path.join(root, "bench", "crypto", d), path.join(dir, d), { recursive: true })
+      }
+      edit(path.join(dir, "curves"))
+      return dir
+    }
+    const validateCopy = (dir, only) =>
+      spawnSync(
+        "node",
+        [
+          path.join(root, "bench", "crypto", "run.mjs"),
+          "--compiler",
+          path.relative(root, NISH),
+          "--families",
+          dir,
+          "--only",
+          only,
+          "--no-go",
+          "--no-rust",
+          "--no-node",
+          "--validate",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+    const clean = validateCopy(
+      copyCurves("clean", () => {}),
+      "x25519"
+    )
+    const altered = validateCopy(
+      copyCurves("altered", (dir) => {
+        const file = path.join(dir, "expected.txt")
+        const text = fs.readFileSync(file, "utf8")
+        // The checksum's last hex digit, moved by one: still a well-formed line.
+        const next = text.replace(/^(x25519 32 \d+ [0-9a-f]{7})([0-9a-f])$/m, (_, head, d) =>
+          `${head}${((parseInt(d, 16) + 1) % 16).toString(16)}`
+        )
+        fs.writeFileSync(file, next === text ? `${text}# no x25519 32 line to alter\n` : next)
+      }),
+      "x25519"
+    )
+    check(
+      "crypto-bench: --validate exits 1 with a CHECKSUM MISMATCH line when one expected.txt line is altered, and 0 on the unaltered copy",
+      clean.status === 0 &&
+        /^curves: 1 of 1 kernel size\(s\) match expected\.txt$/m.test(clean.stdout) &&
+        altered.status === 1 &&
+        /^CHECKSUM MISMATCH x25519 32 nish: printed [0-9a-f]{8}, expected\.txt has [0-9a-f]{8}$/m.test(
+          altered.stdout
+        ) &&
+        /^crypto: \d+ mismatch\(es\); nothing is timed$/m.test(altered.stdout),
+      `unaltered: exit ${clean.status}\n${clean.stdout}${clean.stderr}\naltered: exit ${altered.status}\n${altered.stdout}${altered.stderr}`
+    )
+    // The paired-rounds proof (portableRounds) on two more copies, each with a
+    // ratio floor no mask reaches so the rounds alone decide: the real mask
+    // must pass; a mask that clears only AVX, which X25519 does not use, must
+    // fail (its ratio alone would pass it on a noisy run, as 1.098x once did).
+    // That mask names its second word as `~0x0`: OpenSSL reads a missing second
+    // word as zero, which would clear BMI2 and ADX too. Each needs a CPU with
+    // the flags its mask clears; GitHub's runner has them. The verdict line
+    // names whichever proof case decided, the last one when all fall short.
+    const withFamily = (edit) => (dir) => {
+      const file = path.join(dir, "family.json")
+      const spec = JSON.parse(fs.readFileSync(file, "utf8"))
+      edit(spec)
+      fs.writeFileSync(file, `${JSON.stringify(spec, null, 2)}\n`)
+    }
+    const pairedLine = (verdict) =>
+      new RegExp(
+        `^${verdict} curves openssl-portable: \\d+\\.\\d{3}x the time of openssl at [\\w-]+@\\d+, slower in \\d+ of \\d+ paired rounds `,
+        "m"
+      )
+    const paired = [
+      {
+        name: "crypto-bench: portableRounds proves the curves family's OpenSSL mask by its paired rounds when the ratio falls short",
+        dir: "paired-real",
+        edit: (spec) => {
+          spec.portableMinRatio.openssl = 100
+        },
+        status: 0,
+        line: pairedLine("portable"),
+      },
+      {
+        name: "crypto-bench: portableRounds fails an OpenSSL mask that clears nothing X25519 uses (AVX only)",
+        dir: "paired-avx",
+        edit: (spec) => {
+          spec.portableMinRatio.openssl = 100
+          spec.twins.openssl.portable.env.OPENSSL_ia32cap = "~0x1000000000000000:~0x0"
+          spec.portableProofFlags = ["avx"]
+        },
+        status: 1,
+        line: pairedLine("NOT PORTABLE"),
+      },
+    ]
+    for (const c of paired) {
+      const r = validateCopy(copyCurves(c.dir, withFamily(c.edit)), "curves")
+      const unproved = /^portable curves openssl-portable: unproved \((.*)\)$/m.exec(r.stdout)
+      if (unproved !== null && !strict) {
+        skip(`${c.name} (${unproved[1]})`)
+        continue
+      }
+      check(c.name, r.status === c.status && c.line.test(r.stdout), `exit ${r.status}\n${r.stdout}${r.stderr}`)
+    }
+    fs.rmSync(copies, { recursive: true, force: true })
+    // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
+    // compiler it was given reaches the child, and the child's status comes
+    // back. A wrapper answers --version from the compiler under test and fails
+    // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
+    // That build is whichever family sorts first, so the log may name any
+    // family's main.ts.
+    const wrapDir = path.join(buildDir, "crypto-bench")
+    const wrapper = path.join(wrapDir, "nish-wrapper")
+    const wrapLog = path.join(wrapDir, "wrapper.log")
+    fs.mkdirSync(wrapDir, { recursive: true })
+    fs.rmSync(wrapLog, { force: true })
+    fs.writeFileSync(
+      wrapper,
+      `#!/bin/sh\nif [ "$1" = --version ]; then exec '${path.resolve(NISH)}' --version; fi\necho "$@" >> '${wrapLog}'\nexit 3\n`,
+      { mode: 0o755 }
+    )
+    const deleg = spawnSync(
+      "node",
+      [path.join(root, "bench", "run.mjs"), "--compiler", wrapper, "--only", "crypto", "--validate"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
+      deleg.status === 1 && /bench[\\/]crypto[\\/][a-z0-9-]+[\\/]main\.ts/.test(forwarded),
+      `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
+    )
+    // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
+    // section bench/crypto/run.mjs --record writes there: fib(20), Nish and C
+    // only, one run, into a copy of the file.
+    const out = path.join(buildDir, "crypto-bench", "benchmarks.md")
+    const section = "<!-- crypto:begin -->\n## kept\n<!-- crypto:end -->"
+    fs.mkdirSync(path.dirname(out), { recursive: true })
+    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
+    const r = spawnSync(
+      "node",
+      [
+        path.join(root, "bench", "run.mjs"),
+        "--compiler",
+        path.relative(root, NISH),
+        "--only",
+        "fib",
+        "--n",
+        "fib=20",
+        "--runs",
+        "1",
+        "--warmup",
+        "0",
+        "--no-rust",
+        "--no-go",
+        "--out",
+        out,
+      ],
+      { cwd: root, encoding: "utf8" }
+    )
+    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
+    check(
+      "crypto-bench: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section bench/crypto/run.mjs --record wrote, once",
+      text.includes(section) &&
+        text.split("<!-- crypto:begin -->").length === 2 &&
+        !text.includes("stale table"),
+      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
+    )
+  } else {
+    skip("crypto-bench: bench/crypto/run.mjs --validate (no clang)")
+  }
+}
+
+for (const [key, section] of Object.entries(DEALT_SECTIONS)) {
+  if (section.selected && SHARD !== sectionShard(key)) {
+    delegate(section.name, shardJob(sectionShard(key)))
+  }
 }
 if (SHARD > 1) {
-  delegate("every section after the tests/link programs and WP14 self-hosting", shardJob(1))
+  delegate("every section after the tests/link programs but the WP14 self-hosting and crypto-bench ones", shardJob(1))
   summarise()
 }
 // A name in `LINK_READ_LATER` that is no longer a program would pin nothing,
@@ -11567,7 +11872,7 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
 // translation units "compile warning-free together", so compiling them is the
 // check and a cached object would skip it. Two links is what that costs.
 // They run under `node tests/run.js runtime_test` on their own, which is how
-// CI's `runtime-net (macos-latest)` job runs runtime-net.c's Darwin branch.
+// CI's `runtime-net` job runs runtime-net.c's Darwin branch.
 if (!only || "runtime_test".includes(only)) {
   const rt = spawnSync(
     "clang",
@@ -16164,262 +16469,6 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
         subset.stdout.includes("unchanged"),
       `${subset.stdout}${subset.stderr}`
     )
-  }
-}
-
-// ---- crypto-bench: the crypto twins ------------------------------------------------
-// bench/crypto/run.mjs --validate builds every family under bench/crypto/ (a
-// directory with a family.json) in Nish, OpenSSL, Go, Rust and Node, requires
-// every program to print the checksums its expected.txt pins, and proves the
-// portable columns portable. Each family must report every kernel size matched,
-// found by listing the directories, so a new family is checked without an edit
-// here. A missing toolchain is the runner's note and a column of —, not a
-// failure; so is a family that needs a loopback socket the machine refuses, and
-// a portable column this host cannot prove. Those notes and unproved lines are
-// printed under the check on a pass too, so a green run says what it left out.
-if (!only || "crypto-bench".includes(only)) {
-  if (HAS_CLANG) {
-    const families = fs
-      .readdirSync(path.join(root, "bench", "crypto"))
-      .filter((d) => fs.existsSync(path.join(root, "bench", "crypto", d, "family.json")))
-      .sort()
-    const proved = families.filter(
-      (f) =>
-        JSON.parse(fs.readFileSync(path.join(root, "bench", "crypto", f, "family.json"), "utf8"))
-          .portableProof !== undefined
-    )
-    const v = spawnSync(
-      "node",
-      [path.join(root, "bench", "crypto", "run.mjs"), "--compiler", path.relative(root, NISH), "--validate"],
-      { cwd: root, encoding: "utf8" }
-    )
-    // The runner accounts for every column of every family it validated: a
-    // `<family>: ran …` line, and for each other column `<family> has no <id>:`
-    // (the family's own word) or `<family> did not run <id>:` (this machine's
-    // reason). The test takes that account rather than probing toolchains
-    // itself, which disagreed with the runner on a host whose Go was older
-    // than go.mod or whose cargo could not fetch. The column list is the
-    // runner's own `crypto: columns …` line; without it the check fails.
-    const COLUMNS = (/^crypto: columns (.+)$/m.exec(v.stdout)?.[1] ?? "").split(", ").filter((id) => id !== "")
-    const validated = families.filter((f) => !new RegExp(`^${f}: skipped `, "m").test(v.stdout))
-    const unaccounted = validated.flatMap((f) => {
-      const ran = (new RegExp(`^${f}: ran (.*)$`, "m").exec(v.stdout)?.[1] ?? "").split(", ")
-      return COLUMNS.filter(
-        (id) => !ran.includes(id) && !new RegExp(`^${f} (?:has no|did not run) ${id}: `, "m").test(v.stdout)
-      ).map((id) => `${f} ${id}`)
-    })
-    // GitHub's x86-64 Linux runner has every twin's toolchain and the
-    // extensions their portable builds give up, so there a column this machine
-    // did not run, or an `unproved` line, means a gate failed open: every twin
-    // must run and the OpenSSL and Go proofs must be measured ones.
-    const strict =
-      process.env.GITHUB_ACTIONS === "true" && process.platform === "linux" && os.arch() === "x64"
-    const provedLine = (f, id) => new RegExp(`^portable ${f} ${id}: \\d+\\.\\d{3}x the time of `, "m")
-    check(
-      `crypto-bench: every family (${families.join(", ")}) prints its expected.txt checksums from every twin, and its portable columns are portable`,
-      v.status === 0 &&
-        families.length > 0 &&
-        COLUMNS.length > 0 &&
-        families.every((f) =>
-          new RegExp(
-            `^${f}: (?:(\\d+) of \\1 kernel size\\(s\\) match expected\\.txt|skipped \\(needs loopback\\))$`,
-            "m"
-          ).test(v.stdout)
-        ) &&
-        unaccounted.length === 0 &&
-        proved.every((f) =>
-          ["openssl-portable", "go-purego", "rust-soft"].every((id) =>
-            new RegExp(`^portable ${f} ${id}: `, "m").test(v.stdout)
-          )
-        ) &&
-        (!strict ||
-          (validated.length === families.length &&
-            !/ did not run /.test(v.stdout) &&
-            proved.every((f) =>
-              ["openssl-portable", "go-purego"].every((id) => provedLine(f, id).test(v.stdout))
-            ))),
-      `columns: ${COLUMNS.join(", ") || "none printed"}; unaccounted for: ${unaccounted.join(", ") || "none"}${strict ? "; strict: every twin must run and the OpenSSL and Go proofs must be measured" : ""}\n${v.stdout}${v.stderr}`
-    )
-    for (const line of `${v.stdout}${v.stderr}`.split("\n")) {
-      if (line.startsWith("note: ") || / unproved \(/.test(line) || / did not run /.test(line)) {
-        console.log(`      ${line}`)
-      }
-    }
-    // --validate fails, not only passes: a copy of the curves family, read
-    // through --families, passes as committed and fails once one line of its
-    // expected.txt is altered. Nish and OpenSSL alone, at x25519's one size.
-    const copies = path.join(buildDir, "crypto-bench", "families")
-    const copyCurves = (name, edit) => {
-      const dir = path.join(copies, name)
-      fs.rmSync(dir, { recursive: true, force: true })
-      // main.ts imports ../lib/gen, so the shared library comes along.
-      for (const d of ["curves", "lib"]) {
-        fs.cpSync(path.join(root, "bench", "crypto", d), path.join(dir, d), { recursive: true })
-      }
-      edit(path.join(dir, "curves"))
-      return dir
-    }
-    const validateCopy = (dir, only) =>
-      spawnSync(
-        "node",
-        [
-          path.join(root, "bench", "crypto", "run.mjs"),
-          "--compiler",
-          path.relative(root, NISH),
-          "--families",
-          dir,
-          "--only",
-          only,
-          "--no-go",
-          "--no-rust",
-          "--no-node",
-          "--validate",
-        ],
-        { cwd: root, encoding: "utf8" }
-      )
-    const clean = validateCopy(
-      copyCurves("clean", () => {}),
-      "x25519"
-    )
-    const altered = validateCopy(
-      copyCurves("altered", (dir) => {
-        const file = path.join(dir, "expected.txt")
-        const text = fs.readFileSync(file, "utf8")
-        // The checksum's last hex digit, moved by one: still a well-formed line.
-        const next = text.replace(/^(x25519 32 \d+ [0-9a-f]{7})([0-9a-f])$/m, (_, head, d) =>
-          `${head}${((parseInt(d, 16) + 1) % 16).toString(16)}`
-        )
-        fs.writeFileSync(file, next === text ? `${text}# no x25519 32 line to alter\n` : next)
-      }),
-      "x25519"
-    )
-    check(
-      "crypto-bench: --validate exits 1 with a CHECKSUM MISMATCH line when one expected.txt line is altered, and 0 on the unaltered copy",
-      clean.status === 0 &&
-        /^curves: 1 of 1 kernel size\(s\) match expected\.txt$/m.test(clean.stdout) &&
-        altered.status === 1 &&
-        /^CHECKSUM MISMATCH x25519 32 nish: printed [0-9a-f]{8}, expected\.txt has [0-9a-f]{8}$/m.test(
-          altered.stdout
-        ) &&
-        /^crypto: \d+ mismatch\(es\); nothing is timed$/m.test(altered.stdout),
-      `unaltered: exit ${clean.status}\n${clean.stdout}${clean.stderr}\naltered: exit ${altered.status}\n${altered.stdout}${altered.stderr}`
-    )
-    // The paired-rounds proof (portableRounds) on two more copies, each with a
-    // ratio floor no mask reaches so the rounds alone decide: the real mask
-    // must pass; a mask that clears only AVX, which X25519 does not use, must
-    // fail (its ratio alone would pass it on a noisy run, as 1.098x once did).
-    // That mask names its second word as `~0x0`: OpenSSL reads a missing second
-    // word as zero, which would clear BMI2 and ADX too. Each needs a CPU with
-    // the flags its mask clears; GitHub's runner has them. The verdict line
-    // names whichever proof case decided, the last one when all fall short.
-    const withFamily = (edit) => (dir) => {
-      const file = path.join(dir, "family.json")
-      const spec = JSON.parse(fs.readFileSync(file, "utf8"))
-      edit(spec)
-      fs.writeFileSync(file, `${JSON.stringify(spec, null, 2)}\n`)
-    }
-    const pairedLine = (verdict) =>
-      new RegExp(
-        `^${verdict} curves openssl-portable: \\d+\\.\\d{3}x the time of openssl at [\\w-]+@\\d+, slower in \\d+ of \\d+ paired rounds `,
-        "m"
-      )
-    const paired = [
-      {
-        name: "crypto-bench: portableRounds proves the curves family's OpenSSL mask by its paired rounds when the ratio falls short",
-        dir: "paired-real",
-        edit: (spec) => {
-          spec.portableMinRatio.openssl = 100
-        },
-        status: 0,
-        line: pairedLine("portable"),
-      },
-      {
-        name: "crypto-bench: portableRounds fails an OpenSSL mask that clears nothing X25519 uses (AVX only)",
-        dir: "paired-avx",
-        edit: (spec) => {
-          spec.portableMinRatio.openssl = 100
-          spec.twins.openssl.portable.env.OPENSSL_ia32cap = "~0x1000000000000000:~0x0"
-          spec.portableProofFlags = ["avx"]
-        },
-        status: 1,
-        line: pairedLine("NOT PORTABLE"),
-      },
-    ]
-    for (const c of paired) {
-      const r = validateCopy(copyCurves(c.dir, withFamily(c.edit)), "curves")
-      const unproved = /^portable curves openssl-portable: unproved \((.*)\)$/m.exec(r.stdout)
-      if (unproved !== null && !strict) {
-        skip(`${c.name} (${unproved[1]})`)
-        continue
-      }
-      check(c.name, r.status === c.status && c.line.test(r.stdout), `exit ${r.status}\n${r.stdout}${r.stderr}`)
-    }
-    fs.rmSync(copies, { recursive: true, force: true })
-    // `bench/run.mjs --only crypto` hands the run to bench/crypto/run.mjs: the
-    // compiler it was given reaches the child, and the child's status comes
-    // back. A wrapper answers --version from the compiler under test and fails
-    // the first build with 3, which bench/crypto/run.mjs reports as its exit 1.
-    // That build is whichever family sorts first, so the log may name any
-    // family's main.ts.
-    const wrapDir = path.join(buildDir, "crypto-bench")
-    const wrapper = path.join(wrapDir, "nish-wrapper")
-    const wrapLog = path.join(wrapDir, "wrapper.log")
-    fs.mkdirSync(wrapDir, { recursive: true })
-    fs.rmSync(wrapLog, { force: true })
-    fs.writeFileSync(
-      wrapper,
-      `#!/bin/sh\nif [ "$1" = --version ]; then exec '${path.resolve(NISH)}' --version; fi\necho "$@" >> '${wrapLog}'\nexit 3\n`,
-      { mode: 0o755 }
-    )
-    const deleg = spawnSync(
-      "node",
-      [path.join(root, "bench", "run.mjs"), "--compiler", wrapper, "--only", "crypto", "--validate"],
-      { cwd: root, encoding: "utf8" }
-    )
-    const forwarded = fs.existsSync(wrapLog) ? fs.readFileSync(wrapLog, "utf8") : ""
-    check(
-      "crypto-bench: bench/run.mjs --only crypto forwards --compiler to bench/crypto/run.mjs and exits with its status",
-      deleg.status === 1 && /bench[\\/]crypto[\\/][a-z0-9-]+[\\/]main\.ts/.test(forwarded),
-      `exit ${deleg.status}\n${deleg.stdout}${deleg.stderr}\nwrapper log: ${forwarded}`
-    )
-    // bench/run.mjs rewrites docs/BENCHMARKS.md whole, and must carry over the
-    // section bench/crypto/run.mjs --record writes there: fib(20), Nish and C
-    // only, one run, into a copy of the file.
-    const out = path.join(buildDir, "crypto-bench", "benchmarks.md")
-    const section = "<!-- crypto:begin -->\n## kept\n<!-- crypto:end -->"
-    fs.mkdirSync(path.dirname(out), { recursive: true })
-    fs.writeFileSync(out, `# Benchmarks\n\nstale table\n\n${section}\n`)
-    const r = spawnSync(
-      "node",
-      [
-        path.join(root, "bench", "run.mjs"),
-        "--compiler",
-        path.relative(root, NISH),
-        "--only",
-        "fib",
-        "--n",
-        "fib=20",
-        "--runs",
-        "1",
-        "--warmup",
-        "0",
-        "--no-rust",
-        "--no-go",
-        "--out",
-        out,
-      ],
-      { cwd: root, encoding: "utf8" }
-    )
-    const text = r.status === 0 ? fs.readFileSync(out, "utf8") : ""
-    check(
-      "crypto-bench: bench/run.mjs rewriting docs/BENCHMARKS.md keeps the section bench/crypto/run.mjs --record wrote, once",
-      text.includes(section) &&
-        text.split("<!-- crypto:begin -->").length === 2 &&
-        !text.includes("stale table"),
-      r.status === 0 ? text.slice(-400) : `${r.stdout}${r.stderr}`
-    )
-  } else {
-    skip("crypto-bench: bench/crypto/run.mjs --validate (no clang)")
   }
 }
 

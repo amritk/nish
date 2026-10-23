@@ -37,12 +37,12 @@ them for review.
 | Job | Runner | What it does |
 | --- | --- | --- |
 | `test (ubuntu-latest, shard <i>/4)` | Ubuntu, LLVM 18 from apt (`clang-18 lld-18 llvm-18`, `valgrind`, `wasi-libc`, `libclang-rt-18-dev-wasm32`) | `npm ci`, `npm run check`, the seed (`scripts/fetch-seed.sh`), `npm test -- --seed build/seed/bin/nish --delegate-fixed-point --shard <i>/4` ([shards](#shards-and-time-limits)), then, in shard 1 only, the stage1 the suite built kept as `build/nish` and used for the smoke test, `docs/cookbook/regen.sh --check`, `gen-diagnostic-codes.mjs --check` and the size report in the job summary |
-| `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net (macos-latest)` runs the network runtime on a mac; `nish-cmp` is Linux-only |
+| `test (macos-latest)` | — | **commented out** of the matrix, on four named checks (below). `bootstrap` has had darwin rows since the 0.4.0 seeds, `runtime-net` runs the network runtime on a mac; `nish-cmp` is Linux-only |
 | `seeds` | Ubuntu | runs `.github/seed-matrix.sh`: asks the newest release which seed assets it carries and emits the `bootstrap` and `nish-cmp` matrices. Red only when a seed that is due is missing |
 | `bootstrap (<asset>)` | the row's `runner` from `.github/seed-targets.json` | `NISH_BOOTSTRAP=<seed> scripts/bootstrap.sh --verify` — the only check of WP19's rolling freeze — then `tests/nish/cli.ts` against the stage2 it built |
 | `nish-cmp (<asset>)` | the row's `runner` | WP19 G2.1: `tests/nish-cmp.js` compiles the corpus with the last release and with HEAD and requires every byte to match, then `tests/differential/fuzz.js --stage1` does the same for 200 random programs. Rows only for the Linux (`ubuntu-*`) seeds, and none until the newest release is at or after `cmpSince` |
 | `runner (shard <i>/4)` | Ubuntu, LLVM 18 | builds the compiler from the seed and runs a quarter of the golden corpus through `tests/nish/run.ts`, the harness written in Nish, with `--shard <i>/4`. A regression in the runner, or in `readdirSync` / `spawnSyncTo` / `monotonicNanos`, fails only here |
-| `runtime-net (macos-latest)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then `node tests/run.js net_`. Each run's summary line and every skip, with its reason, go to the job summary |
+| `runtime-net (macos-latest, shard <i>/3)` | macOS (AArch64), LLVM 18 from Homebrew (`llvm@18`) | #358: `runtime/runtime-net.c`'s Darwin branch (kqueue, `SO_NOSIGPIPE`, errno translated to Linux's numbers), run. In shard 1, `node tests/run.js runtime_test` compiles `tests/runtime-test.c` with every runtime source under `-std=c11 -Wall -Wextra -Werror -O2` and runs it, plain and with `-DNISH_THREADS=1 -pthread`; then, in every shard, `node tests/run.js net_ --shard <i>/3` ([shards](#shards-and-time-limits)). Each run's summary line and every skip, with its reason, go to the job summary |
 | `lint` | Ubuntu | `npm ls --package-lock-only` (skipped on tags, on `release/next` and on the Release PR's merge-queue run), `npm run lint` (filenames and Biome), `npm run lint:dead` (knip), `shellcheck -S warning` over the repository's shell scripts, and `node docs/check-links.mjs` |
 
 Every job that compiles anything compiles with `src/`, built from the seed:
@@ -68,8 +68,8 @@ fixed point.
 
 ### Shards and time limits
 
-Every job stops at 15 minutes (`timeout-minutes`), and every LLVM install step
-at 5 (10 for Homebrew). Without them a job that hangs runs to GitHub's six-hour
+Every job stops at 15 minutes (`timeout-minutes`) but `test` (25) and
+`runtime-net` (20), and every LLVM install step at 5 (10 for Homebrew). Without them a job that hangs runs to GitHub's six-hour
 limit: on #502 three jobs waited on one `apt-get update` fetch from
 archive.ubuntu.com from 19:22 to 01:22 and no test ran. apt has no timeout of
 its own, so every `apt-get` is also handed `$APT_OPTS` (30 s per connection,
@@ -83,13 +83,14 @@ minute and retried twice without the Azure mirror (dropped from
 `/etc/apt/apt-mirrors.txt`), since the stall is that mirror's and
 retrying it stalls again.
 
-Two jobs took longer than 15 minutes unsplit, so each runs as four:
+Three jobs took longer than 15 minutes unsplit, so each is split:
 
-- **`test`.** `node tests/run.js --shard <i>/<n>` splits the suite. Every shard
-  builds stage1 and runs everything before the `tests/link/` programs, which is
-  under two minutes. Shard 1 runs every section after them but WP14
-  self-hosting, together with the link programs whose output a later check
-  reads (`LINK_READ_LATER`). The WP14 section and the remaining link programs
+- **`test`**, four ways. `node tests/run.js --shard <i>/<n>` splits the suite.
+  Every shard builds stage1 and runs everything before the `tests/link/`
+  programs, which is under two minutes. Shard 1 runs every section after them
+  but the dealt ones (`DEALT_SECTIONS` in `tests/run.js`: WP14 self-hosting and
+  crypto-bench), together with the link programs whose output a later check
+  reads (`LINK_READ_LATER`). The dealt sections and the remaining link programs
   are dealt by cost: `tests/shard-costs.json` holds the seconds each took in a
   CI shard, and `linkShard` in `tests/run.js` gives each, largest first, to the
   shard with the least so far, shard 1 starting from its own sections' cost.
@@ -101,16 +102,23 @@ Two jobs took longer than 15 minutes unsplit, so each runs as four:
 
   Regenerate the table when a shard drifts more than about a fifth from the
   others: the costs are the gaps between consecutive programs' last lines in a
-  CI shard's log, and `shardOne` and `selfHosting` the spans of those
-  sections. Runners differ in speed by nearly a factor of two (one built
+  CI shard's log, and `shardOne`, `selfHosting` and `cryptoBench` the spans of
+  those sections (`shardOne` without crypto-bench's, plus shard 1's steps
+  after the suite). Runners differ in speed by nearly a factor of two (one built
   stage1 in 34 s where its siblings took 57-61 s), so read a span only from a
   shard whose stage1 build and pre-link sections took as long as the other
   shards': a shard on a fast runner finishes early on any table. The shard-1
   steps after the suite that require a `PASS` line (`simd`, the AES kernels,
   `cpu-level`) grep the Test step's log for it rather than running their
   section again.
-- **`runner`.** `build/nish-runner --shard <i>/<n>` deals the cases and link
-  programs the runner selects round-robin.
+- **`runner`**, four ways. `build/nish-runner --shard <i>/<n>` deals the cases
+  and link programs the runner selects round-robin.
+- **`runtime-net`**, three ways. `node tests/run.js net_ --shard <i>/3` is a
+  filtered run, which deals only the link programs its filter selects and
+  starts shard 1 at nothing, so each mac shard gets about a third of the 188
+  `net_` programs. Unsplit they took from 11 to over 28 minutes on one runner
+  image, and a run past 30 was cancelled. Three, because an account runs at
+  most five macOS jobs at once and the `bootstrap` darwin rows are two.
 
 A check in `tests/run.js` holds each job's `shard:` list to the `n` its
 `--shard` names. A list shorter than `n` would be a green run in which one
@@ -128,7 +136,7 @@ runtime mismatch is caught as a segfault on Darwin rather than as a link
 error). The two `runtime objects:` byte comparisons were the next two: they
 linked their two binaries at different output paths, and `LC_UUID` (next
 section) varies with the path. They now link at one path and move each binary
-aside, and `runtime-net (macos-latest)` measures the default runtime's green on
+aside, and the `runtime-net` job measures the default runtime's green on
 a mac (#358). The four that still hold the row out, listed with the run in the
 comment beside `os:` in `ci.yml`, are three causes and one simulation:
 

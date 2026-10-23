@@ -7351,7 +7351,7 @@ receiver, 1,200-byte datagrams: 459,000 a second at one per call, and
 always `0, 0`. A `meta[1]` of `0` is also what a datagram that really is not
 ECN-capable reads as, so a receive on Darwin cannot say ECN is unsupported: a
 program learns that from the `-95` a send with an `ecn` above `0` answers, and
-on Darwin it reads every arrival as Not-ECT. CI's `runtime-net (macos-latest)`
+on Darwin it reads every arrival as Not-ECT. CI's `runtime-net` (macos-latest)
 job runs that branch: the `net_` sections there take the `-95` a GSO send and a
 GRO bind answer, and fall back to one datagram a send (`net_loopback`,
 `net_relay`), and `net_udp_offload` requires the `-95` of GSO, the GRO bind and
@@ -7422,7 +7422,7 @@ filter reports nothing. And a peer's half-close is `1` on Linux but `5`, `1|4`,
 on Darwin: kqueue marks the read filter with end-of-file as soon as the FIN
 arrives, and the runtime reads end-of-file as `4`, where epoll sets its
 hang-up bit only once both directions are shut. CI's
-`runtime-net (macos-latest)` job runs `net_loop_calls` and `net_loop_two` on a
+`runtime-net` (macos-latest) job runs `net_loop_calls` and `net_loop_two` on a
 mac, as it runs every `net_` section.
 
 #### Bounds
