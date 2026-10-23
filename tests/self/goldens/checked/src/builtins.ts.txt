@@ -357,9 +357,9 @@ function checkMath(ctx: CheckContext, call: Node, args: Node, name: string, memb
   local +79:15 base: i32 (const)
   callee +79:50 TypeTable.baseOf -> @TypeTable.baseOf
   callee +81:11 CheckContext.error -> @CheckContext.error
-  callee +81:72 TypeTable.typeName -> @TypeTable.typeName
-  callee +88:5 checkBuiltinArity -> @checkBuiltinArity
-  callee +91:10 unknownBuiltin -> @unknownBuiltin
+  callee +83:59 TypeTable.typeName -> @TypeTable.typeName
+  callee +91:5 checkBuiltinArity -> @checkBuiltinArity
+  callee +94:10 unknownBuiltin -> @unknownBuiltin
 function requireF64(ctx: CheckContext, name: string, arg: Node, scope: Scope): void -> @requireF64
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression

@@ -529,11 +529,8 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "Math.pow") {
     return emitMathPow(emitter, expr)
   }
-  if (name === "Math.atan2") {
-    return emitMathLibm2(emitter, expr, "atan2")
-  }
-  if (name === "Math.hypot") {
-    return emitMathLibm2(emitter, expr, "hypot")
+  if (name === "Math.atan2" || name === "Math.hypot") {
+    return emitMathLibm2(emitter, expr, name.substring(5, name.length))
   }
   if (name === "Math.round") {
     return emitMathRound(emitter, expr)

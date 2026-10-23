@@ -473,8 +473,8 @@ function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): string -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitConsoleLog
   calls: Emitter.declareType Emitter.emitExpression Emitter.useRuntime IRFunction.emit IRFunction.emitValue callIntrinsic emitConsoleError emitConsoleLog emitFromBytes emitFromCharCode emitMathAbs emitMathLibm2 emitMathMinMax emitMathPow emitMathRound emitMathSign f64UnaryIntrinsic firstArgument internalErrorFor nish_exit nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_new
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitConsoleLog#0 emitConsoleError#0 emitFromCharCode#0 emitFromBytes#0 emitMathPow#0 emitMathLibm2#0 emitMathLibm2#0 emitMathRound#0 emitMathAbs#0 emitMathSign#0 emitMathMinMax#0 emitMathMinMax#0 Emitter.emitExpression#0 callIntrinsic#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 callIntrinsic#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0
-  pointer expr: size=40 writesThrough=false captured=false passedTo=emitConsoleLog#1 emitConsoleError#1 emitFromCharCode#1 emitFromBytes#1 emitMathPow#1 emitMathLibm2#1 emitMathLibm2#1 emitMathRound#1 emitMathAbs#1 emitMathSign#1 emitMathMinMax#1 emitMathMinMax#1 firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0
+  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitConsoleLog#0 emitConsoleError#0 emitFromCharCode#0 emitFromBytes#0 emitMathPow#0 emitMathLibm2#0 emitMathRound#0 emitMathAbs#0 emitMathSign#0 emitMathMinMax#0 emitMathMinMax#0 Emitter.emitExpression#0 callIntrinsic#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 callIntrinsic#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.declareType#0 Emitter.emitExpression#0 Emitter.useRuntime#0
+  pointer expr: size=40 writesThrough=false captured=false passedTo=emitConsoleLog#1 emitConsoleError#1 emitFromCharCode#1 emitFromBytes#1 emitMathPow#1 emitMathLibm2#1 emitMathRound#1 emitMathAbs#1 emitMathSign#1 emitMathMinMax#1 emitMathMinMax#1 firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0 firstArgument#0
   stackSites=0 stackLocals=0
   callee +0:12 emitConsoleLog -> @emitConsoleLog
   callee +3:12 emitConsoleError -> @emitConsoleError
@@ -482,55 +482,54 @@ function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): string -> 
   callee +9:12 emitFromBytes -> @emitFromBytes
   callee +12:12 emitMathPow -> @emitMathPow
   callee +15:12 emitMathLibm2 -> @emitMathLibm2
-  callee +18:12 emitMathLibm2 -> @emitMathLibm2
-  callee +21:12 emitMathRound -> @emitMathRound
-  callee +24:12 emitMathAbs -> @emitMathAbs
-  callee +27:12 emitMathSign -> @emitMathSign
+  callee +18:12 emitMathRound -> @emitMathRound
+  callee +21:12 emitMathAbs -> @emitMathAbs
+  callee +24:12 emitMathSign -> @emitMathSign
+  callee +27:12 emitMathMinMax -> @emitMathMinMax
   callee +30:12 emitMathMinMax -> @emitMathMinMax
-  callee +33:12 emitMathMinMax -> @emitMathMinMax
-  local +36:11 x: string (const)
-  callee +36:15 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +36:38 firstArgument -> @firstArgument
-  callee +37:12 callIntrinsic -> @callIntrinsic
-  local +41:11 args: Node (const)
-  local +42:11 a: string (const)
-  callee +42:15 Emitter.emitExpression -> @Emitter.emitExpression
-  local +43:11 b: string (const)
-  callee +43:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local +33:11 x: string (const)
+  callee +33:15 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +33:38 firstArgument -> @firstArgument
+  callee +34:12 callIntrinsic -> @callIntrinsic
+  local +38:11 args: Node (const)
+  local +39:11 a: string (const)
+  callee +39:15 Emitter.emitExpression -> @Emitter.emitExpression
+  local +40:11 b: string (const)
+  callee +40:15 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +41:12 IRFunction.emitValue -> @IRFunction.emitValue
   callee +44:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +47:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +47:48 Emitter.useRuntime -> @Emitter.useRuntime
-  local +50:11 intrinsic: string (const)
-  callee +50:23 f64UnaryIntrinsic -> @f64UnaryIntrinsic
-  callee +52:14 callIntrinsic -> @callIntrinsic
-  callee +56:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +56:42 firstArgument -> @firstArgument
-  local +61:11 code: string (const)
-  callee +61:18 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +61:41 firstArgument -> @firstArgument
-  callee +62:5 IRFunction.emit -> @IRFunction.emit
-  callee +62:34 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +63:5 IRFunction.emit -> @IRFunction.emit
-  callee +67:5 IRFunction.emit -> @IRFunction.emit
-  callee +67:34 Emitter.useRuntime -> @Emitter.useRuntime
-  local +71:11 mark: string (const)
-  callee +71:18 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +71:41 firstArgument -> @firstArgument
-  callee +72:5 IRFunction.emit -> @IRFunction.emit
-  callee +72:34 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +44:48 Emitter.useRuntime -> @Emitter.useRuntime
+  local +47:11 intrinsic: string (const)
+  callee +47:23 f64UnaryIntrinsic -> @f64UnaryIntrinsic
+  callee +49:14 callIntrinsic -> @callIntrinsic
+  callee +53:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +53:42 firstArgument -> @firstArgument
+  local +58:11 code: string (const)
+  callee +58:18 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +58:41 firstArgument -> @firstArgument
+  callee +59:5 IRFunction.emit -> @IRFunction.emit
+  callee +59:34 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +60:5 IRFunction.emit -> @IRFunction.emit
+  callee +64:5 IRFunction.emit -> @IRFunction.emit
+  callee +64:34 Emitter.useRuntime -> @Emitter.useRuntime
+  local +68:11 mark: string (const)
+  callee +68:18 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +68:41 firstArgument -> @firstArgument
+  callee +69:5 IRFunction.emit -> @IRFunction.emit
+  callee +69:34 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +73:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +73:45 Emitter.useRuntime -> @Emitter.useRuntime
   callee +76:12 IRFunction.emitValue -> @IRFunction.emitValue
   callee +76:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +79:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +79:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +84:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +84:48 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +87:5 Emitter.declareType -> @Emitter.declareType
-  local +88:11 bytes: string (const)
-  callee +88:19 Emitter.emitExpression -> @Emitter.emitExpression
-  callee +88:42 firstArgument -> @firstArgument
-  callee +89:5 IRFunction.emit -> @IRFunction.emit
-  callee +89:34 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +92:16 internalErrorFor -> @internalErrorFor
+  callee +81:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +81:48 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +84:5 Emitter.declareType -> @Emitter.declareType
+  local +85:11 bytes: string (const)
+  callee +85:19 Emitter.emitExpression -> @Emitter.emitExpression
+  callee +85:42 firstArgument -> @firstArgument
+  callee +86:5 IRFunction.emit -> @IRFunction.emit
+  callee +86:34 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +89:16 internalErrorFor -> @internalErrorFor
 function builtinCalleesNamed(program: CheckedProgram, table: TypeTable, call: Node, name: string): string[] -> @builtinCalleesNamed [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via absIntrinsic
