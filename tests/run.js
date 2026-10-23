@@ -1571,7 +1571,11 @@ if (!only || "term".includes(only)) {
   // term_pty, and compares after each; `hold` is asked about `icanon` while it
   // waits in raw mode, then sent SIGTERM; a second `hold` is sent SIGSEGV, the
   // fault handlers' path. Its stdin is `/dev/tty` because a
-  // background job of a non-interactive shell otherwise reads `/dev/null`.
+  // background job of a non-interactive shell otherwise reads `/dev/null`. A
+  // third runs in the foreground under job control (`set -m`) and is stopped
+  // by SIGTSTP, Ctrl-Z's signal, from a background helper: the terminal is as
+  // it was while it is stopped, because the shell puts back nothing, and raw
+  // again once `fg` continues it.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
@@ -1601,6 +1605,17 @@ if (!only || "term".includes(only)) {
         "i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
         'kill -SEGV $pid; wait $pid',
         'echo "fault $? stty $(same)"',
+        "icanon() { stty -a | tr ' ;' '\\n\\n' | grep -x -- '-\\{0,1\\}icanon'; }",
+        "set -m",
+        ': > "$D/hold.out"',
+        "( i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        '  echo "$(icanon)" > "$D/stop.out"; kill -TSTP "$(cat "$D/hold.pid")" ) &',
+        'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" hold > "$2/hold.out"\' sh "$E" "$D"',
+        'echo "stopped $? stty $(same) was $(cat "$D/stop.out")"',
+        '( i=0; while [ $i -lt 50 ] && [ "$(icanon)" != -icanon ]; do sleep 0.1; i=$((i + 1)); done',
+        '  echo "$(icanon)" > "$D/cont.out"; kill -TERM "$(cat "$D/hold.pid")" ) &',
+        "fg > /dev/null",
+        'echo "continued $? stty $(same) was $(cat "$D/cont.out")"',
         "",
       ].join("\n")
     )
@@ -1630,9 +1645,11 @@ if (!only || "term".includes(only)) {
         "held -icanon",
         "hold 143 stty same said raw 0 ready ",
         "fault 139 stty same",
+        `stopped ${128 + os.constants.signals.SIGTSTP} stty same was -icanon`,
+        "continued 143 stty same was -icanon",
       ]
       check(
-        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was",
+        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, after which `fg` gives raw mode back",
         want.every((line) => lines.includes(line)),
         `want every line of ${JSON.stringify(want)}\n${shown(r)}`
       )

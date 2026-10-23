@@ -38,9 +38,11 @@
  * program still dies of it and its parent sees that. The handlers run on an
  * alternate stack of the thread that entered raw mode, so a stack overflow
  * there restores the terminal too; one on another thread has no stack to run
- * it on, and the terminal stays raw. SIGTSTP is left alone: a shell with job
- * control saves a stopped job's terminal state and puts its own back, and
- * gives the job its state again on `fg`.
+ * it on, and the terminal stays raw. SIGTSTP, Ctrl-Z, is caught the same way,
+ * because bash keeps no stopped job's terminal state: its handler restores the
+ * terminal, stops the program, and once a shell continues it puts the handler
+ * back and raw mode with it. A stop by SIGSTOP, which no program can catch,
+ * leaves the terminal raw at the shell.
  *
  * WASI has `read` and `poll` on stdin and no terminal interface, so there the
  * first two work (`readStdin` waiting, below) and the TTY questions answer
@@ -157,10 +159,10 @@ nish_array *nish_terminal_size(void) {
   return out;
 }
 
-/* The termios stdin had before raw mode was entered, whether it is in
-   force now, and whether the exit and signal handlers are in place. One
-   terminal per process, so one of each. */
-static struct termios nish_term_saved;
+/* The termios stdin had before raw mode was entered, the raw one entered,
+   whether that is in force now, and whether the exit and signal handlers are
+   in place. One terminal per process, so one of each. */
+static struct termios nish_term_saved, nish_term_raw_t;
 static volatile sig_atomic_t nish_term_raw;
 static int nish_term_armed;
 
@@ -186,13 +188,39 @@ static void nish_term_restore(void) {
    64 KiB, past Darwin's MINSIGSTKSZ of 32 KiB and glibc's on any core. */
 static char nish_term_alt_stack[65536];
 
-/* `SA_RESETHAND` puts the default back, except that POSIX lets a system keep
-   the handler for SIGILL and SIGTRAP, so it is put back here too: `signal` is
-   async-signal-safe. */
+static void nish_term_on_signal(int sig);
+
+/* Catch `sig`: once, `SA_RESETHAND`, on the alternate stack, and with the
+   signal left unblocked while the handler runs (`SA_NODEFER`), so the
+   handler's own `raise` acts at once rather than after it returns. */
+static void nish_term_catch(int sig) {
+  struct sigaction sa;
+  sa.sa_handler = nish_term_on_signal;
+  sa.sa_flags = SA_RESETHAND | SA_ONSTACK | SA_NODEFER;
+  sigemptyset(&sa.sa_mask);
+  sigaction(sig, &sa, 0);
+}
+
+/* Restore the terminal and raise `sig` again at its default. `SA_RESETHAND`
+   put the default back, except that POSIX lets a system keep the handler for
+   SIGILL and SIGTRAP, so it is put back here too: `signal` is
+   async-signal-safe. Every signal caught but SIGTSTP ends the program in that
+   `raise`; SIGTSTP stops it there, and the `raise` returns once a shell
+   continues it, in the foreground or, after a SIGTTOU stop in the
+   `tcsetattr`, once it is brought there. */
 static void nish_term_on_signal(int sig) {
+  int err = errno;
+  sig_atomic_t was = nish_term_raw;
   nish_term_restore();
   signal(sig, SIG_DFL);
   raise(sig);
+  nish_term_catch(sig);
+  if (was) {
+    nish_term_raw = 1;
+    __atomic_store_n(&nish_fatal_hook, nish_term_restore, __ATOMIC_RELEASE);
+    tcsetattr(0, TCSANOW, &nish_term_raw_t);
+  }
+  errno = err;
 }
 
 /* `setRawMode(on)`: 0, or -25 when stdin is not a terminal and the host's
@@ -209,12 +237,13 @@ static int32_t nish_term_set(bool on) {
   if (nish_term_raw) return 0;
   if (!isatty(0)) return -25;
   if (tcgetattr(0, &nish_term_saved) != 0) return -errno;
-  struct termios t = nish_term_saved;
-  t.c_iflag &= ~(tcflag_t)(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | INPCK | IXON);
-  t.c_cflag = (t.c_cflag & ~(tcflag_t)(CSIZE | PARENB)) | CS8;
-  t.c_lflag &= ~(tcflag_t)(ECHO | ECHONL | ICANON | IEXTEN);
-  t.c_cc[VMIN] = 1;
-  t.c_cc[VTIME] = 0;
+  struct termios *t = &nish_term_raw_t;
+  *t = nish_term_saved;
+  t->c_iflag &= ~(tcflag_t)(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | INPCK | IXON);
+  t->c_cflag = (t->c_cflag & ~(tcflag_t)(CSIZE | PARENB)) | CS8;
+  t->c_lflag &= ~(tcflag_t)(ECHO | ECHONL | ICANON | IEXTEN);
+  t->c_cc[VMIN] = 1;
+  t->c_cc[VTIME] = 0;
   if (!nish_term_armed) {
     nish_term_armed = 1;
     atexit(nish_term_restore);
@@ -230,21 +259,17 @@ static int32_t nish_term_set(bool on) {
     static const int sigs[] = {
         SIGINT,  SIGTERM, SIGQUIT, SIGHUP,  SIGPIPE, SIGALRM, SIGUSR1,
         SIGUSR2, SIGPROF, SIGVTALRM, SIGXCPU, SIGXFSZ, SIGSYS, SIGILL,
-        SIGTRAP, SIGABRT, SIGFPE,  SIGBUS,  SIGSEGV};
+        SIGTRAP, SIGABRT, SIGFPE,  SIGBUS,  SIGSEGV, SIGTSTP};
     for (unsigned i = 0; i < sizeof sigs / sizeof sigs[0]; i++) {
-      struct sigaction old, sa;
-      if (sigaction(sigs[i], 0, &old) != 0 || old.sa_handler != SIG_DFL) continue;
-      sa.sa_handler = nish_term_on_signal;
-      sa.sa_flags = SA_RESETHAND | SA_ONSTACK;
-      sigemptyset(&sa.sa_mask);
-      sigaction(sigs[i], &sa, 0);
+      struct sigaction old;
+      if (sigaction(sigs[i], 0, &old) == 0 && old.sa_handler == SIG_DFL) nish_term_catch(sigs[i]);
     }
   }
   /* Raw before the call, so a signal while it drains the output, or just
      after the switch, still puts the saved termios back. */
   nish_term_raw = 1;
   __atomic_store_n(&nish_fatal_hook, nish_term_restore, __ATOMIC_RELEASE);
-  if (tcsetattr(0, TCSAFLUSH, &t) == 0) return 0;
+  if (tcsetattr(0, TCSAFLUSH, t) == 0) return 0;
   int err = errno;
   nish_term_raw = 0;
   __atomic_store_n(&nish_fatal_hook, 0, __ATOMIC_RELEASE);

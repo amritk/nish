@@ -73,7 +73,9 @@ Three things do not change:
 - **`"\n"` still starts a new line**, so `console.log` works as it always does.
 - **The terminal is always put back.** `setRawMode(false)` restores it, and
   so does returning from `main`, `process.exit`, a panic or a crash, a
-  Ctrl-C or `kill`, and a closed pipe on the other end of stdout. Only `kill -9`, and a stack overflow on a thread other
+  Ctrl-C or `kill`, and a closed pipe on the other end of stdout. Ctrl-Z
+  puts it back while the program is stopped, and `fg` puts raw mode back on.
+  Only `kill -9`, `kill -STOP`, and a stack overflow on a thread other
   than the one that called `setRawMode(true)`, leave the terminal in raw
   mode; type `stty sane` to fix it.
 

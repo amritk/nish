@@ -20399,8 +20399,8 @@ attributes #2 = { nounwind noreturn cold }
 
 ### `nish:term`: `readStdin`, `waitStdin` and the terminal
 
-A key-reading loop without the `net` capability: `waitStdin` is a `poll` of
-stdin with a timeout, `readStdin` a read of what is already there, and the
+A key-reading loop without the `net` capability: `waitStdin` is a `select` on
+stdin with a timeout (a `poll` under WASI), `readStdin` a read of what is already there, and the
 three terminal questions are a call each. `readStdin(buf, off, len)` lowers as
 `netRead` does with the descriptor left out — the `[off, off + len)` check, the
 same `net.fail` block and its slice panic, then the call — and
