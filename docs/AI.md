@@ -178,7 +178,7 @@ rejects. This table is the highest-value part of the page.
 | `import d from "./m"`, `import * as m from "./m"`, `import "./m"`, `import type { T } from "./m"` | `` Default imports are not supported; use `import { d } from "./m"` `` / `` Namespace imports (`import * as m`) are not supported; import functions by name `` / `` Side-effect imports (`import "./m"`) are not supported; modules have no top-level code `` / `Type-only imports are not supported` | `import { d, T } from "./m"`, naming what you use |
 | `total += xs[i]` in a loop, with `i` from somewhere the compiler cannot bound | it compiles, with an `NL9007` performance warning: `` `i` is not proven to be in range for `xs` here, so this access keeps its bounds check `` | a guard before the statement, `if (!(i >= 0 && i < toI32(xs.length))) { panic("index out of range") }`, which proves both ends in either number mode; `nish --fix` inserts it where it changes nothing the program does |
 | `new Date()` | `` `new Date()` is refused: Nish has no `Date` object; the one `Date` member is `Date.now()`, the wall clock in milliseconds `` | `Date.now()` for the wall clock, `monotonicNanos()` for elapsed time; there is no calendar |
-| `JSON.parse`, `RegExp`, `Promise` | unknown / forbidden | none of these exist; write them or restructure |
+| `JSON.parse`, `RegExp`, `/re/` literals, `Promise` | unknown / forbidden | none of these are built in: `regexCompile(pattern, flags)` from `nish/regex` for a pattern, `jsonDecode` from `nish/json-typed` for JSON; restructure around `Promise` |
 | `for (const [k, v] of m)`, `m.forEach(...)`, `new Map(entries)` | each refused by name | `Map` and `Set` exist, with `size`, `get`, `set` / `add`, `has`, `delete`, `clear`, and `keys()` / `values()` in a `for...of` — see [Map and Set](#map-and-set) |
 | `let v = m.get(k)`, `f(m.get(k))`, `m.get(k) + 1` | `` `m.get(k)` is `i32 \| undefined` and cannot be held in a `let` `` (and one message per place) | `m.get(k) ?? 0`, or `const v = m.get(k); if (v !== undefined) { … }` |
 | `let x = 5; x = "s"` | `Cannot initialize …` | types never change and never convert implicitly |
@@ -2528,6 +2528,20 @@ bytes at a time, so prefer it to a `charCodeAt` loop over a long text — and
 never call it on secret data, because its time says where the match is.
 (No block: a program importing `nish/text` writes two `.ll` files;
 `tests/link/std_text_index_of_any` is its program.)
+
+**Match a pattern** — there is no `RegExp` and no `/re/` literal:
+`regexCompile(pattern, flags)` from `nish/regex` answers a
+`Result<Regex, string>`, the error text naming the byte. The syntax is
+JavaScript's with the `u` flag's strictness (a stray `{` or `]` is an
+error), the flags are `i`, `m` and `s`, and backreferences and lookaround are
+refused, because matching never backtracks: time is linear in the input for
+every pattern. `test`, `exec(text, from, m)` into a reused `RegexMatch`,
+`find`, `findAll`, `count`, `replace`, `replaceAll` (`$&`, `$1`,
+`$<name>`) and `split`; offsets are UTF-8 bytes and `\w`, `\d`, `\b` and `i`
+are ASCII. A `Regex` keeps its scratch memory, so compile once outside the
+loop and use it from one thread. (No block, as for `nish/text`;
+`tests/link/std_regex` is its program, and the user guide's [standard-library
+page](guide/using-nish/standard-library.md#nishregex) its walk-through.)
 
 **Decode a URL or read a query** — there is no `decodeURIComponent` and no
 `URLSearchParams`: `nish/net/url` has both readings. `urlDecode(s, flags)` and

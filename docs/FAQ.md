@@ -228,11 +228,11 @@ written and named); `70` internal compiler error. Details in
 ### How do I report a bug?
 
 - **Exit code 70** means the compiler itself crashed, not that your program
-  is wrong. It prints `nish <version>: internal compiler error while
-  compiling <files>` and the exception; re-run with `NISH_DEBUG=1` for
-  the stack trace, then open an issue at
-  <https://github.com/amritk/nish/issues> with the input file, the
-  command line, and that output.
+  is wrong. It prints `nish <version>: internal compiler error` and the
+  invariant that broke. There is no stack trace behind it (the compiler is
+  self-hosted, and `NISH_DEBUG=1` adds nothing), so open a bug report at
+  <https://github.com/amritk/nish/issues/new/choose> with the input file,
+  the command line, and that output.
 - **Wrong IR or wrong native output** for a program that compiles: attach
   the `.ts`, the `.ll` (`-o out.ll`), the flags, and what you expected.
   `--plain` gives the smallest IR to look at. Behaviour that is known to

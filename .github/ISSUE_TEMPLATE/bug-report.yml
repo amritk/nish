@@ -1,0 +1,161 @@
+name: Bug report
+description: The compiler crashed, rejected a valid program, accepted an invalid one, or a compiled program did the wrong thing.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A report that can be reproduced from what is written here gets fixed first. The fix lands with
+        a regression test built from your program, so the smaller and more self-contained it is, the better.
+
+        **A security vulnerability is not reported here**: use
+        [private reporting](https://github.com/amritk/nish/security/advisories/new) ([SECURITY.md](https://github.com/amritk/nish/blob/main/SECURITY.md)).
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong
+      options:
+        - The compiler crashed (exit 70, "internal compiler error")
+        - A valid program was rejected (exit 1)
+        - An invalid program was accepted
+        - A compiled program gives the wrong output, panics or crashes (native)
+        - A compiled program gives the wrong output, panics or crashes (wasm32 / wasi)
+        - Linking or the toolchain failed (exit 3)
+        - A diagnostic is wrong, unclear, or points at the wrong place
+        - "`--fix` rewrote something wrongly"
+        - A CLI flag, `nish run`, or `--json` output misbehaves
+        - A `std/` or `nish:` module misbehaves
+        - Interop (C header, N-API shim, `.d.ts`, FFI) is wrong
+        - Performance (slow compile, slow program, large binary)
+        - Install or upgrade failed
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `nish --version`, or the commit if you built from a checkout (`git rev-parse --short HEAD`).
+      placeholder: nish 0.20.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install
+    attributes:
+      label: How nish was installed
+      options:
+        - npm (`npm install -g nish`)
+        - install.sh
+        - Release tarball from GitHub
+        - Built from a checkout (`npm run build` / `build/nish`)
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS and architecture (`uname -sm`), and the distribution or macOS version.
+      placeholder: Linux x86_64, Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: textarea
+    id: program
+    attributes:
+      label: The program
+      description: |
+        The smallest program that shows the problem, complete, so it compiles as pasted. For more than
+        one module, give each file under its own path. Leave out `import`s of your own code that the bug
+        does not need.
+      render: typescript
+    validations:
+      required: true
+
+  - type: textarea
+    id: command
+    attributes:
+      label: The command line
+      description: |
+        Exactly what you ran, with every flag (`--profile`, `--target`, `--threads`, `-g`, `--link`, …),
+        any environment variables that matter (`CC`, `WASI_SYSROOT`, …), and how you ran the result
+        (`./a.out`, `wasmtime`, `node`).
+      placeholder: |
+        nish main.ts --profile speed --link main
+        ./main
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: |
+        The full stdout and stderr, unedited, and the exit code (`echo $?` straight after). For a
+        diagnostic, the whole report (all three lines), or the line `--json` prints for it, which carries
+        its `NL` code. For a crash in a compiled program, the panic message or signal.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: exit-code
+    attributes:
+      label: Exit code
+      placeholder: "70"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: |
+        What should have happened instead, and why. Nish compiles a subset of TypeScript, so for a
+        program's behaviour the strongest evidence is what the same file prints under Node; paste that
+        output if it differs ([`docs/RUN_UNDER_NODE.md`](https://github.com/amritk/nish/blob/main/docs/RUN_UNDER_NODE.md)
+        has the one-line command and the f64-mode limits). For a rejection you think is wrong, the
+        `docs/LANGUAGE.md` rule you read it against.
+    validations:
+      required: true
+
+  - type: input
+    id: regression
+    attributes:
+      label: Last version where it worked
+      description: If this used to work, the last release (or commit) where it did. It lets the fix start from a bisect.
+      placeholder: nish 0.19.0
+
+  - type: textarea
+    id: toolchain
+    attributes:
+      label: Toolchain
+      description: |
+        Needed for a link, toolchain, wasm or wrong-code report: `clang --version`, and `wasm-ld --version`
+        or the wasm runtime and its version if the target is wasm32.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: |
+        Whatever narrows it down: the IR (`-o out.ll --plain`), `--emit-checked` output, whether it also
+        happens with `--profile debug`, or a smaller program that does *not* show it. Attach large files
+        rather than pasting them.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you send
+      options:
+        - label: I searched the [open and closed issues](https://github.com/amritk/nish/issues?q=is%3Aissue) and this is not one of them.
+          required: true
+        - label: It is not listed in [Known inconsistencies](https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#known-inconsistencies).
+          required: true
+        - label: The program above reproduces it as pasted, with the command line above.
+          required: true
