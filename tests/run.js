@@ -9392,6 +9392,98 @@ if (!only || "bytes_prelude_bigint".includes(only)) {
   )
 }
 
+// ---- WP33 R3: the runtime's hosts ----------------------------------------------
+//
+// `runtime/shim.mjs` is the host-agnostic core (`runtime/core.mjs` and
+// `runtime/core/*.mjs`) with the Node host (`runtime/node.mjs`) installed. The
+// frozen rewrites import the shim's exports by name, so none of the names it
+// had before the split may go; `tests/runtime/shim-exports.txt` is that list.
+// And the core may reach the world only through its host, so no module it
+// imports names a `node:` module, `process` or `Buffer`.
+if (!only || "runtime-hosts".includes(only)) {
+  const runtimeDir = path.join(root, "runtime")
+  const exportsOf = (file) =>
+    spawnSync(
+      "node",
+      ["--input-type=module", "-e", `const m = await import(${JSON.stringify(pathToFileURL(file).href)}); console.log(Object.keys(m).sort().join("\\n"))`],
+      { cwd: root, encoding: "utf8" }
+    )
+  const pinned = fs.readFileSync(path.join(root, "tests", "runtime", "shim-exports.txt"), "utf8").split("\n").filter(Boolean)
+  const shim = exportsOf(path.join(runtimeDir, "shim.mjs"))
+  const now = new Set(shim.stdout.split("\n").filter(Boolean))
+  const lost = pinned.filter((name) => !now.has(name))
+  check(
+    "runtime-hosts: shim.mjs exports every name it exported before the split",
+    shim.status === 0 && pinned.length > 0 && lost.length === 0,
+    shim.status === 0 ? `no longer exported: ${lost.join(", ")}` : shim.stderr
+  )
+
+  // The scan reads code, not comments: a block comment, or a `//` comment that
+  // starts a line or follows whitespace, may name `process` to say what the
+  // core stands in for. Every import must be relative, so the walk from
+  // `core.mjs` reaches every module the core loads.
+  const codeOf = (text) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1")
+  const offences = (text) => {
+    const code = codeOf(text)
+    const found = []
+    for (const m of code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
+      if (!m[1].startsWith("./") && !m[1].startsWith("../")) found.push(`imports "${m[1]}"`)
+    }
+    for (const word of ["process", "Buffer"]) {
+      if (new RegExp(`\\b${word}\\b`).test(code)) found.push(`names ${word}`)
+    }
+    return found
+  }
+  const seen = new Set()
+  const problems = []
+  const walk = (file) => {
+    if (seen.has(file)) return
+    seen.add(file)
+    const text = fs.readFileSync(file, "utf8")
+    for (const o of offences(text)) problems.push(`${path.relative(root, file)} ${o}`)
+    for (const m of codeOf(text).matchAll(/\b(?:from|import)\s*["'](\.{1,2}\/[^"']+)["']/g)) {
+      walk(path.resolve(path.dirname(file), m[1]))
+    }
+  }
+  walk(path.join(runtimeDir, "core.mjs"))
+  const coreDir = path.join(runtimeDir, "core")
+  const unreached = fs
+    .readdirSync(coreDir)
+    .map((f) => path.join(coreDir, f))
+    .filter((f) => !seen.has(f))
+  // The scan's own two answers: a Node import and a `process` in code are
+  // caught, and the same words in comments are not.
+  const caught = offences('import fs from "node:fs";\nprocess.exit(1)\n').length === 2
+  const spared = offences("/** `process.exit` */\n// Buffer\nconst a = 1 // node:fs\n").length === 0
+  check(
+    "runtime-hosts: the core imports no node: module and names no process or Buffer",
+    problems.length === 0 && unreached.length === 0 && seen.size > 1 && caught && spared,
+    [
+      ...problems,
+      ...unreached.map((f) => `${path.relative(root, f)} is not reached from runtime/core.mjs`),
+      caught ? "" : "the scan misses a node: import or process",
+      spared ? "" : "the scan reads comments",
+    ]
+      .filter(Boolean)
+      .join("\n")
+  )
+
+  // With no adapter imported, the core still loads and its pure half answers,
+  // and the first call that needs the world throws a `NishNoHost` naming it.
+  const probe = [
+    `const core = await import(${JSON.stringify(pathToFileURL(path.join(runtimeDir, "core.mjs")).href)});`,
+    "const tryIt = (f) => { try { return String(f()); } catch (e) { return e.name + ' ' + e.requested; } };",
+    "console.log([core.strLen('h\\u00e9'), core.toI32(2 ** 40), tryIt(() => core.log(1)), tryIt(() => core.readFileSync('x')), tryIt(() => core.exit(0))].join('\\n'));",
+  ].join("\n")
+  const r = spawnSync("node", ["--input-type=module", "-e", probe], { cwd: root, encoding: "utf8" })
+  const want = "3\n2147483647\nNishNoHost writeOut\nNishNoHost readFileSync\nNishNoHost exit\n"
+  check(
+    "runtime-hosts: runtime/core.mjs alone computes, and throws NishNoHost at the first call that needs a host",
+    r.status === 0 && r.stdout === want,
+    `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+  )
+}
+
 // ---- WP34 N6: constant time -------------------------------------------------------
 
 // The TypeScript reading of `ctSelect` and `ctEq` over `u64`, which no unmodified run
