@@ -1433,6 +1433,8 @@ class YamlParser {
   handlePrefixes: string[]
   /** The children of every collection still open, innermost last. */
   scratch: i32[]
+  /** Hash sets for the duplicate check of maps past YAML_PAIRWISE_KEYS pairs, reused as maps nest and end. */
+  keySets: YamlKeySet[]
   pos: i32 = 0
   len: i32 = 0
   depth: i32 = 0
@@ -1445,6 +1447,7 @@ class YamlParser {
   anchorTop: i32 = 0
   pendingTop: i32 = 0
   scratchTop: i32 = 0
+  keySetTop: i32 = 0
   /** The last error's range, so one mistake is not reported twice. */
   lastErrStart: i32 = -1
   lastErrEnd: i32 = -1
@@ -1470,6 +1473,7 @@ class YamlParser {
     this.handleNames = []
     this.handlePrefixes = []
     this.scratch = []
+    this.keySets = []
     this.len = toI32(text.length)
     this.maxDepth = options.maxDepth
     this.uniqueKeys = options.uniqueKeys
@@ -3057,4 +3061,126 @@ class YamlParser {
     const node: i32 = this.stream.newNode(YAML_MAP, YAML_FLOW, start, this.pos)
     this.finishCollection(node, base)
     return node
+  }
+
+  // ---- Collections and pairs ------------------------------------------------------
+
+  /** Internal: moves the scratch slots from `base` up into `node`'s children. */
+  finishCollection(node: i32, base: i32): void {
+    const stream: YamlStream = this.stream
+    let first: i32 = stream.kidTop
+    let i: i32 = base
+    while (i < this.scratchTop) {
+      const slot: i32 = stream.pushKid(yamlAt(this.scratch, i))
+      if (i === base) {
+        first = slot
+      }
+      i += 1
+    }
+    yamlPut(stream.firsts, node, first)
+    yamlPut(stream.counts, node, this.scratchTop - base)
+    this.scratchTop = base
+  }
+
+  /** Internal: a pair node joining `key` to `value`, which is `-1` when the key has none. */
+  makePair(key: i32, value: i32): i32 {
+    const stream: YamlStream = this.stream
+    const end: i32 = value >= 0 ? stream.end(value) : stream.end(key)
+    const pair: i32 = stream.newNode(YAML_PAIR, YAML_PLAIN, stream.start(key), end)
+    yamlPut(stream.firsts, pair, key)
+    yamlPut(stream.counts, pair, value)
+    return pair
+  }
+
+  /** Internal: whether `key` is a `<<` merge key, which the duplicate check skips when merging is on. */
+  isMergeKey(key: i32): boolean {
+    const stream: YamlStream = this.stream
+    if (!this.merge || stream.kind(key) !== YAML_SCALAR || stream.style(key) !== YAML_PLAIN) {
+      return false
+    }
+    const start: i32 = stream.start(key)
+    return stream.end(key) === start + 2 && this.at(start) === YAML_LT && this.at(start + 1) === YAML_LT
+  }
+
+  /** Internal: whether two keys share a style and their source bytes, which makes them equal without decoding. */
+  sameKeyBytes(a: i32, b: i32): boolean {
+    const stream: YamlStream = this.stream
+    if (stream.kind(a) !== YAML_SCALAR || stream.kind(b) !== YAML_SCALAR || stream.style(a) !== stream.style(b)) {
+      return false
+    }
+    return yamlSameBytes(this.text, stream.start(a), stream.end(a), stream.start(b), stream.end(b))
+  }
+
+  /**
+   * Internal: reports `key` when an earlier pair of the map whose pairs start
+   * at scratch slot `base` has an equal key. Up to YAML_PAIRWISE_KEYS pairs the
+   * keys are compared pairwise, by bytes first; past that the map takes a hash
+   * set from the pool, whose index it returns (`set` is the one it holds, or `-1`).
+   */
+  trackKey(base: i32, key: i32, set: i32): i32 {
+    if (!this.uniqueKeys || this.isMergeKey(key)) {
+      return set
+    }
+    const stream: YamlStream = this.stream
+    if (set < 0 && this.scratchTop - base < YAML_PAIRWISE_KEYS) {
+      let text: string = ""
+      let decoded: boolean = false
+      let i: i32 = base
+      while (i < this.scratchTop) {
+        const other: i32 = stream.key(yamlAt(this.scratch, i))
+        let same: boolean = this.sameKeyBytes(other, key)
+        if (!same && !this.isMergeKey(other)) {
+          if (!decoded) {
+            text = yamlKeyText(stream, key)
+            decoded = true
+          }
+          same = yamlKeyText(stream, other) === text
+        }
+        if (same) {
+          this.reportDuplicateKey(key)
+          return set
+        }
+        i += 1
+      }
+      return set
+    }
+    let held: i32 = set
+    if (held < 0) {
+      held = this.keySetTop
+      if (held >= toI32(this.keySets.length)) {
+        this.keySets.push(new YamlKeySet())
+      }
+      this.keySetTop = held + 1
+      let i: i32 = base
+      while (i < this.scratchTop) {
+        const other: i32 = stream.key(yamlAt(this.scratch, i))
+        if (!this.isMergeKey(other)) {
+          this.keySets[held].add(yamlKeyText(stream, other))
+        }
+        i += 1
+      }
+    }
+    if (!this.keySets[held].add(yamlKeyText(stream, key))) {
+      this.reportDuplicateKey(key)
+    }
+    return held
+  }
+
+  /** Internal: hands the key set a finished map held back to the pool. */
+  releaseKeySet(set: i32): void {
+    if (set >= 0) {
+      this.keySets[set].clear()
+      this.keySetTop = set
+    }
+  }
+
+  /** Internal: reports `key` as a repeat of an earlier key in its map. */
+  reportDuplicateKey(key: i32): void {
+    const stream: YamlStream = this.stream
+    this.error(
+      YAML_ERR_DUPLICATE_KEY,
+      `Map key "${yamlKeyText(stream, key)}" is duplicated`,
+      stream.start(key),
+      stream.end(key),
+    )
   }
