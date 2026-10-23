@@ -19,6 +19,10 @@ same translation out as TypeScript a person can keep. The prelude is the thing
 you would actually hand to someone, and it is weaker because a prelude can only
 replace *globals* — never operators, never the object model.
 
+To import the builtins from TypeScript rather than install them as globals —
+`nish/runtime`, with `nish/runtime/node` or `nish/runtime/browser` as the
+host — see the guide's [Back to TypeScript](guide/using-nish/to-typescript.md).
+
 ## Using it
 
 ```bash
