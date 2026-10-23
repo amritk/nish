@@ -289,6 +289,7 @@ function main(): i32 -> @nish_main [exported entry]
   callee +120:72 supportedTargets -> @supportedTargets
   local +197:13 mask: i32 (const)
   callee +197:20 capabilityListMask -> @capabilityListMask
+  callee +226:224 helpHint -> @helpHint
   callee +263:19 usageText -> @usageText
   callee +272:60 helpHint -> @helpHint
   callee +289:19 usageText -> @usageText

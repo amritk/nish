@@ -127,9 +127,9 @@ const envSaysYes = (name: string): boolean => saysYes(getenv(name))
  * Whether file descriptor `fd` is a terminal. The language has no `isatty`,
  * and `src/` may only use what the seed compiler already has, so the shell
  * answers: a child inherits the descriptors, and `[ -t 1 ]` is POSIX. It costs
- * one fork, and only on the paths that print help or refuse a flag. Where nothing
- * can be spawned (the WebAssembly build) the answer is "no", which is plain
- * text, the safe side.
+ * one fork, and only on the paths that print the help or the no-inputs usage.
+ * Where nothing can be spawned (the WebAssembly build) the answer is "no",
+ * which is plain text, the safe side.
  */
 const isTerminal = (fd: i32): boolean => spawnSync(["/bin/sh", "-c", `[ -t ${fd} ]`]) === 0
 

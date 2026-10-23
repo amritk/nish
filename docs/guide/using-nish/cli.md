@@ -185,7 +185,7 @@ otherwise.
 
 **Coding agents get a plain help with an extra section.** When `nish` runs
 under an agent — `CLAUDECODE` or `GEMINI_CLI` is set, or you set
-`NISH_AGENT=1` — the help has no colour, even on a terminal or with
+`NISH_AGENT` to anything but empty or a no (`NISH_AGENT=1`) — the help has no colour, even on a terminal or with
 `FORCE_COLOR` set, and ends with an **Agents** section: the absolute path of
 `docs/AI.md` (the language as rules, traps first) in the installed package,
 and the flags an agent's loop needs —

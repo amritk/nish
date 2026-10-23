@@ -7,8 +7,9 @@
  * surface as a promise to whatever drives it — a script, an editor, an agent:
  *
  *   - `--help` answers **on stdout with exit 0**, because asking for the usage
- *     text is a request that succeeded; a usage *error* is the same text on
- *     **stderr with exit 2**, because it is a refusal.
+ *     text is a request that succeeded; a usage *error* is a refusal on
+ *     **stderr with exit 2**: with no inputs at all, the same text, and for a
+ *     flag it does not take, one line that names it and points at `--help`.
  *   - `--json` prints **one flat object per diagnostic** on stdout, whose `code`
  *     is a stable rule identifier and whose `severity` is the field a tool
  *     filters on. Every failure is one of those objects, the ones that are about
@@ -404,7 +405,7 @@ const checkIdentity = (t: Suite, cli: Cli): string => {
 };
 
 /**
- * The `--help` / usage-error pair: the same text, told apart by the stream and
+ * The `--help` / no-inputs pair: the same text, told apart by the stream and
  * the code. A wrapper that cannot tell them apart reads an answer as a failure.
  */
 const checkHelp = (t: Suite, cli: Cli, name: string, env: boolean): void => {
@@ -478,6 +479,7 @@ const checkUsageErrors = (t: Suite, cli: Cli): void => {
   t.contains("and says signed overflow is checked", nsw.stderr, "signed overflow is checked");
   t.contains("and names nish:unsafe as the way to wrap", nsw.stderr, "`wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe`");
   t.contains("and the deprecated --wrapping", nsw.stderr, "--wrapping");
+  t.contains("and points at --help", nsw.stderr, "--help` for the flags");
   t.eqStr("and the refusal says nothing on stdout", trim(nsw.stdout), "");
 };
 

@@ -361,7 +361,8 @@ skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
 `runtime/` (the C runtime — eight translation units, the wasm subset and their header),
-`scripts/build.sh` (the link pipeline) and `std/` (the standard library). The
+`scripts/build.sh` (the link pipeline), `std/` (the standard library) and
+`docs/AI.md` (the rules card an agent's `nish --help` points at). The
 compiler itself is not in it: it arrives as one prebuilt
 `@amritk/nish-<asset>` package per platform, and `bin/nish` hands over to
 whichever one npm installed. `nish` locates the runtime, the script and `std/`

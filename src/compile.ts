@@ -678,7 +678,7 @@ export const main = (): number => {
       // defined wrap is `--wrapping`, and the refusal says so rather than
       // letting an old build script mean something it no longer can.
       console.error(
-        "compile: `--nsw` is gone: signed overflow is checked and panics; write an operation meant to wrap as `wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe` (or use the deprecated --wrapping)"
+        `compile: \`--nsw\` is gone: signed overflow is checked and panics; write an operation meant to wrap as \`wrappingAdd\`, \`wrappingSub\` or \`wrappingMul\` from \`nish:unsafe\` (or use the deprecated --wrapping); ${helpHint()}`
       )
       return 2
     } else if (value === "--wrapping") {
