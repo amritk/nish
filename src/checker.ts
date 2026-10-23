@@ -46,6 +46,7 @@ import {
   FLAG_CONST,
   FLAG_FOREIGN,
   FLAG_PREFIX,
+  FLAG_STATIC,
   FLAG_TYPE_ONLY,
   FLAG_VAR,
   N_ARROW,
@@ -60,6 +61,7 @@ import {
   N_EMPTY,
   N_EXPR_STMT,
   N_FALSE,
+  N_FIELD,
   N_FOR,
   N_FOR_OF,
   N_FUNCTION,
@@ -132,6 +134,7 @@ import {
   referencedStructNames,
   signatureStructNames,
 } from "./structs"
+import { handleHeaderMessage, isHandleFieldAnnotation } from "./handles"
 import {
   T_BOOL,
   T_ERROR,
@@ -670,6 +673,16 @@ export class Checker {
     if (this.nameTaken(name)) {
       this.ctx.error(nameNode, `\`${name}\` is already declared in this module`)
       return
+    }
+    // WP40 §4a H: a class owning a C pointer is a handle class, and a handle
+    // class has no type parameters.
+    if (kind === STRUCT_CLASS) {
+      for (const member of stmt.children[3].children) {
+        if (member.kind === N_FIELD && (member.flags & FLAG_STATIC) === 0 && isHandleFieldAnnotation(member.children[1])) {
+          this.ctx.error(nameNode, handleHeaderMessage(name, "have type parameters"))
+          return
+        }
+      }
     }
     const template = new StructTemplateInfo(name, kind, stmt, this.program.source, this.ctx)
     template.exported = isExported(stmt)

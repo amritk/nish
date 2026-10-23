@@ -1,0 +1,24 @@
+// WP40 H1.1, Row 4: inside the class, a closure capturing a `const` read from
+// the pointer could outlive the call.
+declare function fopen(path: string, mode: string): CPtr | null
+declare function fclose(p: CPtr): i32
+declare function fgetc(p: CPtr): i32
+class File {
+  readonly file: CPtr | null
+  constructor(path: string) {
+    this.file = fopen(path, "r")
+  }
+  peek(): i32 {
+    const p = this.file
+    const next = (): i32 => (p === null ? -1 : fgetc(p))
+    return next()
+  }
+  [Symbol.dispose](): void {
+    const p = this.file
+    if (p !== null) {
+      fclose(p)
+    }
+  }
+}
+
+export const main = (): i32 => 0

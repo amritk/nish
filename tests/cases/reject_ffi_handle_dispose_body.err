@@ -1,0 +1,1 @@
+The `[Symbol.dispose]` of handle class `File` must take no parameters, return `void` and be exactly `close(this.file);` or `const p = this.file; if (p !== null) { close(p); }` for a `declare function` `close`
