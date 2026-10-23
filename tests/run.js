@@ -17307,7 +17307,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   const basic = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "xterm", COLORTERM: "" })
   check(
     "--help with CLICOLOR_FORCE=1 on an 8-colour TERM: the basic palette only",
-    basic.stdout.includes(`${ESC}36m`) && !basic.stdout.includes("38;5;"),
+    basic.stdout.includes(`${ESC}36m`) &&
+      !basic.stdout.includes("38;5;") &&
+      !/\u001b\[(?:[0-9;]*;)?(?:9[0-7]|10[0-7])[;m]/.test(basic.stdout),
     JSON.stringify(basic.stdout.slice(0, 200))
   )
   const noColor = run(["--help"], { ...plainEnv, NO_COLOR: "1", FORCE_COLOR: "1" })

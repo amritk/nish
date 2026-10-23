@@ -48,7 +48,7 @@ export class Style {
 
   /**
    * `text` wrapped in the escape for `code256` (a 256-colour SGR parameter
-   * list) or `code16` (an eight-colour one), and a reset after it; `text` unchanged
+   * list) or `code16` (an eight-colour one, or faint), and a reset after it; `text` unchanged
    * when colour is off, so a caller never has to ask.
    */
   paint(text: string, code256: string, code16: string): string {
@@ -78,9 +78,12 @@ export class Style {
     return this.paint(text, "38;5;222", "33")
   }
 
-  /** Text that explains rather than names: descriptions, notes. */
+  /**
+   * Text that explains rather than names: descriptions, notes. Faint rather
+   * than bright black on the basic palette, which Solarized makes the background.
+   */
   dim(text: string): string {
-    return this.paint(text, "38;5;245", "90")
+    return this.paint(text, "38;5;245", "2")
   }
 }
 
