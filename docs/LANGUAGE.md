@@ -7610,7 +7610,7 @@ only, and WASI as below.
 | `readStdin(buf: u8[], off: i32, len: i32): i32` | at most `len` bytes of stdin into `buf[off, off + len)`, **without waiting**: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds), and the buffer is a writable `u8[]` | write | `term_calls`, `term_import`; `reject_term_read_arity`, `reject_term_read_i32_buffer`, `reject_term_read_readonly` |
 | `waitStdin(timeoutMs: i32): boolean` | wait until stdin is readable, or `timeoutMs` milliseconds pass: `true` when it is readable — its end and an error included, so the read after it answers at once — and `false` when the time ran out first or a signal ended the wait early. A negative timeout waits for ever. Not `willreturn` | write | `term_calls`, `term_import`; `reject_term_wait_string` |
 | `isTerminal(fd: i32): boolean` | whether the descriptor is a terminal (`isatty`) | write | `term_calls`, `term_pty`; `reject_term_is_terminal_arity` |
-| `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stdin when stdout is not one; `[-errno, 0]` when neither is, **`[-25, 0]` for "not a terminal"**. Read it again on each frame to follow a resize | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
+| `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stderr when stdout is not one; `[-errno, 0]` when neither is, **`[-25, 0]` for "not a terminal"**. Read it again on each frame to follow a resize | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
 | `setRawMode(on: boolean): i32` | puts stdin's terminal in raw mode (`true`) or back as it was (`false`): `0`, `-25` when stdin is not a terminal, or the host's `-errno` when the terminal refuses. Asking for the mode it is already in changes nothing and answers `0`, so `setRawMode(false)` is always safe | write | `term_calls`, `term_pty`; `reject_term_raw_number`, `reject_term_unknown_export` |
 
 **Errors are numbers**, in `nish:net`'s shape: `>= 0` is success and a negative
@@ -7672,18 +7672,23 @@ Two things stay as they were:
 - **`OPOST` stays on**, so `"\n"` still moves to the start of the next line and
   output needs no `"\r\n"`.
 
-**The terminal is always put back.** The first `setRawMode(true)` saves the
-termios that was there, and it comes back on `setRawMode(false)`; when `main`
-returns or `process.exit` is called (an `atexit` handler); on every panic, a
-failed check included, whose path ends in `_exit` and so is given its own hook;
-on SIGINT, SIGTERM, SIGQUIT and SIGHUP; and on the faults a program dies of,
-SIGILL, SIGTRAP, SIGABRT, SIGFPE, SIGBUS and SIGSEGV (a stack overflow, or a
-fault in C code a program links). For each of the ten signals a handler is
-installed only when the program left it at its default action: it restores the
-terminal, puts the default back and raises the signal again, so the program
-still dies of it and its parent sees that (exit status 143 for SIGTERM in
-`term_pty`). The handlers run on an alternate stack of the thread that entered
-raw mode, so a stack overflow there restores the terminal too. A program that
+**The terminal is always put back.** Each `setRawMode(true)` that enters raw
+mode saves the termios that was there, and it comes back on
+`setRawMode(false)`; when `main` returns or `process.exit` is called (an
+`atexit` handler); on every panic, a failed check included, whose path ends in
+`_exit` and so is given its own hook; and on every signal whose default action
+ends the program, SIGKILL aside: SIGINT, SIGTERM, SIGQUIT and SIGHUP, SIGPIPE
+from a reader that went away, SIGALRM, SIGUSR1, SIGUSR2, SIGPROF, SIGVTALRM,
+SIGXCPU, SIGXFSZ and SIGSYS, and the faults a program dies of, SIGILL, SIGTRAP,
+SIGABRT, SIGFPE, SIGBUS and SIGSEGV (a stack overflow, or a fault in C code a
+program links). For each a handler is installed only when the program left it
+at its default action: it restores the terminal, puts the default back and
+raises the signal again, so the program still dies of it and its parent sees
+that (exit status 143 for SIGTERM in `term_pty`). The handlers run on a 64 KiB
+alternate stack of the thread that entered raw mode, or on the one that thread
+already had, so a stack overflow there restores the terminal too. The mode is
+marked raw before the switch, so a signal that lands while `TCSAFLUSH` drains
+the output still puts the saved termios back. A program that
 took SIGTERM or SIGINT through `signalFd` keeps it, and puts the terminal back
 itself, or by returning. SIGKILL leaves raw mode behind, and so does a stack
 overflow on a thread other than the one that called `setRawMode(true)`; `stty
@@ -7691,8 +7696,8 @@ sane` undoes either. SIGTSTP is not touched: a shell with job control saves a
 stopped job's terminal state, puts its own back, and gives the job its state
 again on `fg`. Job control also stops a program started in the background
 (`app &`) when it calls `setRawMode(true)`, by SIGTTOU, as it stops any program
-that sets the terminal, and the program enters raw mode on `fg`. Two threads that call `setRawMode`
-at once take turns, so the termios saved is the one from before either.
+that sets the terminal, and the program enters raw mode on `fg`. Two threads that call `setRawMode` at
+once take turns, so the termios saved is the one from before either.
 
 The `term` block of `tests/run.js` runs `term_pty` under `script(1)`, which
 gives it a pseudo-terminal: it is a terminal on both descriptors with a size,

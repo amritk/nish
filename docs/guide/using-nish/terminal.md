@@ -31,7 +31,7 @@ every platform, so a program can branch on them:
 | Answer | Meaning |
 | --- | --- |
 | `-11` | `readStdin`: nothing is waiting yet |
-| `-25` | not a terminal: stdin or stdout is a pipe or a file |
+| `-25` | not a terminal: a pipe or a file — stdin for `setRawMode`, stdout and stderr both for `terminalSize` |
 
 `terminalSize()` answers a pair, `[columns, rows]`. When there is no terminal
 the first number is the error and the second is `0`, so `[-25, 0]` means "not
@@ -68,8 +68,8 @@ Three things do not change:
   terminal `setRawMode` set up.
 - **`"\n"` still starts a new line**, so `console.log` works as it always does.
 - **The terminal is always put back.** `setRawMode(false)` restores it, and
-  so does returning from `main`, `process.exit`, a panic or a crash, and a
-  Ctrl-C or `kill`. Only `kill -9`, and a stack overflow on a thread other
+  so does returning from `main`, `process.exit`, a panic or a crash, a
+  Ctrl-C or `kill`, and a closed pipe on the other end of stdout. Only `kill -9`, and a stack overflow on a thread other
   than the one that called `setRawMode(true)`, leave the terminal in raw
   mode; type `stty sane` to fix it.
 

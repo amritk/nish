@@ -25,20 +25,21 @@
  * editing, no CR-to-NL translation, no flow control, 8-bit bytes, a read that
  * answers as soon as one byte is there. `ISIG` stays on, so Ctrl-C is still
  * SIGINT and Ctrl-Z still stops the program, and `OPOST` stays on, so "\n"
- * still moves to the start of the next line. The termios that was there first
- * is saved by the first `setRawMode(true)` and put back by
+ * still moves to the start of the next line. The termios that was there is
+ * saved by each `setRawMode(true)` that enters raw mode and put back by
  * `setRawMode(false)`, by an atexit handler, by every panic (runtime.c's
- * `nish_fatal_hook`, because a failed check ends in `_exit`), and by SIGINT,
- * SIGTERM, SIGQUIT and SIGHUP and the faults a program dies of (SIGILL,
- * SIGTRAP, SIGABRT, SIGFPE, SIGBUS, SIGSEGV), for each of which a handler is
- * installed only when the program left it at its default: the handler restores
- * the terminal, the default comes back (`SA_RESETHAND`), and the signal is
- * raised again, so the program still dies of it and its parent sees that. A
- * fault's handler runs on an alternate stack of the thread that entered raw
- * mode, so a stack overflow there restores the terminal too; one on another
- * thread has no stack to run it on, and the terminal stays raw. SIGTSTP is
- * left alone: a shell with job control saves a stopped job's terminal state
- * and puts its own back, and gives the job its state again on `fg`.
+ * `nish_fatal_hook`, because a failed check ends in `_exit`), and by each of
+ * the signals POSIX says end a program, SIGKILL aside: SIGINT, SIGTERM and
+ * their kin, SIGPIPE from a reader that went away, and the faults (SIGILL,
+ * SIGTRAP, SIGABRT, SIGFPE, SIGBUS, SIGSEGV). A handler is installed for one
+ * only when the program left it at its default: it restores the terminal, the
+ * default comes back (`SA_RESETHAND`), and the signal is raised again, so the
+ * program still dies of it and its parent sees that. The handlers run on an
+ * alternate stack of the thread that entered raw mode, so a stack overflow
+ * there restores the terminal too; one on another thread has no stack to run
+ * it on, and the terminal stays raw. SIGTSTP is left alone: a shell with job
+ * control saves a stopped job's terminal state and puts its own back, and
+ * gives the job its state again on `fg`.
  *
  * WASI has `read` and `poll` on stdin and no terminal interface, so there the
  * first two work (`readStdin` waiting, below) and the TTY questions answer
@@ -130,14 +131,15 @@ int32_t nish_set_raw_mode(bool on) { return on ? -25 : 0; }
 /* `isTerminal(fd)`: `isatty`. */
 bool nish_is_terminal(int32_t fd) { return isatty(fd) == 1; }
 
-/* `terminalSize()`: `[columns, rows]` of the terminal on stdout, or on stdin
-   when stdout is not one, as a fresh two-element `i32[]`; `[-errno, 0]` when
-   neither is, -25 for "not a terminal". */
+/* `terminalSize()`: `[columns, rows]` of the terminal on stdout, or on stderr
+   when stdout is not one (the two Node keeps a size for), as a fresh
+   two-element `i32[]`; `[-errno, 0]` when neither is, -25 for "not a
+   terminal". */
 nish_array *nish_terminal_size(void) {
   nish_array *out = nish_alloc_array(sizeof(int32_t), 2);
   int32_t *w = (int32_t *)out->data;
   struct winsize ws;
-  if (ioctl(1, TIOCGWINSZ, &ws) == 0 || ioctl(0, TIOCGWINSZ, &ws) == 0) {
+  if (ioctl(1, TIOCGWINSZ, &ws) == 0 || ioctl(2, TIOCGWINSZ, &ws) == 0) {
     w[0] = ws.ws_col;
     w[1] = ws.ws_row;
   } else {
@@ -147,7 +149,7 @@ nish_array *nish_terminal_size(void) {
   return out;
 }
 
-/* The termios stdin had before the first `setRawMode(true)`, whether it is in
+/* The termios stdin had before raw mode was entered, whether it is in
    force now, and whether the exit and signal handlers are in place. One
    terminal per process, so one of each. */
 static struct termios nish_term_saved;
@@ -170,8 +172,9 @@ static void nish_term_restore(void) {
   tcsetattr(0, TCSANOW, &nish_term_saved);
 }
 
-/* Where a fault's handler runs, so a SIGSEGV from an exhausted stack can. */
-static char nish_term_alt_stack[16384];
+/* Where a fault's handler runs, so a SIGSEGV from an exhausted stack can:
+   64 KiB, past Darwin's MINSIGSTKSZ of 32 KiB and glibc's on any core. */
+static char nish_term_alt_stack[65536];
 
 static void nish_term_on_signal(int sig) {
   nish_term_restore();
@@ -194,20 +197,27 @@ static int32_t nish_term_set(bool on) {
   if (tcgetattr(0, &nish_term_saved) != 0) return -errno;
   struct termios t = nish_term_saved;
   t.c_iflag &= ~(tcflag_t)(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
-  t.c_cflag |= CS8;
+  t.c_cflag = (t.c_cflag & ~(tcflag_t)(CSIZE | PARENB)) | CS8;
   t.c_lflag &= ~(tcflag_t)(ECHO | ICANON | IEXTEN);
   t.c_cc[VMIN] = 1;
   t.c_cc[VTIME] = 0;
   if (!nish_term_armed) {
     nish_term_armed = 1;
     atexit(nish_term_restore);
-    stack_t alt = {0};
-    alt.ss_sp = nish_term_alt_stack;
-    alt.ss_size = sizeof nish_term_alt_stack;
-    sigaltstack(&alt, 0);
-    static const int sigs[10] = {SIGINT,  SIGTERM, SIGQUIT, SIGHUP, SIGILL,
-                                 SIGTRAP, SIGABRT, SIGFPE,  SIGBUS, SIGSEGV};
-    for (int i = 0; i < 10; i++) {
+    /* An alternate stack the thread already has, from C code the program
+       links, is kept. */
+    stack_t alt;
+    if (sigaltstack(0, &alt) == 0 && (alt.ss_flags & SS_DISABLE)) {
+      alt.ss_sp = nish_term_alt_stack;
+      alt.ss_size = sizeof nish_term_alt_stack;
+      alt.ss_flags = 0;
+      sigaltstack(&alt, 0);
+    }
+    static const int sigs[] = {
+        SIGINT,  SIGTERM, SIGQUIT, SIGHUP,  SIGPIPE, SIGALRM, SIGUSR1,
+        SIGUSR2, SIGPROF, SIGVTALRM, SIGXCPU, SIGXFSZ, SIGSYS, SIGILL,
+        SIGTRAP, SIGABRT, SIGFPE,  SIGBUS,  SIGSEGV};
+    for (unsigned i = 0; i < sizeof sigs / sizeof sigs[0]; i++) {
       struct sigaction old, sa;
       if (sigaction(sigs[i], 0, &old) != 0 || old.sa_handler != SIG_DFL) continue;
       sa.sa_handler = nish_term_on_signal;
@@ -216,10 +226,15 @@ static int32_t nish_term_set(bool on) {
       sigaction(sigs[i], &sa, 0);
     }
   }
-  if (tcsetattr(0, TCSAFLUSH, &t) != 0) return -errno;
+  /* Raw before the call, so a signal while it drains the output, or just
+     after the switch, still puts the saved termios back. */
   nish_term_raw = 1;
   nish_fatal_hook = nish_term_restore;
-  return 0;
+  if (tcsetattr(0, TCSAFLUSH, &t) == 0) return 0;
+  int err = errno;
+  nish_term_raw = 0;
+  nish_fatal_hook = 0;
+  return -err;
 }
 
 int32_t nish_set_raw_mode(bool on) {

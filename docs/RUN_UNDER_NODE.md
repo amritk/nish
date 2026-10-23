@@ -100,7 +100,7 @@ clocks. The command lines above stay as they are.
   `nish:net` import does not resolve under Node at all, nor does any other
   `nish:` import but the three below; the globals are what the prelude can answer
 - `isTerminal`, `terminalSize` — `tty.isatty(fd)`, and the `columns` and
-  `rows` Node keeps for stdout, or for stdin when stdout is not a terminal,
+  `rows` Node keeps for stdout, or for stderr when stdout is not a terminal,
   `[-25, 0]` when neither is: the native answers
   ([`nish:term`](LANGUAGE.md#nishterm-terminal-input))
 - `readStdin`, `waitStdin`, `setRawMode` — installed only to **throw**, each

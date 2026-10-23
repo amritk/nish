@@ -400,10 +400,10 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
  * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
- * `terminalSize` and `setRawMode`, with the restore that the exit, a panic, four
- * signals and six faults run while raw mode holds.
+ * `terminalSize` and `setRawMode`, with the restore that the exit, a panic and
+ * every signal whose default ends the program run while raw mode holds.
  *
- * Measured **847 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
+ * Measured **890 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
  * `.text`. A ninth translation unit rather than more of `runtime-os.c`, which had 177
  * bytes of its ceiling left, because the rule is a new file with its own measured
  * ceiling, never a raised one. The budget is the next 256-byte boundary above the

@@ -611,10 +611,11 @@ export class RuntimeTable {
     // `nish:term`, runtime/runtime-term.c. Each is a write: stdin's queue and
     // the terminal's mode are kernel state, so no two calls fold into one.
     // `waitStdin` may wait forever, `setRawMode(true)` waits for the
-    // terminal's output to drain (`TCSAFLUSH`), and `readStdin`'s `read` follows a `poll`
-    // that a second reader of the same terminal can race, so those three get
-    // `nounwind` alone. `isTerminal` is one `isatty` and `terminalSize` one
-    // `ioctl` and a fresh two-element `i32[]`, as `waitPid`'s is.
+    // terminal's output to drain (`TCSAFLUSH`), and `readStdin`'s `read`
+    // follows a readiness check that a second reader of the same terminal can
+    // race, so those three get `nounwind` alone. `isTerminal` is one `isatty`
+    // and `terminalSize` at most two `ioctl`s and a fresh two-element `i32[]`
+    // (the shape `waitPid` answers), so both return.
     this.add(
       mayNotReturn(
         "nish_read_stdin",

@@ -322,7 +322,8 @@ function isExecutableSync(path) {
 
 /**
  * `isTerminal(fd)` and `terminalSize()` (`nish:term`): whether a descriptor is
- * a terminal, and the size Node already keeps for stdout's, or stdin's,
+ * a terminal, and the size Node already keeps for stdout's, or stderr's (a
+ * `tty.ReadStream` keeps none, so stdin has no size here),
  * `[-25, 0]` when neither is one, as `runtime-term.c` answers.
  */
 function isTerminal(fd) {
@@ -330,7 +331,7 @@ function isTerminal(fd) {
 }
 
 function terminalSize() {
-  for (const stream of [process.stdout, process.stdin]) {
+  for (const stream of [process.stdout, process.stderr]) {
     if (stream.isTTY && stream.columns !== undefined) return [stream.columns, stream.rows];
   }
   return [-25, 0];
