@@ -179,6 +179,7 @@ provide("toU32", (x) => shim.convert(x, "f64", "u32"));
 provide("toU64", (x) => shim.convert(x, "f64", "u64"));
 provide("f64ToBits", shim.f64ToBits);
 provide("bitsToF64", shim.bitsToF64);
+provide("f32ToBits", shim.f32ToBits);
 
 // Constant time (WP34 N6). Pure functions of their operands, so the answers
 // agree with a native run; the timing does not, and is not claimed here.

@@ -55,8 +55,12 @@ const isF64Unary = (name: string): boolean =>
   name === "round" ||
   name === "sin" ||
   name === "cos" ||
+  name === "tan" ||
   name === "exp" ||
   name === "log"
+
+/** `Math.pow`, `atan2` and `hypot`: two `f64` in, one `f64` out. */
+const isF64Binary = (name: string): boolean => name === "pow" || name === "atan2" || name === "hypot"
 
 /** Whether a bare identifier names a builtin namespace rather than a value. */
 const isNamespace = (name: string): boolean =>
@@ -129,6 +133,7 @@ export const isBuiltinFunction = (name: string): boolean => {
   }
   return (
     name === "f64ToBits" ||
+    name === "f32ToBits" ||
     name === "bitsToF64" ||
     name === "ctSelect" ||
     name === "ctEq" ||
@@ -428,9 +433,9 @@ export const checkNamespaceProperty = (
  */
 const SUPPORTED_BUILTINS: string =
   "console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, Math.floor, Math.ceil, " +
-  "Math.trunc, Math.round, Math.sin, Math.cos, Math.exp, Math.log, Math.pow, Math.abs, Math.min, Math.max, " +
-  "Math.clz32, Math.random, process.exit, Arena.reset, Arena.mark, Arena.release, Arena.used, Date.now, " +
-  "crypto.getRandomValues"
+  "Math.trunc, Math.round, Math.sin, Math.cos, Math.tan, Math.exp, Math.log, Math.pow, Math.atan2, " +
+  "Math.hypot, Math.abs, Math.sign, Math.min, Math.max, Math.clz32, Math.imul, Math.random, process.exit, " +
+  "Arena.reset, Arena.mark, Arena.release, Arena.used, Date.now, crypto.getRandomValues"
 
 /** stage0's one sentence for a call whose dotted name is not a builtin. */
 const unknownBuiltin = (ctx: CheckContext, at: Node, name: string): i32 =>
@@ -549,8 +554,8 @@ const checkMath = (
   member: string,
   scope: Scope
 ): i32 => {
-  if (isF64Unary(member) || member === "pow") {
-    const arity = member === "pow" ? 2 : 1
+  if (isF64Unary(member) || isF64Binary(member)) {
+    const arity = isF64Binary(member) ? 2 : 1
     if (checkBuiltinArity(ctx, call, name, args, arity)) {
       for (const arg of args.children) {
         requireF64(ctx, name, arg, scope)
@@ -567,6 +572,19 @@ const checkMath = (
       return ctx.errorType(args.children[0], `\`Math.abs\` expects a number, got ${ctx.table.typeName(got)}`)
     }
     return got
+  }
+  // `-1`, `0` or `1` in the operand's own type, and for a float `-0` or NaN
+  // as JavaScript answers them.
+  if (member === "sign") {
+    if (!checkBuiltinArity(ctx, call, name, args, 1)) {
+      return T_ERROR
+    }
+    const got = checkExpression(ctx, args.children[0], scope, ctx.numberType())
+    if (got !== T_ERROR && !isNumeric(got)) {
+      return ctx.errorType(args.children[0], `\`Math.sign\` expects a number, got ${ctx.table.typeName(got)}`)
+    }
+    // A ranged operand's base: `Math.sign` of an `integer<5, 9>` is 1, outside it.
+    return got === T_ERROR ? T_ERROR : ctx.table.baseOf(got)
   }
   if (member === "min" || member === "max") {
     if (!checkBuiltinArity(ctx, call, name, args, 2)) {
@@ -607,6 +625,24 @@ const checkMath = (
       )
     }
     return answer
+  }
+  // The low 32 bits of the product, as a signed `i32`. Either operand may be
+  // an `i32` or a `u32` for `clz32`'s reason: its bits are what ToInt32 would
+  // give, so the wrapping `mul` is JavaScript's answer.
+  if (member === "imul") {
+    if (checkBuiltinArity(ctx, call, name, args, 2)) {
+      for (const arg of args.children) {
+        const got = checkExpression(ctx, arg, scope, T_I32)
+        const base = got === T_ERROR ? T_ERROR : ctx.table.baseOf(got)
+        if (base !== T_ERROR && base !== T_I32 && base !== T_U32) {
+          ctx.error(
+            arg,
+            `\`Math.imul\` expects an i32 or a u32, got ${ctx.table.typeName(got)} (convert with toI32 or toU32)`
+          )
+        }
+      }
+    }
+    return T_I32
   }
   if (member === "random") {
     checkBuiltinArity(ctx, call, name, args, 0)
@@ -795,6 +831,12 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       checkArgumentType(ctx, args.children[0], scope, name, from)
     }
     return name === "f64ToBits" ? T_I64 : T_F64
+  }
+  if (name === "f32ToBits") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_F32)
+    }
+    return T_I32
   }
   if (name === "ctSelect" || name === "ctEq") {
     return checkConstantTime(ctx, call, scope, name, args)

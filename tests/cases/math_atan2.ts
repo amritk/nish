@@ -1,0 +1,11 @@
+// Math.atan2(y, x) is libm's `atan2`, declared `readnone` like an intrinsic: LLVM 18 has
+// no llvm.atan2. The quadrant comes from both signs, so a -0 `y` gives -pi, as in JavaScript.
+export const angle = (y: f64, x: f64): f64 => Math.atan2(y, x);
+
+export const main = (): i32 => {
+  const one = toF64(1);
+  const zero = toF64(0);
+  console.log(`${angle(one, one)} ${angle(one, zero)} ${angle(zero, -one)} ${angle(-zero, -one)}`);
+  console.log(`${one / angle(-zero, one)} ${angle(zero, zero)}`);
+  return 0;
+};

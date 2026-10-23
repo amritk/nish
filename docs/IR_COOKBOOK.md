@@ -19180,9 +19180,13 @@ attributes #2 = { nounwind willreturn readonly }
 ### `Math.*` on `f64`
 
 `Math.sqrt` is `llvm.sqrt.f64`; `Math.round` is the floor/compare/select
-sequence that matches JavaScript's round-half-up; `Math.min`/`max` are
-`llvm.minnum`/`maxnum`. All intrinsics are `readnone willreturn`, so the
-callers stay pure.
+sequence that matches JavaScript's round-half-up, then `llvm.copysign.f64`
+so that `Math.round(-0.3)` is `-0`; `Math.min`/`max` are
+`llvm.minimum`/`maximum`, which answer NaN for a NaN operand and order `-0`
+below `+0`, as JavaScript does. `Math.tan`, `Math.atan2` and `Math.hypot`
+call libm's `tan`, `atan2` and `hypot`, declared `readnone` the same way,
+since LLVM 18 has no intrinsic for them. All of these are
+`readnone willreturn`, so the callers stay pure.
 
 <!-- cookbook:begin builtin-math-f64 -->
 Compiled with `--number-mode f64`.
@@ -19198,8 +19202,9 @@ const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1)
 ```llvm
 declare double @llvm.sqrt.f64(double) #0
 declare double @llvm.floor.f64(double) #0
-declare double @llvm.minnum.f64(double, double) #0
-declare double @llvm.maxnum.f64(double, double) #0
+declare double @llvm.minimum.f64(double, double) #0
+declare double @llvm.maximum.f64(double, double) #0
+declare double @llvm.copysign.f64(double, double) #0
 
 define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
 entry:
@@ -19217,13 +19222,14 @@ entry:
   %2 = fcmp oge double %1, 0x3FE0000000000000
   %3 = fadd double %0, 0x3FF0000000000000
   %4 = select i1 %2, double %3, double %0
-  ret double %4
+  %5 = call double @llvm.copysign.f64(double %4, double %x)
+  ret double %5
 }
 
 define internal noundef double @clamp01(double noundef %x) #0 {
 entry:
-  %0 = call double @llvm.maxnum.f64(double %x, double 0x0000000000000000)
-  %1 = call double @llvm.minnum.f64(double %0, double 0x3FF0000000000000)
+  %0 = call double @llvm.maximum.f64(double %x, double 0x0000000000000000)
+  %1 = call double @llvm.minimum.f64(double %0, double 0x3FF0000000000000)
   ret double %1
 }
 

@@ -7,8 +7,9 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
 declare double @llvm.floor.f64(double) #2
-declare double @llvm.minnum.f64(double, double) #2
-declare double @llvm.maxnum.f64(double, double) #2
+declare double @llvm.minimum.f64(double, double) #2
+declare double @llvm.maximum.f64(double, double) #2
+declare double @llvm.copysign.f64(double, double) #2
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -23,13 +24,13 @@ entry:
   store double %0, double* %nan.addr, align 8
   %1 = load double, double* %nan.addr, align 8
   %2 = load double, double* %one.addr, align 8
-  %3 = call double @llvm.minnum.f64(double %1, double %2)
+  %3 = call double @llvm.minimum.f64(double %1, double %2)
   store double %3, double* %low.addr, align 8
   %4 = load double, double* %one.addr, align 8
   %5 = load double, double* %one.addr, align 8
   %6 = fadd double %4, %5
   %7 = load double, double* %nan.addr, align 8
-  %8 = call double @llvm.maxnum.f64(double %6, double %7)
+  %8 = call double @llvm.maximum.f64(double %6, double %7)
   store double %8, double* %high.addr, align 8
   %9 = fneg double 0x4010000000000000
   %10 = fdiv double %9, 0x4024000000000000
@@ -38,20 +39,21 @@ entry:
   %13 = fcmp oge double %12, 0x3FE0000000000000
   %14 = fadd double %11, 0x3FF0000000000000
   %15 = select i1 %13, double %14, double %11
-  store double %15, double* %r.addr, align 8
-  %16 = load double, double* %low.addr, align 8
-  %17 = call i8* @nish_str_from_f64(double %16)
-  %18 = call i8* @nish_str_concat(i8* %17, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %19 = load double, double* %high.addr, align 8
-  %20 = call i8* @nish_str_from_f64(double %19)
-  %21 = call i8* @nish_str_concat(i8* %18, i8* %20)
-  %22 = call i8* @nish_str_concat(i8* %21, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
-  %23 = load double, double* %one.addr, align 8
-  %24 = load double, double* %r.addr, align 8
-  %25 = fdiv double %23, %24
-  %26 = call i8* @nish_str_from_f64(double %25)
-  %27 = call i8* @nish_str_concat(i8* %22, i8* %26)
-  call void @nish_print(i8* %27)
+  %16 = call double @llvm.copysign.f64(double %15, double %10)
+  store double %16, double* %r.addr, align 8
+  %17 = load double, double* %low.addr, align 8
+  %18 = call i8* @nish_str_from_f64(double %17)
+  %19 = call i8* @nish_str_concat(i8* %18, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %20 = load double, double* %high.addr, align 8
+  %21 = call i8* @nish_str_from_f64(double %20)
+  %22 = call i8* @nish_str_concat(i8* %19, i8* %21)
+  %23 = call i8* @nish_str_concat(i8* %22, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %24 = load double, double* %one.addr, align 8
+  %25 = load double, double* %r.addr, align 8
+  %26 = fdiv double %24, %25
+  %27 = call i8* @nish_str_from_f64(double %26)
+  %28 = call i8* @nish_str_concat(i8* %23, i8* %27)
+  call void @nish_print(i8* %28)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

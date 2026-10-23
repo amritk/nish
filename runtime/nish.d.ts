@@ -171,6 +171,8 @@ declare function toF64(x: number | boolean): f64;
 /** Reinterpret the 64 bits of an `f64`, never convert the value. */
 declare function f64ToBits(x: f64): i64;
 declare function bitsToF64(bits: i64): f64;
+/** Reinterpret the 32 bits of an `f32`, never convert the value. */
+declare function f32ToBits(x: f32): i32;
 
 // ---- Constant time (WP34 N6) ------------------------------------------------
 

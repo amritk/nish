@@ -93,6 +93,12 @@ export function bitsToF64(b) {
   return BITS.getFloat64(0);
 }
 
+/** `f32ToBits`: the 32 bits of an `f32`, signed like the compiler's i32. */
+export function f32ToBits(x) {
+  BITS.setFloat32(0, x);
+  return BITS.getInt32(0);
+}
+
 /**
  * `ctSelect` / `ctEq` (WP34 N6). A `u32` is a `number` here and a `u64` a
  * BigInt, so the operands' kind picks the width, and a mix of the two — which

@@ -12,8 +12,9 @@ declare double @llvm.exp.f64(double) #0
 declare double @llvm.log.f64(double) #0
 declare double @llvm.fabs.f64(double) #0
 declare double @llvm.pow.f64(double, double) #0
-declare double @llvm.minnum.f64(double, double) #0
-declare double @llvm.maxnum.f64(double, double) #0
+declare double @llvm.minimum.f64(double, double) #0
+declare double @llvm.maximum.f64(double, double) #0
+declare double @llvm.copysign.f64(double, double) #0
 
 define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
 entry:
@@ -53,57 +54,60 @@ entry:
   %11 = fcmp oge double %10, 0x3FE0000000000000
   %12 = fadd double %9, 0x3FF0000000000000
   %13 = select i1 %11, double %12, double %9
-  %14 = call i8* @nish_str_from_f64(double %13)
-  call void @nish_print(i8* %14)
-  %15 = fneg double 0x4004000000000000
-  %16 = call double @llvm.floor.f64(double %15)
-  %17 = fsub double %15, %16
-  %18 = fcmp oge double %17, 0x3FE0000000000000
-  %19 = fadd double %16, 0x3FF0000000000000
-  %20 = select i1 %18, double %19, double %16
-  %21 = call i8* @nish_str_from_f64(double %20)
-  call void @nish_print(i8* %21)
-  %22 = call double @llvm.floor.f64(double 0x3FDFFFFFFFFFFFFF)
-  %23 = fsub double 0x3FDFFFFFFFFFFFFF, %22
-  %24 = fcmp oge double %23, 0x3FE0000000000000
-  %25 = fadd double %22, 0x3FF0000000000000
-  %26 = select i1 %24, double %25, double %22
-  %27 = call i8* @nish_str_from_f64(double %26)
-  call void @nish_print(i8* %27)
-  %28 = fneg double 0x3FF8000000000000
-  %29 = call double @llvm.fabs.f64(double %28)
+  %14 = call double @llvm.copysign.f64(double %13, double 0x4004000000000000)
+  %15 = call i8* @nish_str_from_f64(double %14)
+  call void @nish_print(i8* %15)
+  %16 = fneg double 0x4004000000000000
+  %17 = call double @llvm.floor.f64(double %16)
+  %18 = fsub double %16, %17
+  %19 = fcmp oge double %18, 0x3FE0000000000000
+  %20 = fadd double %17, 0x3FF0000000000000
+  %21 = select i1 %19, double %20, double %17
+  %22 = call double @llvm.copysign.f64(double %21, double %16)
+  %23 = call i8* @nish_str_from_f64(double %22)
+  call void @nish_print(i8* %23)
+  %24 = call double @llvm.floor.f64(double 0x3FDFFFFFFFFFFFFF)
+  %25 = fsub double 0x3FDFFFFFFFFFFFFF, %24
+  %26 = fcmp oge double %25, 0x3FE0000000000000
+  %27 = fadd double %24, 0x3FF0000000000000
+  %28 = select i1 %26, double %27, double %24
+  %29 = call double @llvm.copysign.f64(double %28, double 0x3FDFFFFFFFFFFFFF)
   %30 = call i8* @nish_str_from_f64(double %29)
   call void @nish_print(i8* %30)
-  %31 = fneg double 0x4000000000000000
-  %32 = call double @llvm.minnum.f64(double 0x3FF8000000000000, double %31)
+  %31 = fneg double 0x3FF8000000000000
+  %32 = call double @llvm.fabs.f64(double %31)
   %33 = call i8* @nish_str_from_f64(double %32)
   call void @nish_print(i8* %33)
   %34 = fneg double 0x4000000000000000
-  %35 = call double @llvm.maxnum.f64(double 0x3FF8000000000000, double %34)
+  %35 = call double @llvm.minimum.f64(double 0x3FF8000000000000, double %34)
   %36 = call i8* @nish_str_from_f64(double %35)
   call void @nish_print(i8* %36)
-  %37 = call double @llvm.pow.f64(double 0x4000000000000000, double 0x4024000000000000)
-  %38 = fcmp uno double 0x4024000000000000, 0x4024000000000000
-  %39 = call double @llvm.fabs.f64(double 0x4000000000000000)
-  %40 = call double @llvm.fabs.f64(double 0x4024000000000000)
-  %41 = fcmp oeq double %39, 1.0
-  %42 = fcmp oeq double %40, 0x7FF0000000000000
-  %43 = and i1 %41, %42
-  %44 = or i1 %38, %43
-  %45 = select i1 %44, double 0x7FF8000000000000, double %37
-  %46 = call i8* @nish_str_from_f64(double %45)
-  call void @nish_print(i8* %46)
-  %47 = call double @llvm.exp.f64(double 0x0000000000000000)
-  %48 = call i8* @nish_str_from_f64(double %47)
-  call void @nish_print(i8* %48)
-  %49 = call double @llvm.log.f64(double 0x4005BF0A8B145769)
-  %50 = call i8* @nish_str_from_f64(double %49)
-  call void @nish_print(i8* %50)
-  %51 = call double @trig(double 0x0000000000000000)
-  %52 = call i8* @nish_str_from_f64(double %51)
-  call void @nish_print(i8* %52)
-  %53 = call i8* @nish_str_from_f64(double 0x400921FB54442D18)
+  %37 = fneg double 0x4000000000000000
+  %38 = call double @llvm.maximum.f64(double 0x3FF8000000000000, double %37)
+  %39 = call i8* @nish_str_from_f64(double %38)
+  call void @nish_print(i8* %39)
+  %40 = call double @llvm.pow.f64(double 0x4000000000000000, double 0x4024000000000000)
+  %41 = fcmp uno double 0x4024000000000000, 0x4024000000000000
+  %42 = call double @llvm.fabs.f64(double 0x4000000000000000)
+  %43 = call double @llvm.fabs.f64(double 0x4024000000000000)
+  %44 = fcmp oeq double %42, 1.0
+  %45 = fcmp oeq double %43, 0x7FF0000000000000
+  %46 = and i1 %44, %45
+  %47 = or i1 %41, %46
+  %48 = select i1 %47, double 0x7FF8000000000000, double %40
+  %49 = call i8* @nish_str_from_f64(double %48)
+  call void @nish_print(i8* %49)
+  %50 = call double @llvm.exp.f64(double 0x0000000000000000)
+  %51 = call i8* @nish_str_from_f64(double %50)
+  call void @nish_print(i8* %51)
+  %52 = call double @llvm.log.f64(double 0x4005BF0A8B145769)
+  %53 = call i8* @nish_str_from_f64(double %52)
   call void @nish_print(i8* %53)
+  %54 = call double @trig(double 0x0000000000000000)
+  %55 = call i8* @nish_str_from_f64(double %54)
+  call void @nish_print(i8* %55)
+  %56 = call i8* @nish_str_from_f64(double 0x400921FB54442D18)
+  call void @nish_print(i8* %56)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

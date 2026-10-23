@@ -236,10 +236,7 @@ no prelude can reach it. They are language decisions
   two senders' values interleave is spawn order here and the scheduler's
   natively, so a program prints the same both ways when what it prints does
   not depend on that order — a count, an integer sum.
-- **1-ulp libm differences** in `sin`/`cos`/`log`/`pow` (glibc vs V8's fdlibm),
-  **`Math.min`/`Math.max` with a NaN operand** (`llvm.minnum`/`maxnum` answer the
-  other operand; JavaScript answers NaN), and **`Math.round(-0.3)`** (`+0`
-  natively, `-0` in JavaScript).
+- **1-ulp libm differences** in `sin`/`cos`/`log`/`pow` (glibc vs V8's fdlibm).
 
 ## What is tested
 

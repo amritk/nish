@@ -164,8 +164,14 @@ const builtinConversionTarget = (name: string): i32 => {
 
 // ---- Math ---------------------------------------------------------------------------
 
-/** The `llvm.<f>.f64` behind a one-argument `Math.*`, or the empty string. */
+/**
+ * The `llvm.<f>.f64` behind a one-argument `Math.*`, or the empty string.
+ * `tan` is libm's own symbol: LLVM 18 has no `llvm.tan`.
+ */
 const f64UnaryIntrinsic = (name: string): string => {
+  if (name === "tan") {
+    return "tan"
+  }
   if (
     name === "sqrt" ||
     name === "floor" ||
@@ -192,10 +198,15 @@ const absIntrinsic = (table: TypeTable, type: i32): string => {
   return isInteger(type) ? `llvm.abs.${table.llvmType(type)}` : `llvm.fabs.${type === T_F32 ? "f32" : "f64"}`
 }
 
-/** `llvm.umin`/`umax` for the unsigned widths, `smin`/`smax` for the signed ones. */
+/**
+ * `llvm.umin`/`umax` for the unsigned widths, `smin`/`smax` for the signed
+ * ones, and `llvm.minimum`/`maximum` for a float: a NaN operand answers NaN
+ * and `-0` orders below `+0`, which is JavaScript's rule, where `minnum`
+ * would drop the NaN.
+ */
 const minMaxIntrinsic = (table: TypeTable, which: string, type: i32): string => {
   if (!isInteger(type)) {
-    return `llvm.${which}num.${type === T_F32 ? "f32" : "f64"}`
+    return `llvm.${which}imum.${type === T_F32 ? "f32" : "f64"}`
   }
   return `llvm.${isUnsigned(type) ? "u" : "s"}${which}.${table.llvmType(type)}`
 }
@@ -220,9 +231,22 @@ const emitMathPow = (emitter: Emitter, expr: Node): string => {
 }
 
 /**
+ * `Math.atan2(y, x)` and `Math.hypot(x, y)`: libm's own, whose C99 Annex F
+ * special cases are ECMAScript's. LLVM 18 has no intrinsic for either.
+ */
+const emitMathLibm2 = (emitter: Emitter, expr: Node, symbol: string): string => {
+  const args = expr.children[1]
+  const a = emitter.emitExpression(args.children[0])
+  const b = emitter.emitExpression(args.children[1])
+  return callIntrinsic(emitter, symbol, "double", `double ${a}, double ${b}`)
+}
+
+/**
  * `Math.round(x)`: JavaScript rounds half toward +infinity, which is neither
  * `llvm.round` nor `llvm.roundeven`, and `floor(x + 0.5)` is wrong for
- * 0.49999999999999994. `f = floor(x)`, plus one when `x - f >= 0.5`.
+ * 0.49999999999999994. `f = floor(x)`, plus one when `x - f >= 0.5`, then
+ * `x`'s sign put back: a value in `[-0.5, 0)` rounds to `-0`, and a NaN stays
+ * NaN, as they do in JavaScript.
  */
 const emitMathRound = (emitter: Emitter, expr: Node): string => {
   const x = emitter.emitExpression(firstArgument(expr))
@@ -230,7 +254,35 @@ const emitMathRound = (emitter: Emitter, expr: Node): string => {
   const frac = emitter.fn.emitValue(`fsub double ${x}, ${floor}`)
   const up = emitter.fn.emitValue(`fcmp oge double ${frac}, ${f64Hex(0.5)}`)
   const next = emitter.fn.emitValue(`fadd double ${floor}, ${f64Hex(1.0)}`)
-  return emitter.fn.emitValue(`select i1 ${up}, double ${next}, double ${floor}`)
+  const r = emitter.fn.emitValue(`select i1 ${up}, double ${next}, double ${floor}`)
+  return callIntrinsic(emitter, "llvm.copysign.f64", "double", `double ${r}, double ${x}`)
+}
+
+/**
+ * `Math.sign(x)`: `(x > 0) - (x < 0)` for a signed integer and `x != 0` for an
+ * unsigned one. A float answers `1` or `-1`, and otherwise `x` itself, which
+ * is how `-0` and NaN come back as JavaScript gives them.
+ */
+const emitMathSign = (emitter: Emitter, expr: Node): string => {
+  const arg = firstArgument(expr)
+  const type = emitter.table.baseOf(emitter.typeOf(arg))
+  const x = emitter.emitExpression(arg)
+  const ty = emitter.llvm(type)
+  if (!isInteger(type)) {
+    const below = emitter.fn.emitValue(`fcmp olt ${ty} ${x}, 0.0`)
+    const above = emitter.fn.emitValue(`fcmp ogt ${ty} ${x}, 0.0`)
+    const low = emitter.fn.emitValue(`select i1 ${below}, ${ty} -1.0, ${ty} ${x}`)
+    return emitter.fn.emitValue(`select i1 ${above}, ${ty} 1.0, ${ty} ${low}`)
+  }
+  if (isUnsigned(type)) {
+    const nonzero = emitter.fn.emitValue(`icmp ne ${ty} ${x}, 0`)
+    return emitter.fn.emitValue(`zext i1 ${nonzero} to ${ty}`)
+  }
+  const above = emitter.fn.emitValue(`icmp sgt ${ty} ${x}, 0`)
+  const below = emitter.fn.emitValue(`icmp slt ${ty} ${x}, 0`)
+  const plus = emitter.fn.emitValue(`zext i1 ${above} to ${ty}`)
+  const minus = emitter.fn.emitValue(`zext i1 ${below} to ${ty}`)
+  return emitter.fn.emitValue(`sub ${ty} ${plus}, ${minus}`)
 }
 
 const emitMathAbs = (emitter: Emitter, expr: Node): string => {
@@ -477,11 +529,20 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "Math.pow") {
     return emitMathPow(emitter, expr)
   }
+  if (name === "Math.atan2") {
+    return emitMathLibm2(emitter, expr, "atan2")
+  }
+  if (name === "Math.hypot") {
+    return emitMathLibm2(emitter, expr, "hypot")
+  }
   if (name === "Math.round") {
     return emitMathRound(emitter, expr)
   }
   if (name === "Math.abs") {
     return emitMathAbs(emitter, expr)
+  }
+  if (name === "Math.sign") {
+    return emitMathSign(emitter, expr)
   }
   if (name === "Math.min") {
     return emitMathMinMax(emitter, expr, "min")
@@ -492,6 +553,13 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "Math.clz32") {
     const x = emitter.emitExpression(firstArgument(expr))
     return callIntrinsic(emitter, "llvm.ctlz.i32", "i32", `i32 ${x}, i1 false`)
+  }
+  // The low 32 bits of the product, which a wrapping `mul` is: no overflow check.
+  if (name === "Math.imul") {
+    const args = expr.children[1]
+    const a = emitter.emitExpression(args.children[0])
+    const b = emitter.emitExpression(args.children[1])
+    return emitter.fn.emitValue(`mul i32 ${a}, ${b}`)
   }
   if (name === "Math.random") {
     return emitter.fn.emitValue(`call double ${emitter.useRuntime("nish_random")}()`)
@@ -584,8 +652,13 @@ export const builtinCalleesNamed = (
     out.push("llvm.fabs.f64")
     return out
   }
+  if (name === "Math.atan2" || name === "Math.hypot") {
+    out.push(name.substring(5, name.length))
+    return out
+  }
   if (name === "Math.round") {
     out.push("llvm.floor.f64")
+    out.push("llvm.copysign.f64")
     return out
   }
   if (name === "Math.abs") {
@@ -667,6 +740,9 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   }
   if (name === "f64ToBits") {
     return emitter.fn.emitValue(`bitcast double ${emitter.emitExpression(firstArgument(expr))} to i64`)
+  }
+  if (name === "f32ToBits") {
+    return emitter.fn.emitValue(`bitcast float ${emitter.emitExpression(firstArgument(expr))} to i32`)
   }
   if (name === "bitsToF64") {
     return emitter.fn.emitValue(`bitcast i64 ${emitter.emitExpression(firstArgument(expr))} to double`)
@@ -1092,11 +1168,17 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   // Declared here rather than left to fall through, so the table says it:
-  // `f64ToBits` / `bitsToF64` are one bitcast, `ctSelect` / `ctEq` are
+  // `f64ToBits` / `f32ToBits` / `bitsToF64` are one bitcast, `ctSelect` / `ctEq` are
   // bitwise instructions and an empty asm (WP34 N6), and the other `nish:unsafe`
   // functions are a load, a store or one instruction, with no panic behind
   // any of them. None calls anything.
-  if (name === "f64ToBits" || name === "bitsToF64" || name === "ctSelect" || name === "ctEq") {
+  if (
+    name === "f64ToBits" ||
+    name === "f32ToBits" ||
+    name === "bitsToF64" ||
+    name === "ctSelect" ||
+    name === "ctEq"
+  ) {
     return out
   }
   if (name === "uncheckedGet" || name === "uncheckedSet") {

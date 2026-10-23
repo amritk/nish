@@ -32,8 +32,7 @@
 //   - the names `isCLibrarySymbol` lists:
 //       - every symbol the runtime's objects leave undefined, natively, with
 //         `-DNISH_THREADS` and for wasm32-wasi, and every one
-//         `runtime/runtime-wasm.c` defines or leaves undefined (it defines
-//         `fmin`, `fminf`, `fmax` and `fmaxf` itself);
+//         `runtime/runtime-wasm.c` defines or leaves undefined;
 //       - what the runtime calls only on Darwin and the BSDs, which no Linux
 //         run can list: `accept`, `getentropy`, `kevent`, `kqueue`, `pipe`;
 //       - the C library calls a program's own code reaches through LLVM: the

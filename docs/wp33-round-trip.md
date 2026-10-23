@@ -149,8 +149,7 @@ collected in §7.
 | `i64` / `u64` are native 64-bit | the prelude throws at the first mixed arithmetic | C | `bigint`, `BigInt.asIntN(64, …)` / `asUintN` | Keep. The type becomes `bigint`, which is also the honest TS type. |
 | `i32 >>> n` reads back signed | `-1 >>> 0` is `-1` | C | `(a >>> n) \| 0` | Keep. It is the documented wart that `u32` exists for. |
 | `toI32` from `f64` saturates | `toI32(5e10)` | C | a runtime helper, already in `shim.mjs` | Keep. |
-| `Math.min` / `max` with a NaN operand, `Math.round(-0.3)` | known-failures | C | runtime helpers, `min`/`max`/`round` | Keep. Cheap to translate exactly. |
-| 1-ulp `sin` / `cos` / `log` / `pow` | known-failures | — | nothing | Platform noise, not a language difference: two native targets can disagree the same way. Stated, not translated. |
+| 1-ulp `sin` / `cos` / `tan` / `atan2` / `hypot` / `log` / `pow` | known-failures | — | nothing | Platform noise, not a language difference: two native targets can disagree the same way. Stated, not translated. |
 | integer divide by zero, `MIN / -1` | known-failures | B | `idiv`, which panics as native does | — |
 | signed overflow panics without `--wrapping` or `wrapping*` | LANGUAGE.md | B | wrapping, via the `\| 0` above | A program that overflows stops natively, and the TS reading picks one defined answer. |
 
@@ -209,7 +208,11 @@ inheritance); compile-time function parameters and non-capturing arrows;
 `for...of` over an array; `fill` on an array of numbers, clamped ends and
 all; `ctSelect` and `ctEq` over `u32`; `Date.now()`, the same floored
 `CLOCK_REALTIME` in both readings; `statMtimeSync` under the prelude, which is
-Node's own `mtimeMs` (WP34 N3); template literals; f64 arithmetic; `std/threads.ts`'s
+Node's own `mtimeMs` (WP34 N3); `Math.min`, `max` and `round` of a float,
+NaN and `-0` included, which left §3.1 when WP34 N7 lowered them to
+`llvm.minimum`, `llvm.maximum` and a `llvm.copysign` (NL8010 is retired);
+`Math.sign`, `Math.imul` and `f32ToBits` (N7, the last through
+`runtime/nish.mjs`); template literals; f64 arithmetic; `std/threads.ts`'s
 parallel calls, whose std bodies are their sequential meaning; ASI.
 
 ---
