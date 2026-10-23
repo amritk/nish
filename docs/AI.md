@@ -2096,7 +2096,8 @@ method there is. `substring` **clamps** an out-of-range offset the
 way JavaScript does; `slice` instead **panics** unless
 `0 <= start <= end <= s.length`, and is the faster of the two when you have
 already established the range. Every offset is a **byte** offset, so cutting a multi-byte character
-in half is possible.
+in half is possible. To count characters rather than bytes, `codePointLength(s)`
+from `nish/text` counts code points natively and under Node alike.
 
 **Process.** `process.exit(code)`, `process.argv` (a read-only `string[]`;
 `argv[0]` is the program path, one index earlier than Node),

@@ -6,8 +6,8 @@
 // needle leaving `replaceAll` alone — so changing one of those decisions makes
 // this case the diff that says so.
 //
-// The same program runs under Node too (`tests/run.js`, "std_text: the same
-// report under Node"), which is why the imports name the `.ts` file: Node
+// The same program runs under Node too (`tests/run.js`, "link/std_text: under
+// the Node prelude it exits 0 and prints expected.out"), which is why the imports name the `.ts` file: Node
 // resolves a relative path only as written, and Nish takes either spelling.
 import { Suite } from "../../../std/testing.ts";
 import {

@@ -70,11 +70,11 @@ const SPACE: i32 = 32
 const TAB: i32 = 9
 const INDEX_OF_ANY_MAX_SET: i32 = 16
 const NON_ASCII: i32 = 128
-const TEXT_UTF8_TOP_BITS: i32 = 192
-const TEXT_UTF8_CONTINUATION: i32 = 128
-const TEXT_HIGH_SURROGATE: i32 = 55296
-const TEXT_LOW_SURROGATE: i32 = 56320
-const TEXT_SURROGATE_END: i32 = 57344
+const UTF8_TOP_BITS: i32 = 192
+const UTF8_CONTINUATION: i32 = 128
+const HIGH_SURROGATE: i32 = 55296
+const LOW_SURROGATE: i32 = 56320
+const SURROGATE_END: i32 = 57344
 function isTextBlankByte(code: i32): boolean -> @nish.isTextBlankByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -164,9 +164,9 @@ function codePointLength(text: string): i32 -> @nish.codePointLength [exported]
   calls: nish.textUnitsAreBytes
   stackSites=0 stackLocals=0
   local +0:9 length: i32 (const)
-  local +1:7 count: i32 (let)
-  local +2:7 i: i32 (let)
-  callee +3:7 textUnitsAreBytes -> @nish.textUnitsAreBytes
-  local +17:7 previous: i32 (let)
-  local +19:11 unit: i32 (const)
-  local +20:11 closesPair: boolean (const)
+  local +5:7 count: u32 (let)
+  local +6:7 i: i32 (let)
+  callee +7:7 textUnitsAreBytes -> @nish.textUnitsAreBytes
+  local +18:7 previous: i32 (let)
+  local +20:11 unit: i32 (const)
+  local +21:11 closesPair: boolean (const)

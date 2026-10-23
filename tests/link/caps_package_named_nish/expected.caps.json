@@ -70,12 +70,10 @@
               "capabilities": [],
               "witnesses": {},
               "panics": [
-                { "kind": "index", "at": "std/text.ts:328:18", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:329:9", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:331:7", "proven": true },
-                { "kind": "index", "at": "std/text.ts:339:29", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:346:7", "proven": true },
-                { "kind": "overflow", "at": "std/text.ts:349:5", "proven": true }
+                { "kind": "index", "at": "std/text.ts:330:18", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:333:7", "proven": true },
+                { "kind": "index", "at": "std/text.ts:341:29", "proven": true },
+                { "kind": "overflow", "at": "std/text.ts:348:5", "proven": true }
               ]
             },
             {

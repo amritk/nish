@@ -18,7 +18,8 @@
 // bare numeric literal passed to a user function or a method, so an `i32`
 // argument has to be converted at the call (LANGUAGE.md, *Numeric literals*).
 // The imports name the `.ts` file so that Node runs this program as written
-// (`tests/run.js`, "std_text: the same report under Node").
+// (`tests/run.js`, "link/std_text_f64: under the Node prelude it exits 0 and
+// prints expected.out").
 import { jsonField } from "../../../std/json.ts";
 import { Suite } from "../../../std/testing.ts";
 import {

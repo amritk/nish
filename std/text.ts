@@ -271,30 +271,31 @@ const indexOfAnyFrom = (text: string, bytes: string, from: i32): i32 => {
 }
 
 /** The top two bits of a UTF-8 byte, which say whether it starts a code point. */
-const TEXT_UTF8_TOP_BITS: i32 = 0xc0
+const UTF8_TOP_BITS: i32 = 0xc0
 
 /** What those two bits are on a continuation byte: `10xxxxxx`, never a code point's first byte. */
-const TEXT_UTF8_CONTINUATION: i32 = 0x80
+const UTF8_CONTINUATION: i32 = 0x80
 
 /** The first high surrogate, the unit that opens a UTF-16 pair. */
-const TEXT_HIGH_SURROGATE: i32 = 0xd800
+const HIGH_SURROGATE: i32 = 0xd800
 
 /** The first low surrogate, the unit that closes a pair; the high ones end just below it. */
-const TEXT_LOW_SURROGATE: i32 = 0xdc00
+const LOW_SURROGATE: i32 = 0xdc00
 
 /** One past the last low surrogate. */
-const TEXT_SURROGATE_END: i32 = 0xe000
+const SURROGATE_END: i32 = 0xe000
 
 /**
  * Whether a string's units are UTF-8 bytes, as they are natively, rather than
  * UTF-16 units, as they are under Node.
  *
  * `é` is two bytes and one UTF-16 unit, so its length says which host is
- * running. Natively the length of a literal is a load from a constant, and the
+ * running. It is written as an escape so that how this file is saved, `é` as
+ * one code point or as `e` and a combining accent, cannot change the answer. Natively the length of a literal is a load from a constant, and the
  * optimiser folds this call to `true` and drops the other walk in
  * `codePointLength`. The name is long for the reason `isTextBlankByte`'s is.
  */
-const textUnitsAreBytes = (): boolean => toI32("é".length) === 2
+const textUnitsAreBytes = (): boolean => toI32("\u00e9".length) === 2
 
 /**
  * The number of Unicode code points in `text`: what JSON Schema's
@@ -318,19 +319,20 @@ const textUnitsAreBytes = (): boolean => toI32("é".length) === 2
  */
 export const codePointLength = (text: string): i32 => {
   const length: i32 = toI32(text.length)
-  let count: i32 = 0
+  // `count` never passes `i`, which stays below `length`, so it never wraps.
+  // It is a `u32` because unsigned addition carries no overflow check: an
+  // `i32` would need a panic branch, or a `count < length` guard to prove it
+  // away, and either one keeps the byte walk from vectorizing.
+  let count: u32 = 0
   let i: i32 = 0
   if (textUnitsAreBytes()) {
     while (i < length) {
-      // `count` never passes `i`, which is below `length`, so `count < length`
-      // always holds: it is written because it proves the `+ 1` cannot wrap,
-      // which keeps this function callable where panics are denied.
-      if ((toI32(text.charCodeAt(i)) & TEXT_UTF8_TOP_BITS) !== TEXT_UTF8_CONTINUATION && count < length) {
+      if ((toI32(text.charCodeAt(i)) & UTF8_TOP_BITS) !== UTF8_CONTINUATION) {
         count += 1
       }
       i += 1
     }
-    return count
+    return toI32(count)
   }
   // A low surrogate right after a high one closes a pair the high one already
   // counted. Any other unit, a lone surrogate included, is a code point.
@@ -338,15 +340,12 @@ export const codePointLength = (text: string): i32 => {
   while (i < length) {
     const unit: i32 = toI32(text.charCodeAt(i))
     const closesPair: boolean =
-      unit >= TEXT_LOW_SURROGATE &&
-      unit < TEXT_SURROGATE_END &&
-      previous >= TEXT_HIGH_SURROGATE &&
-      previous < TEXT_LOW_SURROGATE
-    if (!closesPair && count < length) {
+      unit >= LOW_SURROGATE && unit < SURROGATE_END && previous >= HIGH_SURROGATE && previous < LOW_SURROGATE
+    if (!closesPair) {
       count += 1
     }
     previous = unit
     i += 1
   }
-  return count
+  return toI32(count)
 }

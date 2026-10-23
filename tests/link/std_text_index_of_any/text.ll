@@ -1046,113 +1046,93 @@ while.body:
   %12 = zext i8 %11 to i32
   %13 = and i32 %12, 192
   %14 = icmp ne i32 %13, 128
-  br i1 %14, label %land.rhs, label %land.end
-
-land.rhs:
-  %15 = load i32, i32* %count.addr, align 4
-  %16 = load i32, i32* %length.addr, align 4
-  %17 = icmp slt i32 %15, %16
-  br label %land.end
-
-land.end:
-  %18 = phi i1 [ false, %while.body ], [ %17, %land.rhs ]
-  br i1 %18, label %if.then.1, label %if.end.1
+  br i1 %14, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %19 = load i32, i32* %count.addr, align 4
-  %20 = add nsw i32 %19, 1
-  store i32 %20, i32* %count.addr, align 4
+  %15 = load i32, i32* %count.addr, align 4
+  %16 = add i32 %15, 1
+  store i32 %16, i32* %count.addr, align 4
   br label %if.end.1
 
 if.end.1:
-  %21 = load i32, i32* %i.addr, align 4
-  %22 = add nsw i32 %21, 1
-  store i32 %22, i32* %i.addr, align 4
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = add nsw i32 %17, 1
+  store i32 %18, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
-  %23 = load i32, i32* %count.addr, align 4
-  ret i32 %23
+  %19 = load i32, i32* %count.addr, align 4
+  ret i32 %19
 
 if.end:
   store i32 0, i32* %previous.addr, align 4
   br label %while.cond.1
 
 while.cond.1:
-  %24 = load i32, i32* %i.addr, align 4
-  %25 = load i32, i32* %length.addr, align 4
-  %26 = icmp slt i32 %24, %25
-  br i1 %26, label %while.body.1, label %while.end.1
+  %20 = load i32, i32* %i.addr, align 4
+  %21 = load i32, i32* %length.addr, align 4
+  %22 = icmp slt i32 %20, %21
+  br i1 %22, label %while.body.1, label %while.end.1
 
 while.body.1:
-  %27 = load i32, i32* %i.addr, align 4
-  %28 = sext i32 %27 to i64
-  %29 = getelementptr inbounds i8, i8* %text, i64 8
-  %30 = getelementptr inbounds i8, i8* %29, i64 %28
-  %31 = load i8, i8* %30, align 1
-  %32 = zext i8 %31 to i32
-  store i32 %32, i32* %unit.addr, align 4
-  %33 = load i32, i32* %unit.addr, align 4
-  %34 = icmp sge i32 %33, 56320
-  br i1 %34, label %land.rhs.3, label %land.end.3
-
-land.rhs.3:
-  %35 = load i32, i32* %unit.addr, align 4
-  %36 = icmp slt i32 %35, 57344
-  br label %land.end.3
-
-land.end.3:
-  %37 = phi i1 [ false, %while.body.1 ], [ %36, %land.rhs.3 ]
-  br i1 %37, label %land.rhs.2, label %land.end.2
+  %23 = load i32, i32* %i.addr, align 4
+  %24 = sext i32 %23 to i64
+  %25 = getelementptr inbounds i8, i8* %text, i64 8
+  %26 = getelementptr inbounds i8, i8* %25, i64 %24
+  %27 = load i8, i8* %26, align 1
+  %28 = zext i8 %27 to i32
+  store i32 %28, i32* %unit.addr, align 4
+  %29 = load i32, i32* %unit.addr, align 4
+  %30 = icmp sge i32 %29, 56320
+  br i1 %30, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %38 = load i32, i32* %previous.addr, align 4
-  %39 = icmp sge i32 %38, 55296
+  %31 = load i32, i32* %unit.addr, align 4
+  %32 = icmp slt i32 %31, 57344
   br label %land.end.2
 
 land.end.2:
-  %40 = phi i1 [ false, %land.end.3 ], [ %39, %land.rhs.2 ]
-  br i1 %40, label %land.rhs.1, label %land.end.1
+  %33 = phi i1 [ false, %while.body.1 ], [ %32, %land.rhs.2 ]
+  br i1 %33, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %41 = load i32, i32* %previous.addr, align 4
-  %42 = icmp slt i32 %41, 56320
+  %34 = load i32, i32* %previous.addr, align 4
+  %35 = icmp sge i32 %34, 55296
   br label %land.end.1
 
 land.end.1:
-  %43 = phi i1 [ false, %land.end.2 ], [ %42, %land.rhs.1 ]
-  store i1 %43, i1* %closesPair.addr, align 1
-  %44 = load i1, i1* %closesPair.addr, align 1
-  %45 = xor i1 %44, true
-  br i1 %45, label %land.rhs.4, label %land.end.4
+  %36 = phi i1 [ false, %land.end.2 ], [ %35, %land.rhs.1 ]
+  br i1 %36, label %land.rhs, label %land.end
 
-land.rhs.4:
-  %46 = load i32, i32* %count.addr, align 4
-  %47 = load i32, i32* %length.addr, align 4
-  %48 = icmp slt i32 %46, %47
-  br label %land.end.4
+land.rhs:
+  %37 = load i32, i32* %previous.addr, align 4
+  %38 = icmp slt i32 %37, 56320
+  br label %land.end
 
-land.end.4:
-  %49 = phi i1 [ false, %land.end.1 ], [ %48, %land.rhs.4 ]
-  br i1 %49, label %if.then.2, label %if.end.2
+land.end:
+  %39 = phi i1 [ false, %land.end.1 ], [ %38, %land.rhs ]
+  store i1 %39, i1* %closesPair.addr, align 1
+  %40 = load i1, i1* %closesPair.addr, align 1
+  %41 = xor i1 %40, true
+  br i1 %41, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %50 = load i32, i32* %count.addr, align 4
-  %51 = add nsw i32 %50, 1
-  store i32 %51, i32* %count.addr, align 4
+  %42 = load i32, i32* %count.addr, align 4
+  %43 = add i32 %42, 1
+  store i32 %43, i32* %count.addr, align 4
   br label %if.end.2
 
 if.end.2:
-  %52 = load i32, i32* %unit.addr, align 4
-  store i32 %52, i32* %previous.addr, align 4
-  %53 = load i32, i32* %i.addr, align 4
-  %54 = add nsw i32 %53, 1
-  store i32 %54, i32* %i.addr, align 4
+  %44 = load i32, i32* %unit.addr, align 4
+  store i32 %44, i32* %previous.addr, align 4
+  %45 = load i32, i32* %i.addr, align 4
+  %46 = add nsw i32 %45, 1
+  store i32 %46, i32* %i.addr, align 4
   br label %while.cond.1
 
 while.end.1:
-  %55 = load i32, i32* %count.addr, align 4
-  ret i32 %55
+  %47 = load i32, i32* %count.addr, align 4
+  ret i32 %47
 }
 
 attributes #0 = { nounwind willreturn readnone }
