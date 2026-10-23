@@ -38,6 +38,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
+| [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and the keys it reads decoded |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url |
@@ -694,6 +695,92 @@ A generator is an ordinary object you step, so a task or a parallel body that
 makes its own may use it freely; one shared between tasks would be a write
 they all see, and is refused. See [Random numbers](../../LANGUAGE.md#random-numbers-rng-in-nishrandom)
 in the reference.
+
+## `nish/term`
+
+`nish/term` is for a program that draws the whole terminal, many times a
+second: a game, a dashboard. It does no input or output of its own. A
+`Screen` turns what you drew into the string that updates the terminal, and
+you print it with `write`. A `KeyDecoder` turns the bytes you read into key
+events. The terminal's size and the clock are numbers you pass in. Because
+the module reaches no capability, a program that uses it builds under
+`--deny` of all of them and prints the same bytes under Node.
+
+```ts nish:ok
+import { ATTR_BOLD, COLOR_DEFAULT, Canvas, Screen, hideCursor, rgb, showCursor } from "nish/term";
+import { write } from "nish:io";
+
+export const main = (): i32 => {
+  const screen = new Screen(20, 4, false);
+  const canvas = new Canvas(screen); // 20 x 8 pixels, two to a cell
+  canvas.fillRect(2, 2, 6, 2, rgb(0, 160, 255)); // a brick
+  canvas.line(0, 7, 19, 7, rgb(90, 90, 90)); // the floor
+  screen.text(11, 0, "score 0", rgb(255, 255, 0), COLOR_DEFAULT, ATTR_BOLD);
+  write(hideCursor());
+  write(screen.flush()); // the first frame: every cell
+  screen.text(17, 0, "5", rgb(255, 255, 0), COLOR_DEFAULT, ATTR_BOLD);
+  write(screen.flush()); // the next one: a cursor move and the "5"
+  write(`${showCursor()}\n`); // a flush ends in the default style
+  return 0;
+};
+```
+
+**A `Screen`** is `width × height` cells, each a code point, a foreground
+colour, a background colour and the attributes `ATTR_BOLD` and
+`ATTR_INVERSE`. Draw with `set(x, y, codePoint, fg, bg, attrs)` and
+`text(x, y, s, fg, bg, attrs)`, which returns the column after the text, and
+blank the frame with `clear(background)`. The screen also remembers what it
+last sent. `flush()` answers only the difference: it moves the cursor to the
+cells that changed and sends a style only where it differs from the cell
+before. An empty answer means nothing changed. On a 200 × 60 screen,
+rewriting every cell flushes in about 0.1 ms, and one changed cell in about
+0.03 ms. After `resize(width, height)` the next flush redraws everything, and
+so does one after `invalidate()`: call that when something else has written
+to the terminal.
+
+**A `Canvas`** puts pixels on a screen, two to a cell, one above the other.
+It draws with the half-block character "▀": the foreground is the top pixel's
+colour and the background is the bottom pixel's. A cell is about twice as
+tall as it is wide, so the pixels come out roughly square. It has
+`setPixel(x, y, colour)`, `pixel(x, y)`, `fillRect(x, y, w, h, colour)`,
+`line(x0, y0, x1, y1, colour)`, `clear(colour)`, and
+`text(column, row, s, fg)`, which writes over the pixels in cell
+coordinates. Anything drawn off the edge is dropped.
+
+**Colour** is `rgb(r, g, b)`, a 24-bit `i32`, or `COLOR_DEFAULT` for the
+terminal's own colour. Some terminals cannot show 24-bit colour; for them,
+make the screen with `new Screen(w, h, true)` and every colour is sent as its
+nearest entry in the 256-colour palette (`paletteIndex`). Most terminals set
+`COLORTERM` to `truecolor` or `24bit` when they can, and reading it is up to
+your program. The other escapes are plain functions that answer a string:
+`enterAltScreen` and `leaveAltScreen`, `hideCursor` and `showCursor`,
+`clearScreen`, `resetStyle` and `moveCursor(x, y)`.
+
+**A `KeyDecoder`** reads the bytes a terminal in raw mode sends.
+`feed(bytes, count, nowMs)` answers a `KeyEvent[]`, each with a `kind` (one
+of `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`, `KEY_ENTER`, `KEY_SPACE`,
+`KEY_ESCAPE`, `KEY_CTRL_C`, `KEY_TAB`, `KEY_BACKSPACE`, `KEY_CHAR`,
+`KEY_CONTROL`, `KEY_UNKNOWN`) and a `code`, which for `KEY_CHAR` is the
+character's code point. A read can stop in the middle of an arrow key's
+`ESC [ A`; the decoder holds the start and finishes the key on the next
+`feed`. The ESC key sends a lone ESC, which is also how an arrow key begins.
+So the decoder holds an ESC until either the rest of a sequence arrives or
+the timeout you gave the constructor passes. While `waiting()` is true, call
+`poll(nowMs)` once the timeout is up to collect the `KEY_ESCAPE`.
+
+```ts nish:ok
+import { KEY_LEFT, KeyDecoder } from "nish/term";
+
+export const main = (): i32 => {
+  const keys = new KeyDecoder(toF64(30)); // give up on a lone ESC after 30 ms
+  const first: u8[] = [toU8(27), toU8(91)]; // ESC [, and the read ends
+  const rest: u8[] = [toU8(68)]; // D
+  const none = keys.feed(first, 2, toF64(0));
+  const left = keys.feed(rest, 1, toF64(4));
+  console.log(`${none.length} ${left.length} ${left[0].kind === KEY_LEFT}`); // 0 1 true
+  return 0;
+};
+```
 
 ## `nish/bytes`
 
