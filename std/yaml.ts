@@ -290,6 +290,12 @@ export class YamlStream {
   /** Per comment kept: its range, from the `#`. */
   commentStarts: i32[]
   commentEnds: i32[]
+  /**
+   * Per node: the path step whose merge search last went through it, as
+   * `mergeStep` numbers them; grown to the node count by the first search, so
+   * a search marks a map searched in one store.
+   */
+  mergeStamps: i32[]
   /** Per node: its `YAML_*` kind, style and core-schema type (`YAML_UNRESOLVED` until read). */
   kinds: u8[]
   styles: u8[]
@@ -302,6 +308,8 @@ export class YamlStream {
   kidTop: i32 = 0
   errors: i32 = 0
   warnings: i32 = 0
+  /** How many path steps have searched merge keys; the stamp of the latest. */
+  mergeStep: i32 = 0
   /** Whether a plain `<<` key is a merge key, as `YamlOptions.merge` said; paths follow merge keys while it is. */
   merge: boolean = true
 
@@ -338,6 +346,7 @@ export class YamlStream {
     this.docEnds = []
     this.commentStarts = []
     this.commentEnds = []
+    this.mergeStamps = []
   }
 
   // ---- Documents ---------------------------------------------------------------
@@ -4400,19 +4409,15 @@ export const keyText = (stream: YamlStream, node: i32): string => yamlKeyText(st
 /** Walks a path of map keys and sequence indexes down from a node. */
 class YamlPathWalker {
   stream: YamlStream
-  /** The maps one step's merge search has been through, so each is searched once: the first `seenTop`. */
-  seen: i32[]
   /** The deepest node reached. */
   node: i32 = -1
   /** The last pair stepped through, or `-1`. */
   pair: i32 = -1
   /** How many steps matched. */
   matched: i32 = 0
-  seenTop: i32 = 0
 
   constructor(stream: YamlStream) {
     this.stream = stream
-    this.seen = []
   }
 
   /** Internal: node `n` with its aliases followed, up to `YAML_ALIAS_HOPS` of them; `-1` past that. */
@@ -4489,8 +4494,11 @@ class YamlPathWalker {
    * name, in the order they are written, each searched as `ownPair` and then
    * through its own merge keys, so the first map listed wins. A merge key's
    * value is a map, an alias to one or a sequence of those; anything else
-   * merges nothing. A map already searched is skipped, and the search goes
-   * `YAML_ALIAS_HOPS` merges deep at most, so a recursive alias ends.
+   * merges nothing. A map already searched is skipped (two merges sharing a
+   * map search it once), and the search goes `YAML_ALIAS_HOPS` merges deep at
+   * most. No YAML source can form a merge cycle, since an anchor binds only
+   * once its node ends, so both guards are defensive: they bound the work, not
+   * a loop.
    */
   mergedPair(map: i32, step: string, depth: i32): i32 {
     const stream: YamlStream = this.stream
@@ -4528,27 +4536,44 @@ class YamlPathWalker {
     if (from < 0 || stream.kind(from) !== YAML_MAP) {
       return -1
     }
-    const seen: i32[] = this.seen
-    let k: i32 = 0
-    while (k < this.seenTop && k < toI32(seen.length)) {
-      if (seen[k] === from) {
-        return -1
-      }
-      k += 1
+    if (!this.markSeen(from)) {
+      return -1
     }
-    this.markSeen(from)
     const own: i32 = this.ownPair(from, step)
     return own >= 0 ? own : this.mergedPair(from, step, depth + 1)
   }
 
-  /** Internal: records map `map` as searched, reusing the array a past step grew. */
-  markSeen(map: i32): void {
-    if (this.seenTop < toI32(this.seen.length)) {
-      this.seen[this.seenTop] = map
-    } else {
-      this.seen.push(map)
+  /**
+   * Internal: starts a step's merge search: a new `mergeStep` stamp, with
+   * `mergeStamps` grown to every node. The stamps are cleared only when the
+   * count wraps, so a step costs what it searches, not the document's size.
+   */
+  startMerge(): void {
+    const stream: YamlStream = this.stream
+    const stamps: i32[] = stream.mergeStamps
+    while (toI32(stamps.length) < stream.top) {
+      stamps.push(0)
     }
-    this.seenTop += 1
+    if (stream.mergeStep === 2147483647) {
+      let k: i32 = 0
+      while (k < toI32(stamps.length)) {
+        stamps[k] = 0
+        k += 1
+      }
+      stream.mergeStep = 0
+    }
+    stream.mergeStep += 1
+  }
+
+  /** Internal: marks map `map` searched by this step; `false` when it already was. */
+  markSeen(map: i32): boolean {
+    const stream: YamlStream = this.stream
+    const stamps: i32[] = stream.mergeStamps
+    if (map < 0 || map >= toI32(stamps.length) || stamps[map] === stream.mergeStep) {
+      return false
+    }
+    stamps[map] = stream.mergeStep
+    return true
   }
 
   /** Internal: walks `path` down from `root`, as far as it matches. */
@@ -4568,7 +4593,7 @@ class YamlPathWalker {
       if (kind === YAML_MAP) {
         let pair: i32 = this.ownPair(at, step)
         if (pair < 0 && stream.merge) {
-          this.seenTop = 0
+          this.startMerge()
           this.markSeen(at)
           pair = this.mergedPair(at, step, toI32(0))
         }

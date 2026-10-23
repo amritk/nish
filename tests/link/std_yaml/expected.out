@@ -236,10 +236,19 @@ PASS  a << step names the merge value itself
 PASS  a missing key is still missing
 PASS  pathPair names the pair inside the merged map
 PASS  at the merged key's line and column
+PASS  named by the merged key
+PASS  its value is the merged value
 PASS  every step matches
-PASS  a recursive alias in a merge ends the walk
+PASS  a merge through an unresolved self-alias ends the walk
 PASS  and still finds what is there
-PASS  a cycle through two maps ends the walk
+PASS  so does one through an alias its own anchor encloses
+PASS  two merges sharing a map find its keys
+PASS  and search it once for a key it lacks
+PASS  a chain of 50 merges is followed
+PASS  one of 120 stops at the hop cap
+PASS  20000 merge sources are searched for a key none has
+PASS  and the last one's key is found
+PASS  20000 aliases to one map search it once
 PASS  a scalar merges nothing
 PASS  without merge, a path does not look in <<
 PASS  and << is an ordinary key
@@ -340,4 +349,4 @@ PASS  diagnostics are in source order
 report 2:10 (byte 10) UNEXPECTED_COMMA Missing value before ","
 report 3:5 (byte 9) UNRESOLVED_ALIAS Alias "*nope" has no matching anchor
 report 5:1 (byte 1) DUPLICATE_KEY Map key "k" is duplicated
-std/yaml: 339 passed, 0 failed, 0 skipped
+std/yaml: 348 passed, 0 failed, 0 skipped
