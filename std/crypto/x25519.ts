@@ -64,7 +64,14 @@
  * `exposeWith`, and the clamped copy and every ladder element are wiped before
  * it returns (ECC-2, docs/security/crypto-ecc.md).
  *
- * Private names carry the `f25519` / `x25519` prefix because a `std/` module's
+ * **The field is shared with Ed25519.** `nish/crypto/ed25519` works over the
+ * same GF(p), so the `f25519` functions are exported for it to import rather
+ * than written twice; they are the module's internals, with the bounds each
+ * one states, not an API for programs. Ed25519's square root needs
+ * `z^(2^252 - 3)`, which shares its first 250 bits with the inversion's
+ * exponent, so that part of the chain is `f25519Pow250`, which both call.
+ *
+ * Names carry the `f25519` / `x25519` prefix because a `std/` module's
  * private functions share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  */
@@ -84,9 +91,9 @@ const X25519_A24: i64 = 121665
  * because signed arithmetic is checked for an overflow, and a check is a
  * branch on a secret limb. Each is one instruction once LLVM inlines it.
  */
-const f25519Add64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
-const f25519Sub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
-const f25519Mul64 = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b))
+export const f25519Add64 = (a: i64, b: i64): i64 => toI64(toU64(a) + toU64(b))
+export const f25519Sub64 = (a: i64, b: i64): i64 => toI64(toU64(a) - toU64(b))
+export const f25519Mul64 = (a: i64, b: i64): i64 => toI64(toU64(a) * toU64(b))
 
 /** The width of limb `i`: 26 bits for an even limb, 25 for an odd one. */
 const f25519Width = (i: i32): i64 => {
@@ -98,20 +105,20 @@ const f25519Width = (i: i32): i64 => {
 const f25519LimbMask = (i: i32): i64 => f25519Sub64(toI64(1) << f25519Width(i), toI64(1))
 
 /** A fresh field element, zero. */
-const f25519Zero = (): i64[] => {
+export const f25519Zero = (): i64[] => {
   const f: i64[] = new Array<i64>(10)
   return f
 }
 
 /** A fresh field element holding the small constant `n`. */
-const f25519Small = (n: i64): i64[] => {
+export const f25519Small = (n: i64): i64[] => {
   const f: i64[] = f25519Zero()
   f[0] = n
   return f
 }
 
 /** `out = f`, limb by limb. */
-const f25519Copy = (out: i64[], f: i64[]): void => {
+export const f25519Copy = (out: i64[], f: i64[]): void => {
   if (toI32(out.length) < 10 || toI32(f.length) < 10) {
     return
   }
@@ -152,7 +159,7 @@ const f25519CarryChain = (h: i64[]): void => {
  * `h & (2^width - 1)`, which is the matching non-negative remainder for a
  * negative limb too, without shifting a negative number left.
  */
-const f25519Carry = (h: i64[]): void => {
+export const f25519Carry = (h: i64[]): void => {
   if (toI32(h.length) < 10) {
     return
   }
@@ -169,7 +176,7 @@ const f25519Carry = (h: i64[]): void => {
  * `out = f + g`, not carried. With both reduced (limbs below 2^26 in
  * magnitude) the sum's limbs are below 2^27, which `f25519Mul` accepts.
  */
-const f25519Add = (out: i64[], f: i64[], g: i64[]): void => {
+export const f25519Add = (out: i64[], f: i64[], g: i64[]): void => {
   if (toI32(out.length) < 10 || toI32(f.length) < 10 || toI32(g.length) < 10) {
     return
   }
@@ -183,7 +190,7 @@ const f25519Add = (out: i64[], f: i64[], g: i64[]): void => {
  * both reduced the difference's limbs are below 2^27 in magnitude, which
  * `f25519Mul` accepts.
  */
-const f25519Sub = (out: i64[], f: i64[], g: i64[]): void => {
+export const f25519Sub = (out: i64[], f: i64[], g: i64[]): void => {
   if (toI32(out.length) < 10 || toI32(f.length) < 10 || toI32(g.length) < 10) {
     return
   }
@@ -208,7 +215,7 @@ const f25519Sub = (out: i64[], f: i64[], g: i64[]): void => {
  * sums added again, say — breaks this bound, which is why every caller carries
  * or multiplies before it adds a second time.
  */
-const f25519Mul = (out: i64[], f: i64[], g: i64[]): void => {
+export const f25519Mul = (out: i64[], f: i64[], g: i64[]): void => {
   if (toI32(f.length) < 10 || toI32(g.length) < 10) {
     return
   }
@@ -240,12 +247,12 @@ const f25519Mul = (out: i64[], f: i64[], g: i64[]): void => {
 }
 
 /** `out = f * f`, reduced; the same bounds as `f25519Mul`. */
-const f25519Square = (out: i64[], f: i64[]): void => {
+export const f25519Square = (out: i64[], f: i64[]): void => {
   f25519Mul(out, f, f)
 }
 
 /** `out = f` squared `n` times in a row (`n` at least 1), reduced. */
-const f25519SquareTimes = (out: i64[], f: i64[], n: i32): void => {
+export const f25519SquareTimes = (out: i64[], f: i64[], n: i32): void => {
   f25519Square(out, f)
   for (let i: i32 = 1; i < n; i++) {
     f25519Square(out, out)
@@ -268,25 +275,20 @@ const f25519MulA24 = (out: i64[], f: i64[]): void => {
 }
 
 /**
- * `out = z^(p - 2)`, which is `1 / z` by Fermat's little theorem, and zero for
- * a zero `z` — what RFC 7748 §5 asks of the ladder's last step.
- *
- * p - 2 = 2^255 - 21 = (2^250 - 1) * 2^5 + 11, so the exponent is 250 ones
- * followed by `01011`. The chain builds `z^(2^n - 1)` for n = 2, 4, 5, 10, 20,
- * 40, 50, 100, 200 and 250 from the rule
- * `z^(2^(a+b) - 1) = (z^(2^a - 1))^(2^b) * z^(2^b - 1)`, then squares five
- * times and multiplies by `z^11`: 254 squarings and 11 multiplications, the
- * same for every `z`.
+ * `out = z^(2^250 - 1)` and `z11 = z^11`: the part of the exponent chain that
+ * `f25519Invert` and Ed25519's square root (`ed25519Pow22523`,
+ * `nish/crypto/ed25519`) share. The chain builds `z^(2^n - 1)` for n = 2, 4,
+ * 5, 10, 20, 40, 50, 100, 200 and 250 from the rule
+ * `z^(2^(a+b) - 1) = (z^(2^a - 1))^(2^b) * z^(2^b - 1)`: 251 squarings and 11
+ * multiplications, the same for every `z`. `out` and `z11` may not be `z`.
  */
-const f25519Invert = (out: i64[], z: i64[]): void => {
+export const f25519Pow250 = (out: i64[], z11: i64[], z: i64[]): void => {
   const z2: i64[] = f25519Zero()
-  const z11: i64[] = f25519Zero()
   const e2: i64[] = f25519Zero()
   const e5: i64[] = f25519Zero()
   const e10: i64[] = f25519Zero()
   const e50: i64[] = f25519Zero()
   const t: i64[] = f25519Zero()
-  const acc: i64[] = f25519Zero()
 
   f25519Square(z2, z)
   f25519Mul(e2, z2, z) // z^3 = z^(2^2 - 1)
@@ -300,17 +302,33 @@ const f25519Invert = (out: i64[], z: i64[]): void => {
   f25519SquareTimes(t, e5, 5)
   f25519Mul(e10, t, e5) // 2^10 - 1
   f25519SquareTimes(t, e10, 10)
-  f25519Mul(acc, t, e10) // 2^20 - 1
-  f25519SquareTimes(t, acc, 20)
-  f25519Mul(acc, t, acc) // 2^40 - 1
-  f25519SquareTimes(t, acc, 10)
+  f25519Mul(out, t, e10) // 2^20 - 1
+  f25519SquareTimes(t, out, 20)
+  f25519Mul(out, t, out) // 2^40 - 1
+  f25519SquareTimes(t, out, 10)
   f25519Mul(e50, t, e10) // 2^50 - 1
   f25519SquareTimes(t, e50, 50)
-  f25519Mul(acc, t, e50) // 2^100 - 1
-  f25519SquareTimes(t, acc, 100)
-  f25519Mul(acc, t, acc) // 2^200 - 1
-  f25519SquareTimes(t, acc, 50)
-  f25519Mul(acc, t, e50) // 2^250 - 1
+  f25519Mul(out, t, e50) // 2^100 - 1
+  f25519SquareTimes(t, out, 100)
+  f25519Mul(out, t, out) // 2^200 - 1
+  f25519SquareTimes(t, out, 50)
+  f25519Mul(out, t, e50) // 2^250 - 1
+}
+
+/**
+ * `out = z^(p - 2)`, which is `1 / z` by Fermat's little theorem, and zero for
+ * a zero `z` — what RFC 7748 §5 asks of the ladder's last step.
+ *
+ * p - 2 = 2^255 - 21 = (2^250 - 1) * 2^5 + 11, so the exponent is 250 ones
+ * followed by `01011`: `f25519Pow250`, then five squarings and a
+ * multiplication by `z^11` — 256 squarings and 12 multiplications, the same
+ * for every `z`.
+ */
+export const f25519Invert = (out: i64[], z: i64[]): void => {
+  const z11: i64[] = f25519Zero()
+  const acc: i64[] = f25519Zero()
+  const t: i64[] = f25519Zero()
+  f25519Pow250(acc, z11, z)
   f25519SquareTimes(t, acc, 5)
   f25519Mul(out, t, z11) // 2^255 - 21
 }
@@ -320,7 +338,7 @@ const f25519Invert = (out: i64[], z: i64[]): void => {
  * same instructions either way: the mask is all ones or all zeros, and the
  * swap is the masked xor of the two.
  */
-const f25519Swap = (f: i64[], g: i64[], bit: i64): void => {
+export const f25519Swap = (f: i64[], g: i64[], bit: i64): void => {
   if (toI32(f.length) < 10 || toI32(g.length) < 10) {
     return
   }
@@ -341,7 +359,7 @@ const f25519Swap = (f: i64[], g: i64[], bit: i64): void => {
  * `[p, 2^255)` is neither refused nor adjusted: §5 has it processed as its
  * residue, and the arithmetic does that by itself.
  */
-const f25519Decode = (bytes: u8[]): i64[] => {
+export const f25519Decode = (bytes: u8[]): i64[] => {
   const f: i64[] = new Array<i64>(10)
   if (toI32(bytes.length) < 32) {
     return f
@@ -382,7 +400,7 @@ const f25519Decode = (bytes: u8[]): i64[] => {
  * when the value is at least p — so the element adds `19 * q` and drops bit
  * 255, which is subtracting `p * q`.
  */
-const f25519Encode = (f: i64[]): u8[] => {
+export const f25519Encode = (f: i64[]): u8[] => {
   const h: i64[] = new Array<i64>(10)
   f25519Copy(h, f)
   f25519Carry(h)

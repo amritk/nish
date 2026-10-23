@@ -8922,6 +8922,75 @@ runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
   }
 }
 
+// The two wipes of `ed25519Reduce` (#788) that `tests/wipes/` cannot count:
+// `opt` promotes `acc` and `diff`, eight `u64` limbs each, to stack slots, and
+// their wipes reach -O2 as one volatile `i64` zero store per limb rather than as
+// a memset. Each array's stores share an SROA base, so the body must hold two
+// groups of eight; deleting `wipe(acc)` or `wipe(diff)` removes its group. The
+// `ed25519`, `crypto`, `wipe` and `crypto_ed25519` filters all run it.
+{
+  const name = "crypto: the wipes survive opt -O2 (ed25519Reduce's acc and diff, eight volatile i64 zero stores each)"
+  if (!only || [name, "crypto_ed25519"].some((selector) => selector.includes(only))) {
+    if (!has("opt")) {
+      skip("crypto: no opt to show ed25519Reduce's promoted wipes survive -O2")
+    } else {
+      const dir = path.join(buildDir, "wipes-o2", "ed25519-reduce")
+      fs.rmSync(dir, { recursive: true, force: true })
+      fs.mkdirSync(dir, { recursive: true })
+      const c = spawnSync(NISH, [path.join(root, "tests/link/crypto_ed25519/main.ts"), "-o", `${dir}/`], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const o =
+        c.status === 0
+          ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "ed25519.ll")], {
+              encoding: "utf8",
+            })
+          : c
+      const body =
+        o.status === 0 ? (o.stdout.match(/^define [^\n]*@"?nish\.ed25519Reduce"?\([\s\S]*?\n\}/m) ?? [""])[0] : ""
+      const groups = new Map()
+      for (const m of body.matchAll(/store volatile i64 0, ptr %([\w.]+?)\.sroa\.\d+,/g)) {
+        groups.set(m[1], (groups.get(m[1]) ?? 0) + 1)
+      }
+      const sizes = [...groups.values()]
+      let detail = `volatile i64 zero stores by array: ${JSON.stringify([...groups])}`
+      if (o.status !== 0) {
+        detail = o.stderr
+      } else if (body === "") {
+        detail = "nish.ed25519Reduce: not in the optimised ed25519.ll"
+      }
+      check(name, sizes.length === 2 && sizes.every((n) => n === 8), detail)
+    }
+  }
+}
+
+// The message-length guard of `ed25519Sign` and `ed25519Verify` (#788): a
+// message longer than 2^31 - 1 bytes does not survive `toI32` under
+// `--number-mode f64`, so both would hash a prefix and a signature would verify
+// for a longer message that shares it. A 2 GiB test is impractical, so this
+// reads the f64 IR instead: each function must compare the length against
+// 2^31 - 1 and panic. Deleting either guard fails it.
+{
+  const name = "crypto: ed25519Sign and ed25519Verify panic on a message longer than 2^31 - 1 bytes (--number-mode f64)"
+  if (!only || [name, "crypto_ed25519"].some((selector) => selector.includes(only))) {
+    const dir = path.join(buildDir, "ed25519-length-guard")
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.mkdirSync(dir, { recursive: true })
+    const c = spawnSync(
+      NISH,
+      [path.join(root, "tests/link/crypto_ed25519_f64/main.ts"), "--number-mode", "f64", "-o", `${dir}/`],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ir = c.status === 0 ? fs.readFileSync(path.join(dir, "ed25519.ll"), "utf8") : ""
+    const missing = ["ed25519Sign", "ed25519Verify"].filter((fn) => {
+      const body = (ir.match(new RegExp(`^define [^\\n]*@"?nish\\.${fn}"?\\([\\s\\S]*?\\n\\}`, "m")) ?? [""])[0]
+      return !/fcmp ogt double %\d+, 0x41DFFFFFFFC00000\n\s+br i1 %\d+, label %if\.then[\s\S]*?call void @nish_panic/.test(body)
+    })
+    check(name, c.status === 0 && missing.length === 0, c.status === 0 ? `no guard in: ${missing.join(", ")}` : c.stderr)
+  }
+}
+
 // `nish:secret` under `runtime/nish.mjs`: the specifier resolves to the shim, where a
 // `Secret` is a plain wrapper and `wipe` zero-fills it, so `secret_wipe` prints what
 // the native binary prints.

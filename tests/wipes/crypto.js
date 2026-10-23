@@ -9,6 +9,9 @@ const HMAC_HKDF_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha)/m
 /** The module that defines P-256. */
 const P256_MODULES = /^define [^\n]*@nish\.(P256|p256)/m
 
+/** The module that defines Ed25519. */
+const ED25519_MODULES = /^define [^\n]*@nish\.(Ed25519|ed25519)/m
+
 /** The modules that define HMAC, HKDF, SHA-2, the TLS schedule and record layer, or QUIC packet protection. */
 const HELD_DERIVE_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha|Tls|tls|quic)/m
 
@@ -162,6 +165,31 @@ export const wipeChecks = [
       ["nish.TlsRecordProtection.advanceHeld", 127],
       ["nish.quicKeysHeldInto", 93],
       ["nish.quicKeyUpdateSecretHeldInto", 62],
+    ],
+  },
+  // `nish/crypto/ed25519` (#788, ECC-5). The multiplication wipes its digits,
+  // 1 (`ed25519ScalarMult`), and the encoding x's bytes, 1 (`ed25519Encode`);
+  // a hasher's wipe is three arrays and the scratch's sixteen (eight
+  // temporaries, the selected entry's four coordinates, the table point's
+  // four). So the public key 26 (the seed's hasher 3, one multiplication and
+  // one encoding, the seed's hash, the point 4 and the scratch 16) and signing
+  // 38 (the same twice over for A and R, the nonce's hasher 3 and its hash,
+  // the nonce, and `ed25519MulAdd`'s five arrays, which `opt` inlines).
+  // `ed25519Reduce`'s two wipes reach -O2 as volatile `i64` stores, which
+  // `tests/run.js` pins itself ("crypto: the wipes survive opt -O2
+  // (ed25519Reduce's acc and diff, …)"). One wipe of each kind was deleted in
+  // turn — the nonce's hash, the digits, the seed's hasher, x's bytes,
+  // `ed25519MulAdd`'s bytes and a scratch entry — and every root that reaches
+  // it dropped by one, or by three for the hasher.
+  {
+    name: "crypto: the wipes survive opt -O2 (Ed25519's seed hash, nonce, hashers, digits, point and scratch in ed25519PublicKeyExposed and ed25519SignExposed)",
+    program: "tests/link/crypto_ed25519/main.ts",
+    modules: ED25519_MODULES,
+    roots: [
+      ["nish.ed25519ScalarMult", 1],
+      ["nish.ed25519Encode", 1],
+      ["nish.ed25519PublicKeyExposed", 26],
+      ["nish.ed25519SignExposed", 38],
     ],
   },
 ]
