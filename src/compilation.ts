@@ -172,7 +172,13 @@ import { splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
-import { buildModeOf, buildsWasmModule, hostVisible, isFreestandingWasmBuild, isWasmBuild } from "./visibility"
+import {
+  buildModeOf,
+  buildsWasmModule,
+  hostVisible,
+  isFreestandingWasmBuild,
+  isWasmBuild,
+} from "./visibility"
 import { CheckContext, NUMBER_MODE_F64 } from "./context"
 
 const SLASH: i32 = 47

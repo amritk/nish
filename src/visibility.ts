@@ -84,7 +84,7 @@ export const isWasmBuild = (opts: Options): boolean =>
  * so the checker refuses `nish:term` here and nowhere else.
  */
 export const isFreestandingWasmBuild = (opts: Options): boolean =>
-  isWasmBuild(opts) && opts.profile !== "wasi" && !opts.target.includes("wasi")
+  isWasmBuild(opts) && opts.profile !== "wasi" && opts.target.indexOf("wasi") < 0
 
 /**
  * Whether the build's output becomes a wasm module, whose linear memory
