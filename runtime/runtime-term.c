@@ -72,12 +72,14 @@
    ends the wait, and the host's `-errno` when the question fails. Outside
    WASI this asks `select`, because Darwin's `poll` does not support devices:
    it answers POLLNVAL for a terminal at once, with no input there. Under WASI
-   a timeout of 0 asks for 1 ms: Node's WASI answers a poll with no wait as
-   "nothing waiting" when bytes are. */
+   a timeout under 10 ms asks for 10: Node's WASI (uvwasi) runs a timer that is
+   due before its first look at the descriptor, and counts it from before it
+   set the look up, so a shorter wait answers "nothing waiting" while bytes
+   are whenever setting up took longer than the wait, as on a busy machine. */
 static int nish_stdin_ready(int32_t timeout_ms) {
 #ifdef __wasi__
   struct pollfd p = {0, POLLIN, 0};
-  int r = poll(&p, 1, timeout_ms < 0 ? -1 : timeout_ms == 0 ? 1 : timeout_ms);
+  int r = poll(&p, 1, timeout_ms < 0 ? -1 : timeout_ms < 10 ? 10 : timeout_ms);
 #else
   fd_set in;
   FD_ZERO(&in);

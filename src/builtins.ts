@@ -99,7 +99,8 @@ const refuseWhen = (ctx: CheckContext, refused: boolean, call: Node, name: strin
  * target, so there they are refused here rather than failing to link. True
  * when the call was refused.
  */
-const refuseOnWasm = (ctx: CheckContext, call: Node, name: string): boolean => refuseWhen(ctx, ctx.wasm, call, name)
+const refuseOnWasm = (ctx: CheckContext, call: Node, name: string): boolean =>
+  refuseWhen(ctx, ctx.wasm, call, name)
 
 /**
  * `nish:term` runs under WASI, whose libc has `read` and `poll` on stdin, so

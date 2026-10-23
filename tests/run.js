@@ -1657,7 +1657,7 @@ if (!only || "term".includes(only)) {
 // The same two reading programs as `--profile wasi` builds under Node's WASI,
 // where `readStdin` reads without asking whether stdin is ready (runtime-term.c) and the terminal
 // questions answer "not a terminal", so the native expected lines hold; and a
-// `waitStdin(0)`, which there polls for 1 ms rather than not at all.
+// `waitStdin(0)`, which there polls for 10 ms rather than not at all.
 if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
   if (WASI_SYSROOT && has("wasm-ld")) {
     const wasiDir = path.join(buildDir, "term_wasi")

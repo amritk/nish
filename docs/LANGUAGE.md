@@ -7720,7 +7720,10 @@ missing or makes no terminal, that check is a counted skip that says which.
 WASI has `read` and `poll` on stdin and no terminal interface. There
 `readStdin` reads without asking `poll` first, because Node's WASI answers a
 zero-timeout poll of stdin with "nothing waiting" while bytes are, so it waits
-for its bytes: call `waitStdin` first, as the loop above does. The checker
+for its bytes: call `waitStdin` first, as the loop above does. For the same
+reason a `waitStdin` there waits at least 10 ms: Node's WASI counts a shorter
+wait from before it looks at stdin, and on a busy machine answers "nothing
+waiting" before it has looked. The checker
 accepts the five there, unlike `nish:net`'s, and refuses them on a
 freestanding `--target wasm32` build, whose runtime has no stdin
 (`reject_term_wasm`). Under Node,

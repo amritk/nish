@@ -150,8 +150,8 @@ export const main = (): i32 => {
 
 `nish:term` works on Linux and macOS. Under WebAssembly (`--profile wasi`)
 there is no terminal: `readStdin` waits for its bytes instead of answering
-`-11`, so call `waitStdin` first, as the loop above does, and the other three
-answer "not a terminal". A freestanding `--target wasm32` build has no stdin
+`-11`, so call `waitStdin` first, as the loop above does; there it waits at
+least 10 ms, even for `waitStdin(0)`. The other three answer "not a terminal". A freestanding `--target wasm32` build has no stdin
 at all, so the compiler refuses all five there. When a program is run under
 Node, `isTerminal` and `terminalSize` work, and the other three throw; in a
 browser the two answer "not a terminal".
