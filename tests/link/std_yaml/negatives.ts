@@ -45,6 +45,7 @@ export const ytNegatives = (t: Suite): void => {
   ytCase(t, "[- x]\n", "BAD_SCALAR_START@1..2");
   ytCase(t, "@x\n", "BAD_SCALAR_START@0..1");
   ytCase(t, "!<x 1\n", "BAD_TAG@0..3");
+  ytCase(t, "!<> x\n", "BAD_TAG@0..3");
   ytCase(t, "!x{ 1\n", "BAD_TAG@0..3");
   ytCase(t, "!!map x\n", "~BAD_TAG_VALUE@6..7");
   ytCase(t, "!!int x\n", "~BAD_TAG_VALUE@6..7");

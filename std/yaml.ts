@@ -1156,9 +1156,10 @@ const yamlDecodeBlock = (text: string, from: i32, to: i32, extras: i32, folded: 
     const hasBreak: boolean = e < to
     let empty: boolean = j === e
     if (!empty && (j - i < indent || (!seenContent && !explicit))) {
-      // Short of the indent, or before the indent was found: only blanks, so empty.
+      // Short of the indent, or before the indent was found: empty when only
+      // spaces, as the scanner counts it; a tab makes the first content line.
       let k: i32 = j
-      while (k < e && yamlIsBlank(yamlByte(text, k))) {
+      while (k < e && yamlByte(text, k) === YAML_SPACE) {
         k += 1
       }
       empty = k === e
@@ -1836,6 +1837,10 @@ class YamlParser {
     if (this.at(start + 1) === YAML_LT) {
       if (this.at(end - 1) !== YAML_GT) {
         this.error(YAML_ERR_BAD_TAG, 'Verbatim tag is missing its closing ">"', start, end)
+        return written
+      }
+      if (end - start === 3) {
+        this.error(YAML_ERR_BAD_TAG, "Verbatim tag is empty", start, end)
         return written
       }
       return yamlShortenTag(this.text.substring(start + 2, end - 1))
@@ -3204,13 +3209,18 @@ class YamlParser {
     return stream.end(key) === start + 2 && this.at(start) === YAML_LT && this.at(start + 1) === YAML_LT
   }
 
-  /** Internal: whether two keys share a style and their source bytes, which makes them equal without decoding. */
+  /**
+   * Internal: whether two keys share a style, a tag and their source bytes,
+   * which makes them equal without decoding. The tag counts because a key's
+   * range leaves out its properties: `~` is a null, `!!str ~` the string `"~"`.
+   */
   sameKeyBytes(a: i32, b: i32): boolean {
     const stream: YamlStream = this.stream
     if (
       stream.kind(a) !== YAML_SCALAR ||
       stream.kind(b) !== YAML_SCALAR ||
-      stream.style(a) !== stream.style(b)
+      stream.style(a) !== stream.style(b) ||
+      stream.tag(a) !== stream.tag(b)
     ) {
       return false
     }

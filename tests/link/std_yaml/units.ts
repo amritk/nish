@@ -94,6 +94,7 @@ const ytScalarUnits = (t: Suite): void => {
   ytBlock(t, "|1\n  a\n", " a\n");
   ytBlock(t, "|\n", "");
   ytBlock(t, ">+\n a\n b\n\n", "a b\n\n");
+  ytBlock(t, "|\n \t\n x\n", "\t\nx\n");
   ytBlock(t, "|\r\n  l1\r\n  l2\r\n", "l1\nl2\n");
   ytBlock(t, "|\r  l1\r  l2\r", "l1\nl2\n");
   t.eqStr("a document marker ends a block scalar of blank lines", ytRangesOf("--- |\n  \n---\n"), "");
@@ -250,6 +251,9 @@ const ytOptionUnits = (t: Suite): void => {
   t.eqStr("a quoted key matches a plain one", ytRangesOf("a: 1\n'a': 2\n"), "DUPLICATE_KEY@5..8");
   t.eqStr("1 and 01 are different keys", ytRangesOf("1: a\n01: b\n"), "");
   t.eqStr("null and ~ are the same key", ytRangesOf("null: a\n~: b\n"), "DUPLICATE_KEY@8..9");
+  t.eqStr("~ and !!str ~ are different keys", ytRangesOf("~: 1\n!!str ~: 2\n"), "");
+  t.eqStr("null and !!str null are different keys", ytRangesOf("null: 1\n!!str null: 2\n"), "");
+  t.eqStr("two !!str ~ keys are the same key", ytRangesOf("!!str ~: 1\n!!str ~: 2\n"), "DUPLICATE_KEY@17..18");
   t.eqStr("equal flow keys", ytRangesOf("? [a, b]\n: 1\n? [a, b]\n: 2\n"), "DUPLICATE_KEY@15..21");
   const many: string[] = [];
   let i: i32 = 0;
@@ -331,7 +335,7 @@ const ytPathUnits = (t: Suite): void => {
   t.eqI32("names its pair", pathPair(blank, blankRoot, ["a"]), blank.child(blankRoot, 0));
   t.eqI32("and no node", pathNode(blank, blankRoot, ["a"]), -1);
   const loop = parseYaml("l: &l [*l]\n");
-  t.eqI32("a recursive alias stops the walk", pathMatch(loop, loop.documentRoot(0), ["l", "0", "0", "0"]), 2);
+  t.eqI32("an alias to its own unfinished anchor stops the walk at the unresolved alias", pathMatch(loop, loop.documentRoot(0), ["l", "0", "0", "0"]), 2);
 };
 
 const ytLineUnits = (t: Suite): void => {

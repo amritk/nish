@@ -60,6 +60,8 @@ PASS  block |\n
 PASS  block |\n is quiet
 PASS  block >+\n a\n b\n\n
 PASS  block >+\n a\n b\n\n is quiet
+PASS  block |\n \t\n x\n
+PASS  block |\n \t\n x\n is quiet
 PASS  block |\r\n  l1\r\n  l2\r\n
 PASS  block |\r\n  l1\r\n  l2\r\n is quiet
 PASS  block |\r  l1\r  l2\r
@@ -167,6 +169,9 @@ PASS  without merge, << is a plain key
 PASS  a quoted key matches a plain one
 PASS  1 and 01 are different keys
 PASS  null and ~ are the same key
+PASS  ~ and !!str ~ are different keys
+PASS  null and !!str null are different keys
+PASS  two !!str ~ keys are the same key
 PASS  equal flow keys
 PASS  a big map hashes its keys and still finds the repeat
 PASS  the hashed check names it
@@ -212,7 +217,7 @@ PASS  not its first line
 PASS  a step onto an empty value matches
 PASS  names its pair
 PASS  and no node
-PASS  a recursive alias stops the walk
+PASS  an alias to its own unfinished anchor stops the walk at the unresolved alias
 PASS  LF, CRLF and CR are each one break
 PASS  line of 0
 PASS  line of 3
@@ -253,6 +258,7 @@ PASS  ranges of a\n: 1\n
 PASS  ranges of [- x]\n
 PASS  ranges of @x\n
 PASS  ranges of !<x 1\n
+PASS  ranges of !<> x\n
 PASS  ranges of !x{ 1\n
 PASS  ranges of !!map x\n
 PASS  ranges of !!int x\n
@@ -295,4 +301,4 @@ PASS  diagnostics are in source order
 report 2:10 (byte 10) UNEXPECTED_COMMA Missing value before ","
 report 3:5 (byte 9) UNRESOLVED_ALIAS Alias "*nope" has no matching anchor
 report 5:1 (byte 1) DUPLICATE_KEY Map key "k" is duplicated
-std/yaml: 294 passed, 0 failed, 0 skipped
+std/yaml: 300 passed, 0 failed, 0 skipped
