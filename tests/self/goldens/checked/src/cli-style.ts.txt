@@ -70,13 +70,12 @@ function envIsSet(name: string): boolean -> @envIsSet
   stackSites=0 stackLocals=0
   local +0:9 value: string | null (const)
 function spells(value: string, word: string): boolean -> @spells
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
   local +0:12 i: i32 (let)
   local +1:9 code: i32 (let)
 function isNo(value: string): boolean -> @isNo
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: value
   calls: nish_str_eq spells
   stackSites=0 stackLocals=0
@@ -84,25 +83,25 @@ function isNo(value: string): boolean -> @isNo
   callee +0:46 spells -> @spells
   callee +0:69 spells -> @spells
 function saysNo(value: string | null): boolean -> @saysNo
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: value
   calls: isNo
   stackSites=0 stackLocals=0
   callee +0:69 isNo -> @isNo
 function saysYes(value: string | null): boolean -> @saysYes
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: value
   calls: isNo
   stackSites=0 stackLocals=0
   callee +0:91 isNo -> @isNo
 function envSaysNo(name: string): boolean -> @envSaysNo
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
   calls: nish_getenv saysNo
   stackSites=0 stackLocals=0
   callee +0:46 saysNo -> @saysNo
 function envSaysYes(name: string): boolean -> @envSaysYes
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
   calls: nish_getenv saysYes
   stackSites=0 stackLocals=0
@@ -113,7 +112,7 @@ function isTerminal(fd: i32): boolean -> @isTerminal
   calls: nish_spawn nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function agentDriven(): boolean -> @agentDriven [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via envIsSet
   calls: envIsSet envSaysNo envSaysYes nish_arena_mark nish_arena_release
   stackSites=0 stackLocals=0
@@ -122,7 +121,7 @@ function agentDriven(): boolean -> @agentDriven [exported]
   callee +3:10 envSaysYes -> @envSaysYes
   callee +3:38 envSaysYes -> @envSaysYes
 function styleFor(fd: i32, agent: boolean): Style -> @styleFor [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=2
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=2
   sharedWrite: via nish_getenv
   escaping: fd
   calls: Style.constructor envIsSet envSaysNo envSaysYes isTerminal nish_alloc_struct nish_getenv nish_str_eq nish_str_index_of nish_str_index_of_from saysNo saysYes
