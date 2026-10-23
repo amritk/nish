@@ -23,13 +23,13 @@ class Fallback {
 
 const base = (): i32 => new Fallback().orReturn() - 1
 
-const sum = (a: string, b: string, c: string): Result<i32, string> => {
+const sum = (a: string, b: string, c: string, d: string): Result<i32, string> => {
   const __t0: i32 = base()
   const x = parse(a).orReturn() + __t0
   const y = parse(b).orReturn()
-  const z = parse(a).orReturn()
+  const z = parse(c).orReturn()
   check(x + y + z).orReturn()
-  if (parse(c).orReturn() > 1) {
+  if (parse(d).orReturn() > 1) {
     return Ok(x + y + z)
   }
   return Ok(x - y)
@@ -50,12 +50,13 @@ const loop = (words: string[]): Result<i32, string> => {
 const show = (r: Result<i32, string>): string => (r.isOk() ? `ok ${r.value}` : `err ${r.error}`)
 
 export const main = (): number => {
-  console.log(show(sum("one", "two", "two")))
-  console.log(show(sum("six", "two", "two")))
-  console.log(show(sum("one", "seven", "two")))
-  console.log(show(sum("two", "two", "two")))
-  console.log(show(sum("one", "two", "eight")))
-  console.log(show(sum("one", "two", "one")))
+  console.log(show(sum("one", "two", "one", "two")))
+  console.log(show(sum("six", "two", "one", "two")))
+  console.log(show(sum("one", "seven", "one", "two")))
+  console.log(show(sum("one", "two", "nine", "two")))
+  console.log(show(sum("two", "two", "two", "two")))
+  console.log(show(sum("one", "two", "one", "eight")))
+  console.log(show(sum("one", "two", "one", "one")))
   console.log(show(both("one", "two")))
   console.log(show(both("five", "two")))
   console.log(show(both("one", "ten")))

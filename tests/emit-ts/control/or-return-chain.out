@@ -1,6 +1,7 @@
 ok 4
 err cannot parse six
 err cannot parse seven
+err cannot parse nine
 err 6 is too big
 err cannot parse eight
 ok -1
