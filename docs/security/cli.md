@@ -19,6 +19,14 @@ fixed: `scripts/build.sh` (how the link's arguments reach `clang`),
 `runtime/runtime-os.c` (`nish_put_file`, `nish_mkdir`, `nish_spawn_impl`,
 `nish_realpath`: what each builtin actually does to the file system).
 
+Added after the audit, with the grouped `--help`: `isTerminal`
+(`src/cli-style.ts`) starts `/bin/sh -c '[ -t N ]'` by absolute path, with N
+the descriptor 1 or 2 and nothing taken from the arguments or the environment,
+on the paths that print the usage; and `usageText` (`src/compile.ts`) calls
+`findPackage` for an agent's help only to print the absolute path of the
+package's `docs/AI.md`, which `nish` neither reads nor runs. The root it
+settles on is the one CLI-9 already covers.
+
 ## Threat model
 
 The victim runs `nish <file.ts> ...` or `nish run <file.ts>` as themselves.

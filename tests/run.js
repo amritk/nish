@@ -16912,8 +16912,10 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
 
   // The help is painted only for a person at a terminal (src/cli-style.ts).
-  // Every help run names each variable the policy reads, so the runner's own
-  // environment -- an agent's, a CI's -- cannot decide the answer.
+  // Every help run sets the variables the policy reads first -- `NO_COLOR`,
+  // the forcing ones and `NISH_AGENT` -- so the runner's own environment, an
+  // agent's or a CI's, cannot decide the answer; a run that unsets `NO_COLOR`
+  // or `NISH_AGENT` sets whatever comes after them itself.
   const ESC = "\u001b["
   const plainEnv = { NO_COLOR: "", FORCE_COLOR: "", CLICOLOR_FORCE: "", CLICOLOR: "", NISH_AGENT: "0" }
   const noInputs = run([], plainEnv)
@@ -16958,6 +16960,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--deny-retention",
     "--emit-arena",
     "--target",
+    "--cpu",
     "--profile",
     "--warn-portability",
     "--fix",

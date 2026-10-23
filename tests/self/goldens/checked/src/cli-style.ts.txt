@@ -83,20 +83,30 @@ function isNo(value: string): boolean -> @isNo
   callee +0:20 spells -> @spells
   callee +0:46 spells -> @spells
   callee +0:69 spells -> @spells
+function saysNo(value: string | null): boolean -> @saysNo
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: value
+  calls: isNo
+  stackSites=0 stackLocals=0
+  callee +0:69 isNo -> @isNo
+function saysYes(value: string | null): boolean -> @saysYes
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: value
+  calls: isNo
+  stackSites=0 stackLocals=0
+  callee +0:91 isNo -> @isNo
 function envSaysNo(name: string): boolean -> @envSaysNo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
-  calls: isNo nish_getenv
+  calls: nish_getenv saysNo
   stackSites=0 stackLocals=0
-  local +0:9 value: string | null (const)
-  callee +1:28 isNo -> @isNo
+  callee +0:46 saysNo -> @saysNo
 function envSaysYes(name: string): boolean -> @envSaysYes
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
-  calls: isNo nish_getenv
+  calls: nish_getenv saysYes
   stackSites=0 stackLocals=0
-  local +0:9 value: string | null (const)
-  callee +1:49 isNo -> @isNo
+  callee +0:47 saysYes -> @saysYes
 function isTerminal(fd: i32): boolean -> @isTerminal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_spawn
@@ -115,23 +125,22 @@ function styleFor(fd: i32, agent: boolean): Style -> @styleFor [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=2
   sharedWrite: via nish_getenv
   escaping: fd
-  calls: Style.constructor envIsSet envSaysNo envSaysYes isNo isTerminal nish_alloc_struct nish_getenv nish_str_eq nish_str_index_of nish_str_index_of_from
+  calls: Style.constructor envIsSet envSaysNo envSaysYes isTerminal nish_alloc_struct nish_getenv nish_str_eq nish_str_index_of nish_str_index_of_from saysNo saysYes
   stackSites=0 stackLocals=0
-  local +0:9 term: string | null (const)
-  local +1:9 level: string | null (const)
-  local +2:9 forceNo: boolean (const)
-  callee +2:37 isNo -> @isNo
-  local +3:9 forceYes: boolean (const)
-  local +4:9 rich: boolean (const)
-  callee +6:5 envIsSet -> @envIsSet
-  callee +8:7 envIsSet -> @envIsSet
-  callee +9:12 new Style -> @Style.constructor
-  callee +11:19 envSaysYes -> @envSaysYes
-  callee +12:12 new Style -> @Style.constructor
-  callee +14:7 envSaysNo -> @envSaysNo
-  callee +15:12 new Style -> @Style.constructor
-  callee +17:10 new Style -> @Style.constructor
-  callee +17:20 isTerminal -> @isTerminal
+  local +0:9 level: string | null (const)
+  callee +1:7 envIsSet -> @envIsSet
+  callee +1:40 saysNo -> @saysNo
+  callee +2:12 new Style -> @Style.constructor
+  local +4:9 term: string | null (const)
+  local +5:9 rich: boolean (const)
+  callee +7:5 envIsSet -> @envIsSet
+  callee +9:7 saysYes -> @saysYes
+  callee +9:25 envSaysYes -> @envSaysYes
+  callee +10:12 new Style -> @Style.constructor
+  callee +12:7 envSaysNo -> @envSaysNo
+  callee +13:12 new Style -> @Style.constructor
+  callee +15:10 new Style -> @Style.constructor
+  callee +15:20 isTerminal -> @isTerminal
 function padTo(width: i32, column: i32): string -> @padTo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow repeatString

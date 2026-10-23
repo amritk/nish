@@ -111,17 +111,17 @@ const spells = (value: string, word: string): boolean => {
 const isNo = (value: string): boolean =>
   value === "0" || spells(value, "false") || spells(value, "no") || spells(value, "off")
 
-/** Whether `name` is set to a no (`isNo`). */
-const envSaysNo = (name: string): boolean => {
-  const value = getenv(name)
-  return value !== null && isNo(value)
-}
+/** Whether a variable's `value` is set to a no (`isNo`). */
+const saysNo = (value: string | null): boolean => value !== null && isNo(value)
 
-/** Whether `name` is set and says yes: not empty, and not a no (`isNo`). */
-const envSaysYes = (name: string): boolean => {
-  const value = getenv(name)
-  return value !== null && value.length > 0 && !isNo(value)
-}
+/** Whether a variable's `value` is set and says yes: not empty, and not a no. */
+const saysYes = (value: string | null): boolean => value !== null && value.length > 0 && !isNo(value)
+
+/** Whether the variable `name` is set to a no (`saysNo`). */
+const envSaysNo = (name: string): boolean => saysNo(getenv(name))
+
+/** Whether the variable `name` says yes (`saysYes`). */
+const envSaysYes = (name: string): boolean => saysYes(getenv(name))
 
 /**
  * Whether file descriptor `fd` is a terminal. The language has no `isatty`,
@@ -156,22 +156,20 @@ export const agentDriven = (): boolean => {
  * `FORCE_COLOR` asks for level 2 or 3.
  */
 export const styleFor = (fd: i32, agent: boolean): Style => {
-  const term = getenv("TERM")
   const level = getenv("FORCE_COLOR")
-  const forceNo = level !== null && isNo(level)
-  const forceYes = level !== null && level.length > 0 && !forceNo
+  if (envIsSet("NO_COLOR") || agent || saysNo(level)) {
+    return new Style(false, false)
+  }
+  const term = getenv("TERM")
   const rich =
     (term !== null && term.indexOf("256") >= 0) ||
     envIsSet("COLORTERM") ||
     (level !== null && (level === "2" || level === "3"))
-  if (envIsSet("NO_COLOR") || agent || forceNo) {
-    return new Style(false, rich)
-  }
-  if (forceYes || envSaysYes("CLICOLOR_FORCE")) {
+  if (saysYes(level) || envSaysYes("CLICOLOR_FORCE")) {
     return new Style(true, rich)
   }
   if (envSaysNo("CLICOLOR") || (term !== null && term === "dumb")) {
-    return new Style(false, rich)
+    return new Style(false, false)
   }
   return new Style(isTerminal(fd), rich)
 }
@@ -209,12 +207,14 @@ const usageRow = (style: Style, first: boolean, shape: string, description: stri
 }
 
 /**
- * The help: every flag the compiler takes, bar `--strict-exports`, which only
- * restates the default, grouped by what a person reaches for it to do, one per
- * line, inside 80 columns but for an agent's path to the card, as long as the
- * install made it. `--help` prints it on stdout and a bare `nish` on stderr,
- * each styled for its own stream; with colour off the two are the same bytes. `guide`, when it is not empty, is where the
- * rules card is, and adds the section for an agent (`agentDriven`).
+ * The help: every flag a user passes -- not `--strict-exports`, which only
+ * restates the default, `--nsw`, which is refused, or the test hook
+ * `--range-reference` -- grouped by what a person reaches for it to do, one per line, inside 80
+ * columns but for an agent's path to the card, as long as the install made
+ * it. `--help` prints it on stdout and a bare `nish` on stderr, each styled
+ * for its own stream; with colour off the two are the same bytes. `guide`,
+ * when it is not empty, is where the rules card is, and adds the section for
+ * an agent (`agentDriven`).
  * `tests/run.js` checks the width and that every flag `tests/nish/cli.ts`
  * advertises is in it.
  */

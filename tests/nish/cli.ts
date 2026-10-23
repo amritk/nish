@@ -444,7 +444,11 @@ const checkHelp = (t: Suite, cli: Cli, name: string, env: boolean): void => {
   const nothing: string[] = [];
   const usage = cli.run("usage", plainEnv, nothing);
   t.eqI32("no inputs at all exits 2", usage.status, 2);
-  t.contains("and prints the usage on stderr", usage.stderr, "usage");
+  if (env) {
+    t.contains("and prints the usage on stderr", usage.stderr, `usage: ${name}`);
+  } else {
+    t.skip("and prints the usage on stderr", "needs env(1) to keep the usage plain, and the probe did not find one");
+  }
   t.eqStr(
     "--help and a usage error are the same text on different streams",
     trim(usage.stderr),
