@@ -3226,25 +3226,18 @@ class YamlParser {
       this.badMerge(stream.start(key), stream.end(key))
       return
     }
-    const target: i32 = stream.kind(value) === YAML_ALIAS ? stream.target(value) : -1
-    if (target >= 0 && stream.kind(target) === YAML_SEQ) {
-      const count: i32 = stream.count(target)
+    const onAlias: boolean = stream.kind(value) === YAML_ALIAS
+    const seq: i32 = onAlias ? stream.target(value) : value
+    if (seq >= 0 && stream.kind(seq) === YAML_SEQ) {
+      const count: i32 = stream.count(seq)
       let i: i32 = 0
       while (i < count) {
-        if (!this.mergesMap(stream.child(target, i))) {
-          this.badMerge(stream.start(value), stream.end(value))
-          return
-        }
-        i += 1
-      }
-      return
-    }
-    if (stream.kind(value) === YAML_SEQ) {
-      const count: i32 = stream.count(value)
-      let i: i32 = 0
-      while (i < count) {
-        const item: i32 = stream.child(value, i)
+        const item: i32 = stream.child(seq, i)
         if (!this.mergesMap(item)) {
+          if (onAlias) {
+            this.badMerge(stream.start(value), stream.end(value))
+            return
+          }
           this.badMerge(stream.start(item), stream.end(item))
         }
         i += 1
@@ -4275,19 +4268,21 @@ class YamlKeySet {
 
 /** Whether map key `key` of `stream` is a merge key: a plain `<<`, untagged or `!!merge`, while the stream merges. */
 const yamlIsMergeKey = (stream: YamlStream, key: i32): boolean => {
-  if (!stream.merge || key < 0 || stream.kind(key) !== YAML_SCALAR || stream.style(key) !== YAML_PLAIN) {
-    return false
-  }
-  const tag: string = stream.tag(key)
-  if (tag !== "" && tag !== "merge") {
+  if (!stream.merge || key < 0) {
     return false
   }
   const start: i32 = stream.start(key)
-  return (
-    stream.end(key) === start + 2 &&
-    yamlByte(stream.source, start) === YAML_LT &&
-    yamlByte(stream.source, start + 1) === YAML_LT
-  )
+  if (
+    stream.end(key) !== start + 2 ||
+    yamlByte(stream.source, start) !== YAML_LT ||
+    yamlByte(stream.source, start + 1) !== YAML_LT ||
+    stream.kind(key) !== YAML_SCALAR ||
+    stream.style(key) !== YAML_PLAIN
+  ) {
+    return false
+  }
+  const tag: string = stream.tag(key)
+  return tag === "" || tag === "merge"
 }
 
 // ---- Key text -------------------------------------------------------------------
