@@ -30,8 +30,9 @@
  * The kinds are `YAML_SCALAR`, `YAML_MAP`, `YAML_SEQ`, `YAML_ALIAS` and
  * `YAML_PAIR`. A map's children are its pairs, in source order; a pair's `key`
  * and `value` are nodes. A seq's children are its items. An alias's `target`
- * is the node its anchor named. Merge keys (`<<`) are checked but not applied:
- * a map holds the pairs it was written with.
+ * is the node its anchor named. Merge keys (`<<`) are not applied: a map holds
+ * the pairs it was written with, and a `<<` key is only exempt from the
+ * duplicate-key check.
  *
  * **Diagnostics** carry a `YAML_ERR_*` code, whether they are a warning, a
  * message, a byte range and the document they belong to, sorted by where they
@@ -202,12 +203,10 @@ const YAML_UNRESOLVED: i32 = 255
 /** The prefix a `!!` tag stands for; tags are kept with it stripped (`"int"`). */
 const YAML_CORE_PREFIX: string = "tag:yaml.org,2002:"
 
-/** Where a node is parsed from, which decides what may start on its line. */
-const YAML_IN_VALUE: i32 = 0
-const YAML_IN_SEQ: i32 = 1
-const YAML_IN_ROOT: i32 = 2
-const YAML_IN_KEY: i32 = 3
-const YAML_IN_MARKER: i32 = 4
+/** What `skipStreamHead` met before a document's body: a `---`, a `...`, and a node on the `---` line. */
+const YAML_SAW_DOC_START: i32 = 1
+const YAML_SAW_DOC_END: i32 = 2
+const YAML_SAW_INLINE_NODE: i32 = 4
 
 /** A block scalar's chomping, in the low two bits of its `extras`. */
 const YAML_CLIP: i32 = 0
@@ -222,7 +221,7 @@ export class YamlOptions {
   maxDepth: i32 = 1000
   /** Whether a map that repeats a key is reported (`DUPLICATE_KEY`). */
   uniqueKeys: boolean = true
-  /** Whether a plain `<<` key is a merge key, checked as one (`BAD_MERGE`) and exempt from `uniqueKeys`. */
+  /** Whether a plain `<<` key is a merge key, exempt from `uniqueKeys`. Merge keys are not applied. */
   merge: boolean = true
   /** Whether the stream keeps the byte range of every comment (`commentCount`). */
   keepComments: boolean = false
@@ -1454,6 +1453,8 @@ class YamlParser {
   /** What `peekLine` found: the next content line's indent and first byte. */
   lineIndent: i32 = 0
   lineContent: i32 = 0
+  /** Where the current document's `---` is, or `-1` when it has none. */
+  markerAt: i32 = -1
   flowIndentReported: boolean = false
   uniqueKeys: boolean = true
   merge: boolean = true
@@ -1881,7 +1882,7 @@ class YamlParser {
         }
         const tag: string = this.resolveTag(start, end)
         const tags: string[] = this.stream.propTags
-        if (slot < toI32(tags.length)) {
+        if (slot >= 0 && slot < toI32(tags.length)) {
           tags[slot] = tag
         }
         yamlPut(this.stream.propTagStarts, slot, start)
@@ -1910,7 +1911,6 @@ class YamlParser {
         i += 1
       }
     }
-    return i
   }
 
   /** Internal: the entry of the anchor named `[from, to)` among those defined so far, or `-1`. */
@@ -2405,9 +2405,6 @@ class YamlParser {
     this.finishLine()
     const bodyStart: i32 = this.pos
     let contentIndent: i32 = explicitIndent > 0 ? parentIndent + explicitIndent : -1
-    if (contentIndent < -1) {
-      contentIndent = -1
-    }
     let leadingBlank: i32 = -1
     let valueEnd: i32 = this.pos
     while (this.pos < this.len) {
@@ -2825,9 +2822,10 @@ class YamlParser {
 
   /** Internal: reports nesting past `maxDepth`, gives up on the rest of the text, and stands in an empty node. */
   depthLimitNode(): i32 {
-    this.error(YAML_ERR_DEPTH_LIMIT, `Exceeded maximum nesting depth of ${this.maxDepth}`, this.pos, this.pos)
+    const at: i32 = this.pos
+    this.error(YAML_ERR_DEPTH_LIMIT, `Exceeded maximum nesting depth of ${this.maxDepth}`, at, at)
     this.pos = this.len
-    return this.emptyScalar(this.pos)
+    return this.emptyScalar(at)
   }
 
   /** Internal: reads one flow node, guarding the nesting depth. */
@@ -2853,7 +2851,7 @@ class YamlParser {
     } else if (c === YAML_LBRACE) {
       node = this.parseFlowMap()
     } else if (c === YAML_DQUOTE || c === YAML_SQUOTE) {
-      node = this.scanQuoted(c, this.flowIndentReported ? -1 : this.flowIndent)
+      node = this.scanQuoted(c, this.flowIndentReported ? YAML_NONE : this.flowIndent)
     } else if (c === YAML_STAR) {
       node = this.scanAlias()
     } else {
@@ -3002,7 +3000,7 @@ class YamlParser {
         item = this.singlePairMap(this.makePair(item, value))
         this.skipFlowWs()
       } else if (explicit) {
-        item = this.singlePairMap(this.makePair(item, -1))
+        item = this.singlePairMap(this.makePair(item, YAML_NONE))
       }
       this.scratchTop = yamlStackPush(this.scratch, this.scratchTop, item)
       if (!this.flowSeparator(YAML_RBRACKET, start)) {
@@ -3241,3 +3239,1086 @@ class YamlParser {
     }
     return true
   }
+
+  /** Internal: reads the document that starts at the `---` line's content at `contentPos`. */
+  parseDocMarkerNode(contentPos: i32): i32 {
+    const seq: boolean = this.isSeqEntryDash(contentPos)
+    if (seq || this.opensBlockMapping(contentPos)) {
+      this.error(
+        YAML_ERR_UNEXPECTED_CONTENT,
+        seq ? 'A block sequence cannot start on the "---" line' : 'A block mapping cannot start on the "---" line',
+        contentPos,
+        this.plainLineEnd(contentPos),
+      )
+    }
+    this.pos = contentPos
+    return this.parseNode(toI32(0), YAML_NONE, true)
+  }
+
+  /** Internal: reads a document's root from the line `peekLine` found, whose content is at `contentPos`. */
+  parseBareRoot(contentPos: i32, indent: i32): i32 {
+    if (indent !== 0) {
+      this.checkRootTabIndent(contentPos)
+    }
+    this.pos = contentPos
+    return this.parseNode(indent, YAML_NONE, true)
+  }
+
+  /** Internal: reports a tab in the indentation of a root collection's first line, which starts at the cursor. */
+  checkRootTabIndent(contentPos: i32): void {
+    const lineStart: i32 = this.pos
+    let tab: i32 = lineStart
+    while (tab < contentPos && this.at(tab) !== YAML_TAB) {
+      tab += 1
+    }
+    if (tab === contentPos || this.tabReportedAt === lineStart) {
+      return
+    }
+    if (this.isSeqEntryDash(contentPos) || this.opensBlockMapping(contentPos)) {
+      this.error(YAML_ERR_TAB_INDENT, "Tabs cannot be used for indentation", tab, contentPos)
+      this.tabReportedAt = lineStart
+    }
+  }
+
+  /** Internal: whether the line `peekLine` found is a `---` or `...` marker. */
+  atMarkerLine(): boolean {
+    return !this.lineEof && this.lineIndent === 0 && this.isDocMarker(this.lineContent)
+  }
+
+  /** Internal: warns when the core-schema tag of the properties in `slot` does not fit `node`. */
+  checkTaggedNode(node: i32, slot: i32): void {
+    const stream: YamlStream = this.stream
+    const tag: string = stream.tag(node)
+    let want: i32 = 0
+    if (tag === "str" || tag === "int" || tag === "float" || tag === "bool" || tag === "null") {
+      want = YAML_SCALAR
+    } else if (tag === "binary" || tag === "timestamp") {
+      want = YAML_SCALAR
+    } else if (tag === "map" || tag === "set") {
+      want = YAML_MAP
+    } else if (tag === "seq" || tag === "omap" || tag === "pairs") {
+      want = YAML_SEQ
+    } else {
+      return
+    }
+    let start: i32 = stream.start(node)
+    let end: i32 = stream.end(node)
+    if (start === end) {
+      start = yamlAt(stream.propTagStarts, slot)
+      end = yamlAt(stream.propTagEnds, slot)
+    }
+    if (stream.kind(node) !== want) {
+      const what: string = want === YAML_SCALAR ? "a scalar" : want === YAML_MAP ? "a mapping" : "a sequence"
+      this.warn(YAML_ERR_BAD_TAG_VALUE, `!!${tag} describes ${what}, and cannot be applied here`, start, end)
+      return
+    }
+    if (tag === "int" || tag === "float" || tag === "bool" || tag === "null") {
+      if (stream.type(node) === YAML_STRING) {
+        this.warn(
+          YAML_ERR_BAD_TAG_VALUE,
+          `"${stream.text(node)}" is not a valid !!${tag} value; it is kept as a string`,
+          start,
+          end,
+        )
+      }
+    }
+  }
+
+  /**
+   * Internal: checks what follows the first document's node, and answers the
+   * end of its `...` footer when one closes it, or `-1`.
+   */
+  checkDocumentEnd(): i32 {
+    if (this.pos >= this.len) {
+      return -1
+    }
+    this.finishLineIfMidLine()
+    this.peekLine(toI32(0))
+    if (this.lineEof) {
+      return -1
+    }
+    if (this.atMarkerLine()) {
+      return this.warnIfMoreDocuments(this.lineContent)
+    }
+    this.error(
+      YAML_ERR_UNEXPECTED_CONTENT,
+      'Unexpected content after the document node — start a new document with "---"',
+      this.lineContent,
+      this.plainLineEnd(this.lineContent),
+    )
+    return -1
+  }
+
+  /**
+   * Internal: warns that the documents after the marker at `marker` were not
+   * read, unless none of them holds anything. Answers the end of a `...`
+   * marker, which is the first document's footer, or `-1`.
+   */
+  warnIfMoreDocuments(marker: i32): i32 {
+    this.recordLineComment(marker + 3)
+    const footer: boolean = this.at(marker) === YAML_DOT
+    let hidden: boolean = false
+    if (footer) {
+      this.checkDocEndTail(marker)
+    } else {
+      hidden = !this.lineRestIsBlank(marker + 3)
+    }
+    this.pos = this.nextLineStart(marker + 3)
+    const footerEnd: i32 = footer ? marker + 3 : -1
+    if (!hidden) {
+      this.peekLine(toI32(0))
+      if (this.lineEof || this.onlyEmptyDocumentsFollow(this.pos)) {
+        return footerEnd
+      }
+    }
+    this.warn(
+      YAML_ERR_MULTIPLE_DOCUMENTS,
+      "Only the first document of this stream was parsed — turn off firstDocumentOnly to read the rest",
+      marker,
+      marker + 3,
+    )
+    return footerEnd
+  }
+
+  /**
+   * Internal: reads the directives and markers before a document's body, and
+   * answers which of `YAML_SAW_*` it met. `closed` says the document before
+   * ended with `...` (or there is none), so a directive may follow.
+   */
+  skipStreamHead(closed: boolean): i32 {
+    let seen: i32 = 0
+    let sawDirective: boolean = false
+    while (true) {
+      this.peekLine(toI32(0))
+      if (this.lineEof) {
+        break
+      }
+      const p: i32 = this.lineContent
+      const c: i32 = this.at(p)
+      if (c === YAML_PERCENT && this.lineIndent === 0) {
+        if (!closed && (seen & YAML_SAW_DOC_END) === 0) {
+          this.error(
+            YAML_ERR_UNEXPECTED_DIRECTIVE,
+            'A directive must be preceded by a "..." document-end marker',
+            p,
+            this.tokenEnd(p),
+          )
+        }
+        this.readDirective(p)
+        sawDirective = true
+        this.recordLineComment(p)
+        this.pos = this.nextLineStart(p)
+        continue
+      }
+      if (!this.atMarkerLine()) {
+        break
+      }
+      if (c === YAML_DOT) {
+        this.checkDocEndTail(p)
+        this.recordLineComment(p + 3)
+        this.pos = this.nextLineStart(p + 3)
+        seen = seen | YAML_SAW_DOC_END
+        continue
+      }
+      this.markerAt = p
+      const inline: i32 = this.docMarkerInlineNode(p)
+      return inline >= 0 ? seen | YAML_SAW_DOC_START | YAML_SAW_INLINE_NODE : seen | YAML_SAW_DOC_START
+    }
+    if (sawDirective) {
+      this.error(
+        YAML_ERR_UNEXPECTED_DIRECTIVE,
+        'A directive must be followed by a "---" document start',
+        this.pos,
+        this.pos,
+      )
+    }
+    return seen
+  }
+
+  /** Internal: steps past a UTF-8 byte order mark. */
+  skipBom(): void {
+    if (yamlByte(this.text, 0) === 0xef && yamlByte(this.text, 1) === 0xbb && yamlByte(this.text, 2) === 0xbf) {
+      this.pos = 3
+    }
+  }
+
+  /** Internal: reads the first document only. */
+  parseFirst(): void {
+    this.skipBom()
+    const markers: i32 = this.skipStreamHead(true)
+    let root: i32 = -1
+    if ((markers & YAML_SAW_INLINE_NODE) !== 0) {
+      root = this.parseDocMarkerNode(this.pos)
+    } else {
+      this.peekLine(toI32(0))
+      if (!this.lineEof && !this.atMarkerLine()) {
+        root = this.parseBareRoot(this.lineContent, this.lineIndent)
+      }
+    }
+    const footerEnd: i32 = this.checkDocumentEnd()
+    this.pushDocument(root, footerEnd)
+  }
+
+  /** Internal: reads every document of the stream. */
+  parseAll(): void {
+    this.skipBom()
+    let closed: boolean = true
+    while (true) {
+      this.markerAt = -1
+      const markers: i32 = this.skipStreamHead(closed)
+      const sawStart: boolean = (markers & YAML_SAW_DOC_START) !== 0
+      let root: i32 = -1
+      let body: boolean = false
+      if ((markers & YAML_SAW_INLINE_NODE) !== 0) {
+        root = this.parseDocMarkerNode(this.pos)
+        this.finishLineIfMidLine()
+        body = true
+      } else {
+        this.peekLine(toI32(0))
+        if (!this.lineEof && !this.atMarkerLine()) {
+          const p: i32 = this.lineContent
+          const count: i32 = toI32(this.stream.docRoots.length)
+          if (!sawStart && !closed && (markers & YAML_SAW_DOC_END) === 0 && count > 0) {
+            this.error(
+              YAML_ERR_UNEXPECTED_CONTENT,
+              'Unexpected content — start a new document with "---"',
+              p,
+              this.plainLineEnd(p),
+            )
+          }
+          root = this.parseBareRoot(p, this.lineIndent)
+          this.finishLineIfMidLine()
+          body = true
+        }
+      }
+      if (!sawStart && !body) {
+        break
+      }
+      let footerEnd: i32 = -1
+      this.peekLine(toI32(0))
+      if (this.atMarkerLine() && this.at(this.lineContent) === YAML_DOT) {
+        const p: i32 = this.lineContent
+        this.checkDocEndTail(p)
+        this.recordLineComment(p + 3)
+        this.pos = this.nextLineStart(p + 3)
+        footerEnd = p + 3
+      }
+      this.pushDocument(root, footerEnd)
+      closed = footerEnd >= 0
+      this.anchorTop = 0
+      this.pendingTop = 0
+      this.handleNames = []
+      this.handlePrefixes = []
+      this.yamlDirective = false
+      this.doc += 1
+    }
+    const stream: YamlStream = this.stream
+    const count: i32 = toI32(stream.docRoots.length)
+    if (count === 0) {
+      if (toI32(stream.diagCodes.length) > 0 || toI32(stream.commentStarts.length) > 0) {
+        this.pushDocument(YAML_NONE, YAML_NONE)
+      }
+      return
+    }
+    let i: i32 = 0
+    while (i < toI32(stream.diagDocuments.length)) {
+      if (stream.diagDocuments[i] >= count) {
+        stream.diagDocuments[i] = count - 1
+      }
+      i += 1
+    }
+  }
+
+  /** Internal: records a document whose root is `root` (or `-1`), closed by a `...` ending at `footerEnd` (or `-1`). */
+  pushDocument(root: i32, footerEnd: i32): void {
+    const stream: YamlStream = this.stream
+    let start: i32 = this.markerAt >= 0 ? this.markerAt : root >= 0 ? stream.start(root) : this.pos
+    let end: i32 = footerEnd
+    if (end < 0) {
+      end = root >= 0 ? stream.end(root) : start
+      if (this.markerAt + 3 > end) {
+        end = this.markerAt + 3
+      }
+      if (start > end) {
+        end = start
+      }
+    }
+    if (start > end) {
+      start = end
+    }
+    stream.docRoots.push(root)
+    stream.docStarts.push(start)
+    stream.docEnds.push(end)
+  }
+
+  // ---- Block collections ----------------------------------------------------------
+
+  /**
+   * Internal: the value of properties written alone at the end of their line,
+   * whose slot is `props`: the node on the lines below, or an empty scalar.
+   */
+  parsePropsOnlyValue(props: i32, parentIndent: i32, seqAtParentIndent: boolean): i32 {
+    const propsEnd: i32 = this.pos
+    this.finishLine()
+    this.peekLine(parentIndent + 1)
+    if (!this.lineEof && this.lineIndent > parentIndent) {
+      this.pos = this.lineContent
+      return this.attachProps(this.parseNode(this.lineIndent, parentIndent, seqAtParentIndent), props)
+    }
+    if (
+      seqAtParentIndent &&
+      !this.lineEof &&
+      this.lineIndent === parentIndent &&
+      this.isSeqEntryDash(this.lineContent)
+    ) {
+      this.pos = this.lineContent
+      return this.attachProps(this.parseBlockSeq(parentIndent), props)
+    }
+    return this.attachProps(this.emptyScalar(propsEnd), props)
+  }
+
+  /** Internal: the value written on a key's line after its `:`, or `-1` when there is none. */
+  parseInlineValue(parentIndent: i32): i32 {
+    const props: i32 = this.scanProps(false)
+    this.skipInlineSpaces()
+    if (this.atLineEnd()) {
+      return props >= 0 ? this.parsePropsOnlyValue(props, parentIndent, true) : -1
+    }
+    const c: i32 = this.at(this.pos)
+    let node: i32 = -1
+    if (c === YAML_STAR) {
+      node = this.scanAlias()
+      this.checkTrailingContent()
+    } else if (c === YAML_PIPE || c === YAML_GT) {
+      node = this.scanBlockScalar(parentIndent)
+    } else if (c === YAML_LBRACKET || c === YAML_LBRACE) {
+      this.enterFlow(parentIndent)
+      node = c === YAML_LBRACKET ? this.parseFlowSeq() : this.parseFlowMap()
+      this.checkTrailingContent()
+    } else if (c === YAML_DQUOTE || c === YAML_SQUOTE) {
+      node = this.scanQuoted(c, parentIndent)
+      this.checkTrailingContent()
+    } else {
+      if (this.plainStartClass(c) !== 0) {
+        this.reportBadPlainStart(this.pos, false)
+      }
+      node = this.scanPlainScalar(parentIndent)
+    }
+    return this.attachProps(node, props)
+  }
+
+  /** Internal: the column of `at`: its distance from the start of its line. */
+  columnOf(at: i32): i32 {
+    let i: i32 = at
+    while (i > 0 && !yamlIsBreak(this.at(i - 1))) {
+      i -= 1
+    }
+    return at - i
+  }
+
+  /**
+   * Internal: a block collection written on an indicator's line (`- - a`,
+   * `- k: v`, `? - a`), or `-1` when the cursor holds no such collection.
+   */
+  parseCompactCollection(): i32 {
+    const at: i32 = this.pos
+    const seq: boolean = this.isSeqEntryDash(at)
+    const keyAt: i32 = seq ? at : this.skipPropsAhead(at)
+    const explicit: boolean = !seq && this.isExplicitKey(keyAt)
+    const colon: i32 = seq || explicit ? -1 : this.findKeyColon(keyAt)
+    if (!seq && !explicit && colon < 0) {
+      return -1
+    }
+    if (this.depth >= this.maxDepth) {
+      return this.depthLimitNode()
+    }
+    const column: i32 = this.columnOf(at)
+    this.depth += 1
+    let node: i32 = -1
+    if (seq) {
+      node = this.parseBlockSeq(column)
+    } else {
+      let props: i32 = -1
+      if (keyAt !== at) {
+        props = this.scanProps(false)
+        this.skipInlineSpaces()
+      }
+      if (explicit) {
+        if (props >= 0) {
+          this.reportPropsBeforeExplicitKey(this.pos)
+        }
+        node = this.attachProps(this.parseBlockMap(column, YAML_NONE, YAML_NONE, YAML_NONE), props)
+      } else {
+        node = this.parseBlockMap(column, colon, YAML_NONE, props)
+      }
+    }
+    this.depth -= 1
+    return node
+  }
+
+  /**
+   * Internal: the value after an indicator of a block collection at `indent`:
+   * on the same line, or on the lines below. `compact` lets a collection
+   * start on the indicator's line. `-1` when there is none.
+   */
+  parseValueOrChild(indent: i32, compact: boolean): i32 {
+    if (compact) {
+      this.skipIndicatorSeparation()
+    } else {
+      this.skipInlineSpaces()
+    }
+    if (this.atLineEnd()) {
+      this.finishLine()
+      this.peekLine(indent + 1)
+      if (!this.lineEof && this.lineIndent > indent) {
+        this.pos = this.lineContent
+        return this.parseNode(this.lineIndent, indent, true)
+      }
+      if (!this.lineEof && this.lineIndent === indent && this.isSeqEntryDash(this.lineContent)) {
+        this.pos = this.lineContent
+        return this.parseBlockSeq(indent)
+      }
+      return -1
+    }
+    if (compact) {
+      const collection: i32 = this.parseCompactCollection()
+      if (collection >= 0) {
+        return collection
+      }
+    }
+    const node: i32 = this.parseInlineValue(indent)
+    this.finishLineIfMidLine()
+    return node
+  }
+
+  /**
+   * Internal: reads a block mapping at `indent`. Its first entry is already
+   * found: an implicit key whose `:` is at `firstColon`, with the properties in
+   * `firstProps`; or the node `firstKey`, read up to its `:`; or, with both
+   * `-1`, an explicit `?` key at the cursor.
+   */
+  parseBlockMap(indent: i32, firstColon: i32, firstKey: i32, firstProps: i32): i32 {
+    const stream: YamlStream = this.stream
+    const base: i32 = this.scratchTop
+    let keySet: i32 = -1
+    let contentPos: i32 = this.pos
+    let firstEntry: boolean = true
+    if (firstKey >= 0) {
+      const firstValue: i32 = this.parseValueOrChild(indent, false)
+      keySet = this.trackKey(base, firstKey, keySet)
+      this.scratchTop = yamlStackPush(this.scratch, this.scratchTop, this.makePair(firstKey, firstValue))
+      firstEntry = false
+    }
+    while (true) {
+      let colon: i32 = -1
+      let explicit: boolean = false
+      let keyProps: i32 = -1
+      if (firstEntry) {
+        colon = firstColon
+        explicit = firstColon < 0
+        keyProps = firstProps
+      } else {
+        this.peekLine(indent)
+        if (this.lineEof || this.lineIndent !== indent) {
+          break
+        }
+        const lineStart: i32 = this.pos
+        contentPos = this.lineContent
+        if (this.isSeqEntryDash(contentPos) || (indent === 0 && this.isDocMarker(contentPos))) {
+          break
+        }
+        const c: i32 = this.at(contentPos)
+        if (c === YAML_AMP || c === YAML_BANG) {
+          this.pos = contentPos
+          keyProps = this.scanProps(false)
+          this.skipInlineSpaces()
+          contentPos = this.pos
+          if (keyProps >= 0 && this.isExplicitKey(contentPos)) {
+            this.reportPropsBeforeExplicitKey(contentPos)
+          }
+        }
+        explicit = this.isExplicitKey(contentPos)
+        colon = explicit ? -1 : this.findKeyColon(contentPos)
+        if (colon < 0 && !explicit) {
+          this.pos = lineStart
+          break
+        }
+      }
+      firstEntry = false
+      let key: i32 = -1
+      let value: i32 = -1
+      if (explicit) {
+        this.pos = contentPos + 1
+        key = this.parseValueOrChild(indent, true)
+        if (key < 0) {
+          key = this.emptyScalar(contentPos + 1)
+        }
+        key = this.attachProps(key, keyProps)
+        this.peekLine(indent)
+        if (
+          !this.lineEof &&
+          this.lineIndent === indent &&
+          this.at(this.lineContent) === YAML_COLON &&
+          yamlIsWs(this.at(this.lineContent + 1))
+        ) {
+          this.pos = this.lineContent + 1
+          value = this.parseValueOrChild(indent, true)
+        }
+      } else {
+        key = this.parseImplicitKey(indent, contentPos, colon)
+        key = this.attachProps(key, keyProps)
+        this.pos = colon + 1
+        value = this.parseValueOrChild(indent, false)
+      }
+      keySet = this.trackKey(base, key, keySet)
+      this.scratchTop = yamlStackPush(this.scratch, this.scratchTop, this.makePair(key, value))
+    }
+    this.releaseKeySet(keySet)
+    let start: i32 = this.pos
+    let end: i32 = this.pos
+    if (this.scratchTop > base) {
+      start = stream.start(yamlAt(this.scratch, base))
+      end = stream.end(yamlAt(this.scratch, this.scratchTop - 1))
+    }
+    const node: i32 = stream.newNode(YAML_MAP, YAML_BLOCK, start, end)
+    this.finishCollection(node, base)
+    return node
+  }
+
+  /** Internal: reads the implicit key at `from` of a block mapping at `indent`, whose `:` is at `colon`. */
+  parseImplicitKey(indent: i32, from: i32, colon: i32): i32 {
+    if (colon - from > YAML_MAX_KEY_LENGTH) {
+      this.reportLongImplicitKey(from, colon)
+    }
+    this.pos = from
+    const c: i32 = this.at(from)
+    let key: i32 = -1
+    if (c === YAML_DQUOTE || c === YAML_SQUOTE) {
+      key = this.scanQuoted(c, YAML_NONE)
+      const stream: YamlStream = this.stream
+      if (this.crossesLine(stream.start(key), stream.end(key))) {
+        this.error(
+          YAML_ERR_BAD_IMPLICIT_KEY,
+          "An implicit key must be on one line",
+          stream.start(key),
+          stream.end(key),
+        )
+      }
+    } else if (c === YAML_STAR) {
+      key = this.scanAlias()
+    } else if (c === YAML_LBRACKET || c === YAML_LBRACE) {
+      this.enterFlow(indent)
+      key = c === YAML_LBRACKET ? this.parseFlowSeq() : this.parseFlowMap()
+    } else {
+      if (this.plainStartClass(c) !== 0) {
+        this.reportBadPlainStart(from, false)
+      }
+      return this.plainNode(from, this.trimEnd(from, colon))
+    }
+    if (this.pos < colon) {
+      this.checkKeyGap(colon)
+    }
+    return key
+  }
+
+  /** Internal: reads a block sequence at `indent`, whose first `-` is at the cursor. */
+  parseBlockSeq(indent: i32): i32 {
+    const stream: YamlStream = this.stream
+    const base: i32 = this.scratchTop
+    let start: i32 = -1
+    let contentPos: i32 = this.pos
+    let firstEntry: boolean = true
+    while (true) {
+      if (!firstEntry) {
+        this.peekLine(indent)
+        if (this.lineEof || this.lineIndent !== indent) {
+          break
+        }
+        contentPos = this.lineContent
+      }
+      firstEntry = false
+      if (!this.isSeqEntryDash(contentPos)) {
+        break
+      }
+      if (start < 0) {
+        start = contentPos
+      }
+      const dash: i32 = contentPos
+      this.pos = dash + 1
+      this.skipIndicatorSeparation()
+      let item: i32 = -1
+      if (this.atLineEnd()) {
+        this.finishLine()
+        this.peekLine(indent + 1)
+        if (!this.lineEof && this.lineIndent > indent) {
+          this.pos = this.lineContent
+          item = this.parseNode(this.lineIndent, indent, false)
+        } else {
+          item = this.emptyScalar(dash + 1)
+        }
+      } else {
+        const c: i32 = this.at(this.pos)
+        if (c === YAML_PIPE || c === YAML_GT) {
+          item = this.scanBlockScalar(indent)
+        } else {
+          item = this.parseNode(this.pos - contentPos + indent, indent, false)
+        }
+        this.finishLineIfMidLine()
+      }
+      this.scratchTop = yamlStackPush(this.scratch, this.scratchTop, item)
+    }
+    if (start < 0) {
+      start = this.pos
+    }
+    const end: i32 = this.scratchTop > base ? stream.end(yamlAt(this.scratch, this.scratchTop - 1)) : this.pos
+    const node: i32 = stream.newNode(YAML_SEQ, YAML_BLOCK, start, end)
+    this.finishCollection(node, base)
+    return node
+  }
+
+  /**
+   * Internal: reads the block node at the cursor, at `indent`, whose parent
+   * is at `parentIndent`, guarding the nesting depth. `seqAtParentIndent` lets
+   * a sequence at the parent's own indent be the value of lone properties.
+   */
+  parseNode(indent: i32, parentIndent: i32, seqAtParentIndent: boolean): i32 {
+    if (this.depth >= this.maxDepth) {
+      return this.depthLimitNode()
+    }
+    this.depth += 1
+    const node: i32 = this.parseNodeInner(indent, parentIndent, seqAtParentIndent)
+    this.depth -= 1
+    return node
+  }
+
+  /** Internal: `parseNode`, past the depth guard. */
+  parseNodeInner(indent: i32, parentIndent: i32, seqAtParentIndent: boolean): i32 {
+    if (this.isSeqEntryDash(this.pos)) {
+      return this.parseBlockSeq(indent)
+    }
+    const props: i32 = this.scanProps(false)
+    if (props >= 0) {
+      this.skipInlineSpaces()
+      if (this.isSeqEntryDash(this.pos)) {
+        this.error(
+          YAML_ERR_UNEXPECTED_CONTENT,
+          "A block sequence cannot start on the line its node properties are written on",
+          this.pos,
+          this.pos + 1,
+        )
+      }
+      if (this.atLineEnd()) {
+        return this.parsePropsOnlyValue(props, parentIndent, seqAtParentIndent)
+      }
+    }
+    const c: i32 = this.at(this.pos)
+    if (c === YAML_STAR || c === YAML_LBRACKET || c === YAML_LBRACE) {
+      let node: i32 = -1
+      if (c === YAML_STAR) {
+        node = this.scanAlias()
+      } else {
+        this.enterFlow(parentIndent)
+        node = c === YAML_LBRACKET ? this.parseFlowSeq() : this.parseFlowMap()
+      }
+      node = this.attachProps(node, props)
+      this.skipInlineSpaces()
+      if (this.at(this.pos) === YAML_COLON && yamlIsWs(this.at(this.pos + 1))) {
+        const stream: YamlStream = this.stream
+        if (this.crossesLine(stream.start(node), stream.end(node))) {
+          this.error(
+            YAML_ERR_BAD_IMPLICIT_KEY,
+            "An implicit key must be on one line",
+            stream.start(node),
+            stream.end(node),
+          )
+        }
+        this.pos += 1
+        return this.parseBlockMap(indent, YAML_NONE, node, YAML_NONE)
+      }
+      this.checkTrailingContent()
+      return node
+    }
+    if (c === YAML_PIPE || c === YAML_GT) {
+      return this.attachProps(this.scanBlockScalar(parentIndent), props)
+    }
+    if (this.isExplicitKey(this.pos)) {
+      if (props >= 0) {
+        this.reportPropsBeforeExplicitKey(this.pos)
+      }
+      return this.attachProps(this.parseBlockMap(indent, YAML_NONE, YAML_NONE, YAML_NONE), props)
+    }
+    const colon: i32 = this.findKeyColon(this.pos)
+    if (colon >= 0) {
+      return this.parseBlockMap(indent, colon, YAML_NONE, props)
+    }
+    if (c === YAML_DQUOTE || c === YAML_SQUOTE) {
+      const quoted: i32 = this.attachProps(this.scanQuoted(c, parentIndent), props)
+      this.checkTrailingContent()
+      return quoted
+    }
+    if (this.plainStartClass(c) !== 0) {
+      this.reportBadPlainStart(this.pos, false)
+    }
+    return this.attachProps(this.scanPlainScalar(parentIndent), props)
+  }
+}
+
+// ---- Key sets ---------------------------------------------------------------------
+
+const YAML_FNV_OFFSET: i32 = -2128831035
+const YAML_FNV_PRIME: i32 = 16777619
+const YAML_KEY_SET_SLOTS: i32 = 64
+
+/** FNV-1a over the characters of `text`. */
+const yamlKeyHash = (text: string): i32 => {
+  let hash: i32 = YAML_FNV_OFFSET
+  const length: i32 = toI32(text.length)
+  let i: i32 = 0
+  while (i < length) {
+    hash = wrappingMul(hash ^ toI32(text.charCodeAt(i)), YAML_FNV_PRIME)
+    i += 1
+  }
+  return hash
+}
+
+/**
+ * The keys of one large map, for the duplicate check: open addressing over
+ * a power-of-two table, kept at most half full. `filled` lists the used
+ * slots, so a set handed back to the pool clears only those.
+ */
+class YamlKeySet {
+  texts: string[]
+  used: boolean[]
+  filled: i32[]
+  mask: i32 = 0
+
+  constructor() {
+    this.texts = []
+    this.used = []
+    this.filled = []
+    this.resize(YAML_KEY_SET_SLOTS)
+  }
+
+  /** Adds `text`; false when it was already there. */
+  add(text: string): boolean {
+    if ((toI32(this.filled.length) + 1) * 2 > this.mask + 1) {
+      this.grow()
+    }
+    let slot: i32 = yamlKeyHash(text) & this.mask
+    while (slot < toI32(this.used.length) && this.used[slot]) {
+      if (this.texts[slot] === text) {
+        return false
+      }
+      slot = (slot + 1) & this.mask
+    }
+    if (slot < toI32(this.used.length)) {
+      this.used[slot] = true
+      this.texts[slot] = text
+    }
+    this.filled.push(slot)
+    return true
+  }
+
+  /** Empties the set, keeping its table. */
+  clear(): void {
+    let i: i32 = 0
+    while (i < toI32(this.filled.length)) {
+      const slot: i32 = this.filled[i]
+      if (slot >= 0 && slot < toI32(this.used.length)) {
+        this.used[slot] = false
+        this.texts[slot] = ""
+      }
+      i += 1
+    }
+    this.filled = []
+  }
+
+  /** Internal: doubles the table and puts every key back. */
+  grow(): void {
+    const texts: string[] = []
+    let i: i32 = 0
+    while (i < toI32(this.filled.length)) {
+      const slot: i32 = this.filled[i]
+      texts.push(slot >= 0 && slot < toI32(this.texts.length) ? this.texts[slot] : "")
+      i += 1
+    }
+    this.resize((this.mask + 1) * 2)
+    let j: i32 = 0
+    while (j < toI32(texts.length)) {
+      this.add(texts[j])
+      j += 1
+    }
+  }
+
+  /** Internal: an empty table of `slots` slots. */
+  resize(slots: i32): void {
+    this.texts = []
+    this.used = []
+    this.filled = []
+    let i: i32 = 0
+    while (i < slots) {
+      this.texts.push("")
+      this.used.push(false)
+      i += 1
+    }
+    this.mask = slots - 1
+  }
+}
+
+// ---- Key text -------------------------------------------------------------------
+
+/** How many characters `keyText` writes for a collection key before it cuts the rest to `…`. */
+const YAML_KEY_TEXT_BUDGET: i32 = 4096
+/** How deep `keyText` follows a collection key's nesting before it cuts the rest to `…`. */
+const YAML_KEY_TEXT_DEPTH: i32 = 64
+/** How many aliases in a row a path step follows before it stops. */
+const YAML_ALIAS_HOPS: i32 = 100
+
+/** Writes a collection key as one line of flow text, within `YAML_KEY_TEXT_BUDGET` characters. */
+class YamlFlowWriter {
+  stream: YamlStream
+  out: string
+  left: i32 = 0
+  cut: boolean = false
+
+  constructor(stream: YamlStream) {
+    this.stream = stream
+    this.out = ""
+    this.left = YAML_KEY_TEXT_BUDGET
+  }
+
+  /** Internal: appends `s`, or as much of it as the budget allows and then `…`. */
+  append(s: string): void {
+    if (this.cut) {
+      return
+    }
+    const length: i32 = toI32(s.length)
+    if (length > this.left) {
+      this.out = this.out + s.substring(0, this.left) + "…"
+      this.cut = true
+      return
+    }
+    this.out = this.out + s
+    this.left -= length
+  }
+
+  /** Internal: appends node `n` (`-1` for a missing value), nested `depth` deep. */
+  write(n: i32, depth: i32): void {
+    const stream: YamlStream = this.stream
+    if (depth > YAML_KEY_TEXT_DEPTH) {
+      this.append("…")
+      this.cut = true
+      return
+    }
+    const at: i32 = n >= 0 ? stream.resolved(n) : -1
+    if (at < 0) {
+      this.append(n >= 0 ? yamlKeyText(stream, n) : "null")
+      return
+    }
+    const kind: i32 = stream.kind(at)
+    if (kind === YAML_SCALAR) {
+      this.append(stream.type(at) === YAML_NULL ? "null" : stream.text(at))
+      return
+    }
+    const count: i32 = stream.count(at)
+    const map: boolean = kind === YAML_MAP
+    if (count === 0) {
+      this.append(map ? "{}" : "[]")
+      return
+    }
+    this.append(map ? "{ " : "[ ")
+    let i: i32 = 0
+    while (i < count && !this.cut) {
+      if (i > 0) {
+        this.append(", ")
+      }
+      const item: i32 = stream.child(at, i)
+      if (map) {
+        this.write(stream.key(item), depth + 1)
+        this.append(": ")
+        this.write(stream.value(item), depth + 1)
+      } else {
+        this.write(item, depth + 1)
+      }
+      i += 1
+    }
+    this.append(map ? " }" : " ]")
+  }
+}
+
+/**
+ * The text a map key is matched and reported by: a scalar's decoded text (its
+ * source text for a number or a boolean, `""` for a null), an alias's target's
+ * text (`*name` when it names no anchor), and a collection written as one line
+ * of flow text, `{ a: 1 }` or `[ a, b ]`, cut to `…` past 4096 characters.
+ */
+const yamlKeyText = (stream: YamlStream, node: i32): string => {
+  const kind: i32 = stream.kind(node)
+  if (kind === YAML_ALIAS && stream.target(node) < 0) {
+    return stream.source.substring(stream.start(node), stream.end(node))
+  }
+  const at: i32 = stream.resolved(node)
+  if (stream.kind(at) === YAML_SCALAR) {
+    return stream.type(at) === YAML_NULL ? "" : stream.text(at)
+  }
+  const writer: YamlFlowWriter = new YamlFlowWriter(stream)
+  writer.write(at, toI32(0))
+  return writer.out
+}
+
+/** The text map key `node` of `stream` is matched by in a path and named by in a diagnostic; see `yamlKeyText`. */
+export const keyText = (stream: YamlStream, node: i32): string => yamlKeyText(stream, node)
+
+// ---- Paths ----------------------------------------------------------------------
+
+/** Walks a path of map keys and sequence indexes down from a node. */
+class YamlPathWalker {
+  stream: YamlStream
+  /** The deepest node reached. */
+  node: i32 = -1
+  /** The last pair stepped through, or `-1`. */
+  pair: i32 = -1
+  /** How many steps matched. */
+  matched: i32 = 0
+
+  constructor(stream: YamlStream) {
+    this.stream = stream
+  }
+
+  /** Internal: node `n` with its aliases followed, up to `YAML_ALIAS_HOPS` of them; `-1` past that. */
+  follow(n: i32): i32 {
+    const stream: YamlStream = this.stream
+    let at: i32 = n
+    let hops: i32 = 0
+    while (at >= 0 && stream.kind(at) === YAML_ALIAS) {
+      if (hops === YAML_ALIAS_HOPS) {
+        return -1
+      }
+      at = stream.target(at)
+      hops += 1
+    }
+    return at
+  }
+
+  /** Internal: whether map key `key` is written as `step`. */
+  keyIs(key: i32, step: string): boolean {
+    const stream: YamlStream = this.stream
+    const start: i32 = stream.start(key)
+    const end: i32 = stream.end(key)
+    if (stream.kind(key) === YAML_SCALAR && stream.style(key) === YAML_PLAIN && stream.tag(key) === "") {
+      if (!yamlIsWord(stream.source, start, end, step)) {
+        return step === "" && stream.type(key) === YAML_NULL
+      }
+      return stream.type(key) !== YAML_NULL || step === ""
+    }
+    return yamlKeyText(stream, key) === step
+  }
+
+  /** Internal: the index `step` writes, or `-1` when it is not 1 to 9 decimal digits. */
+  indexOf(step: string): i32 {
+    const length: i32 = toI32(step.length)
+    if (length === 0 || length > 9) {
+      return -1
+    }
+    let index: i32 = 0
+    let i: i32 = 0
+    while (i < length) {
+      const c: i32 = toI32(step.charCodeAt(i))
+      if (c < 48 || c > 57) {
+        return -1
+      }
+      index = index * 10 + (c - 48)
+      i += 1
+    }
+    return index
+  }
+
+  /** Internal: walks `path` down from `root`, as far as it matches. */
+  walk(root: i32, path: string[]): void {
+    const stream: YamlStream = this.stream
+    this.node = root
+    this.pair = -1
+    this.matched = 0
+    const steps: i32 = toI32(path.length)
+    while (this.matched < steps) {
+      const at: i32 = this.follow(this.node)
+      if (at < 0) {
+        return
+      }
+      const step: string = path[this.matched]
+      const kind: i32 = stream.kind(at)
+      let next: i32 = -1
+      if (kind === YAML_MAP) {
+        const count: i32 = stream.count(at)
+        let i: i32 = 0
+        while (i < count && next < 0) {
+          const pair: i32 = stream.child(at, i)
+          if (this.keyIs(stream.key(pair), step)) {
+            this.pair = pair
+            const value: i32 = stream.value(pair)
+            if (value < 0) {
+              return
+            }
+            next = value
+          }
+          i += 1
+        }
+      } else if (kind === YAML_SEQ) {
+        const index: i32 = this.indexOf(step)
+        if (index >= 0 && index < stream.count(at)) {
+          next = stream.child(at, index)
+        }
+      }
+      if (next < 0) {
+        return
+      }
+      this.node = next
+      this.matched += 1
+    }
+  }
+}
+
+/**
+ * The node `path` names below `root` of `stream`: each step a map key (matched
+ * by `keyText`) or a sequence index (`"0"`), through aliases. When a step does
+ * not match, the deepest node reached; `root` itself for an empty path.
+ */
+export const pathNode = (stream: YamlStream, root: i32, path: string[]): i32 => {
+  const walker: YamlPathWalker = new YamlPathWalker(stream)
+  walker.walk(root, path)
+  return walker.node
+}
+
+/** The last map pair `path` steps through below `root` of `stream` (see `pathNode`), or `-1`. */
+export const pathPair = (stream: YamlStream, root: i32, path: string[]): i32 => {
+  const walker: YamlPathWalker = new YamlPathWalker(stream)
+  walker.walk(root, path)
+  return walker.pair
+}
+
+/** How many steps of `path` match below `root` of `stream`; `path.length` when it names a node. */
+export const pathMatch = (stream: YamlStream, root: i32, path: string[]): i32 => {
+  const walker: YamlPathWalker = new YamlPathWalker(stream)
+  walker.walk(root, path)
+  return walker.matched
+}
+
+// ---- Parsing --------------------------------------------------------------------
+
+/** Parses `text` as a YAML stream with `options`. Panics when `maxDepth` is outside 1 to 1000. */
+export const parseYamlWith = (text: string, options: YamlOptions): YamlStream => {
+  if (options.maxDepth < 1 || options.maxDepth > YAML_MAX_DEPTH) {
+    panic("nish/yaml: maxDepth must be between 1 and 1000")
+  }
+  const parser: YamlParser = new YamlParser(text, options)
+  if (options.firstDocumentOnly) {
+    parser.parseFirst()
+  } else {
+    parser.parseAll()
+  }
+  parser.stream.sortDiagnostics()
+  return parser.stream
+}
+
+/** Parses `text` as a YAML stream with the default options. */
+export const parseYaml = (text: string): YamlStream => parseYamlWith(text, new YamlOptions())
