@@ -4678,6 +4678,60 @@ On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
 with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
 
+### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` in `nish/bytes`
+
+The three runs answer the first index in `[from, to)` of a `u8[]` whose byte
+is not in their class, or `to` when every byte there is; `copyBytes` copies a
+window of one array into another, or into itself
+([wp38-simd.md](wp38-simd.md), S6a). They are the scans and the copy a parser
+spends its time in, and `std/json` is written over them.
+
+```typescript
+import { copyBytes, skipBlank, skipDigits, skipJsonText } from "nish/bytes";
+
+export const main = (): i32 => {
+  const text: u8[] = [32, 10, 52, 50, 44, 34, 104, 105, 34]; // " \n42,\"hi\""
+  const start = skipBlank(text, 0, 9);
+  console.log(`${start} ${skipDigits(text, start, 9)}`);   // 2 4
+  console.log(`${skipJsonText(text, 6, 9)}`);              // 8, the closing quote
+  const word: u8[] = [0, 0];
+  copyBytes(word, 0, text, 6, 2);
+  console.log(`${word[0]} ${word[1]}`);                    // 104 105
+  return 0;
+};
+```
+
+- **The classes.** `skipBlank` skips JSON's four blanks (space, tab, newline,
+  carriage return) and `skipDigits` the ASCII digits. `skipJsonText` skips
+  what a JSON string holds as itself: printable ASCII other than `"` and `\`
+  (DEL included, which JSON does not escape), and every well-formed UTF-8
+  sequence (RFC 3629 §4) that ends before `to`. It stops at a quote, a
+  backslash or a control byte, and at the lead byte of a sequence that is
+  overlong, a surrogate, past U+10FFFF, a stray continuation byte or cut short
+  by `to`, so where it stops is the byte a decoder has to look at.
+- **The runs never panic.** `to` is clamped into `[0, b.length]` and `from`
+  into `[0, to]`, as `indexOfAny` clamps: a negative `from` scans from the
+  start, and a `from` at or past `to` answers it
+  (`tests/link/std_bytes_runs`).
+- **`copyBytes` panics on a range outside its array.** A negative `count`, or
+  a window that does not lie inside `src` or `dst`, panics
+  `copyBytes: the range lies outside an array` before any byte is written
+  (`tests/link/std_bytes_copy_outside`). Overlapping ranges of one array copy
+  as if every byte were read before any was written, as `copyWithin` does.
+- **The walkers are the meaning.** Each public function clamps or checks its
+  range, then makes one call to a private walker, a plain loop over the bytes,
+  which is what runs under Node. Natively the compiler recognises that call by
+  module and name (`src/kernels.ts`), as it does `indexOfAny`'s, and emits the
+  runtime's `nish_bytes_skip_blank`, `nish_bytes_skip_digits` or
+  `nish_bytes_skip_json_text` (`runtime/runtime-bytes.c`) in its place, or one
+  `llvm.memmove` for the copy. The kernels pick a scalar, a 16-byte (SSE2,
+  NEON or wasm SIMD) or a 32-byte (AVX2) path on their first call, and
+  `NISH_SIMD=scalar|base|avx2` pins it, except in a freestanding wasm32 build,
+  which has no environment to read it from.
+- **The runs are variable-time.** How long one takes says how long the run is,
+  so they are for text, never for secret data: `std/crypto` does not call
+  them.
+
 ### Interfaces and object literals
 
 ```ts

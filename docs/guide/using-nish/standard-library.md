@@ -36,7 +36,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
-| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order |
+| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` for the runs a parser skips and the bytes it copies |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
@@ -737,6 +737,49 @@ itself.
 Natively every function answers for every value. Under Node the `u16` and
 `u32` functions are expected to answer the same, but the 64-bit ones, the
 `i32` ones and `f64` do not yet: the Node prelude's conversions saturate where native ones wrap.
+
+### Runs and copies
+
+A parser spends its time skipping: the blanks between tokens, the digits of a
+number, the plain text inside a string. Three functions answer where such a
+run ends — the first index in `[from, to)` whose byte is not in the class, or
+`to` if every byte is:
+
+| Function | Skips |
+| --- | --- |
+| `skipBlank(b, from, to)` | JSON's blanks: space, tab, newline, carriage return |
+| `skipDigits(b, from, to)` | the ASCII digits `0` to `9` |
+| `skipJsonText(b, from, to)` | what a JSON string holds as itself: printable ASCII other than `"` and `\`, and well-formed UTF-8 |
+
+`copyBytes(dst, at, src, from, count)` copies `count` bytes of `src` from
+`from` into `dst` at `at`. The two arrays may be the same one, and the ranges
+may overlap.
+
+```ts nish:ok
+import { copyBytes, skipBlank, skipDigits } from "nish/bytes";
+
+export const main = (): i32 => {
+  const text: u8[] = [32, 10, 52, 50, 44]; // " \n42,"
+  const start = skipBlank(text, 0, 5);
+  const end = skipDigits(text, start, 5);
+  console.log(`${start} ${end}`); // 2 4
+  const digits: u8[] = [0, 0];
+  copyBytes(digits, 0, text, start, end - start);
+  console.log(`${digits[0]} ${digits[1]}`); // 52 50
+  return 0;
+};
+```
+
+The runs never panic: `to` is clamped to the array and `from` to `to`, so a
+range past the end answers the end. `copyBytes` panics with
+`copyBytes: the range lies outside an array` if either window does not fit,
+before it writes anything. `skipJsonText` stops at a quote, a backslash, a
+control byte or the first byte of a malformed UTF-8 sequence — the byte your
+decoder has to look at next.
+
+Natively each run reads 16 or 32 bytes at a time and the copy is one block
+move; under Node they are plain loops with the same answers. The runs take
+longer the longer the run is, so they are for text, never for secret data.
 
 ## `nish/threads`
 

@@ -68,7 +68,7 @@ export const runtimeCacheRoot = (): string => {
 
 /**
  * The runtime's translation units, in the order `scripts/build.sh` compiles
- * and links them: `runtime.c` and the seven it pairs with it. One list for both
+ * and links them: `runtime.c` and the eight it pairs with it. One list for both
  * keys below and for the objects a runtime entry holds.
  */
 export const runtimeUnits = (): string[] => [
@@ -80,6 +80,7 @@ export const runtimeUnits = (): string[] => [
   "runtime-net.c",
   "runtime-simd.c",
   "runtime-aes.c",
+  "runtime-bytes.c",
 ]
 
 /**

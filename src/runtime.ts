@@ -301,6 +301,20 @@ export class RuntimeTable {
         EFFECT_READ
       )
     )
+    // WP38 S6a: `nish/bytes`'s byte-class runs, in runtime-simd.c beside
+    // `indexOfAny`'s kernel and with its effect, for its reason. The data is
+    // an array's, which is null while the array is empty, so it is not
+    // `nonnull`.
+    for (const name of ["nish_bytes_skip_blank", "nish_bytes_skip_digits", "nish_bytes_skip_json_text"]) {
+      this.add(
+        new RuntimeFunction(
+          name,
+          `declare i64 @${name}(i8* noundef readonly nocapture, i64 noundef, i64 noundef)`,
+          attrs3("nounwind", "willreturn", "memory(argmem: read, inaccessiblemem: readwrite)"),
+          EFFECT_READ
+        )
+      )
+    }
     this.add(
       new RuntimeFunction(
         "nish_str_index_of_from",

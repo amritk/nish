@@ -62,6 +62,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    runtime/runtime-cross.c      copy-at-join (C, 1.1 KB)         │
 │    runtime/runtime-simd.c       vector byte search (C, 0.7 KB)   │
 │    runtime/runtime-aes.c        AES-NI/PMULL AES-GCM (C, 2.5 KB) │
+│    runtime/runtime-bytes.c      JSON byte-class runs (C, 1.3 KB) │
 │    scripts/build.sh             clang -O3/-Oz, LTO, gc-sections  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -96,6 +97,7 @@ Design rules that every WP must respect:
   | `runtime-net.c` | 2,303 | 2,304 |
   | `runtime-simd.c` | 675 (2026-10-09) | 768 |
   | `runtime-aes.c` | 2,532 (2026-10-11) | 2,560 |
+  | `runtime-bytes.c` | 1,303 (2026-10-23) | 1,536 |
 
   `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
   functions it calls. [wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget)

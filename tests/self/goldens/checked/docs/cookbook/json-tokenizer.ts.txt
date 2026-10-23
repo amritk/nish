@@ -23,6 +23,9 @@ function messageInto(tok: JsonTokenizer, body: u8[], out: u8[]): i32 -> @message
   callee +9:13 JsonTokenizer.skipValue -> @nish.JsonTokenizer.skipValue
   callee +13:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
 module std/json-tokenizer.ts [package nish]
+import copyBytes from "nish/bytes" -> function @nish.copyBytes
+import skipBlank from "nish/bytes" -> function @nish.skipBlank
+import skipJsonText from "nish/bytes" -> function @nish.skipJsonText
 const JSON_TOK_END: i32 = 0 [exported]
 const JSON_TOK_OBJECT_BEGIN: i32 = 1 [exported]
 const JSON_TOK_OBJECT_END: i32 = 2 [exported]
@@ -194,36 +197,36 @@ function jsonTokIsBlank(b: i32): boolean -> @nish.jsonTokIsBlank
 function jsonTokIsDigit(b: i32): boolean -> @nish.jsonTokIsDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function jsonTokIsPlain(b: i32): boolean -> @nish.jsonTokIsPlain
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
 function jsonTokSkipBlank(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSkipBlank
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: i
-  calls: nish.jsonTokIsBlank
-  pointer src: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end i
+  calls: nish.jsonTokIsBlank nish.skipBlank nish_panic_index nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.skipBlank#0
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +1:7 j: i32 (let)
-  callee +2:30 jsonTokIsBlank -> @nish.jsonTokIsBlank
+  local +1:9 to: i32 (const)
+  callee +8:8 jsonTokIsBlank -> @nish.jsonTokIsBlank
+  callee +11:23 jsonTokIsBlank -> @nish.jsonTokIsBlank
+  callee +14:10 skipBlank -> @nish.skipBlank
 function jsonTokSkipDigits(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSkipDigits
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: i
-  calls: nish.jsonTokIsDigit
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end i
+  calls: nish.jsonTokIsDigit nish_panic_index
   pointer src: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +1:7 j: i32 (let)
-  callee +2:30 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  local +1:9 to: i32 (const)
+  local +2:7 j: i32 (let)
+  callee +3:20 jsonTokIsDigit -> @nish.jsonTokIsDigit
 function jsonTokSkipPlain(src: u8[], i: i32, limit: i32): i32 -> @nish.jsonTokSkipPlain
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: i
-  calls: nish.jsonTokIsPlain
-  pointer src: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i limit
+  calls: nish.skipJsonText
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.skipJsonText#0
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +1:7 j: i32 (let)
-  callee +2:32 jsonTokIsPlain -> @nish.jsonTokIsPlain
+  local +1:9 to: i32 (const)
+  callee +5:10 skipJsonText -> @nish.skipJsonText
 function jsonTokHexDigit(b: i32): i32 -> @nish.jsonTokHexDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
@@ -525,27 +528,29 @@ function JsonTokenizer.stringInto(this: JsonTokenizer, out: u8[], at: i32): i32 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: at
-  calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
+  calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.copyBytes nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
-  pointer out: size=0 writesThrough=true captured=false
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0
   stackSites=0 stackLocals=0
-  local -15:11 n: i32 (const)
-  callee -14:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local -11:11 src: u8[] (const)
-  local -10:11 end: i32 (const)
-  local -9:9 i: i32 (let)
-  local -8:9 o: i32 (let)
-  local -3:15 srcLength: i32 (const)
-  local -2:15 outLength: i32 (const)
-  local +8:13 b: i32 (const)
-  callee +8:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local +17:13 cp: i32 (const)
-  callee +17:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local +18:13 width: i32 (const)
-  callee +18:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local +19:11 k: i32 (let)
-  callee +22:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee +27:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local -33:11 n: i32 (const)
+  callee -32:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local -29:11 src: u8[] (const)
+  local -28:11 end: i32 (const)
+  local -27:9 i: i32 (let)
+  local -26:9 o: i32 (let)
+  local -20:15 srcLength: i32 (const)
+  local -19:15 outLength: i32 (const)
+  local -18:13 count: i32 (let)
+  callee -10:11 copyBytes -> @nish.copyBytes
+  local -3:13 b: i32 (const)
+  callee -3:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local +6:13 cp: i32 (const)
+  callee +6:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local +7:13 width: i32 (const)
+  callee +7:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local +8:11 k: i32 (let)
+  callee +11:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee +16:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.stringLength(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.stringLength [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.isText
@@ -2052,3 +2057,279 @@ function jsonTokPowerOfFive(index: i32): u64 -> @nish.jsonTokPowerOfFive
   callee +2598:14 jsonTokW64 -> @nish.jsonTokW64
   callee +2600:14 jsonTokW64 -> @nish.jsonTokW64
   callee +2602:14 jsonTokW64 -> @nish.jsonTokW64
+module std/bytes.ts [package nish]
+const BYTES_SPACE: i32 = 32
+const BYTES_TAB: i32 = 9
+const BYTES_NEWLINE: i32 = 10
+const BYTES_CARRIAGE_RETURN: i32 = 13
+const BYTES_DIGIT_ZERO: i32 = 48
+const BYTES_DIGIT_NINE: i32 = 57
+const BYTES_QUOTE: i32 = 34
+const BYTES_BACKSLASH: i32 = 92
+const BYTES_NON_ASCII: i32 = 128
+const BYTES_CONTINUATION_TOP: i32 = 191
+function getU16LE(b: u8[], off: i32): u16 -> @nish.getU16LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU16BE(b: u8[], off: i32): u16 -> @nish.getU16BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU32LE(b: u8[], off: i32): u32 -> @nish.getU32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU32BE(b: u8[], off: i32): u32 -> @nish.getU32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU64LE(b: u8[], off: i32): u64 -> @nish.getU64LE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 v: u64 (let)
+  local +1:12 i: i32 (let)
+function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 v: u64 (let)
+  local +1:12 i: i32 (let)
+function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU32LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32LE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU32LE -> @nish.getU32LE
+function getI32BE(b: u8[], off: i32): i32 -> @nish.getI32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU32BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32BE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU32BE -> @nish.getU32BE
+function getI64LE(b: u8[], off: i32): i64 -> @nish.getI64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU64LE -> @nish.getU64LE
+function getI64BE(b: u8[], off: i32): i64 -> @nish.getI64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU64BE -> @nish.getU64BE
+function getF64LE(b: u8[], off: i32): f64 -> @nish.getF64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:69 getU64LE -> @nish.getU64LE
+function getF64BE(b: u8[], off: i32): f64 -> @nish.getF64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:69 getU64BE -> @nish.getU64BE
+function setU16LE(b: u8[], off: i32, v: u16): void -> @nish.setU16LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU16BE(b: u8[], off: i32, v: u16): void -> @nish.setU16BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU32LE(b: u8[], off: i32, v: u32): void -> @nish.setU32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU32BE(b: u8[], off: i32, v: u32): void -> @nish.setU32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU64LE(b: u8[], off: i32, v: u64): void -> @nish.setU64LE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:12 i: i32 (let)
+function setU64BE(b: u8[], off: i32, v: u64): void -> @nish.setU64BE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:12 i: i32 (let)
+function setI32LE(b: u8[], off: i32, v: i32): void -> @nish.setI32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU32LE
+  escaping: off
+  calls: nish.setU32LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32LE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU32LE -> @nish.setU32LE
+function setI32BE(b: u8[], off: i32, v: i32): void -> @nish.setI32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU32BE
+  escaping: off
+  calls: nish.setU32BE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32BE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU32BE -> @nish.setU32BE
+function setI64LE(b: u8[], off: i32, v: i64): void -> @nish.setI64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64LE
+  escaping: off
+  calls: nish.setU64LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64LE -> @nish.setU64LE
+function setI64BE(b: u8[], off: i32, v: i64): void -> @nish.setI64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64BE
+  escaping: off
+  calls: nish.setU64BE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64BE -> @nish.setU64BE
+function setF64LE(b: u8[], off: i32, v: f64): void -> @nish.setF64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64LE
+  escaping: off
+  calls: nish.setU64LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64LE -> @nish.setU64LE
+function setF64BE(b: u8[], off: i32, v: f64): void -> @nish.setF64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64BE
+  escaping: off
+  calls: nish.setU64BE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64BE -> @nish.setU64BE
+function bytesRunEnd(b: u8[], to: i32): i32 -> @nish.bytesRunEnd
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: to
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+function bytesRunStart(from: i32, end: i32): i32 -> @nish.bytesRunStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end from
+  stackSites=0 stackLocals=0
+function skipBlank(b: u8[], from: i32, to: i32): i32 -> @nish.skipBlank [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipBlankWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipBlankWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipBlankWalk -> @nish.skipBlankWalk
+  callee +1:27 bytesRunStart -> @nish.bytesRunStart
+function skipDigits(b: u8[], from: i32, to: i32): i32 -> @nish.skipDigits [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipDigitsWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipDigitsWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipDigitsWalk -> @nish.skipDigitsWalk
+  callee +1:28 bytesRunStart -> @nish.bytesRunStart
+function skipJsonText(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonText [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipJsonTextWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipJsonTextWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipJsonTextWalk -> @nish.skipJsonTextWalk
+  callee +1:30 bytesRunStart -> @nish.bytesRunStart
+function copyBytes(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytes [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.copyBytesWalk
+  escaping: at count from
+  calls: nish.copyBytesWalk nish_panic
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.copyBytesWalk#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.copyBytesWalk#2
+  stackSites=0 stackLocals=0
+  callee +0:3 copyBytesWalk -> @nish.copyBytesWalk
+function skipBlankWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipBlankWalk
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+function skipDigitsWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipDigitsWalk
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+function bytesUtf8Length(b: u8[], i: i32, to: i32): i32 -> @nish.bytesUtf8Length
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 lead: i32 (const)
+  local +1:7 low: i32 (let)
+  local +2:7 high: i32 (let)
+  local +3:7 n: i32 (let)
+  local +28:9 second: i32 (const)
+  local +32:7 k: i32 (let)
+  local +34:11 c: i32 (const)
+function skipJsonTextWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonTextWalk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesUtf8Length nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesUtf8Length#0
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+  local +4:13 n: i32 (const)
+  callee +4:22 bytesUtf8Length -> @nish.bytesUtf8Length
+function copyBytesWalk(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytesWalk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish_panic_index nish_panic_overflow
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -2:9 k: i32 (let)
+  local +5:7 k: i32 (let)

@@ -2551,6 +2551,11 @@ export const isPureRuntime = (symbol: string): boolean =>
   // Effect-pure, but variable-time: how long it takes says where the first
   // match is, so `std/crypto` must not call `indexOfAny` on secret data.
   symbol === "nish_str_index_of_any" ||
+  // The same for `nish/bytes`'s byte-class runs: where a run stops is how
+  // long it takes.
+  symbol === "nish_bytes_skip_blank" ||
+  symbol === "nish_bytes_skip_digits" ||
+  symbol === "nish_bytes_skip_json_text" ||
   symbol === "nish_str_len" ||
   symbol === "nish_str_from_i32" ||
   symbol === "nish_str_from_f64" ||

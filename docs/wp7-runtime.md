@@ -7,7 +7,7 @@ strings, and the `wasi` build profile. Later work superseded several parts:
 
 - signed overflow, `i64` included, is a checked panic by default (#426);
 - the shortest-digits search was replaced by a port of Ryu;
-- the runtime grew from one translation unit to eight, each with its own
+- the runtime grew from one translation unit to nine, each with its own
   measured budget (below).
 
 The living reference for every builtin is [LANGUAGE.md](LANGUAGE.md) ("Math",
@@ -183,6 +183,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-net.c` | `nish:net` sockets, `SO_REUSEPORT` listeners, UDP, the readiness loop | 2,560 (`NET_TEXT_BUDGET`) | 2,335 (2026-10-20) |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s scalar, SSE2 and AVX2 paths and their resolver ([wp38](wp38-simd.md) S1) | 768 (`RUNTIME_SIMD_TEXT_BUDGET`) | 675 (2026-10-09) |
 | `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
+| `runtime/runtime-bytes.c` | the byte-class runs of `nish/bytes`: JSON's blanks, the digits and a JSON string's plain bytes, their scalar, SSE2 and AVX2 paths, the UTF-8 step and their resolver ([wp38](wp38-simd.md) S6a) | 1,536 (`RUNTIME_BYTES_TEXT_BUDGET`) | 1,303 (2026-10-23) |
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
 
@@ -216,6 +217,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-20 | a divided region's pieces claimed dynamically (threads-followups): `runtime-parallel.c` threaded 2,900 → 3,097. Up to eight pieces a thread off an atomic counter, the arena rewound between them (`nish_par_run` 21 → 102, `nish_par_piece` 49 and `nish_par_run_lead` 21 new, `nish_parallel_range` 245 → 280); bench/par-heavy.ts at four threads 846 → 792 ms | parallel threads 3,328 |
 | 2026-10-20 | a map element's rewind keeps the chunk its body grew (threads-followups): `runtime-cross.c` 1,444 / 1,513 → 1,552 / 1,631, all of it `nish_cross_keep` (262 → 370) with `nish_rewind` inlined. A mark at the end of a full chunk had every element's body `malloc` a 64 KB chunk and the release `free` it; the newest 64 KB chunk is now kept, emptied, in front of the mark's. 1M short strings at one thread 72.8 → 54.9 ms, inside the loop's band; the file's other functions are the join's and the guard's, unchanged | cross 1,664 / 1,664 |
 | 2026-10-20 | WP34 N12's `spawn`, `kill`, `waitPid`, `availableParallelism` and `totalMemory`: `runtime-os.c` 1,530 → 2,383. The four process and memory builtins are 276 bytes (`nish_spawn_start` split from `spawnSync` +31, `nish_spawn_child` 9, `nish_kill` 53, `nish_wait_pid` 134, `nish_total_memory` 49); the other 577 is the CPU count's reading (sysconf, affinity, cgroup, `NISH_NUM_THREADS`), moved from `runtime-parallel.c` so that `availableParallelism` works without `--threads`. `runtime-parallel.c` threaded 3,097 → 2,522; the two files together grew by 278 | os 2,560, parallel threads 2,560 |
+| 2026-10-23 | `runtime-bytes.c` (1,303), wp38 S6a; folded into `runtime-simd.c` the two measured 1,960 | bytes 1,536 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -346,6 +348,30 @@ include `nish.h`, so the arena chunk's layout, which both files walk, is pinned
 by the same `_Static_assert`s in each. `scripts/build.sh` pairs the unit and
 `src/run-cache.ts` lists it in one commit, as the AES unit's were. A program
 that answers, sends or guards no string keeps none of it, by section GC.
+
+### The byte-class unit
+
+`runtime/runtime-bytes.c` (wp38 S6a, [wp38-simd.md](wp38-simd.md) §3.1) holds
+the three runs `nish/bytes` steps over — JSON's blanks, the digits, and the
+bytes a JSON string holds as themselves, UTF-8 checked — sixteen or thirty-two
+bytes at a time. The compiler calls its kernels in place of three private
+walkers of `std/bytes.ts`, as it calls `runtime-simd.c`'s in place of
+`indexOfAny`'s, and each has a scalar path of its own, so there is no branch
+back to the Nish walker. Its 1,303 bytes are the scalar path 137, the SSE2
+path 265, the AVX2 path 368, the UTF-8 step 238 and its resume 29, the
+resolver 204 and the three entry points 62.
+
+It is a ninth unit rather than more of `runtime-simd.c` by the same rule as
+the AES unit: folded in, the two measured 1,960 bytes against that file's
+ceiling of 768. Apart, a program that searches text links no JSON run and one
+that tokenizes JSON no byte-set search. The paths and their choice are
+`runtime-simd.c`'s, `NISH_SIMD` included; the one difference is freestanding
+wasm32, which has no libc to read `NISH_SIMD` with, where the kernels call the
+base path directly. `scripts/build.sh --profile wasm` adds the file to a
+freestanding link whose IR calls a kernel, as it adds `runtime-aes.c`, so a
+module compiled for the host links there too. `scripts/build.sh` pairs it,
+`src/run-cache.ts` lists it and the compiler first calls it in one commit. A
+program that never reaches a run keeps none of it, by section GC.
 
 ### Checked arithmetic
 

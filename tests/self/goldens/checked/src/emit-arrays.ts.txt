@@ -28,6 +28,8 @@ import emitSliceCheck from "./emit-strings" -> function @emitSliceCheck
 import guardKeep from "./emit-strings" -> function @guardKeep
 import NUMBER_MODE_I32 from "./context" -> const NUMBER_MODE_I32
 import internalErrorFor from "./ice" -> function @internalErrorFor
+import BYTES_WALK_COPY from "./kernels" -> const BYTES_WALK_COPY
+import bytesKernelOf from "./kernels" -> function @bytesKernelOf
 import N_ARRAY from "./nodes" -> const N_ARRAY
 import N_ARROW from "./nodes" -> const N_ARROW
 import N_BINARY from "./nodes" -> const N_BINARY
@@ -1553,3 +1555,44 @@ function emitForOf(emitter: Emitter, stmt: Node): void -> @emitForOf [exported]
   callee +10:48 Emitter.align8 -> @Emitter.align8
   callee +11:3 IRFunction.emit -> @IRFunction.emit
   callee +13:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+function emitBytesKernel(emitter: Emitter, walk: i32, values: string[]): string -> @emitBytesKernel [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via bytePointer
+  escaping: walk
+  calls: Emitter.declare Emitter.useRuntime IRFunction.emit IRFunction.emitValue bytePointer bytesKernelOf elementAccess loadData nish_panic_index nish_str_concat
+  pointer emitter: size=264 writesThrough=false captured=false passedTo=bytePointer#0 bytePointer#0 Emitter.declare#0 elementAccess#0 loadData#0 Emitter.useRuntime#0
+  pointer values: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +2:11 to: string (const)
+  callee +2:16 bytePointer -> @bytePointer
+  local +3:11 from: string (const)
+  callee +3:18 bytePointer -> @bytePointer
+  local +4:11 count: string (const)
+  callee +4:19 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +5:5 Emitter.declare -> @Emitter.declare
+  callee +8:5 IRFunction.emit -> @IRFunction.emit
+  callee +8:85 elementAccess -> @elementAccess
+  local +11:9 data: string (const)
+  callee +11:16 loadData -> @loadData
+  local +12:9 from: string (const)
+  callee +12:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +13:9 to: string (const)
+  callee +13:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local +14:9 stop: string (const)
+  callee +14:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +15:17 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +15:36 bytesKernelOf -> @bytesKernelOf
+  callee +17:10 IRFunction.emitValue -> @IRFunction.emitValue
+function bytePointer(emitter: Emitter, arr: string, at: string): string -> @bytePointer
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via loadData
+  escaping: arr
+  calls: IRFunction.emitValue loadData nish_str_concat
+  pointer emitter: size=264 writesThrough=false captured=false passedTo=loadData#0
+  stackSites=0 stackLocals=0
+  local +0:9 data: string (const)
+  callee +0:16 loadData -> @loadData
+  local +1:9 offset: string (const)
+  callee +1:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:10 IRFunction.emitValue -> @IRFunction.emitValue

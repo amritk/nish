@@ -13,6 +13,7 @@ const MAP_EXTRAS_SPECIFIER: string = "nish/map"
 const JSON_TYPED_SPECIFIER: string = "nish/json-typed"
 const SECRET_STD_SPECIFIER: string = "nish/secret" [exported]
 const TEXT_SPECIFIER: string = "nish/text"
+const BYTES_SPECIFIER: string = "nish/bytes"
 const CRYPTO_AES_SPECIFIER: string = "nish/crypto/aes"
 function stdModuleName(specifier: string): string -> @stdModuleName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -54,6 +55,11 @@ function isJsonTypedModule(packageName: string, name: string): boolean -> @isJso
   stackSites=0 stackLocals=0
   callee +0:35 stdModuleName -> @stdModuleName
 function isTextModule(packageName: string, name: string): boolean -> @isTextModule [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
+  stackSites=0 stackLocals=0
+  callee +0:35 stdModuleName -> @stdModuleName
+function isBytesModule(packageName: string, name: string): boolean -> @isBytesModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
   stackSites=0 stackLocals=0

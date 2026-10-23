@@ -95,6 +95,8 @@
  * adapted from fast_float under the notice above `jsonTokW64`.
  */
 
+import { copyBytes, skipBlank, skipJsonText } from "nish/bytes"
+
 /** The top-level value is complete and only blanks follow it. Answered again on every later call. */
 export const JSON_TOK_END: i32 = 0
 /** `{`. */
@@ -291,13 +293,6 @@ const jsonTokIsBlank = (b: i32): boolean =>
 const jsonTokIsDigit = (b: i32): boolean => b >= JSON_TOK_DIGIT_0 && b <= JSON_TOK_DIGIT_9
 
 /**
- * A byte a string's scan steps over without a second look: printable ASCII
- * that is neither the closing quote nor a backslash.
- */
-const jsonTokIsPlain = (b: i32): boolean =>
-  b >= JSON_TOK_SPACE && b < JSON_TOK_ASCII_END && b !== JSON_TOK_QUOTE && b !== JSON_TOK_BACKSLASH
-
-/**
  * The first index at or after `i` that is not a blank, or `end`. The run is
  * read straight out of `src`, bounded by both `end` and the array's length,
  * so it stops wherever `jsonTokByteAt` would have answered `-1`.
@@ -307,11 +302,20 @@ const jsonTokSkipBlank = (src: u8[], i: i32, end: i32): i32 => {
     return i
   }
   const n: i32 = toI32(src.length)
-  let j: i32 = i
-  while (j < end && j < n && jsonTokIsBlank(toI32(src[j]))) {
-    j += 1
+  const to: i32 = end < n ? end : n
+  if (i >= to) {
+    return i
   }
-  return j
+  // Most runs between tokens are no blank or one, so those two bytes are
+  // read here and only a longer run, an indented document's, pays a call
+  // into the kernel (WP38 S6a).
+  if (!jsonTokIsBlank(toI32(src[i]))) {
+    return i
+  }
+  if (i + 1 >= to || !jsonTokIsBlank(toI32(src[i + 1]))) {
+    return i + 1
+  }
+  return skipBlank(src, i + 2, to)
 }
 
 /** The first index at or after `i` that is not a digit, or `end`, read as `jsonTokSkipBlank` reads its run. */
@@ -319,25 +323,37 @@ const jsonTokSkipDigits = (src: u8[], i: i32, end: i32): i32 => {
   if (i < 0) {
     return i
   }
+  // A number's digits are short runs, which a call into `skipDigits`'s
+  // kernel costs more than it saves (WP38 S6a), so they stay a loop here,
+  // against one bound.
   const n: i32 = toI32(src.length)
+  const to: i32 = end < n ? end : n
   let j: i32 = i
-  while (j < end && j < n && jsonTokIsDigit(toI32(src[j]))) {
+  while (j < to && jsonTokIsDigit(toI32(src[j]))) {
     j += 1
   }
   return j
 }
 
-/** The first index at or after `i` that is not a plain string byte, or `limit`, read as `jsonTokSkipBlank` reads its run. */
+/**
+ * The first index at or after `i` that is not a plain string byte, or
+ * `limit`, read as `jsonTokSkipBlank` reads its run. A plain byte is one a
+ * string's scan steps over without a second look: printable ASCII that is
+ * neither the closing quote nor a backslash, and every well-formed UTF-8
+ * sequence that ends by `limit`, which the checks in `string` would pass with
+ * `decoded += width; i += width` (`skipJsonText`). So the run leaves them the
+ * first byte they would judge differently.
+ */
 const jsonTokSkipPlain = (src: u8[], i: i32, limit: i32): i32 => {
   if (i < 0) {
     return i
   }
   const n: i32 = toI32(src.length)
-  let j: i32 = i
-  while (j < limit && j < n && jsonTokIsPlain(toI32(src[j]))) {
-    j += 1
+  const to: i32 = limit < n ? limit : n
+  if (i >= to) {
+    return i
   }
-  return j
+  return skipJsonText(src, i, to)
 }
 
 /** The value of one hex digit, or `-1`. */
@@ -949,15 +965,22 @@ export class JsonTokenizer {
     let i: i32 = this.tokStart + 1
     let o: i32 = at
     if (n === end - i) {
-      // No escape (see `keyEquals`): the bytes are copied as they are. Both
-      // cursors only climb, so their floors are tested once, before the loop.
+      // No escape (see `keyEquals`): the bytes are copied as they are, as one
+      // `copyBytes` of as many as both arrays hold, which the caller's test
+      // above has made all of them.
       if (i >= 0 && o >= 0) {
         const srcLength: i32 = toI32(src.length)
         const outLength: i32 = toI32(out.length)
-        while (i < end && i < srcLength && o < outLength) {
-          out[o] = src[i]
-          o += 1
-          i += 1
+        let count: i32 = end - i
+        if (srcLength - i < count) {
+          count = srcLength - i
+        }
+        if (outLength - o < count) {
+          count = outLength - o
+        }
+        if (count > 0) {
+          copyBytes(out, o, src, i, count)
+          o += count
         }
       }
       return o - at
