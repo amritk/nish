@@ -365,6 +365,69 @@ const numbers = (t: Suite): void => {
     t.eqF64("numberF64 is 0 on a string token", str.numberF64(), toF64(0));
   }
 
+  // isIntegral is the value rule, read from the text: 1.0 is whole, 1.5 is not.
+  const wholes = [
+    "0",
+    "-0",
+    "0.0",
+    "-0.0e5",
+    "1.0",
+    "1.000",
+    "1e2",
+    "1E+2",
+    "100e-2",
+    "150e-1",
+    "1.5e1",
+    "12345678901234567890.0",
+    "1e400",
+    "1e99999999999",
+    "0e-99999999999",
+    "1.25e000000000000000000000000000000000000002",
+    "1.5e2147483647",
+    "1.5e2147483648",
+    "1.5e21474836500",
+    "1.5e1000000000000000000000000000000000000000",
+    "1000e-3",
+    "10.0e-1",
+    "0.1e1",
+    "0.10e1",
+    "1.5",
+    "-1.5",
+    "1e-1",
+    "10e-2",
+    "15e-1",
+    "123.456e2",
+    "1e-400",
+    "1e-99999999999",
+    "1.5e-1000000000000000000000000000000000000000",
+    "100e-0000000000000000000000000000000000000003",
+    "1.5e0",
+    "100e-3",
+    "1.0e-5",
+  ];
+  const whole = [
+    true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+    true, true, true, true, true, true, true, true, true, false, false, false, false, false, false,
+    false, false, false, false, false, false, false,
+  ];
+  let w: i32 = 0;
+  while (w < toI32(wholes.length) && w < toI32(whole.length)) {
+    const n = jtAt(wholes[w], JSON_TOK_NUMBER);
+    if (n === null) {
+      t.fail(`a number token for ${wholes[w]}`, "none");
+    } else {
+      t.eqBool(`isIntegral(${wholes[w]})`, n.isIntegral(), whole[w]);
+    }
+    w += 1;
+  }
+  if (str !== null) {
+    t.ok("isIntegral is false on a string token", !str.isIntegral());
+  }
+  const one = jtAt("1.0", JSON_TOK_NUMBER);
+  if (one !== null) {
+    t.ok("1.0 is isIntegral but neither isInteger nor integral: the spelling readers are unchanged", one.isIntegral() && !one.isInteger() && !one.integral);
+  }
+
   // numberF64 is correctly rounded: the bits of what JSON.parse answers.
   const zero: i64 = 0;
   const infinity: i64 = toI64(2047) << 52;

@@ -53,7 +53,8 @@
  *
  * **Numbers are lossless.** A number keeps its source text, and is read as
  * whatever the caller asks for when it asks: `i64` and `u64` when the text is
- * an integer that fits (`isI64`, `isU64`), the nearest `f64` (`f64`, correctly
+ * an integer that fits (`isI64`, `isU64`), whether its value is whole at all
+ * (`isIntegral`, so `1.0` and `1e2` are), the nearest `f64` (`f64`, correctly
  * rounded, the tokenizer's `numberF64`), or the text itself (`numberText`).
  * Writing it back copies the text. So `18446744073709551616`, wider than any
  * integer type, and `0.1000000000000000055511151231257827`, more digits than an
@@ -748,7 +749,11 @@ export class JsonDocument {
     return this.textOf(jsonValueGet(this.first, x), jsonValueGet(this.count, x))
   }
 
-  /** Whether `v` is a number written without a fraction or an exponent whose value fits an `i64`. */
+  /**
+   * Whether `v` is a number written without a fraction or an exponent whose
+   * value fits an `i64`: the spelling, so `1.0` is not one. `isIntegral(v)`
+   * asks whether the value is whole.
+   */
   isI64(v: JsonValue): boolean {
     return this.readNumber(this.index(v)) && this.numbers.isInteger()
   }
@@ -759,7 +764,10 @@ export class JsonDocument {
     return this.readNumber(this.index(v)) ? this.numbers.numberI64() : toI64(0)
   }
 
-  /** Whether `v` is a number written without a sign, a fraction or an exponent whose value fits a `u64`. */
+  /**
+   * Whether `v` is a number written without a sign, a fraction or an exponent
+   * whose value fits a `u64`: the spelling, as `isI64(v)` is.
+   */
   isU64(v: JsonValue): boolean {
     this.unsigned(this.index(v))
     return this.unsignedFits
@@ -802,6 +810,17 @@ export class JsonDocument {
     }
     this.unsignedFits = true
     return acc
+  }
+
+  /**
+   * Whether `v` is a number whose value is whole, however it is written:
+   * JSON Schema 2020-12's "integer", the tokenizer's `isIntegral`. `1.0`,
+   * `1e2` and `1e400` are, where `isI64(v)` and `isU64(v)` go by spelling and
+   * by range and answer `false` for all three. `false` for any other kind and
+   * for a handle from an earlier parse.
+   */
+  isIntegral(v: JsonValue): boolean {
+    return this.readNumber(this.index(v)) && this.numbers.isIntegral()
   }
 
   /** A number's nearest `f64`, ties to even, as `JSON.parse` reads it; `0` for any other value. */
