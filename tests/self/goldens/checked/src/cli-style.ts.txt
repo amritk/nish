@@ -177,7 +177,7 @@ function helpText(style: Style, guide: string): string -> @helpText [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: guide
   calls: Style.dim Style.heading Style.meta Style.name helpRow nish_alloc_struct nish_array_grow nish_str_concat usageRow
-  pointer style: size=2 writesThrough=false captured=false passedTo=Style.name#0 Style.dim#0 Style.dim#0 usageRow#0 usageRow#0 usageRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 Style.dim#0 Style.meta#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 Style.dim#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0
+  pointer style: size=2 writesThrough=false captured=false passedTo=Style.name#0 Style.dim#0 Style.dim#0 usageRow#0 usageRow#0 usageRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 Style.dim#0 Style.meta#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 Style.dim#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0
   stackSites=1 stackLocals=1
   local +0:9 lines: string[] (const)
   callee +2:8 Style.name -> @Style.name
@@ -211,32 +211,33 @@ function helpText(style: Style, guide: string): string -> @helpText [exported]
   callee +40:14 helpRow -> @helpRow
   callee +41:14 helpRow -> @helpRow
   callee +42:14 helpRow -> @helpRow
-  callee +45:14 Style.heading -> @Style.heading
-  callee +46:14 helpRow -> @helpRow
+  callee +43:14 helpRow -> @helpRow
+  callee +46:14 Style.heading -> @Style.heading
   callee +47:14 helpRow -> @helpRow
   callee +48:14 helpRow -> @helpRow
   callee +49:14 helpRow -> @helpRow
-  callee +52:14 Style.heading -> @Style.heading
-  callee +53:14 helpRow -> @helpRow
+  callee +50:14 helpRow -> @helpRow
+  callee +53:14 Style.heading -> @Style.heading
   callee +54:14 helpRow -> @helpRow
   callee +55:14 helpRow -> @helpRow
   callee +56:14 helpRow -> @helpRow
   callee +57:14 helpRow -> @helpRow
   callee +58:14 helpRow -> @helpRow
   callee +59:14 helpRow -> @helpRow
-  callee +63:16 Style.heading -> @Style.heading
-  callee +64:21 Style.dim -> @Style.dim
-  callee +65:21 Style.meta -> @Style.meta
-  callee +66:16 helpRow -> @helpRow
+  callee +60:14 helpRow -> @helpRow
+  callee +64:16 Style.heading -> @Style.heading
+  callee +65:21 Style.dim -> @Style.dim
+  callee +66:21 Style.meta -> @Style.meta
   callee +67:16 helpRow -> @helpRow
   callee +68:16 helpRow -> @helpRow
-  callee +72:14 Style.heading -> @Style.heading
-  callee +73:19 Style.dim -> @Style.dim
-  callee +76:14 Style.heading -> @Style.heading
-  callee +77:14 helpRow -> @helpRow
+  callee +69:16 helpRow -> @helpRow
+  callee +73:14 Style.heading -> @Style.heading
+  callee +74:19 Style.dim -> @Style.dim
+  callee +77:14 Style.heading -> @Style.heading
   callee +78:14 helpRow -> @helpRow
   callee +79:14 helpRow -> @helpRow
   callee +80:14 helpRow -> @helpRow
+  callee +81:14 helpRow -> @helpRow
 function helpHint(): string -> @helpHint [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

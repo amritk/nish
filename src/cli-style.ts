@@ -259,6 +259,7 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(style.heading("Interop"))
   lines.push(helpRow(style, "--emit-header", "<file.h>", "a C header for the exports"))
   lines.push(helpRow(style, "--emit-dts", "<file.d.ts>", "their typings, and a <file>.mjs loader"))
+  lines.push(helpRow(style, "--emit-ts", "<dir>", "the program as TypeScript, instead of IR"))
   lines.push(helpRow(style, "--emit-napi", "<shim.c>", "a Node-API shim, to load them from Node"))
   lines.push(helpRow(style, "--emit-napi-async", "<shim.c>", "the same, plus a promise for each export"))
 
