@@ -7621,7 +7621,9 @@ terminal. Any other is the host's own.
 **stdin is never made non-blocking.** `O_NONBLOCK` belongs to the open file
 description, which a shell shares with every program it starts, so a program
 that set it and then crashed would leave the shell's own stdin non-blocking.
-`readStdin` asks `poll` with a timeout of `0` before it reads instead.
+`readStdin` asks `select` with a timeout of `0` before it reads instead, and so
+does `waitStdin`: Darwin's `poll` does not support devices, and answers a
+terminal at once whether a key is waiting or not.
 
 **The loop.** `waitStdin` is the frame clock: a game waits up to one frame for a
 key, reads what came, advances the world and draws, so the wait costs nothing
@@ -7685,16 +7687,19 @@ raw mode, so a stack overflow there restores the terminal too. A program that
 took SIGTERM or SIGINT through `signalFd` keeps it, and puts the terminal back
 itself, or by returning. SIGKILL leaves raw mode behind, and so does a stack
 overflow on a thread other than the one that called `setRawMode(true)`; `stty
-sane` undoes either. SIGTSTP is not
-touched: a shell with job control saves a stopped job's terminal state, puts its
-own back, and gives the job its state again on `fg`.
+sane` undoes either. SIGTSTP is not touched: a shell with job control saves a
+stopped job's terminal state, puts its own back, and gives the job its state
+again on `fg`. Job control also stops a program started in the background
+(`app &`) when it calls `setRawMode(true)`, by SIGTTOU, as it stops any program
+that sets the terminal, and the program enters raw mode on `fg`. Two threads that call `setRawMode`
+at once take turns, so the termios saved is the one from before either.
 
 The `term` block of `tests/run.js` runs `term_pty` under `script(1)`, which
 gives it a pseudo-terminal: it is a terminal on both descriptors with a size,
 enters raw mode twice and leaves twice, each `0`, and after it returns in raw
 mode, panics in raw mode, and is killed by SIGTERM, and then by SIGSEGV, while
-it waits in raw mode, `stty -g` reads what it read before. Where `script` is missing or makes no
-terminal, that check is a counted skip that says which.
+it waits in raw mode, `stty -g` reads what it read before. Where `script` is
+missing or makes no terminal, that check is a counted skip that says which.
 
 #### Where there is no terminal
 

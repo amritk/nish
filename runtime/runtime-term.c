@@ -19,7 +19,7 @@
  * stdin is never made non-blocking. `O_NONBLOCK` is a property of the open
  * file description, which a shell shares with every program it starts, so
  * setting it would leave the shell's own stdin non-blocking after a crash.
- * `readStdin` asks `poll` first instead, with a timeout of 0.
+ * `readStdin` asks `select` first instead, with a timeout of 0.
  *
  * Raw mode is cfmakeraw's input side without its output side: no echo, no line
  * editing, no CR-to-NL translation, no flow control, 8-bit bytes, a read that
@@ -53,34 +53,52 @@
 #endif
 #include "nish.h"
 
-#include <poll.h>
 #include <errno.h>
 #include <unistd.h>
-#ifndef __wasi__
+#ifdef __wasi__
+#include <poll.h>
+#else
 #include <signal.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
+#include <sys/select.h>
 #include <termios.h>
 #endif
+
+/* 1 when stdin is readable within `timeout_ms` (a negative one waits for
+   ever), which includes its end and an error, 0 when it is not or a signal
+   ends the wait, and the host's `-errno` when the question fails. Outside
+   WASI this asks `select`, because Darwin's `poll` does not support devices:
+   it answers POLLNVAL for a terminal at once, with no input there. */
+static int nish_stdin_ready(int32_t timeout_ms) {
+#ifdef __wasi__
+  struct pollfd p = {0, POLLIN, 0};
+  int r = poll(&p, 1, timeout_ms < 0 ? -1 : timeout_ms);
+#else
+  fd_set in;
+  FD_ZERO(&in);
+  FD_SET(0, &in);
+  struct timeval tv = {timeout_ms / 1000, (timeout_ms % 1000) * 1000};
+  int r = select(1, &in, 0, 0, timeout_ms < 0 ? 0 : &tv);
+#endif
+  if (r < 0) return errno == EINTR ? 0 : -errno;
+  return r;
+}
 
 /* `readStdin(buf, off, len)`: at most `len` bytes into `buf` from `off`, the
    count, 0 at the end of the stream and -11 when nothing is waiting. The
    compiled call has already checked `0 <= off <= off + len <= buf.length`,
    unless the program was built with `--unchecked-indexing`. A `read` that a
    signal interrupts is asked again; one that would block (a descriptor some
-   other program made non-blocking) is -11 too, and so is a `poll` a signal
-   interrupts, which would otherwise fall through to a `read` that waits. A
-   descriptor `poll` calls invalid is that error rather than a read. Under
-   WASI the poll is left out and the read waits: Node's WASI answers a poll of
-   stdin with a timeout of 0 as "nothing waiting" when bytes are, so there the
-   program asks `waitStdin` first. */
+   other program made non-blocking) is -11 too, and so is a readiness check a
+   signal interrupts, which would otherwise fall through to a `read` that
+   waits. Under WASI the check is left out and the read waits: Node's WASI
+   answers a poll of stdin with a timeout of 0 as "nothing waiting" when bytes
+   are, so there the program asks `waitStdin` first. */
 int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len) {
 #ifndef __wasi__
-  struct pollfd p = {0, POLLIN, 0};
-  int ready = poll(&p, 1, 0);
-  if (ready == 0 || (ready < 0 && errno == EINTR)) return -11;
-  if (ready < 0) return -errno;
-  if (p.revents & POLLNVAL) return -EBADF;
+  int ready = nish_stdin_ready(0);
+  if (ready <= 0) return ready == 0 ? -11 : ready;
 #endif
   ssize_t n;
   do n = read(0, buf->data + off, (size_t)len);
@@ -93,10 +111,7 @@ int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len) {
    and an error, so a read after it answers at once; false when `timeoutMs`
    passes first, or a signal ends the wait early. A negative timeout waits for
    ever. */
-bool nish_wait_stdin(int32_t timeout_ms) {
-  struct pollfd p = {0, POLLIN, 0};
-  return poll(&p, 1, timeout_ms < 0 ? -1 : timeout_ms) > 0;
-}
+bool nish_wait_stdin(int32_t timeout_ms) { return nish_stdin_ready(timeout_ms) != 0; }
 
 #ifdef __wasi__
 bool nish_is_terminal(int32_t fd) {
@@ -139,6 +154,12 @@ static struct termios nish_term_saved;
 static volatile sig_atomic_t nish_term_raw;
 static int nish_term_armed;
 
+/* Held across `setRawMode`, so two threads entering raw mode at once save
+   the cooked termios once and arm the handlers once. A spin, because the
+   runtime links no pthread without `--threads`; a signal handler's restore
+   never takes it, so it cannot wait on the thread it interrupted. */
+static int nish_term_lock;
+
 /* Put the saved termios back, once: it is called from `setRawMode(false)`, an
    atexit handler, a panic and a signal handler, so it uses only `tcsetattr`,
    which is async-signal-safe. */
@@ -160,8 +181,10 @@ static void nish_term_on_signal(int sig) {
 /* `setRawMode(on)`: 0, or -25 when stdin is not a terminal and the host's
    `-errno` when `tcsetattr` refuses. Entering flushes the input a line
    discipline had already buffered; leaving keeps it. Asking for the mode the
-   terminal is already in changes nothing. */
-int32_t nish_set_raw_mode(bool on) {
+   terminal is already in changes nothing. A program its shell runs in the
+   background is stopped by SIGTTOU here, as any program that sets the
+   terminal is, and goes on into raw mode on `fg`. */
+static int32_t nish_term_set(bool on) {
   if (!on) {
     nish_term_restore();
     return 0;
@@ -197,5 +220,13 @@ int32_t nish_set_raw_mode(bool on) {
   nish_term_raw = 1;
   nish_fatal_hook = nish_term_restore;
   return 0;
+}
+
+int32_t nish_set_raw_mode(bool on) {
+  while (__atomic_exchange_n(&nish_term_lock, 1, __ATOMIC_ACQUIRE)) {
+  }
+  int32_t r = nish_term_set(on);
+  __atomic_store_n(&nish_term_lock, 0, __ATOMIC_RELEASE);
+  return r;
 }
 #endif

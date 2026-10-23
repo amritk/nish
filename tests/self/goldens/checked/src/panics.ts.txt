@@ -10,6 +10,7 @@ import DiagnosticSink from "./diagnostics" -> struct DiagnosticSink
 import SourceFile from "./diagnostics" -> struct SourceFile
 import StringSet from "./map" -> struct StringSet
 import isNetExport from "./nish-modules" -> function @isNetExport
+import isTermExport from "./nish-modules" -> function @isTermExport
 import netRangeBuffer from "./nish-modules" -> function @netRangeBuffer
 import N_BINARY from "./nodes" -> const N_BINARY
 import N_CALL from "./nodes" -> const N_CALL
@@ -79,10 +80,11 @@ function panicsHere(site: PanicSite): boolean -> @panicsHere
 function builtinPanicKind(name: string): i32 -> @builtinPanicKind [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
-  calls: isNetExport netRangeBuffer nish_str_eq
+  calls: isNetExport isTermExport netRangeBuffer nish_str_eq
   stackSites=0 stackLocals=0
   callee +0:8 isNetExport -> @isNetExport
-  callee +0:54 netRangeBuffer -> @netRangeBuffer
+  callee +0:29 isTermExport -> @isTermExport
+  callee +0:52 netRangeBuffer -> @netRangeBuffer
 function sortByPosition(sites: PanicSite[]): void -> @sortByPosition
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
