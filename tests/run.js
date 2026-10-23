@@ -1581,14 +1581,14 @@ if (!only || "term".includes(only)) {
   // "Stopped (tty output)"), a SIGTTIN stop, a background read that never
   // re-entered raw mode, does not count. A fourth, `deadline`, is stopped for
   // three seconds inside a two-second wait and must end within a second of
-  // `fg %sh`, before a helper's SIGTERM: a retry that asked for the whole
+  // `fg`, before a helper's SIGTERM: a retry that asked for the whole
   // timeout again, or for ever, would die of it. The stop comes half a
   // second after `ready`, so the wait has read its clock, and only while the
   // program has said `ready` but not `timed`, so it reaches a pid that has
-  // gone only if the program ends between that look and the signal. The
-  // line gives the status the stop left, then `fg`'s; only a stop starts the
-  // SIGTERM helper and `fg`, and the helper's process group is killed once
-  // `fg` returns, so a wait never stopped fails with `-` and signals nothing.
+  // gone only if the program died inside its wait, which the line reports.
+  // The line gives the status the stop left, then `fg`'s; only SIGTSTP's
+  // status (`NISH_PTY_TSTP`) starts the SIGTERM helper and `fg`, whose group
+  // is killed once `fg` returns, so a wait never stopped fails with `-`.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
@@ -1636,9 +1636,9 @@ if (!only || "term".includes(only)) {
         "( i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
         '  sleep 0.5; grep -q ready "$D/hold.out" && ! grep -q timed "$D/hold.out" && kill -TSTP "$(cat "$D/hold.pid")" ) &',
         'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" deadline > "$2/hold.out"\' sh "$E" "$D"; t=$?',
-        's=-; if [ "$t" -gt 128 ]; then sleep 3',
+        's=-; if [ "$t" -eq "$NISH_PTY_TSTP" ]; then sleep 3',
         '  ( sleep 1; kill -TERM "$(cat "$D/hold.pid")" 2>/dev/null ) & k=$!',
-        '  fg %sh > /dev/null; s=$?; kill -TERM -$k 2>/dev/null; fi',
+        '  fg %?deadline > /dev/null; s=$?; kill -TERM -$k 2>/dev/null; fi',
         'echo "deadline $t $s stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
         "",
       ].join("\n")
@@ -1652,7 +1652,13 @@ if (!only || "term".includes(only)) {
     const r = spawnSync("script", argv, {
       cwd: root,
       encoding: "utf8",
-      env: { ...process.env, NISH_PTY_SH: sh, NISH_PTY_EXE: ptyExe, NISH_PTY_DIR: termDir },
+      env: {
+        ...process.env,
+        NISH_PTY_SH: sh,
+        NISH_PTY_EXE: ptyExe,
+        NISH_PTY_DIR: termDir,
+        NISH_PTY_TSTP: String(128 + os.constants.signals.SIGTSTP),
+      },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30000,
     })
