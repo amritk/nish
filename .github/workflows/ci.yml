@@ -220,12 +220,13 @@ jobs:
       # The crypto bench's Go twins (bench/crypto/*/go) build with
       # GOTOOLCHAIN=local, so the Go on PATH must be at least the `go` line of
       # every twin's go.mod, and the strict run fails a twin that cannot build.
-      # The runner image ships Go 1.24; the aead and handshake twins ask for
-      # 1.25 since #803 moved golang.org/x/crypto to v0.52.0. The action
-      # exports GOTOOLCHAIN=local, which is what the bench sets anyway.
+      # The runner image ships Go 1.24; the aead twin asks for 1.25 since #803
+      # moved golang.org/x/crypto to v0.52.0, and the handshake twin for 1.26
+      # since #818 moved golang.org/x/net to v0.60.0. The action exports
+      # GOTOOLCHAIN=local, which is what the bench sets anyway.
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.x"
           cache: false
 
       # The runner image ships clang-18, lld-18 and llvm-18, so what this job
