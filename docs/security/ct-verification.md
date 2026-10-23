@@ -288,12 +288,14 @@ time a C leak rather than the fixture, that is 940 function-runs. Their max
 of 3.46; six were above 3.5, one above 4.0, the largest 4.08 (`tableLookup`).
 None crossing in 940 bounds the rate on this VM below 0.32% a function-run (95%
 upper bound); a Gaussian fit to the tail puts it near 0.012%, or about 1% of
-weekly runs of some 92 function-runs on two runners. The runners' tail is
-heavier: three weekly runs, two runners each, some 41 to 46 functions a run,
-are about 260 function-runs, and one crossed (CT-19), about 0.4% a
-function-run, which is a red weekly run about a third of the time. A
-dispatch of `ct-timing.yml` with `aa_runs` set runs the A/A test on the
-runners themselves.
+weekly runs of some 92 function-runs on two runners. On the runners
+themselves, dispatch run 39733213208 of `ct-timing.yml` (`aa_runs: 10`, head
+`6717ff9`) found 0 of 540 function-runs above 4.5 on the x86-64 runner, an AMD
+EPYC 9V74, and 0 of 540 on the arm64 runner. None in 540 bounds each runner's
+rate below 0.55% a function-run (95% upper bound); it does not make it zero,
+and CT-19's one crossing in the weekly runs before it stands. Each timing run
+now measures its own runner's null as well ([the CPU fingerprint and the
+same-runner null](#the-cpu-fingerprint-and-the-same-runner-null)).
 
 **`macEqual` beside its neighbours.** The 102 tests of each function, dumped
 from six runs at 1,000,000 samples (seeds 11 to 66), on this VM:
@@ -324,10 +326,9 @@ table's first line as "re-measured on seed"). The function is a finding, exit
 the table with its second |t|, as "crossed once, did not repeat", and is named
 in the summary line; the run passes, and the report job comments on the open
 `ct-timing` issue, or opens one when none is open, so that a function that
-crosses once every week is seen. The runners' rate rests on one crossing, and a
-re-measure seconds later on the same shared runner is not independent of the
-first, so the rule's own false-positive rate is not claimed; the `aa_runs`
-dispatch measures it. A large leak is not hidden by it: every control and every
+crosses once every week is seen. A re-measure seconds later on the same shared
+runner is not independent of the first, so the rule's own false-positive rate
+is not claimed beyond what the A/A runs above measured. A large leak is not hidden by it: every control and every
 leak this record has timed read |t| in the hundreds or thousands, and crosses
 on any seed. That shows the rule's power for large effects only: a weak leak
 near the threshold, |t| about 4 to 6, can cross once and not again by chance,
@@ -341,6 +342,67 @@ Both branches were shown with a scratch copy of the harness whose threshold
 was 1.5, at `--quick`, seed 7: 21 of 46 functions crossed, 9 read "crossed
 once, did not repeat" and were named as such, 12 crossed again and were
 named as found on two seeds, the controls differed, and the run exited 1.
+
+## The CPU fingerprint and the same-runner null
+
+A |t| means something only beside the machine it was read on and that
+machine's noise, so each timing run now carries both (anchors at `1fab4c8`,
+the parent of the change that adds them; the names are in
+`tests/ct-timing.js`).
+
+**The fingerprint.** `cpuFingerprint` prints one line before the table,
+`ct-timing: CPU (cpu0, from /proc/cpuinfo and sysfs): …`, read from the kernel
+and never guessed. On x86-64 it names `vendor_id`, `cpu family`, `model`,
+`stepping`, `microcode` and `model name`; on aarch64 `CPU implementer`, `CPU
+part`, `CPU variant` and `CPU revision`, and `MIDR_EL1` from
+`/sys/devices/system/cpu/cpu0/regs/identification/midr_el1` when it is
+readable. A part is named only where it can be cited (`ARM_PARTS`: implementer
+0x41 with 0xd0c Neoverse N1, 0xd40 V1, 0xd49 N2, 0xd4f V2, from each core's
+TRM and Linux's `cputype.h`); any other prints its raw values. The line also
+gives the `hypervisor` flag, the cpufreq `boost` and intel_pstate `no_turbo`
+state and the kernel release. A field the kernel does not give prints
+"unreadable", never a default. On a host with no `/proc/cpuinfo` the line
+reads `ct-timing: CPU from os.cpus() only (…)` and says what it fell back to.
+On this VM it reads:
+
+```
+ct-timing: CPU (cpu0, from /proc/cpuinfo and sysfs): x64 GenuineIntel family 6 model 85 stepping 7 microcode 0x1 "Intel(R) Xeon(R) Processor @ 2.80GHz"; hypervisor flag set; cpufreq boost unreadable; intel_pstate no_turbo unreadable; kernel 6.18.44-fc-v140; 4 logical CPUs
+```
+
+**The same-runner A/A pass.** After the timing pass, every driver it linked is
+run again with `--null`, on a seed derived from the run's (`seed ×
+0xbf58476d1ce4e5b9 mod 2^64`, named on the table's first line as "same-runner
+A/A pass on seed"), and a function above 4.5 there is re-measured as the
+timing pass's are. The table gains an `A/A |t|` column, and a line beside it
+reads `ct-timing: the same-runner A/A pass: K of N functions above |t| = 4.5
+(…), M of them again on a fresh seed`. It is printed before the controls are
+judged, so a run that fails on a control still says what its null read.
+`--no-aa` leaves the pass out; `--null` runs never take it, since they are
+the null.
+
+It reports and never decides. The exit code is the timing pass's alone: a
+quiet null does not clear a finding, a noisy one does not excuse it, and the
+controls must still differ on their first measurement (exit 2). When the A/A
+pass crosses on a function the timing pass flagged, once or twice, the summary
+line says so: `the same-runner A/A pass crossed on … too, so this machine's
+noise reaches the same function: re-run before reading it as a leak`. The
+report job of `ct-timing.yml` puts each runner's fingerprint line and A/A line
+above its table in the issue comment, and files a run whose A/A pass crossed
+as it files a function that crossed once.
+
+Shown with a scratch copy of the harness whose threshold was 1.5, at
+`--quick`: 38 of 54 functions crossed in the A/A pass and were named, 25 of
+the timing pass's flagged functions were named as crossing in it too, and the
+run exited 1 on the timing pass's 30 findings, as it would have without the
+pass.
+
+**What this does not do.** The test stays statistical. A same-machine null
+bounds the rate of false alarms on that machine, on that day; it never makes
+it zero, and a run with a quiet null can still cross on noise. It does not
+make a weak leak, |t| near the threshold, visible: such a leak and a noisy
+null look alike, which is why both are put in front of a person. It says
+nothing about a CPU the runners never drew (the fingerprint says which ones
+were), nor about inputs the fixtures never use.
 
 ## Checked arithmetic and the fixtures
 
@@ -527,6 +589,7 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 | Both targets are read, or the run fails (CT-15) | `ct_asm: clang targets x86-64 / aarch64` |
 | The timing harness can see a leak it is shown | the control in `tests/ct-timing.js`; a quiet control is exit 2 |
 | A reading above 4.5 is a finding only when it repeats on a fresh seed, and one that does not is still shown (CT-19) | the verdicts "crossed once, did not repeat" and "**differs**, and again on a fresh seed", the summary's "crossed once and not again: …", and the header's "re-measured on seed" in `tests/ct-timing.js`; `--null`'s "the A/A run: X of N functions above \|t\| = 4.5, Y of them again on a fresh seed". Not in `npm test`: shown by the threshold-1.5 run in [the re-measure rule](#the-re-measure-rule), and run weekly by `ct-timing.yml` |
+| Each timing run names the CPU it ran on and its own runner's null, and the null never changes the verdict | `cpuFingerprint`'s "ct-timing: CPU (cpu0, from /proc/cpuinfo and sysfs)" and "ct-timing: CPU from os.cpus() only", "unreadable" for a field the kernel does not give; the A/A pass's "same-runner A/A pass on seed", "the same-runner A/A pass: " and "the same-runner A/A pass crossed on", and `--no-aa`, in `tests/ct-timing.js`; `grep '^ct-timing: CPU'` and `grep 'same-runner A/A pass: '` in `ct-timing.yml`'s report job. Not in `npm test`: shown by the threshold-1.5 run in [the CPU fingerprint and the same-runner null](#the-cpu-fingerprint-and-the-same-runner-null), and run weekly by `ct-timing.yml` |
 | Each `runtime/runtime-aes.c` kernel, read from `clang -O2` for both targets, branches only on public values and loads and stores only at public addresses (WP38 S5) | `ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}`, the `kernel` promise "no branch on a secret, call, secret-indexed access or secret-dependent latency" (12 checks: both targets, and x86-64 at `x86-64-v3`) |
 | The unit exports no function the reading leaves out, so a fifth kernel cannot go unread | the same, the `exports` promise "exports exactly the kernels read here and nish_aes_hw" (3 checks); and `exportMisses` in `tests/ct-asm-runtime.js`, which runs at load and requires a sixth `.globl` to be named unread and a missing kernel to be named missing |
 | The runtime check refuses a table lookup and a branch on data in real compiler output | the same, the `leak` promise `refused for ${r.expect}` (6 checks, `tests/simd/aes-leaky.c`) |
