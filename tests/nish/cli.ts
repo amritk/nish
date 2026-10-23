@@ -7,8 +7,9 @@
  * surface as a promise to whatever drives it — a script, an editor, an agent:
  *
  *   - `--help` answers **on stdout with exit 0**, because asking for the usage
- *     text is a request that succeeded; a usage *error* is the same text on
- *     **stderr with exit 2**, because it is a refusal.
+ *     text is a request that succeeded; a usage *error* is a refusal on
+ *     **stderr with exit 2**: with no inputs at all, the same text, and for a
+ *     flag it does not take, one line that names it and points at `--help`.
  *   - `--json` prints **one flat object per diagnostic** on stdout, whose `code`
  *     is a stable rule identifier and whose `severity` is the field a tool
  *     filters on. Every failure is one of those objects, the ones that are about
@@ -92,6 +93,20 @@ const FIXTURE_DEPRECATED: string = "deprecated.ts";
  * there is no top-level code to build an array with (`docs/LANGUAGE.md`).
  */
 const advertisedFlags = (): string[] => [
+  "--output",
+  "-g",
+  "--version",
+  "--plain",
+  "--no-stack-alloc",
+  "--no-strict-exports",
+  "--no-warn-performance",
+  "--unchecked-indexing",
+  "--wrapping",
+  "--number-mode",
+  "--runtime-decls",
+  "--threads",
+  "--emit-ast",
+  "--emit-checked",
   "--json",
   "--link",
   "--emit-header",
@@ -104,12 +119,12 @@ const advertisedFlags = (): string[] => [
   "--deny-retention",
   "--emit-arena",
   "--target",
-  "--profile",
   "--cpu",
+  "--profile",
   "--warn-portability",
   "--fix",
   "--emit-capabilities",
-  "[--capabilities]",
+  "--capabilities",
   "--allow",
   "--deny",
   "run [flags] <file.ts> [args ...]",
@@ -405,29 +420,51 @@ const checkIdentity = (t: Suite, cli: Cli): string => {
 };
 
 /**
- * The `--help` / usage-error pair: the same text, told apart by the stream and
+ * The `--help` / no-inputs pair: the same text, told apart by the stream and
  * the code. A wrapper that cannot tell them apart reads an answer as a failure.
  */
-const checkHelp = (t: Suite, cli: Cli, name: string): void => {
-  const help = cli.plain("help", ["--help"]);
+const checkHelp = (t: Suite, cli: Cli, name: string, env: boolean): void => {
+  // `NO_COLOR` wins over every other colour variable and `NISH_AGENT=0` over
+  // the agents' own, so the environment this harness inherited cannot paint
+  // the text the checks below read or add an agent's section to it. Without
+  // env(1) nothing can pin them, so only the streams and codes are checked.
+  const plainEnv: string[] = [];
+  if (env) {
+    plainEnv.push("NO_COLOR=1");
+    plainEnv.push("NISH_AGENT=0");
+  }
+  const help = cli.run("help", plainEnv, ["--help"]);
   t.eqI32("--help exits 0", help.status, 0);
-  t.contains("--help prints the usage on stdout", help.stdout, "usage: ");
   t.eqStr("--help says nothing on stderr", trim(help.stderr), "");
-  // The spelling rather than the shape: the usage text has to name the tool the
-  // user typed. Both compilers build it from `CLI` in their `branding.ts`.
-  t.contains("the usage text names the tool itself", help.stdout, `usage: ${name}`);
   t.eqBool("--help prints no stack frame", hasStackFrame(help.stdout), false);
-  const flags = advertisedFlags();
-  t.containsAll(`--help names every advertised flag (${flags.length} of them)`, help.stdout, flags);
+  if (env) {
+    t.contains("--help prints the usage on stdout", help.stdout, "usage: ");
+    // The spelling rather than the shape: the usage text has to name the tool
+    // the user typed. The compiler builds it from `CLI` in `src/branding.ts`.
+    t.contains("the usage text names the tool itself", help.stdout, `usage: ${name}`);
+    // Each flag between spaces, as its row prints it, so `--deny` is not found
+    // inside `--deny-panics`.
+    const flags: string[] = [];
+    for (const flag of advertisedFlags()) {
+      flags.push(` ${flag} `);
+    }
+    t.containsAll(`--help names every advertised flag (${flags.length} of them)`, help.stdout, flags);
+  } else {
+    t.skip("--help's text", "needs env(1) to keep the help plain, and the probe did not find one");
+  }
 
-  const short = cli.plain("help_short", ["-h"]);
+  const short = cli.run("help_short", plainEnv, ["-h"]);
   t.eqStr("-h is --help exactly", short.stdout, help.stdout);
 
   // No arguments at all, which is the usage error every wrapper meets first.
   const nothing: string[] = [];
-  const usage = cli.plain("usage", nothing);
+  const usage = cli.run("usage", plainEnv, nothing);
   t.eqI32("no inputs at all exits 2", usage.status, 2);
-  t.contains("and prints the usage on stderr", usage.stderr, "usage: ");
+  if (env) {
+    t.contains("and prints the usage on stderr", usage.stderr, `usage: ${name}`);
+  } else {
+    t.skip("and prints the usage on stderr", "needs env(1) to keep the usage plain, and the probe did not find one");
+  }
   t.eqStr(
     "--help and a usage error are the same text on different streams",
     trim(usage.stderr),
@@ -457,6 +494,7 @@ const checkUsageErrors = (t: Suite, cli: Cli): void => {
   t.contains("and says signed overflow is checked", nsw.stderr, "signed overflow is checked");
   t.contains("and names nish:unsafe as the way to wrap", nsw.stderr, "`wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe`");
   t.contains("and the deprecated --wrapping", nsw.stderr, "--wrapping");
+  t.contains("and points at --help", nsw.stderr, "--help` for the flags");
   t.eqStr("and the refusal says nothing on stdout", trim(nsw.stdout), "");
 };
 
@@ -1996,7 +2034,7 @@ export const main = (): number => {
   const t = new Suite(`cli contract (${cli.label})`);
 
   const name = checkIdentity(t, cli);
-  checkHelp(t, cli, name);
+  checkHelp(t, cli, name, env);
   checkUsageErrors(t, cli);
   checkSuccess(t, cli);
   checkErrorObjects(t, cli);
