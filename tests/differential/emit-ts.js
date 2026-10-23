@@ -28,8 +28,11 @@
  * The run fails when a program outside the list does not agree, when a listed
  * one now does, when a listed one's row has moved and when a listed name is
  * gone: a stage that fixes a program removes it with `--update`, so the list
- * only ever says what is true today. A failed build, emit or native run is
- * never listed, so it always fails the run.
+ * only ever says what is true today. A failed native build or emit, and a
+ * native run that times out, are never listed, so they always fail the run
+ * (save a native build of a program refused for its C functions, NL4010); a
+ * run that times out under Node alone is a disagreement like any other, listed
+ * under the row its evidence names.
  *
  * Both halves use `--compiler`, default `build/nish`. The seed cannot stand in
  * for it, as it does for `run.js`, because a released compiler that predates
@@ -208,16 +211,21 @@ const compare = async (prog, compiler) => {
   // refuses it as a usage error.
   const emitArgs = prog.args.filter((arg) => !DUMPS.includes(arg))
   const emitted = await run(compiler, [prog.entry, "--json", "--emit-ts", out, ...emitArgs])
+  const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL40(10|11))"/)
+  // The native build is read first, so a program that is both refused and
+  // broken natively is an error rather than a listed refusal. The exception is
+  // an NL4010 refusal: a module that declares C functions may need C this
+  // harness does not link (`map_fingerprint_miss` links its own under
+  // `run.js`), and the refusal is the verdict whether or not it builds.
+  if (built.status !== 0 && (coded === null || coded[1] !== "NL4010")) {
+    return { name: prog.name, verdict: "native-error", row: "", reason: firstLine(built.stderr) }
+  }
   if (emitted.status !== 0) {
-    const coded = String(emitted.stdout).match(/"code":"(NL40(10|11))"/)
     if (coded !== null) {
       const row = coded[1] === "NL4010" ? "ffi" : "refused"
       return { name: prog.name, verdict: "refused", row, reason: `${coded[1]} under --emit-ts` }
     }
     return { name: prog.name, verdict: "emit-error", row: "", reason: firstLine(emitted.stdout) }
-  }
-  if (built.status !== 0) {
-    return { name: prog.name, verdict: "native-error", row: "", reason: firstLine(built.stderr) }
   }
   const native = await run(exe, prog.argv, { cwd: scratchRoot(work, "native"), env: prog.env })
   const node = await run("node", [...NODE_FLAGS, path.join(out, "entry.ts"), ...prog.argv], {
@@ -328,6 +336,10 @@ const main = async (argv) => {
   let jobs = Math.min(8, os.cpus().length || 2)
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
+    if (["--only", "--compiler", "--jobs"].includes(a) && i + 1 >= argv.length) {
+      console.error(`emit-ts.js: ${a} needs a value`)
+      return 2
+    }
     if (a === "--only") {
       only = argv[++i]
     } else if (a === "--update") {
@@ -352,6 +364,10 @@ const main = async (argv) => {
     return 2
   }
   const programs = discoverPrograms().filter((p) => only === undefined || p.name.includes(only))
+  if (programs.length === 0) {
+    console.error(`emit-ts.js: no program matches --only ${only}`)
+    return 2
+  }
   const results = await pool(programs, jobs, (prog) => compare(prog, compiler))
   const errors = results.filter((r) => ERRORS.includes(r.verdict))
   if (update && errors.length === 0) {

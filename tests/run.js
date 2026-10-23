@@ -4004,6 +4004,22 @@ if (!only || "emit-ts".includes(only)) {
     clash.status === 2 && clash.stderr.includes("over another file at nish/pair.ts") && !clash.wrote,
     `exit ${clash.status}\n${clash.stderr}`
   )
+  // An output directory that holds the program's own sources would be written
+  // over: `--emit-ts .` beside them exits 2 and leaves them as they were.
+  const selfTree = path.join(work, "self")
+  const selfSource = "export const main = (): number => 0\n"
+  fs.rmSync(selfTree, { recursive: true, force: true })
+  fs.mkdirSync(selfTree, { recursive: true })
+  fs.writeFileSync(path.join(selfTree, "main.ts"), selfSource)
+  const self = spawnSync(NISH, ["main.ts", "--emit-ts", "."], { cwd: selfTree, encoding: "utf8" })
+  check(
+    "emit-ts: an output directory holding the program's sources exits 2 and writes nothing",
+    self.status === 2 &&
+      self.stderr.includes("would write over main.ts") &&
+      fs.readFileSync(path.join(selfTree, "main.ts"), "utf8") === selfSource &&
+      !fs.existsSync(path.join(selfTree, "entry.ts")),
+    `exit ${self.status}\n${self.stderr}`
+  )
 
   // The refusals: a finding about the program, exit 1, under its code, with
   // not one file written -- the output is all or nothing.

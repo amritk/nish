@@ -241,8 +241,8 @@ function capabilityListMask(flag: string, list: string): i32 -> @capabilityListM
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
-  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.panicsText Options.constructor PackageSearch.wasRefused PackageSearch.where acceptsSidecars astText basenameWithout cDeclared capabilityListMask capabilityNames capabilitySummary checkedText emitTypeScript externalFunctions findPackage fixProgram internalErrorFor isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file planOutputs report reportDeprecations reportLoadFailure reportPerformance reportPortability reportToolchainFailure resolveTarget runProgram simulatedInternalError simulatedUnlabelledBuiltin supportedTargets usageText writeCapabilityReport writeSidecars
-  stackSites=5 stackLocals=4
+  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.panicsText Options.constructor PackageSearch.wasRefused PackageSearch.where acceptsSidecars astText basenameWithout cDeclared capabilityListMask capabilityNames capabilitySummary checkedText emitTypeScript externalFunctions findPackage fixProgram internalErrorFor isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_realpath nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file planOutputs report reportDeprecations reportLoadFailure reportPerformance reportPortability reportToolchainFailure resolveTarget runProgram simulatedInternalError simulatedUnlabelledBuiltin supportedTargets usageText writeCapabilityReport writeSidecars
+  stackSites=6 stackLocals=4
   callee +0:19 usageText -> @usageText
   local +3:9 opts: Options (const)
   callee +3:16 new Options -> @Options.constructor
@@ -330,34 +330,39 @@ function main(): i32 -> @nish_main [exported entry]
   callee +607:10 makeDirectoryFor -> @makeDirectoryFor
   callee +610:35 Compilation.arenaText -> @Compilation.arenaText
   callee +616:11 checkedText -> @checkedText
-  local +623:11 ts: EmittedProgram (const)
-  callee +623:16 emitTypeScript -> @emitTypeScript
-  callee +625:14 internalErrorFor -> @internalErrorFor
-  callee +632:7 report -> @report
-  local +641:16 file: EmittedFile (const)
-  local +642:13 path: string (const)
-  callee +642:20 joinPath -> @joinPath
-  callee +643:12 makeDirectoryFor -> @makeDirectoryFor
-  local +654:9 anySidecar: boolean (const)
-  local +659:9 fns: ExternalFunction[] (const)
-  callee +659:48 externalFunctions -> @externalFunctions
-  callee +660:22 acceptsSidecars -> @acceptsSidecars
-  callee +660:56 cDeclared -> @cDeclared
-  callee +661:5 report -> @report
-  local +664:9 emitted: EmittedModule[] (const)
-  callee +664:19 Compilation.emit -> @Compilation.emit
-  callee +666:12 runProgram -> @runProgram
-  callee +669:7 basenameWithout -> @basenameWithout
-  local +678:9 stems: string[] (const)
-  local +679:9 paths: string[] (const)
-  local +682:14 module: EmittedModule (const)
-  local +686:9 outputs: string[] (const)
-  callee +686:19 planOutputs -> @planOutputs
-  local +691:7 i: i32 (let)
-  local +693:11 file: string (const)
-  callee +694:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +703:22 writeSidecars -> @writeSidecars
-  callee +709:10 linkProgram -> @linkProgram
+  local +624:11 ts: EmittedProgram (const)
+  callee +624:16 emitTypeScript -> @emitTypeScript
+  callee +626:14 internalErrorFor -> @internalErrorFor
+  callee +633:7 report -> @report
+  local +645:16 file: EmittedFile (const)
+  local +646:13 target: string | null (const)
+  callee +646:35 joinPath -> @joinPath
+  local +650:18 unit: ModuleUnit (const)
+  local +651:15 source: string | null (const)
+  local +660:16 file: EmittedFile (const)
+  local +661:13 path: string (const)
+  callee +661:20 joinPath -> @joinPath
+  callee +662:12 makeDirectoryFor -> @makeDirectoryFor
+  local +673:9 anySidecar: boolean (const)
+  local +678:9 fns: ExternalFunction[] (const)
+  callee +678:48 externalFunctions -> @externalFunctions
+  callee +679:22 acceptsSidecars -> @acceptsSidecars
+  callee +679:56 cDeclared -> @cDeclared
+  callee +680:5 report -> @report
+  local +683:9 emitted: EmittedModule[] (const)
+  callee +683:19 Compilation.emit -> @Compilation.emit
+  callee +685:12 runProgram -> @runProgram
+  callee +688:7 basenameWithout -> @basenameWithout
+  local +697:9 stems: string[] (const)
+  local +698:9 paths: string[] (const)
+  local +701:14 module: EmittedModule (const)
+  local +705:9 outputs: string[] (const)
+  callee +705:19 planOutputs -> @planOutputs
+  local +710:7 i: i32 (let)
+  local +712:11 file: string (const)
+  callee +713:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +722:22 writeSidecars -> @writeSidecars
+  callee +728:10 linkProgram -> @linkProgram
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv

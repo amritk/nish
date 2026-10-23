@@ -130,6 +130,9 @@ const relativeSpecifier = (from: string, to: string): string => {
   return path.startsWith("../") ? path : `./${path}`
 }
 
+/** Whether `c` is a space, a tab or a carriage return: blank within a line. */
+const isLineBlank = (c: i32): boolean => c === 32 || c === 9 || c === 13
+
 /**
  * The byte offset an import line goes at: after the comments that open the
  * module, so a module's header stays its first lines. A comment that ends
@@ -140,7 +143,7 @@ const importOffset = (text: string): i32 => {
   let after = 0
   while (at >= 0 && at < text.length) {
     const c = text.charCodeAt(at)
-    if (c === 32 || c === 9 || c === 10 || c === 13) {
+    if (isLineBlank(c) || c === 10) {
       at = at + 1
     } else if (text.substring(at, at + 2) === "//") {
       const end = text.indexOf("\n", at)
@@ -155,6 +158,14 @@ const importOffset = (text: string): i32 => {
         return after
       }
       const end = text.indexOf("\n", close + 2)
+      const lineEnd = end < 0 ? text.length : end
+      let rest = close + 2
+      while (rest < lineEnd && rest < text.length && isLineBlank(text.charCodeAt(rest))) {
+        rest = rest + 1
+      }
+      if (rest < lineEnd) {
+        return after
+      }
       if (end < 0) {
         return text.length
       }

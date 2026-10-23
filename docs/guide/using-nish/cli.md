@@ -150,7 +150,9 @@ pass `-o`, `--link`, `--emit-ast`, `--emit-checked`, `--emit-header`,
 directory. It also exits 2 when a
 module lies above the directory of the others (`../shared/s.ts`), or when two
 modules would land on one file — a module of your own at `nish/pair.ts` and
-the standard library's `nish/pair`, say.
+the standard library's `nish/pair`, say. And it exits 2, before writing
+anything, when a file it would write is one of your own sources: `--emit-ts .`
+next to `app.ts` would write over it, so give it a directory of its own.
 
 `--emit-panics`, `--emit-arena` and `--emit-capabilities` still write their
 files alongside `--emit-ts`, and they are written before the TypeScript, so

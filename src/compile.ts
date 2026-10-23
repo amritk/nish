@@ -1050,7 +1050,8 @@ export const main = (): number => {
   }
   // `--emit-ts` writes the checked program back out as TypeScript and never
   // emits IR. Every module is written in memory first, so a refusal in the
-  // last one leaves no half-written directory behind.
+  // last one leaves no half-written directory behind; a write that fails
+  // part-way does leave the files before it.
   if (opts.emitTs.length > 0) {
     const ts = emitTypeScript(compilation)
     if (ts.internal.length > 0) {
@@ -1069,6 +1070,24 @@ export const main = (): number => {
         "compile: `-o` cannot be used with --emit-ts, which writes the program as TypeScript and emits no IR"
       )
       return 2
+    }
+    // A file that already exists is resolved through its links and compared
+    // with every module the program read, so `--emit-ts .` beside the sources
+    // is refused before anything is written rather than writing over them.
+    for (const file of ts.files) {
+      const target = realpathSync(joinPath([opts.emitTs, file.path]))
+      if (target === null) {
+        continue
+      }
+      for (const unit of compilation.modules) {
+        const source = realpathSync(unit.path)
+        if (source !== null && source === target) {
+          console.error(
+            `compile: --emit-ts would write over ${unit.path}, a module of the program; write it to another directory`
+          )
+          return 2
+        }
+      }
     }
     for (const file of ts.files) {
       const path = joinPath([opts.emitTs, file.path])

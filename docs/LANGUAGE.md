@@ -9875,7 +9875,8 @@ by the caller.
   them (`std/pair.ts` as `nish/pair.ts`); a dependency package's module is not
   written. Last comes `entry.ts`, which imports `nish/runtime/node`, calls
   `main` and exits with what it answered. Imports are rewritten to match: a
-  `nish:` specifier becomes `nish/runtime`, the one package the output names;
+  `nish:` specifier becomes `nish/runtime`, the one package the output names,
+  except `nish:secret`, which has source and becomes `./nish/secret.ts`;
   a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
   imported name that is only a type (an interface, a generic interface, an
   alias) is written `type X`, because Node's type stripping does not know
@@ -9896,7 +9897,10 @@ by the caller.
   `-o`, once the program is known to be writable. `--emit-ts` without a
   directory is exit 2 as well, and so is a program that cannot be laid out
   under one directory: a module above the directory of the others, or two
-  modules (or one and `entry.ts`) that would be written to one path.
+  modules (or one and `entry.ts`) that would be written to one path, and so
+  is a directory where a file it would write is one of the program's own
+  modules (`--emit-ts .` beside the sources), checked before anything is
+  written.
 
 ### Panic sites
 
