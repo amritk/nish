@@ -1516,7 +1516,6 @@ class YamlParser {
   markerAt: i32 = -1
   flowIndentReported: boolean = false
   uniqueKeys: boolean = true
-  merge: boolean = true
   keepComments: boolean = false
   firstOnly: boolean = false
   yamlDirective: boolean = false
@@ -1537,7 +1536,6 @@ class YamlParser {
     this.len = toI32(text.length)
     this.maxDepth = options.maxDepth
     this.uniqueKeys = options.uniqueKeys
-    this.merge = options.merge
     this.stream.merge = options.merge
     this.keepComments = options.keepComments
     this.firstOnly = options.firstDocumentOnly
@@ -2420,7 +2418,7 @@ class YamlParser {
         scan = this.nextLineStart(blank)
         continue
       }
-      if (c < 0 || this.at(blank) < 0) {
+      if (this.at(blank) < 0) {
         break
       }
       const indent: i32 = i - scan
@@ -3218,13 +3216,27 @@ class YamlParser {
 
   /**
    * Internal: reports the value of merge key `key` unless it is a map, an alias
-   * to one or a sequence of those; an empty value is reported on the key, and a
-   * sequence on each item that is not. An alias with no target is already reported.
+   * to one or a sequence of those; an empty value is reported on the key, a
+   * sequence on each item that is not, and an alias to a sequence on the alias.
+   * An alias with no target is already reported.
    */
   checkMerge(key: i32, value: i32): void {
     const stream: YamlStream = this.stream
     if (value < 0) {
       this.badMerge(stream.start(key), stream.end(key))
+      return
+    }
+    const target: i32 = stream.kind(value) === YAML_ALIAS ? stream.target(value) : -1
+    if (target >= 0 && stream.kind(target) === YAML_SEQ) {
+      const count: i32 = stream.count(target)
+      let i: i32 = 0
+      while (i < count) {
+        if (!this.mergesMap(stream.child(target, i))) {
+          this.badMerge(stream.start(value), stream.end(value))
+          return
+        }
+        i += 1
+      }
       return
     }
     if (stream.kind(value) === YAML_SEQ) {
@@ -4261,9 +4273,13 @@ class YamlKeySet {
   }
 }
 
-/** Whether map key `key` of `stream` is a merge key: a plain `<<`, while the stream merges. */
+/** Whether map key `key` of `stream` is a merge key: a plain `<<`, untagged or `!!merge`, while the stream merges. */
 const yamlIsMergeKey = (stream: YamlStream, key: i32): boolean => {
   if (!stream.merge || key < 0 || stream.kind(key) !== YAML_SCALAR || stream.style(key) !== YAML_PLAIN) {
+    return false
+  }
+  const tag: string = stream.tag(key)
+  if (tag !== "" && tag !== "merge") {
     return false
   }
   const start: i32 = stream.start(key)
@@ -4389,14 +4405,15 @@ export const keyText = (stream: YamlStream, node: i32): string => yamlKeyText(st
 /** Walks a path of map keys and sequence indexes down from a node. */
 class YamlPathWalker {
   stream: YamlStream
+  /** The maps one step's merge search has been through, so each is searched once: the first `seenTop`. */
+  seen: i32[]
   /** The deepest node reached. */
   node: i32 = -1
   /** The last pair stepped through, or `-1`. */
   pair: i32 = -1
   /** How many steps matched. */
   matched: i32 = 0
-  /** The maps one step's merge search has been through, so each is searched once. */
-  seen: i32[]
+  seenTop: i32 = 0
 
   constructor(stream: YamlStream) {
     this.stream = stream
@@ -4517,14 +4534,26 @@ class YamlPathWalker {
       return -1
     }
     const seen: i32[] = this.seen
-    for (const map of seen) {
-      if (map === from) {
+    let k: i32 = 0
+    while (k < this.seenTop && k < toI32(seen.length)) {
+      if (seen[k] === from) {
         return -1
       }
+      k += 1
     }
-    seen.push(from)
+    this.markSeen(from)
     const own: i32 = this.ownPair(from, step)
     return own >= 0 ? own : this.mergedPair(from, step, depth + 1)
+  }
+
+  /** Internal: records map `map` as searched, reusing the array a past step grew. */
+  markSeen(map: i32): void {
+    if (this.seenTop < toI32(this.seen.length)) {
+      this.seen[this.seenTop] = map
+    } else {
+      this.seen.push(map)
+    }
+    this.seenTop += 1
   }
 
   /** Internal: walks `path` down from `root`, as far as it matches. */
@@ -4544,7 +4573,8 @@ class YamlPathWalker {
       if (kind === YAML_MAP) {
         let pair: i32 = this.ownPair(at, step)
         if (pair < 0 && stream.merge) {
-          this.seen = [at]
+          this.seenTop = 0
+          this.markSeen(at)
           pair = this.mergedPair(at, step, toI32(0))
         }
         if (pair < 0) {

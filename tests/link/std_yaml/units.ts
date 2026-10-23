@@ -392,6 +392,10 @@ const ytMergeUnits = (t: Suite): void => {
   t.eqI32("and << is an ordinary key", pathMatch(plain, plainRoot, ["m", "<<", "x"]), 3);
   const quoted = parseYaml("m: {'<<': {x: 1}}\n");
   t.eqI32("a quoted << is not a merge key", pathMatch(quoted, quoted.documentRoot(0), ["m", "x"]), 1);
+  const strTagged = parseYaml("m: {!!str <<: {x: 1}}\n");
+  t.eqI32("a !!str << is not a merge key", pathMatch(strTagged, strTagged.documentRoot(0), ["m", "x"]), 1);
+  t.eqStr("a !!merge << is", ytMergedText("m: {!!merge <<: {x: 1}}\n", ["m", "x"]), "1");
+  t.eqStr("an alias to a sequence of maps merges", ytMergedText("s: &s [{x: 1}]\nm: {<<: *s}\n", ["m", "x"]), "1");
 };
 
 const ytLineUnits = (t: Suite): void => {

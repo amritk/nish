@@ -99,14 +99,14 @@ export class YcComparer {
     return at;
   }
 
-  /** Whether pair `pair`'s key is a merge key: a plain, untagged `<<`. */
+  /** Whether pair `pair`'s key is a merge key: a plain `<<`, untagged or `!!merge`. */
   isMerge(pair: i32): boolean {
     const key: i32 = this.stream.key(pair);
     return (
       key >= 0 &&
       this.stream.kind(key) === YAML_SCALAR &&
       this.stream.style(key) === YAML_PLAIN &&
-      this.stream.tag(key) === "" &&
+      (this.stream.tag(key) === "" || this.stream.tag(key) === "merge") &&
       this.stream.text(key) === "<<"
     );
   }

@@ -678,9 +678,10 @@ text it was written as, so `1` and `01` are different keys and a null key
 wins. A step onto an empty value (`a:`) matches, so `pathMatch` counts it and
 `pathPair` names its pair, but it reaches no node: `pathNode` answers `-1`.
 
-**Merge keys.** A path follows `<<` merge keys: a key a map does not hold is
-looked up in the maps its `<<` keys name — a map, an alias to one, or a
-sequence of those — in the order they are written. The map's own keys win,
+**Merge keys.** A path follows `<<` merge keys (a plain `<<`, untagged or
+`!!merge`): a key a map does not hold is looked up in the maps its `<<` keys
+name — a map, an alias to one, or a sequence of those or an alias to one — in
+the order they are written. The map's own keys win,
 then the first merged map that has the key, and the node and pair found are
 the ones inside that map, so a message points at the line that set it. A
 recursive alias ends the search. A `<<` whose value names no map is an error,

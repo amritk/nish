@@ -31,6 +31,9 @@ export const ytNegatives = (t: Suite): void => {
   ytCase(t, "<<: [{a: 1}, x, {b: 2}]\n", "BAD_MERGE@13..14");
   ytCase(t, "<<:\n", "BAD_MERGE@0..2");
   ytCase(t, "a: &a {x: 1}\nb: {<<: [*a, {y: 2}]}\nc: {<<: *a}\n", "");
+  ytCase(t, "s: &s [{x: 1}]\nm: {<<: *s}\n", "");
+  ytCase(t, "s: &s [{x: 1}, 2]\nm: {<<: *s}\n", "BAD_MERGE@26..28");
+  ytCase(t, "m: {!!str <<: 1}\n", "");
   ytCase(t, "%YAML 1.x\n--- 1\n", "BAD_DIRECTIVE@0..9");
   ytCase(t, "%YAML 1.2 x\n--- 1\n", "BAD_DIRECTIVE@10..11");
   ytCase(t, "\"\\q\"\n", "BAD_ESCAPE@1..3");

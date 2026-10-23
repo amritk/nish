@@ -244,6 +244,9 @@ PASS  a scalar merges nothing
 PASS  without merge, a path does not look in <<
 PASS  and << is an ordinary key
 PASS  a quoted << is not a merge key
+PASS  a !!str << is not a merge key
+PASS  a !!merge << is
+PASS  an alias to a sequence of maps merges
 PASS  LF, CRLF and CR are each one break
 PASS  line of 0
 PASS  line of 3
@@ -271,6 +274,9 @@ PASS  ranges of a: &a [1]\nb:\n  <<: *a\n
 PASS  ranges of <<: [{a: 1}, x, {b: 2}]\n
 PASS  ranges of <<:\n
 PASS  ranges of a: &a {x: 1}\nb: {<<: [*a, {y: 2}]}\nc: {<<: *a}\n
+PASS  ranges of s: &s [{x: 1}]\nm: {<<: *s}\n
+PASS  ranges of s: &s [{x: 1}, 2]\nm: {<<: *s}\n
+PASS  ranges of m: {!!str <<: 1}\n
 PASS  ranges of %YAML 1.x\n--- 1\n
 PASS  ranges of %YAML 1.2 x\n--- 1\n
 PASS  ranges of "\q"\n
@@ -334,4 +340,4 @@ PASS  diagnostics are in source order
 report 2:10 (byte 10) UNEXPECTED_COMMA Missing value before ","
 report 3:5 (byte 9) UNRESOLVED_ALIAS Alias "*nope" has no matching anchor
 report 5:1 (byte 1) DUPLICATE_KEY Map key "k" is duplicated
-std/yaml: 333 passed, 0 failed, 0 skipped
+std/yaml: 339 passed, 0 failed, 0 skipped
