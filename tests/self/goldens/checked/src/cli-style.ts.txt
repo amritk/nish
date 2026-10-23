@@ -106,7 +106,7 @@ function styleFor(fd: i32): Style -> @styleFor [exported]
   callee +9:12 new Style -> @Style.constructor
   callee +11:10 new Style -> @Style.constructor
   callee +11:20 isTerminal -> @isTerminal
-function spaces(count: i32): string -> @spaces [exported]
+function spaces(count: i32): string -> @spaces
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText
   stackSites=1 stackLocals=1

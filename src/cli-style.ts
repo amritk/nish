@@ -140,7 +140,7 @@ export const styleFor = (fd: i32): Style => {
 }
 
 /** `count` spaces; zero or fewer is the empty string. */
-export const spaces = (count: i32): string => {
+const spaces = (count: i32): string => {
   const text = new StringBuilder()
   let i: i32 = 0
   while (i < count) {
