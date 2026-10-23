@@ -1,9 +1,16 @@
 import { panicIndex, panicSlice, toIndex } from "./checks.mjs";
 
+// The native check compares the index as an unsigned 64-bit number, so a
+// negative one fails, and prints, as that number: `-1` is 18446744073709551615.
+function outOfRange(i, len) {
+  const k = typeof i === "bigint" ? i : BigInt(toIndex(i));
+  panicIndex(k < 0n ? BigInt.asUintN(64, k) : k, len);
+}
+
 /** `a[i]` read with the WP4 bounds check (negative indices fail like the unsigned compare does). */
 export function idx(a, i) {
   const k = toIndex(i);
-  if (!(k >= 0 && k < a.length)) panicIndex(k, a.length);
+  if (!(k >= 0 && k < a.length)) outOfRange(i, a.length);
   return a[k];
 }
 
@@ -16,7 +23,7 @@ export function pop(a) {
 /** `a[i] = v`: evaluates `a`, `i`, `v`, then checks and stores; yields `v`. */
 export function setIdx(a, i, v) {
   const k = toIndex(i);
-  if (!(k >= 0 && k < a.length)) panicIndex(k, a.length);
+  if (!(k >= 0 && k < a.length)) outOfRange(i, a.length);
   a[k] = v;
   return v;
 }
@@ -24,9 +31,44 @@ export function setIdx(a, i, v) {
 /** `a[i] op= v`: evaluates `a`, `i`, checks, loads, then `f(old)` computes the new element. */
 export function updIdx(a, i, f) {
   const k = toIndex(i);
-  if (!(k >= 0 && k < a.length)) panicIndex(k, a.length);
+  if (!(k >= 0 && k < a.length)) outOfRange(i, a.length);
   const v = f(a[k]);
   a[k] = v;
+  return v;
+}
+
+/** `nish:unsafe`'s `uncheckedGet(a, i)`: the element with no bounds check, as the native load is. */
+export function uncheckedGet(a, i) {
+  return a[i];
+}
+
+/** `nish:unsafe`'s `uncheckedSet(a, i, v)`: the store with no bounds check. */
+export function uncheckedSet(a, i, v) {
+  a[i] = v;
+}
+
+// A record an array holds inline is an object literal here, and nothing else
+// is a plain object: a class instance has its class's prototype, and an array
+// has Array's.
+function isRecord(v) {
+  return v !== null && typeof v === "object" && Object.getPrototypeOf(v) === Object.prototype;
+}
+
+/** A value put into an array slot from a generic body: a copy when it is a record, as a slot holds it inline. */
+export function copyIn(v) {
+  return isRecord(v) ? { ...v } : v;
+}
+
+/**
+ * `a[i] = v` from a generic body: as `setIdx`, but a record is written field
+ * by field into the record already in the slot, as an inline element is.
+ */
+export function storeIdx(a, i, v) {
+  const k = toIndex(i);
+  if (!(k >= 0 && k < a.length)) outOfRange(i, a.length);
+  const old = a[k];
+  if (isRecord(old) && isRecord(v)) Object.assign(old, v);
+  else a[k] = v;
   return v;
 }
 

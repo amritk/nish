@@ -3,10 +3,214 @@
 entry: src/emit-ts-records.ts src/emit-ts-edits.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/emit-ts-control.ts src/nodes.ts src/emit-ts-numbers.ts src/emit-ts-strings.ts src/nish-modules.ts src/branding.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/ice.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/emit-util.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/declarations.ts src/checker.ts src/expressions.ts src/members.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/statements.ts src/loop-flow.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/emit-json.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 import Operands from "./emit-ts-edits" -> struct Operands
 import Walk from "./emit-ts-edits" -> struct Walk
+import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
+import N_ARRAY from "./nodes" -> const N_ARRAY
+import N_BIGINT from "./nodes" -> const N_BIGINT
+import N_BINARY from "./nodes" -> const N_BINARY
+import N_CALL from "./nodes" -> const N_CALL
+import N_IDENT from "./nodes" -> const N_IDENT
+import N_INDEX from "./nodes" -> const N_INDEX
+import N_MEMBER from "./nodes" -> const N_MEMBER
+import N_NEW from "./nodes" -> const N_NEW
+import N_NUMBER from "./nodes" -> const N_NUMBER
+import N_OBJECT from "./nodes" -> const N_OBJECT
+import N_PAREN from "./nodes" -> const N_PAREN
+import N_SPREAD from "./nodes" -> const N_SPREAD
+import N_TYPE_NULL from "./nodes" -> const N_TYPE_NULL
+import N_TYPE_PAREN from "./nodes" -> const N_TYPE_PAREN
+import N_TYPE_REF from "./nodes" -> const N_TYPE_REF
+import N_TYPE_UNION from "./nodes" -> const N_TYPE_UNION
 import Node from "./nodes" -> struct Node
-function recordsRow(_walk: Walk, _node: Node, _operands: Operands): string | null -> @recordsRow [exported]
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer _walk: size=112 writesThrough=false captured=false
-  pointer _node: size=40 writesThrough=false captured=false
-  pointer _operands: size=40 writesThrough=false captured=false
+import CheckedProgram from "./program" -> struct CheckedProgram
+import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE
+import T_BOOL from "./types" -> const T_BOOL
+import T_CPTR from "./types" -> const T_CPTR
+import T_I64 from "./types" -> const T_I64
+import T_U64 from "./types" -> const T_U64
+const COPY_NONE: i32 = 0
+const COPY_SPREAD: i32 = 1
+const COPY_AT_RUN: i32 = 2
+function inlineRecord(program: CheckedProgram, type: i32): boolean -> @inlineRecord
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer program: size=656 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:14 info: StructInfo (const)
+function hasInlineRecords(program: CheckedProgram): boolean -> @hasInlineRecords
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer program: size=656 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 info: StructInfo (const)
+function copyKind(walk: Walk, value: Node): i32 -> @copyKind
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: hasInlineRecords inlineRecord nish_panic_index
+  pointer walk: size=112 writesThrough=false captured=false
+  pointer value: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:12 hasInlineRecords -> @hasInlineRecords
+  callee +2:10 inlineRecord -> @inlineRecord
+function copied(walk: Walk, value: Node, written: string): string -> @copied
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.useHelper
+  escaping: written
+  calls: Walk.useHelper copyKind nish_str_concat
+  pointer walk: size=112 writesThrough=false captured=false passedTo=copyKind#0 Walk.useHelper#0
+  pointer value: size=40 writesThrough=false captured=false passedTo=copyKind#1
+  stackSites=0 stackLocals=0
+  local +0:9 kind: i32 (const)
+  callee +0:16 copyKind -> @copyKind
+  callee +5:5 Walk.useHelper -> @Walk.useHelper
+function checkedAt(walk: Walk, node: Node): boolean -> @checkedAt
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer walk: size=112 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function idxArguments(text: string): string -> @idxArguments
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_at nish_str_new
+  stackSites=0 stackLocals=0
+function writtenReceiver(text: string, name: string): string -> @writtenReceiver
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_new
+  stackSites=0 stackLocals=0
+function atomic(node: Node): boolean -> @atomic
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function updateParam(text: string): string -> @updateParam
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_index_of nish_str_index_of_from
+  stackSites=0 stackLocals=0
+  local +0:7 name: string (let)
+function compoundStore(walk: Walk, node: Node, operands: Operands, args: string): string -> @compoundStore
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.useHelper
+  calls: Operands.at Walk.useHelper atomic nish_panic_index nish_str_concat nish_str_new updateParam
+  pointer walk: size=112 writesThrough=false captured=false passedTo=Walk.useHelper#0
+  pointer node: size=40 writesThrough=false captured=false
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
+  stackSites=0 stackLocals=0
+  local +0:9 op: string (const)
+  local +1:9 written: string (const)
+  callee +1:19 Operands.at -> @Operands.at
+  local +2:9 value: string (const)
+  callee +2:17 atomic -> @atomic
+  local +3:9 old: string (const)
+  callee +3:15 updateParam -> @updateParam
+  callee +4:3 Walk.useHelper -> @Walk.useHelper
+function storeRow(walk: Walk, node: Node, operands: Operands): string | null -> @storeRow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.useHelper
+  calls: Operands.at Walk.useHelper compoundStore hasInlineRecords idxArguments inlineRecord nish_panic_index nish_str_at nish_str_concat nish_str_eq
+  pointer walk: size=112 writesThrough=false captured=false passedTo=Walk.useHelper#0 Walk.useHelper#0 compoundStore#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=compoundStore#1
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 Operands.at#0 Operands.at#0 compoundStore#2
+  stackSites=0 stackLocals=0
+  local +0:9 target: Node (const)
+  local +4:9 left: string (const)
+  callee +4:16 Operands.at -> @Operands.at
+  local +5:9 args: string (const)
+  callee +5:16 idxArguments -> @idxArguments
+  callee +7:43 hasInlineRecords -> @hasInlineRecords
+  callee +8:7 Walk.useHelper -> @Walk.useHelper
+  callee +9:35 Operands.at -> @Operands.at
+  callee +11:29 inlineRecord -> @inlineRecord
+  callee +12:40 Operands.at -> @Operands.at
+  callee +17:5 Walk.useHelper -> @Walk.useHelper
+  callee +18:31 Operands.at -> @Operands.at
+  callee +26:10 compoundStore -> @compoundStore
+function callRow(walk: Walk, node: Node, operands: Operands): string | null -> @callRow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.useHelper
+  calls: Operands.at Walk.useHelper checkedAt copied nish_panic_index nish_str_at nish_str_concat nish_str_eq writtenReceiver
+  pointer walk: size=112 writesThrough=false captured=false passedTo=checkedAt#0 Walk.useHelper#0 copied#0 Walk.useHelper#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=checkedAt#1
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 Operands.at#0
+  stackSites=0 stackLocals=0
+  local +0:9 callee: Node (const)
+  local +4:9 args: Node[] (const)
+  local +5:9 method: string (const)
+  local +6:9 written: string (const)
+  callee +6:19 Operands.at -> @Operands.at
+  callee +10:48 checkedAt -> @checkedAt
+  callee +11:5 Walk.useHelper -> @Walk.useHelper
+  callee +12:19 writtenReceiver -> @writtenReceiver
+  local +15:11 arg: string (const)
+  callee +15:17 Operands.at -> @Operands.at
+  local +16:11 copy: string (const)
+  callee +16:18 copied -> @copied
+  callee +25:5 Walk.useHelper -> @Walk.useHelper
+  callee +26:24 writtenReceiver -> @writtenReceiver
+  callee +26:61 Operands.at -> @Operands.at
+function literalRow(walk: Walk, node: Node, operands: Operands): string | null -> @literalRow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via copied
+  calls: Operands.at copied nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq
+  pointer walk: size=112 writesThrough=false captured=false passedTo=copied#0
+  pointer node: size=40 writesThrough=false captured=false
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
+  stackSites=1 stackLocals=1
+  local +0:9 parts: string[] (const)
+  local +1:7 copies: boolean (let)
+  local +2:7 i: i32 (let)
+  local +4:11 written: string (const)
+  callee +4:21 Operands.at -> @Operands.at
+  local +5:11 part: string (const)
+  callee +5:18 copied -> @copied
+function primitiveZero(type: i32): string -> @primitiveZero
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function fillZero(walk: Walk, type: Node): string -> @fillZero
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: CheckedProgram.alias StringMap.get fillZero nish_panic_index nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new primitiveZero
+  pointer walk: size=112 writesThrough=false captured=false passedTo=fillZero#0 fillZero#0
+  pointer type: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:12 fillZero -> @fillZero
+  local +3:16 member: Node (const)
+  local +13:9 name: string (const)
+  local +32:9 program: CheckedProgram (const)
+  callee +33:7 StringMap.get -> @StringMap.get
+  local +36:9 dot: i32 (const)
+  callee +37:18 StringMap.get -> @StringMap.get
+  local +40:9 alias: AliasInfo | null (const)
+  callee +40:17 CheckedProgram.alias -> @CheckedProgram.alias
+  callee +42:12 fillZero -> @fillZero
+  local +44:9 instance: Instantiation | null (const)
+  callee +46:12 primitiveZero -> @primitiveZero
+  callee +46:26 StringMap.get -> @StringMap.get
+function typedArrayZero(name: string): string -> @typedArrayZero
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_eq
+  stackSites=0 stackLocals=0
+function newRow(walk: Walk, node: Node, operands: Operands): string | null -> @newRow
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.useHelper
+  calls: Operands.at Walk.useHelper fillZero nish_panic_index nish_str_concat nish_str_eq typedArrayZero
+  pointer walk: size=112 writesThrough=false captured=false passedTo=fillZero#0 Walk.useHelper#0
+  pointer node: size=40 writesThrough=false captured=false
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
+  stackSites=0 stackLocals=0
+  local +0:9 callee: Node (const)
+  local +4:9 typeArgs: Node[] (const)
+  local +5:7 zero: string (let)
+  callee +7:12 fillZero -> @fillZero
+  callee +9:12 typedArrayZero -> @typedArrayZero
+  callee +14:3 Walk.useHelper -> @Walk.useHelper
+  callee +15:22 Operands.at -> @Operands.at
+function recordsRow(walk: Walk, node: Node, operands: Operands): string | null -> @recordsRow [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.useHelper
+  calls: Operands.at Walk.useHelper callRow checkedAt literalRow newRow nish_str_concat storeRow
+  pointer walk: size=112 writesThrough=false captured=false passedTo=checkedAt#0 Walk.useHelper#0 storeRow#0 callRow#0 literalRow#0 newRow#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=checkedAt#1 storeRow#1 callRow#1 literalRow#1 newRow#1
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 storeRow#2 callRow#2 literalRow#2 newRow#2
+  stackSites=0 stackLocals=0
+  callee +0:50 checkedAt -> @checkedAt
+  callee +3:7 Walk.useHelper -> @Walk.useHelper
+  callee +4:21 Operands.at -> @Operands.at
+  callee +4:40 Operands.at -> @Operands.at
+  callee +6:14 storeRow -> @storeRow
+  callee +8:14 callRow -> @callRow
+  callee +10:14 literalRow -> @literalRow
+  callee +12:14 newRow -> @newRow
