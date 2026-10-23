@@ -346,7 +346,9 @@ through the flags you will reach for.
 
 Exit codes: `0` success, `1` compile error (`file:line:col: error: ...` plus
 a caret excerpt), `2` usage error, `3` toolchain error, `70` internal
-compiler error (please report it; `NISH_DEBUG=1` adds the stack trace).
+compiler error (please
+[report it](https://github.com/amritk/nish/issues/new/choose) with the input and
+the command line).
 A compile that fails reports every error it found (statement by statement,
 declaration by declaration), in source order, up to 20 before `...and N more
 errors`; `--json` gives editors and tools the same list as

@@ -4,10 +4,12 @@ entry: src/kernels.ts src/program.ts src/context.ts src/diagnostics.ts src/codes
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
 import isCryptoAesModule from "./std-modules" -> function @isCryptoAesModule
+import isRegexModule from "./std-modules" -> function @isRegexModule
 import isTextModule from "./std-modules" -> function @isTextModule
 import T_VOID from "./types" -> const T_VOID
 const INDEX_OF_ANY_KERNEL: string = "nish_str_index_of_any" [exported]
 const INDEX_OF_ANY_WALK: string = "indexOfAnyFrom"
+const REGEX_SCAN_KERNEL: string = "nish_regex_scan" [exported]
 const AES_SEAM_NONE: i32 = 0 [exported]
 const AES_SEAM_SCHEDULE: i32 = 1
 const AES_SEAM_BLOCK: i32 = 2
@@ -21,6 +23,13 @@ function isIndexOfAnyWalk(program: CheckedProgram, sig: FunctionSig): boolean ->
   pointer sig: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isTextModule -> @isTextModule
+function isRegexScanWalk(program: CheckedProgram, sig: FunctionSig): boolean -> @isRegexScanWalk [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isRegexModule nish_str_eq
+  pointer program: size=656 writesThrough=false captured=false
+  pointer sig: size=136 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:3 isRegexModule -> @isRegexModule
 function isAesSeam(program: CheckedProgram, sig: FunctionSig): i32 -> @isAesSeam [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isCryptoAesModule nish_str_eq

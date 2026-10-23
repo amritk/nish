@@ -266,7 +266,7 @@ when one of those variables is set for some other reason. If the package's
 | 1 | the program was rejected: a compile error, or an input file that does not exist |
 | 2 | usage error: an unknown flag, a missing argument, no input files |
 | 3 | toolchain error: no usable `clang`, or the link failed (the `.ll` files are still written) |
-| 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input; `NISH_DEBUG=1` adds a stack trace |
+| 70 | internal compiler error: a bug in `nish`, not in your program — please [report it](https://github.com/amritk/nish/issues) with the input, the command line and the message it printed |
 
 `nish run` answers these codes until the program starts, and the program's own
 exit status after that — the value `main` returns, `1` for a panic such as an
