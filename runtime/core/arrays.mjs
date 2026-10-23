@@ -40,6 +40,16 @@ export function updIdx(a, i, f) {
   return v;
 }
 
+/** `nish:unsafe`'s `uncheckedGet(a, i)`: the element with no bounds check, as the native load is. */
+export function uncheckedGet(a, i) {
+  return a[i];
+}
+
+/** `nish:unsafe`'s `uncheckedSet(a, i, v)`: the store with no bounds check. */
+export function uncheckedSet(a, i, v) {
+  a[i] = v;
+}
+
 // A record an array holds inline is an object literal here, and nothing else
 // is a plain object: a class instance has its class's prototype, and an array
 // has Array's.

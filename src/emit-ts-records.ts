@@ -56,7 +56,7 @@ import {
   Node,
 } from "./nodes"
 import { CheckedProgram, STRUCT_INTERFACE } from "./program"
-import { T_CPTR } from "./types"
+import { T_BOOL, T_CPTR, T_I64, T_U64 } from "./types"
 
 /** Whether `type` is a record an array holds inline: an interface no class implements. */
 const inlineRecord = (program: CheckedProgram, type: i32): boolean => {
@@ -177,7 +177,12 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
   const left = operands.at(0)
   const args = idxArguments(left)
   if (node.text === "=") {
-    if (args !== "" && (walk.inInstance ? hasInlineRecords(walk.program) : inlineRecord(walk.program, walk.program.nodeTypes[target.id]))) {
+    if (
+      args !== "" &&
+      (walk.inInstance
+        ? hasInlineRecords(walk.program)
+        : inlineRecord(walk.program, walk.program.nodeTypes[target.id]))
+    ) {
       walk.useHelper("storeIdx")
       return `storeIdx(${args}, ${operands.at(1)})`
     }
@@ -250,7 +255,22 @@ const literalRow = (walk: Walk, node: Node, operands: Operands): string | null =
   return copies ? `[${parts.join(", ")}]` : null
 }
 
-/** The zero `new Array<T>(n)` fills each slot with, read off the written `T`, or the empty string. */
+/** The zero of a primitive type id, or the empty string for any other type. */
+const primitiveZero = (type: i32): string => {
+  if (type === T_I64 || type === T_U64) {
+    return "0n"
+  }
+  if (type === T_BOOL) {
+    return "false"
+  }
+  return type >= 1 && type < T_BOOL ? "0" : ""
+}
+
+/**
+ * The zero `new Array<T>(n)` fills each slot with, read off the written `T`, or the empty string.
+ * In a generic body `T` is the instance's binding; instances whose zeros
+ * differ are written differently, which the composer reports.
+ */
 const fillZero = (walk: Walk, type: Node): string => {
   if (type.kind === N_TYPE_PAREN) {
     return fillZero(walk, type.children[0])
@@ -296,6 +316,10 @@ const fillZero = (walk: Walk, type: Node): string => {
   const alias = program.alias(name)
   if (alias !== null) {
     return fillZero(walk, alias.decl.children[1])
+  }
+  const instance = program.activeInstance
+  if (instance !== null) {
+    return primitiveZero(instance.bindings.get(name, -1))
   }
   return ""
 }
