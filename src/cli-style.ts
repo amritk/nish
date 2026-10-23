@@ -245,8 +245,8 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(helpRow(style, "--json", "", "each diagnostic as one JSON line on stdout"))
   lines.push(helpRow(style, "--warn-portability", "", "warn where TypeScript would answer otherwise"))
   lines.push(helpRow(style, "--no-warn-performance", "", "silence the performance warnings"))
-  lines.push(helpRow(style, "--deny-panics", "", "refuse a panic the compiler cannot rule out"))
-  lines.push(helpRow(style, "--deny-retention", "", "refuse arena memory kept past its last use"))
+  lines.push(helpRow(style, "--deny-panics", "", "refuse an unproven panic in your package"))
+  lines.push(helpRow(style, "--deny-retention", "", "refuse retained arena memory in your package"))
 
   lines.push("")
   lines.push(style.heading("Capabilities"))
@@ -258,7 +258,7 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push("")
   lines.push(style.heading("Interop"))
   lines.push(helpRow(style, "--emit-header", "<file.h>", "a C header for the exports"))
-  lines.push(helpRow(style, "--emit-dts", "<file.d.ts>", "TypeScript declarations for them"))
+  lines.push(helpRow(style, "--emit-dts", "<file.d.ts>", "their typings, and a <file>.mjs loader"))
   lines.push(helpRow(style, "--emit-napi", "<shim.c>", "a Node-API shim, to load them from Node"))
   lines.push(helpRow(style, "--emit-napi-async", "<shim.c>", "the same, plus a promise for each export"))
 
