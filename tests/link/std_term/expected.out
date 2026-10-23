@@ -22,6 +22,7 @@ cleared: ^[[H^[[0m
 unknown attribute bits: ^[[H^[[0mA
 control, negative, surrogate, DEL: ^[[H^[[0m����
 gap over a control, moved: ^[[H^[[0mA^[[CB
+C1 controls, then U+00A0: ^[[H^[[0m��� 
 256 colours: ^[[H^[[0;38;5;196;48;5;16mab^[[39;49m 
 sync first frame: ^[[?2026h^[[H^[[0m   ^[[?2026l
 sync unchanged: 0
@@ -70,5 +71,6 @@ held over two feeds, then: [] holding
   timed from the first: [escape(27) char(91)]
 ESC O and no final: [escape(27) char(79) enter(10)]
 past U+10FFFF lead: [char(65533) char(65533) char(97)]
+C1 control, then U+00A0: [char(65533) char(160)]
 overlong, surrogate, too high: [char(65533) char(65533) char(65533)]
 four bytes: [char(128512)]

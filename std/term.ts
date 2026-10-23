@@ -540,14 +540,14 @@ export class Screen {
 
   /**
    * Append code point `cp` as UTF-8. One that would not draw a character in
-   * place, or is not a scalar value — a control, DEL, a surrogate, a negative
-   * number — goes as U+FFFD, so a cell cannot move the cursor or send bytes
-   * that are not UTF-8.
+   * place, or is not a scalar value — a C0 or C1 control, DEL, a surrogate, a
+   * negative number — goes as U+FFFD, so a cell cannot move the cursor, open
+   * an escape or send bytes that are not UTF-8.
    */
   putGlyph(cp: i32): void {
     if (cp >= TERM_SPACE && cp < TERM_DELETE) {
       this.put(cp)
-    } else if (cp >= 128 && cp < 2048) {
+    } else if (cp >= 160 && cp < 2048) {
       this.put((cp >> 6) | 192)
       this.put((cp & 63) | 128)
     } else if (cp >= 65536 && cp < 1114112) {
@@ -1231,10 +1231,15 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
       i = i + 1 + good
       continue
     }
-    // An overlong three- or four-byte form, a surrogate or a code point past
-    // U+10FFFF is no character.
-    const scalar: boolean =
-      (width === 2 || cp >= (width === 3 ? 2048 : 65536)) && cp < 1114112 && !(cp >= 55296 && cp < 57344)
+    // A C1 control, an overlong three- or four-byte form, a surrogate or a
+    // code point past U+10FFFF is no character.
+    let least: i32 = 65536
+    if (width === 2) {
+      least = 160
+    } else if (width === 3) {
+      least = 2048
+    }
+    const scalar: boolean = cp >= least && cp < 1114112 && !(cp >= 55296 && cp < 57344)
     events.push(new KeyEvent(KEY_CHAR, scalar ? cp : TERM_REPLACEMENT))
     i = i + width
   }

@@ -169,6 +169,13 @@ export const main = (): number => {
   q.set(0, 0, 65, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
   q.set(2, 0, 66, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
   frame("gap over a control, moved", q.flush());
+  // U+0080-U+009F are the C1 controls, CSI (U+009B) and OSC (U+009D) among
+  // them; U+00A0 is the first that prints
+  q.set(0, 0, 128, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  q.set(1, 0, 155, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  q.set(2, 0, 159, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  q.set(3, 0, 160, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  frame("C1 controls, then U+00A0", q.flush());
 
   // --- the 256-colour fallback ---------------------------------------------
   const p = new Screen(3, 1, true);
@@ -279,6 +286,7 @@ export const main = (): number => {
   events("  timed from the first", d.poll(toF64(2035)), d);
   events("ESC O and no final", d.feed(bytesOf([27, 79, 10]), 3, toF64(2100)), d);
   events("past U+10FFFF lead", d.feed(bytesOf([245, 128, 97]), 3, toF64(2200)), d);
+  events("C1 control, then U+00A0", d.feed(bytesOf([194, 155, 194, 160]), 4, toF64(2150)), d);
   events("overlong, surrogate, too high", d.feed(bytesOf([224, 128, 128, 237, 160, 128, 244, 144, 128, 128]), 10, toF64(2200)), d);
   events("four bytes", d.feed(bytesOf([240, 159, 152, 128]), 4, toF64(2200)), d);
   return 0;
