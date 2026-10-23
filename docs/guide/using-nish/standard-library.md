@@ -34,6 +34,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
+| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key; `nish/yaml-lines` for `line:column` |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order |
@@ -592,6 +593,100 @@ them, so walk a large object once with `keyAt` and `at` rather than calling
 differs from the native build there; `parse` over bytes reads the same both
 ways. Its security record is
 [docs/security/json.md](../../security/json.md).
+
+## `nish/yaml`
+
+`parseYaml(text)` reads a YAML 1.2 stream — a configuration file, a CI
+workflow, a Kubernetes manifest — and answers a `YamlStream`: every document,
+every node, and every problem found, each with the byte range of the source it
+is about. A parse never fails and never panics on its input; a stream that is
+not valid YAML still answers its nodes, as the parser's best reading of it,
+beside the errors that say why.
+
+```ts nish:ok
+import { YAML_INT, YAML_MAP, keyText, parseYaml, pathNode, yamlErrorName } from "nish/yaml";
+import { YamlLineIndex } from "nish/yaml-lines";
+
+export const main = (): i32 => {
+  const text = "name: tea\nport: 8080\ntags: [green, black]\n";
+  const stream = parseYaml(text);
+  const root = stream.documentRoot(0);
+  if (stream.kind(root) === YAML_MAP) {
+    let i: i32 = 0;
+    while (i < stream.count(root)) {
+      const pair = stream.child(root, i);
+      console.log(`${keyText(stream, stream.key(pair))} = ${keyText(stream, stream.value(pair))}`);
+      i += 1;
+    }
+  }
+  // name = tea
+  // port = 8080
+  // tags = [ green, black ]
+
+  const port = pathNode(stream, root, ["port"]);
+  console.log(`${stream.type(port) === YAML_INT} ${stream.intValue(port)}`); // true 8080
+  console.log(stream.text(pathNode(stream, root, ["tags", "1"]))); // black
+  console.log(`bytes ${stream.start(port)}..${stream.end(port)}`); // bytes 16..20
+
+  const bad = parseYaml("a: 1\nb: [1,,2]\na: 3\n");
+  const lines = new YamlLineIndex(bad.source);
+  let d: i32 = 0;
+  while (d < bad.diagnosticCount()) {
+    const at = bad.diagnosticStart(d);
+    console.log(`${lines.line(at)}:${lines.column(at)} ${yamlErrorName(bad.diagnosticCode(d))} ${bad.diagnosticMessage(d)}`);
+    d += 1;
+  }
+  // 2:7 UNEXPECTED_COMMA Missing value before ","
+  // 3:1 DUPLICATE_KEY Map key "a" is duplicated
+  return bad.errorCount() === 2 ? 0 : 1;
+};
+```
+
+**A node is an `i32` handle** into the stream, and `-1` is no node. Its
+`kind` is `YAML_SCALAR`, `YAML_MAP`, `YAML_SEQ`, `YAML_ALIAS` or `YAML_PAIR`.
+`count(n)` and `child(n, i)` walk a collection: a map's children are its
+pairs, in the order they were written, and a pair's `key` and `value` are
+nodes; a sequence's children are its items. An empty value (`a:`) is no node,
+so its `value` is `-1` and reads as null. An alias's `target` is the node its
+anchor named, and `resolved(n)` follows an alias to it. `anchor`, `tag` and
+`style` answer what was written; a `!!` tag is kept without its prefix
+(`"int"`).
+
+**Scalars are read when you ask.** `text(n)` decodes a scalar — quotes,
+escapes, folding and block scalars — and `type(n)` resolves it against the
+core schema: `YAML_NULL`, `YAML_BOOL`, `YAML_INT`, `YAML_FLOAT` or
+`YAML_STRING`, with `boolValue`, `intValue` and `floatValue` to read it. YAML
+1.1's `yes` and `on` are strings, as 1.2 says. Nothing is decoded until it is
+read, so a program that wants one key pays for one key.
+
+**Paths.** `pathNode(stream, root, path)` follows a path of map keys and
+sequence indices (`"0"`) through aliases, and answers the deepest node it
+reached; `pathMatch` says how many steps matched and `pathPair` answers the
+last pair it stepped through, whose `key` is where a message about that
+setting should point. A key is matched by `keyText`, the text it was written
+as, so `1` and `01` are different keys.
+
+**Ranges and lines.** `start(n)` and `end(n)` are byte offsets into
+`stream.source`, as are a diagnostic's `diagnosticStart` and
+`diagnosticEnd`. `new YamlLineIndex(text)` from `nish/yaml-lines` turns an
+offset into a 1-based `line` and `column` (in characters; `byteColumn` counts
+bytes); a line break is LF, CR LF or a lone CR.
+
+**Diagnostics.** `diagnosticCount`, `errorCount` and `warningCount` count
+them; each has a `YAML_ERR_*` code, named by `yamlErrorName` the way other
+YAML tools name it, `diagnosticIsWarning`, a message and its range, sorted by
+where it starts. An error means the text is not valid YAML; a warning means it
+is valid and probably not what was meant, such as `!!int x`. A map that
+repeats a key is an error, `DUPLICATE_KEY`.
+
+**Options.** `parseYamlWith(text, options)` takes a `YamlOptions`:
+`maxDepth` (how deeply collections nest before `DEPTH_LIMIT`, 1 to 1000,
+1000 by default), `uniqueKeys`, `merge` (whether a `<<` key is exempt from the
+duplicate check), `keepComments` (keep every comment's range, for
+`commentCount` and `comment`) and `firstDocumentOnly` (warn
+`MULTIPLE_DOCUMENTS` and stop after the first). Merge keys are not applied: a
+map holds the pairs it was written with. Tabs are never indentation, as YAML
+says.
 
 ## `nish/pair`
 
