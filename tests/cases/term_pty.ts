@@ -7,9 +7,10 @@
 // restores before it lets the signal end the program. It reads and drops what
 // comes meanwhile: `script(1)` gives the terminal a Ctrl-D when its own stdin
 // ends, which raw mode delivers as a byte, so one wait could return before the
-// signal does. The wait has no timeout, so one that returns false was ended
-// by a signal: it prints `early`, which neither SIGTERM nor a Ctrl-Z and `fg`
-// may cause.
+// signal does. The wait's ten minutes outlast the test, so one that returns
+// false was ended by a signal: it prints `early`, which neither SIGTERM nor a
+// Ctrl-Z and `fg` may cause. A finite timeout, so the stop's retry asks for
+// what is left of its deadline rather than waiting for ever.
 const probe = (): number => {
   const size = terminalSize();
   console.log(`${isTerminal(0)} ${isTerminal(1)} ${size[0] >= 0} ${size[1] >= 0}`);
@@ -36,7 +37,7 @@ export const main = (): number => {
     const buf: u8[] = new Array<u8>(16);
     let n = -11;
     while (n > 0 || n === -11) {
-      if (waitStdin(-1)) {
+      if (waitStdin(600000)) {
         n = readStdin(buf, 0, 16);
       } else {
         console.log("early");

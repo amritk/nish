@@ -50,8 +50,11 @@ like the end.
 `waitStdin(timeoutMs)` waits until there is something to read, or until
 `timeoutMs` milliseconds have passed. It answers `true` when stdin is ready
 (its end and an error count, so the read after it answers at once) and `false`
-when the time ran out or a signal ended the wait first. A negative timeout
-waits for ever.
+when the time ran out or a signal ended the wait first. A Ctrl-Z and `fg`
+after `setRawMode(true)` do not end it: the wait goes on until its timeout.
+Before raw mode, whether a stop ends the wait depends on the system, so treat
+`false` as "nothing to read yet" rather than as the time having run out. A
+negative timeout waits for ever.
 
 Together they make the loop of an interactive program. Each pass waits up to
 one frame for a key, handles what came, and draws. A key that arrives early

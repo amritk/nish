@@ -261,7 +261,7 @@ lor.end:
   br i1 %67, label %while.body, label %while.end
 
 while.body:
-  %68 = call zeroext i1 @nish_wait_stdin(i32 -1)
+  %68 = call zeroext i1 @nish_wait_stdin(i32 600000)
   br i1 %68, label %if.then.4, label %if.else
 
 if.then.4:

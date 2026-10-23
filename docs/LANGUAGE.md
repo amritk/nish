@@ -7703,9 +7703,9 @@ back and enters raw mode again, so the terminal is as it was while the program
 is stopped and raw after `fg`; no `setRawMode` on another thread runs between
 the two. A program continued in the background stops again, by SIGTTOU, until
 `fg`. A `waitStdin` the stop interrupts goes on waiting until its timeout,
-measured from when it began. Any other blocking call goes on where the system restarts it
-after a handler (`SA_RESTART`), and ends early where it never does, as a
-`pollWait` does after any signal. A stop by SIGSTOP, which no program can catch,
+measured from when it began. Any other blocking call goes on where the system
+restarts it after a handler (`SA_RESTART`), and ends early where it never
+does, as a `pollWait` does after any signal. A stop by SIGSTOP, which no program can catch,
 leaves the terminal raw at a shell that puts nothing back.
 Job control also stops a program started in the background
 (`app &`) when it calls `setRawMode(true)`, by SIGTTOU, as it stops any program
