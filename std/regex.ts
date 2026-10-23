@@ -1225,20 +1225,25 @@ const regexSortPoints = (a: i32[]): void => {
       let i: i32 = lo
       let j: i32 = mid
       let k: i32 = lo
-      while (k < hi) {
-        if (i < mid && (j >= hi || a[i] <= a[j])) {
-          tmp[k] = a[i]
-          i += 1
-        } else {
-          tmp[k] = a[j]
+      // Each index is also tested against the length it reads, `n` for `a`:
+      // the runs end inside both arrays, and that test is what proves it.
+      while (k >= 0 && k < hi && k < toI32(tmp.length)) {
+        const right: boolean = j >= 0 && j < hi && j < n && (i >= mid || i < 0 || i >= n || a[j] < a[i])
+        const from: i32 = right ? j : i
+        if (from >= 0 && from < n) {
+          tmp[k] = a[from]
+        }
+        if (right) {
           j += 1
+        } else {
+          i += 1
         }
         k += 1
       }
       lo = hi
     }
     let k: i32 = 0
-    while (k < n) {
+    while (k < n && k < toI32(tmp.length)) {
       a[k] = tmp[k]
       k += 1
     }
@@ -1353,7 +1358,8 @@ const regexScanFrom = (text: string, masks: u8[], depth: i32, off: i32, width: i
         b = 255
       }
       const slot: i32 = 32 * depth + (j << 8) + b
-      if (masks[slot] === 0) {
+      // Outside the table is never reached; the test is what proves `slot`.
+      if (slot < 0 || slot >= toI32(masks.length) || masks[slot] === 0) {
         break
       }
       k += 1
@@ -1517,21 +1523,9 @@ export class Regex {
   dCtxR: i32[]
   dMaskF: i32[]
   dMaskR: i32[]
-  /**
-   * Whether no forward assertion reads the character before it, so every
-   * forward state after a character holds the same context and a state with
-   * no thread left is the unanchored start state wherever the text resumes.
-   */
-  dCtxFree: boolean
   /** Each start state's offset + 1, by mode and context, or 0. */
   dStartOff: i32[]
-  /**
-   * Whether a match can start only where the ASCII `prefix` is and no
-   * assertion reads the context, so the unanchored start state after the
-   * prefix's bytes is one state, `dPrefOff`.
-   */
-  dPrefFast: boolean
-  /** That state's offset + 1, or 0 until it is computed. */
+  /** The unanchored start state after the prefix (see `dPrefFast`): its offset + 1, or 0 until it is computed. */
   dPrefOff: i32
   /** Bytes the inner search read in vain past its literal, and bytes it moved past: see `dfaInner`. */
   innerWaste: f64
@@ -1594,6 +1588,18 @@ export class Regex {
   scanSel: boolean
   /** The scan's first positions are exactly the prefix's bytes, all ASCII: see `prefixIsScan`. */
   prefixExact: boolean
+  /**
+   * Whether no forward assertion reads the character before it, so every
+   * forward state after a character holds the same context and a state with
+   * no thread left is the unanchored start state wherever the text resumes.
+   */
+  dCtxFree: boolean
+  /**
+   * Whether a match can start only where the ASCII `prefix` is and no
+   * assertion reads the context, so the unanchored start state after the
+   * prefix's bytes is one state, at `dPrefOff`.
+   */
+  dPrefFast: boolean
 
   constructor(source: string, flags: string) {
     this.source = source
@@ -1773,7 +1779,10 @@ export class Regex {
         if (rev) {
           k = count - 1 - i
         }
-        this.compileNode(p, kids[k], rev)
+        // Always true: written because it is what proves `k` within `kids`.
+        if (k >= 0 && k < toI32(kids.length)) {
+          this.compileNode(p, kids[k], rev)
+        }
         i += 1
       }
       return
@@ -1996,13 +2005,15 @@ export class Regex {
     let bestLen: i32 = 0
     let bestScore: i32 = 0
     let i: i32 = 1
-    while (i < count) {
+    while (i >= 0 && i < toI32(kids.length)) {
+      // Read before the calls below, which end what the loop's test proves.
+      const first: i32 = kids[i]
       let n: i32 = 0
       while (i + n < count && this.isAsciiChar(p, kids[i + n])) {
         n += 1
       }
       if (n > 0) {
-        const b: i32 = p.na[kids[i]]
+        const b: i32 = p.na[first]
         const score: i32 = regexByteScore(b)
         if (bestLen === 0 || score < bestScore || (score === bestScore && n > bestLen)) {
           let j: i32 = 0
@@ -2025,13 +2036,13 @@ export class Regex {
     }
     const bytes: u8[] = new Array<u8>(bestLen)
     i = 0
-    while (i < bestLen) {
+    while (i < toI32(bytes.length)) {
       bytes[i] = toU8(p.na[kids[best + i]])
       i += 1
     }
     this.innerEntry = this.pc()
     i = best - 1
-    while (i >= 0) {
+    while (i >= 0 && i < toI32(kids.length)) {
       this.compileNode(p, kids[i], true)
       i -= 1
     }
@@ -2099,7 +2110,7 @@ export class Regex {
       this.literal = this.op[pc] === OP_MATCH && this.groups === 1
       let best: i32 = 1000
       let i: i32 = 0
-      while (i < n) {
+      while (i < toI32(bytes.length)) {
         const b: i32 = toI32(bytes[i])
         if (b < 128 && regexByteScore(b) < best) {
           best = regexByteScore(b)
@@ -2215,9 +2226,10 @@ export class Regex {
       }
       let odd: i32 = wide ? 100 : 0
       let c: i32 = 0
-      while (c >= 0 && c < 128) {
-        if (set[c] === 1) {
-          const row: i32 = (depth << 5) | (c & 15)
+      while (c >= 0 && c < toI32(set.length)) {
+        const row: i32 = (depth << 5) | (c & 15)
+        // The second test always holds: it is what proves `row`.
+        if (set[c] === 1 && row >= 0 && row < toI32(masks.length)) {
           const bit: i32 = toI32(1) << (c >> 4)
           masks[row] |= toU8(bit)
           odd += regexBytePerMille(c)
@@ -2228,17 +2240,21 @@ export class Regex {
         let k: i32 = 16
         while (k < 32) {
           const row: i32 = (depth << 5) | k
-          masks[row] = 255
+          if (row >= 0 && row < toI32(masks.length)) {
+            masks[row] = 255
+          }
           k += 1
         }
       }
-      odds[depth] = odd > 1000 ? 1000 : odd
+      if (depth < toI32(odds.length)) {
+        odds[depth] = odd > 1000 ? 1000 : odd
+      }
       if (depth === 0 && this.prefix === "") {
         // The first position also feeds the VM's table, which wants a set
         // that leaves some byte out.
         let m: i32 = 0
         c = 0
-        while (c >= 0 && c < 128) {
+        while (c >= 0 && c < toI32(set.length)) {
           m += toI32(set[c])
           c += 1
         }
@@ -2263,7 +2279,7 @@ export class Regex {
     // read a load a byte.
     const both: u8[] = new Array<u8>(288 * depth)
     let at: i32 = 0
-    while (at >= 0 && at < 32 * depth && at < toI32(both.length)) {
+    while (at >= 0 && at < 32 * depth && at < toI32(both.length) && at < toI32(masks.length)) {
       both[at] = masks[at]
       at += 1
     }
@@ -2272,8 +2288,8 @@ export class Regex {
       const b: i32 = at & 255
       const row: i32 = ((at >> 8) << 5) | ((b >> 7) << 4) | (b & 15)
       const slot: i32 = 32 * depth + at
-      if (slot < toI32(both.length) && ((toI32(masks[row]) >> ((b >> 4) & 7)) & 1) === 1) {
-        both[slot] = 1
+      if (slot >= 0 && slot < toI32(both.length) && row >= 0 && row < toI32(masks.length)) {
+        both[slot] = toU8((toI32(masks[row]) >> ((b >> 4) & 7)) & 1)
       }
       at += 1
     }
@@ -2657,7 +2673,7 @@ export class Regex {
         }
       } else if (o === OP_CLASS) {
         const k: i32 = this.ia[pc]
-        if (seenCls[k] === 0) {
+        if (k >= 0 && k < toI32(seenCls.length) && seenCls[k] === 0) {
           seenCls[k] = 1
           let r: i32 = this.clsFrom[k]
           while (r < this.clsTo[k]) {
@@ -2694,13 +2710,13 @@ export class Regex {
     }
     const rep: i32[] = new Array<i32>(units)
     let u: i32 = 0
-    while (u < 128) {
+    while (u < 128 && u < toI32(rep.length)) {
       rep[u] = u
       u += 1
     }
     rep[128] = -1
     i = 0
-    while (i < wide) {
+    while (i < wide && 129 + i < toI32(rep.length)) {
       rep[129 + i] = lows[i]
       i += 1
     }
@@ -2712,14 +2728,14 @@ export class Regex {
     let n: i32 = 1
     let work: i32 = 0
     u = 0
-    while (u < units) {
+    while (u < toI32(hit.length)) {
       hit[u] = toU8(u === 128 ? 1 : 0)
       u += 1
     }
     n = this.dRefine(cls, hit, units, n, remap)
     const pairs: u8[] = new Array<u8>(16384)
     i = 0
-    while (i < classes) {
+    while (i < toI32(seenCls.length)) {
       seenCls[i] = 0
       i += 1
     }
@@ -2732,25 +2748,36 @@ export class Regex {
       if (o === OP_CHAR) {
         if (a < 128 && b < 128) {
           const key: i32 = a * 128 + b
-          use = pairs[key] === 0
-          pairs[key] = 1
+          // Always true for a character: the test is what proves `key`.
+          if (key >= 0 && key < toI32(pairs.length)) {
+            use = pairs[key] === 0
+            pairs[key] = 1
+          }
         } else {
           use = true
         }
         if (use) {
           u = 0
-          while (u < units) {
+          while (u < toI32(hit.length) && u < toI32(rep.length)) {
             hit[u] = toU8(rep[u] === a || rep[u] === b ? 1 : 0)
             u += 1
           }
         }
       } else if (o === OP_CLASS) {
-        use = seenCls[a] === 0
-        seenCls[a] = 1
+        if (a >= 0 && a < toI32(seenCls.length)) {
+          use = seenCls[a] === 0
+          seenCls[a] = 1
+        }
         if (use) {
           u = 0
-          while (u < units) {
-            hit[u] = toU8(u !== 128 && this.classHas(a, rep[u]) ? 1 : 0)
+          while (u < toI32(rep.length)) {
+            // Read before the call, after which only a test of its own
+            // proves `u` within `hit`.
+            const r: i32 = rep[u]
+            const has: boolean = u !== 128 && this.classHas(a, r)
+            if (u < toI32(hit.length)) {
+              hit[u] = toU8(has ? 1 : 0)
+            }
             u += 1
           }
         }
@@ -2766,7 +2793,7 @@ export class Regex {
     }
     if (lines) {
       u = 0
-      while (u < units) {
+      while (u < toI32(hit.length) && u < toI32(rep.length)) {
         const r: i32 = rep[u]
         hit[u] = toU8(r === 10 || r === 13 || r === 0x2028 || r === 0x2029 ? 1 : 0)
         u += 1
@@ -2775,9 +2802,12 @@ export class Regex {
     }
     if (words) {
       u = 0
-      while (u < units) {
+      while (u < toI32(hit.length) && u < toI32(rep.length)) {
         const r: i32 = rep[u]
-        hit[u] = toU8(r >= 0 && r < 128 && isRegexWordByte(r) ? 1 : 0)
+        const word: boolean = r >= 0 && r < 128 && isRegexWordByte(r)
+        if (u < toI32(hit.length)) {
+          hit[u] = toU8(word ? 1 : 0)
+        }
         u += 1
       }
       n = this.dRefine(cls, hit, units, n, remap)
@@ -2796,7 +2826,7 @@ export class Regex {
     this.dCls = new Array<i32>(256)
     u = 0
     while (u < 256) {
-      this.dCls[u] = u < 128 ? cls[u] : n
+      this.dCls[u] = u < 128 && u < toI32(cls.length) ? cls[u] : n
       u += 1
     }
     this.dEot = cls[128]
@@ -2804,7 +2834,7 @@ export class Regex {
     this.dWide = wide
     this.dWcls = new Array<i32>(wide)
     i = 0
-    while (i < wide) {
+    while (i < wide && 129 + i < toI32(cls.length)) {
       this.dWcls[i] = cls[129 + i]
       i += 1
     }
@@ -2821,11 +2851,11 @@ export class Regex {
     this.dCtxR = new Array<i32>(n)
     const done: u8[] = new Array<u8>(n)
     u = 0
-    while (u < units) {
+    while (u < toI32(cls.length) && u < toI32(rep.length)) {
       const c: i32 = cls[u]
-      if (done[c] === 0) {
+      const r: i32 = rep[u]
+      if (c >= 0 && c < toI32(done.length) && done[c] === 0) {
         done[c] = 1
-        const r: i32 = rep[u]
         this.dRep[c] = r
         let kind: i32 = CTX_OTHER
         if (r < 0) {
@@ -2871,19 +2901,22 @@ export class Regex {
    */
   dRefine(cls: i32[], hit: u8[], units: i32, n: i32, remap: i32[]): i32 {
     let k: i32 = 0
-    while (k < 2 * n) {
+    while (k < 2 * n && k < toI32(remap.length)) {
       remap[k] = -1
       k += 1
     }
     let next: i32 = 0
     let u: i32 = 0
-    while (u < units) {
+    while (u < units && u < toI32(cls.length) && u < toI32(hit.length)) {
       const key: i32 = cls[u] * 2 + toI32(hit[u])
-      if (remap[key] < 0) {
-        remap[key] = next
-        next += 1
+      // Always true: a class is below `n`. The test is what proves `key`.
+      if (key >= 0 && key < toI32(remap.length)) {
+        if (remap[key] < 0) {
+          remap[key] = next
+          next += 1
+        }
+        cls[u] = remap[key]
       }
-      cls[u] = remap[key]
       u += 1
     }
     return next
@@ -3149,7 +3182,7 @@ export class Regex {
       }
       const pool: i32[] = new Array<i32>(grown)
       let k: i32 = 0
-      while (k < this.dPoolLen) {
+      while (k < this.dPoolLen && k < toI32(pool.length)) {
         pool[k] = this.dPool[k]
         k += 1
       }
@@ -3186,7 +3219,7 @@ export class Regex {
     const used: i32 = this.dCount << this.dShift
     const trans: i32[] = new Array<i32>(cap << this.dShift)
     let k: i32 = 0
-    while (k < used) {
+    while (k < used && k < toI32(trans.length)) {
       trans[k] = this.dTrans[k]
       k += 1
     }
@@ -3195,16 +3228,23 @@ export class Regex {
     const flags: i32[] = new Array<i32>(cap)
     const hash: i32[] = new Array<i32>(this.dHashSize(cap))
     const mask: i32 = toI32(hash.length) - 1
+    // Every length test below always holds (`dCount` is at most `cap`, and
+    // `& mask` keeps a slot within `hash`): each is what proves its index.
     k = 1
-    while (k < this.dCount) {
-      start[k] = this.dStart[k]
-      len[k] = this.dLen[k]
-      flags[k] = this.dFlags[k]
-      let slot: i32 = this.dHashOf(this.dPool, start[k], len[k], flags[k]) & mask
-      while (hash[slot] !== 0) {
+    while (k < this.dCount && k < toI32(start.length) && k < toI32(len.length) && k < toI32(flags.length)) {
+      const at: i32 = this.dStart[k]
+      const size: i32 = this.dLen[k]
+      const kind: i32 = this.dFlags[k]
+      start[k] = at
+      len[k] = size
+      flags[k] = kind
+      let slot: i32 = this.dHashOf(this.dPool, at, size, kind) & mask
+      while (slot >= 0 && slot < toI32(hash.length) && hash[slot] !== 0) {
         slot = (slot + 1) & mask
       }
-      hash[slot] = k + 1
+      if (slot >= 0 && slot < toI32(hash.length)) {
+        hash[slot] = k + 1
+      }
       k += 1
     }
     this.dTrans = trans
@@ -3379,7 +3419,7 @@ export class Regex {
     const cls: i32[] = this.dCls
     while (true) {
       // The hot loop: an ASCII byte and a transition already computed.
-      while (p < len) {
+      while (p >= 0 && p < len) {
         const b: i32 = toI32(text.charCodeAt(p))
         const e: i32 = uncheckedGet(trans, off | uncheckedGet(cls, b))
         if (e > 0) {
@@ -3400,10 +3440,11 @@ export class Regex {
       }
       let c: i32 = this.dEot
       let w: i32 = 1
-      if (p < len) {
+      if (p >= 0 && p < len) {
         const b: i32 = toI32(text.charCodeAt(p))
         if (b < 128) {
-          c = cls[b]
+          // `dCls` has an entry for every byte.
+          c = uncheckedGet(cls, b)
         } else {
           const packed: i32 = regexDecodeAt(text, p, len)
           c = this.dWideClass(packed >> 3)
@@ -3505,7 +3546,8 @@ export class Regex {
       if (p > 0) {
         const b: i32 = toI32(text.charCodeAt(p - 1))
         if (b < 128) {
-          c = cls[b]
+          // `dCls` has an entry for every byte.
+          c = uncheckedGet(cls, b)
         } else {
           const lim: i32 = p > from ? from : 0
           let cp: i32 = REGEX_INVALID + b
