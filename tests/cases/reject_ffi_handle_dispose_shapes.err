@@ -1,0 +1,17 @@
+The `[Symbol.dispose]` of handle class `TakesParam` must take no parameters
+The `[Symbol.dispose]` of handle class `ReturnsValue` must take no parameters
+The `[Symbol.dispose]` of handle class `OtherArgument` must take no parameters
+The `[Symbol.dispose]` of handle class `NotACall` must take no parameters
+The `[Symbol.dispose]` of handle class `LetBinding` must take no parameters
+The `[Symbol.dispose]` of handle class `UsingBinding` must take no parameters
+The `[Symbol.dispose]` of handle class `TwoDeclarators` must take no parameters
+The `[Symbol.dispose]` of handle class `Annotated` must take no parameters
+The `[Symbol.dispose]` of handle class `OtherPointer` must take no parameters
+The `[Symbol.dispose]` of handle class `WithElse` must take no parameters
+The `[Symbol.dispose]` of handle class `OtherTest` must take no parameters
+The `[Symbol.dispose]` of handle class `NullFirst` must take no parameters
+The `[Symbol.dispose]` of handle class `OtherLocal` must take no parameters
+The `[Symbol.dispose]` of handle class `SelfTest` must take no parameters
+The `[Symbol.dispose]` of handle class `FieldInIf` must take no parameters
+The close `closedir` of handle class `CallArity` must take exactly one argument
+The close `close2` of handle class `DeclaredArity` must take exactly one argument

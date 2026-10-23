@@ -136,7 +136,8 @@ the same `file:line:col` shape (`tests/run.js`, WP10 block).
   **`undefined`** is forbidden (`` `undefined` is forbidden in Nish; use `null` with a `T | null` type ``,
   `tests/cases/reject_undefined_value`).
 - **Bigint** literals (`10n`) and regex literals are forbidden
-  (`tests/cases/reject_bigint_literal`, `reject_regex`).
+  (`tests/cases/reject_bigint_literal`, `reject_regex`); a pattern is a
+  library instead, `regexCompile` from `nish/regex` (`std/regex.ts`).
 - **Reserved prefix.** Function, class, and interface names starting with
   `nish_` are reserved for the runtime: `` Function names starting with `nish_` are reserved for the runtime ``
   *(CLI only; `src/declarations.ts`)*.
@@ -4951,10 +4952,10 @@ declare function free(block: CPtr): void;
   analysis walks; the second would put one across a boundary `--emit-header`,
   `--emit-dts` and `--emit-napi` describe, and none of the three has a spelling
   for an address whose provenance and lifetime are unknown. The type-argument
-  clause is stated at a generic *function*'s instantiation; a generic *class* at
-  `CPtr` is refused by whichever member rule the monomorphised class reaches
-  (`reject_ffi_pointer_type_argument`), which is every shape that lays the type
-  out — see `docs/wp27-ffi.md` §7a for the one that does not.
+  clause is stated where a generic function or class is instantiated
+  (`reject_ffi_pointer_type_argument`), so `new Empty<CPtr>()` is refused even
+  when no member of `Empty<T>` names `T`. The one field that may hold a `CPtr`
+  is a handle class's, below.
 - **A `null` reaches C only as the literal.** A `declare function` may return
   `CPtr | null` and may take one, and a call passes a `CPtr | null` parameter
   either the literal `null` — `realpath(path, null)`, `getcwd(null, 0)`, the
@@ -5136,6 +5137,96 @@ declare function compare(a: readonly u8[], na: u64, b: readonly u8[], nb: u64): 
   only on a target where `size_t` is 64 bits, until a later release gives the
   count a target-width type. The freestanding `--profile wasm` link resolves
   the declaration against the C the link is given.
+
+#### A handle class: a class that owns a `CPtr`
+
+**A class with a `CPtr` or `CPtr | null` field is a handle class: it owns the C
+resource the pointer names, and its `[Symbol.dispose]` names the C function
+that closes it** (`tests/cases/ffi_handle_positions`, `docs/wp40-ffi-buffers-handles.md`
+§4a–§4d).
+
+```ts
+declare function fopen(path: string, mode: string): CPtr | null;
+declare function fclose(p: CPtr): i32;
+declare function fgetc(p: CPtr): i32;
+
+class File {
+  readonly file: CPtr | null;
+  constructor(path: string) {
+    this.file = fopen(path, "r");
+  }
+  read(): i32 {
+    const p = this.file;
+    if (p === null) {
+      return -1;
+    }
+    return fgetc(p);
+  }
+  [Symbol.dispose](): void {
+    const p = this.file;
+    if (p !== null) {
+      fclose(p);
+    }
+  }
+}
+
+const first = (f: File): i32 => f.read();
+```
+
+**`using` of a handle class is not lowered yet.** The class, its methods and
+every function that borrows one are checked, and `using f = new File(p)` is
+`` `using` of handle class `File` is not lowered yet: until a release emits its
+close, hold the `CPtr` in a local and close it yourself `` (NL2573,
+`reject_ffi_handle_using`) until the compiler emits the close at every exit of
+the block. Until then, a program holds the `CPtr` in a local and calls the
+close itself, as the declared-function examples above do; what the rules
+below fix is the shape a program will open a `File` with.
+
+- **The class.** Exactly one `CPtr` or `CPtr | null` field, `readonly` and with
+  no initialiser (`reject_ffi_handle_two_fields`, `_field_mutable`,
+  `_field_initialiser`). No type parameters, no `implements`, no `export`
+  (`_generic_class`, `_implements`, `_export`), and no `static readonly json`
+  (`_json`).
+- **The write.** The constructor writes the field once, as
+  `this.file = g(...)` at its top level, with `g` a `declare function` and no
+  exit before it (`_field_copy`, `_field_copy_twice`, `_field_copy_branch`,
+  `_field_copy_non_foreign`).
+- **The read.** The pointer is read only as `this.file` inside a method of the
+  class, passed straight to a `declare function` or bound once to a `const`
+  (`_field_read_outside`, `_field_other_instance`, `_field_alias_copy`,
+  `_field_alias_let`, `_field_position`): `` The pointer `file` of handle class
+  `File` cannot be used here ``.
+- **The close.** `[Symbol.dispose](): void` is `close(this.file);` or
+  `const p = this.file; if (p !== null) { close(p); }` for a `declare
+  function` `close` of one parameter (`_no_dispose`, `_dispose_body`,
+  `_dispose_arity`, `_dispose_arg_type`, `_dispose_unknown`, `_dispose_forms`,
+  `_dispose_shapes`). A class declares one, with no modifier
+  (`_dispose_twice`, `_dispose_static`). Nothing else may
+  call that close on the field, in a method or in the constructor
+  (`_close_call`), and `[Symbol.dispose]` is never called by name
+  (`_dispose_call`).
+- **Where a `File` may be.** It is opened by `using` (once lowered), called
+  (`f.read()`), or lent to a parameter of type `File`, which may lend it on.
+  Everything else is `` A `File` cannot be used here `` (`_position`): `new`
+  outside a `using` initialiser, `this` leaving the constructor, a copy into
+  another binding, an array element, an object literal, a capture, a builtin's
+  argument, a comparison (`_new_outside_using`, `_this_escapes`, `_alias`,
+  `_array`, `_object_literal`, `_closure_capture`, `_builtin_arg`,
+  `_walk_compare`).
+- **Where `File` may be written.** Only as the type of such a parameter. A
+  local's annotation, a field, a return, a `Result` arm, a nullable, a type
+  argument and an exported function's parameter are `` `File` is a handle
+  class, and its name may be written only as the type of a parameter that
+  borrows one `` (`_type_position`, `_field`, `_return`, `_result`,
+  `_nullable`, `_type_argument`, `_exported_param`).
+
+**Two things stay C contracts, as a buffer's count does.** The class's methods
+pass the field only to functions that use it and return, and that neither close
+what it owns nor hand it back: `freopen`, a close through a C wrapper with
+another name, `close(fileno(p))`, or a C function returning its argument are
+not seen by the rules above. And the constructor's foreign call returns a
+pointer the object owns: two objects built from one shared pointer would both
+close it.
 
 #### What a declaration cannot say
 
@@ -9613,11 +9704,12 @@ by the caller.
     byte and the unit differ);
   - it **bounds a loop**: either operand of a comparison in a `while`, `do`
     or `for` condition, unless the other operand also holds an offset or is
-    the loop's *cursor* into a string — a local the loop uses as a string's
-    index or hands to a string's method, alone or in arithmetic — which
-    counts in the string's own unit (`for (let i = 0; i < s.length; i++)`
-    over `s.charCodeAt(i)` is quiet, and so is a bound that moves the cursor
-    by a constant to look ahead, `i + 1 < s.length`);
+    the loop's *cursor* into the string it counted — a local the loop hands
+    to that string's method, alone or in arithmetic — which counts in the
+    string's own unit (`for (let i = 0; i < s.length; i++)` over
+    `s.charCodeAt(i)` is quiet, and so is a bound that moves the cursor by a
+    constant to look ahead, `i + 1 < s.length`; the same loop over
+    `other.charCodeAt(i)` alone is reported);
   - it is **a data-parallel body's answer**: stored in the array
     `parallelMap`, `parallelMapInto` or `parallelFrom` fills, or folded by
     `parallelReduce` (with its identity) into the value the call answers,
@@ -9639,7 +9731,11 @@ by the caller.
   method of a generic class or a function of another module, at a parameter
   the callee never reads, or one it reads only inside an arrow it passes on,
   and at the answer of a `spawn` body, whose task is not followed into the
-  value its scope hands back (`tests/link/port_utf8_offset_walk_limits`).
+  value its scope hands back. A recursive helper that answers its parameter
+  is still reported at the call that prints its answer. Once an offset has
+  crossed into another function, the string it counted is out of reach, so a
+  loop it bounds there takes any string's method as its cursor
+  (`tests/link/port_utf8_offset_walk_limits`).
 
   One `+ k` on the offset an `indexOf` (with or without a start) or
   `lastIndexOf` of a provably ASCII needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a
@@ -9775,6 +9871,43 @@ by the caller.
   compiles `runtime.c` with `-g` and skips the strip step of every profile
   (`tests/cases/dbg_locals`; the `-g` block of `tests/run.js` checks the
   linked binary's line table with `llvm-dwarfdump`).
+
+### Writing the program out as TypeScript
+
+- **`--emit-ts <dir>` writes the checked program back out as TypeScript**
+  that Node runs with its type stripping ([wp33](wp33-round-trip.md) §3),
+  one file per module, and emits no IR (`src/emit-ts.ts`). Each module of the
+  root package keeps its path relative to the directory they all share; each
+  standard-library module the program reaches is written under `nish/` beside
+  them (`std/pair.ts` as `nish/pair.ts`); a dependency package's module is not
+  written. Last comes `entry.ts`, which imports `nish/runtime/node`, calls
+  `main` and exits with what it answered. Imports are rewritten to match: a
+  `nish:` specifier becomes `nish/runtime`, the one package the output names,
+  except `nish:secret`, which has source and becomes `./nish/secret.ts`;
+  a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
+  imported name that is only a type (an interface, a generic interface, an
+  alias) is written `type X`, because Node's type stripping does not know
+  which names are types. A module that needs none of that is written byte for
+  byte (`tests/emit-ts/identity/`; the layout is `tests/emit-ts/layout/`).
+- **The flag turns `--warn-portability` on**: those warnings name the sites
+  where the TypeScript reading answers differently.
+- **Two kinds of module are refused, and then nothing is written** (exit 1):
+  one that declares C functions, whose bodies are not in the program
+  (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
+  or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
+  its global name, whose translation is not local to its statement (NL4011,
+  `reject_emit_ts_net`, `reject_emit_ts_net_global`, `reject_emit_ts_signal`).
+  Every refusal in the program is reported before it exits.
+- **It answers in place of the other outputs.** `--link`, `--emit-ast`,
+  `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/
+  `--emit-napi-async` sidecars are refused beside it with exit 2, and so is
+  `-o`, once the program is known to be writable. `--emit-ts` without a
+  directory is exit 2 as well, and so is a program that cannot be laid out
+  under one directory: a module above the directory of the others, or two
+  modules (or one and `entry.ts`) that would be written to one path, and so
+  is a directory where a file it would write is one of the program's own
+  modules (`--emit-ts .` beside the sources), checked before anything is
+  written.
 
 ### Panic sites
 

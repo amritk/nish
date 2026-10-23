@@ -1,0 +1,1 @@
+`null` is not a File; declare the type as `File | null`

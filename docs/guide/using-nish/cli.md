@@ -95,6 +95,70 @@ The sidecars that let C, Node and WebAssembly call your code —
 `--emit-header`, `--emit-napi`, `--emit-dts` — have a page of their own:
 [Calling Nish from other languages](interop.md).
 
+## Writing TypeScript: `--emit-ts`
+
+`nish app.ts --emit-ts out/` writes your program back out as TypeScript that
+Node runs, one file per module, and no IR:
+
+```sh
+nish app.ts --emit-ts out/
+node --experimental-strip-types out/entry.ts
+```
+
+The output imports its runtime from the `nish` package, as `nish/runtime`, so
+Node has to find `nish` from `out/`, the way it finds any dependency. A program
+that uses `using` also needs `--js-explicit-resource-management`.
+
+Inside `out/`:
+
+- **Your modules** keep their paths relative to the directory they share:
+  `app.ts` and `lib/tally.ts` are written as `out/app.ts` and
+  `out/lib/tally.ts`.
+- **Each standard-library module** your program imports is written under
+  `nish/`, so `nish/pair` becomes `out/nish/pair.ts`.
+- **`entry.ts`** runs your `main` and exits with the number it returns.
+
+Imports are rewritten so Node can follow them. A `nish:` builtin becomes
+`nish/runtime`, the one package the output imports, except `nish:secret`,
+which is written like a standard-library module, as `nish/secret.ts`. A `nish/x` or relative
+import becomes a relative path ending in `.ts`. An imported interface or type
+alias is marked `import { type Pair }`. A module that needs none of this is
+written unchanged, byte for byte.
+
+The flag also turns on `--warn-portability`. Those warnings name the places
+where your program can answer differently under Node.
+
+Two kinds of module cannot be written. In either case `nish` exits 1 and
+writes no file:
+
+```text
+app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
+app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
+```
+
+The second is reported at each `nish:net` import and at each call to a
+`nish:net` function, `signalFd` or `readSignal`, imported or not.
+
+Not every builtin has a runtime export yet. The `nish:unsafe` functions
+(`uncheckedGet`, `wrappingAdd`, `readCString` and the rest) are written as
+imports from `nish/runtime` that Node cannot resolve, so a program that uses
+them does not run under Node yet.
+
+`--emit-ts` writes a directory instead of IR, so it exits 2 if you also
+pass `-o`, `--link`, `--emit-ast`, `--emit-checked`, `--emit-header`,
+`--emit-dts`, `--emit-napi` or `--emit-napi-async`, or give it an empty
+directory. It also exits 2 when a
+module lies above the directory of the others (`../shared/s.ts`), or when two
+modules would land on one file — a module of your own at `nish/pair.ts` and
+the standard library's `nish/pair`, say. And it exits 2, before writing
+anything, when a file it would write is one of your own sources: `--emit-ts .`
+next to `app.ts` would write over it, so give it a directory of its own.
+
+`--emit-panics`, `--emit-arena` and `--emit-capabilities` still write their
+files alongside `--emit-ts`, and they are written before the TypeScript, so
+they are there even when the program is refused or its modules cannot be laid
+out.
+
 ## Reading diagnostics
 
 An error prints with its position and an excerpt, and the compile exits 1:

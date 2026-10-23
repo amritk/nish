@@ -897,6 +897,15 @@ export class StructInfo {
    * the fields are collected and writes what it says into each field.
    */
   jsonOptions: Node | null
+  /**
+   * WP40 §4a. A class with one `CPtr` field is an owned foreign handle: the
+   * field is the C resource it owns, its `[Symbol.dispose]` closes it, and
+   * `src/handles.ts` keeps every value of the class where that close is the only
+   * one. Set in `declareStruct`, before a field is collected.
+   */
+  handle: boolean
+  /** The handle's `CPtr` field, or `""` for any other struct. */
+  handleField: string
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
@@ -922,6 +931,8 @@ export class StructInfo {
     this.jsonOptions = null
     this.jsonNumber = false
     this.atomic = false
+    this.handle = false
+    this.handleField = ""
   }
 
   /** The field called `name` on this struct, or `null`. */

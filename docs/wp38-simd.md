@@ -8,6 +8,13 @@ function, `indexOfAny` (#519), are built. No way of moving `std/json` onto it
 was reliably faster than S0 on `bench/json`, and none came near 1.5x, so
 `std/json` is unchanged (§2.3); whether to design S1b, the block classifier,
 is the owner's call (§7).
+A second kernel shares S1's file, path store and `NISH_SIMD` pin:
+`nish_regex_scan` finds where a `nish/regex` match can start, testing up to
+three positions of a pattern's leading byte sets for thirty-two starts at
+once on AVX2, a nibble lookup in each of the 32-byte forms, and simd128 or
+NEON at sixteen. `std/regex.ts`'s walker `regexScanFrom` is recognised as
+`indexOfAny`'s is ([IR_COOKBOOK](IR_COOKBOOK.md#nishregex-a-matchs-first-byte-on-the-runtime-kernel));
+`tests/simd/regex-scan.c` holds every path to a reference loop.
 S2's `--cpu` flag is built (`d835d40`): S0's figures missed its bar, and a
 re-measurement against the noise met it (§7); the owner decided to build it.
 What reading every level costs the constant-time checkers was measured: the
