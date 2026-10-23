@@ -7627,8 +7627,8 @@ if (!only || "std_json_tokenizer".includes(only)) {
 // gives a BigInt) breaks it there and nowhere natively. `node.ts` tokenizes a
 // small ASCII input under the plain prelude, through the parseFloat path,
 // `numberI64` at the i64 edges, `numberU64` at the u64 edges, an escaped
-// surrogate pair's decoded bytes and `keyEquals` both ways, and prints the
-// lines the native build prints.
+// surrogate pair's decoded bytes, `keyEquals` both ways and `isIntegral` out
+// to an exponent past any `i32`, and prints the lines the native build prints.
 if (!only || "std_json_tokenizer".includes(only)) {
   const entry = path.join(linkDir, "std_json_tokenizer", "node.ts")
   const want = [
@@ -7636,6 +7636,7 @@ if (!only || "std_json_tokenizer".includes(only)) {
     "3 7:-9223372036854776000/-9223372036854775808 7:9223372036854776000+9223372036854775808 7:0/0 4 0@-1",
     "3 7:1/1+1 -1@3",
     "3 7:18446744073709552000+18446744073709551615 7:18446744073709552000 7:10000000000000000000+10000000000000000000 7:10000000000000000000+9999999999999999999 7:0/0+0 4 0@-1",
+    "isIntegral 1 1 0 0 1 1 1 0 0",
     "",
   ].join("\n")
   const run = runUnderPrelude(entry, [])
@@ -8306,8 +8307,9 @@ if (!only || "std_json_value".includes(only)) {
   }
   // `nish/json-value` has to load under Node, as every `std/` module does:
   // `node.ts` calls every public method of `JsonDocument` once on ASCII text,
-  // `u64` at its edge and past it, a handle kept across a same-size refill and
-  // `maxValues`, and both runs must print these lines.
+  // `u64` at its edge and past it, `isIntegral` out to an exponent past any
+  // `i32`, a handle kept across a same-size refill and `maxValues`, and both
+  // runs must print these lines.
   const entry = path.join(linkDir, "std_json_value", "node.ts")
   const want = [
     "parseText true kind 6 length 9 keyAt a",
@@ -8320,6 +8322,7 @@ if (!only || "std_json_value".includes(only)) {
     "parse true [7] error -3@6",
     "duplicates -30@7",
     'last {"a":2,"b":0}',
+    "isIntegral 1 0 1 1 0 0 isI64 false",
     'stale 0 0 "" fresh two',
     "maxValues -34@3 1",
     "set 0 0 0",
