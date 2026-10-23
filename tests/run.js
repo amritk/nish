@@ -6065,8 +6065,10 @@ if (DEALT_SECTIONS.selfHosting.selected && SHARD === sectionShard("selfHosting")
     // The `--help` contract: a request that succeeded goes to stdout with
     // exit 0, a refusal to stderr with exit 2. It is the shape that is pinned
     // here; the WP12 block pins the text.
-    const ourHelp = spawnSync(compiler, ["--help"], { cwd: root, encoding: "utf8" })
-    const ourRefusal = spawnSync(compiler, [], { cwd: root, encoding: "utf8" })
+    // Plain and a person's, whatever colour or agent the runner's shell says.
+    const plainHelpEnv = { ...process.env, NO_COLOR: "1", NISH_AGENT: "0" }
+    const ourHelp = spawnSync(compiler, ["--help"], { cwd: root, encoding: "utf8", env: plainHelpEnv })
+    const ourRefusal = spawnSync(compiler, [], { cwd: root, encoding: "utf8", env: plainHelpEnv })
     check(
       "the self-hosted compiler: --help answers on stdout with exit 0, and a usage error on stderr with exit 2",
       ourHelp.status === 0 &&

@@ -214,9 +214,8 @@ const usageRow = (style: Style, first: boolean, shape: string, description: stri
  * it. `--help` prints it on stdout and a bare `nish` on stderr, each styled
  * for its own stream; with colour off the two are the same bytes. `guide`,
  * when it is not empty, is where the rules card is, and adds the section for
- * an agent (`agentDriven`).
- * `tests/run.js` checks the width and that every flag `tests/nish/cli.ts`
- * advertises is in it.
+ * an agent (`agentDriven`). `tests/run.js` checks its width and its own list
+ * of flags; `tests/nish/cli.ts` checks the flags it advertises.
  */
 export const helpText = (style: Style, guide: string): string => {
   const lines: string[] = []
@@ -238,7 +237,7 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(helpRow(style, "--cpu", "x86-64-v3", "allow AVX2; such a binary needs it to start"))
   lines.push(helpRow(style, "--target", "<triple>|host", "stamp the IR with a target's data layout"))
   lines.push(helpRow(style, "-g", "", "DWARF debug info, for gdb and lldb"))
-  lines.push(helpRow(style, "--threads", "", "a thread-safe arena, as nish/threads needs"))
+  lines.push(helpRow(style, "--threads", "", "an arena per thread, as nish/threads needs"))
 
   lines.push("")
   lines.push(style.heading("Check"))
