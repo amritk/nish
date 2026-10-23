@@ -185,7 +185,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
-| `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore | 1,280 (`RUNTIME_TERM_TEXT_BUDGET`) | 1,047 (2026-10-23) |
+| `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore | 1,280 (`RUNTIME_TERM_TEXT_BUDGET`) | 1,254 (2026-10-23) |
 
 **How the ceilings moved.**
 
@@ -218,7 +218,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-20 | a map element's rewind keeps the chunk its body grew (threads-followups): `runtime-cross.c` 1,444 / 1,513 → 1,552 / 1,631, all of it `nish_cross_keep` (262 → 370) with `nish_rewind` inlined. A mark at the end of a full chunk had every element's body `malloc` a 64 KB chunk and the release `free` it; the newest 64 KB chunk is now kept, emptied, in front of the mark's. 1M short strings at one thread 72.8 → 54.9 ms, inside the loop's band; the file's other functions are the join's and the guard's, unchanged | cross 1,664 / 1,664 |
 | 2026-10-20 | WP34 N12's `spawn`, `kill`, `waitPid`, `availableParallelism` and `totalMemory`: `runtime-os.c` 1,530 → 2,383. The four process and memory builtins are 276 bytes (`nish_spawn_start` split from `spawnSync` +31, `nish_spawn_child` 9, `nish_kill` 53, `nish_wait_pid` 134, `nish_total_memory` 49); the other 577 is the CPU count's reading (sysconf, affinity, cgroup, `NISH_NUM_THREADS`), moved from `runtime-parallel.c` so that `availableParallelism` works without `--threads`. `runtime-parallel.c` threaded 3,097 → 2,522; the two files together grew by 278 | os 2,560, parallel threads 2,560 |
 | 2026-10-23 | `nish_fatal_exit`: the panics' `_exit(1)` behind one noreturn call that runs `nish_fatal_hook` first, so raw mode is restored after a failed check: core 3,684 → 3,698, threads 3,885 → 3,899. Calling the hook from `nish_panic_claim` instead measured 3,752 / 3,900, because every call site kept more registers live across it. It stays in the core rather than a unit of its own because `runtime.c` links alone and its panics call it; defined in `runtime-term.c` the core measured 3,675, but a lone `runtime.c` no longer linked | core 3,698, threads 3,899 |
-| 2026-10-23 | `runtime-term.c` (1,047), `nish:term` | term 1,280 |
+| 2026-10-23 | `runtime-term.c` (1,254), `nish:term` | term 1,280 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same

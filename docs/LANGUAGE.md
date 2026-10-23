@@ -7693,12 +7693,16 @@ took SIGTERM or SIGINT through `signalFd` keeps it, and puts the terminal back
 itself, or by returning. SIGKILL leaves raw mode behind, and so does a stack
 overflow on a thread other than the one that called `setRawMode(true)`; `stty
 sane` undoes either. SIGTSTP, Ctrl-Z, is caught the same way when it is at its
-default, because a shell keeps no stopped job's terminal state (bash does not):
-the handler restores the terminal, stops the program, and once `fg` or `bg`
-continues it puts the handler back and enters raw mode again, so `term_pty` sees
-the terminal as it was while the program is stopped and raw after `fg`. A
-program continued in the background stops again, by SIGTTOU, until `fg`. A stop
-by SIGSTOP, which no program can catch, leaves the terminal raw at the shell.
+default, because no shell can be counted on to: bash puts its own termios back
+while a job is stopped but does not give the job its raw mode back on `fg`, and
+a shell without that bookkeeping puts back nothing. The handler restores the
+terminal, stops the program, and once `fg` or `bg` continues it puts the handler
+back and enters raw mode again, unless another thread called `setRawMode`
+meanwhile, so the terminal is as it was while the program is stopped and raw
+after `fg`. A program continued in the background stops again, by SIGTTOU,
+until `fg`. A blocking call the stop interrupts goes on (`SA_RESTART`), as it
+does under the default stop. A stop by SIGSTOP, which no program can catch,
+leaves the terminal raw at a shell that puts nothing back.
 Job control also stops a program started in the background
 (`app &`) when it calls `setRawMode(true)`, by SIGTTOU, as it stops any program
 that sets the terminal, and the program enters raw mode on `fg`. Two threads that call `setRawMode` at

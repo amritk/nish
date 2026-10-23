@@ -337,8 +337,9 @@ int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) { return nish_
    a write fails (docs/security/runtime.md, RT-11). A failure still ends the
    output, `EAGAIN` on a non-blocking stdout included, since spinning on it
    would burn a core. `EINTR` is retried, the newline's included: the only
-   handler this runtime installs (runtime-host.c) has `SA_RESTART`, but a C
-   host may install one without it. `panic`'s message, `expect`'s, and the
+   handlers this runtime installs that return (runtime-host.c's and
+   runtime-term.c's SIGTSTP) have `SA_RESTART`, but a C host may install one
+   without it. `panic`'s message, `expect`'s, and the
    arithmetic and out-of-memory panics (`nish_die`) are written here. The
    index and slice panics and the file and entropy failures use `dprintf`, and
    runtime-parallel.c's out of memory one `write`: neither retries `EINTR`. */

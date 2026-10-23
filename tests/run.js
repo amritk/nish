@@ -1574,8 +1574,9 @@ if (!only || "term".includes(only)) {
   // background job of a non-interactive shell otherwise reads `/dev/null`. A
   // third runs in the foreground under job control (`set -m`) and is stopped
   // by SIGTSTP, Ctrl-Z's signal, from a background helper: the terminal is as
-  // it was while it is stopped, because the shell puts back nothing, and raw
-  // again once `fg` continues it.
+  // it was while it is stopped, because the shell puts back nothing, still so
+  // once `bg` continues it, because it stops again by SIGTTOU entering raw
+  // mode from the background, and raw again once `fg` continues it.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
@@ -1612,6 +1613,9 @@ if (!only || "term".includes(only)) {
         '  echo "$(icanon)" > "$D/stop.out"; kill -TSTP "$(cat "$D/hold.pid")" ) &',
         'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" hold > "$2/hold.out"\' sh "$E" "$D"',
         'echo "stopped $? stty $(same) was $(cat "$D/stop.out")"',
+        "bg > /dev/null",
+        'i=0; while [ $i -lt 50 ]; do jobs > "$D/jobs"; grep -q Stopped "$D/jobs" && break; sleep 0.1; i=$((i + 1)); done',
+        'echo "background $(grep -c Stopped "$D/jobs") stty $(same) $(icanon)"',
         '( i=0; while [ $i -lt 50 ] && [ "$(icanon)" != -icanon ]; do sleep 0.1; i=$((i + 1)); done',
         '  echo "$(icanon)" > "$D/cont.out"; kill -TERM "$(cat "$D/hold.pid")" ) &',
         "fg > /dev/null",
@@ -1646,10 +1650,11 @@ if (!only || "term".includes(only)) {
         "hold 143 stty same said raw 0 ready ",
         "fault 139 stty same",
         `stopped ${128 + os.constants.signals.SIGTSTP} stty same was -icanon`,
+        "background 1 stty same icanon",
         "continued 143 stty same was -icanon",
       ]
       check(
-        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, after which `fg` gives raw mode back",
+        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back",
         want.every((line) => lines.includes(line)),
         `want every line of ${JSON.stringify(want)}\n${shown(r)}`
       )
