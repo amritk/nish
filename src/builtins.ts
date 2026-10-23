@@ -546,6 +546,22 @@ const checkConsole = (
   return T_VOID
 }
 
+/**
+ * One operand of `Math.imul`: an `i32` or a `u32`, for `Math.clz32`'s reason.
+ * A function of its own, not a loop over the operands, so the type name it
+ * builds for a diagnostic is not an allocation the loop keeps.
+ */
+const checkImulOperand = (ctx: CheckContext, arg: Node, scope: Scope): void => {
+  const got = checkExpression(ctx, arg, scope, T_I32)
+  const base = got === T_ERROR ? T_ERROR : ctx.table.baseOf(got)
+  if (base !== T_ERROR && base !== T_I32 && base !== T_U32) {
+    ctx.error(
+      arg,
+      `\`Math.imul\` expects an i32 or a u32, got ${ctx.table.typeName(got)} (convert with toI32 or toU32)`
+    )
+  }
+}
+
 const checkMath = (
   ctx: CheckContext,
   call: Node,
@@ -631,16 +647,8 @@ const checkMath = (
   // give, so the wrapping `mul` is JavaScript's answer.
   if (member === "imul") {
     if (checkBuiltinArity(ctx, call, name, args, 2)) {
-      for (const arg of args.children) {
-        const got = checkExpression(ctx, arg, scope, T_I32)
-        const base = got === T_ERROR ? T_ERROR : ctx.table.baseOf(got)
-        if (base !== T_ERROR && base !== T_I32 && base !== T_U32) {
-          ctx.error(
-            arg,
-            `\`Math.imul\` expects an i32 or a u32, got ${ctx.table.typeName(got)} (convert with toI32 or toU32)`
-          )
-        }
-      }
+      checkImulOperand(ctx, args.children[0], scope)
+      checkImulOperand(ctx, args.children[1], scope)
     }
     return T_I32
   }

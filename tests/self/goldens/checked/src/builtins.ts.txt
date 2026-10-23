@@ -299,15 +299,29 @@ function checkConsole(ctx: CheckContext, call: Node, args: Node, name: string, m
   callee +7:5 CheckContext.error -> @CheckContext.error
   callee +9:62 TypeTable.typeName -> @TypeTable.typeName
   callee +12:3 requireStatementPosition -> @requireStatementPosition
+function checkImulOperand(ctx: CheckContext, arg: Node, scope: Scope): void -> @checkImulOperand
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via checkExpression
+  calls: CheckContext.error TypeTable.baseOf TypeTable.typeName checkExpression nish_str_concat
+  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
+  pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
+  pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
+  stackSites=0 stackLocals=0
+  local +0:9 got: i32 (const)
+  callee +0:15 checkExpression -> @checkExpression
+  local +1:9 base: i32 (const)
+  callee +1:44 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +3:5 CheckContext.error -> @CheckContext.error
+  callee +5:53 TypeTable.typeName -> @TypeTable.typeName
 function checkMath(ctx: CheckContext, call: Node, args: Node, name: string, member: string, scope: Scope): i32 -> @checkMath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
   escaping: member name
-  calls: CheckContext.error CheckContext.errorType CheckContext.numberType TypeTable.baseOf TypeTable.rangedOf TypeTable.typeName checkBuiltinArity checkExpression isF64Binary isF64Unary isNumeric nish_panic_index nish_str_concat nish_str_eq requireF64 unknownBuiltin
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkBuiltinArity#0 requireF64#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 checkExpression#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 unknownBuiltin#0
+  calls: CheckContext.error CheckContext.errorType CheckContext.numberType TypeTable.baseOf TypeTable.rangedOf TypeTable.typeName checkBuiltinArity checkExpression checkImulOperand isF64Binary isF64Unary isNumeric nish_panic_index nish_str_concat nish_str_eq requireF64 unknownBuiltin
+  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkBuiltinArity#0 requireF64#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 checkExpression#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkImulOperand#0 checkImulOperand#0 checkBuiltinArity#0 unknownBuiltin#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 CheckContext.errorType#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3
-  pointer scope: size=56 writesThrough=true captured=true passedTo=requireF64#3 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2
+  pointer scope: size=56 writesThrough=true captured=true passedTo=requireF64#3 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkImulOperand#2 checkImulOperand#2
   stackSites=0 stackLocals=0
   callee +0:7 isF64Unary -> @isF64Unary
   callee +0:29 isF64Binary -> @isF64Binary
@@ -351,15 +365,10 @@ function checkMath(ctx: CheckContext, call: Node, args: Node, name: string, memb
   callee +65:7 CheckContext.error -> @CheckContext.error
   callee +67:56 TypeTable.typeName -> @TypeTable.typeName
   callee +76:9 checkBuiltinArity -> @checkBuiltinArity
-  local +77:18 arg: Node (const)
-  local +78:15 got: i32 (const)
-  callee +78:21 checkExpression -> @checkExpression
-  local +79:15 base: i32 (const)
-  callee +79:50 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +81:11 CheckContext.error -> @CheckContext.error
-  callee +83:59 TypeTable.typeName -> @TypeTable.typeName
-  callee +91:5 checkBuiltinArity -> @checkBuiltinArity
-  callee +94:10 unknownBuiltin -> @unknownBuiltin
+  callee +77:7 checkImulOperand -> @checkImulOperand
+  callee +78:7 checkImulOperand -> @checkImulOperand
+  callee +83:5 checkBuiltinArity -> @checkBuiltinArity
+  callee +86:10 unknownBuiltin -> @unknownBuiltin
 function requireF64(ctx: CheckContext, name: string, arg: Node, scope: Scope): void -> @requireF64
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
