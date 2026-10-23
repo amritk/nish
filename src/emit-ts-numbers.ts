@@ -30,7 +30,11 @@
 //   or the core's shifts.
 // - Integer `/` and `%` at every width are `idiv(a, b)` and `irem(a, b)`.
 // - f32 `+ - * / %` and a float literal at f32 are rounded with `Math.fround`.
-// - `x op= e`, `++` and `--` are the same operation assigned back.
+// - `x op= e`, `++` and `--` are the same operation assigned back. That
+//   reads the target twice, so a target whose index holds a call, a step or
+//   an element read is refused (NL4012).
+// - An i64 or u64 string index, or offset of an array's `fill`,
+//   goes through `Number`.
 // - The conversions whose source or target is unsigned or f32 go through
 //   `convert(x, from, to)`; `Math.min`, `Math.max`, `Math.round` and
 //   `Math.abs` through the core where Math answers differently.
@@ -295,8 +299,8 @@ const repeatable = (node: Node): boolean => {
 }
 
 /**
- * Whether an index reads the same twice: names, literals and the arithmetic
- * of them. Its only effect is a panic, and the first copy panics before the
+ * Whether an index reads the same twice: names, their fields, literals and
+ * the arithmetic of them. Its only effect is a panic, and the first copy panics before the
  * second runs.
  */
 const pure = (node: Node): boolean => {
@@ -305,6 +309,11 @@ const pure = (node: Node): boolean => {
   }
   if (node.kind === N_PAREN) {
     return pure(node.children[0])
+  }
+  if (node.kind === N_MEMBER && node.children.length === 1) {
+    // A field, never a getter, of a name: `seen.length`.
+    const receiver = node.children[0]
+    return receiver.kind === N_THIS || receiver.kind === N_IDENT
   }
   if (node.kind === N_UNARY) {
     return node.text !== "++" && node.text !== "--" && pure(node.children[0])
@@ -315,14 +324,26 @@ const pure = (node: Node): boolean => {
   return false
 }
 
+/**
+ * Whether `text`, a row's rewrite of the repeatable `target`, is still that
+ * target: an element whose index changed, or a property of such an element.
+ * Only an index is rewritten below a target, so the property name ends it.
+ */
+const rewrittenTarget = (target: Node, text: string): boolean => {
+  if (target.kind === N_INDEX) {
+    return true
+  }
+  return target.kind === N_MEMBER && text.endsWith(`.${target.text}`)
+}
+
+/** The message the refusal of a compound assignment over an impure target carries; `src/codes.ts` keys its code on it. */
+const COMPOUND_REFUSAL: string =
+  "--emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const"
+
 const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const op = node.text
   if (isCompound(op)) {
     const target = node.children[0]
-    // An element target may have had its index rewritten; the rest is repeated as written.
-    if (!repeatable(target) || (operands.changed[0] && target.kind !== N_INDEX)) {
-      return null
-    }
     const name = operands.at(0)
     const own = typeOf(walk, node)
     const value = operation(
@@ -333,7 +354,16 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
       name,
       operands.at(1)
     )
-    return value === null ? null : `${name} = ${value}`
+    if (value === null) {
+      return null
+    }
+    // Written `x = x op e`, the target is read twice: refused where the second
+    // read could differ, or a row's rewrite of it may no longer be a target.
+    if (!repeatable(target) || (operands.changed[0] && !rewrittenTarget(target, name))) {
+      walk.refuse(node, COMPOUND_REFUSAL)
+      return null
+    }
+    return `${name} = ${value}`
   }
   return operation(walk, node, op, typeOf(walk, node), operands.at(0), operands.at(1))
 }
@@ -416,6 +446,19 @@ const unaryRow = (walk: Walk, node: Node, operands: Operands): string | null => 
 }
 
 /** Unary `~` or `-` of `x` at the integer `type`, or null where JavaScript's answer is native's. */
+/** Whether a numeric literal spells zero, in any base: `0`, `0x0`, `0b00`, `0n`. */
+const zeroLiteral = (text: string): boolean => {
+  const prefixed = text.length > 2 && text.startsWith("0") && "xXbBoO".indexOf(text.substring(1, 2)) >= 0
+  const digits = prefixed ? text.substring(2, text.length) : text
+  let zero = true
+  for (let i = 0; i < digits.length; i++) {
+    const c = digits.charCodeAt(i)
+    // `0`, `_` and the `n` of a bigint.
+    zero = zero && (c === 48 || c === 95 || c === 110)
+  }
+  return zero
+}
+
 const negation = (walk: Walk, node: Node, type: i32, x: string): string | null => {
   const op = node.text
   if (!isInteger(type)) {
@@ -436,7 +479,7 @@ const negation = (walk: Walk, node: Node, type: i32, x: string): string | null =
   const literal = node.children[0].kind === N_NUMBER || node.children[0].kind === N_BIGINT
   if (signed && literal) {
     // `-0` is a negative zero in JavaScript and the integer zero natively.
-    return node.children[0].text === "0" ? zero : null
+    return zeroLiteral(node.children[0].text) ? zero : null
   }
   if (signed && !unchecked(walk, node)) {
     return helper(walk, "checkedNeg", x)
@@ -523,7 +566,10 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
     callee.children.length === 1 &&
     typeOf(walk, callee.children[0]) === T_STRING
   ) {
-    return stringIndices(walk, node, operands)
+    return indexArguments(walk, node, operands, 0)
+  }
+  if (callee.kind === N_MEMBER && callee.children.length === 1 && arrayOffsets(walk, node)) {
+    return indexArguments(walk, node, operands, 1)
   }
   if (callee.kind !== N_MEMBER || callee.children.length !== 1 || callee.children[0].kind !== N_IDENT) {
     return null
@@ -563,24 +609,35 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
 }
 
 /**
- * A string method given an i64 or u64 index, which JavaScript's string
- * methods refuse as a `bigint`: each such argument goes through `Number`,
- * whose rounding past 2^53 lands where the method's clamp does anyway.
- * Arguments another row rewrote are left alone.
+ * Whether `node` is an array's `fill(v, from, to)`, whose offsets may be an
+ * i64 or u64; a function of the program named so has a callee. An array's
+ * `set` takes one too, but Node's arrays have no `set` to call.
  */
-const stringIndices = (walk: Walk, node: Node, operands: Operands): string | null => {
+const arrayOffsets = (walk: Walk, node: Node): boolean =>
+  node.children[0].text === "fill" && walk.program.nodeCallees[node.id] === null
+
+/**
+ * A string method given an i64 or u64 index, or an array's `fill` given one as
+ * an offset, which JavaScript refuses as a `bigint`: each such argument from
+ * the `first` on goes through `Number`, whose rounding past 2^53 lands where
+ * the method's clamp does anyway. When another row rewrote an argument, the
+ * list's text no longer splits into arguments, so the runtime's `offsets`
+ * converts them instead.
+ */
+const indexArguments = (walk: Walk, node: Node, operands: Operands, first: i32): string | null => {
   const args = node.children[1]
-  if (operands.changed[1]) {
-    return null
-  }
   let wrapped = false
-  for (const arg of args.children) {
-    wrapped = wrapped || isBig(typeOf(walk, arg))
+  for (let i = first; i < args.children.length; i++) {
+    wrapped = wrapped || isBig(typeOf(walk, args.children[i]))
   }
   if (!wrapped) {
     return null
   }
-  return `${operands.at(0)}${between(walk, node.children[0].end, args.start)}${wrappedFrom(walk, args, 0, args.start, node.end)}`
+  if (operands.changed[1]) {
+    walk.useHelper("offsets")
+    return `${operands.at(0)}${between(walk, node.children[0].end, args.start)}...offsets(${first}, [${operands.at(1)}])${between(walk, args.end, node.end)}`
+  }
+  return `${operands.at(0)}${between(walk, node.children[0].end, args.start)}${wrappedFrom(walk, args, first, args.start, node.end)}`
 }
 
 /**

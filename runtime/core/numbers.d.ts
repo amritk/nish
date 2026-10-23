@@ -51,3 +51,4 @@ export declare function convert(x: number | bigint, from: NumericKind, to: Numer
 export declare function parseInt(s: string): i32;
 export declare function parseFloat(s: string): f64;
 export declare function number(x: string | number | bigint | boolean): f64;
+export declare function offsets<T extends unknown[]>(first: number, args: T): T;

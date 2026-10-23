@@ -314,3 +314,11 @@ export function number(x) {
   if (m) return literalValue(m);
   return BLANK.test(x) ? 0 : NaN;
 }
+
+/** A method's arguments with each `bigint` from the `first` on made a number: the offsets and indices `--emit-ts` cannot wrap one by one. */
+export function offsets(first, args) {
+  for (let i = first; i < args.length; i++) {
+    if (typeof args[i] === "bigint") args[i] = Number(args[i]);
+  }
+  return args;
+}
