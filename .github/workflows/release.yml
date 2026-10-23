@@ -37,7 +37,8 @@
 # same seed ci.yml's `bootstrap` job builds with (WP19 G3).
 #
 # The `npm` job at the end publishes the packages the release attached, by
-# npm's trusted publishing; see it and docs/wp12-release.md.
+# npm's trusted publishing; see it and docs/wp12-release.md. The `interop`
+# job beside it runs interop.yml with the compiler the release published.
 #
 # Two ways in, because one of them does not work unattended. A tag pushed by a
 # workflow using the default GITHUB_TOKEN raises no `push` event -- that is
@@ -594,6 +595,22 @@ jobs:
             --title "nish $GITHUB_REF_NAME" \
             --notes-file build/release/notes.md \
             --verify-tag
+
+  # Interop (interop.yml) on the tag, with this release's own compiler as the
+  # seed of the server image. install.sh fetches it from the release's assets
+  # and verifies it against SHA256SUMS, which `release` is what attaches, so
+  # this needs `release`. Beside `npm`, not in front of it: a live third-party
+  # peer is a check on the network stack, not on the bytes being published, and
+  # a peer's flake after the publish is fixed by re-running this job alone --
+  # the release itself is not wrong (docs/wp12-release.md).
+  interop:
+    name: interop
+    needs: [release]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/interop.yml
+    with:
+      seed: ${{ github.ref_name }}
 
   # The registry half of the release: the N+1 packages `release` just attached,
   # published by npm's trusted publishing. Each package trusts this workflow
