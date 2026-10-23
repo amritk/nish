@@ -42,7 +42,7 @@
 // since a statement opening with `(` would call the line before it when that
 // line has no semicolon.
 
-import { Operands, Walk } from "./emit-ts-edits";
+import { Operands, Walk } from "./emit-ts-edits"
 import {
   FLAG_POSTFIX,
   N_BINARY,
@@ -60,144 +60,126 @@ import {
   N_VAR_DECL,
   N_UNARY,
   Node,
-} from "./nodes";
-import {
-  T_F32,
-  T_F64,
-  T_I32,
-  T_I64,
-  T_STRING,
-  T_U16,
-  T_U32,
-  T_U64,
-  T_U8,
-  isInteger,
-} from "./types";
+} from "./nodes"
+import { T_F32, T_F64, T_I32, T_I64, T_STRING, T_U16, T_U32, T_U64, T_U8, isInteger } from "./types"
 
 /** The numbers row's rewrite of `node`, or `null` to leave it to the next row. */
-export const numbersRow = (
-  walk: Walk,
-  node: Node,
-  operands: Operands,
-): string | null => {
-  const kind = node.kind;
+export const numbersRow = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const kind = node.kind
   if (kind === N_NUMBER) {
-    return wideLiteral(walk, node);
+    return wideLiteral(walk, node)
   }
   if (kind === N_BINARY) {
-    return binaryRow(walk, node, operands);
+    return binaryRow(walk, node, operands)
   }
   if (kind === N_UNARY) {
-    return unaryRow(walk, node, operands);
+    return unaryRow(walk, node, operands)
   }
   if (kind === N_CALL) {
-    return callRow(walk, node, operands);
+    return callRow(walk, node, operands)
   }
   if (kind === N_EXPR_STMT) {
-    return statementRow(walk, node, operands);
+    return statementRow(walk, node, operands)
   }
   if (kind === N_VAR_DECL) {
-    return typedConstant(walk, node, operands);
+    return typedConstant(walk, node, operands)
   }
   if (kind === N_NEW) {
-    return arrayLength(walk, node, operands);
+    return arrayLength(walk, node, operands)
   }
-  return null;
-};
+  return null
+}
 
 /** The width's name as the core's `convert` spells it, or "" for a type this row leaves alone. */
 const kindName = (type: i32): string => {
   if (type === T_I32) {
-    return "i32";
+    return "i32"
   }
   if (type === T_I64) {
-    return "i64";
+    return "i64"
   }
   if (type === T_U8) {
-    return "u8";
+    return "u8"
   }
   if (type === T_U16) {
-    return "u16";
+    return "u16"
   }
   if (type === T_U32) {
-    return "u32";
+    return "u32"
   }
   if (type === T_U64) {
-    return "u64";
+    return "u64"
   }
   if (type === T_F32) {
-    return "f32";
+    return "f32"
   }
-  return type === T_F64 ? "f64" : "";
-};
+  return type === T_F64 ? "f64" : ""
+}
 
-const isBig = (type: i32): boolean => type === T_I64 || type === T_U64;
+const isBig = (type: i32): boolean => type === T_I64 || type === T_U64
 
 /** `node`'s type in the checked program, or -1 when the node has none recorded. */
 const typeOf = (walk: Walk, node: Node): i32 => {
-  const types = walk.program.nodeTypes;
-  return node.id >= 0 && node.id < types.length ? types[node.id] : -1;
-};
+  const types = walk.program.nodeTypes
+  return node.id >= 0 && node.id < types.length ? types[node.id] : -1
+}
 
 /** Whether the operation at `site` may skip its overflow check: proven, or `--wrapping`. */
 const unchecked = (walk: Walk, site: Node): boolean => {
-  const proven = walk.program.nodeProvenNoOverflow;
-  return (
-    walk.program.wrapping ||
-    (site.id >= 0 && site.id < proven.length && proven[site.id])
-  );
-};
+  const proven = walk.program.nodeProvenNoOverflow
+  return walk.program.wrapping || (site.id >= 0 && site.id < proven.length && proven[site.id])
+}
 
 /** `expr` wrapped into the integer width `type`. */
 const wrapTo = (type: i32, expr: string): string => {
   if (type === T_I32) {
-    return `((${expr}) | 0)`;
+    return `((${expr}) | 0)`
   }
   if (type === T_U32) {
-    return `((${expr}) >>> 0)`;
+    return `((${expr}) >>> 0)`
   }
   if (type === T_U8) {
-    return `((${expr}) & 0xff)`;
+    return `((${expr}) & 0xff)`
   }
   if (type === T_U16) {
-    return `((${expr}) & 0xffff)`;
+    return `((${expr}) & 0xffff)`
   }
   if (type === T_I64) {
-    return `BigInt.asIntN(64, ${expr})`;
+    return `BigInt.asIntN(64, ${expr})`
   }
-  return `BigInt.asUintN(64, ${expr})`;
-};
+  return `BigInt.asUintN(64, ${expr})`
+}
 
 /** A helper call, importing the helper. */
 const helper = (walk: Walk, name: string, args: string): string => {
-  walk.useHelper(name);
-  return `${name}(${args})`;
-};
+  walk.useHelper(name)
+  return `${name}(${args})`
+}
 
 /** An integer literal at i64 or u64 is a `bigint`. */
 const wideLiteral = (walk: Walk, node: Node): string | null => {
-  const type = typeOf(walk, node);
+  const type = typeOf(walk, node)
   if (isBig(type)) {
-    return bigLiteral(node.text);
+    return bigLiteral(node.text)
   }
   // A float literal at f32 is the nearest float; a short integer is one already.
-  const exact = node.text.length <= 7 && !hasFraction(node.text);
-  return type === T_F32 && !exact ? `Math.fround(${node.text})` : null;
-};
+  const exact = node.text.length <= 7 && !hasFraction(node.text)
+  return type === T_F32 && !exact ? `Math.fround(${node.text})` : null
+}
 
 /** Whether a decimal literal has a fraction or an exponent. */
 const hasFraction = (text: string): boolean =>
   !text.startsWith("0x") &&
   !text.startsWith("0X") &&
-  (text.indexOf(".") >= 0 || text.indexOf("e") >= 0 || text.indexOf("E") >= 0);
+  (text.indexOf(".") >= 0 || text.indexOf("e") >= 0 || text.indexOf("E") >= 0)
 
 /** A number literal's text as a `bigint` literal. */
 const bigLiteral = (text: string): string => {
   if (hasFraction(text)) {
-    return `BigInt(${text})`;
+    return `BigInt(${text})`
   }
-  return `${text}n`;
-};
+  return `${text}n`
+}
 
 /**
  * A module constant with an integer annotation: the checker folds its
@@ -206,84 +188,69 @@ const bigLiteral = (text: string): string => {
  * A literal of an i64 or u64 constant is a `bigint`. An initializer holding
  * anything but literals, names, parentheses and arithmetic is left alone.
  */
-const typedConstant = (
-  walk: Walk,
-  node: Node,
-  operands: Operands,
-): string | null => {
+const typedConstant = (walk: Walk, node: Node, operands: Operands): string | null => {
   if (node.children.length !== 3 || operands.changed[2]) {
-    return null;
+    return null
   }
-  const annotation = node.children[1];
-  const init = node.children[2];
-  const type =
-    annotation.kind === N_TYPE_REF ? spelledType(annotation.text) : -1;
+  const annotation = node.children[1]
+  const init = node.children[2]
+  const type = annotation.kind === N_TYPE_REF ? spelledType(annotation.text) : -1
   if (type < 0 || typeOf(walk, init) >= 0) {
-    return null;
+    return null
   }
-  const value = foldedText(walk, init, type);
+  const value = foldedText(walk, init, type)
   if (value === null || value === between(walk, init.start, init.end)) {
-    return null;
+    return null
   }
-  return `${operands.at(0)}${between(walk, node.children[0].end, init.start)}${value}${between(walk, init.end, node.end)}`;
-};
+  return `${operands.at(0)}${between(walk, node.children[0].end, init.start)}${value}${between(walk, init.end, node.end)}`
+}
 
 /** The integer type a type name spells, or -1. */
 const spelledType = (name: string): i32 => {
-  const types = [T_I32, T_I64, T_U8, T_U16, T_U32, T_U64];
+  const types = [T_I32, T_I64, T_U8, T_U16, T_U32, T_U64]
   for (const type of types) {
     if (kindName(type) === name) {
-      return type;
+      return type
     }
   }
-  return -1;
-};
+  return -1
+}
 
 /** `node`, a folded initializer, written at `type`; null for a node this does not write. */
 const foldedText = (walk: Walk, node: Node, type: i32): string | null => {
   if (node.kind === N_NUMBER) {
-    return isBig(type) ? bigLiteral(node.text) : node.text;
+    return isBig(type) ? bigLiteral(node.text) : node.text
   }
   if (node.kind === N_IDENT) {
-    return node.text;
+    return node.text
   }
   if (node.kind === N_PAREN && node.children.length === 1) {
-    const inner = foldedText(walk, node.children[0], type);
+    const inner = foldedText(walk, node.children[0], type)
     return inner === null
       ? null
-      : `${between(walk, node.start, node.children[0].start)}${inner}${between(walk, node.children[0].end, node.end)}`;
+      : `${between(walk, node.start, node.children[0].start)}${inner}${between(walk, node.children[0].end, node.end)}`
   }
-  if (
-    node.kind === N_UNARY &&
-    node.children.length === 1 &&
-    (node.text === "-" || node.text === "~")
-  ) {
-    const x = foldedText(walk, node.children[0], type);
+  if (node.kind === N_UNARY && node.children.length === 1 && (node.text === "-" || node.text === "~")) {
+    const x = foldedText(walk, node.children[0], type)
     if (x === null) {
-      return null;
+      return null
     }
-    const negated = negation(walk, node, type, x);
-    return negated === null ? `${node.text}${x}` : negated;
+    const negated = negation(walk, node, type, x)
+    return negated === null ? `${node.text}${x}` : negated
   }
-  if (
-    node.kind === N_BINARY &&
-    node.children.length === 2 &&
-    !isCompound(node.text)
-  ) {
-    const left = node.children[0];
-    const right = node.children[1];
-    const a = foldedText(walk, left, type);
-    const b = foldedText(walk, right, type);
+  if (node.kind === N_BINARY && node.children.length === 2 && !isCompound(node.text)) {
+    const left = node.children[0]
+    const right = node.children[1]
+    const a = foldedText(walk, left, type)
+    const b = foldedText(walk, right, type)
     if (a === null || b === null) {
-      return null;
+      return null
     }
-    const written = operation(walk, node, node.text, type, a, b);
-    return written === null
-      ? `${a}${between(walk, left.end, right.start)}${b}`
-      : written;
+    const written = operation(walk, node, node.text, type, a, b)
+    return written === null ? `${a}${between(walk, left.end, right.start)}${b}` : written
   }
-  return null;
-};
+  return null
+}
 
 /** Whether `op` is a compound assignment (`+=`, `>>>=`, ...), not a comparison or `=`. */
 const isCompound = (op: string): boolean =>
@@ -294,7 +261,7 @@ const isCompound = (op: string): boolean =>
   op !== "===" &&
   op !== "!==" &&
   op !== "<=" &&
-  op !== ">=";
+  op !== ">="
 
 /**
  * Whether a target can be read and then assigned again by repeating its text:
@@ -303,198 +270,145 @@ const isCompound = (op: string): boolean =>
  */
 const repeatable = (node: Node): boolean => {
   if (node.kind === N_IDENT) {
-    return true;
+    return true
   }
   if (node.kind === N_MEMBER && node.children.length === 1) {
-    const receiver = node.children[0];
-    return receiver.kind === N_THIS || repeatable(receiver);
+    const receiver = node.children[0]
+    return receiver.kind === N_THIS || repeatable(receiver)
   }
   if (node.kind === N_INDEX && node.children.length === 2) {
-    const index = node.children[1];
-    return (
-      repeatable(node.children[0]) &&
-      (index.kind === N_IDENT || index.kind === N_NUMBER)
-    );
+    const index = node.children[1]
+    return repeatable(node.children[0]) && (index.kind === N_IDENT || index.kind === N_NUMBER)
   }
-  return false;
-};
+  return false
+}
 
-const binaryRow = (
-  walk: Walk,
-  node: Node,
-  operands: Operands,
-): string | null => {
-  const op = node.text;
+const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const op = node.text
   if (isCompound(op)) {
-    const target = node.children[0];
+    const target = node.children[0]
     if (operands.changed[0] || !repeatable(target)) {
-      return null;
+      return null
     }
-    const name = operands.at(0);
+    const name = operands.at(0)
     const value = operation(
       walk,
       node,
       op.substring(0, op.length - 1),
       typeOf(walk, node) >= 0 ? typeOf(walk, node) : typeOf(walk, target),
       name,
-      operands.at(1),
-    );
-    return value === null ? null : `${name} = ${value}`;
+      operands.at(1)
+    )
+    return value === null ? null : `${name} = ${value}`
   }
-  return operation(
-    walk,
-    node,
-    op,
-    typeOf(walk, node),
-    operands.at(0),
-    operands.at(1),
-  );
-};
+  return operation(walk, node, op, typeOf(walk, node), operands.at(0), operands.at(1))
+}
 
 /**
  * `a op b` at `type`, or `null` when JavaScript's operator already answers
  * what the native one does. `site` is the node the compiler keyed its overflow
  * proof to: the operation, the compound assignment or the `++`.
  */
-const operation = (
-  walk: Walk,
-  site: Node,
-  op: string,
-  type: i32,
-  a: string,
-  b: string,
-): string | null => {
+const operation = (walk: Walk, site: Node, op: string, type: i32, a: string, b: string): string | null => {
   if (type === T_F32) {
     return op === "+" || op === "-" || op === "*" || op === "/" || op === "%"
       ? `Math.fround(${a} ${op} ${b})`
-      : null;
+      : null
   }
   if (!isInteger(type)) {
-    return null;
+    return null
   }
   if (op === "/") {
-    return helper(walk, "idiv", `${a}, ${b}`);
+    return helper(walk, "idiv", `${a}, ${b}`)
   }
   if (op === "%") {
-    return helper(walk, "irem", `${a}, ${b}`);
+    return helper(walk, "irem", `${a}, ${b}`)
   }
   if (op === "+" || op === "-" || op === "*") {
-    return arithmetic(walk, site, op, type, a, b);
+    return arithmetic(walk, site, op, type, a, b)
   }
   if (op === "<<" || op === ">>" || op === ">>>") {
-    return shift(walk, op, type, a, b);
+    return shift(walk, op, type, a, b)
   }
   if ((op === "&" || op === "|" || op === "^") && type === T_U32) {
-    return wrapTo(type, `${a} ${op} ${b}`);
+    return wrapTo(type, `${a} ${op} ${b}`)
   }
-  return null;
-};
+  return null
+}
 
-const arithmetic = (
-  walk: Walk,
-  site: Node,
-  op: string,
-  type: i32,
-  a: string,
-  b: string,
-): string => {
-  const signed = type === T_I32 || type === T_I64;
+/** The helper suffix of `+ - *`: `Add`, `Sub` or `Mul`. */
+const opName = (op: string): string => {
+  if (op === "+") {
+    return "Add"
+  }
+  return op === "-" ? "Sub" : "Mul"
+}
+
+const arithmetic = (walk: Walk, site: Node, op: string, type: i32, a: string, b: string): string => {
+  const signed = type === T_I32 || type === T_I64
   if (signed && !unchecked(walk, site)) {
-    return helper(
-      walk,
-      op === "+" ? "checkedAdd" : op === "-" ? "checkedSub" : "checkedMul",
-      `${a}, ${b}`,
-    );
+    return helper(walk, `checked${opName(op)}`, `${a}, ${b}`)
   }
   if (op === "*" && (type === T_I32 || type === T_U32)) {
-    return type === T_I32
-      ? `Math.imul(${a}, ${b})`
-      : `(Math.imul(${a}, ${b}) >>> 0)`;
+    return type === T_I32 ? `Math.imul(${a}, ${b})` : `(Math.imul(${a}, ${b}) >>> 0)`
   }
-  return wrapTo(type, `${a} ${op} ${b}`);
-};
+  return wrapTo(type, `${a} ${op} ${b}`)
+}
 
-const shift = (
-  walk: Walk,
-  op: string,
-  type: i32,
-  a: string,
-  b: string,
-): string | null => {
+const shift = (walk: Walk, op: string, type: i32, a: string, b: string): string | null => {
   if (type === T_I32) {
-    return op === ">>>" ? `((${a} >>> ${b}) | 0)` : null;
+    return op === ">>>" ? `((${a} >>> ${b}) | 0)` : null
   }
   if (type === T_U32) {
-    return op === "<<" ? `((${a} << ${b}) >>> 0)` : `(${a} >>> ${b})`;
+    return op === "<<" ? `((${a} << ${b}) >>> 0)` : `(${a} >>> ${b})`
   }
   if (type === T_U8 || type === T_U16) {
-    const count = `(${b} & ${type === T_U8 ? "7" : "15"})`;
-    return op === "<<"
-      ? wrapTo(type, `${a} << ${count}`)
-      : `(${a} >>> ${count})`;
+    const count = `(${b} & ${type === T_U8 ? "7" : "15"})`
+    return op === "<<" ? wrapTo(type, `${a} << ${count}`) : `(${a} >>> ${count})`
   }
-  if (type === T_I64) {
-    return helper(
-      walk,
-      op === "<<" ? "shlI64" : op === ">>" ? "ashrI64" : "lshrI64",
-      `${a}, ${b}`,
-    );
+  const name = op === "<<" ? "shl" : "lshr"
+  if (type === T_I64 && op === ">>") {
+    return helper(walk, "ashrI64", `${a}, ${b}`)
   }
-  return helper(walk, op === "<<" ? "shlU64" : "lshrU64", `${a}, ${b}`);
-};
+  return helper(walk, `${name}${type === T_I64 ? "I64" : "U64"}`, `${a}, ${b}`)
+}
 
-const unaryRow = (
-  walk: Walk,
-  node: Node,
-  operands: Operands,
-): string | null => {
-  const op = node.text;
+const unaryRow = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const op = node.text
   if (op === "++" || op === "--") {
-    return stepped(
-      walk,
-      node,
-      operands,
-      (node.flags & FLAG_POSTFIX) !== 0,
-      false,
-    );
+    return stepped(walk, node, operands, (node.flags & FLAG_POSTFIX) !== 0, false)
   }
-  return negation(walk, node, typeOf(walk, node), operands.at(0));
-};
+  return negation(walk, node, typeOf(walk, node), operands.at(0))
+}
 
 /** Unary `~` or `-` of `x` at the integer `type`, or null where JavaScript's answer is native's. */
-const negation = (
-  walk: Walk,
-  node: Node,
-  type: i32,
-  x: string,
-): string | null => {
-  const op = node.text;
+const negation = (walk: Walk, node: Node, type: i32, x: string): string | null => {
+  const op = node.text
   if (!isInteger(type)) {
-    return null;
+    return null
   }
   if (op === "~") {
     if (type === T_U8 || type === T_U16 || type === T_U32 || type === T_U64) {
-      return wrapTo(type, `~${x}`);
+      return wrapTo(type, `~${x}`)
     }
-    return null;
+    return null
   }
   if (op !== "-") {
-    return null;
+    return null
   }
-  const zero = isBig(type) ? "0n" : "0";
-  const signed = type === T_I32 || type === T_I64;
+  const zero = isBig(type) ? "0n" : "0"
+  const signed = type === T_I32 || type === T_I64
   // A negative literal is the constant itself, never a negation that can overflow.
-  const literal =
-    node.children[0].kind === N_NUMBER || node.children[0].kind === N_BIGINT;
+  const literal = node.children[0].kind === N_NUMBER || node.children[0].kind === N_BIGINT
   if (signed && literal) {
     // `-0` is a negative zero in JavaScript and the integer zero natively.
-    return node.children[0].text === "0" ? "0" : null;
+    return node.children[0].text === "0" ? "0" : null
   }
   if (signed && !unchecked(walk, node)) {
-    return helper(walk, "checkedNeg", x);
+    return helper(walk, "checkedNeg", x)
   }
-  return wrapTo(type, `${zero} - ${x}`);
-};
+  return wrapTo(type, `${zero} - ${x}`)
+}
 
 /**
  * `++x`, `x++`, `--x` and `x--` on an integer or f32 local: the step assigned
@@ -507,35 +421,35 @@ const stepped = (
   node: Node,
   operands: Operands,
   postfix: boolean,
-  bare: boolean,
+  bare: boolean
 ): string | null => {
-  const type = typeOf(walk, node.children[0]);
+  const type = typeOf(walk, node.children[0])
   if (type === T_F32 && postfix) {
-    return null;
+    return null
   }
   if (!isInteger(type) && type !== T_F32) {
-    return null;
+    return null
   }
-  const signed = type === T_I32 || type === T_I64;
+  const signed = type === T_I32 || type === T_I64
   if (signed && !walk.program.wrapping && unchecked(walk, node)) {
-    return null;
+    return null
   }
-  const name = operands.at(0);
-  const one = isBig(type) ? "1n" : "1";
-  const up = node.text === "++";
-  const value = operation(walk, node, up ? "+" : "-", type, name, one);
+  const name = operands.at(0)
+  const one = isBig(type) ? "1n" : "1"
+  const up = node.text === "++"
+  const value = operation(walk, node, up ? "+" : "-", type, name, one)
   if (value === null) {
-    return null;
+    return null
   }
   if (bare) {
-    return `${name} = ${value}`;
+    return `${name} = ${value}`
   }
-  const assigned = `(${name} = ${value})`;
+  const assigned = `(${name} = ${value})`
   if (!postfix) {
-    return assigned;
+    return assigned
   }
-  return wrapTo(type, `${assigned} ${up ? "-" : "+"} ${one}`);
-};
+  return wrapTo(type, `${assigned} ${up ? "-" : "+"} ${one}`)
+}
 
 /**
  * An expression statement that is only a step: its value is unused, so it is
@@ -543,31 +457,26 @@ const stepped = (
  * value back, and a statement that opened with `(` would be read as a call
  * on the line before it when that line has no semicolon.
  */
-const statementRow = (
-  walk: Walk,
-  node: Node,
-  operands: Operands,
-): string | null => {
-  const expr = node.children[0];
+const statementRow = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const expr = node.children[0]
   if (!operands.changed[0] || expr.kind !== N_UNARY) {
-    return null;
+    return null
   }
   if (expr.text !== "++" && expr.text !== "--") {
-    return null;
+    return null
   }
-  const inner = new Operands(expr, walk.source.text);
-  inner.texts.push("");
-  inner.changed.push(false);
-  const step = stepped(walk, expr, inner, false, true);
+  const inner = new Operands(expr, walk.source.text)
+  inner.texts.push("")
+  inner.changed.push(false)
+  const step = stepped(walk, expr, inner, false, true)
   if (step === null) {
-    return null;
+    return null
   }
-  return `${between(walk, node.start, expr.start)}${step}${between(walk, expr.end, node.end)}`;
-};
+  return `${between(walk, node.start, expr.start)}${step}${between(walk, expr.end, node.end)}`
+}
 
 /** The source between two offsets. */
-const between = (walk: Walk, from: i32, to: i32): string =>
-  walk.source.text.substring(from, to);
+const between = (walk: Walk, from: i32, to: i32): string => walk.source.text.substring(from, to)
 
 /**
  * A call this row rewrites: a conversion builtin whose source or target the
@@ -576,64 +485,58 @@ const between = (walk: Walk, from: i32, to: i32): string =>
  */
 const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   if (node.children.length !== 2) {
-    return null;
+    return null
   }
-  const callee = node.children[0];
-  const args = node.children[1];
+  const callee = node.children[0]
+  const args = node.children[1]
   if (callee.kind === N_IDENT && walk.program.nodeCallees[node.id] === null) {
     const name =
-      walk.program.nodeBuiltins[node.id].length > 0
-        ? walk.program.nodeBuiltins[node.id]
-        : callee.text;
-    return conversion(walk, name, args, operands);
+      walk.program.nodeBuiltins[node.id].length > 0 ? walk.program.nodeBuiltins[node.id] : callee.text
+    return conversion(walk, name, args, operands)
   }
   if (
     callee.kind === N_MEMBER &&
     callee.children.length === 1 &&
     typeOf(walk, callee.children[0]) === T_STRING
   ) {
-    return stringIndices(walk, node, operands);
+    return stringIndices(walk, node, operands)
   }
-  if (
-    callee.kind !== N_MEMBER ||
-    callee.children.length !== 1 ||
-    callee.children[0].kind !== N_IDENT
-  ) {
-    return null;
+  if (callee.kind !== N_MEMBER || callee.children.length !== 1 || callee.children[0].kind !== N_IDENT) {
+    return null
   }
   if (callee.children[0].text === "console") {
-    return printed(walk, node, operands);
+    return printed(walk, node, operands)
   }
   if (callee.children[0].text !== "Math") {
-    return null;
+    return null
   }
-  const type = typeOf(walk, node);
-  const method = callee.text;
-  let replacement = "";
+  const type = typeOf(walk, node)
+  const method = callee.text
+  let replacement = ""
   if (method === "min" || method === "max") {
     if (type === T_I64) {
-      replacement = method === "min" ? "minI64" : "maxI64";
+      replacement = method === "min" ? "minI64" : "maxI64"
     } else if (type === T_U64) {
-      replacement = method === "min" ? "minU64" : "maxU64";
+      replacement = method === "min" ? "minU64" : "maxU64"
     } else if (type === T_F32 || type === T_F64) {
-      replacement = method === "min" ? "minF64" : "maxF64";
+      replacement = method === "min" ? "minF64" : "maxF64"
     }
   } else if (method === "round" && (type === T_F32 || type === T_F64)) {
-    replacement = "roundF64";
+    replacement = "roundF64"
   } else if (method === "abs") {
     if (type === T_I64) {
-      replacement = "absI64";
+      replacement = "absI64"
     } else if (type === T_I32) {
       // `llvm.abs` with poison off: the minimum is its own absolute value.
-      return `(${operands.at(0)}${between(walk, callee.end, args.start)}${operands.at(1)}${between(walk, args.end, node.end)} | 0)`;
+      return `(${operands.at(0)}${between(walk, callee.end, args.start)}${operands.at(1)}${between(walk, args.end, node.end)} | 0)`
     }
   }
   if (replacement.length === 0) {
-    return null;
+    return null
   }
-  walk.useHelper(replacement);
-  return `${replacement}${between(walk, callee.end, args.start)}${operands.at(1)}${between(walk, args.end, node.end)}`;
-};
+  walk.useHelper(replacement)
+  return `${replacement}${between(walk, callee.end, args.start)}${operands.at(1)}${between(walk, args.end, node.end)}`
+}
 
 /**
  * A string method given an i64 or u64 index, which JavaScript's string
@@ -641,48 +544,36 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
  * whose rounding past 2^53 lands where the method's clamp does anyway.
  * Arguments another row rewrote are left alone.
  */
-const stringIndices = (
-  walk: Walk,
-  node: Node,
-  operands: Operands,
-): string | null => {
-  const args = node.children[1];
+const stringIndices = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const args = node.children[1]
   if (operands.changed[1]) {
-    return null;
+    return null
   }
-  let text = "";
-  let from = args.start;
-  let wrapped = false;
+  let text = ""
+  let from = args.start
+  let wrapped = false
   for (const arg of args.children) {
     if (isBig(typeOf(walk, arg))) {
-      text = `${text}${between(walk, from, arg.start)}Number(${between(walk, arg.start, arg.end)})`;
-      from = arg.end;
-      wrapped = true;
+      text = `${text}${between(walk, from, arg.start)}Number(${between(walk, arg.start, arg.end)})`
+      from = arg.end
+      wrapped = true
     }
   }
   if (!wrapped) {
-    return null;
+    return null
   }
-  return `${operands.at(0)}${between(walk, node.children[0].end, args.start)}${text}${between(walk, from, node.end)}`;
-};
+  return `${operands.at(0)}${between(walk, node.children[0].end, args.start)}${text}${between(walk, from, node.end)}`
+}
 
 /**
  * `new Array<T>(n)` at an i64 or u64 length, which JavaScript would take as a
  * one-element array holding the `bigint`: the length goes through `Number`.
  */
-const arrayLength = (
-  walk: Walk,
-  node: Node,
-  operands: Operands,
-): string | null => {
-  if (
-    node.children.length !== 3 ||
-    node.children[0].kind !== N_IDENT ||
-    node.children[0].text !== "Array"
-  ) {
-    return null;
+const arrayLength = (walk: Walk, node: Node, operands: Operands): string | null => {
+  if (node.children.length !== 3 || node.children[0].kind !== N_IDENT || node.children[0].text !== "Array") {
+    return null
   }
-  const args = node.children[2];
+  const args = node.children[2]
   if (
     operands.changed[0] ||
     operands.changed[1] ||
@@ -690,11 +581,11 @@ const arrayLength = (
     args.children.length !== 1 ||
     !isBig(typeOf(walk, args.children[0]))
   ) {
-    return null;
+    return null
   }
-  const length = args.children[0];
-  return `${between(walk, node.start, length.start)}Number(${between(walk, length.start, length.end)})${between(walk, length.end, node.end)}`;
-};
+  const length = args.children[0]
+  return `${between(walk, node.start, length.start)}Number(${between(walk, length.start, length.end)})${between(walk, length.end, node.end)}`
+}
 
 /**
  * `console.log(x)` and `console.error(x)` of an i64, u64 or float, whose
@@ -702,75 +593,63 @@ const arrayLength = (
  * its `n` and a negative zero as `-0`.
  */
 const printed = (walk: Walk, node: Node, operands: Operands): string | null => {
-  const callee = node.children[0];
-  const args = node.children[1];
-  if (
-    (callee.text !== "log" && callee.text !== "error") ||
-    args.children.length !== 1
-  ) {
-    return null;
+  const callee = node.children[0]
+  const args = node.children[1]
+  if ((callee.text !== "log" && callee.text !== "error") || args.children.length !== 1) {
+    return null
   }
-  const type = typeOf(walk, args.children[0]);
+  const type = typeOf(walk, args.children[0])
   if (!isBig(type) && type !== T_F32 && type !== T_F64) {
-    return null;
+    return null
   }
-  return `${operands.at(0)}${between(walk, callee.end, args.start)}String(${operands.at(1)})${between(walk, args.end, node.end)}`;
-};
+  return `${operands.at(0)}${between(walk, callee.end, args.start)}String(${operands.at(1)})${between(walk, args.end, node.end)}`
+}
 
 /** The width a conversion builtin converts to, or "" for another name. */
 const conversionWidth = (name: string): string => {
   if (name === "toI32") {
-    return "i32";
+    return "i32"
   }
   if (name === "toI64") {
-    return "i64";
+    return "i64"
   }
   if (name === "toU8") {
-    return "u8";
+    return "u8"
   }
   if (name === "toU16") {
-    return "u16";
+    return "u16"
   }
   if (name === "toU32") {
-    return "u32";
+    return "u32"
   }
   if (name === "toU64") {
-    return "u64";
+    return "u64"
   }
   if (name === "toF32") {
-    return "f32";
+    return "f32"
   }
-  return name === "toF64" ? "f64" : "";
-};
+  return name === "toF64" ? "f64" : ""
+}
 
 /** Whether the core's own `toI32`, `toI64` and `toF64` read and write `width` exactly. */
-const exactWidth = (width: string): boolean =>
-  width === "i32" || width === "i64" || width === "f64";
+const exactWidth = (width: string): boolean => width === "i32" || width === "i64" || width === "f64"
 
 /**
  * `toU8(x)` and the rest as `convert(x, "from", "to")`, except where the
  * core's own `toI32`, `toI64` or `toF64` is already exact: a signed or float
  * source going to a signed or f64 target.
  */
-const conversion = (
-  walk: Walk,
-  name: string,
-  args: Node,
-  operands: Operands,
-): string | null => {
-  const to = conversionWidth(name);
+const conversion = (walk: Walk, name: string, args: Node, operands: Operands): string | null => {
+  const to = conversionWidth(name)
   if (to.length === 0 || args.children.length !== 1) {
-    return null;
+    return null
   }
-  const from = kindName(typeOf(walk, args.children[0]));
+  const from = kindName(typeOf(walk, args.children[0]))
   if (from.length === 0) {
-    return null;
+    return null
   }
-  if (
-    exactWidth(to) &&
-    (exactWidth(from) || (from === "f32" && to !== "f64"))
-  ) {
-    return null;
+  if (exactWidth(to) && (exactWidth(from) || (from === "f32" && to !== "f64"))) {
+    return null
   }
-  return helper(walk, "convert", `${operands.at(1)}, "${from}", "${to}"`);
-};
+  return helper(walk, "convert", `${operands.at(1)}, "${from}", "${to}"`)
+}
