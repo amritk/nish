@@ -86,16 +86,17 @@ static int nish_term_stop_count(void) {
 /* 1 when stdin is readable within `timeout_ms` (a negative one waits for
    ever), which includes its end and an error, 0 when it is not or a signal
    ends the wait, and the host's `-errno` when the question fails. A Ctrl-Z
-   and `fg` do not end it: no system restarts a `select` after a handler,
-   `SA_RESTART` or not, though Linux does after the default stop, so one the
-   stop interrupted is asked again, for what Linux left of the timeout and
-   Darwin for all of it. Outside WASI this asks `select`, because Darwin's
-   `poll` does not support devices: it answers POLLNVAL for a terminal at
-   once, with no input there. Under WASI a timeout under 10 ms asks for 10:
-   Node's WASI (uvwasi) runs a timer that is due before its first look at the
-   descriptor, and counts it from before it set the look up, so a shorter wait
-   answers "nothing waiting" while bytes are whenever setting up took longer
-   than the wait, as on a busy machine. */
+   and `fg` do not end it once `setRawMode(true)` has caught SIGTSTP: no
+   system restarts a `select` after a handler, `SA_RESTART` or not, so one the
+   handler's stop interrupted is asked again, for what Linux left of the
+   timeout and Darwin for all of it. Before that, Linux restarts it after the
+   default stop and Darwin ends the wait. Outside WASI this asks `select`,
+   because Darwin's `poll` does not support devices: it answers POLLNVAL for a
+   terminal at once, with no input there. Under WASI a timeout under 10 ms
+   asks for 10: Node's WASI (uvwasi) runs a timer that is due before its first
+   look at the descriptor, and counts it from before it set the look up, so a
+   shorter wait answers "nothing waiting" while bytes are there whenever
+   setting up took longer than the wait, as on a busy machine. */
 static int nish_stdin_ready(int32_t timeout_ms) {
 #ifdef __wasi__
   struct pollfd p = {0, POLLIN, 0};
@@ -138,8 +139,8 @@ int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len) {
 
 /* `waitStdin(timeoutMs)`: true once stdin is readable, which includes its end
    and an error, so a read after it answers at once; false when `timeoutMs`
-   passes first, or a signal other than a Ctrl-Z ends the wait early. A
-   negative timeout waits for ever. */
+   passes first, or a signal ends the wait early: not a Ctrl-Z once raw mode
+   has caught SIGTSTP. A negative timeout waits for ever. */
 bool nish_wait_stdin(int32_t timeout_ms) { return nish_stdin_ready(timeout_ms) != 0; }
 
 #ifdef __wasi__
