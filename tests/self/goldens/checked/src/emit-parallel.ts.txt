@@ -3,6 +3,7 @@
 entry: src/emit-parallel.ts src/emit.ts src/emit-secret.ts src/ir.ts src/strings.ts src/map.ts src/runtime.ts src/program.ts src/context.ts src/diagnostics.ts src/codes.ts src/lexer.ts src/tokens.ts src/nodes.ts src/symbols.ts src/types.ts src/ice.ts src/branding.ts src/nish-modules.ts src/packages.ts src/panics.ts src/attributes.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/emit-util.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/declarations.ts src/checker.ts src/expressions.ts src/members.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/statements.ts src/loop-flow.ts src/tbaa.ts src/emit-map.ts src/capabilities.ts src/emit-json.ts src/debug.ts src/target.ts src/visibility.ts
 import Emitter from "./emit" -> struct Emitter
 import LoopTarget from "./emit" -> struct LoopTarget
+import openedHandle from "./handles" -> function @openedHandle
 import isScalarArgument from "./escape" -> function @isScalarArgument
 import loadField from "./emit-classes" -> function @loadField
 import structFieldPointer from "./emit-classes" -> function @structFieldPointer
@@ -62,7 +63,7 @@ function emitParallelRegion(emitter: Emitter, chunk: FunctionSig, types: string[
   sharedWrite: via nish_exit
   escaping: captured
   calls: Emitter.useRuntime IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock IRModule.addFunction beginTransfer chunkTrampoline internalErrorFor nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_from_i32 regionGrain regionKeepSize
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=regionKeepSize#0 beginTransfer#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 chunkTrampoline#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=regionKeepSize#0 beginTransfer#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0 chunkTrampoline#0
   pointer chunk: size=136 writesThrough=false captured=false passedTo=chunkTrampoline#2
   pointer types: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
@@ -137,7 +138,7 @@ function emitParallelRegion(emitter: Emitter, chunk: FunctionSig, types: string[
 function regionKeepSize(emitter: Emitter, caller: FunctionSig): i32 -> @regionKeepSize
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: crossingSize nish_panic_index nish_panic_overflow parallelRoleOf
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=crossingSize#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=crossingSize#0
   pointer caller: size=136 writesThrough=false captured=false passedTo=parallelRoleOf#0
   stackSites=0 stackLocals=0
   local +0:9 role: i32 (const)
@@ -148,7 +149,7 @@ function beginTransfer(emitter: Emitter, fn: IRFunction, list: string): string -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitAlloca
   calls: Emitter.useRuntime IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   pointer fn: size=160 writesThrough=true captured=false passedTo=IRFunction.emitAlloca#0 IRFunction.emitValue#0 IRFunction.emit#0
   stackSites=0 stackLocals=0
   local +0:9 slot: string (const)
@@ -162,7 +163,7 @@ function chunkTrampoline(emitter: Emitter, name: string, chunk: FunctionSig, ctx
   sharedWrite: +0:5
   escaping: name
   calls: Emitter.useRuntime IRFunction.constructor IRFunction.emit IRFunction.emitValue IRModule.attrGroupFor IRParam.constructor beginTransfer nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=beginTransfer#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=beginTransfer#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer chunk: size=136 writesThrough=false captured=false
   pointer fieldTypes: size=0 writesThrough=false captured=false
   stackSites=3 stackLocals=3
@@ -217,7 +218,7 @@ function storeOf(emitter: Emitter, task: FunctionSig): FunctionSig -> @storeOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=136
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat taskStoreOf
-  pointer emitter: size=264 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer task: size=136 writesThrough=false captured=false passedTo=taskStoreOf#0
   stackSites=0 stackLocals=0
   local +0:9 store: FunctionSig | null (const)
@@ -227,7 +228,7 @@ function taskEntryOf(emitter: Emitter, task: FunctionSig): FunctionSig -> @taskE
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=136
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat parallelBodyOf
-  pointer emitter: size=264 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer task: size=136 writesThrough=false captured=false passedTo=parallelBodyOf#0
   stackSites=0 stackLocals=0
   local +0:9 body: FunctionSig | null (const)
@@ -237,7 +238,7 @@ function emitSpawnTask(emitter: Emitter, task: FunctionSig, types: string[], val
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via capturesOf
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRModule.addFunction TaskInputs.constructor arityOf capturesOf countSenders internalErrorFor nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 storeOf storesAnswer taskEntryOf taskFinish taskRun
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=taskEntryOf#0 storeOf#0 Emitter.llvm#0 countSenders#0 Emitter.llvm#0 Emitter.useRuntime#0 taskRun#0 taskFinish#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=taskEntryOf#0 storeOf#0 Emitter.llvm#0 countSenders#0 Emitter.llvm#0 Emitter.useRuntime#0 taskRun#0 taskFinish#0
   pointer task: size=136 writesThrough=true captured=true passedTo=capturesOf#0 storesAnswer#0 arityOf#0 taskEntryOf#1 storeOf#1
   pointer types: size=0 writesThrough=true captured=true passedTo=TaskInputs.constructor#2 taskFinish#4
   pointer values: size=0 writesThrough=false captured=false
@@ -311,7 +312,7 @@ function taskFunction(emitter: Emitter, name: string): IRFunction -> @taskFuncti
   sharedWrite: +0:5
   escaping: name
   calls: IRFunction.constructor IRModule.attrGroupFor IRParam.constructor nish_alloc_struct nish_array_grow
-  pointer emitter: size=264 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local -2:9 attrs: string[] (const)
   local +2:9 params: IRParam[] (const)
@@ -333,7 +334,7 @@ function crossingSize(emitter: Emitter, type: i32): i32 -> @crossingSize
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isArray TypeTable.refOf elementStride isScalarArgument
-  pointer emitter: size=264 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
   callee +4:7 TypeTable.isArray -> @TypeTable.isArray
@@ -346,7 +347,7 @@ function crossOut(emitter: Emitter, fn: IRFunction, type: string, value: string,
   sharedWrite: via IRFunction.emitValue
   escaping: value
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat nish_str_eq nish_str_from_i32
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   pointer fn: size=160 writesThrough=true captured=false passedTo=IRFunction.emitValue#0 IRFunction.emitValue#0 IRFunction.emitValue#0
   stackSites=0 stackLocals=0
   local +0:9 raw: string (const)
@@ -358,7 +359,7 @@ function crossOut(emitter: Emitter, fn: IRFunction, type: string, value: string,
 function elementKeepSize(emitter: Emitter, caller: FunctionSig | null, callee: FunctionSig): i32 -> @elementKeepSize [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: crossingSize nish_panic_index nish_panic_overflow nish_str_eq parallelBodyOf parallelRoleOf
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=crossingSize#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=crossingSize#0
   pointer caller: size=136 writesThrough=false captured=false passedTo=parallelBodyOf#0 parallelRoleOf#0
   pointer callee: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -373,7 +374,7 @@ function keepElement(emitter: Emitter, type: string, value: string, size: i32, m
   sharedWrite: via IRFunction.emitValue
   escaping: value
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat nish_str_eq nish_str_from_i32
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +1:9 raw: string (const)
@@ -387,7 +388,7 @@ function crossIn(emitter: Emitter, fn: IRFunction, type: string, value: string, 
   sharedWrite: via IRFunction.emitValue
   escaping: value
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat nish_str_eq nish_str_from_i32
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   pointer fn: size=160 writesThrough=true captured=false passedTo=IRFunction.emitValue#0 IRFunction.emitValue#0 IRFunction.emitValue#0
   stackSites=0 stackLocals=0
   local +0:9 raw: string (const)
@@ -401,7 +402,7 @@ function taskRun(emitter: Emitter, name: string, spawn: FunctionSig, body: Funct
   sharedWrite: via taskFunction
   escaping: name result
   calls: Emitter.useRuntime IRFunction.emit IRFunction.emitValue countSenders crossOut crossingSize loadPayload nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 taskFunction
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=taskFunction#0 Emitter.useRuntime#0 crossingSize#0 crossOut#0 Emitter.useRuntime#0 Emitter.useRuntime#0 countSenders#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=taskFunction#0 Emitter.useRuntime#0 crossingSize#0 crossOut#0 Emitter.useRuntime#0 Emitter.useRuntime#0 countSenders#0
   pointer spawn: size=136 writesThrough=false captured=false passedTo=countSenders#2
   pointer body: size=136 writesThrough=false captured=false
   pointer inputs: size=24 writesThrough=false captured=false
@@ -442,7 +443,7 @@ function taskFinish(emitter: Emitter, name: string, store: FunctionSig | null, p
   sharedWrite: via taskFunction
   escaping: answer name payloadType result
   calls: IRFunction.emit IRFunction.emitValue crossIn crossingSize loadPayload nish_panic_index nish_str_concat taskFunction
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=taskFunction#0 crossingSize#0 crossIn#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=taskFunction#0 crossingSize#0 crossIn#0
   pointer store: size=136 writesThrough=false captured=false
   pointer types: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -468,8 +469,8 @@ function lockWord(emitter: Emitter, info: StructInfo, name: string): FieldInfo -
   sharedWrite: via nish_exit
   escaping: name
   calls: StructInfo.field internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false
-  pointer info: size=152 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer emitter: size=272 writesThrough=false captured=false
+  pointer info: size=160 writesThrough=false captured=false passedTo=StructInfo.field#0
   stackSites=0 stackLocals=0
   local +0:9 field: FieldInfo | null (const)
   callee +0:17 StructInfo.field -> @StructInfo.field
@@ -478,7 +479,7 @@ function emitLockBody(emitter: Emitter, sig: FunctionSig): void -> @emitLockBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock internalErrorFor loadField lockWord nish_exit nish_str_concat structFieldPointer structInfoOf
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=lockWord#0 structInfoOf#0 loadField#0 structFieldPointer#0 lockWord#0 Emitter.useRuntime#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=lockWord#0 structInfoOf#0 loadField#0 structFieldPointer#0 lockWord#0 Emitter.useRuntime#0 Emitter.llvm#0
   pointer sig: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 mutex: StructInfo | null (const)
@@ -513,7 +514,7 @@ function emitAtomicBody(emitter: Emitter, sig: FunctionSig): void -> @emitAtomic
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.llvm IRFunction.emit IRFunction.emitValue atomicRmwOperation internalErrorFor lockWord nish_exit nish_panic_index nish_str_concat nish_str_eq paramValue structFieldPointer
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=lockWord#0 Emitter.llvm#0 structFieldPointer#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=lockWord#0 Emitter.llvm#0 structFieldPointer#0
   pointer sig: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
@@ -548,45 +549,38 @@ function atomicRmwOperation(name: string): string -> @atomicRmwOperation
   escaping: name
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-function openScope(emitter: Emitter, list: Node): void -> @openScope [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via openOneScope
-  calls: openOneScope
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=openOneScope#0
-  pointer list: size=40 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:14 decl: Node (const)
-  callee +1:5 openOneScope -> @openOneScope
-function openOneScope(emitter: Emitter, decl: Node): void -> @openOneScope
+function openScope(emitter: Emitter, decl: Node): void -> @openScope [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: Emitter.llvm IRFunction.emitValue internalErrorFor isArenaCall isLockCall loadLocal lockWord nish_array_grow nish_exit nish_panic_index nish_str_concat scopeSeals structFieldPointer structInfoOf unwrapParens
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=loadLocal#0 structInfoOf#0 structFieldPointer#0 lockWord#0 Emitter.llvm#0 scopeSeals#0
+  calls: Emitter.llvm IRFunction.emitValue internalErrorFor isArenaCall isLockCall loadLocal lockWord nish_array_grow nish_exit nish_panic_index nish_str_concat openedHandle scopeSeals structFieldPointer structInfoOf unwrapParens
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=loadLocal#0 structInfoOf#0 structFieldPointer#0 lockWord#0 Emitter.llvm#0 scopeSeals#0
   pointer decl: size=40 writesThrough=false captured=false passedTo=scopeSeals#1
   stackSites=0 stackLocals=0
-  local -10:9 local: Local | null (const)
-  callee -8:18 internalErrorFor -> @internalErrorFor
-  local -6:9 value: string (const)
-  callee -6:17 loadLocal -> @loadLocal
-  local -5:9 init: Node (const)
-  callee -5:16 unwrapParens -> @unwrapParens
-  local -4:9 arena: boolean (const)
-  callee -4:17 isArenaCall -> @isArenaCall
-  local -3:9 lock: boolean (const)
-  callee -3:16 isLockCall -> @isLockCall
+  local -11:9 local: Local | null (const)
+  callee -9:18 internalErrorFor -> @internalErrorFor
+  local -7:9 value: string (const)
+  callee -7:17 loadLocal -> @loadLocal
+  local -6:9 init: Node (const)
+  callee -6:16 unwrapParens -> @unwrapParens
+  local -5:9 arena: boolean (const)
+  callee -5:17 isArenaCall -> @isArenaCall
+  local -4:9 lock: boolean (const)
+  callee -4:16 isLockCall -> @isLockCall
+  local -3:9 handle: StructInfo | null (const)
+  callee -3:18 openedHandle -> @openedHandle
   local -1:11 info: StructInfo (const)
   callee -1:18 structInfoOf -> @structInfoOf
   callee +0:29 structFieldPointer -> @structFieldPointer
   callee +0:70 lockWord -> @lockWord
-  callee +3:23 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +3:55 Emitter.llvm -> @Emitter.llvm
-  local +9:9 none: string[] (const)
-  callee +10:54 scopeSeals -> @scopeSeals
+  callee +4:29 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +4:61 Emitter.llvm -> @Emitter.llvm
+  local +10:9 none: string[] (const)
+  callee +11:73 scopeSeals -> @scopeSeals
 function scopeSeals(emitter: Emitter, decl: Node): string[] -> @scopeSeals
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: channelStateIn internalErrorFor loadLocal nish_array_grow nish_exit nish_panic_index
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=channelStateIn#0 loadLocal#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=channelStateIn#0 loadLocal#0
   pointer decl: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 seals: string[] (const)
@@ -596,58 +590,103 @@ function scopeSeals(emitter: Emitter, decl: Node): string[] -> @scopeSeals
   callee +6:24 internalErrorFor -> @internalErrorFor
   callee +8:20 channelStateIn -> @channelStateIn
   callee +8:68 loadLocal -> @loadLocal
-function closeScope(emitter: Emitter, i: i32): void -> @closeScope
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function emitDropped(emitter: Emitter, call: string, result: string): void -> @emitDropped
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emit
-  escaping: i
-  calls: Emitter.useRuntime IRFunction.emit nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
+  escaping: call
+  calls: IRFunction.emit IRFunction.emitValue nish_str_eq
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 IRFunction.emit -> @IRFunction.emit
-  callee +2:5 IRFunction.emit -> @IRFunction.emit
-  callee +2:34 Emitter.useRuntime -> @Emitter.useRuntime
-  local +6:16 state: string (const)
-  callee +7:7 IRFunction.emit -> @IRFunction.emit
-  callee +7:36 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +9:5 IRFunction.emit -> @IRFunction.emit
-  callee +9:34 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +2:5 IRFunction.emitValue -> @IRFunction.emitValue
+function closeHandle(emitter: Emitter, info: StructInfo, object: string): void -> @closeHandle
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_exit
+  escaping: object
+  calls: Emitter.llvm Emitter.llvmAbi IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable emitDropped internalErrorFor loadField lockWord nish_exit nish_panic_index nish_str_concat
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=lockWord#0 loadField#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 emitDropped#0 Emitter.llvm#0 emitDropped#0
+  pointer info: size=160 writesThrough=false captured=false passedTo=lockWord#1 loadField#1
+  stackSites=0 stackLocals=0
+  local +0:9 close: FunctionSig | null (const)
+  callee +2:18 internalErrorFor -> @internalErrorFor
+  local +4:9 field: FieldInfo (const)
+  callee +4:17 lockWord -> @lockWord
+  local +5:9 pointer: string (const)
+  callee +5:19 loadField -> @loadField
+  local +6:9 param: string (const)
+  callee +6:17 Emitter.llvmAbi -> @Emitter.llvmAbi
+  local +7:9 result: string (const)
+  callee +7:18 Emitter.llvmAbi -> @Emitter.llvmAbi
+  local +8:9 call: string (const)
+  callee +9:8 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +10:5 emitDropped -> @emitDropped
+  local +13:9 open: IRBlock (const)
+  callee +13:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +14:9 done: IRBlock (const)
+  callee +14:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +15:9 isNull: string (const)
+  callee +15:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +15:50 Emitter.llvm -> @Emitter.llvm
+  callee +16:3 IRFunction.emit -> @IRFunction.emit
+  callee +17:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +18:3 emitDropped -> @emitDropped
+  callee +19:3 IRFunction.emit -> @IRFunction.emit
+  callee +20:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+function closeScope(emitter: Emitter, i: i32): void -> @closeScope
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via closeHandle
+  escaping: i
+  calls: Emitter.useRuntime IRFunction.emit closeHandle nish_panic_index nish_str_concat
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=closeHandle#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
+  stackSites=0 stackLocals=0
+  local +0:9 handle: StructInfo | null (const)
+  callee +2:5 closeHandle -> @closeHandle
+  callee +4:5 IRFunction.emit -> @IRFunction.emit
+  callee +6:5 IRFunction.emit -> @IRFunction.emit
+  callee +6:34 Emitter.useRuntime -> @Emitter.useRuntime
+  local +10:16 state: string (const)
+  callee +11:7 IRFunction.emit -> @IRFunction.emit
+  callee +11:36 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +13:5 IRFunction.emit -> @IRFunction.emit
+  callee +13:34 Emitter.useRuntime -> @Emitter.useRuntime
 function emitScopeJoins(emitter: Emitter, minLoops: i32, arenas: boolean): void -> @emitScopeJoins [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via closeScope
   calls: closeScope nish_panic_index
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=closeScope#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=closeScope#0
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 later: boolean (const)
-  callee +4:7 closeScope -> @closeScope
+  callee +5:7 closeScope -> @closeScope
 function closeBlockScopes(emitter: Emitter, count: i32): void -> @closeBlockScopes [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: IRBlock.terminated IRFunction.currentBlock closeScope nish_panic_index nish_panic_overflow
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=closeScope#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=closeScope#0
   stackSites=0 stackLocals=0
   callee -8:8 IRBlock.terminated -> @IRBlock.terminated
   callee -8:8 IRFunction.currentBlock -> @IRFunction.currentBlock
   local -7:9 i: i32 (let)
   callee -5:7 closeScope -> @closeScope
-function emitLockReleases(emitter: Emitter): void -> @emitLockReleases [exported]
+function emitHeldReleases(emitter: Emitter): void -> @emitHeldReleases [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via closeScope
   calls: closeScope nish_panic_index
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=closeScope#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=closeScope#0
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   callee +3:7 closeScope -> @closeScope
-function holdsLock(emitter: Emitter): boolean -> @holdsLock [exported]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer emitter: size=264 writesThrough=false captured=false
+function holdsRelease(emitter: Emitter): boolean -> @holdsRelease [exported]
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:14 handle: StructInfo | null (const)
 function channelStateIn(emitter: Emitter, fn: IRFunction, type: i32, receiver: string): string -> @channelStateIn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via structInfoOf
   escaping: type
   calls: IRFunction.emitValue StructInfo.field internalErrorFor nish_exit nish_str_concat nish_str_from_i32 structInfoOf
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=structInfoOf#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=structInfoOf#0
   pointer fn: size=160 writesThrough=true captured=false passedTo=IRFunction.emitValue#0
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo (const)
@@ -662,7 +701,7 @@ function senderStateIn(emitter: Emitter, fn: IRFunction, type: i32, arg: string,
   sharedWrite: via channelStateIn
   escaping: arg path type
   calls: Emitter.llvm IRFunction.emitValue StructInfo.field channelStateIn internalErrorFor nish_exit nish_str_concat nish_str_from_i32 structInfoOf
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=channelStateIn#0 structInfoOf#0 Emitter.llvm#0 channelStateIn#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=channelStateIn#0 structInfoOf#0 Emitter.llvm#0 channelStateIn#0
   pointer fn: size=160 writesThrough=true captured=false passedTo=channelStateIn#1 IRFunction.emitValue#0 IRFunction.emitValue#0 channelStateIn#1
   stackSites=0 stackLocals=0
   callee +0:12 channelStateIn -> @channelStateIn
@@ -684,7 +723,7 @@ function countSenders(emitter: Emitter, fn: IRFunction, spawn: FunctionSig, arg:
   sharedWrite: via senderStateIn
   escaping: arg
   calls: Emitter.useRuntime IRFunction.emit nish_panic_index nish_str_concat nish_str_from_i32 senderStateIn
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=senderStateIn#0 Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=senderStateIn#0 Emitter.useRuntime#0
   pointer fn: size=160 writesThrough=true captured=false passedTo=senderStateIn#1 IRFunction.emit#0
   pointer spawn: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -724,7 +763,7 @@ function emitChannelSendBody(emitter: Emitter, sig: FunctionSig): void -> @emitC
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emit IRFunction.emitValue channelStateIn internalErrorFor nish_exit nish_panic_index nish_str_concat paramValue widenToSlot
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=channelStateIn#0 Emitter.llvm#0 Emitter.useRuntime#0 Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=channelStateIn#0 Emitter.llvm#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer sig: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
@@ -747,7 +786,7 @@ function emitChannelWalk(emitter: Emitter, stmt: Node): void -> @emitChannelWalk
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: DebugInfo.declareLocal Emitter.align Emitter.align8 Emitter.alignSuffix Emitter.emitExpression Emitter.emitStatement Emitter.llvm Emitter.setSlot Emitter.useRuntime IRBlock.terminated IRFunction.currentBlock IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor channelStateIn crossIn internalErrorFor narrowFromSlot nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat unwrapParens
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 channelStateIn#0 Emitter.useRuntime#0 Emitter.align8#0 crossIn#0 Emitter.alignSuffix#0 Emitter.emitStatement#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.align#0 Emitter.setSlot#0 Emitter.emitExpression#0 channelStateIn#0 Emitter.useRuntime#0 Emitter.align8#0 crossIn#0 Emitter.alignSuffix#0 Emitter.emitStatement#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -37:9 decl: Node (const)

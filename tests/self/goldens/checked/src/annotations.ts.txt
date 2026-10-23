@@ -333,7 +333,7 @@ function variantTagOf(ctx: CheckContext, at: Node, variant: i32, info: StructInf
   calls: CheckContext.errorType TypeTable.isEnumMemberType TypeTable.typeName nish_panic_slice nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new variantTag variantTagName variantTagReadonly wholeEnumTag
   pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.errorType#0 variantTag#0 wholeEnumTag#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1
-  pointer info: size=152 writesThrough=false captured=false passedTo=variantTag#1 wholeEnumTag#1 variantTagName#0 variantTagName#0 variantTagReadonly#0 variantTagName#0
+  pointer info: size=160 writesThrough=false captured=false passedTo=variantTag#1 wholeEnumTag#1 variantTagName#0 variantTagName#0 variantTagReadonly#0 variantTagName#0
   stackSites=0 stackLocals=0
   callee +0:12 CheckContext.errorType -> @CheckContext.errorType
   callee +2:12 TypeTable.typeName -> @TypeTable.typeName
@@ -398,12 +398,12 @@ function reportTagClash(ctx: CheckContext, node: Node, other: i32, variant: i32,
 function declaredMembers(info: StructInfo): Node[] -> @declaredMembers
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function firstField(info: StructInfo): Node | null -> @firstField
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: declaredMembers
-  pointer info: size=152 writesThrough=false captured=false passedTo=declaredMembers#0
+  pointer info: size=160 writesThrough=false captured=false passedTo=declaredMembers#0
   stackSites=0 stackLocals=0
   local +0:14 member: Node (const)
   callee +0:24 declaredMembers -> @declaredMembers
@@ -411,7 +411,7 @@ function wholeEnumTag(ctx: CheckContext, info: StructInfo): string -> @wholeEnum
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.enumNamed EnumInfo.hasMember firstField nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from
   pointer ctx: size=280 writesThrough=false captured=false
-  pointer info: size=152 writesThrough=false captured=false passedTo=firstField#0
+  pointer info: size=160 writesThrough=false captured=false passedTo=firstField#0
   stackSites=0 stackLocals=0
   local +0:9 field: Node | null (const)
   callee +0:17 firstField -> @firstField
@@ -425,7 +425,7 @@ function variantTag(ctx: CheckContext, info: StructInfo): i32 -> @variantTag
   sharedWrite: via resolveType
   calls: firstField nish_panic_index nish_str_index_of nish_str_index_of_from resolveType
   pointer ctx: size=280 writesThrough=true captured=true passedTo=resolveType#1
-  pointer info: size=152 writesThrough=false captured=false passedTo=firstField#0
+  pointer info: size=160 writesThrough=false captured=false passedTo=firstField#0
   stackSites=0 stackLocals=0
   local +0:9 field: Node | null (const)
   callee +0:17 firstField -> @firstField
@@ -434,14 +434,14 @@ function variantTag(ctx: CheckContext, info: StructInfo): i32 -> @variantTag
 function variantTagName(info: StructInfo): string -> @variantTagName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: firstField nish_panic_index
-  pointer info: size=152 writesThrough=false captured=false passedTo=firstField#0
+  pointer info: size=160 writesThrough=false captured=false passedTo=firstField#0
   stackSites=0 stackLocals=0
   local +0:9 field: Node | null (const)
   callee +0:17 firstField -> @firstField
 function variantTagReadonly(info: StructInfo): boolean -> @variantTagReadonly
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: firstField
-  pointer info: size=152 writesThrough=false captured=false passedTo=firstField#0
+  pointer info: size=160 writesThrough=false captured=false passedTo=firstField#0
   stackSites=0 stackLocals=0
   local +0:9 field: Node | null (const)
   callee +0:17 firstField -> @firstField

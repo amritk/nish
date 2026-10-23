@@ -89,6 +89,7 @@ import ParentTable from "./parents" -> struct ParentTable
 import Local from "./symbols" -> struct Local
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
 import sourceLocal from "./symbols" -> function @sourceLocal
+import openedHandle from "./handles" -> function @openedHandle
 import K_ARRAY from "./types" -> const K_ARRAY
 import K_NULLABLE from "./types" -> const K_NULLABLE
 import K_RESULT from "./types" -> const K_RESULT
@@ -900,7 +901,7 @@ function captureWriteRemedy(program: CheckedProgram, target: Node): string -> @c
 function isThreadsLayout(info: StructInfo): boolean -> @isThreadsLayout
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: isThreadsModule nish_arena_mark nish_arena_release nish_str_eq threadsModuleName
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: StructInstantiation | null (const)
   callee +2:12 isThreadsModule -> @isThreadsModule
@@ -1613,16 +1614,17 @@ function isUsingInitialiser(node: Node, parents: Node[], n: i32): boolean -> @is
   stackSites=0 stackLocals=0
   local +0:9 decl: Node (const)
   local +1:9 stmt: Node (const)
-function walkScopes(program: CheckedProgram, node: Node, parents: Node[], scopeType: i32, arenas: Local[], out: ScopeFinding[]): void -> @walkScopes
+function walkScopes(program: CheckedProgram, node: Node, parents: Node[], table: TypeTable, scopeType: i32, arenas: Local[], out: ScopeFinding[]): void -> @walkScopes
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: node scopeType
-  calls: ScopeFinding.constructor arenaBindingMessage arenaNotUsingMessage boundNameOf fixedFinding isArenaCall isLockCall isScopeCall isSpawnReceiver isUsingInitialiser nish_alloc_struct nish_array_grow nish_panic_index scopeEscapesMessage scopeNotUsingMessage sourceLocal unwrapParens usingEdits usingNotScopeMessage usingPlaceMessage walkScopes
-  pointer program: size=656 writesThrough=false captured=false passedTo=isArenaCall#0 isScopeCall#0 isLockCall#0 isArenaCall#0 isScopeCall#0 usingEdits#0 walkScopes#0
+  calls: ScopeFinding.constructor arenaBindingMessage arenaNotUsingMessage boundNameOf fixedFinding isArenaCall isLockCall isScopeCall isSpawnReceiver isUsingInitialiser nish_alloc_struct nish_array_grow nish_panic_index openedHandle scopeEscapesMessage scopeNotUsingMessage sourceLocal unwrapParens usingEdits usingNotScopeMessage usingPlaceMessage walkScopes
+  pointer program: size=656 writesThrough=false captured=false passedTo=isArenaCall#0 isScopeCall#0 isLockCall#0 openedHandle#0 isArenaCall#0 isScopeCall#0 usingEdits#0 walkScopes#0
   pointer node: size=40 writesThrough=true captured=true passedTo=ScopeFinding.constructor#1 isArenaCall#1 ScopeFinding.constructor#1 ScopeFinding.constructor#1 isScopeCall#1 fixedFinding#0 ScopeFinding.constructor#1
   pointer parents: size=0 writesThrough=true captured=false passedTo=isUsingInitialiser#1 isUsingInitialiser#1 boundNameOf#1 usingEdits#2 isSpawnReceiver#1 walkScopes#2
-  pointer arenas: size=0 writesThrough=true captured=false passedTo=walkScopes#4
-  pointer out: size=0 writesThrough=true captured=false passedTo=walkScopes#5
+  pointer table: size=96 writesThrough=false captured=false passedTo=openedHandle#1 walkScopes#3
+  pointer arenas: size=0 writesThrough=true captured=false passedTo=walkScopes#5
+  pointer out: size=0 writesThrough=true captured=false passedTo=walkScopes#6
   stackSites=0 stackLocals=0
   local -5:9 n: i32 (const)
   local -4:9 parent: Node | null (const)
@@ -1633,39 +1635,40 @@ function walkScopes(program: CheckedProgram, node: Node, parents: Node[], scopeT
   callee +3:20 unwrapParens -> @unwrapParens
   local +4:13 local: Local | null (const)
   callee +5:11 isArenaCall -> @isArenaCall
-  callee +9:19 isScopeCall -> @isScopeCall
-  callee +9:61 isLockCall -> @isLockCall
-  callee +10:18 new ScopeFinding -> @ScopeFinding.constructor
-  callee +10:41 usingNotScopeMessage -> @usingNotScopeMessage
-  local +14:9 declaresName: boolean (const)
-  local +17:7 at: Node (let)
-  local +18:7 depth: i32 (let)
-  callee +23:7 isArenaCall -> @isArenaCall
-  callee +23:38 isUsingInitialiser -> @isUsingInitialiser
-  callee +24:14 new ScopeFinding -> @ScopeFinding.constructor
-  callee +24:37 arenaNotUsingMessage -> @arenaNotUsingMessage
-  local +26:9 named: Local | null (const)
-  callee +27:46 sourceLocal -> @sourceLocal
-  callee +29:14 new ScopeFinding -> @ScopeFinding.constructor
-  callee +29:37 arenaBindingMessage -> @arenaBindingMessage
-  callee +32:33 isScopeCall -> @isScopeCall
-  callee +33:12 isUsingInitialiser -> @isUsingInitialiser
-  callee +35:11 fixedFinding -> @fixedFinding
-  callee +37:13 scopeNotUsingMessage -> @scopeNotUsingMessage
-  callee +37:34 boundNameOf -> @boundNameOf
-  callee +38:13 usingEdits -> @usingEdits
-  callee +42:43 isSpawnReceiver -> @isSpawnReceiver
-  callee +43:16 new ScopeFinding -> @ScopeFinding.constructor
-  callee +43:39 scopeEscapesMessage -> @scopeEscapesMessage
-  local +47:14 child: Node (const)
-  callee +48:5 walkScopes -> @walkScopes
+  callee +10:10 isScopeCall -> @isScopeCall
+  callee +11:10 isLockCall -> @isLockCall
+  callee +12:9 openedHandle -> @openedHandle
+  callee +14:18 new ScopeFinding -> @ScopeFinding.constructor
+  callee +14:41 usingNotScopeMessage -> @usingNotScopeMessage
+  local +18:9 declaresName: boolean (const)
+  local +21:7 at: Node (let)
+  local +22:7 depth: i32 (let)
+  callee +27:7 isArenaCall -> @isArenaCall
+  callee +27:38 isUsingInitialiser -> @isUsingInitialiser
+  callee +28:14 new ScopeFinding -> @ScopeFinding.constructor
+  callee +28:37 arenaNotUsingMessage -> @arenaNotUsingMessage
+  local +30:9 named: Local | null (const)
+  callee +31:46 sourceLocal -> @sourceLocal
+  callee +33:14 new ScopeFinding -> @ScopeFinding.constructor
+  callee +33:37 arenaBindingMessage -> @arenaBindingMessage
+  callee +36:33 isScopeCall -> @isScopeCall
+  callee +37:12 isUsingInitialiser -> @isUsingInitialiser
+  callee +39:11 fixedFinding -> @fixedFinding
+  callee +41:13 scopeNotUsingMessage -> @scopeNotUsingMessage
+  callee +41:34 boundNameOf -> @boundNameOf
+  callee +42:13 usingEdits -> @usingEdits
+  callee +46:43 isSpawnReceiver -> @isSpawnReceiver
+  callee +47:16 new ScopeFinding -> @ScopeFinding.constructor
+  callee +47:39 scopeEscapesMessage -> @scopeEscapesMessage
+  local +51:14 child: Node (const)
+  callee +52:5 walkScopes -> @walkScopes
 function scopeFindings(programs: CheckedProgram[], program: CheckedProgram, table: TypeTable, facts: FactsTable, summaries: ChannelSummaries): ScopeFinding[] -> @scopeFindings [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.structOf
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FunctionSig.body FunctionSig.definedIn HeldContext.constructor TypeTable.structOf checkBody checkChannels checkFieldTypes findGuardBlocks isThreadsModule nish_str_eq nish_str_index_of nish_str_index_of_from scopeSymbol threadsLoaded walkMutexes walkScopes
   pointer programs: size=0 writesThrough=false captured=false passedTo=threadsLoaded#0 scopeSymbol#0
   pointer program: size=656 writesThrough=true captured=false passedTo=isThreadsModule#0 checkFieldTypes#0 CheckedProgram.enterInstance#0 walkScopes#0 checkBody#0 walkMutexes#0 findGuardBlocks#0 checkChannels#0 CheckedProgram.leaveInstance#0
-  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.structOf#0 checkFieldTypes#1 checkBody#1 walkMutexes#1 checkChannels#1
+  pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.structOf#0 checkFieldTypes#1 walkScopes#3 checkBody#1 walkMutexes#1 checkChannels#1
   pointer facts: size=16 writesThrough=false captured=false passedTo=checkBody#2 findGuardBlocks#1
   pointer summaries: size=40 writesThrough=true captured=true passedTo=HeldContext.constructor#3 checkChannels#2
   stackSites=3 stackLocals=2
@@ -2359,7 +2362,7 @@ function checkBody(program: CheckedProgram, table: TypeTable, facts: FactsTable,
 function isThreadsClass(info: StructInfo | null, name: string): boolean -> @isThreadsClass
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isThreadsModule nish_str_eq
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: StructInstantiation | null (const)
   callee +4:5 isThreadsModule -> @isThreadsModule
@@ -2394,7 +2397,7 @@ function isGuardType(program: CheckedProgram, table: TypeTable, type: i32): bool
 function isChannelClass(info: StructInfo): boolean -> @isChannelClass [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isThreadsClass
-  pointer info: size=152 writesThrough=false captured=false passedTo=isThreadsClass#0
+  pointer info: size=160 writesThrough=false captured=false passedTo=isThreadsClass#0
   stackSites=0 stackLocals=0
   callee +0:62 isThreadsClass -> @isThreadsClass
 function isChannelType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @isChannelType
@@ -2435,12 +2438,12 @@ function markAtomicClass(program: CheckedProgram, info: StructInfo): void -> @ma
   sharedWrite: +0:5
   calls: isThreadsModule nish_str_eq
   pointer program: size=656 writesThrough=false captured=false passedTo=isThreadsModule#0
-  pointer info: size=152 writesThrough=true captured=false
+  pointer info: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -2:5 isThreadsModule -> @isThreadsModule
 function isAtomicClass(info: StructInfo | null): boolean -> @isAtomicClass
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function isAtomicType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @isAtomicType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -2454,7 +2457,7 @@ function isAtomicType(program: CheckedProgram, table: TypeTable, type: i32): boo
 function isThreadsStruct(info: StructInfo): boolean -> @isThreadsStruct [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isAtomicClass isThreadsLayout
-  pointer info: size=152 writesThrough=false captured=false passedTo=isAtomicClass#0 isThreadsLayout#0
+  pointer info: size=160 writesThrough=false captured=false passedTo=isAtomicClass#0 isThreadsLayout#0
   stackSites=0 stackLocals=0
   callee +0:63 isAtomicClass -> @isAtomicClass
   callee +0:86 isThreadsLayout -> @isThreadsLayout

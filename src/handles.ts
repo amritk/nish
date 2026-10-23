@@ -111,9 +111,6 @@ const closeTypeMessage = (
 const closeCallMessage = (name: string, cls: string): string =>
   `\`${name}\` is the close of handle class \`${cls}\`, and only its \`[Symbol.dispose]\` may call it on the pointer the object owns: the \`using\` block closes it at every exit, so a close written here would be followed by a use after close and a second close`
 
-const usingMessage = (cls: string): string =>
-  `\`using\` of handle class \`${cls}\` is not lowered yet: until a release emits its close, hold the \`CPtr\` in a local and close it yourself`
-
 // ---- Which types are handles -----------------------------------------------
 
 /**
@@ -132,6 +129,15 @@ const handleOf = (program: CheckedProgram, table: TypeTable, type: i32): StructI
   const info = program.struct(table.nameOf(bare))
   return info !== null && info.handle ? info : null
 }
+
+/**
+ * H1.2: the handle class a `using` declarator's initialiser `init` opens, when
+ * it is a `new` of one; `null` for a scope, an arena or a guard. The walk
+ * below admits no other `new` of a handle class, so this is the one place an
+ * owned pointer starts, and its block closes it.
+ */
+export const openedHandle = (program: CheckedProgram, table: TypeTable, init: Node): StructInfo | null =>
+  init.kind === N_NEW ? handleOf(program, table, program.nodeTypes[init.id]) : null
 
 /**
  * A type argument that is a handle class, written or inferred (`id(f)`): the
@@ -642,14 +648,15 @@ const isDerived = (walk: HandleWalk, local: Local | null): boolean => {
   return false
 }
 
-/** A `new` of a handle class in a body: only as a `using` declaration's initialiser, which is not lowered yet (NL2573). */
+/** A `new` of a handle class in a body: only as a `using` declaration's initialiser, whose block closes it (H1.2). */
 const checkHandleNew = (walk: HandleWalk, node: Node, info: StructInfo, depth: i32): void => {
   const up = climbParens(walk)
   // Two levels above a declarator's initialiser is its statement; only a
   // variable statement carries `FLAG_USING`.
   const stmt = walk.parent(up + 2)
-  const opened = depth === 0 && stmt !== null && (stmt.flags & FLAG_USING) !== 0
-  walk.out.push(new HandleFinding(node, opened ? usingMessage(info.name) : handleValueMessage(info.name)))
+  if (depth !== 0 || stmt === null || (stmt.flags & FLAG_USING) === 0) {
+    walk.out.push(new HandleFinding(node, handleValueMessage(info.name)))
+  }
 }
 
 const walkValues = (walk: HandleWalk, node: Node, depth: i32): void => {
@@ -724,6 +731,7 @@ export const handleFindings = (program: CheckedProgram, table: TypeTable): Handl
       const close = checkDispose(program, table, info, found)
       if (close !== null) {
         closes.push(close)
+        info.handleClose = close.sig // H1.2: what each exit of its `using` calls
       }
     }
   }

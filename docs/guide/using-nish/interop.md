@@ -356,11 +356,57 @@ Argument 1 of `free` is a `CPtr | null` the program holds: a nullable foreign pa
 ```
 
 A class with a `CPtr` field is a *handle class*: it owns the C resource, and
-its `[Symbol.dispose]` is exactly the call that closes it. The compiler checks
-such a class and every place one goes, but does not yet lower `using` of one,
-so `using f = new File(path)` is refused with "`using` of handle class `File`
-is not lowered yet: until a release emits its close, hold the `CPtr` in a
-local and close it yourself" — do exactly that, as above. The rules are in
+its `[Symbol.dispose]` is exactly the call that closes it. Open one with
+`using`, and the compiler closes it for you, once, at every exit of the
+block — falling off its end, an early `return`, `break`, `continue`, or an
+`orReturn()` that propagates:
+
+```ts
+declare function fopen(path: string, mode: string): CPtr | null;
+declare function fclose(p: CPtr): i32;
+declare function fgetc(p: CPtr): i32;
+
+class File {
+  readonly file: CPtr | null;
+  constructor(path: string) {
+    this.file = fopen(path, "r");
+  }
+  read(): i32 {
+    const p = this.file;
+    if (p === null) {
+      return -1;
+    }
+    return fgetc(p);
+  }
+  [Symbol.dispose](): void {
+    const p = this.file;
+    if (p !== null) {
+      fclose(p);
+    }
+  }
+}
+
+const firstByte = (path: string): i32 => {
+  using f = new File(path);
+  return f.read();
+};
+
+export const main = (): i32 => {
+  console.log(firstByte("/dev/null"));
+  return 0;
+};
+```
+
+```console
+-1
+```
+
+A handle is never copied, stored or returned: you call its methods, or lend
+it to a parameter of its own type. Several declarators in one `using` close in
+reverse order, beside an `arena()` or a lock. A panic or `process.exit` ends
+the process without the close; the operating system takes the descriptor
+back, but a bounds panic does not flush what C still buffers, so call
+`fflush` on a `FILE *` you wrote before code that may panic. The rules are in
 [A handle class](../../LANGUAGE.md#a-handle-class-a-class-that-owns-a-cptr).
 
 A declared function has no body and cannot be exported. Calling C has a cost

@@ -725,7 +725,7 @@ function Checker.bindStructImport(this: Checker, index: i32, struct: StructInfo)
   escaping: index struct
   calls: CheckContext.error CheckedProgram.addStruct StringMap.has StringSet.add nish_panic_index nish_str_concat nish_str_eq
   pointer this: size=24 writesThrough=false captured=false
-  pointer struct: size=152 writesThrough=true captured=true passedTo=CheckedProgram.addStruct#2
+  pointer struct: size=160 writesThrough=true captured=true passedTo=CheckedProgram.addStruct#2
   stackSites=0 stackLocals=0
   local -18:11 imp: ImportBinding (const)
   callee -16:7 CheckContext.error -> @CheckContext.error

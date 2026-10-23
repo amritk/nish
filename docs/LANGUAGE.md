@@ -5171,14 +5171,28 @@ class File {
 const first = (f: File): i32 => f.read();
 ```
 
-**`using` of a handle class is not lowered yet.** The class, its methods and
-every function that borrows one are checked, and `using f = new File(p)` is
-`` `using` of handle class `File` is not lowered yet: until a release emits its
-close, hold the `CPtr` in a local and close it yourself `` (NL2573,
-`reject_ffi_handle_using`) until the compiler emits the close at every exit of
-the block. Until then, a program holds the `CPtr` in a local and calls the
-close itself, as the declared-function examples above do; what the rules
-below fix is the shape a program will open a `File` with.
+**`using` of a handle class closes it at every exit of its block, once.**
+`using f = new File(p)` opens `f` as soon as its initialiser returns, before a
+later declarator's initialiser runs, and calls the close its
+`[Symbol.dispose]` names on every way control leaves the block: falling off
+its end, `return`, `break`, `continue`, and an `orReturn()` that propagates,
+including one in a later declarator's initialiser. A `return` computes its
+value first and closes after it, so `return twice(n)` inside the block is not
+a tail call. Declarators close in the reverse of the order they opened, beside
+an arena, a scope or a lock in the same `using` (`ffi_handle_file`,
+`ffi_handle_exits`, `ffi_handle_arena`). The close is inlined: the field is
+loaded, a `CPtr | null` one is tested against `null`, and the C function is
+called with it. The `using` is where the program reaches `ffi`, so
+`--deny ffi` refuses it and names the close (`caps_ffi_handle`,
+`reject_ffi_handle_deny`).
+
+A panic and `process.exit` do not close: the process ends, and the operating
+system takes back the descriptor. What it does not take back is what a C
+library still buffers. `panic`, `expect` and a failed range entry end through
+`exit(1)`, which flushes stdio, but a failed check and out of memory end
+through `_exit(1)`, which does not, so bytes written to a `FILE *` with
+`fwrite` and not yet flushed are lost on a bounds panic. Flush (`fflush`)
+before code that may panic when those bytes matter.
 
 - **The class.** Exactly one `CPtr` or `CPtr | null` field, `readonly` and with
   no initialiser (`reject_ffi_handle_two_fields`, `_field_mutable`,

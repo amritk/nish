@@ -54,7 +54,7 @@ function emitToString(emitter: Emitter, expr: Node): string -> @emitToString
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
   calls: Emitter.emitExpression Emitter.llvm Emitter.stringConstant Emitter.typeOf Emitter.useRuntime IRFunction.emitValue isUnsigned nish_str_concat nish_str_eq stringifyCallee
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.stringConstant#0 Emitter.stringConstant#0 Emitter.llvm#0 Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.stringConstant#0 Emitter.stringConstant#0 Emitter.llvm#0 Emitter.useRuntime#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=Emitter.typeOf#1 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -77,7 +77,7 @@ function emitConcat(emitter: Emitter, lhs: string, rhs: string): string -> @emit
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
   callee +0:36 Emitter.useRuntime -> @Emitter.useRuntime
@@ -85,7 +85,7 @@ function emitTemplate(emitter: Emitter, expr: Node): string -> @emitTemplate [ex
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.stringConstant
   calls: Emitter.stringConstant emitConcat emitToString templateParts
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.stringConstant#0 emitToString#0 emitConcat#0 Emitter.stringConstant#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.stringConstant#0 emitToString#0 emitConcat#0 Emitter.stringConstant#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=templateParts#0
   stackSites=0 stackLocals=0
   local +0:9 parts: Node[] (const)
@@ -102,7 +102,7 @@ function emitStringLength(emitter: Emitter, expr: Node): string -> @emitStringLe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitUncopied
   calls: Emitter.emitUncopied Emitter.typeOf IRFunction.emitValue loadStringLength nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitUncopied#0 loadStringLength#0 Emitter.typeOf#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitUncopied#0 loadStringLength#0 Emitter.typeOf#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
   stackSites=0 stackLocals=0
   local +0:9 str: string (const)
@@ -116,7 +116,7 @@ function loadStringLength(emitter: Emitter, str: string): string -> @loadStringL
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.alignSuffix IRFunction.emitValue nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.alignSuffix#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.alignSuffix#0
   stackSites=0 stackLocals=0
   local +0:9 header: string (const)
   callee +0:18 IRFunction.emitValue -> @IRFunction.emitValue
@@ -126,14 +126,14 @@ function stringData(emitter: Emitter, str: string): string -> @stringData
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
 function clampToLength(emitter: Emitter, value: string, len: string): string -> @clampToLength
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   local +0:9 low: string (const)
   callee +0:15 IRFunction.emitValue -> @IRFunction.emitValue
@@ -144,7 +144,7 @@ function newString(emitter: Emitter, bytes: string, n: string): string -> @newSt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
   callee +0:36 Emitter.useRuntime -> @Emitter.useRuntime
@@ -153,7 +153,7 @@ function copyString(emitter: Emitter, str: string): string -> @copyString [expor
   sharedWrite: via newString
   escaping: str
   calls: loadStringLength newString stringData
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=newString#0 stringData#0 loadStringLength#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=newString#0 stringData#0 loadStringLength#0
   stackSites=0 stackLocals=0
   callee +0:3 newString -> @newString
   callee +0:22 stringData -> @stringData
@@ -162,7 +162,7 @@ function guardKeep(emitter: Emitter, old: string, value: string): string -> @gua
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
   callee +0:36 Emitter.useRuntime -> @Emitter.useRuntime
@@ -170,7 +170,7 @@ function emitSliceCheck(emitter: Emitter, from: string, to: string, len: string,
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +1:7 inRange: string (let)
@@ -193,7 +193,7 @@ function emitSlice(emitter: Emitter, expr: Node, str: string): string -> @emitSl
   sharedWrite: via loadStringLength
   escaping: str
   calls: IRFunction.emitValue emitIndex emitSliceCheck loadStringLength newString nish_panic_index nish_str_concat stringData
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=loadStringLength#0 emitIndex#0 emitIndex#0 emitSliceCheck#0 stringData#0 newString#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=loadStringLength#0 emitIndex#0 emitIndex#0 emitSliceCheck#0 stringData#0 newString#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node (const)
@@ -215,7 +215,7 @@ function emitOccursAt(emitter: Emitter, str: string, at: string, sub: string): s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
   callee +1:24 Emitter.useRuntime -> @Emitter.useRuntime
@@ -224,7 +224,7 @@ function emitCharCodeAt(emitter: Emitter, expr: Node, str: string): string -> @e
   sharedWrite: via emitIndex
   escaping: str
   calls: Emitter.typeOf IRFunction.emitValue emitIndex emitRangeCheck loadStringLength nish_panic_index nish_str_concat stringData
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitIndex#0 emitRangeCheck#0 loadStringLength#0 stringData#0 Emitter.typeOf#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitIndex#0 emitRangeCheck#0 loadStringLength#0 stringData#0 Emitter.typeOf#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
   stackSites=0 stackLocals=0
   local +0:9 args: Node (const)
@@ -245,7 +245,7 @@ function clampBound(emitter: Emitter, bound: Node, len: string): string -> @clam
   sharedWrite: via emitIndex
   escaping: len
   calls: clampToLength emitIndex nish_panic_index
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitIndex#0 clampToLength#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitIndex#0 clampToLength#0
   pointer bound: size=40 writesThrough=true captured=true passedTo=emitIndex#1
   stackSites=0 stackLocals=0
   local +0:9 value: string (const)
@@ -256,7 +256,7 @@ function emitSubstring(emitter: Emitter, expr: Node, str: string): string -> @em
   sharedWrite: via loadStringLength
   escaping: str
   calls: Emitter.useRuntime IRFunction.emitValue clampBound loadStringLength newString nish_panic_index nish_str_concat stringData
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=loadStringLength#0 clampBound#0 clampBound#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringData#0 newString#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=loadStringLength#0 clampBound#0 clampBound#0 Emitter.useRuntime#0 Emitter.useRuntime#0 stringData#0 newString#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node (const)
@@ -283,7 +283,7 @@ function clampStart(emitter: Emitter, value: string, type: i32, str: string): st
   sharedWrite: via loadStringLength
   escaping: str type value
   calls: Emitter.useRuntime IRFunction.emitValue clampToLength isUnsigned loadStringLength nish_str_concat nish_str_eq
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=loadStringLength#0 Emitter.useRuntime#0 clampToLength#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=loadStringLength#0 Emitter.useRuntime#0 clampToLength#0
   stackSites=0 stackLocals=0
   local +0:9 len: string (const)
   callee +0:15 loadStringLength -> @loadStringLength
@@ -296,7 +296,7 @@ function emitStringIndexOf(emitter: Emitter, expr: Node, str: string): string ->
   sharedWrite: via Emitter.emitExpression
   escaping: str
   calls: Emitter.emitExpression Emitter.typeOf Emitter.useRuntime IRFunction.emitValue clampStart emitNumberFromI64 emitOffset nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 clampStart#0 emitOffset#0 Emitter.typeOf#0 Emitter.useRuntime#0 emitNumberFromI64#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 clampStart#0 emitOffset#0 Emitter.typeOf#0 Emitter.useRuntime#0 emitNumberFromI64#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitNumberFromI64#2
   stackSites=0 stackLocals=0
   local +0:9 args: Node (const)
@@ -316,7 +316,7 @@ function emitIndexOfAnyKernel(emitter: Emitter, values: string[]): string -> @em
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emitValue nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 from: string (const)
@@ -329,7 +329,7 @@ function emitStringMethodCall(emitter: Emitter, expr: Node): string -> @emitStri
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
   calls: Emitter.emitExpression IRFunction.emitValue emitCharCodeAt emitOccursAt emitSlice emitStringIndexOf emitSubstring loadStringLength nish_panic_index nish_str_concat nish_str_eq
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 emitCharCodeAt#0 emitSubstring#0 emitSlice#0 emitStringIndexOf#0 emitOccursAt#0 Emitter.emitExpression#0 Emitter.emitExpression#0 loadStringLength#0 loadStringLength#0 emitOccursAt#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 emitCharCodeAt#0 emitSubstring#0 emitSlice#0 emitStringIndexOf#0 emitOccursAt#0 Emitter.emitExpression#0 Emitter.emitExpression#0 loadStringLength#0 loadStringLength#0 emitOccursAt#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitCharCodeAt#1 emitSubstring#1 emitSlice#1 emitStringIndexOf#1
   stackSites=0 stackLocals=0
   local +0:9 access: Node (const)
@@ -353,7 +353,7 @@ function emitFromCharCode(emitter: Emitter, expr: Node): string -> @emitFromChar
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitIndex
   calls: IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue emitIndex newString nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitIndex#0 newString#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitIndex#0 newString#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 code: string (const)
@@ -368,7 +368,7 @@ function emitFromBytes(emitter: Emitter, expr: Node): string -> @emitFromBytes [
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
   calls: Emitter.emitExpression IRFunction.emitValue emitIndex emitSliceCheck loadData loadLength newString nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 emitIndex#0 emitIndex#0 emitSliceCheck#0 loadLength#0 loadData#0 newString#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 emitIndex#0 emitIndex#0 emitSliceCheck#0 loadLength#0 loadData#0 newString#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
@@ -411,7 +411,7 @@ function emitForeignString(emitter: Emitter, arg: Node, value: string, callee: F
   sharedWrite: via IRFunction.emitValue
   escaping: index
   calls: Emitter.stringConstant Emitter.typeOf Emitter.useRuntime IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable emitPanicTail foreignStringIsNulFree nish_panic_index nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_new unwrapBoundsParens
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.typeOf#0 Emitter.stringConstant#0 Emitter.useRuntime#0 emitPanicTail#0 Emitter.stringConstant#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.typeOf#0 Emitter.stringConstant#0 Emitter.useRuntime#0 emitPanicTail#0 Emitter.stringConstant#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0 foreignStringIsNulFree#0 Emitter.typeOf#1
   pointer callee: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -458,7 +458,7 @@ function emitForeignBuffers(emitter: Emitter, call: Node, callee: FunctionSig, o
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: Emitter.stringConstant IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitPanicTail foreignBufferCount foreignBufferCountProven isForeignBuffer loadData loadLength nish_panic_index nish_str_concat nish_str_from_i32
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=loadLength#0 emitPanicTail#0 Emitter.stringConstant#0 loadData#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=loadLength#0 emitPanicTail#0 Emitter.stringConstant#0 loadData#0
   pointer call: size=40 writesThrough=false captured=false passedTo=foreignBufferCountProven#2
   pointer callee: size=136 writesThrough=false captured=false passedTo=foreignBufferCount#1
   pointer operands: size=0 writesThrough=true captured=false
@@ -504,7 +504,7 @@ function emitCStringCopy(emitter: Emitter, value: string): string -> @emitCStrin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.useRuntime
   calls: Emitter.useRuntime IRFunction.emitValue IRModule.addRawDefinition foreignCopy nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   local +0:9 copy: string (const)
   callee +0:16 Emitter.useRuntime -> @Emitter.useRuntime
@@ -516,7 +516,7 @@ function emitForeignStringResult(emitter: Emitter, callee: FunctionSig, value: s
   sharedWrite: via IRFunction.emitValue
   escaping: value
   calls: Emitter.stringConstant IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable emitCStringCopy emitPanicTail nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=emitPanicTail#0 Emitter.stringConstant#0 emitCStringCopy#0 emitCStringCopy#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=emitPanicTail#0 Emitter.stringConstant#0 emitCStringCopy#0 emitCStringCopy#0
   pointer callee: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -551,7 +551,7 @@ function emitStrictEquality(emitter: Emitter, expr: Node): string -> @emitStrict
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf Emitter.useRuntime IRFunction.emitValue isFloat nish_panic_index nish_str_concat nish_str_eq
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.useRuntime#0 Emitter.llvm#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -573,7 +573,7 @@ function emitConsoleLog(emitter: Emitter, expr: Node): string -> @emitConsoleLog
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitToString
   calls: Emitter.useRuntime IRFunction.emit emitToString nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitToString#0 Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitToString#0 Emitter.useRuntime#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 text: string (const)
@@ -584,7 +584,7 @@ function emitConsoleError(emitter: Emitter, expr: Node): string -> @emitConsoleE
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitToString
   calls: Emitter.useRuntime IRFunction.emit emitToString nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitToString#0 Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitToString#0 Emitter.useRuntime#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 text: string (const)

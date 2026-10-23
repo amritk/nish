@@ -509,7 +509,7 @@ function unionField(table: TypeTable, info: StructInfo): FieldInfo | null -> @un
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.holdsUnion
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.holdsUnion#0
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:14 f: FieldInfo (const)
   callee +1:9 TypeTable.holdsUnion -> @TypeTable.holdsUnion

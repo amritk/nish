@@ -7,6 +7,7 @@ import SECRET_WIPE from "./secret" -> const SECRET_WIPE
 import secretRoleOf from "./secret" -> function @secretRoleOf
 import jsonRouteCallees from "./json-typed" -> function @jsonRouteCallees
 import jsonRouteOf from "./json-typed" -> function @jsonRouteOf
+import openedHandle from "./handles" -> function @openedHandle
 import builtinCalleesNamed from "./emit-builtins" -> function @builtinCalleesNamed
 import checksRangesInPrologue from "./emit-builtins" -> function @checksRangesInPrologue
 import identifierBuiltinCallees from "./emit-builtins" -> function @identifierBuiltinCallees
@@ -422,6 +423,7 @@ struct FactCollector (class) size=56 align=8
   method noteTableStores -> @FactCollector.noteTableStores
   method ownEdge -> @FactCollector.ownEdge
   method addComposedCallee -> @FactCollector.addComposedCallee
+  method noteHandleClose -> @FactCollector.noteHandleClose
   method addCallee -> @FactCollector.addCallee
   method noteBuiltin -> @FactCollector.noteBuiltin
   method addCallees -> @FactCollector.addCallees
@@ -1761,6 +1763,19 @@ function FactCollector.addComposedCallee(this: FactCollector, callee: string, si
   pointer site: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -2:5 StringSet.add -> @StringSet.add
+function FactCollector.noteHandleClose(this: FactCollector, node: Node): void -> @FactCollector.noteHandleClose [method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via StringSet.add
+  calls: FunctionFacts.offerCapability StringSet.add openedHandle
+  pointer this: size=56 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=true captured=true passedTo=openedHandle#2 FunctionFacts.offerCapability#3
+  stackSites=0 stackLocals=0
+  local +0:11 info: StructInfo | null (const)
+  callee +0:18 openedHandle -> @openedHandle
+  local +4:11 close: FunctionSig | null (const)
+  callee +8:5 StringSet.add -> @StringSet.add
+  callee +9:5 StringSet.add -> @StringSet.add
+  callee +11:7 FunctionFacts.offerCapability -> @FunctionFacts.offerCapability
 function FactCollector.addCallee(this: FactCollector, callee: FunctionSig, call: Node): void -> @FactCollector.addCallee [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via FactCollector.addComposedCallee
@@ -1879,9 +1894,9 @@ function FactCollector.collectStringFacts(this: FactCollector, node: Node): void
 function FactCollector.collectClassFacts(this: FactCollector, node: Node): void -> @FactCollector.collectClassFacts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: FactCollector.addComposedCallee FactCollector.initialisesThis FactCollector.isStackOwned FactCollector.noteArguments FactCollector.noteCall FactCollector.noteSlotWrite FunctionFacts.isStackSite ParentTable.parentOf StringSet.add TypeTable.isStruct TypeTable.isUnion TypeTable.stripNull constructorOf intrinsicType isAssignmentTarget isGuardedAccess nish_panic_index nish_str_eq
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isStackOwned#0 FactCollector.initialisesThis#0 FactCollector.noteSlotWrite#0 FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.noteCall#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=ParentTable.parentOf#1 isAssignmentTarget#1 isGuardedAccess#2 intrinsicType#1 FunctionFacts.isStackSite#1 intrinsicType#1 FactCollector.addComposedCallee#2 FactCollector.noteArguments#1 FactCollector.noteCall#1 FunctionFacts.isStackSite#1
+  calls: FactCollector.addComposedCallee FactCollector.initialisesThis FactCollector.isStackOwned FactCollector.noteArguments FactCollector.noteCall FactCollector.noteHandleClose FactCollector.noteSlotWrite FunctionFacts.isStackSite ParentTable.parentOf StringSet.add TypeTable.isStruct TypeTable.isUnion TypeTable.stripNull constructorOf intrinsicType isAssignmentTarget isGuardedAccess nish_panic_index nish_str_eq
+  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isStackOwned#0 FactCollector.initialisesThis#0 FactCollector.noteSlotWrite#0 FactCollector.addComposedCallee#0 FactCollector.noteArguments#0 FactCollector.noteCall#0 FactCollector.noteHandleClose#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=ParentTable.parentOf#1 isAssignmentTarget#1 isGuardedAccess#2 intrinsicType#1 FunctionFacts.isStackSite#1 intrinsicType#1 FactCollector.addComposedCallee#2 FactCollector.noteArguments#1 FactCollector.noteCall#1 FactCollector.noteHandleClose#1 FunctionFacts.isStackSite#1
   stackSites=0 stackLocals=0
   local -9:11 program: CheckedProgram (const)
   local -8:11 table: TypeTable (const)
@@ -1908,8 +1923,9 @@ function FactCollector.collectClassFacts(this: FactCollector, node: Node): void 
   callee +39:9 FactCollector.addComposedCallee -> @FactCollector.addComposedCallee
   callee +40:9 FactCollector.noteArguments -> @FactCollector.noteArguments
   callee +41:9 FactCollector.noteCall -> @FactCollector.noteCall
-  callee +45:36 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
-  callee +47:7 StringSet.add -> @StringSet.add
+  callee +43:7 FactCollector.noteHandleClose -> @FactCollector.noteHandleClose
+  callee +46:36 FunctionFacts.isStackSite -> @FunctionFacts.isStackSite
+  callee +48:7 StringSet.add -> @StringSet.add
 function FactCollector.collectResultFacts(this: FactCollector, node: Node): void -> @FactCollector.collectResultFacts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
