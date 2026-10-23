@@ -1579,7 +1579,10 @@ if (!only || "term".includes(only)) {
   // mode from the background, and raw again once `fg` continues it, its wait
   // going on rather than ending early. Where `jobs` names the signal (dash:
   // "Stopped (tty output)"), a SIGTTIN stop, a background read that never
-  // re-entered raw mode, does not count.
+  // re-entered raw mode, does not count. A fourth, `deadline`, is stopped for
+  // three seconds inside a two-second wait and must end within a second of
+  // `fg`, before a helper's SIGTERM: a retry that asked for the whole timeout
+  // again, or for ever, would die of it.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
@@ -1623,6 +1626,14 @@ if (!only || "term".includes(only)) {
         '  echo "$(icanon)" > "$D/cont.out"; kill -TERM "$(cat "$D/hold.pid")" ) &',
         "fg > /dev/null",
         'echo "continued $? stty $(same) was $(cat "$D/cont.out") said $(tr \'\\n\' \' \' < "$D/hold.out")"',
+        ': > "$D/hold.out"',
+        "( i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        '  sleep 0.2; kill -TSTP "$(cat "$D/hold.pid")" ) &',
+        'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" deadline > "$2/hold.out"\' sh "$E" "$D"',
+        "sleep 3",
+        '( sleep 1; kill -TERM "$(cat "$D/hold.pid")" 2>/dev/null ) &',
+        "fg > /dev/null",
+        'echo "deadline $? stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
         "",
       ].join("\n")
     )
@@ -1655,9 +1666,10 @@ if (!only || "term".includes(only)) {
         `stopped ${128 + os.constants.signals.SIGTSTP} stty same was -icanon`,
         "background 1 stty same icanon",
         "continued 143 stty same was -icanon said raw 0 ready ",
+        "deadline 0 stty same said raw 0 ready timed false ",
       ]
       check(
-        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early",
+        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early, and only until its deadline",
         want.every((line) => lines.includes(line)),
         `want every line of ${JSON.stringify(want)}\n${shown(r)}`
       )

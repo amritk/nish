@@ -8,9 +8,11 @@
 @.str.4 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"probe\00" }, align 8
 @.str.5 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"raw \00" }, align 8
 @.str.6 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"panic\00" }, align 8
-@.str.7 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"hold\00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [9 x i8] } { i64 8, [9 x i8] c"deadline\00" }, align 8
 @.str.8 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"ready\00" }, align 8
-@.str.9 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"early\00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"timed \00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"hold\00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"early\00" }, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
 declare void @nish_free_arena() #1
@@ -112,6 +114,9 @@ entry:
   %buf.addr = alloca %struct.nish_array*, align 8
   %arr.hdr.1 = alloca %struct.nish_array, align 8
   %arr.data.1 = alloca [16 x i8], align 8
+  %buf.addr.1 = alloca %struct.nish_array*, align 8
+  %arr.hdr.2 = alloca %struct.nish_array, align 8
+  %arr.data.2 = alloca [16 x i8], align 8
   %n.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = load %struct.nish_array*, %struct.nish_array** @nish_argv, align 8
@@ -229,11 +234,10 @@ bounds.ok.1:
 
 if.end.2:
   %57 = load i8*, i8** %mode.addr, align 8
-  %58 = call zeroext i1 @nish_str_eq(i8* %57, i8* bitcast ({ i64, [5 x i8] }* @.str.7 to i8*))
+  %58 = call zeroext i1 @nish_str_eq(i8* %57, i8* bitcast ({ i64, [9 x i8] }* @.str.7 to i8*))
   br i1 %58, label %if.then.3, label %if.end.3
 
 if.then.3:
-  call void @nish_print(i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*))
   %59 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 0
   store i64 16, i64* %59, align 8, !alias.scope !3, !noalias !4, !tbaa !10
   %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 1
@@ -243,57 +247,105 @@ if.then.3:
   %62 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.1, i64 0, i32 2
   store i8* %61, i8** %62, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   store %struct.nish_array* %arr.hdr.1, %struct.nish_array** %buf.addr, align 8
-  store i32 -11, i32* %n.addr, align 4
   br label %while.cond
 
 while.cond:
-  %63 = load i32, i32* %n.addr, align 4
-  %64 = icmp sgt i32 %63, 0
-  br i1 %64, label %lor.end, label %lor.rhs
-
-lor.rhs:
-  %65 = load i32, i32* %n.addr, align 4
-  %66 = icmp eq i32 %65, -11
-  br label %lor.end
-
-lor.end:
-  %67 = phi i1 [ true, %while.cond ], [ %66, %lor.rhs ]
-  br i1 %67, label %while.body, label %while.end
-
-while.body:
-  %68 = call zeroext i1 @nish_wait_stdin(i32 600000)
-  br i1 %68, label %if.then.4, label %if.else
-
-if.then.4:
-  %69 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
-  %70 = add i64 0, 16
-  %71 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %69, i64 0, i32 0
-  %72 = load i64, i64* %71, align 8
-  %73 = icmp ule i64 0, %70
-  %74 = icmp ule i64 %70, %72
-  %75 = and i1 %73, %74
-  br i1 %75, label %net.ok, label %net.fail
+  %63 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8
+  %64 = add i64 0, 16
+  %65 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %63, i64 0, i32 0
+  %66 = load i64, i64* %65, align 8
+  %67 = icmp ule i64 0, %64
+  %68 = icmp ule i64 %64, %66
+  %69 = and i1 %67, %68
+  br i1 %69, label %net.ok, label %net.fail
 
 net.fail:
-  call void @nish_panic_slice(i64 0, i64 %70, i64 %72)
+  call void @nish_panic_slice(i64 0, i64 %64, i64 %66)
   unreachable
 
 net.ok:
-  %76 = call i32 @nish_read_stdin(%struct.nish_array* %69, i64 0, i64 16)
-  store i32 %76, i32* %n.addr, align 4
-  br label %if.end.4
+  %70 = call i32 @nish_read_stdin(%struct.nish_array* %63, i64 0, i64 16)
+  %71 = icmp sgt i32 %70, 0
+  br i1 %71, label %while.body, label %while.end
 
-if.else:
-  call void @nish_print(i8* bitcast ({ i64, [6 x i8] }* @.str.9 to i8*))
-  br label %if.end.4
-
-if.end.4:
+while.body:
   br label %while.cond
 
 while.end:
+  call void @nish_print(i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*))
+  %72 = call zeroext i1 @nish_wait_stdin(i32 2000)
+  %73 = select i1 %72, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  %74 = call i8* @nish_str_concat(i8* bitcast ({ i64, [7 x i8] }* @.str.9 to i8*), i8* %73)
+  call void @nish_print(i8* %74)
   br label %if.end.3
 
 if.end.3:
+  %75 = load i8*, i8** %mode.addr, align 8
+  %76 = call zeroext i1 @nish_str_eq(i8* %75, i8* bitcast ({ i64, [5 x i8] }* @.str.10 to i8*))
+  br i1 %76, label %if.then.4, label %if.end.4
+
+if.then.4:
+  call void @nish_print(i8* bitcast ({ i64, [6 x i8] }* @.str.8 to i8*))
+  %77 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 0
+  store i64 16, i64* %77, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %78 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 1
+  store i64 16, i64* %78, align 8, !alias.scope !3, !noalias !4, !tbaa !16
+  %79 = bitcast [16 x i8]* %arr.data.2 to i8*
+  call void @llvm.memset.p0i8.i64(i8* align 8 %79, i8 0, i64 16, i1 false), !alias.scope !4, !noalias !3
+  %80 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %arr.hdr.2, i64 0, i32 2
+  store i8* %79, i8** %80, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  store %struct.nish_array* %arr.hdr.2, %struct.nish_array** %buf.addr.1, align 8
+  store i32 -11, i32* %n.addr, align 4
+  br label %while.cond.1
+
+while.cond.1:
+  %81 = load i32, i32* %n.addr, align 4
+  %82 = icmp sgt i32 %81, 0
+  br i1 %82, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %83 = load i32, i32* %n.addr, align 4
+  %84 = icmp eq i32 %83, -11
+  br label %lor.end
+
+lor.end:
+  %85 = phi i1 [ true, %while.cond.1 ], [ %84, %lor.rhs ]
+  br i1 %85, label %while.body.1, label %while.end.1
+
+while.body.1:
+  %86 = call zeroext i1 @nish_wait_stdin(i32 600000)
+  br i1 %86, label %if.then.5, label %if.else
+
+if.then.5:
+  %87 = load %struct.nish_array*, %struct.nish_array** %buf.addr.1, align 8
+  %88 = add i64 0, 16
+  %89 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %87, i64 0, i32 0
+  %90 = load i64, i64* %89, align 8
+  %91 = icmp ule i64 0, %88
+  %92 = icmp ule i64 %88, %90
+  %93 = and i1 %91, %92
+  br i1 %93, label %net.ok.1, label %net.fail.1
+
+net.fail.1:
+  call void @nish_panic_slice(i64 0, i64 %88, i64 %90)
+  unreachable
+
+net.ok.1:
+  %94 = call i32 @nish_read_stdin(%struct.nish_array* %87, i64 0, i64 16)
+  store i32 %94, i32* %n.addr, align 4
+  br label %if.end.5
+
+if.else:
+  call void @nish_print(i8* bitcast ({ i64, [6 x i8] }* @.str.11 to i8*))
+  br label %if.end.5
+
+if.end.5:
+  br label %while.cond.1
+
+while.end.1:
+  br label %if.end.4
+
+if.end.4:
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

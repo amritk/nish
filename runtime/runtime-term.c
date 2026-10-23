@@ -8,7 +8,9 @@
  * and runtime-os.c, the other half this could have joined, had 177 bytes of
  * its ceiling left. Section GC means a program that calls none of these pays
  * for none of them, and scripts/build.sh pairs this file with runtime.c like
- * the other halves, so a link line still names one runtime.
+ * the other halves, so a link line still names one runtime. `waitStdin`
+ * reads its clock through runtime-os.c's `nish_monotonic_nanos`, so a program
+ * that waits links that function too.
  *
  * Errors take `nish:net`'s shape: an `int32_t` that is `>= 0` for success and
  * a negated errno for a failure. Two codes a program branches on are spelled
@@ -90,39 +92,43 @@ static int nish_term_stop_count(void) {
    system restarts a `select` after a handler, `SA_RESTART` or not, so one the
    handler's stop interrupted is asked again, for what is left until a
    deadline read once from the monotonic clock, since `select` promises
-   nothing of its timeout or its set after an error. A stop in the few
-   instructions between reading the count and `select` starting goes unseen,
-   and that wait runs the time it had left after `fg`. Outside WASI this asks
-   `select`, because Darwin's `poll` does not support devices: it answers
-   POLLNVAL for a terminal at once, with no input there. Under WASI a timeout
-   under 10 ms asks for 10: Node's WASI (uvwasi) runs a timer that is due
-   before its first look at the descriptor, and counts it from before it set
-   the look up, so a shorter wait answers "nothing waiting" while bytes are
-   there whenever setting up took longer than the wait, as on a busy
-   machine. */
+   nothing of its timeout or its set after an error. The first ask is for the
+   whole timeout, so a wait reads the clock once up front and again only
+   after a stop. A stop that lands between reading the clock and `select` starting
+   goes unseen, and that wait runs the time it had left after `fg`; one in the
+   last few instructions, after the stop count is read, also has the next
+   other signal ask again rather than end the wait. Before raw mode the
+   default stop decides: Linux goes on with what is left, Darwin ends the
+   wait. Outside WASI this asks `select`, because Darwin's `poll` does not
+   support devices: it answers POLLNVAL for a terminal at once, with no input
+   there. Under WASI a timeout under 10 ms asks for 10: Node's WASI (uvwasi)
+   runs a timer that is due before its first look at the descriptor, and
+   counts it from before it set the look up, so a shorter wait answers
+   "nothing waiting" while bytes are there whenever setting up took longer
+   than the wait, as on a busy machine. */
 static int nish_stdin_ready(int32_t timeout_ms) {
 #ifdef __wasi__
   struct pollfd p = {0, POLLIN, 0};
   int r = poll(&p, 1, timeout_ms < 0 ? -1 : timeout_ms < 10 ? 10 : timeout_ms);
 #else
   fd_set in;
-  struct timeval tv = {0, 0};
-  int64_t end = timeout_ms > 0
-                    ? nish_monotonic_nanos() + timeout_ms * 1000000LL
-                    : 0;
+  struct timeval tv;
+  int64_t left = timeout_ms * 1000LL;
+  int64_t end = timeout_ms > 0 ? nish_monotonic_nanos() + left * 1000 : 0;
   int r, stops;
-  do {
-    stops = nish_term_stop_count();
+  for (;;) {
+    tv.tv_sec = left / 1000000;
+    tv.tv_usec = left % 1000000;
     FD_ZERO(&in);
     FD_SET(0, &in);
-    if (timeout_ms > 0) {
-      int64_t left = (end - nish_monotonic_nanos()) / 1000;
-      if (left < 0) left = 0;
-      tv.tv_sec = left / 1000000;
-      tv.tv_usec = left % 1000000;
-    }
+    stops = nish_term_stop_count();
     r = select(1, &in, 0, 0, timeout_ms < 0 ? 0 : &tv);
-  } while (r < 0 && errno == EINTR && stops != nish_term_stop_count());
+    if (r >= 0 || errno != EINTR || stops == nish_term_stop_count()) break;
+    if (timeout_ms > 0) {
+      left = (end - nish_monotonic_nanos()) / 1000;
+      if (left < 0) left = 0;
+    }
+  }
 #endif
   if (r < 0) return errno == EINTR ? 0 : -errno;
   return r;

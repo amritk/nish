@@ -11,9 +11,10 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via probe
   calls: nish_arena_mark nish_arena_release nish_is_terminal nish_panic_index nish_panic_overflow nish_panic_slice nish_print nish_read_stdin nish_set_raw_mode nish_str_concat nish_str_eq nish_str_from_i32 nish_wait_stdin probe
-  stackSites=2 stackLocals=2
+  stackSites=3 stackLocals=3
   local +0:9 mode: string (const)
   callee +2:12 probe -> @probe
   local +10:11 xs: i32[] (const)
-  local +15:11 buf: u8[] (const)
-  local +16:9 n: i32 (let)
+  local +14:11 buf: u8[] (const)
+  local +21:11 buf: u8[] (const)
+  local +22:9 n: i32 (let)

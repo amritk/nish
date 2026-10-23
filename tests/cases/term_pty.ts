@@ -10,7 +10,10 @@
 // signal does. The wait's ten minutes outlast the test, so one that returns
 // false was ended by a signal: it prints `early`, which neither SIGTERM nor a
 // Ctrl-Z and `fg` may cause. A finite timeout, so the stop's retry asks for
-// what is left of its deadline rather than waiting for ever.
+// what is left of its deadline rather than waiting for ever. `deadline` drops
+// what is waiting, then waits two seconds once and prints what it answered:
+// stopped for longer than that, it answers `false` as soon as `fg` continues
+// it, because the retry asks for what is left, which is nothing.
 const probe = (): number => {
   const size = terminalSize();
   console.log(`${isTerminal(0)} ${isTerminal(1)} ${size[0] >= 0} ${size[1] >= 0}`);
@@ -31,6 +34,12 @@ export const main = (): number => {
   if (mode === "panic") {
     const xs: i32[] = [1, 2, 3];
     console.log(xs[process.argv.length + 4]);
+  }
+  if (mode === "deadline") {
+    const buf: u8[] = new Array<u8>(16);
+    while (readStdin(buf, 0, 16) > 0) {}
+    console.log("ready");
+    console.log(`timed ${waitStdin(2000)}`);
   }
   if (mode === "hold") {
     console.log("ready");
