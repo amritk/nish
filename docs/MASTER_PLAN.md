@@ -94,7 +94,7 @@ Design rules that every WP must respect:
   | `runtime-cross.c` | 1,427 (1,508 threaded) (2026-10-17) | 1,536 (1,536) |
   | `runtime-host.c` | 764 | 768 |
   | `runtime-net.c` | 2,303 | 2,304 |
-  | `runtime-simd.c` | 675 (2026-10-09) | 768 |
+  | `runtime-simd.c` | 2,337 (2026-10-23) | 2,560 |
   | `runtime-aes.c` | 2,532 (2026-10-11) | 2,560 |
 
   `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the

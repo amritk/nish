@@ -3,17 +3,18 @@
  *
  * The language gives a string `length`, `charCodeAt`, `substring`, `indexOf`,
  * `startsWith`, `endsWith` and `===` by content, and an array `join`. It does
- * **not** give `split`, `trim`, `toLowerCase` or a regular expression, and that
- * is a decision rather than a gap: each of those allocates, and several of them
- * need a locale or a character table that this runtime has no room for
+ * **not** give `split`, `trim`, `toLowerCase` or a regular expression (that is
+ * `std/regex`), and that is a decision rather than a gap: each allocates, and
+ * several need a locale or a character table this runtime has no room for
  * (`docs/wp7-runtime.md` keeps the runtime under a measured byte budget).
  *
  * So a program that reads a file and wants its lines writes the loop. This
  * module is that loop, written once. Every offset here is a **byte** offset,
- * like `s.length` itself, and every function is ASCII-only where it inspects
- * characters at all — a UTF-8 string passes through `splitLines` and `split`
- * untouched, because a newline and a space cannot appear inside a multi-byte
- * sequence.
+ * like `s.length` itself, and every function but one is ASCII-only where it
+ * inspects characters at all — a UTF-8 string passes through `splitLines` and
+ * `split` untouched, because a newline and a space cannot appear inside a
+ * multi-byte sequence. The one is `codePointLength`, which counts code points
+ * rather than bytes and answers the same natively and under Node; it says how.
  *
  * Every width this module declares is spelled (`i32`, never `number`) *and*
  * every value a builtin hands it is converted at the read: `s.length`,
@@ -267,4 +268,86 @@ const indexOfAnyFrom = (text: string, bytes: string, from: i32): i32 => {
     i += 1
   }
   return -1
+}
+
+/** The top two bits of a UTF-8 byte, which say whether it starts a code point. */
+const UTF8_TOP_BITS: i32 = 0xc0
+
+/** What those two bits are on a continuation byte: `10xxxxxx`, never a code point's first byte. */
+const UTF8_CONTINUATION: i32 = 0x80
+
+/** The first high surrogate, the unit that opens a UTF-16 pair. */
+const HIGH_SURROGATE: i32 = 0xd800
+
+/** The first low surrogate, the unit that closes a pair; the high ones end just below it. */
+const LOW_SURROGATE: i32 = 0xdc00
+
+/** One past the last low surrogate. */
+const SURROGATE_END: i32 = 0xe000
+
+/**
+ * Whether a string's units are UTF-8 bytes, as they are natively, rather than
+ * UTF-16 units, as they are under Node.
+ *
+ * `é` is two bytes and one UTF-16 unit, so its length says which host is
+ * running. It is written as an escape so that how this file is saved, `é` as
+ * one code point or as `e` and a combining accent, cannot change the answer.
+ * Natively the length of a literal is a load from a constant, and the
+ * optimiser folds this call to `true` and drops the other walk in
+ * `codePointLength`. The name is long for the reason `isTextBlankByte`'s is.
+ */
+const textUnitsAreBytes = (): boolean => toI32("\u00e9".length) === 2
+
+/**
+ * The number of Unicode code points in `text`: what JSON Schema's
+ * `minLength` and `maxLength` count, and not what `text.length` counts.
+ * `codePointLength("é")` is 1 where `"é".length` is 2, and
+ * `codePointLength("😀")` is 1 where its length is 4.
+ *
+ * Natively a string is its UTF-8 bytes, and every code point has exactly one
+ * byte that is not a continuation byte (`10xxxxxx`), so that is what is
+ * counted. Under Node the same `charCodeAt` reads UTF-16 units, where a byte
+ * rule would miscount: `"©®±"` is three units in `0x80`–`0xBF`, which are
+ * continuation bytes in UTF-8 but whole characters here. So the function asks
+ * which host it is on (`textUnitsAreBytes`) and, under Node, counts every unit
+ * except the low half of a surrogate pair. Both walks answer the same for any
+ * string literal, a lone surrogate escape included: it is three WTF-8 bytes
+ * with one leading byte natively, and one unit under Node. They differ for
+ * text built from bytes: `String.fromBytes` and `String.fromCharCode` give one
+ * unit per byte under Node, so a string decoded that way, as `nish/json`
+ * decodes a `\u` escape, counts its UTF-8 bytes there. They also differ for text
+ * that is not well-formed — bytes that are not UTF-8 natively, where each
+ * stray continuation byte counts nothing, or the two halves of a pair joined
+ * at run time, which are one string under Node and two lone surrogates
+ * natively.
+ */
+export const codePointLength = (text: string): i32 => {
+  const length: i32 = toI32(text.length)
+  // `count` never passes `i`, which stays below `length`, so it never wraps.
+  // It is a `u32` because unsigned addition carries no overflow check: an
+  // `i32` would need a panic branch, or a `count < length` guard to prove it
+  // away, and either one keeps the byte walk from vectorizing.
+  let count: u32 = 0
+  let i: i32 = 0
+  if (textUnitsAreBytes()) {
+    while (i < length) {
+      if ((toI32(text.charCodeAt(i)) & UTF8_TOP_BITS) !== UTF8_CONTINUATION) {
+        count += 1
+      }
+      i += 1
+    }
+    return toI32(count)
+  }
+  // A low surrogate right after a high one closes a pair the high one already
+  // counted. Any other unit, a lone surrogate included, is a code point.
+  let afterHigh: boolean = false
+  while (i < length) {
+    const unit: i32 = toI32(text.charCodeAt(i))
+    if (!(afterHigh && unit >= LOW_SURROGATE && unit < SURROGATE_END)) {
+      count += 1
+    }
+    afterHigh = unit >= HIGH_SURROGATE && unit < LOW_SURROGATE
+    i += 1
+  }
+  return toI32(count)
 }

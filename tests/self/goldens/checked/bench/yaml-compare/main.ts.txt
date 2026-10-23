@@ -3471,6 +3471,11 @@ const SPACE: i32 = 32
 const TAB: i32 = 9
 const INDEX_OF_ANY_MAX_SET: i32 = 16
 const NON_ASCII: i32 = 128
+const UTF8_TOP_BITS: i32 = 192
+const UTF8_CONTINUATION: i32 = 128
+const HIGH_SURROGATE: i32 = 55296
+const LOW_SURROGATE: i32 = 56320
+const SURROGATE_END: i32 = 57344
 function isTextBlankByte(code: i32): boolean -> @nish.isTextBlankByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
@@ -3552,3 +3557,16 @@ function indexOfAnyFrom(text: string, bytes: string, from: i32): i32 -> @nish.in
   local +2:7 i: i32 (let)
   local +6:11 code: i32 (const)
   local +7:9 j: i32 (let)
+function textUnitsAreBytes(): boolean -> @nish.textUnitsAreBytes
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function codePointLength(text: string): i32 -> @nish.codePointLength [exported]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.textUnitsAreBytes
+  stackSites=0 stackLocals=0
+  local +0:9 length: i32 (const)
+  local +5:7 count: u32 (let)
+  local +6:7 i: i32 (let)
+  callee +7:7 textUnitsAreBytes -> @nish.textUnitsAreBytes
+  local +18:7 afterHigh: boolean (let)
+  local +20:11 unit: i32 (const)

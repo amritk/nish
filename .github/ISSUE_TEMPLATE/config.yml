@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/amritk/nish/security/advisories/new
+    about: Privately, never as a public issue. SECURITY.md says what counts and what to include.
+  - name: Read the FAQ
+    url: https://github.com/amritk/nish/blob/main/docs/FAQ.md
+    about: Exit codes, clang warnings, what Nish deliberately does not support.
+  - name: Known inconsistencies
+    url: https://github.com/amritk/nish/blob/main/docs/LANGUAGE.md#known-inconsistencies
+    about: Behaviour already known to differ from JavaScript or the design notes.
