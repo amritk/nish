@@ -14415,7 +14415,9 @@ Four things refuse the hoist, and each is the whole of a proof:
   says grows an array — those are what move `len`, `cap` and `data`. A `new`
   of a class is a call to its constructor, and refuses the hoist on the same
   fact (`cg_sec_hoist_new_resize`: `new P(xs)` pushes, `new Q(xs)` only
-  reads and keeps it);
+  reads and keeps it). A `declare function` is not such a call: C is handed
+  an array's data pointer and never its header, so it cannot move `len` or
+  `data` (WP40 B1.3, `tests/cases/ffi_buffer_no_resize`);
 - a store in the loop to a field named anywhere in the path (`h.xs = other`),
   since the hoisted value is a field load;
 - a path rooted at a local the loop itself declares, or at a reassignable one,
