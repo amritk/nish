@@ -49,7 +49,8 @@
 //   or clash with it. No program of the corpus does.
 
 import { Operands, Walk } from "./emit-ts-edits"
-import { FLAG_OPTIONAL, N_CALL, N_IDENT, N_INDEX, N_MEMBER, Node } from "./nodes"
+import { isOptionalChain } from "./emit-util"
+import { N_CALL, N_IDENT, N_MEMBER, Node } from "./nodes"
 import { T_STRING } from "./types"
 
 /** The string methods whose offsets count bytes, each a core helper of the same name. */
@@ -68,23 +69,6 @@ const stringStaticHelper = (member: string): string => {
 
 /** Whether `node`'s value is an Nish string, as the checker typed it. */
 const typedString = (walk: Walk, node: Node): boolean => walk.program.nodeTypes[node.id] === T_STRING
-
-/**
- * Whether `link`, a member, or a link of the chain it closes is a `?.`. A
- * helper call that takes arguments cannot sit inside such a chain, whose short
- * circuit skips them, so these are left as written: right for every ASCII
- * string.
- */
-const inOptionalChain = (link: Node): boolean => {
-  let at = link
-  while (at.kind === N_MEMBER || at.kind === N_INDEX || at.kind === N_CALL) {
-    if ((at.flags & FLAG_OPTIONAL) !== 0) {
-      return true
-    }
-    at = at.children[0]
-  }
-  return false
-}
 
 /** `helper(args)` with its import asked for: `args` is the call's argument list as it will be written. */
 const stringHelperCall = (walk: Walk, helper: string, args: string): string => {
@@ -111,7 +95,7 @@ const stringLengthRewrite = (walk: Walk, node: Node, operands: Operands): string
   if (node.text !== "length" || !typedString(walk, node.children[0])) {
     return null
   }
-  return stringHelperCall(walk, inOptionalChain(node) ? "strLenOpt" : "strLen", operands.at(0))
+  return stringHelperCall(walk, isOptionalChain(node) ? "strLenOpt" : "strLen", operands.at(0))
 }
 
 /** A call this row rewrites: a byte-offset method of a string, a `String` static, or `Number` of a string. */
@@ -140,7 +124,9 @@ const stringCallRewrite = (walk: Walk, node: Node, operands: Operands): string |
     const helper = stringStaticHelper(callee.text)
     return helper.length === 0 ? null : stringHelperCall(walk, helper, operands.at(1))
   }
-  if (inOptionalChain(node)) {
+  // A helper call taking arguments cannot sit inside a `?.` chain, whose short
+  // circuit skips them, so the method stays as written: right for ASCII text.
+  if (isOptionalChain(node)) {
     return null
   }
   if (OFFSET_METHODS.indexOf(` ${callee.text} `) < 0 || !typedString(walk, receiver)) {

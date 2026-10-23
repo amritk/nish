@@ -3,10 +3,9 @@
 entry: src/emit-ts-strings.ts src/emit-ts-edits.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/emit-ts-control.ts src/nodes.ts src/emit-ts-numbers.ts src/emit-ts-records.ts src/nish-modules.ts src/branding.ts src/program.ts src/context.ts src/lexer.ts src/tokens.ts src/symbols.ts src/types.ts src/ice.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/emit-util.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/declarations.ts src/checker.ts src/expressions.ts src/members.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/statements.ts src/loop-flow.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/emit-json.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 import Operands from "./emit-ts-edits" -> struct Operands
 import Walk from "./emit-ts-edits" -> struct Walk
-import FLAG_OPTIONAL from "./nodes" -> const FLAG_OPTIONAL
+import isOptionalChain from "./emit-util" -> function @isOptionalChain
 import N_CALL from "./nodes" -> const N_CALL
 import N_IDENT from "./nodes" -> const N_IDENT
-import N_INDEX from "./nodes" -> const N_INDEX
 import N_MEMBER from "./nodes" -> const N_MEMBER
 import Node from "./nodes" -> struct Node
 import T_STRING from "./types" -> const T_STRING
@@ -21,13 +20,6 @@ function typedString(walk: Walk, node: Node): boolean -> @typedString
   pointer walk: size=112 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function inOptionalChain(link: Node): boolean -> @inOptionalChain
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: link
-  calls: nish_panic_index
-  pointer link: size=40 writesThrough=true captured=true
-  stackSites=0 stackLocals=0
-  local +0:7 at: Node (let)
 function stringHelperCall(walk: Walk, helper: string, args: string): string -> @stringHelperCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.useHelper
@@ -49,21 +41,21 @@ function methodReceiverText(walk: Walk, member: Node, memberText: string): strin
 function stringLengthRewrite(walk: Walk, node: Node, operands: Operands): string | null -> @stringLengthRewrite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stringHelperCall
-  calls: Operands.at inOptionalChain nish_panic_index nish_str_eq stringHelperCall typedString
+  calls: Operands.at isOptionalChain nish_panic_index nish_str_eq stringHelperCall typedString
   pointer walk: size=112 writesThrough=false captured=false passedTo=typedString#0 stringHelperCall#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=inOptionalChain#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
   callee +0:34 typedString -> @typedString
   callee +3:10 stringHelperCall -> @stringHelperCall
-  callee +3:33 inOptionalChain -> @inOptionalChain
+  callee +3:33 isOptionalChain -> @isOptionalChain
   callee +3:81 Operands.at -> @Operands.at
 function stringCallRewrite(walk: Walk, node: Node, operands: Operands): string | null -> @stringCallRewrite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stringHelperCall
-  calls: Operands.at inOptionalChain methodReceiverText nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from stringHelperCall stringStaticHelper typedString
+  calls: Operands.at isOptionalChain methodReceiverText nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from stringHelperCall stringStaticHelper typedString
   pointer walk: size=112 writesThrough=true captured=false passedTo=typedString#0 stringHelperCall#0 stringHelperCall#0 typedString#0 methodReceiverText#0 stringHelperCall#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=inOptionalChain#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 Operands.at#0 Operands.at#0
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
@@ -76,13 +68,13 @@ function stringCallRewrite(walk: Walk, node: Node, operands: Operands): string |
   callee +21:20 stringStaticHelper -> @stringStaticHelper
   callee +22:41 stringHelperCall -> @stringHelperCall
   callee +22:72 Operands.at -> @Operands.at
-  callee +24:7 inOptionalChain -> @inOptionalChain
-  callee +27:58 typedString -> @typedString
-  local +30:9 target: string | null (const)
-  callee +30:18 methodReceiverText -> @methodReceiverText
-  callee +30:51 Operands.at -> @Operands.at
-  callee +34:10 stringHelperCall -> @stringHelperCall
-  callee +34:60 Operands.at -> @Operands.at
+  callee +26:7 isOptionalChain -> @isOptionalChain
+  callee +29:58 typedString -> @typedString
+  local +32:9 target: string | null (const)
+  callee +32:18 methodReceiverText -> @methodReceiverText
+  callee +32:51 Operands.at -> @Operands.at
+  callee +36:10 stringHelperCall -> @stringHelperCall
+  callee +36:60 Operands.at -> @Operands.at
 function stringsRow(walk: Walk, node: Node, operands: Operands): string | null -> @stringsRow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stringLengthRewrite
