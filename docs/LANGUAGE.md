@@ -3977,7 +3977,9 @@ breaks one is refused with that rule's own code:
   third disposable beside `scope()` and `arena()`, and one `using` takes one
   lock (a second declarator's `lock()` is R5's, below). A lock may share a
   `using` with a scope opened before it or with an arena on either side, and
-  the declarators close in the reverse of the order they opened, so in
+  the declarators close in the reverse of the order they opened, each opening
+  before the next declarator's initialiser runs (an `orReturn()` there closes
+  the ones before it), so in
   `using a = arena(), g = m.lock()` the lock is given back before the arena
   releases (`tests/link/thread_mutex_using_mixed`); a scope opened after the
   lock, `using g = m.lock(), s = scope()`, is R5's
