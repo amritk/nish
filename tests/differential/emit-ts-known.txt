@@ -97,7 +97,10 @@ cases/arr_u8 numbers  # differ: stdout line 3 differs
 cases/bit_shift_narrow numbers  # differ: stdout line 1 differs
 cases/bytes_offset_float numbers  # differ: exit 0 vs 1: ReferenceError: toF32 is not defined
 cases/bytes_offset_u64 numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
-cases/bytes_set_float_panic strings  # differ: stderr line 1 differs
+cases/bytes_set_disjoint records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
+cases/bytes_set_end records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
+cases/bytes_set_float_panic strings  # differ: stdout line 1 differs
+cases/bytes_set_self records  # differ: exit 0 vs 1: TypeError: a.set is not a function
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
 cases/caps_net refused  # refused: NL4011 under --emit-ts
 cases/caps_process_wait numbers  # differ: exit 0 vs 1: throw new Error(
@@ -209,6 +212,7 @@ cases/panics_overflow numbers  # differ: exit 0 vs 1: SyntaxError: The requested
 cases/panics_overflow_proven numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/panics_overflow_via records  # differ: stdout line 1 differs
 cases/panics_overflow_wrapping numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'wrappingAdd'
+cases/panics_slice records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
 cases/perf_arena_control control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/perf_arena_loop control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/perf_rng_counter numbers  # differ: exit 1 vs 0
@@ -244,7 +248,7 @@ cases/secret_field_wipe_o2 numbers  # differ: exit 0 vs 1: ReferenceError: toU8 
 cases/secret_field_wipe_o2_plain numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/secret_flow numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/secret_inferred numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/secret_wipe numbers  # differ: stdout line 3 differs
+cases/secret_wipe records  # differ: exit 0 vs 1: TypeError: copy.set is not a function
 cases/secret_wipe_o2 numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/secret_wipe_o2_inferred numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/secret_wipe_o2_inferred_plain numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined

@@ -55,9 +55,9 @@ function stringLengthRewrite(walk: Walk, node: Node, operands: Operands): string
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
   callee +0:34 typedString -> @typedString
-  callee +0:73 inOptionalChain -> @inOptionalChain
   callee +3:10 stringHelperCall -> @stringHelperCall
-  callee +3:43 Operands.at -> @Operands.at
+  callee +3:33 inOptionalChain -> @inOptionalChain
+  callee +3:81 Operands.at -> @Operands.at
 function stringCallRewrite(walk: Walk, node: Node, operands: Operands): string | null -> @stringCallRewrite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stringHelperCall
@@ -77,13 +77,12 @@ function stringCallRewrite(walk: Walk, node: Node, operands: Operands): string |
   callee +22:41 stringHelperCall -> @stringHelperCall
   callee +22:72 Operands.at -> @Operands.at
   callee +24:7 inOptionalChain -> @inOptionalChain
-  local +27:7 helper: string (let)
-  callee +28:58 typedString -> @typedString
-  local +35:9 target: string | null (const)
-  callee +35:18 methodReceiverText -> @methodReceiverText
-  callee +35:51 Operands.at -> @Operands.at
-  callee +39:10 stringHelperCall -> @stringHelperCall
-  callee +39:55 Operands.at -> @Operands.at
+  callee +27:58 typedString -> @typedString
+  local +30:9 target: string | null (const)
+  callee +30:18 methodReceiverText -> @methodReceiverText
+  callee +30:51 Operands.at -> @Operands.at
+  callee +34:10 stringHelperCall -> @stringHelperCall
+  callee +34:60 Operands.at -> @Operands.at
 function stringsRow(walk: Walk, node: Node, operands: Operands): string | null -> @stringsRow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stringLengthRewrite

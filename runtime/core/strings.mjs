@@ -2,31 +2,14 @@
  * The strings of the core: an Nish string is its UTF-8 bytes, so every length
  * and offset here counts bytes. Only the web's `TextEncoder` and `TextDecoder`
  * are used, and the decoder keeps a leading byte-order mark, as a cut through
- * the bytes must.
+ * the bytes must. Decoding is lossy where native is not: bytes that are not
+ * UTF-8, or a cut through a character, decode to U+FFFD, whose three bytes
+ * then change the string's length.
  */
 import { panicIndex, panicSlice, toIndex } from "./checks.mjs";
 
 const ENCODER = new TextEncoder();
 const DECODER = new TextDecoder("utf-8", { ignoreBOM: true });
-
-/**
- * The UTF-8 byte length of `s` without encoding it: a lone surrogate counts the
- * three bytes of the U+FFFD it encodes as.
- */
-function utf8Length(s) {
-  let n = 0;
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c < 0x80) n += 1;
-    else if (c < 0x800) n += 2;
-    else if (c >= 0xd800 && c < 0xdc00 && i + 1 < s.length && (s.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
-      n += 4;
-      i++;
-    } else n += 3;
-  }
-  return n;
-}
-
 
 /** The string `bytesOf` encoded last, and its bytes. */
 let lastString = "";
@@ -53,6 +36,16 @@ function bytesOf(s) {
  */
 export function strLen(x) {
   return typeof x === "string" ? bytesOf(x).length : x.length;
+}
+
+/**
+ * `s?.length` in a `?.` chain: `undefined` when the chain has stopped at a
+ * `null` or `undefined` link, as `?.` answers, and the byte length otherwise.
+ * The chain is its argument, so it is evaluated once and its short circuit
+ * kept.
+ */
+export function strLenOpt(x) {
+  return x === null || x === undefined ? undefined : strLen(x);
 }
 
 /** `s.charCodeAt(i)`: the byte at `i`, bounds-checked as `a[i]` is (JavaScript answers NaN). */
@@ -125,10 +118,16 @@ export function startsWith(s, sub) {
 }
 
 export function endsWith(s, sub) {
-  return occursAt(s, utf8Length(s) - utf8Length(sub), sub);
+  const bytes = bytesOf(s);
+  const needle = ENCODER.encode(sub);
+  return bytesAt(bytes, bytes.length - needle.length, needle);
 }
 
-/** `String.fromCharCode(c)`: the one-byte string of `c & 0xFF`. */
+/**
+ * `String.fromCharCode(c)`: the one-unit string of `c & 0xFF`. Under 128 that
+ * is the one byte native builds; from 128 it is the Latin-1 character, two
+ * UTF-8 bytes where native holds one (LANGUAGE.md's C row).
+ */
 export function fromCharCode(code) {
   return String.fromCharCode(toIndex(code) & 0xff);
 }

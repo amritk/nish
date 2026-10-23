@@ -23,16 +23,30 @@
 // that name with the receiver first. `startsWith` and `endsWith` answer the
 // same over code units as over bytes and stay as written. `String.fromBytes`
 // decodes its bytes as UTF-8 (`utf8FromBytes`), `String.fromCharCode` builds
-// its one byte, and `Number` of a string parses as the native runtime does
-// (`number`). `parseInt` and `parseFloat` need nothing here: the composer
-// imports the core's for every ambient call already, so the global is never
-// reached.
+// the string of one code unit, and `Number` of a string parses as the native
+// runtime does (`number`). `parseInt` and `parseFloat` need nothing here: the
+// composer imports the core's for every ambient call already, so the global
+// is never reached.
 //
-// `dst.set(src, at)` on an array of numbers (§3.2's bulk-write row) is
-// `arraySet(dst, src, at)`: a `u8[]` is a plain `Array` under Node, which has
-// no `set`. The walk carries no type table to ask whether the receiver is an
-// array, but a `set` the checker bound no callee to is the array method: a
-// `Map`'s `set` is a method of `std/collections.ts`, and so has a callee.
+// A `?.` chain ends in `??`, so a string's `.length` closes its chain, and
+// `o?.s.length` is `strLenOpt(o?.s)`: the chain evaluated once, as the
+// argument, and `undefined` when it stopped short.
+//
+// What this row does not make agree:
+//
+// - A byte-offset method inside a `?.` chain (`s?.slice(0, 1)`) stays as
+//   written, so it counts UTF-16 units past ASCII. A call skips its arguments
+//   when the chain stops, so a faithful form is a conditional expression, not
+//   a helper call.
+// - `String.fromCharCode` of 128 and up is the Latin-1 character, two UTF-8
+//   bytes where native builds one (LANGUAGE.md's C row), so it and
+//   `String.fromBytes` disagree over the same bytes.
+// - Decoding is lossy: `String.fromBytes` of bytes that are not UTF-8, or a
+//   `slice` or `substring` through a character, gives U+FFFD where native
+//   keeps the bytes, and the length changes with it.
+// - A helper is imported under its own name (`useHelper` cannot alias it), so
+//   a program that binds `slice`, `number`, `indexOf`, ... itself would shadow
+//   or clash with it. No program of the corpus does.
 
 import { Operands, Walk } from "./emit-ts-edits"
 import { FLAG_OPTIONAL, N_CALL, N_IDENT, N_INDEX, N_MEMBER, Node } from "./nodes"
@@ -57,8 +71,9 @@ const typedString = (walk: Walk, node: Node): boolean => walk.program.nodeTypes[
 
 /**
  * Whether `link`, a member, or a link of the chain it closes is a `?.`. A
- * helper call cannot sit inside such a chain, whose short circuit skips the
- * rest of it, so these are left as written: right for every ASCII string.
+ * helper call that takes arguments cannot sit inside such a chain, whose short
+ * circuit skips them, so these are left as written: right for every ASCII
+ * string.
  */
 const inOptionalChain = (link: Node): boolean => {
   let at = link
@@ -91,15 +106,15 @@ const methodReceiverText = (walk: Walk, member: Node, memberText: string): strin
   return memberText.substring(0, memberText.length - suffix.length)
 }
 
-/** `s.length` on a string: its byte length. */
+/** `s.length` on a string: its byte length, `undefined` where a `?.` chain stopped. */
 const stringLengthRewrite = (walk: Walk, node: Node, operands: Operands): string | null => {
-  if (node.text !== "length" || !typedString(walk, node.children[0]) || inOptionalChain(node)) {
+  if (node.text !== "length" || !typedString(walk, node.children[0])) {
     return null
   }
-  return stringHelperCall(walk, "strLen", operands.at(0))
+  return stringHelperCall(walk, inOptionalChain(node) ? "strLenOpt" : "strLen", operands.at(0))
 }
 
-/** A call this row rewrites: a byte-offset method of a string, a `String` static, `Number` of a string, or an array's `set`. */
+/** A call this row rewrites: a byte-offset method of a string, a `String` static, or `Number` of a string. */
 const stringCallRewrite = (walk: Walk, node: Node, operands: Operands): string | null => {
   const callee = node.children[0]
   const args = node.children[1]
@@ -128,19 +143,14 @@ const stringCallRewrite = (walk: Walk, node: Node, operands: Operands): string |
   if (inOptionalChain(node)) {
     return null
   }
-  let helper = ""
-  if (OFFSET_METHODS.indexOf(` ${callee.text} `) >= 0 && typedString(walk, receiver)) {
-    helper = callee.text
-  } else if (callee.text === "set" && walk.program.nodeBuiltins[node.id].length === 0) {
-    helper = "arraySet"
-  } else {
+  if (OFFSET_METHODS.indexOf(` ${callee.text} `) < 0 || !typedString(walk, receiver)) {
     return null
   }
   const target = methodReceiverText(walk, callee, operands.at(0))
   if (target === null) {
     return null
   }
-  return stringHelperCall(walk, helper, `${target}, ${operands.at(1)}`)
+  return stringHelperCall(walk, callee.text, `${target}, ${operands.at(1)}`)
 }
 
 /** The strings row's rewrite of `node`, or `null` to leave it to the next row. */
