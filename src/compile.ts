@@ -711,10 +711,9 @@ export const main = (): number => {
       productFlag = productFlag.length === 0 ? value : productFlag
       emitAst = true
     } else if (value === "-h" || value === "--help") {
-      // A request that succeeded, not a refusal: stdout and exit 0. stage0
-      // answers it the same way (`usageText` in stage0's `src/index.ts`), so a script
-      // that asks either compiler for its help sees the same shape. A bare
-      // `nish` and a command line with no input still print the usage on
+      // A request that succeeded, not a refusal: stdout and exit 0, so a
+      // script can ask for the help without reading the run as a failure. A
+      // bare `nish` and a command line with no input print the usage on
       // stderr and return 2; an unknown flag returns 2 with one line.
       console.log(usageText(1))
       return 0

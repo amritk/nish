@@ -408,7 +408,13 @@ const checkIdentity = (t: Suite, cli: Cli): string => {
  * the code. A wrapper that cannot tell them apart reads an answer as a failure.
  */
 const checkHelp = (t: Suite, cli: Cli, name: string): void => {
-  const help = cli.plain("help", ["--help"]);
+  // `NO_COLOR` wins over every other colour variable, so the environment this
+  // harness inherited cannot paint the text the checks below read.
+  const plainEnv: string[] = [];
+  if (hasEnvTool()) {
+    plainEnv.push("NO_COLOR=1");
+  }
+  const help = cli.run("help", plainEnv, ["--help"]);
   t.eqI32("--help exits 0", help.status, 0);
   t.contains("--help prints the usage on stdout", help.stdout, "usage: ");
   t.eqStr("--help says nothing on stderr", trim(help.stderr), "");
@@ -416,15 +422,20 @@ const checkHelp = (t: Suite, cli: Cli, name: string): void => {
   // user typed. Both compilers build it from `CLI` in their `branding.ts`.
   t.contains("the usage text names the tool itself", help.stdout, `usage: ${name}`);
   t.eqBool("--help prints no stack frame", hasStackFrame(help.stdout), false);
-  const flags = advertisedFlags();
+  // Each flag between spaces, as its row prints it, so `--deny` is not found
+  // inside `--deny-panics`.
+  const flags: string[] = [];
+  for (const flag of advertisedFlags()) {
+    flags.push(` ${flag} `);
+  }
   t.containsAll(`--help names every advertised flag (${flags.length} of them)`, help.stdout, flags);
 
-  const short = cli.plain("help_short", ["-h"]);
+  const short = cli.run("help_short", plainEnv, ["-h"]);
   t.eqStr("-h is --help exactly", short.stdout, help.stdout);
 
   // No arguments at all, which is the usage error every wrapper meets first.
   const nothing: string[] = [];
-  const usage = cli.plain("usage", nothing);
+  const usage = cli.run("usage", plainEnv, nothing);
   t.eqI32("no inputs at all exits 2", usage.status, 2);
   t.contains("and prints the usage on stderr", usage.stderr, "usage: ");
   t.eqStr(

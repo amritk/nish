@@ -35,7 +35,7 @@ const DESCRIPTION_COLUMN: i32 = 35
  * How one output stream is painted. `on` says whether to colour at all, and
  * `rich` whether the terminal has the 256-colour palette, which every modern
  * one does and which the softer tones below need; without it each tone falls
- * back to the nearest of the eight basic colours.
+ * back to the nearest of the sixteen basic colours.
  */
 export class Style {
   on: boolean
@@ -90,10 +90,13 @@ const envIsSet = (name: string): boolean => {
   return value !== null && value.length > 0
 }
 
-/** Whether `name` is set and says yes: not empty, and not the `0` that means no. */
+/**
+ * Whether `name` is set and says yes: not empty, and neither the `0` nor the
+ * `false` that mean no, as Node reads `FORCE_COLOR`.
+ */
 const envSaysYes = (name: string): boolean => {
   const value = getenv(name)
-  return value !== null && value.length > 0 && value !== "0"
+  return value !== null && value.length > 0 && value !== "0" && value !== "false"
 }
 
 /**
