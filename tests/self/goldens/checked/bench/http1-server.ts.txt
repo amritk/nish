@@ -18513,11 +18513,11 @@ function jsonTokEiselLemire(w0: u64, q: i32): f64 -> @nish.jsonTokEiselLemire
   local +34:9 upperbit: i32 (const)
   local +35:9 shift: i32 (const)
   local +36:7 mantissa: u64 (let)
-  local +39:9 power: i32 (const)
-  local +40:7 power2: i32 (let)
-  local +44:11 subnormalShift: i32 (const)
-  local +55:9 three: u64 (const)
-  local +60:9 hidden: u64 (const)
+  local +41:9 power: i32 (const)
+  local +42:7 power2: i32 (let)
+  local +46:11 subnormalShift: i32 (const)
+  local +57:9 three: u64 (const)
+  local +62:9 hidden: u64 (const)
 function jsonTokPowerOfFive(index: i32): u64 -> @nish.jsonTokPowerOfFive
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index

@@ -1395,7 +1395,7 @@ const jsonTokMulHigh = (a: u64, b: u64): u64 => {
 /** The leading zero bits of a `u64`, 64 for zero. */
 const jsonTokLeadingZeros = (w: u64): i32 => {
   const hi: i32 = toI32(w >> toU64(32))
-  return hi !== 0 ? Math.clz32(hi) : 32 + Math.clz32(toI32(w))
+  return hi !== 0 ? Math.clz32(hi) : Math.clz32(toI32(w)) + 32
 }
 
 /**
@@ -1426,7 +1426,7 @@ const jsonTokEiselLemire = (w0: u64, q: i32): f64 => {
   // compute_product_approximation: w × 5^q to the 55 bits a double needs
   // (52 explicit, the implicit one, a rounding bit and the one `upperbit` may
   // cost), with the next word of the power only when those bits are all ones.
-  const index: i32 = 2 * (q - JSON_TOK_SMALLEST_POWER)
+  const index: i32 = (q - JSON_TOK_SMALLEST_POWER) * 2
   const five: u64 = jsonTokPowerOfFive(index)
   let high: u64 = jsonTokMulHigh(w, five)
   // The low half: natively a `u64` product wraps to it, and as a `bigint` the
@@ -1451,7 +1451,9 @@ const jsonTokEiselLemire = (w0: u64, q: i32): f64 => {
   let mantissa: u64 = high >> toU64(shift)
   // detail::power: floor(q × log2(5)) + q + 63, with upstream's bias so the
   // shift is of a non-negative value. `q` is within ±342, so the product fits.
-  const power: i32 = ((152170 + 65536) * q + 2048 * 65536) >> 16
+  // The literals are upstream's `152170 + 65536` and `2048 * 65536`, folded,
+  // since a sum of literals is an `f64` under `--number-mode f64`.
+  const power: i32 = (q * 217706 + 134217728) >> 16
   let power2: i32 = power - 2048 + 63 + upperbit - lz + 1023
   if (power2 <= 0) {
     // A subnormal, or zero. The rounded mantissa is at most 2^52, and when it
