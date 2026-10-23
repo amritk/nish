@@ -93,8 +93,8 @@ static int nish_term_stop_count(void) {
    handler's stop interrupted is asked again, for what is left until a
    deadline read once from the monotonic clock, since `select` promises
    nothing of its timeout or its set after an error. The first ask is for the
-   whole timeout, so a wait reads the clock once up front and again only
-   after a stop. A stop that lands between reading the clock and `select` starting
+   whole timeout, so a wait reads the clock once up front and again only after
+   a stop. A stop that lands between reading the clock and `select` starting
    goes unseen, and that wait runs the time it had left after `fg`; one in the
    last few instructions, after the stop count is read, also has the next
    other signal ask again rather than end the wait. Before raw mode the

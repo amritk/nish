@@ -1582,7 +1582,11 @@ if (!only || "term".includes(only)) {
   // re-entered raw mode, does not count. A fourth, `deadline`, is stopped for
   // three seconds inside a two-second wait and must end within a second of
   // `fg`, before a helper's SIGTERM: a retry that asked for the whole timeout
-  // again, or for ever, would die of it.
+  // again, or for ever, would die of it. The stop comes half a second after
+  // `ready`, so the wait has read its clock, and the helper is killed once
+  // the program is done, so it signals no pid that has gone. The Ctrl-D
+  // `script(1)` gives when its stdin ends came at the start, and the first
+  // `hold` read it.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
@@ -1628,11 +1632,12 @@ if (!only || "term".includes(only)) {
         'echo "continued $? stty $(same) was $(cat "$D/cont.out") said $(tr \'\\n\' \' \' < "$D/hold.out")"',
         ': > "$D/hold.out"',
         "( i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
-        '  sleep 0.2; kill -TSTP "$(cat "$D/hold.pid")" ) &',
+        '  sleep 0.5; kill -TSTP "$(cat "$D/hold.pid")" ) &',
         'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" deadline > "$2/hold.out"\' sh "$E" "$D"',
         "sleep 3",
-        '( sleep 1; kill -TERM "$(cat "$D/hold.pid")" 2>/dev/null ) &',
+        '( sleep 1; kill -TERM "$(cat "$D/hold.pid")" 2>/dev/null ) & k=$!',
         "fg > /dev/null",
+        'kill $k 2>/dev/null',
         'echo "deadline $? stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
         "",
       ].join("\n")
