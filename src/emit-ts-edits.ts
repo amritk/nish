@@ -160,16 +160,16 @@ export class Walk {
   refusals: string[]
   /** An internal error the walk ran into, or the empty string. */
   failure: string
+  /** The statements hoisted out of the current statement so far, in order. */
+  preludes: string[]
+  /** The next number `temporary` tries. */
+  temps: i32
   /** The node being walked may hoist, by its position alone (`hoistChild`). */
   hoistHere: boolean
   /** What `canHoist` answers to the hook being asked about the current node. */
   hoistable: boolean
   /** Something with an effect has run in the current statement, and was not hoisted. */
   effects: boolean
-  /** The statements hoisted out of the current statement so far, in order. */
-  preludes: string[]
-  /** The next number `temporary` tries. */
-  temps: i32
 
   constructor(program: CheckedProgram, source: SourceFile, nodeCount: i32) {
     this.program = program
