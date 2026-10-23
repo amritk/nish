@@ -7879,6 +7879,7 @@ declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer
 declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
 declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
 declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
 declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
 declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
 declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
@@ -8197,6 +8198,7 @@ declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer
 declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
 declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
 declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
+declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
 declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
 declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #1
 declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #1
@@ -8618,6 +8620,7 @@ declare noundef i64 @nish.JsonDocument.i64(%struct.JsonDocument* noundef nonnull
 declare noundef zeroext i1 @nish.JsonDocument.isU64(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(224) nocapture, i32 noundef) #0
 declare noundef i64 @nish.JsonDocument.u64(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(224) nocapture, i32 noundef) #0
 declare noundef i64 @nish.JsonDocument.unsigned(%struct.JsonDocument* noundef nonnull align 8 dereferenceable(224) nocapture, i32 noundef) #0
+declare noundef zeroext i1 @nish.JsonDocument.isIntegral(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(224) nocapture, i32 noundef) #0
 declare noundef double @nish.JsonDocument.f64(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(224) nocapture, i32 noundef) #0
 declare noundef zeroext i1 @nish.JsonDocument.readNumber(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(224) nocapture, i32 noundef) #0
 declare noundef nonnull align 8 i8* @nish.JsonDocument.textOf(%struct.JsonDocument* noundef nonnull readonly align 8 dereferenceable(224) nocapture, i32 noundef, i32 noundef) #0
@@ -8665,6 +8668,7 @@ declare noundef zeroext i1 @nish.JsonTokenizer.integerScan(%struct.JsonTokenizer
 declare noundef zeroext i1 @nish.JsonTokenizer.isU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
 declare noundef i64 @nish.JsonTokenizer.numberU64(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
 declare noundef zeroext i1 @nish.JsonTokenizer.unsignedScan(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
+declare noundef zeroext i1 @nish.JsonTokenizer.isIntegral(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
 declare noundef double @nish.JsonTokenizer.numberF64(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
 declare noundef double @nish.JsonTokenizer.numberSlow(%struct.JsonTokenizer* noundef nonnull readonly align 8 dereferenceable(96) nocapture) #0
 declare noundef i32 @nish.JsonTokenizer.skipValue(%struct.JsonTokenizer* noundef nonnull align 8 dereferenceable(96) nocapture) #0
@@ -14415,7 +14419,9 @@ Four things refuse the hoist, and each is the whole of a proof:
   says grows an array — those are what move `len`, `cap` and `data`. A `new`
   of a class is a call to its constructor, and refuses the hoist on the same
   fact (`cg_sec_hoist_new_resize`: `new P(xs)` pushes, `new Q(xs)` only
-  reads and keeps it);
+  reads and keeps it). A `declare function` is not such a call: C is handed
+  an array's data pointer and never its header, so it cannot move `len` or
+  `data` (WP40 B1.3, `tests/cases/ffi_buffer_no_resize`);
 - a store in the loop to a field named anywhere in the path (`h.xs = other`),
   since the hoisted value is a field load;
 - a path rooted at a local the loop itself declares, or at a reassignable one,

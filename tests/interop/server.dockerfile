@@ -19,8 +19,12 @@ RUN apt-get $APT_OPTS update \
 WORKDIR /nish
 COPY install.sh package.json ./
 COPY scripts/ scripts/
-RUN version="$(sed -n 's/^  "version": "\(.*\)",$/\1/p' package.json)" \
- && sh scripts/fetch-seed.sh "$version"
+# The seed is the newest published release, as in ci.yml, unless SEED_VERSION
+# names one: release.yml's `interop` job names the release it just published.
+# Not package.json's version: on the release commit, and on every push until
+# release.yml has published it, that names a release with no SHA256SUMS yet.
+ARG SEED_VERSION=""
+RUN sh scripts/fetch-seed.sh ${SEED_VERSION}
 COPY src/ src/
 COPY std/ std/
 COPY runtime/ runtime/

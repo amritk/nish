@@ -120,7 +120,7 @@ function findDo(n: i32): string -> @findDo
   callee +5:7 free -> @free
   callee +9:7 free -> @free
 function findOf(xs: i32[]): string -> @findOf
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via strdup
   calls: free nish_panic nish_str_concat nish_str_from_i32 nish_str_index_of nish_str_new strdup
   pointer xs: size=0 writesThrough=false captured=false
