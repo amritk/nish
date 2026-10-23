@@ -52,22 +52,32 @@ function cryptoRefusal(what: string): string -> @cryptoRefusal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
+function refuseWhen(ctx: CheckContext, refused: boolean, call: Node, name: string): boolean -> @refuseWhen
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via CheckContext.error
+  calls: CheckContext.error nish_str_concat
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  stackSites=0 stackLocals=0
+  callee +0:3 CheckContext.error -> @CheckContext.error
 function refuseOnWasm(ctx: CheckContext, call: Node, name: string): boolean -> @refuseOnWasm
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via CheckContext.error
-  calls: CheckContext.error nish_str_concat
-  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  sharedWrite: via refuseWhen
+  escaping: name
+  calls: refuseWhen
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=refuseWhen#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=refuseWhen#2
   stackSites=0 stackLocals=0
-  callee +0:3 CheckContext.error -> @CheckContext.error
+  callee +0:80 refuseWhen -> @refuseWhen
 function refuseOnFreestandingWasm(ctx: CheckContext, call: Node, name: string): boolean -> @refuseOnFreestandingWasm
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via CheckContext.error
-  calls: CheckContext.error nish_str_concat
-  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
+  sharedWrite: via refuseWhen
+  escaping: name
+  calls: refuseWhen
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=refuseWhen#0
+  pointer call: size=40 writesThrough=false captured=false passedTo=refuseWhen#2
   stackSites=0 stackLocals=0
-  callee +0:3 CheckContext.error -> @CheckContext.error
+  callee +0:3 refuseWhen -> @refuseWhen
 function conversionTarget(name: string): i32 -> @conversionTarget
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq

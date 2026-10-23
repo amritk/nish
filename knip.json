@@ -18,6 +18,7 @@
   ],
   "project": ["**/*.{ts,js,mjs}"],
   "ignore": [
+    "tests/emit-ts/**",
     "tests/cases/**",
     "tests/link/**",
     "tests/wordings/**",
