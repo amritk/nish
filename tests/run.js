@@ -19348,6 +19348,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(stage, "scripts", "build.sh"))
         fs.copyFileSync(path.join(root, "LICENSE"), path.join(stage, "LICENSE"))
         fs.copyFileSync(path.join(root, "docs", "INSTALL.md"), path.join(stage, "INSTALL.md"))
+        fs.mkdirSync(path.join(stage, "docs"), { recursive: true })
+        fs.copyFileSync(path.join(root, "docs", "AI.md"), path.join(stage, "docs", "AI.md"))
         const stagedBinary = path.join(stage, "bin", "nish")
         fs.copyFileSync(NISH, stagedBinary)
         fs.chmodSync(stagedBinary, 0o755)
@@ -19380,6 +19382,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           "runtime/runtime-os.c",
           "runtime/nish.h",
           "scripts/build.sh",
+          "docs/AI.md",
           ...stdModuleFiles(),
         ]
         const missingFromPlatform = wantedInPlatform.filter((f) => !packedPaths.includes(f))
@@ -19442,6 +19445,20 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
             "installed nish compiles examples/add.ts to IR from an unrelated cwd",
             ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
             ir.stderr
+          )
+          // The binary's root is the platform package, not the main one, so
+          // the card it names an agent has to have shipped in it.
+          const agentHelp = spawnSync(bin, ["--help"], {
+            cwd: work,
+            encoding: "utf8",
+            env: { ...process.env, NISH_AGENT: "1", NO_COLOR: "" },
+          })
+          const shipped = path.join(platformDir, "docs", "AI.md")
+          const card = fs.existsSync(shipped) ? fs.realpathSync(shipped) : shipped
+          check(
+            "installed nish --help names an agent the AI.md its platform package ships, by absolute path",
+            agentHelp.status === 0 && agentHelp.stdout.split("\n").some((line) => line.trim() === card),
+            agentHelp.stdout + agentHelp.stderr
           )
           // A program that imports the standard library, through the installed package,
           // by its package specifier. `std/` travels in the platform package as well as

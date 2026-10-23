@@ -112,7 +112,10 @@ directory unrelated to both the checkout and the unpack.
 
 The staged directory `release.yml`'s `binaries` job builds is what both
 channels ship: `bin/nish` (stage2), `runtime/`, `scripts/build.sh`, `std/`,
-`LICENSE` and `INSTALL.md`. `std/` joined it on 2026-09-20; every release from
+`LICENSE`, `INSTALL.md` and `docs/AI.md`, the language card an agent's
+`nish --help` names by absolute path: the compiler looks for it under its own
+root, which is this directory, not the main npm package beside it. `std/`
+joined it on 2026-09-20; every release from
 0.1.1 to 0.4.0 lacks it, so their compilers refuse any `import ... from
 "nish/<module>"`. `nish-cmp` found that on its first run, and it is why
 `cmpSince` in `.github/seed-targets.json` skips those seeds. `release.yml` has
