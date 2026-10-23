@@ -78,7 +78,7 @@
    handler on one thread counts what a wait on another reads. */
 static int nish_term_stops;
 
-static int nish_term_stopped(void) {
+static int nish_term_stop_count(void) {
   return __atomic_load_n(&nish_term_stops, __ATOMIC_RELAXED);
 }
 #endif
@@ -89,13 +89,13 @@ static int nish_term_stopped(void) {
    and `fg` do not end it: no system restarts a `select` after a handler,
    `SA_RESTART` or not, though Linux does after the default stop, so one the
    stop interrupted is asked again, for what Linux left of the timeout and
-   Darwin for all of it. Outside
-   WASI this asks `select`, because Darwin's `poll` does not support devices:
-   it answers POLLNVAL for a terminal at once, with no input there. Under WASI
-   a timeout under 10 ms asks for 10: Node's WASI (uvwasi) runs a timer that is
-   due before its first look at the descriptor, and counts it from before it
-   set the look up, so a shorter wait answers "nothing waiting" while bytes
-   are whenever setting up took longer than the wait, as on a busy machine. */
+   Darwin for all of it. Outside WASI this asks `select`, because Darwin's
+   `poll` does not support devices: it answers POLLNVAL for a terminal at
+   once, with no input there. Under WASI a timeout under 10 ms asks for 10:
+   Node's WASI (uvwasi) runs a timer that is due before its first look at the
+   descriptor, and counts it from before it set the look up, so a shorter wait
+   answers "nothing waiting" while bytes are whenever setting up took longer
+   than the wait, as on a busy machine. */
 static int nish_stdin_ready(int32_t timeout_ms) {
 #ifdef __wasi__
   struct pollfd p = {0, POLLIN, 0};
@@ -107,9 +107,9 @@ static int nish_stdin_ready(int32_t timeout_ms) {
   struct timeval tv = {timeout_ms / 1000, (timeout_ms % 1000) * 1000};
   int r, stops;
   do {
-    stops = nish_term_stopped();
+    stops = nish_term_stop_count();
     r = select(1, &in, 0, 0, timeout_ms < 0 ? 0 : &tv);
-  } while (r < 0 && errno == EINTR && stops != nish_term_stopped());
+  } while (r < 0 && errno == EINTR && stops != nish_term_stop_count());
 #endif
   if (r < 0) return errno == EINTR ? 0 : -errno;
   return r;

@@ -7,8 +7,9 @@
 // restores before it lets the signal end the program. It reads and drops what
 // comes meanwhile: `script(1)` gives the terminal a Ctrl-D when its own stdin
 // ends, which raw mode delivers as a byte, so one wait could return before the
-// signal does. A wait that returns false, a signal ending it, prints `early`,
-// which neither SIGTERM nor a Ctrl-Z and `fg` may cause.
+// signal does. The wait has no timeout, so one that returns false was ended
+// by a signal: it prints `early`, which neither SIGTERM nor a Ctrl-Z and `fg`
+// may cause.
 const probe = (): number => {
   const size = terminalSize();
   console.log(`${isTerminal(0)} ${isTerminal(1)} ${size[0] >= 0} ${size[1] >= 0}`);
