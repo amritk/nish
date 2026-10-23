@@ -222,7 +222,7 @@ The checks in `tests/run.js` that hold the above:
   scanners read is proven, with no check left in the hot loops.
 - `link/std_json_tokenizer: nish/json-tokenizer loads under the Node prelude and tokenizes as it does natively`
   and `link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to`:
-  the module runs under `runtime/nish.mjs`, through `parseFloat`, `numberI64` and `numberU64`.
+  the module runs under `runtime/nish.mjs`, through `parseFloat`, `numberI64`, `numberU64` and `isIntegral`.
 - `third-party-licence: ${noticesDoc} lists ${rows.length} files, and each exists and carries the notice of its licence`,
   for the vendored corpus.
 
