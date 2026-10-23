@@ -420,7 +420,7 @@ The npm-pack `required` list (`tests/run.js` around :17965) gains `runtime/core.
 - It runs after `check()` and the reports, beside `--emit-checked` (:975-1001). It returns before `compilation.emit()`, which it never calls.
 - It turns on the portability pass, which §5.2 asks for. Those warnings print as usual and do not block the output.
 - `-o` alongside it is a usage error (exit 2).
-- It is added to `helpText` in [src/cli-style.ts](../../src/cli-style.ts), to `advertisedFlags` in [tests/nish/cli.ts](../../tests/nish/cli.ts) (:94-115), and to `documented` in `tests/run.js` (:15664-15690).
+- It is added to `helpText` in [src/cli-style.ts](../../src/cli-style.ts), to `advertisedFlags` in [tests/nish/cli.ts](../../tests/nish/cli.ts) (:95-117), and to `documented` in `tests/run.js` (:17244-17266).
 
 ### The composer
 

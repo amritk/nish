@@ -237,7 +237,7 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(helpRow(style, "--cpu", "x86-64-v3", "allow AVX2; such a binary needs it to start"))
   lines.push(helpRow(style, "--target", "<triple>|host", "stamp the IR with a target's data layout"))
   lines.push(helpRow(style, "-g", "", "DWARF debug info, for gdb and lldb"))
-  lines.push(helpRow(style, "--threads", "", "an arena per thread; nish/threads sets it"))
+  lines.push(helpRow(style, "--threads", "", "an arena per thread, for --emit-napi-async"))
 
   lines.push("")
   lines.push(style.heading("Check"))
@@ -259,9 +259,9 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(style.heading("Interop"))
   lines.push(helpRow(style, "--emit-header", "<file.h>", "a C header for the exports"))
   lines.push(helpRow(style, "--emit-dts", "<file.d.ts>", "their typings, and a <file>.mjs loader"))
-  lines.push(helpRow(style, "--emit-ts", "<dir>", "the program as TypeScript, instead of IR"))
   lines.push(helpRow(style, "--emit-napi", "<shim.c>", "a Node-API shim, to load them from Node"))
   lines.push(helpRow(style, "--emit-napi-async", "<shim.c>", "the same, plus a promise for each export"))
+  lines.push(helpRow(style, "--emit-ts", "<dir>", "the program as TypeScript, instead of IR"))
 
   lines.push("")
   lines.push(style.heading("Inspect"))
