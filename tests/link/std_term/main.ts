@@ -154,6 +154,22 @@ export const main = (): number => {
   t.clear(COLOR_DEFAULT);
   frame("cleared", t.flush());
 
+  // --- what a cell cannot hold: unknown attribute bits are dropped, so the
+  // cell needs no SGR; a control, a negative or a surrogate is U+FFFD; and a
+  // gap over a control glyph is moved across, not reprinted ---------------
+  const q = new Screen(4, 1, false);
+  q.flush();
+  q.set(0, 0, 65, COLOR_DEFAULT, COLOR_DEFAULT, 64);
+  frame("unknown attribute bits", q.flush());
+  q.set(0, 0, 7, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  q.set(1, 0, -5, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  q.set(2, 0, 55296, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  q.set(3, 0, 127, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  frame("control, negative, surrogate, DEL", q.flush());
+  q.set(0, 0, 65, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  q.set(2, 0, 66, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  frame("gap over a control, moved", q.flush());
+
   // --- the 256-colour fallback ---------------------------------------------
   const p = new Screen(3, 1, true);
   p.text(0, 0, "ab", rgb(255, 0, 0), rgb(0, 0, 0), ATTR_NONE);
@@ -186,6 +202,10 @@ export const main = (): number => {
   c.line(0, 0, 3, 3, red);
   frame("line", cs.flush());
   console.log(`pixel (1,1) ${c.pixel(1, 1) === red} (1,2) ${c.pixel(1, 2) === COLOR_DEFAULT} off ${c.pixel(9, 0)}`);
+  c.clear(COLOR_DEFAULT);
+  c.line(1, 0, 2000000000, 1, red);
+  c.line(3, 3, -2000000000, -1000000000, blue);
+  frame("lines to far endpoints stop at the edge", cs.flush());
   c.fillRect(-2, -2, 100, 100, blue);
   c.text(1, 0, "ok", red);
   frame("text over pixels", cs.flush());
@@ -254,5 +274,12 @@ export const main = (): number => {
   events("invalid bytes", d.feed(bytesOf([255, 128, 97]), 3, toF64(1200)), d);
   events("a character cut short by another", d.feed(bytesOf([226, 150, 97]), 3, toF64(1250)), d);
   events("empty feed", d.feed(bytesOf([]), 0, toF64(1300)), d);
+  events("held over two feeds, first", d.feed(bytesOf([27]), 1, toF64(2000)), d);
+  events("held over two feeds, then", d.feed(bytesOf([91]), 1, toF64(2025)), d);
+  events("  timed from the first", d.poll(toF64(2035)), d);
+  events("ESC O and no final", d.feed(bytesOf([27, 79, 10]), 3, toF64(2100)), d);
+  events("past U+10FFFF lead", d.feed(bytesOf([245, 128, 97]), 3, toF64(2200)), d);
+  events("overlong, surrogate, too high", d.feed(bytesOf([224, 128, 128, 237, 160, 128, 244, 144, 128, 128]), 10, toF64(2200)), d);
+  events("four bytes", d.feed(bytesOf([240, 159, 152, 128]), 4, toF64(2200)), d);
   return 0;
 };

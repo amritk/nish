@@ -6991,6 +6991,22 @@ if (!only || "par_alloc".includes(only)) {
   )
 }
 
+/** Run a link fixture's `main` under runtime/nish.mjs, its output read as `encoding`. */
+const runFixtureUnderNode = (entry, encoding) =>
+  spawnSync(
+    "node",
+    [
+      "--experimental-strip-types",
+      "--js-explicit-resource-management",
+      "--no-warnings",
+      "--import",
+      path.join(root, "runtime", "nish.mjs"),
+      "-e",
+      `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
+    ],
+    { cwd: root, encoding }
+  )
+
 // #224: a `nish/threads` program prints the same under Node, through the path
 // docs/RUN_UNDER_NODE.md documents, as it does natively. The std bodies are the
 // sequential meaning and are what Node runs, so a reduce whose blocking used
@@ -7186,21 +7202,7 @@ for (const name of [
   }
   const entry = path.join(linkDir, name, "main.ts")
   const fixture = fs.existsSync(entry)
-  const run = fixture
-    ? spawnSync(
-        "node",
-        [
-          "--experimental-strip-types",
-          "--js-explicit-resource-management",
-          "--no-warnings",
-          "--import",
-          path.join(root, "runtime", "nish.mjs"),
-          "-e",
-          `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
-        ],
-        { cwd: root, encoding: "utf8" }
-      )
-    : null
+  const run = fixture ? runFixtureUnderNode(entry, "utf8") : null
   const want = fixture ? fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8") : ""
   check(
     `link/${name}: nish/threads-under-node prints what the native binary prints`,
@@ -7222,19 +7224,7 @@ for (const name of ["std_term", "std_term_f64"]) {
     continue
   }
   const entry = path.join(linkDir, name, "main.ts")
-  const run = spawnSync(
-    "node",
-    [
-      "--experimental-strip-types",
-      "--js-explicit-resource-management",
-      "--no-warnings",
-      "--import",
-      path.join(root, "runtime", "nish.mjs"),
-      "-e",
-      `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
-    ],
-    { cwd: root, encoding: "buffer" }
-  )
+  const run = runFixtureUnderNode(entry, "buffer")
   const want = fs.readFileSync(path.join(linkDir, name, "expected.out"))
   check(
     `link/${name}: nish/term prints the same bytes under runtime/nish.mjs as natively`,

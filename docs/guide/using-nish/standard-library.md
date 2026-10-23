@@ -729,7 +729,9 @@ export const main = (): i32 => {
 colour, a background colour and the attributes `ATTR_BOLD` and
 `ATTR_INVERSE`. Draw with `set(x, y, codePoint, fg, bg, attrs)` and
 `text(x, y, s, fg, bg, attrs)`, which returns the column after the text, and
-blank the frame with `clear(background)`. The screen also remembers what it
+blank the frame with `clear(background)`. A code point the terminal cannot
+show in one cell, such as a control character or a surrogate, is sent as
+U+FFFD, and attribute bits other than those two are dropped. The screen also remembers what it
 last sent. `flush()` answers only the difference: it moves the cursor to the
 cells that changed and sends a style only where it differs from the cell
 before. An empty answer means nothing changed. On a 200 × 60 screen,
@@ -762,7 +764,8 @@ your program. The other escapes are plain functions that answer a string:
 of `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`, `KEY_ENTER`, `KEY_SPACE`,
 `KEY_ESCAPE`, `KEY_CTRL_C`, `KEY_TAB`, `KEY_BACKSPACE`, `KEY_CHAR`,
 `KEY_CONTROL`, `KEY_UNKNOWN`) and a `code`, which for `KEY_CHAR` is the
-character's code point. A read can stop in the middle of an arrow key's
+character's code point; bytes that are not valid UTF-8 come out as U+FFFD.
+A read can stop in the middle of an arrow key's
 `ESC [ A`; the decoder holds the start and finishes the key on the next
 `feed`. The ESC key sends a lone ESC, which is also how an arrow key begins.
 So the decoder holds an ESC until either the rest of a sequence arrives or

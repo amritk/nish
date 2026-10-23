@@ -107,6 +107,9 @@ const TERM_ESC: i32 = 27
 /** The space a blank cell holds. */
 const TERM_SPACE: i32 = 32
 
+/** DEL, the first byte past printable ASCII. */
+const TERM_DELETE: i32 = 127
+
 /** `[`, which follows ESC to begin a control sequence. */
 const TERM_BRACKET: i32 = 91
 
@@ -443,7 +446,6 @@ export class Screen {
     // Sized here rather than in `flush`, so a flush stores nothing into the
     // screen and a frame loop around it can take its string back every pass.
     this.out = new Array<u8>(cells * TERM_CELL_BYTES + TERM_CELL_BYTES)
-    this.out.fill(toU8(0))
     this.clear(COLOR_DEFAULT)
     this.invalidate()
   }
@@ -464,7 +466,11 @@ export class Screen {
     this.sentAttrs.fill(ATTR_NONE)
   }
 
-  /** Draw code point `glyph` at column `x`, row `y`; a cell off the screen is not drawn. */
+  /**
+   * Draw code point `glyph` at column `x`, row `y`; a cell off the screen is
+   * not drawn. Bits of `attrs` other than `ATTR_BOLD` and `ATTR_INVERSE` are
+   * dropped, so `flush` never has an attribute it cannot write.
+   */
   set(x: i32, y: i32, glyph: i32, fg: i32, bg: i32, attrs: i32): void {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) {
       return
@@ -476,7 +482,7 @@ export class Screen {
     this.glyphs[i] = glyph
     this.fgs[i] = fg
     this.bgs[i] = bg
-    this.attrs[i] = attrs
+    this.attrs[i] = attrs & (ATTR_BOLD | ATTR_INVERSE)
   }
 
   /**
@@ -532,9 +538,14 @@ export class Screen {
     this.put(final)
   }
 
-  /** Append code point `cp` as UTF-8; a negative one, which no cell holds, as U+FFFD. */
+  /**
+   * Append code point `cp` as UTF-8. One that would not draw a character in
+   * place, or is not a scalar value — a control, DEL, a surrogate, a negative
+   * number — goes as U+FFFD, so a cell cannot move the cursor or send bytes
+   * that are not UTF-8.
+   */
   putGlyph(cp: i32): void {
-    if (cp >= 0 && cp < 128) {
+    if (cp >= TERM_SPACE && cp < TERM_DELETE) {
       this.put(cp)
     } else if (cp >= 128 && cp < 2048) {
       this.put((cp >> 6) | 192)
@@ -545,7 +556,7 @@ export class Screen {
       this.put(((cp >> 6) & 63) | 128)
       this.put((cp & 63) | 128)
     } else {
-      const c: i32 = cp >= 2048 && cp < 65536 ? cp : TERM_REPLACEMENT
+      const c: i32 = cp >= 2048 && cp < 65536 && !(cp >= 55296 && cp < 57344) ? cp : TERM_REPLACEMENT
       this.put((c >> 12) | 224)
       this.put(((c >> 6) & 63) | 128)
       this.put((c & 63) | 128)
@@ -667,7 +678,8 @@ export class Screen {
           for (let k: i32 = i - gap; k < i; k++) {
             if (
               !(k >= 0) ||
-              glyphs[k] >= 128 ||
+              glyphs[k] < TERM_SPACE ||
+              glyphs[k] >= TERM_DELETE ||
               attrs[k] !== styleAttrs ||
               this.colourKey(fgs[k]) !== styleFg ||
               this.colourKey(bgs[k]) !== styleBg
@@ -845,13 +857,18 @@ export class Canvas {
     }
   }
 
-  /** Draw a line from `x0`, `y0` to `x1`, `y1`, both ends included (Bresenham's). */
+  /**
+   * Draw a line from `x0`, `y0` to `x1`, `y1`, both ends included (Bresenham's).
+   * Any `i32` ends will do: the walk stops once it leaves the canvas for good,
+   * though one that starts far outside steps all the way in.
+   */
   line(x0: i32, y0: i32, x1: i32, y1: i32, colour: i32): void {
-    const dx: i32 = x1 > x0 ? x1 - x0 : x0 - x1
-    const dy: i32 = y1 > y0 ? y0 - y1 : y1 - y0
+    // The error terms are f64, exact here, because a span past 2^30 overflows `2 * err` in i32.
+    const dx: f64 = Math.abs(toF64(x1) - toF64(x0))
+    const dy: f64 = -Math.abs(toF64(y1) - toF64(y0))
     const sx: i32 = x0 < x1 ? 1 : -1
     const sy: i32 = y0 < y1 ? 1 : -1
-    let err: i32 = dx + dy
+    let err: f64 = dx + dy
     let x: i32 = x0
     let y: i32 = y0
     while (true) {
@@ -859,7 +876,7 @@ export class Canvas {
       if (x === x1 && y === y1) {
         return
       }
-      const twice: i32 = 2 * err
+      const twice: f64 = 2.0 * err
       if (twice >= dy) {
         err = err + dy
         x = x + sx
@@ -867,6 +884,15 @@ export class Canvas {
       if (twice <= dx) {
         err = err + dx
         y = y + sy
+      }
+      // The walk only moves away from an edge it has passed, so no later point is on the canvas.
+      if (
+        (sx > 0 && x >= this.width) ||
+        (sx < 0 && x < 0) ||
+        (sy > 0 && y >= this.height) ||
+        (sy < 0 && y < 0)
+      ) {
+        return
       }
     }
   }
@@ -978,7 +1004,8 @@ export class KeyDecoder {
       }
       rest.push(work[k])
     }
-    if (held === 0 && toI32(rest.length) > 0) {
+    // What is held now started in these bytes unless all of it was held before.
+    if (toI32(rest.length) > 0 && used >= held) {
       this.pendingSince = nowMs
     }
     this.pending = rest
@@ -1154,8 +1181,13 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
           continue
         }
         const final: i32 = toI32(bytes[i + 2])
-        events.push(new KeyEvent(termArrowKind(final), final))
-        i = i + 3
+        if (final >= 64 && final < 127) {
+          events.push(new KeyEvent(termArrowKind(final), final))
+          i = i + 3
+        } else {
+          events.push(new KeyEvent(KEY_ESCAPE, b))
+          i = i + 1
+        }
         continue
       }
       events.push(new KeyEvent(KEY_ESCAPE, b))
@@ -1167,8 +1199,9 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
       i = i + 1
       continue
     }
-    // 0xC0 and 0xC1 only ever start an overlong form, and 0xF8 up start nothing.
-    const width: i32 = b < 194 || b >= 248 ? 1 : termLeadWidth(b)
+    // 0xC0 and 0xC1 only ever start an overlong form, and 0xF5 up a code
+    // point past U+10FFFF or nothing.
+    const width: i32 = b < 194 || b >= 245 ? 1 : termLeadWidth(b)
     if (width === 1) {
       events.push(new KeyEvent(KEY_CHAR, TERM_REPLACEMENT))
       i = i + 1
@@ -1198,7 +1231,11 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
       i = i + 1 + good
       continue
     }
-    events.push(new KeyEvent(KEY_CHAR, cp))
+    // An overlong three- or four-byte form, a surrogate or a code point past
+    // U+10FFFF is no character.
+    const scalar: boolean =
+      (width === 2 || cp >= (width === 3 ? 2048 : 65536)) && cp < 1114112 && !(cp >= 55296 && cp < 57344)
+    events.push(new KeyEvent(KEY_CHAR, scalar ? cp : TERM_REPLACEMENT))
     i = i + width
   }
   return toI32(bytes.length)

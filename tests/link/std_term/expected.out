@@ -19,6 +19,9 @@ styled run: ^[[H^[[0;1;38;2;255;0;0;48;2;0;0;255mHi^[[0;7;38;2;255;0;0;48;2;0;0;
 text answers 2, glyph at 4 is 233
 add inverse: ^[[H^[[0;1;7;38;2;255;0;0;48;2;0;0;255mHi^[[0m
 cleared: ^[[H^[[0m      
+unknown attribute bits: ^[[H^[[0mA
+control, negative, surrogate, DEL: ^[[H^[[0m����
+gap over a control, moved: ^[[H^[[0mA^[[CB
 256 colours: ^[[H^[[0;38;5;196;48;5;16mab^[[39;49m 
 sync first frame: ^[[?2026h^[[H^[[0m   ^[[?2026l
 sync unchanged: 0
@@ -29,6 +32,7 @@ pixels: ^[[H^[[0;38;2;255;0;0m▀^[[38;2;0;0;255m▄^[[38;2;255;0;0;48;2;0;0;255
 fillRect: ^[[2;1H^[[0;38;2;0;255;0;48;2;0;255;0m▀▀▀▀^[[0m
 line: ^[[1;2H^[[0;38;2;255;0;0m▄^[[39m ^[[2;1H  ^[[38;2;255;0;0m▀▄^[[0m
 pixel (1,1) true (1,2) true off -1
+lines to far endpoints stop at the edge: ^[[H^[[0;38;2;0;0;255m▄^[[38;2;255;0;0m▀▀▀^[[2;2H^[[38;2;0;0;255m▀▀▄^[[0m
 text over pixels: ^[[H^[[0;38;2;0;0;255;48;2;0;0;255m▀^[[38;2;255;0;0mok^[[38;2;0;0;255m▀^[[2;1H▀▀▀▀^[[0m
 frame loop sent 27207 bytes
 steps 0 0 2 0 8 0 1 alpha 75%
@@ -61,3 +65,10 @@ unfinished UTF-8 timed out: [] holding
 invalid bytes: [char(65533) char(65533) char(97)]
 a character cut short by another: [char(65533) char(97)]
 empty feed: []
+held over two feeds, first: [] holding
+held over two feeds, then: [] holding
+  timed from the first: [escape(27) char(91)]
+ESC O and no final: [escape(27) char(79) enter(10)]
+past U+10FFFF lead: [char(65533) char(65533) char(97)]
+overlong, surrogate, too high: [char(65533) char(65533) char(65533)]
+four bytes: [char(128512)]
