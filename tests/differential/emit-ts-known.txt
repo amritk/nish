@@ -136,6 +136,8 @@ cases/ffi_buffer_declared ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_late_load ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_memcpy ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_write ffi  # refused: NL4010 under --emit-ts
+cases/ffi_handle_class_template ffi  # refused: NL4010 under --emit-ts
+cases/ffi_handle_positions ffi  # refused: NL4010 under --emit-ts
 cases/ffi_owned_string ffi  # refused: NL4010 under --emit-ts
 cases/ffi_pointer ffi  # refused: NL4010 under --emit-ts
 cases/ffi_scalar ffi  # refused: NL4010 under --emit-ts

@@ -133,6 +133,9 @@ const EVIDENCE = [
   ],
 ]
 
+/** The compiler's dump flags, which take no value and `--emit-ts` refuses alongside it. */
+const DUMPS = ["--emit-ast", "--emit-checked"]
+
 /** Two lines that print the same floats but for their last digits: the libm row. */
 const ulpApart = (a, b) => {
   const fa = (a ?? "").match(/-?\d+\.\d+(e[-+]?\d+)?/g)
@@ -200,7 +203,11 @@ const compare = async (prog, compiler) => {
   ])
   const out = path.join(work, "ts")
   // `--json`, so a refusal names its code, which is the row it is filed under.
-  const emitted = await run(compiler, [prog.entry, "--json", "--emit-ts", out, ...prog.args])
+  // A dump flag a case passes for its own test is dropped: it prints the
+  // checked program and changes nothing the build does, and `--emit-ts`
+  // refuses it as a usage error.
+  const emitArgs = prog.args.filter((arg) => !DUMPS.includes(arg))
+  const emitted = await run(compiler, [prog.entry, "--json", "--emit-ts", out, ...emitArgs])
   if (emitted.status !== 0) {
     const coded = String(emitted.stdout).match(/"code":"(NL40(10|11))"/)
     if (coded !== null) {
