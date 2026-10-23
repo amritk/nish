@@ -754,7 +754,8 @@ nearest entry in the 256-colour palette (`paletteIndex`). Most terminals set
 `COLORTERM` to `truecolor` or `24bit` when they can, and reading it is up to
 your program. The other escapes are plain functions that answer a string:
 `enterAltScreen` and `leaveAltScreen`, `hideCursor` and `showCursor`,
-`clearScreen`, `resetStyle` and `moveCursor(x, y)`.
+`clearScreen`, `resetStyle`, `moveCursor(x, y)`, and `beginSync` and
+`endSync`, described below.
 
 **A `KeyDecoder`** reads the bytes a terminal in raw mode sends.
 `feed(bytes, count, nowMs)` answers a `KeyEvent[]`, each with a `kind` (one
@@ -781,6 +782,61 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+**At 120 or 240 Hz**, two things matter. The first is that the terminal
+never shows a frame half drawn. Set `screen.sync = true` and every flush
+that changes something is wrapped in `beginSync()` and `endSync()`
+(synchronized output, mode 2026). A terminal that supports the mode holds
+the frame and paints it in one go; kitty, foot, WezTerm and iTerm2 do, and
+one that does not ignores the escapes. An unchanged frame
+stays an empty string. The second is that the game runs at the same speed
+whatever the display does. A `FixedStep` clock turns the time between frames
+into whole steps: `new FixedStep(stepsPerSecond, maxSteps)`, then
+`advance(nowMs)` answers how many steps to run and keeps the remainder for
+next time. `alpha()` is that remainder as a fraction of a step, for drawing
+between the last two positions. A clock that falls more than `maxSteps`
+behind, after a stall, drops the backlog instead of trying to catch up. The
+same clock with `maxSteps` 1 paces the drawing: it answers 1 when a frame is
+due. The first `advance` only starts the clock, and answers 0.
+
+```ts nish:ok
+import { COLOR_DEFAULT, Canvas, FixedStep, Screen, rgb } from "nish/term";
+import { write } from "nish:io";
+import { monotonicNanos } from "nish:process";
+
+export const main = (): i32 => {
+  const screen = new Screen(40, 12, false);
+  screen.sync = true; // each frame is painted whole
+  const canvas = new Canvas(screen); // 40 x 24 pixels
+  const logic = new FixedStep(240, 8); // the game moves 240 times a second
+  const draw = new FixedStep(120, 1); // and is drawn 120 times a second
+  const start = monotonicNanos();
+  let x = 0;
+  let nowMs = toF64(0);
+  while (nowMs < toF64(2000)) {
+    nowMs = toF64(monotonicNanos() - start) / toF64(1000000);
+    const steps = logic.advance(nowMs);
+    for (let k = 0; k < steps; k++) {
+      x = (x + 1) % 480; // one pixel every 6 steps
+    }
+    if (draw.advance(nowMs) > 0) {
+      canvas.clear(COLOR_DEFAULT);
+      canvas.fillRect((x / 6) | 0, 10, 4, 4, rgb(255, 120, 0));
+      write(screen.flush());
+    }
+  }
+  return 0;
+};
+```
+
+The loop above spins between frames to stay short; a real one waits on its
+keyboard input until the next frame is due. A frame of a game like this
+flushes in well under a millisecond, so the budget at 240 Hz, about 4 ms,
+goes to the terminal, which has its own pacing. kitty waits `repaint_delay`
+milliseconds (10 by default) before it paints; `repaint_delay 2` and
+`sync_to_monitor yes` in `kitty.conf` let it keep up. foot paints on the
+compositor's frame callback, so it follows the monitor's refresh rate by
+itself.
 
 ## `nish/bytes`
 

@@ -11,6 +11,7 @@ import {
   ATTR_NONE,
   COLOR_DEFAULT,
   Canvas,
+  FixedStep,
   KEY_BACKSPACE,
   KEY_CHAR,
   KEY_CONTROL,
@@ -26,7 +27,9 @@ import {
   KeyDecoder,
   KeyEvent,
   Screen,
+  beginSync,
   clearScreen,
+  endSync,
   enterAltScreen,
   hideCursor,
   leaveAltScreen,
@@ -111,6 +114,7 @@ export const main = (): number => {
   frame("clear", clearScreen());
   frame("reset", resetStyle());
   frame("move 3,1", moveCursor(3, 1));
+  frame("sync", `${beginSync()}..${endSync()}`);
 
   // --- colour --------------------------------------------------------------
   console.log(`rgb clamps: ${rgb(300, -4, 128) === rgb(255, 0, 128)}`);
@@ -155,6 +159,18 @@ export const main = (): number => {
   p.text(0, 0, "ab", rgb(255, 0, 0), rgb(0, 0, 0), ATTR_NONE);
   frame("256 colours", p.flush());
 
+  // --- synchronized output: a frame that changes is wrapped, one that does
+  // not stays empty, and a style left on is reset inside the wrap ----------
+  const y = new Screen(3, 1, false);
+  y.sync = true;
+  frame("sync first frame", y.flush());
+  console.log(`sync unchanged: ${y.flush().length}`);
+  y.set(1, 0, 90, red, COLOR_DEFAULT, ATTR_NONE);
+  frame("sync one styled cell", y.flush());
+  y.sync = false;
+  y.set(1, 0, 89, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  frame("sync turned off", y.flush());
+
   // --- canvas: two pixels per cell -----------------------------------------
   const cs = new Screen(4, 2, false);
   const c = new Canvas(cs);
@@ -184,6 +200,31 @@ export const main = (): number => {
     sent = sent + out.length;
   }
   console.log(`frame loop sent ${sent} bytes`);
+
+  // --- the fixed-step clock: 250 steps a second is 4 ms a step, at most 8 ---
+  const logic = new FixedStep(250, 8);
+  const steps: string[] = [];
+  steps.push(`${logic.advance(toF64(1000))}`);
+  steps.push(`${logic.advance(toF64(1003))}`);
+  steps.push(`${logic.advance(toF64(1009))}`);
+  steps.push(`${logic.advance(toF64(1009))}`);
+  steps.push(`${logic.advance(toF64(1050))}`);
+  steps.push(`${logic.advance(toF64(1040))}`);
+  steps.push(`${logic.advance(toF64(1045))}`);
+  console.log(`steps ${steps.join(" ")} alpha ${Math.floor(logic.alpha() * toF64(100))}%`);
+  const behind = new FixedStep(100, 3);
+  behind.advance(toF64(0));
+  const caught = behind.advance(toF64(1005));
+  console.log(`a long stall runs ${caught} and keeps the phase: alpha ${Math.floor(behind.alpha() * toF64(100))}%`);
+  const draw = new FixedStep(100, 1);
+  let frames = 0;
+  draw.advance(toF64(0));
+  for (let ms = 1; ms <= 1000; ms++) {
+    frames = frames + draw.advance(toF64(ms));
+  }
+  console.log(`a 100 Hz draw clock over a second of 1 ms ticks: ${frames} frames`);
+  const odd = new FixedStep(0, 0);
+  console.log(`clamped: step ${odd.stepMs} ms, at most ${odd.maxSteps}`);
 
   // --- keys ----------------------------------------------------------------
   const d = new KeyDecoder(toF64(30));

@@ -125,6 +125,18 @@ const TERM_FINAL_FORWARD: i32 = 67
 /** `m`, the final byte of a style (SGR). */
 const TERM_FINAL_STYLE: i32 = 109
 
+/** `?`, which marks a DEC private mode: `ESC [ ? n h` sets mode n, `ESC [ ? n l` resets it. */
+const TERM_PRIVATE: i32 = 63
+
+/** `h`, the final byte that sets a mode. */
+const TERM_FINAL_SET: i32 = 104
+
+/** `l`, the final byte that resets a mode. */
+const TERM_FINAL_RESET: i32 = 108
+
+/** The DEC private mode of synchronized output: the terminal holds what it is sent until the mode is reset, then paints it at once. */
+const TERM_SYNC_MODE: i32 = 2026
+
 /** The SGR base of a foreground colour: 38 sets one, 39 is the default. */
 const TERM_SGR_FOREGROUND: i32 = 30
 
@@ -137,7 +149,11 @@ const TERM_UNSENT: i32 = -1
 /** A style the terminal is not known to be in, so the next cell sends its own in full. */
 const TERM_STYLE_UNKNOWN: i32 = -2
 
-/** The most bytes one cell can add to a flush: a move, a full SGR and a 4-byte glyph, rounded up. */
+/**
+ * The most bytes one cell can add to a flush: a move, a full SGR and a 4-byte
+ * glyph, rounded up. A flush reserves this once more for what is not a cell:
+ * the closing `ESC [ 0 m` and the two synchronized-output escapes, 20 bytes.
+ */
 const TERM_CELL_BYTES: i32 = 64
 
 /** The most unchanged cells `flush` rewrites to bridge a gap rather than move the cursor over it. */
@@ -250,6 +266,16 @@ export const resetStyle = (): string => "\x1b[0m"
 
 /** Move the cursor to column `x`, row `y`, both from 0. */
 export const moveCursor = (x: i32, y: i32): string => `\x1b[${y + 1};${x + 1}H`
+
+/**
+ * Begin a synchronized update (DEC mode 2026): a terminal that knows the mode
+ * holds what follows until `endSync`, then paints it in one go, so a frame is
+ * never seen half drawn. One that does not ignores it.
+ */
+export const beginSync = (): string => "\x1b[?2026h"
+
+/** End a synchronized update, so the terminal paints what `beginSync` held. */
+export const endSync = (): string => "\x1b[?2026l"
 
 /**
  * The code point of the character that starts at unit `i` of `s`: UTF-8 bytes
@@ -375,6 +401,8 @@ export class Screen {
   outLen: i32
   /** Whether colours go out as 256-colour palette indices rather than 24-bit RGB. */
   palette256: boolean
+  /** Whether a `flush` that changes anything is wrapped in `beginSync` and `endSync`; off until set. */
+  sync: boolean
 
   /**
    * A `width × height` screen of blank cells in the terminal's colours, none
@@ -385,6 +413,7 @@ export class Screen {
     this.width = width < 0 ? 0 : width
     this.height = height < 0 ? 0 : height
     this.palette256 = palette256
+    this.sync = false
     this.glyphs = []
     this.fgs = []
     this.bgs = []
@@ -494,6 +523,15 @@ export class Screen {
     this.put((v % 10) + TERM_DIGIT_0)
   }
 
+  /** Append `ESC [ ? 2026` and `final`, which sets or resets synchronized output. */
+  putSyncMode(final: i32): void {
+    this.put(TERM_ESC)
+    this.put(TERM_BRACKET)
+    this.put(TERM_PRIVATE)
+    this.putDecimal(TERM_SYNC_MODE)
+    this.put(final)
+  }
+
   /** Append code point `cp` as UTF-8; a negative one, which no cell holds, as U+FFFD. */
   putGlyph(cp: i32): void {
     if (cp >= 0 && cp < 128) {
@@ -558,7 +596,9 @@ export class Screen {
    * sent only when it differs from the previous cell's, and only the parts
    * that differ, from a reset when an attribute has to be turned off. A flush
    * that leaves the terminal in a style other than the default ends with
-   * `ESC [ 0 m`, so what the caller writes next starts plain.
+   * `ESC [ 0 m`, so what the caller writes next starts plain. With `sync` set,
+   * a flush that changes anything is wrapped in `beginSync` and `endSync`, in
+   * the same string, so the terminal paints the frame whole.
    */
   flush(): string {
     const w: i32 = this.width
@@ -586,6 +626,10 @@ export class Screen {
     ) {
       panic("nish/term: a Screen's buffers disagree on its size")
     }
+    if (this.sync) {
+      this.putSyncMode(TERM_FINAL_SET)
+    }
+    const opened: i32 = this.outLen
     let styleFg: i32 = TERM_STYLE_UNKNOWN
     let styleBg: i32 = TERM_STYLE_UNKNOWN
     let styleAttrs: i32 = TERM_STYLE_UNKNOWN
@@ -719,6 +763,11 @@ export class Screen {
       this.put(TERM_BRACKET)
       this.put(TERM_DIGIT_0)
       this.put(TERM_FINAL_STYLE)
+    }
+    if (this.outLen === opened) {
+      this.outLen = 0
+    } else if (this.sync) {
+      this.putSyncMode(TERM_FINAL_RESET)
     }
     return termBytesText(this.out, this.outLen)
   }
@@ -946,6 +995,73 @@ export class KeyDecoder {
     termDecodeKeys(this.pending, true, events)
     this.pending = []
     return events
+  }
+}
+
+/**
+ * A fixed-step clock: it turns the time between frames into a whole number of
+ * steps of `1000 / stepsPerSecond` milliseconds, so a game's logic runs at the
+ * same rate whatever the display does. `advance(nowMs)` answers how many steps
+ * to run since the last call and keeps the remainder for the next; `alpha()`
+ * is that remainder as a fraction of a step, to draw between the last two
+ * states. At most `maxSteps` run per call: a clock further behind drops the
+ * backlog rather than spiral, keeping its phase. With `maxSteps` 1 the same
+ * clock paces drawing, answering 1 when a frame is due. The clock is the
+ * caller's, as `KeyDecoder`'s is.
+ */
+export class FixedStep {
+  /** The length of one step, in milliseconds. */
+  stepMs: f64
+  /** The time since the last step, in milliseconds, under one step after each `advance`. */
+  carry: f64
+  /** The time the last `advance` was given. */
+  lastMs: f64
+  /** The most steps one `advance` answers. */
+  maxSteps: i32
+  /** Whether `advance` has been called, so `lastMs` is a time. */
+  started: boolean
+
+  /** A clock of `stepsPerSecond` steps a second (1 at least), running at most `maxSteps` (1 at least) per `advance`. */
+  constructor(stepsPerSecond: i32, maxSteps: i32) {
+    const rate: i32 = stepsPerSecond < 1 ? 1 : stepsPerSecond
+    this.stepMs = 1000.0 / toF64(rate)
+    this.maxSteps = maxSteps < 1 ? 1 : maxSteps
+    this.carry = 0.0
+    this.lastMs = 0.0
+    this.started = false
+  }
+
+  /**
+   * The steps to run for the time between the last call and `nowMs`. The first
+   * call only starts the clock and answers 0, as does a time earlier than the
+   * last one.
+   */
+  advance(nowMs: f64): i32 {
+    if (!this.started || !(nowMs >= this.lastMs)) {
+      this.started = true
+      this.lastMs = nowMs
+      return 0
+    }
+    this.carry = this.carry + (nowMs - this.lastMs)
+    this.lastMs = nowMs
+    let steps: i32 = 0
+    while (this.carry >= this.stepMs && steps < this.maxSteps) {
+      this.carry = this.carry - this.stepMs
+      steps = steps + 1
+    }
+    if (this.carry >= this.stepMs) {
+      this.carry = this.carry - this.stepMs * Math.floor(this.carry / this.stepMs)
+      // Rounding, or a jump to infinity, can leave the remainder outside a step.
+      if (!(this.carry >= 0.0 && this.carry < this.stepMs)) {
+        this.carry = 0.0
+      }
+    }
+    return steps
+  }
+
+  /** How far into the next step the clock is, from 0 up to but not including 1. */
+  alpha(): f64 {
+    return this.carry / this.stepMs
   }
 }
 

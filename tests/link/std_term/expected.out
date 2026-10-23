@@ -5,6 +5,7 @@ show: ^[[?25h
 clear: ^[[H^[[2J
 reset: ^[[0m
 move 3,1: ^[[2;4H
+sync: ^[[?2026h..^[[?2026l
 rgb clamps: true
 palette red 196 grey 244 near-black 232 white 231 default -1
 blank 4x2: ^[[H^[[0m    ^[[2;1H    
@@ -19,6 +20,10 @@ text answers 2, glyph at 4 is 233
 add inverse: ^[[H^[[0;1;7;38;2;255;0;0;48;2;0;0;255mHi^[[0m
 cleared: ^[[H^[[0m      
 256 colours: ^[[H^[[0;38;5;196;48;5;16mab^[[39;49m 
+sync first frame: ^[[?2026h^[[H^[[0m   ^[[?2026l
+sync unchanged: 0
+sync one styled cell: ^[[?2026h^[[1;2H^[[0;38;2;255;0;0mZ^[[0m^[[?2026l
+sync turned off: ^[[1;2H^[[0mY
 canvas 4x4
 pixels: ^[[H^[[0;38;2;255;0;0m▀^[[38;2;0;0;255m▄^[[38;2;255;0;0;48;2;0;0;255m▀^[[39;49m ^[[2;1H    
 fillRect: ^[[2;1H^[[0;38;2;0;255;0;48;2;0;255;0m▀▀▀▀^[[0m
@@ -26,6 +31,10 @@ line: ^[[1;2H^[[0;38;2;255;0;0m▄^[[39m ^[[2;1H  ^[[38;2;255;0;0m▀▄^[[0m
 pixel (1,1) true (1,2) true off -1
 text over pixels: ^[[H^[[0;38;2;0;0;255;48;2;0;0;255m▀^[[38;2;255;0;0mok^[[38;2;0;0;255m▀^[[2;1H▀▀▀▀^[[0m
 frame loop sent 27207 bytes
+steps 0 0 2 0 8 0 1 alpha 75%
+a long stall runs 3 and keeps the phase: alpha 50%
+a 100 Hz draw clock over a second of 1 ms ticks: 100 frames
+clamped: step 1000 ms, at most 1
 arrows: [up(65) down(66) right(67) left(68)]
 controls: [ctrl-c(3) enter(13) enter(10) space(32) tab(9) backspace(127) backspace(8) control(1)]
 printable: [char(113) char(81) char(126) char(233) char(9600)]
