@@ -3,6 +3,7 @@
 
 @.str.0 = private unnamed_addr constant { i64, [44 x i8] } { i64 43, [44 x i8] c"indexOfAny: the set must hold 1 to 16 bytes\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"indexOfAny: every byte of the set must be ASCII\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"\C3\A9\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
@@ -999,6 +1000,136 @@ while.end.1:
 
 while.end:
   ret i32 -1
+}
+
+define internal noundef zeroext i1 @nish.textUnitsAreBytes() #2 {
+entry:
+  %0 = bitcast i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*) to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = trunc i64 %1 to i32
+  %3 = icmp eq i32 %2, 2
+  ret i1 %3
+}
+
+define noundef i32 @nish.codePointLength(i8* noundef nonnull noalias readonly align 8 nocapture %text) #3 {
+entry:
+  %length.addr = alloca i32, align 4
+  %count.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %afterHigh.addr = alloca i1, align 1
+  %unit.addr = alloca i32, align 4
+  %0 = bitcast i8* %text to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = trunc i64 %1 to i32
+  store i32 %2, i32* %length.addr, align 4
+  store i32 0, i32* %count.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  %3 = call i1 @nish.textUnitsAreBytes()
+  br i1 %3, label %if.then, label %if.end
+
+if.then:
+  br label %while.cond
+
+while.cond:
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = load i32, i32* %length.addr, align 4
+  %6 = icmp slt i32 %4, %5
+  br i1 %6, label %while.body, label %while.end
+
+while.body:
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = sext i32 %7 to i64
+  %9 = getelementptr inbounds i8, i8* %text, i64 8
+  %10 = getelementptr inbounds i8, i8* %9, i64 %8
+  %11 = load i8, i8* %10, align 1
+  %12 = zext i8 %11 to i32
+  %13 = and i32 %12, 192
+  %14 = icmp ne i32 %13, 128
+  br i1 %14, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %15 = load i32, i32* %count.addr, align 4
+  %16 = add i32 %15, 1
+  store i32 %16, i32* %count.addr, align 4
+  br label %if.end.1
+
+if.end.1:
+  %17 = load i32, i32* %i.addr, align 4
+  %18 = add nsw i32 %17, 1
+  store i32 %18, i32* %i.addr, align 4
+  br label %while.cond
+
+while.end:
+  %19 = load i32, i32* %count.addr, align 4
+  ret i32 %19
+
+if.end:
+  store i1 false, i1* %afterHigh.addr, align 1
+  br label %while.cond.1
+
+while.cond.1:
+  %20 = load i32, i32* %i.addr, align 4
+  %21 = load i32, i32* %length.addr, align 4
+  %22 = icmp slt i32 %20, %21
+  br i1 %22, label %while.body.1, label %while.end.1
+
+while.body.1:
+  %23 = load i32, i32* %i.addr, align 4
+  %24 = sext i32 %23 to i64
+  %25 = getelementptr inbounds i8, i8* %text, i64 8
+  %26 = getelementptr inbounds i8, i8* %25, i64 %24
+  %27 = load i8, i8* %26, align 1
+  %28 = zext i8 %27 to i32
+  store i32 %28, i32* %unit.addr, align 4
+  %29 = load i1, i1* %afterHigh.addr, align 1
+  br i1 %29, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %30 = load i32, i32* %unit.addr, align 4
+  %31 = icmp sge i32 %30, 56320
+  br label %land.end.1
+
+land.end.1:
+  %32 = phi i1 [ false, %while.body.1 ], [ %31, %land.rhs.1 ]
+  br i1 %32, label %land.rhs, label %land.end
+
+land.rhs:
+  %33 = load i32, i32* %unit.addr, align 4
+  %34 = icmp slt i32 %33, 57344
+  br label %land.end
+
+land.end:
+  %35 = phi i1 [ false, %land.end.1 ], [ %34, %land.rhs ]
+  %36 = xor i1 %35, true
+  br i1 %36, label %if.then.2, label %if.end.2
+
+if.then.2:
+  %37 = load i32, i32* %count.addr, align 4
+  %38 = add i32 %37, 1
+  store i32 %38, i32* %count.addr, align 4
+  br label %if.end.2
+
+if.end.2:
+  %39 = load i32, i32* %unit.addr, align 4
+  %40 = icmp sge i32 %39, 55296
+  br i1 %40, label %land.rhs.2, label %land.end.2
+
+land.rhs.2:
+  %41 = load i32, i32* %unit.addr, align 4
+  %42 = icmp slt i32 %41, 56320
+  br label %land.end.2
+
+land.end.2:
+  %43 = phi i1 [ false, %if.end.2 ], [ %42, %land.rhs.2 ]
+  store i1 %43, i1* %afterHigh.addr, align 1
+  %44 = load i32, i32* %i.addr, align 4
+  %45 = add nsw i32 %44, 1
+  store i32 %45, i32* %i.addr, align 4
+  br label %while.cond.1
+
+while.end.1:
+  %46 = load i32, i32* %count.addr, align 4
+  ret i32 %46
 }
 
 attributes #0 = { nounwind willreturn readnone }

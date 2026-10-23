@@ -6304,8 +6304,10 @@ if (DEALT_SECTIONS.selfHosting.selected && SHARD === sectionShard("selfHosting")
     // The `--help` contract: a request that succeeded goes to stdout with
     // exit 0, a refusal to stderr with exit 2. It is the shape that is pinned
     // here; the WP12 block pins the text.
-    const ourHelp = spawnSync(compiler, ["--help"], { cwd: root, encoding: "utf8" })
-    const ourRefusal = spawnSync(compiler, [], { cwd: root, encoding: "utf8" })
+    // Plain and a person's, whatever colour or agent the runner's shell says.
+    const plainHelpEnv = { ...process.env, NO_COLOR: "1", NISH_AGENT: "0" }
+    const ourHelp = spawnSync(compiler, ["--help"], { cwd: root, encoding: "utf8", env: plainHelpEnv })
+    const ourRefusal = spawnSync(compiler, [], { cwd: root, encoding: "utf8", env: plainHelpEnv })
     check(
       "the self-hosted compiler: --help answers on stdout with exit 0, and a usage error on stderr with exit 2",
       ourHelp.status === 0 &&
@@ -8513,6 +8515,36 @@ if (!only || "std_text_index_of_any".includes(only)) {
       rootIr.includes("call i32 @indexOfAnyFrom(") &&
       !rootIr.includes("nish_str_index_of_any"),
     asRoot.status === 0 ? rootIr : asRoot.stderr
+  )
+}
+
+// `std/text` under the Node prelude. The link loop runs both programs natively
+// against their expected.out; here the same files run under `runtime/nish.mjs`
+// and are held to the same bytes. That is the whole claim `codePointLength`
+// makes: its native walk counts UTF-8 lead bytes and its Node walk counts
+// UTF-16 units less the second half of each pair, and é, €, 😀, "©®±" and a
+// lone surrogate print the same count both ways.
+if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
+  for (const name of ["std_text", "std_text_f64"]) {
+    const dir = path.join(linkDir, name)
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    check(
+      `link/${name}: under the Node prelude it exits ${code} and prints expected.out`,
+      run.status === code && run.stdout === out,
+      `--- native (expected.out)\n${out}--- node\n${shown(run)}`
+    )
+  }
+  // Where the answers part: text built from bytes is one unit per byte under
+  // Node, U+0080 is a whole unit there, and the joined halves are one pair.
+  // expected.out holds the native answers; these are Node's.
+  const divergent = runUnderPrelude(path.join(linkDir, "std_text_code_points_native", "main.ts"), [])
+  check(
+    "link/std_text_code_points_native: under the Node prelude bytes count as units and the joined halves as one pair",
+    divergent.status === 0 &&
+      divergent.stdout === "built from bytes: 2\nstray continuation byte: 1\njoined halves: 1, length 2\n",
+    shown(divergent)
   )
 }
 
@@ -17228,7 +17260,14 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     v.stdout + v.stderr
   )
 
-  const noInputs = run([])
+  // The help is painted only for a person at a terminal (src/cli-style.ts).
+  // Every help run sets the variables the policy reads first -- `NO_COLOR`,
+  // the forcing ones and `NISH_AGENT` -- so the runner's own environment, an
+  // agent's or a CI's, cannot decide the answer; a run that unsets `NO_COLOR`
+  // or `NISH_AGENT` sets whatever comes after them itself.
+  const ESC = "\u001b["
+  const plainEnv = { NO_COLOR: "", FORCE_COLOR: "", CLICOLOR_FORCE: "", CLICOLOR: "", NISH_AGENT: "0" }
+  const noInputs = run([], plainEnv)
   check(
     "no inputs: usage on stderr, exit 2",
     noInputs.status === 2 && noInputs.stderr.includes("usage: nish"),
@@ -17239,13 +17278,13 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   // two are told apart by the stream and the exit code, so a wrapper -- a
   // script, an editor, an agent -- can ask for the text without reading the
   // run as a failure. `noInputs` above is the other half of this pair.
-  const help = run(["--help"])
+  const help = run(["--help"], plainEnv)
   check(
     "--help: usage on stdout, nothing on stderr, exit 0",
     help.status === 0 && help.stdout.includes("usage: nish") && help.stderr === "",
     help.stdout + help.stderr
   )
-  const shortHelp = run(["-h"])
+  const shortHelp = run(["-h"], plainEnv)
   check(
     "-h: identical to --help",
     shortHelp.status === 0 && shortHelp.stdout === help.stdout,
@@ -17256,9 +17295,25 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     help.stdout.trim() === noInputs.stderr.trim(),
     `stdout:\n${help.stdout}\nstderr:\n${noInputs.stderr}`
   )
-  // Every flag the driver accepts is listed: a wrapper that reads --help to
-  // learn the surface must not be missing one.
+  // Every flag the driver accepts is listed, by one of its spellings, bar
+  // --help itself, the test hook `--range-reference`, the refused `--nsw` and
+  // the default `--strict-exports`: a wrapper that reads --help to learn the
+  // surface must not be missing one.
   const documented = [
+    "--output",
+    "-g",
+    "--version",
+    "--plain",
+    "--no-stack-alloc",
+    "--no-strict-exports",
+    "--no-warn-performance",
+    "--unchecked-indexing",
+    "--wrapping",
+    "--number-mode",
+    "--runtime-decls",
+    "--threads",
+    "--emit-ast",
+    "--emit-checked",
     "--json",
     "--link",
     "--emit-header",
@@ -17271,25 +17326,130 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--deny-retention",
     "--emit-arena",
     "--target",
+    "--cpu",
     "--profile",
     "--warn-portability",
     "--fix",
     "--emit-capabilities",
-    "[--capabilities]",
+    "--capabilities",
     "--allow",
     "--deny",
     "run [flags] <file.ts> [args ...]",
   ]
-  const undocumented = documented.filter((f) => !help.stdout.includes(f))
+  // Delimited, so `--deny` is not found inside `--deny-panics`.
+  const listed = (f) =>
+    new RegExp(`(?<![\\w-])${f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`).test(help.stdout)
+  const undocumented = documented.filter((f) => !listed(f))
   check(
     `--help lists every advertised flag (${documented.length} checked)`,
     undocumented.length === 0,
     `missing from --help: ${undocumented.join(", ")}`
   )
-  const badFlag = run(["--bogus", entry])
   check(
-    "unknown flag: names it, exit 2",
-    badFlag.status === 2 && badFlag.stderr.includes("unknown flag `--bogus`"),
+    "--help into a pipe: no escape codes",
+    help.status === 0 && !help.stdout.includes(ESC),
+    JSON.stringify(help.stdout.slice(0, 200))
+  )
+  const wide = help.stdout.split("\n").filter((line) => line.length > 80)
+  check("--help: every line fits in 80 columns", wide.length === 0, wide.join("\n"))
+  const forced = run(["--help"], { ...plainEnv, FORCE_COLOR: "1", TERM: "xterm-256color" })
+  check(
+    "--help with FORCE_COLOR=1: coloured, and the same text under the escapes",
+    forced.status === 0 &&
+      forced.stdout.includes(`${ESC}38;5;`) &&
+      forced.stdout.replace(/\u001b\[[0-9;]*m/g, "") === help.stdout,
+    JSON.stringify(forced.stdout.slice(0, 200))
+  )
+  const basic = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "xterm", COLORTERM: "" })
+  check(
+    "--help with CLICOLOR_FORCE=1 on an 8-colour TERM: the basic palette only",
+    basic.stdout.includes(`${ESC}36m`) &&
+      !basic.stdout.includes("38;5;") &&
+      !/\u001b\[(?:[0-9;]*;)?(?:9[0-7]|10[0-7])[;m]/.test(basic.stdout),
+    JSON.stringify(basic.stdout.slice(0, 200))
+  )
+  const noColor = run(["--help"], { ...plainEnv, NO_COLOR: "1", FORCE_COLOR: "1" })
+  check(
+    "--help: NO_COLOR wins over FORCE_COLOR",
+    noColor.stdout === help.stdout,
+    JSON.stringify(noColor.stdout.slice(0, 200))
+  )
+  const forcedOff = run(["--help"], { ...plainEnv, FORCE_COLOR: "False" })
+  check(
+    "--help: FORCE_COLOR=False forces nothing, in any case",
+    forcedOff.stdout === help.stdout,
+    JSON.stringify(forcedOff.stdout.slice(0, 200))
+  )
+  const zeroWins = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", FORCE_COLOR: "0" })
+  check(
+    "--help: FORCE_COLOR=0 turns colour off, over CLICOLOR_FORCE",
+    zeroWins.stdout === help.stdout,
+    JSON.stringify(zeroWins.stdout.slice(0, 200))
+  )
+  const level2 = run(["--help"], { ...plainEnv, FORCE_COLOR: "2", TERM: "xterm", COLORTERM: "" })
+  check(
+    "--help with FORCE_COLOR=2 on an 8-colour TERM: 256 colours",
+    level2.stdout.includes(`${ESC}38;5;`),
+    JSON.stringify(level2.stdout.slice(0, 200))
+  )
+  const dumbForced = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "dumb" })
+  check(
+    "--help: CLICOLOR_FORCE=1 wins over TERM=dumb",
+    dumbForced.stdout.includes(ESC),
+    JSON.stringify(dumbForced.stdout.slice(0, 200))
+  )
+  const clicolorOff = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", CLICOLOR: "0" })
+  check(
+    "--help: CLICOLOR_FORCE=1 wins over CLICOLOR=0",
+    clicolorOff.stdout.includes(ESC),
+    JSON.stringify(clicolorOff.stdout.slice(0, 200))
+  )
+  // An agent gets the plain text and a section a person does not: the rules
+  // card by a path it can open, which is the package's own docs/AI.md.
+  const agentHelp = run(["--help"], { ...plainEnv, NISH_AGENT: "1" })
+  const card = agentHelp.stdout.split("\n").find((line) => line.trim().endsWith("/docs/AI.md"))
+  check(
+    "--help for an agent (NISH_AGENT=1): plain, with the rules card by a path that exists",
+    agentHelp.status === 0 &&
+      agentHelp.stdout.includes("\nAgents\n") &&
+      !agentHelp.stdout.includes(ESC) &&
+      card !== undefined &&
+      fs.existsSync(card.trim()),
+    agentHelp.stdout
+  )
+  // The path to the card is as long as the install made it; every other line
+  // keeps to the width a person's help does.
+  const agentWide = agentHelp.stdout.split("\n").filter((line) => line.length > 80 && line !== card)
+  check(
+    "--help for an agent: every line but the card's path fits in 80 columns",
+    agentWide.length === 0,
+    agentWide.join("\n")
+  )
+  const claude = run(["--help"], { ...plainEnv, NISH_AGENT: "", CLAUDECODE: "1" })
+  check(
+    "--help under CLAUDECODE=1 is an agent's, and NISH_AGENT=0 is a person's",
+    claude.stdout === agentHelp.stdout && !help.stdout.includes("\nAgents\n"),
+    claude.stdout
+  )
+  const notAgent = run(["--help"], { ...plainEnv, NISH_AGENT: "off", CLAUDECODE: "1" })
+  check(
+    "--help: NISH_AGENT=off is a person's, over CLAUDECODE=1",
+    notAgent.stdout === help.stdout,
+    notAgent.stdout
+  )
+  const agentForced = run(["--help"], { ...plainEnv, NISH_AGENT: "1", FORCE_COLOR: "1" })
+  check(
+    "--help for an agent stays plain under FORCE_COLOR=1",
+    agentForced.stdout === agentHelp.stdout,
+    JSON.stringify(agentForced.stdout.slice(0, 200))
+  )
+  // An unknown flag is refused in one line that points at the help, and that
+  // line is a diagnostic, so it is plain even when colour is forced.
+  const badFlag = run(["--bogus", entry], { ...plainEnv, FORCE_COLOR: "1" })
+  check(
+    "unknown flag: names it and points at --help, plain, exit 2",
+    badFlag.status === 2 &&
+      badFlag.stderr.trim() === "compile: unknown flag `--bogus`; run `nish --help` for the flags",
     badFlag.stderr
   )
   const noValue = run([entry, "-o"])
@@ -18215,7 +18375,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
       wasi.status === 2 && wasi.stderr.includes("cannot use --profile wasi"),
       wasi.stderr
     )
-    const noFile = nishRun([])
+    const noFile = nishRun([], { NO_COLOR: "1", NISH_AGENT: "0" })
     check(
       "nish run: no file is the usage on stderr, exit 2",
       noFile.status === 2 && noFile.stderr.includes("nish run [flags] <file.ts> [args ...]"),
@@ -20061,6 +20221,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
         fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(stage, "scripts", "build.sh"))
         fs.copyFileSync(path.join(root, "LICENSE"), path.join(stage, "LICENSE"))
         fs.copyFileSync(path.join(root, "docs", "INSTALL.md"), path.join(stage, "INSTALL.md"))
+        fs.mkdirSync(path.join(stage, "docs"), { recursive: true })
+        fs.copyFileSync(path.join(root, "docs", "AI.md"), path.join(stage, "docs", "AI.md"))
         const stagedBinary = path.join(stage, "bin", "nish")
         fs.copyFileSync(NISH, stagedBinary)
         fs.chmodSync(stagedBinary, 0o755)
@@ -20093,6 +20255,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
           "runtime/runtime-os.c",
           "runtime/nish.h",
           "scripts/build.sh",
+          "docs/AI.md",
           ...stdModuleFiles(),
         ]
         const missingFromPlatform = wantedInPlatform.filter((f) => !packedPaths.includes(f))
@@ -20155,6 +20318,20 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
             "installed nish compiles examples/add.ts to IR from an unrelated cwd",
             ir.status === 0 && fs.existsSync(path.join(work, "add.ll")),
             ir.stderr
+          )
+          // The binary's root is the platform package, not the main one, so
+          // the card it names an agent has to have shipped in it.
+          const agentHelp = spawnSync(bin, ["--help"], {
+            cwd: work,
+            encoding: "utf8",
+            env: { ...process.env, NISH_AGENT: "1", NO_COLOR: "" },
+          })
+          const shipped = path.join(platformDir, "docs", "AI.md")
+          const card = fs.existsSync(shipped) ? fs.realpathSync(shipped) : shipped
+          check(
+            "installed nish --help names an agent the AI.md its platform package ships, by absolute path",
+            agentHelp.status === 0 && agentHelp.stdout.split("\n").some((line) => line.trim() === card),
+            agentHelp.stdout + agentHelp.stderr
           )
           // A program that imports the standard library, through the installed package,
           // by its package specifier. `std/` travels in the platform package as well as

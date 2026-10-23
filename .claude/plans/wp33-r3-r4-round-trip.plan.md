@@ -54,7 +54,7 @@ stages:
     status: pending
     todos:
       - id: r4a-flag
-        content: Parse --emit-ts <dir> in src/compile.ts as a product flag on the --emit-checked early-return path, with usageText and both advertised-flag lists — see R4a, The flag
+        content: Parse --emit-ts <dir> in src/compile.ts as a product flag on the --emit-checked early-return path, with helpText and both advertised-flag lists — see R4a, The flag
         status: pending
       - id: r4a-composer
         content: Write src/emit-ts-edits.ts, the bottom-up composer that rebuilds a node's text from its children's rewritten texts so nested rewrites compose — see R4a, The composer
@@ -415,12 +415,12 @@ The npm-pack `required` list (`tests/run.js` around :17965) gains `runtime/core.
 
 ### The flag
 
-`--emit-ts <dir>` in [src/compile.ts](../../src/compile.ts)'s flag loop (:482-718):
+`--emit-ts <dir>` in [src/compile.ts](../../src/compile.ts)'s flag loop (:507-753):
 - It stores the path in `opts.emitTs` ([src/options.ts](../../src/options.ts)) and sets `productFlag`, so `run` and `--fix` refuse it.
-- It runs after `check()` and the reports, beside `--emit-checked` (:975-1001). It returns before `compilation.emit()`, which it never calls.
+- It runs after `check()` and the reports, beside `--emit-checked` (:1072-1075). It returns before `compilation.emit()`, which it never calls.
 - It turns on the portability pass, which §5.2 asks for. Those warnings print as usual and do not block the output.
 - `-o` alongside it is a usage error (exit 2).
-- It is added to `usageText` (:92), to `advertisedFlags` in [tests/nish/cli.ts](../../tests/nish/cli.ts) (:94-115), and to `documented` in `tests/run.js` (:15664-15690).
+- It is added to `helpText` in [src/cli-style.ts](../../src/cli-style.ts), to `advertisedFlags` in [tests/nish/cli.ts](../../tests/nish/cli.ts) (:95-117), and to `documented` in `tests/run.js` (:17245-17285).
 
 ### The composer
 

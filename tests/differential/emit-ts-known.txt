@@ -12,9 +12,7 @@
 
 cases/argv_echo numbers  # differ: stdout line 1 differs
 cases/arr_bounds_break_for records  # differ: exit 1 vs 0
-cases/arr_bounds_break_for_string records  # differ: exit 1 vs 0
 cases/arr_bounds_break_while records  # differ: exit 1 vs 0
-cases/arr_bounds_break_while_string records  # differ: exit 1 vs 0
 cases/arr_bounds_cond_assign records  # differ: exit 1 vs 0
 cases/arr_bounds_cond_effect records  # differ: exit 1 vs 0
 cases/arr_bounds_continue_do records  # differ: exit 1 vs 0
@@ -62,13 +60,11 @@ cases/arr_new_zeroed records  # differ: stdout line 2 differs
 cases/arr_path_alias_shrink records  # differ: exit 1 vs 0
 cases/arr_path_alias_store records  # differ: exit 1 vs 0
 cases/arr_path_callee_pop records  # differ: exit 1 vs 0
-cases/arr_path_callee_string records  # differ: exit 1 vs 0
 cases/arr_path_cond_call records  # differ: exit 1 vs 0
 cases/arr_path_cond_generic records  # differ: exit 1 vs 0
 cases/arr_path_cond_or records  # differ: exit 1 vs 0
 cases/arr_path_cond_root records  # differ: exit 1 vs 0
 cases/arr_path_cond_store records  # differ: exit 1 vs 0
-cases/arr_path_cond_string records  # differ: exit 1 vs 0
 cases/arr_path_cond_ternary records  # differ: exit 1 vs 0
 cases/arr_path_cond_while records  # differ: exit 1 vs 0
 cases/arr_path_continue_do records  # differ: exit 1 vs 0
@@ -92,7 +88,6 @@ cases/arr_range_call_rebind_callee records  # differ: exit 1 vs 0
 cases/arr_range_call_two_sites records  # differ: exit 1 vs 0
 cases/arr_range_call_wrap records  # differ: exit 1 vs 0
 cases/arr_typed_push_pop records  # differ: exit 0 vs 1: TypeError: a.push is not a function
-cases/attr_panic_charcodeat records  # differ: stderr line 1 differs
 cases/bytes_offset_float records  # differ: exit 0 vs 1: TypeError: a.set is not a function
 cases/bytes_offset_u64 records  # differ: exit 0 vs 1: TypeError: a.set is not a function
 cases/bytes_set_disjoint records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
@@ -107,7 +102,6 @@ cases/cls_inline_array records  # differ: exit 0 vs 1
 cases/ct_asm_p256 numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 cases/ct_asm_x25519 records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 cases/ctor_empty_init_tag control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/dbg_utf8 numbers  # differ: exit 0 vs 254
 cases/deny_panics_overflow_wrapping numbers  # differ: stdout line 1 differs
 cases/deny_panics_overflow_wrapping_add numbers  # differ: stdout line 1 differs
 cases/deny_panics_unsafe records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
@@ -197,7 +191,6 @@ cases/panics_overflow_wrapping numbers  # differ: stdout line 1 differs
 cases/panics_slice records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
 cases/perf_arena_control control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/perf_arena_loop control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/perf_bounds_toi32_user records  # differ: exit 1 vs 0
 cases/perf_rng_counter numbers  # differ: exit 1 vs 0
 cases/port_array_zero_fill numbers  # differ: exit 0 vs 1: TypeError: Cannot convert undefined to a BigInt
 cases/port_rec_alias_copy numbers  # differ: stdout line 1 differs
@@ -210,13 +203,6 @@ cases/port_record_alias_ctor_write numbers  # differ: stdout line 1 differs
 cases/port_record_alias_helper_bump numbers  # differ: stdout line 1 differs
 cases/port_record_alias_helper_copy numbers  # differ: stdout line 1 differs
 cases/port_record_alias_helper_write numbers  # differ: stdout line 1 differs
-cases/port_str_length_printed numbers  # differ: stdout line 1 differs
-cases/port_str_needle_step_printed numbers  # differ: stdout line 1 differs
-cases/port_str_nonascii_charcode numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_argument numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_helper_return numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_index numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_loop_bound numbers  # differ: stdout line 1 differs
 cases/rng_entry_bitwise_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_panic_f64 numbers  # differ: exit 1 vs 0
@@ -229,14 +215,7 @@ cases/secret_wipe_o2 numbers  # differ: stdout line 1 differs
 cases/secret_wipe_o2_inferred numbers  # differ: stdout line 1 differs
 cases/secret_wipe_o2_inferred_plain numbers  # differ: stdout line 1 differs
 cases/secret_wipe_o2_plain numbers  # differ: stdout line 1 differs
-cases/str_from_bytes strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_from_bytes_arrow strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_from_bytes_lifetime numbers  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_from_bytes_ways strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_index_of_from_port numbers  # differ: stdout line 1 differs
-cases/str_slice_panic strings  # differ: exit 1 vs 0
-cases/str_surrogate_lone records  # differ: stdout line 1 differs
-cases/str_surrogate_pair numbers  # differ: stdout line 1 differs
+cases/str_surrogate_lone numbers  # differ: stdout line 1 differs
 cases/union_arena control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/union_forms control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/union_narrowing control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
@@ -256,15 +235,10 @@ cases/union_switch_narrowed control  # differ: exit 0 vs 1: SyntaxError [ERR_UNS
 cases/union_switch_secret control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/union_types control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/unsafe_get_set records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
-corpus/argv_words numbers  # differ: exit 29 vs 105
+corpus/argv_words numbers  # differ: exit 29 vs 106
 corpus/arr_oob_exit records  # differ: exit 1 vs 0
 corpus/arr_oob_negative records  # differ: exit 1 vs 0
 corpus/arr_push_growth records  # differ: stdout line 13 differs
 corpus/bit_compound_target refused  # refused: NL4012 under --emit-ts
 corpus/f64_libm libm  # differ: stdout line 33 differs
-corpus/io_roundtrip numbers  # differ: stdout line 1 differs
 corpus/parse_argv_sum numbers  # differ: stdout line 1 differs
-corpus/str_methods strings  # differ: stdout line 5 differs
-corpus/str_nul_escapes numbers  # differ: stdout line 8 differs
-corpus/str_slice strings  # differ: stdout line 2 differs
-corpus/str_unicode numbers  # differ: stdout line 2 differs
