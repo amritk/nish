@@ -338,6 +338,55 @@ const ytPathUnits = (t: Suite): void => {
   t.eqI32("an alias to its own unfinished anchor stops the walk at the unresolved alias", pathMatch(loop, loop.documentRoot(0), ["l", "0", "0", "0"]), 2);
 };
 
+/** The text of the node `path` names below the first document of `text`, merging; `"-"` for an empty value. */
+const ytMergedText = (text: string, path: string[]): string => {
+  const stream = parseYaml(text);
+  const node: i32 = pathNode(stream, stream.documentRoot(0), path);
+  return node < 0 ? "-" : stream.text(node);
+};
+
+const ytMergeUnits = (t: Suite): void => {
+  const base = "base: &b {x: 1, y: 2}\n";
+  t.eqStr("an alias to a map merges", ytMergedText(`${base}m: {<<: *b, z: 3}\n`, ["m", "x"]), "1");
+  t.eqStr("a map merges", ytMergedText("m:\n  <<: {x: 1}\n", ["m", "x"]), "1");
+  t.eqStr("a sequence of maps merges", ytMergedText("m:\n  <<: [{x: 1}, {y: 2}]\n", ["m", "y"]), "2");
+  t.eqStr("a sequence of aliases merges", ytMergedText(`${base}c: &c {w: 4}\nm:\n  <<: [*c, *b]\n`, ["m", "y"]), "2");
+  t.eqStr("the map's own key wins", ytMergedText(`${base}m:\n  x: own\n  <<: *b\n`, ["m", "x"]), "own");
+  t.eqStr("whether before or after the merge key", ytMergedText(`${base}m:\n  <<: *b\n  x: own\n`, ["m", "x"]), "own");
+  t.eqStr("the first map listed wins", ytMergedText("m:\n  <<: [{x: first}, {x: second}]\n", ["m", "x"]), "first");
+  t.eqStr("so does the first merge key", ytMergedText("m:\n  <<: {x: first}\n  <<: {x: second}\n", ["m", "x"]), "first");
+  t.eqStr("a merged map's own merge keys merge too", ytMergedText("a: &a {x: 1}\nb: &b {<<: *a}\nm: {<<: *b}\n", ["m", "x"]), "1");
+  t.eqStr("searched depth first", ytMergedText("a: &a {x: deep}\nb: &b {<<: *a}\nm: {<<: [*b, {x: flat}]}\n", ["m", "x"]), "deep");
+  t.eqStr("a path keeps walking below a merged key", ytMergedText("a: &a {x: {y: 5}}\nm: {<<: *a}\n", ["m", "x", "y"]), "5");
+  t.eqStr("a << step names the merge value itself", ytMergedText("m: {<<: {x: 1}}\n", ["m", "<<", "x"]), "1");
+  const missing = parseYaml(`${base}m: {<<: *b}\n`);
+  t.eqI32("a missing key is still missing", pathMatch(missing, missing.documentRoot(0), ["m", "q"]), 1);
+  const text = "base: &b\n  x: 1\nm:\n  <<: *b\n";
+  const stream = parseYaml(text);
+  const root: i32 = stream.documentRoot(0);
+  const pair: i32 = pathPair(stream, root, ["m", "x"]);
+  t.eqI32("pathPair names the pair inside the merged map", pair, pathPair(stream, root, ["base", "x"]));
+  const lines = new YamlLineIndex(text);
+  const node: i32 = pathNode(stream, root, ["m", "x"]);
+  t.eqStr("at the merged key's line and column", `${lines.line(stream.start(node))}:${lines.column(stream.start(node))}`, "2:6");
+  t.eqI32("every step matches", pathMatch(stream, root, ["m", "x"]), 2);
+  const loop = parseYaml("a: &a\n  <<: *a\n  x: 1\nm:\n  <<: *a\n");
+  t.eqI32("a recursive alias in a merge ends the walk", pathMatch(loop, loop.documentRoot(0), ["m", "q"]), 1);
+  t.eqStr("and still finds what is there", ytMergedText("a: &a\n  <<: *a\n  x: 1\nm:\n  <<: *a\n", ["m", "x"]), "1");
+  const cycle = parseYaml("a: &a {b: &b {<<: *a}, <<: *b}\n");
+  t.eqI32("a cycle through two maps ends the walk", pathMatch(cycle, cycle.documentRoot(0), ["a", "q"]), 1);
+  const scalar = parseYaml("m: {<<: 1}\n");
+  t.eqI32("a scalar merges nothing", pathMatch(scalar, scalar.documentRoot(0), ["m", "x"]), 1);
+  const off = new YamlOptions();
+  off.merge = false;
+  const plain = parseYamlWith("m:\n  <<: {x: 1}\n", off);
+  const plainRoot: i32 = plain.documentRoot(0);
+  t.eqI32("without merge, a path does not look in <<", pathMatch(plain, plainRoot, ["m", "x"]), 1);
+  t.eqI32("and << is an ordinary key", pathMatch(plain, plainRoot, ["m", "<<", "x"]), 3);
+  const quoted = parseYaml("m: {'<<': {x: 1}}\n");
+  t.eqI32("a quoted << is not a merge key", pathMatch(quoted, quoted.documentRoot(0), ["m", "x"]), 1);
+};
+
 const ytLineUnits = (t: Suite): void => {
   const lines = new YamlLineIndex("a\nbc\r\nd\re");
   t.eqI32("LF, CRLF and CR are each one break", lines.lineCount(), 4);
@@ -364,5 +413,6 @@ export const ytUnits = (t: Suite): void => {
   ytOptionUnits(t);
   ytKeyTextUnits(t);
   ytPathUnits(t);
+  ytMergeUnits(t);
   ytLineUnits(t);
 };
