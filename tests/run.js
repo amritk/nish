@@ -1585,11 +1585,13 @@ if (!only || "term".includes(only)) {
   // timeout again, or for ever, would die of it. The stop comes half a
   // second after `ready`, so the wait has read its clock, and only while the
   // program has said `ready` but not `timed`, so it reaches a pid that has
-  // gone only if the program died inside its wait, which the line reports.
-  // The line gives the status the stop left, then `fg`'s; only SIGTSTP's
-  // status (`NISH_PTY_TSTP`) starts the SIGTERM helper and `fg`, whose group
-  // is killed once `fg` returns, so a wait never stopped fails with `-`.
+  // gone only if the program ends between that look and the signal. The
+  // line gives the status the stop left, then `fg`'s; only SIGTSTP's status
+  // (`NISH_PTY_TSTP`) starts the SIGTERM helper and `fg`, and the helper's
+  // process group is killed once `fg` returns, so a wait never stopped fails
+  // with `-`.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
+  const tstpStatus = 128 + os.constants.signals.SIGTSTP
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
   } else if (ptyExe !== null) {
@@ -1657,7 +1659,7 @@ if (!only || "term".includes(only)) {
         NISH_PTY_SH: sh,
         NISH_PTY_EXE: ptyExe,
         NISH_PTY_DIR: termDir,
-        NISH_PTY_TSTP: String(128 + os.constants.signals.SIGTSTP),
+        NISH_PTY_TSTP: String(tstpStatus),
       },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30000,
@@ -1675,10 +1677,10 @@ if (!only || "term".includes(only)) {
         "held -icanon",
         "hold 143 stty same said raw 0 ready ",
         "fault 139 stty same",
-        `stopped ${128 + os.constants.signals.SIGTSTP} stty same was -icanon`,
+        `stopped ${tstpStatus} stty same was -icanon`,
         "background 1 stty same icanon",
         "continued 143 stty same was -icanon said raw 0 ready ",
-        `deadline ${128 + os.constants.signals.SIGTSTP} 0 stty same said raw 0 ready timed false `,
+        `deadline ${tstpStatus} 0 stty same said raw 0 ready timed false `,
       ]
       check(
         "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early, and once stopped mid-wait only until its deadline",
