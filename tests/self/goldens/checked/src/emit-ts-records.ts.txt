@@ -111,15 +111,15 @@ function storeRow(walk: Walk, node: Node, operands: Operands): string | null -> 
   callee +4:16 Operands.at -> @Operands.at
   local +5:9 args: string (const)
   callee +5:16 idxArguments -> @idxArguments
-  callee +10:11 hasInlineRecords -> @hasInlineRecords
-  callee +11:11 inlineRecord -> @inlineRecord
-  callee +13:7 Walk.useHelper -> @Walk.useHelper
-  callee +14:35 Operands.at -> @Operands.at
-  callee +16:29 inlineRecord -> @inlineRecord
-  callee +17:40 Operands.at -> @Operands.at
-  callee +22:5 Walk.useHelper -> @Walk.useHelper
-  callee +23:31 Operands.at -> @Operands.at
-  callee +31:10 compoundStore -> @compoundStore
+  local +7:11 record: boolean (const)
+  callee +8:9 hasInlineRecords -> @hasInlineRecords
+  callee +9:9 inlineRecord -> @inlineRecord
+  callee +11:7 Walk.useHelper -> @Walk.useHelper
+  callee +12:35 Operands.at -> @Operands.at
+  callee +15:40 Operands.at -> @Operands.at
+  callee +20:5 Walk.useHelper -> @Walk.useHelper
+  callee +21:31 Operands.at -> @Operands.at
+  callee +29:10 compoundStore -> @compoundStore
 function callRow(walk: Walk, node: Node, operands: Operands): string | null -> @callRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.useHelper
@@ -133,16 +133,16 @@ function callRow(walk: Walk, node: Node, operands: Operands): string | null -> @
   local +5:9 method: string (const)
   local +6:9 written: string (const)
   callee +6:19 Operands.at -> @Operands.at
-  callee +10:48 checkedAt -> @checkedAt
-  callee +11:5 Walk.useHelper -> @Walk.useHelper
-  callee +12:19 writtenReceiver -> @writtenReceiver
-  local +15:11 arg: string (const)
-  callee +15:17 Operands.at -> @Operands.at
-  local +16:11 copy: string (const)
-  callee +16:18 copied -> @copied
-  callee +26:5 Walk.useHelper -> @Walk.useHelper
-  callee +27:24 writtenReceiver -> @writtenReceiver
-  callee +27:61 Operands.at -> @Operands.at
+  local +10:9 receiver: string (const)
+  callee +10:20 writtenReceiver -> @writtenReceiver
+  callee +11:48 checkedAt -> @checkedAt
+  callee +12:5 Walk.useHelper -> @Walk.useHelper
+  local +16:11 arg: string (const)
+  callee +16:17 Operands.at -> @Operands.at
+  local +17:11 copy: string (const)
+  callee +17:18 copied -> @copied
+  callee +27:5 Walk.useHelper -> @Walk.useHelper
+  callee +28:37 Operands.at -> @Operands.at
 function literalRow(walk: Walk, node: Node, operands: Operands): string | null -> @literalRow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via copied
