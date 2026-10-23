@@ -34,10 +34,12 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
+| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key; `nish/yaml-lines` for `line:column` |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
+| [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and the keys it reads decoded |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url |
@@ -299,6 +301,11 @@ window you gave it.
   correctly rounded. `isInteger()` and `numberI64()` read one that fits in an
   `i64`, and `isU64()` and `numberU64()` read one written in digits alone, with
   no minus sign, that fits in a `u64`, up to `18446744073709551615`.
+  Those go by how the number is written, so `1.0` and `1e2` are not
+  integers to them. `isIntegral()` asks whether the value is whole however it
+  is written: `1.0`, `1e2`, `100e-2` and `1e400` are, `1.5` and `10e-2` are
+  not. That is JSON Schema's "integer". It reads the text, not a double, so it
+  holds at any size and any exponent.
 - **Skipping.** `skipValue()` steps over whatever value comes next, however
   deeply it nests: use it for a field you do not want.
 - **Limits.** `JsonLimits` caps nesting depth (128), the bytes in one string
@@ -543,6 +550,9 @@ above would see `12345678901234567000` and `0.1`, and `JSON.stringify` would
 write those back. A `JsonDocument` keeps the text and reads it as what you
 ask for: `isI64` and `i64`, `isU64` and `u64` for an integer that fits,
 `f64` for the nearest double, and `numberText` for the digits themselves.
+`isIntegral` asks whether the value is whole however it is written, so `1.0`
+and `1e2` are, though `isI64` says no to both: they are not written as
+integers.
 Writing the document back writes the text, so an ID wider than any integer
 type, or a price with more digits than a double holds, comes out exactly as it
 came in.
@@ -592,6 +602,108 @@ them, so walk a large object once with `keyAt` and `at` rather than calling
 differs from the native build there; `parse` over bytes reads the same both
 ways. Its security record is
 [docs/security/json.md](../../security/json.md).
+
+## `nish/yaml`
+
+`parseYaml(text)` reads a YAML 1.2 stream — a configuration file, a CI
+workflow, a Kubernetes manifest — and answers a `YamlStream`: every document,
+every node, and every problem found, each with the byte range of the source it
+is about. A parse never fails and never panics on its input; a stream that is
+not valid YAML still answers its nodes, as the parser's best reading of it,
+beside the errors that say why.
+
+```ts nish:ok
+import { YAML_INT, YAML_MAP, keyText, parseYaml, pathNode, yamlErrorName } from "nish/yaml";
+import { YamlLineIndex } from "nish/yaml-lines";
+
+export const main = (): i32 => {
+  const text = "name: tea\nport: 8080\ntags: [green, black]\n";
+  const stream = parseYaml(text);
+  const root = stream.documentRoot(0);
+  if (stream.kind(root) === YAML_MAP) {
+    let i: i32 = 0;
+    while (i < stream.count(root)) {
+      const pair = stream.child(root, i);
+      console.log(`${keyText(stream, stream.key(pair))} = ${keyText(stream, stream.value(pair))}`);
+      i += 1;
+    }
+  }
+  // name = tea
+  // port = 8080
+  // tags = [ green, black ]
+
+  const port = pathNode(stream, root, ["port"]);
+  console.log(`${stream.type(port) === YAML_INT} ${stream.intValue(port)}`); // true 8080
+  console.log(stream.text(pathNode(stream, root, ["tags", "1"]))); // black
+  console.log(`bytes ${stream.start(port)}..${stream.end(port)}`); // bytes 16..20
+
+  const bad = parseYaml("a: 1\nb: [1,,2]\na: 3\n");
+  const lines = new YamlLineIndex(bad.source);
+  let d: i32 = 0;
+  while (d < bad.diagnosticCount()) {
+    const at = bad.diagnosticStart(d);
+    console.log(`${lines.line(at)}:${lines.column(at)} ${yamlErrorName(bad.diagnosticCode(d))} ${bad.diagnosticMessage(d)}`);
+    d += 1;
+  }
+  // 2:7 UNEXPECTED_COMMA Missing value before ","
+  // 3:1 DUPLICATE_KEY Map key "a" is duplicated
+  return bad.errorCount() === 2 ? 0 : 1;
+};
+```
+
+**A node is an `i32` handle** into the stream, and `-1` is no node. Its
+`kind` is `YAML_SCALAR`, `YAML_MAP`, `YAML_SEQ`, `YAML_ALIAS` or `YAML_PAIR`.
+`count(n)` and `child(n, i)` walk a collection: a map's children are its
+pairs, in the order they were written, and a pair's `key` and `value` are
+nodes; a sequence's children are its items. An empty value (`a:`) is no node,
+so its `value` is `-1` and reads as null. An alias's `target` is the node its
+anchor named, and `resolved(n)` follows an alias to it. `anchor`, `tag` and
+`style` answer what was written; a `!!` tag is kept without its prefix
+(`"int"`).
+
+**Scalars are read when you ask.** `text(n)` decodes a scalar — quotes,
+escapes, folding and block scalars — and `type(n)` resolves it against the
+core schema: `YAML_NULL`, `YAML_BOOL`, `YAML_INT`, `YAML_FLOAT` or
+`YAML_STRING`, with `boolValue`, `intValue` and `floatValue` to read it. YAML
+1.1's `yes` and `on` are strings, as 1.2 says. Nothing is decoded until it is
+read, so a program that wants one key pays for one key.
+
+**Paths.** `pathNode(stream, root, path)` follows a path of map keys and
+sequence indices (`"0"`, never `"01"`) through aliases, and answers the node
+the last matching step reached; `pathMatch` says how many steps matched and
+`pathPair` answers the last pair it stepped through, whose `key` is where a
+message about that setting should point. A key is matched by `keyText`, the
+text it was written as, so `1` and `01` are different keys and a null key
+(`~`, `null`) is matched by `""`. When a map repeats a key, the last one
+wins. A step onto an empty value (`a:`) matches, so `pathMatch` counts it and
+`pathPair` names its pair, but it reaches no node: `pathNode` answers `-1`.
+
+**A read never panics.** A handle that names no node, or a read that does
+not fit the node — `count` of a scalar, `intValue` of a string — answers a
+default: `-1` for a node or an offset, and `0`, `false` or `""` otherwise.
+
+**Ranges and lines.** `start(n)` and `end(n)` are byte offsets into
+`stream.source`, as are a diagnostic's `diagnosticStart` and
+`diagnosticEnd`. `new YamlLineIndex(text)` from `nish/yaml-lines` turns an
+offset into a 1-based `line` and `column` (in characters; `byteColumn` counts
+bytes); a line break is LF, CR LF or a lone CR.
+
+**Diagnostics.** `diagnosticCount`, `errorCount` and `warningCount` count
+them; each has a `YAML_ERR_*` code, named by `yamlErrorName` the way other
+YAML tools name it, `diagnosticIsWarning`, a message and its range, sorted by
+where it starts. An error means the text is not valid YAML; a warning means it
+is valid and probably not what was meant, such as `!!int x`. A map that
+repeats a key is an error, `DUPLICATE_KEY`.
+
+**Options.** `parseYamlWith(text, options)` takes a `YamlOptions`:
+`maxDepth` (how deeply collections nest before `DEPTH_LIMIT`, 1000 by
+default; a value outside 1 to 1000 is a mistake in the program, so
+`parseYamlWith` panics on it), `uniqueKeys`, `merge` (whether a `<<` key is exempt from the
+duplicate check), `keepComments` (keep every comment's range, for
+`commentCount` and `comment`) and `firstDocumentOnly` (warn
+`MULTIPLE_DOCUMENTS` and stop after the first). Merge keys are not applied: a
+map holds the pairs it was written with. Tabs are never indentation, as YAML
+says.
 
 ## `nish/pair`
 
@@ -694,6 +806,152 @@ A generator is an ordinary object you step, so a task or a parallel body that
 makes its own may use it freely; one shared between tasks would be a write
 they all see, and is refused. See [Random numbers](../../LANGUAGE.md#random-numbers-rng-in-nishrandom)
 in the reference.
+
+## `nish/term`
+
+`nish/term` is for a program that draws the whole terminal, many times a
+second: a game, a dashboard. It does no input or output of its own. A
+`Screen` turns what you drew into the string that updates the terminal, and
+you print it with `write`. A `KeyDecoder` turns the bytes you read into key
+events. The terminal's size and the clock are numbers you pass in. Because
+the module reaches no capability, a program that uses it builds under
+`--deny` of all of them and prints the same bytes under Node.
+
+```ts nish:ok
+import { ATTR_BOLD, COLOR_DEFAULT, Canvas, Screen, hideCursor, rgb, showCursor } from "nish/term";
+import { write } from "nish:io";
+
+export const main = (): i32 => {
+  const screen = new Screen(20, 4, false);
+  const canvas = new Canvas(screen); // 20 x 8 pixels, two to a cell
+  canvas.fillRect(2, 2, 6, 2, rgb(0, 160, 255)); // a brick
+  canvas.line(0, 7, 19, 7, rgb(90, 90, 90)); // the floor
+  screen.text(11, 0, "score 0", rgb(255, 255, 0), COLOR_DEFAULT, ATTR_BOLD);
+  write(hideCursor());
+  write(screen.flush()); // the first frame: every cell
+  screen.text(17, 0, "5", rgb(255, 255, 0), COLOR_DEFAULT, ATTR_BOLD);
+  write(screen.flush()); // the next one: a cursor move and the "5"
+  write(`${showCursor()}\n`); // a flush ends in the default style
+  return 0;
+};
+```
+
+**A `Screen`** is `width × height` cells, each a code point, a foreground
+colour, a background colour and the attributes `ATTR_BOLD` and
+`ATTR_INVERSE`. Draw with `set(x, y, codePoint, fg, bg, attrs)` and
+`text(x, y, s, fg, bg, attrs)`, which returns the column after the text, and
+blank the frame with `clear(background)`. A code point the terminal cannot
+show in one cell, such as a control character (C0 or C1, so U+009B cannot
+open an escape) or a surrogate, is sent as U+FFFD, and attribute bits other than those two are dropped. The screen also remembers what it
+last sent. `flush()` answers only the difference: it moves the cursor to the
+cells that changed and sends a style only where it differs from the cell
+before. An empty answer means nothing changed. On a 200 × 60 screen,
+rewriting every cell flushes in about 0.1 ms, and one changed cell in about
+0.03 ms. After `resize(width, height)` the next flush redraws everything, and
+so does one after `invalidate()`: call that when something else has written
+to the terminal.
+
+**A `Canvas`** puts pixels on a screen, two to a cell, one above the other.
+It draws with the half-block character "▀": the foreground is the top pixel's
+colour and the background is the bottom pixel's. A cell is about twice as
+tall as it is wide, so the pixels come out roughly square. It has
+`setPixel(x, y, colour)`, `pixel(x, y)`, `fillRect(x, y, w, h, colour)`,
+`line(x0, y0, x1, y1, colour)`, `clear(colour)`, and
+`text(column, row, s, fg)`, which writes over the pixels in cell
+coordinates. Anything drawn off the edge is dropped.
+
+**Colour** is `rgb(r, g, b)`, a 24-bit `i32`, or `COLOR_DEFAULT` for the
+terminal's own colour. Some terminals cannot show 24-bit colour; for them,
+make the screen with `new Screen(w, h, true)` and every colour is sent as its
+nearest entry in the 256-colour palette (`paletteIndex`). Most terminals set
+`COLORTERM` to `truecolor` or `24bit` when they can, and reading it is up to
+your program. The other escapes are plain functions that answer a string:
+`enterAltScreen` and `leaveAltScreen`, `hideCursor` and `showCursor`,
+`clearScreen`, `resetStyle`, `moveCursor(x, y)`, and `beginSync` and
+`endSync`, described below.
+
+**A `KeyDecoder`** reads the bytes a terminal in raw mode sends.
+`feed(bytes, count, nowMs)` answers a `KeyEvent[]`, each with a `kind` (one
+of `KEY_UP`, `KEY_DOWN`, `KEY_LEFT`, `KEY_RIGHT`, `KEY_ENTER`, `KEY_SPACE`,
+`KEY_ESCAPE`, `KEY_CTRL_C`, `KEY_TAB`, `KEY_BACKSPACE`, `KEY_CHAR`,
+`KEY_CONTROL`, `KEY_UNKNOWN`) and a `code`, which for `KEY_CHAR` is the
+character's code point; bytes that are not valid UTF-8, and a C1 control
+(U+0080–U+009F), come out as U+FFFD.
+A read can stop in the middle of an arrow key's
+`ESC [ A`; the decoder holds the start and finishes the key on the next
+`feed`. The ESC key sends a lone ESC, which is also how an arrow key begins.
+So the decoder holds an ESC until either the rest of a sequence arrives or
+the timeout you gave the constructor passes. While `waiting()` is true, call
+`poll(nowMs)` once the timeout is up to collect the `KEY_ESCAPE`.
+
+```ts nish:ok
+import { KEY_LEFT, KeyDecoder } from "nish/term";
+
+export const main = (): i32 => {
+  const keys = new KeyDecoder(toF64(30)); // give up on a lone ESC after 30 ms
+  const first: u8[] = [toU8(27), toU8(91)]; // ESC [, and the read ends
+  const rest: u8[] = [toU8(68)]; // D
+  const none = keys.feed(first, 2, toF64(0));
+  const left = keys.feed(rest, 1, toF64(4));
+  console.log(`${none.length} ${left.length} ${left[0].kind === KEY_LEFT}`); // 0 1 true
+  return 0;
+};
+```
+
+**At 120 or 240 Hz**, two things matter. The first is that the terminal
+never shows a frame half drawn. Set `screen.sync = true` and every flush
+that changes something is wrapped in `beginSync()` and `endSync()`
+(synchronized output, mode 2026). A terminal that supports the mode holds
+the frame and paints it in one go; kitty, foot, WezTerm and iTerm2 do, and
+one that does not ignores the escapes. An unchanged frame
+stays an empty string. The second is that the game runs at the same speed
+whatever the display does. A `FixedStep` clock turns the time between frames
+into whole steps: `new FixedStep(stepsPerSecond, maxSteps)`, then
+`advance(nowMs)` answers how many steps to run and keeps the remainder for
+next time. `alpha()` is that remainder as a fraction of a step, for drawing
+between the last two positions. A clock that falls more than `maxSteps`
+behind, after a stall, drops the backlog instead of trying to catch up. The
+same clock with `maxSteps` 1 paces the drawing: it answers 1 when a frame is
+due. The first `advance` only starts the clock, and answers 0.
+
+```ts nish:ok
+import { COLOR_DEFAULT, Canvas, FixedStep, Screen, rgb } from "nish/term";
+import { write } from "nish:io";
+import { monotonicNanos } from "nish:process";
+
+export const main = (): i32 => {
+  const screen = new Screen(40, 12, false);
+  screen.sync = true; // each frame is painted whole
+  const canvas = new Canvas(screen); // 40 x 24 pixels
+  const logic = new FixedStep(240, 8); // the game moves 240 times a second
+  const draw = new FixedStep(120, 1); // and is drawn 120 times a second
+  const start = monotonicNanos();
+  let x = 0;
+  let nowMs = toF64(0);
+  while (nowMs < toF64(2000)) {
+    nowMs = toF64(monotonicNanos() - start) / toF64(1000000);
+    const steps = logic.advance(nowMs);
+    for (let k = 0; k < steps; k++) {
+      x = (x + 1) % 480; // one pixel every 6 steps
+    }
+    if (draw.advance(nowMs) > 0) {
+      canvas.clear(COLOR_DEFAULT);
+      canvas.fillRect((x / 6) | 0, 10, 4, 4, rgb(255, 120, 0));
+      write(screen.flush());
+    }
+  }
+  return 0;
+};
+```
+
+The loop above spins between frames to stay short; a real one waits on its
+keyboard input until the next frame is due. A frame of a game like this
+flushes in well under a millisecond, so the budget at 240 Hz, about 4 ms,
+goes to the terminal, which has its own pacing. kitty waits `repaint_delay`
+milliseconds (10 by default) before it paints; `repaint_delay 2` and
+`sync_to_monitor yes` in `kitty.conf` let it keep up. foot paints on the
+compositor's frame callback, so it follows the monitor's refresh rate by
+itself.
 
 ## `nish/bytes`
 

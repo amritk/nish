@@ -52,7 +52,10 @@
  *
  * Everything here delegates to `runtime/shim.mjs`, the module the differential
  * harness already uses, so the two cannot drift apart: a semantic fixed there
- * is fixed here in the same commit.
+ * is fixed here in the same commit. The shim is itself two layers: the
+ * host-agnostic core (`runtime/core.mjs`) and the Node host
+ * (`runtime/node.mjs`) it installs, so this module adds only what is Node's to
+ * add — the globals, the module hooks and `process.argv`.
  */
 import { registerHooks } from "node:module";
 import * as shim from "./shim.mjs";

@@ -37,7 +37,8 @@
 # same seed ci.yml's `bootstrap` job builds with (WP19 G3).
 #
 # The `npm` job at the end publishes the packages the release attached, by
-# npm's trusted publishing; see it and docs/wp12-release.md.
+# npm's trusted publishing; see it and docs/wp12-release.md. The `interop`
+# job beside it runs interop.yml with the compiler the release published.
 #
 # Two ways in, because one of them does not work unattended. A tag pushed by a
 # workflow using the default GITHUB_TOKEN raises no `push` event -- that is
@@ -313,10 +314,10 @@ jobs:
         run: |
           tar -tzf "$TARBALL" |
             sed "s#^$NAME/##" | sort > "$RUNNER_TEMP/files.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/json-typed.ts std/json-value.ts std/pair.ts std/random.ts std/secret.ts std/threads.ts std/collections.ts std/map.ts std/bytes.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/hpack.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts LICENSE INSTALL.md; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/json-typed.ts std/json-value.ts std/yaml.ts std/yaml-lines.ts std/pair.ts std/random.ts std/secret.ts std/threads.ts std/term.ts std/collections.ts std/map.ts std/bytes.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/hpack.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts LICENSE INSTALL.md; do
             grep -qx "$f" "$RUNNER_TEMP/files.txt" || { echo "::error::$f missing from $NAME.tar.gz"; exit 1; }
           done
-          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the seventy-two that have to be there"
+          echo "$(wc -l < "$RUNNER_TEMP/files.txt") paths, and the seventy-three that have to be there"
 
       # A released compiler that does not work is worse than no release: it is
       # the seed every later release is built from. Unpack the actual tarball
@@ -404,7 +405,7 @@ jobs:
           # which is louder and no less broken. No smoke test of the unpacked
           # tarball can see it, so the list is checked here.
           tar -tzf "build/release/$file" | sed 's#^package/##' | sort > "$RUNNER_TEMP/pkg.txt"
-          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/json-typed.ts std/json-value.ts std/pair.ts std/random.ts std/secret.ts std/threads.ts std/collections.ts std/map.ts std/bytes.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/hpack.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts package.json; do
+          for f in bin/nish runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/json-typed.ts std/json-value.ts std/yaml.ts std/yaml-lines.ts std/pair.ts std/random.ts std/secret.ts std/threads.ts std/term.ts std/collections.ts std/map.ts std/bytes.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/hpack.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts package.json; do
             grep -qx "$f" "$RUNNER_TEMP/pkg.txt" || { echo "::error::$f missing from $file"; exit 1; }
           done
           echo "$file carries $(wc -l < "$RUNNER_TEMP/pkg.txt") paths"
@@ -529,7 +530,7 @@ jobs:
           # packages the matrix above built. The three `bin/` paths are the command
           # and the two files behind it, and a tarball missing any of them installs
           # a package whose `bin` points at nothing.
-          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/json-typed.ts std/json-value.ts std/pair.ts std/random.ts std/secret.ts std/threads.ts std/collections.ts std/map.ts std/bytes.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/hpack.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts; do
+          for f in bin/nish bin/launcher.js bin/packaging.js runtime/runtime.c runtime/LICENSE-ryu runtime/runtime-os.c runtime/nish.h scripts/build.sh std/text.ts std/testing.ts std/json.ts std/json-tokenizer.ts std/json-typed.ts std/json-value.ts std/yaml.ts std/yaml-lines.ts std/pair.ts std/random.ts std/secret.ts std/threads.ts std/term.ts std/collections.ts std/map.ts std/bytes.ts std/crypto/aes.ts std/crypto/LICENSE-bearssl std/crypto/base64url.ts std/crypto/chacha20poly1305.ts std/crypto/ct.ts std/crypto/ed25519.ts std/crypto/hkdf.ts std/crypto/hmac.ts std/crypto/p256.ts std/crypto/LICENSE-fiat-crypto std/crypto/LICENSE-libsecp256k1 std/crypto/sha1.ts std/crypto/sha256.ts std/crypto/sha512.ts std/crypto/x25519.ts std/crypto/x509.ts std/crypto/x509-random.ts std/net/buffer-pool.ts std/net/hpack.ts std/net/http-fields.ts std/net/http1.ts std/net/http1-server.ts std/net/http2.ts std/net/http2-frame.ts std/net/http2-tls.ts std/net/http3.ts std/net/http3-frame.ts std/net/http3-server.ts std/net/prefork.ts std/net/qpack.ts std/net/quic.ts std/net/quic-conn-ack.ts std/net/quic-conn-cid.ts std/net/quic-conn-params.ts std/net/quic-frame.ts std/net/quic-listener.ts std/net/quic-recovery.ts std/net/quic-packet.ts std/net/quic-stream.ts std/net/quic-datagram.ts std/net/router.ts std/net/tls.ts std/net/tls-tcp.ts std/net/tls/codec.ts std/net/tls/record.ts std/net/tls/record-server.ts std/net/tls/schedule.ts std/net/tls/ticket.ts std/net/url.ts std/net/websocket.ts std/net/webtransport.ts; do
             grep -qx "$f" build/release/files.txt || { echo "::error::$f missing from tarball"; exit 1; }
           done
 
@@ -594,6 +595,22 @@ jobs:
             --title "nish $GITHUB_REF_NAME" \
             --notes-file build/release/notes.md \
             --verify-tag
+
+  # Interop (interop.yml) on the tag, with this release's own compiler as the
+  # seed of the server image. install.sh fetches it from the release's assets
+  # and verifies it against SHA256SUMS, which `release` is what attaches, so
+  # this needs `release`. Beside `npm`, not in front of it: a live third-party
+  # peer is a check on the network stack, not on the bytes being published, and
+  # a peer's flake after the publish is fixed by re-running this job alone --
+  # the release itself is not wrong (docs/wp12-release.md).
+  interop:
+    name: interop
+    needs: [release]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/interop.yml
+    with:
+      seed: ${{ github.ref_name }}
 
   # The registry half of the release: the N+1 packages `release` just attached,
   # published by npm's trusted publishing. Each package trusts this workflow

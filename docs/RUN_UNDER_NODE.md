@@ -19,6 +19,10 @@ same translation out as TypeScript a person can keep. The prelude is the thing
 you would actually hand to someone, and it is weaker because a prelude can only
 replace *globals* — never operators, never the object model.
 
+To import the builtins from TypeScript rather than install them as globals —
+`nish/runtime`, with `nish/runtime/node` or `nish/runtime/browser` as the
+host — see the guide's [Back to TypeScript](guide/using-nish/to-typescript.md).
+
 ## Using it
 
 ```bash
@@ -47,7 +51,11 @@ ever runs; put the program under a directory whose `package.json` says
 
 Everything delegates to `runtime/shim.mjs`, the module the differential harness
 already uses, so the two cannot drift: a semantic fixed there is fixed here in
-the same commit.
+the same commit. The shim is itself a layer over two modules:
+`runtime/core.mjs`, the host-agnostic builtins, which name no `node:` module,
+`process` or `Buffer`, and `runtime/node.mjs`, which installs Node as the
+core's host — its output, exit, arguments, files, environment, children and
+clocks. The command lines above stay as they are.
 
 - `console.log` / `console.error` — `String(x)` plus a newline on a synchronous
   write. Node's own console *inspects*, so it prints `-0` where `String(-0)` is
@@ -203,9 +211,10 @@ no prelude can reach it. They are language decisions
   naming the line.
 - **Node only.** The prelude installs its loader with `node:module`'s
   `registerHooks`, which Bun does not have (`Export named 'registerHooks' not
-  found`), and `runtime/shim.mjs` imports `node:fs`, `node:child_process` and
-  `node:os`, which a browser does not have.
-  [wp33-round-trip.md](wp33-round-trip.md) §4.3 splits the runtime by host.
+  found`), and `runtime/node.mjs`, the host the shim installs, imports
+  `node:fs`, `node:child_process` and `node:os`, which a browser does not have.
+  `runtime/core.mjs` imports none of them: another host is an adapter that
+  installs itself in its place ([wp33-round-trip.md](wp33-round-trip.md) §4.3).
 - **A scope's tasks run at the spawn under Node**, one after another, and each
   stores its answer there; natively they run together when the scope's block
   ends, and each answer is stored after the last task finishes

@@ -1,0 +1,1 @@
+`fclose` is the close of handle class `File`, and only its `[Symbol.dispose]` may call it on the pointer the object owns

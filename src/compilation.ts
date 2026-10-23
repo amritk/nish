@@ -48,6 +48,7 @@
 // answers with the IR text per module and the stem each module's file should
 // use, and `src/compile.ts` writes them. There is no `mkdir` here (D4).
 
+import { handleFindings } from "./handles"
 import { analyzeFunctions, AnalysisUnit, FactsTable } from "./attributes"
 import { arenaBlockFindings, arenaLoopFindings } from "./escape"
 import { portabilityFindings } from "./portability"
@@ -1182,6 +1183,17 @@ export class Compilation {
       }
     }
     this.rejectInstantiatedStructClashes()
+    if (this.sink.hasErrors()) {
+      return false
+    }
+    // WP40 §4: the handle rules read the checked tables, so they run once
+    // every body, every instance's included, has checked clean.
+    for (const unit of this.modules) {
+      const program = unit.checker.program
+      for (const finding of handleFindings(program, this.table)) {
+        this.sink.report(program.source, finding.node.start, finding.node.end, finding.message)
+      }
+    }
     if (this.sink.hasErrors()) {
       return false
     }
