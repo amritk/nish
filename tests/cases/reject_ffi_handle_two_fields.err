@@ -1,0 +1,1 @@
+Handle class `File`: a handle class declares exactly one `CPtr` or `CPtr | null` field, `readonly` and with no initialiser, so the one point
