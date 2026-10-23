@@ -18253,12 +18253,12 @@ function JsonTokenizer.string(this: JsonTokenizer, at: i32, k: i32): i32 -> @nis
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokSkipPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.escapeCodePoint#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local -51:11 src: u8[] (const)
-  local -50:11 end: i32 (const)
-  local -47:11 room: i32 (const)
-  local -46:11 limit: i32 (const)
-  local -45:9 i: i32 (let)
-  local -44:9 decoded: i32 (let)
+  local -52:11 src: u8[] (const)
+  local -51:11 end: i32 (const)
+  local -48:11 room: i32 (const)
+  local -47:11 limit: i32 (const)
+  local -46:9 i: i32 (let)
+  local -45:9 decoded: i32 (let)
   local -38:13 run: i32 (const)
   callee -37:11 jsonTokSkipPlain -> @nish.jsonTokSkipPlain
   local -35:13 b: i32 (const)

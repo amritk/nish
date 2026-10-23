@@ -881,10 +881,11 @@ export class JsonTokenizer {
     let i: i32 = at + 1
     let decoded: i32 = 0
     while (true) {
-      // A run of plain bytes is stepped over in one loop. Each byte of it is
-      // one the checks below would pass with `decoded += 1; i += 1`, and the
-      // run stops short of `limit`, so the first byte it leaves is judged by
-      // those checks exactly as before.
+      // A run of plain bytes is stepped over in one call. Each ASCII byte or
+      // UTF-8 sequence of it is one the checks below would pass with
+      // `decoded += width; i += width`, and the run stops short of `limit`,
+      // so the first byte it leaves is judged by those checks exactly as
+      // before.
       const run: i32 = i
       i = jsonTokSkipPlain(src, i, limit)
       decoded += i - run
