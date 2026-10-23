@@ -72,6 +72,11 @@ PASS  its header's comment is not part of it
 PASS  a document marker ends a block scalar of blank lines
 PASS  and starts the next document
 PASS  so does a document end
+PASS  a plain scalar's blank line of spaces and tabs folds to a break
+PASS  and is quiet
+PASS  a tab-only line ends a plain scalar it trails
+PASS  so does a blank line the text ends on
+PASS  which is quiet
 PASS  CR LF breaks in every scalar style and a comment
 PASS  are quiet
 PASS  a lone CR is a break too
@@ -349,4 +354,4 @@ PASS  diagnostics are in source order
 report 2:10 (byte 10) UNEXPECTED_COMMA Missing value before ","
 report 3:5 (byte 9) UNRESOLVED_ALIAS Alias "*nope" has no matching anchor
 report 5:1 (byte 1) DUPLICATE_KEY Map key "k" is duplicated
-std/yaml: 348 passed, 0 failed, 0 skipped
+std/yaml: 353 passed, 0 failed, 0 skipped

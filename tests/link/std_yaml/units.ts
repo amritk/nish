@@ -107,6 +107,11 @@ const ytScalarUnits = (t: Suite): void => {
   t.eqStr("a document marker ends a block scalar of blank lines", ytRangesOf("--- |\n  \n---\n"), "");
   t.eqI32("and starts the next document", parseYaml("--- |\n  \n---\n").documentCount(), 2);
   t.eqStr("so does a document end", ytRangesOf("--- >\n\n  \n...\n"), "");
+  t.eqStr("a plain scalar's blank line of spaces and tabs folds to a break", ytScalar("x\n \t \ny\n"), "string <x\ny>");
+  t.eqStr("and is quiet", ytRangesOf("x\n \t \ny\n"), "");
+  t.eqStr("a tab-only line ends a plain scalar it trails", ytScalar("a\n\t\n"), "string <a>");
+  t.eqStr("so does a blank line the text ends on", ytScalar("a\n \t"), "string <a>");
+  t.eqStr("which is quiet", ytRangesOf("a\n \t"), "");
   const crlf = "a: x\r\nb: 'y\r\n  z'\r\n# c\r\nd: \"p\r\n  q\"\r\ne: f\r\n  g\r\n";
   t.eqStr("CR LF breaks in every scalar style and a comment", ytFlow(crlf), "{ a: x, b: y z, d: p q, e: f g }");
   t.eqStr("are quiet", ytRangesOf(crlf), "");
