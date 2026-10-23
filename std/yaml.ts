@@ -474,7 +474,9 @@ export class YamlStream {
     }
     const at: i32 = this.resolved(n)
     const code: i32 =
-      this.style(at) === YAML_PLAIN ? yamlByte(this.source, this.start(at)) : yamlByte(yamlDecode(this, at), 0)
+      this.style(at) === YAML_PLAIN
+        ? yamlByte(this.source, this.start(at))
+        : yamlByte(yamlDecode(this, at), 0)
     return code === 116 || code === 84
   }
 
@@ -1137,6 +1139,10 @@ const yamlDecodeBlock = (text: string, from: i32, to: i32, extras: i32, folded: 
     }
     i = hasBreak ? yamlAfterBreak(text, e) : to
   }
+  if (seenContent && pending === 0) {
+    // The last line ran to the end of the text: its break is implied.
+    pending = 1
+  }
   if (chomp === YAML_KEEP) {
     out.repeat(YAML_LF, pending)
   } else if (chomp === YAML_CLIP && seenContent && pending > 0) {
@@ -1287,7 +1293,11 @@ const yamlIsFloatForm = (text: string, from: i32, to: i32): boolean => {
 const yamlSpecialFloat = (text: string, from: i32, to: i32): i32 => {
   const c: i32 = yamlByte(text, from)
   const at: i32 = c === YAML_PLUS || c === YAML_DASH ? from + 1 : from
-  if (yamlIsWord(text, at, to, ".inf") || yamlIsWord(text, at, to, ".Inf") || yamlIsWord(text, at, to, ".INF")) {
+  if (
+    yamlIsWord(text, at, to, ".inf") ||
+    yamlIsWord(text, at, to, ".Inf") ||
+    yamlIsWord(text, at, to, ".INF")
+  ) {
     return c === YAML_DASH ? 2 : 1
   }
   if (
@@ -1339,3 +1349,1712 @@ const yamlParseFloat = (text: string, from: i32, to: i32): f64 => {
   }
   return yamlIsFloatForm(text, from, to) ? parseFloat(text.substring(from, to)) : toF64(0)
 }
+
+// ---- The parser ------------------------------------------------------------------
+
+/** `a[top] = v`, or a push when `a` is no longer than `top`; answers `top + 1`. */
+const yamlStackPush = (a: i32[], top: i32, v: i32): i32 => {
+  if (top < toI32(a.length)) {
+    yamlPut(a, top, v)
+  } else {
+    a.push(v)
+  }
+  return top + 1
+}
+
+/** A tag with the core schema's `tag:yaml.org,2002:` prefix taken off. */
+const yamlShortenTag = (tag: string): string => {
+  const prefix: i32 = toI32(YAML_CORE_PREFIX.length)
+  if (toI32(tag.length) >= prefix && tag.substring(0, prefix) === YAML_CORE_PREFIX) {
+    return tag.substring(prefix, toI32(tag.length))
+  }
+  return tag
+}
+
+/** A byte a `%TAG` handle may hold between its `!`s: a letter, a digit or `-`. */
+const yamlIsHandleChar = (code: i32): boolean =>
+  yamlIsDigit(code) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === YAML_DASH
+
+/** The bytes of a UTF-8 character that starts with `lead`. */
+const yamlCharWidth = (lead: i32): i32 => {
+  if (lead >= 240) {
+    return 4
+  }
+  if (lead >= 224) {
+    return 3
+  }
+  return lead >= 192 ? 2 : 1
+}
+
+/** Whether `\` followed by `code` is an escape YAML defines: `1`, or `2` for the hex ones. */
+const yamlEscapeKind = (code: i32): i32 => {
+  if (code === 120 || code === 117 || code === 85) {
+    return 2
+  }
+  if (
+    code === YAML_ZERO ||
+    code === 97 ||
+    code === 98 ||
+    code === 116 ||
+    code === 110 ||
+    code === 118 ||
+    code === 102 ||
+    code === 114 ||
+    code === 101 ||
+    code === YAML_SPACE ||
+    code === YAML_DQUOTE ||
+    code === 47 ||
+    code === YAML_BACKSLASH ||
+    code === 78 ||
+    code === 95 ||
+    code === 76 ||
+    code === 80 ||
+    code === YAML_TAB ||
+    yamlIsBreak(code)
+  ) {
+    return 1
+  }
+  return 0
+}
+
+/** One parse in progress: the cursor, the anchors in scope and the document's directives. */
+class YamlParser {
+  stream: YamlStream
+  text: string
+  /** The anchors defined so far in this document: each name's range and its node, searched from the end. */
+  anchorStarts: i32[]
+  anchorEnds: i32[]
+  anchorNodes: i32[]
+  /** The anchors whose node is still being read, so an alias to one is recursive. */
+  pendingStarts: i32[]
+  pendingEnds: i32[]
+  /** The `%TAG` handles this document declared, and their prefixes. */
+  handleNames: string[]
+  handlePrefixes: string[]
+  /** The children of every collection still open, innermost last. */
+  scratch: i32[]
+  pos: i32 = 0
+  len: i32 = 0
+  depth: i32 = 0
+  maxDepth: i32 = 1000
+  doc: i32 = 0
+  /** The indent a flow collection's continuation lines must pass. */
+  flowIndent: i32 = -1
+  tabReportedAt: i32 = -1
+  commentWatermark: i32 = 0
+  anchorTop: i32 = 0
+  pendingTop: i32 = 0
+  scratchTop: i32 = 0
+  /** The last error's range, so one mistake is not reported twice. */
+  lastErrStart: i32 = -1
+  lastErrEnd: i32 = -1
+  /** What `peekLine` found: the next content line's indent and first byte. */
+  lineIndent: i32 = 0
+  lineContent: i32 = 0
+  flowIndentReported: boolean = false
+  uniqueKeys: boolean = true
+  merge: boolean = true
+  keepComments: boolean = false
+  firstOnly: boolean = false
+  yamlDirective: boolean = false
+  lineEof: boolean = false
+
+  constructor(text: string, options: YamlOptions) {
+    this.stream = new YamlStream(text)
+    this.text = text
+    this.anchorStarts = []
+    this.anchorEnds = []
+    this.anchorNodes = []
+    this.pendingStarts = []
+    this.pendingEnds = []
+    this.handleNames = []
+    this.handlePrefixes = []
+    this.scratch = []
+    this.len = toI32(text.length)
+    this.maxDepth = options.maxDepth
+    this.uniqueKeys = options.uniqueKeys
+    this.merge = options.merge
+    this.keepComments = options.keepComments
+    this.firstOnly = options.firstDocumentOnly
+  }
+
+  // ---- Reporting and bytes -------------------------------------------------------
+
+  /** Internal: records an error over `[start, end)`. */
+  error(code: i32, message: string, start: i32, end: i32): void {
+    this.stream.report(code, false, message, start, end, this.doc)
+    this.lastErrStart = start
+    this.lastErrEnd = end < start ? start : end
+  }
+
+  /** Internal: records a warning over `[start, end)`. */
+  warn(code: i32, message: string, start: i32, end: i32): void {
+    this.stream.report(code, true, message, start, end, this.doc)
+  }
+
+  /** Internal: the byte at `i`, or `-1` outside the text. */
+  at(i: i32): i32 {
+    return yamlByte(this.text, i)
+  }
+
+  /** Internal: whether `i` holds a `-` that starts a block sequence entry. */
+  isSeqEntryDash(i: i32): boolean {
+    return this.at(i) === YAML_DASH && yamlIsWs(this.at(i + 1))
+  }
+
+  /** Internal: whether `[from, to)` holds a line break. */
+  crossesLine(from: i32, to: i32): boolean {
+    return from < to && yamlLineEnd(this.text, from, to) < to
+  }
+
+  /** Internal: the start of the line after the one `from` is on, or the end of the text. */
+  nextLineStart(from: i32): i32 {
+    const e: i32 = yamlLineEnd(this.text, from, this.len)
+    return e >= this.len ? this.len : yamlAfterBreak(this.text, e)
+  }
+
+  /** Internal: whether `i` starts a `---` or `...` marker. */
+  isDocMarker(i: i32): boolean {
+    const c: i32 = this.at(i)
+    return (
+      (c === YAML_DASH || c === YAML_DOT) && this.at(i + 1) === c && this.at(i + 2) === c && yamlIsWs(this.at(i + 3))
+    )
+  }
+
+  /** Internal: the end of `[from, …)` before any trailing blanks and a comment, on its line. */
+  plainLineEnd(from: i32): i32 {
+    let i: i32 = from
+    let lastNonSpace: i32 = from
+    while (i < this.len) {
+      const c: i32 = this.at(i)
+      if (yamlIsBreak(c)) {
+        break
+      }
+      if (c === YAML_HASH && i > from && yamlIsBlank(this.at(i - 1))) {
+        break
+      }
+      i += 1
+      if (!yamlIsBlank(c)) {
+        lastNonSpace = i
+      }
+    }
+    return lastNonSpace
+  }
+
+  /** Internal: the end of a token: the next blank, break or end of text. */
+  tokenEnd(from: i32): i32 {
+    let i: i32 = from
+    while (i < this.len && !yamlIsWs(this.at(i))) {
+      i += 1
+    }
+    return i
+  }
+
+  /** Internal: the end of an anchor or tag token; in flow, a flow indicator ends it too. */
+  propTokenEnd(from: i32, flow: boolean): i32 {
+    let i: i32 = from
+    while (i < this.len) {
+      const c: i32 = this.at(i)
+      if (yamlIsWs(c) || (flow && yamlIsFlowIndicator(c))) {
+        break
+      }
+      i += 1
+    }
+    return i
+  }
+
+  // ---- Lines and comments ----------------------------------------------------------
+
+  /**
+   * Internal: moves to the start of the next line with content, past blank and
+   * comment lines, and sets `lineEof`, `lineIndent` and `lineContent`.
+   */
+  peekLine(minIndent: i32): void {
+    let p: i32 = this.pos
+    while (p < this.len) {
+      let i: i32 = p
+      while (this.at(i) === YAML_SPACE) {
+        i += 1
+      }
+      const c: i32 = this.at(i)
+      if (c < 0) {
+        break
+      }
+      if (yamlIsBreak(c) || c === YAML_HASH) {
+        if (c === YAML_HASH) {
+          this.recordComment(i)
+        }
+        p = this.nextLineStart(i)
+        continue
+      }
+      if (c === YAML_TAB) {
+        let j: i32 = i
+        while (yamlIsBlank(this.at(j))) {
+          j += 1
+        }
+        const d: i32 = this.at(j)
+        if (d < 0 || yamlIsBreak(d) || d === YAML_HASH) {
+          if (d === YAML_HASH) {
+            this.recordComment(j)
+          }
+          p = this.nextLineStart(j)
+          continue
+        }
+        if (i - p < minIndent && this.tabReportedAt !== p) {
+          this.error(YAML_ERR_TAB_INDENT, "Tabs cannot be used for indentation", i, j)
+          this.tabReportedAt = p
+        }
+        this.setLine(p, j - p, j)
+        return
+      }
+      this.setLine(p, i - p, i)
+      return
+    }
+    this.pos = this.len
+    this.lineEof = true
+    this.lineIndent = 0
+    this.lineContent = this.len
+  }
+
+  /** Internal: the line `peekLine` found. */
+  setLine(start: i32, indent: i32, content: i32): void {
+    this.pos = start
+    this.lineEof = false
+    this.lineIndent = indent
+    this.lineContent = content
+  }
+
+  /** Internal: steps past spaces and tabs. */
+  skipInlineSpaces(): void {
+    while (yamlIsBlank(this.at(this.pos))) {
+      this.pos += 1
+    }
+  }
+
+  /** Internal: steps past the spaces after an indicator, reporting a tab that indents a compact node. */
+  skipIndicatorSeparation(): void {
+    while (this.at(this.pos) === YAML_SPACE) {
+      this.pos += 1
+    }
+    if (this.at(this.pos) !== YAML_TAB) {
+      return
+    }
+    const tab: i32 = this.pos
+    this.skipInlineSpaces()
+    const c: i32 = this.at(this.pos)
+    if (c === YAML_HASH) {
+      return
+    }
+    if (
+      this.isSeqEntryDash(this.pos) ||
+      (c === YAML_QUESTION && yamlIsWs(this.at(this.pos + 1))) ||
+      this.findKeyColon(this.pos) >= 0
+    ) {
+      this.error(YAML_ERR_TAB_INDENT, "Tabs cannot be used for indentation", tab, this.pos)
+    }
+  }
+
+  /** Internal: keeps the comment that starts at `hash`, when comments are kept. */
+  recordComment(hash: i32): void {
+    if (!this.keepComments || hash < this.commentWatermark) {
+      return
+    }
+    const end: i32 = yamlLineEnd(this.text, hash, this.len)
+    this.commentWatermark = end
+    this.stream.commentStarts.push(hash)
+    this.stream.commentEnds.push(end)
+  }
+
+  /** Internal: keeps a comment after the content on this line, if there is one. */
+  recordTrailingComment(): void {
+    if (!this.keepComments) {
+      return
+    }
+    let i: i32 = this.pos
+    while (yamlIsBlank(this.at(i))) {
+      i += 1
+    }
+    if (this.at(i) !== YAML_HASH) {
+      return
+    }
+    if (i === this.pos && !yamlIsWs(this.at(i - 1))) {
+      return
+    }
+    this.recordComment(i)
+  }
+
+  /** Internal: keeps the first comment on the line from `from`, if there is one. */
+  recordLineComment(from: i32): void {
+    if (!this.keepComments) {
+      return
+    }
+    let i: i32 = from
+    while (i < this.len) {
+      const c: i32 = this.at(i)
+      if (yamlIsBreak(c)) {
+        return
+      }
+      if (c === YAML_HASH && yamlIsWs(this.at(i - 1))) {
+        this.recordComment(i)
+        return
+      }
+      i += 1
+    }
+  }
+
+  /** Internal: whether the cursor is at the end of the text, a break or a comment. */
+  atLineEnd(): boolean {
+    const c: i32 = this.at(this.pos)
+    return c < 0 || yamlIsBreak(c) || c === YAML_HASH
+  }
+
+  /** Internal: moves past the rest of this line, keeping its comment. */
+  finishLine(): void {
+    this.recordTrailingComment()
+    this.pos = this.nextLineStart(this.pos)
+  }
+
+  /** Internal: `finishLine`, unless the cursor is already at the start of a line. */
+  finishLineIfMidLine(): void {
+    if (this.pos > 0 && this.pos < this.len && !yamlIsBreak(this.at(this.pos - 1))) {
+      this.finishLine()
+    }
+  }
+
+  /** Internal: reports what follows a node on its line, if it is neither a comment nor nothing. */
+  checkTrailingContent(): void {
+    const c: i32 = this.at(this.pos)
+    if (c < 0 || yamlIsBreak(c)) {
+      return
+    }
+    if (yamlIsBlank(c)) {
+      this.skipInlineSpaces()
+      if (this.atLineEnd()) {
+        return
+      }
+    }
+    const start: i32 = this.pos
+    if (this.at(start) === YAML_HASH) {
+      if (start > 0 && yamlIsBlank(this.at(start - 1))) {
+        return
+      }
+      this.error(YAML_ERR_BAD_COMMENT, "A comment must be preceded by whitespace", start, this.plainLineEnd(start))
+      return
+    }
+    this.error(
+      YAML_ERR_UNEXPECTED_CONTENT,
+      "Unexpected content after the end of a node",
+      start,
+      this.plainLineEnd(start),
+    )
+  }
+
+  // ---- Tags and properties ---------------------------------------------------------
+
+  /** Internal: the tag written at `[start, end)`, resolved against this document's handles. */
+  resolveTag(start: i32, end: i32): string {
+    const written: string = this.text.substring(start, end)
+    if (end - start === 1) {
+      return "!"
+    }
+    if (this.at(start + 1) === YAML_LT) {
+      if (this.at(end - 1) !== YAML_GT) {
+        this.error(YAML_ERR_BAD_TAG, 'Verbatim tag is missing its closing ">"', start, end)
+        return written
+      }
+      return yamlShortenTag(this.text.substring(start + 2, end - 1))
+    }
+    let handleEnd: i32 = start + 1
+    if (this.at(start + 1) === YAML_BANG) {
+      handleEnd = start + 2
+    } else {
+      let i: i32 = start + 1
+      while (i < end && yamlIsHandleChar(this.at(i))) {
+        i += 1
+      }
+      if (i > start + 1 && this.at(i) === YAML_BANG) {
+        handleEnd = i + 1
+      }
+    }
+    let k: i32 = handleEnd
+    while (k < end) {
+      if (yamlIsFlowIndicator(this.at(k))) {
+        this.error(YAML_ERR_BAD_TAG, `Tag "${written}" contains a character a tag may not hold`, start, end)
+        break
+      }
+      k += 1
+    }
+    const handle: string = this.text.substring(start, handleEnd)
+    const suffix: string = this.text.substring(handleEnd, end)
+    let i: i32 = toI32(this.handleNames.length) - 1
+    while (i >= 0) {
+      if (this.handleNames[i] === handle) {
+        return yamlShortenTag(this.handlePrefixes[i] + suffix)
+      }
+      i -= 1
+    }
+    if (handle === "!!") {
+      return suffix
+    }
+    if (handle === "!") {
+      return written
+    }
+    this.error(
+      YAML_ERR_UNKNOWN_TAG_HANDLE,
+      `Tag handle "${handle}" was never declared by a %TAG directive`,
+      start,
+      end,
+    )
+    return written
+  }
+
+  /** Internal: reports an anchor or alias name that is empty or runs into a flow indicator. */
+  reportBadAnchorName(what: string, start: i32, end: i32): void {
+    if (end === start + 1) {
+      this.error(YAML_ERR_BAD_ANCHOR, `${what} name cannot be empty`, start, end)
+      return
+    }
+    const name: string = this.text.substring(start + 1, end)
+    const next: string = this.text.substring(end, end + 1)
+    this.error(
+      YAML_ERR_BAD_ANCHOR,
+      `${what} name "${name}" cannot run on into "${next}": a flow indicator is not part of a name, so it needs a space before it`,
+      start,
+      end + 1,
+    )
+  }
+
+  /** Internal: warns about an anchor or alias name `[start + 1, end)` that ends in `:`. */
+  checkAmbiguousName(what: string, start: i32, end: i32): void {
+    if (end <= start + 1 || this.at(end - 1) !== YAML_COLON) {
+      return
+    }
+    const name: string = this.text.substring(start + 1, end)
+    this.warn(
+      YAML_ERR_AMBIGUOUS_ANCHOR_NAME,
+      `${what} name "${name}" ends in ":", which YAML reads as part of the name rather than as a mapping separator`,
+      start,
+      end,
+    )
+  }
+
+  /** Internal: reads the anchor and tag before a node; answers their slot, or `-1` for none. */
+  scanProps(flow: boolean): i32 {
+    const first: i32 = this.at(this.pos)
+    if (first !== YAML_AMP && first !== YAML_BANG && !yamlIsBlank(first)) {
+      return -1
+    }
+    let slot: i32 = -1
+    while (true) {
+      this.skipInlineSpaces()
+      const c: i32 = this.at(this.pos)
+      if (c !== YAML_AMP && c !== YAML_BANG) {
+        break
+      }
+      const start: i32 = this.pos
+      const end: i32 = this.propTokenEnd(start + 1, c === YAML_AMP || flow)
+      if (slot < 0) {
+        slot = this.stream.newProps()
+        yamlPut(this.stream.propStarts, slot, start)
+      }
+      if (c === YAML_AMP) {
+        if (end === start + 1 || (!flow && yamlIsFlowIndicator(this.at(end)))) {
+          this.reportBadAnchorName("Anchor", start, end)
+          if (end === start + 1) {
+            this.pos = end
+            continue
+          }
+        }
+        if (yamlAt(this.stream.propAnchorStarts, slot) >= 0) {
+          this.error(YAML_ERR_BAD_PROPERTY, "A node cannot carry more than one anchor", start, end)
+        }
+        yamlPut(this.stream.propAnchorStarts, slot, start + 1)
+        yamlPut(this.stream.propAnchorEnds, slot, end)
+        this.checkAmbiguousName("Anchor", start, end)
+      } else {
+        if (yamlAt(this.stream.propTagStarts, slot) >= 0) {
+          this.error(YAML_ERR_BAD_PROPERTY, "A node cannot carry more than one tag", start, end)
+        }
+        const tag: string = this.resolveTag(start, end)
+        const tags: string[] = this.stream.propTags
+        if (slot < toI32(tags.length)) {
+          tags[slot] = tag
+        }
+        yamlPut(this.stream.propTagStarts, slot, start)
+        yamlPut(this.stream.propTagEnds, slot, end)
+      }
+      yamlPut(this.stream.propEnds, slot, end)
+      this.pos = end
+    }
+    if (slot >= 0 && yamlAt(this.stream.propAnchorStarts, slot) >= 0) {
+      yamlStackPush(this.pendingEnds, this.pendingTop, yamlAt(this.stream.propAnchorEnds, slot))
+      this.pendingTop = yamlStackPush(this.pendingStarts, this.pendingTop, yamlAt(this.stream.propAnchorStarts, slot))
+    }
+    return slot
+  }
+
+  /** Internal: the first byte after the anchors and tags at `from`, and the blanks after them. */
+  skipPropsAhead(from: i32): i32 {
+    let i: i32 = from
+    while (true) {
+      const c: i32 = this.at(i)
+      if (c !== YAML_AMP && c !== YAML_BANG) {
+        return i
+      }
+      i = this.propTokenEnd(i + 1, c === YAML_AMP)
+      while (yamlIsBlank(this.at(i))) {
+        i += 1
+      }
+    }
+    return i
+  }
+
+  /** Internal: the entry of the anchor named `[from, to)` among those defined so far, or `-1`. */
+  findAnchor(from: i32, to: i32): i32 {
+    let i: i32 = this.anchorTop - 1
+    while (i >= 0) {
+      if (yamlSameBytes(this.text, yamlAt(this.anchorStarts, i), yamlAt(this.anchorEnds, i), from, to)) {
+        return i
+      }
+      i -= 1
+    }
+    return -1
+  }
+
+  /** Internal: defines the anchor `[from, to)` as naming `node`, and ends it being pending. */
+  defineAnchor(from: i32, to: i32, node: i32, slot: i32): void {
+    yamlStackPush(this.anchorStarts, this.anchorTop, from)
+    yamlStackPush(this.anchorEnds, this.anchorTop, to)
+    yamlPut(this.stream.propEntries, slot, this.anchorTop)
+    this.anchorTop = yamlStackPush(this.anchorNodes, this.anchorTop, node)
+    let i: i32 = this.pendingTop - 1
+    while (i >= 0) {
+      if (yamlSameBytes(this.text, yamlAt(this.pendingStarts, i), yamlAt(this.pendingEnds, i), from, to)) {
+        // Close the gap: what was pending after it moves down one.
+        let j: i32 = i + 1
+        while (j < this.pendingTop) {
+          yamlPut(this.pendingStarts, j - 1, yamlAt(this.pendingStarts, j))
+          yamlPut(this.pendingEnds, j - 1, yamlAt(this.pendingEnds, j))
+          j += 1
+        }
+        this.pendingTop -= 1
+        return
+      }
+      i -= 1
+    }
+  }
+
+  /** Internal: gives `node` the properties in `slot`, and answers `node`. */
+  attachProps(node: i32, slot: i32): i32 {
+    if (slot < 0 || node < 0) {
+      return node
+    }
+    const stream: YamlStream = this.stream
+    const anchorFrom: i32 = yamlAt(stream.propAnchorStarts, slot)
+    const anchorTo: i32 = yamlAt(stream.propAnchorEnds, slot)
+    if (stream.kind(node) === YAML_ALIAS) {
+      this.error(YAML_ERR_BAD_PROPERTY, "An alias cannot carry an anchor or a tag", stream.start(node), stream.end(node))
+      if (anchorFrom >= 0) {
+        yamlPut(stream.props, node, slot)
+        this.defineAnchor(anchorFrom, anchorTo, node, slot)
+      }
+      return node
+    }
+    const own: i32 = yamlAt(stream.props, node)
+    let into: i32 = slot
+    if (own >= 0) {
+      // The node read its own properties on a later line: these join them.
+      into = own
+      if (anchorFrom >= 0) {
+        if (yamlAt(stream.propAnchorStarts, own) >= 0) {
+          this.error(
+            YAML_ERR_BAD_PROPERTY,
+            "A node cannot carry more than one anchor",
+            stream.start(node),
+            stream.end(node),
+          )
+        }
+        yamlPut(stream.propAnchorStarts, own, anchorFrom)
+        yamlPut(stream.propAnchorEnds, own, anchorTo)
+      }
+      if (yamlAt(stream.propTagStarts, slot) >= 0) {
+        yamlPut(stream.propTagStarts, own, yamlAt(stream.propTagStarts, slot))
+        yamlPut(stream.propTagEnds, own, yamlAt(stream.propTagEnds, slot))
+        const tags: string[] = stream.propTags
+        if (own < toI32(tags.length) && slot < toI32(tags.length)) {
+          tags[own] = tags[slot]
+        }
+      }
+      yamlPut(stream.propStarts, own, yamlAt(stream.propStarts, slot))
+    } else {
+      yamlPut(stream.props, node, slot)
+    }
+    if (anchorFrom >= 0) {
+      this.defineAnchor(anchorFrom, anchorTo, node, into)
+    }
+    if (yamlAt(stream.propTagStarts, slot) >= 0) {
+      yamlPutU8(stream.types, node, YAML_UNRESOLVED)
+      this.checkTaggedNode(node, slot)
+    }
+    return node
+  }
+
+  // ---- Scalars -------------------------------------------------------------------
+
+  /** Internal: reports the bad escape whose `\` is at `at`. */
+  reportBadEscape(at: i32): void {
+    const e: i32 = this.at(at + 1)
+    let digits: i32 = 0
+    if (e === 120) {
+      digits = 2
+    } else if (e === 117) {
+      digits = 4
+    } else if (e === 85) {
+      digits = 8
+    }
+    if (digits > 0) {
+      let limit: i32 = at + 2 + digits
+      if (limit > this.len) {
+        limit = this.len
+      }
+      let end: i32 = at + 2
+      let value: i32 = 0
+      let tooBig: boolean = false
+      while (end < limit && yamlHexValue(this.at(end)) >= 0) {
+        // 0x10FFFF fits in 21 bits: past it, stop growing and remember.
+        if (value > 1114111) {
+          tooBig = true
+        } else {
+          value = value * 16 + yamlHexValue(this.at(end))
+        }
+        end += 1
+      }
+      const written: string = this.text.substring(at, end)
+      if (end - at - 2 < digits) {
+        this.error(YAML_ERR_BAD_ESCAPE, `"${written}" needs exactly ${digits} hex digits`, at, end)
+      } else if (digits === 8 && (tooBig || value > 1114111)) {
+        this.error(YAML_ERR_BAD_ESCAPE, `"${written}" is past the last Unicode code point`, at, end)
+      }
+      return
+    }
+    const width: i32 = yamlCharWidth(e)
+    const escaped: string = this.text.substring(at + 1, at + 1 + width)
+    this.error(YAML_ERR_BAD_ESCAPE, `"\\${escaped}" is not a valid escape sequence`, at, at + 1 + width)
+  }
+
+  /** Internal: reports a quoted scalar's continuation line at `lineStart` that is not indented past its parent. */
+  checkQuotedIndent(lineStart: i32, parentIndent: i32): boolean {
+    let i: i32 = lineStart
+    while (this.at(i) === YAML_SPACE) {
+      i += 1
+    }
+    const c: i32 = this.at(i)
+    if (c < 0 || yamlIsBreak(c) || i - lineStart > parentIndent) {
+      return false
+    }
+    this.flowIndentReported = true
+    this.error(
+      YAML_ERR_BAD_INDENT,
+      "A quoted scalar continued over lines must be indented deeper than its parent",
+      lineStart,
+      i,
+    )
+    return true
+  }
+
+  /** Internal: reads a single- or double-quoted scalar at the cursor. */
+  scanQuoted(quote: i32, parentIndent: i32): i32 {
+    const start: i32 = this.pos
+    const single: boolean = quote === YAML_SQUOTE
+    let i: i32 = start + 1
+    let indentReported: boolean = parentIndent < 0
+    let closed: boolean = false
+    let contentEnd: i32 = this.len
+    while (i < this.len) {
+      const at: i32 = toI32(indexOfAny(this.text, single ? YAML_SINGLE_STOPS : YAML_DOUBLE_STOPS, i))
+      if (at < 0) {
+        i = this.len
+        break
+      }
+      i = at
+      const c: i32 = this.at(i)
+      if (c === YAML_SQUOTE) {
+        if (this.at(i + 1) === YAML_SQUOTE) {
+          i += 2
+          continue
+        }
+        contentEnd = i
+        i += 1
+        closed = true
+        break
+      }
+      if (c === YAML_DQUOTE) {
+        contentEnd = i
+        i += 1
+        closed = true
+        break
+      }
+      if (c === YAML_BACKSLASH) {
+        const e: i32 = this.at(i + 1)
+        if (e < 0) {
+          i = this.len
+          break
+        }
+        if (yamlIsBreak(e)) {
+          i += 1
+          continue
+        }
+        if (yamlEscapeKind(e) !== 1) {
+          this.reportBadEscape(i)
+        }
+        i += 2
+        continue
+      }
+      // A line break.
+      const after: i32 = yamlAfterBreak(this.text, i)
+      if (this.isDocMarker(after)) {
+        contentEnd = i
+        i = after
+        break
+      }
+      if (!indentReported) {
+        indentReported = this.checkQuotedIndent(after, parentIndent)
+      }
+      i = after
+    }
+    if (!closed) {
+      this.error(YAML_ERR_UNTERMINATED_QUOTE, "Missing closing quote", start, i)
+    }
+    const node: i32 = this.stream.newNode(
+      YAML_SCALAR,
+      single ? YAML_SINGLE_QUOTED : YAML_DOUBLE_QUOTED,
+      start,
+      i,
+    )
+    yamlPut(this.stream.firsts, node, start + 1)
+    yamlPut(this.stream.counts, node, contentEnd)
+    this.pos = i
+    return node
+  }
+
+  /** Internal: reads an alias at the cursor and resolves it against the anchors defined so far. */
+  scanAlias(): i32 {
+    const start: i32 = this.pos
+    let i: i32 = start + 1
+    while (i < this.len) {
+      const c: i32 = this.at(i)
+      if (yamlIsWs(c) || yamlIsFlowIndicator(c)) {
+        break
+      }
+      i += 1
+    }
+    this.checkAmbiguousName("Alias", start, i)
+    this.pos = i
+    const node: i32 = this.stream.newNode(YAML_ALIAS, YAML_PLAIN, start, i)
+    if (i === start + 1) {
+      this.reportBadAnchorName("Alias", start, i)
+      return node
+    }
+    const entry: i32 = this.findAnchor(start + 1, i)
+    if (entry >= 0) {
+      yamlPut(this.stream.firsts, node, yamlAt(this.anchorNodes, entry))
+      return node
+    }
+    const name: string = this.text.substring(start + 1, i)
+    let p: i32 = this.pendingTop - 1
+    while (p >= 0) {
+      if (yamlSameBytes(this.text, yamlAt(this.pendingStarts, p), yamlAt(this.pendingEnds, p), start + 1, i)) {
+        this.error(
+          YAML_ERR_RECURSIVE_ALIAS,
+          `Alias "*${name}" refers to the node that contains it; recursive structures are not supported`,
+          start,
+          i,
+        )
+        return node
+      }
+      p -= 1
+    }
+    this.error(YAML_ERR_UNRESOLVED_ALIAS, `Alias "*${name}" has no matching anchor`, start, i)
+    return node
+  }
+
+  /** Internal: an empty plain scalar, a null, at `at`. */
+  emptyScalar(at: i32): i32 {
+    return this.stream.newNode(YAML_SCALAR, YAML_PLAIN, at, at)
+  }
+
+  /** Internal: whether `code` may not start a plain scalar: `1` always, `2` for `-?:` before a blank. */
+  plainStartClass(code: i32): i32 {
+    if (
+      code === YAML_DASH ||
+      code === YAML_QUESTION ||
+      code === YAML_COLON
+    ) {
+      return 2
+    }
+    if (
+      yamlIsFlowIndicator(code) ||
+      code === YAML_HASH ||
+      code === YAML_AMP ||
+      code === YAML_STAR ||
+      code === YAML_BANG ||
+      code === YAML_PIPE ||
+      code === YAML_GT ||
+      code === YAML_SQUOTE ||
+      code === YAML_DQUOTE ||
+      code === YAML_PERCENT ||
+      code === YAML_AT ||
+      code === YAML_BACKTICK
+    ) {
+      return 1
+    }
+    return 0
+  }
+
+  /** Internal: whether `after` ends a flow indicator: the end, a blank, a break, `,`, `]` or `}`. */
+  flowIndicatorBoundary(after: i32): boolean {
+    const c: i32 = this.at(after)
+    return yamlIsWs(c) || c === YAML_COMMA || c === YAML_RBRACKET || c === YAML_RBRACE
+  }
+
+  /** Internal: reports the indicator at `pos` that cannot start a plain scalar. */
+  reportBadPlainStart(pos: i32, flow: boolean): void {
+    if (this.lastErrStart <= pos && pos < this.lastErrEnd) {
+      return
+    }
+    const c: i32 = this.at(pos)
+    if (this.plainStartClass(c) === 2) {
+      if (c === YAML_COLON) {
+        return
+      }
+      if (flow ? !this.flowIndicatorBoundary(pos + 1) : !yamlIsWs(this.at(pos + 1))) {
+        return
+      }
+      if (c === YAML_DASH) {
+        if (flow) {
+          this.error(
+            YAML_ERR_BAD_SCALAR_START,
+            'A "-" sequence indicator cannot start a flow collection entry',
+            pos,
+            pos + 1,
+          )
+        } else {
+          this.error(
+            YAML_ERR_UNEXPECTED_CONTENT,
+            "A block sequence cannot start on the line of the key it belongs to",
+            pos,
+            pos + 1,
+          )
+        }
+        return
+      }
+      this.error(
+        YAML_ERR_BAD_SCALAR_START,
+        '"?" is an explicit-key indicator here and cannot start a plain scalar — quote the value',
+        pos,
+        pos + 1,
+      )
+      return
+    }
+    if (flow && yamlIsFlowIndicator(c)) {
+      return
+    }
+    const written: string = this.text.substring(pos, pos + 1)
+    this.error(
+      YAML_ERR_BAD_SCALAR_START,
+      `Indicator "${written}" cannot start a plain scalar — quote the value`,
+      pos,
+      pos + 1,
+    )
+  }
+
+  /** Internal: the first `:` in `[from, end)` that a blank or the end follows, or `-1`. */
+  plainColonAt(from: i32, end: i32): i32 {
+    let i: i32 = from
+    while (i < end) {
+      if (this.at(i) === YAML_COLON && (i + 1 >= end || yamlIsBlank(this.at(i + 1)))) {
+        return i
+      }
+      i += 1
+    }
+    return -1
+  }
+
+  /** Internal: reports the `: ` at `at` inside a plain scalar. */
+  reportPlainColon(at: i32): void {
+    this.error(
+      YAML_ERR_BAD_SCALAR_CONTENT,
+      'A plain scalar cannot contain ": " — quote the value, or indent it as a nested mapping',
+      at,
+      at + 1,
+    )
+  }
+
+  /** Internal: whether only blanks and a comment follow `from` on its line. */
+  endsAtComment(from: i32): boolean {
+    let i: i32 = from
+    while (yamlIsBlank(this.at(i))) {
+      i += 1
+    }
+    return this.at(i) === YAML_HASH
+  }
+
+  /** Internal: reads a block-context plain scalar at the cursor, with its continuation lines. */
+  scanPlainScalar(parentIndent: i32): i32 {
+    const start: i32 = this.pos
+    let valueEnd: i32 = this.plainLineEnd(start)
+    let colonReported: boolean = false
+    const firstColon: i32 = this.plainColonAt(start, valueEnd)
+    if (firstColon >= 0) {
+      this.reportPlainColon(firstColon)
+      colonReported = true
+    }
+    let scan: i32 = this.nextLineStart(valueEnd)
+    while (scan < this.len) {
+      let i: i32 = scan
+      while (this.at(i) === YAML_SPACE) {
+        i += 1
+      }
+      const c: i32 = this.at(i)
+      if (yamlIsBreak(c)) {
+        scan = this.nextLineStart(i)
+        continue
+      }
+      if (c < 0) {
+        break
+      }
+      const indent: i32 = i - scan
+      if (indent <= parentIndent || c === YAML_HASH) {
+        break
+      }
+      if (this.endsAtComment(valueEnd)) {
+        break
+      }
+      if (indent === 0 && this.isDocMarker(i)) {
+        break
+      }
+      const lineEnd: i32 = this.plainLineEnd(i)
+      if (!colonReported) {
+        const colon: i32 = this.plainColonAt(i, lineEnd)
+        if (colon >= 0) {
+          this.reportPlainColon(colon)
+          colonReported = true
+        }
+      }
+      valueEnd = lineEnd
+      scan = this.nextLineStart(lineEnd)
+    }
+    this.pos = valueEnd
+    const node: i32 = this.stream.newNode(YAML_SCALAR, YAML_PLAIN, start, valueEnd)
+    yamlPut(this.stream.firsts, node, start)
+    yamlPut(this.stream.counts, node, valueEnd)
+    return node
+  }
+
+  /** Internal: reports anything but a comment after a block scalar's header. */
+  checkBlockHeaderEnd(): void {
+    let i: i32 = this.pos
+    while (yamlIsBlank(this.at(i))) {
+      i += 1
+    }
+    const c: i32 = this.at(i)
+    if (c < 0 || yamlIsBreak(c) || (c === YAML_HASH && i > this.pos)) {
+      return
+    }
+    this.error(
+      YAML_ERR_BAD_BLOCK_HEADER,
+      c === YAML_HASH
+        ? "A comment must be preceded by whitespace"
+        : "A block scalar header holds only its chomping and indentation indicators",
+      i,
+      this.plainLineEnd(i),
+    )
+  }
+
+  /** Internal: reads a `|` or `>` block scalar at the cursor. */
+  scanBlockScalar(parentIndent: i32): i32 {
+    const start: i32 = this.pos
+    const folded: boolean = this.at(start) === YAML_GT
+    this.pos += 1
+    let chomp: i32 = YAML_CLIP
+    let explicitIndent: i32 = 0
+    let sawChomp: boolean = false
+    while (true) {
+      const c: i32 = this.at(this.pos)
+      if (c === YAML_DASH || c === YAML_PLUS) {
+        if (sawChomp) {
+          this.error(YAML_ERR_BAD_BLOCK_HEADER, "Repeated chomping indicator", this.pos, this.pos + 1)
+        }
+        sawChomp = true
+        chomp = c === YAML_DASH ? YAML_STRIP : YAML_KEEP
+      } else if (c >= YAML_ONE && c <= YAML_NINE) {
+        if (explicitIndent !== 0) {
+          this.error(YAML_ERR_BAD_BLOCK_HEADER, "Repeated indentation indicator", this.pos, this.pos + 1)
+        }
+        explicitIndent = c - YAML_ZERO
+      } else {
+        break
+      }
+      this.pos += 1
+    }
+    this.checkBlockHeaderEnd()
+    this.finishLine()
+    const bodyStart: i32 = this.pos
+    let contentIndent: i32 = explicitIndent > 0 ? parentIndent + explicitIndent : -1
+    if (contentIndent < -1) {
+      contentIndent = -1
+    }
+    let leadingBlank: i32 = -1
+    let valueEnd: i32 = this.pos
+    while (this.pos < this.len) {
+      const lineStart: i32 = this.pos
+      let i: i32 = lineStart
+      while (this.at(i) === YAML_SPACE) {
+        i += 1
+      }
+      const c: i32 = this.at(i)
+      const indent: i32 = i - lineStart
+      if (c === YAML_TAB && indent < (contentIndent === -1 ? parentIndent + 1 : contentIndent)) {
+        this.error(YAML_ERR_TAB_INDENT, "Tabs cannot be used for indentation", i, i + 1)
+      }
+      if (c < 0 || yamlIsBreak(c)) {
+        if (contentIndent === -1 && indent > leadingBlank) {
+          leadingBlank = indent
+        }
+        this.pos = this.nextLineStart(i)
+        continue
+      }
+      if (contentIndent === -1) {
+        if (indent <= parentIndent) {
+          break
+        }
+        contentIndent = indent
+        if (leadingBlank > indent) {
+          this.error(
+            YAML_ERR_BAD_INDENT,
+            "A leading blank line of a block scalar is indented deeper than its first content line",
+            lineStart,
+            i,
+          )
+        }
+      }
+      if (indent < contentIndent || (indent === 0 && this.isDocMarker(i))) {
+        break
+      }
+      const lineEnd: i32 = yamlLineEnd(this.text, lineStart + contentIndent, this.len)
+      valueEnd = lineEnd
+      this.pos = this.nextLineStart(lineEnd)
+    }
+    const node: i32 = this.stream.newNode(YAML_SCALAR, folded ? YAML_FOLDED : YAML_LITERAL, start, valueEnd)
+    yamlPut(this.stream.firsts, node, bodyStart)
+    yamlPut(this.stream.counts, node, this.pos)
+    const eight: i32 = 8
+    const four: i32 = 4
+    yamlPut(this.stream.extras, node, (contentIndent + 1) * eight + (explicitIndent > 0 ? four : 0) + chomp)
+    return node
+  }
+
+  // ---- Directives and key colons -------------------------------------------------
+
+  /** Internal: reads the `%` directive at `at` into the document's handles and version. */
+  readDirective(at: i32): void {
+    const nameEnd: i32 = this.tokenEnd(at + 1)
+    const isTag: boolean = yamlIsWord(this.text, at + 1, nameEnd, "TAG")
+    if (isTag || yamlIsWord(this.text, at + 1, nameEnd, "YAML")) {
+      let i: i32 = nameEnd
+      while (yamlIsBlank(this.at(i))) {
+        i += 1
+      }
+      const firstEnd: i32 = this.tokenEnd(i)
+      if (isTag) {
+        let j: i32 = firstEnd
+        while (yamlIsBlank(this.at(j))) {
+          j += 1
+        }
+        const prefixEnd: i32 = this.tokenEnd(j)
+        if (firstEnd === i || prefixEnd === j || this.at(i) !== YAML_BANG) {
+          this.warn(YAML_ERR_BAD_DIRECTIVE, "%TAG directive needs a handle and a prefix", at, prefixEnd)
+          return
+        }
+        const handle: string = this.text.substring(i, firstEnd)
+        let k: i32 = toI32(this.handleNames.length) - 1
+        while (k >= 0) {
+          if (this.handleNames[k] === handle) {
+            this.warn(
+              YAML_ERR_DUPLICATE_DIRECTIVE,
+              `Tag handle "${handle}" is declared more than once`,
+              at,
+              prefixEnd,
+            )
+            break
+          }
+          k -= 1
+        }
+        this.handleNames.push(handle)
+        this.handlePrefixes.push(this.text.substring(j, prefixEnd))
+        return
+      }
+      this.readYamlVersion(at, i, firstEnd)
+      return
+    }
+    this.warn(
+      YAML_ERR_UNKNOWN_DIRECTIVE,
+      `Unknown directive "%${this.text.substring(at + 1, nameEnd)}"`,
+      at,
+      nameEnd,
+    )
+  }
+
+  /** Internal: checks the version `[from, to)` of the `%YAML` directive at `at`. */
+  readYamlVersion(at: i32, from: i32, to: i32): void {
+    if (this.yamlDirective) {
+      this.error(YAML_ERR_DUPLICATE_DIRECTIVE, "A document may carry only one %YAML directive", at, to)
+    }
+    this.yamlDirective = true
+    const version: string = this.text.substring(from, to)
+    let i: i32 = from
+    while (i < to && yamlIsDigit(this.at(i))) {
+      i += 1
+    }
+    const major: i32 = i
+    let valid: boolean = i > from && this.at(i) === YAML_DOT
+    if (valid) {
+      i += 1
+      const minor: i32 = i
+      while (i < to && yamlIsDigit(this.at(i))) {
+        i += 1
+      }
+      valid = i > minor && i === to
+    }
+    if (!valid) {
+      this.error(YAML_ERR_BAD_DIRECTIVE, `"${version}" is not a valid YAML version`, at, to)
+      return
+    }
+    if (!this.lineRestIsBlank(to)) {
+      let after: i32 = to
+      while (yamlIsBlank(this.at(after))) {
+        after += 1
+      }
+      this.error(
+        YAML_ERR_BAD_DIRECTIVE,
+        "Unexpected content after the %YAML version",
+        after,
+        this.tokenEnd(after),
+      )
+    }
+    if (version !== "1.2") {
+      const message: string =
+        major === from + 1 && this.at(from) === YAML_ONE
+          ? `Document declares YAML ${version}; it is parsed with the 1.2 core schema`
+          : `Unsupported YAML version "${version}"`
+      this.warn(YAML_ERR_UNSUPPORTED_YAML_VERSION, message, at, to)
+    }
+  }
+
+  /** Internal: the end of the quoted scalar opening at `from`, past its closing quote, or `-1` at a break. */
+  quotedKeyEnd(from: i32, stopAtBreak: boolean): i32 {
+    const quote: i32 = this.at(from)
+    let i: i32 = from + 1
+    while (i < this.len) {
+      const q: i32 = this.at(i)
+      if (stopAtBreak && yamlIsBreak(q)) {
+        return -1
+      }
+      if (q === quote) {
+        if (quote === YAML_SQUOTE && this.at(i + 1) === YAML_SQUOTE) {
+          i += 2
+        } else {
+          return i + 1
+        }
+      } else {
+        i += quote === YAML_DQUOTE && q === YAML_BACKSLASH ? 2 : 1
+      }
+    }
+    return i + 1
+  }
+
+  /** Internal: the end of the flow collection opening at `from`, when it closes on its line; else `-1`. */
+  flowKeyEnd(from: i32): i32 {
+    let depth: i32 = 0
+    let i: i32 = from
+    while (i < this.len) {
+      const c: i32 = this.at(i)
+      if (yamlIsBreak(c)) {
+        return -1
+      }
+      if (c === YAML_SQUOTE || c === YAML_DQUOTE) {
+        i = this.quotedKeyEnd(i, true)
+        if (i < 0) {
+          return -1
+        }
+        continue
+      }
+      if (c === YAML_LBRACKET || c === YAML_LBRACE) {
+        depth += 1
+      } else if (c === YAML_RBRACKET || c === YAML_RBRACE) {
+        depth -= 1
+        if (depth === 0) {
+          return i + 1
+        }
+      }
+      i += 1
+    }
+    return -1
+  }
+
+  /** Internal: the `:` that makes the line from `from` an implicit key, or `-1`. */
+  findKeyColon(from: i32): i32 {
+    let i: i32 = from
+    const first: i32 = this.at(from)
+    if (first === YAML_LBRACKET || first === YAML_LBRACE) {
+      i = this.flowKeyEnd(from)
+      if (i < 0) {
+        return -1
+      }
+    } else if (first === YAML_SQUOTE || first === YAML_DQUOTE) {
+      i = this.quotedKeyEnd(from, false)
+    }
+    while (i < this.len) {
+      const c: i32 = this.at(i)
+      if (yamlIsBreak(c)) {
+        return -1
+      }
+      if (c === YAML_HASH && i > from && yamlIsBlank(this.at(i - 1))) {
+        return -1
+      }
+      if (c === YAML_COLON && yamlIsWs(this.at(i + 1))) {
+        return i
+      }
+      i += 1
+    }
+    return -1
+  }
+
+  /** Internal: whether the rest of the line from `from` is blank or a comment. */
+  lineRestIsBlank(from: i32): boolean {
+    let i: i32 = from
+    while (yamlIsBlank(this.at(i))) {
+      i += 1
+    }
+    const c: i32 = this.at(i)
+    return c < 0 || yamlIsBreak(c) || c === YAML_HASH
+  }
+
+  /** Internal: `to` moved back over the blanks that end `[from, to)`. */
+  trimEnd(from: i32, to: i32): i32 {
+    let e: i32 = to
+    while (e > from && yamlIsBlank(this.at(e - 1))) {
+      e -= 1
+    }
+    return e
+  }
+
+  /** Internal: whether `at` holds a `?` explicit-key indicator. */
+  isExplicitKey(at: i32): boolean {
+    return this.at(at) === YAML_QUESTION && yamlIsWs(this.at(at + 1))
+  }
+
+  // ---- Flow collections ----------------------------------------------------------
+
+  /** Internal: enters a flow collection nested in a block node indented `blockIndent`. */
+  enterFlow(blockIndent: i32): void {
+    this.flowIndent = blockIndent
+    this.flowIndentReported = false
+  }
+
+  /** Internal: checks that the flow line starting at `lineStart` is indented deeper than its block parent. */
+  checkFlowIndent(lineStart: i32): void {
+    let i: i32 = lineStart
+    while (this.at(i) === YAML_SPACE) {
+      i += 1
+    }
+    let c: i32 = this.at(i)
+    if (c === YAML_TAB) {
+      let j: i32 = i
+      while (yamlIsBlank(this.at(j))) {
+        j += 1
+      }
+      if (j >= this.len) {
+        return
+      }
+      c = this.at(j)
+    }
+    if (c < 0 || yamlIsBreak(c) || c === YAML_HASH) {
+      return
+    }
+    const indent: i32 = i - lineStart
+    if (indent > this.flowIndent) {
+      return
+    }
+    if ((c === YAML_RBRACKET || c === YAML_RBRACE) && indent >= this.flowIndent) {
+      return
+    }
+    this.flowIndentReported = true
+    this.error(
+      YAML_ERR_BAD_INDENT,
+      "A flow collection continued over lines must be indented deeper than its parent",
+      lineStart,
+      i,
+    )
+  }
+
+  /** Internal: skips blanks, breaks and comments inside a flow collection. */
+  skipFlowWs(): void {
+    let p: i32 = this.pos
+    while (p < this.len) {
+      const c: i32 = this.at(p)
+      if (yamlIsBlank(c)) {
+        p += 1
+      } else if (yamlIsBreak(c)) {
+        p = yamlAfterBreak(this.text, p)
+        const d: i32 = this.at(p)
+        if ((d === YAML_DASH || d === YAML_DOT) && this.isDocMarker(p)) {
+          this.error(
+            YAML_ERR_UNEXPECTED_CONTENT,
+            "A document marker cannot appear inside a flow collection",
+            p,
+            p + 3,
+          )
+        } else if (!this.flowIndentReported) {
+          this.checkFlowIndent(p)
+        }
+      } else if (c === YAML_HASH) {
+        if (p > 0 && !yamlIsWs(this.at(p - 1))) {
+          this.error(YAML_ERR_BAD_COMMENT, "A comment must be preceded by whitespace", p, this.plainLineEnd(p))
+        } else {
+          this.recordComment(p)
+        }
+        p = yamlLineEnd(this.text, p, this.len)
+      } else {
+        break
+      }
+    }
+    this.pos = p
+  }
+
+  /** Internal: whether a `:` before `after` ends a flow plain scalar. */
+  flowColonEnds(after: i32): boolean {
+    const c: i32 = this.at(after)
+    return c === YAML_LBRACKET || c === YAML_LBRACE || this.flowIndicatorBoundary(after)
+  }
+
+  /** Internal: where a flow plain scalar's line from `from` stops. */
+  flowPlainLineEnd(from: i32, lineStart: i32): i32 {
+    let i: i32 = from
+    while (i < this.len) {
+      const hit: i32 = toI32(indexOfAny(this.text, YAML_PLAIN_FLOW_STOPS, i))
+      if (hit < 0) {
+        return this.len
+      }
+      const c: i32 = this.at(hit)
+      if (c === YAML_COLON) {
+        if (this.flowColonEnds(hit + 1)) {
+          return hit
+        }
+      } else if (c === YAML_HASH) {
+        if (hit > lineStart && yamlIsBlank(this.at(hit - 1))) {
+          return hit
+        }
+      } else {
+        return hit
+      }
+      i = hit + 1
+    }
+    return this.len
+  }
+
+  /** Internal: reads a flow-context plain scalar at the cursor, with its continuation lines. */
+  scanFlowPlain(): i32 {
+    const start: i32 = this.pos
+    const i: i32 = this.flowPlainLineEnd(start, start)
+    let valueEnd: i32 = this.trimEnd(start, i)
+    if (!yamlIsBreak(this.at(i))) {
+      this.pos = i
+      return this.plainNode(start, valueEnd)
+    }
+    let scan: i32 = yamlAfterBreak(this.text, i)
+    while (true) {
+      let j: i32 = scan
+      while (yamlIsBlank(this.at(j))) {
+        j += 1
+      }
+      const c: i32 = this.at(j)
+      if (yamlIsBreak(c)) {
+        scan = yamlAfterBreak(this.text, j)
+        continue
+      }
+      if (c < 0 || c === YAML_COMMA || c === YAML_LBRACKET || c === YAML_RBRACKET) {
+        break
+      }
+      if (c === YAML_LBRACE || c === YAML_RBRACE || c === YAML_HASH) {
+        break
+      }
+      if (j === scan && this.isDocMarker(j)) {
+        break
+      }
+      if (c === YAML_COLON && this.flowColonEnds(j + 1)) {
+        break
+      }
+      if (!this.flowIndentReported) {
+        this.checkFlowIndent(scan)
+      }
+      const lineEnd: i32 = this.flowPlainLineEnd(j, j)
+      valueEnd = this.trimEnd(j, lineEnd)
+      if (!yamlIsBreak(this.at(lineEnd))) {
+        this.pos = lineEnd
+        return this.plainNode(start, valueEnd)
+      }
+      scan = yamlAfterBreak(this.text, lineEnd)
+    }
+    this.pos = valueEnd
+    return this.plainNode(start, valueEnd)
+  }
+
+  /** Internal: a plain scalar node over `[start, end)`. */
+  plainNode(start: i32, end: i32): i32 {
+    const stream: YamlStream = this.stream
+    const node: i32 = stream.newNode(YAML_SCALAR, YAML_PLAIN, start, end)
+    yamlPut(stream.firsts, node, start)
+    yamlPut(stream.counts, node, end)
+    return node
+  }
+
+  /** Internal: reports nesting past `maxDepth`, gives up on the rest of the text, and stands in an empty node. */
+  depthLimitNode(): i32 {
+    this.error(YAML_ERR_DEPTH_LIMIT, `Exceeded maximum nesting depth of ${this.maxDepth}`, this.pos, this.pos)
+    this.pos = this.len
+    return this.emptyScalar(this.pos)
+  }
+
+  /** Internal: reads one flow node, guarding the nesting depth. */
+  parseFlowNode(): i32 {
+    if (this.depth >= this.maxDepth) {
+      return this.depthLimitNode()
+    }
+    this.depth += 1
+    const node: i32 = this.parseFlowNodeInner()
+    this.depth -= 1
+    return node
+  }
+
+  /** Internal: reads one flow node with its properties. */
+  parseFlowNodeInner(): i32 {
+    this.skipFlowWs()
+    const props: i32 = this.scanProps(true)
+    this.skipFlowWs()
+    const c: i32 = this.at(this.pos)
+    let node: i32 = -1
+    if (c === YAML_LBRACKET) {
+      node = this.parseFlowSeq()
+    } else if (c === YAML_LBRACE) {
+      node = this.parseFlowMap()
+    } else if (c === YAML_DQUOTE || c === YAML_SQUOTE) {
+      node = this.scanQuoted(c, this.flowIndentReported ? -1 : this.flowIndent)
+    } else if (c === YAML_STAR) {
+      node = this.scanAlias()
+    } else {
+      if (this.plainStartClass(c) !== 0) {
+        this.reportBadPlainStart(this.pos, true)
+      }
+      node = this.scanFlowPlain()
+    }
+    return this.attachProps(node, props)
+  }
+
+  /** Internal: steps over a `?` explicit-key indicator in flow; whether there was one. */
+  skipFlowExplicitKey(): boolean {
+    if (!this.isExplicitKey(this.pos)) {
+      return false
+    }
+    this.pos += 1
+    this.skipFlowWs()
+    return true
+  }
+
+  /** Internal: reports an implicit key whose `:` is not on the key's line. */
+  checkImplicitKeyLine(afterKey: i32): void {
+    if (this.crossesLine(afterKey, this.pos)) {
+      this.error(
+        YAML_ERR_BAD_IMPLICIT_KEY,
+        'An implicit key must be followed by its ":" on the same line',
+        afterKey,
+        this.pos + 1,
+      )
+    }
+  }
+
+  /** Internal: reports an implicit key longer than YAML allows. */
+  reportLongImplicitKey(keyStart: i32, colon: i32): void {
+    this.error(
+      YAML_ERR_BAD_IMPLICIT_KEY,
+      `An implicit key may not run more than ${YAML_MAX_KEY_LENGTH} characters before its ":"`,
+      keyStart,
+      colon + 1,
+    )
+  }
+
+  /** Internal: reports content between a key node and its `:`. */
+  checkKeyGap(colon: i32): void {
+    let from: i32 = this.pos
+    while (yamlIsBlank(this.at(from))) {
+      from += 1
+    }
+    if (from >= colon) {
+      return
+    }
+    const to: i32 = this.trimEnd(from, colon)
+    this.error(
+      YAML_ERR_UNEXPECTED_CONTENT,
+      `Unexpected "${this.text.substring(from, to)}" between a mapping key and its ":"`,
+      from,
+      to,
+    )
+  }
+
+  /** Internal: reports node properties written before a `?` on its line. */
+  reportPropsBeforeExplicitKey(at: i32): void {
+    this.error(
+      YAML_ERR_BAD_PROPERTY,
+      'Node properties cannot come before a "?" explicit key indicator on its line; write them after the "?", or on a line of their own above',
+      at,
+      at + 1,
+    )
+  }
+
+  /** Internal: steps over a `,` with no entry before it, reporting it; whether there was one. */
+  skipEmptyFlowEntry(): boolean {
+    if (this.at(this.pos) !== YAML_COMMA) {
+      return false
+    }
+    this.error(YAML_ERR_UNEXPECTED_COMMA, 'Missing value before ","', this.pos, this.pos + 1)
+    this.pos += 1
+    return true
+  }
+
+  /** Internal: reads the flow value after a `:` in flow, or `-1` when the entry ends first. */
+  parseFlowValue(close: i32): i32 {
+    this.pos += 1
+    this.skipFlowWs()
+    const c: i32 = this.at(this.pos)
+    if (c < 0 || c === YAML_COMMA || c === close) {
+      return -1
+    }
+    return this.parseFlowNode()
+  }
+
+  /** Internal: reads the separator after a flow entry; whether the collection goes on. */
+  flowSeparator(close: i32, start: i32): boolean {
+    const c: i32 = this.at(this.pos)
+    if (c === YAML_COMMA) {
+      this.pos += 1
+      return true
+    }
+    if (c === close) {
+      this.pos += 1
+      return false
+    }
+    this.reportUnterminatedFlow(close, start)
+    return false
+  }
+
+  /** Internal: reports a flow collection opened at `start` that never closes. */
+  reportUnterminatedFlow(close: i32, start: i32): void {
+    this.error(
+      YAML_ERR_UNTERMINATED_FLOW,
+      close === YAML_RBRACKET ? 'Missing closing "]" for flow sequence' : 'Missing closing "}" for flow mapping',
+      start,
+      this.pos,
+    )
+  }
+
+  /** Internal: reads the flow sequence opening at the cursor. */
+  parseFlowSeq(): i32 {
+    const start: i32 = this.pos
+    const base: i32 = this.scratchTop
+    this.pos += 1
+    while (true) {
+      this.skipFlowWs()
+      const c: i32 = this.at(this.pos)
+      if (c === YAML_RBRACKET) {
+        this.pos += 1
+        break
+      }
+      if (c < 0) {
+        this.reportUnterminatedFlow(YAML_RBRACKET, start)
+        break
+      }
+      if (this.skipEmptyFlowEntry()) {
+        continue
+      }
+      const explicit: boolean = this.skipFlowExplicitKey()
+      let item: i32 = this.parseFlowNode()
+      const afterItem: i32 = this.pos
+      this.skipFlowWs()
+      if (this.at(this.pos) === YAML_COLON) {
+        if (!explicit) {
+          this.checkImplicitKeyLine(afterItem)
+        }
+        const value: i32 = this.parseFlowValue(YAML_RBRACKET)
+        item = this.singlePairMap(this.makePair(item, value))
+        this.skipFlowWs()
+      } else if (explicit) {
+        item = this.singlePairMap(this.makePair(item, -1))
+      }
+      this.scratchTop = yamlStackPush(this.scratch, this.scratchTop, item)
+      if (!this.flowSeparator(YAML_RBRACKET, start)) {
+        break
+      }
+    }
+    const node: i32 = this.stream.newNode(YAML_SEQ, YAML_FLOW, start, this.pos)
+    this.finishCollection(node, base)
+    return node
+  }
+
+  /** Internal: the flow map of the one pair a `k: v` entry of a flow sequence makes. */
+  singlePairMap(pair: i32): i32 {
+    const stream: YamlStream = this.stream
+    const node: i32 = stream.newNode(YAML_MAP, YAML_FLOW, stream.start(pair), stream.end(pair))
+    yamlPut(stream.firsts, node, stream.pushKid(pair))
+    yamlPut(stream.counts, node, 1)
+    return node
+  }
+
+  /** Internal: reads the flow mapping opening at the cursor. */
+  parseFlowMap(): i32 {
+    const start: i32 = this.pos
+    const base: i32 = this.scratchTop
+    let keySet: i32 = -1
+    this.pos += 1
+    while (true) {
+      this.skipFlowWs()
+      const c: i32 = this.at(this.pos)
+      if (c === YAML_RBRACE) {
+        this.pos += 1
+        break
+      }
+      if (c < 0) {
+        this.reportUnterminatedFlow(YAML_RBRACE, start)
+        break
+      }
+      if (this.skipEmptyFlowEntry()) {
+        continue
+      }
+      this.skipFlowExplicitKey()
+      const key: i32 = this.parseFlowNode()
+      this.skipFlowWs()
+      let value: i32 = -1
+      if (this.at(this.pos) === YAML_COLON) {
+        value = this.parseFlowValue(YAML_RBRACE)
+      }
+      keySet = this.trackKey(base, key, keySet)
+      this.scratchTop = yamlStackPush(this.scratch, this.scratchTop, this.makePair(key, value))
+      this.skipFlowWs()
+      if (!this.flowSeparator(YAML_RBRACE, start)) {
+        break
+      }
+    }
+    this.releaseKeySet(keySet)
+    const node: i32 = this.stream.newNode(YAML_MAP, YAML_FLOW, start, this.pos)
+    this.finishCollection(node, base)
+    return node
+  }
