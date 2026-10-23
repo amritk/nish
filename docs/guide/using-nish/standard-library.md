@@ -30,7 +30,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
-| [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `indexOfAny` |
+| [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `codePointLength`, `indexOfAny` |
 | [`nish/regex`](#nishregex) | `regexCompile`: JavaScript-syntax regular expressions, matched in time linear in the input |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
@@ -120,6 +120,16 @@ it is not constant-time, so it is never for secret data
 ([Byte search](../../LANGUAGE.md#byte-search-indexofany-in-nishtext)).
 `firstDifference(left, right)` answers the index of the first line where two
 arrays of lines differ.
+
+`codePointLength(text)` counts Unicode code points, which is what a length
+limit on text a person typed usually means (JSON Schema's `minLength` and
+`maxLength` count them). `.length` does not: it counts UTF-8 bytes, so
+`"é".length` is `2` and `"😀".length` is `4`, where `codePointLength` answers
+`1` for each. It answers the same when the program runs under Node, where
+`.length` counts UTF-16 units instead, for well-formed text, except text
+built from bytes: under Node, `String.fromBytes`, `String.fromCharCode` of a
+byte and a `\u` escape that `nish/json` decodes give one unit per byte, so
+such a string counts its UTF-8 bytes there.
 
 ## `nish/regex`
 
