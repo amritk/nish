@@ -1,0 +1,1 @@
+--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement

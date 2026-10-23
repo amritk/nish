@@ -1,0 +1,1 @@
+`switch` requires an integer discriminant, got File (use `if` / `else`; only an integer switch lowers to a jump table)

@@ -68,7 +68,13 @@ import {
   TemplateInfo,
 } from "./program"
 import { StringSet } from "./map"
-import { T_BOOL, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
+import { T_BOOL, T_CPTR, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
+import {
+  handleFieldMessage,
+  handleHeaderMessage,
+  handleJsonMessage,
+  isHandleFieldAnnotation,
+} from "./handles"
 
 /**
  * Size in bytes of a value stored in a struct field. `bool` is one byte
@@ -419,9 +425,39 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
   }
   const info = new StructInfo(name, kind, ctx.table.structOf(name), decl, ctx.source)
   info.exported = isExported(decl)
+  if (kind === STRUCT_CLASS) {
+    declareHandle(ctx, info, decl)
+  }
   ctx.program.addStruct(name, info)
   ctx.program.typeNames.add(name)
   return info
+}
+
+/**
+ * WP40 §4a: a class with a `CPtr` field owns the C resource it points to, and
+ * is a handle class. Marked before any field is collected, so the field's
+ * own rules (`collectField`) and every annotation naming the class know it.
+ */
+const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void => {
+  for (const member of decl.children[3].children) {
+    if (
+      member.kind === N_FIELD &&
+      (member.flags & FLAG_STATIC) === 0 &&
+      isHandleFieldAnnotation(member.children[1])
+    ) {
+      info.handle = true
+      info.handleField = member.children[0].text
+      break
+    }
+  }
+  if (!info.handle) {
+    return
+  }
+  if (decl.children[2].children.length > 0) {
+    ctx.error(decl.children[0], handleHeaderMessage(info.name, "implement an interface"))
+  } else if (info.exported) {
+    ctx.error(decl.children[0], handleHeaderMessage(info.name, "be exported"))
+  }
 }
 
 /**
@@ -494,6 +530,10 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
   // member, so an instance field or a method called `json` before it is no
   // duplicate, as in TypeScript, whose statics have a namespace of their own.
   if ((decl.flags & FLAG_STATIC) !== 0 && name === JSON_OPTIONS && owner.kind === STRUCT_CLASS) {
+    if (owner.handle) {
+      ctx.error(decl.children[0], handleJsonMessage(owner.name))
+      return
+    }
     noteJsonOptions(ctx, owner, decl)
     return
   }
@@ -536,9 +576,17 @@ const collectField = (ctx: CheckContext, owner: StructInfo, decl: Node): void =>
     ctx.error(decl.children[1], `${what} cannot have type void`)
     return
   }
-  // WP27 S2: a field would put a foreign address inside a value the arena owns
-  // and the escape analysis walks. `src/annotations.ts` has the reasoning.
-  if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
+  // WP40 §4a D1: a handle class's one pointer, `readonly` and written only by
+  // its constructor. Any other field holding a foreign address is refused, as
+  // WP27 S2 refuses it everywhere: it would sit inside a value the arena owns
+  // and the escape analysis walks (`src/annotations.ts`).
+  if (owner.handle && ctx.table.stripNull(type) === T_CPTR) {
+    const sole = name === owner.handleField && isHandleFieldAnnotation(decl.children[1])
+    if (!sole || (decl.flags & FLAG_READONLY) === 0 || decl.children[2].kind !== N_EMPTY) {
+      ctx.error(decl.children[1], handleFieldMessage(owner.name))
+      return
+    }
+  } else if (rejectForeignPointer(ctx, type, "a field", decl.children[1])) {
     return
   }
   // `nish:secret`: a field outlives the function that made the secret, unless
@@ -615,14 +663,38 @@ const rejectMemberModifiers = (ctx: CheckContext, decl: Node, what: string): boo
   return false
 }
 
+/**
+ * WP40 D5: a handle class declares exactly one `[Symbol.dispose]`, an instance
+ * method, so two of the member rules `collectMethod` applies to every other
+ * method apply to it too: no second one, and no modifier. The parser refuses a
+ * `?` after a computed name, so an optional one never gets here.
+ */
+const collectHandleDispose = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
+  const shown = spelled(ctx, owner)
+  for (const member of owner.decl.children[3].children) {
+    if (member === decl) {
+      break
+    }
+    if (member.kind === N_METHOD && member.children[0].text === DISPOSE_METHOD) {
+      ctx.error(decl.children[0], `Duplicate member \`${DISPOSE_METHOD}\` in class \`${shown}\``)
+      return
+    }
+  }
+  rejectMemberModifiers(ctx, decl, `Method \`${DISPOSE_METHOD}\` of class \`${shown}\``)
+}
+
 const collectMethod = (ctx: CheckContext, owner: StructInfo, decl: Node): void => {
   const name = decl.children[0].text
   // WP29 P2: the method `using` calls is the scope's, and the scope's join is
   // emitted by the construct rather than called, so the declaration is for
   // TypeScript and Node and has no signature here.
   if (name === DISPOSE_METHOD) {
-    if (!isThreadsSource(ctx.program)) {
+    // WP40 §4b: a handle class's dispose names its close, and is checked once
+    // every body is (`src/handles.ts`).
+    if (!owner.handle && !isThreadsSource(ctx.program)) {
       ctx.error(decl.children[0], disposeElsewhereMessage(spelled(ctx, owner)))
+    } else if (owner.handle) {
+      collectHandleDispose(ctx, owner, decl)
     }
     return
   }

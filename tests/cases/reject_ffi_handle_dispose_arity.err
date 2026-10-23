@@ -1,0 +1,1 @@
+The close `fclose2` of handle class `File` must take exactly one argument, the pointer the object owns, and be declared with one parameter

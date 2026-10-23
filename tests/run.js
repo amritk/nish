@@ -58,6 +58,7 @@ import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
+import { NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
 import { urlFuzzVerdict } from "./link/std_url/verdict.js"
@@ -2355,6 +2356,34 @@ for (const name of [
   )
 }
 
+// ---- A handle case reports exactly its own refusals (WP40 H1.1) -----------------------
+// The same blind spot for the handle pass: each `.err` line names one refusal,
+// and the count says nothing else was found, so a check that starts firing
+// twice, or on a body it should skip (an arrow lifted out of its method), fails.
+for (const [name, count] of [
+  ["reject_ffi_handle_arrow_using", 2],
+  ["reject_ffi_handle_dispose_forms", 15],
+  ["reject_ffi_handle_walk_forms", 9],
+  ["reject_ffi_handle_walk_ctor_param", 6],
+  ["reject_ffi_handle_walk_function_type", 2],
+]) {
+  if (only && !name.includes(only)) {
+    continue
+  }
+  const at = selectedCases.indexOf(name)
+  const errors =
+    at < 0
+      ? []
+      : String(caseResults[at].stderr)
+          .split("\n")
+          .filter((l) => /:\d+:\d+: error: /.test(l))
+  check(
+    `${name}: exactly ${count} refusals`,
+    at >= 0 && caseResults[at].status === 1 && errors.length === count,
+    at < 0 ? "(no such case)" : String(caseResults[at].stderr)
+  )
+}
+
 // ---- A computed key cut short is one syntax error (#348) -------------------------------
 // The same blind spot for the parser: the literal skips the broken property to
 // its `,` and parses the next one, where abandoning the literal would report
@@ -3804,6 +3833,237 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       summaries(many.stderr).length === 20 &&
       many.stderr.includes("\n...and 5 more portability warnings\n25 portability warnings"),
     many.stderr
+  )
+}
+
+// ---- WP33 R4: `--emit-ts` ------------------------------------------------------------
+// The program written back out as TypeScript (src/emit-ts.ts). Each fixture in
+// tests/emit-ts/<group>/ with a `.out` is an entry: it is written out, the
+// `entry.ts` run under Node and the program run natively, and both must print
+// the `.out`. Beside it, `<name>.files` lists every path the output holds, and
+// `<name>.expected.ts` (and `<name>.entry.expected.ts`, where there is one) is
+// the module as written; in `identity/` there is no `.expected.ts`, because a
+// class-A module's golden is its own source, byte for byte. `UPDATE_GOLDENS=1`
+// rewrites the generated ones. Then the flag's usage errors, the two refusals,
+// which write nothing, and the whole corpus against native
+// (tests/differential/emit-ts.js, with its known list).
+if (!only || "emit-ts".includes(only)) {
+  const fixtures = path.join(root, "tests", "emit-ts")
+  const work = path.join(buildDir, "emit-ts")
+  const update = process.env.UPDATE_GOLDENS === "1"
+  fs.rmSync(work, { recursive: true, force: true })
+  fs.mkdirSync(work, { recursive: true })
+  /** Every file under `dir`, as `/`-separated paths relative to it, sorted. */
+  const filesUnder = (dir) =>
+    fs
+      .readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter((e) => e.isFile())
+      .map((e) => path.relative(dir, path.join(e.parentPath, e.name)).split(path.sep).join("/"))
+      .sort()
+  /** Compare `actual` with the golden at `file`, or write it under UPDATE_GOLDENS=1. */
+  const golden = (name, file, actual) => {
+    if (update) {
+      fs.writeFileSync(file, actual)
+    }
+    const want = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null
+    check(
+      name,
+      want === actual,
+      want === null ? `no ${path.relative(root, file)} (run with UPDATE_GOLDENS=1 to create)` : actual
+    )
+  }
+  for (const group of fs.readdirSync(fixtures, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+    const dir = path.join(fixtures, group.name)
+    const entries = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".out"))
+      .map((f) => f.slice(0, -4))
+      .sort()
+    for (const name of entries) {
+      const label = `${group.name}/${name}`
+      const src = path.join(dir, `${name}.ts`)
+      const out = path.join(work, group.name, name)
+      const emitted = spawnSync(NISH, [src, "--emit-ts", out], { cwd: root, encoding: "utf8" })
+      if (!check(`emit-ts: ${label} is written out`, emitted.status === 0, emitted.stderr)) {
+        continue
+      }
+      golden(`emit-ts: ${label} writes the paths in ${name}.files`, path.join(dir, `${name}.files`), filesUnder(out).join("\n") + "\n")
+      const written = fs.readFileSync(path.join(out, `${name}.ts`), "utf8")
+      if (group.name === "identity") {
+        check(
+          `emit-ts: a class-A module is written byte for byte (${label})`,
+          written === fs.readFileSync(src, "utf8"),
+          written
+        )
+      } else {
+        golden(`emit-ts: ${label} is written as ${name}.expected.ts`, path.join(dir, `${name}.expected.ts`), written)
+      }
+      const entryGolden = path.join(dir, `${name}.entry.expected.ts`)
+      if (fs.existsSync(entryGolden) || (update && group.name !== "identity")) {
+        golden(
+          `emit-ts: ${label}'s launcher is ${name}.entry.expected.ts`,
+          entryGolden,
+          fs.readFileSync(path.join(out, "entry.ts"), "utf8")
+        )
+      }
+      const want = fs.readFileSync(path.join(dir, `${name}.out`), "utf8")
+      const node = spawnSync("node", [...emitTsNodeFlags, path.join(out, "entry.ts")], { cwd: root, encoding: "utf8" })
+      check(
+        `emit-ts: ${label} under Node prints ${name}.out and exits 0`,
+        node.status === 0 && node.stdout === want,
+        `exit ${node.status}\n${node.stdout}${node.stderr}`
+      )
+      const exe = path.join(work, group.name, `${name}.exe`)
+      const linked = spawnSync(NISH, [src, "-o", path.join(work, group.name, `${name}-ll`) + path.sep, "--link", exe], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const native = linked.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8" }) : linked
+      check(
+        `emit-ts: ${label} natively prints ${name}.out and exits 0`,
+        native.status === 0 && native.stdout === want,
+        `exit ${native.status}\n${native.stdout}${native.stderr}`
+      )
+    }
+  }
+
+  // The CRLF fixture is only a CRLF case while its line ends survive checkout;
+  // a checkout that turned them into LF would leave the group passing on LF.
+  check(
+    "emit-ts: identity/text.ts still has CRLF line ends",
+    fs.readFileSync(path.join(fixtures, "identity", "text.ts"), "utf8").includes("\r\n"),
+    "tests/emit-ts/identity/text.ts holds no \\r\\n"
+  )
+
+  // Usage errors exit 2 and write nothing: `-o` (the output is not IR), a
+  // missing directory, and another `--emit-*`.
+  const comments = path.join(fixtures, "identity", "comments.ts")
+  const usage = (args) => {
+    const dir = path.join(work, "usage")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const r = spawnSync(NISH, [comments, ...args.map((a) => (a === "<dir>" ? dir : a))], { cwd: root, encoding: "utf8" })
+    return { status: r.status, stderr: r.stderr, wrote: fs.existsSync(dir) }
+  }
+  const withO = usage(["--emit-ts", "<dir>", "-o", path.join(work, "usage.ll")])
+  check(
+    "emit-ts: -o with --emit-ts exits 2 and writes nothing",
+    withO.status === 2 && withO.stderr.includes("`-o` cannot be used with --emit-ts") && !withO.wrote,
+    withO.stderr
+  )
+  const bare = usage(["--emit-ts"])
+  check(
+    "emit-ts: --emit-ts without a directory exits 2",
+    bare.status === 2 && bare.stderr.includes("--emit-ts needs a directory"),
+    bare.stderr
+  )
+  const empty = usage(["--emit-ts", ""])
+  check(
+    "emit-ts: an empty --emit-ts directory exits 2 rather than compiling natively",
+    empty.status === 2 && empty.stderr.includes("--emit-ts needs a directory"),
+    `exit ${empty.status}\n${empty.stderr}`
+  )
+  const withDts = usage(["--emit-ts", "<dir>", "--emit-dts", path.join(work, "usage.d.ts")])
+  check(
+    "emit-ts: --emit-ts with --emit-dts exits 2 and writes nothing",
+    withDts.status === 2 && withDts.stderr.includes("--emit-dts") && !withDts.wrote,
+    withDts.stderr
+  )
+
+  // A program that cannot be laid out under one directory is a usage error,
+  // exit 2, with nothing written: a module above the others' directory, which
+  // would land outside the output, and a module of the root package at
+  // `nish/pair.ts` beside the standard library's `nish/pair`, which would
+  // overwrite each other.
+  const layout = (name, files, entry) => {
+    const tree = path.join(work, name)
+    fs.rmSync(tree, { recursive: true, force: true })
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), { recursive: true })
+      fs.writeFileSync(path.join(tree, file), text)
+    }
+    const cwd = path.join(tree, path.dirname(entry))
+    const r = spawnSync(NISH, [path.basename(entry), "--emit-ts", "out"], { cwd, encoding: "utf8" })
+    return { status: r.status, stderr: r.stderr, wrote: fs.existsSync(path.join(cwd, "out")) }
+  }
+  const above = layout(
+    "above",
+    {
+      "app/main.ts": 'import { two } from "../shared/s"\nexport const main = (): number => two() - 2\n',
+      "shared/s.ts": "export const two = (): number => 2\n",
+    },
+    "app/main.ts"
+  )
+  check(
+    "emit-ts: a module above the program's directory exits 2 and writes nothing",
+    above.status === 2 && above.stderr.includes("lies above the directory") && !above.wrote,
+    `exit ${above.status}\n${above.stderr}`
+  )
+  const clash = layout(
+    "clash",
+    {
+      "main.ts":
+        'import { Pair } from "nish/pair"\nimport { mine } from "./nish/pair"\nexport const main = (): number => {\n  const p: Pair<number, number> = { first: mine(), second: 0 }\n  return p.first\n}\n',
+      "nish/pair.ts": "export const mine = (): number => 0\n",
+    },
+    "main.ts"
+  )
+  check(
+    "emit-ts: two modules written to one path exit 2 and write nothing",
+    clash.status === 2 && clash.stderr.includes("over another file at nish/pair.ts") && !clash.wrote,
+    `exit ${clash.status}\n${clash.stderr}`
+  )
+  // An output directory that holds the program's own sources would be written
+  // over: `--emit-ts .` beside them exits 2 and leaves them as they were. The
+  // `i32` makes the emitted module import the runtime, so an overwrite would
+  // change its bytes.
+  const selfTree = path.join(work, "self")
+  const selfSource = "const zero: i32 = 0\nexport const main = (): number => zero\n"
+  fs.rmSync(selfTree, { recursive: true, force: true })
+  fs.mkdirSync(selfTree, { recursive: true })
+  fs.writeFileSync(path.join(selfTree, "main.ts"), selfSource)
+  const self = spawnSync(NISH, ["main.ts", "--emit-ts", "."], { cwd: selfTree, encoding: "utf8" })
+  check(
+    "emit-ts: an output directory holding the program's sources exits 2 and writes nothing",
+    self.status === 2 &&
+      self.stderr.includes("would write over main.ts") &&
+      fs.readFileSync(path.join(selfTree, "main.ts"), "utf8") === selfSource &&
+      !fs.existsSync(path.join(selfTree, "entry.ts")),
+    `exit ${self.status}\n${self.stderr}`
+  )
+
+  // The refusals: a finding about the program, exit 1, under its code, with
+  // not one file written -- the output is all or nothing.
+  for (const [code, name] of [
+    ["NL4010", "reject_emit_ts_ffi"],
+    ["NL4011", "reject_emit_ts_net"],
+    ["NL4011", "reject_emit_ts_net_global"],
+    ["NL4011", "reject_emit_ts_signal"],
+  ]) {
+    const dir = path.join(work, name)
+    const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `emit-ts: ${name} is refused with ${code}, exit 1, and nothing written`,
+      r.status === 1 && r.stdout.includes(`"code":"${code}"`) && !fs.existsSync(dir),
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    )
+  }
+
+  // The corpus: every whole program under --emit-ts against its native run,
+  // failing on a disagreement the known list does not name and on a listed
+  // program that now agrees.
+  const corpus = spawnSync("node", [path.join(root, "tests", "differential", "emit-ts.js"), "--compiler", NISH], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  const tally = /^(\d+)\/(\d+) programs agree under --emit-ts \((\d+) known/m.exec(corpus.stdout)
+  check(
+    `emit-ts: the corpus under --emit-ts agrees with native (${tally ? `${tally[2]} programs, ${tally[3]} known` : "no tally"})`,
+    corpus.status === 0 && tally !== null,
+    corpus.stdout + corpus.stderr
   )
 }
 
@@ -7348,6 +7608,22 @@ if (!only || "par_alloc".includes(only)) {
   )
 }
 
+/** Run a link fixture's `main` under runtime/nish.mjs, its output read as `encoding`. */
+const runFixtureUnderNode = (entry, encoding) =>
+  spawnSync(
+    "node",
+    [
+      "--experimental-strip-types",
+      "--js-explicit-resource-management",
+      "--no-warnings",
+      "--import",
+      path.join(root, "runtime", "nish.mjs"),
+      "-e",
+      `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
+    ],
+    { cwd: root, encoding }
+  )
+
 // #224: a `nish/threads` program prints the same under Node, through the path
 // docs/RUN_UNDER_NODE.md documents, as it does natively. The std bodies are the
 // sequential meaning and are what Node runs, so a reduce whose blocking used
@@ -7543,21 +7819,7 @@ for (const name of [
   }
   const entry = path.join(linkDir, name, "main.ts")
   const fixture = fs.existsSync(entry)
-  const run = fixture
-    ? spawnSync(
-        "node",
-        [
-          "--experimental-strip-types",
-          "--js-explicit-resource-management",
-          "--no-warnings",
-          "--import",
-          path.join(root, "runtime", "nish.mjs"),
-          "-e",
-          `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
-        ],
-        { cwd: root, encoding: "utf8" }
-      )
-    : null
+  const run = fixture ? runFixtureUnderNode(entry, "utf8") : null
   const want = fixture ? fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8") : ""
   check(
     `link/${name}: nish/threads-under-node prints what the native binary prints`,
@@ -7565,6 +7827,50 @@ for (const name of [
     run === null
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
+// `nish/term` does no I/O, so a frame and a key decode are pure functions of
+// what was drawn or fed, and a program that prints them prints the same bytes
+// under runtime/nish.mjs as compiled. The comparison is of bytes, not decoded
+// text: the canvas lines carry raw half blocks, and Node builds them from
+// UTF-16 code units where the native screen builds UTF-8, so a wrong lead or
+// continuation byte would decode to U+FFFD on both sides of a string compare.
+for (const name of ["std_term", "std_term_f64"]) {
+  if (only && !name.includes(only) && !"term-under-node".includes(only)) {
+    continue
+  }
+  const entry = path.join(linkDir, name, "main.ts")
+  const run = runFixtureUnderNode(entry, "buffer")
+  const want = fs.readFileSync(path.join(linkDir, name, "expected.out"))
+  check(
+    `link/${name}: nish/term prints the same bytes under runtime/nish.mjs as natively`,
+    run.status === 0 && Buffer.compare(run.stdout, want) === 0,
+    `exit ${run.status}\n--- native (expected.out)\n${want.toString("utf8")}--- node\n${run.stdout.toString("utf8")}${run.stderr.toString("utf8")}`
+  )
+}
+
+// A game calls `flush` on a screen made before its frame loop. Were the call to
+// store into the screen (growing its byte buffer, say), the loop could not take
+// a pass's string back, and a 200×60 frame would keep its ~100 KB to the end of
+// the run on every pass. std_term's frame loop holds the placement to `pass`.
+if (!only || "std_term".includes(only) || "term-frame-loop".includes(only)) {
+  const arenaFile = path.join(buildDir, "std_term.arena.json")
+  const placed = spawnSync(
+    NISH,
+    [path.join(linkDir, "std_term", "main.ts"), "-o", path.join(buildDir, "std_term-arena") + "/", "--emit-arena", arenaFile],
+    { cwd: root, encoding: "utf8" }
+  )
+  const main =
+    placed.status === 0
+      ? JSON.parse(fs.readFileSync(arenaFile, "utf8")).functions.find((f) => f.symbol === "nish_main")
+      : undefined
+  const sites = main === undefined ? [] : main.sites
+  const piling = sites.filter((s) => s.accumulates === true)
+  check(
+    "link/std_term: a frame loop's `flush` is taken back every pass, and nothing in main piles up",
+    sites.some((s) => s.callee === "Screen.flush" && s.placement === "pass") && piling.length === 0,
+    placed.status !== 0 ? `exit ${placed.status}\n${placed.stderr}` : JSON.stringify(main === undefined ? null : piling)
   )
 }
 
@@ -9409,6 +9715,257 @@ if (!only || "bytes_prelude_bigint".includes(only)) {
     "bytes_prelude_bigint: under runtime/nish.mjs a bigint offset of set or fill throws a TypeError and writes nothing",
     r.status === 0 && r.stdout === want,
     `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+  )
+}
+
+// ---- WP33 R3: the runtime's hosts ----------------------------------------------
+//
+// `runtime/shim.mjs` is the host-agnostic core (`runtime/core.mjs` and
+// `runtime/core/*.mjs`) with the Node host (`runtime/node.mjs`) installed. The
+// frozen rewrites import the shim's exports by name, so none of the names it
+// had before the split may go; `tests/runtime/shim-exports.txt` is that list.
+// And the core may reach the world only through its host, so no module it
+// imports names a `node:` module, `process` or `Buffer`.
+if (!only || "runtime-hosts".includes(only)) {
+  const runtimeDir = path.join(root, "runtime")
+  const exportsOf = (file) =>
+    spawnSync(
+      "node",
+      ["--input-type=module", "-e", `const m = await import(${JSON.stringify(pathToFileURL(file).href)}); console.log(Object.keys(m).sort().join("\\n"))`],
+      { cwd: root, encoding: "utf8" }
+    )
+  const pinned = fs.readFileSync(path.join(root, "tests", "runtime", "shim-exports.txt"), "utf8").split("\n").filter(Boolean)
+  const shim = exportsOf(path.join(runtimeDir, "shim.mjs"))
+  const now = new Set(shim.stdout.split("\n").filter(Boolean))
+  const lost = pinned.filter((name) => !now.has(name))
+  check(
+    "runtime-hosts: shim.mjs exports every name it exported before the split",
+    shim.status === 0 && pinned.length > 0 && lost.length === 0,
+    shim.status === 0 ? `no longer exported: ${lost.join(", ")}` : shim.stderr
+  )
+
+  // The scan reads code, not comments: a block comment, or a `//` comment that
+  // starts a line or follows whitespace, may name `process` to say what the
+  // core stands in for. Every import must be relative, so the walk from
+  // `core.mjs` reaches every module the core loads.
+  const codeOf = (text) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1")
+  const offences = (text) => {
+    const code = codeOf(text)
+    const found = []
+    for (const m of code.matchAll(/\b(?:from|import)\s*\(?\s*["']([^"']+)["']/g)) {
+      if (!m[1].startsWith("./") && !m[1].startsWith("../")) found.push(`imports "${m[1]}"`)
+    }
+    for (const word of ["process", "Buffer"]) {
+      if (new RegExp(`\\b${word}\\b`).test(code)) found.push(`names ${word}`)
+    }
+    return found
+  }
+  const seen = new Set()
+  const problems = []
+  const walk = (file) => {
+    if (seen.has(file)) return
+    seen.add(file)
+    const text = fs.readFileSync(file, "utf8")
+    for (const o of offences(text)) problems.push(`${path.relative(root, file)} ${o}`)
+    for (const m of codeOf(text).matchAll(/\b(?:from|import)\s*["'](\.{1,2}\/[^"']+)["']/g)) {
+      walk(path.resolve(path.dirname(file), m[1]))
+    }
+  }
+  walk(path.join(runtimeDir, "core.mjs"))
+  const coreDir = path.join(runtimeDir, "core")
+  const unreached = fs
+    .readdirSync(coreDir)
+    .filter((f) => f.endsWith(".mjs"))
+    .map((f) => path.join(coreDir, f))
+    .filter((f) => !seen.has(f))
+  // The scan's own two answers: a Node import and a `process` in code are
+  // caught, and the same words in comments are not.
+  const caught = offences('import fs from "node:fs";\nprocess.exit(1)\n').length === 2
+  const spared = offences("/** `process.exit` */\n// Buffer\nconst a = 1 // node:fs\n").length === 0
+  check(
+    "runtime-hosts: the core imports no node: module and names no process or Buffer",
+    problems.length === 0 && unreached.length === 0 && seen.size > 1 && caught && spared,
+    [
+      ...problems,
+      ...unreached.map((f) => `${path.relative(root, f)} is not reached from runtime/core.mjs`),
+      caught ? "" : "the scan misses a node: import or process",
+      spared ? "" : "the scan reads comments",
+    ]
+      .filter(Boolean)
+      .join("\n")
+  )
+
+  // With no adapter imported, the core still loads and its pure half answers,
+  // and the first call that needs the world throws a `NishNoHost` naming it.
+  const probe = [
+    `const core = await import(${JSON.stringify(pathToFileURL(path.join(runtimeDir, "core.mjs")).href)});`,
+    "const tryIt = (f) => { try { return String(f()); } catch (e) { return e.name + ' ' + e.requested; } };",
+    "console.log([core.strLen('h\\u00e9'), core.toI32(2 ** 40), tryIt(() => core.log(1)), tryIt(() => core.readFileSync('x')), tryIt(() => core.exit(0))].join('\\n'));",
+  ].join("\n")
+  const r = spawnSync("node", ["--input-type=module", "-e", probe], { cwd: root, encoding: "utf8" })
+  const want = "3\n2147483647\nNishNoHost writeOut\nNishNoHost readFileSync\nNishNoHost exit\n"
+  check(
+    "runtime-hosts: runtime/core.mjs alone computes, and throws NishNoHost at the first call that needs a host",
+    r.status === 0 && r.stdout === want,
+    `exit ${r.status}\n--- want\n${want}\n--- got\n${r.stdout}${r.stderr}`
+  )
+
+  // The core and the browser adapter in a vm context holding only web globals,
+  // linked by a loader that refuses `node:`: the script asserts the console
+  // lines, each `NishExit` code, and the browser's file-system panic.
+  const web = spawnSync("node", ["--experimental-vm-modules", path.join(root, "tests", "runtime", "web-context.mjs")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  check(
+    "runtime-hosts: the core and the browser adapter run with only web globals",
+    web.status === 0 && web.stdout === "web-context: ok\n",
+    `exit ${web.status}\n${web.stdout}${web.stderr}`
+  )
+
+  // A package that depends on `nish` reaches the three entry points by name; a
+  // self-reference from inside the checkout resolves through the same
+  // `exports` map.
+  const entries = { "nish/runtime": "core.mjs", "nish/runtime/node": "node.mjs", "nish/runtime/browser": "browser.mjs" }
+  const resolved = spawnSync(
+    "node",
+    ["--input-type=module", "-e", `for (const s of ${JSON.stringify(Object.keys(entries))}) console.log(import.meta.resolve(s))`],
+    { cwd: root, encoding: "utf8" }
+  )
+  const wantResolved = Object.values(entries)
+    .map((f) => `${pathToFileURL(path.join(runtimeDir, f)).href}\n`)
+    .join("")
+  check(
+    "runtime-hosts: the package resolves nish/runtime, /node and /browser",
+    resolved.status === 0 && resolved.stdout === wantResolved,
+    `exit ${resolved.status}\n--- want\n${wantResolved}--- got\n${resolved.stdout}${resolved.stderr}`
+  )
+
+  // The declarations: `core.d.ts` declares exactly the values `core.mjs`
+  // exports; a program importing the three entry points by name typechecks
+  // under `nodenext`, each through its own `types` condition; and every function both `core/*.d.ts` and
+  // `runtime/nish.d.ts` declare has the same overloads, width for width, once
+  // `bigint` (what the core's i64 and u64 are at run time) reads as `number`.
+  const ts = require("typescript")
+  const probePath = path.join(root, "runtime-hosts-probe.mts")
+  const probeText = [
+    'import { Ok, toI64, type Result, type i64 } from "nish/runtime";',
+    // A bare `import "nish/runtime/node"` goes unchecked; a namespace import
+    // of a module without declarations is an error under `strict`.
+    'import * as node from "nish/runtime/node";',
+    'import * as browser from "nish/runtime/browser";',
+    "const r: Result<i64, string> = Ok(toI64(3));",
+    "export const n: i64 = r.ok ? r.value : 0n;",
+    "export const hosts = [node, browser];",
+  ].join("\n")
+  const options = {
+    strict: true,
+    noEmit: true,
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    target: ts.ScriptTarget.ES2022,
+    lib: ["lib.es2022.d.ts"],
+    types: [],
+    noUncheckedSideEffectImports: true,
+  }
+  const host = ts.createCompilerHost(options)
+  const { fileExists, readFile, getSourceFile } = host
+  host.fileExists = (f) => f === probePath || fileExists(f)
+  host.readFile = (f) => (f === probePath ? probeText : readFile(f))
+  host.getSourceFile = (f, ...rest) =>
+    f === probePath ? ts.createSourceFile(f, probeText, ts.ScriptTarget.ES2022, true) : getSourceFile(f, ...rest)
+  const coreDts = path.join(runtimeDir, "core.d.ts")
+  const program = ts.createProgram([probePath, coreDts], options, host)
+  const diagnostics = ts
+    .getPreEmitDiagnostics(program)
+    .map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n"))
+  const checker = program.getTypeChecker()
+  const declared = new Set(
+    checker
+      .getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(coreDts)))
+      .filter((s) => ts.skipAlias(s, checker).flags & ts.SymbolFlags.Value)
+      .map((s) => s.name)
+  )
+  const exported = exportsOf(path.join(runtimeDir, "core.mjs"))
+  const runtimeNames = exported.stdout.split("\n").filter(Boolean)
+  const undeclared = runtimeNames.filter((name) => !declared.has(name))
+  const unexported = [...declared].filter((name) => !runtimeNames.includes(name))
+
+  const typeText = (node) => {
+    if (!node) return "any"
+    if (ts.isParenthesizedTypeNode(node)) return typeText(node.type)
+    if (ts.isUnionTypeNode(node)) return [...new Set(node.types.map(typeText))].sort().join(" | ")
+    if (node.kind === ts.SyntaxKind.BigIntKeyword) return "number"
+    if (ts.isArrayTypeNode(node)) return `${typeText(node.elementType)}[]`
+    if (ts.isTypeOperatorNode(node)) return `${ts.tokenToString(node.operator)} ${typeText(node.type)}`
+    if (ts.isFunctionTypeNode(node)) return `(${node.parameters.map(paramText).join(", ")}) => ${typeText(node.type)}`
+    if (ts.isTypeReferenceNode(node)) {
+      const name = node.typeName.getText()
+      return node.typeArguments ? `${name}<${node.typeArguments.map(typeText).join(", ")}>` : name
+    }
+    return node.getText().replace(/\s+/g, " ")
+  }
+  const paramText = (p) => `${p.dotDotDotToken ? "..." : ""}${p.questionToken ? "?" : ""}${typeText(p.type)}`
+  const signature = (fn) => {
+    const generics = (fn.typeParameters ?? []).map((t) => (t.constraint ? `${t.name.text} extends ${typeText(t.constraint)}` : t.name.text))
+    return `<${generics.join(", ")}>(${fn.parameters.map(paramText).join(", ")}): ${typeText(fn.type)}`
+  }
+  // Every function declaration in a file, at the top or in a `declare module`,
+  // by name: the set of its overloads' signatures.
+  const functionsOf = (file, text) => {
+    const found = new Map()
+    const visit = (node) => {
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        if (!found.has(node.name.text)) found.set(node.name.text, new Set())
+        found.get(node.name.text).add(signature(node))
+      }
+      if (ts.isModuleDeclaration(node) || ts.isModuleBlock(node) || ts.isSourceFile(node)) ts.forEachChild(node, visit)
+    }
+    visit(ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true))
+    return found
+  }
+  // `arena()` is `Disposable` in nish.d.ts, which declares that interface for
+  // itself; the core's declarations cannot assume a `lib` that has it.
+  const DIFFERS = new Set(["arena"])
+  const disagreements = (core, nish) =>
+    [...core]
+      .filter(([name]) => nish.has(name) && !DIFFERS.has(name))
+      .filter(([name, sigs]) => [...sigs].sort().join("\n") !== [...nish.get(name)].sort().join("\n"))
+      .map(([name, sigs]) => `${name}: core.d.ts ${[...sigs].join(" / ")}, nish.d.ts ${[...nish.get(name)].join(" / ")}`)
+  const coreFunctions = new Map()
+  for (const f of fs.readdirSync(coreDir).filter((f) => f.endsWith(".d.ts"))) {
+    for (const [name, sigs] of functionsOf(f, fs.readFileSync(path.join(coreDir, f), "utf8"))) coreFunctions.set(name, sigs)
+  }
+  const nishFunctions = functionsOf("nish.d.ts", fs.readFileSync(path.join(runtimeDir, "nish.d.ts"), "utf8"))
+  const disagreeing = disagreements(coreFunctions, nishFunctions)
+  const shared = [...coreFunctions.keys()].filter((name) => nishFunctions.has(name)).length
+  // The comparison's own two answers: a `bigint` the core also takes agrees
+  // with `number`, and one width in place of another does not.
+  const pair = (a, b) => disagreements(functionsOf("a.d.ts", a), functionsOf("b.d.ts", b)).length
+  const agrees = pair("declare function f(x: number | bigint): i64;", "declare function f(x: number): i64;") === 0
+  const differs = pair("declare function f(x: f64): f64;", "declare function f(x: f64): i64;") === 1
+  check(
+    "runtime-hosts: core.d.ts declares every name the core exports, and agrees with nish.d.ts",
+    exported.status === 0 &&
+      diagnostics.length === 0 &&
+      undeclared.length === 0 &&
+      unexported.length === 0 &&
+      disagreeing.length === 0 &&
+      shared > 20 &&
+      agrees &&
+      differs,
+    [
+      exported.status === 0 ? "" : exported.stderr,
+      ...diagnostics,
+      ...undeclared.map((name) => `core.mjs exports ${name}, which core.d.ts does not declare`),
+      ...unexported.map((name) => `core.d.ts declares ${name}, which core.mjs does not export`),
+      ...disagreeing,
+      shared > 20 ? "" : `only ${shared} functions compared`,
+      agrees ? "" : "the comparison reads `bigint` as other than `number`",
+      differs ? "" : "the comparison reads one width as another",
+    ]
+      .filter(Boolean)
+      .join("\n")
   )
 }
 
@@ -16547,6 +17104,65 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
   }
 }
 
+if (!only || "yaml-compare".includes(only) || "bench".includes(only)) {
+  // bench/yaml-compare/run.mjs runs Nish, its copy right after it, and one or
+  // two JavaScript runtimes through json-compare's roundOrder: each in every
+  // position equally often, Nish and its copy taking turns going first.
+  for (const n of [3, 4]) {
+    const rounds = roundsFor(n, 15)
+    const impls = Array.from({ length: n }, (_, k) => k)
+    const counts = impls.map(() => new Array(n).fill(0))
+    let nishFirst = 0
+    for (let round = 0; round < rounds; round++) {
+      const order = roundOrder(impls, round)
+      order.forEach((impl, position) => {
+        counts[impl][position] += 1
+      })
+      nishFirst += order.indexOf(0) < order.indexOf(1) ? 1 : 0
+    }
+    check(
+      `yaml-compare: ${n} implementations run ${rounds} rounds by default, each in every position equally often, Nish and its copy taking turns going first`,
+      counts.every((row) => row.every((c) => c === rounds / n)) && nishFirst === rounds / 2,
+      `positions ${JSON.stringify(counts)}, Nish before its copy in ${nishFirst} of ${rounds} rounds`
+    )
+  }
+  // The Nish program against the checksums @amritk/yaml printed for the
+  // committed sample (sample.expected says how they were recorded).
+  const dir = path.join(root, "bench", "yaml-compare")
+  const exe = path.join(buildDir, "yaml-compare", "main")
+  if (HAS_CLANG) {
+    const built = spawnSync(
+      NISH,
+      [path.join(dir, "main.ts"), "-o", `${path.dirname(exe)}${path.sep}`, "--link", exe, "--profile", "speed"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const sample = path.join(dir, "sample.yaml")
+    const expected = fs
+      .readFileSync(path.join(dir, "sample.expected"), "utf8")
+      .split("\n")
+      .filter((l) => l.length > 0 && !l.startsWith("#"))
+      .map((l) => {
+        const [args, want] = l.split(": ")
+        return { args: args.split(" "), want }
+      })
+    for (const { args, want } of expected) {
+      const run = built.status === 0 ? spawnSync(exe, [args[0], sample, args[1]], { encoding: "utf8" }) : null
+      check(
+        `yaml-compare: bench/yaml-compare/main.ts ${args[0]} on sample.yaml prints the checksum @amritk/yaml printed`,
+        run !== null && run.status === 0 && run.stdout.split("\n")[0] === want,
+        run === null ? `${built.stdout}${built.stderr}` : `${run.stdout}${run.stderr}\nexpected ${want}`
+      )
+    }
+    check(
+      "yaml-compare: sample.expected holds a line for each workload",
+      ["parse", "walk"].every((w) => expected.some((e) => e.args[0] === w)),
+      expected.map((e) => e.want).join("\n")
+    )
+  } else {
+    skip("yaml-compare: bench/yaml-compare/main.ts native run (no clang)")
+  }
+}
+
 // ---- Instruction counts ------------------------------------------------------------
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
 // noise is bigger than that. An instruction count is exact, so the twenty-one
@@ -16641,6 +17257,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--link",
     "--emit-header",
     "--emit-dts",
+    "--emit-ts",
     "--emit-napi",
     "--emit-napi-async",
     "--emit-panics",
@@ -18949,6 +19566,24 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",
+      // The three entry points `exports` names for a TypeScript caller, the
+      // core's files they load, and the declarations of all three.
+      "runtime/core.mjs",
+      "runtime/core.d.ts",
+      "runtime/node.mjs",
+      "runtime/browser.mjs",
+      "runtime/host.d.ts",
+      "runtime/core/arrays.mjs",
+      "runtime/core/checks.mjs",
+      "runtime/core/host.mjs",
+      "runtime/core/numbers.mjs",
+      "runtime/core/result.mjs",
+      "runtime/core/strings.mjs",
+      "runtime/core/arrays.d.ts",
+      "runtime/core/host.d.ts",
+      "runtime/core/numbers.d.ts",
+      "runtime/core/result.d.ts",
+      "runtime/core/strings.d.ts",
       "scripts/build.sh",
       // The standard library is source, so shipping it *is* shipping the library
       // (wp21 §2). A tarball without it would install a compiler whose `std/`
