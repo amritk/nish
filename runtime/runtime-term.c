@@ -43,7 +43,7 @@
  * while a job is stopped but does not give the job its raw mode back on `fg`,
  * and a shell without that bookkeeping puts back nothing. Its handler restores
  * the terminal, stops the program, and once a shell continues it puts the
- * handler back and raw mode with it, unless `setRawMode` was called meanwhile.
+ * handler back and raw mode with it.
  * A stop by SIGSTOP, which no program can catch, leaves the terminal raw at a
  * shell that puts nothing back.
  *
@@ -72,9 +72,19 @@
 #include <termios.h>
 #endif
 
+#ifndef __wasi__
+/* How many times the SIGTSTP handler has stopped the program, so a wait the
+   stop interrupted can tell that from any other signal. */
+static volatile sig_atomic_t nish_term_stops;
+#endif
+
 /* 1 when stdin is readable within `timeout_ms` (a negative one waits for
    ever), which includes its end and an error, 0 when it is not or a signal
-   ends the wait, and the host's `-errno` when the question fails. Outside
+   ends the wait, and the host's `-errno` when the question fails. A Ctrl-Z
+   and `fg` do not end it: no system restarts a `select` after a handler,
+   `SA_RESTART` or not, though Linux does after the default stop, so one the
+   stop interrupted is asked again, for what Linux left of the timeout and
+   Darwin for all of it. Outside
    WASI this asks `select`, because Darwin's `poll` does not support devices:
    it answers POLLNVAL for a terminal at once, with no input there. Under WASI
    a timeout under 10 ms asks for 10: Node's WASI (uvwasi) runs a timer that is
@@ -90,7 +100,11 @@ static int nish_stdin_ready(int32_t timeout_ms) {
   FD_ZERO(&in);
   FD_SET(0, &in);
   struct timeval tv = {timeout_ms / 1000, (timeout_ms % 1000) * 1000};
-  int r = select(1, &in, 0, 0, timeout_ms < 0 ? 0 : &tv);
+  int r, stops;
+  do {
+    stops = nish_term_stops;
+    r = select(1, &in, 0, 0, timeout_ms < 0 ? 0 : &tv);
+  } while (r < 0 && errno == EINTR && stops != nish_term_stops);
 #endif
   if (r < 0) return errno == EINTR ? 0 : -errno;
   return r;
@@ -119,8 +133,8 @@ int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len) {
 
 /* `waitStdin(timeoutMs)`: true once stdin is readable, which includes its end
    and an error, so a read after it answers at once; false when `timeoutMs`
-   passes first, or a signal ends the wait early. A negative timeout waits for
-   ever. */
+   passes first, or a signal other than a Ctrl-Z ends the wait early. A
+   negative timeout waits for ever. */
 bool nish_wait_stdin(int32_t timeout_ms) { return nish_stdin_ready(timeout_ms) != 0; }
 
 #ifdef __wasi__
@@ -169,32 +183,30 @@ static struct termios nish_term_saved, nish_term_raw_t;
 static volatile sig_atomic_t nish_term_raw;
 static int nish_term_armed;
 
-/* Held across `setRawMode` and across each half of the SIGTSTP handler, so
-   two threads entering raw mode at once save the cooked termios once and arm
-   the handlers once, and a Ctrl-Z caught on one thread cannot undo a
-   `setRawMode` another has just made. A spin, because the runtime links no
-   pthread without `--threads`. A thread holds it only with SIGTSTP blocked, so
-   that handler never waits on the thread it interrupted; the others never take
+/* Held across `setRawMode`, the atexit and panic restores, and the whole
+   SIGTSTP handler, stop included, so two threads entering raw mode at once
+   save the cooked termios once and arm the handlers once, and no mode is set
+   between a Ctrl-Z's restore and its re-entry: the program stops with the
+   terminal as it was, and comes back raw. A spin, because the runtime links
+   no pthread without `--threads`. A thread holds it only with SIGTSTP blocked,
+   so that handler never waits on the thread it interrupted, and every handler
+   blocks SIGTSTP too; the other handlers end the program, and never take
    it. */
 static int nish_term_lock;
 
-/* Whether the SIGTSTP handler found raw mode on, and so enters it again once
-   the program is continued. Any `setRawMode` meanwhile clears it: the program
-   has chosen a mode since. */
-static int nish_term_resume;
-
-/* Block SIGTSTP on this thread, the mask before in `old`. `sigprocmask` rather
-   than `pthread_sigmask` for the reason the lock is a spin; both Linux and
-   Darwin apply it to the calling thread alone. */
-static void nish_term_block(sigset_t *old) {
+/* Block or unblock SIGTSTP on this thread, `how` as `sigprocmask` takes it.
+   `sigprocmask` rather than `pthread_sigmask` for the reason the lock is a
+   spin; both Linux and Darwin apply it to the calling thread alone. */
+static void nish_term_mask(int how, sigset_t *old) {
   sigset_t s;
   sigemptyset(&s);
   sigaddset(&s, SIGTSTP);
-  sigprocmask(SIG_BLOCK, &s, old);
+  sigprocmask(how, &s, old);
 }
 
+/* Block SIGTSTP and take the lock, the mask before in `old`. */
 static void nish_term_hold(sigset_t *old) {
-  nish_term_block(old);
+  nish_term_mask(SIG_BLOCK, old);
   while (__atomic_exchange_n(&nish_term_lock, 1, __ATOMIC_ACQUIRE)) {
   }
 }
@@ -204,36 +216,38 @@ static void nish_term_drop(const sigset_t *old) {
   sigprocmask(SIG_SETMASK, old, 0);
 }
 
-/* Put the saved termios back, once: it is called from `setRawMode(false)`, an
-   atexit handler, a panic and a signal handler, so it uses only calls that are
-   async-signal-safe. SIGTSTP is blocked across it, so a Ctrl-Z cannot find
-   raw mode still on between the `tcsetattr` and the flag and enter it again
-   just before the flag is cleared. The flag is cleared after the call, so any
-   other signal that lands during it restores again, which is harmless, rather
-   than not at all. */
+/* Put the saved termios back, once. Called with the lock held, or from a
+   handler that ends the program, so it uses only calls that are
+   async-signal-safe and needs no Ctrl-Z kept out: SIGTSTP is blocked in both.
+   The flag is cleared after the call, so any other signal that lands during it
+   restores again, which is harmless, rather than not at all. */
 static void nish_term_restore(void) {
-  sigset_t old;
-  nish_term_block(&old);
   if (nish_term_raw) {
     tcsetattr(0, TCSANOW, &nish_term_saved);
     nish_term_raw = 0;
     __atomic_store_n(&nish_fatal_hook, 0, __ATOMIC_RELEASE);
   }
-  sigprocmask(SIG_SETMASK, &old, 0);
+}
+
+/* The atexit and panic restore: under the lock, so it waits out a Ctrl-Z
+   handler on another thread rather than leave the terminal to its re-entry. */
+static void nish_term_leave(void) {
+  sigset_t old;
+  nish_term_hold(&old);
+  nish_term_restore();
+  nish_term_drop(&old);
 }
 
 /* Enter the raw termios, `when` as `tcsetattr` takes it: 0, or the host's
-   `-errno` with the flag and the hook taken back. Raw before the call, so a
-   signal while it drains the output, or just after the switch, still puts the
-   saved termios back. */
+   `-errno`. Raw once the call has switched, not before: a signal that ends the
+   program while it drains the output, or while SIGTTOU holds it stopped in the
+   background, finds the terminal as it was and leaves it, rather than setting
+   it from the background and being stopped again. */
 static int32_t nish_term_enter(int when) {
+  if (tcsetattr(0, when, &nish_term_raw_t) != 0) return -errno;
   nish_term_raw = 1;
-  __atomic_store_n(&nish_fatal_hook, nish_term_restore, __ATOMIC_RELEASE);
-  if (tcsetattr(0, when, &nish_term_raw_t) == 0) return 0;
-  int err = errno;
-  nish_term_raw = 0;
-  __atomic_store_n(&nish_fatal_hook, 0, __ATOMIC_RELEASE);
-  return -err;
+  __atomic_store_n(&nish_fatal_hook, nish_term_leave, __ATOMIC_RELEASE);
+  return 0;
 }
 
 /* Where a fault's handler runs, so a SIGSEGV from an exhausted stack can:
@@ -244,14 +258,17 @@ static void nish_term_on_signal(int sig);
 
 /* Catch `sig`: once, `SA_RESETHAND`, on the alternate stack, and with the
    signal left unblocked while the handler runs (`SA_NODEFER`), so the
-   handler's own `raise` acts at once rather than after it returns.
-   `SA_RESTART`, so a call that a Ctrl-Z and `fg` interrupt goes on, as it did
-   under the default stop. */
+   handler's own `raise` acts at once rather than after it returns, SIGTSTP
+   aside. SIGTSTP is blocked in every handler, so a Ctrl-Z cannot stop one
+   between its restore and its `raise`, and re-enter raw mode for the program
+   to die in. `SA_RESTART`, so a call that a Ctrl-Z and `fg` interrupt goes on
+   where the system restarts it. */
 static void nish_term_catch(int sig) {
   struct sigaction sa;
   sa.sa_handler = nish_term_on_signal;
   sa.sa_flags = SA_RESETHAND | SA_ONSTACK | SA_NODEFER | SA_RESTART;
   sigemptyset(&sa.sa_mask);
+  sigaddset(&sa.sa_mask, SIGTSTP);
   sigaction(sig, &sa, 0);
 }
 
@@ -259,29 +276,30 @@ static void nish_term_catch(int sig) {
    put the default back, except that POSIX lets a system keep the handler for
    SIGILL and SIGTRAP, so it is put back here too: `signal` is
    async-signal-safe. Every signal caught but SIGTSTP ends the program in that
-   `raise`; SIGTSTP stops it there, and the `raise` returns once a shell
+   `raise`. SIGTSTP's handler holds the lock throughout and unblocks SIGTSTP
+   for the `raise` alone, which stops the program and returns once a shell
    continues it, in the foreground or, after a SIGTTOU stop in the
-   `tcsetattr`, once it is brought there. Only SIGTSTP's handler takes the
-   lock, because only it returns. */
+   `tcsetattr`, once it is brought there. The handler that ends the program
+   takes no lock, because the thread it interrupted may hold it. */
 static void nish_term_on_signal(int sig) {
+  if (sig != SIGTSTP) {
+    nish_term_restore();
+    signal(sig, SIG_DFL);
+    raise(sig);
+    return;
+  }
   int err = errno;
   sigset_t old;
-  if (sig == SIGTSTP) {
-    nish_term_hold(&old);
-    nish_term_resume = nish_term_raw;
-    nish_term_restore();
-    nish_term_drop(&old);
-  } else {
-    nish_term_restore();
-  }
-  signal(sig, SIG_DFL);
-  raise(sig);
-  nish_term_catch(sig);
   nish_term_hold(&old);
-  if (nish_term_resume) {
-    nish_term_resume = 0;
-    nish_term_enter(TCSANOW);
-  }
+  int was = nish_term_raw;
+  nish_term_restore();
+  signal(sig, SIG_DFL);
+  nish_term_stops++;
+  nish_term_mask(SIG_UNBLOCK, 0);
+  raise(sig);
+  nish_term_mask(SIG_BLOCK, 0);
+  nish_term_catch(sig);
+  if (was) nish_term_enter(TCSANOW);
   nish_term_drop(&old);
   errno = err;
 }
@@ -293,7 +311,6 @@ static void nish_term_on_signal(int sig) {
    background is stopped by SIGTTOU here, as any program that sets the
    terminal is, and goes on into raw mode on `fg`. */
 static int32_t nish_term_set(bool on) {
-  nish_term_resume = 0;
   if (!on) {
     nish_term_restore();
     return 0;
@@ -310,7 +327,7 @@ static int32_t nish_term_set(bool on) {
   t->c_cc[VTIME] = 0;
   if (!nish_term_armed) {
     nish_term_armed = 1;
-    atexit(nish_term_restore);
+    atexit(nish_term_leave);
     /* An alternate stack the thread already has, from C code the program
        links, is kept. */
     stack_t alt;

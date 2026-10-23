@@ -1576,7 +1576,9 @@ if (!only || "term".includes(only)) {
   // by SIGTSTP, Ctrl-Z's signal, from a background helper: the terminal is as
   // it was while it is stopped, because the shell puts back nothing, still so
   // once `bg` continues it, because it stops again by SIGTTOU entering raw
-  // mode from the background, and raw again once `fg` continues it.
+  // mode from the background, and raw again once `fg` continues it. Where
+  // `jobs` names the signal (dash: "Stopped (tty output)"), a SIGTTIN stop,
+  // a background read that never re-entered raw mode, does not count.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
@@ -1615,7 +1617,7 @@ if (!only || "term".includes(only)) {
         'echo "stopped $? stty $(same) was $(cat "$D/stop.out")"',
         "bg > /dev/null",
         'i=0; while [ $i -lt 50 ]; do jobs > "$D/jobs"; grep -q Stopped "$D/jobs" && break; sleep 0.1; i=$((i + 1)); done',
-        'echo "background $(grep -c Stopped "$D/jobs") stty $(same) $(icanon)"',
+        'echo "background $(grep Stopped "$D/jobs" | grep -vc "tty input") stty $(same) $(icanon)"',
         '( i=0; while [ $i -lt 50 ] && [ "$(icanon)" != -icanon ]; do sleep 0.1; i=$((i + 1)); done',
         '  echo "$(icanon)" > "$D/cont.out"; kill -TERM "$(cat "$D/hold.pid")" ) &',
         "fg > /dev/null",

@@ -7608,7 +7608,7 @@ only, and WASI as below.
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `readStdin(buf: u8[], off: i32, len: i32): i32` | at most `len` bytes of stdin into `buf[off, off + len)`, **without waiting**: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds), and the buffer is a writable `u8[]` | write | `term_calls`, `term_import`; `reject_term_read_arity`, `reject_term_read_i32_buffer`, `reject_term_read_readonly` |
-| `waitStdin(timeoutMs: i32): boolean` | wait until stdin is readable, or `timeoutMs` milliseconds pass: `true` when it is readable — its end and an error included, so the read after it answers at once, with `0` or a negative errno that is not `-11`, which a loop treats as the end — and `false` when the time ran out first or a signal ended the wait early. A negative timeout waits for ever. Not `willreturn` | write | `term_calls`, `term_import`; `reject_term_wait_string` |
+| `waitStdin(timeoutMs: i32): boolean` | wait until stdin is readable, or `timeoutMs` milliseconds pass: `true` when it is readable — its end and an error included, so the read after it answers at once, with `0` or a negative errno that is not `-11`, which a loop treats as the end — and `false` when the time ran out first or a signal ended the wait early — not a Ctrl-Z and `fg`, after which the wait goes on. A negative timeout waits for ever. Not `willreturn` | write | `term_calls`, `term_import`; `reject_term_wait_string` |
 | `isTerminal(fd: i32): boolean` | whether the descriptor is a terminal (`isatty`) | write | `term_calls`, `term_pty`; `reject_term_is_terminal_arity` |
 | `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stderr when stdout is not one; `[-errno, 0]` when neither is, **`[-25, 0]` for "not a terminal"**, and `[0, 0]` for a terminal no one set a size for. Read it again on each frame to follow a resize | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
 | `setRawMode(on: boolean): i32` | puts stdin's terminal in raw mode (`true`) or back as it was (`false`): `0`, `-25` when stdin is not a terminal, or the host's `-errno` when the terminal refuses. Asking for the mode it is already in changes nothing and answers `0`, so `setRawMode(false)` is always safe | write | `term_calls`, `term_pty`; `reject_term_raw_number`, `reject_term_unknown_export` |
@@ -7687,8 +7687,9 @@ raises the signal again, so the program still dies of it and its parent sees
 that (exit status 143 for SIGTERM in `term_pty`). The handlers run on a 64 KiB
 alternate stack of the thread that entered raw mode, or on the one that thread
 already had, so a stack overflow there restores the terminal too. The mode is
-marked raw before the switch, so a signal that lands while `TCSAFLUSH` drains
-the output still puts the saved termios back. A program that
+marked raw once the switch is made, so a signal that ends the program while
+`TCSAFLUSH` drains the output, or while SIGTTOU holds it stopped in the
+background, leaves the terminal as it was. A program that
 took SIGTERM or SIGINT through `signalFd` keeps it, and puts the terminal back
 itself, or by returning. SIGKILL leaves raw mode behind, and so does a stack
 overflow on a thread other than the one that called `setRawMode(true)`; `stty
@@ -7697,11 +7698,13 @@ default, because no shell can be counted on to: bash puts its own termios back
 while a job is stopped but does not give the job its raw mode back on `fg`, and
 a shell without that bookkeeping puts back nothing. The handler restores the
 terminal, stops the program, and once `fg` or `bg` continues it puts the handler
-back and enters raw mode again, unless another thread called `setRawMode`
-meanwhile, so the terminal is as it was while the program is stopped and raw
-after `fg`. A program continued in the background stops again, by SIGTTOU,
-until `fg`. A blocking call the stop interrupts goes on (`SA_RESTART`), as it
-does under the default stop. A stop by SIGSTOP, which no program can catch,
+back and enters raw mode again, so the terminal is as it was while the program
+is stopped and raw after `fg`; no `setRawMode` on another thread runs between
+the two. A program continued in the background stops again, by SIGTTOU, until
+`fg`. A `waitStdin` the stop interrupts goes on waiting, as it does under the
+default stop. Any other blocking call goes on where the system restarts it
+after a handler (`SA_RESTART`), and ends early where it never does, as a
+`pollWait` does after any signal. A stop by SIGSTOP, which no program can catch,
 leaves the terminal raw at a shell that puts nothing back.
 Job control also stops a program started in the background
 (`app &`) when it calls `setRawMode(true)`, by SIGTTOU, as it stops any program
