@@ -1581,12 +1581,14 @@ if (!only || "term".includes(only)) {
   // "Stopped (tty output)"), a SIGTTIN stop, a background read that never
   // re-entered raw mode, does not count. A fourth, `deadline`, is stopped for
   // three seconds inside a two-second wait and must end within a second of
-  // `fg`, before a helper's SIGTERM: a retry that asked for the whole timeout
-  // again, or for ever, would die of it. The stop comes half a second after
-  // `ready`, so the wait has read its clock, and not at all once the program
-  // said `timed`; the SIGTERM helper's process group is killed once `fg`
-  // returns, so it signals no pid that has gone. The line gives the status
-  // the stop left, then `fg`'s, so a wait that was never stopped fails it.
+  // `fg %sh`, before a helper's SIGTERM: a retry that asked for the whole
+  // timeout again, or for ever, would die of it. The stop comes half a
+  // second after `ready`, so the wait has read its clock, and only while the
+  // program has said `ready` but not `timed`, so it reaches a pid that has
+  // gone only if the program ends between that look and the signal. The
+  // line gives the status the stop left, then `fg`'s; only a stop starts the
+  // SIGTERM helper and `fg`, and the helper's process group is killed once
+  // `fg` returns, so a wait never stopped fails with `-` and signals nothing.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
@@ -1632,12 +1634,11 @@ if (!only || "term".includes(only)) {
         'echo "continued $? stty $(same) was $(cat "$D/cont.out") said $(tr \'\\n\' \' \' < "$D/hold.out")"',
         ': > "$D/hold.out"',
         "( i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
-        '  sleep 0.5; grep -q timed "$D/hold.out" || kill -TSTP "$(cat "$D/hold.pid")" ) &',
+        '  sleep 0.5; grep -q ready "$D/hold.out" && ! grep -q timed "$D/hold.out" && kill -TSTP "$(cat "$D/hold.pid")" ) &',
         'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" deadline > "$2/hold.out"\' sh "$E" "$D"; t=$?',
-        "sleep 3",
-        '( sleep 1; kill -TERM "$(cat "$D/hold.pid")" 2>/dev/null ) & k=$!',
-        "fg > /dev/null; s=$?",
-        'kill -TERM -$k 2>/dev/null',
+        's=-; if [ "$t" -gt 128 ]; then sleep 3',
+        '  ( sleep 1; kill -TERM "$(cat "$D/hold.pid")" 2>/dev/null ) & k=$!',
+        '  fg %sh > /dev/null; s=$?; kill -TERM -$k 2>/dev/null; fi',
         'echo "deadline $t $s stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
         "",
       ].join("\n")
@@ -1674,7 +1675,7 @@ if (!only || "term".includes(only)) {
         `deadline ${128 + os.constants.signals.SIGTSTP} 0 stty same said raw 0 ready timed false `,
       ]
       check(
-        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early, and only until its deadline",
+        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early, and once stopped mid-wait only until its deadline",
         want.every((line) => lines.includes(line)),
         `want every line of ${JSON.stringify(want)}\n${shown(r)}`
       )
