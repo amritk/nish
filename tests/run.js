@@ -11691,11 +11691,18 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   const namesTestedIn = (text) => [...(text ?? "").matchAll(/name === "([^"]+)"/g)].map((m) => m[1])
 
   const builtinsDecl = declarationOf(selfSource("builtins.ts"), "isBuiltinFunction")
-  // `nish:unsafe`'s exports are builtins through `isUnsafeExport`, and
-  // `readCString` among them allocates, so they are read from there too.
+  // An arrow with no braces, so it ends at the blank line after it.
+  const modulesSource = selfSource("nish-modules.ts")
+  const termExportsAt = modulesSource.search(/^export const isTermExport\b/m)
+  const termExportsDecl =
+    termExportsAt < 0 ? "" : modulesSource.slice(termExportsAt, modulesSource.indexOf("\n\n", termExportsAt))
+  // `nish:unsafe`'s and `nish:term`'s exports are builtins through
+  // `isUnsafeExport` and `isTermExport`, and `readCString` and `terminalSize`
+  // among them allocate, so they are read from there too.
   const builtins = [
     ...namesTestedIn(builtinsDecl),
     ...namesTestedIn(declarationOf(selfSource("nish-modules.ts"), "isUnsafeExport")),
+    ...namesTestedIn(termExportsDecl),
   ]
   const emitBuiltins = selfSource("emit-builtins.ts")
   const calleesDecl = declarationOf(emitBuiltins, "identifierBuiltinCalleesNamed")
