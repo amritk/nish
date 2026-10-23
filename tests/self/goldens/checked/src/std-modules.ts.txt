@@ -15,6 +15,7 @@ const SECRET_STD_SPECIFIER: string = "nish/secret" [exported]
 const TEXT_SPECIFIER: string = "nish/text"
 const CRYPTO_AES_SPECIFIER: string = "nish/crypto/aes"
 const REGEX_SPECIFIER: string = "nish/regex"
+const MATH_SPECIFIER: string = "nish/math" [exported]
 function stdModuleName(specifier: string): string -> @stdModuleName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_new
@@ -65,6 +66,11 @@ function isCryptoAesModule(packageName: string, name: string): boolean -> @isCry
   stackSites=0 stackLocals=0
   callee +0:35 stdModuleName -> @stdModuleName
 function isRegexModule(packageName: string, name: string): boolean -> @isRegexModule [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
+  stackSites=0 stackLocals=0
+  callee +0:35 stdModuleName -> @stdModuleName
+function isMathModule(packageName: string, name: string): boolean -> @isMathModule [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq stdModuleName
   stackSites=0 stackLocals=0

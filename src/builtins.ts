@@ -577,6 +577,11 @@ const checkMath = (
         requireF64(ctx, name, arg, scope)
       }
     }
+    // `std/math.ts`'s, bound by the checker's `importMath` under this spelling.
+    const at = ctx.sigs.get(name, -1)
+    if (at >= 0) {
+      ctx.program.nodeCallees[call.id] = ctx.program.functions[at]
+    }
     return T_F64
   }
   if (member === "abs") {

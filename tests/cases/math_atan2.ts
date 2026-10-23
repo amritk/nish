@@ -1,5 +1,5 @@
-// Math.atan2(y, x) is libm's `atan2`, declared `readnone` like an intrinsic: LLVM 18 has
-// no llvm.atan2. The quadrant comes from both signs, so a -0 `y` gives -pi, as in JavaScript.
+// Math.atan2(y, x) is `std/math.ts`'s `atan2`, copied into the module as `internal`
+// `@nish.atan2` with no libm call. The quadrant comes from both signs, so a -0 `y` gives -pi, as in JavaScript.
 export const angle = (y: f64, x: f64): f64 => Math.atan2(y, x);
 
 export const main = (): i32 => {

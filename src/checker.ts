@@ -104,7 +104,7 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
-import { COLLECTIONS_SPECIFIER } from "./std-modules"
+import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER } from "./std-modules"
 import {
   AliasInfo,
   CheckedProgram,
@@ -248,6 +248,7 @@ export class Checker {
     // Here rather than in pass 1 because it is an import, and the module it
     // names has to be loaded with the rest.
     this.importCollections()
+    this.importMath()
     this.ctx.errored = false
   }
 
@@ -384,6 +385,35 @@ export class Checker {
     }
     this.program.imports.push(new ImportBinding(COLLECTIONS_SPECIFIER, name, name, at, at))
     this.program.typeNames.add(name)
+  }
+
+  /**
+   * `Math.atan2`, `Math.tan` and `Math.hypot` are `std/math.ts`'s, not libm's:
+   * a module that calls one is given an import of it from `nish/math`, under
+   * the dotted spelling as its local name, which no declaration can take.
+   * `checkMath` records that function as the call's callee, and from there it
+   * is an ordinary call into a library copied like `nish/collections`. A
+   * module that calls none of the three loads nothing.
+   */
+  importMath(): void {
+    if (this.program.isMathLibrary() || this.program.source.text.indexOf("Math.") < 0) {
+      return
+    }
+    const calls: Node[] = []
+    scanMathCalls(this.program.file, calls)
+    for (const call of calls) {
+      const name = call.children[0].text
+      const local = `Math.${name}`
+      let bound = false
+      for (const imp of this.program.imports) {
+        if (imp.localName === local) {
+          bound = true
+        }
+      }
+      if (!bound) {
+        this.program.imports.push(new ImportBinding(MATH_SPECIFIER, name, local, call, call))
+      }
+    }
   }
 
   /**
@@ -3050,6 +3080,24 @@ class CollectionNames {
     } else if (name === "Set" && this.set === null) {
       this.set = at
     }
+  }
+}
+
+/** The `Math.atan2`, `Math.tan` and `Math.hypot` calls under `node`, in source order (`importMath`). */
+const scanMathCalls = (node: Node, calls: Node[]): void => {
+  if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
+    const callee = node.children[0]
+    const name = callee.text
+    if (
+      callee.children[0].kind === N_IDENT &&
+      callee.children[0].text === "Math" &&
+      (name === "atan2" || name === "tan" || name === "hypot")
+    ) {
+      calls.push(node)
+    }
+  }
+  for (const child of node.children) {
+    scanMathCalls(child, calls)
   }
 }
 

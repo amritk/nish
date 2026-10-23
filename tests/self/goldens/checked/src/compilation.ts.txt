@@ -1168,7 +1168,7 @@ function Compilation.libraryRoot(this: Compilation): string -> @Compilation.libr
   stackSites=0 stackLocals=0
 function Compilation.libraryUnits(this: Compilation, units: AnalysisUnit[]): AnalysisUnit[] -> @Compilation.libraryUnits [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: CheckedProgram.isCollections CheckedProgram.isSecretLibrary nish_array_grow
+  calls: CheckedProgram.isCollections CheckedProgram.isMathLibrary CheckedProgram.isSecretLibrary nish_array_grow
   pointer this: size=128 writesThrough=false captured=false
   pointer units: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1177,6 +1177,7 @@ function Compilation.libraryUnits(this: Compilation, units: AnalysisUnit[]): Ana
   local +3:13 program: CheckedProgram (const)
   callee +4:11 CheckedProgram.isCollections -> @CheckedProgram.isCollections
   callee +4:38 CheckedProgram.isSecretLibrary -> @CheckedProgram.isSecretLibrary
+  callee +4:67 CheckedProgram.isMathLibrary -> @CheckedProgram.isMathLibrary
 function Compilation.writesOutput(this: Compilation, unit: ModuleUnit): boolean -> @Compilation.writesOutput [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.writesNoOutput

@@ -1167,13 +1167,6 @@ export class RuntimeTable {
     // `Math.clz32`, with `i1 false` so that a zero answers 32 as JavaScript's
     // does, rather than poison.
     this.addIntrinsic("llvm.ctlz.i32", "i32", "i32, i1")
-    // `Math.tan`, `atan2` and `hypot`: libm's symbols, as LLVM 18 has no
-    // intrinsic for them. Declared as one all the same, `readnone` included,
-    // because the only memory they touch is `errno`, which nothing here reads;
-    // clang's `-fno-math-errno` makes the same promise for C.
-    this.addIntrinsic("tan", "double", "double")
-    this.addIntrinsic("atan2", "double", "double, double")
-    this.addIntrinsic("hypot", "double", "double, double")
   }
 }
 

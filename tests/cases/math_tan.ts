@@ -1,5 +1,5 @@
-// Math.tan is libm's `tan`, declared `readnone` like an intrinsic: LLVM 18 has no
-// llvm.tan. It keeps the sign of a zero, which `1 / t` shows.
+// Math.tan is `std/math.ts`'s `tan`, copied into the module as `internal`
+// `@nish.tan` with no libm call. It keeps the sign of a zero, which `1 / t` shows.
 export const tangent = (x: f64): f64 => Math.tan(x);
 
 export const main = (): i32 => {

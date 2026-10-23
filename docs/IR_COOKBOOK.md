@@ -19235,10 +19235,11 @@ operand and order `-0` below `+0`, as JavaScript does, through the branches
 clang gives the same C: an unordered compare to a quiet NaN, an ordered
 compare and `select`, and on equal operands the one whose sign bit says `-0`.
 A wasm build calls `llvm.minimum`/`maximum` instead, which are `f64.min`/`max`
-there. `Math.tan`, `Math.atan2` and `Math.hypot`
-call libm's `tan`, `atan2` and `hypot`, declared `readnone` the same way,
-since LLVM 18 has no intrinsic for them. All of these are
-`readnone willreturn`, so the callers stay pure.
+there. All of these are `readnone willreturn`, so the callers stay pure.
+`Math.tan`, `Math.atan2` and `Math.hypot` are not builtins in the IR at all:
+each is a call to `std/math.ts`'s Nish port of fdlibm, copied into the module
+as `internal @nish.tan`, `@nish.atan2` and `@nish.hypot`, so no target calls
+libm and the optimiser sees the whole body.
 
 <!-- cookbook:begin builtin-math-f64 -->
 Compiled with `--number-mode f64`.

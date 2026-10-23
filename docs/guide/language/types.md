@@ -82,6 +82,9 @@ answers. `Math.sqrt`, `floor`, `ceil`, `trunc`, `round`, `sin`, `cos`, `tan`,
 `i32`s the way JavaScript's 32-bit multiply wraps. `Math.round(-0.3)` is
 `-0`, and `Math.min` or `Math.max` with a `NaN` operand is `NaN`, as in
 JavaScript. `Math.min`, `max` and `hypot` take exactly two arguments.
+`Math.tan`, `atan2` and `hypot` are compiled from the standard library's
+`std/math.ts` rather than called from the C library, so they answer the same
+on every target, WebAssembly included, within one unit in the last place.
 
 ```ts nish:ok
 export const main = (): i32 => {

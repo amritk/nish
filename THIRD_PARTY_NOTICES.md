@@ -10,7 +10,7 @@ the tree.
 
 ## What the npm package ships
 
-Three of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
+Four of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
 formatter is adapted from Ryu. The package carries `runtime/LICENSE-ryu` beside
 it, because `package.json`'s `files` names the whole `runtime/` directory, and
 the release tarball and the platform packages copy that directory too. Ryu is
@@ -38,6 +38,13 @@ licence makes no exception for object code: a program built with
 same file's inversion of the signing nonce is ported from libsecp256k1, under
 MIT too, so the package carries `std/crypto/LICENSE-libsecp256k1` beside it as
 well, and such a program carries libsecp256k1's notice beside fiat-crypto's.
+
+The fourth is `std/math.ts`, whose `Math.tan`, `Math.atan2` and `Math.hypot`
+are ported from fdlibm, as FreeBSD's msun carries it. The package carries
+`std/LICENSE-fdlibm` beside it, for the same reason. fdlibm's licence grants
+use, copying and distribution "provided that this notice is preserved", which
+the file's header does; it asks nothing of object code, so a program calling
+those functions needs no notice of its own.
 
 Nothing else here ships. `package.json`'s `files` names neither `bench/`,
 `tests/`, `examples/` nor `docs/cookbook/`.
@@ -149,6 +156,17 @@ under the MIT licence. The port reads `src/modinv32_impl.h` and
 Ported from libsecp256k1 (https://github.com/bitcoin-core/secp256k1), src/modinv32_impl.h. Copyright (c) 2020 Peter Dettman. Used under the MIT licence; see std/crypto/LICENSE-libsecp256k1.
 ```
 
+### `std/LICENSE-fdlibm`
+
+[fdlibm](https://www.netlib.org/fdlibm/), Copyright (C) 1993 Sun Microsystems,
+Inc., under its own permissive notice. The port reads FreeBSD msun's
+`lib/msun/src` copies; the licence text is the notice those files carry,
+verbatim.
+
+```notice
+Ported from fdlibm (https://www.netlib.org/fdlibm/), as FreeBSD msun carries it, lib/msun/src/k_tan.c, s_tan.c, e_atan2.c, s_atan.c, e_hypot.c and k_rem_pio2.c. Copyright (C) 1993 by Sun Microsystems, Inc. Used under the fdlibm licence; see std/LICENSE-fdlibm.
+```
+
 ### `tests/json-suite/LICENSE-jsontestsuite`
 
 [JSONTestSuite](https://github.com/nst/JSONTestSuite)'s parsing corpus,
@@ -231,6 +249,7 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 | `bench/simd-s3a/mat-vec-scalar.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-checked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-unchecked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `std/math.ts` | fdlibm (FreeBSD msun) `k_tan.c` `__kernel_tan`, `s_tan.c` `tan`, `e_atan2.c` `__ieee754_atan2`, `s_atan.c` `atan`, `e_hypot.c` `__ieee754_hypot` and `k_rem_pio2.c`'s `ipio2` table; the integer Payne-Hanek reduction `tanLarge`, the double-double quotient in `atan2` and the rescale in `hypot` are not derived from it | fdlibm | `std/LICENSE-fdlibm` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |
 | `std/crypto/p256.ts` | fiat-crypto, `fiat-c/src/p256_32.c` (`mul`, `square`, `add`, `sub`, `nonzero`, `selectznz`, `set_one` and the `addcarryx`, `subborrowx`, `mulx` and `cmovznz` helpers) and `fiat-c/src/p256_scalar_32.c` (`mul`, `add`, `set_one`), as the `p256Fiat*` functions | MIT | `std/crypto/LICENSE-fiat-crypto` |

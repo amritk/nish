@@ -167,12 +167,9 @@ const builtinConversionTarget = (name: string): i32 => {
 
 /**
  * The `llvm.<f>.f64` behind a one-argument `Math.*`, or the empty string.
- * `tan` is libm's own symbol: LLVM 18 has no `llvm.tan`.
+ * `Math.tan` is not here: it is a call into `std/math.ts` (`importMath`).
  */
 const f64UnaryIntrinsic = (name: string): string => {
-  if (name === "tan") {
-    return "tan"
-  }
   if (
     name === "sqrt" ||
     name === "floor" ||
@@ -233,17 +230,6 @@ const emitMathPow = (emitter: Emitter, expr: Node): string => {
   const special = emitter.fn.emitValue(`and i1 ${xOne}, ${yInf}`)
   const nan = emitter.fn.emitValue(`or i1 ${yNaN}, ${special}`)
   return emitter.fn.emitValue(`select i1 ${nan}, double 0x7FF8000000000000, double ${p}`)
-}
-
-/**
- * `Math.atan2(y, x)` and `Math.hypot(x, y)`: libm's own, whose C99 Annex F
- * special cases are ECMAScript's. LLVM 18 has no intrinsic for either.
- */
-const emitMathLibm2 = (emitter: Emitter, expr: Node, symbol: string): string => {
-  const args = expr.children[1]
-  const a = emitter.emitExpression(args.children[0])
-  const b = emitter.emitExpression(args.children[1])
-  return callIntrinsic(emitter, symbol, "double", `double ${a}, double ${b}`)
 }
 
 /**
@@ -572,9 +558,6 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "Math.pow") {
     return emitMathPow(emitter, expr)
   }
-  if (name === "Math.atan2" || name === "Math.hypot") {
-    return emitMathLibm2(emitter, expr, name.substring(5, name.length))
-  }
   if (name === "Math.round") {
     return emitMathRound(emitter, expr)
   }
@@ -690,10 +673,6 @@ export const builtinCalleesNamed = (
   if (name === "Math.pow") {
     out.push("llvm.pow.f64")
     out.push("llvm.fabs.f64")
-    return out
-  }
-  if (name === "Math.atan2" || name === "Math.hypot") {
-    out.push(name.substring(5, name.length))
     return out
   }
   if (name === "Math.round") {

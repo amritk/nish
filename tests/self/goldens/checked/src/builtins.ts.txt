@@ -315,60 +315,62 @@ function checkImulOperand(ctx: CheckContext, arg: Node, scope: Scope): void -> @
   callee +5:53 TypeTable.typeName -> @TypeTable.typeName
 function checkMath(ctx: CheckContext, call: Node, args: Node, name: string, member: string, scope: Scope): i32 -> @checkMath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via checkBuiltinArity
+  sharedWrite: +0:7
   escaping: member name
-  calls: CheckContext.error CheckContext.errorType CheckContext.numberType TypeTable.baseOf TypeTable.rangedOf TypeTable.typeName checkBuiltinArity checkExpression checkImulOperand isF64Binary isF64Unary isNumeric nish_panic_index nish_str_concat nish_str_eq requireF64 unknownBuiltin
+  calls: CheckContext.error CheckContext.errorType CheckContext.numberType StringMap.get TypeTable.baseOf TypeTable.rangedOf TypeTable.typeName checkBuiltinArity checkExpression checkImulOperand isF64Binary isF64Unary isNumeric nish_panic_index nish_str_concat nish_str_eq requireF64 unknownBuiltin
   pointer ctx: size=280 writesThrough=true captured=true passedTo=checkBuiltinArity#0 requireF64#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.numberType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 checkExpression#0 CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 checkBuiltinArity#0 checkImulOperand#0 checkImulOperand#0 checkBuiltinArity#0 unknownBuiltin#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1 CheckContext.errorType#1 checkBuiltinArity#1 checkBuiltinArity#1 checkBuiltinArity#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3 checkBuiltinArity#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=requireF64#3 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkExpression#2 checkImulOperand#2 checkImulOperand#2
   stackSites=0 stackLocals=0
-  callee +0:7 isF64Unary -> @isF64Unary
-  callee +0:29 isF64Binary -> @isF64Binary
-  local +1:11 arity: i32 (const)
-  callee +1:19 isF64Binary -> @isF64Binary
-  callee +2:9 checkBuiltinArity -> @checkBuiltinArity
-  local +3:18 arg: Node (const)
-  callee +4:9 requireF64 -> @requireF64
-  callee +10:10 checkBuiltinArity -> @checkBuiltinArity
-  local +13:11 got: i32 (const)
-  callee +13:17 checkExpression -> @checkExpression
-  callee +13:63 CheckContext.numberType -> @CheckContext.numberType
-  callee +14:29 isNumeric -> @isNumeric
-  callee +15:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +15:84 TypeTable.typeName -> @TypeTable.typeName
-  callee +22:10 checkBuiltinArity -> @checkBuiltinArity
-  local +25:11 got: i32 (const)
-  callee +25:17 checkExpression -> @checkExpression
-  callee +25:63 CheckContext.numberType -> @CheckContext.numberType
-  callee +26:29 isNumeric -> @isNumeric
-  callee +27:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +27:85 TypeTable.typeName -> @TypeTable.typeName
-  callee +30:40 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +33:10 checkBuiltinArity -> @checkBuiltinArity
-  local +36:11 a: i32 (const)
-  callee +36:15 checkExpression -> @checkExpression
-  local +37:11 b: i32 (const)
-  callee +37:15 checkExpression -> @checkExpression
-  callee +41:10 isNumeric -> @isNumeric
-  local +42:13 x: string (const)
-  callee +42:17 TypeTable.typeName -> @TypeTable.typeName
-  callee +43:14 CheckContext.errorType -> @CheckContext.errorType
-  callee +45:85 TypeTable.typeName -> @TypeTable.typeName
-  local +58:11 answer: i32 (const)
-  callee +58:20 TypeTable.rangedOf -> @TypeTable.rangedOf
-  callee +59:10 checkBuiltinArity -> @checkBuiltinArity
-  local +62:11 got: i32 (const)
-  callee +62:17 checkExpression -> @checkExpression
-  local +63:11 base: i32 (const)
-  callee +63:46 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +65:7 CheckContext.error -> @CheckContext.error
-  callee +67:56 TypeTable.typeName -> @TypeTable.typeName
-  callee +76:9 checkBuiltinArity -> @checkBuiltinArity
-  callee +77:7 checkImulOperand -> @checkImulOperand
-  callee +78:7 checkImulOperand -> @checkImulOperand
-  callee +83:5 checkBuiltinArity -> @checkBuiltinArity
-  callee +86:10 unknownBuiltin -> @unknownBuiltin
+  callee -10:7 isF64Unary -> @isF64Unary
+  callee -10:29 isF64Binary -> @isF64Binary
+  local -9:11 arity: i32 (const)
+  callee -9:19 isF64Binary -> @isF64Binary
+  callee -8:9 checkBuiltinArity -> @checkBuiltinArity
+  local -7:18 arg: Node (const)
+  callee -6:9 requireF64 -> @requireF64
+  local -2:11 at: i32 (const)
+  callee -2:16 StringMap.get -> @StringMap.get
+  callee +5:10 checkBuiltinArity -> @checkBuiltinArity
+  local +8:11 got: i32 (const)
+  callee +8:17 checkExpression -> @checkExpression
+  callee +8:63 CheckContext.numberType -> @CheckContext.numberType
+  callee +9:29 isNumeric -> @isNumeric
+  callee +10:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +10:84 TypeTable.typeName -> @TypeTable.typeName
+  callee +17:10 checkBuiltinArity -> @checkBuiltinArity
+  local +20:11 got: i32 (const)
+  callee +20:17 checkExpression -> @checkExpression
+  callee +20:63 CheckContext.numberType -> @CheckContext.numberType
+  callee +21:29 isNumeric -> @isNumeric
+  callee +22:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +22:85 TypeTable.typeName -> @TypeTable.typeName
+  callee +25:40 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +28:10 checkBuiltinArity -> @checkBuiltinArity
+  local +31:11 a: i32 (const)
+  callee +31:15 checkExpression -> @checkExpression
+  local +32:11 b: i32 (const)
+  callee +32:15 checkExpression -> @checkExpression
+  callee +36:10 isNumeric -> @isNumeric
+  local +37:13 x: string (const)
+  callee +37:17 TypeTable.typeName -> @TypeTable.typeName
+  callee +38:14 CheckContext.errorType -> @CheckContext.errorType
+  callee +40:85 TypeTable.typeName -> @TypeTable.typeName
+  local +53:11 answer: i32 (const)
+  callee +53:20 TypeTable.rangedOf -> @TypeTable.rangedOf
+  callee +54:10 checkBuiltinArity -> @checkBuiltinArity
+  local +57:11 got: i32 (const)
+  callee +57:17 checkExpression -> @checkExpression
+  local +58:11 base: i32 (const)
+  callee +58:46 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +60:7 CheckContext.error -> @CheckContext.error
+  callee +62:56 TypeTable.typeName -> @TypeTable.typeName
+  callee +71:9 checkBuiltinArity -> @checkBuiltinArity
+  callee +72:7 checkImulOperand -> @checkImulOperand
+  callee +73:7 checkImulOperand -> @checkImulOperand
+  callee +78:5 checkBuiltinArity -> @checkBuiltinArity
+  callee +81:10 unknownBuiltin -> @unknownBuiltin
 function requireF64(ctx: CheckContext, name: string, arg: Node, scope: Scope): void -> @requireF64
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
