@@ -478,7 +478,9 @@ major. Whether it happens at all is still wp22 §10's open question.
   (§7). A `nish:simd` module of 128-bit vector types (S3) is unbuilt, and is
   decided on S3a, its bar kernels measured without a surface, which is planned
   beside S2 (§7, Q8). S7, crediting an offset index from the test that bounds
-  it, was to come first and was already built by #561 (§7, Q9). Every
+  it, was to come first and was already built by #561 (§7, Q9). S6b,
+  Eisel–Lemire in `numberF64`, met its bar: canada.json tokenizes 2.78x
+  faster, bit-for-bit `parseFloat`'s. Every
   stage adds a function, a flag or a module and withdraws nothing, so it fits
   a minor.
 

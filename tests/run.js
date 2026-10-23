@@ -6394,6 +6394,19 @@ if (!only || "p256 gen-p256-table".includes(only)) {
   )
 }
 
+// The power-of-five table in std/json-tokenizer.ts is what
+// scripts/gen-json-pow5.mjs computes with exact integer arithmetic, word for
+// word: a hand edit to one entry would round every number whose exponent reads
+// it to the wrong double, and only a number with that exponent would show it.
+if (!only || "json gen-json-pow5".includes(only)) {
+  const r = spawnSync("node", ["scripts/gen-json-pow5.mjs", "--check"], { cwd: root, encoding: "utf8" })
+  check(
+    "json: the power-of-five table in std/json-tokenizer.ts is what scripts/gen-json-pow5.mjs generates",
+    r.status === 0 && r.stdout === "gen-json-pow5: 1302 words, as generated\n",
+    shown(r)
+  )
+}
+
 // WP29 P1: `dst` shorter than `src` panics before any element is written, with
 // `std/threads.ts`'s own message. The link loop above compares stdout and the
 // exit code only, so the wording is pinned here, on stderr, the way

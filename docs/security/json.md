@@ -29,7 +29,7 @@ layer, all Low; the typed layer's own findings follow in its section, JSON-13
 
 | File | Functions |
 | --- | --- |
-| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen` |
+| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen`, `jsonTokW64`, `jsonTokMulHigh`, `jsonTokLeadingZeros`, `jsonTokEiselLemire`, `jsonTokPowerOfFive` |
 
 Out of scope: `std/json.ts`'s `jsonField` and `jsonFields`, which read the
 compiler's own `--json` lines and validate nothing by design, and its writer
@@ -84,7 +84,7 @@ constructor, so 100,000 openers cost the same as 129: "DEPTH: a bomb of
 128 levels fit the default". There is no recursion anywhere in the module, and
 `skipValue` loops over `next`.
 
-**Huge numbers** (`:703`, `number`; `:1037`, `numberF64`; `:1007`,
+**Huge numbers** (`:769`, `number`; `:1179`, `numberF64`; `:1079`,
 `integerScan`): a number longer than `maxNumberBytes` (256 by default) is
 refused with `JSON_TOK_ERR_NUMBER_LIMIT` ("NUMBER_LIMIT: 257 do not"); within
 it, an exponent stops being added up at 100,000 and the text goes to
@@ -92,10 +92,24 @@ it, an exponent stops being added up at 100,000 and the text goes to
 an exponent past the cap"). `numberI64` answers only when `isInteger` holds,
 whose overflow test accumulates negatively and so reaches −2^63 exactly
 ("isInteger(9223372036854775808)", "numberI64(-9223372036854775808)").
-`numberF64` is correctly rounded: Clinger's fast path for at most 15
-significant digits and a decimal exponent within ±22, `strtod` otherwise
-("numberF64(9007199254740993) rounds to even", "numberF64(5e-324), the
-smallest subnormal", and the Node check's bitwise comparison over the corpus).
+`numberF64` is correctly rounded: Clinger's fast path for a significand of
+at most 2^53 and a decimal exponent within ±22, Eisel–Lemire (`:1414`,
+`jsonTokEiselLemire`) for any other of at most 19 significant digits, and
+`strtod` past 19 digits or the exponent cap ("numberF64(9007199254740993)
+rounds to even", "numberF64(5e-324), the smallest subnormal", "numberF64 of 20
+digits goes to parseFloat", "numberF64 just above half the smallest
+subnormal", "numberF64(1.7976931348623159e308) rounds up to an infinity", and
+the JSONTestSuite check's bitwise comparison). Eisel–Lemire's run time is
+bounded per number whatever the text: two reads of the power-of-five table,
+at most two 64×64-bit products built from four 32-bit limb products each, and
+a fixed number of shifts, with no loop and no fallback, since for 19 digits
+Mushtak and Lemire prove the extended product always decides the rounding.
+Its table index is `2 × (q + 342)` for a `q` already tested to lie in
+[−342, 308], so at most 1301, and `jsonTokPowerOfFive` answers 0 rather than
+reading anything past it. The table is generated, not transcribed: "json: the
+power-of-five table in std/json-tokenizer.ts is what
+scripts/gen-json-pow5.mjs generates" fails on a changed byte. Nothing new is
+unbounded: the slow path is the `parseFloat` call it always was.
 `numberU64` (at `2d9a369f`: `:1110`, and `:1122`, `unsignedScan`) answers
 only when `isU64` holds: digits alone, with no minus sign, `-0` included, and
 at most 20 of them. RFC 8259 allows no leading zero, so up to 19 digits is
@@ -207,7 +221,8 @@ The checks in `tests/run.js` that hold the above:
   scanners read is proven, with no check left in the hot loops.
 - `link/std_json_tokenizer: nish/json-tokenizer loads under the Node prelude and tokenizes as it does natively`
   and `link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to`:
-  the module runs under `runtime/nish.mjs`, through `parseFloat`, `numberI64` and `numberU64`.
+  the module runs under `runtime/nish.mjs`, through `numberF64`'s three paths, `numberI64` and `numberU64`.
+- `json: the power-of-five table in std/json-tokenizer.ts is what scripts/gen-json-pow5.mjs generates`.
 - `third-party-licence: ${noticesDoc} lists ${rows.length} files, and each exists and carries the notice of its licence`,
   for the vendored corpus.
 

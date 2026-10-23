@@ -195,10 +195,10 @@ PASS  numberF64(1E+2)
 PASS  numberF64(0.000001)
 PASS  numberF64(0.1), the fast path's divide
 PASS  numberF64(1e22), the largest exact power
-PASS  numberF64(1e23), parseFloat's path
-PASS  numberF64(1e-23), parseFloat's path
-PASS  numberF64 of 17 significant digits goes to parseFloat
-PASS  numberF64 of 16 significant digits goes to parseFloat
+PASS  numberF64(1e23), Eisel-Lemire's path
+PASS  numberF64(1e-23), Eisel-Lemire's path
+PASS  numberF64 of 17 significant digits goes to Eisel-Lemire
+PASS  numberF64 of 16 significant digits past 2^53 goes to Eisel-Lemire
 PASS  numberF64 of 15 significant digits after leading zeros
 PASS  numberF64(123456789012345678)
 PASS  numberF64(2.2250738585072011e-308), the largest subnormal
@@ -211,6 +211,20 @@ PASS  numberF64 of an exponent past the cap
 PASS  numberF64 of zero with an exponent past the cap
 PASS  numberF64 of an exponent with leading zeros
 PASS  numberF64(9007199254740993) rounds to even
+PASS  numberF64(9007199254740995) rounds to even, upward
+PASS  numberF64 of 19 digits, Eisel-Lemire's widest
+PASS  numberF64 of 20 digits goes to parseFloat
+PASS  numberF64(7.2057594037927933e16) rounds up to 2^56
+PASS  numberF64(2.2250738585072014e-308), the smallest normal
+PASS  numberF64(2.2250738585072012e-308) rounds up out of the subnormals
+PASS  numberF64(123456789e-330), a subnormal
+PASS  numberF64 just above half the smallest subnormal
+PASS  numberF64 just below half the smallest subnormal
+PASS  numberF64(1e-342), the smallest power in the table
+PASS  numberF64 of a power below the table
+PASS  numberF64(1e308), the largest power in the table
+PASS  numberF64 of a power above the table
+PASS  numberF64(1.7976931348623159e308) rounds up to an infinity
 PASS  isU64(0)
 PASS  numberU64(0)
 PASS  isU64(1)
@@ -415,4 +429,4 @@ PASS  alloc: 10,000 reused bodies tokenize to the end
 PASS  alloc: Arena.used() is flat across every one, parseFloat's numbers included
 PASS  alloc: the checksum is the work being done
 PASS  alloc: the meter sees a call that keeps a string
-std/json-tokenizer: 417 passed, 0 failed, 0 skipped
+std/json-tokenizer: 431 passed, 0 failed, 0 skipped
