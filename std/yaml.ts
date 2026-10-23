@@ -233,6 +233,11 @@ export class YamlOptions {
 /**
  * Every document, node and diagnostic one parse found. Its fields and its
  * "Internal" methods are reachable, as every member in Nish is; use the others.
+ *
+ * A read never panics: a handle that names no node (`-1`, or one past the
+ * stream), or a read that does not fit the node's kind (`count` of a scalar,
+ * `intValue` of a string), answers a default — `-1` for a node or an offset,
+ * `0`, `false` or `""` otherwise — as each method says.
  */
 export class YamlStream {
   /** The text the stream was parsed from; every offset is into it. */
@@ -432,7 +437,9 @@ export class YamlStream {
   /**
    * A scalar's text, decoded: quotes and escapes undone, lines folded, a block
    * scalar's indentation and chomping applied. An alias answers its target's
-   * text, and any other node `""`. Decoded on every call; keep the result.
+   * text, and any other node `""`. A `\u` surrogate pair is one character; a
+   * lone surrogate escape is kept as its three bytes, which are not UTF-8.
+   * Decoded on every call; keep the result.
    */
   text(n: i32): string {
     const at: i32 = this.resolved(n)
@@ -547,7 +554,7 @@ export class YamlStream {
     return yamlAt(this.diagEnds, i)
   }
 
-  /** Diagnostic `i`'s message, such as `map key "a" is duplicated`, or `""`. */
+  /** Diagnostic `i`'s message, such as `Map key "a" is duplicated` (a capital first, as other YAML tooling spells them), or `""`. */
   diagnosticMessage(i: i32): string {
     const messages: string[] = this.diagMessages
     return i >= 0 && i < toI32(messages.length) ? messages[i] : ""
@@ -812,8 +819,19 @@ const yamlHexValue = (code: i32): i32 => {
 const yamlAfterBreak = (text: string, i: i32): i32 =>
   yamlByte(text, i) === YAML_CR && yamlByte(text, i + 1) === YAML_LF ? i + 2 : i + 1
 
-/** The first break in `text[from, to)`, or `to`. */
+/**
+ * The first break in `text[from, to)`, or `to`. Short of the end of the text
+ * the search reads only `[from, to)`, so a caller testing a short range on a
+ * long line pays for the range, not the line.
+ */
 const yamlLineEnd = (text: string, from: i32, to: i32): i32 => {
+  if (to < toI32(text.length)) {
+    let i: i32 = from
+    while (i < to && !yamlIsBreak(yamlByte(text, i))) {
+      i += 1
+    }
+    return i
+  }
   const at: i32 = indexOfAny(text, YAML_BREAKS, from)
   return at < 0 || at > to ? to : at
 }
@@ -1000,6 +1018,24 @@ const yamlDecodeFlow = (text: string, from: i32, to: i32, style: i32): string =>
   return out.text()
 }
 
+/** The low surrogate a `\u` escape at `text[at]` writes, or `-1` when it writes none before `to`. */
+const yamlLowSurrogateAt = (text: string, at: i32, to: i32): i32 => {
+  if (at + 6 > to || yamlByte(text, at) !== YAML_BACKSLASH || yamlByte(text, at + 1) !== 117) {
+    return -1
+  }
+  let cp: i32 = 0
+  let k: i32 = 0
+  while (k < 4) {
+    const v: i32 = yamlHexValue(yamlByte(text, at + 2 + k))
+    if (v < 0) {
+      return -1
+    }
+    cp = cp * 16 + v
+    k += 1
+  }
+  return cp >= 0xdc00 && cp < 0xe000 ? cp : -1
+}
+
 /** Appends what the escape at `text[at]`, a `\`, stands for; answers the byte past it. */
 const yamlDecodeEscape = (text: string, at: i32, to: i32, out: YamlBuffer): i32 => {
   if (at + 1 >= to) {
@@ -1027,6 +1063,12 @@ const yamlDecodeEscape = (text: string, at: i32, to: i32, out: YamlBuffer): i32 
       k += 1
     }
     if (k === digits && cp <= 0x10ffff) {
+      // A `\u` high surrogate and a `\u` low one after it are one code point, written as one.
+      const low: i32 = digits === 4 && cp >= 0xd800 && cp < 0xdc00 ? yamlLowSurrogateAt(text, at + 6, to) : -1
+      if (low >= 0) {
+        out.codePoint((cp - 0xd800) * 0x400 + (low - 0xdc00) + 0x10000)
+        return at + 12
+      }
       out.codePoint(cp)
       return at + 2 + digits
     }
@@ -1567,9 +1609,21 @@ class YamlParser {
     return i
   }
 
-  /** Internal: the end of an anchor or tag token; in flow, a flow indicator ends it too. */
+  /**
+   * Internal: the end of an anchor or tag token; in flow, a flow indicator ends
+   * it too, except in a verbatim tag, `!<…>`, which runs to its `>`.
+   */
   propTokenEnd(from: i32, flow: boolean): i32 {
     let i: i32 = from
+    if (this.at(from - 1) === YAML_BANG && this.at(from) === YAML_LT) {
+      while (i < this.len && !yamlIsWs(this.at(i))) {
+        i += 1
+        if (this.at(i - 1) === YAML_GT) {
+          return i
+        }
+      }
+      return i
+    }
     while (i < this.len) {
       const c: i32 = this.at(i)
       if (yamlIsWs(c) || (flow && yamlIsFlowIndicator(c))) {
@@ -2450,6 +2504,9 @@ class YamlParser {
         this.pos = this.nextLineStart(i)
         continue
       }
+      if (indent === 0 && this.isDocMarker(i)) {
+        break
+      }
       if (contentIndent === -1) {
         if (indent <= parentIndent) {
           break
@@ -2464,7 +2521,7 @@ class YamlParser {
           )
         }
       }
-      if (indent < contentIndent || (indent === 0 && this.isDocMarker(i))) {
+      if (indent < contentIndent) {
         break
       }
       const lineEnd: i32 = yamlLineEnd(this.text, lineStart + contentIndent, this.len)
@@ -4138,14 +4195,14 @@ class YamlKeySet {
 
 // ---- Key text -------------------------------------------------------------------
 
-/** How many characters `keyText` writes for a collection key before it cuts the rest to `…`. */
+/** How many bytes `keyText` writes for a collection key before it cuts the rest to `…`. */
 const YAML_KEY_TEXT_BUDGET: i32 = 4096
 /** How deep `keyText` follows a collection key's nesting before it cuts the rest to `…`. */
 const YAML_KEY_TEXT_DEPTH: i32 = 64
 /** How many aliases in a row a path step follows before it stops. */
 const YAML_ALIAS_HOPS: i32 = 100
 
-/** Writes a collection key as one line of flow text, within `YAML_KEY_TEXT_BUDGET` characters. */
+/** Writes a collection key as one line of flow text, within `YAML_KEY_TEXT_BUDGET` bytes. */
 class YamlFlowWriter {
   stream: YamlStream
   out: string
@@ -4165,7 +4222,12 @@ class YamlFlowWriter {
     }
     const length: i32 = toI32(s.length)
     if (length > this.left) {
-      this.out = this.out + s.substring(0, this.left) + "…"
+      // Back up to the start of a character, so the cut never splits one's bytes.
+      let keep: i32 = this.left
+      while (keep > 0 && (yamlByte(s, keep) & 0xc0) === 0x80) {
+        keep -= 1
+      }
+      this.out = this.out + s.substring(0, keep) + "…"
       this.cut = true
       return
     }
@@ -4221,7 +4283,8 @@ class YamlFlowWriter {
  * The text a map key is matched and reported by: a scalar's decoded text (its
  * source text for a number or a boolean, `""` for a null), an alias's target's
  * text (`*name` when it names no anchor), and a collection written as one line
- * of flow text, `{ a: 1 }` or `[ a, b ]`, cut to `…` past 4096 characters.
+ * of flow text, `{ a: 1 }` or `[ a, b ]`, cut to `…` past 4096 bytes, at a
+ * character's start.
  */
 const yamlKeyText = (stream: YamlStream, node: i32): string => {
   const kind: i32 = stream.kind(node)
@@ -4271,24 +4334,31 @@ class YamlPathWalker {
     return at
   }
 
-  /** Internal: whether map key `key` is written as `step`. */
+  /**
+   * Internal: whether map key `key` is matched by `step`. A one-line plain key
+   * that is not a null is its own source text, so it is compared in place;
+   * every other key goes through `yamlKeyText`.
+   */
   keyIs(key: i32, step: string): boolean {
     const stream: YamlStream = this.stream
     const start: i32 = stream.start(key)
     const end: i32 = stream.end(key)
-    if (stream.kind(key) === YAML_SCALAR && stream.style(key) === YAML_PLAIN && stream.tag(key) === "") {
-      if (!yamlIsWord(stream.source, start, end, step)) {
-        return step === "" && stream.type(key) === YAML_NULL
-      }
-      return true
+    if (
+      stream.kind(key) === YAML_SCALAR &&
+      stream.style(key) === YAML_PLAIN &&
+      stream.tag(key) === "" &&
+      yamlLineEnd(stream.source, start, end) === end &&
+      stream.type(key) !== YAML_NULL
+    ) {
+      return yamlIsWord(stream.source, start, end, step)
     }
     return yamlKeyText(stream, key) === step
   }
 
-  /** Internal: the index `step` writes, or `-1` when it is not 1 to 9 decimal digits. */
+  /** Internal: the index `step` writes, or `-1` when it is not 1 to 9 decimal digits without a leading zero. */
   indexOf(step: string): i32 {
     const length: i32 = toI32(step.length)
-    if (length === 0 || length > 9) {
+    if (length === 0 || length > 9 || (length > 1 && toI32(step.charCodeAt(0)) === 48)) {
       return -1
     }
     let index: i32 = 0
@@ -4318,41 +4388,46 @@ class YamlPathWalker {
       }
       const step: string = path[this.matched]
       const kind: i32 = stream.kind(at)
-      let next: i32 = -1
       if (kind === YAML_MAP) {
-        const count: i32 = stream.count(at)
-        let i: i32 = 0
-        while (i < count && next < 0) {
+        // The last pair with the key wins, as it does when a duplicate is let through.
+        let i: i32 = stream.count(at) - 1
+        while (i >= 0) {
           const pair: i32 = stream.child(at, i)
           if (this.keyIs(stream.key(pair), step)) {
+            // An empty value (`a:`) matches the step and reaches no node, which ends the walk.
             this.pair = pair
-            const value: i32 = stream.value(pair)
-            if (value < 0) {
+            this.node = stream.value(pair)
+            this.matched += 1
+            if (this.node < 0) {
               return
             }
-            next = value
+            break
           }
-          i += 1
+          i -= 1
+        }
+        if (i < 0) {
+          return
         }
       } else if (kind === YAML_SEQ) {
         const index: i32 = this.indexOf(step)
-        if (index >= 0 && index < stream.count(at)) {
-          next = stream.child(at, index)
+        if (index < 0 || index >= stream.count(at)) {
+          return
         }
-      }
-      if (next < 0) {
+        this.node = stream.child(at, index)
+        this.matched += 1
+      } else {
         return
       }
-      this.node = next
-      this.matched += 1
     }
   }
 }
 
 /**
  * The node `path` names below `root` of `stream`: each step a map key (matched
- * by `keyText`) or a sequence index (`"0"`), through aliases. When a step does
- * not match, the deepest node reached; `root` itself for an empty path.
+ * by `keyText`; of duplicate keys, the last) or a sequence index (`"0"`, no
+ * leading zero), through aliases. When a step does not match, the node the last
+ * matching step reached; `root` itself for an empty path. A step onto an empty
+ * value (`a:`) matches and reaches no node, so the answer is then `-1`.
  */
 export const pathNode = (stream: YamlStream, root: i32, path: string[]): i32 => {
   const walker: YamlPathWalker = new YamlPathWalker(stream)
@@ -4360,14 +4435,17 @@ export const pathNode = (stream: YamlStream, root: i32, path: string[]): i32 => 
   return walker.node
 }
 
-/** The last map pair `path` steps through below `root` of `stream` (see `pathNode`), or `-1`. */
+/** The last map pair `path` steps through below `root` of `stream` (see `pathNode`), or `-1` for none. */
 export const pathPair = (stream: YamlStream, root: i32, path: string[]): i32 => {
   const walker: YamlPathWalker = new YamlPathWalker(stream)
   walker.walk(root, path)
   return walker.pair
 }
 
-/** How many steps of `path` match below `root` of `stream`; `path.length` when it names a node. */
+/**
+ * How many steps of `path` match below `root` of `stream` (see `pathNode`):
+ * `path.length` when every step matches, an empty value's included.
+ */
 export const pathMatch = (stream: YamlStream, root: i32, path: string[]): i32 => {
   const walker: YamlPathWalker = new YamlPathWalker(stream)
   walker.walk(root, path)

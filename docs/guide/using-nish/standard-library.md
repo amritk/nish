@@ -660,11 +660,18 @@ core schema: `YAML_NULL`, `YAML_BOOL`, `YAML_INT`, `YAML_FLOAT` or
 read, so a program that wants one key pays for one key.
 
 **Paths.** `pathNode(stream, root, path)` follows a path of map keys and
-sequence indices (`"0"`) through aliases, and answers the deepest node it
-reached; `pathMatch` says how many steps matched and `pathPair` answers the
-last pair it stepped through, whose `key` is where a message about that
-setting should point. A key is matched by `keyText`, the text it was written
-as, so `1` and `01` are different keys.
+sequence indices (`"0"`, never `"01"`) through aliases, and answers the node
+the last matching step reached; `pathMatch` says how many steps matched and
+`pathPair` answers the last pair it stepped through, whose `key` is where a
+message about that setting should point. A key is matched by `keyText`, the
+text it was written as, so `1` and `01` are different keys and a null key
+(`~`, `null`) is matched by `""`. When a map repeats a key, the last one
+wins. A step onto an empty value (`a:`) matches, so `pathMatch` counts it and
+`pathPair` names its pair, but it reaches no node: `pathNode` answers `-1`.
+
+**A read never panics.** A handle that names no node, or a read that does
+not fit the node — `count` of a scalar, `intValue` of a string — answers a
+default: `-1` for a node or an offset, and `0`, `false` or `""` otherwise.
 
 **Ranges and lines.** `start(n)` and `end(n)` are byte offsets into
 `stream.source`, as are a diagnostic's `diagnosticStart` and
@@ -680,8 +687,9 @@ is valid and probably not what was meant, such as `!!int x`. A map that
 repeats a key is an error, `DUPLICATE_KEY`.
 
 **Options.** `parseYamlWith(text, options)` takes a `YamlOptions`:
-`maxDepth` (how deeply collections nest before `DEPTH_LIMIT`, 1 to 1000,
-1000 by default), `uniqueKeys`, `merge` (whether a `<<` key is exempt from the
+`maxDepth` (how deeply collections nest before `DEPTH_LIMIT`, 1000 by
+default; a value outside 1 to 1000 is a mistake in the program, so
+`parseYamlWith` panics on it), `uniqueKeys`, `merge` (whether a `<<` key is exempt from the
 duplicate check), `keepComments` (keep every comment's range, for
 `commentCount` and `comment`) and `firstDocumentOnly` (warn
 `MULTIPLE_DOCUMENTS` and stop after the first). Merge keys are not applied: a

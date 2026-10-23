@@ -31,11 +31,15 @@ const YAML_LINES_LF: i32 = 10
 const YAML_LINES_CONTINUATION: i32 = 128
 const YAML_LINES_LEAD: i32 = 192
 
-/** Where each line of one text starts, for turning byte offsets into lines and columns. */
+/**
+ * Where each line of one text starts, for turning byte offsets into lines and
+ * columns. Its fields and its "Internal" methods are reachable, as every member
+ * in Nish is; use the others, and do not change the fields.
+ */
 export class YamlLineIndex {
   /** The text the index was built from. */
   text: string
-  /** `starts[n]` is the byte at which line `n + 1` begins; line 1 begins at 0. */
+  /** Internal: `starts[n]` is the byte at which line `n + 1` begins; line 1 begins at 0. */
   starts: i32[]
 
   constructor(text: string) {

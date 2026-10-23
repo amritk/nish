@@ -58,6 +58,20 @@ PASS  block |1\n  a\n
 PASS  block |1\n  a\n is quiet
 PASS  block |\n
 PASS  block |\n is quiet
+PASS  block >+\n a\n b\n\n
+PASS  block >+\n a\n b\n\n is quiet
+PASS  block |\r\n  l1\r\n  l2\r\n
+PASS  block |\r\n  l1\r\n  l2\r\n is quiet
+PASS  block |\r  l1\r  l2\r
+PASS  block |\r  l1\r  l2\r is quiet
+PASS  a document marker ends a block scalar of blank lines
+PASS  and starts the next document
+PASS  so does a document end
+PASS  CR LF breaks in every scalar style and a comment
+PASS  are quiet
+PASS  a lone CR is a break too
+PASS  and is quiet
+PASS  a surrogate pair escape is one character
 PASS  block |\n  a\n   b\n
 PASS  block |\n  a\n   b\n is quiet
 PASS  eleven items
@@ -108,12 +122,25 @@ PASS  a tagged node's range is its text
 PASS  a local tag
 PASS  a verbatim tag
 PASS  no tag
+PASS  a verbatim tag in a flow seq keeps its comma
+PASS  and its next item
+PASS  a verbatim tag in a flow seq is quiet
+PASS  a verbatim tag on a flow key
+PASS  a verbatim tag on a flow key is quiet
+PASS  a %TAG handle resolves
+PASS  a %TAG handle is quiet
 PASS  an int tag makes an int
 PASS  a float tag makes a float
 PASS  an empty text has no documents
 PASS  nor does a comment
 PASS  an empty value reads as null
 PASS  an empty value is no node
+PASS  a single pair in a flow seq is a map
+PASS  a single pair is quiet
+PASS  a flow collection across lines
+PASS  a flow collection across lines is quiet
+PASS  a long flow line of single pairs
+PASS  parses quietly
 PASS  three documents, quietly
 PASS  three documents
 PASS  document 0 starts at its ---
@@ -156,8 +183,6 @@ PASS  path a/b/1/c
 PASS  path a/b/1/c matches every step
 PASS  path a/1
 PASS  path a/1 matches every step
-PASS  path a/null
-PASS  path a/null matches every step
 PASS  path a/
 PASS  path a/ matches every step
 PASS  path q
@@ -172,6 +197,22 @@ PASS  and pathNode stops at the deepest node reached
 PASS  a missing key matches nothing
 PASS  a key step on a seq does not match
 PASS  a negative index does not match
+PASS  a null key is matched by "" only, not ~
+PASS  nor null
+PASS  an index has no leading zero
+PASS  nor 00
+PASS  a path ending on an alias names the alias
+PASS  which resolves to the anchored node
+PASS  pathPair's key starts at the key
+PASS  and ends past it
+PASS  the last duplicate key wins
+PASS  its pair
+PASS  a key across lines matches its folded text
+PASS  not its first line
+PASS  a step onto an empty value matches
+PASS  names its pair
+PASS  and no node
+PASS  a recursive alias stops the walk
 PASS  LF, CRLF and CR are each one break
 PASS  line of 0
 PASS  line of 3
@@ -184,6 +225,8 @@ PASS  lineStart
 PASS  lineStart clamps
 PASS  byteColumn
 PASS  an empty text has one line
+PASS  a column counts characters
+PASS  a byteColumn counts bytes
 PASS  ranges of a: &x: 1\n
 PASS  ranges of a: & 1\n
 PASS  ranges of a: |x\n  b\n
@@ -249,4 +292,7 @@ PASS  the message form of a warning
 PASS  two errors
 PASS  no warnings
 PASS  diagnostics are in source order
-std/yaml: 251 passed, 0 failed, 0 skipped
+report 2:10 (byte 10) UNEXPECTED_COMMA Missing value before ","
+report 3:5 (byte 9) UNRESOLVED_ALIAS Alias "*nope" has no matching anchor
+report 5:1 (byte 1) DUPLICATE_KEY Map key "k" is duplicated
+std/yaml: 294 passed, 0 failed, 0 skipped

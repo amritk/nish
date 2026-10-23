@@ -13,13 +13,21 @@ export const ytDoc = (stream: YamlStream, d: i32): string => {
 /** The first document of `text` as flow text. */
 export const ytFlow = (text: string): string => ytDoc(parseYaml(text), 0);
 
-/** `text` on one line, its breaks and tabs written `\n` and `\t`, to name a check by. */
+/** `text` on one line, its breaks and tabs written `\n`, `\r` and `\t`, to name a check by. */
 export const ytShow = (text: string): string => {
   const out: string[] = [];
   let i: i32 = 0;
   while (i < toI32(text.length)) {
     const c: i32 = text.charCodeAt(i);
-    out.push(c === 10 ? "\\n" : c === 9 ? "\\t" : text.substring(i, i + 1));
+    if (c === 10) {
+      out.push("\\n");
+    } else if (c === 13) {
+      out.push("\\r");
+    } else if (c === 9) {
+      out.push("\\t");
+    } else {
+      out.push(text.substring(i, i + 1));
+    }
     i += 1;
   }
   return out.join("");

@@ -3,11 +3,13 @@
 // its kind and exact byte range.
 import { Suite } from "../../../std/testing";
 import { ytNegatives } from "./negatives";
+import { ytReport } from "./report";
 import { ytUnits } from "./units";
 
 export const main = (): number => {
   const t = new Suite("std/yaml");
   ytUnits(t);
   ytNegatives(t);
+  ytReport();
   return t.done();
 };
