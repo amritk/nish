@@ -65,22 +65,24 @@ const walk = (docs, read) => {
 }
 
 const walking = workload === "walk"
-let docs = []
-let c = newCounts()
+let stream = []
+let counts = newCounts()
 let textLength = 0
 const t0 = process.hrtime.bigint()
 for (let r = 0; r < iterations; r++) {
-  docs = parseAllDocuments(text)
+  stream = parseAllDocuments(text)
   if (walking) {
-    c = walk(docs, true)
-    textLength += c.textLength
+    counts = walk(stream, true)
+    textLength += counts.textLength
   }
 }
 const elapsed = process.hrtime.bigint() - t0
 if (!walking) {
-  c = walk(docs, false)
+  counts = walk(stream, false)
 }
-const errors = docs.reduce((n, doc) => n + doc.errors.length, 0)
-console.log(`${workload} ${docs.length} ${c.scalars} ${c.maps} ${c.seqs} ${c.aliases} ${c.pairs} ${errors}`)
+const errors = stream.reduce((n, doc) => n + doc.errors.length, 0)
+console.log(
+  `${workload} ${stream.length} ${counts.scalars} ${counts.maps} ${counts.seqs} ${counts.aliases} ${counts.pairs} ${errors}`
+)
 console.log(`ns ${elapsed}`)
 console.log(`text ${textLength}`)
