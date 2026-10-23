@@ -3184,3 +3184,60 @@ class YamlParser {
       stream.end(key),
     )
   }
+
+  // ---- Documents --------------------------------------------------------------------
+
+  /** Internal: the start of a node written on the `---` line at `marker`, or `-1` when the line ends first. */
+  docMarkerInlineNode(marker: i32): i32 {
+    let i: i32 = marker + 3
+    while (yamlIsBlank(this.at(i))) {
+      i += 1
+    }
+    const c: i32 = this.at(i)
+    if (c < 0 || yamlIsBreak(c) || c === YAML_HASH) {
+      if (c === YAML_HASH && this.keepComments) {
+        this.recordComment(i)
+      }
+      this.pos = this.nextLineStart(i)
+      return -1
+    }
+    this.pos = i
+    return i
+  }
+
+  /** Internal: whether the content at `from` opens a block mapping: a `?` key, or an implicit key's `:`. */
+  opensBlockMapping(from: i32): boolean {
+    const p: i32 = this.skipPropsAhead(from)
+    return this.isExplicitKey(p) || this.findKeyColon(p) >= 0
+  }
+
+  /** Internal: reports content after the `...` marker at `marker` on its line. */
+  checkDocEndTail(marker: i32): void {
+    if (this.lineRestIsBlank(marker + 3)) {
+      return
+    }
+    let after: i32 = marker + 3
+    while (yamlIsBlank(this.at(after))) {
+      after += 1
+    }
+    this.error(
+      YAML_ERR_UNEXPECTED_CONTENT,
+      'Unexpected content after the "..." document-end marker',
+      after,
+      this.plainLineEnd(after),
+    )
+  }
+
+  /** Internal: whether every line from `from` is blank, a comment, or a bare document marker. */
+  onlyEmptyDocumentsFollow(from: i32): boolean {
+    let i: i32 = from
+    while (i < this.len) {
+      if (!this.lineRestIsBlank(i)) {
+        if (!this.isDocMarker(i) || !this.lineRestIsBlank(i + 3)) {
+          return false
+        }
+      }
+      i = this.nextLineStart(i)
+    }
+    return true
+  }
