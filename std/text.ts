@@ -6,7 +6,8 @@
  * **not** give `split`, `trim`, `toLowerCase` or a regular expression, and that
  * is a decision rather than a gap: each of those allocates, and several of them
  * need a locale or a character table that this runtime has no room for
- * (`docs/wp7-runtime.md` keeps the runtime under a measured byte budget).
+ * (`docs/wp7-runtime.md` keeps the runtime under a measured byte budget). A
+ * regular expression is a library instead, `std/regex` (`nish/regex`).
  *
  * So a program that reads a file and wants its lines writes the loop. This
  * module is that loop, written once. Every offset here is a **byte** offset,

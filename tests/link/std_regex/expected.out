@@ -1,0 +1,187 @@
+PASS  /abc/
+PASS  /abc/
+PASS  /foo\d/
+PASS  /needle/
+PASS  /[xy]z/
+PASS  /(?:q|r)s+/
+PASS  /cat|dog/
+PASS  /a|ab/
+PASS  /(a|ab)(c|bcd)/
+PASS  /|a/
+PASS  /a+/
+PASS  /a+?/
+PASS  /a*?b/
+PASS  /<.+>/
+PASS  /<.+?>/
+PASS  /a??b/
+PASS  /(a+)(a*)/
+PASS  /(a+?)(a*)/
+PASS  /a{2,3}/
+PASS  /a{2}/
+PASS  /a{2,}/
+PASS  /ba{0}c/
+PASS  /x{1,2}?/
+PASS  /(ab){2}/
+PASS  /(?:a|b){3,}?c/
+PASS  /(a)(b)?/
+PASS  /(?<y>\d+)-(?<m>\d+)/
+PASS  /(?:ab)+/
+PASS  /(a|b)*/
+PASS  /(a)|b/
+PASS  /((a)|b)+/
+PASS  /(a*)*/
+PASS  /(a*)+/
+PASS  /(z)((a+)?(b+)?(c))*/
+PASS  /(.*?)x(\d*)/
+PASS  /^abc/
+PASS  /^abc$/
+PASS  /^b/m
+PASS  /^b/
+PASS  /a$/m
+PASS  /a$/
+PASS  /$/
+PASS  /^$/m
+PASS  /x$/m
+PASS  /^y/m
+PASS  /a.c/
+PASS  /a.c/s
+PASS  /a.c/
+PASS  /.+/
+PASS  /[a-c]+/
+PASS  /[^a-c]+/
+PASS  /[\d.]+/
+PASS  /[-a]+/
+PASS  /[a-]+/
+PASS  /[\w-]+/
+PASS  /[]/
+PASS  /[^]/
+PASS  /[\]\\]+/
+PASS  /[\b]/
+PASS  /\D+/
+PASS  /\W+/
+PASS  /\S+/
+PASS  /[^\d\s]+/
+PASS  /[\s\S]+/
+PASS  /\bfoo\b/
+PASS  /\Bo/
+PASS  /\b/
+PASS  /\B/
+PASS  /HELLO/i
+PASS  /[a-z]+/i
+PASS  /[^a-z]/i
+PASS  /[A-Z]x/i
+PASS  /k/i
+PASS  /\x41\u0042\u{43}/
+PASS  /\t/
+PASS  /\cJ/
+PASS  /a\.b/
+PASS  /\/\*\+\?\(\)\{\}\|\^\$/
+PASS  /\ud83d\ude00/
+PASS  /\0/
+PASS  /\f\v/
+PASS  /\s+/
+PASS  /é+/
+PASS  /./
+PASS  /[à-ÿ]+/
+PASS  /\u{1F600}/
+PASS  /^.$/
+PASS  /[^a]/
+PASS  /\s/
+PASS  /[😀-😂]/
+PASS  /a.b/
+PASS  /[^€]+/
+PASS  /\w+/
+PASS  /\bgo\b/
+PASS  //
+PASS  /x*/
+PASS  /(|a)+/
+PASS  /(|a){1,2}/
+PASS  /(|a){0,2}/
+PASS  /(a|)*/
+PASS  /(|a)*?b/
+PASS  /(?:(a)|b?)+/
+PASS  /(a?b?)*/
+PASS  /(\b|a)+/
+PASS  /((a*)*)+/
+PASS  /(a|b|)+c/
+PASS  /(a?)*?b/
+PASS  /(a/
+PASS  /a)/
+PASS  /*a/
+PASS  /a**/
+PASS  /a{1}{2}/
+PASS  /(?=a)/
+PASS  /(?!a)/
+PASS  /(?<=a)b/
+PASS  /(?<!a)b/
+PASS  /(a)\1/
+PASS  /(?<n>a)\k<n>/
+PASS  /[b-a]/
+PASS  /a{3,2}/
+PASS  /a{1001}/
+PASS  /\q/
+PASS  /(?<n>a)(?<n>b)/
+PASS  /[\d-z]/
+PASS  /a{/
+PASS  /}/
+PASS  /]/
+PASS  /^*/
+PASS  /\b+/
+PASS  /[a/
+PASS  /\/
+PASS  /(?x)/
+PASS  /(?<1a>x)/
+PASS  /\x4/
+PASS  /\u{110000}/
+PASS  /\01/
+PASS  /a/g
+PASS  /a/ii
+PASS  /a/u
+PASS  findAll
+PASS  count
+PASS  findAll: empty matches step past a character
+PASS  count: empty matches
+PASS  findAll: empty matches step a whole UTF-8 character
+PASS  groupCount
+PASS  groupIndex
+PASS  groupIndex: no such name
+PASS  named
+PASS  named: no such name
+PASS  groupStart
+PASS  groupEnd
+PASS  find: no match is null
+PASS  exec from an offset
+PASS  exec from an offset: text
+PASS  exec past the last match
+PASS  exec past the last match leaves the match alone
+PASS  replace: the first match
+PASS  replaceAll
+PASS  replaceAll: numbered groups
+PASS  replaceAll: named groups
+PASS  replace: $$ and the text around
+PASS  replace: an unknown name is empty
+PASS  replace: a group that took no part is empty
+PASS  replace: a $ that names nothing stays
+PASS  replaceAll: empty matches
+PASS  replaceAll: no match leaves the text
+PASS  split
+PASS  split: groups follow their piece
+PASS  split: an empty pattern splits characters
+PASS  split: the empty string, no match
+PASS  split: the empty string, a match
+PASS  split: separators at both ends
+PASS  regexEscape
+PASS  regexEscape: nothing to escape
+PASS  regexEscape: matches its text exactly
+PASS  /(a*?)+?$/
+PASS  /a/g
+PASS  /a/ii
+PASS  /a/u
+PASS  /A/ims
+PASS  (a+)+$ on a's and a b
+PASS  (a|a)*c on a's
+PASS  (x+x+)+y on x's
+PASS  (a*)*b counts no matches
+PASS  a{1000} counts 20 matches
+PASS  (a+)+ matches everything
+regex: 186 passed, 0 failed, 0 skipped
