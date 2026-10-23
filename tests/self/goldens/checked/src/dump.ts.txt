@@ -99,7 +99,7 @@ function structText(table: TypeTable, info: StructInfo, out: string[]): void -> 
   sharedWrite: +0:3
   calls: FieldInfo.inline StringMap.keyAt TypeTable.structOf TypeTable.typeName nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.typeName#0 TypeTable.typeName#0 TypeTable.structOf#0 TypeTable.typeName#0
-  pointer info: size=160 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   pointer out: size=0 writesThrough=true captured=false
   stackSites=2 stackLocals=2
   local -2:9 kind: string (const)

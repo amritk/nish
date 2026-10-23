@@ -190,10 +190,13 @@ export const isHandleFieldAnnotation = (type: Node): boolean => {
 class HandleClose {
   info: StructInfo
   sig: FunctionSig
+  /** Shape 2: the call sits behind the dispose's own `!== null` test. */
+  tested: boolean
 
-  constructor(info: StructInfo, sig: FunctionSig) {
+  constructor(info: StructInfo, sig: FunctionSig, tested: boolean) {
     this.info = info
     this.sig = sig
+    this.tested = tested
   }
 }
 
@@ -351,7 +354,7 @@ const checkDispose = (
     )
     return null
   }
-  return new HandleClose(info, sig)
+  return new HandleClose(info, sig, method.children[3].children.length === 2)
 }
 
 // ---- Where the name is written (§4d, the type positions) --------------------
@@ -732,6 +735,7 @@ export const handleFindings = (program: CheckedProgram, table: TypeTable): Handl
       if (close !== null) {
         closes.push(close)
         info.handleClose = close.sig // H1.2: what each exit of its `using` calls
+        info.handleTested = close.tested
       }
     }
   }

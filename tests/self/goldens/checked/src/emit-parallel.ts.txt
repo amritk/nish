@@ -470,7 +470,7 @@ function lockWord(emitter: Emitter, info: StructInfo, name: string): FieldInfo -
   escaping: name
   calls: StructInfo.field internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=272 writesThrough=false captured=false
-  pointer info: size=160 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.field#0
   stackSites=0 stackLocals=0
   local +0:9 field: FieldInfo | null (const)
   callee +0:17 StructInfo.field -> @StructInfo.field
@@ -605,7 +605,7 @@ function closeHandle(emitter: Emitter, info: StructInfo, object: string): void -
   escaping: object
   calls: Emitter.llvm Emitter.llvmAbi IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable emitDropped internalErrorFor loadField lockWord nish_exit nish_panic_index nish_str_concat
   pointer emitter: size=272 writesThrough=false captured=false passedTo=lockWord#0 loadField#0 Emitter.llvmAbi#0 Emitter.llvmAbi#0 emitDropped#0 Emitter.llvm#0 emitDropped#0
-  pointer info: size=160 writesThrough=false captured=false passedTo=lockWord#1 loadField#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=lockWord#1 loadField#1
   stackSites=0 stackLocals=0
   local +0:9 close: FunctionSig | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor
@@ -618,7 +618,7 @@ function closeHandle(emitter: Emitter, info: StructInfo, object: string): void -
   local +7:9 result: string (const)
   callee +7:18 Emitter.llvmAbi -> @Emitter.llvmAbi
   local +8:9 call: string (const)
-  callee +9:8 TypeTable.isNullable -> @TypeTable.isNullable
+  callee +9:30 TypeTable.isNullable -> @TypeTable.isNullable
   callee +10:5 emitDropped -> @emitDropped
   local +13:9 open: IRBlock (const)
   callee +13:16 IRFunction.newBlock -> @IRFunction.newBlock

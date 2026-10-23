@@ -901,7 +901,7 @@ function captureWriteRemedy(program: CheckedProgram, target: Node): string -> @c
 function isThreadsLayout(info: StructInfo): boolean -> @isThreadsLayout
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: isThreadsModule nish_arena_mark nish_arena_release nish_str_eq threadsModuleName
-  pointer info: size=160 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: StructInstantiation | null (const)
   callee +2:12 isThreadsModule -> @isThreadsModule
@@ -2362,7 +2362,7 @@ function checkBody(program: CheckedProgram, table: TypeTable, facts: FactsTable,
 function isThreadsClass(info: StructInfo | null, name: string): boolean -> @isThreadsClass
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isThreadsModule nish_str_eq
-  pointer info: size=160 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 instance: StructInstantiation | null (const)
   callee +4:5 isThreadsModule -> @isThreadsModule
@@ -2397,7 +2397,7 @@ function isGuardType(program: CheckedProgram, table: TypeTable, type: i32): bool
 function isChannelClass(info: StructInfo): boolean -> @isChannelClass [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isThreadsClass
-  pointer info: size=160 writesThrough=false captured=false passedTo=isThreadsClass#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=isThreadsClass#0
   stackSites=0 stackLocals=0
   callee +0:62 isThreadsClass -> @isThreadsClass
 function isChannelType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @isChannelType
@@ -2438,12 +2438,12 @@ function markAtomicClass(program: CheckedProgram, info: StructInfo): void -> @ma
   sharedWrite: +0:5
   calls: isThreadsModule nish_str_eq
   pointer program: size=656 writesThrough=false captured=false passedTo=isThreadsModule#0
-  pointer info: size=160 writesThrough=true captured=false
+  pointer info: size=168 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -2:5 isThreadsModule -> @isThreadsModule
 function isAtomicClass(info: StructInfo | null): boolean -> @isAtomicClass
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer info: size=160 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function isAtomicType(program: CheckedProgram, table: TypeTable, type: i32): boolean -> @isAtomicType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -2457,7 +2457,7 @@ function isAtomicType(program: CheckedProgram, table: TypeTable, type: i32): boo
 function isThreadsStruct(info: StructInfo): boolean -> @isThreadsStruct [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isAtomicClass isThreadsLayout
-  pointer info: size=160 writesThrough=false captured=false passedTo=isAtomicClass#0 isThreadsLayout#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=isAtomicClass#0 isThreadsLayout#0
   stackSites=0 stackLocals=0
   callee +0:63 isAtomicClass -> @isAtomicClass
   callee +0:86 isThreadsLayout -> @isThreadsLayout

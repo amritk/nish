@@ -1,0 +1,4 @@
+lockFirst -100 9 1
+arenaFirst -100 999 true released
+scopeFirst -100 -1
+three -100 50 51

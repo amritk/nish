@@ -38,7 +38,7 @@ function structNode(emitter: Emitter, info: StructInfo): string -> @structNode
   sharedWrite: via scalarNode
   calls: Emitter.metadata FieldInfo.inline nish_str_concat nish_str_from_i32 scalarNode
   pointer emitter: size=272 writesThrough=false captured=false passedTo=scalarNode#0 Emitter.metadata#0
-  pointer info: size=160 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 members: string (let)
   local +1:7 i: i32 (let)
@@ -51,7 +51,7 @@ function fieldTbaa(emitter: Emitter, info: StructInfo, field: FieldInfo): string
   sharedWrite: via structNode
   calls: Emitter.metadata nish_str_concat nish_str_from_i32 scalarNode structNode
   pointer emitter: size=272 writesThrough=false captured=false passedTo=structNode#0 scalarNode#0 Emitter.metadata#0
-  pointer info: size=160 writesThrough=false captured=false passedTo=structNode#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=structNode#1
   pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 base: string (const)

@@ -608,8 +608,11 @@ source. It is not a Nish function pointer, which the language does not have
 The emitter does not call the method. Like a lock's release, the close is
 emitted by the construct: `using` pushes a fourth kind onto the stack that
 `openOneScope` (src/emit-parallel.ts:797) keeps beside scope, arena and lock.
-`closeScope` (:843) then emits the null test and the call in LIFO order on
-every exit, the same exits a lock is released on (§2).
+`closeScope` (:843) then emits the call on every exit, the same exits a lock
+is released on (§2), exactly as the dispose spells it: behind the `!== null`
+test for shape 2, and on the field as it is for shape 1, so shape 1 on a
+`CPtr | null` field whose close takes `CPtr | null` calls the close with
+`null` (`ffi_handle_shapes`).
 
 "Every exit" is a list of emitter paths, and each one is wired for the fourth
 kind, as each was for locks:
@@ -625,8 +628,13 @@ kind, as each was for locks:
   handle as it meets each one. Two passes, one per kind, would get the order
   wrong: under `using l = m.lock(); using f = new File(p)`, `f` closes before
   `l` is released, the reverse of their order of opening, as on the
-  fall-through path. `ffi_handle_file` has a lock and a handle in one block
-  and shows that order on an early `return`;
+  fall-through path. `tests/link/ffi_handle_mutex` has a lock and a handle
+  in one block and shows that order on an early `return`. As built, the pass
+  is `emitHeldReleases`, after the value; a `return` still joins its scopes
+  before the value (`emitScopeJoins` with `arenas` false) and releases its
+  arenas after the pass, so on a `return` the order is scopes, then handles
+  and locks innermost first, then arenas, while `break`, `continue` and the
+  fall-through close every kind strictly innermost first;
 - the tail-call suppression. `holdsLock` (src/emit-parallel.ts:913) stops
   src/emit.ts:676 from marking a call in return position `tail` while a lock
   is held, because the release runs after it. An open handle needs the same:
@@ -935,9 +943,10 @@ design, decided on a program that needs them.
   `using a = new File(p), b = new File(q.orReturn())` with `q` an `Err`, and
   the sidecar's close count shows `a` closed once. Under (b), the refusal is
   the negative case and `ffi_handle_file` keeps two plain declarators.
-- **The object's memory.** The object is allocated in the arena that is live
-  at the `new`. It is popped from the stack before any arena opened earlier
-  releases, so the close never reads freed memory.
+- **The object's memory.** As built, the object a `using` binds is a stack
+  `alloca` in the function's entry block (`%File.obj` in `ffi_handle_file`'s
+  golden), not an arena allocation, so no arena release can free it before
+  the close loads its field.
 
 ## 5. Interactions
 
@@ -1043,7 +1052,9 @@ design, decided on a program that needs them.
   emitted, not written, so the `using` statement offers `ffi` itself, naming
   the close function, and the report points to the `using` line. Otherwise
   `--deny ffi` would let a program that only closes slip through. That is
-  pinned by `caps_ffi_handle` (a `.caps.json` naming both sites) and
+  pinned by `caps_ffi_handle`, whose `.caps.json` has one `ffi` witness: the
+  `using` line, naming `fclose` (the constructor's `fopen` is on the same
+  line, through the `new`, and adds no second witness), and by
   `reject_ffi_handle_deny`.
 
 **`--emit-header`, `--emit-dts` and `--emit-napi`.**

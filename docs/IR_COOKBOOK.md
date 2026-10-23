@@ -10112,12 +10112,15 @@ one closes it at every exit of its block, once. The object is the class's
 plain `%struct` on the stack, as a `using` of an arena or a lock is; it opens
 as soon as `new` returns, before anything after it runs. The close is the
 class's `[Symbol.dispose]` inlined at each exit: a load of the `CPtr` field,
-an `icmp eq i8* %p, null` when the field is `CPtr | null`, and the `call i32
-@fclose`, whose result nothing reads. Below, the early `return k` and the
+an `icmp eq i8* %p, null` when the dispose tests a `CPtr | null` field
+(a dispose that is the bare `close(this.f)` calls it untested, `null`
+included), and the `call i32 @fclose`, whose result nothing reads. Below, the early `return k` and the
 fall-through `return f.read()` each carry their own copy, after the returned
 value is computed, so a `return` of a call in a `using` block is never a
-`tail call`. Beside an arena, a scope or a lock the closes run in reverse
-order of opening. A panic or `process.exit` does not close (LANGUAGE.md); the
+`tail call`. Beside an arena, a scope or a lock, falling off the end,
+`break` and `continue` close in reverse order of opening; a `return` joins its
+scopes before the value, then closes handles and locks innermost first, then
+releases its arenas. A panic or `process.exit` does not close (LANGUAGE.md); the
 module carries the `ffi` capability, so `--deny ffi` refuses it.
 
 <!-- cookbook:begin decl-ffi-handle -->

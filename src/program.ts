@@ -912,6 +912,11 @@ export class StructInfo {
    * calls on the field. `null` for any other struct.
    */
   handleClose: FunctionSig | null
+  /**
+   * Whether that dispose calls the close behind its own `!== null` test (§4b
+   * shape 2); shape 1 calls it on the field as it is, `null` included.
+   */
+  handleTested: boolean
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
@@ -940,6 +945,7 @@ export class StructInfo {
     this.handle = false
     this.handleField = ""
     this.handleClose = null
+    this.handleTested = false
   }
 
   /** The field called `name` on this struct, or `null`. */

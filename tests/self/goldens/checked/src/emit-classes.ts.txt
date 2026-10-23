@@ -47,7 +47,7 @@ import T_STRING from "./types" -> const T_STRING
 import T_VOID from "./types" -> const T_VOID
 import UNION_TYPE from "./types" -> const UNION_TYPE
 function structInfoOf(emitter: Emitter, type: i32): StructInfo -> @structInfoOf [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=160
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=168
   sharedWrite: via nish_exit
   escaping: type
   calls: CheckedProgram.struct TypeTable.nameOf internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
@@ -61,14 +61,14 @@ function structInfoOf(emitter: Emitter, type: i32): StructInfo -> @structInfoOf 
 function structTypeName(info: StructInfo): string -> @structTypeName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
-  pointer info: size=160 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function structFieldPointer(emitter: Emitter, info: StructInfo, receiver: string, field: FieldInfo): string -> @structFieldPointer [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat nish_str_from_i32 structTypeName
   pointer emitter: size=272 writesThrough=false captured=false
-  pointer info: size=160 writesThrough=false captured=false passedTo=structTypeName#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=structTypeName#0
   pointer field: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -80,7 +80,7 @@ function loadField(emitter: Emitter, info: StructInfo, receiver: string, field: 
   escaping: receiver
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emitValue fieldTbaa nish_str_concat structFieldPointer
   pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 fieldTbaa#0 Emitter.alignSuffix#0
-  pointer info: size=160 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
   pointer field: size=64 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -97,7 +97,7 @@ function storeField(emitter: Emitter, info: StructInfo, receiver: string, field:
   escaping: receiver
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emit fieldTbaa nish_str_concat structFieldPointer
   pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 structFieldPointer#0 fieldTbaa#0 Emitter.alignSuffix#0
-  pointer info: size=160 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=structFieldPointer#1 fieldTbaa#1
   pointer field: size=64 writesThrough=false captured=false passedTo=structFieldPointer#3 fieldTbaa#2
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -113,7 +113,7 @@ function allocate(emitter: Emitter, info: StructInfo, site: Node): string -> @al
   sharedWrite: via IRFunction.emitAlloca
   calls: Emitter.isStackSite IRFunction.emitAlloca arenaObject nish_str_concat structTypeName
   pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.isStackSite#0 arenaObject#0
-  pointer info: size=160 writesThrough=false captured=false passedTo=structTypeName#0 arenaObject#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=structTypeName#0 arenaObject#1
   pointer site: size=40 writesThrough=false captured=false passedTo=Emitter.isStackSite#1
   stackSites=0 stackLocals=0
   callee +0:7 Emitter.isStackSite -> @Emitter.isStackSite
@@ -125,7 +125,7 @@ function arenaObject(emitter: Emitter, info: StructInfo): string -> @arenaObject
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.useRuntime IRFunction.emitValue nish_str_concat nish_str_from_i32 structTypeName
   pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
-  pointer info: size=160 writesThrough=false captured=false passedTo=structTypeName#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=structTypeName#0
   stackSites=0 stackLocals=0
   local +0:9 raw: string (const)
   callee +0:15 IRFunction.emitValue -> @IRFunction.emitValue
@@ -157,7 +157,7 @@ function emitFieldInitializers(emitter: Emitter, info: StructInfo, receiver: str
   escaping: receiver
   calls: initializerConstant storeField
   pointer emitter: size=272 writesThrough=false captured=false passedTo=storeField#0 initializerConstant#0
-  pointer info: size=160 writesThrough=false captured=false passedTo=storeField#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=storeField#1
   stackSites=0 stackLocals=0
   local +0:14 field: FieldInfo (const)
   callee +2:7 storeField -> @storeField
@@ -168,7 +168,7 @@ function constructObject(emitter: Emitter, info: StructInfo, receiver: string, a
   escaping: receiver
   calls: emitCall emitFieldInitializers
   pointer emitter: size=272 writesThrough=true captured=false passedTo=emitCall#0 emitFieldInitializers#0
-  pointer info: size=160 writesThrough=false captured=false passedTo=emitFieldInitializers#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=emitFieldInitializers#1
   pointer args: size=0 writesThrough=true captured=false passedTo=emitCall#3
   pointer site: size=40 writesThrough=false captured=false passedTo=emitCall#4
   stackSites=0 stackLocals=0
@@ -225,7 +225,7 @@ function emitNewWithoutArguments(emitter: Emitter, info: StructInfo, site: Node)
   sharedWrite: via arenaObject
   calls: arenaObject constructObject initInlineArrays
   pointer emitter: size=272 writesThrough=true captured=false passedTo=arenaObject#0 initInlineArrays#0 constructObject#0
-  pointer info: size=160 writesThrough=false captured=false passedTo=arenaObject#1 initInlineArrays#1 constructObject#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=arenaObject#1 initInlineArrays#1 constructObject#1
   pointer site: size=40 writesThrough=false captured=false passedTo=constructObject#4
   stackSites=1 stackLocals=1
   local +0:9 obj: string (const)
@@ -445,7 +445,7 @@ function noteSignature(emitter: Emitter, referenced: string[], results: string[]
 function structFunctions(info: StructInfo): FunctionSig[] -> @structFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow
-  pointer info: size=160 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: FunctionSig[] (const)
   local +1:9 ctor: FunctionSig | null (const)

@@ -5181,11 +5181,19 @@ later declarator's initialiser runs, and calls the close its
 its end, `return`, `break`, `continue`, and an `orReturn()` that propagates,
 including one in a later declarator's initialiser. A `return` computes its
 value first and closes after it, so `return twice(n)` inside the block is not
-a tail call. Declarators close in the reverse of the order they opened, beside
-an arena, a scope or a lock in the same `using` (`ffi_handle_file`,
-`ffi_handle_exits`, `ffi_handle_arena`). The close is inlined: the field is
-loaded, a `CPtr | null` one is tested against `null`, and the C function is
-called with it. The `using` is where the program reaches `ffi`, so
+a tail call. Each declarator opens before the next one's initialiser runs.
+Falling off the end, `break` and `continue` close the declarators in the
+reverse of the order they opened, beside an arena, a scope or a lock in the
+same `using`. A `return` or a propagating `orReturn()` joins every `scope()`
+before its value is computed (the value may read what the tasks stored), then
+closes the handles and gives back the locks, innermost first, then releases
+the arenas (`ffi_handle_file`, `ffi_handle_exits`, `ffi_handle_arena`,
+`ffi_handle_shapes`, `tests/link/ffi_handle_mutex`,
+`tests/link/using_declarator_exit`). The close is inlined as the dispose spells
+it: the field is loaded and the C function called with it, behind a `null`
+test only when the dispose writes one (`const p = this.f; if (p !== null)`);
+a dispose that is the single call `close(this.f)` calls it with the field as
+it is, `null` included (`ffi_handle_shapes`). The `using` is where the program reaches `ffi`, so
 `--deny ffi` refuses it and names the close (`caps_ffi_handle`,
 `reject_ffi_handle_deny`).
 
@@ -7985,7 +7993,7 @@ const tally = (rows: string[]): i32 => {
   | stored into an element, `xs[i] = v` | likewise | NL2420 | `reject_using_arena_element` |
   | stored into memory any other way: handed to a callee that keeps it, held by an object or array literal | always: the escape analysis stops following a stored value | NL2421 | `reject_using_arena_stored` |
   | `push` onto an array | the array is not a `const` the block binds to a fresh array, whatever is pushed: a `push` moves the array's storage into the arena | NL2422 | `reject_using_arena_push` |
-  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return` |
+  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return`, `reject_using_arena_declarator_or_return` |
   | a call to a function that stores an allocation into memory | always | NL2424 | `reject_using_arena_callee_stores` |
   | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
   | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |

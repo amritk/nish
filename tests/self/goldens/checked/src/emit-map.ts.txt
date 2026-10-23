@@ -787,7 +787,7 @@ function FusedProbe.constructor(this: FusedProbe, id: i32, receiver: string, key
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: found id key owner packed receiver
   pointer this: size=48 writesThrough=true captured=false
-  pointer owner: size=160 writesThrough=true captured=true
+  pointer owner: size=168 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function tableMethod(emitter: Emitter, owner: StructInfo, name: string): FunctionSig -> @tableMethod
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=136
@@ -795,7 +795,7 @@ function tableMethod(emitter: Emitter, owner: StructInfo, name: string): Functio
   escaping: name
   calls: StructInfo.method internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=272 writesThrough=false captured=false
-  pointer owner: size=160 writesThrough=false captured=false passedTo=StructInfo.method#0
+  pointer owner: size=168 writesThrough=false captured=false passedTo=StructInfo.method#0
   stackSites=0 stackLocals=0
   local +0:9 sig: FunctionSig | null (const)
   callee +0:15 StructInfo.method -> @StructInfo.method
@@ -852,7 +852,7 @@ function emitFusedProbe(emitter: Emitter, call: Node): FusedProbe -> @emitFusedP
   callee -4:5 tableMethod -> @tableMethod
   callee -4:26 ownerOf -> @ownerOf
 function ownerOf(emitter: Emitter, method: FunctionSig): StructInfo -> @ownerOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=160
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=168
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
   pointer emitter: size=272 writesThrough=false captured=false
@@ -1036,7 +1036,7 @@ function routeCalleesOf(table: TypeTable, sig: FunctionSig): FunctionSig[] -> @r
 function methodsNamed(owner: StructInfo | null, names: string[]): FunctionSig[] -> @methodsNamed
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StructInfo.method nish_array_grow
-  pointer owner: size=160 writesThrough=false captured=false passedTo=StructInfo.method#0
+  pointer owner: size=168 writesThrough=false captured=false passedTo=StructInfo.method#0
   pointer names: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: FunctionSig[] (const)

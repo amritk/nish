@@ -843,10 +843,12 @@ const emitDropped = (emitter: Emitter, call: string, result: string): void => {
 }
 
 /**
- * WP40 H1.2: close the pointer the handle `object` owns, as its
+ * WP40 H1.2: close the pointer the handle `object` owns, exactly as its
  * `[Symbol.dispose]` does: one call of the close it names on the field, behind
- * a test when the field may be `null`. The field is read here rather than
- * when the `using` opened, because a dispose reads it when it runs.
+ * a `null` test only when the dispose writes one (§4b shape 2) and the field
+ * may be `null`. Shape 1 passes the field as it is, `null` included. The
+ * field is read here rather than when the `using` opened, because a dispose
+ * reads it when it runs.
  */
 const closeHandle = (emitter: Emitter, info: StructInfo, object: string): void => {
   const close = info.handleClose
@@ -858,7 +860,7 @@ const closeHandle = (emitter: Emitter, info: StructInfo, object: string): void =
   const param = emitter.llvmAbi(close.paramTypes[0], false)
   const result = emitter.llvmAbi(close.returnType, false)
   const call = `call ${result} @${close.name}(${param} ${pointer})`
-  if (!emitter.table.isNullable(field.type)) {
+  if (!info.handleTested || !emitter.table.isNullable(field.type)) {
     emitDropped(emitter, call, result)
     return
   }

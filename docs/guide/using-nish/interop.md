@@ -361,7 +361,7 @@ its `[Symbol.dispose]` is exactly the call that closes it. Open one with
 block — falling off its end, an early `return`, `break`, `continue`, or an
 `orReturn()` that propagates:
 
-```ts
+```ts nish:ok
 declare function fopen(path: string, mode: string): CPtr | null;
 declare function fclose(p: CPtr): i32;
 declare function fgetc(p: CPtr): i32;
@@ -402,8 +402,10 @@ export const main = (): i32 => {
 ```
 
 A handle is never copied, stored or returned: you call its methods, or lend
-it to a parameter of its own type. Several declarators in one `using` close in
-reverse order, beside an `arena()` or a lock. A panic or `process.exit` ends
+it to a parameter of its own type. Several declarators in one `using` open
+one at a time, so an `orReturn()` in a later initialiser closes the ones
+before it, and they close in reverse order beside an `arena()` or a lock; a
+`return` waits for a `scope()`'s tasks before it computes its value. A panic or `process.exit` ends
 the process without the close; the operating system takes the descriptor
 back, but a bounds panic does not flush what C still buffers, so call
 `fflush` on a `FILE *` you wrote before code that may panic. The rules are in
