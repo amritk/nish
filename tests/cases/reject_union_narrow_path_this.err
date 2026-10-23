@@ -1,0 +1,1 @@
+This `===` is always false: `this.k` is `Kind.A` and `Kind.B` is `Kind.B`, which share no member

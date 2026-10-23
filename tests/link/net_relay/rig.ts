@@ -17,7 +17,6 @@ import {
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
-  quicPushAck,
   quicPushStream,
   quicPutDatagram,
 } from "nish/net/quic-frame";
@@ -33,13 +32,23 @@ import { RELAY_HELLO, RELAY_PROTOCOL_VERSION } from "../../../examples/relay/fra
 import { bytesOf, fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { leafCertificate, leafPrivate } from "../net_tls_common/server";
-import { QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcReadFlight, qcReceive, qcRetried, qcShort } from "../net_quic_conn/client";
-import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, h3Cat, h3Frame, h3Section, h3Varint } from "../net_http3/peer";
+import { QcClient, qcCrypto, qcFinishedPacket, qcHello, qcInitial, qcPushAppAck, qcReadFlight, qcReceive, qcRetried, qcShort } from "../net_quic_conn/client";
+import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, WireWait, h3Cat, h3Frame, h3Section, h3Varint } from "../net_http3/peer";
 import { wtClientSettingIds, wtClientSettingValues, wtSettingsFrame } from "../net_webtransport/peer";
 import { SECRET, signGrant } from "./grants";
 
 /** The Unix millisecond the rig's wall clock starts at: grant.rs's `now`. */
 export const RIG_WALL: i64 = 1700000000000;
+
+/** What `udpBind` and `udpSendTo` answer where the host has no UDP GRO or GSO (Darwin): the rig binds and sends without them. */
+export const RIG_NO_OFFLOAD: i32 = -95;
+
+/** The relay's client socket on a loopback port of its own: with GRO, as the relay binds it, where the host has it. */
+export const rigRelaySocket = (): i32 => {
+  const fd: i32 = udpBind("127.0.0.1", n32(0), n32(2));
+  return fd === RIG_NO_OFFLOAD ? udpBind("127.0.0.1", n32(0), n32(0)) : fd;
+};
+
 
 /** A grant for `host:port`, good until long after the rig's wall clock, signed with grant.rs's SECRET. */
 export const rigGrant = (host: string, port: i32): string =>
@@ -58,10 +67,17 @@ export const rigHello = (token: string, version: i32): u8[] => {
 /**
  * A relay under `config` on the UDP socket `fd`, serving `net_tls_common`'s
  * P-256 test certificate (which the test client checks) and verifying grants
- * with the grant secret `turn` hands each step, grant.rs's SECRET.
+ * with the grant secret `turn` hands each step, grant.rs's SECRET; `retry`
+ * turns the listener's Retry on.
  */
-export const rigRelay = (config: RelayConfig, fd: i32, entropy: u8[]): Relay =>
-  new Relay(config, relayQuicConfig([leafCertificate()], new Array<u8>(32), new Array<u8>(32)), fd, new GrantVerifier(), entropy);
+export const rigRelayRetry = (config: RelayConfig, fd: i32, entropy: u8[], retry: boolean): Relay => {
+  const quic = relayQuicConfig([leafCertificate()], new Array<u8>(32), new Array<u8>(32));
+  quic.retry = retry;
+  return new Relay(config, quic, fd, new GrantVerifier(), entropy);
+};
+
+/** `rigRelayRetry` with `retry` off, as the relay ships. */
+export const rigRelay = (config: RelayConfig, fd: i32, entropy: u8[]): Relay => rigRelayRetry(config, fd, entropy, false);
 
 /** The game server: a UDP socket that records what it is sent and, unless silent, sends it back. */
 export class RigEcho {
@@ -79,9 +95,13 @@ export class RigEcho {
   burst: u8[];
   burstSegment: i32 = 0;
   last: u8[];
+  /** Whether it reads with GRO: asked for and granted by the host. */
+  offload: boolean = false;
 
   constructor(gro: boolean) {
-    this.fd = udpBind("127.0.0.1", n32(0), gro ? n32(2) : n32(0));
+    const fd: i32 = udpBind("127.0.0.1", n32(0), gro ? n32(2) : n32(0));
+    this.offload = gro && fd !== RIG_NO_OFFLOAD;
+    this.fd = fd === RIG_NO_OFFLOAD ? udpBind("127.0.0.1", n32(0), n32(0)) : fd;
     this.port = netLocalPort(this.fd);
     this.rx = new Array<u8>(65536);
     this.from = new Array<u8>(18);
@@ -125,7 +145,13 @@ export class RigEcho {
       n = udpRecvFrom(this.fd, this.rx, n32(0), n32(65536), this.from, this.meta);
     }
     if (toI32(this.burst.length) > 0) {
-      udpSendTo(this.fd, this.burst, n32(0), toI32(this.burst.length), this.last, this.burstSegment, n32(0));
+      const total: i32 = toI32(this.burst.length);
+      if (udpSendTo(this.fd, this.burst, n32(0), total, this.last, this.burstSegment, n32(0)) === RIG_NO_OFFLOAD) {
+        // No GSO: the same datagrams, one send each.
+        for (let at: i32 = 0; at < total; at = at + this.burstSegment) {
+          udpSendTo(this.fd, this.burst, at, total - at < this.burstSegment ? total - at : this.burstSegment, this.last, n32(0), n32(0));
+        }
+      }
       this.burst = [];
     }
     return reads;
@@ -214,7 +240,7 @@ export class RigClient {
   packet(payload: u8[]): void {
     const all: u8[] = [];
     if (this.c.largestApp >= 0) {
-      quicPushAck(all, [n64(0), this.c.largestApp], n32(1), n64(0));
+      qcPushAppAck(all, this.c);
       this.acked = this.c.largestApp;
     }
     for (const b of payload) {
@@ -409,16 +435,22 @@ export class Rig {
   kept: i64 = 0;
   measuring: boolean = false;
 
-  constructor(config: RelayConfig, gro: boolean) {
-    const fd: i32 = udpBind("127.0.0.1", n32(0), n32(2));
+  /** Waits for what a turn sent to land: the game server's socket, the relay's loop and each client's socket. */
+  wait: WireWait;
+
+  constructor(config: RelayConfig, gro: boolean, retry: boolean) {
+    const fd: i32 = rigRelaySocket();
     this.port = netLocalPort(fd);
     const entropy: u8[] = new Array<u8>(QUIC_LISTENER_ENTROPY_SIZE);
     for (let k: i32 = 0; k < QUIC_LISTENER_ENTROPY_SIZE; k++) {
       entropy[k] = toU8(0x40 + k);
     }
-    this.relay = rigRelay(config, fd, entropy);
+    this.relay = rigRelayRetry(config, fd, entropy, retry);
     this.echo = new RigEcho(gro);
     this.clients = [];
+    this.wait = new WireWait();
+    this.wait.watch(this.echo.fd);
+    this.wait.watch(this.relay.loop);
   }
 
   /** One turn: the relay's step, signing with the test key, then the game server, then each client reads and acknowledges. Answers whether anything moved. */
@@ -444,11 +476,16 @@ export class Rig {
     return moved > 0;
   }
 
-  /** Turns until nothing moves for a few turns in a row, at most `limit`. */
+  /**
+   * Turns until nothing moves for a few turns in a row, at most `limit`. The
+   * first quiet turn waits for anything still on its way (`WireWait`): where
+   * loopback delivers later than the send (Darwin), a quiet turn is not yet a
+   * settled rig.
+   */
   settle(limit: i32): void {
     let quiet: i32 = 0;
     for (let k: i32 = 0; k < limit && quiet < 3; k++) {
-      quiet = this.turn() ? 0 : quiet + 1;
+      quiet = this.turn() || (quiet === 0 && this.wait.landed()) ? 0 : quiet + 1;
     }
   }
 
@@ -464,16 +501,27 @@ export class Rig {
     }
   }
 
-  /** A client numbered `index` from `host`, through its QUIC handshake with the relay. */
-  connect(index: i32, host: string): RigClient {
+  /**
+   * A client numbered `index` from `host` that sends its first Initial and
+   * nothing after it, as one whose source address is forged does: the relay's
+   * answer goes to the address, never to the sender, so the handshake goes no
+   * further and the address is never validated.
+   */
+  initial(index: i32, host: string): RigClient {
     const c = new RigClient(index, host, this.port);
     this.clients.push(c);
+    this.wait.watch(c.fd);
     const hello: u8[] = c.hello();
     c.c.before = hello;
-    const from: i32 = toI32(c.c.datagrams.length);
     c.transmit(qcInitial(c.c, qcCrypto(n64(0), hello), n32(1200)));
     this.settle(n32(50));
-    if (qcReadFlight(c.c, from, n32(0))) {
+    return c;
+  }
+
+  /** A client numbered `index` from `host`, through its QUIC handshake with the relay. */
+  connect(index: i32, host: string): RigClient {
+    const c: RigClient = this.initial(index, host);
+    if (qcReadFlight(c.c, n32(0), n32(0))) {
       c.transmit(qcFinishedPacket(c.c));
       c.connected = true;
       this.settle(n32(50));

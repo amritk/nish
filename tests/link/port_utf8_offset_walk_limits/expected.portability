@@ -1,0 +1,1 @@
+{"file":"tests/link/port_utf8_offset_walk_limits/main.ts","line":46,"column":6,"endLine":46,"endColumn":23,"severity":"portability","code":"NL8001","message":"`word.indexOf(\"l\")` counts UTF-8 bytes here, and UTF-16 units in TypeScript, and it is passed to `h2`, where it is passed to `h3`, where it is passed to `h4`, where it is passed to `h5`, where it is printed"}

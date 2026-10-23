@@ -55,17 +55,6 @@ WebAssembly targets, install Homebrew's LLVM instead, as
 Either way below installs the same prebuilt compiler; nothing is compiled
 during the install.
 
-**With npm.** This needs Node.js 22.18 or newer. The package is
-`@amritk/nish` and the command it installs is `nish`. The unscoped `nish`
-package on npm is an unrelated project, so do not install that one.
-
-```bash
-npm install -g @amritk/nish
-```
-
-Install it without `-g` (`npm install --save-dev @amritk/nish`) to pin the
-version per project in `package.json`, and run it as `npx nish`.
-
 **With the install script.** This needs neither Node nor npm, only `sh`,
 `curl` and `tar`:
 
@@ -79,9 +68,21 @@ new terminal. To upgrade later, run the same command again. Ending the
 command with `| sh -s -- --help` instead of `| sh` lists the script's other
 options: another directory, and uninstalling.
 
+**Or with npm.** This needs Node.js 22.18 or newer. The package and the
+command it installs are both `nish`:
+
+```bash
+npm install -g nish
+```
+
+Install it without `-g` (`npm install --save-dev nish`) to pin the
+version per project in `package.json`, and run it as `npx nish`. Releases up
+to 0.18.0 were published as `@amritk/nish`; if you installed that, uninstall
+it (`npm uninstall -g @amritk/nish`) and install `nish` instead.
+
 Nish is pre-alpha and changes between minor releases, so you may want to pin
-an exact version: `npm install -g @amritk/nish@0.18.0`, or end the install
-script's command with `| sh -s 0.18.0`. Read the
+an exact version: end the install script's command with `| sh -s 0.20.0`,
+or run `npm install -g nish@0.20.0`. Read the
 [changelog](../../../CHANGELOG.md) before you upgrade.
 
 ## 3. Check that it worked
@@ -92,7 +93,7 @@ nish --version
 ```
 
 The first command prints `nish` and a version number, for example
-`nish 0.18.0`. If `nish` is not found, the directory it was installed into is
+`nish 0.20.0`. If `nish` is not found, the directory it was installed into is
 not on your `PATH` yet. The second runs the C compiler `nish` will use, `$CC`
 if you set it and `clang` otherwise, and prints its LLVM version. If it is not
 found, `nish` cannot build a binary either.

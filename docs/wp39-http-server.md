@@ -1,7 +1,13 @@
 # WP39: The HTTP server — a TechEmpower entry, then a general-purpose server
 
-**Status: proposed.** Nothing here is built. The anchors below are at
-`ce9d394`.
+**Status: Part A in progress.** E1, E3, E4 and E5 are built. E1 is
+`tcpListenFlags`, `SO_REUSEPORT` on a TCP listener (#733). E3 is `JsonWriter`
+in `std/json.ts`. E4 is `httpDateWrite` in `std/net/http-fields.ts` and
+`HttpDate` in `std/net/http1-server.ts`. E5 is `bench/techempower/`, pinned by
+`tests/link/tfb_entry`, with its numbers in
+[BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext). E2
+(`TCP_NODELAY`) is flags 2 and 3 of `tcpListenFlags` (#770). E6 to E9 and Part B are not started. The
+anchors below are at `ce9d394`; §1 says where each row stands now.
 
 [WP34](wp34-hosting-cs.md) built a network stack for one program: cs's relay.
 That stack serves HTTP/1.1 with WebSocket, HTTP/2, HTTP/3 and WebTransport, and
@@ -32,12 +38,13 @@ names here, and this note says which of them each stage takes.
 
 | | Today | Proof |
 | --- | --- | --- |
-| Cores | **One.** `nish:net` is refused inside a `scope()` task or a parallel body (`reject_net_task`), and `tcpListen` has no `SO_REUSEPORT` flag (`udpBind` has one), so N processes cannot share a TCP port | [#478](https://github.com/amritk/nish/issues/478) |
+| Cores | **One per process.** `nish:net` is refused inside a `scope()` task or a parallel body (`reject_net_task`). `tcpListenFlags` flag 1 sets `SO_REUSEPORT` (E1, #733), so N processes can share a TCP port, but nothing in Nish starts them yet | [#478](https://github.com/amritk/nish/issues/478), `tests/link/net_tcp_reuseport_spread` |
 | HTTP/1.1 | Keep-alive, chunked bodies both ways and pipelining. A burst of pipelined responses leaves in one write (`Http1Server.next`, `flush`). A warmed slot allocates nothing per request, and a slot's connection is built on the first accept into it | `tests/link/net_loopback`, `tests/link/net_http1_server`; no third-party client yet |
 | HTTP/2 | Over TLS with ALPN `h2` only (`std/net/http2-tls.ts`); no cleartext h2c | `h2spec`, `curl --http2` |
 | HTTP/3 and WebTransport | `Http3Server` behind a `QuicListener`; WebTransport pinned to the draft Chrome negotiates | the runner's `http3` case, `curl --http3-only`, Chromium |
 | One handler for all three versions | **None.** Each carrier has its own event API, so a program that serves all three versions answers each one separately. `tests/link/net_interop_server` does exactly that (`app.ts`, `h2.ts`, `server.ts`) | — |
-| JSON | A reader only (`std/json.ts`'s `jsonField`) | `tests/link/std_json` |
+| JSON | A reader (`jsonField`) and a writer into a caller-owned `u8[]` (`JsonWriter`, E3), both in `std/json.ts` | `tests/link/std_json`, `tests/link/std_json_writer` |
+| TechEmpower `json` and `plaintext` | `bench/techempower/` (E5): one core, one `pollWait` loop on `Http1Server`, with `Server` and a cached `Date` (`HttpDate`, E4) | `tests/link/tfb_entry`; [BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext) |
 | Databases | **None.** No Postgres client; the TLS client role (N13) is unbuilt | — |
 | Crypto speed | ChaCha20-Poly1305 is portable and fast. AES-GCM is bitsliced (K3) and slow, yet it is what Chrome and curl list first on AES-capable machines, and the server takes the client's first suite (`chooseSuite`, `std/net/tls.ts`). No session tickets, so every connection pays a full handshake | WP34 K3, S1 |
 
@@ -114,7 +121,24 @@ that `Arena.used()` stays flat. It ships with:
 **Acceptance.** The verifier's rules pass locally. Requests per second at TFB's
 concurrency levels go into [BENCHMARKS.md](BENCHMARKS.md) beside a reference
 entry measured on the same machine in the same interleaved rounds, with the
-noise band, as CLAUDE.md's `Measured:` rules require.
+noise band, as the `Measured:` rules in `.claude/testing.md` require.
+
+**Built.** `bench/techempower/` holds the program (`main.ts`, `server.ts`),
+`nish.dockerfile`, `benchmark-config.json` (upstream's `benchmark_config.json`)
+and `run.sh`, unsubmitted (D1).
+There is no pass arena: NL2424 refuses `using a = arena()` around a serve,
+because `Http1Server` stores into the slot's parser and output, which outlive
+the pass. None is needed either, since a warmed pass allocates nothing, and
+`tests/link/tfb_entry` pins every server call over 200 requests to leave
+`Arena.used()` where it was instead. The
+reference entries are the HTTP twins (`bench/http-twins/`). With E2 in, the
+entry sets `TCP_NODELAY` by default, and `run.sh --nodelay-compare` measures it
+against the same build with the flag off: the flag is never slower outside the
+noise band and faster outside it at four levels, so it stays on
+([BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext)).
+
+**Follow-up.** Multi-core: one entry process per core on one `SO_REUSEPORT`
+port, through #719's prefork supervisor (`std/net/prefork.ts`) once it lands.
 
 ### E6. A Postgres client (L, std lane)
 
@@ -132,7 +156,8 @@ side. It covers:
   results for `int4` and `text`;
 - pipelining several queries before one Sync, which is what the strongest
   `query` and `update` entries do;
-- a pool of connections sized at start-up (N9's discipline);
+- a pool of connections whose size is a cap, a slot's connection built on its
+  first use rather than at start-up (N9's discipline);
 - refusing a malformed or oversized message with a defined error.
 
 Postgres over TLS needs N13, the client role of T1. TFB's database sits on a
@@ -174,7 +199,7 @@ closes.
 | **G2** | Server hardening: a deadline for a whole request head ([H1-1](security/http1.md)); a lingering close after a refusal (H1-2); HPACK's allocation per header block ([H2-1](security/http2.md)); a SETTINGS timeout and an idle timeout for HTTP/2 (H2-3); an idle timeout in the TLS carrier ([TLS-4](security/tls.md)); a session clock and a rate cap for WebTransport ([WT-2](security/webtransport.md)) | those findings | M |
 | **G3** | TLS resumption: NewSessionTicket and PSK resumption, without 0-RTT; `secp256r1` as a key-share group beside x25519; `record_size_limit` | WP34 T1 and T2 "Left" | M–L |
 | **G4** | Crypto speed, each part gated on its own measurement: AES-GCM and AES header protection as a runtime kernel on AES-NI with PCLMULQDQ, and on AArch64's AESE with PMULL, falling back to the bitsliced Nish (a new [WP38](wp38-simd.md) stage, on S1's route through `src/kernels.ts`, under WP38 §6's constant-time rules); a faster P-256, with 64-bit limbs or a fixed-base table | WP34 K3 and K5 "Left" | M each |
-| **G5** | QUIC: the runner's congestion cases; a congestion controller beyond NewReno (CUBIC, or BBR), if a measurement asks for one; ECN; the AEAD limits ([QUIC-6](security/quic.md)); detecting an optimistic ACK (QUIC-7); path MTU discovery (RFC 8899), since packets stay at 1,200 bytes today; following a peer's address change, which A1 records as its NAT-rebinding gap | WP34 Q3, Q4 and A1 "Left" | L |
+| **G5** | QUIC: the runner's congestion cases; a congestion controller beyond NewReno (CUBIC, or BBR), if a measurement asks for one; ECN; ~~the AEAD limits ([QUIC-6](security/quic.md)); detecting an optimistic ACK (QUIC-7)~~, closed by #784; path MTU discovery (RFC 8899), since packets stay at 1,200 bytes today; following a peer's address change, which A1 records as its NAT-rebinding gap | WP34 Q3, Q4 and A1 "Left" | L |
 | **G6** | QUIC on more than one core: E1's pre-fork shares a UDP port today, but the kernel picks a process from the peer's address, so a rebinding peer lands on another process. The process to route to is carried in the connection ID, and the packet is steered either by a `SO_ATTACH_REUSEPORT_EBPF` program or by forwarding between processes. Design note first | — | M–L |
 | **G7** | One handler for all three versions: a façade over `Http1Server`, `Http2TlsServer` and `Http3Server`, so that a program answers a request once whatever version carried it. It advertises `Alt-Svc` for HTTP/3 from the HTTP/1.1 and HTTP/2 responses, and adds cleartext HTTP/2 with prior knowledge (h2c), which is what `h2load` and a proxy's upstream speak. The façade must keep "nothing allocates per request". Design note first | — | M–L |
 | **G8** | HTTP/2 and HTTP/3 benchmarks: an `h2load` harness in `bench/`, numbers in [BENCHMARKS.md](BENCHMARKS.md). It runs after E1 and G4, or it measures one core and software AES | — | S–M |

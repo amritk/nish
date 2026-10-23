@@ -1,0 +1,43 @@
+{
+  "title": "X25519, P-256 and Ed25519",
+  "kernels": [
+    { "name": "x25519-base", "sizes": [32], "unit": "op/s" },
+    { "name": "x25519", "sizes": [32], "unit": "op/s" },
+    { "name": "p256-sign", "sizes": [64], "unit": "op/s" },
+    { "name": "p256-verify", "sizes": [64], "unit": "op/s" },
+    { "name": "ed25519-sign", "sizes": [64], "unit": "op/s" },
+    { "name": "ed25519-verify", "sizes": [64], "unit": "op/s" }
+  ],
+  "twins": {
+    "openssl": {
+      "portable": {
+        "env": { "OPENSSL_ia32cap": "~0x1000000000000000:~0x80120" },
+        "lacks": {
+          "x25519-base": "OpenSSL's X25519 of the base point runs the same C (fe51) code whatever the mask",
+          "ed25519-sign": "OpenSSL's Ed25519 runs the same C curve code whatever the mask; only its SHA-512 changes",
+          "ed25519-verify": "OpenSSL's Ed25519 runs the same C curve code whatever the mask; only its SHA-512 changes"
+        }
+      }
+    },
+    "go": { "portable": { "tags": ["purego"] } },
+    "rust": {
+      "portable": {
+        "rustflags": ["--cfg", "curve25519_dalek_backend=\"serial\"", "--cfg", "sha2_backend=\"soft\""],
+        "lacks": {
+          "x25519-base": "curve25519-dalek's base-point multiply is table code, the same whichever backend",
+          "x25519": "curve25519-dalek's Montgomery ladder is serial field code, the same whichever backend",
+          "p256-sign": "RustCrypto's p256 is pure Rust, so there is no assembly to switch off",
+          "p256-verify": "RustCrypto's p256 is pure Rust, so there is no assembly to switch off",
+          "ed25519-sign": "ed25519-dalek's signing multiplies the base point by table, the same whichever backend"
+        }
+      }
+    },
+    "node": {
+      "portable": "node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off"
+    }
+  },
+  "portableProof": ["x25519@32", "p256-verify@64"],
+  "portableProofFlags": ["bmi2", "adx"],
+  "portableMinRatio": { "openssl": 1.05, "rust": null },
+  "portableRounds": ["openssl"]
+}

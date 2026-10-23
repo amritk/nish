@@ -1,6 +1,6 @@
 {
-  "name": "@amritk/nish",
-  "version": "0.18.0",
+  "name": "nish",
+  "version": "0.19.0",
   "description": "Nish: an ahead-of-time compiler from a static subset of TypeScript to LLVM IR",
   "license": "MIT",
   "type": "module",
@@ -21,9 +21,8 @@
     "!scripts/arrowify.mjs",
     "!scripts/fetch-seed.sh",
     "!scripts/check-filenames.mjs",
-    "!scripts/check-pr-body.mjs",
-    "!scripts/check-pr-body.test.mjs",
     "!scripts/changelog-gen.test.mjs",
+    "!scripts/sync-main.mjs",
     "std",
     "README.md",
     "LICENSE",
@@ -51,7 +50,8 @@
     "lint:dead": "knip --no-progress",
     "format": "biome format --write .",
     "prepublishOnly": "npm run check && npm test",
-    "changelog": "node scripts/changelog-gen.mjs"
+    "changelog": "node scripts/changelog-gen.mjs",
+    "sync-main": "node scripts/sync-main.mjs"
   },
   "engines": {
     "node": ">=22.18.0"
@@ -77,10 +77,10 @@
     "nish"
   ],
   "optionalDependencies": {
-    "@amritk/nish-x86_64-linux": "0.18.0",
-    "@amritk/nish-aarch64-linux": "0.18.0",
-    "@amritk/nish-aarch64-darwin": "0.18.0",
-    "@amritk/nish-x86_64-darwin": "0.18.0"
+    "@amritk/nish-x86_64-linux": "0.19.0",
+    "@amritk/nish-aarch64-linux": "0.19.0",
+    "@amritk/nish-aarch64-darwin": "0.19.0",
+    "@amritk/nish-x86_64-darwin": "0.19.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",

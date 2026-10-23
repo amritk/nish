@@ -34,18 +34,16 @@
  *
  * **What each golden holds.**
  *
- *   - `goldens/checked.txt` — `--emit-checked` for every positive program of
- *     the corpus outside `src/`: 262 programs, whole dumps, one after
- *     another. This is where per-construct checker coverage lives, so it is
- *     stored as text a failure can be read as a diff.
- *   - `goldens/checked-self.txt` — the same dump for the 57 programs of
- *     `src/`, stored **deduplicated by module**. A `src/` program is loaded
- *     whole, so each of the 57 entries re-dumps every module it imports, and
- *     the raw text is 19.9 MB of which 1.0 MB is distinct. The entry index
- *     records each program's module load order and each module's section is
- *     written once. Nothing is measured out: the check still runs all 57
- *     programs and compares every byte they print, and a module whose dump
- *     differs between two entries is a hard error rather than a silent pick.
+ *   - `goldens/checked/<module>.txt` — `--emit-checked` for every program of
+ *     the corpus, `src/` included, stored **one file per module**: a program
+ *     re-dumps every module it imports, so the dump of `std/json.ts` is
+ *     written once rather than under each of the programs that load it. A
+ *     corpus program's own file opens with its `entry` line, the modules it
+ *     loaded in load order, or its `reject` line, the wording it was refused
+ *     with. Nothing is measured out: the check still runs every program and
+ *     compares every byte it prints, and a module whose dump differs between
+ *     two programs is a hard error rather than a silent pick. See
+ *     `produceChecked` for why the layout is this one.
  *   - `goldens/types.txt`, `goldens/diagnostics.txt`, `goldens/symbols.txt` —
  *     the stdout of the three driver programs the dying oracles run
  *     (`tests/self/types.ts` and friends), which is the whole of what those
@@ -114,26 +112,76 @@ const dumpLines = (dump) =>
     .filter((line) => line.length > 0)
     .map((line) => line.replace(/^(const VERSION: string = )"[^"]*"/, '$1"<version>"'))
 
-/** `tests/cases/add.ts --number-mode f64`: the program as its record names it. */
-const programLabel = (named, flags) => (flags.length > 0 ? `${named} ${flags.join(" ")}` : named)
-
 const header = (what) => [
   `# ${what}`,
   "# Generated from stage1 by `npm run test:update` (or `node tests/self/goldens.js --update`).",
   "# WP19 gate G2.4: the coverage that dies with stage0, written down. Do not edit by hand.",
 ]
 
+/** The directory under `GOLDENS` that holds the `--emit-checked` goldens, one file per module. */
+const CHECKED_DIR = "checked"
+
+/** `src/checker.ts` → `checked/src/checker.ts.txt`: a module's golden sits at its own path. */
+const moduleGolden = (module) => `${CHECKED_DIR}/${module}.txt`
+
+/** A body line that carries a source position: `  local 3503:9 owner: ...`. */
+const POSITIONED = /^(\s+(?:local|callee|sharedWrite:) )(\d+):(\d+)/
+
 /**
- * `--emit-checked` over the whole corpus, in two files: the construct corpus
- * as whole dumps, and `src/` deduplicated by module.
+ * A module's dump with every body's line numbers counted from that body's
+ * first position, so `  local 3503:9` becomes `  local +0:9` and the next
+ * line down `  local +4:14`. A top-level line (`function`, `struct`, `const`)
+ * starts a body; the indented lines after it belong to it.
  *
- * The split is a measurement rather than a taste. The corpus outside `src/`
- * dumps 272 KiB over 262 programs and every byte of it is a construct's
- * layout, signature or folded constant — the material a failure has to be
- * readable as. `src/` dumps 19.9 MB over 57 programs and only 1.0 MB of that
- * is distinct, because every entry re-dumps its imports: storing it whole
- * would multiply one edit to one module by the 57 entries that import it, and
- * a golden nobody can read the diff of is a hash with extra bytes.
+ * The dump prints absolute lines, and an absolute line moves whenever
+ * anything above it does: adding one line near the top of `src/checker.ts`
+ * rewrote every later `local` and `callee` of the module, so a one-function
+ * fix moved a thousand golden lines and two unrelated changes to one file
+ * conflicted all the way down. Counted from the body, a line moves only when
+ * its own function changes. What is let go is the body's offset in the file;
+ * the column, and every position relative to the body's others, are still
+ * pinned. `unsafe` records stay absolute: they sit at module level, with no
+ * body to count from, and a program that opts out of a check is rare enough
+ * that their churn is not what conflicts.
+ */
+const relativeLines = (lines) => {
+  let anchor = null
+  return lines.map((line) => {
+    if (!line.startsWith(" ")) {
+      anchor = null
+      return line
+    }
+    const at = POSITIONED.exec(line)
+    if (at === null) {
+      return line
+    }
+    const row = Number(at[2])
+    if (anchor === null) {
+      anchor = row
+    }
+    const offset = row - anchor
+    return `${at[1]}${offset < 0 ? offset : `+${offset}`}:${at[3]}${line.slice(at[0].length)}`
+  })
+}
+
+/**
+ * `--emit-checked` over the whole corpus, one golden file per module.
+ *
+ * The layout is set by how the goldens are changed rather than by how they are
+ * read. Nearly every pull request that touches `src/`, `std/` or adds a case
+ * moves them, so two open pull requests each regenerate them, and the second
+ * to land conflicts with the first. With every module in its own file, git
+ * merges two changes to two different modules by itself, and only a change to
+ * the same module is left to regenerate. Two things in the older single-file
+ * layout conflicted whatever two pull requests changed, and are gone: a
+ * running count of programs and dump lines in the header, and whole dumps per
+ * program, which wrote one change to a `std/` module out again under every
+ * case that imported it.
+ *
+ * Deduplication is a measurement, not an assumption: every module dumps the
+ * same text under every program that loads it, whatever its `--number-mode`
+ * (1,175 programs over 1,198 distinct modules when this was written), and the
+ * generator checks that on every run rather than picking one.
  */
 const produceChecked = (seed) => {
   const dumper = link(seed, path.join("src", "dump-checked.ts"), "dump_checked")
@@ -141,41 +189,27 @@ const produceChecked = (seed) => {
     return { error: dumper.error }
   }
 
-  const outside = []
-  const entries = []
+  const entries = new Map()
   const bodies = new Map()
   const bodyOwner = new Map()
-  let outsidePrograms = 0
-  let outsideLines = 0
-  let selfPrograms = 0
-  let selfLines = 0
+  let dumped = 0
+  let dumpLineCount = 0
 
   for (const file of programs()) {
     const named = path.relative(root, file).split(path.sep).join("/")
     const flags = checkerArgs(file)
-    const isSelf = named.startsWith("src/")
+    const label = flags.length > 0 ? ` ${flags.join(" ")}` : ""
     const result = dumper.run([...flags, named])
     if (result.status !== 0) {
       // A program the checker refuses has no dump, and the reason it gives is
       // a diagnostic wording nothing else here would pin. It belongs in the
       // record for the same reason the dump does.
-      const record = `reject ${programLabel(named, flags)}: ${firstLine(result.stderr)}`
-      if (isSelf) {
-        entries.push(record)
-      } else {
-        outside.push(record)
-      }
+      entries.set(named, `reject${label}: ${firstLine(result.stderr)}`)
       continue
     }
-    const lines = dumpLines(result.stdout)
-    if (!isSelf) {
-      outsidePrograms++
-      outsideLines += lines.length
-      outside.push(`program ${programLabel(named, flags)}`, ...lines)
-      continue
-    }
-    selfPrograms++
-    selfLines += lines.length
+    const lines = relativeLines(dumpLines(result.stdout))
+    dumped++
+    dumpLineCount += lines.length
     const order = []
     let module = null
     let body = []
@@ -193,7 +227,7 @@ const produceChecked = (seed) => {
       }
       if (seen !== text) {
         // Deduplication is only sound while a module dumps the same under
-        // every entry that loads it. It does today; the day it stops, the
+        // every program that loads it. It does today; the day it stops, the
         // golden has to grow a dimension rather than quietly pick a winner.
         return `module ${module} dumps differently under ${bodyOwner.get(module)} and ${named}`
       }
@@ -214,45 +248,29 @@ const produceChecked = (seed) => {
     if (conflict !== undefined) {
       return { error: conflict }
     }
-    entries.push(`entry ${programLabel(named, flags)}: ${order.join(" ")}`)
+    entries.set(named, `entry${label}: ${order.join(" ")}`)
   }
 
-  const selfText = [
-    ...header("`--emit-checked` for the 57 programs of `src/`, deduplicated by module."),
-    "#",
-    "# An `entry` line is one program and the modules it loaded, in load order; the",
-    "# entry module is the one the line is named for. A `module` section is that",
-    "# module's dump, written once for the whole corpus because it is the same text",
-    "# under every entry that loads it — which the generator checks rather than",
-    "# assumes. The comparison still runs all 57 programs and reads every byte.",
-    `# ${selfPrograms} programs, ${selfLines} dump lines live, ${bodies.size} distinct modules.`,
-    ...entries,
-  ]
-  for (const [module, text] of bodies) {
-    selfText.push(`module ${module}`)
-    if (text.length > 0) {
-      selfText.push(text)
+  const files = new Map()
+  for (const module of [...new Set([...entries.keys(), ...bodies.keys()])].sort()) {
+    const text = [
+      `# stage1's \`--emit-checked\` of ${module}, each body's lines counted from its first position.`,
+      "# Generated by `node tests/self/goldens.js --update` (or `npm run test:update`). Do not edit by hand.",
+    ]
+    const entry = entries.get(module)
+    if (entry !== undefined) {
+      text.push(entry)
     }
+    const body = bodies.get(module)
+    if (body !== undefined && body.length > 0) {
+      text.push(body)
+    }
+    files.set(moduleGolden(module), `${text.join("\n")}\n`)
   }
-
-  const outsideText = [
-    ...header("`--emit-checked` for every positive program of the corpus outside `src/`."),
-    "#",
-    "# One `program` record per program, holding its whole dump: every struct's",
-    "# layout with field indices and byte offsets, every signature, every folded",
-    "# constant, every local and callee of every body, the attribute pass's facts,",
-    "# and the order they come out in. A `reject` record is a program the checker",
-    "# refuses, and pins the wording it refuses it with.",
-    `# ${outsidePrograms} programs, ${outsideLines} dump lines.`,
-    ...outside,
-  ]
-
   return {
-    files: new Map([
-      ["checked.txt", `${outsideText.join("\n")}\n`],
-      ["checked-self.txt", `${selfText.join("\n")}\n`],
-    ]),
-    note: `${outsidePrograms + selfPrograms} programs, ${outsideLines + selfLines} dump lines`,
+    files,
+    dir: CHECKED_DIR,
+    note: `${dumped} programs, ${dumpLineCount} dump lines, ${bodies.size} distinct modules`,
   }
 }
 
@@ -351,6 +369,33 @@ const diff = (want, got, limit) => {
 
 const goldenPath = (file) => path.join(GOLDENS, file)
 
+/** How many failing files show their differing lines without `--verbose`. */
+const FILES_SHOWN = 5
+
+/** Every file under `dir` in `GOLDENS`, as the `/`-separated path a golden names it by. */
+const filesUnder = (dir) => {
+  const at = goldenPath(dir)
+  if (!fs.existsSync(at)) {
+    return []
+  }
+  return fs
+    .readdirSync(at, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => path.relative(GOLDENS, path.join(entry.parentPath, entry.name)).split(path.sep).join("/"))
+}
+
+/** Removes the directories under `dir` that `--update` left empty, deepest first. */
+const removeEmptyDirs = (dir) => {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      removeEmptyDirs(path.join(dir, entry.name))
+    }
+  }
+  if (fs.readdirSync(dir).length === 0) {
+    fs.rmdirSync(dir)
+  }
+}
+
 /**
  * The seed this file's rule allows: `given` (a `--seed` value), then
  * `NISH_BOOTSTRAP`, then `build/nish`, and no fourth answer. Exported because
@@ -409,7 +454,21 @@ const main = (argv) => {
   fs.mkdirSync(GOLDENS, { recursive: true })
   let failed = 0
   let bytes = 0
+  let agreed = 0
+  let shownFiles = 0
   const summary = []
+  const fail = (file, report) => {
+    failed++
+    process.stdout.write(`  FAIL ${file}${report.length > 0 ? `: ${report[0]}` : ""}\n`)
+    // A change to a checker rule can move the dump of hundreds of modules at
+    // once; the first few files are what tells a reader what moved.
+    if (shownFiles < FILES_SHOWN || verbose) {
+      for (const line of report.slice(1)) {
+        process.stdout.write(`${line}\n`)
+      }
+      shownFiles++
+    }
+  }
   for (const golden of wanted) {
     const produced = golden.produce(seed)
     if (produced.error !== undefined) {
@@ -422,50 +481,69 @@ const main = (argv) => {
       bytes += Buffer.byteLength(text)
       if (update) {
         const before = fs.existsSync(at) ? fs.readFileSync(at, "utf8") : null
-        fs.writeFileSync(at, text)
-        let verb = before === null ? "written" : "updated"
         if (before === text) {
-          verb = "unchanged"
+          agreed++
+          continue
         }
-        summary.push(`${file}: ${verb}`)
+        fs.mkdirSync(path.dirname(at), { recursive: true })
+        fs.writeFileSync(at, text)
+        summary.push(`${file}: ${before === null ? "written" : "updated"}`)
         continue
       }
       if (!fs.existsSync(at)) {
-        process.stdout.write(`  FAIL ${file} is missing (run with --update to write it)\n`)
-        failed++
+        fail(file, ["missing (run with --update to write it)"])
         continue
       }
       const want = fs.readFileSync(at, "utf8")
       if (want === text) {
-        summary.push(`${file}: ${golden.name} agrees`)
+        agreed++
         continue
       }
       const d = diff(want, text, limit)
-      process.stdout.write(
-        `  FAIL ${file}: ${d.total} lines differ from what stage1 prints (${golden.oracle}'s coverage)\n`
-      )
-      for (const line of d.out) {
-        process.stdout.write(`${line}\n`)
+      const more =
+        d.shown < d.total ? [`  ... and ${d.total - d.shown} more differing lines (--verbose for all)`] : []
+      fail(file, [
+        `${d.total} lines differ from what stage1 prints (${golden.oracle}'s coverage)`,
+        ...d.out,
+        ...more,
+      ])
+    }
+    // A golden kept as a directory owns every file in it, so a file no program
+    // produces any more is a module that left the corpus: `--update` removes
+    // it, and the check fails on it rather than keep comparing nothing.
+    if (produced.dir !== undefined) {
+      for (const file of filesUnder(produced.dir)) {
+        if (produced.files.has(file)) {
+          continue
+        }
+        if (update) {
+          fs.rmSync(goldenPath(file))
+          summary.push(`${file}: removed`)
+        } else {
+          fail(file, ["no program loads this module any more (run with --update to remove it)"])
+        }
       }
-      if (d.shown < d.total) {
-        process.stdout.write(`  ... and ${d.total - d.shown} more differing lines (--verbose for all)\n`)
+      if (update) {
+        removeEmptyDirs(goldenPath(produced.dir))
       }
-      failed++
     }
     if (produced.note !== undefined && verbose) {
       process.stdout.write(`  ${golden.name}: ${produced.note}\n`)
     }
   }
+  if (shownFiles < failed && !verbose) {
+    process.stdout.write(
+      `  (differences shown for the first ${FILES_SHOWN} failing files; --verbose for all)\n`
+    )
+  }
   // Under `--update` these are the only evidence that a regeneration did or
   // did not move anything, which is the question the person running it has.
-  if (verbose) {
-    for (const line of summary) {
-      process.stdout.write(`  ${line}\n`)
-    }
+  for (const line of summary) {
+    process.stdout.write(`  ${line}\n`)
   }
 
   process.stdout.write(
-    `${summary.length} goldens ${update ? "written" : "agree"}, ${failed} failed, ${(bytes / 1024).toFixed(0)} KiB of goldens (seed ${seed.label})\n`
+    `${agreed + summary.length} golden files ${update ? `checked, ${summary.length} changed` : "agree"}, ${failed} failed, ${(bytes / 1024).toFixed(0)} KiB of goldens (seed ${seed.label})\n`
   )
   return failed === 0 ? 0 : 1
 }

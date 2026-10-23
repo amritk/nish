@@ -218,7 +218,7 @@ own source until the seed compiles it, which is the next release.
    writes a missing golden), an `llvm-as` pass, a native round trip (`.out`,
    using `tests/driver.c`'s `test()` or an `export const main`), at least one
    `reject_*` case, and `.args` for flags. A new positive case moves the
-   generated `tests/self/goldens/checked.txt`, which is rewritten with
+   generated `tests/self/goldens/checked/<module>.txt` files, rewritten with
    `node tests/self/goldens.js --update` and never by hand; a case the last
    release compiles differently, or refuses, needs its `DECLARED` entry in
    `tests/nish-cmp.js`. A new builtin touches more files than this list
@@ -231,8 +231,11 @@ own source until the seed compiles it, which is the next release.
     itself builds, so the entry is written in the same pull request as the
     construct rather than a release later. Teach the construct on its
     [user guide](guide/index.md) page, in the same pull request
-    ([README.md](README.md#writing-a-guide-page) has the page rules). The
-    changelog entry is the
+    ([README.md](README.md#writing-a-guide-page) has the page rules). Any
+    other change a user of Nish sees — a builtin or `nish:` module, a
+    `std/` module, a CLI flag or exit code, an install step, a diagnostic a
+    guide page shows — updates its guide page in the same pull request too,
+    as [CLAUDE.md](../CLAUDE.md) states. The changelog entry is the
     commit message, its conventional subject and its body: `scripts/changelog-gen.mjs`
     writes `CHANGELOG.md` from the commits when a release is cut, so the
     file is never edited by hand.

@@ -70,4 +70,19 @@ PASS  every connection ended, nothing is lent from any pool
 PASS  a server of 1,024 slots shares one set of stream pools across them
 PASS  and with no connection, the stream pools have made no buffer nor bitmap
 PASS  nor the data and section pools of its HTTP/3 connections
-http3 server: 72 passed, 0 failed, 0 skipped
+PASS  a server of 1,024 slots has built none of them
+PASS  and a slot never built holds nothing, nor counts as busy
+PASS  the first client builds one slot, and takes it
+PASS  the second builds the next
+PASS  the first, closed, frees its slot and keeps it built
+PASS  a third takes the slot released, building nothing
+PASS  asking for a slot not built builds it and those before it, and takes none
+PASS  and the connection bound up front is the one the slot keeps
+PASS  a server of two slots takes two clients and refuses none
+PASS  the third, with both busy, is refused and counted, and builds nothing
+PASS  the first Initial into a slot never built keeps the slot in the arena
+PASS  closed after its GOAWAY, its slot is free and still built
+PASS  a second client takes that slot
+PASS  a client taking the slot released keeps 0 bytes in the arena: the re-accept builds nothing
+PASS  while one past the high-water mark builds the next slot and keeps it
+http3 server: 87 passed, 0 failed, 0 skipped

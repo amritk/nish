@@ -1,15 +1,11 @@
-// What counts as tool attribution, in one list with two readers.
+// What counts as tool attribution.
 //
 // `no-attribution.mjs` beside this file refuses a tool call that would publish
-// one of these into git or GitHub. That cannot see a footer a platform appends
-// to a pull request body *after* the call that created it -- the session links
-// that reached #167, #168, #169, #171 and #179 all got in that way (#176) -- so
-// `scripts/check-pr-body.mjs` reads the body CI sees and fails the `PR body`
-// check on the same list. The hook ends in `process.exit(main())` and cannot be
-// imported, which is why the list lives here rather than in it.
+// one of these into git or GitHub. The hook ends in `process.exit(main())` and
+// cannot be imported, which is why the list lives here rather than in it.
 //
-// A pull request that trips this is fixed by editing its body, never by
-// loosening a pattern: the patterns are the rule in CLAUDE.md, not a guess at it.
+// The patterns are the rule in CLAUDE.md, not a guess at it: a call that trips
+// one is fixed by dropping the attribution, never by loosening a pattern.
 
 /** Each entry is [what to call it in the refusal, how to spot it]. */
 export const BANNED = [

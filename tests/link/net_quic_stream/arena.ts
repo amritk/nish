@@ -8,7 +8,6 @@
 // a connection does after its handshake.
 import { Secret, secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
-import { quicPushAck } from "nish/net/quic-frame";
 import { quicEncodeTransportParameters } from "nish/net/quic-conn-params";
 import { QUIC_CONN_DATAGRAM_SIZE, QUIC_STATE_CONNECTED, QuicConnection } from "nish/net/quic";
 import { tlsSignEcdsaP256 } from "nish/net/tls";
@@ -25,6 +24,7 @@ import {
   qcFinishedPacket,
   qcHello,
   qcInitial,
+  qcPushAppAck,
   qcReadFlight,
   qcReceive,
   qcShort,
@@ -108,7 +108,7 @@ export const nqMeteredDrain = (conn: QuicConnection, c: QcClient, m: NqMeter): i
 const echoRound = (conn: QuicConnection, c: QcClient, offset: i64, m: NqMeter): void => {
   const ack: u8[] = [];
   if (c.largestApp >= n64(0)) {
-    quicPushAck(ack, [n64(0), c.largestApp], n32(1), n64(0));
+    qcPushAppAck(ack, c);
   }
   const packet: u8[] = qcShort(c, cat([qcStream(n64(0), offset, nqText(n32(100)), false), ack]));
   nqMeteredReceive(conn, packet, c.now, m);

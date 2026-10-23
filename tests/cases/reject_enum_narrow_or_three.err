@@ -1,0 +1,1 @@
+This `===` is always false: `k` is `Kind.A | Kind.B | Kind.C` and `Kind.D` is `Kind.D`, which share no member

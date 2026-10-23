@@ -277,7 +277,7 @@ boolean deadlocked the release that was meant to carry the asset.
 0.4.0 because its rows first had to run on their own hardware. That run settled
 Mach-O's `stage3 == stage2` (#114): `bootstrap.sh` had linked the two stages at
 different paths, so ld64 gave them different `LC_UUID`s. The macOS `test` row
-stays out for six named checks, none a compiler bug
+stays out for four named checks, none a compiler bug
 ([wp10-ci.md](wp10-ci.md#ci-matrix)).
 
 #### What the seeded run proves, and what it does not
@@ -306,7 +306,7 @@ and `INSTALL.md` rewritten. **Closed:**
 - `release.yml` builds each binary from the seed on its own architecture, so
   every shipped binary passed `--verify` and a smoke test on its hardware.
   v0.4.0 was the first release to attach all four.
-- The package is `@amritk/nish`, the command `nish`
+- The package is `nish`, the command `nish`
   ([wp12-release.md](wp12-release.md#the-npm-name)). `bin/nish` is a launcher,
   and the compiler arrives as one `@amritk/nish-<asset>` optional dependency
   per platform, so nothing is compiled on a user's machine.

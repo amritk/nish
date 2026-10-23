@@ -63,6 +63,7 @@ entry:
   %self.addr = alloca %struct.Weights*, align 8
   %out.addr = alloca %struct.nish_array*, align 8
   %s.addr = alloca %struct.ThreadScope*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   store %struct.Weights* %this, %struct.Weights** %self.addr, align 8
   %0 = call i8* @nish_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.nish_array*
@@ -102,6 +103,7 @@ bounds.ok:
   %20 = bitcast i8* %19 to i32*
   %21 = getelementptr inbounds i32, i32* %20, i64 0
   %22 = load i32, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %22
 }
 
@@ -205,6 +207,7 @@ define internal noundef i32 @scaledParts(%struct.nish_array* noundef nonnull ali
 entry:
   %out.addr = alloca %struct.nish_array*, align 8
   %s.addr = alloca %struct.ThreadScope*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i8* @nish_alloc_struct(i64 24)
   %1 = bitcast i8* %0 to %struct.nish_array*
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
@@ -269,6 +272,7 @@ bounds.ok.1:
   br i1 %36, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %35
 
 ovf.fail:
@@ -280,6 +284,7 @@ define internal noundef i32 @weighted(%struct.Weights* noundef readonly align 8 
 entry:
   %out.addr = alloca %struct.nish_array*, align 8
   %s.addr = alloca %struct.ThreadScope*, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = icmp ne %struct.Weights* %w, null
   br i1 %0, label %if.then, label %if.end
 
@@ -321,9 +326,11 @@ bounds.ok:
   %20 = bitcast i8* %19 to i32*
   %21 = getelementptr inbounds i32, i32* %20, i64 0
   %22 = load i32, i32* %21, align 4, !alias.scope !4, !noalias !3, !tbaa !14
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %22
 
 if.end:
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 -1
 }
 

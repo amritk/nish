@@ -255,7 +255,28 @@ export const main = (): i32 => {
 - **Not `dst`.** In `parallelMapInto`, a body may not read an array that could
   be the one being written. A `const` table bound to its own array is fine
   beside a `dst` that is a `const` bound to its own array, as in
-  `const table = [1, 2]` and `const dst = new Array<i32>(n)`.
+  `const table = [1, 2]` and `const dst = new Array<i32>(n)`. Any capture is
+  fine beside a `dst` that is a `const` bound to its own array and that
+  nothing was given before the call: not stored in a field or a list, not
+  passed to a function, not bound to a second name, not built into an object
+  and not written by an earlier `parallelMapInto`. Indexing it, reading its
+  `length`, calling its methods and walking it with `for...of` give it to no
+  one. After the call you may hand `dst` on, except inside a loop around the
+  call that `dst` was declared outside of, where the next pass's call comes
+  after it; a loop that declares its own `dst` each pass is fine.
+
+```ts nish:ok
+import { parallelMap, parallelMapInto } from "nish/threads";
+
+export const main = (): i32 => {
+  const src: i32[] = [3, 14, 15, 92];
+  const weights = parallelMap(src, (x) => x % 13);
+  const dst = new Array<i32>(src.length);
+  parallelMapInto(src, dst, (x) => weights[x % 4] + 1); // nothing had `dst` yet
+  const kept = dst; // after the call: fine
+  return kept[0];
+};
+```
 
 Each of these is refused because every thread reads the same value at once:
 a write to it, or a `let` that changes under the threads, would make the
@@ -367,6 +388,16 @@ export const main = (): i32 => {
 - **A scope never leaves its block.** It is only ever the receiver of
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.
+- **Spawning costs no memory.** Every task has run before the function, the
+  loop pass or the
+  [`using a = arena()`](../language/memory.md#freeing-a-batch-yourself-using-a--arena)
+  block around the scope gives back what it made, so an array you build and
+  hand to a task is freed with the rest, unless the task answers it or you
+  keep it. Inside an arena block, declare the scope after the arena —
+  `using a = arena(), s = scope()`, or a `using s = scope()` of its own
+  further in — so it joins before the release; a scope declared before the
+  arena, or before a second `arena()` of the same statement, joins after a
+  release and may not be handed what the block made.
 
 ### Tasks without a destination, and arrow tasks
 

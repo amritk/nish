@@ -103,6 +103,35 @@ drives that path with.
    edit to `docs/wp14-selfhost.md`, and its commit says so, because the commit
    message is the changelog entry.
 
+## Soundness rules that review keeps missing
+
+Each of these reached a hole past review rounds that had read the rule and
+found it sound.
+
+**A rule that lets a value outlive its scope pins what it leaves out.** An
+escape-analysis rule that lets a value travel with a container says which
+element types it covers, and pins the excluded ones with a negative golden run
+after `churn()`: #520's second review round reproduced a use-after-free through
+`string[][]` that every reading review had missed. Narrowing such a rule
+regenerates every golden the wider rule moved, not only the new cases — #520's
+`perf_alloc_quiet.ll` kept the wider rule's release and turned CI red.
+
+**A checker rule covers every way in, not only the one its tests write.**
+Three shapes recur:
+- A walk over what a function calls covers `new` too: a constructor is a call.
+  #562 accepted a lock taken in a constructor reached by `new`. #566 accepted a
+  constructor that sent on a channel, and native and Node printed different
+  answers.
+- A rule about a `using` binding covers every declarator of the statement.
+  `using a = m.lock(), b = n.lock()` slipped past #562's no-second-lock rule
+  and hung.
+- A rule about what may reach an object also follows `this` out of its
+  constructor. In #566, `h.l = this` handed the parent a way to send inside the
+  scope's block.
+
+Each shape gets its own negative case. When a review finds one of them, probe
+its siblings in the same round.
+
 ## Nish-0, the subset `src/` is written in
 
 No generics, closures, nested functions or function values; no `type` aliases,
@@ -219,6 +248,34 @@ predates #423's capabilities audit, so its `CAP_NONE` row came later.
 `src/` may not call the builtin until the seed declares it (the rolling
 freeze), which is why CLI-7 and CLI-9 wait a release after #425.
 
+## Changing the runtime
+
+Four pairings CI checks and a local run on one machine does not:
+
+- **A new runtime unit is paired in `scripts/build.sh` and `src/run-cache.ts`
+  in one commit**: `build.sh`'s `halves` and `run-cache.ts`'s `runtimeUnits()`
+  together. In `halves` alone, the cache entry lacks the unit's object, so
+  `build.sh --runtime-from` exits 2 on every cached `nish --link` and
+  `nish run`. In `runtimeUnits()` alone, moving the objects into the entry
+  fails, the entry never gets its key, and the runtime cache is silently off.
+  #594 added `runtime/runtime-aes.c` and left the pairing to #598.
+- **A declaration added to `src/runtime.ts` moves `docs/IR_COOKBOOK.md`'s
+  runtime prelude.** The `<!-- cookbook:begin runtime-prelude -->` block is the
+  generated `--runtime-decls` output: regenerate it with
+  `docs/cookbook/regen.sh` in the same change, or CI's `regen.sh --check`
+  fails. #598's five `nish_aes_*` declarations moved it.
+- **A lowering skipped for wasm32 also covers the freestanding
+  `--profile wasm` route.** `scripts/build.sh --profile wasm` links IR that was
+  compiled for the host, so a wasm32 guard in the compiler never sees it. On
+  #598's first head, such a link of AES IR referenced `nish_aes_*` without
+  `runtime-aes.c`.
+- **A positive check gated on `/proc/cpuinfo` has a CI step that greps its
+  PASS line.** A runner that masks the instructions takes the check's other arm
+  and stays green, so the line that says the path ran is required in
+  `.github/workflows/ci.yml`, where the instructions are known to exist. #598's
+  "calls all four kernels" check was gated that way and required nowhere until
+  review.
+
 ## How `src/` is tested
 
 Every tool below builds its compiler from `src/` with the seed
@@ -302,10 +359,11 @@ something surprising.**
 ### The goldens
 
 ```bash
-node tests/self/goldens.js                  # verify all of them, ~13 s
+node tests/self/goldens.js                  # verify all of them, ~2.5 min
 node tests/self/goldens.js checked --verbose
 npm run test:update                         # regenerate, with the .ll goldens
 node tests/self/goldens.js --update         # regenerate these alone
+npm run sync-main                           # merge origin/main, regenerate, stage
 ```
 
 They were written by stage1 while stage0 still agreed with it byte for byte,
@@ -317,9 +375,29 @@ reference was stage0's *checker* — the rewrite needs the static type of every
 expression and `src/` has no rewriter — so it cannot be rewritten at all, only
 checked for freshness (`node tests/differential/goldens.js --fresh`, and wp19
 §6 item 6 for what the freeze does not save). A corpus program with no frozen
-rewrite is named in a register rather than silently skipped. `src/`'s dump is
-stored deduplicated by module — 19.9 MB of live text, 1.0 MB of distinct text
-— and the comparison still reads every byte of it.
+rewrite is named in a register rather than silently skipped. The checked dump
+is stored one file per module under `checked/`, each module once however many
+programs load it (the generator fails if two programs dump one module
+differently), and each body's positions counted from its first, so that two
+pull requests collide only when they change the same module.
+
+**`checked/` is regenerated, never edited or merged by hand.** It is stage1's
+`--emit-checked` dump of the corpus and of `src/`, so any change to `src/`, to
+`std/` or to a positive `tests/cases/*.ts` moves the files of the modules it
+touches, and a plan stage that changes `src/` or `std/` owns them (#532
+regenerated them outside its declared files). `npm run sync-main` fetches,
+merges `origin/main`, drops every conflicted golden under
+`tests/self/goldens/`, runs both `--update`s and stages what they wrote; it
+stops on any other conflict, the frozen `tests/differential/goldens/` store's
+included, for `-- --continue` once it is resolved, and never commits, so read
+the staged diff before `git commit --no-edit`. When another `src/` or `std/`
+pull request lands first, sync even if git reports no conflict, and merge only
+once CI is green on that head: the goldens and the `.ll` the two changes share
+move without a textual conflict (#549 after #547). Where the merge queue is on
+for `main`, CI's `merge_group` run catches that pair by testing each pull
+request on top of the ones queued ahead of it. A new positive `tests/cases/*`
+is registered with `node tests/differential/goldens.js --update` in the same
+commit, or `differential: the frozen rewrites` fails (#548).
 
 ## Habits that have paid off
 

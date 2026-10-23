@@ -81,8 +81,19 @@ PASS  a slot never built holds nothing: no descriptor, H1_ERROR to next, done to
 PASS  closing it and rearming it change nothing
 PASS  an accept with no listener answers its error and builds nothing
 PASS  a never-built slot's connection is slot 0's, built once and holding nothing
+PASS  TLS: a pool of three builds no slot before its first accept
+PASS  TLS: a pool built as it accepts takes slots 0, 1, 2 in order, building each slot's connection and TLS state on its first accept
+PASS  TLS: with size slots busy the next is shed with TLS_TCP_POOL_FULL and nothing more is built
+PASS  TLS: a closed slot is taken again, its connection kept rather than built anew
+PASS  TLS: the first accept into each slot moves Arena.mark(); closing one and accepting into it again leaves it where it was
+PASS  TLS: and every slot is free once closed
+PASS  TLS: a pool of 16,384 reports its size with no slot built
+PASS  TLS: a slot never built holds nothing: no descriptor, H1_ERROR to next, done to the rest
+PASS  TLS: closing it, expiring the pool and an accept with no listener build nothing
+PASS  TLS: a never-built slot's connection is one no slot holds, made once, with no ALPN and building no slot
 PASS  a client offering http/1.1 completes the handshake, the server's signature and Finished verified
 PASS  ALPN chose http/1.1
+PASS  TLS: while slot 0 is open, a slot never built reads as a free one: not held, no descriptor, no ALPN, not refused, not slot 0's connection
 PASS  a GET over TLS
 PASS  a chunked POST echoed over TLS
 PASS  fifty exchanges over TLS on the warmed slot
@@ -171,4 +182,4 @@ PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input ca
 PASS  an aborted connection is done at once
 PASS  a body event is a window onto the parser's buffer
 PASS  a body cut by the end of the stream ends the connection
-http1 server: 173 passed, 0 failed, 0 skipped
+http1 server: 184 passed, 0 failed, 0 skipped

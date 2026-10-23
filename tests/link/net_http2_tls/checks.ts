@@ -23,7 +23,7 @@ import { TLS_CONTENT_ALERT, TLS_CONTENT_APPLICATION_DATA, TLS_CONTENT_HANDSHAKE,
 import { TLS_RECORD_DONE } from "nish/net/tls/record-server";
 import { TLS_GROUP_X25519, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, TLS_VERSION_13 } from "nish/net/tls/codec";
 import { H2_FLAG_END_STREAM } from "nish/net/http2-frame";
-import { H2_ERROR, Http2Config, Http2Pools } from "nish/net/http2";
+import { H2_ERROR, Http2Config, Http2Connection, Http2Pools } from "nish/net/http2";
 import { netClose, tcpListen } from "nish:net";
 import { H2_ALPN, Http2TlsServer } from "nish/net/http2-tls";
 import { Suite } from "nish/testing";
@@ -246,10 +246,23 @@ export const tlsChecks = (): i32 => {
   t.ok("and only then does the server close its side", h.alerts.join(",") === "1 0" && lb.awaitClosed(toI32(3)));
 
   // --- 4. The pool ---------------------------------------------------------------------------------
+  const first: Http2Connection = lb.server.connections[0];
+  t.ok(
+    `one client at a time has used slot 0 alone, and slot 1's connection is not made (${lb.server.connections.length} made)`,
+    lb.server.connections.length === 1 && lb.acceptSlot === 0
+  );
   const c = new H2Client(lb);
   const d = new H2Client(lb);
   const e = new H2Client(lb);
-  t.ok("two clients fill the pool", c.handshake([H2_ALPN]) && d.handshake([H2_ALPN]));
+  const beforeC: i32 = lb.accepted;
+  t.ok("a client accepted again into slot 0", c.handshake([H2_ALPN]) && lb.acceptSlot === 0 && lb.accepted === beforeC + 1);
+  t.ok(`moves the arena not at all (${lb.acceptGrowth} bytes)`, lb.acceptGrowth === toI64(0) && lb.server.connections[0] === first);
+  const beforeD: i32 = lb.accepted;
+  t.ok("and a second fills the pool, accepted into slot 1", d.handshake([H2_ALPN]) && lb.acceptSlot === 1 && lb.accepted === beforeD + 1);
+  t.ok(
+    `whose connection the first accept into it makes (${lb.acceptGrowth !== toI64(0) ? "some" : "no"} bytes, ${lb.server.connections.length} made)`,
+    lb.acceptGrowth !== toI64(0) && lb.server.connections.length === 2
+  );
   e.index = lb.connect();
   t.ok("a third is accepted and shed", lb.awaitEnd(e.index) && lb.refused === 1);
   lb.server.date.pin(noon + toI64(60000));
@@ -299,6 +312,17 @@ export const tlsChecks = (): i32 => {
   t.ok(
     `a server of ${big.size()} slots and no connection has made no frame buffer (${big.pools.made()})`,
     big.size() === toI32(1024) && big.pools.made() === 0
+  );
+  t.ok(`and has made one slot's connection, slot 0's (${big.connections.length})`, big.connections.length === 1);
+  t.ok(
+    "a slot never accepted into is free: no descriptor, H2_ERROR to next, done to flush",
+    !big.holds(toI32(700)) && big.fd(toI32(700)) === -1 && big.next(toI32(700)) === H2_ERROR && (big.flush(toI32(700)) & TLS_RECORD_DONE) !== 0
+  );
+  big.rest(toI32(700));
+  big.close(toI32(700));
+  t.ok(
+    "and names slot 0's connection, making none for itself",
+    big.connection(toI32(700)) === big.connection(ZERO) && big.connections.length === 1 && big.busy() === 0
   );
   netClose(listener);
   return t.done();

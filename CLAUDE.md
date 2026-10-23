@@ -1,301 +1,126 @@
 # Project rules
 
-**New session? Read [`.claude/orientation.md`](.claude/orientation.md) first** —
-it is the ninety-second map of the repository, the compiler, the seed that
-builds it, and the commands. If the work touches the compiler — `src/` —
-read [`.claude/selfhost.md`](.claude/selfhost.md) straight after it.
+**New session? Read [`.claude/orientation.md`](.claude/orientation.md) first**
+— the map of the repository, the compiler, the seed and the commands. Then read
+only the guide your task touches; the rules there are authoritative:
 
-Writing a *program* in Nish rather than working on the compiler? That is
-[`docs/AI.md`](docs/AI.md) — the whole language as rules in one pass, every
-example compiled by `npm test`; to learn it page by page, the user guide,
-[`docs/guide/index.md`](docs/guide/index.md).
-
-Developer guidelines live in the `.claude/` directory:
-
-- **orientation.md** — start here: what the repo is, where the code is, what to run
-- **selfhost.md** — the compiler in `src/`: Nish-0, the seed, the module map, how it is tested, the files a new builtin touches, and the lines `tests/run.js`'s mutation checks need byte-identical
-- **node.md** — Node runtime, npm scripts, the LLVM toolchain, Biome
-- **linting.md** — What the linters enforce and why: kebab-case files, camelCase names, the Biome rule set, knip and the format hook
-- **typescript.md** — TypeScript style: the Nish rules for every program in the repo, the compiler included, and the static-friendly rules for the JavaScript tooling
-- **comments.md** — Comment guidelines and JSDoc
-- **testing.md** — The golden-test harness, what every construct ships with
-- **architecture.md** — The pipeline, the rules that shape every change, where to read next
-- **licensing.md** — Third-party code: what counts as a copy, the notice it keeps, the licences allowed
-
-> **Agents: read `orientation.md` first, and each other file in `.claude/`
-> before writing code its subject covers** — `selfhost.md` before touching
-> `src/`, `typescript.md` and `comments.md` before writing TypeScript,
-> `testing.md` before adding or changing a test, `node.md` and `linting.md`
-> before touching scripts, tooling or lint configuration, `licensing.md` before
-> copying code in, `architecture.md` before adding a construct. The rules there
-> are authoritative — if generated code violates them, that is a mistake
-> regardless of whether the user points it out. Reading all of them up front
-> costs some 40k tokens that ride along on every later call of the session, most
-> of them never consulted.
+| Before you… | Read |
+| --- | --- |
+| touch `src/` (the compiler) | [`.claude/selfhost.md`](.claude/selfhost.md) |
+| write TypeScript anywhere | [`.claude/typescript.md`](.claude/typescript.md), [`.claude/comments.md`](.claude/comments.md) |
+| add or change a test | [`.claude/testing.md`](.claude/testing.md) |
+| touch scripts, tooling or lint config | [`.claude/node.md`](.claude/node.md), [`.claude/linting.md`](.claude/linting.md) |
+| add a construct | [`.claude/architecture.md`](.claude/architecture.md) |
+| copy or port code in | [`.claude/licensing.md`](.claude/licensing.md) |
+| work in `std/crypto`, `std/net` or `docs/security/` | [`docs/security/README.md`](docs/security/README.md) |
+| write a *program* in Nish | [`docs/AI.md`](docs/AI.md), then [`docs/guide/`](docs/guide/index.md) |
 
 ## Definition of done
 
-`npm run check` (an ambient `tsc --noEmit` over `src/`, `std/` and
-`tests/nish/` against `runtime/nish.d.ts`) and an undegraded `npm test` green.
-A new construct ships with a golden `.ll`, an `llvm-as` pass, a native round
-trip with expected stdout, at least one negative test, its `docs/LANGUAGE.md`
-rule, cookbook entry and user-guide page, and a conventional commit whose
-subject and body are its changelog entry (`CHANGELOG.md` is generated from
-them; see below) — see
-`docs/MASTER_PLAN.md` §7 and the checklist in `docs/ARCHITECTURE.md`. Show the
-exact LLVM IR for every TypeScript snippet a PR adds to the tests. Code copied,
-ported or adapted from elsewhere keeps its upstream notice and is listed in
-`THIRD_PARTY_NOTICES.md` ([`.claude/licensing.md`](.claude/licensing.md)).
+`npm run check` and an undegraded `npm test` green (read the skip count, not
+just the exit code). A new construct ships with a golden `.ll`, an `llvm-as`
+pass, a native round trip with expected stdout, at least one negative test, its
+`docs/LANGUAGE.md` rule, cookbook entry and user-guide page — the checklist is
+`docs/ARCHITECTURE.md` → "How to add a construct". Show the exact LLVM IR for
+every TypeScript snippet a PR adds to the tests. Copied code keeps its upstream
+notice and is listed in `THIRD_PARTY_NOTICES.md`.
 
 **The user guide moves with the language.** A change a user of Nish sees — a
 construct, a builtin or `nish:` module, a `std/` module, a CLI flag or exit
-code, an install step, a diagnostic a guide page shows — updates the
-`docs/guide/` page describing it in the same PR: a new topic gets a page and a
-route in `scalar.config.json`, a removed or renamed feature leaves the guide.
-Internal changes (the IR, `src/` structure, CI) do not touch it. Page rules:
+code, an install step, a diagnostic a guide page shows — updates its
+`docs/guide/` page in the same PR (a new topic gets a page and a route in
+`scalar.config.json`). Internal changes do not. Page rules:
 [`docs/README.md`](docs/README.md#writing-a-guide-page).
 
 **Read a check's exit status, never its piped tail.** `npm run lint | tail`
-reports success when lint fails: #557's shadowed variable passed a local lint
-read that way and then turned CI red. Run the command bare, or check `$?` (or
-`PIPESTATUS`) before calling it clean.
+reports success when lint fails. Run it bare, or check `$?` / `PIPESTATUS`.
 
-**A rule that lets a value outlive its scope pins what it leaves out.** An
-escape-analysis rule that lets a value travel with a container says which
-element types it covers, and pins the excluded ones with a negative golden run
-after `churn()`: #520's second review round reproduced a use-after-free through
-`string[][]` that every reading review had missed. Narrowing such a rule
-regenerates every golden the wider rule moved, not only the new cases — #520's
-`perf_alloc_quiet.ll` kept the wider rule's release and turned CI red.
-
-**A checker rule covers every way in, not only the one its tests write.**
-Three shapes recur. Each reached a soundness hole past review rounds that had
-read the rule and found it sound.
-- A walk over what a function calls covers `new` too: a constructor is a call.
-  #562 accepted a lock taken in a constructor reached by `new`. #566 accepted a
-  constructor that sent on a channel, and native and Node printed different
-  answers.
-- A rule about a `using` binding covers every declarator of the statement.
-  `using a = m.lock(), b = n.lock()` slipped past #562's no-second-lock rule
-  and hung.
-- A rule about what may reach an object also follows `this` out of its
-  constructor. In #566, `h.l = this` handed the parent a way to send inside the
-  scope's block.
-
-Each shape gets its own negative case. When a review finds one of them, probe
-its siblings in the same round.
-
-**There is one compiler, and a construct is written once, in `src/`.** The
-TypeScript implementation that used to sit beside it, stage0, was deleted in
-WP19 R6 (`docs/wp19-stage0-retirement.md`). `src/` is built by the last
-released `nish` — the seed, which `scripts/fetch-seed.sh` puts in `build/seed/`
-— so `src/` may not *use* a new construct in its own source until the next
-release: the rolling freeze, which CI's `bootstrap` job checks by building
-`src/` with that release. `fetch-seed.sh` keeps whatever seed is already there,
-so a session that may hold an older one runs `bash scripts/fetch-seed.sh
---force` before building: a 0.16.0 seed against `main`'s 0.18.0 made `fuzz
---stage1` disagree on a clean `main` (#541, #540). `src/` is also linked whole
-into the web compiler's wasi module, and the performance ratchet allows no new
-NL9007 in it, so a change to `src/` runs `node tests/run.js wasi` and `node
-tests/run.js performance` before it is pushed: #546 called builtins refused on
-wasm32 and #550 added an unproven index, both green on every local check and
-red in CI. The `web:` checks that link `src/` as `nish.wasm` live in the
-`wasi` section, not under the `web` filter, and the section skips without a
-WASI sysroot (`WASI_SYSROOT=/usr` where the wasi-libc package is installed),
-so read its skip line.
+**There is one compiler, in `src/`, built by the seed** (the last release, in
+`build/seed/`). `src/` may not *use* a new construct or builtin until the next
+release ships it — the rolling freeze, checked by CI's `bootstrap` job. Run
+`bash scripts/fetch-seed.sh --force` if the seed may be stale. A change to
+`src/` also runs `node tests/run.js wasi` and `node tests/run.js performance`
+before it is pushed (read the `wasi` skip line; it needs
+`WASI_SYSROOT=/usr`).
 
 **Generated goldens are regenerated, never edited or merged by hand.**
-`tests/self/goldens/checked.txt` and `checked-self.txt` are stage1's
-`--emit-checked` dump of the golden cases and of `src/`, so any change to
-`src/`, to `std/` or to a positive `tests/cases/*.ts` moves them, and every
-`src/` commit on `main` conflicts with every open pull request that touches
-`src/`. A plan stage that changes `src/` or `std/` therefore owns these goldens
-too (#532 regenerated `checked.txt` outside its declared files). Rewrite
-them only with `node tests/self/goldens.js --update` (add
-`--seed build/seed/bin/nish` when `build/nish` is not built) and read the diff
-before committing it. On a conflict, merge `main` in and regenerate rather
-than resolving lines ([`AGENTS.md`](AGENTS.md#shipping-a-change-what-a-pull-request-must-be-and-who-merges-it),
-[`.claude/selfhost.md`](.claude/selfhost.md)). When another `src/` or `std/`
-pull request lands first, merge `main` and regenerate even if git reports no
-conflict, and merge only once CI is green on that head: the goldens and the
-`.ll` the two changes share move without a textual conflict (#549 after #547).
-A new positive `tests/cases/*` is registered with `node
-tests/differential/goldens.js --update` in the same commit, or `differential:
-the frozen rewrites` fails (#548).
-
-**A new runtime unit is paired in `scripts/build.sh` and `src/run-cache.ts` in
-one commit.** It goes into `build.sh`'s `halves` and `run-cache.ts`'s
-`runtimeUnits()` together. In `halves` alone, the cache entry lacks the
-unit's object, so `build.sh --runtime-from` exits 2 on every cached `nish
---link` and `nish run`. In `runtimeUnits()` alone, moving the objects into the
-entry fails, the entry never gets its key, and the runtime cache is silently
-off. #594 added
-`runtime/runtime-aes.c` and left the pairing to #598, which landed both in
-one commit.
-
-**A declaration added to `src/runtime.ts` moves `docs/IR_COOKBOOK.md`'s
-runtime prelude.** The `<!-- cookbook:begin runtime-prelude -->` block is the
-generated `--runtime-decls` output: regenerate it with `docs/cookbook/regen.sh`
-in the same change, or CI's `regen.sh --check` fails. #598's five `nish_aes_*`
-declarations moved it.
-
-**A lowering skipped for wasm32 also covers the freestanding `--profile wasm`
-route.** `scripts/build.sh --profile wasm` links IR that was compiled for the
-host, so a wasm32 guard in the compiler never sees it. On #598's first head,
-such a link of AES IR referenced `nish_aes_*` without `runtime-aes.c`; review
-round 1 found it.
-
-**A positive check gated on `/proc/cpuinfo` has a CI step that greps its PASS
-line.** A runner that masks the instructions takes the check's other arm and
-stays green, so the line that says the path ran is required in
-`.github/workflows/ci.yml`, where the instructions are known to exist. #598's
-"calls all four kernels" check was gated that way and required nowhere until
-review round 1.
+`tests/self/goldens/checked/` (one file per module) moves with any change to
+`src/`, `std/` or a positive `tests/cases/*.ts`: rewrite it with
+`node tests/self/goldens.js --update` (`--seed build/seed/bin/nish` without
+`build/nish`) and read the diff. To take in `main`, run `npm run sync-main`: it
+merges, regenerates the goldens and stages them without committing. Sync after
+any `src/` or `std/` change lands on `main`, even with no textual conflict. A
+new positive `tests/cases/*` is registered with
+`node tests/differential/goldens.js --update` in the same commit. Details:
+`.claude/selfhost.md` → "The goldens".
 
 **Moving where a fact lives moves every pointer to it in the same PR.** Grep
-the tree for the old location before the PR goes up: the docs, `.claude/`,
-`CLAUDE.md` and source comments. #636 moved the runtime ceilings from
-`tests/run.js` into `tests/runtime-budgets.js`, and the pointers left in its
-docs and in six `runtime/*.c` headers took two more review rounds to find.
+the docs, `.claude/`, `CLAUDE.md` and source comments for the old location.
 
 ## Spending tokens
 
-Every model call re-reads the session's whole context, so what a session costs
-is its context size times its calls. Past sessions spent most of their budget
-re-reading 400k–780k contexts, on wakes that changed nothing.
-`.claude/settings.json` sets `autoCompactWindow` to 200k so a session compacts
-long before the 1M window; the rules below keep the calls down.
+Every call re-reads the whole context, so cost is context size × calls.
 
-- **One deliverable per session.** When a session that has already shipped
-  something is asked for a new, separate one, say so and offer a short handoff
-  for a fresh session rather than building it on the old context. A plan's later
-  stages go to fresh sessions, not to the one that built stage 1.
-- **The full `npm test` runs twice per pull request**: before opening it, and
-  after merging `main` just before it merges. It takes 40–70 minutes. In between,
-  run `node tests/run.js <section>` for what changed, plus `npm run check` and
-  `npm run lint`; CI runs the whole suite on every push.
-- **Wait for a long run without polling.** Commit first, so the stop hook does
-  not wake you about uncommitted work. Start the run once, in the background,
-  with its output in a file, and end the turn: you are woken when it exits. No
-  `sleep` or `until` loops, no re-armed monitors, no scheduled check-ins, and
-  never a second run while one is going — they share `build/`.
-- **Merge `main` when the pull request conflicts, or just before it merges** —
-  not every time `main` moves. Each merge means regenerating the goldens and
-  another full run.
-- **Wide reads go to a subagent.** "Where is X handled", a long log, a file of
-  thousands of lines: hand it to an `Explore` agent with `model: "sonnet"` and
-  keep only its answer. Read files by range (`sed -n`, `grep -n`), and do not
-  re-read one already in context.
+- **One deliverable per session.** Asked for a new, separate one after
+  shipping, offer a short handoff for a fresh session instead.
+- **The full `npm test` (40–70 min) runs twice per pull request**: before
+  opening it, and after the last merge of `main`. In between, run
+  `node tests/run.js <section>`, `npm run check` and `npm run lint`.
+- **Wait for a long run without polling.** Commit first, start it once in the
+  background with output to a file, and end the turn. No `sleep` loops, no
+  scheduled check-ins, never two runs at once (they share `build/`).
+- **Merge `main` only on a conflict or just before merging.**
+- **Wide reads go to a subagent** (`Explore`, `model: "sonnet"`). Read files
+  by range and never re-read one already in context.
 
 ## Security
 
-Vulnerabilities are reported privately, as [`SECURITY.md`](SECURITY.md) says,
-and each audited area keeps its record under
-[`docs/security/`](docs/security/README.md). A record states the commit its
-`file:line` anchors are at; a row rewritten after that base names the commit
-its own anchors are at, rather than moving them silently (#529, CG-5).
-A record's Tests list names every check it cites by its exact `check(...)`
-string, templated names as templates, so a grep from the record finds the
-test; grep each one against `tests/run.js` before pushing (#557, rounds 2 and
-4).
-
-**Secret material in `std/crypto` is a `Secret` and is wiped.** `nish:secret`
-(docs/LANGUAGE.md, "Secrets") is the primitive: a function that holds a
-private key, a secret scalar or another secret intermediate takes and gives
-the key as a `Secret<T>`, computes on it inside `expose`, and `wipe`s every
-intermediate before it returns — a volatile store `tests/run.js` pins under
-`-O2` ("nish:secret: the wipe survives opt -O2"). What a wipe cannot reach (a
-scalar in a register, an immutable string) is recorded in its area's record,
-as ECC-2 and X509-7 do. `std/` may use `nish:secret` now; `src/` only from the
-release that ships it (the rolling freeze).
-
-**A cache entry's `key`, written last, is its only completeness signal.** A
-hit trusts the stored key alone, equal byte for byte to the computed one; a
-missing or mismatched key is a miss and the entry is rebuilt. Files removed by
-hand from an entry whose key is intact are out of scope for the run cache and
-the runtime cache alike (CLI-5, CLI-11), so a review need not raise them:
-#557's reviewers did in all five rounds, and each was refuted.
+Report vulnerabilities privately ([`SECURITY.md`](SECURITY.md)). **Secret
+material in `std/crypto` is a `Secret` and is wiped**: a function holding a
+private key or secret intermediate takes and gives it as `Secret<T>`
+(`nish:secret`), computes inside `expose`, and `wipe`s every intermediate
+before it returns — a volatile store `tests/run.js` pins under `-O2`
+("nish:secret: the wipe survives opt -O2"). What a wipe cannot reach is
+recorded in its area's record.
+Record format and review scope: [`docs/security/README.md`](docs/security/README.md#writing-a-record).
 
 ## Git & PR Guidelines
 
-NEVER include Claude session links, tracking IDs, model names, or platform
-attributions in commits, code, or PR text. Keep all PR descriptions strictly
-focused on the code changes. A cloud session can have a footer with a session
-link appended to a pull request's body after you write it, so read the body
-back once the pull request is open and delete any such footer: `pr-body.yml`
-fails the pull request until you do.
+NEVER include session links, tracking IDs, model names or platform
+attributions in commits, code or PR text.
 
-Before starting on an issue, search the open pull requests for it, and put
-`Fixes #N` in the first push: two parallel runs both fixed #524 (#534 and
-#536), and one had to be thrown away.
+- Before starting on an issue, search open PRs for it; put `Fixes #N` in the
+  first push.
+- **A PR goes up finished and you squash-merge it yourself** once CI is green
+  on the current head, nothing conflicts, and no human requests changes or
+  holds an open thread. Until then, watch it and fix what is red. A PR that
+  conflicts with `main` gets no CI at all — check mergeability first.
+- **Never merge the Release PR** (`chore(release): <version>` on
+  `release/next`): merging it publishes to npm.
+- The five conditions in full:
+  [`AGENTS.md`](AGENTS.md#shipping-a-change-what-a-pull-request-must-be-and-who-merges-it).
 
-**A pull request goes up finished, and you merge it yourself.** Fully tested
-(`npm run check` and an **undegraded** `npm test` — read the skip count, not
-just the exit code) and clear of conflicts with `main` before you open it. Once
-CI is green on the *current* head, no conflict remains, and no human is
-requesting changes or holding an unresolved thread, **squash-merge it** rather
-than waiting to be asked. Until then, do not stop and do not ask: watch the
-pull request, fix the red check, resolve the conflict, answer the review, and
-merge when it gets there.
-
-The one exception is the **Release PR** — `chore(release): <version>` on
-`release/next`. Merging it tags and publishes to npm, so it stays a human's
-decision however green it is. Never merge it.
-
-[`AGENTS.md`](AGENTS.md#shipping-a-change-what-a-pull-request-must-be-and-who-merges-it)
-states the five conditions in full.
-
-**A pull request that conflicts with `main` gets no `pull_request` CI.** When
-a push shows no runs, check mergeability before anything else: #594's
-`a7cfdb7` and `52a50f6` never ran CI because `docs/security/README.md`
-conflicted, and CI started only once `main` was merged in.
-
-**Commit messages are the changelog.** `scripts/changelog-gen.mjs` builds each
-release from the commits it contains, so the subject is the line a reader sees
-in `CHANGELOG.md` and in the release notes, and the body is that entry's prose
-in `changelog/<version>.json` — the record the website renders. Write the body
-for someone reading the release notes, not only for the reviewer:
+**Commit messages are the changelog** (`scripts/changelog-gen.mjs`): the
+subject is the `CHANGELOG.md` line, the body its prose in the release notes.
 
 ```
 type(scope): imperative subject
 
-The explanation, in prose and in Markdown. What changed, and why this
-way rather than another.
+What changed, and why this way, for a reader of the release notes.
 
 Measured: 1.58x on an element loop
 Refs: docs/IR_COOKBOOK.md#arrays
 Tests: tests/cases/arr_alias_domains
 ```
 
-- **type** is one of `feat` `fix` `perf` `refactor` `docs` `test` `build` `ci`
-  `chore`, and decides both the heading and the version bump: `feat` moves the
-  minor, everything else the patch.
-- **`type!`** or a `BREAKING CHANGE:` trailer marks a break. Before 1.0 that
-  moves the minor, not the major. **The project stays on 0.x until its owner
-  says otherwise**: do not propose, plan towards or cut 1.0.0, and do not add a
-  `Release-As:` trailer. The stability rule at the head of `docs/LANGUAGE.md`
-  says what a break in the language is, now and after 1.0.
-- **scope** is the part of the compiler — `checker`, `codegen`, `runtime`,
-  `self`, `cli`, `interop` — and is what the website filters on.
-- **`Measured:`** carries a number, because this project's claims are measured.
-  It states the figures themselves: a trailer that points at the pull request
-  body loses them, because the body is not the changelog. Time a loop whose
-  input changes on every iteration and whose output is folded into a printed
-  checksum, or the optimiser may compute the answer once and time nothing.
-  State the noise band too — the baseline timed against a byte-identical copy
-  of itself in the same interleaved rounds — and read every delta against it:
-  "faster", or "none faster", is claimed only outside that band (#538).
-  Copy a figure from where the repository records it (the comment beside a
-  ceiling in `tests/runtime-budgets.js`, the benchmark's own output) on the head being
-  merged, not from the pull request body. #566's entry carried 609 / 1,424
-  bytes from an earlier head, while `tests/run.js` recorded 597 / 1,403.
-  `Refs:` and `Tests:` link the rule and the golden that pins it.
-- **`Release-Note:`** replaces the body in public notes, for when the body is
-  about the review rather than about the change.
-
-Only conventional subjects become release entries. A subject that is not one
-is skipped and named on stderr, so a change worth reading about has to say what
-it was — which is why `pr-title.yml` checks the pull request title, the subject
-a squash merge lands. Work-in-progress commits behind a merge therefore cost
-nothing; `--include-unconventional` files them all under "Uncategorised" when a
-release really needs the raw history.
+- **type**: `feat` (minor bump) or `fix` `perf` `refactor` `docs` `test`
+  `build` `ci` `chore` (patch). **scope**: `checker`, `codegen`, `runtime`,
+  `self`, `cli`, `interop`.
+- `type!` or `BREAKING CHANGE:` marks a break, which moves the minor: **the
+  project stays on 0.x** — never propose or cut 1.0.0, never add
+  `Release-As:`.
+- `Measured:` states the figures and their noise band
+  (`.claude/testing.md` → "A `Measured:` trailer"). `Release-Note:` replaces
+  the body in public notes.
+- Only conventional subjects become entries; `pr-title.yml` checks the PR
+  title, which a squash merge lands.

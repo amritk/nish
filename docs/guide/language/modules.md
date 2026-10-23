@@ -45,6 +45,12 @@ Give the compiler the file with `main` and it finds the rest by following the
 imports: `nish run main.ts` prints `25`, and `nish main.ts --link app` builds
 one executable from both files.
 
+A generic function or class imported from another file works as one declared
+in yours, and what it answers needs no annotation. If `box.ts` exports
+`box = <T>(value: T): Box<T> => new Box<T>(value)`, then `const b = box(7)` in
+`main.ts` is a `Box<i32>`, with `b.get()` and `b.value` to hand, even though
+`main.ts` never writes `Box<i32>`.
+
 A declaration without `export` is private to its file, and importing it is an
 error that tells you to add `export`. Modules have no top-level code that
 runs, so two modules may import each other.
@@ -76,7 +82,9 @@ Four more rules come from compiling the whole program at once:
 else, generic classes and interfaces included, can be renamed with `as`.
 - **An exported function cannot be named after a C library function** such as
   `write`, `read`, `free`, `exit`, `strlen`, `sin` or `abs`, nor take a name that
-  begins with `_`, `napi_` or `node_api_`. An exported function keeps its name in the
+  begins with `_`, `napi_` or `node_api_`. That includes every function C's
+  `<math.h>` and `<complex.h>` declare, in each precision: `hypot`, `nan`,
+  `tgamma`, `erff`, `conj` and the like. An exported function keeps its name in the
   compiled program, and the runtime and your own `Math` calls reach the C
   library's function of that name to print, read files, allocate memory and
   compute, so they would reach yours instead. The same holds when you build
@@ -103,7 +111,7 @@ local name:
 | Module | What it has |
 | --- | --- |
 | `nish:fs` | reading and writing files and directories: `readFileSync`, `writeFileSync`, `readdirSync`, … |
-| `nish:process` | `exit`, `argv`, `getenv`, `spawnSync`, `platform`, `arch`, … |
+| `nish:process` | `exit`, `argv`, `getenv`, `spawnSync`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `platform`, `arch`, … |
 | `nish:io` | `write` and `writeError` (stdout and stderr without a newline), `panic` |
 | `nish:net` | TCP and UDP sockets and a readiness loop ([Networking](../using-nish/networking.md)) |
 | `nish:secret` | the `Secret<T>` wrapper for keys and other secret values |

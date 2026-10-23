@@ -1,7 +1,25 @@
 # WP42: A multi-core server from pre-forked processes
 
-**Status: proposed.** Nothing here is built. The anchors below are at
-`2f5963f`.
+**Status: the `prefork` stage is built** (`std/net/prefork.ts`,
+`examples/prefork-server.ts`, `tests/link/net_prefork*`, and the
+`bench/http1-server.ts` `BENCH_CORES` path with its tables in
+`bench/README.md`). The anchors below are at `2f5963f`. Where the build
+differs from this note:
+
+- `preforkWorkers(args)` and `preforkWith(args, config)` take `process.argv`
+  from the caller: a `std/` module compiled on its own has no `main`, and
+  `process.argv` needs one. `preforkArgs(args)` answers the arguments without
+  the worker flag.
+- The flag is the last argument, `--nish-prefork-worker=<index>`, and only a
+  last argument of exactly that form counts.
+- The supervisor runs `/proc/self/exe` on Linux, `argv[0]` elsewhere (§2.3).
+- It answers `PREFORK_SPAWN_FAILED` (-2) when a worker cannot be started,
+  after stopping the ones already running, rather than panicking with
+  workers left behind, and when it cannot set up its signal handling, before
+  any spawn. A bad `PreforkConfig` panics before any spawn.
+- A second `SIGTERM` or `SIGINT` during the grace period sends `SIGKILL` at
+  once.
+- A `NISH_WORKERS` of anything but ASCII digits is ignored; it has no cap.
 
 A Nish server today runs on one core. [WP39](wp39-http-server.md) E1 named
 the way out, `SO_REUSEPORT` on TCP, and left its second half, the process that
@@ -139,12 +157,12 @@ import { preforkWorkers } from "nish/net/prefork"
 // In the parent, preforkWorkers spawns the workers and supervises them, and
 // returns only when they have all exited. In a worker it returns that
 // worker's index at once.
-const worker = preforkWorkers()
+const worker = preforkWorkers(process.argv)
 const listener = tcpListenFlags("0.0.0.0", 8080, 1024, 1)
 // … the single-core server, unchanged …
 ```
 
-`preforkWorkers()` decides which process it is in from its argv: the
+`preforkWorkers(process.argv)` decides which process it is in from its argv: the
 supervisor spawns each worker as `argv[0]` with the worker's index appended
 as a flag. N12's `spawn` takes an argv only, and the child inherits the
 parent's whole environment (`posix_spawnp` is passed `environ`,
@@ -211,7 +229,7 @@ handed to its siblings; moving them needs `net.ipv4.tcp_migrate_req`
 **Darwin** accepts `SO_REUSEPORT` and lets several sockets bind the port, but
 does not spread connections between them: one socket takes them all. Prefork
 on Darwin therefore runs, and every worker binds, but one worker serves.
-`preforkWorkers()` defaults to one worker there, so the default does not spawn
+`preforkWorkers` defaults to one worker there, so the default does not spawn
 idle processes; `NISH_WORKERS` still sets more, for a program that wants the
 supervisor's restart and shutdown rather than the spread. The link test for
 spread runs on Linux only.

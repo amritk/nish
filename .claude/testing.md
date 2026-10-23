@@ -157,7 +157,11 @@ PR adding a construct is not finished without all of them:
 4. `.args` for any flag the case depends on.
 5. Its `docs/LANGUAGE.md` rule, citing the case by name, a cookbook entry
    (`docs/cookbook/regen.sh`), and the user-guide page that teaches it
-   (`docs/README.md` → "Writing a guide page").
+   (`docs/README.md` → "Writing a guide page"). The guide rule is not
+   limited to constructs: any other change a user of Nish sees — a builtin
+   or `nish:` module, a `std/` module, a CLI flag or exit code, an install
+   step, a diagnostic a guide page shows — updates its guide page in the
+   same PR too, as [`CLAUDE.md`](../CLAUDE.md) states.
 6. One implementation, in `src/`. There is no second compiler to compare it
    with, so the golden and the native round trip are the proof, and
    `tests/nish-cmp.js` — the last release against this tree — reports every
@@ -239,6 +243,24 @@ file and per code. Two checks read it:
 
 Both are counted from `--json` by `code` rather than from the report, for the
 reason the next section gives: the report stops at 20.
+
+### A `Measured:` trailer
+
+A commit's `Measured:` trailer is the changelog's figure, so it states the
+figures themselves: a trailer that points at the pull request body loses them,
+because the body is not the changelog.
+
+- Time a loop whose input changes on every iteration and whose output is
+  folded into a printed checksum, or the optimiser may compute the answer once
+  and time nothing (one P-256 measurement came out twenty times too fast).
+- State the noise band — the baseline timed against a byte-identical copy of
+  itself in the same interleaved rounds — and read every delta against it:
+  "faster", or "none faster", is claimed only outside that band (#538).
+- Copy a figure from where the repository records it (the comment beside a
+  ceiling in `tests/runtime-budgets.js`, the benchmark's own output) on the
+  head being merged, not from the pull request body. #566's entry carried
+  609 / 1,424 bytes from an earlier head, while `tests/run.js` recorded
+  597 / 1,403.
 
 ## Testing a Nish program in Nish
 
@@ -462,11 +484,19 @@ oracles that compared stage1 with stage0 and were deleted with it.
 regenerating one, because regenerating without reading the diff is how a
 golden records a bug as the specification.
 
-`checked.txt` changes whenever a `tests/cases` program is added, so two open
-pull requests that each add a case conflict there as soon as one merges.
-Resolve it by merging `main` and running `node tests/self/goldens.js --update`,
-never by hand. Do it as the last push before merging, since each case another
-pull request lands makes the file stale again.
+`checked/` keeps one file per module, named after its path
+(`checked/tests/cases/add_plain.ts.txt`), and counts each body's `local`,
+`callee` and `sharedWrite` lines from that body's first position, so a line
+added above a function does not move it. Two pull requests that each add a
+case, or change different modules, therefore merge without a conflict; two that
+change the same module conflict in its file. Resolve that by merging `main` and
+running `node tests/self/goldens.js --update`, never by hand, and run it after
+any merge of `main` that touched `src/` or `std/`: a module's dump can move
+when a module it imports changes, without a textual conflict.
+`npm run sync-main` (`scripts/sync-main.mjs`) is that whole sequence: it
+merges `origin/main`, drops the conflicted files under `tests/self/goldens/`,
+runs both `--update`s and stages the result for you to read, stopping on any
+conflict it cannot regenerate — the frozen store below among them.
 
 `tests/differential/goldens/` is the third: the JavaScript every whole program
 rewrites to, which the WP13 oracle compares against Node. It is the one golden

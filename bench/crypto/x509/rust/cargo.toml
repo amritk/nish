@@ -1,0 +1,15 @@
+[package]
+name = "x509"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+p256 = { version = "=0.14.0", features = ["ecdsa"] }
+rcgen = { version = "=0.14.10", default-features = false }
+time = "=0.3.55"
+x509-parser = "=0.18.1"
+
+[profile.release]
+codegen-units = 1
+lto = true

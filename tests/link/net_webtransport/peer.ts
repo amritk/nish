@@ -18,7 +18,6 @@ import {
   QuicFrame,
   quicDatagramSize,
   quicParseFrame,
-  quicPushAck,
   quicPushStream,
   quicPushStreamError,
   quicPutDatagram,
@@ -65,7 +64,7 @@ import { leafCertificate } from "../net_tls_common/server";
 import { fromHex, textOf } from "../crypto_x509/hex";
 import { n32, n64 } from "../net_quic_frame/typed";
 import { fixedEntropy, resetKey, tokenKey } from "../net_quic_conn_replay/server";
-import { CLIENT_SCID, QcClient, qcConnect, qcDrain, qcExchange, qcHello, qcShort } from "../net_quic_conn/client";
+import { CLIENT_SCID, QcClient, qcConnect, qcDrain, qcExchange, qcHello, qcPushAppAck, qcShort } from "../net_quic_conn/client";
 import { CLIENT_CONTROL, CLIENT_DECODER, CLIENT_ENCODER, h3Cat, h3Frame, h3Hex, h3Section, h3Varint } from "../net_http3/peer";
 
 /** The most stream bytes the client puts in one packet. */
@@ -458,7 +457,7 @@ export class WtPeer {
       return;
     }
     const ack: u8[] = [];
-    quicPushAck(ack, [n64(0), this.c.largestApp], n32(1), n64(0));
+    qcPushAppAck(ack, this.c);
     this.packet(ack);
   }
 

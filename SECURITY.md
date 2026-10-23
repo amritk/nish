@@ -47,7 +47,7 @@ made on `main` and ship in the next release. Nothing is backported.
 | Version | Gets security fixes |
 | --- | --- |
 | `main` | yes |
-| the latest 0.x release ([releases](https://github.com/amritk/nish/releases/latest), [npm](https://www.npmjs.com/package/@amritk/nish)) | yes, through the next release |
+| the latest 0.x release ([releases](https://github.com/amritk/nish/releases/latest), [npm](https://www.npmjs.com/package/nish)) | yes, through the next release |
 | every earlier release | no: upgrade |
 
 The compiler is built by the release before it (the seed,

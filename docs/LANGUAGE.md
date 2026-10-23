@@ -730,7 +730,12 @@ and each has its own code:
   `reject_union_type`).
 - Its first field is of one enum member type: otherwise
   `` `Point` cannot be a union variant: its first field must be its tag, a field whose type is one member of an enum, such as `readonly kind: Kind.Circle = Kind.Circle` ``
-  (NL2523, `reject_union_untagged`, `reject_paren_union_type`).
+  (NL2523, `reject_union_untagged`, `reject_paren_union_type`). A first
+  field typed with its whole enum, `readonly kind: Kind = Kind.A`, holds a tag
+  but types it as every variant's, so the union could not tell its variants
+  apart by it; that is NL2559, which names the member to write:
+  `` `First` cannot be a union variant: its tag `kind` has the whole enum `Kind` as its type, which every variant shares, so give it the one member it holds instead: `readonly kind: Kind.A = Kind.A` ``
+  (`reject_union_tag_whole_enum`).
 - The tag is `readonly`: otherwise
   `` `Circle` cannot be a union variant: its tag `kind` must be `readonly`, because the union tells its variants apart by it ``
   (NL2535, `reject_union_mutable_tag`).
@@ -753,11 +758,13 @@ arm or a `??` default whose other side is the union
 (`tests/cases/union_forms`). Equality on two unions compares the pointers, as
 on any object.
 
-**Reading.** The tag is the one member a union has (NL2528 for any other
-field or method, `reject_union_member_field`, `reject_union_method_call`,
-even when every variant has it). It reads as the enum, `Kind`, so it compares,
-switches and is passed as one. A union is read-only: a write through it is
-NL2529, even to a field every variant has (`reject_union_assign_tag`).
+**Reading.** The tag is the one member a union has until a test of the tag
+narrows it (below): any other field or method is
+`` `r` cannot be used on the union `Circle | Square`: a union has only its tag `kind` until a test of the tag narrows it to one variant ``
+(NL2528, `reject_union_member_field`, `reject_union_method_call`, even when
+every variant has it). It reads as the enum, `Kind`, so it compares, switches
+and is passed as one. A union is read-only: a write through it is NL2529, even
+to a field every variant has (`reject_union_assign_tag`).
 
 **Comparisons that cannot be true.** As in `tsc`, comparing the tag with a
 member no variant has is an error: `s.kind === Kind.Tri` when no variant is
@@ -765,17 +772,228 @@ tagged `Kind.Tri` is NL2531 (`reject_union_disjoint_compare`), and
 `case Kind.Tri:` in a `switch (s.kind)` is NL2532
 (`reject_union_disjoint_case`).
 
-**Accepted here, refused by TypeScript.** One gap runs the other way, and
-the next stage, narrowing by the tag, closes it. `tsc` narrows a union by a
-test of its tag, so after `if (u.kind === Kind.A) { return 1; }` it knows
-`u.kind` is not `Kind.A`, and a second `u.kind === Kind.A`, in a ternary, a
-nested ternary or another `if`, is TS2367. This version does not narrow, so
-it accepts that comparison and evaluates it, to `false`. The tag stored in
-a local first, `const k: Kind = u.kind`, carries the same gap, and wider:
-`tsc` narrows `k` on its declaration to the variants' members
-(`Kind.A | Kind.B` for a union of those two), so even a first
-`k === Kind.C`, or a `case Kind.C:` of a `switch (k)`, is TS2367 (TS2678)
-there and accepted here, for a member of `Kind` no variant has.
+**Narrowing.** A test of a variable's tag narrows the variable, as in `tsc`.
+Where `s.kind === Kind.Circle` holds, `s` reads as a `Circle`, so its fields
+and methods are there; where it fails, `s` is the union of the variants left,
+and when one variant is left it reads as that one
+(`tests/cases/union_narrowing`):
+
+```ts
+const area = (s: Shape): i32 => {
+  if (s.kind === Kind.Circle) {
+    return 3 * s.r * s.r;
+  }
+  return s.side * s.side;
+};
+```
+
+- The test narrows the branch it guards: the `then` and `else` of an `if`,
+  the arms of a ternary, the right side of `&&` (where it held) and of `||`
+  (where it failed), and the statements after an `if` whose branch always
+  leaves (`return`, `break`, `continue`, a `panic(...)`). `!==` narrows the other way
+  round, and the operands may be either way round, `Kind.Square === s.kind`.
+- Each `case Kind.X:` of a `switch (s.kind)` narrows `s` to its variant, and
+  `default` to the variants no `case` named. A `case` that a previous one falls
+  through into narrows nothing.
+- A null test composes with it: on `s: Shape | null`,
+  `s !== null && s.kind === Kind.Circle && s.r > 0` reads `s.r`.
+- Where an `||` held, either side may have made it hold, so the variable is
+  what either side proved: past `s.kind === Kind.Circle || s.kind ===
+  Kind.Square`, `s` is a `Circle | Square`, which has only its tag and whose
+  tag is not `Kind.Tri`. The same goes for the side of an `&&` where it
+  failed, for an enum variable, for any number of arms and for `===` mixed
+  with `!==`; an arm that tests something else leaves the variable as
+  declared (`tests/cases/union_narrowing_join`; `reject_union_narrow_or_if`,
+  `reject_union_narrow_or_ternary`, `reject_union_narrow_and_false`,
+  `reject_enum_narrow_or_if`, `reject_enum_narrow_or_ternary`,
+  `reject_enum_narrow_or_three`, `reject_enum_narrow_or_mixed`,
+  `reject_enum_narrow_and_false`).
+- The test may read the variable through an assignment, which answers the
+  value it stored: `(t = next()).kind === Kind.Square` narrows `t`, as
+  `(k = next()) === Kind.A` narrows an enum `k`
+  (`reject_union_narrow_test_assign`, `reject_union_narrow_or_assign`,
+  `reject_enum_narrow_assign`).
+- The variable is a parameter or a `let` or `const` local; a narrowed `const`
+  stays narrowed in a data-parallel arrow that reads it
+  (`tests/link/union_narrowing_capture`). An
+  assignment to it drops what the tests proved, as for a nullable
+  and a loop that assigns it drops it before its body
+  (`reject_union_narrow_dropped`, `reject_union_narrow_else_assign`,
+  `reject_union_narrow_loop_assign`).
+- What a test proved holds past the statement that made it as far as every
+  way out of it agrees, as in `tsc`. After an `if` with an `else`, the
+  variable is what the arms that fall through left it, joined; after an
+  `if` whose one arm falls through, what that arm left, so a chain of `else
+  if`s whose branches all return leaves the variant no test named and an arm
+  that assigns the variable leaves what it assigned
+  (`reject_union_narrow_else_if_chain`, `reject_union_narrow_arm_assign`,
+  `reject_nullable_arm_assign`). A block's early return narrows what follows
+  the block. An enum local that an `if`, a ternary, a loop or a `switch`
+  stores a member into holds, after it, what it held before or any member
+  stored (`reject_enum_held_if_join`, `reject_enum_held_else_join`,
+  `reject_enum_held_ternary`, `reject_enum_held_ternary_assign`,
+  `reject_enum_held_loop_join`, `reject_enum_held_switch_join`). The join
+  after an `if` covers every local and path either arm assigns, one first
+  assigned in the `else` included (`reject_union_narrow_path_if_join`,
+  `reject_union_narrow_path_if_test`), and every one a test inside either arm
+  narrowed, whether or not an arm assigns it: two arms that each leave when
+  `k === Kind.A` leave `k` not `Kind.A` past the `if`, joined with what held
+  before it (`tests/cases/union_narrowing_tested_join`;
+  `reject_enum_if_tested_join`, `reject_union_narrow_if_tested_join`,
+  `reject_union_narrow_path_tested_join`, `reject_union_narrow_nullable_tested_join`,
+  `reject_enum_else_if_tested_join`, `reject_enum_if_tested_outer`). A `switch` joins what each of its
+  exits leaves: every `break` out of it, the fall off its last clause and,
+  when no `default` covers every member, the case no clause matches; a
+  clause that returns is no exit (`tests/cases/union_narrowing_switch_join`;
+  `reject_union_narrow_path_switch`, `reject_union_narrow_path_switch_late`,
+  `reject_enum_switch_join`, `reject_enum_switch_unmatched`), a variable only
+  its clauses' tests narrowed included (`reject_enum_switch_tested_join`,
+  `reject_enum_switch_tag_tested_join`). What held
+  before the `switch` holds again at the start of each clause and in the
+  case no label matches, whatever an earlier clause stored
+  (`reject_union_narrow_switch_kept`, `reject_enum_switch_kept`). A loop is
+  followed to a fixpoint, as `tsc` follows it: the head of a `while`, `for`
+  or `do` holds what reaches it before the loop, at the end of an iteration
+  and at a `continue` (through its update, for a `for`), joined until it no
+  longer changes; after a `while` or `for` comes the head with its condition
+  false, joined with every `break`,
+  after a `do` the end of the body and its `continue`s with the condition
+  false, and after a `for...of` the head and the `break`s. A loop inside the
+  body and a `switch` inside it are followed the same way, an `if` or a
+  `switch` narrowing its arms and clauses inside the loop as it does outside
+  one (`tests/cases/union_narrowing_loop_flow`,
+  `tests/cases/union_narrowing_loop_reads`; `reject_union_loop_while_join`,
+  `reject_union_loop_do_join`, `reject_union_loop_condition_reassigned`,
+  `reject_enum_loop_for_join`, `reject_enum_loop_do_join`,
+  `reject_enum_loop_top_of_body`, `reject_enum_loop_do_continue`,
+  `reject_enum_loop_break`, `reject_enum_loop_for_of`,
+  `reject_enum_loop_nested`, `reject_enum_loop_switch`,
+  `reject_enum_loop_switch_store`, `reject_enum_loop_switch_while`,
+  `reject_union_loop_switch`). A variable the loop only tests, never
+  writes, is followed too (`reject_enum_loop_tested_while`,
+  `reject_enum_loop_tested_do`, `reject_enum_loop_tested_break`,
+  `reject_enum_loop_tested_inner`, `reject_enum_loop_switch_tested`,
+  `reject_union_loop_tested_while`, `reject_union_loop_null_tested`). A
+  store holds what its value holds where the value is one of: a member; a
+  local of a member type, `const m: Kind.B`; a call of a function that
+  returns a member type; a field of a member type, or a call of a method
+  that returns one, read through `this`, a local or parameter or a field of
+  one, nullable or not; a `const` the loop declares once, read by its
+  initializer; another
+  enum variable; a union's tag; or a ternary of two of these, each arm read
+  on its side of the condition
+  (`reject_enum_loop_ternary_store`, `reject_enum_loop_copy_store`,
+  `reject_union_loop_tag_copy`, `reject_enum_loop_member_local`,
+  `reject_enum_loop_member_call`, `reject_enum_loop_field_store`,
+  `reject_enum_loop_method_store`, `reject_enum_loop_nullable_receiver`,
+  `reject_enum_loop_body_const`,
+  `reject_enum_loop_ternary_narrowed`, `reject_enum_loop_ternary_tracked`,
+  `reject_enum_loop_ternary_self`). A test against a member, a local of a
+  member type or such a call narrows as outside a loop, and so does a test
+  against another enum variable, by the members it holds there
+  (`reject_enum_loop_const_test`, `reject_union_loop_const_test`,
+  `reject_enum_loop_held_operand`, `reject_enum_loop_held_single`,
+  `reject_enum_loop_held_ternary`, `reject_union_loop_held_operand`;
+  `tests/cases/enum_loop_held_several`). A `for`
+  update runs after the body and before the next test, and is followed
+  there (`tests/cases/enum_loop_for_update`;
+  `reject_enum_loop_for_update_store`, `reject_enum_loop_for_update_cond`),
+  and is checked when the body is one refused statement, so both errors are
+  reported (`reject_for_update_after_body`). A store of any other value holds
+  the whole declared type. Where the loop holds a shape the fixpoint does not
+  follow, a local or path holds, after it and throughout it, every member
+  stored anywhere in it, which may be more than `tsc` knows ("Accepted here,
+  refused by `tsc`", below).
+- A tag compared with an enum variable narrows on the side where they are
+  equal: `s.kind === k`, with `k` holding `Kind.Circle | Kind.Square`, makes
+  `s` a `Circle | Square` there, and `j === k` leaves the enum `j` one of
+  `k`'s members. Where they differ, nothing is known, since `k` may hold
+  either, unless `k` holds one member, which is then left out
+  (`tests/cases/union_narrowing_arms`;
+  `reject_union_narrow_tag_variable`, `reject_enum_compare_variable`).
+- A tag tested through a path — a field `h.k`, `this.k`, a field of a field
+  `h.s.kind`, a literal index `xs[0].kind` — stays narrowed for the
+  comparisons after it, so a repeat test of a member already excluded is
+  NL2531, as `tsc`'s TS2367 is. A store to the path, to a prefix of it
+  (`h.s = t`, `xs[0] = t`) or to its root drops what it held, and the joins
+  above follow a path as they follow a variable; a call does not, as in
+  `tsc` (`tests/cases/union_narrowing_paths`;
+  `reject_union_narrow_path_field`, `reject_union_narrow_path_this`,
+  `reject_union_narrow_path_nested`, `reject_union_narrow_path_index`,
+  `reject_union_narrow_path_join`, `reject_union_narrow_path_loop`). An
+  index is part of the path when it names one element, as TypeScript 5.5
+  reads it: a number literal, a parameter, a `const` (`const i = 0` makes
+  `xs[i]` the path `xs[0]`, annotated or not, and so does `const j = i`
+  after an unannotated `const i = 0`, whose type is the literal `0`), a module
+  constant (`const IDX: i32 = 0` makes `xs[IDX]` the path `xs[0]` too, and
+  `const A: i32 = -1` and `const B: i32 = -1` make `xs[A]` and `xs[B]` one
+  path), or a `let` nothing in its block assigns, a closure's body included. A
+  `let` that is assigned or stepped (`i = 1`, `i++`), a parenthesised name or any
+  other expression keys no path, so `xs[i]` is not narrowed through it, and a
+  store through such an index (`xs[j] = t`) drops nothing, as in `tsc`
+  (`tests/cases/union_narrowing_index`, `union_narrowing_index_const`;
+  `reject_union_narrow_path_ident`, `reject_union_narrow_path_steady`,
+  `reject_union_narrow_path_const_index`,
+  `reject_union_narrow_path_index_store`,
+  `reject_union_narrow_path_const_chain`,
+  `reject_union_narrow_path_negative_index`,
+  `reject_union_narrow_path_negative_zero`,
+  `reject_union_narrow_path_module_index`,
+  `reject_union_narrow_path_module_literal`,
+  `reject_union_narrow_path_module_ident`,
+  `reject_union_narrow_path_module_negative`). The union read through the path is
+  not narrowed (below).
+- A union of two or more variants left still has only its tag
+  (`reject_union_narrow_none_if`, `reject_union_narrow_none_ternary`,
+  `reject_union_narrow_none_and`, `reject_union_narrow_none_or`,
+  `reject_union_narrow_none_fallthrough`), and a narrowed variant has only its
+  own fields (`reject_union_narrow_none_case`, `reject_union_narrow_none_null`,
+  `reject_union_narrow_none_reversed`).
+
+What a test excluded stays excluded, so a second test of a tag already ruled
+out is always false and NL2531, in an `if`, a ternary or an `&&`
+(`reject_union_narrow_second_if`, `reject_union_narrow_second_ternary`,
+`reject_union_narrow_second_and`), and so is its `case`, NL2532
+(`reject_union_narrow_dead_case`). An enum local holds what it was given: the
+tag stored in a local, `const k: Kind = s.kind`, holds only the variants'
+members, and a local given `Kind.Circle` holds only that member until it is
+assigned again, so `k === Kind.Tri` against a member it cannot hold is NL2531
+and `case Kind.Tri:` of a `switch (k)` NL2532, as `tsc`'s TS2367 and TS2678 are
+(`reject_union_tag_local_compare`, `reject_union_tag_local_case`,
+`reject_enum_held_const`, `reject_enum_held_let`, `reject_enum_held_reassign`,
+`reject_union_tag_held_capture`).
+
+A test of an enum variable against a member narrows what it holds in the same
+forms, as `tsc` narrows it: `k === Kind.A` and `k !== Kind.A`, either way
+round, in an `if` and its `else`, a ternary, `&&` and `||`, after an `if` whose
+branch always leaves, and each `case` and the `default` of a `switch (k)`. This
+holds for a parameter `k: Kind` as for the tag local `const k: Kind = s.kind`,
+and an assignment drops it as it drops a union's. So after
+`if (k === Kind.A) return`, `k === Kind.A` is NL2531 and `case Kind.A:` NL2532,
+as `tsc`'s TS2367 and TS2678 are (`tests/cases/enum_narrowing`;
+`reject_enum_narrow_else`, `reject_enum_narrow_early`,
+`reject_enum_narrow_ternary`, `reject_enum_narrow_and`,
+`reject_enum_narrow_or`, `reject_enum_narrow_switch`,
+`reject_enum_narrow_tag_local`). Narrowed to one member, the variable is that
+member's type, so `let j = k` is a `Kind.A` that `j = Kind.B` does not fit
+(`reject_enum_narrow_let_member`), as in `tsc`.
+
+A `switch` whose subject reads a union variant's tag field, with no
+`default` and labels that name every variant the tag can hold, is
+**complete**: no value reaches the case no label
+names, so when no `break` targets the `switch` and its last clause leaves, the
+`switch` terminates (see Termination) and can end a function that returns a
+value, as in `tsc`. Its unmatched case compiles to LLVM's `unreachable`. The
+tag may be read through a union variable, a field, an element or a call's
+result, `s.kind`, `h.shape.kind`, `shapes[i].kind`, and a variable that a test
+before the `switch` left fewer variants needs labels for those only
+(`tests/cases/union_switch`). With a variant unnamed, the `switch` does not
+terminate, and a function that returns a value and ends in it is the
+missing-return error, as `tsc --strict --noImplicitReturns`'s TS2366 is
+(`reject_union_switch_missing_case`, `reject_union_switch_missing_case_field`).
+Complete means the tag can hold nothing else: a variant's tag is `readonly`,
+written only with its own member, and a union never crosses the interop
+boundary, so no other `i32` reaches it.
 
 **Stricter than TypeScript.** Each of these programs is accepted by
 `tsc --strict` and refused here; each refusal is pinned:
@@ -790,8 +1008,7 @@ there and accepted here, for a member of `Kind` no variant has.
   `reject_union_narrow_element`, `reject_union_narrow_ternary`,
   `reject_union_narrow_nullable`). A call that returns `Shape` is a value of
   the whole union, and is stored freely. Passing and returning a variant
-  narrows nothing, and is accepted. Narrowing by `if` and `switch` on the
-  tag is not in this version either.
+  narrows nothing, and is accepted. A test of the tag does narrow (above).
 - **No union type arguments.** `Box<Shape>`, a generic function or method
   whose type parameter would bind to a union, `Map<K, Shape>` and
   `Result<Shape, E>` / `Result<T, Shape>` are NL2533
@@ -812,7 +1029,53 @@ there and accepted here, for a member of `Kind` no variant has.
   ternary, or the result of an arrow that binds a type parameter
   (`reject_union_tag_array`, `reject_union_tag_ternary`,
   `reject_union_tag_arrow`). An annotation as the enum, `const k: Kind =
-  s.kind`, is accepted, with the narrowing gap above.
+  s.kind`, is accepted, and the local holds the variants' members (above).
+  An enum variable narrowed to two or more members is the same: `const j = k`
+  after `if (k === Kind.A) return` is NL2530, since `tsc` would infer
+  `Kind.B | Kind.C` (`reject_enum_narrow_inferred_set`); annotate it as `Kind`.
+- **No narrowing of a union through a path.** `tsc` narrows a property
+  path, `h.s.kind === Kind.Circle` then `h.s.r`; this version narrows the
+  tag read through the path (above) but the union only in a variable, so a
+  read of a variant's member through the path is
+  `` `r` cannot be used on the union `Circle | Square | Tri` read through a property path: a test of the tag narrows a variable, not a path, so copy the union into a local first and test that ``
+  (NL2558, `reject_union_narrow_path`).
+- **A complete `switch` reads the union's tag.** `tsc` treats a `switch`
+  whose labels name every member of an enum as complete, and so ends a
+  function in it; this version does so for a union's tag only (above). A
+  plain enum, `switch (k)` for `k: Kind`, can arrive from C holding any
+  `i32`, so a `switch` on a plain `Kind` local or field is never complete
+  (`reject_union_switch_enum`), nor is one on the tag copied into an enum
+  local, `const k: Kind = s.kind`, or a `let` one reassigned on another path
+  (`reject_union_switch_tag_local`, `reject_union_switch_tag_local_reassigned`).
+  A narrowed path needs every tag of the whole union: `switch (h.s.kind)`
+  after `if (h.s.kind === Kind.A) return` is complete only with `Kind.A`
+  labelled too, since a call between the test and the `switch` could have
+  reassigned `h.s` (`reject_union_switch_path_narrowed`); a narrowed union
+  local, which nothing reassigns unseen, is complete with the labels of the
+  variants left to it (`tests/cases/union_switch_narrowed`). Nor is a `switch`
+  complete on an enum field assigned from
+  a tag, `b.k = s.kind`, which a call, an alias, a method or `this` can
+  overwrite with any member (`reject_union_switch_enum_field_call` and its
+  siblings): what decides is the subject's static type, a union's tag field,
+  never what a path was assigned or narrowed to hold. End such a function
+  after the `switch`, or give it a `default` (`tests/cases/union_switch_flow`).
+- **No `never`.** Where the tests have excluded every variant, `tsc` types the
+  variable `never` and accepts a read of it; this version has no such type, so
+  the read is
+  `` `s` has no variant left here: the tests before this read excluded every variant of its union, which TypeScript types `never` and this version has no type for ``
+  (NL2557, `reject_union_narrow_exhausted`).
+- **No narrowing through a stored condition.** `tsc` narrows `s` where a
+  `const` holding a test of its tag is true, `const round = s.kind ===
+  Kind.Circle; if (round) { s.r }`; this version narrows on the test
+  itself only, so `s.r` there reads the union (NL2528,
+  `reject_union_narrow_aliased`). Test the tag in the condition.
+- **No field shared by every variant.** `tsc` reads a field every variant
+  declares through the union; this version reads only the tag before a test
+  narrows it (NL2528, `reject_union_member_field`).
+- **A tag of one member.** `tsc` accepts a variant whose tag is typed with its
+  whole enum, `readonly kind: Kind = Kind.A`, which then discriminates
+  nothing; this version asks for the member type (NL2559,
+  `reject_union_tag_whole_enum`).
 - **No covariant arrays.** A `Circle[]` is not a `Shape[]`, since a push
   through the wider type would put a `Square` among the circles; build the
   array as a `Shape[]` (`reject_union_covariant_array`).
@@ -845,6 +1108,38 @@ wanted is the existing refusal of its position (`reject_union_into_init`,
 `reject_union_ternary_other`, `reject_union_nullish_other`). A smaller union
 stored where a larger one is declared narrows it in `tsc`, as a variant
 does, and is NL2534 too (`reject_union_narrow_subunion`).
+
+**Accepted here, refused by `tsc`.** The loop pass (above) reads less than
+`tsc` in the shapes below, and these are all of them: a variable holds every
+member stored anywhere in the loop, or its whole declared type, so a
+comparison `tsc` refuses as TS2367 may compile here. Each is pinned as it
+stands, with the expected `tsc` error written at the comparison, so the case
+fails on either side once the gap closes (`tests/cases/enum_loop_join_gap`):
+
+- **A path.** A tag or enum held by a field, `h.k`, is joined over the whole
+  loop, not followed through it.
+- **A store inside an expression.** An assignment that is an argument,
+  `keep((j = Kind.C))`, an initializer, `const t = (j = Kind.C)`, or the
+  inner store of a chain, `k = j = Kind.C`, rather than a statement of its
+  own.
+- **A value the pass cannot read.** A store of a field or a method call
+  read through anything but `this`, a local or parameter the loop does not
+  declare, or a field of one — an element, `j = gs[0].b` or
+  `j = gs[0].pick()`, a call's result, `j = makeG().b`, a receiver the loop
+  declares, `const g = new G(); j = g.b` — holds the whole declared type,
+  though the field or method is typed with one member. So does a store of a
+  `let` the loop declares, or of a `const` it declares from a tracked
+  variable, as the swap `const t: Kind = a; a = b; b = t;` does.
+- **An arm that holds nothing.** A ternary arm that reads the stored
+  variable where the condition leaves it no member, the `k` of
+  `k = k === Kind.A ? Kind.B : k` while `k` holds only `Kind.A`, reads as
+  the whole type, as the checker reads a variable narrowed to `never`, so
+  the store holds every member from then on.
+- **A wide type.** A union of more than 29 variants or an enum of more than
+  29 members.
+
+`try`, a labelled statement, destructuring and an arrow that captures a
+local are refused by Nish on their own, so no loop that compiles holds them.
 
 **Across a sidecar.** A union has no C spelling yet, so a function exported
 through `--emit-header` or `--emit-napi` whose parameter or return holds a
@@ -1720,62 +2015,91 @@ and their `.ll` goldens are byte-identical files.
   the runtime calls it, and it is never assumed anything about. The rule is
   `hostVisible` in `src/visibility.ts`, and `docs/ARCHITECTURE.md` (the
   call-site ranges row of the attribute soundness rules) is why it is sound.
-- **An exported function is not named after a C library function.** A
-  module of the program's own package has no symbol prefix, so an exported
-  function's symbol is its name, in the entry module and in every other
-  module of the package, and under `--no-strict-exports` every function's
-  is. Named `write`, `read`, `free`, `exit`, `sin` or another function the
-  C library defines for the runtime or for the program's own arithmetic, it
-  would be the definition those references reach in the linked program
-  (`console.log` printing nothing, a crash at the first file read, `Math.sin`
-  answering what the program's `sin` returns), so it is
-  `` `write` is the C library's `write`: an exported function of the program's own package keeps its name as its symbol, so the references the C library and the runtime make to that name would reach this function instead; rename it ``
-  (`tests/cases/reject_export_c_symbol_const`, `reject_export_c_symbol_function`,
-  `reject_export_c_symbol_libm`, `reject_export_c_symbol_libm_f32`,
-  `tests/link/export_c_symbol_sibling`, `export_c_symbol_sibling_function`;
-  with `--no-strict-exports`, `reject_export_c_symbol_no_strict` and
+- **An exported function is not named after a C library function.** A module of
+  the program's own package has no symbol prefix, so an exported function's
+  symbol is its name, in the entry module and in every other module of the
+  package, and under `--no-strict-exports` every function's is. Named `write`,
+  `read`, `free`, `exit`, `sin` or another function the C library defines for
+  the runtime or for the program's own arithmetic, it would be the definition
+  those references reach in the linked program (`console.log` printing nothing,
+  a crash at the first file read, `Math.sin` answering what the program's `sin`
+  returns), so it is `` `write` is the C library's `write`: an exported function
+  of the program's own package keeps its name as its symbol, so the references
+  the C library and the runtime make to that name would reach this function
+  instead; rename it `` (`tests/cases/reject_export_c_symbol_const`,
+  `reject_export_c_symbol_function`, `reject_export_c_symbol_libm`,
+  `reject_export_c_symbol_libm_f32`, `tests/link/export_c_symbol_sibling`,
+  `export_c_symbol_sibling_function`; with `--no-strict-exports`,
+  `reject_export_c_symbol_no_strict` and
   `reject_export_c_symbol_no_strict_exported`). A name that begins with `_`,
   which C reserves for its library and start-up code (C11 7.1.3), or with
   `napi_` or `node_api_`, which Node-API reserves, is refused the same way with
   `` begins with `_`, which C reserves for its library and start-up code `` or
   `` begins with `napi_`, which Node-API reserves for its functions `` (or
-  `node_api_`)
-  (`reject_export_c_symbol_reserved_prefix`, which pins `__libc_start_main` and
-  `__register_atfork`, each of which crashed; `reject_export_c_symbol_napi_prefix`).
-  The rule is the same in a wasm or an N-API build, where the exported name
-  is the one JavaScript calls: rename the function there too. The names are
-  reserved on every target, whichever target each one binds on: a name only
-  wasi-libc defines (`strdup`, `unlink`) is refused in a native build as well,
-  and no flag lifts the rule. The names and
+  `node_api_`) (`reject_export_c_symbol_reserved_prefix`, which pins
+  `__libc_start_main` and `__register_atfork`, each of which crashed;
+  `reject_export_c_symbol_napi_prefix`). The rule is the same in a wasm or an
+  N-API build, where the exported name is the one JavaScript calls: rename the
+  function there too. The names are reserved on every target, whichever target
+  each one binds on: a name only wasi-libc defines (`strdup`, `unlink`) is
+  refused in a native build as well, and no flag lifts the rule. The names and
   where each comes from are in `src/c-symbols.ts`: the symbols the runtime
-  leaves undefined on every platform it builds for, the libm calls behind
-  every `Math` builtin and `%` on a float in `double` and in `float`, with
-  the ones LLVM rewrites them into, the `memcpy` family, the rest of the C
-  allocator, and, because `--profile wasi` links wasi-libc statically, every
-  name a wasi-libc member that link pulls in defines or references (an
-  exported `sbrk` trapped at start), and every name LLVM's TargetLibraryInfo
-  recognises as a library function on the targets the compiler emits for
-  (`abs`, `atan`, `rename`, `qsort`: LLVM folds or rewrites a call to one of
-  them whatever its definition, so `abs(-3)` answered 3;
-  `reject_export_c_symbol_tli`). `tests/run.js` reads them back with `llvm-nm` from the runtime's
+  leaves undefined on every platform it builds for, the libm calls behind every
+  `Math` builtin and `%` on a float in `double` and in `float`, with the ones
+  LLVM rewrites them into, the `memcpy` family, the rest of the C allocator,
+  and, because `--profile wasi` links wasi-libc statically, every name a
+  wasi-libc member that link pulls in defines or references (an exported `sbrk`
+  trapped at start), and every name LLVM's TargetLibraryInfo recognises as a
+  library function on the targets the compiler emits for (`abs`, `atan`,
+  `rename`, `qsort`: LLVM folds or rewrites a call to one of them whatever its
+  definition, so `abs(-3)` answered 3; `reject_export_c_symbol_tli`), and every
+  function C23's `<math.h>` and C99's `<complex.h>` declare, in `double`,
+  `float` and `long double` (`tgamma`, `erff`, `ilogbl`, `cexp`), whether or not
+  the LLVM in use knows it, because a later LLVM than CI's recognises more of
+  them (#651). `tests/run.js` reads them back with `llvm-nm` from the runtime's
   objects, `runtime-wasm.c`, the N-API shim, and two programs — one that calls
   every `Math` builtin, one that multiplies `i64`s, copies arrays and prints
   strings — linked at three optimisation levels and compiled for wasm32, the
-  wasi-libc members a traced `--profile wasi` link of each pulls in, and
-  fails on a name the file does not reserve ("c-symbols: ..."); it reads the
-  TargetLibraryInfo names with `llvm-tli-checker` for five target triples. A function whose symbol is not its
-  ABI is spelled apart instead of refused: an `internal` one whose name is
-  reserved takes a `$` at the end of its symbol (`@floor$`), because LLVM
-  folds a call to a function it knows by name as the C library's, and a
-  private `floor` called as `floor(1.5)` answered 1
+  wasi-libc members a traced `--profile wasi` link of each pulls in, and fails
+  on a name the file does not reserve ("c-symbols: ..."); it reads the
+  TargetLibraryInfo names with `llvm-tli-checker` for five target triples. A
+  function whose symbol is not its ABI is spelled apart instead of refused: an
+  `internal` one whose name is reserved takes a `$` at the end of its symbol
+  (`@floor$`), because LLVM folds a call to a function it knows by name as the C
+  library's, and a private `floor` called as `floor(1.5)` answered 1
   (`tests/link/c_symbol_private_libm`), and a `hidden` one, which another
-  module's instantiation calls, takes it whatever its name
-  (#610, under [function parameters](#function-parameters);
+  module's instantiation calls, takes it whatever its name (#610, under
+  [function parameters](#function-parameters);
   `tests/link/thread_no_strict_hidden_task`, under `--no-strict-exports`). A
   method, whose symbol carries its class, and a function of another package,
   whose symbol carries the package, may have any of these names
   (`tests/link/export_c_symbol_allowed`). `main` is the entry's alone
   (`tests/link/main_in_import`), and emitted as `@nish_main`.
+- **A wasm module's function is not named `memory`.** `wasm-ld` exports the
+  module's linear memory as `memory`, and `scripts/build.sh --profile wasm`
+  links with `--export-all`, so in that module an exported function of that
+  name, or any function under `--no-strict-exports`, is a second export of
+  it, and Node refuses the module ("Duplicate export name 'memory'"). The
+  `wasi` command module exports only `memory` and `_start`, so the function
+  does not collide there; the name is reserved there too, so that a program
+  that builds for wasi also builds as a freestanding wasm module. On a wasm
+  `--target`, under `--profile wasi`, and in an `--emit-dts` compile, whose
+  loader is for the module `scripts/build.sh --profile wasm` links its IR
+  into, it is
+  `` `memory` is the name a wasm module exports its linear memory under: an exported function of the program's own package keeps its name as its symbol, so the module would export two things named `memory` and no host could load it; rename it ``
+  (NL3038; `tests/cases/reject_export_wasm_memory`,
+  `reject_export_wasm_memory_wasi`, `reject_export_wasm_memory_dts`,
+  `tests/link/export_wasm_memory_sibling`; with `--no-strict-exports`,
+  `reject_export_wasm_memory_no_strict`; without the flag a `memory` nobody
+  exported stays internal and compiles, "wasm memory: a --target wasm32
+  compile keeps a `memory` nobody exported" in `tests/run.js`). IR compiled for the host with `-o`
+  alone reaches build.sh without the compiler knowing the build is wasm, so
+  `build.sh --profile wasm` and `--profile wasi` refuse IR that defines an
+  exported `@memory` with exit 2 ("wasm memory: ..." in `tests/run.js`). A
+  native build has no linear memory to collide with and keeps the name
+  (`export_memory_native`, `tests/link/export_memory_native_sibling`). The
+  linker's other names, `_start`, `__heap_base`, `__data_end` and
+  `__indirect_function_table`, are already refused by the rule above.
 - The only import form is a named import: `import { square, cube as pow3 } from
   "./math"` (`tests/link/two_file`). The specifier must start with `./` or
   `../`, name one of the three builtin modules below, name a standard-library
@@ -1841,9 +2165,9 @@ and their `.ll` goldens are byte-identical files.
   specifier works at any depth. A module the library does not have is
   `` Module `nish/toml` is not part of the standard library (it has:
   collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
-  crypto/ct, crypto/hkdf, crypto/hmac, crypto/p256, crypto/sha256,
-  crypto/sha512, crypto/x25519, crypto/x509, json, map, pair, testing, text,
-  threads) ``
+  crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256,
+  crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
+  testing, text, threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
   rather than resolved: `` Module `nish/../../escape/lib` climbs out of the
@@ -1885,16 +2209,17 @@ and their `.ll` goldens are byte-identical files.
   side; `docs/wp23-language-surface.md` §5 is the reasoning.
 - **`nish/crypto/<primitive>` is a module in a subdirectory of the library**,
   one per primitive: `sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`,
-  `ct` (constant-time compare), `base64url`, `x25519`, `chacha20poly1305`
-  (ChaCha20-Poly1305), `aes` (AES-128 and AES-256 with GCM), `p256` (P-256
-  ECDSA) and `x509` (DER, PEM and self-signed P-256 certificates)
-  (`tests/link/crypto_base64url` is the case that resolves a nested
-  specifier). Each is ordinary Nish source under the rules above, and a byte
-  string is a `u8[]`. They are written branch-free on secret data, and WP34
-  N6's disassembly check (`tests/ct-asm.js`) verifies that of the functions
-  its `ct_asm_*` fixtures hold, on x86-64 and aarch64; the rest is discipline.
-  `std/README.md` lists what each module exports, the specification it
-  reproduces, which of its functions are verified, and the rules they share.
+  `ct` (constant-time compare), `base64url`, `x25519`, `ed25519` (Ed25519
+  signatures), `chacha20poly1305` (ChaCha20-Poly1305), `aes` (AES-128 and
+  AES-256 with GCM), `p256` (P-256 ECDSA) and `x509` (DER, PEM and
+  self-signed P-256 certificates) (`tests/link/crypto_base64url` is the case
+  that resolves a nested specifier). Each is ordinary Nish source under the
+  rules above, and a byte string is a `u8[]`. They are written branch-free on
+  secret data, and WP34 N6's disassembly check (`tests/ct-asm.js`) verifies
+  that of the functions its `ct_asm_*` fixtures hold, on x86-64 and aarch64;
+  the rest is discipline. `std/README.md` lists what each module exports, the
+  specification it reproduces, which of its functions are verified, and the
+  rules they share.
 - **A package is imported by name, and what is resolved is its source.**
   `import { scale } from "pkg_bare"` looks for `node_modules/pkg_bare` in the
   importing file's directory and in every directory above it — above the
@@ -3156,6 +3481,31 @@ export const main = (): i32 => {
   parameter table, and two fresh `const`s in a generic function, are
   admitted). Two parameters may be one array and are refused. `parallelMap`
   and `parallelFrom` allocate their own `dst`, which no capture can reach.
+- **A fresh `dst` nothing was handed is apart from every capture** (#612).
+  When `dst` is a `const` bound to an array of its own, and nothing before the
+  call — or in a loop around the call that does not also declare it, or in a
+  function written inside — names it except to index it or read a member, then
+  no capture can reach it: the only way into a value is through a binding, and
+  none was given this one. So the body may read a `parallelMap` result, a
+  config object or a `const self = this` beside it
+  (`tests/link/par_into_fresh_pipeline`, `par_into_fresh_object`); indexing
+  it, reading `d.length`, calling `d.fill(0)` or walking it with `for...of`
+  first hands it to no one (`par_into_fresh_reads`). Anything that hands
+  `dst` on first is refused with the message above: a store `p.arr = d` or
+  `this.tab = d` (`reject_par_into_store_field`, `_this_field`), an argument
+  `keep(h, d)` or `ts.push(d)` (`_helper`, `_push`), an alias `const e = d`
+  (`_alias`), a branch `c ? d : w` (`_ternary`), a holder `new Holder(d)`
+  (`_holder`), a store after the call inside a loop around it
+  (`_loop_store`, and `_loop_store_while`, `_do`, `_for_of` for the other
+  loops) — the outermost such loop, so a store after an inner loop
+  inside an outer one counts (`_nested_loop`) — a hand-on on one branch of
+  an `if` (`_if_branch`), an
+  earlier call writing the same `dst` (`_twice`), `dst` passed as the call's
+  own `src` (`_as_src`), and the arrow reading `dst` itself (`_captured`). A
+  `dst` bound to a captured array is no fresh `const` (`_from_capture`). The
+  rule asks for the one binding of that name in its function, so a `dst`
+  whose name is declared twice there keeps the stricter rule above
+  (`_shadow`).
 
 ### Scoped tasks: `using s = scope()`
 
@@ -3399,7 +3749,15 @@ export const main = (): i32 => {
   around it, which releases only after the join, and an argument a task is
   handed is never given back by a loop's pass before the join reads it
   (`tests/link/thread_scope_nested_arena`, which also nests one scope inside
-  another). A panic ends the process and joins nothing (`throw` is refused by
+  another). Since the join comes first, spawning gives up no memory: a
+  function, a loop's pass or a `using a = arena()` block that hands a task an
+  array it made still gives that array back when it ends, after the join,
+  unless the task keeps it — answers it, or stores it where it outlives the
+  task — or the frame keeps it past its end by any other route
+  (`tests/link/thread_scope_reclaim`, whose peak resident memory
+  `tests/run.js` bounds at every thread count, and
+  `thread_scope_reclaim_escapes`, which reads each route after the memory is
+  reused). A panic ends the process and joins nothing (`throw` is refused by
   Phase 0, `reject_throw`).
 - **A scope is introduced by `using`, and `using` takes only a scope, a
   [`Mutex`'s lock](#a-lock-that-owns-its-data-mutext) or an
@@ -4379,6 +4737,24 @@ const swap = (p: Pair): Pair => ({ first: p.second, second: p.first });
   `const z = c ? { v: 7 } : null` is still
   `Object literal needs a contextual class or interface type`
   (`reject_obj_lit_nullable_context`).
+- A **class with methods** is made only by `new`. Natively a literal would
+  take the class's layout and its methods, but under Node it is a plain
+  object, and a call on it throws, so wherever a context above types a
+  literal as such a class it is
+  `` `Counter` has methods, so it is made only by `new`: an object literal would be a plain object under Node, with none of the methods the class is used through. Write `new Counter(...)` ``
+  (NL2556; `tests/cases/reject_class_literal_decl`, `…_return`,
+  `…_arrow_body`, `…_call_arg`, `…_method_arg`, `…_new_arg`,
+  `…_array_elem`, `…_push`, `…_index_assign`, `…_map_set`,
+  `…_record_field`, `…_assign`, `…_field_assign`, `…_ternary`, `…_paren`, `…_alias`,
+  `…_coalesce`, `…_coalesce_chain`, `…_coalesce_field`, `…_coalesce_call`,
+  `…_coalesce_map`, `…_coalesce_optional`, `…_coalesce_ternary`,
+  `…_equality`, `…_index_of`, `…_math_max`, `…_fn_param`, `…_unary`,
+  `…_compound_bitwise`, `…_compound_arith`, `…_nullable`, `…_generic_class`, `…_generic_target`, `…_generic_method`,
+  `…_imported`). A generic method counts as a method; a constructor does
+  not. A class with fields alone, and an interface, still take a literal
+  (`tests/cases/cls_literal_methodless`). The `nish/threads` classes keep
+  their own refusal, NL2515 (see "Atomics"), and a class holding a `Secret`
+  keeps NL2545.
 - `readonly` on an interface field forbids every assignment (`i.a = 2` is
   `` Cannot assign to readonly field `a` of `Config` ``,
   `tests/cases/reject_cls_readonly_interface`); literals still set it. The
@@ -4948,8 +5324,12 @@ switch (node.kind) {
 - `break` inside a `switch` leaves the switch, not an enclosing loop;
   `continue` looks past the switch to the loop
   (`tests/cases/cf_switch_break`).
-- A `switch` terminates (see Termination) when it has a `default`, no `break`
-  targets it, and its last clause terminates.
+- A `switch` terminates (see Termination) when no `break` targets it, its
+  last clause terminates, and it has a `default` or is a complete `switch` on a
+  union's tag, whose labels name every variant
+  ([Discriminated unions](#discriminated-unions), `tests/cases/union_switch`).
+  A `switch` on an integer or a plain enum without a `default` never
+  terminates, whatever its labels (`reject_union_switch_enum`).
 
 ### `break` / `continue`
 
@@ -4989,8 +5369,8 @@ purposes, the current path: a non-`void` function may end with it
 
 A statement *terminates* when control cannot fall out of it: `return`,
 `break`, `continue`, `process.exit(...)`, `panic(...)`; an `if` whose branches
-both terminate; a `switch` with a `default`, no `break` aimed at it and a
-terminating last clause; a loop with no condition or the condition `true` and
+both terminate; a `switch` with a `default` or one complete on a union's tag,
+no `break` aimed at it and a terminating last clause; a loop with no condition or the condition `true` and
 no `break` aimed at it. Any other loop may run zero times and does not
 terminate. Rules (`src/statements.ts`, `checker.ts`):
 
@@ -5588,7 +5968,11 @@ Three consequences, each of them a rule:
   `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse
   that storage; index `ps` again afterwards rather than holding the element
   across it `` (`reject_arr_element_across_push`,
-  `reject_arr_element_loop_push`). A loop is checked as a whole, because a
+  `reject_arr_element_loop_push`). A second name for the element is one too:
+  `const q = p`, `q = p` (in a nested block as well, since `q` outlives it),
+  and either side of `c ? p : r` or `m ?? p` (`tests/cases/arr_ref_alias_*`);
+  a call's result is not, since a helper may return a copy
+  (`arr_ref_alias_clone`). A loop is checked as a whole, because a
   `push` at the bottom of the body reaches a reference taken at the top on the
   next pass. `ps.push(ps[i])` is refused for the same reason, in one message of
   its own (`reject_arr_element_push_self`).
@@ -5708,7 +6092,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
@@ -5886,7 +6270,7 @@ export const mix = (h: i32[], i: i32, x: i32): void => {
   per module, an `unsafe import <line>:<col> <name> from "nish:unsafe"` line for
   each name imported and an `unsafe call <line>:<col> <name> (node <id>)` line
   for each site, so a report of where a program opts out of a check reads them
-  rather than the source (`tests/self/goldens/checked.txt`).
+  rather than the source (`tests/self/goldens/checked/`, one file per module).
 - **The import is the opt-in the no-panic scope takes.** Under `--deny-panics`
   or `"nish".noPanic`, `uncheckedGet` and `uncheckedSet` are allowed, listed
   as `unchecked` sites with `"allowed": true`, because they cannot panic and
@@ -6215,10 +6599,10 @@ export const main = (): i32 => {
 | Export | Meaning | Test |
 | --- | --- | --- |
 | `Secret<T>` | an opaque class holding `T`: an array of integers (`u8[]`, `u32[]`, `i64[]`, ...) or a class or interface whose every field is an integer | `secret_wipe`, `secret_flow`; `reject_secret_shape` |
-| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*` |
+| `secret(v)` | `v` wrapped: a value nothing else holds, and a local handed in is moved | `secret_flow`, `secret_inferred`; `reject_secret_moved`, `reject_secret_unmovable`, `reject_secret_alias_*`, `reject_secret_inferred_*` |
 | `expose(s, f)` | `f(value)`, under the rules below | `secret_wipe`; `reject_secret_expose_*` |
 | `exposeWith(s, arg, f)` | `f(value, arg)`, because an arrow captures nothing | `secret_wipe`; `reject_secret_expose_writes_arg` |
-| `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
+| `wipe(x)` | zero every byte of a `Secret`'s value, or of an array or record of integers `expose`'s function holds | `secret_wipe`, `secret_wipe_o2`, `secret_wipe_o2_inferred`; `reject_secret_wipe_shape`, `reject_secret_wipe_nullable` |
 
 `nish:secret` is the one builtin module with source behind it: `std/secret.ts`,
 loaded like a standard-library module, imported only by the builtin name
@@ -6228,6 +6612,21 @@ module that uses it, so it writes no `.ll` of its own. `runtime/nish.d.ts`
 declares it for `tsc`, with a private constructor and field so that `tsc`
 refuses `new Secret` and `s.value` too. Under Node (`runtime/nish.mjs`) a
 `Secret` is a plain wrapper and `wipe` zero-fills it.
+
+**A `Secret` local needs no annotation.** `const k = secret(v)` gives `k` the
+type `secret` answers, `Secret<T>` for the `T` that `v` is, and every rule
+below holds for it as for `const k: Secret<T> = secret(v)`: the payload's
+shape, the move and the second reference, each judged where `v` is written
+(`secret_inferred` binds an array literal, `new Array`, a call, a moved local,
+a ternary, a record and a class unannotated; `reject_secret_inferred_literal`,
+`_alias`, `_call`, `_field` and `_moved_class` are refused unannotated as
+annotated). The same holds for any generic an imported module declares:
+`const b = box(7)` holds the `Box<i32>` that `box` answers, whose layout comes
+with the call (`tests/link/generic_import_inferred`), with its methods even
+where the module already held `Box<i32>` as a type argument
+(`tests/link/generic_import_inferred_held`), and with those of every struct
+its fields reach, through an array, a nullable, a `Result` or a nested
+instance, in either order (`tests/link/generic_import_inferred_closure`).
 
 **What a `Secret` may hold.** One run of integers, so that `wipe` reaches every
 byte with one store: `` `Secret<string>` is not key material `` (NL2428,
@@ -6290,10 +6689,12 @@ path by path rather than counted, because "wiped on one arm of an `if`" is not
 - `secret(v)` takes a value nothing else holds, and moves it, because a
   second name for the bytes would read the key outside the `Secret`, and
   zeros once `wipe` has run. A local handed in is not read again (NL2445,
-  `reject_secret_moved`), and neither is the local in either arm of
-  `secret(c ? a : b)`. A parameter, a field or an element, whose owner keeps
-  the plain bytes, is refused (NL2447, `reject_secret_unmovable`). Everything
-  else is judged where it is written:
+  `reject_secret_moved`, whose message says the plain array, and
+  `reject_secret_inferred_moved_class` and `reject_secret_moved_interface`,
+  where it names the class or interface the plain value is), and neither is
+  the local in either arm of `secret(c ? a : b)`. A parameter, a field or an element,
+  whose owner keeps the plain bytes, is refused (NL2447,
+  `reject_secret_unmovable`). Everything else is judged where it is written:
   - an array or object literal, `null`, and a ternary of fresh values are
     fresh, and so is a `new` whose constructor keeps no `this`;
   - a call is fresh when its callee answers a fresh value, judged over the
@@ -6511,6 +6912,10 @@ volatile memory intrinsic, so the store survives every optimisation, inlining
 included: `tests/run.js` compiles `secret_wipe_o2`, whose wiped bytes nothing
 reads again, beside a twin that zeroes them with `fill(0)`, and after
 `opt -O2` the twin holds no store and the wipe holds one volatile zero per byte.
+`secret_wipe_o2_inferred` does the same for a `Secret` bound with no
+annotation, beside `secret_wipe_o2_inferred_plain` ("nish:secret: an inferred
+`Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the
+twin's fill(0) is deleted").
 Two things it does not reach, and says so: a buffer a `push` outgrew, which is
 no longer the array's, and a string, which is immutable and is not key material.
 
@@ -6752,6 +7157,59 @@ its event loop, which a blocking `readSignal` never returns to, so the prelude's
 versions throw rather than answer. The row in
 [wp33-round-trip.md](wp33-round-trip.md) §3.5 gives the translation.
 
+### Children and the machine: `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`
+
+What a supervisor asks of the host (WP34 N12): start a child without waiting
+for it, stop it, reap it when it ends, and size itself to the machine it runs
+on. All five are C in `runtime/runtime-os.c`, beside `spawnSync`, and each is
+exported by `nish:process` as well as being a global.
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `spawn(argv: string[]): i32` | start `argv[0]`, searched on `PATH`, exactly as `spawnSync` does — the same vector, environment, streams and working directory — and answer the child's **pid** at once, **without waiting**. A failure is a **negative errno**: -22 (EINVAL) for an empty vector or an argument holding a NUL, and `posix_spawnp`'s own error otherwise, so a program that is not there is -2 (ENOENT). **Test `pid > 0` before handing the answer on**: a failure such as -1 (EPERM) passed to `waitPid` reads as "any child". The child is this process's until `waitPid` reaps it; one never reaped stays a zombie until the program exits, as it would in C | write | `os_spawn`; `reject_os_spawn_type`, `reject_os_spawn_wasm` |
+| `kill(pid: i32, sig: i32): i32` | send `sig` to `pid` and answer 0, or a negative errno. **Only 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM)**, whose numbers are the same on Linux and Darwin; any other `sig` is -22, so a number means the same signal on every host. A `pid` of 0 or below is -22 too, because `kill(2)` reads those as a process group or every process, which is not one process. -3 (ESRCH) when no process has the pid — a child already reaped included — and -1 (EPERM) when it is another user's. A positive pid may be any process of this user, not only a child ([RT-19](security/runtime.md)) | write | `os_kill`; `reject_os_kill_f64`, `reject_os_kill_wasm` |
+| `waitPid(pid: i32, flags: i32): i32[]` | reap a child and answer a fresh two-element **`[pid, status]`**. `pid` is a child's, or **-1 for any child**; flag **1 is WNOHANG**. The status is `spawnSync`'s: the exit code, or **128 + n** when signal `n` ended it. `[0, 0]` is a WNOHANG wait with a child left and none exited. A failure puts the negative errno first: `[-10, 0]` (ECHILD) when there is no child to wait for, `[-4, 0]` (EINTR) when a signal interrupted the wait — though after `signalFd()` a blocking wait never sees it, because that handler is installed with `SA_RESTART` and the wait restarts, and `[-22, 0]` for any other flag bit or a pid that is neither -1 nor positive. An array because the language has no tuple | write | `os_wait`, `os_spawn`, `os_kill`; `reject_os_wait_arity`, `reject_os_wait_wasm` |
+| `availableParallelism(): i32` | the CPUs this program may use, **at least 1**: the smallest of the CPUs online, the ones its thread may run on (an affinity mask, a container's cpuset), a cgroup v2 CPU quota rounded up, and `NISH_NUM_THREADS` when that is a positive number — which can lower the count and never raise it. It needs no `--threads`: a program asks it to decide how many workers to start | none | `os_cpu`; `reject_os_cpu_arity`, `reject_os_cpu_wasm` |
+| `totalMemory(): i64` | bytes of **physical memory** — `_SC_PHYS_PAGES` times the page size on Linux, `hw.memsize` on Darwin — or **-1** where the host does not say. The machine's, not a cgroup's limit | none | `os_memory`; `reject_os_memory_wasm` |
+
+**Capabilities.** `spawn`, `kill` and `waitPid` carry `process.spawn`, the
+label `spawnSync` carries: each reaches other processes — `kill` any process of
+this user, as kill(1) does, not only a child `spawn` started — so none takes a
+label of its own (`caps_process_wait`).
+`availableParallelism` and `totalMemory` carry **none**: how many cores and
+bytes the machine has is a fact about the host, as `process.platform` is, read
+to size a program rather than to reach anything (`caps_host`).
+
+**A supervisor polls.** A blocking `waitPid(pid, 0)` cannot be woken by
+SIGTERM once `signalFd()` is installed (the restart above), so a supervisor
+that must answer a signal while its children run reaps with flag 1 (WNOHANG)
+on each tick of a `pollWait` loop that also watches the signal descriptor,
+and stops its children with `kill` when `readSignal` answers.
+
+**In a task.** `spawn`, `kill` and `waitPid` write state outside the program,
+so a scope's task or a parallel body that calls one — under any import alias —
+is refused as any shared write is (`reject_os_spawn_task`,
+`reject_os_kill_task`, `reject_os_wait_task`, `reject_os_kill_task_alias`,
+`reject_os_kill_parallel`). `availableParallelism` and `totalMemory` write
+nothing and may be called there (`tests/link/thread_host_facts_task`).
+
+**On wasm.** A `wasm32` target has no processes and no host to ask, so all five
+are refused by the checker with the N3 rule's words: `` `spawn` reaches the
+operating system, and a wasm32 build has none to reach `` (NL2404;
+`reject_os_spawn_wasm`, `reject_os_kill_wasm`, `reject_os_wait_wasm`,
+`reject_os_cpu_wasm`, `reject_os_memory_wasm`).
+
+**The TypeScript reading.** `kill`, `availableParallelism` and `totalMemory`
+are **class A** under `runtime/nish.mjs`: `kill` checks the signal and the pid
+as the native one does and turns Node's error code back into its errno;
+`availableParallelism` is `os.availableParallelism()` lowered by
+`NISH_NUM_THREADS` (Node reads no cgroup quota, so inside a container with one
+the two can differ); and `totalMemory` is `os.totalmem()`, a `bigint` as every
+`i64` is there. `spawn` and `waitPid` are **class C**: Node reaps its children
+itself, on the event loop, so a synchronous wait has nothing to find, and the
+prelude's versions throw, naming themselves, rather than answer (the `os_`
+block of `tests/run.js`).
+
 ### `nish:net`: addresses, non-blocking TCP and UDP, and the readiness loop
 
 Sockets for a program that owns its loop (WP34 N5): a server listens, accepts
@@ -6775,7 +7233,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netAddress(out: u8[], host: string, port: i32): i32` | writes the [address form](#the-address-form) of a **numeric** host — an IPv4 dotted quad or an IPv6 literal — and `port` into `out`'s first 18 bytes: `0`, or `-22` for a name (there is no DNS), a string with a NUL inside it, a port outside `0..65535` or an `out` shorter than 18 bytes, which is then left as it was | write | `net_tcp_calls`, `net_tcp_import`; `reject_net_unknown_export` |
 | `netLocalPort(fd: i32): i32` | the port the socket is bound to, which is how a program that listened on port `0` learns the one the kernel chose | write | `net_tcp_calls`, `net_tcp_echo` |
 | `tcpListen(host: string, port: i32, backlog: i32): i32` | a listening socket on a numeric host with `SO_REUSEADDR`, so a restarted server rebinds a port its old connections still hold in `TIME_WAIT`. An IPv4 host is an IPv4 socket; any other is IPv6 with `IPV6_V6ONLY` off, so `"::"` hears both families, and on a kernel without IPv6 `"::"` is IPv4's `0.0.0.0`. `-98` when the port is in use, `-22` for a host that is not a literal | write | `net_tcp_calls`, `net_tcp_echo`, `net_dual_stack`; `reject_net_arity`, `reject_net_wasm` |
-| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener that did not ask for it, or asked by one that does not, is `-98` | write | `net_tcp_reuseport`, `link/net_tcp_reuseport_spread`; `reject_net_reuseport_wasm` |
+| `tcpListenFlags(host: string, port: i32, backlog: i32, flags: i32): i32` | `tcpListen`'s socket, with flags. Flag `1` sets `SO_REUSEPORT` before the bind, so several listeners that all ask for it share one port, each with its own accept queue, whether one process holds them all or each of several processes holds one. What sharing does differs by platform, in the table below. Flag `2` sets `TCP_NODELAY` on every connection `tcpAccept` takes from the listener, on every platform: the runtime sets it on each accepted socket rather than trusting the kernel to copy it from the listener, and a connection on which it cannot be set is closed and its failure answered. Flags add: `3` is both. Flag `0` is `tcpListen` exactly. Any other bit, a negative `flags` included, is `-22` before a socket is made. A port held by a listener without flag `1` is `-98` to a listener that asks for it, and the other way round | write | `net_tcp_reuseport`, `net_tcp_nodelay`, `link/net_tcp_reuseport_spread`, `link/net_tcp_nodelay_shared`; `reject_net_reuseport_wasm`, `reject_net_nodelay_wasm` |
 | `tcpAccept(fd: i32, peer: u8[]): i32` | the next waiting connection as a descriptor of its own, non-blocking and close-on-exec, with the peer's address written into `peer`; `-11` when none is waiting. A `peer` shorter than 18 bytes is `-22` before anything is accepted, so no connection is taken and lost. Not `willreturn`: on a blocking socket the program inherited it waits | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_accept_readonly` |
 | `netRead(fd: i32, buf: u8[], off: i32, len: i32): i32` | at most `len` bytes into `buf[off, off + len)`: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`, `net_tcp_unchecked`; `reject_net_readonly`, `reject_net_element`, `reject_net_import_wasm` |
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
@@ -6893,17 +7351,19 @@ receiver, 1,200-byte datagrams: 459,000 a second at one per call, and
 always `0, 0`. A `meta[1]` of `0` is also what a datagram that really is not
 ECN-capable reads as, so a receive on Darwin cannot say ECN is unsupported: a
 program learns that from the `-95` a send with an `ecn` above `0` answers, and
-on Darwin it reads every arrival as Not-ECT. That branch is compiled by CI's Darwin rows and run by nothing.
-On Linux, where the suite runs, no UDP call answers `-95` (the code is pinned
-there by `tcpAccept` on a datagram socket instead, above), so the Darwin
-answers are a statement about the code, not about a test.
+on Darwin it reads every arrival as Not-ECT. CI's `runtime-net (macos-latest)`
+job runs that branch: the `net_` sections there take the `-95` a GSO send and a
+GRO bind answer, and fall back to one datagram a send (`net_loopback`,
+`net_relay`), and `net_udp_offload` requires the `-95` of GSO, the GRO bind and
+each ECN mark, with nothing sent by them while a plain send still arrives. On Linux no UDP call answers `-95`, and the code is pinned there
+by `tcpAccept` on a datagram socket instead, above.
 
 #### The readiness loop
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `pollCreate(): i32` | a loop: a descriptor, close-on-exec, that watches others — epoll on Linux, kqueue on Darwin | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_wasm` |
-| `pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32` | watches `fd` for `events` — `1` readable, `2` writable, `3` both, `0` neither — and reports it under `token`, an `i32` of the program's choosing that comes back as it went in: `0`, `-17` for a descriptor the loop already watches (on Linux; kqueue adds it again), or `-22` for an event bit past `2` | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`, `reject_net_poll_parallel` |
+| `pollAdd(loop: i32, fd: i32, events: i32, token: i32): i32` | watches `fd` for `events` — `1` readable, `2` writable, `3` both, `0` neither — and reports it under `token`, an `i32` of the program's choosing that comes back as it went in: `0`, `-17` for a descriptor the loop already watches, or `-22` for an event bit past `2` | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_arity`, `reject_net_poll_parallel` |
 | `pollModify(loop: i32, fd: i32, events: i32, token: i32): i32` | new events or a new token for a descriptor the loop watches: `0`, or `-2` for one it does not | write | `net_loop_calls`, `net_loop_two` |
 | `pollRemove(loop: i32, fd: i32): i32` | stops watching `fd`: `0`, or `-2` for a descriptor the loop does not watch. Closing a descriptor stops the watching too | write | `net_loop_calls`, `net_loop_two` |
 | `pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32` | waits until a watched descriptor is ready or `timeoutMs` milliseconds pass, **forever for `-1`** (any negative number), and writes one pair per ready descriptor: `ready[2k]` its token and `ready[2k + 1]` its events, `1` readable and `2` writable with **`4` added for a hang-up or an error**. It answers the count, at most `ready.length / 2` and at most 64, or **`0` on a timeout**. A `ready` shorter than 2 is `-22`. Not `willreturn`, because it can wait forever | write | `net_loop_calls`, `net_loop_two`; `reject_net_poll_readonly`, `reject_net_poll_element`, `reject_net_poll_task`, `reject_net_poll_region` |
@@ -6949,14 +7409,21 @@ while (running) {
 }
 ```
 
-**Darwin** is kqueue, with a filter per direction rather than a set of events:
-`pollModify` there deletes the descriptor's filters and adds the ones asked
-for, so it adds a descriptor the loop did not watch rather than answer `-2`;
-`pollAdd` of a descriptor already watched adds it again rather than answer
-`-17`; a descriptor added watching nothing has no filter, so `pollRemove` of it
-answers `-2`; and a descriptor both readable and writable is two pairs with the
-same token, one per filter. That branch is compiled by CI's Darwin rows and run by
-nothing, as the rest of the Darwin network code is.
+**Darwin** is kqueue, with a filter per direction rather than a set of events,
+and the runtime builds epoll's answers from the filters: `pollAdd` of a
+descriptor already watched is `-17`, `pollModify` and `pollRemove` of one not
+watched are `-2`, a descriptor added watching nothing holds a disabled read
+filter so the loop still knows it, and a descriptor both readable and writable
+is one pair, `3`, folded from its two filters' records. Three differences
+stay. The `pollAdd` that answers `-17` leaves the descriptor, both ways, under
+the token it gave rather than the old one. A descriptor watching nothing is
+never reported: epoll still reports its hang-up or error as `4`, but a disabled
+filter reports nothing. And a peer's half-close is `1` on Linux but `5`, `1|4`,
+on Darwin: kqueue marks the read filter with end-of-file as soon as the FIN
+arrives, and the runtime reads end-of-file as `4`, where epoll sets its
+hang-up bit only once both directions are shut. CI's
+`runtime-net (macos-latest)` job runs `net_loop_calls` and `net_loop_two` on a
+mac, as it runs every `net_` section.
 
 #### Bounds
 
@@ -7416,6 +7883,8 @@ const tally = (rows: string[]): i32 => {
   | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
   | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
   | `s.spawn(...)` on a scope declared outside the block | always: the task runs, and stores, when that scope joins, after the release | NL2427 | `reject_using_arena_spawn` |
+  | `s.spawn(...)` on a scope the same `using` declares ahead of `arena()`, `using s = scope(), a = arena()` | an argument is not older than the block: `s` is disposed after the arena, so it joins after the release | NL2427 | `reject_using_arena_spawn_declarator` |
+  | the same, ahead of the statement's last `arena()`, `using a = arena(), s = scope(), b = arena()` | an argument is not older than the block: `b` releases before `s` joins | NL2427 | `reject_using_arena_spawn_last` |
 
   A number, a `boolean` or an `enum` leaves the block freely, and so does a
   value older than it. The rule is the escape analysis's, so it is
@@ -7436,6 +7905,17 @@ const tally = (rows: string[]): i32 => {
   stops following, as it does for a loop that pushes arrays into an array, so
   the block refuses it as NL2424 and says what to write instead: run that map
   outside the block (`tests/cases/reject_using_arena_map_arrays`).
+- **A task filed on a scope the block declares may read what it allocated.**
+  That scope joins before the block releases, inner `using s = scope()` or
+  `using a = arena(), s = scope()` alike, so the block may hand its task an
+  array or an object it made (`tests/link/thread_scope_reclaim`). A scope
+  declared ahead of the statement's last `arena()` is not one: that arena
+  releases first (`reject_using_arena_spawn_last`). The task
+  is followed as any callee is: one that answers its argument into an older
+  destination stores it (NL2424, `tests/cases/reject_using_arena_spawn_relay`,
+  as `reject_using_arena_spawn_stores` for any array answer), and a
+  constructor that makes the argument and hands `this` out stores it too
+  (`reject_using_arena_spawn_constructor`).
 - **It costs no scope.** A function that declares one keeps its automatic
   scope and its loops' pass scopes, because the block's mark is checked like
   theirs; only `Arena.mark`, `Arena.release` and `Arena.reset` give those up. And the arena-loop warning, NL9011, says
@@ -8151,12 +8631,12 @@ policy](#the-capability-policy); without one, the set is a report.
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
-| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`) |
+| `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
-`process.argv`, `process.platform` and `process.arch`, `panic`, `Arena.*` and `arena()`,
+`process.argv`, `process.platform` and `process.arch`, `availableParallelism` and `totalMemory` (`caps_host`), `panic`, `Arena.*` and `arena()`,
 `Math.*` other than `random`, the conversions, the constant-time builtins, `secureZero`, the
 string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
 `nish:` import carries the label of the builtin it renames.
@@ -8226,6 +8706,20 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   (`tests/link/caps_policy_deny_unsafe`) — and never allowed: the import is
   the opt-in, so an allowlist does not refuse it and `--allow unsafe` is a
   usage error.
+- `unsafe` travels like every other capability — to each caller, however far
+  up, and to the module and package above it, including a dependency that
+  imports `nish:unsafe` when the entry package does not — and keeps a program
+  deterministic ("capabilities: `unsafe` reaches a caller two frames up, with
+  the whole chain as its witness", "capabilities: a dependency that imports
+  `nish:unsafe` gives `unsafe` to its package and to the entry that calls
+  it"). The deprecated `--wrapping` and `--unchecked-indexing` carry no
+  `unsafe`, so `--deny unsafe` passes them: they reach only the entry package
+  and each compile that passes one prints its deprecation note (NL9014).
+  `--unchecked-indexing` also notes each site it leaves unchecked (NL7002),
+  which `nish --fix` rewrites into `uncheckedGet` and `uncheckedSet` calls
+  that do carry it; `--wrapping` has no fixer, and its note names the
+  `nish:unsafe` exports to write instead ("capabilities: `--wrapping` and
+  `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them").
 - A name that is no capability, `--allow unsafe`, a capability both allowed
   and denied, and a directory scope (`fs.read=<dir>`, which nothing enforces
   yet) are usage errors, exit 2. In `package.json` they are errors where the
@@ -9069,7 +9563,7 @@ by the caller.
 
   | Code | Row ([wp33](wp33-round-trip.md) §3) | Where it is reported | What the TypeScript reading does instead |
   | --- | --- | --- | --- |
-  | NL8001 | UTF-8 offsets (3.2) | an offset (`s.length`, `s.indexOf(t)`, `s.lastIndexOf(t)`) or a code unit (`s.charCodeAt(i)`) of a string that is not provably ASCII, where it meets a fact not counted in bytes: printed, returned by `main`, stored, compared or combined with a number literal, or taken from a width (`width - s.length`); the exact predicate is below the table | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
+  | NL8001 | UTF-8 offsets (3.2) | an offset (`s.length`, `s.indexOf(t)`, `s.lastIndexOf(t)`) or a code unit (`s.charCodeAt(i)`) of a string that is not provably ASCII, where it meets a fact not counted in bytes: printed, returned by `main`, stored (a data-parallel body's answer included), compared or combined with a number literal, taken from a width (`width - s.length`), used as an array index, a loop bound or `parallelFrom`'s count — directly, through a function it is passed to, or through a helper that returns it; the exact predicate is below the table | counts UTF-16 code units, so the number differs wherever the text is not ASCII |
   | NL8002 | checked `slice` (3.2) | a `slice(a)` or `slice(a, b)` on a string with a bound that is a negative literal, or that is placed inside `[0, length]` neither by the bounds proof which folds a `substring` clamp nor by the receiver's own text: an ASCII string literal, a `const` bound to one, a `const` copied from such a `const`, or a module constant that folds to one has a known length, and a bound no larger than it is quiet when it is a non-negative literal, or a local the same bounds proof holds between 0 and that length — a `const` or a `let` its initialiser bounds, or one a guard bounds — and, when the receiver's length is what proves either of two bounds, the first is known to be no larger than the second, from the largest the first can be and the smallest the second can be (`tests/cases/port_str_slice_literal_quiet`; past the end, a reversed pair such as `slice(5, 2)`, a pair nothing orders, a `let` receiver and a non-ASCII literal still warn, `port_str_slice_literal_past`); one warning per call, at the first such bound | clamps the bounds and counts a negative one from the end, where this panics |
   | NL8003 | a record copied in (3.3) | a local record `p` copied into a record array `ps` (`ps.push(p)`, an element of an array literal, `ps[i] = p`), when a field of one copy is written after the copy and the other copy is read after that write; the exact predicate is below the table | stores the same object, so a write through one is seen through the other |
   | NL8004 | a store over a live element (3.3) | a whole-slot store `ps[i] = v` into a record array while an element reference into the same array (`const r = ps[j]`, or `r` of `for (const r of ps)`) is still read afterwards; `i` and `j` are not compared, and a field store `ps[i].x = v` is not a whole-slot store | puts a new object in the slot and leaves `r` holding the old one |
@@ -9106,19 +9600,58 @@ by the caller.
     names the same character in both units);
   - it is **taken from a width**: the right operand of a `-` whose left
     operand does not itself hold an offset, as in `width - s.length`, the
-    room left in a column that was not counted in bytes.
+    room left in a column that was not counted in bytes;
+  - it **indexes an array** (`a[s.indexOf(t)]` picks another element) or
+    **counts the elements** `parallelFrom(n, f)` makes — an offset or a code
+    unit alike (`table[s.charCodeAt(i) % n]` reads another slot where the
+    byte and the unit differ);
+  - it **bounds a loop**: either operand of a comparison in a `while`, `do`
+    or `for` condition, unless the other operand also holds an offset or is
+    the loop's *cursor* into a string — a local the loop uses as a string's
+    index or hands to a string's method, alone or in arithmetic — which
+    counts in the string's own unit (`for (let i = 0; i < s.length; i++)`
+    over `s.charCodeAt(i)` is quiet, and so is a bound that moves the cursor
+    by a constant to look ahead, `i + 1 < s.length`);
+  - it is **a data-parallel body's answer**: stored in the array
+    `parallelMap`, `parallelMapInto` or `parallelFrom` fills, or folded by
+    `parallelReduce` (with its identity) into the value the call answers,
+    which is followed on from the call.
+
+  The walk crosses functions of the same module that are not generic or
+  methods of a generic class, up to four calls deep. An offset passed as an
+  argument — to a function, a method or a constructor — is followed through
+  the parameter in the callee and reported at the argument, quoting the
+  callee's reason (`` `s.length` … and it is passed to `show`, where it is
+  printed ``). An offset a function returns, or an arrow answers, is followed
+  from every call of it in the module, and from the parallel call that runs
+  the arrow as its body; a call whose string argument is provably ASCII is
+  skipped. A name an arrow captures is provably ASCII when the function that
+  hosts the arrow writes only ASCII to it.
+
+  The walk is a lint, not a proof, and it is silent where it stops: past the
+  fourth call (a recursive call ends there), into a generic function, a
+  method of a generic class or a function of another module, at a parameter
+  the callee never reads, or one it reads only inside an arrow it passes on,
+  and at the answer of a `spawn` body, whose task is not followed into the
+  value its scope hands back (`tests/link/port_utf8_offset_walk_limits`).
 
   One `+ k` on the offset an `indexOf` (with or without a start) or
   `lastIndexOf` of a provably ASCII needle answers, with `0 < k <= needle.length`, steps inside the match and is not itself a
   fact from outside: `line.substring(line.indexOf(":") + 1)` is quiet, and
   the stepped offset is followed on like any other, so printing it is
-  reported. Everything else is quiet: an offset handed to a string method or
-  to any function, compared with another offset or with a local, or used as a
-  loop bound, stays inside the program's own counting, so
+  reported. Everything else is quiet: an offset handed to a string method,
+  compared with another offset or with a cursor, or kept inside a function
+  the walk does not cross, stays inside the program's own counting, so
   `const width = name.length;` alone is not reported
   (`tests/cases/port_str_length_printed`, `port_str_nonascii_charcode`,
-  `port_str_needle_step_printed`; quiet: `port_str_ascii_literal_quiet`,
-  `port_str_offset_roundtrip_quiet`; the form with a start: `str_index_of_from_port`).
+  `port_str_needle_step_printed`, `port_utf8_offset_index`,
+  `port_utf8_offset_argument`, `port_utf8_offset_loop_bound`,
+  `port_utf8_offset_helper_return`; `tests/link/port_utf8_offset_parallel_body`,
+  `port_utf8_offset_parallel_from`, `port_utf8_offset_parallel_reduce`,
+  `port_utf8_offset_walk_limits`; quiet:
+  `port_str_ascii_literal_quiet`, `port_str_offset_roundtrip_quiet`,
+  `tests/link/port_utf8_offset_quiet`; the form with a start:
+  `str_index_of_from_port`).
 
   **NL8003 and NL8004, exactly.** A *record array* holds its records inline:
   its element type is an `interface` no class `implements`, and not
@@ -9682,6 +10215,7 @@ messages are exact for the cases cited; other rows quote the checker
 | a member named by a string or a number, a parameter property | `` Members of `Point` must have plain identifier names `` / ``Parameter properties (`constructor(public x: number)`) are not supported; declare the field and assign it`` | `reject_cls_field_string_name`, `reject_cls_param_property` |
 | an index signature, a `static { }` block, a construct or call signature, `interface … extends` | `` Index signatures are not supported in class `Point` (object layout is fixed) `` (or `interface`) / `` Unsupported class member in `Point`: ClassStaticBlockDeclaration `` / `` Unsupported interface member in `Point`: ConstructSignature `` / ``Interface inheritance (`extends`) is not supported; list every field`` | `reject_cls_index_signature`, `reject_iface_index_signature`, `reject_cls_static_block`, `reject_iface_member_unsupported`, `reject_iface_extends` |
 | an object literal key that is not a name, a method in an object literal | `Object literal keys must be plain identifiers` / ``Unsupported object literal member: MethodDeclaration (only `key: value`)`` | `reject_cls_literal_key`, `reject_cls_literal_member` |
+| an object literal typed as a class with methods | `` `Counter` has methods, so it is made only by `new`: ... Write `new Counter(...)` `` | `reject_class_literal_*`, `nl2556_class_literal` |
 | more than one class, interface or enum form in one declaration | the first in source order, alone; a `static` or `readonly` header before one is the member's own refusal | `reject_cls_sweep_together` |
 | a side-effect import, `import "./m"` | `` Side-effect imports (`import "./locals"`) are not supported; modules have no top-level code `` | `reject_side_effect_import` |
 | `import type`, `{ type A }` | `Type-only imports are not supported` | `reject_import_type_only`, `nl2243_type_only_import` |

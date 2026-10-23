@@ -42,6 +42,24 @@ export class Local {
    * in `src/arrays.ts`).
    */
   typedArray: string
+  /**
+   * What an index `xs[i]` through this variable is keyed as among the
+   * property paths a test narrows (`indexKey` in `src/expressions.ts`): the
+   * number a `const` is initialised with, `$n` for any other variable that
+   * holds one value while it is in scope — a `const`, a parameter, a `let`
+   * its block never assigns — and `""` for a variable that is assigned, which
+   * keys nothing, as TypeScript narrows `xs[i]` only through such a variable.
+   * Among the pointers, as `typedArray` is.
+   */
+  pathIndex: string
+  /**
+   * The name TypeScript gives this variable's literal type when it keys an
+   * index by it (`literalIndexName` in `src/expressions.ts`): `"0"` for
+   * `const i = 0` and `"-1"` for `const i = -1`, so that `xs[j]` is `xs[0]`
+   * after `const j = i` as well. `""` for anything else: an annotated `const`,
+   * whose type is the annotation's, a `let`, a parameter.
+   */
+  literalKey: string
   /** A `TypeTable` id, the type as declared. `Scope.typeOf` may narrow it. */
   type: i32
   storage: i32
@@ -73,6 +91,8 @@ export class Local {
     this.typedArray = ""
     this.fresh = false
     this.captureOf = null
+    this.pathIndex = ""
+    this.literalKey = ""
   }
 }
 
@@ -132,6 +152,13 @@ export const unknownOrigin = (expr: Node): TypeOrigin => {
   return origin
 }
 
+/**
+ * The narrowing of a union variable every tag of which a test excluded,
+ * which TypeScript types `never`. Below every type id; `Scope.typeOf` never
+ * hands it out, and `Scope.exhausted` reports it.
+ */
+export const NARROWED_NONE: i32 = -3
+
 export class Scope {
   parent: Scope | null
   /** Name -> index into `locals`. */
@@ -140,6 +167,15 @@ export class Scope {
   /** Narrowed variables and the types they read as, in the same order. */
   narrowedVars: Local[]
   narrowedTypes: i32[]
+  /**
+   * Enum variables and the members they can hold, in the same order: a
+   * member type, or a union whose tags they were read from. Set by the
+   * value a declaration or an assignment stores, as TypeScript narrows a
+   * variable of a literal union to what was assigned to it, and dropped with
+   * the narrowings, so a comparison with a member none of them is can be refused.
+   */
+  heldVars: Local[]
+  heldSets: i32[]
 
   constructor(parent: Scope | null) {
     this.parent = parent
@@ -147,6 +183,8 @@ export class Scope {
     this.locals = []
     this.narrowedVars = []
     this.narrowedTypes = []
+    this.heldVars = []
+    this.heldSets = []
   }
 
   child(): Scope {
@@ -213,13 +251,78 @@ export class Scope {
   typeOf(variable: Local): i32 {
     const at = this.narrowingIndex(variable)
     if (at >= 0) {
-      return this.narrowedTypes[at]
+      const type = this.narrowedTypes[at]
+      return type === NARROWED_NONE ? variable.type : type
     }
     const parent = this.parent
     if (parent !== null) {
       return parent.typeOf(variable)
     }
     return variable.type
+  }
+
+  /**
+   * Whether the innermost narrowing of `variable` left it no variant: every
+   * tag of its union was tested away, so TypeScript types it `never`.
+   */
+  exhausted(variable: Local): boolean {
+    const at = this.narrowingIndex(variable)
+    if (at >= 0) {
+      return this.narrowedTypes[at] === NARROWED_NONE
+    }
+    const parent = this.parent
+    if (parent !== null) {
+      return parent.exhausted(variable)
+    }
+    return false
+  }
+
+  /** Record that the enum variable `variable` holds one of `set`'s members for the rest of this scope. */
+  hold(variable: Local, set: i32): void {
+    let i = 0
+    while (i < this.heldVars.length) {
+      if (this.heldVars[i] === variable) {
+        this.heldSets[i] = set
+        return
+      }
+      i = i + 1
+    }
+    this.heldVars.push(variable)
+    this.heldSets.push(set)
+  }
+
+  /** The members `variable` can hold, as `hold` recorded them, or -1 when they are not known. */
+  heldBy(variable: Local): i32 {
+    let i = 0
+    while (i < this.heldVars.length) {
+      if (this.heldVars[i] === variable) {
+        return this.heldSets[i]
+      }
+      i = i + 1
+    }
+    const parent = this.parent
+    if (parent !== null) {
+      return parent.heldBy(variable)
+    }
+    return -1
+  }
+
+  /**
+   * Take on every narrowing and every held set `arm` recorded itself: `arm`
+   * is a child of this scope whose region is the only way past it, so what
+   * it proved holds for the rest of this one.
+   */
+  adopt(arm: Scope): void {
+    let i = 0
+    while (i < arm.narrowedVars.length) {
+      this.narrow(arm.narrowedVars[i], arm.narrowedTypes[i])
+      i = i + 1
+    }
+    i = 0
+    while (i < arm.heldVars.length) {
+      this.hold(arm.heldVars[i], arm.heldSets[i])
+      i = i + 1
+    }
   }
 
   /**
@@ -236,6 +339,18 @@ export class Scope {
       this.narrowedTypes[at] = this.narrowedTypes[last]
       this.narrowedVars.pop()
       this.narrowedTypes.pop()
+    }
+    let i = 0
+    while (i < this.heldVars.length) {
+      if (this.heldVars[i] === variable) {
+        const last = this.heldVars.length - 1
+        this.heldVars[i] = this.heldVars[last]
+        this.heldSets[i] = this.heldSets[last]
+        this.heldVars.pop()
+        this.heldSets.pop()
+      } else {
+        i = i + 1
+      }
     }
     const parent = this.parent
     if (parent !== null) {

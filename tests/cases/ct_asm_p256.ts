@@ -16,7 +16,9 @@
 // fixed-base comb of `p256BaseMult` — the digit's four bits read out of the
 // scalar, the fifteen-entry read of a comb sub-table, the complete mixed
 // addition, the move that keeps or discards its sum, and one whole pass of
-// its inner loop, the four composed. The check follows each call into its callee in this listing (tests/ct-asm.js), which is
+// its inner loop, the four composed; and the nonce's inversion by safegcd —
+// one block of thirty divsteps, and the two matrix updates, of d and e and of
+// f and g. The check follows each call into its callee in this listing (tests/ct-asm.js), which is
 // what lets the doubling, the addition and the window step, which call the
 // field functions rather than inline them, be held at all.
 //
@@ -28,12 +30,20 @@
 // is a back-edge; and the comb's offsets wrap rather than check, because an
 // overflow check is a branch. Their field steps are the module's, in order.
 //
+// The safegcd copies are the module's with their loops written out: the
+// thirty divsteps as thirty blocks, each the module's loop body line for line
+// (tests/run.js holds them to the module's text), and the updates' loop over
+// limbs 1 to 8 at literal indices. What they do not cover — the conversions
+// to and from signed-30, the normalisation and the twenty rounds around them —
+// is held by discipline (docs/security/ct-verification.md).
+//
 // `main` keeps the copies honest: it runs P-256's scalar multiplication on
 // them — the table built with `p256PointAdd`, 64 `p256WindowStep`s — and
 // again by the comb — its table built from G here, on the copies, not taken
 // from the module, then 64 `p256BaseStep`s — and requires, both ways, RFC 6979
 // A.2.5's public key and the `r` of its two SHA-256 signatures
-// (ct_asm_p256.out). tests/link/crypto_p256 holds the module to the
+// (ct_asm_p256.out), and inverts 2, n - 1 and the RFC's "sample" nonce on
+// the safegcd copies, against inverses computed with Python's integers. tests/link/crypto_p256 holds the module to the
 // same vectors, so the two agree through the RFC; the field copies are also
 // held to known answers computed from their definitions.
 // ct-check: p256FiatMul secret=contents
@@ -52,6 +62,9 @@
 // ct-check: p256PointAddMixed secret=contents
 // ct-check: p256BaseKeep secret=digit,contents
 // ct-check: p256BaseStep secret=contents
+// ct-check: p256Divsteps30 secret=zeta,f0,g0
+// ct-check: p256UpdateDe30 secret=contents
+// ct-check: p256UpdateFg30 secret=contents
 
 import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
 
@@ -3674,6 +3687,755 @@ export const p256BaseStep = (x: u32[], y: u32[], z: u32[], table: u32[], k: u8[]
   p256BaseKeep(z, sum, 16, digit)
 }
 
+// ---- The nonce's inverse by safegcd ----------------------------------------------
+//
+// Ported from libsecp256k1 (https://github.com/bitcoin-core/secp256k1), src/modinv32_impl.h. Copyright (c) 2020 Peter Dettman. Used under the MIT licence; see std/crypto/LICENSE-libsecp256k1.
+
+/** A signed-30 limb's 32-bit pattern, sign-extended to 64 bits. */
+const p256Wide = (a: u32): u64 => toU64(toI64(toI32(a)))
+
+/** A 64-bit accumulator shifted right by 30, arithmetically. */
+const p256Carry30 = (c: u64): u64 => toU64(toI64(c) >> 30)
+
+/** All ones when `a`'s top bit is set, zero otherwise. */
+const p256SignMask = (a: u32): u32 => toU32(toI32(a) >> 31)
+
+/**
+ * `p256Divsteps30`, without the length guard on `t`, and with its thirty
+ * iterations written out, each a block that is the module's loop body line for
+ * line, because a rolled loop is a back-edge (tests/run.js holds the two to
+ * the same text).
+ */
+export const p256Divsteps30 = (zeta: u32, f0: u32, g0: u32, t: u32[]): u32 => {
+  const zero: u32 = 0
+  let z: u32 = zeta
+  let f: u32 = f0
+  let g: u32 = g0
+  let u: u32 = 1
+  let v: u32 = 0
+  let q: u32 = 0
+  let r: u32 = 1
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  {
+    // Masks for zeta < 0 and for g odd.
+    let mask1: u32 = p256SignMask(z)
+    const mask2: u32 = zero - (g & 1)
+    // f, u and v, negated when zeta < 0, added to g, q and r when g is odd.
+    g = g + (((f ^ mask1) - mask1) & mask2)
+    q = q + (((u ^ mask1) - mask1) & mask2)
+    r = r + (((v ^ mask1) - mask1) & mask2)
+    // When both hold, zeta becomes -zeta - 2 and the new g, q and r are added
+    // to f, u and v (the swap); otherwise zeta becomes zeta - 1.
+    mask1 = mask1 & mask2
+    z = (z ^ mask1) - 1
+    f = f + (g & mask1)
+    u = u + (q & mask1)
+    v = v + (r & mask1)
+    g = g >> 1
+    u = u << 1
+    v = v << 1
+  }
+  uncheckedSet(t, 0, u);
+  uncheckedSet(t, 1, v);
+  uncheckedSet(t, 2, q);
+  uncheckedSet(t, 3, r);
+  return z
+}
+
+/**
+ * `p256UpdateDe30`, without the length guard on `d`, `e`, `t` and `n`, and
+ * with the loop over limbs 1 to 8 written out at literal indices.
+ */
+export const p256UpdateDe30 = (d: u32[], e: u32[], t: u32[], n: u32[]): void => {
+  const u: u64 = p256Wide(uncheckedGet(t, 0))
+  const v: u64 = p256Wide(uncheckedGet(t, 1))
+  const q: u64 = p256Wide(uncheckedGet(t, 2))
+  const r: u64 = p256Wide(uncheckedGet(t, 3))
+  // n^-1 mod 2^30, which makes the sum's bottom 30 bits zero below.
+  const inverse30: u32 = 0x11ff43b1
+  // [md, me] start as [u, q] if d is negative plus [v, r] if e is.
+  const sd: u32 = p256SignMask(uncheckedGet(d, 8))
+  const se: u32 = p256SignMask(uncheckedGet(e, 8))
+  let md: u32 = (uncheckedGet(t, 0) & sd) + (uncheckedGet(t, 1) & se)
+  let me: u32 = (uncheckedGet(t, 2) & sd) + (uncheckedGet(t, 3) & se)
+  const d0: u64 = p256Wide(uncheckedGet(d, 0))
+  const e0: u64 = p256Wide(uncheckedGet(e, 0))
+  let cd: u64 = u * d0 + v * e0
+  let ce: u64 = q * d0 + r * e0
+  // Correct md and me so that the bottom 30 bits of the sum are zero.
+  md = md - ((inverse30 * toU32(cd) + md) & 0x3fffffff)
+  me = me - ((inverse30 * toU32(ce) + me) & 0x3fffffff)
+  const mdWide: u64 = p256Wide(md)
+  const meWide: u64 = p256Wide(me)
+  cd = p256Carry30(cd + p256Wide(uncheckedGet(n, 0)) * mdWide)
+  ce = p256Carry30(ce + p256Wide(uncheckedGet(n, 0)) * meWide)
+  cd = cd + u * p256Wide(uncheckedGet(d, 1)) + v * p256Wide(uncheckedGet(e, 1)) + p256Wide(uncheckedGet(n, 1)) * mdWide
+  ce = ce + q * p256Wide(uncheckedGet(d, 1)) + r * p256Wide(uncheckedGet(e, 1)) + p256Wide(uncheckedGet(n, 1)) * meWide
+  uncheckedSet(d, 0, toU32(cd) & 0x3fffffff);
+  uncheckedSet(e, 0, toU32(ce) & 0x3fffffff);
+  cd = p256Carry30(cd)
+  ce = p256Carry30(ce)
+  cd = cd + u * p256Wide(uncheckedGet(d, 2)) + v * p256Wide(uncheckedGet(e, 2)) + p256Wide(uncheckedGet(n, 2)) * mdWide
+  ce = ce + q * p256Wide(uncheckedGet(d, 2)) + r * p256Wide(uncheckedGet(e, 2)) + p256Wide(uncheckedGet(n, 2)) * meWide
+  uncheckedSet(d, 1, toU32(cd) & 0x3fffffff);
+  uncheckedSet(e, 1, toU32(ce) & 0x3fffffff);
+  cd = p256Carry30(cd)
+  ce = p256Carry30(ce)
+  cd = cd + u * p256Wide(uncheckedGet(d, 3)) + v * p256Wide(uncheckedGet(e, 3)) + p256Wide(uncheckedGet(n, 3)) * mdWide
+  ce = ce + q * p256Wide(uncheckedGet(d, 3)) + r * p256Wide(uncheckedGet(e, 3)) + p256Wide(uncheckedGet(n, 3)) * meWide
+  uncheckedSet(d, 2, toU32(cd) & 0x3fffffff);
+  uncheckedSet(e, 2, toU32(ce) & 0x3fffffff);
+  cd = p256Carry30(cd)
+  ce = p256Carry30(ce)
+  cd = cd + u * p256Wide(uncheckedGet(d, 4)) + v * p256Wide(uncheckedGet(e, 4)) + p256Wide(uncheckedGet(n, 4)) * mdWide
+  ce = ce + q * p256Wide(uncheckedGet(d, 4)) + r * p256Wide(uncheckedGet(e, 4)) + p256Wide(uncheckedGet(n, 4)) * meWide
+  uncheckedSet(d, 3, toU32(cd) & 0x3fffffff);
+  uncheckedSet(e, 3, toU32(ce) & 0x3fffffff);
+  cd = p256Carry30(cd)
+  ce = p256Carry30(ce)
+  cd = cd + u * p256Wide(uncheckedGet(d, 5)) + v * p256Wide(uncheckedGet(e, 5)) + p256Wide(uncheckedGet(n, 5)) * mdWide
+  ce = ce + q * p256Wide(uncheckedGet(d, 5)) + r * p256Wide(uncheckedGet(e, 5)) + p256Wide(uncheckedGet(n, 5)) * meWide
+  uncheckedSet(d, 4, toU32(cd) & 0x3fffffff);
+  uncheckedSet(e, 4, toU32(ce) & 0x3fffffff);
+  cd = p256Carry30(cd)
+  ce = p256Carry30(ce)
+  cd = cd + u * p256Wide(uncheckedGet(d, 6)) + v * p256Wide(uncheckedGet(e, 6)) + p256Wide(uncheckedGet(n, 6)) * mdWide
+  ce = ce + q * p256Wide(uncheckedGet(d, 6)) + r * p256Wide(uncheckedGet(e, 6)) + p256Wide(uncheckedGet(n, 6)) * meWide
+  uncheckedSet(d, 5, toU32(cd) & 0x3fffffff);
+  uncheckedSet(e, 5, toU32(ce) & 0x3fffffff);
+  cd = p256Carry30(cd)
+  ce = p256Carry30(ce)
+  cd = cd + u * p256Wide(uncheckedGet(d, 7)) + v * p256Wide(uncheckedGet(e, 7)) + p256Wide(uncheckedGet(n, 7)) * mdWide
+  ce = ce + q * p256Wide(uncheckedGet(d, 7)) + r * p256Wide(uncheckedGet(e, 7)) + p256Wide(uncheckedGet(n, 7)) * meWide
+  uncheckedSet(d, 6, toU32(cd) & 0x3fffffff);
+  uncheckedSet(e, 6, toU32(ce) & 0x3fffffff);
+  cd = p256Carry30(cd)
+  ce = p256Carry30(ce)
+  cd = cd + u * p256Wide(uncheckedGet(d, 8)) + v * p256Wide(uncheckedGet(e, 8)) + p256Wide(uncheckedGet(n, 8)) * mdWide
+  ce = ce + q * p256Wide(uncheckedGet(d, 8)) + r * p256Wide(uncheckedGet(e, 8)) + p256Wide(uncheckedGet(n, 8)) * meWide
+  uncheckedSet(d, 7, toU32(cd) & 0x3fffffff);
+  uncheckedSet(e, 7, toU32(ce) & 0x3fffffff);
+  cd = p256Carry30(cd)
+  ce = p256Carry30(ce)
+  uncheckedSet(d, 8, toU32(cd));
+  uncheckedSet(e, 8, toU32(ce));
+}
+
+/**
+ * `p256UpdateFg30`, without the length guard on `f`, `g` and `t`, and with
+ * the loop over limbs 1 to 8 written out at literal indices.
+ */
+export const p256UpdateFg30 = (f: u32[], g: u32[], t: u32[]): void => {
+  const u: u64 = p256Wide(uncheckedGet(t, 0))
+  const v: u64 = p256Wide(uncheckedGet(t, 1))
+  const q: u64 = p256Wide(uncheckedGet(t, 2))
+  const r: u64 = p256Wide(uncheckedGet(t, 3))
+  const f0: u64 = p256Wide(uncheckedGet(f, 0))
+  const g0: u64 = p256Wide(uncheckedGet(g, 0))
+  let cf: u64 = p256Carry30(u * f0 + v * g0)
+  let cg: u64 = p256Carry30(q * f0 + r * g0)
+  cf = cf + u * p256Wide(uncheckedGet(f, 1)) + v * p256Wide(uncheckedGet(g, 1))
+  cg = cg + q * p256Wide(uncheckedGet(f, 1)) + r * p256Wide(uncheckedGet(g, 1))
+  uncheckedSet(f, 0, toU32(cf) & 0x3fffffff);
+  uncheckedSet(g, 0, toU32(cg) & 0x3fffffff);
+  cf = p256Carry30(cf)
+  cg = p256Carry30(cg)
+  cf = cf + u * p256Wide(uncheckedGet(f, 2)) + v * p256Wide(uncheckedGet(g, 2))
+  cg = cg + q * p256Wide(uncheckedGet(f, 2)) + r * p256Wide(uncheckedGet(g, 2))
+  uncheckedSet(f, 1, toU32(cf) & 0x3fffffff);
+  uncheckedSet(g, 1, toU32(cg) & 0x3fffffff);
+  cf = p256Carry30(cf)
+  cg = p256Carry30(cg)
+  cf = cf + u * p256Wide(uncheckedGet(f, 3)) + v * p256Wide(uncheckedGet(g, 3))
+  cg = cg + q * p256Wide(uncheckedGet(f, 3)) + r * p256Wide(uncheckedGet(g, 3))
+  uncheckedSet(f, 2, toU32(cf) & 0x3fffffff);
+  uncheckedSet(g, 2, toU32(cg) & 0x3fffffff);
+  cf = p256Carry30(cf)
+  cg = p256Carry30(cg)
+  cf = cf + u * p256Wide(uncheckedGet(f, 4)) + v * p256Wide(uncheckedGet(g, 4))
+  cg = cg + q * p256Wide(uncheckedGet(f, 4)) + r * p256Wide(uncheckedGet(g, 4))
+  uncheckedSet(f, 3, toU32(cf) & 0x3fffffff);
+  uncheckedSet(g, 3, toU32(cg) & 0x3fffffff);
+  cf = p256Carry30(cf)
+  cg = p256Carry30(cg)
+  cf = cf + u * p256Wide(uncheckedGet(f, 5)) + v * p256Wide(uncheckedGet(g, 5))
+  cg = cg + q * p256Wide(uncheckedGet(f, 5)) + r * p256Wide(uncheckedGet(g, 5))
+  uncheckedSet(f, 4, toU32(cf) & 0x3fffffff);
+  uncheckedSet(g, 4, toU32(cg) & 0x3fffffff);
+  cf = p256Carry30(cf)
+  cg = p256Carry30(cg)
+  cf = cf + u * p256Wide(uncheckedGet(f, 6)) + v * p256Wide(uncheckedGet(g, 6))
+  cg = cg + q * p256Wide(uncheckedGet(f, 6)) + r * p256Wide(uncheckedGet(g, 6))
+  uncheckedSet(f, 5, toU32(cf) & 0x3fffffff);
+  uncheckedSet(g, 5, toU32(cg) & 0x3fffffff);
+  cf = p256Carry30(cf)
+  cg = p256Carry30(cg)
+  cf = cf + u * p256Wide(uncheckedGet(f, 7)) + v * p256Wide(uncheckedGet(g, 7))
+  cg = cg + q * p256Wide(uncheckedGet(f, 7)) + r * p256Wide(uncheckedGet(g, 7))
+  uncheckedSet(f, 6, toU32(cf) & 0x3fffffff);
+  uncheckedSet(g, 6, toU32(cg) & 0x3fffffff);
+  cf = p256Carry30(cf)
+  cg = p256Carry30(cg)
+  cf = cf + u * p256Wide(uncheckedGet(f, 8)) + v * p256Wide(uncheckedGet(g, 8))
+  cg = cg + q * p256Wide(uncheckedGet(f, 8)) + r * p256Wide(uncheckedGet(g, 8))
+  uncheckedSet(f, 7, toU32(cf) & 0x3fffffff);
+  uncheckedSet(g, 7, toU32(cg) & 0x3fffffff);
+  cf = p256Carry30(cf)
+  cg = p256Carry30(cg)
+  uncheckedSet(f, 8, toU32(cf));
+  uncheckedSet(g, 8, toU32(cg));
+}
+
 // ---- P-256 on the copies, for main ----------------------------------------------
 
 /** Eight little-endian limbs of 64 big-endian hex digits, plain (not Montgomery). */
@@ -3874,6 +4636,68 @@ const combMult = (table: u32[], k: string): string => {
   return affineHex(x, y, z)
 }
 
+/** Bit `i` of the eight limbs `a`, 0 past the top. */
+const bitOf = (a: u32[], i: i32): u32 => {
+  const limb: i32 = i >> 5
+  return limb >= 0 && limb < 8 ? (uncheckedGet(a, limb) >> toU32(i & 31)) & 1 : 0
+}
+
+/** The eight limbs `a` as nine signed-30 limbs, bit by bit. */
+const signed30Of = (a: u32[]): u32[] => {
+  const out: u32[] = new Array<u32>(9)
+  for (let i: i32 = 0; i < 256; i++) {
+    const limb: i32 = i / 30
+    if (limb >= 0 && limb < 9) {
+      uncheckedSet(out, limb, uncheckedGet(out, limb) | (bitOf(a, i) << toU32(i % 30)));
+    }
+  }
+  return out
+}
+
+/** `a` plus n when `mask` is all ones, negated when `negate` is, then carried: the module's `p256AddOrder30`. */
+const addOrder30 = (a: u32[], n: u32[], mask: u32, negate: u32): void => {
+  for (let i: i32 = 0; i < 9; i++) {
+    uncheckedSet(a, i, ((uncheckedGet(a, i) + (uncheckedGet(n, i) & mask)) ^ negate) - negate);
+  }
+  for (let i: i32 = 1; i < 9; i++) {
+    uncheckedSet(a, i, uncheckedGet(a, i) + toU32(toI32(uncheckedGet(a, i - 1)) >> 30));
+    uncheckedSet(a, i - 1, uncheckedGet(a, i - 1) & 0x3fffffff);
+  }
+}
+
+/**
+ * `1 / a` mod n as hex, `a` plain, by `p256ScalarInverse`'s method on the
+ * copies: twenty rounds of `p256Divsteps30`, `p256UpdateDe30` and
+ * `p256UpdateFg30` from f = n and g = a, then d normalised and read back.
+ */
+const inverseHex = (text: string): string => {
+  const n: u32[] = signed30Of(limbsOfHex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"))
+  const d: u32[] = new Array<u32>(9)
+  const e: u32[] = new Array<u32>(9)
+  const f: u32[] = signed30Of(limbsOfHex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"))
+  const g: u32[] = signed30Of(limbsOfHex(text))
+  const t: u32[] = new Array<u32>(4)
+  uncheckedSet(e, 0, 1);
+  let zeta: u32 = 0xffffffff
+  for (let i: i32 = 0; i < 20; i++) {
+    zeta = p256Divsteps30(zeta, uncheckedGet(f, 0), uncheckedGet(g, 0), t)
+    p256UpdateDe30(d, e, t, n)
+    p256UpdateFg30(f, g, t)
+  }
+  addOrder30(d, n, p256SignMask(uncheckedGet(d, 8)), p256SignMask(uncheckedGet(f, 8)))
+  addOrder30(d, n, p256SignMask(uncheckedGet(d, 8)), 0)
+  const out: u32[] = new Array<u32>(8)
+  for (let i: i32 = 0; i < 256; i++) {
+    const limb: i32 = i / 30
+    const word: i32 = i >> 5
+    if (limb >= 0 && limb < 9 && word >= 0 && word < 8) {
+      const bit: u32 = (uncheckedGet(d, limb) >> toU32(i % 30)) & 1
+      uncheckedSet(out, word, uncheckedGet(out, word) | (bit << toU32(i & 31)));
+    }
+  }
+  return hexOfLimbs(out)
+}
+
 /** `ok` or `FAIL`, the name, and on a failure what came out. */
 const report = (name: string, actual: string, expected: string): i32 => {
   if (actual === expected) {
@@ -3995,6 +4819,21 @@ export const main = (): i32 => {
     "RFC 6979 A.2.5 SHA-256 \"test\", by the comb: k G has x = r",
     combMult(table, "d16b6ae827f17175e040871a1c7ec3500192c4c92677336ec2537acaee0008e0").substring(0, 64),
     "f1abb023518351cd71d881567b1ea663ed3efcf6c5132b354f28d3b0b7d38367"
+  )
+  failed += report(
+    "p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / 2 mod n is (n + 1) / 2",
+    inverseHex("0000000000000000000000000000000000000000000000000000000000000002"),
+    "7fffffff800000007fffffffffffffffde737d56d38bcf4279dce5617e3192a9"
+  )
+  failed += report(
+    "p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / (n - 1) mod n is n - 1",
+    inverseHex("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"),
+    "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550"
+  )
+  failed += report(
+    "p256Divsteps30, p256UpdateDe30, p256UpdateFg30: 1 / k mod n, RFC 6979 A.2.5's SHA-256 \"sample\" nonce",
+    inverseHex("a6e3c57dd01abe90086538398355dd4c3b17aa873382b0f24d6129493d8aad60"),
+    "aaf7a4c4d10293a89370e2cc3e88ca623e38b5814d37eb5e96ffdea769cfe547"
   )
   return failed
 }

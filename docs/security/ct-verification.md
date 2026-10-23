@@ -17,7 +17,7 @@ test now pins each property.
 - `tests/cases/ct_asm_refused`: the functions written to fail.
 - `tests/ct-timing.js` and `tests/ct-timing/dudect.c` / `dudect.h`: the driver
   it generates, the classes, the t-tests, the threshold and the exit codes.
-- Since WP38 S5 (at `74c2716`): `tests/ct-asm-runtime.js`, its reading of
+- Since WP38 S5 (at `ea34c4e`): `tests/ct-asm-runtime.js`, its reading of
   `runtime/runtime-aes.c`, and the negative case `tests/simd/aes-leaky.c`.
 - Read, not changed (outside this stage): the `ct_asm` block of
   `tests/run.js` (lines 3346–3530 at the base), `.github/workflows/ci.yml` and
@@ -83,12 +83,13 @@ a pass nobody earned, so the model is held to err towards refusing.
 | CT-10 | Low | `tests/ct-asm.js:835` | aarch64 `fccmpe` was not a compare: it was read as writing its first operand and left the flags clean, so a `csetm` after a secret float compare was public. | Fixed; corner. |
 | CT-11 | Low | `tests/ct-asm.js:142` | A `ct-check` whose `secret=contents` names a function with no array argument taints nothing and passes whatever the function does. | Fixed: refused as a spec problem, checked at load. |
 | CT-12 | Low | `tests/ct-timing.js:73`, `:440` | The timing harness had no positive control: every `expect=` function was left out, so a harness that timed nothing (a call the optimiser dropped, a timer that does not tick) would print "none above". | Fixed: the `expect=branch` functions are timed as the control and must differ, or the run fails with exit 2; a filtered run still times them. Measured: `naiveEqual` |t| = 162 at `--quick`, 1114–1301 at 300,000 samples. |
-| CT-13 | High if real; unconfirmed | `tests/cases/ct_asm_x25519.ts:148` (`ladderStep`), `std/crypto/x25519.ts`, `tests/ct-timing.js` | `ladderStep` measured |t| = 35–42 at 300,000 samples, every run, on this machine when the driver held all seven x25519 functions — and 1.4–2.9 when it was linked alone or twice, on the same inputs and seeds, and `fieldSub` once read 11. The verdict followed the link layout of the driver, not only the function. It might have been a microarchitectural effect of out-of-domain inputs (the harness handed it unreduced 64-bit limbs and a 64-bit `swap`) that some layouts expose, or a harness artefact. | Open, not reproduced (#378). 34 runs of `ladderStep` on this VM since, in the module's domain and out of it, in the full driver and linked alone, and on the fixture the reading was taken from, read |t| = 1.46–3.22; the weekly CI run read 1.17 (x86-64) and 2.09 (aarch64). That does not establish that the 35–42 was an artefact: it was never re-run on the host that produced it, its cause is not measured, and only the x86-64 code was inventoried ([the readings](#ct-13-the-readings)). `tests/ct-timing.js` now times the fixture on the inputs the module gives each function, with controls of its own that fail the run if the narrowing erases a leak (`DOMAINS`). |
+| CT-13 | High if real; an artefact | `tests/cases/ct_asm_x25519.ts:157` (at `c8a00d6`; `ladderStep`), `std/crypto/x25519.ts`, `tests/ct-timing.js` | `ladderStep` measured |t| = 35–42 at 300,000 samples, every run, on this machine when the driver held all seven x25519 functions — and 1.4–2.9 when it was linked alone or twice, on the same inputs and seeds, and `fieldSub` once read 11. The verdict followed the link layout of the driver, not only the function. It might have been a microarchitectural effect of out-of-domain inputs (the harness handed it unreduced 64-bit limbs and a 64-bit `swap`) that some layouts expose, or a harness artefact. | Closed as an artefact, not a leak (#378); not counted. 20 runs at 1,000,000 samples with the committed harness (at `c90d8fa`), five seeds each in the module's domain and out of it, in the full driver and with `--function ladderStep`, read 1.34–3.10, where an effect the size of the 35–42 would read some 64–77 at that count; with the 34 earlier runs at 300,000 and three weekly CI runs on two architectures, none has reproduced it. Its code, inventoried for x86-64 and aarch64 at `-O2`, has no branch, no divide and no instruction whose time follows its operands ([the readings](#ct-13-the-readings)). The 35–42 was never re-run on the host that produced it, nor in the driver layout it was read in, and its cause is not measured. `tests/ct-timing.js` times the fixture on the inputs the module gives each function, with controls of its own that fail the run if the narrowing erases a leak (`DOMAINS`). |
 | CT-14 | Low | `tests/run.js:3418` | The check's name says "refused for a conditional branch" for every `expect=` other than `load`, so the new `call` and `latency` seeds are named as branches in the output (the assertion itself is right). | Fixed after this stage: each check is named by the `promise` `ctSpecs` gives its spec in `tests/ct-asm.js`: the kind it expects, and the `via=` callee where there is one, both from the `EXPECT_KINDS` table `ctSpecs` also reads its kinds from, so a kind it accepts always has a name. |
 | CT-15 | Low | `tests/run.js:3376` | A clang without the aarch64 target turns that half of the check into counted skips; `npm test` then exits 0 with a "Note", not the DEGRADED banner, since every tool is present. CI's clang has both targets today, but nothing requires it. | Fixed after this stage: `ct_asm: clang targets <target>` is a check for each of the two targets, and fails with clang's answer when one is missing; the target's fixtures are not tried again. Shown with a `clang` that refuses `--target=aarch64*`: 9 skips and exit 0 before, one failure and exit 1 after. The wasm32 compile, which reads no branches, is still a counted skip. |
-| CT-16 | Low | `tests/run.js:3369`; narrowed at `tests/run.js:6441`, `:9968`, `tests/ct-asm-runtime.js:214` (at `d835d40`) | The checker reads `clang -O2` for the baseline CPU only. A program built with another profile or `-march` is not what was read, and the ISA extensions behind CT-5 and CT-6 never reach it. | Narrowed (WP38 S2): `--cpu x86-64-v3` is the one level a build may take besides the baseline (`docs/LANGUAGE.md`, "The CPU level"; every other value is refused), and x86-64 is now read at that level too, both the `tests/cases/ct_asm_*` fixtures and the runtime's kernels, so the AVX2, BMI2 and FMA encodings it permits reach the checker. Every other level, and a profile other than `clang -O2`, stays unread. |
+| CT-16 | Low | `tests/run.js:6488`; narrowed at `tests/run.js:6441`, `:9970`, `tests/ct-asm-runtime.js:214` (at `37566813`) | The checker reads `clang -O2` for the baseline CPU only. A program built with another profile or `-march` is not what was read, and the ISA extensions behind CT-5 and CT-6 never reach it. | Narrowed (WP38 S2): `--cpu x86-64-v3` is the one level a build may take besides the baseline (`docs/LANGUAGE.md`, "The CPU level"; every other value is refused), and x86-64 is now read at that level too, both the `tests/cases/ct_asm_*` fixtures and the runtime's kernels, so the AVX2, BMI2 and FMA encodings it permits reach the checker. Every other level, and a profile other than `clang -O2`, stays unread. |
 | CT-17 | Low | `tests/ct-asm.js:653`, `:659`, `:666`, `:859` (at `e3d4da1`) | Found reading vector code for WP38 S5 ([below](#the-runtimes-aes-kernels)). Five instructions that read their destination were read as overwriting it, so a secret in the destination came out public: `pshufb`, which the `v?pshuf` overwrite pattern took with `pshufd`; the SSE forms of `shufps` and `palignr`, in the three-operand overwrite list; `movhlps` and `movlhps`, taken as moves; and aarch64's `aese` and `aesd`, which XOR their destination with the key before SubBytes. A `pshufb` by a public mask, the byte reversal every GHASH implementation runs, laundered the block it reversed. No Nish fixture compiles to any of them. | Fixed: each is read as reading its destination; a corner each in `AUDIT_CORNERS`, which fail on the base. |
-| CT-18 | Low | `tests/ct-asm.js:793`, `:865` (at `a7cfdb7`) | Found in review of WP38 S5. The SSE4.2 string compares (`pcmpistri`, `pcmpestri`, `pcmpistrm`, `pcmpestrm` and their `v` forms) write CF, ZF, SF and OF from their operands, and a register they do not name: an index into `%ecx` (the `i` forms) or a mask into `%xmm0` (the `m` forms). `preciseFlags`' list of instructions that leave the flags alone took them in with every other `p…` instruction, so a `jc` or `setc` after one on a secret read as public; and in either mode the implicit `%ecx` or `%xmm0` kept the taint it had before. The kernels compile to none of them. | Fixed: they are left out of the keep list, and the step writes `%ecx` or `%xmm0` and the flags with their operands' taint (with `%eax` and `%edx` for the `e` forms); six `AUDIT_CORNERS` rows that each fail before the fix -- the flags under `preciseFlags`, the `%ecx` and `%xmm0` writes, an `e` form whose only secret is the length in `%eax`, and a secret block read from memory -- each also shown to fail with its own arm of the step deleted where another row does not cover it, and a seventh, a compare on public operands, that must pass. |
+| CT-18 | Low | `tests/ct-asm.js:790`, `:870` (at `ea34c4e`) | Found in review of WP38 S5. The SSE4.2 string compares (`pcmpistri`, `pcmpestri`, `pcmpistrm`, `pcmpestrm` and their `v` forms) write CF, ZF, SF and OF from their operands, and a register they do not name: an index into `%ecx` (the `i` forms) or a mask into `%xmm0` (the `m` forms). `preciseFlags`' list of instructions that leave the flags alone took them in with every other `p…` instruction, so a `jc` or `setc` after one on a secret read as public; and in either mode the implicit `%ecx` or `%xmm0` kept the taint it had before. The kernels compile to none of them. | Fixed: they are left out of the keep list, and the step writes `%ecx` or `%xmm0` and the flags with their operands' taint (with `%eax` and `%edx` for the `e` forms); six `AUDIT_CORNERS` rows that each fail before the fix -- the flags under `preciseFlags`, the `%ecx` and `%xmm0` writes, an `e` form whose only secret is the length in `%eax`, and a secret block read from memory -- each also shown to fail with its own arm of the step deleted where another row does not cover it, and a seventh, a compare on public operands, that must pass. |
+| CT-19 | Low | `tests/ct-timing.js:431` (at `c8a00d6`: `const differs = r.max > THRESHOLD`, one seed); `tests/cases/ct_asm_mac.ts:14` (`macEqual`) | The weekly run [38205978049](https://github.com/amritk/nish/actions/runs/38205978049) failed on `macEqual`: |t| = 5.64 at cropped percentile 89 on `ubuntu-latest` (an AMD EPYC 7763, seed 781192836), with its uncropped test at -0.92, and 1.71 on the aarch64 runner in the same run (#599). The next weekly run, [39201550804](https://github.com/amritk/nish/actions/runs/39201550804), read 3.35 at cropped percentile 76 on an AMD EPYC 9V74, and passed. The harness compared the largest of 102 correlated tests, taken once on one seed, with 4.5, so one excursion in one percentile's tail failed the run with no leak behind it. | Fixed: a function above 4.5 is timed again, by itself in the same linked driver, on a fresh seed, and is a finding only when it crosses on both; the controls must still differ on their first measurement ([the re-measure rule](#the-re-measure-rule)). `macEqual` itself is not changed: on 20 seeds at 1,000,000 samples on this VM it read 0.79–2.89, inside the spread of the quiet functions beside it, and its x86-64 code has no branch and no instruction whose time follows its operands. |
 
 No fixture failed the stricter checker: every function in every
 `tests/cases/ct_asm_*` passes on both targets after CT-2 to CT-11, so none of
@@ -97,7 +98,7 @@ those gaps was hiding a leak in code checked today.
 ## Seeded violations
 
 `tests/cases/ct_asm_refused` now holds one function for each rule, and
-`tests/run.js` checks each on x86-64, on x86-64 at `x86-64-v3` and on aarch64 (24 checks):
+`tests/run.js` checks each on x86-64, on x86-64 at `x86-64-v3` and on aarch64 (30 checks):
 
 | function | rule | expected kind | what it compiles to |
 | --- | --- | --- | --- |
@@ -109,6 +110,8 @@ those gaps was hiding a leak in code checked today.
 | `callsLeak` | leak inside a followed call | `load` via `leakyRow` | four `callq leakyRow` / `bl leakyRow` |
 | `tailLeak` | leak inside a followed tail call | `load` via `leakyRow` | `jmp leakyRow@PLT` / `b leakyRow` |
 | `secretDivide` | variable-latency instruction | `latency` | `divl %esi` / `udiv w0, w0, w8` |
+| `leakyBaseRead` | P-256 comb entry read at the digit's offset | `load` | `movl (%rcx,%rsi,4), %esi` / `ldr w11, [x9, w11, sxtw #2]` |
+| `leakyDivstep` | P-256 safegcd divstep that tests g's low bit with an `if` | `branch` | `testb $1, %dl` then `je` / `tbz w2, #0` |
 
 `via=leakyRow` is new: a violation found outside the named callee is reported
 as `load outside leakyRow`, so if LLVM ever inlines `leakyRow` the two checks
@@ -149,14 +152,14 @@ that is not committed, and cannot be repeated with the one that is:
 - "out of domain, all seven": three runs with `tests/ct-timing.js` as it is
   on `main` at 69e5fe8, before `DOMAINS` existed, and four with a scratch copy
   of this harness whose `DOMAINS` lookup was switched off.
-- "non-negative": the first version of this change (607ca5d), whose single
+- "non-negative": the first version of #537 (a commit squashed into f2fd9ab), whose single
   `ct_field25519` mask is no longer in the tree.
 - "`ladderStep` alone", in every domain: a scratch copy of the harness that
   filtered the fixture's specs (and its `DOMAINS` entry) to `ladderStep`
   before it wrote the driver.
 - the fixture CT-13 was read on: `tests/ct-timing.js` from a worktree at
   0d362c59, with `--nish` naming the 0.16.0 seed.
-- the two rows with leaks: 607ca5d's harness, and the scratch copy without
+- the two rows with leaks: the first version of #537's harness, and the scratch copy without
   `DOMAINS`, on the fixture with the two leaks added and then reverted.
 
 The weekly `ct-timing.yml` run of 2026-10-05 (9552a94, 1,000,000 samples,
@@ -177,13 +180,55 @@ calls to `condSwap` and `fieldMul`: no divide and no branch,
 which `tests/ct-asm.js` already pins on both targets, and none of those is
 documented as taking an operand-dependent time on current x86-64 cores.
 
-**What it does not.** The 35–42 was never re-run on the host that produced
-it, so it is not shown to be an artefact. The harness has not changed since
-#377, but the fixture has (#426 rewrote its arithmetic in `u64`, which moves
-its code and the driver's layout), and a layout effect on that host is an
-explanation, not a measurement. The aarch64 code was not inventoried; the CI
-runner's 2.09 is its only reading. So CT-13 stays open at its severity, as an
-unconfirmed reading that has not reproduced.
+**What it did not, at 300,000.** The 35–42 was never re-run on the host that
+produced it. The harness has not changed since #377, but the fixture has (#426
+rewrote its arithmetic in `u64`, which moves its code and the driver's
+layout), and a layout effect on that host is an explanation, not a
+measurement. The aarch64 code was not inventoried, and the CI runner's 2.09
+was its only reading. So CT-13 stayed open at its severity.
+
+**At 1,000,000 samples, with the committed harness.** Twenty runs of the
+committed `tests/ct-timing.js` at `c90d8fa`, `--samples 1000000`, on the same
+VM with nothing else running, one run a cell. "Alone" is `--function
+ladderStep`, which links `ladderStep` with the controls only; "out of domain"
+is `--out-of-domain`, the whole range of the fixture's types, as CT-13 was
+read.
+
+| inputs | driver | seed 101 | seed 202 | seed 303 | seed 404 | seed 505 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| the module's domain | all seven | 1.57 | 2.35 | 1.73 | 1.92 | 2.49 |
+| the module's domain | `ladderStep` alone | 1.71 | 1.53 | 3.10 | 2.75 | 2.34 |
+| out of domain | all seven | 1.59 | 1.78 | 1.84 | 2.13 | 2.22 |
+| out of domain | `ladderStep` alone | 1.34 | 1.87 | 2.04 | 1.70 | 2.19 |
+
+Every run exited 0, no function crossed 4.5 even once, and every control
+differed: at seed 101 in the domain, `naiveEqual` read 2,590 and the three
+domain controls 22,780, 25,733 and 699. The weekly runs since read 1.22
+(`ubuntu-latest`, 39201550804) and the readings above it. A difference
+between the classes the size of the 35–42 at 300,000 samples grows with the
+square root of the sample count, to some 64–77 at 1,000,000; the largest of
+these twenty is 3.10. The aarch64 code is now inventoried too: `clang-18 -O2
+--target=aarch64-unknown-linux-gnu` compiles `ladderStep` and the six functions
+it calls to `ldr`, `ldp`, `str`, `stp`, `add`, `sub`, `neg`, `and`, `eor`,
+`asr`, `lsl`, `mov`, `movk`, `movi`, `dup`, `mul` and `madd`, `bl` to the
+field functions, and one unconditional `b` (`fieldSquare`'s tail call into
+`fieldMul`): no divide and no conditional branch, and every one of them is in
+Arm's list of instructions whose timing does not depend on their data under
+FEAT_DIT. Nothing sets PSTATE.DIT, which is 0 by default, so on aarch64 that
+is the cores' behaviour rather than a guarantee.
+
+**The verdict: an artefact, not a leak.** In 54 runs on this VM since (a VM
+of the same class as the one that read 35–42, not that host),
+on two versions of the fixture, in both link layouts and on both input ranges,
+`ladderStep` has not read above 3.22, nor above 4.5 on the CI runners of
+either architecture in three weekly runs; and its code
+on both targets is made only of instructions whose time does not follow their
+operands. The 35–42 is not a property of the function. Its cause on the host
+that produced it is not measured, and cannot be now: the fixture and the
+driver it was read in are not the ones in the tree. CT-13 is closed as an
+artefact and is not counted as a finding. The re-measure rule (below) is not
+what closes it: the 35–42 repeated on every run, and would have repeated on a
+fresh seed too, so a reading like it still fails the run.
 
 **The harness's domain.** A reading on 64-bit limbs is about a function the
 module never runs, so `DOMAINS` in `tests/ct-timing.js` gives each function
@@ -224,6 +269,140 @@ non-zero limb, read |t| = 1,297 and 2,105 narrowed and 1,383 and 656 not;
 `highBitLeak`, which does 200 extra multiplies when bit 40 of limb 0 is set,
 read 791 and 1,088 unnarrowed and 1.77 and 0.98 narrowed, which failed the run
 with exit 2 as a control that did not differ.
+
+## The re-measure rule
+
+CT-19's 5.64 was one excursion in the tail of one percentile, on one seed.
+Each function is timed 102 ways (uncropped, 100 cropped percentiles and a
+second-order test), and the harness compares the largest |t| of the 102 with
+4.5. The tests share their samples and the cycle counts are quantized, so only
+10 to 76 of the 102 are distinct in a run, but that is still the largest of
+dozens of correlated statistics, on a machine that other tenants share.
+
+**The null rate, measured.** `--null` prepares both classes as class 1, so no
+class differs and every |t| it prints is noise. Twenty A/A runs on this VM at
+1,000,000 samples (seeds 104,729 × 1 to 20) each printed "0 of 50 functions
+above |t| = 4.5, 0 of them again". Leaving out the three domain controls, which
+time a C leak rather than the fixture, that is 940 function-runs. Their max
+|t| had a median of 1.91, a 90th percentile of 2.70, a 95th of 2.96 and a 99th
+of 3.46; six were above 3.5, one above 4.0, the largest 4.08 (`tableLookup`).
+None crossing in 940 bounds the rate on this VM below 0.32% a function-run (95%
+upper bound); a Gaussian fit to the tail puts it near 0.012%, or about 1% of
+weekly runs of some 92 function-runs on two runners. On the runners
+themselves, dispatch run 39733213208 of `ct-timing.yml` (`aa_runs: 10`, head
+`6717ff9`) found 0 of 540 function-runs above 4.5 on the x86-64 runner, an AMD
+EPYC 9V74, and 0 of 540 on the arm64 runner. None in 540 bounds each runner's
+rate below 0.55% a function-run (95% upper bound); it does not make it zero,
+and CT-19's one crossing in the weekly runs before it stands. Each timing run
+now measures its own runner's null as well ([the CPU fingerprint and the
+same-runner null](#the-cpu-fingerprint-and-the-same-runner-null)).
+
+**`macEqual` beside its neighbours.** The 102 tests of each function, dumped
+from six runs at 1,000,000 samples (seeds 11 to 66), on this VM:
+
+| function | mean \|t\| | sd of t | runs' max \|t\| | tests above 2 |
+| --- | ---: | ---: | --- | ---: |
+| `macEqual` | 0.76 | 0.90 | 1.42–2.55 | 1.8% |
+| `tableLookup` | 0.50 | 0.64 | | 0.2% |
+| `timingSafeEqual32` | 0.47 | 0.66 | | 0.5% |
+| `timingSafeEqual48` | 0.90 | 1.12 | | 5.1% |
+| `timingSafeEqualAt16` | 0.90 | 1.03 | | 9.0% |
+
+`macEqual` sits inside the spread of the K1 comparisons, which nothing has
+read as leaking, and on 20 more seeds (7,919 × 1 to 20) its max |t| was
+0.79–2.89. The two classes hand it different answers (both arrays zero, so
+`0xFFFFFFFF`; random, so 0), but it computes the answer with the same
+instructions either way. Its 5.64 and 3.35 were both at upper cropped
+percentiles (89 and 76) with the uncropped test near zero (-0.92 and 0.35):
+the tail of the distribution moved, not its body, which is what an interrupt
+or a frequency change on a shared host does.
+
+**The rule.** A function above 4.5 is timed again, by itself, on a fresh seed:
+the same linked driver run with the function's name as a filter, so the layout
+it was read in is kept, rather than a driver linked for it alone. The seed is
+derived from the run's (`seed × 0x9e3779b97f4a7c15 mod 2^64`, named on the
+table's first line as "re-measured on seed"). The function is a finding, exit
+1, only when it crosses on both. One that crosses once and not again stays in
+the table with its second |t|, as "crossed once, did not repeat", and is named
+in the summary line; the run passes, and the report job comments on the open
+`ct-timing` issue, or opens one when none is open, so that a function that
+crosses once every week is seen. A re-measure seconds later on the same shared
+runner is not independent of the first, so the rule's own false-positive rate
+is not claimed beyond what the A/A runs above measured. A large leak is not hidden by it: every control and every
+leak this record has timed read |t| in the hundreds or thousands, and crosses
+on any seed. That shows the rule's power for large effects only: a weak leak
+near the threshold, |t| about 4 to 6, can cross once and not again by chance,
+which is why a crossed-once row is put in front of a person rather than
+dropped. The controls are never re-measured: each must differ on its first
+measurement, or the run fails with exit 2, so a harness that cannot see a leak
+cannot pass by asking twice. A reading like CT-13's, which repeated on every
+run, still fails it.
+
+Both branches were shown with a scratch copy of the harness whose threshold
+was 1.5, at `--quick`, seed 7: 21 of 46 functions crossed, 9 read "crossed
+once, did not repeat" and were named as such, 12 crossed again and were
+named as found on two seeds, the controls differed, and the run exited 1.
+
+## The CPU fingerprint and the same-runner null
+
+A |t| means something only beside the machine it was read on and that
+machine's noise, so each timing run now carries both (anchors at `1fab4c8`,
+the parent of the change that adds them; the names are in
+`tests/ct-timing.js`).
+
+**The fingerprint.** `cpuFingerprint` prints one line before the table,
+`ct-timing: CPU (cpu0, from /proc/cpuinfo and sysfs): …`, read from the kernel
+and never guessed. On x86-64 it names `vendor_id`, `cpu family`, `model`,
+`stepping`, `microcode` and `model name`; on aarch64 `CPU implementer`, `CPU
+part`, `CPU variant` and `CPU revision`, and `MIDR_EL1` from
+`/sys/devices/system/cpu/cpu0/regs/identification/midr_el1` when it is
+readable. A part is named only where it can be cited (`ARM_PARTS`: implementer
+0x41 with 0xd0c Neoverse N1, 0xd40 V1, 0xd49 N2, 0xd4f V2, from each core's
+TRM and Linux's `cputype.h`); any other prints its raw values. The line also
+gives the `hypervisor` flag, the cpufreq `boost` and intel_pstate `no_turbo`
+state and the kernel release. A field the kernel does not give prints
+"unreadable", never a default. On a host with no `/proc/cpuinfo` the line
+reads `ct-timing: CPU from os.cpus() only (…)` and says what it fell back to.
+On this VM it reads:
+
+```
+ct-timing: CPU (cpu0, from /proc/cpuinfo and sysfs): x64 GenuineIntel family 6 model 85 stepping 7 microcode 0x1 "Intel(R) Xeon(R) Processor @ 2.80GHz"; hypervisor flag set; cpufreq boost unreadable; intel_pstate no_turbo unreadable; kernel 6.18.44-fc-v140; 4 logical CPUs
+```
+
+**The same-runner A/A pass.** After the timing pass, every driver it linked is
+run again with `--null`, on a seed derived from the run's (`seed ×
+0xbf58476d1ce4e5b9 mod 2^64`, named on the table's first line as "same-runner
+A/A pass on seed"), and a function above 4.5 there is re-measured as the
+timing pass's are. The table gains an `A/A |t|` column, and a line beside it
+reads `ct-timing: the same-runner A/A pass: K of N functions above |t| = 4.5
+(…), M of them again on a fresh seed`. It is printed before the controls are
+judged, so a run that fails on a control still says what its null read.
+`--no-aa` leaves the pass out; `--null` runs never take it, since they are
+the null.
+
+It reports and never decides. The exit code is the timing pass's alone: a
+quiet null does not clear a finding, a noisy one does not excuse it, and the
+controls must still differ on their first measurement (exit 2). When the A/A
+pass crosses on a function the timing pass flagged, once or twice, the summary
+line says so: `the same-runner A/A pass crossed on … too, so this machine's
+noise reaches the same function: re-run before reading it as a leak`. The
+report job of `ct-timing.yml` puts each runner's fingerprint line and A/A line
+above its table in the issue comment, and files a run whose A/A pass crossed
+as it files a function that crossed once.
+
+Shown with a scratch copy of the harness whose threshold was 1.5, at
+`--quick`: 38 of 54 functions crossed in the A/A pass and were named, 25 of
+the timing pass's flagged functions were named as crossing in it too, and the
+run exited 1 on the timing pass's 30 findings, as it would have without the
+pass.
+
+**What this does not do.** The test stays statistical. A same-machine null
+bounds the rate of false alarms on that machine, on that day; it never makes
+it zero, and a run with a quiet null can still cross on noise. It does not
+make a weak leak, |t| near the threshold, visible: such a leak and a noisy
+null look alike, which is why both are put in front of a person. It says
+nothing about a CPU the runners never drew (the fingerprint says which ones
+were), nor about inputs the fixtures never use.
 
 ## Checked arithmetic and the fixtures
 
@@ -288,22 +467,29 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
 - **`std/crypto/p256.ts`**: `p256FiatNonzero`, `p256FiatSelectznz`,
   `p256FiatScalarAdd`, `p256FieldInvert`, `p256ScalarInvert`,
   `p256ScalarMult`, `p256BaseMult`, `p256BaseMultWith`, `p256LimbsFromBytes`, `p256LimbsToBytes`,
+  `p256ScalarInverse` with its safegcd helpers `p256ToSigned30`,
+  `p256FromSigned30`, `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`,
+  `p256AddOrder30` and `p256Normalize30`,
   `p256SubBorrow`, `p256Below`, `p256ReduceOnce`, `p256AffineX`,
   `p256EncodePoint`, `p256DigestScalar`, `p256NonceKey`, `p256SignScalar`,
   `p256PublicKey`, `p256Sign`, `p256SignSha256`. (The field and scalar
   multiplies, add, subtract and conditional move, the point doubling and
   addition, the table move and select, and one window step are read as copies
   or reshaped copies, as are the comb's digit, fifteen-entry select, mixed
-  addition, masked keep and one comb step.) `p256Verify` handles only public data.
+  addition, masked keep and one comb step, and safegcd's thirty divsteps and
+  its two matrix updates: `ct_asm_p256`'s `p256Divsteps30`, the module's
+  divstep loop unrolled thirty times, which `tests/run.js` holds to the
+  module's loop body text, and `p256UpdateDe30` and `p256UpdateFg30` with
+  their limb loops unrolled.) `p256Verify` handles only public data.
 
 `std/crypto/x509.ts` handles public data and is not constant-time code.
 
 ## The runtime's AES kernels
 
 WP38 S5 adds C to the constant-time surface: `runtime/runtime-aes.c` (anchors
-below at `74c2716`), AES-GCM on AES-NI and PCLMULQDQ or on the ARMv8 AES and
+below at `ea34c4e`), AES-GCM on AES-NI and PCLMULQDQ or on the ARMv8 AES and
 PMULL instructions, which the compiler calls in place of four functions of
-`std/crypto/aes.ts` (the lowering, below, since `c29cd40`). Unlike every Nish fixture it loops over `length`, so
+`std/crypto/aes.ts` (the lowering, below, since `7890aee`). Unlike every Nish fixture it loops over `length`, so
 `tests/ct-asm.js`, which refuses every conditional branch, cannot read it.
 `tests/ct-asm-runtime.js` does, on the same taint model: the `Taint` state and
 the per-instruction steps are ct-asm.js's own, so a corner one learns the other
@@ -356,8 +542,8 @@ operations run the kernel or the bitsliced Nish code is a property of the
 machine and its environment, not of the key. `NISH_AES=soft` pins the
 bitsliced path, whose constant time is the Nish code's own (above).
 
-**The lowering** (anchors at `c29cd40`). The compiler asks `nish_aes_hw` again
-in front of each of the four seam calls (`src/emit.ts:1441`,
+**The lowering** (anchors at `7890aee`). The compiler asks `nish_aes_hw` again
+in front of each of the four seam calls (`src/emit.ts:1443`,
 `emitAesKernelArm` at `:1473`; the seams are recognised by `isAesSeam`,
 `src/kernels.ts:89`), and branches on its answer: the kernel on one arm, the
 bitsliced walker's own call on the other. The branch is the dispatch above,
@@ -392,7 +578,7 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 
 | property | pinned by |
 | --- | --- |
-| Every rule the assembly check enforces refuses a real violation, on both targets | `ct_asm: ct_asm_refused <fn> on x86-64 / x86-64 at x86-64-v3 / aarch64` (24 checks in `npm test`) |
+| Every rule the assembly check enforces refuses a real violation, on both targets | `ct_asm: ct_asm_refused <fn> on x86-64 / x86-64 at x86-64-v3 / aarch64` (30 checks in `npm test`) |
 | No seed can be deleted, or its `expect=`/`via=` loosened, silently | `SEEDED` in `tests/ct-asm.js`, checked when the module loads |
 | A followed call's leak is found inside the callee, not in inlined code | `via=leakyRow` on `callsLeak` and `tailLeak`; `CALL_CORNERS` `leakVia` / `leakElsewhere` |
 | A chain of calls deeper than `CALL_DEPTH` is refused, not followed for ever | `CALL_CORNERS` `deep` |
@@ -402,12 +588,14 @@ reaches ([crypto-aead.md](crypto-aead.md), AEAD-4).
 | Each refusal check is named for the kind it expects (CT-14) | `EXPECT_KINDS` and each spec's `promise` in `tests/ct-asm.js` |
 | Both targets are read, or the run fails (CT-15) | `ct_asm: clang targets x86-64 / aarch64` |
 | The timing harness can see a leak it is shown | the control in `tests/ct-timing.js`; a quiet control is exit 2 |
+| A reading above 4.5 is a finding only when it repeats on a fresh seed, and one that does not is still shown (CT-19) | the verdicts "crossed once, did not repeat" and "**differs**, and again on a fresh seed", the summary's "crossed once and not again: …", and the header's "re-measured on seed" in `tests/ct-timing.js`; `--null`'s "the A/A run: X of N functions above \|t\| = 4.5, Y of them again on a fresh seed". Not in `npm test`: shown by the threshold-1.5 run in [the re-measure rule](#the-re-measure-rule), and run weekly by `ct-timing.yml` |
+| Each timing run names the CPU it ran on and its own runner's null, and the null never changes the verdict | `cpuFingerprint`'s "ct-timing: CPU (cpu0, from /proc/cpuinfo and sysfs)" and "ct-timing: CPU from os.cpus() only", "unreadable" for a field the kernel does not give; the A/A pass's "same-runner A/A pass on seed", "the same-runner A/A pass: " and "the same-runner A/A pass crossed on", and `--no-aa`, in `tests/ct-timing.js`; `grep '^ct-timing: CPU'` and `grep 'same-runner A/A pass: '` in `ct-timing.yml`'s report job. Not in `npm test`: shown by the threshold-1.5 run in [the CPU fingerprint and the same-runner null](#the-cpu-fingerprint-and-the-same-runner-null), and run weekly by `ct-timing.yml` |
 | Each `runtime/runtime-aes.c` kernel, read from `clang -O2` for both targets, branches only on public values and loads and stores only at public addresses (WP38 S5) | `ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}`, the `kernel` promise "no branch on a secret, call, secret-indexed access or secret-dependent latency" (12 checks: both targets, and x86-64 at `x86-64-v3`) |
 | The unit exports no function the reading leaves out, so a fifth kernel cannot go unread | the same, the `exports` promise "exports exactly the kernels read here and nish_aes_hw" (3 checks); and `exportMisses` in `tests/ct-asm-runtime.js`, which runs at load and requires a sixth `.globl` to be named unread and a missing kernel to be named missing |
 | The runtime check refuses a table lookup and a branch on data in real compiler output | the same, the `leak` promise `refused for ${r.expect}` (6 checks, `tests/simd/aes-leaky.c`) |
 | The runtime check's joins and per-instruction flags read loops as they run | `CORNERS` in `tests/ct-asm-runtime.js`, checked when the module loads |
 | A destination-reading vector instruction keeps its destination's taint (CT-17) | `AUDIT_CORNERS` in `tests/ct-asm.js` |
-| The lowered branch runs the kernel and the walker to the same bytes, end to end, and the kernel where the CPU has it (WP38 S5, at `c29cd40`) | `aes kernel: ${program} prints the same bytes with NISH_AES unset and with NISH_AES=soft, and they are its expected.out`, `aes kernel: ${program} under NISH_AES=soft calls no kernel` and `aes kernel: ${program} with NISH_AES unset calls all four kernels, which /proc/cpuinfo says this CPU runs`, each for `crypto_aes` and `crypto_aes_agree` |
+| The lowered branch runs the kernel and the walker to the same bytes, end to end, and the kernel where the CPU has it (WP38 S5, at `7890aee`) | `aes kernel: ${program} prints the same bytes with NISH_AES unset and with NISH_AES=soft, and they are its expected.out`, `aes kernel: ${program} under NISH_AES=soft calls no kernel` and `aes kernel: ${program} with NISH_AES unset calls all four kernels, which /proc/cpuinfo says this CPU runs`, each for `crypto_aes` and `crypto_aes_agree` |
 | x86-64 is read at the one `--cpu` level as well as the baseline, or the run fails (CT-16) | `ct_asm: clang targets ${ctTargetName(target)} (${target.triple}), so that ${…} of the check runs`, here `ct_asm: clang targets x86-64 at x86-64-v3 (x86_64-unknown-linux-gnu), so that level of the check runs`; `ct_asm: ${name} ${spec.name} on ${at}: ${spec.promise}` and `ct_asm: ${r.file} ${r.fn} on ${r.target}: ${promises[r.kind]}` with `x86-64 at x86-64-v3` for the target |
 | A wasm32 build references no kernel | `aes kernel: --profile wasi compiles crypto_aes_agree to IR and a .wasm that reference no nish_aes_ symbol, and it prints its expected.out` |
 
