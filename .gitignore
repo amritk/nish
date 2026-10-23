@@ -27,3 +27,4 @@ a.out
 # (two_file/), so this names the one that leaks rather than ignoring the glob.
 tests/link/no_main/main.ll
 bench/json-compare/cache/
+bench/yaml-compare/cache/

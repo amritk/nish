@@ -1,0 +1,41 @@
+# The committed sample tests/run.js runs bench/yaml-compare/main.ts on: every
+# shape the fetched fixtures have, small. Written for this repository.
+%YAML 1.2
+---
+defaults: &defaults
+  retries: 3
+  timeout: 2.5
+  verbose: false
+  owner: ~
+service:
+  <<: *defaults
+  name: "api été"
+  tags: [web, 'blue green', {tier: 1, zone: eu}]
+  ports:
+    - 80
+    - 443
+    - name: admin
+      port: 9000
+  script: |
+    npm ci
+    npm test -- --shard 1/2
+  summary: >-
+    A folded scalar
+    over two lines.
+
+  empty:
+  nested:
+    - - a
+      - b
+    - [c, d]
+  ref: *defaults
+? complex key
+: value
+---
+- &item {id: 1, label: one}
+- *item
+- !!str 42
+- "tab\tand \"quote\""
+...
+---
+plain: value

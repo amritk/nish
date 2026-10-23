@@ -58,6 +58,7 @@ import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
+import { NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
 import { urlFuzzVerdict } from "./link/std_url/verdict.js"
@@ -3833,6 +3834,237 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
       summaries(many.stderr).length === 20 &&
       many.stderr.includes("\n...and 5 more portability warnings\n25 portability warnings"),
     many.stderr
+  )
+}
+
+// ---- WP33 R4: `--emit-ts` ------------------------------------------------------------
+// The program written back out as TypeScript (src/emit-ts.ts). Each fixture in
+// tests/emit-ts/<group>/ with a `.out` is an entry: it is written out, the
+// `entry.ts` run under Node and the program run natively, and both must print
+// the `.out`. Beside it, `<name>.files` lists every path the output holds, and
+// `<name>.expected.ts` (and `<name>.entry.expected.ts`, where there is one) is
+// the module as written; in `identity/` there is no `.expected.ts`, because a
+// class-A module's golden is its own source, byte for byte. `UPDATE_GOLDENS=1`
+// rewrites the generated ones. Then the flag's usage errors, the two refusals,
+// which write nothing, and the whole corpus against native
+// (tests/differential/emit-ts.js, with its known list).
+if (!only || "emit-ts".includes(only)) {
+  const fixtures = path.join(root, "tests", "emit-ts")
+  const work = path.join(buildDir, "emit-ts")
+  const update = process.env.UPDATE_GOLDENS === "1"
+  fs.rmSync(work, { recursive: true, force: true })
+  fs.mkdirSync(work, { recursive: true })
+  /** Every file under `dir`, as `/`-separated paths relative to it, sorted. */
+  const filesUnder = (dir) =>
+    fs
+      .readdirSync(dir, { recursive: true, withFileTypes: true })
+      .filter((e) => e.isFile())
+      .map((e) => path.relative(dir, path.join(e.parentPath, e.name)).split(path.sep).join("/"))
+      .sort()
+  /** Compare `actual` with the golden at `file`, or write it under UPDATE_GOLDENS=1. */
+  const golden = (name, file, actual) => {
+    if (update) {
+      fs.writeFileSync(file, actual)
+    }
+    const want = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null
+    check(
+      name,
+      want === actual,
+      want === null ? `no ${path.relative(root, file)} (run with UPDATE_GOLDENS=1 to create)` : actual
+    )
+  }
+  for (const group of fs.readdirSync(fixtures, { withFileTypes: true }).filter((e) => e.isDirectory())) {
+    const dir = path.join(fixtures, group.name)
+    const entries = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".out"))
+      .map((f) => f.slice(0, -4))
+      .sort()
+    for (const name of entries) {
+      const label = `${group.name}/${name}`
+      const src = path.join(dir, `${name}.ts`)
+      const out = path.join(work, group.name, name)
+      const emitted = spawnSync(NISH, [src, "--emit-ts", out], { cwd: root, encoding: "utf8" })
+      if (!check(`emit-ts: ${label} is written out`, emitted.status === 0, emitted.stderr)) {
+        continue
+      }
+      golden(`emit-ts: ${label} writes the paths in ${name}.files`, path.join(dir, `${name}.files`), filesUnder(out).join("\n") + "\n")
+      const written = fs.readFileSync(path.join(out, `${name}.ts`), "utf8")
+      if (group.name === "identity") {
+        check(
+          `emit-ts: a class-A module is written byte for byte (${label})`,
+          written === fs.readFileSync(src, "utf8"),
+          written
+        )
+      } else {
+        golden(`emit-ts: ${label} is written as ${name}.expected.ts`, path.join(dir, `${name}.expected.ts`), written)
+      }
+      const entryGolden = path.join(dir, `${name}.entry.expected.ts`)
+      if (fs.existsSync(entryGolden) || (update && group.name !== "identity")) {
+        golden(
+          `emit-ts: ${label}'s launcher is ${name}.entry.expected.ts`,
+          entryGolden,
+          fs.readFileSync(path.join(out, "entry.ts"), "utf8")
+        )
+      }
+      const want = fs.readFileSync(path.join(dir, `${name}.out`), "utf8")
+      const node = spawnSync("node", [...emitTsNodeFlags, path.join(out, "entry.ts")], { cwd: root, encoding: "utf8" })
+      check(
+        `emit-ts: ${label} under Node prints ${name}.out and exits 0`,
+        node.status === 0 && node.stdout === want,
+        `exit ${node.status}\n${node.stdout}${node.stderr}`
+      )
+      const exe = path.join(work, group.name, `${name}.exe`)
+      const linked = spawnSync(NISH, [src, "-o", path.join(work, group.name, `${name}-ll`) + path.sep, "--link", exe], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const native = linked.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8" }) : linked
+      check(
+        `emit-ts: ${label} natively prints ${name}.out and exits 0`,
+        native.status === 0 && native.stdout === want,
+        `exit ${native.status}\n${native.stdout}${native.stderr}`
+      )
+    }
+  }
+
+  // The CRLF fixture is only a CRLF case while its line ends survive checkout;
+  // a checkout that turned them into LF would leave the group passing on LF.
+  check(
+    "emit-ts: identity/text.ts still has CRLF line ends",
+    fs.readFileSync(path.join(fixtures, "identity", "text.ts"), "utf8").includes("\r\n"),
+    "tests/emit-ts/identity/text.ts holds no \\r\\n"
+  )
+
+  // Usage errors exit 2 and write nothing: `-o` (the output is not IR), a
+  // missing directory, and another `--emit-*`.
+  const comments = path.join(fixtures, "identity", "comments.ts")
+  const usage = (args) => {
+    const dir = path.join(work, "usage")
+    fs.rmSync(dir, { recursive: true, force: true })
+    const r = spawnSync(NISH, [comments, ...args.map((a) => (a === "<dir>" ? dir : a))], { cwd: root, encoding: "utf8" })
+    return { status: r.status, stderr: r.stderr, wrote: fs.existsSync(dir) }
+  }
+  const withO = usage(["--emit-ts", "<dir>", "-o", path.join(work, "usage.ll")])
+  check(
+    "emit-ts: -o with --emit-ts exits 2 and writes nothing",
+    withO.status === 2 && withO.stderr.includes("`-o` cannot be used with --emit-ts") && !withO.wrote,
+    withO.stderr
+  )
+  const bare = usage(["--emit-ts"])
+  check(
+    "emit-ts: --emit-ts without a directory exits 2",
+    bare.status === 2 && bare.stderr.includes("--emit-ts needs a directory"),
+    bare.stderr
+  )
+  const empty = usage(["--emit-ts", ""])
+  check(
+    "emit-ts: an empty --emit-ts directory exits 2 rather than compiling natively",
+    empty.status === 2 && empty.stderr.includes("--emit-ts needs a directory"),
+    `exit ${empty.status}\n${empty.stderr}`
+  )
+  const withDts = usage(["--emit-ts", "<dir>", "--emit-dts", path.join(work, "usage.d.ts")])
+  check(
+    "emit-ts: --emit-ts with --emit-dts exits 2 and writes nothing",
+    withDts.status === 2 && withDts.stderr.includes("--emit-dts") && !withDts.wrote,
+    withDts.stderr
+  )
+
+  // A program that cannot be laid out under one directory is a usage error,
+  // exit 2, with nothing written: a module above the others' directory, which
+  // would land outside the output, and a module of the root package at
+  // `nish/pair.ts` beside the standard library's `nish/pair`, which would
+  // overwrite each other.
+  const layout = (name, files, entry) => {
+    const tree = path.join(work, name)
+    fs.rmSync(tree, { recursive: true, force: true })
+    for (const [file, text] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(tree, file)), { recursive: true })
+      fs.writeFileSync(path.join(tree, file), text)
+    }
+    const cwd = path.join(tree, path.dirname(entry))
+    const r = spawnSync(NISH, [path.basename(entry), "--emit-ts", "out"], { cwd, encoding: "utf8" })
+    return { status: r.status, stderr: r.stderr, wrote: fs.existsSync(path.join(cwd, "out")) }
+  }
+  const above = layout(
+    "above",
+    {
+      "app/main.ts": 'import { two } from "../shared/s"\nexport const main = (): number => two() - 2\n',
+      "shared/s.ts": "export const two = (): number => 2\n",
+    },
+    "app/main.ts"
+  )
+  check(
+    "emit-ts: a module above the program's directory exits 2 and writes nothing",
+    above.status === 2 && above.stderr.includes("lies above the directory") && !above.wrote,
+    `exit ${above.status}\n${above.stderr}`
+  )
+  const clash = layout(
+    "clash",
+    {
+      "main.ts":
+        'import { Pair } from "nish/pair"\nimport { mine } from "./nish/pair"\nexport const main = (): number => {\n  const p: Pair<number, number> = { first: mine(), second: 0 }\n  return p.first\n}\n',
+      "nish/pair.ts": "export const mine = (): number => 0\n",
+    },
+    "main.ts"
+  )
+  check(
+    "emit-ts: two modules written to one path exit 2 and write nothing",
+    clash.status === 2 && clash.stderr.includes("over another file at nish/pair.ts") && !clash.wrote,
+    `exit ${clash.status}\n${clash.stderr}`
+  )
+  // An output directory that holds the program's own sources would be written
+  // over: `--emit-ts .` beside them exits 2 and leaves them as they were. The
+  // `i32` makes the emitted module import the runtime, so an overwrite would
+  // change its bytes.
+  const selfTree = path.join(work, "self")
+  const selfSource = "const zero: i32 = 0\nexport const main = (): number => zero\n"
+  fs.rmSync(selfTree, { recursive: true, force: true })
+  fs.mkdirSync(selfTree, { recursive: true })
+  fs.writeFileSync(path.join(selfTree, "main.ts"), selfSource)
+  const self = spawnSync(NISH, ["main.ts", "--emit-ts", "."], { cwd: selfTree, encoding: "utf8" })
+  check(
+    "emit-ts: an output directory holding the program's sources exits 2 and writes nothing",
+    self.status === 2 &&
+      self.stderr.includes("would write over main.ts") &&
+      fs.readFileSync(path.join(selfTree, "main.ts"), "utf8") === selfSource &&
+      !fs.existsSync(path.join(selfTree, "entry.ts")),
+    `exit ${self.status}\n${self.stderr}`
+  )
+
+  // The refusals: a finding about the program, exit 1, under its code, with
+  // not one file written -- the output is all or nothing.
+  for (const [code, name] of [
+    ["NL4010", "reject_emit_ts_ffi"],
+    ["NL4011", "reject_emit_ts_net"],
+    ["NL4011", "reject_emit_ts_net_global"],
+    ["NL4011", "reject_emit_ts_signal"],
+  ]) {
+    const dir = path.join(work, name)
+    const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `emit-ts: ${name} is refused with ${code}, exit 1, and nothing written`,
+      r.status === 1 && r.stdout.includes(`"code":"${code}"`) && !fs.existsSync(dir),
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    )
+  }
+
+  // The corpus: every whole program under --emit-ts against its native run,
+  // failing on a disagreement the known list does not name and on a listed
+  // program that now agrees.
+  const corpus = spawnSync("node", [path.join(root, "tests", "differential", "emit-ts.js"), "--compiler", NISH], {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  const tally = /^(\d+)\/(\d+) programs agree under --emit-ts \((\d+) known/m.exec(corpus.stdout)
+  check(
+    `emit-ts: the corpus under --emit-ts agrees with native (${tally ? `${tally[2]} programs, ${tally[3]} known` : "no tally"})`,
+    corpus.status === 0 && tally !== null,
+    corpus.stdout + corpus.stderr
   )
 }
 
@@ -13108,7 +13340,11 @@ if (!only || "runtime-parallel".includes(only)) {
 // sysroot is installed, and as a static AArch64 binary when the host can run one
 // (binfmt_misc and qemu-user), which is how the NEON path runs on an x86-64 host. A
 // path the host cannot run is said, not skipped quietly: the driver's own line names
-// it, as the AVX2 path on a CPU without AVX2 is.
+// it, as the AVX2 path on a CPU without AVX2 is. tests/simd/regex-scan.c holds
+// `nish_regex_scan`, the byte-set search `nish/regex` starts its matches with, to
+// the same: 1..8 positions of random sets with the window anywhere in them, every
+// planted position of every length 0..300, and the resolver's pick, on the same
+// targets.
 if (!only || "simd".includes(only)) {
   const simdDir = path.join(buildDir, "simd")
   fs.mkdirSync(simdDir, { recursive: true })
@@ -13121,7 +13357,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|aes-gcm): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|regex-scan|aes-gcm): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -13134,6 +13370,8 @@ if (!only || "simd".includes(only)) {
   }
   const native = (exe) => spawnSync(exe, [], { encoding: "utf8" })
   agree(`native ${process.arch}`, [], path.join(simdDir, "index-of-any"), native)
+  const scanDriver = "tests/simd/regex-scan.c"
+  agree(`regex-scan native ${process.arch}`, [], path.join(simdDir, "regex-scan"), native, scanDriver)
 
   // WP38 S5: runtime/runtime-aes.c runs AES-GCM on AES-NI and PCLMULQDQ, or on the
   // ARMv8 AES and PMULL instructions, and a program takes that path or the bitsliced
@@ -13178,16 +13416,22 @@ if (!only || "simd".includes(only)) {
       ["wasm32-wasi, the scalar base path", []],
       ["wasm32-wasi -msimd128", ["-msimd128"]],
     ]) {
-      agree(
-        label,
-        ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, ...flags],
-        path.join(simdDir, `index-of-any${flags.join("")}.wasm`),
-        (wasm) =>
-          spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
-            cwd: root,
-            encoding: "utf8",
-          })
-      )
+      for (const [name, source] of [
+        ["index-of-any", driver],
+        ["regex-scan", scanDriver],
+      ]) {
+        agree(
+          name === "index-of-any" ? label : `${name} ${label}`,
+          ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, ...flags],
+          path.join(simdDir, `${name}${flags.join("")}.wasm`),
+          (wasm) =>
+            spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+              cwd: root,
+              encoding: "utf8",
+            }),
+          source
+        )
+      }
     }
   } else {
     skip("simd: no WASI sysroot (set WASI_SYSROOT): the wasm32 scalar and simd128 paths are not run")
@@ -13221,6 +13465,13 @@ if (!only || "simd".includes(only)) {
       for (const [label, source, out, what, wantLine] of [
         ["aarch64 through binfmt, the NEON path", driver, a64, "the NEON path", null],
         [
+          "regex-scan aarch64 through binfmt, the NEON path",
+          scanDriver,
+          path.join(simdDir, "regex-scan.aarch64"),
+          "the NEON path of regex-scan",
+          null,
+        ],
+        [
           "aes-gcm aarch64 through binfmt (QEMU_CPU=max), the ARMv8 AES and PMULL path",
           "tests/simd/aes-gcm.c",
           path.join(simdDir, "aes-gcm.aarch64"),
@@ -13237,7 +13488,7 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|regex-scan:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
@@ -13287,7 +13538,7 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
@@ -16855,6 +17106,65 @@ if (!only || "json-compare".includes(only) || "bench".includes(only)) {
   }
 }
 
+if (!only || "yaml-compare".includes(only) || "bench".includes(only)) {
+  // bench/yaml-compare/run.mjs runs Nish, its copy right after it, and one or
+  // two JavaScript runtimes through json-compare's roundOrder: each in every
+  // position equally often, Nish and its copy taking turns going first.
+  for (const n of [3, 4]) {
+    const rounds = roundsFor(n, 15)
+    const impls = Array.from({ length: n }, (_, k) => k)
+    const counts = impls.map(() => new Array(n).fill(0))
+    let nishFirst = 0
+    for (let round = 0; round < rounds; round++) {
+      const order = roundOrder(impls, round)
+      order.forEach((impl, position) => {
+        counts[impl][position] += 1
+      })
+      nishFirst += order.indexOf(0) < order.indexOf(1) ? 1 : 0
+    }
+    check(
+      `yaml-compare: ${n} implementations run ${rounds} rounds by default, each in every position equally often, Nish and its copy taking turns going first`,
+      counts.every((row) => row.every((c) => c === rounds / n)) && nishFirst === rounds / 2,
+      `positions ${JSON.stringify(counts)}, Nish before its copy in ${nishFirst} of ${rounds} rounds`
+    )
+  }
+  // The Nish program against the checksums @amritk/yaml printed for the
+  // committed sample (sample.expected says how they were recorded).
+  const dir = path.join(root, "bench", "yaml-compare")
+  const exe = path.join(buildDir, "yaml-compare", "main")
+  if (HAS_CLANG) {
+    const built = spawnSync(
+      NISH,
+      [path.join(dir, "main.ts"), "-o", `${path.dirname(exe)}${path.sep}`, "--link", exe, "--profile", "speed"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const sample = path.join(dir, "sample.yaml")
+    const expected = fs
+      .readFileSync(path.join(dir, "sample.expected"), "utf8")
+      .split("\n")
+      .filter((l) => l.length > 0 && !l.startsWith("#"))
+      .map((l) => {
+        const [args, want] = l.split(": ")
+        return { args: args.split(" "), want }
+      })
+    for (const { args, want } of expected) {
+      const run = built.status === 0 ? spawnSync(exe, [args[0], sample, args[1]], { encoding: "utf8" }) : null
+      check(
+        `yaml-compare: bench/yaml-compare/main.ts ${args[0]} on sample.yaml prints the checksum @amritk/yaml printed`,
+        run !== null && run.status === 0 && run.stdout.split("\n")[0] === want,
+        run === null ? `${built.stdout}${built.stderr}` : `${run.stdout}${run.stderr}\nexpected ${want}`
+      )
+    }
+    check(
+      "yaml-compare: sample.expected holds a line for each workload",
+      ["parse", "walk"].every((w) => expected.some((e) => e.args[0] === w)),
+      expected.map((e) => e.want).join("\n")
+    )
+  } else {
+    skip("yaml-compare: bench/yaml-compare/main.ts native run (no clang)")
+  }
+}
+
 // ---- Instruction counts ------------------------------------------------------------
 // Wall time cannot catch a codegen regression of a few percent: a VM's run-to-run
 // noise is bigger than that. An instruction count is exact, so the twenty-one
@@ -16949,6 +17259,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--link",
     "--emit-header",
     "--emit-dts",
+    "--emit-ts",
     "--emit-napi",
     "--emit-napi-async",
     "--emit-panics",

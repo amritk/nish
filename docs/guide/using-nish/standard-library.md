@@ -14,7 +14,8 @@ what you import but never call is dropped from the binary. A name the library
 does not have is an error that lists the modules it does.
 
 The language itself has few string helpers — there is no `split`, `trim` or
-regular expression — so `nish/text` is where you look first. `Map` and `Set`
+`RegExp` — so `nish/text` is where you look first, and `nish/regex` when a
+pattern is what you need. `Map` and `Set`
 need no import at all ([Maps and sets](../language/maps-and-sets.md)), and the
 built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 `nish:io`, `nish:net`) are part of the language rather than this library; see
@@ -30,10 +31,12 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
 | [`nish/text`](#nishtext) | `splitLines`, `splitWhitespace`, `trim`, `trimStart`, `trimEnd`, `contains`, `replaceAll`, `firstDifference`, `indexOfAny` |
+| [`nish/regex`](#nishregex) | `regexCompile`: JavaScript-syntax regular expressions, matched in time linear in the input |
 | [`nish/json`](#nishjson) | `jsonField` and `jsonFields` to read the fields of one flat JSON object; `JsonWriter` to write JSON into a byte buffer, minified or indented, with an optional strict mode for NaN and the infinities |
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
+| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key; `nish/yaml-lines` for `line:column` |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order |
@@ -117,6 +120,64 @@ it is not constant-time, so it is never for secret data
 ([Byte search](../../LANGUAGE.md#byte-search-indexofany-in-nishtext)).
 `firstDifference(left, right)` answers the index of the first line where two
 arrays of lines differ.
+
+## `nish/regex`
+
+Regular expressions in JavaScript's syntax. `regexCompile(pattern, flags)`
+answers a `Result`: the `Regex`, or the reason the pattern is refused.
+
+```ts nish:ok
+import { Regex, RegexMatch, regexCompile } from "nish/regex";
+
+export const main = (): i32 => {
+  const compiled = regexCompile("(?<year>\\d{4})-(?<month>\\d\\d)", "");
+  if (compiled.isErr()) {
+    console.log(compiled.error);
+    return 1;
+  }
+  const date: Regex = compiled.value;
+  const m = new RegexMatch();
+  if (date.exec("due 2026-10, paid 2026-11", 0, m)) {
+    console.log(`${m.text()} at ${m.start()}, month ${m.named("month")}`);
+  }
+  console.log(date.findAll("due 2026-10, paid 2026-11").join(" "));
+  console.log(date.replaceAll("2026-10", "$<month>/$<year>"));
+  const bad = regexCompile("(a", "");
+  if (bad.isErr()) {
+    console.log(bad.error);
+  }
+  return 0;
+};
+```
+
+```console
+$ nish run regex.ts
+2026-10 at 4, month 10
+2026-10 2026-11
+10/2026
+regex: missing ) at byte 0
+```
+
+A `Regex` has `test`, `exec` (into a `RegexMatch` you reuse), `find`,
+`findAll`, `count`, `replace`, `replaceAll` and `split`. A replacement
+template reads `$&`, `$1` to `$99`, `$<name>`, `` $` ``, `$'` and `$$`, as
+in JavaScript. `regexEscape(text)` makes a pattern that matches `text`
+exactly. The flags are `i` (ASCII letters), `m` and `s`; there is no `g`,
+since `findAll` and `replaceAll` are the global forms.
+
+Matching never backtracks, so a pattern cannot make it slow: `(a+)+$` against
+a long run of `a`s takes as long as `a+$`. The price is that backreferences
+(`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused when the pattern is
+compiled. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
+`\b` are ASCII, as they are in JavaScript. The `i` flag folds only ASCII
+letters, where JavaScript's folds every letter: `é` does not match `É`.
+
+A search runs a lazy DFA, a table of states built as the text needs them,
+and falls back to a slower engine only to fill in groups or when a pattern
+would need more states than the table holds (about 1 MiB). A `Regex` keeps
+that table and its other scratch memory between calls, so repeated searches
+allocate little beyond their answers — which also means one `Regex` is used
+by one thread at a time.
 
 ## `nish/json`
 
@@ -601,6 +662,108 @@ them, so walk a large object once with `keyAt` and `at` rather than calling
 differs from the native build there; `parse` over bytes reads the same both
 ways. Its security record is
 [docs/security/json.md](../../security/json.md).
+
+## `nish/yaml`
+
+`parseYaml(text)` reads a YAML 1.2 stream — a configuration file, a CI
+workflow, a Kubernetes manifest — and answers a `YamlStream`: every document,
+every node, and every problem found, each with the byte range of the source it
+is about. A parse never fails and never panics on its input; a stream that is
+not valid YAML still answers its nodes, as the parser's best reading of it,
+beside the errors that say why.
+
+```ts nish:ok
+import { YAML_INT, YAML_MAP, keyText, parseYaml, pathNode, yamlErrorName } from "nish/yaml";
+import { YamlLineIndex } from "nish/yaml-lines";
+
+export const main = (): i32 => {
+  const text = "name: tea\nport: 8080\ntags: [green, black]\n";
+  const stream = parseYaml(text);
+  const root = stream.documentRoot(0);
+  if (stream.kind(root) === YAML_MAP) {
+    let i: i32 = 0;
+    while (i < stream.count(root)) {
+      const pair = stream.child(root, i);
+      console.log(`${keyText(stream, stream.key(pair))} = ${keyText(stream, stream.value(pair))}`);
+      i += 1;
+    }
+  }
+  // name = tea
+  // port = 8080
+  // tags = [ green, black ]
+
+  const port = pathNode(stream, root, ["port"]);
+  console.log(`${stream.type(port) === YAML_INT} ${stream.intValue(port)}`); // true 8080
+  console.log(stream.text(pathNode(stream, root, ["tags", "1"]))); // black
+  console.log(`bytes ${stream.start(port)}..${stream.end(port)}`); // bytes 16..20
+
+  const bad = parseYaml("a: 1\nb: [1,,2]\na: 3\n");
+  const lines = new YamlLineIndex(bad.source);
+  let d: i32 = 0;
+  while (d < bad.diagnosticCount()) {
+    const at = bad.diagnosticStart(d);
+    console.log(`${lines.line(at)}:${lines.column(at)} ${yamlErrorName(bad.diagnosticCode(d))} ${bad.diagnosticMessage(d)}`);
+    d += 1;
+  }
+  // 2:7 UNEXPECTED_COMMA Missing value before ","
+  // 3:1 DUPLICATE_KEY Map key "a" is duplicated
+  return bad.errorCount() === 2 ? 0 : 1;
+};
+```
+
+**A node is an `i32` handle** into the stream, and `-1` is no node. Its
+`kind` is `YAML_SCALAR`, `YAML_MAP`, `YAML_SEQ`, `YAML_ALIAS` or `YAML_PAIR`.
+`count(n)` and `child(n, i)` walk a collection: a map's children are its
+pairs, in the order they were written, and a pair's `key` and `value` are
+nodes; a sequence's children are its items. An empty value (`a:`) is no node,
+so its `value` is `-1` and reads as null. An alias's `target` is the node its
+anchor named, and `resolved(n)` follows an alias to it. `anchor`, `tag` and
+`style` answer what was written; a `!!` tag is kept without its prefix
+(`"int"`).
+
+**Scalars are read when you ask.** `text(n)` decodes a scalar — quotes,
+escapes, folding and block scalars — and `type(n)` resolves it against the
+core schema: `YAML_NULL`, `YAML_BOOL`, `YAML_INT`, `YAML_FLOAT` or
+`YAML_STRING`, with `boolValue`, `intValue` and `floatValue` to read it. YAML
+1.1's `yes` and `on` are strings, as 1.2 says. Nothing is decoded until it is
+read, so a program that wants one key pays for one key.
+
+**Paths.** `pathNode(stream, root, path)` follows a path of map keys and
+sequence indices (`"0"`, never `"01"`) through aliases, and answers the node
+the last matching step reached; `pathMatch` says how many steps matched and
+`pathPair` answers the last pair it stepped through, whose `key` is where a
+message about that setting should point. A key is matched by `keyText`, the
+text it was written as, so `1` and `01` are different keys and a null key
+(`~`, `null`) is matched by `""`. When a map repeats a key, the last one
+wins. A step onto an empty value (`a:`) matches, so `pathMatch` counts it and
+`pathPair` names its pair, but it reaches no node: `pathNode` answers `-1`.
+
+**A read never panics.** A handle that names no node, or a read that does
+not fit the node — `count` of a scalar, `intValue` of a string — answers a
+default: `-1` for a node or an offset, and `0`, `false` or `""` otherwise.
+
+**Ranges and lines.** `start(n)` and `end(n)` are byte offsets into
+`stream.source`, as are a diagnostic's `diagnosticStart` and
+`diagnosticEnd`. `new YamlLineIndex(text)` from `nish/yaml-lines` turns an
+offset into a 1-based `line` and `column` (in characters; `byteColumn` counts
+bytes); a line break is LF, CR LF or a lone CR.
+
+**Diagnostics.** `diagnosticCount`, `errorCount` and `warningCount` count
+them; each has a `YAML_ERR_*` code, named by `yamlErrorName` the way other
+YAML tools name it, `diagnosticIsWarning`, a message and its range, sorted by
+where it starts. An error means the text is not valid YAML; a warning means it
+is valid and probably not what was meant, such as `!!int x`. A map that
+repeats a key is an error, `DUPLICATE_KEY`.
+
+**Options.** `parseYamlWith(text, options)` takes a `YamlOptions`:
+`maxDepth` (how deeply collections nest before `DEPTH_LIMIT`, 1000 by
+default; a value outside 1 to 1000 is a mistake in the program, so
+`parseYamlWith` panics on it), `uniqueKeys`, `merge` (whether a `<<` key is exempt from the
+duplicate check), `keepComments` (keep every comment's range, for
+`commentCount` and `comment`) and `firstDocumentOnly` (warn
+`MULTIPLE_DOCUMENTS` and stop after the first). Merge keys are not applied: a
+map holds the pairs it was written with. Tabs are never indentation, as YAML
+says.
 
 ## `nish/pair`
 

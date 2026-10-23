@@ -23,8 +23,10 @@
 //   - The per-module checked goldens under `tests/self/goldens/checked/`, whose
 //     paths mirror the corpus module each one dumps
 //     (`tests/cases/add_plain.ts.txt`), fixture names and all.
-//   - A `node_modules` directory: package resolution looks for that name, so
-//     the cookbook's package example has to live under one.
+//   - A directory whose name a tool looks for, in TOOL_DIRECTORIES: package
+//     resolution reads `node_modules`, so the cookbook's package example has
+//     to live under one, and GitHub reads issue forms only from
+//     `.github/ISSUE_TEMPLATE`.
 //
 //   node scripts/check-filenames.mjs             exit 1 on any violation
 //   node scripts/check-filenames.mjs --advisory  print them, exit 0
@@ -40,6 +42,8 @@ const FIXTURE_ROOTS = [
   "tests/differential/corpus/",
   "tests/self/goldens/checked/",
 ]
+
+const TOOL_DIRECTORIES = ["node_modules", "ISSUE_TEMPLATE"]
 
 const KEBAB_PART = /^[a-z0-9]+(-[a-z0-9]+)*$/
 const SHOUTED_DOCUMENT = /^[A-Z][A-Z0-9]*([_-][A-Za-z0-9]+)*(\.[a-z]+)?$/
@@ -58,7 +62,7 @@ const offendingSegments = (file) => {
   const segments = file.split("/")
   const base = segments[segments.length - 1]
   const dirs = segments.slice(0, -1)
-  const bad = dirs.filter((dir) => dir !== "node_modules" && !isKebabSegment(dir))
+  const bad = dirs.filter((dir) => !TOOL_DIRECTORIES.includes(dir) && !isKebabSegment(dir))
   if (!SHOUTED_DOCUMENT.test(base) && !isKebabSegment(base)) {
     bad.push(base)
   }

@@ -371,7 +371,7 @@ function checksRangesInPrologue(table: TypeTable, opts: Options, sig: FunctionSi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.visibleOutside privateAbi takesRange
   pointer table: size=96 writesThrough=false captured=false passedTo=takesRange#0
-  pointer opts: size=152 writesThrough=false captured=false passedTo=privateAbi#0
+  pointer opts: size=160 writesThrough=false captured=false passedTo=privateAbi#0
   pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0 takesRange#1
   stackSites=0 stackLocals=0
   callee +0:4 privateAbi -> @privateAbi
