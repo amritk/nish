@@ -46,6 +46,7 @@ import child_process from "node:child_process";
 import { webcrypto } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
+import tty from "node:tty";
 
 const I32_MIN = -2147483648;
 const I32_MAX = 2147483647;
@@ -927,6 +928,31 @@ export function readSignal() {
 export function noNetReading(name) {
   throw new Error(
     `\`${name}\` has no synchronous reading under Node: a socket is ready only to the event loop, which a program that owns its loop never returns to (docs/wp33-round-trip.md)`
+  );
+}
+
+/**
+ * `nish:term`. Two of the five have a faithful synchronous reading: whether a
+ * descriptor is a terminal, and the size Node already keeps for stdout's, or
+ * stdin's, `[-25, 0]` when neither is one. The other three throw, naming
+ * themselves, for `noNetReading`'s reason: Node reads stdin only to its event
+ * loop, and its own raw mode turns Ctrl-C into a byte, which is not the native
+ * answer. `nish.mjs` installs `noTermReading` per name.
+ */
+export function isTerminal(fd) {
+  return tty.isatty(fd);
+}
+
+export function terminalSize() {
+  for (const stream of [process.stdout, process.stdin]) {
+    if (stream.isTTY && stream.columns !== undefined) return [stream.columns, stream.rows];
+  }
+  return [-25, 0];
+}
+
+export function noTermReading(name) {
+  throw new Error(
+    `\`${name}\` has no synchronous reading under Node: stdin is read only by the event loop, which a program that owns its loop never returns to (docs/RUN_UNDER_NODE.md)`
   );
 }
 

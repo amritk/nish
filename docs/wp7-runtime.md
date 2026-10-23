@@ -7,7 +7,7 @@ strings, and the `wasi` build profile. Later work superseded several parts:
 
 - signed overflow, `i64` included, is a checked panic by default (#426);
 - the shortest-digits search was replaced by a port of Ryu;
-- the runtime grew from one translation unit to eight, each with its own
+- the runtime grew from one translation unit to nine, each with its own
   measured budget (below).
 
 The living reference for every builtin is [LANGUAGE.md](LANGUAGE.md) ("Math",
@@ -174,8 +174,8 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 
 | File | Subject | Budget (constant) | Measured 2026-10-05 |
 | --- | --- | ---: | ---: |
-| `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,684 (`RUNTIME_TEXT_BUDGET`) | 3,684 (2026-10-16) |
-| `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 3,885 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,885 (2026-10-16) |
+| `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,698 (`RUNTIME_TEXT_BUDGET`) | 3,698 (2026-10-23) |
+| `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 3,899 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,899 (2026-10-23) |
 | `runtime/runtime-os.c` | syscall wrappers: files, directories, subprocesses (`spawnSync`, and `spawn`, `kill`, `waitPid`), `getenv`, the clock, `realpath`, platform, the CPU count and physical memory | 2,560 (`RUNTIME_OS_TEXT_BUDGET`) | 2,383 (2026-10-20) |
 | `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 768 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 610 (2026-10-16) |
 | `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path, channels and the worker pool | 2,560 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 2,522 (2026-10-20) |
@@ -185,6 +185,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
+| `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore | 768 (`RUNTIME_TERM_TEXT_BUDGET`) | 723 (2026-10-23) |
 
 **How the ceilings moved.**
 
@@ -216,6 +217,8 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-20 | a divided region's pieces claimed dynamically (threads-followups): `runtime-parallel.c` threaded 2,900 → 3,097. Up to eight pieces a thread off an atomic counter, the arena rewound between them (`nish_par_run` 21 → 102, `nish_par_piece` 49 and `nish_par_run_lead` 21 new, `nish_parallel_range` 245 → 280); bench/par-heavy.ts at four threads 846 → 792 ms | parallel threads 3,328 |
 | 2026-10-20 | a map element's rewind keeps the chunk its body grew (threads-followups): `runtime-cross.c` 1,444 / 1,513 → 1,552 / 1,631, all of it `nish_cross_keep` (262 → 370) with `nish_rewind` inlined. A mark at the end of a full chunk had every element's body `malloc` a 64 KB chunk and the release `free` it; the newest 64 KB chunk is now kept, emptied, in front of the mark's. 1M short strings at one thread 72.8 → 54.9 ms, inside the loop's band; the file's other functions are the join's and the guard's, unchanged | cross 1,664 / 1,664 |
 | 2026-10-20 | WP34 N12's `spawn`, `kill`, `waitPid`, `availableParallelism` and `totalMemory`: `runtime-os.c` 1,530 → 2,383. The four process and memory builtins are 276 bytes (`nish_spawn_start` split from `spawnSync` +31, `nish_spawn_child` 9, `nish_kill` 53, `nish_wait_pid` 134, `nish_total_memory` 49); the other 577 is the CPU count's reading (sysconf, affinity, cgroup, `NISH_NUM_THREADS`), moved from `runtime-parallel.c` so that `availableParallelism` works without `--threads`. `runtime-parallel.c` threaded 3,097 → 2,522; the two files together grew by 278 | os 2,560, parallel threads 2,560 |
+| 2026-10-23 | `nish_fatal_exit`: the panics' `_exit(1)` behind one noreturn call that runs `nish_fatal_hook` first, so raw mode is restored after a failed check: core 3,684 → 3,698, threads 3,885 → 3,899. Calling the hook from `nish_panic_claim` instead measured 3,752 / 3,900, because every call site kept more registers live across it | core 3,698, threads 3,899 |
+| 2026-10-23 | `runtime-term.c` (723), `nish:term` | term 768 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same

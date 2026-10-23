@@ -90,6 +90,7 @@
           },
           "/threads": { "type": "page", "title": "Threads", "filepath": "docs/guide/using-nish/threads.md" },
           "/networking": { "type": "page", "title": "Networking", "filepath": "docs/guide/using-nish/networking.md" },
+          "/terminal": { "type": "page", "title": "Terminal input", "filepath": "docs/guide/using-nish/terminal.md" },
           "/http-router": { "type": "page", "title": "HTTP routing", "filepath": "docs/guide/using-nish/http-router.md" }
         }
       }

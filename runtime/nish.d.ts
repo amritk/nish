@@ -380,6 +380,31 @@ declare function pollRemove(loop: i32, fd: i32): i32;
 /** Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error). */
 declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 
+// ---- `nish:term` ------------------------------------------------------------------
+//
+// stdin without blocking and the terminal it may be: the frame clock and the
+// keys of a terminal UI, with no `net` capability. -11 is "nothing is
+// waiting" and -25 "not a terminal" on every platform; any other failure is
+// the host's `-errno`. Under WASI the reading works, `readStdin` waiting for
+// its bytes (ask `waitStdin` first), and the terminal answers -25. Under Node `isTerminal` and `terminalSize` answer and the other three
+// throw.
+
+/** Up to `len` bytes of stdin into `buf` from `off`, never blocking: the count, 0 at end of stream, or -11 when nothing is waiting. */
+declare function readStdin(buf: u8[], off: i32, len: i32): i32;
+/** Wait up to `timeoutMs` (negative: forever) for stdin to be readable: `true` when it is, `false` when the time passed. */
+declare function waitStdin(timeoutMs: i32): boolean;
+/** Whether descriptor `fd` is a terminal (`isatty`). */
+declare function isTerminal(fd: i32): boolean;
+/** `[columns, rows]` of the terminal on stdout, else stdin; `[-25, 0]` when neither is one. */
+declare function terminalSize(): i32[];
+/**
+ * Raw mode on stdin's terminal, or the mode it had back: 0, -25 when stdin is
+ * not a terminal. No echo, no line editing; Ctrl-C stays SIGINT and "\n"
+ * still starts a line. The terminal is put back at exit, on a panic and on
+ * SIGINT, SIGTERM, SIGQUIT and SIGHUP.
+ */
+declare function setRawMode(on: boolean): i32;
+
 // ---- `Date` and `crypto` (WP34 N3) -----------------------------------------------
 //
 // `lib.es2022` already declares `Date`, whose `now()` is Nish's one member of it,
@@ -533,6 +558,19 @@ declare module "nish:io" {
   export function writeError(s: string): void;
   /** `message` to stderr, then exit 1. A terminator, as `process.exit` is. */
   export function panic(message: string): never;
+}
+
+declare module "nish:term" {
+  /** Up to `len` bytes of stdin into `buf` from `off`, never blocking: the count, 0 at end of stream, or -11 when nothing is waiting. */
+  export function readStdin(buf: u8[], off: i32, len: i32): i32;
+  /** Wait up to `timeoutMs` (negative: forever) for stdin to be readable: `true` when it is, `false` when the time passed. */
+  export function waitStdin(timeoutMs: i32): boolean;
+  /** Whether descriptor `fd` is a terminal (`isatty`). */
+  export function isTerminal(fd: i32): boolean;
+  /** `[columns, rows]` of the terminal on stdout, else stdin; `[-25, 0]` when neither is one. */
+  export function terminalSize(): i32[];
+  /** Raw mode on stdin's terminal (0), or the mode it had back; -25 when stdin is not a terminal. Restored at exit, panic and fatal signals. */
+  export function setRawMode(on: boolean): i32;
 }
 
 // `nish:secret` has source behind it, `std/secret.ts`, but a program imports it

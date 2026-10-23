@@ -47,8 +47,17 @@
  * well, and `nish_die`, the arithmetic and out-of-memory panics, writes its message through
  * the same retrying loop (`nish_write_all`) instead of `fputs`, which gives up on `EINTR`.
  * Measured 3,684 on 2026-10-16 with clang 18 on linux-x64.
+ *
+ * Raised by 14, to 3,698, for `nish_fatal_exit` (`nish:term`): a panic that ends in
+ * `_exit` runs no atexit handler, so it calls this where it called `_exit(1)`, and it
+ * runs `nish_fatal_hook` first, which `setRawMode(true)` sets to its restore. Without it
+ * a failed bounds check in a terminal UI left the shell in raw mode. Each call site is a
+ * call where a call was, so the raise is the function alone (a load, a test, the
+ * hook's call and the `_exit`); the hook's pointer is `.bss`. Measured 3,698 against
+ * 3,684 on 2026-10-23 with clang 18 on linux-x64; calling the hook from the inlined
+ * `nish_panic_claim` instead measured 3,752, because every site grew its own test.
  */
-const RUNTIME_TEXT_BUDGET = 3684
+const RUNTIME_TEXT_BUDGET = 3698
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -116,8 +125,11 @@ const RUNTIME_OS_TEXT_BUDGET = 2560
  * 3,860 on 2026-10-16 with clang 18 on linux-x64, and then 3,885 with the newline's retry
  * and `nish_die` writing through the same loop (as above). The raise is what was measured
  * and no more, as `nish_wipe`'s was.
+ *
+ * Raised by 14, to 3,899, for `nish_fatal_exit` (as above), measured 3,899 against 3,885
+ * on 2026-10-23 with clang 18 on linux-x64.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 3885
+const RUNTIME_THREADS_TEXT_BUDGET = 3899
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
@@ -385,6 +397,19 @@ const RUNTIME_SIMD_TEXT_BUDGET = 768
  * as every ceiling here was set.
  */
 const RUNTIME_AES_TEXT_BUDGET = 2560
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
+ * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
+ * `terminalSize` and `setRawMode`, with the restore that the exit, a panic and four
+ * signals run while raw mode holds.
+ *
+ * Measured **723 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
+ * `.text`. An eighth translation unit rather than more of `runtime-os.c`, which had 177
+ * bytes of its ceiling left, because the rule is a new file with its own measured
+ * ceiling, never a raised one. The budget is the next 256-byte boundary above the
+ * measurement, as every ceiling here was set.
+ */
+const RUNTIME_TERM_TEXT_BUDGET = 768
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
@@ -516,6 +541,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-net.c", NET_TEXT_BUDGET, "NET_TEXT_BUDGET", []],
   ["runtime/runtime-simd.c", RUNTIME_SIMD_TEXT_BUDGET, "RUNTIME_SIMD_TEXT_BUDGET", []],
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
+  ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
 /**

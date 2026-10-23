@@ -15,8 +15,9 @@ const CAP_FS_WRITE: i32 = 6
 const CAP_NET: i32 = 7
 const CAP_PROCESS_SPAWN: i32 = 8
 const CAP_SIGNAL: i32 = 9
-const CAP_UNSAFE: i32 = 10
-const CAPABILITY_COUNT: i32 = 11 [exported]
+const CAP_TTY: i32 = 10
+const CAP_UNSAFE: i32 = 11
+const CAPABILITY_COUNT: i32 = 12 [exported]
 function nondeterministic(): i32 -> @nondeterministic
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

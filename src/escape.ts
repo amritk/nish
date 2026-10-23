@@ -138,6 +138,7 @@ const isAllocatingBuiltin = (name: string): boolean =>
   name === "readdirSync" ||
   name === "realpathSync" ||
   name === "waitPid" ||
+  name === "terminalSize" ||
   name === "readCString"
 
 /**

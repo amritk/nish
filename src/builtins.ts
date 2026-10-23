@@ -164,6 +164,11 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "waitPid" ||
     name === "availableParallelism" ||
     name === "totalMemory" ||
+    name === "readStdin" ||
+    name === "waitStdin" ||
+    name === "isTerminal" ||
+    name === "terminalSize" ||
+    name === "setRawMode" ||
     isNetExport(name) ||
     isUnsafeExport(name)
   )
@@ -1055,6 +1060,37 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       refuseOnWasm(ctx, call, name)
     }
     return name === "totalMemory" ? T_I64 : T_I32
+  }
+  // `nish:term`, runtime-term.c. `readStdin` is `netRead` without the
+  // descriptor: the `u8[]` it writes and the range of it, checked as
+  // `netRead`'s are. None is refused on wasm: wasi-libc has `read` and `poll`
+  // for stdin, and the three TTY questions answer "not a terminal" there.
+  if (name === "readStdin") {
+    if (checkBuiltinArity(ctx, call, name, args, 3)) {
+      checkBuffer(ctx, args.children[0], scope, name, T_U8, true)
+      checkArgumentType(ctx, args.children[1], scope, name, T_I32)
+      checkArgumentType(ctx, args.children[2], scope, name, T_I32)
+    }
+    return T_I32
+  }
+  // The frame clock: a timeout in milliseconds, negative for none, and
+  // whether stdin is readable when it ends. An `i32`, as `pollWait`'s is.
+  if (name === "waitStdin" || name === "isTerminal") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_I32)
+    }
+    return T_BOOL
+  }
+  // A fresh `[columns, rows]`, or `[-errno, 0]`, as `waitPid` answers a pair.
+  if (name === "terminalSize") {
+    checkBuiltinArity(ctx, call, name, args, 0)
+    return ctx.table.arrayOf(T_I32)
+  }
+  if (name === "setRawMode") {
+    if (checkBuiltinArity(ctx, call, name, args, 1)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_BOOL)
+    }
+    return T_I32
   }
   if (isNetExport(name)) {
     return checkNet(ctx, call, scope, name)

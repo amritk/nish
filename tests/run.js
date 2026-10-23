@@ -123,11 +123,12 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-cross.c` copies the strings and arrays that cross between them,
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
- * searches that read a vector at a time and `runtime-aes.c` AES-GCM on the
- * CPU's AES instructions, split apart so that each carries its own `.text*`
+ * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
+ * CPU's AES instructions and `runtime-term.c` stdin and the terminal of
+ * `nish:term`, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eight:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same nine:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -146,6 +147,7 @@ const RUNTIME_C = [
   "runtime/runtime-net.c",
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
+  "runtime/runtime-term.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -1488,6 +1490,181 @@ const runWithPort = async (exe, args, onPort) => {
     }
   })
   return { ...r, results: await (talks ?? Promise.resolve([])) }
+}
+
+// ---- `nish:term`, over a pipe and a pseudo-terminal -------------------------------
+//
+// What a golden cannot say about stdin and the terminal, because the case runner
+// gives every program `/dev/null` for stdin and a pipe for stdout: end of stream
+// and no terminal, always. Here a pipe carries bytes in, a pipe held open with
+// nothing in it times `waitStdin` out, and `script` puts a pseudo-terminal under
+// `tests/cases/term_pty`, where raw mode takes and each way out (returning, a
+// panic, SIGTERM) leaves `stty -g` as it found it.
+if (!only || "term".includes(only)) {
+  const termDir = path.join(buildDir, "term")
+  fs.rmSync(termDir, { recursive: true, force: true })
+  fs.mkdirSync(termDir, { recursive: true })
+
+  // The bytes are in the pipe before the program starts, so `readStdin`'s poll,
+  // which does not wait, finds them; `waitStdin(50)` then sees the writer's end.
+  const callsExe = buildCaseIn(termDir, "term_calls")
+  if (callsExe !== null) {
+    const r = spawnSync("sh", ["-c", 'printf abcd | { sleep 0.2; exec "$0"; }', callsExe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "term_calls: over a pipe readStdin reads the four bytes waiting, waitStdin sees the end, and the terminal questions answer false and -25",
+      r.status === 0 && r.stdout === "4\ntrue\nfalse\nfalse\n2 -25 0\n-25\n0\n",
+      shown(r)
+    )
+
+    // Open with nothing written: `readStdin` answers -11 at once and `waitStdin(50)`
+    // gives up after its 50 ms rather than at once or never.
+    const held = await new Promise((resolve) => {
+      const start = process.hrtime.bigint()
+      const child = spawn(callsExe, [], { cwd: root, stdio: ["pipe", "pipe", "pipe"] })
+      let out = ""
+      let err = ""
+      const timer = setTimeout(() => child.kill("SIGKILL"), 10000)
+      child.stdout.on("data", (chunk) => {
+        out += chunk
+      })
+      child.stderr.on("data", (chunk) => {
+        err += chunk
+      })
+      child.on("close", (code, signal) => {
+        clearTimeout(timer)
+        child.stdin.destroy()
+        resolve({ code, signal, out, err, ms: Number(process.hrtime.bigint() - start) / 1e6 })
+      })
+    })
+    check(
+      "term_calls: over a pipe held open with nothing in it readStdin answers -11 and waitStdin(50) times out after at least 50 ms",
+      held.code === 0 && held.out === "-11\nfalse\nfalse\nfalse\n2 -25 0\n-25\n0\n" && held.ms >= 50,
+      `exit ${held.code} signal ${held.signal} after ${held.ms.toFixed(1)} ms\nstdout: ${JSON.stringify(held.out)}\nstderr: ${held.err}`
+    )
+  }
+
+  // A thousand bytes in sixteen-byte reads, the key loop of the guide page.
+  const importExe = buildCaseIn(termDir, "term_import")
+  if (importExe !== null) {
+    const r = spawnSync(importExe, [], { cwd: root, encoding: "utf8", input: "k".repeat(1000) })
+    check(
+      "term_import: waitStdin and readStdin drain a thousand piped bytes and stop at the end of the stream",
+      r.status === 0 && r.stdout === "-25\n1000\n",
+      shown(r)
+    )
+  }
+
+  // Under a pseudo-terminal. The script saves `stty -g`, runs each mode of
+  // term_pty, and compares after each; `hold` is asked about `icanon` while it
+  // waits in raw mode, then sent SIGTERM. Its stdin is `/dev/tty` because a
+  // background job of a non-interactive shell otherwise reads `/dev/null`.
+  const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
+  if (!has("script")) {
+    skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
+  } else if (ptyExe !== null) {
+    const sh = path.join(termDir, "pty.sh")
+    fs.writeFileSync(
+      sh,
+      [
+        'E="$1"; D="$2"',
+        'if [ -t 0 ]; then echo pty; else echo "no pty"; exit 0; fi',
+        'same() { stty -g | cmp -s - "$D/before" && echo same || echo changed; }',
+        'stty -g > "$D/before"',
+        '"$E" probe',
+        'echo "probe stty $(same)"',
+        '"$E" exit',
+        'echo "exit $? stty $(same)"',
+        '"$E" panic 2>/dev/null',
+        'echo "panic $? stty $(same)"',
+        ': > "$D/hold.out"',
+        '"$E" hold </dev/tty > "$D/hold.out" & pid=$!',
+        "i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        'echo "held $(stty -a | tr \' ;\' \'\\n\\n\' | grep -x -- \'-\\{0,1\\}icanon\')"',
+        'kill -TERM $pid; wait $pid',
+        'echo "hold $? stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
+        "",
+      ].join("\n")
+    )
+    const argv =
+      process.platform === "darwin"
+        ? ["-q", "/dev/null", "sh", sh, ptyExe, termDir]
+        : ["-qec", `sh ${sh} ${ptyExe} ${termDir}`, "/dev/null"]
+    const r = spawnSync("script", argv, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30000 })
+    const lines = String(r.stdout).replaceAll("\r", "").split("\n")
+    if (!lines.includes("pty")) {
+      skip(`term_pty: \`script\` gave no pseudo-terminal here (${shown(r).replaceAll("\n", " ")})`)
+    } else {
+      const want = [
+        "true true true true",
+        "0 0 0 0",
+        "probe stty same",
+        "exit 0 stty same",
+        "panic 1 stty same",
+        "held -icanon",
+        "hold 143 stty same said raw 0 ready ",
+      ]
+      check(
+        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic and SIGTERM each leave the terminal as it was",
+        want.every((line) => lines.includes(line)),
+        `want every line of ${JSON.stringify(want)}\n${shown(r)}`
+      )
+    }
+  }
+
+  // Under Node the two questions answer and the three readers fail loudly.
+  const answered = runCaseUnderPrelude("caps_tty", [])
+  check(
+    "caps_tty: under the prelude terminalSize answers -25 off a terminal, as natively",
+    answered.status === 0 && answered.stdout === "-25\n",
+    shown(answered)
+  )
+  const loud = runCaseUnderPrelude("term_calls", [])
+  check(
+    "term_calls: under the prelude readStdin fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`readStdin` has no synchronous reading under Node"),
+    shown(loud)
+  )
+}
+
+// The same two reading programs as `--profile wasi` builds under Node's WASI,
+// where `readStdin` reads without its poll (runtime-term.c) and the terminal
+// questions answer "not a terminal", so the native expected lines hold.
+if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const wasiDir = path.join(buildDir, "term_wasi")
+    fs.rmSync(wasiDir, { recursive: true, force: true })
+    fs.mkdirSync(wasiDir, { recursive: true })
+    for (const [name, feed, want] of [
+      ["term_calls", "printf abcd", "4\ntrue\nfalse\nfalse\n2 -25 0\n-25\n0\n"],
+      ["term_import", "head -c 1000 /dev/zero", "-25\n1000\n"],
+    ]) {
+      const wasm = path.join(wasiDir, `${name}.wasm`)
+      const built = spawnSync(
+        NISH,
+        [path.join(casesDir, `${name}.ts`), "-o", wasiDir + path.sep, "--link", wasm, "--profile", "wasi"],
+        { cwd: root, encoding: "utf8" }
+      )
+      const ran =
+        built.status === 0
+          ? spawnSync("sh", ["-c", `${feed} | { sleep 0.2; exec node --no-warnings examples/wasi-host.mjs "$0"; }`, wasm], {
+              cwd: root,
+              encoding: "utf8",
+            })
+          : built
+      check(
+        `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) reads piped stdin and answers -25 for the terminal, as natively`,
+        built.status === 0 && ran.status === 0 && ran.stdout === want,
+        shown(ran)
+      )
+    }
+  } else {
+    skip(
+      `skipped: term_calls, term_import: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the stdin readers are not run`
+    )
+  }
 }
 
 // ---- `nish:net`, against Node's sockets (WP34 N5) ---------------------------------
@@ -11586,7 +11763,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c and runtime-aes.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c and runtime-term.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -17540,7 +17717,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's eight translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's nine translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -17595,6 +17772,7 @@ if (!only || "runtime-cache".includes(only)) {
       "runtime-net.c",
       "runtime-simd.c",
       "runtime-aes.c",
+      "runtime-term.c",
     ]
     const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
 
@@ -17602,7 +17780,7 @@ if (!only || "runtime-cache".includes(only)) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eight objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the nine objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -17611,7 +17789,7 @@ if (!only || "runtime-cache".includes(only)) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the eight runtime units once",
+      "runtime cache: the miss compiled each of the nine runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -18159,9 +18337,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eight runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all nine runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 8 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 9 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
@@ -18822,6 +19000,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       // And the eighth: the copy-at-join crossings of strings and arrays between
       // threads, which every parallel construct that answers one calls.
       "runtime/runtime-cross.c",
+      // And the ninth: stdin and the terminal of `nish:term`.
+      "runtime/runtime-term.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

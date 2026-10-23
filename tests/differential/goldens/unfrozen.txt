@@ -124,6 +124,7 @@ cases/caps_process_spawn added after R6: no rewriter to freeze it with
 cases/caps_process_wait added after R6: no rewriter to freeze it with
 cases/caps_pure added after R6: no rewriter to freeze it with
 cases/caps_signal added after R6: no rewriter to freeze it with
+cases/caps_tty added after R6: no rewriter to freeze it with
 cases/cls_inline_array added after R6: no rewriter to freeze it with
 cases/cls_inline_array_call added after R6: no rewriter to freeze it with
 cases/cls_inline_array_dynamic added after R6: no rewriter to freeze it with
@@ -278,6 +279,7 @@ cases/mem_return_array_caller added after R6: no rewriter to freeze it with
 cases/mem_return_array_nested added after R6: no rewriter to freeze it with
 cases/mem_return_array_readdir added after R6: no rewriter to freeze it with
 cases/mem_return_array_scope added after R6: no rewriter to freeze it with
+cases/mem_terminal_size_scope added after R6: no rewriter to freeze it with
 cases/mem_using_arena added after R6: no rewriter to freeze it with
 cases/mem_using_arena_or_return added after R6: no rewriter to freeze it with
 cases/mem_using_arena_tail added after R6: no rewriter to freeze it with
@@ -444,6 +446,9 @@ cases/str_index_of_from_port added after R6: no rewriter to freeze it with
 cases/str_surrogate_lone added after R6: no rewriter to freeze it with
 cases/str_surrogate_map_key added after R6: no rewriter to freeze it with
 cases/str_surrogate_pair added after R6: no rewriter to freeze it with
+cases/term_calls added after R6: no rewriter to freeze it with
+cases/term_import added after R6: no rewriter to freeze it with
+cases/term_pty added after R6: no rewriter to freeze it with
 cases/union_arena added after R6: no rewriter to freeze it with
 cases/union_forms added after R6: no rewriter to freeze it with
 cases/union_narrowing added after R6: no rewriter to freeze it with

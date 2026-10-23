@@ -20,7 +20,7 @@ enforce them.
 
 ## 1. Semantics
 
-A policy is two masks over WP35's eleven capabilities. A denied capability is
+A policy is two masks over WP35's twelve capabilities. A denied capability is
 refused when it is reached; giving `--allow` at all makes the policy an
 allowlist, so anything it does not list is refused, `exit` and `signal`
 included. Both flags repeat and take comma lists. **The command line can only
@@ -80,7 +80,7 @@ under `allow`), NL3035 (a capability under both).
 `builtinCapability` answers `CAP_UNSAFE` for `uncheckedGet`, `uncheckedSet`,
 `wrappingAdd`, `wrappingSub` and `wrappingMul`, and the bit propagates like any
 other: `--emit-capabilities` and `--capabilities` name it, and it is not one
-of `deterministic`'s eight. Unlike WP35's capabilities it can come out of a
+of `deterministic`'s nine. Unlike WP35's capabilities it can come out of a
 parallel body, since `uncheckedGet` writes nothing shared.
 
 ## 5. The refusal

@@ -90,7 +90,15 @@ the same commit.
   program that owns its loop never returns to
   ([`nish:net`](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)). A
   `nish:net` import does not resolve under Node at all, nor does any other
-  `nish:` import but the two below; the globals are what the prelude can answer
+  `nish:` import but the three below; the globals are what the prelude can answer
+- `isTerminal`, `terminalSize` — `tty.isatty(fd)`, and the `columns` and
+  `rows` Node keeps for stdout, or for stdin when stdout is not a terminal,
+  `[-25, 0]` when neither is: the native answers
+  ([`nish:term`](LANGUAGE.md#nishterm-terminal-input))
+- `readStdin`, `waitStdin`, `setRawMode` — installed only to **throw**, each
+  naming itself: Node reads stdin only to its event loop, as it does a socket,
+  and its own raw mode turns Ctrl-C into a byte where the native one keeps it a
+  signal. All five are globals, and the `nish:term` import resolves to them
 - `getenv` — `process.env[name] ?? null`, because Node answers `undefined`
   where the language has only `null`
 - `realpathSync` — `fs.realpathSync` in a `try`, because Node throws where the

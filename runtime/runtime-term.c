@@ -1,0 +1,183 @@
+/* Nish runtime, the terminal half: reading stdin without blocking, waiting
+ * for it with a timeout, and the three questions a terminal UI asks of a TTY
+ * (is it one, how big is it, and raw mode on or off), the `nish:term` builtin
+ * module.
+ *
+ * A translation unit of its own for the reason runtime-net.c is one: each
+ * file carries its own measured `.text*` ceiling in tests/runtime-budgets.js,
+ * and runtime-os.c, the other half this could have joined, had 177 bytes of
+ * its ceiling left. Section GC means a program that calls none of these pays
+ * for none of them, and scripts/build.sh pairs this file with runtime.c like
+ * the other halves, so a link line still names one runtime.
+ *
+ * Errors take `nish:net`'s shape: an `int32_t` that is `>= 0` for success and
+ * a negated errno for a failure. Two codes a program branches on are spelled
+ * as numbers, because WASI numbers its errnos differently: -11 is "nothing is
+ * waiting" and -25 is "not a terminal", on every platform. Any other failure
+ * is the host's own `-errno`.
+ *
+ * stdin is never made non-blocking. `O_NONBLOCK` is a property of the open
+ * file description, which a shell shares with every program it starts, so
+ * setting it would leave the shell's own stdin non-blocking after a crash.
+ * `readStdin` asks `poll` first instead, with a timeout of 0.
+ *
+ * Raw mode is cfmakeraw's input side without its output side: no echo, no
+ * line editing, no CR-to-NL translation, no flow control, 8-bit bytes, a
+ * read that answers as soon as one byte is there. `ISIG` stays on, so Ctrl-C
+ * is still SIGINT and Ctrl-Z still stops the program, and `OPOST` stays on,
+ * so "\n" still moves to the start of the next line. The termios that was
+ * there first is saved by the first `setRawMode(true)` and put back by
+ * `setRawMode(false)`, by an atexit handler, by every panic (runtime.c's
+ * `nish_fatal_hook`, because a failed check ends in `_exit`), and by SIGINT,
+ * SIGTERM, SIGQUIT and SIGHUP, for each of which a handler is installed only
+ * when the program left it at its default: the handler restores the terminal,
+ * the default comes back (`SA_RESETHAND`), and the signal is raised again, so
+ * the program still dies of it and its parent sees that. SIGTSTP is left
+ * alone: a shell with job control saves a stopped job's terminal state and
+ * puts its own back, and gives the job its state again on `fg`.
+ *
+ * WASI has `read` and `poll` on stdin and no terminal interface, so there the
+ * first two work (`readStdin` waiting, below) and the TTY questions answer
+ * "not a terminal": false, `[-25, 0]`, and -25 for entering raw mode. Linux and Darwin only otherwise; the file uses nothing else. */
+/* `SA_RESETHAND` is XSI, so _POSIX_C_SOURCE alone does not declare it on
+   glibc; Darwin hides `TIOCGWINSZ` behind either unless `_DARWIN_C_SOURCE`
+   says otherwise. */
+#define _XOPEN_SOURCE 700
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#endif
+#include "nish.h"
+
+#include <poll.h>
+#include <errno.h>
+#include <unistd.h>
+#ifndef __wasi__
+#include <signal.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <termios.h>
+#endif
+
+/* `readStdin(buf, off, len)`: at most `len` bytes into `buf` from `off`, the
+   count, 0 at the end of the stream and -11 when nothing is waiting. The
+   compiled call has already checked `0 <= off <= off + len <= buf.length`,
+   unless the program was built with `--unchecked-indexing`. A `read` that a
+   signal interrupts is asked again; one that would block (a descriptor some
+   other program made non-blocking) is -11 too. Under WASI the poll is left
+   out and the read waits: Node's WASI answers a poll of stdin with a timeout
+   of 0 as "nothing waiting" when bytes are, so there the program asks
+   `waitStdin` first. */
+int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len) {
+#ifndef __wasi__
+  struct pollfd p = {0, POLLIN, 0};
+  if (poll(&p, 1, 0) == 0) return -11;
+#endif
+  ssize_t n;
+  do n = read(0, buf->data + off, (size_t)len);
+  while (n < 0 && errno == EINTR);
+  if (n >= 0) return (int32_t)n;
+  return errno == EAGAIN || errno == EWOULDBLOCK ? -11 : -errno;
+}
+
+/* `waitStdin(timeoutMs)`: true once stdin is readable, which includes its end
+   and an error, so a read after it answers at once; false when `timeoutMs`
+   passes first, or a signal ends the wait early. A negative timeout waits for
+   ever. */
+bool nish_wait_stdin(int32_t timeout_ms) {
+  struct pollfd p = {0, POLLIN, 0};
+  return poll(&p, 1, timeout_ms < 0 ? -1 : timeout_ms) > 0;
+}
+
+#ifdef __wasi__
+bool nish_is_terminal(int32_t fd) {
+  (void)fd;
+  return 0;
+}
+nish_array *nish_terminal_size(void) {
+  nish_array *out = nish_alloc_array(sizeof(int32_t), 2);
+  int32_t *w = (int32_t *)out->data;
+  w[0] = -25;
+  w[1] = 0;
+  return out;
+}
+int32_t nish_set_raw_mode(bool on) { return on ? -25 : 0; }
+#else
+/* `isTerminal(fd)`: `isatty`. */
+bool nish_is_terminal(int32_t fd) { return isatty(fd) == 1; }
+
+/* `terminalSize()`: `[columns, rows]` of the terminal on stdout, or on stdin
+   when stdout is not one, as a fresh two-element `i32[]`; `[-errno, 0]` when
+   neither is, -25 for "not a terminal". */
+nish_array *nish_terminal_size(void) {
+  nish_array *out = nish_alloc_array(sizeof(int32_t), 2);
+  int32_t *w = (int32_t *)out->data;
+  struct winsize ws;
+  if (ioctl(1, TIOCGWINSZ, &ws) == 0 || ioctl(0, TIOCGWINSZ, &ws) == 0) {
+    w[0] = ws.ws_col;
+    w[1] = ws.ws_row;
+  } else {
+    w[0] = errno == ENOTTY ? -25 : -errno;
+    w[1] = 0;
+  }
+  return out;
+}
+
+/* The termios stdin had before the first `setRawMode(true)`, whether it is in
+   force now, and whether the exit and signal handlers are in place. One
+   terminal per process, so one of each. */
+static struct termios nish_term_saved;
+static volatile sig_atomic_t nish_term_raw;
+static int nish_term_armed;
+
+/* Put the saved termios back, once: it is called from `setRawMode(false)`, an
+   atexit handler, a panic and a signal handler, so it uses only `tcsetattr`,
+   which is async-signal-safe. */
+static void nish_term_restore(void) {
+  if (!nish_term_raw) return;
+  nish_term_raw = 0;
+  nish_fatal_hook = 0;
+  tcsetattr(0, TCSANOW, &nish_term_saved);
+}
+
+static void nish_term_on_signal(int sig) {
+  nish_term_restore();
+  raise(sig);
+}
+
+/* `setRawMode(on)`: 0, or -25 when stdin is not a terminal and the host's
+   `-errno` when `tcsetattr` refuses. Entering flushes the input a line
+   discipline had already buffered; leaving keeps it. Asking for the mode the
+   terminal is already in changes nothing. */
+int32_t nish_set_raw_mode(bool on) {
+  if (!on) {
+    nish_term_restore();
+    return 0;
+  }
+  if (nish_term_raw) return 0;
+  if (!isatty(0)) return -25;
+  if (tcgetattr(0, &nish_term_saved) != 0) return -errno;
+  struct termios t = nish_term_saved;
+  t.c_iflag &= ~(tcflag_t)(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
+  t.c_cflag |= CS8;
+  t.c_lflag &= ~(tcflag_t)(ECHO | ICANON | IEXTEN);
+  t.c_cc[VMIN] = 1;
+  t.c_cc[VTIME] = 0;
+  if (!nish_term_armed) {
+    nish_term_armed = 1;
+    atexit(nish_term_restore);
+    static const int sigs[4] = {SIGINT, SIGTERM, SIGQUIT, SIGHUP};
+    for (int i = 0; i < 4; i++) {
+      struct sigaction old, sa;
+      if (sigaction(sigs[i], 0, &old) != 0 || old.sa_handler != SIG_DFL) continue;
+      sa.sa_handler = nish_term_on_signal;
+      sa.sa_flags = SA_RESETHAND;
+      sigemptyset(&sa.sa_mask);
+      sigaction(sigs[i], &sa, 0);
+    }
+  }
+  if (tcsetattr(0, TCSAFLUSH, &t) != 0) return -errno;
+  nish_term_raw = 1;
+  nish_fatal_hook = nish_term_restore;
+  return 0;
+}
+#endif

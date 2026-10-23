@@ -20393,6 +20393,147 @@ attributes #2 = { nounwind noreturn cold }
 ```
 <!-- cookbook:end builtin-net-loop -->
 
+### `nish:term`: `readStdin`, `waitStdin` and the terminal
+
+A key-reading loop without the `net` capability: `waitStdin` is a `poll` of
+stdin with a timeout, `readStdin` a read of what is already there, and the
+three terminal questions are a call each. `readStdin(buf, off, len)` lowers as
+`netRead` does with the descriptor left out — the `[off, off + len)` check, the
+same `net.fail` block and its slice panic, then the call — and
+`--unchecked-indexing` removes the check. `terminalSize` answers a fresh
+`i32[]` from the arena, so `[0]` on it is an ordinary element read with its
+bounds check. `columns` only reads the pair, so it gets the automatic arena
+scope that gives the pair back; a function that returns it gets none
+(`mem_terminal_size_scope`).
+`@nish_is_terminal` and `@nish_terminal_size` are `willreturn`; the wait, the
+read and `@nish_set_raw_mode` are not
+([LANGUAGE.md](LANGUAGE.md#nishterm-terminal-input)).
+
+<!-- cookbook:begin builtin-term -->
+```ts
+// `nish:term`: one call into runtime-term.c each. `readStdin` is `netRead`
+// without the descriptor: the same range check through the slice panic first,
+// and a buffer that is `nocapture` but not `readonly`. It and `waitStdin` are
+// not `willreturn`, since a wait can last for ever; `isTerminal` and
+// `terminalSize` are, and the size is a fresh `i32[]` from the arena.
+import { isTerminal, readStdin, setRawMode, terminalSize, waitStdin } from "nish:term"
+
+export const nextKeys = (buf: u8[], frameMs: i32): i32 =>
+  waitStdin(frameMs) ? readStdin(buf, 0, buf.length) : -11
+
+export const columns = (): i32 => (isTerminal(1) ? terminalSize()[0] : 80)
+
+export const enterRaw = (): i32 => setRawMode(true)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noundef i32 @nish_read_stdin(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef) #0
+declare zeroext i1 @nish_wait_stdin(i32 noundef) #0
+declare zeroext i1 @nish_is_terminal(i32 noundef) #1
+declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size() #1
+declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #0
+declare void @nish_panic_index(i64 noundef, i64 noundef) #2
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define noundef i32 @nextKeys(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %buf, i32 noundef %frameMs) #0 {
+entry:
+  %0 = call zeroext i1 @nish_wait_stdin(i32 %frameMs)
+  br i1 %0, label %cond.true, label %cond.false
+
+cond.true:
+  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %2 = load i64, i64* %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = trunc i64 %2 to i32
+  %4 = sext i32 %3 to i64
+  %5 = add i64 0, %4
+  %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %buf, i64 0, i32 0
+  %7 = load i64, i64* %6, align 8
+  %8 = icmp ule i64 0, %5
+  %9 = icmp ule i64 %5, %7
+  %10 = and i1 %8, %9
+  br i1 %10, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %5, i64 %7)
+  unreachable
+
+net.ok:
+  %11 = call i32 @nish_read_stdin(%struct.nish_array* %buf, i64 0, i64 %4)
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %12 = phi i32 [ %11, %net.ok ], [ -11, %cond.false ]
+  ret i32 %12
+}
+
+define noundef i32 @columns() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call zeroext i1 @nish_is_terminal(i32 1)
+  br i1 %0, label %cond.true, label %cond.false
+
+cond.true:
+  %1 = call %struct.nish_array* @nish_terminal_size()
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %4 = icmp ult i64 0, %3
+  br i1 %4, label %bounds.ok, label %bounds.fail
+
+bounds.fail:
+  call void @nish_panic_index(i64 0, i64 %3)
+  unreachable
+
+bounds.ok:
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %6 = load i8*, i8** %5, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %7 = bitcast i8* %6 to i32*
+  %8 = getelementptr inbounds i32, i32* %7, i64 0
+  %9 = load i32, i32* %8, align 4, !alias.scope !4, !noalias !3, !tbaa !13
+  br label %cond.end
+
+cond.false:
+  br label %cond.end
+
+cond.end:
+  %10 = phi i32 [ %9, %bounds.ok ], [ 80, %cond.false ]
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %10
+}
+
+define noundef i32 @enterRaw() #0 {
+entry:
+  %0 = call i32 @nish_set_raw_mode(i1 zeroext true)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !8, i64 16}
+!12 = !{!"element i32", !6, i64 0}
+!13 = !{!12, !12, i64 0}
+```
+<!-- cookbook:end builtin-term -->
+
 ### `Math.random`
 
 `nish_random` mutates global state (effect `write`), so `coin` is not pure.
@@ -21906,6 +22047,11 @@ declare i64 @nish_euid() #2
 declare zeroext i1 @nish_is_executable(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noundef i32 @nish_signal_fd() #2
 declare noundef i32 @nish_read_signal(i32 noundef) #3
+declare noundef i32 @nish_read_stdin(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef) #3
+declare zeroext i1 @nish_wait_stdin(i32 noundef) #3
+declare zeroext i1 @nish_is_terminal(i32 noundef) #2
+declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size() #2
+declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #3
 declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare noundef i32 @nish_net_local_port(i32 noundef) #2
 declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
