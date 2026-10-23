@@ -566,10 +566,12 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
     callee.children.length === 1 &&
     typeOf(walk, callee.children[0]) === T_STRING
   ) {
-    return indexArguments(walk, node, operands, 0)
+    indexArguments(walk, node, operands, 0)
+    return null
   }
   if (callee.kind === N_MEMBER && callee.children.length === 1 && arrayOffsets(walk, node)) {
-    return indexArguments(walk, node, operands, 1)
+    indexArguments(walk, node, operands, 1)
+    return null
   }
   if (callee.kind !== N_MEMBER || callee.children.length !== 1 || callee.children[0].kind !== N_IDENT) {
     return null
@@ -620,24 +622,29 @@ const arrayOffsets = (walk: Walk, node: Node): boolean =>
  * A string method given an i64 or u64 index, or an array's `fill` given one as
  * an offset, which JavaScript refuses as a `bigint`: each such argument from
  * the `first` on goes through `Number`, whose rounding past 2^53 lands where
- * the method's clamp does anyway. When another row rewrote an argument, the
- * list's text no longer splits into arguments, so the runtime's `offsets`
- * converts them instead.
+ * the method's clamp does anyway. The argument list is rewritten in
+ * `operands` and the call itself left to the later rows, so the strings row
+ * builds its byte-offset helper from the converted arguments. When another
+ * row rewrote an argument, the list's text no longer splits into arguments,
+ * so the runtime's `offsets` converts them instead.
  */
-const indexArguments = (walk: Walk, node: Node, operands: Operands, first: i32): string | null => {
+const indexArguments = (walk: Walk, node: Node, operands: Operands, first: i32): void => {
   const args = node.children[1]
   let wrapped = false
   for (let i = first; i < args.children.length; i++) {
     wrapped = wrapped || isBig(typeOf(walk, args.children[i]))
   }
   if (!wrapped) {
-    return null
+    return
   }
   if (operands.changed[1]) {
     walk.useHelper("offsets")
-    return `${operands.at(0)}${between(walk, node.children[0].end, args.start)}...offsets(${first}, [${operands.at(1)}])${between(walk, args.end, node.end)}`
+    operands.texts[1] = `...offsets(${first}, [${operands.at(1)}])`
+  } else {
+    operands.texts[1] = wrappedFrom(walk, args, first, args.start, args.end)
   }
-  return `${operands.at(0)}${between(walk, node.children[0].end, args.start)}${wrappedFrom(walk, args, first, args.start, node.end)}`
+  operands.changed[1] = true
+  operands.any = true
 }
 
 /**
