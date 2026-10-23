@@ -281,10 +281,23 @@ export function noNetReading(name) {
  * `readStdin`, `waitStdin` and `setRawMode` (`nish:term`) throw too, naming
  * themselves, for `noNetReading`'s reason: Node reads stdin only to its event
  * loop, and its own raw mode turns Ctrl-C into a byte, which is not the native
- * answer. `nish.mjs` installs one per name.
+ * answer. The core exports one per name, for `--emit-ts` output to import, and
+ * `nish.mjs` installs one per name as a global.
  */
 export function noTermReading(name) {
   throw new Error(
     `\`${name}\` has no synchronous reading under Node: stdin is read only by the event loop, which a program that owns its loop never returns to (docs/RUN_UNDER_NODE.md)`
   );
+}
+
+export function readStdin() {
+  return noTermReading("readStdin");
+}
+
+export function waitStdin() {
+  return noTermReading("waitStdin");
+}
+
+export function setRawMode() {
+  return noTermReading("setRawMode");
 }

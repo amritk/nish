@@ -63,3 +63,7 @@ export declare function readSignal(fd: i32): i32;
 export declare function noNetReading(name: string): never;
 /** What `readStdin`, `waitStdin` and `setRawMode` are under the core: a throw naming `name`. */
 export declare function noTermReading(name: string): never;
+/** `nish:term`'s three that have no reading under Node: each throws, naming itself. */
+export declare function readStdin(buf: u8[], off: i32, len: i32): i32;
+export declare function waitStdin(timeoutMs: i32): boolean;
+export declare function setRawMode(on: boolean): i32;
