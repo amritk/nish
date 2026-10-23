@@ -115,9 +115,9 @@ digits with that one bound, stopping as soon as the sum passes the bound and
 before it would leave an `i32`, so an exponent of any length is answered
 exactly, without overflow under Node or natively, and without the 100,000 cap
 `numberF64` uses ("isIntegral(1e99999999999)", "isIntegral(1e-99999999999)",
-"isIntegral(0e-99999999999)", "isIntegral(1.5e21474836500)", and the forty-digit
-exponents, "isIntegral(1.25e000000000000000000000000000000000000002)" among
-them). A token that is not a number is not whole ("isIntegral is false on a
+"isIntegral(0e-99999999999)", "isIntegral(1.5e21474836500)", and the 39- and
+40-digit exponents, "isIntegral(1.25e000000000000000000000000000000000000002)"
+among them). A token that is not a number is not whole ("isIntegral is false on a
 string token").
 
 **Long strings** (at `2d9a369f`: `:818`, `string`; `:320`,

@@ -387,6 +387,10 @@ const numbers = (t: Suite): void => {
     "1.5e2147483648",
     "1.5e21474836500",
     "1.5e1000000000000000000000000000000000000000",
+    "1000e-3",
+    "10.0e-1",
+    "0.1e1",
+    "0.10e1",
     "1.5",
     "-1.5",
     "1e-1",
@@ -397,10 +401,14 @@ const numbers = (t: Suite): void => {
     "1e-99999999999",
     "1.5e-1000000000000000000000000000000000000000",
     "100e-0000000000000000000000000000000000000003",
+    "1.5e0",
+    "100e-3",
+    "1.0e-5",
   ];
   const whole = [
     true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-    true, true, true, true, true, false, false, false, false, false, false, false, false, false, false,
+    true, true, true, true, true, true, true, true, true, false, false, false, false, false, false,
+    false, false, false, false, false, false, false,
   ];
   let w: i32 = 0;
   while (w < toI32(wholes.length) && w < toI32(whole.length)) {
