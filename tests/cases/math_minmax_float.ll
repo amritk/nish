@@ -1,32 +1,92 @@
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
-declare double @llvm.minimum.f64(double, double) #0
-declare double @llvm.maximum.f64(double, double) #0
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #0
-declare float @llvm.minimum.f32(float, float) #0
-declare float @llvm.maximum.f32(float, float) #0
 
 define noundef double @minF64(double noundef %a, double noundef %b) #0 {
 entry:
-  %0 = call double @llvm.minimum.f64(double %a, double %b)
-  ret double %0
+  %0 = fcmp uno double %a, %b
+  br i1 %0, label %min.end, label %min.num
+
+min.num:
+  %1 = fcmp olt double %a, %b
+  %2 = select i1 %1, double %a, double %b
+  %3 = fcmp oeq double %a, %b
+  br i1 %3, label %min.same, label %min.end
+
+min.same:
+  %4 = bitcast double %a to i64
+  %5 = icmp slt i64 %4, 0
+  %6 = select i1 %5, double %a, double %b
+  br label %min.end
+
+min.end:
+  %7 = phi double [ 0x7FF8000000000000, %entry ], [ %2, %min.num ], [ %6, %min.same ]
+  ret double %7
 }
 
 define noundef double @maxF64(double noundef %a, double noundef %b) #0 {
 entry:
-  %0 = call double @llvm.maximum.f64(double %a, double %b)
-  ret double %0
+  %0 = fcmp uno double %a, %b
+  br i1 %0, label %max.end, label %max.num
+
+max.num:
+  %1 = fcmp ogt double %a, %b
+  %2 = select i1 %1, double %a, double %b
+  %3 = fcmp oeq double %a, %b
+  br i1 %3, label %max.same, label %max.end
+
+max.same:
+  %4 = bitcast double %a to i64
+  %5 = icmp slt i64 %4, 0
+  %6 = select i1 %5, double %b, double %a
+  br label %max.end
+
+max.end:
+  %7 = phi double [ 0x7FF8000000000000, %entry ], [ %2, %max.num ], [ %6, %max.same ]
+  ret double %7
 }
 
 define noundef float @minF32(float noundef %a, float noundef %b) #0 {
 entry:
-  %0 = call float @llvm.minimum.f32(float %a, float %b)
-  ret float %0
+  %0 = fcmp uno float %a, %b
+  br i1 %0, label %min.end, label %min.num
+
+min.num:
+  %1 = fcmp olt float %a, %b
+  %2 = select i1 %1, float %a, float %b
+  %3 = fcmp oeq float %a, %b
+  br i1 %3, label %min.same, label %min.end
+
+min.same:
+  %4 = bitcast float %a to i32
+  %5 = icmp slt i32 %4, 0
+  %6 = select i1 %5, float %a, float %b
+  br label %min.end
+
+min.end:
+  %7 = phi float [ 0x7FF8000000000000, %entry ], [ %2, %min.num ], [ %6, %min.same ]
+  ret float %7
 }
 
 define noundef float @maxF32(float noundef %a, float noundef %b) #0 {
 entry:
-  %0 = call float @llvm.maximum.f32(float %a, float %b)
-  ret float %0
+  %0 = fcmp uno float %a, %b
+  br i1 %0, label %max.end, label %max.num
+
+max.num:
+  %1 = fcmp ogt float %a, %b
+  %2 = select i1 %1, float %a, float %b
+  %3 = fcmp oeq float %a, %b
+  br i1 %3, label %max.same, label %max.end
+
+max.same:
+  %4 = bitcast float %a to i32
+  %5 = icmp slt i32 %4, 0
+  %6 = select i1 %5, float %b, float %a
+  br label %max.end
+
+max.end:
+  %7 = phi float [ 0x7FF8000000000000, %entry ], [ %2, %max.num ], [ %6, %max.same ]
+  ret float %7
 }
 
 define internal noundef zeroext i1 @isNan(double noundef %x) #0 {

@@ -8,14 +8,14 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
+declare double @llvm.copysign.f64(double, double) #0
 
 define noundef double @signF64(double noundef %x) #0 {
 entry:
-  %0 = fcmp olt double %x, 0.0
-  %1 = fcmp ogt double %x, 0.0
-  %2 = select i1 %0, double -1.0, double %x
-  %3 = select i1 %1, double 1.0, double %2
-  ret double %3
+  %0 = call double @llvm.copysign.f64(double 1.0, double %x)
+  %1 = fcmp ueq double %x, 0.0
+  %2 = select i1 %1, double %x, double %0
+  ret double %2
 }
 
 define noundef i32 @signI32(i32 noundef %x) #0 {

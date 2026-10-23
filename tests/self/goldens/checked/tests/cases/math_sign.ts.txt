@@ -3,6 +3,7 @@
 entry: tests/cases/math_sign.ts
 function signF64(x: f64): f64 -> @signF64 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.copysign.f64
   stackSites=0 stackLocals=0
 function signI32(x: i32): i32 -> @signI32 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false

@@ -3,7 +3,7 @@
 // (NL8008) and 64-bit integers (NL8009).
 //
 // NL8010, libm's NaN and signed-zero rules, is retired: `Math.min` and
-// `Math.max` of a float lower to `llvm.minimum` and `llvm.maximum`, and
+// `Math.max` of a float test for NaN and pick a zero by its sign bit, and
 // `Math.round` puts its operand's sign back, so each answers what JavaScript
 // does and there is no site left for the row to name.
 //

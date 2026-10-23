@@ -209,8 +209,8 @@ inheritance); compile-time function parameters and non-capturing arrows;
 all; `ctSelect` and `ctEq` over `u32`; `Date.now()`, the same floored
 `CLOCK_REALTIME` in both readings; `statMtimeSync` under the prelude, which is
 Node's own `mtimeMs` (WP34 N3); `Math.min`, `max` and `round` of a float,
-NaN and `-0` included, which left §3.1 when WP34 N7 lowered them to
-`llvm.minimum`, `llvm.maximum` and a `llvm.copysign` (NL8010 is retired);
+NaN and `-0` included, which left §3.1 when WP34 N7 lowered them to a NaN
+test, a sign-bit pick and a `llvm.copysign` (NL8010 is retired);
 `Math.sign`, `Math.imul` and `f32ToBits` (N7, the last through
 `runtime/nish.mjs`); template literals; f64 arithmetic; `std/threads.ts`'s
 parallel calls, whose std bodies are their sequential meaning; ASI.

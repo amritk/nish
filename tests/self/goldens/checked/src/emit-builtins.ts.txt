@@ -28,6 +28,7 @@ import Node from "./nodes" -> struct Node
 import Options from "./options" -> struct Options
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
+import isWasmBuild from "./visibility" -> function @isWasmBuild
 import rangedStoreOf from "./emit-util" -> function @rangedStoreOf
 import ARGV_GLOBAL from "./runtime" -> const ARGV_GLOBAL
 import ARRAY_TYPE from "./runtime" -> const ARRAY_TYPE
@@ -120,6 +121,10 @@ function absIntrinsic(table: TypeTable, type: i32): string -> @absIntrinsic
   callee +0:7 isUnsigned -> @isUnsigned
   callee +3:10 isInteger -> @isInteger
   callee +3:40 TypeTable.llvmType -> @TypeTable.llvmType
+function copysignIntrinsic(type: i32): string -> @copysignIntrinsic
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
 function minMaxIntrinsic(table: TypeTable, which: string, type: i32): string -> @minMaxIntrinsic
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.llvmType
@@ -199,8 +204,8 @@ function emitMathRound(emitter: Emitter, expr: Node): string -> @emitMathRound
 function emitMathSign(emitter: Emitter, expr: Node): string -> @emitMathSign
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
-  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue TypeTable.baseOf firstArgument isInteger isUnsigned nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.llvm#0
+  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue TypeTable.baseOf callIntrinsic copysignIntrinsic firstArgument isInteger isUnsigned nish_str_concat
+  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.llvm#0 callIntrinsic#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=firstArgument#0
   stackSites=0 stackLocals=0
   local +0:9 arg: Node (const)
@@ -213,26 +218,25 @@ function emitMathSign(emitter: Emitter, expr: Node): string -> @emitMathSign
   local +3:9 ty: string (const)
   callee +3:14 Emitter.llvm -> @Emitter.llvm
   callee +4:8 isInteger -> @isInteger
-  local +5:11 below: string (const)
-  callee +5:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local +6:11 above: string (const)
-  callee +6:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local +7:11 low: string (const)
-  callee +7:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +8:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +10:7 isUnsigned -> @isUnsigned
-  local +11:11 nonzero: string (const)
-  callee +11:21 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +12:12 IRFunction.emitValue -> @IRFunction.emitValue
-  local +14:9 above: string (const)
+  local +5:11 unit: string (const)
+  callee +5:18 callIntrinsic -> @callIntrinsic
+  callee +5:41 copysignIntrinsic -> @copysignIntrinsic
+  local +6:11 zeroOrNaN: string (const)
+  callee +6:23 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +7:12 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +9:7 isUnsigned -> @isUnsigned
+  local +10:11 nonzero: string (const)
+  callee +10:21 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +13:9 above: string (const)
+  callee +13:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +14:9 below: string (const)
   callee +14:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local +15:9 below: string (const)
-  callee +15:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local +16:9 plus: string (const)
-  callee +16:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local +17:9 minus: string (const)
-  callee +17:17 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +18:10 IRFunction.emitValue -> @IRFunction.emitValue
+  local +15:9 plus: string (const)
+  callee +15:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +16:9 minus: string (const)
+  callee +16:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +17:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitMathAbs(emitter: Emitter, expr: Node): string -> @emitMathAbs
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
@@ -256,8 +260,8 @@ function emitMathMinMax(emitter: Emitter, expr: Node, which: string): string -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
   escaping: which
-  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf callIntrinsic minMaxIntrinsic nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.llvm#0 callIntrinsic#0
+  calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf callIntrinsic emitFloatMinMax isInteger isWasmBuild minMaxIntrinsic nish_panic_index nish_str_concat
+  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 Emitter.llvm#0 emitFloatMinMax#0 callIntrinsic#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 args: Node (const)
@@ -269,8 +273,49 @@ function emitMathMinMax(emitter: Emitter, expr: Node, which: string): string -> 
   callee +3:13 Emitter.emitExpression -> @Emitter.emitExpression
   local +4:9 ty: string (const)
   callee +4:14 Emitter.llvm -> @Emitter.llvm
-  callee +5:10 callIntrinsic -> @callIntrinsic
-  callee +5:33 minMaxIntrinsic -> @minMaxIntrinsic
+  callee +5:8 isInteger -> @isInteger
+  callee +5:28 isWasmBuild -> @isWasmBuild
+  callee +6:12 emitFloatMinMax -> @emitFloatMinMax
+  callee +8:10 callIntrinsic -> @callIntrinsic
+  callee +8:33 minMaxIntrinsic -> @minMaxIntrinsic
+function emitFloatMinMax(emitter: Emitter, which: string, ty: string, a: string, b: string): string -> @emitFloatMinMax
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.newBlock
+  calls: IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock nish_str_concat nish_str_eq
+  pointer emitter: size=264 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 num: IRBlock (const)
+  callee +1:15 IRFunction.newBlock -> @IRFunction.newBlock
+  local +2:9 same: IRBlock (const)
+  callee +2:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +3:9 done: IRBlock (const)
+  callee +3:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +4:9 entry: string (const)
+  callee +4:17 IRFunction.currentBlock -> @IRFunction.currentBlock
+  local +5:9 nan: string (const)
+  callee +5:15 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +6:3 IRFunction.emit -> @IRFunction.emit
+  callee +7:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +8:9 wins: string (const)
+  callee +8:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +9:9 picked: string (const)
+  callee +9:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local +10:9 equal: string (const)
+  callee +10:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:3 IRFunction.emit -> @IRFunction.emit
+  callee +12:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +13:9 int: string (const)
+  local +14:9 bits: string (const)
+  callee +14:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +15:9 negative: string (const)
+  callee +15:20 IRFunction.emitValue -> @IRFunction.emitValue
+  local +16:9 zeros: string (const)
+  local +17:9 zero: string (const)
+  callee +17:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +18:3 IRFunction.emit -> @IRFunction.emit
+  callee +19:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +20:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitValueBarrier(emitter: Emitter, ty: string, value: string): string -> @emitValueBarrier
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
@@ -533,9 +578,9 @@ function emitBuiltinCall(emitter: Emitter, expr: Node, name: string): string -> 
 function builtinCalleesNamed(program: CheckedProgram, table: TypeTable, call: Node, name: string): string[] -> @builtinCalleesNamed [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via absIntrinsic
-  calls: absIntrinsic f64UnaryIntrinsic minMaxIntrinsic nish_array_grow nish_panic_index nish_str_at nish_str_eq nish_str_new stringifyCallee
+  calls: TypeTable.baseOf absIntrinsic copysignIntrinsic f64UnaryIntrinsic isFloat minMaxIntrinsic nish_array_grow nish_panic_index nish_str_at nish_str_eq nish_str_new stringifyCallee
   pointer program: size=656 writesThrough=false captured=false
-  pointer table: size=96 writesThrough=false captured=false passedTo=absIntrinsic#0 minMaxIntrinsic#0 minMaxIntrinsic#0
+  pointer table: size=96 writesThrough=false captured=false passedTo=absIntrinsic#0 TypeTable.baseOf#0 minMaxIntrinsic#0 minMaxIntrinsic#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 out: string[] (const)
@@ -545,10 +590,14 @@ function builtinCalleesNamed(program: CheckedProgram, table: TypeTable, call: No
   callee +5:37 stringifyCallee -> @stringifyCallee
   local +37:11 intrinsic: string (const)
   callee +37:23 absIntrinsic -> @absIntrinsic
-  callee +44:14 minMaxIntrinsic -> @minMaxIntrinsic
-  callee +48:14 minMaxIntrinsic -> @minMaxIntrinsic
-  local +60:11 intrinsic: string (const)
-  callee +60:23 f64UnaryIntrinsic -> @f64UnaryIntrinsic
+  local +44:11 base: i32 (const)
+  callee +44:18 TypeTable.baseOf -> @TypeTable.baseOf
+  callee +45:9 isFloat -> @isFloat
+  callee +46:16 copysignIntrinsic -> @copysignIntrinsic
+  callee +51:14 minMaxIntrinsic -> @minMaxIntrinsic
+  callee +55:14 minMaxIntrinsic -> @minMaxIntrinsic
+  local +67:11 intrinsic: string (const)
+  callee +67:23 f64UnaryIntrinsic -> @f64UnaryIntrinsic
 function isIdentifierBuiltinCall(program: CheckedProgram, call: Node): boolean -> @isIdentifierBuiltinCall [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isBuiltinFunction nish_panic_index

@@ -6,19 +6,49 @@ declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
-declare double @llvm.minimum.f64(double, double) #0
-declare double @llvm.maximum.f64(double, double) #0
 
 define noundef double @lo(double noundef %a, double noundef %b) #0 {
 entry:
-  %0 = call double @llvm.minimum.f64(double %a, double %b)
-  ret double %0
+  %0 = fcmp uno double %a, %b
+  br i1 %0, label %min.end, label %min.num
+
+min.num:
+  %1 = fcmp olt double %a, %b
+  %2 = select i1 %1, double %a, double %b
+  %3 = fcmp oeq double %a, %b
+  br i1 %3, label %min.same, label %min.end
+
+min.same:
+  %4 = bitcast double %a to i64
+  %5 = icmp slt i64 %4, 0
+  %6 = select i1 %5, double %a, double %b
+  br label %min.end
+
+min.end:
+  %7 = phi double [ 0x7FF8000000000000, %entry ], [ %2, %min.num ], [ %6, %min.same ]
+  ret double %7
 }
 
 define noundef double @hi(double noundef %a, double noundef %b) #0 {
 entry:
-  %0 = call double @llvm.maximum.f64(double %a, double %b)
-  ret double %0
+  %0 = fcmp uno double %a, %b
+  br i1 %0, label %max.end, label %max.num
+
+max.num:
+  %1 = fcmp ogt double %a, %b
+  %2 = select i1 %1, double %a, double %b
+  %3 = fcmp oeq double %a, %b
+  br i1 %3, label %max.same, label %max.end
+
+max.same:
+  %4 = bitcast double %a to i64
+  %5 = icmp slt i64 %4, 0
+  %6 = select i1 %5, double %b, double %a
+  br label %max.end
+
+max.end:
+  %7 = phi double [ 0x7FF8000000000000, %entry ], [ %2, %max.num ], [ %6, %max.same ]
+  ret double %7
 }
 
 define noundef i32 @nish_main() #1 {

@@ -16559,7 +16559,7 @@ if (!only || "instructions".includes(only)) {
     )
     check(
       "instructions: no benchmark executes more instructions than bench/instructions.json allows",
-      counted.status === 0 && /^instructions: all 21 within /m.test(counted.stdout),
+      counted.status === 0 && /^instructions: all 22 within /m.test(counted.stdout),
       `${counted.stdout}${counted.stderr}`
     )
   }

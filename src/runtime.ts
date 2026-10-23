@@ -1152,6 +1152,7 @@ export class RuntimeTable {
     this.addIntrinsic("llvm.fabs.f32", "float", "float")
     this.addIntrinsic("llvm.minimum.f32", "float", "float, float")
     this.addIntrinsic("llvm.maximum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.copysign.f32", "float", "float, float")
     // `Math.clz32`, with `i1 false` so that a zero answers 32 as JavaScript's
     // does, rather than poison.
     this.addIntrinsic("llvm.ctlz.i32", "i32", "i32, i1")

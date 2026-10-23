@@ -45,6 +45,7 @@ import {
 import { N_IDENT, Node } from "./nodes"
 import { Options } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
+import { isWasmBuild } from "./visibility"
 import { rangedStoreOf } from "./emit-util"
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime"
 import { f64Hex } from "./strings"
@@ -202,8 +203,12 @@ const absIntrinsic = (table: TypeTable, type: i32): string => {
  * `llvm.umin`/`umax` for the unsigned widths, `smin`/`smax` for the signed
  * ones, and `llvm.minimum`/`maximum` for a float: a NaN operand answers NaN
  * and `-0` orders below `+0`, which is JavaScript's rule, where `minnum`
- * would drop the NaN.
+ * would drop the NaN. A native float takes `emitFloatMinMax`'s branches
+ * instead; the callee list names the intrinsic all the same, which is
+ * `readnone` and so moves no attribute.
  */
+const copysignIntrinsic = (type: i32): string => `llvm.copysign.${type === T_F32 ? "f32" : "f64"}`
+
 const minMaxIntrinsic = (table: TypeTable, which: string, type: i32): string => {
   if (!isInteger(type)) {
     return `llvm.${which}imum.${type === T_F32 ? "f32" : "f64"}`
@@ -260,8 +265,10 @@ const emitMathRound = (emitter: Emitter, expr: Node): string => {
 
 /**
  * `Math.sign(x)`: `(x > 0) - (x < 0)` for a signed integer and `x != 0` for an
- * unsigned one. A float answers `1` or `-1`, and otherwise `x` itself, which
- * is how `-0` and NaN come back as JavaScript gives them.
+ * unsigned one. A float answers `copysign(1, x)`, or `x` itself when it is
+ * `±0` or NaN (`fcmp ueq x, 0`), which is how `-0` and NaN come back as
+ * JavaScript gives them. One compare and one select, where two of each timed
+ * about 15% slower in `bench/math`.
  */
 const emitMathSign = (emitter: Emitter, expr: Node): string => {
   const arg = firstArgument(expr)
@@ -269,10 +276,9 @@ const emitMathSign = (emitter: Emitter, expr: Node): string => {
   const x = emitter.emitExpression(arg)
   const ty = emitter.llvm(type)
   if (!isInteger(type)) {
-    const below = emitter.fn.emitValue(`fcmp olt ${ty} ${x}, 0.0`)
-    const above = emitter.fn.emitValue(`fcmp ogt ${ty} ${x}, 0.0`)
-    const low = emitter.fn.emitValue(`select i1 ${below}, ${ty} -1.0, ${ty} ${x}`)
-    return emitter.fn.emitValue(`select i1 ${above}, ${ty} 1.0, ${ty} ${low}`)
+    const unit = callIntrinsic(emitter, copysignIntrinsic(type), ty, `${ty} 1.0, ${ty} ${x}`)
+    const zeroOrNaN = emitter.fn.emitValue(`fcmp ueq ${ty} ${x}, 0.0`)
+    return emitter.fn.emitValue(`select i1 ${zeroOrNaN}, ${ty} ${x}, ${ty} ${unit}`)
   }
   if (isUnsigned(type)) {
     const nonzero = emitter.fn.emitValue(`icmp ne ${ty} ${x}, 0`)
@@ -303,7 +309,44 @@ const emitMathMinMax = (emitter: Emitter, expr: Node, which: string): string => 
   const a = emitter.emitExpression(args.children[0])
   const b = emitter.emitExpression(args.children[1])
   const ty = emitter.llvm(type)
+  if (!isInteger(type) && !isWasmBuild(emitter.opts)) {
+    return emitFloatMinMax(emitter, which, ty, a, b)
+  }
   return callIntrinsic(emitter, minMaxIntrinsic(emitter.table, which, type), ty, `${ty} ${a}, ${ty} ${b}`)
+}
+
+/**
+ * A native float `Math.min`/`max`: `llvm.minimum`'s answer as the branches
+ * clang writes for the same C. A NaN operand jumps to NaN; equal operands,
+ * which differ only as `+0` and `-0`, pick by `a`'s sign bit; anything else
+ * is one compare and select. x86-64 has no instruction for `llvm.minimum`,
+ * whose expansion timed 25–55% slower than this in `bench/math`; wasm32 has
+ * one, and keeps the intrinsic.
+ */
+const emitFloatMinMax = (emitter: Emitter, which: string, ty: string, a: string, b: string): string => {
+  const fn = emitter.fn
+  const num = fn.newBlock(`${which}.num`)
+  const same = fn.newBlock(`${which}.same`)
+  const done = fn.newBlock(`${which}.end`)
+  const entry = fn.currentBlock().label
+  const nan = fn.emitValue(`fcmp uno ${ty} ${a}, ${b}`)
+  fn.emit(`br i1 ${nan}, label %${done.label}, label %${num.label}`)
+  fn.placeBlock(num)
+  const wins = fn.emitValue(`fcmp ${which === "min" ? "olt" : "ogt"} ${ty} ${a}, ${b}`)
+  const picked = fn.emitValue(`select i1 ${wins}, ${ty} ${a}, ${ty} ${b}`)
+  const equal = fn.emitValue(`fcmp oeq ${ty} ${a}, ${b}`)
+  fn.emit(`br i1 ${equal}, label %${same.label}, label %${done.label}`)
+  fn.placeBlock(same)
+  const int = ty === "float" ? "i32" : "i64"
+  const bits = fn.emitValue(`bitcast ${ty} ${a} to ${int}`)
+  const negative = fn.emitValue(`icmp slt ${int} ${bits}, 0`)
+  const zeros = which === "min" ? `${ty} ${a}, ${ty} ${b}` : `${ty} ${b}, ${ty} ${a}`
+  const zero = fn.emitValue(`select i1 ${negative}, ${zeros}`)
+  fn.emit(`br label %${done.label}`)
+  fn.placeBlock(done)
+  return fn.emitValue(
+    `phi ${ty} [ 0x7FF8000000000000, %${entry} ], [ ${picked}, %${num.label} ], [ ${zero}, %${same.label} ]`
+  )
 }
 
 // ---- Constant time (WP34 N6) -----------------------------------------------------------
@@ -662,6 +705,13 @@ export const builtinCalleesNamed = (
     const intrinsic = absIntrinsic(table, firstType)
     if (intrinsic.length > 0) {
       out.push(intrinsic)
+    }
+    return out
+  }
+  if (name === "Math.sign") {
+    const base = table.baseOf(firstType)
+    if (isFloat(base)) {
+      out.push(copysignIntrinsic(base))
     }
     return out
   }
