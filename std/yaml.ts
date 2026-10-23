@@ -3254,7 +3254,12 @@ class YamlParser {
 
   /** Internal: reports a merge value that names no map over `start` to `end`. */
   badMerge(start: i32, end: i32): void {
-    this.error(YAML_ERR_BAD_MERGE, "Merge key value must be a map, an alias to a map or a sequence of those", start, end)
+    this.error(
+      YAML_ERR_BAD_MERGE,
+      "Merge key value must be a map, an alias to a map or a sequence of those",
+      start,
+      end
+    )
   }
 
   /** Internal: whether `key` is a `<<` merge key, which the duplicate check skips when merging is on. */
