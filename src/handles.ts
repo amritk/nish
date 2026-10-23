@@ -79,16 +79,16 @@ export class HandleFinding {
 
 // ---- The sentences ---------------------------------------------------------
 
-export const handlePointerMessage = (cls: string, field: string): string =>
+const handlePointerMessage = (cls: string, field: string): string =>
   `The pointer \`${field}\` of handle class \`${cls}\` cannot be used here: a handle's pointer may be read only as \`this.${field}\` in a method of its class, passed straight to a \`declare function\` or bound once to a \`const\`, so that no name for it outlives the object or reaches a second close`
 
-export const handleValueMessage = (cls: string): string =>
+const handleValueMessage = (cls: string): string =>
   `A \`${cls}\` cannot be used here: a handle may only be opened by \`using\`, called, or lent to a parameter of its type, so that the close its \`using\` block emits is the last thing that names it`
 
-export const handleTypeMessage = (cls: string): string =>
+const handleTypeMessage = (cls: string): string =>
   `\`${cls}\` is a handle class, and its name may be written only as the type of a parameter that borrows one: a handle lives in the \`using\` block that opens it, and a value of this type anywhere else could outlive the close`
 
-export const handleWriteMessage = (cls: string, field: string): string =>
+const handleWriteMessage = (cls: string, field: string): string =>
   `The pointer \`${field}\` of handle class \`${cls}\` is written only once, by \`this.${field} = g(...)\` as a statement at the top of the constructor, where \`g\` is a \`declare function\` and nothing before it leaves the constructor: any other write would replace or copy a pointer the object owns`
 
 export const handleFieldMessage = (cls: string): string =>
@@ -135,7 +135,7 @@ const usingMessage = (cls: string): string =>
  * never exported (§4a H), so the module that names one is the module that
  * declares it, and `program.struct` finds it.
  */
-export const handleOf = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
+const handleOf = (program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null => {
   if (type < 0) {
     return null
   }
@@ -247,7 +247,7 @@ const disposeCall = (body: Node, field: string): Node | null => {
   if (stmts.length === 1) {
     const call = closeStatement(stmts[0])
     return call !== null &&
-      call.children[1].children.length >= 1 &&
+      call.children[1].children.length > 0 &&
       isThisField(call.children[1].children[0], field)
       ? call
       : null
@@ -285,7 +285,7 @@ const disposeCall = (body: Node, field: string): Node | null => {
     return null
   }
   const call = closeStatement(then.children[0])
-  if (call === null || call.children[1].children.length < 1) {
+  if (call === null || call.children[1].children.length === 0) {
     return null
   }
   const arg = unwrapParens(call.children[1].children[0])
@@ -434,7 +434,11 @@ const walkTypes = (
     if (info !== null && info.handle) {
       // `parents` ends at the PARAM the annotation is the type of, if it is one.
       const parent = parents[parents.length - 1]
-      if (parent.kind !== N_PARAM || parent.children[1] !== node || !borrowingParam(program, parent, parents)) {
+      if (
+        parent.kind !== N_PARAM ||
+        parent.children[1] !== node ||
+        !borrowingParam(program, parent, parents)
+      ) {
         out.push(new HandleFinding(node, handleTypeMessage(info.name)))
       }
     }
@@ -569,7 +573,12 @@ const leaves = (node: Node): boolean => {
 /** §4c F: whether the assignment `this.<field> = ...` is the one write the constructor may make; the assignment is `walk.parent(1)`. */
 const soundWrite = (walk: HandleWalk, member: Node, assign: Node): boolean => {
   const body = walk.ctorBody
-  if (!walk.ctor || body === null || assign.text !== "=" || unwrapParens(member.children[0]).kind !== N_THIS) {
+  if (
+    !walk.ctor ||
+    body === null ||
+    assign.text !== "=" ||
+    unwrapParens(member.children[0]).kind !== N_THIS
+  ) {
     return false
   }
   const stmt = walk.parent(2)

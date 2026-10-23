@@ -69,7 +69,12 @@ import {
 } from "./program"
 import { StringSet } from "./map"
 import { T_BOOL, T_CPTR, T_ERROR, T_STRING, T_VOID, TypeTable } from "./types"
-import { handleFieldMessage, handleHeaderMessage, handleJsonMessage, isHandleFieldAnnotation } from "./handles"
+import {
+  handleFieldMessage,
+  handleHeaderMessage,
+  handleJsonMessage,
+  isHandleFieldAnnotation,
+} from "./handles"
 
 /**
  * Size in bytes of a value stored in a struct field. `bool` is one byte
@@ -435,7 +440,11 @@ export const declareStruct = (ctx: CheckContext, decl: Node, kind: i32): StructI
  */
 const declareHandle = (ctx: CheckContext, info: StructInfo, decl: Node): void => {
   for (const member of decl.children[3].children) {
-    if (member.kind === N_FIELD && (member.flags & FLAG_STATIC) === 0 && isHandleFieldAnnotation(member.children[1])) {
+    if (
+      member.kind === N_FIELD &&
+      (member.flags & FLAG_STATIC) === 0 &&
+      isHandleFieldAnnotation(member.children[1])
+    ) {
       info.handle = true
       info.handleField = member.children[0].text
       break

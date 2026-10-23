@@ -678,7 +678,11 @@ export class Checker {
     // class has no type parameters.
     if (kind === STRUCT_CLASS) {
       for (const member of stmt.children[3].children) {
-        if (member.kind === N_FIELD && (member.flags & FLAG_STATIC) === 0 && isHandleFieldAnnotation(member.children[1])) {
+        if (
+          member.kind === N_FIELD &&
+          (member.flags & FLAG_STATIC) === 0 &&
+          isHandleFieldAnnotation(member.children[1])
+        ) {
           this.ctx.error(nameNode, handleHeaderMessage(name, "have type parameters"))
           return
         }
