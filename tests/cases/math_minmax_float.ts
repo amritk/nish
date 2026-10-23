@@ -1,7 +1,7 @@
-// Math.min and Math.max of f64 and f32 are llvm.minimum / llvm.maximum, which answer
-// what JavaScript's do: a NaN operand gives NaN, and -0 is below +0. Natively they are a
-// few instructions; wasm32 has them as `f64.min` and `f32.max`, so a module needs no
-// libm. tests/run.js links this case for wasm and holds its exports to these answers.
+// Math.min and Math.max of f64 and f32 answer what JavaScript's do: a NaN operand gives
+// NaN, and -0 is below +0. Natively they branch: NaN, else compare and select, and on
+// equal operands the zero picked by its sign bit. wasm32 keeps llvm.minimum /
+// llvm.maximum, which are `f64.min` and `f32.max` there, so a module needs no libm. tests/run.js links this case for wasm and holds its exports to these answers.
 export const minF64 = (a: f64, b: f64): f64 => Math.min(a, b);
 export const maxF64 = (a: f64, b: f64): f64 => Math.max(a, b);
 export const minF32 = (a: f32, b: f32): f32 => Math.min(a, b);

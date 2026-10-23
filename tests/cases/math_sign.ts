@@ -1,5 +1,5 @@
-// Math.sign of a float is two compares and two selects: -1, 1, or the operand itself,
-// so -0 stays -0 and NaN stays NaN, as in JavaScript. Of an integer it is the
+// Math.sign of a float is copysign(1, x), or the operand itself when it is a zero or
+// NaN (`fcmp ueq x, 0`), so -0 stays -0 and NaN stays NaN, as in JavaScript. Of an integer it is the
 // operand's own type: `(x > 0) - (x < 0)` when signed, `x != 0` when unsigned.
 export const signF64 = (x: f64): f64 => Math.sign(x);
 export const signI32 = (x: i32): i32 => Math.sign(x);

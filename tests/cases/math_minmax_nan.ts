@@ -1,5 +1,6 @@
-// Math.min and Math.max of f64 are llvm.minimum / llvm.maximum: a NaN operand gives NaN
-// and -0 orders below +0, as in JavaScript, which `1 / m` shows.
+// Math.min and Math.max of f64 branch as clang compiles the C a programmer writes: NaN
+// if either operand is NaN, else compare and select, and on equal operands the zero
+// picked by its sign bit, so -0 orders below +0, as in JavaScript, which `1 / m` shows.
 export const lo = (a: f64, b: f64): f64 => Math.min(a, b);
 export const hi = (a: f64, b: f64): f64 => Math.max(a, b);
 
