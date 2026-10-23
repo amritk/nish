@@ -27,6 +27,12 @@
 // (`number`). `parseInt` and `parseFloat` need nothing here: the composer
 // imports the core's for every ambient call already, so the global is never
 // reached.
+//
+// `dst.set(src, at)` on an array of numbers (§3.2's bulk-write row) is
+// `arraySet(dst, src, at)`: a `u8[]` is a plain `Array` under Node, which has
+// no `set`. The walk carries no type table to ask whether the receiver is an
+// array, but a `set` the checker bound no callee to is the array method: a
+// `Map`'s `set` is a method of `std/collections.ts`, and so has a callee.
 
 import { Operands, Walk } from "./emit-ts-edits"
 import { FLAG_OPTIONAL, N_CALL, N_IDENT, N_INDEX, N_MEMBER, Node } from "./nodes"
@@ -93,7 +99,7 @@ const stringLengthRewrite = (walk: Walk, node: Node, operands: Operands): string
   return stringHelperCall(walk, "strLen", operands.at(0))
 }
 
-/** A call this row rewrites: a byte-offset method of a string, a `String` static, or `Number` of a string. */
+/** A call this row rewrites: a byte-offset method of a string, a `String` static, `Number` of a string, or an array's `set`. */
 const stringCallRewrite = (walk: Walk, node: Node, operands: Operands): string | null => {
   const callee = node.children[0]
   const args = node.children[1]
@@ -119,14 +125,22 @@ const stringCallRewrite = (walk: Walk, node: Node, operands: Operands): string |
     const helper = stringStaticHelper(callee.text)
     return helper.length === 0 ? null : stringHelperCall(walk, helper, operands.at(1))
   }
-  if (OFFSET_METHODS.indexOf(` ${callee.text} `) < 0 || !typedString(walk, receiver) || inOptionalChain(node)) {
+  if (inOptionalChain(node)) {
+    return null
+  }
+  let helper = ""
+  if (OFFSET_METHODS.indexOf(` ${callee.text} `) >= 0 && typedString(walk, receiver)) {
+    helper = callee.text
+  } else if (callee.text === "set" && walk.program.nodeBuiltins[node.id].length === 0) {
+    helper = "arraySet"
+  } else {
     return null
   }
   const target = methodReceiverText(walk, callee, operands.at(0))
   if (target === null) {
     return null
   }
-  return stringHelperCall(walk, callee.text, `${target}, ${operands.at(1)}`)
+  return stringHelperCall(walk, helper, `${target}, ${operands.at(1)}`)
 }
 
 /** The strings row's rewrite of `node`, or `null` to leave it to the next row. */
