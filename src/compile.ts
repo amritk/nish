@@ -1074,6 +1074,8 @@ export const main = (): number => {
     // A file that already exists is resolved through its links and compared
     // with every module the program read, so `--emit-ts .` beside the sources
     // is refused before anything is written rather than writing over them.
+    // Paths are compared, not inodes, so a hard link to a source in the
+    // output directory is not caught: nothing here reads a file's inode.
     for (const file of ts.files) {
       const target = realpathSync(joinPath([opts.emitTs, file.path]))
       if (target === null) {

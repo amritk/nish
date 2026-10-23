@@ -23,6 +23,7 @@ import { Compilation, ModuleUnit } from "./compilation"
 import { Edit } from "./diagnostics"
 import { applyModuleEdits, emitModule, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
+import { Lexer } from "./lexer"
 import { isBuiltinSpecifier } from "./nish-modules"
 import { N_IMPORT } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
@@ -130,49 +131,41 @@ const relativeSpecifier = (from: string, to: string): string => {
   return path.startsWith("../") ? path : `./${path}`
 }
 
-/** Whether `c` is a space, a tab or a carriage return: blank within a line. */
-const isLineBlank = (c: i32): boolean => c === 32 || c === 9 || c === 13
-
 /**
- * The byte offset an import line goes at: after the comments that open the
- * module, so a module's header stays its first lines. A comment that ends
- * mid-line is not stepped past, so the import never splits a line.
+ * The byte offset an import line goes at: the start of the line after the last
+ * line of the module's leading trivia that holds a comment or the shebang, so
+ * a module's header stays its first lines and a `#!` stays at byte 0. Where
+ * the trivia ends is the lexer's answer, a shebang included; this only walks
+ * the bytes it skipped to find their line ends, none inside a block comment. A
+ * comment that ends mid-line, with code after it, keeps the import above its
+ * line, so the import never splits a line.
  */
 const importOffset = (text: string): i32 => {
-  let at = 0
+  const lexer = new Lexer(text)
+  let at = lexer.pos
+  lexer.skipTrivia()
+  const first = lexer.pos
+  // Past a shebang the lexer stands on its newline; the import goes after it.
   let after = 0
-  while (at >= 0 && at < text.length) {
+  let marked = at > 0
+  while (at >= 0 && at < first && at < text.length) {
     const c = text.charCodeAt(at)
-    if (isLineBlank(c) || c === 10) {
+    if (c === 10) {
       at = at + 1
+      if (marked) {
+        after = at
+        marked = false
+      }
     } else if (text.substring(at, at + 2) === "//") {
       const end = text.indexOf("\n", at)
-      if (end < 0) {
-        return text.length
-      }
-      at = end + 1
-      after = at
+      at = end < 0 || end > first ? first : end
+      marked = true
     } else if (text.substring(at, at + 2) === "/*") {
       const close = text.indexOf("*/", at + 2)
-      if (close < 0) {
-        return after
-      }
-      const end = text.indexOf("\n", close + 2)
-      const lineEnd = end < 0 ? text.length : end
-      let rest = close + 2
-      while (rest < lineEnd && rest < text.length && isLineBlank(text.charCodeAt(rest))) {
-        rest = rest + 1
-      }
-      if (rest < lineEnd) {
-        return after
-      }
-      if (end < 0) {
-        return text.length
-      }
-      at = end + 1
-      after = at
+      at = close < 0 || close + 2 > first ? first : close + 2
+      marked = true
     } else {
-      return after
+      at = at + 1
     }
   }
   return after

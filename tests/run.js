@@ -3927,6 +3927,14 @@ if (!only || "emit-ts".includes(only)) {
     }
   }
 
+  // The CRLF fixture is only a CRLF case while its line ends survive checkout;
+  // a checkout that turned them into LF would leave the group passing on LF.
+  check(
+    "emit-ts: identity/text.ts still has CRLF line ends",
+    fs.readFileSync(path.join(fixtures, "identity", "text.ts"), "utf8").includes("\r\n"),
+    "tests/emit-ts/identity/text.ts holds no \\r\\n"
+  )
+
   // Usage errors exit 2 and write nothing: `-o` (the output is not IR), a
   // missing directory, and another `--emit-*`.
   const comments = path.join(fixtures, "identity", "comments.ts")
@@ -4005,9 +4013,11 @@ if (!only || "emit-ts".includes(only)) {
     `exit ${clash.status}\n${clash.stderr}`
   )
   // An output directory that holds the program's own sources would be written
-  // over: `--emit-ts .` beside them exits 2 and leaves them as they were.
+  // over: `--emit-ts .` beside them exits 2 and leaves them as they were. The
+  // `i32` makes the emitted module import the runtime, so an overwrite would
+  // change its bytes.
   const selfTree = path.join(work, "self")
-  const selfSource = "export const main = (): number => 0\n"
+  const selfSource = "const zero: i32 = 0\nexport const main = (): number => zero\n"
   fs.rmSync(selfTree, { recursive: true, force: true })
   fs.mkdirSync(selfTree, { recursive: true })
   fs.writeFileSync(path.join(selfTree, "main.ts"), selfSource)

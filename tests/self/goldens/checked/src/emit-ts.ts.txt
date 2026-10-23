@@ -10,6 +10,7 @@ import emitModule from "./emit-ts-edits" -> function @emitModule
 import SIGNAL_REFUSAL from "./emit-ts-edits" -> const SIGNAL_REFUSAL
 import Walk from "./emit-ts-edits" -> struct Walk
 import StringSet from "./map" -> struct StringSet
+import Lexer from "./lexer" -> struct Lexer
 import isBuiltinSpecifier from "./nish-modules" -> function @isBuiltinSpecifier
 import N_IMPORT from "./nodes" -> const N_IMPORT
 import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
@@ -68,23 +69,21 @@ function relativeSpecifier(from: string, to: string): string -> @relativeSpecifi
   local +0:9 path: string (const)
   callee +0:16 relativePath -> @relativePath
   callee +0:29 dirname -> @dirname
-function isLineBlank(c: i32): boolean -> @isLineBlank
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
 function importOffset(text: string): i32 -> @importOffset
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
-  calls: isLineBlank nish_arena_mark nish_arena_release nish_panic_overflow nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
-  stackSites=0 stackLocals=0
-  local +0:7 at: i32 (let)
-  local +1:7 after: i32 (let)
-  local +3:11 c: i32 (const)
-  callee +4:9 isLineBlank -> @isLineBlank
-  local +7:13 end: i32 (const)
-  local +14:13 close: i32 (const)
-  local +18:13 end: i32 (const)
-  local +19:13 lineEnd: i32 (const)
-  local +20:11 rest: i32 (let)
-  callee +21:54 isLineBlank -> @isLineBlank
+  escaping: text
+  calls: Lexer.constructor Lexer.skipTrivia nish_arena_mark nish_arena_release nish_panic_overflow nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
+  stackSites=1 stackLocals=1
+  local +0:9 lexer: Lexer (const)
+  callee +0:17 new Lexer -> @Lexer.constructor
+  local +1:7 at: i32 (let)
+  callee +2:3 Lexer.skipTrivia -> @Lexer.skipTrivia
+  local +3:9 first: i32 (const)
+  local +5:7 after: i32 (let)
+  local +6:7 marked: boolean (let)
+  local +8:11 c: i32 (const)
+  local +16:13 end: i32 (const)
+  local +20:13 close: i32 (const)
 function braceList(names: StringSet): string -> @braceList
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText StringSet.at StringSet.size
