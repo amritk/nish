@@ -7348,6 +7348,22 @@ if (!only || "par_alloc".includes(only)) {
   )
 }
 
+/** Run a link fixture's `main` under runtime/nish.mjs, its output read as `encoding`. */
+const runFixtureUnderNode = (entry, encoding) =>
+  spawnSync(
+    "node",
+    [
+      "--experimental-strip-types",
+      "--js-explicit-resource-management",
+      "--no-warnings",
+      "--import",
+      path.join(root, "runtime", "nish.mjs"),
+      "-e",
+      `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
+    ],
+    { cwd: root, encoding }
+  )
+
 // #224: a `nish/threads` program prints the same under Node, through the path
 // docs/RUN_UNDER_NODE.md documents, as it does natively. The std bodies are the
 // sequential meaning and are what Node runs, so a reduce whose blocking used
@@ -7543,21 +7559,7 @@ for (const name of [
   }
   const entry = path.join(linkDir, name, "main.ts")
   const fixture = fs.existsSync(entry)
-  const run = fixture
-    ? spawnSync(
-        "node",
-        [
-          "--experimental-strip-types",
-          "--js-explicit-resource-management",
-          "--no-warnings",
-          "--import",
-          path.join(root, "runtime", "nish.mjs"),
-          "-e",
-          `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
-        ],
-        { cwd: root, encoding: "utf8" }
-      )
-    : null
+  const run = fixture ? runFixtureUnderNode(entry, "utf8") : null
   const want = fixture ? fs.readFileSync(path.join(linkDir, name, "expected.out"), "utf8") : ""
   check(
     `link/${name}: nish/threads-under-node prints what the native binary prints`,
@@ -7565,6 +7567,50 @@ for (const name of [
     run === null
       ? `no such fixture: tests/link/${name}`
       : `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
+// `nish/term` does no I/O, so a frame and a key decode are pure functions of
+// what was drawn or fed, and a program that prints them prints the same bytes
+// under runtime/nish.mjs as compiled. The comparison is of bytes, not decoded
+// text: the canvas lines carry raw half blocks, and Node builds them from
+// UTF-16 code units where the native screen builds UTF-8, so a wrong lead or
+// continuation byte would decode to U+FFFD on both sides of a string compare.
+for (const name of ["std_term", "std_term_f64"]) {
+  if (only && !name.includes(only) && !"term-under-node".includes(only)) {
+    continue
+  }
+  const entry = path.join(linkDir, name, "main.ts")
+  const run = runFixtureUnderNode(entry, "buffer")
+  const want = fs.readFileSync(path.join(linkDir, name, "expected.out"))
+  check(
+    `link/${name}: nish/term prints the same bytes under runtime/nish.mjs as natively`,
+    run.status === 0 && Buffer.compare(run.stdout, want) === 0,
+    `exit ${run.status}\n--- native (expected.out)\n${want.toString("utf8")}--- node\n${run.stdout.toString("utf8")}${run.stderr.toString("utf8")}`
+  )
+}
+
+// A game calls `flush` on a screen made before its frame loop. Were the call to
+// store into the screen (growing its byte buffer, say), the loop could not take
+// a pass's string back, and a 200×60 frame would keep its ~100 KB to the end of
+// the run on every pass. std_term's frame loop holds the placement to `pass`.
+if (!only || "std_term".includes(only) || "term-frame-loop".includes(only)) {
+  const arenaFile = path.join(buildDir, "std_term.arena.json")
+  const placed = spawnSync(
+    NISH,
+    [path.join(linkDir, "std_term", "main.ts"), "-o", path.join(buildDir, "std_term-arena") + "/", "--emit-arena", arenaFile],
+    { cwd: root, encoding: "utf8" }
+  )
+  const main =
+    placed.status === 0
+      ? JSON.parse(fs.readFileSync(arenaFile, "utf8")).functions.find((f) => f.symbol === "nish_main")
+      : undefined
+  const sites = main === undefined ? [] : main.sites
+  const piling = sites.filter((s) => s.accumulates === true)
+  check(
+    "link/std_term: a frame loop's `flush` is taken back every pass, and nothing in main piles up",
+    sites.some((s) => s.callee === "Screen.flush" && s.placement === "pass") && piling.length === 0,
+    placed.status !== 0 ? `exit ${placed.status}\n${placed.stderr}` : JSON.stringify(main === undefined ? null : piling)
   )
 }
 
