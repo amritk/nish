@@ -72,7 +72,7 @@ export const SIGNAL_REFUSAL: string =
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)"
 
 /** The message NL4010 carries; `src/codes.ts` keys the code on it. */
-export const FOREIGN_REFUSAL: string =
+const FOREIGN_REFUSAL: string =
   "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)"
 
 /**
@@ -386,7 +386,7 @@ const splice = (walk: Walk, node: Node, operands: Operands): string => {
  * or the node's own source with each changed child spliced in. A row hook
  * that builds its rewrite out of a grandchild calls this.
  */
-export const emitNode = (walk: Walk, node: Node): string => {
+const emitNode = (walk: Walk, node: Node): string => {
   const holder = new Operands(node, walk.source.text)
   holder.texts.push("")
   holder.changed.push(false)
