@@ -324,12 +324,10 @@ const jsonTokSkipDigits = (src: u8[], i: i32, end: i32): i32 => {
     return i
   }
   // A number's digits are short runs, which a call into `skipDigits`'s
-  // kernel costs more than it saves (WP38 S6a), so they stay a loop here,
-  // against one bound.
+  // kernel costs more than it saves (WP38 S6a), so they stay a loop here.
   const n: i32 = toI32(src.length)
-  const to: i32 = end < n ? end : n
   let j: i32 = i
-  while (j < to && jsonTokIsDigit(toI32(src[j]))) {
+  while (j < end && j < n && jsonTokIsDigit(toI32(src[j]))) {
     j += 1
   }
   return j
