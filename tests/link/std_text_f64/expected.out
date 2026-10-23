@@ -3,6 +3,13 @@ PASS  splitLines: the last line
 PASS  splitWhitespace: repeated blanks add no empty elements
 PASS  splitWhitespace: the word after the tab
 PASS  trim: both ends go
+PASS  codePointLength: the empty string has none
+PASS  codePointLength: ASCII is one per byte
+PASS  codePointLength: a two-byte sequence is one
+PASS  codePointLength: a three-byte sequence is one
+PASS  codePointLength: a four-byte sequence is one
+PASS  codePointLength: a mix of every width
+PASS  codePointLength: continuation-range Latin-1 counts one each
 PASS  contains: an interior occurrence
 PASS  replaceAll: every occurrence, not just the first
 PASS  firstDifference: equal line lists answer -1
@@ -20,4 +27,4 @@ FAIL  a check that fails on purpose
 failed: a check that fails on purpose
 deliberate: 0 passed, 1 failed, 0 skipped
 PASS  a failing suite answers exit code 1
-text-f64: 18 passed, 0 failed, 0 skipped
+text-f64: 25 passed, 0 failed, 0 skipped

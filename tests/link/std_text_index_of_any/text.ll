@@ -3,6 +3,7 @@
 
 @.str.0 = private unnamed_addr constant { i64, [44 x i8] } { i64 43, [44 x i8] c"indexOfAny: the set must hold 1 to 16 bytes\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [48 x i8] } { i64 47, [48 x i8] c"indexOfAny: every byte of the set must be ASCII\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c"\C3\A9\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memcpy.p0i8.p0i8.i64(i8* noalias nocapture writeonly, i8* noalias nocapture readonly, i64, i1 immarg)
@@ -999,6 +1000,153 @@ while.end.1:
 
 while.end:
   ret i32 -1
+}
+
+define internal noundef zeroext i1 @nish.textUnitsAreBytes() #2 {
+entry:
+  %0 = bitcast i8* bitcast ({ i64, [3 x i8] }* @.str.2 to i8*) to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = trunc i64 %1 to i32
+  %3 = icmp eq i32 %2, 2
+  ret i1 %3
+}
+
+define noundef i32 @nish.codePointLength(i8* noundef nonnull noalias readonly align 8 nocapture %text) #1 {
+entry:
+  %length.addr = alloca i32, align 4
+  %count.addr = alloca i32, align 4
+  %i.addr = alloca i32, align 4
+  %previous.addr = alloca i32, align 4
+  %unit.addr = alloca i32, align 4
+  %closesPair.addr = alloca i1, align 1
+  %0 = bitcast i8* %text to i64*
+  %1 = load i64, i64* %0, align 8
+  %2 = trunc i64 %1 to i32
+  store i32 %2, i32* %length.addr, align 4
+  store i32 0, i32* %count.addr, align 4
+  store i32 0, i32* %i.addr, align 4
+  %3 = call i1 @nish.textUnitsAreBytes()
+  br i1 %3, label %if.then, label %if.end
+
+if.then:
+  br label %while.cond
+
+while.cond:
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = load i32, i32* %length.addr, align 4
+  %6 = icmp slt i32 %4, %5
+  br i1 %6, label %while.body, label %while.end
+
+while.body:
+  %7 = load i32, i32* %i.addr, align 4
+  %8 = sext i32 %7 to i64
+  %9 = getelementptr inbounds i8, i8* %text, i64 8
+  %10 = getelementptr inbounds i8, i8* %9, i64 %8
+  %11 = load i8, i8* %10, align 1
+  %12 = zext i8 %11 to i32
+  %13 = and i32 %12, 192
+  %14 = icmp ne i32 %13, 128
+  br i1 %14, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %15 = load i32, i32* %count.addr, align 4
+  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 1)
+  %17 = extractvalue { i32, i1 } %16, 0
+  %18 = extractvalue { i32, i1 } %16, 1
+  br i1 %18, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  store i32 %17, i32* %count.addr, align 4
+  br label %if.end.1
+
+if.end.1:
+  %19 = load i32, i32* %i.addr, align 4
+  %20 = add nsw i32 %19, 1
+  store i32 %20, i32* %i.addr, align 4
+  br label %while.cond
+
+while.end:
+  %21 = load i32, i32* %count.addr, align 4
+  ret i32 %21
+
+if.end:
+  store i32 0, i32* %previous.addr, align 4
+  br label %while.cond.1
+
+while.cond.1:
+  %22 = load i32, i32* %i.addr, align 4
+  %23 = load i32, i32* %length.addr, align 4
+  %24 = icmp slt i32 %22, %23
+  br i1 %24, label %while.body.1, label %while.end.1
+
+while.body.1:
+  %25 = load i32, i32* %i.addr, align 4
+  %26 = sext i32 %25 to i64
+  %27 = getelementptr inbounds i8, i8* %text, i64 8
+  %28 = getelementptr inbounds i8, i8* %27, i64 %26
+  %29 = load i8, i8* %28, align 1
+  %30 = zext i8 %29 to i32
+  store i32 %30, i32* %unit.addr, align 4
+  %31 = load i32, i32* %unit.addr, align 4
+  %32 = icmp sge i32 %31, 56320
+  br i1 %32, label %land.rhs.2, label %land.end.2
+
+land.rhs.2:
+  %33 = load i32, i32* %unit.addr, align 4
+  %34 = icmp slt i32 %33, 57344
+  br label %land.end.2
+
+land.end.2:
+  %35 = phi i1 [ false, %while.body.1 ], [ %34, %land.rhs.2 ]
+  br i1 %35, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %36 = load i32, i32* %previous.addr, align 4
+  %37 = icmp sge i32 %36, 55296
+  br label %land.end.1
+
+land.end.1:
+  %38 = phi i1 [ false, %land.end.2 ], [ %37, %land.rhs.1 ]
+  br i1 %38, label %land.rhs, label %land.end
+
+land.rhs:
+  %39 = load i32, i32* %previous.addr, align 4
+  %40 = icmp slt i32 %39, 56320
+  br label %land.end
+
+land.end:
+  %41 = phi i1 [ false, %land.end.1 ], [ %40, %land.rhs ]
+  store i1 %41, i1* %closesPair.addr, align 1
+  %42 = load i1, i1* %closesPair.addr, align 1
+  %43 = xor i1 %42, true
+  br i1 %43, label %if.then.2, label %if.end.2
+
+if.then.2:
+  %44 = load i32, i32* %count.addr, align 4
+  %45 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %44, i32 1)
+  %46 = extractvalue { i32, i1 } %45, 0
+  %47 = extractvalue { i32, i1 } %45, 1
+  br i1 %47, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  store i32 %46, i32* %count.addr, align 4
+  br label %if.end.2
+
+if.end.2:
+  %48 = load i32, i32* %unit.addr, align 4
+  store i32 %48, i32* %previous.addr, align 4
+  %49 = load i32, i32* %i.addr, align 4
+  %50 = add nsw i32 %49, 1
+  store i32 %50, i32* %i.addr, align 4
+  br label %while.cond.1
+
+while.end.1:
+  %51 = load i32, i32* %count.addr, align 4
+  ret i32 %51
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 0)
+  unreachable
 }
 
 attributes #0 = { nounwind willreturn readnone }

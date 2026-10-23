@@ -5,8 +5,13 @@
 // empty elements from `splitWhitespace`, `contains(s, "")` being true, an empty
 // needle leaving `replaceAll` alone — so changing one of those decisions makes
 // this case the diff that says so.
-import { Suite } from "../../../std/testing";
+//
+// The same program runs under Node too (`tests/run.js`, "std_text: the same
+// report under Node"), which is why the imports name the `.ts` file: Node
+// resolves a relative path only as written, and Nish takes either spelling.
+import { Suite } from "../../../std/testing.ts";
 import {
+  codePointLength,
   contains,
   firstDifference,
   replaceAll,
@@ -15,7 +20,7 @@ import {
   trim,
   trimEnd,
   trimStart,
-} from "../../../std/text";
+} from "../../../std/text.ts";
 
 export const main = (): number => {
   const t = new Suite("text");
@@ -158,6 +163,21 @@ export const main = (): number => {
   t.eqI32("firstDifference: two empty lists are equal", firstDifference(none, splitLines("")), -1);
   t.eqI32("firstDifference: an empty list against a non-empty one differs at 0", firstDifference(none, want), 0);
   t.eqI32("firstDifference: a trailing blank line is a difference", firstDifference(want, splitLines("alpha\nbeta\ngamma\n\n")), 3);
+
+  // --- codePointLength -----------------------------------------------------
+  // One code point per sequence, whatever its width: natively that is one byte
+  // in 1, 2, 3 or 4, and under Node one UTF-16 unit or one surrogate pair.
+  t.eqI32("codePointLength: the empty string has none", codePointLength(""), 0);
+  t.eqI32("codePointLength: ASCII is one per byte", codePointLength("alpha beta"), 10);
+  t.eqI32("codePointLength: a two-byte sequence is one", codePointLength("é"), 1);
+  t.eqI32("codePointLength: a three-byte sequence is one", codePointLength("€"), 1);
+  t.eqI32("codePointLength: a four-byte sequence, a surrogate pair under Node, is one", codePointLength("😀"), 1);
+  t.eqI32("codePointLength: a mix of every width", codePointLength("aé€😀z"), 5);
+  // Latin-1 from U+0080 to U+00BF is one UTF-16 unit each in the continuation
+  // byte range, so a byte rule applied under Node would count nothing here.
+  t.eqI32("codePointLength: continuation-range Latin-1 counts one each", codePointLength("©®±"), 3);
+  t.eqI32("codePointLength: the pair written as two escapes is one", codePointLength("\ud83d\ude00"), 1);
+  t.eqI32("codePointLength: a lone surrogate is one", codePointLength("a\ud800b"), 3);
 
   return t.done();
 };

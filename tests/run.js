@@ -7845,6 +7845,26 @@ if (!only || "std_text_index_of_any".includes(only)) {
   )
 }
 
+// `std/text` under the Node prelude. The link loop runs both programs natively
+// against their expected.out; here the same files run under `runtime/nish.mjs`
+// and are held to the same bytes. That is the whole claim `codePointLength`
+// makes: its native walk counts UTF-8 lead bytes and its Node walk counts
+// UTF-16 units less the second half of each pair, and é, €, 😀, "©®±" and a
+// lone surrogate print the same count both ways.
+if (!only || "std_text".includes(only) || only.startsWith("std_text")) {
+  for (const name of ["std_text", "std_text_f64"]) {
+    const dir = path.join(linkDir, name)
+    const run = runUnderPrelude(path.join(dir, "main.ts"), [])
+    const code = Number(fs.readFileSync(path.join(dir, "expected.code"), "utf8").trim())
+    const out = fs.readFileSync(path.join(dir, "expected.out"), "utf8")
+    check(
+      `link/${name}: under the Node prelude it exits ${code} and prints expected.out`,
+      run.status === code && run.stdout === out,
+      `--- native (expected.out)\n${out}--- node\n${shown(run)}`
+    )
+  }
+}
+
 // WP34 N11: `JsonWriter` from `nish/json` against JavaScript's own
 // `JSON.stringify`. `tests/link/std_json_writer/node.ts` writes each of these
 // values, one line apiece and in this order, and is ASCII, so its

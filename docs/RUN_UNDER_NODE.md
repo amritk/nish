@@ -141,7 +141,8 @@ no prelude can reach it. They are language decisions
   rewriter is for.
 - **`s.length` is UTF-16 units under Node** and UTF-8 bytes natively, and so is
   every offset `charCodeAt`, `substring` and `indexOf` take or return. ASCII
-  agrees; `"héllo".length` is `5` under Node and `6` natively.
+  agrees; `"héllo".length` is `5` under Node and `6` natively. To count
+  characters, `codePointLength` from `nish/text` answers `5` on both.
 - **`a[i]` is unchecked.** Out of range is `undefined` here and an exit-1 panic
   natively, and `pop()` on an empty array likewise. Only a program that goes out
   of range can tell the difference.
