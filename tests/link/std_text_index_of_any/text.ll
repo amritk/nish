@@ -1011,7 +1011,7 @@ entry:
   ret i1 %3
 }
 
-define noundef i32 @nish.codePointLength(i8* noundef nonnull noalias readonly align 8 nocapture %text) #1 {
+define noundef i32 @nish.codePointLength(i8* noundef nonnull noalias readonly align 8 nocapture %text) #3 {
 entry:
   %length.addr = alloca i32, align 4
   %count.addr = alloca i32, align 4
@@ -1046,107 +1046,113 @@ while.body:
   %12 = zext i8 %11 to i32
   %13 = and i32 %12, 192
   %14 = icmp ne i32 %13, 128
-  br i1 %14, label %if.then.1, label %if.end.1
+  br i1 %14, label %land.rhs, label %land.end
+
+land.rhs:
+  %15 = load i32, i32* %count.addr, align 4
+  %16 = load i32, i32* %length.addr, align 4
+  %17 = icmp slt i32 %15, %16
+  br label %land.end
+
+land.end:
+  %18 = phi i1 [ false, %while.body ], [ %17, %land.rhs ]
+  br i1 %18, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %15 = load i32, i32* %count.addr, align 4
-  %16 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %15, i32 1)
-  %17 = extractvalue { i32, i1 } %16, 0
-  %18 = extractvalue { i32, i1 } %16, 1
-  br i1 %18, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  store i32 %17, i32* %count.addr, align 4
+  %19 = load i32, i32* %count.addr, align 4
+  %20 = add nsw i32 %19, 1
+  store i32 %20, i32* %count.addr, align 4
   br label %if.end.1
 
 if.end.1:
-  %19 = load i32, i32* %i.addr, align 4
-  %20 = add nsw i32 %19, 1
-  store i32 %20, i32* %i.addr, align 4
+  %21 = load i32, i32* %i.addr, align 4
+  %22 = add nsw i32 %21, 1
+  store i32 %22, i32* %i.addr, align 4
   br label %while.cond
 
 while.end:
-  %21 = load i32, i32* %count.addr, align 4
-  ret i32 %21
+  %23 = load i32, i32* %count.addr, align 4
+  ret i32 %23
 
 if.end:
   store i32 0, i32* %previous.addr, align 4
   br label %while.cond.1
 
 while.cond.1:
-  %22 = load i32, i32* %i.addr, align 4
-  %23 = load i32, i32* %length.addr, align 4
-  %24 = icmp slt i32 %22, %23
-  br i1 %24, label %while.body.1, label %while.end.1
+  %24 = load i32, i32* %i.addr, align 4
+  %25 = load i32, i32* %length.addr, align 4
+  %26 = icmp slt i32 %24, %25
+  br i1 %26, label %while.body.1, label %while.end.1
 
 while.body.1:
-  %25 = load i32, i32* %i.addr, align 4
-  %26 = sext i32 %25 to i64
-  %27 = getelementptr inbounds i8, i8* %text, i64 8
-  %28 = getelementptr inbounds i8, i8* %27, i64 %26
-  %29 = load i8, i8* %28, align 1
-  %30 = zext i8 %29 to i32
-  store i32 %30, i32* %unit.addr, align 4
-  %31 = load i32, i32* %unit.addr, align 4
-  %32 = icmp sge i32 %31, 56320
-  br i1 %32, label %land.rhs.2, label %land.end.2
+  %27 = load i32, i32* %i.addr, align 4
+  %28 = sext i32 %27 to i64
+  %29 = getelementptr inbounds i8, i8* %text, i64 8
+  %30 = getelementptr inbounds i8, i8* %29, i64 %28
+  %31 = load i8, i8* %30, align 1
+  %32 = zext i8 %31 to i32
+  store i32 %32, i32* %unit.addr, align 4
+  %33 = load i32, i32* %unit.addr, align 4
+  %34 = icmp sge i32 %33, 56320
+  br i1 %34, label %land.rhs.3, label %land.end.3
+
+land.rhs.3:
+  %35 = load i32, i32* %unit.addr, align 4
+  %36 = icmp slt i32 %35, 57344
+  br label %land.end.3
+
+land.end.3:
+  %37 = phi i1 [ false, %while.body.1 ], [ %36, %land.rhs.3 ]
+  br i1 %37, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %33 = load i32, i32* %unit.addr, align 4
-  %34 = icmp slt i32 %33, 57344
+  %38 = load i32, i32* %previous.addr, align 4
+  %39 = icmp sge i32 %38, 55296
   br label %land.end.2
 
 land.end.2:
-  %35 = phi i1 [ false, %while.body.1 ], [ %34, %land.rhs.2 ]
-  br i1 %35, label %land.rhs.1, label %land.end.1
+  %40 = phi i1 [ false, %land.end.3 ], [ %39, %land.rhs.2 ]
+  br i1 %40, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %36 = load i32, i32* %previous.addr, align 4
-  %37 = icmp sge i32 %36, 55296
+  %41 = load i32, i32* %previous.addr, align 4
+  %42 = icmp slt i32 %41, 56320
   br label %land.end.1
 
 land.end.1:
-  %38 = phi i1 [ false, %land.end.2 ], [ %37, %land.rhs.1 ]
-  br i1 %38, label %land.rhs, label %land.end
+  %43 = phi i1 [ false, %land.end.2 ], [ %42, %land.rhs.1 ]
+  store i1 %43, i1* %closesPair.addr, align 1
+  %44 = load i1, i1* %closesPair.addr, align 1
+  %45 = xor i1 %44, true
+  br i1 %45, label %land.rhs.4, label %land.end.4
 
-land.rhs:
-  %39 = load i32, i32* %previous.addr, align 4
-  %40 = icmp slt i32 %39, 56320
-  br label %land.end
+land.rhs.4:
+  %46 = load i32, i32* %count.addr, align 4
+  %47 = load i32, i32* %length.addr, align 4
+  %48 = icmp slt i32 %46, %47
+  br label %land.end.4
 
-land.end:
-  %41 = phi i1 [ false, %land.end.1 ], [ %40, %land.rhs ]
-  store i1 %41, i1* %closesPair.addr, align 1
-  %42 = load i1, i1* %closesPair.addr, align 1
-  %43 = xor i1 %42, true
-  br i1 %43, label %if.then.2, label %if.end.2
+land.end.4:
+  %49 = phi i1 [ false, %land.end.1 ], [ %48, %land.rhs.4 ]
+  br i1 %49, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %44 = load i32, i32* %count.addr, align 4
-  %45 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %44, i32 1)
-  %46 = extractvalue { i32, i1 } %45, 0
-  %47 = extractvalue { i32, i1 } %45, 1
-  br i1 %47, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  store i32 %46, i32* %count.addr, align 4
+  %50 = load i32, i32* %count.addr, align 4
+  %51 = add nsw i32 %50, 1
+  store i32 %51, i32* %count.addr, align 4
   br label %if.end.2
 
 if.end.2:
-  %48 = load i32, i32* %unit.addr, align 4
-  store i32 %48, i32* %previous.addr, align 4
-  %49 = load i32, i32* %i.addr, align 4
-  %50 = add nsw i32 %49, 1
-  store i32 %50, i32* %i.addr, align 4
+  %52 = load i32, i32* %unit.addr, align 4
+  store i32 %52, i32* %previous.addr, align 4
+  %53 = load i32, i32* %i.addr, align 4
+  %54 = add nsw i32 %53, 1
+  store i32 %54, i32* %i.addr, align 4
   br label %while.cond.1
 
 while.end.1:
-  %51 = load i32, i32* %count.addr, align 4
-  ret i32 %51
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
+  %55 = load i32, i32* %count.addr, align 4
+  ret i32 %55
 }
 
 attributes #0 = { nounwind willreturn readnone }

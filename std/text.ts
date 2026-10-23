@@ -322,7 +322,10 @@ export const codePointLength = (text: string): i32 => {
   let i: i32 = 0
   if (textUnitsAreBytes()) {
     while (i < length) {
-      if ((toI32(text.charCodeAt(i)) & TEXT_UTF8_TOP_BITS) !== TEXT_UTF8_CONTINUATION) {
+      // `count` never passes `i`, which is below `length`, so `count < length`
+      // always holds: it is written because it proves the `+ 1` cannot wrap,
+      // which keeps this function callable where panics are denied.
+      if ((toI32(text.charCodeAt(i)) & TEXT_UTF8_TOP_BITS) !== TEXT_UTF8_CONTINUATION && count < length) {
         count += 1
       }
       i += 1
@@ -339,7 +342,7 @@ export const codePointLength = (text: string): i32 => {
       unit < TEXT_SURROGATE_END &&
       previous >= TEXT_HIGH_SURROGATE &&
       previous < TEXT_LOW_SURROGATE
-    if (!closesPair) {
+    if (!closesPair && count < length) {
       count += 1
     }
     previous = unit
