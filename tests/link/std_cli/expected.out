@@ -42,3 +42,7 @@ Notes
   /etc/greet.conf
 off paints nothing: true
 mono dim is plain: true
+^[[1;35mgreet^[[0m ^[[2m1.2.0^[[0m  ^[[2msay hello^[[0m
+^[[2m-----------------------^[[0m
+
+^[[1;35musage:^[[0m ^[[1;35mgreet^[[0m ^[[36m<name>^[[0m           ^[[2mgreet someone^[[0m

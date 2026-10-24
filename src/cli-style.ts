@@ -34,11 +34,9 @@ const USAGE_COLUMN: i32 = 46
 export const helpText = (style: Style, guide: string): string => {
   const menu = new HelpMenu(style, CLI, DESCRIPTION_COLUMN, USAGE_COLUMN)
   const tagline = "a static subset of TypeScript, compiled ahead of time"
-  menu.header(VERSION, tagline)
-  // The header ends on a blank line; the wall goes in above it.
-  menu.lines.pop()
-  menu.lines.push(wall(style, CLI.length + VERSION.length + tagline.length + 3))
-  menu.lines.push("")
+  menu.title(VERSION, tagline)
+  menu.line(wall(style, CLI.length + VERSION.length + tagline.length + 3))
+  menu.line("")
   menu.usage("<file.ts> [more.ts ...] [flags]", "compile to LLVM IR")
   menu.usage("run [flags] <file.ts> [args ...]", "build, cache and run it")
   menu.usage("-v, --version | -h, --help", "")

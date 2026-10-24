@@ -33,5 +33,12 @@ export const main = (): i32 => {
   console.log(`off paints nothing: ${off.heading("x") === "x" && off.dim("y") === "y"}`)
   const mono = new Style(true, false)
   console.log(`mono dim is plain: ${mono.dim("z") === "z"}`)
+  const theme = new Style(true, true)
+  const ruled = new HelpMenu(theme, "greet", 24, 30)
+  ruled.title("1.2.0", "say hello")
+  ruled.line(theme.dim("-----------------------"))
+  ruled.line("")
+  ruled.usage("<name>", "greet someone")
+  console.log(visible(ruled.text()))
   return 0
 }
