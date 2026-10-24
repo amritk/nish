@@ -49,6 +49,7 @@ import simulatedInternalError from "./ice" -> function @simulatedInternalError
 import simulatedUnlabelledBuiltin from "./ice" -> function @simulatedUnlabelledBuiltin
 import resolveTarget from "./target" -> function @resolveTarget
 import supportedTargets from "./target" -> function @supportedTargets
+import anyCallsSqlite from "./run-cache" -> function @anyCallsSqlite
 import runBinaryName from "./run-cache" -> function @runBinaryName
 import runCacheKey from "./run-cache" -> function @runCacheKey
 import runCacheRoot from "./run-cache" -> function @runCacheRoot
@@ -56,6 +57,9 @@ import runtimeCacheKey from "./run-cache" -> function @runtimeCacheKey
 import runtimeCacheRoot from "./run-cache" -> function @runtimeCacheRoot
 import runtimeUnits from "./run-cache" -> function @runtimeUnits
 import sha256Hex from "./run-cache" -> function @sha256Hex
+import sqliteCacheKey from "./run-cache" -> function @sqliteCacheKey
+import sqliteFingerprint from "./run-cache" -> function @sqliteFingerprint
+import sqliteUnits from "./run-cache" -> function @sqliteUnits
 const PROFILE_NAMES: string = "speed, size, debug, wasi"
 const CPU_LEVEL: string = "x86-64-v3"
 const COMMA: i32 = 44
@@ -76,6 +80,10 @@ struct PackageSearch (class) size=32 align=8
   constructor -> @PackageSearch.constructor
   method where -> @PackageSearch.where
   method wasRefused -> @PackageSearch.wasRefused
+struct CachedObjects (class) size=16 align=8
+  field runtime: string index=0 offset=0
+  field sqlite: string index=1 offset=8
+  constructor -> @CachedObjects.constructor
 function usageText(fd: i32): string -> @usageText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via agentDriven
@@ -255,7 +263,7 @@ function capabilityListMask(flag: string, list: string): i32 -> @capabilityListM
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
-  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.panicsText Options.constructor PackageSearch.wasRefused PackageSearch.where acceptsSidecars astText basenameWithout cDeclared capabilityListMask capabilityNames capabilitySummary checkedText emitTypeScript externalFunctions findPackage fixProgram helpHint internalErrorFor isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_realpath nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file planOutputs report reportDeprecations reportLoadFailure reportPerformance reportPortability reportToolchainFailure resolveTarget runProgram simulatedInternalError simulatedUnlabelledBuiltin supportedTargets usageText writeCapabilityReport writeSidecars
+  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.panicsText Options.constructor PackageSearch.wasRefused PackageSearch.where acceptsSidecars anyCallsSqlite astText basenameWithout cDeclared capabilityListMask capabilityNames capabilitySummary checkedText emitTypeScript externalFunctions findPackage fixProgram helpHint internalErrorFor isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_realpath nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file planOutputs report reportDeprecations reportLoadFailure reportPerformance reportPortability reportToolchainFailure resolveTarget runProgram simulatedInternalError simulatedUnlabelledBuiltin supportedTargets usageText writeCapabilityReport writeSidecars
   stackSites=6 stackLocals=4
   callee +0:19 usageText -> @usageText
   local +3:9 opts: Options (const)
@@ -377,6 +385,7 @@ function main(): i32 -> @nish_main [exported entry]
   callee +716:10 makeDirectoryFor -> @makeDirectoryFor
   callee +725:22 writeSidecars -> @writeSidecars
   callee +731:10 linkProgram -> @linkProgram
+  callee +739:5 anyCallsSqlite -> @anyCallsSqlite
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv
@@ -456,8 +465,8 @@ function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via runCacheRoot
   escaping: argsFrom cpu debugInfo json name profile threads
-  calls: buildIntoCache cCompiler nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_write_file refuseCacheRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot sha256Hex
-  pointer emitted: size=0 writesThrough=false captured=false passedTo=runCacheKey#0 buildIntoCache#0
+  calls: anyCallsSqlite buildIntoCache cCompiler nish_array_grow nish_panic_index nish_read_file_or_null nish_spawn nish_str_concat nish_str_eq nish_write_file refuseCacheRoot reportToolchainFailure runBinaryName runCacheKey runCacheRoot sha256Hex sqliteCflags sqliteFingerprint
+  pointer emitted: size=0 writesThrough=false captured=false passedTo=anyCallsSqlite#0 runCacheKey#0 buildIntoCache#0
   pointer pkg: size=32 writesThrough=false captured=false passedTo=buildIntoCache#1
   stackSites=0 stackLocals=0
   local +0:9 cacheRoot: string (const)
@@ -466,20 +475,25 @@ function runProgram(emitted: EmittedModule[], pkg: PackageSearch, name: string, 
   callee +8:7 refuseCacheRoot -> @refuseCacheRoot
   local +11:9 file: string (const)
   callee +11:16 runBinaryName -> @runBinaryName
-  local +12:9 key: string (const)
-  callee +12:15 runCacheKey -> @runCacheKey
-  callee +12:86 cCompiler -> @cCompiler
-  local +13:9 cacheEntry: string (const)
-  callee +13:38 sha256Hex -> @sha256Hex
-  local +14:9 binary: string (const)
-  local +15:9 keyFile: string (const)
-  local +16:9 stored: string | null (const)
-  local +18:11 status: i32 (const)
-  callee +18:20 buildIntoCache -> @buildIntoCache
-  local +37:9 argv: string[] (const)
-  local +39:7 i: i32 (let)
-  local +44:9 status: i32 (const)
-  callee +46:5 reportToolchainFailure -> @reportToolchainFailure
+  local +12:9 sqlite: boolean (const)
+  callee +12:18 anyCallsSqlite -> @anyCallsSqlite
+  local +14:9 sqliteLines: string (const)
+  callee +14:32 sqliteFingerprint -> @sqliteFingerprint
+  callee +14:60 sqliteCflags -> @sqliteCflags
+  local +15:9 key: string (const)
+  callee +15:15 runCacheKey -> @runCacheKey
+  callee +15:86 cCompiler -> @cCompiler
+  local +16:9 cacheEntry: string (const)
+  callee +16:38 sha256Hex -> @sha256Hex
+  local +17:9 binary: string (const)
+  local +18:9 keyFile: string (const)
+  local +19:9 stored: string | null (const)
+  local +21:11 status: i32 (const)
+  callee +21:20 buildIntoCache -> @buildIntoCache
+  local +42:9 argv: string[] (const)
+  local +44:7 i: i32 (let)
+  local +49:9 status: i32 (const)
+  callee +51:5 reportToolchainFailure -> @reportToolchainFailure
 function refuseCacheRoot(cacheRoot: string, json: boolean): boolean -> @refuseCacheRoot
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via distrustOf
@@ -489,10 +503,10 @@ function refuseCacheRoot(cacheRoot: string, json: boolean): boolean -> @refuseCa
   local +0:9 distrust: string (const)
   callee +0:20 distrustOf -> @distrustOf
   callee +4:3 reportToolchainFailure -> @reportToolchainFailure
-function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot: string, cacheEntry: string, keyFile: string, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, json: boolean): i32 -> @buildIntoCache
+function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot: string, cacheEntry: string, keyFile: string, name: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, sqlite: boolean, sqliteLines: string, json: boolean): i32 -> @buildIntoCache
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via missingToolchain
-  escaping: cacheRoot cpu debugInfo json profile threads
+  escaping: cacheRoot cpu debugInfo json profile sqlite sqliteLines threads
   calls: hexOfI64 linkProgram makeDirectory missingToolchain nish_array_grow nish_monotonic_nanos nish_spawn nish_spawn_to nish_str_concat nish_write nish_write_file refuseCacheRoot reportToolchainFailure
   pointer emitted: size=0 writesThrough=false captured=false
   pointer pkg: size=32 writesThrough=false captured=false passedTo=linkProgram#1
@@ -514,13 +528,13 @@ function buildIntoCache(emitted: EmittedModule[], pkg: PackageSearch, cacheRoot:
   local +30:9 built: string (const)
   local +31:7 status: i32 (let)
   callee +31:16 linkProgram -> @linkProgram
-  local +34:11 move: string[] (const)
-  callee +36:7 reportToolchainFailure -> @reportToolchainFailure
-  local +40:9 clean: string[] (const)
-function linkProgram(outputs: string[], pkg: PackageSearch, link: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, json: boolean, quiet: boolean): i32 -> @linkProgram
+  local +46:11 move: string[] (const)
+  callee +48:7 reportToolchainFailure -> @reportToolchainFailure
+  local +52:9 clean: string[] (const)
+function linkProgram(outputs: string[], pkg: PackageSearch, link: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, sqlite: boolean, sqliteLines: string, json: boolean, quiet: boolean): i32 -> @linkProgram
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reportToolchainFailure
-  escaping: cpu debugInfo json link profile threads
+  escaping: cpu debugInfo json link profile sqlite sqliteLines threads
   calls: PackageSearch.where cachedRuntime makeDirectoryFor nish_alloc_struct nish_array_grow nish_read_file_or_null nish_spawn nish_str_concat nish_str_from_i32 nish_write pushRecipeFlags reportToolchainFailure
   pointer outputs: size=0 writesThrough=false captured=false passedTo=cachedRuntime#1
   pointer pkg: size=32 writesThrough=false captured=false passedTo=PackageSearch.where#0
@@ -530,15 +544,16 @@ function linkProgram(outputs: string[], pkg: PackageSearch, link: string, profil
   callee +3:48 PackageSearch.where -> @PackageSearch.where
   callee +8:8 makeDirectoryFor -> @makeDirectoryFor
   local +11:9 script: string (const)
-  local +12:9 runtime: string | null (const)
-  callee +12:19 cachedRuntime -> @cachedRuntime
-  local +19:9 argv: string[] (const)
-  local +26:14 file: string (const)
-  callee +37:3 pushRecipeFlags -> @pushRecipeFlags
-  local +38:9 status: i32 (const)
-  local +40:11 why: string (const)
-  callee +41:5 reportToolchainFailure -> @reportToolchainFailure
-  local +47:9 binary: string | null (const)
+  local +12:9 cached: CachedObjects | null (const)
+  callee +12:18 cachedRuntime -> @cachedRuntime
+  local +26:9 runtime: string (const)
+  local +30:9 argv: string[] (const)
+  local +37:14 file: string (const)
+  callee +52:3 pushRecipeFlags -> @pushRecipeFlags
+  local +53:9 status: i32 (const)
+  local +55:11 why: string (const)
+  callee +56:5 reportToolchainFailure -> @reportToolchainFailure
+  local +62:9 binary: string | null (const)
 function pushRecipeFlags(argv: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean): void -> @pushRecipeFlags
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -546,48 +561,86 @@ function pushRecipeFlags(argv: string[], profile: string, cpu: string, debugInfo
   calls: nish_array_grow
   pointer argv: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function cachedRuntime(root: string, outputs: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean, json: boolean): string | null -> @cachedRuntime
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+function CachedObjects.constructor(this: CachedObjects, runtime: string, sqlite: string): void -> @CachedObjects.constructor [constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
+  escaping: runtime sqlite
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function sqliteCflags(): string -> @sqliteCflags
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_getenv
+  calls: nish_getenv
+  stackSites=0 stackLocals=0
+  local +0:9 flags: string | null (const)
+function cachedRuntime(root: string, outputs: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean, sqlite: boolean, sqliteLines: string, json: boolean): CachedObjects | null -> @cachedRuntime
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via runtimeCacheRoot
-  escaping: cpu debugInfo json profile root threads
-  calls: cCompiler distrustOf hexOfI64 makeDirectory nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_slice nish_read_file_or_null nish_realpath nish_spawn nish_spawn_to nish_str_concat nish_str_eq nish_str_from_i32 nish_str_new nish_write_file pushRecipeFlags reportToolchainFailure runtimeCacheKey runtimeCacheRoot runtimeUnits sha256Hex
+  escaping: cpu debugInfo json profile root sqliteLines threads
+  calls: CachedObjects.constructor cCompiler cachedEntry distrustOf hexOfI64 makeDirectory nish_alloc_struct nish_monotonic_nanos nish_read_file_or_null nish_realpath nish_spawn nish_spawn_to nish_str_concat nish_str_eq runtimeCacheKey runtimeCacheRoot runtimeUnits sqliteCacheKey sqliteCflags sqliteFingerprint sqliteUnits
+  pointer outputs: size=0 writesThrough=false captured=false passedTo=cachedEntry#6 cachedEntry#6
+  stackSites=2 stackLocals=2
+  local +0:9 none: CachedObjects (const)
+  callee +0:16 new CachedObjects -> @CachedObjects.constructor
+  local +1:9 cacheRoot: string (const)
+  callee +1:21 runtimeCacheRoot -> @runtimeCacheRoot
+  callee +5:8 makeDirectory -> @makeDirectory
+  local +8:9 privateRoot: string[] (const)
+  callee +15:7 distrustOf -> @distrustOf
+  local +18:9 cc: string (const)
+  callee +18:14 cCompiler -> @cCompiler
+  local +19:9 probe: string (const)
+  callee +19:37 hexOfI64 -> @hexOfI64
+  local +20:9 ask: string[] (const)
+  local +21:9 answered: i32 (const)
+  local +22:9 version: string | null (const)
+  local +23:9 forget: string[] (const)
+  local +25:9 runtimeDir: string | null (const)
+  local +29:9 key: string (const)
+  callee +29:15 runtimeCacheKey -> @runtimeCacheKey
+  local +30:9 recipe: string[] (const)
+  local +31:9 runtime: string | null (const)
+  callee +31:19 cachedEntry -> @cachedEntry
+  callee +36:5 runtimeUnits -> @runtimeUnits
+  callee +49:12 new CachedObjects -> @CachedObjects.constructor
+  local +51:9 sqliteDir: string | null (const)
+  callee +53:12 new CachedObjects -> @CachedObjects.constructor
+  local +55:9 sqliteKey: string (const)
+  callee +55:21 sqliteCacheKey -> @sqliteCacheKey
+  callee +64:44 sqliteFingerprint -> @sqliteFingerprint
+  callee +64:68 sqliteCflags -> @sqliteCflags
+  local +66:9 sqliteRecipe: string[] (const)
+  local +67:9 objects: string | null (const)
+  callee +67:19 cachedEntry -> @cachedEntry
+  callee +72:5 sqliteUnits -> @sqliteUnits
+  callee +81:36 new CachedObjects -> @CachedObjects.constructor
+function cachedEntry(root: string, cacheRoot: string, key: string, recipe: string[], units: string[], what: string, outputs: string[], profile: string, cpu: string, debugInfo: boolean, threads: boolean, json: boolean): string | null -> @cachedEntry
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_read_file_or_null
+  escaping: cpu debugInfo json key profile threads
+  calls: hexOfI64 makeDirectory nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_slice nish_read_file_or_null nish_spawn nish_spawn_to nish_str_concat nish_str_eq nish_str_from_i32 nish_str_new nish_write_file pushRecipeFlags reportToolchainFailure sha256Hex
+  pointer recipe: size=0 writesThrough=false captured=false
+  pointer units: size=0 writesThrough=false captured=false
   pointer outputs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 cacheRoot: string (const)
-  callee +0:21 runtimeCacheRoot -> @runtimeCacheRoot
-  callee +4:8 makeDirectory -> @makeDirectory
-  local +7:9 privateRoot: string[] (const)
-  callee +14:7 distrustOf -> @distrustOf
-  local +17:9 cc: string (const)
-  callee +17:14 cCompiler -> @cCompiler
-  local +18:9 probe: string (const)
-  callee +18:37 hexOfI64 -> @hexOfI64
-  local +19:9 ask: string[] (const)
-  local +20:9 answered: i32 (const)
-  local +21:9 version: string | null (const)
-  local +22:9 forget: string[] (const)
-  local +24:9 runtimeDir: string | null (const)
-  local +28:9 key: string (const)
-  callee +28:15 runtimeCacheKey -> @runtimeCacheKey
-  local +29:9 cacheEntry: string (const)
-  callee +29:38 sha256Hex -> @sha256Hex
-  local +30:9 keyFile: string (const)
-  local +31:9 stored: string | null (const)
-  local +35:9 work: string (const)
-  callee +35:37 hexOfI64 -> @hexOfI64
-  callee +36:8 makeDirectory -> @makeDirectory
-  local +39:9 script: string (const)
-  local +40:9 argv: string[] (const)
-  callee +41:3 pushRecipeFlags -> @pushRecipeFlags
-  local +42:9 status: i32 (const)
-  local +46:7 entry: string (let)
-  local +48:11 why: string (const)
-  local +49:11 where: string (const)
-  callee +50:5 reportToolchainFailure -> @reportToolchainFailure
-  local +53:11 move: string[] (const)
-  local +54:16 unit: string (const)
-  callee +54:24 runtimeUnits -> @runtimeUnits
-  local +63:9 clean: string[] (const)
+  local +0:9 cacheEntry: string (const)
+  callee +0:38 sha256Hex -> @sha256Hex
+  local +1:9 keyFile: string (const)
+  local +2:9 stored: string | null (const)
+  local +6:9 work: string (const)
+  callee +6:37 hexOfI64 -> @hexOfI64
+  callee +7:8 makeDirectory -> @makeDirectory
+  local +10:9 script: string (const)
+  local +11:9 argv: string[] (const)
+  local +12:14 arg: string (const)
+  callee +16:3 pushRecipeFlags -> @pushRecipeFlags
+  local +17:9 status: i32 (const)
+  local +21:7 entry: string (let)
+  local +23:11 why: string (const)
+  local +24:11 where: string (const)
+  callee +25:5 reportToolchainFailure -> @reportToolchainFailure
+  local +28:11 move: string[] (const)
+  local +29:16 unit: string (const)
+  local +38:9 clean: string[] (const)
 function cDeclared(compilation: Compilation, fns: ExternalFunction[]): ExternalFunction[] -> @cDeclared
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via napiBridges
