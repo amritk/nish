@@ -198,8 +198,8 @@ function rewrittenTarget(target: Node, text: string): boolean -> @rewrittenTarge
 function binaryRow(walk: Walk, node: Node, operands: Operands): string | null -> @binaryRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via operation
-  calls: Operands.at Walk.refuse isCompound nish_panic_index nish_str_concat nish_str_new operation repeatable rewrittenTarget typeOf
-  pointer walk: size=136 writesThrough=false captured=false passedTo=typeOf#0 operation#0 typeOf#0 Walk.refuse#0 operation#0 typeOf#0
+  calls: Operands.at Walk.refuse Walk.useHelper isCompound nish_panic_index nish_str_at nish_str_concat nish_str_new operation repeatable rewrittenTarget typeOf
+  pointer walk: size=136 writesThrough=false captured=false passedTo=typeOf#0 operation#0 typeOf#0 Walk.refuse#0 Walk.useHelper#0 operation#0 typeOf#0
   pointer node: size=40 writesThrough=true captured=true passedTo=typeOf#1 operation#1 Walk.refuse#1 operation#1 typeOf#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 Operands.at#0 Operands.at#0
   stackSites=0 stackLocals=0
@@ -217,10 +217,11 @@ function binaryRow(walk: Walk, node: Node, operands: Operands): string | null ->
   callee +18:10 repeatable -> @repeatable
   callee +18:57 rewrittenTarget -> @rewrittenTarget
   callee +19:7 Walk.refuse -> @Walk.refuse
-  callee +24:10 operation -> @operation
-  callee +24:36 typeOf -> @typeOf
-  callee +24:56 Operands.at -> @Operands.at
-  callee +24:72 Operands.at -> @Operands.at
+  callee +25:7 Walk.useHelper -> @Walk.useHelper
+  callee +30:10 operation -> @operation
+  callee +30:36 typeOf -> @typeOf
+  callee +30:56 Operands.at -> @Operands.at
+  callee +30:72 Operands.at -> @Operands.at
 function operation(walk: Walk, site: Node, op: string, type: i32, a: string, b: string): string | null -> @operation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via helper

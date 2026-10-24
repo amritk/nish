@@ -13,7 +13,6 @@
 cases/argv_echo numbers  # differ: stdout line 1 differs
 cases/arr_bounds_lazy_expect records  # differ: exit 1 vs 0
 cases/arr_bounds_lazy_unwrap_or records  # differ: exit 1 vs 0
-cases/arr_path_store_rhs_compound records  # differ: stderr line 1 differs
 cases/bytes_offset_u64 numbers  # differ: exit 0 vs 1: TypeError: Cannot convert a BigInt value to a number
 cases/bytes_set_float_panic strings  # differ: stderr line 1 differs
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
@@ -21,8 +20,6 @@ cases/caps_ffi_handle ffi  # refused: NL4010 under --emit-ts
 cases/caps_net refused  # refused: NL4011 under --emit-ts
 cases/caps_process_wait numbers  # differ: exit 0 vs 1: throw new Error(
 cases/caps_signal refused  # refused: NL4011 under --emit-ts
-cases/cls_inline_array numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
-cases/cls_inline_array_passed numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
 cases/ct_asm_x25519 strings  # differ: node passed 30000 ms
 cases/deny_panics_overflow_wrapping numbers  # differ: stdout line 1 differs
 cases/deny_panics_overflow_wrapping_add numbers  # differ: stdout line 1 differs
@@ -51,7 +48,7 @@ cases/mem_loop_scope numbers  # differ: stdout line 1 differs
 cases/mem_loop_scope_chunk numbers  # differ: stdout line 1 differs
 cases/mem_loop_scope_control numbers  # differ: stdout line 1 differs
 cases/mem_return_array_scope numbers  # differ: stdout line 1 differs
-cases/mem_scope_dynamic_array numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
+cases/mem_scope_dynamic_array numbers  # differ: stdout line 2 differs
 cases/mem_using_arena_tail numbers  # differ: stdout line 1 differs
 cases/mem_wait_pid_scope numbers  # differ: exit 0 vs 1: throw new Error(
 cases/net_dual_stack refused  # refused: NL4011 under --emit-ts
@@ -86,7 +83,6 @@ cases/panics_overflow_via records  # differ: exit 0 vs 1
 cases/panics_overflow_wrapping numbers  # differ: stdout line 1 differs
 cases/perf_arena_control numbers  # differ: stdout line 4 differs
 cases/perf_rng_counter numbers  # differ: exit 1 vs 0
-cases/rng_entries numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
 cases/rng_entry_bitwise_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_panic_f64 numbers  # differ: exit 1 vs 0
@@ -104,8 +100,7 @@ cases/term_calls numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_import numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_pty numbers  # differ: exit 0 vs 1: throw new Error(
 corpus/argv_words numbers  # differ: exit 29 vs 106
-corpus/arr_bounds_edge numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
+corpus/arr_bounds_edge numbers  # differ: exit 0 vs 1: ReferenceError: Cannot access 'idx' before initialization
 corpus/bit_compound_target refused  # refused: NL4012 under --emit-ts
 corpus/f64_libm libm  # differ: stdout line 33 differs
-corpus/int_compound numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
 corpus/parse_argv_sum numbers  # differ: stdout line 1 differs

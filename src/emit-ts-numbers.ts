@@ -363,6 +363,12 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
       walk.refuse(node, COMPOUND_REFUSAL)
       return null
     }
+    // The records row writes an element target whose index is unproven as
+    // `idx(a, i)`, which is no target: the store goes through `setIdx`.
+    if (target.kind === N_INDEX && operands.changed[0] && name.startsWith("idx(") && name.endsWith(")")) {
+      walk.useHelper("setIdx")
+      return `setIdx(${name.substring(4, name.length - 1)}, ${value})`
+    }
     return `${name} = ${value}`
   }
   return operation(walk, node, op, typeOf(walk, node), operands.at(0), operands.at(1))

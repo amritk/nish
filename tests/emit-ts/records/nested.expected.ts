@@ -3,14 +3,14 @@
 // the order of evaluation. The indices come from an array, so no caller
 // proves them. A compound store hoists its element-read index into a const,
 // since --emit-ts will not read such a target twice.
-import { idx, checkedAdd, checkedSub, checkedMul, setIdx, pop } from "nish/runtime"
+import { idx, checkedAdd, setIdx, checkedSub, checkedMul, pop } from "nish/runtime"
 import type { i32 } from "nish/runtime"
 const pick = (a: i32[], b: i32[], i: i32): i32 => idx(a, idx(b, i));
 
 const bump = (a: i32[], b: i32[], i: i32): i32 => {
   const k = idx(b, i);
-  idx(a, k) = checkedAdd(idx(a, k), 10);
-  idx(a, i) = checkedSub(idx(a, i), 1);
+  setIdx(a, k, checkedAdd(idx(a, k), 10));
+  setIdx(a, i, checkedSub(idx(a, i), 1));
   setIdx(a, b[i], checkedMul(a[i], 2));
   return idx(a, b[i]);
 };
