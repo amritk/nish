@@ -6,28 +6,32 @@
 //   npm run build && node bench/sqlite/run.mjs [--validate] [--rounds N] [--compiler <nish>]
 //     --validate  one run of each side at small counts: rows, checksums and
 //                 failures must agree, nothing is timed
-//     --rounds N  timed rounds, rounded up to an even count (default 10),
+//     --rounds N  timed rounds, rounded up to a multiple of 3 (default 12),
 //                 after one uncounted warm-up round
 //
 // main.ts is built with `--link` (the speed profile) and copied byte for byte;
 // twin.c is compiled against the same runtime/sqlite/sqlite3.c with the flags
 // scripts/build.sh compiles SQLite with for that link (the speed profile's
 // optimisation flags and the SQLite options, THREADSAFE=0 among them),
-// sqlite3.c as a native object of its own as the link has it. Both open the
+// sqlite3.c as a native object of its own as the link has it, and linked with
+// the link's flags on Linux. NISH_SQLITE_CFLAGS, which changes how the build
+// compiles SQLite, is refused: the twin would not have it. Both open the
 // database with the same flags and PRAGMAs and prepare each statement once.
 //
 // The database is the challenge's schema.sql filled by `twin seed`: 50,000
 // users, 500,000 posts and 2,000,000 likes from one fixed generator, in WAL
-// mode, made once in build/bench/sqlite/ and made again only when schema.sql
-// or twin.c changes. Nothing is downloaded.
+// mode, made once in build/bench/sqlite/ and made again only when schema.sql,
+// twin.c, sqlite3.c or the flags change. Nothing is downloaded.
 //
 // Each round runs every workload on the build, its copy and the C twin, in an
-// order that rotates by round so each goes first equally often. A run times
+// order that rotates by round, so over a multiple of 3 rounds each goes first
+// equally often. A run times
 // its own loop and prints a checksum of every value it read; every run of a
 // workload must print the same rows and checksum. The report is ns per call,
-// min and median over the rounds; the cost of the module is the build less
-// the twin, and the noise band is the build against its byte-identical copy:
-// a difference inside it is one this machine cannot see.
+// min, median and interquartile range over the rounds; the cost of the module
+// (and of the adapter's checks) is the build less the twin, and the noise band
+// is the build against its byte-identical copy: a difference inside it is one
+// this machine cannot see.
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -46,7 +50,7 @@ const fail = (msg) => {
   process.exit(2)
 }
 
-let rounds = 10
+let rounds = 12
 let validate = false
 const argv = nishc.rest
 for (let i = 2; i < argv.length; i++) {
@@ -97,6 +101,21 @@ const SQLITE_DEFS = [
   "-DSQLITE_THREADSAFE=0",
 ]
 const cc = process.env.CC ?? "clang"
+if ((process.env.NISH_SQLITE_CFLAGS ?? "").trim() !== "") {
+  fail("NISH_SQLITE_CFLAGS is set: the build would compile SQLite with it and the twin would not; unset it")
+}
+// scripts/build.sh's ELF link: gc, lld when there is one, stripped.
+const LDFLAGS =
+  process.platform === "linux"
+    ? [
+        "-Wl,--gc-sections",
+        "-Wl,--as-needed",
+        "-Wl,-O2",
+        "-Wl,--build-id=none",
+        "-s",
+        ...(spawnSync("ld.lld", ["--version"]).status === 0 ? ["-fuse-ld=lld"] : []),
+      ]
+    : []
 
 const run = (cmd, args, what) => {
   const r = spawnSync(cmd, args, { cwd: root, encoding: "utf8", maxBuffer: 1 << 26 })
@@ -137,16 +156,17 @@ for (const unit of ["sqlite3.c", "twin.c"]) {
   run(cc, [...CFLAGS, ...SQLITE_DEFS, "-I", sqliteDir, "-c", src, "-o", obj], `${cc} ${unit}`)
   objects.push(obj)
 }
-run(cc, [...objects, "-lm", "-o", twin], `${cc} twin`)
+run(cc, [...CFLAGS, ...LDFLAGS, ...objects, "-lm", "-o", twin], `${cc} twin`)
 
 // The seed, made again when what makes it changes.
 const db = path.join(outDir, "feed.db")
 const stamp = path.join(outDir, "feed.db.stamp")
 const schema = path.join(here, "schema.sql")
 const hash = createHash("sha256")
-for (const f of [schema, path.join(here, "twin.c")]) {
+for (const f of [schema, path.join(here, "twin.c"), path.join(sqliteDir, "sqlite3.c")]) {
   hash.update(fs.readFileSync(f))
 }
+hash.update([cc, ...CFLAGS, ...SQLITE_DEFS].join(" "))
 const want = hash.digest("hex")
 if (!fs.existsSync(db) || !fs.existsSync(stamp) || fs.readFileSync(stamp, "utf8") !== want) {
   for (const f of [db, `${db}-wal`, `${db}-shm`, stamp]) {
@@ -189,11 +209,21 @@ const median = (xs) => {
   return s.length % 2 === 1 ? s[mid] : (s[mid - 1] + s[mid]) / 2
 }
 const min = (xs) => Math.min(...xs)
+/** The interquartile range, quartiles by linear interpolation. */
+const iqr = (xs) => {
+  const s = [...xs].sort((a, b) => a - b)
+  const at = (q) => {
+    const i = q * (s.length - 1)
+    const lo = Math.floor(i)
+    return s[lo] + (s[Math.min(lo + 1, s.length - 1)] - s[lo]) * (i - lo)
+  }
+  return at(0.75) - at(0.25)
+}
 
 const times = WORKLOADS.map(() => bins.map(() => []))
 const answers = WORKLOADS.map(() => null)
 // Round 0 warms the binaries and the page cache and is not counted.
-const timed = rounds + (rounds % 2)
+const timed = Math.ceil(rounds / bins.length) * bins.length
 for (let round = 0; round <= timed; round++) {
   for (let w = 0; w < WORKLOADS.length; w++) {
     for (let j = 0; j < bins.length; j++) {
@@ -221,7 +251,8 @@ for (let w = 0; w < WORKLOADS.length; w++) {
   console.log(`${WORKLOADS[w].name}: ${answers[w]}`)
   for (let k = 0; k < bins.length; k++) {
     console.log(
-      `  ${labels[k].padEnd(10)} min ${ns(min(times[w][k]))}/call, median ${ns(median(times[w][k]))}/call`
+      `  ${labels[k].padEnd(10)} min ${ns(min(times[w][k]))}/call, median ${ns(median(times[w][k]))}/call,` +
+        ` IQR ${ns(iqr(times[w][k]))}`
     )
   }
   console.log(

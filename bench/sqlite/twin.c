@@ -10,7 +10,16 @@
  * A workload prints `rows R checksum S failed F count N ns T`, the same line
  * main.ts prints for the same arguments; T is the timed loop alone. Each call
  * is what main.ts does through nish/sqlite, written against SQLite's own API:
- * bind, step, every column read (text copied into one reused buffer), reset. */
+ * bind, step, every column read (text copied into one reused buffer), reset.
+ *
+ * The seed is a port of the twelve-dollar server challenge's
+ * seed/generate.mjs (https://github.com/arjaythedev/twelve-dollar-server-challenge):
+ * its mulberry32 generator and seed 42, its table sizes, its users, posts
+ * and bodies, and its ADJECTIVES and NOUNS lists verbatim; WORDS is part of
+ * its word list with "sqlite" added, and the likes are this file's own, as are
+ * the workloads. bench/sqlite/LICENSE.md says what is ported in full.
+ * Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
+ * see bench/sqlite/LICENSE.md. */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -180,28 +189,30 @@ static int64_t nanos(void) {
   return (int64_t)t.tv_sec * 1000000000 + t.tv_nsec;
 }
 
-static uint32_t sum = 0;
 static uint8_t buf[1024];
 
-static void fold(uint32_t v) { sum = sum * 31u + v; }
+/* The checksum is a local of main's, passed in and handed back, so it stays
+ * in a register as main.ts's stays in a local. */
+static uint32_t fold(uint32_t sum, uint32_t v) { return sum * 31u + v; }
 
 /* Column `c` copied into `buf` as nishsqlite_column_into copies it, its
  * length and every byte folded into the checksum. */
-static void fold_text(sqlite3_stmt *st, int c) {
+static uint32_t fold_text(uint32_t sum, sqlite3_stmt *st, int c) {
   const unsigned char *p = sqlite3_column_text(st, c);
   int n = sqlite3_column_bytes(st, c);
   if (p != NULL && (size_t)n <= sizeof buf) memcpy(buf, p, (size_t)n);
-  fold((uint32_t)n);
-  for (int k = 0; k < n && k < (int)sizeof buf; k++) fold(buf[k]);
+  sum = fold(sum, (uint32_t)n);
+  for (int k = 0; k < n && k < (int)sizeof buf; k++) sum = fold(sum, buf[k]);
+  return sum;
 }
 
 /* One row of POST_SQL: id, body, created_at, username, like count. */
-static void fold_post(sqlite3_stmt *st) {
-  fold((uint32_t)sqlite3_column_int64(st, 0));
-  fold_text(st, 1);
-  fold_text(st, 2);
-  fold_text(st, 3);
-  fold((uint32_t)sqlite3_column_int64(st, 4));
+static uint32_t fold_post(uint32_t sum, sqlite3_stmt *st) {
+  sum = fold(sum, (uint32_t)sqlite3_column_int64(st, 0));
+  sum = fold_text(sum, st, 1);
+  sum = fold_text(sum, st, 2);
+  sum = fold_text(sum, st, 3);
+  return fold(sum, (uint32_t)sqlite3_column_int64(st, 4));
 }
 
 /* The 64 bodies the inserts cycle through, body k at k * 256, built as
@@ -225,6 +236,7 @@ int main(int argc, char **argv) {
   if (sqlite3_open_v2(argv[2], &db, SQLITE_OPEN_READWRITE | SQLITE_OPEN_EXRESCODE, NULL) != SQLITE_OK) die(db, argv[2]);
   exec(db, "PRAGMA synchronous=NORMAL");
   int rows = 0, failed = 0;
+  uint32_t sum = 0;
   int64_t t0 = 0, t1 = 0;
 
   if (strcmp(mode, "lookup") == 0) {
@@ -238,7 +250,7 @@ int main(int argc, char **argv) {
       if (sqlite3_bind_int64(st, 1, (int64_t)(x % POSTS) + 1) != SQLITE_OK) failed++;
       if (sqlite3_step(st) == SQLITE_ROW) {
         rows++;
-        fold_post(st);
+        sum = fold_post(sum, st);
       } else {
         failed++;
       }
@@ -253,7 +265,7 @@ int main(int argc, char **argv) {
       int rc;
       while ((rc = sqlite3_step(st)) == SQLITE_ROW) {
         rows++;
-        fold_post(st);
+        sum = fold_post(sum, st);
       }
       if (rc != SQLITE_DONE) failed++;
       sqlite3_reset(st);
@@ -276,12 +288,12 @@ int main(int argc, char **argv) {
         failed++;
       if (sqlite3_step(st) == SQLITE_ROW) {
         rows++;
-        fold((uint32_t)sqlite3_column_int64(st, 0));
+        sum = fold(sum, (uint32_t)sqlite3_column_int64(st, 0));
         /* created_at is the clock's: its length is folded, not its bytes. */
         const unsigned char *p = sqlite3_column_text(st, 1);
         int n = sqlite3_column_bytes(st, 1);
         if (p != NULL && (size_t)n <= sizeof buf) memcpy(buf, p, (size_t)n);
-        fold((uint32_t)n);
+        sum = fold(sum, (uint32_t)n);
       } else {
         failed++;
       }

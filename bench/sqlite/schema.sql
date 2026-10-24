@@ -1,7 +1,8 @@
--- Copied from the twelve-dollar server challenge,
--- https://github.com/arjaythedev/twelve-dollar-server-challenge/blob/main/schema.sql
--- Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
--- the full text is in bench/sqlite/LICENSE.md. Unchanged below this header.
+/* Copied from the twelve-dollar server challenge,
+ * https://github.com/arjaythedev/twelve-dollar-server-challenge/blob/main/schema.sql,
+ * unchanged below this header.
+ * Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
+ * see bench/sqlite/LICENSE.md. */
 -- The database every submission uses (SQLite). seed/make-seed.sh builds seed/feed.db from it.
 -- The schema is fixed: submissions may not add or change tables, columns, indexes or triggers.
 -- Timestamps are TEXT in the exact wire format (YYYY-MM-DDTHH:MM:SS.mmmZ, UTC), which also sorts correctly.

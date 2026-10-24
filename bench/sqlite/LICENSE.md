@@ -1,12 +1,26 @@
 # Licence of the challenge schema
 
-`bench/sqlite/schema.sql` is copied unchanged from the
+The files here that come from the
 [twelve-dollar server challenge](https://github.com/arjaythedev/twelve-dollar-server-challenge)
-(`schema.sql` at the repository root), below a header naming where it comes
-from. It is not covered by this repository's own licence. Nothing else in this
-directory is copied: the seed, the twins and `run.mjs` are this repository's
-own, and the seed is generated here rather than with the challenge's
-`seed/generate.mjs`, so its rows are not the challenge's rows.
+are not covered by this repository's own licence, and each carries the
+challenge's copyright notice:
+
+- `schema.sql` is the challenge's `schema.sql`, copied unchanged below a
+  header naming where it comes from.
+- `twin.c`'s seed is a port of the challenge's `seed/generate.mjs`: its
+  mulberry32 generator and seed 42; its table sizes (50,000 users, 500,000
+  posts, 2,000,000 likes); its users (`adjective_noun_id` names, created over
+  the year before 2025) and posts (spread evenly over 2025 in id order,
+  authors skewed towards the first users by `rnd() * rnd()`); its bodies of
+  one to three sentences of four to fourteen words, at most 500 bytes; and its
+  `ADJECTIVES` and `NOUNS` lists verbatim. Its `WORDS` list is part of the
+  challenge's, with `sqlite` added; it draws no openers, and its likes are
+  uniformly random rather than the challenge's per-post counts. The draws
+  differ, so its rows are not the challenge's rows. The workloads are written
+  here.
+- `main.ts` uses the same table sizes.
+
+`run.mjs` and `README.md` copy nothing; they only name the sizes.
 
 The licence below is reproduced verbatim from the challenge's `LICENSE`.
 

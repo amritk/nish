@@ -17,6 +17,12 @@
 // read; the fold is inside the timed loop on both sides. It prints
 // `rows R checksum S failed F count N ns T`, the line `twin.c` prints for the
 // same arguments, T the timed loop alone.
+//
+// USERS and POSTS are the sizes of the twelve-dollar server challenge's
+// seed/generate.mjs (https://github.com/arjaythedev/twelve-dollar-server-challenge),
+// which twin.c's seed ports.
+// Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
+// see bench/sqlite/LICENSE.md.
 import { OPEN_READWRITE, Statement, openDatabase } from "nish/sqlite"
 
 const USERS: i32 = 50000
