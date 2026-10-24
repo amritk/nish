@@ -152,6 +152,11 @@ Not every builtin has a runtime export yet. The `nish:unsafe` functions
 imports from `nish/runtime` that Node cannot resolve, so a program that uses
 them does not run under Node yet.
 
+The `nish:term` functions are written as imports from `nish/runtime` too, and
+they resolve. Under Node, `isTerminal` and `terminalSize` answer, and
+`readStdin`, `waitStdin` and `setRawMode` throw, naming themselves, as they do
+when a program is [run under Node](terminal.md#where-it-runs).
+
 `--emit-ts` writes a directory instead of IR, so it exits 2 if you also
 pass `-o`, `--link`, `--emit-ast`, `--emit-checked`, `--emit-header`,
 `--emit-dts`, `--emit-napi` or `--emit-napi-async`, or give it an empty

@@ -217,6 +217,9 @@ cases/secret_wipe_o2_inferred_plain numbers  # differ: stdout line 1 differs
 cases/secret_wipe_o2_plain numbers  # differ: stdout line 1 differs
 cases/str_surrogate_lone numbers  # differ: stdout line 1 differs
 cases/str_surrogate_pair numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Bad character escape sequence, expected 4 hex characters
+cases/term_calls numbers  # differ: exit 0 vs 1: throw new Error(
+cases/term_import numbers  # differ: exit 0 vs 1: throw new Error(
+cases/term_pty numbers  # differ: exit 0 vs 1: throw new Error(
 cases/union_arena control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/union_forms control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/union_narrowing control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode

@@ -58,7 +58,7 @@ slow:
   ret i8* %grown
 }
 
-define internal noundef zeroext i1 @raise(%struct.Map$str$f64* noundef nonnull align 8 dereferenceable(56) %m, i8* noundef nonnull noalias readonly align 8 %k, double noundef %by) #0 {
+define internal noundef zeroext i1 @raise$(%struct.Map$str$f64* noundef nonnull align 8 dereferenceable(56) %m, i8* noundef nonnull noalias readonly align 8 %k, double noundef %by) #0 {
 entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i64 @nish.Map$str$f64.probe(%struct.Map$str$f64* %m, i8* %k)
@@ -90,11 +90,11 @@ entry:
   %4 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
   %5 = call %struct.Map$str$f64* @nish.Map$str$f64.set(%struct.Map$str$f64* %4, i8* bitcast ({ i64, [2 x i8] }* @.str.1 to i8*), double 0x4000000000000000)
   %6 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
-  %7 = call i1 @raise(%struct.Map$str$f64* %6, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), double 0x4010000000000000)
+  %7 = call i1 @raise$(%struct.Map$str$f64* %6, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*), double 0x4010000000000000)
   %8 = select i1 %7, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*)
   %9 = call i8* @nish_str_concat(i8* %8, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))
   %10 = load %struct.Map$str$f64*, %struct.Map$str$f64** %m.addr, align 8
-  %11 = call i1 @raise(%struct.Map$str$f64* %10, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*), double 0x4014000000000000)
+  %11 = call i1 @raise$(%struct.Map$str$f64* %10, i8* bitcast ({ i64, [2 x i8] }* @.str.5 to i8*), double 0x4014000000000000)
   %12 = select i1 %11, i8* bitcast ({ i64, [5 x i8] }* @.str.2 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*)
   %13 = call i8* @nish_str_concat(i8* %9, i8* %12)
   %14 = call i8* @nish_str_concat(i8* %13, i8* bitcast ({ i64, [2 x i8] }* @.str.4 to i8*))

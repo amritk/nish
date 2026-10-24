@@ -9,6 +9,7 @@
 import child_process from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
+import tty from "node:tty";
 import { installHost } from "./core/host.mjs";
 
 function ioFail(verb, path) {
@@ -319,6 +320,23 @@ function isExecutableSync(path) {
   }
 }
 
+/**
+ * `isTerminal(fd)` and `terminalSize()` (`nish:term`): whether a descriptor is
+ * a terminal, and the size Node already keeps for stdout's, or stderr's (a
+ * `tty.ReadStream` keeps none, so stdin has no size here),
+ * `[-25, 0]` when neither is one, as `runtime-term.c` answers.
+ */
+function isTerminal(fd) {
+  return tty.isatty(fd);
+}
+
+function terminalSize() {
+  for (const stream of [process.stdout, process.stderr]) {
+    if (stream.isTTY && stream.columns !== undefined) return [stream.columns, stream.rows];
+  }
+  return [-25, 0];
+}
+
 /** The host-bound builtins by name, for the host's `call`. */
 const CALLS = {
   readFileSync,
@@ -343,6 +361,8 @@ const CALLS = {
   lstatOwnerModeSync,
   geteuid,
   isExecutableSync,
+  isTerminal,
+  terminalSize,
 };
 
 // A rewritten program prints most values with Node's own `console.log`, which

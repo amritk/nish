@@ -174,6 +174,12 @@ export class CheckContext {
    * target; set by the driver after construction, and false everywhere else.
    */
   wasm: boolean
+  /**
+   * The build is for wasm with no WASI under it (`isFreestandingWasmBuild`),
+   * whose runtime has no stdin: `nish:term` reads it to refuse itself there.
+   * Set with `wasm`, and false everywhere else.
+   */
+  wasmFreestanding: boolean
   /** Function source name -> index into `program.functions`, for clash checks. */
   sigs: StringMap
   /** The program has an entry point, so `process.argv` may be read. */
@@ -321,6 +327,7 @@ export class CheckContext {
     this.uncheckedIndexing = uncheckedIndexing
     this.strictExports = strictExports
     this.wasm = false
+    this.wasmFreestanding = false
     this.sigs = new StringMap()
     this.entryHasMain = false
     this.current = null
