@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 715
+export const RULE_COUNT: i32 = 717
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -129,6 +129,8 @@ const diagnosticRules = (): string[] => [
   "NL2416",
   ": under Node a task runs where it is spawned, so every task that may send on a channel is spawned, in the block's statement order, before the one task that receives on it, which is also what keeps channels from deadlocking",
   "NL2481",
+  "--emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type",
+  "NL4014",
   "`, a `let` of the function it is written in: a data-parallel body may read only a `const` or a parameter of that function, whose value no thread can change while the body runs; bind the value to a `const` before the call",
   "NL2500",
   "` is set from something other than `secret(...)`: a `Secret` field is set in its class's constructor, from `secret(v)`, so the holder is the only owner of the key it makes, and its `wipe()` the one place that key ends",
@@ -1446,6 +1448,8 @@ const diagnosticRules = (): string[] => [
 const portabilityRules = (): string[] => [
   "overwrites the element a reference still reads, and TypeScript replaces the object instead",
   "NL8004",
+  "is never instantiated, and its body needs the checker's types to translate",
+  "NL8012",
   "is copied into the array here, and TypeScript stores the same object",
   "NL8003",
   "follows the native NaN and signed-zero rules here, not JavaScript's",

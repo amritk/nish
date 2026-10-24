@@ -17,7 +17,7 @@ const store = <T>(xs: T[], i: i32, v: T): void => {
 };
 
 // `like` names T for the call, which infers it from the arguments.
-const fresh = <T>(like: T[], n: i32): T[] => newArray(n, null);
+const fresh = <T>(like: T[], n: i32): T[] => newArray<T>(n, null);
 
 export const main = (): i32 => {
   const p: P = { x: 1 };

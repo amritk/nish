@@ -4,7 +4,7 @@
 import { slice, offsets, substring, indexOf, charCodeAt } from "nish/runtime"
 import type { i32, i64, u64 } from "nish/runtime"
 export const main = (): i32 => {
-  const s = "héllo wörld"
+  const s: string = "héllo wörld"
   const three: i64 = 3n
   const one: u64 = 1n
   console.log(slice(s, 0, Number(three)))

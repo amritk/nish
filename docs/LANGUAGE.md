@@ -4690,22 +4690,23 @@ On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
 with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
 
-### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` in `nish/bytes`
+### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` in `nish/bytes`
 
-The three runs answer the first index in `[from, to)` of a `u8[]` whose byte
+The four runs answer the first index in `[from, to)` of a `u8[]` whose byte
 is not in their class, or `to` when every byte there is; `copyBytes` copies a
 window of one array into another, or into itself
 ([wp38-simd.md](wp38-simd.md), S6a). They are the scans and the copy a parser
 spends its time in, and `std/json` is written over them.
 
 ```typescript
-import { copyBytes, skipBlank, skipDigits, skipJsonText } from "nish/bytes";
+import { copyBytes, skipBlank, skipDigits, skipJsonPlain, skipJsonText } from "nish/bytes";
 
 export const main = (): i32 => {
   const text: u8[] = [32, 10, 52, 50, 44, 34, 104, 105, 34]; // " \n42,\"hi\""
   const start = skipBlank(text, 0, 9);
   console.log(`${start} ${skipDigits(text, start, 9)}`);   // 2 4
   console.log(`${skipJsonText(text, 6, 9)}`);              // 8, the closing quote
+  console.log(`${skipJsonPlain(text, 0, 9)}`);             // 1, the newline
   const word: u8[] = [0, 0];
   copyBytes(word, 0, text, 6, 2);
   console.log(`${word[0]} ${word[1]}`);                    // 104 105
@@ -4721,6 +4722,9 @@ export const main = (): i32 => {
   backslash or a control byte, and at the lead byte of a sequence that is
   overlong, a surrogate, past U+10FFFF, a stray continuation byte or cut short
   by `to`, so where it stops is the byte a decoder has to look at.
+  `skipJsonPlain` skips what a JSON writer copies without an escape: every
+  byte from 0x20 up other than `"` and `\`, DEL and 0x80–0xff included, with
+  no UTF-8 check. It stops at a quote, a backslash or a byte below 0x20.
 - **The runs never panic.** `to` is clamped into `[0, b.length]` and `from`
   into `[0, to]`, as `indexOfAny` clamps: a negative `from` scans from the
   start, and a `from` at or past `to` answers it
@@ -4735,7 +4739,7 @@ export const main = (): i32 => {
   which is what runs under Node. Natively the compiler recognises that call by
   module and name (`src/kernels.ts`), as it does `indexOfAny`'s, and emits the
   runtime's `nish_bytes_skip_blank`, `nish_bytes_skip_digits` or
-  `nish_bytes_skip_json_text` (`runtime/runtime-bytes.c`) in its place, or one
+  `nish_bytes_skip_json_text` or `nish_bytes_skip_json_plain` (`runtime/runtime-bytes.c`) in its place, or one
   `llvm.memmove` for the copy. The kernels pick a scalar, a 16-byte (SSE2,
   NEON or wasm SIMD) or a 32-byte (AVX2) path on their first call, and
   `NISH_SIMD=scalar|base|avx2` pins it, except in a freestanding wasm32 build,
@@ -10140,6 +10144,7 @@ by the caller.
   | NL8009 | 64-bit integers (3.1) | a binding, parameter, field or return type declared `i64` or `u64` | holds a double, which rounds past 2^53 |
   | NL8010 | *retired* | nothing: the row was `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32`, when `min` and `max` dropped a NaN operand and `round` answered `0` for a negative number that rounds to zero. They lower to a NaN test and a sign-bit pick (`llvm.minimum`/`llvm.maximum` on wasm) and a `llvm.copysign.f64` now, which answer NaN and `-0` as JavaScript does, so no site diverges (`tests/cases/port_num_libm` is quiet). The code stays reserved and is never reused | — |
   | NL8011 | *retired* | nothing: the row was `console.log` or `console.error` of a float printing `-0`, and it marks no divergence in the reading the class is defined against. `runtime/nish.mjs` replaces both with shims that print `String(x)`, and `String(-0)` is `0`, which is what the native build prints. The code stays reserved and is never reused | — |
+  | NL8012 | a stubbed generic (`--emit-ts` only) | a generic function or method of the program's own modules that no instance reaches, whose body needs the checker's types to translate (a 64-bit integer or a builtin call) | throws when called, where the native build has no body to call at all |
 
   **NL8001, exactly.** A *source* is `s.length`, `s.indexOf(t)`,
   `s.indexOf(t, i)` or `s.lastIndexOf(t)` (an offset) or `s.charCodeAt(i)` (a code unit) on a
@@ -10267,7 +10272,11 @@ by the caller.
 
   Every row but the retired NL8010 and NL8011 is live, each with a warning case and a
   quiet counterpart among `tests/cases/port_*` and a wording pin in
-  `tests/wordings/`.
+  `tests/wordings/`, but NL8012, which only `--emit-ts` reports: its cases are
+  `tests/emit-ts/records/generic-uncalled.ts` (warned) and
+  `tests/emit-ts/identity/maps.ts` (a standard-library stub, quiet), checked
+  by `tests/run.js`'s emit-ts section, and its pin is
+  `tests/wordings/nl8012_generic_stub`.
 - **Deprecation warnings are the third diagnostic that is not an error.** One
   marks a call the language still compiles, to exactly the IR it always did,
   and is going to take away in a later breaking release, naming what replaces
@@ -10352,15 +10361,18 @@ by the caller.
   written. Last comes `entry.ts`, which imports `nish/runtime/node`, calls
   `main` and exits with what it answered. Imports are rewritten to match: a
   `nish:` specifier becomes `nish/runtime`, the one package the output names,
-  except `nish:secret`, which has source and becomes `./nish/secret.ts`;
-  a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
+  `nish:secret` included (its `std/secret.ts` is not written: the runtime's
+  `wipe` answers it, a zero-fill that cannot reach a copy the engine made, so
+  erasure is the native build's alone: `docs/security/secret.md`, SECRET-6); a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
   imported name that is only a type (an interface, a generic interface, an
   alias) is written `type X`, because Node's type stripping does not know
-  which names are types. A module that needs none of that is written byte for
-  byte (`tests/emit-ts/identity/`; the layout is `tests/emit-ts/layout/`).
+  which names are types. A module that needs none of that and none of the rows
+  below is written byte for byte (`tests/emit-ts/identity/`; the layout is
+  `tests/emit-ts/layout/`); one row that touches an otherwise untouched module
+  is the `: string` on an unannotated `const` bound to a string literal.
 - **The flag turns `--warn-portability` on**: those warnings name the sites
   where the TypeScript reading answers differently.
-- **Four kinds of module are refused, and then nothing is written** (exit 1):
+- **Five kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
   or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
@@ -10376,6 +10388,24 @@ by the caller.
   one instance and by reference in another (`P` and `P | null`), or element
   types with different zeros in `new Array<T>(n)` (`i32` and `i64`) (NL4013,
   `reject_emit_ts_instances`). Write a function per element type.
+  A generic no instance reaches (a function, a method, or the methods and
+  constructor of a class no type argument list names) has no types and no
+  native body. Where no type would change its text it is written as it is,
+  through the rewrites that need no type (`a[i]` is still checked); where a
+  type would (a 64-bit integer, which is a `bigint` there, `f32`, a builtin
+  call, arithmetic whose width wraps, a string's `.length` or methods, a
+  `Result`'s), it is written with a body that throws. Such a stub in the
+  program's own modules is a portability warning naming it at its
+  declaration (NL8012, `tests/emit-ts/records/generic-uncalled.ts`); the
+  standard library's (`insertAt` of `nish/collections`) are written without
+  one. The fifth refusal is such a generic in the program's own modules whose
+  body copies an element into an array slot, in a module that holds records
+  inline, or fills `new Array<T>(n)` with `T`'s zero, which only an instance
+  would decide, whatever else in it needs a type, a 64-bit integer or a
+  builtin call included (NL4014, `tests/emit-ts/refused/uncalled-zero.ts`,
+  `uncalled-copy.ts`, `uncalled-ctor-zero.ts`, `uncalled-field-zero.ts`,
+  `uncalled-wide-zero.ts`); in the standard library the same body is a stub,
+  without a warning, and the program is written.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/
