@@ -108,6 +108,9 @@ export const bcryptChecks = (): i32 => {
   t.eqStr("$2y$ \\xff\\xff\\xa3", verifyOf(fromHex("ffffa3"), "$2y$05$/OK.fbVrR/bpIqNJ5ianF.CE5elHaaO4EbggVDjb8P19RukzXSM3e"), "true");
   t.eqStr("$2b$ \\xff\\xff\\xa3 is $2y$'s digest", verifyOf(fromHex("ffffa3"), "$2b$05$/OK.fbVrR/bpIqNJ5ianF.CE5elHaaO4EbggVDjb8P19RukzXSM3e"), "true");
   t.eqStr("$2a$ \\xff\\xff\\xa3 takes the countermeasure", verifyOf(fromHex("ffffa3"), "$2a$05$/OK.fbVrR/bpIqNJ5ianF.nqd1wy.pTMdcvrRWxyiGL2eMz.2a85."), "true");
+  // OpenBSD's bcrypt and Go's x/crypto have no countermeasure: they hash a
+  // $2a$ password as $2y$ does, so this is the hash they make for it, and it
+  // verifies false here as it does under crypt_r.
   t.eqStr("and is not the $2y$ digest under $2a$", verifyOf(fromHex("ffffa3"), "$2a$05$/OK.fbVrR/bpIqNJ5ianF.CE5elHaaO4EbggVDjb8P19RukzXSM3e"), "false");
   t.eqStr("$2y$ \\xa3", verifyOf(fromHex("a3"), "$2y$05$/OK.fbVrR/bpIqNJ5ianF.Sa7shbm4.OzKpvFnX1pQLmQW96oUlCq"), "true");
   t.eqStr("$2a$ \\xa3 (one 8-bit byte: no countermeasure needed)", verifyOf(fromHex("a3"), "$2a$05$/OK.fbVrR/bpIqNJ5ianF.Sa7shbm4.OzKpvFnX1pQLmQW96oUlCq"), "true");

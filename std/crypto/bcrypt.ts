@@ -1,7 +1,8 @@
 /**
  * `nish/crypto/bcrypt` — bcrypt password hashing, `$2b$` out and `$2a$`,
- * `$2b$`, `$2y$` in, bit for bit what OpenBSD's `bcrypt`, libxcrypt's
- * `crypt_r` and crypt_blowfish answer.
+ * `$2b$`, `$2y$` in, bit for bit what libxcrypt's `crypt_r` and
+ * crypt_blowfish answer. OpenBSD's `bcrypt` and Go's `x/crypto` agree on every
+ * password but one kind under `$2a$`: they lack the countermeasure below.
  *
  *     import { bcryptHash, bcryptVerify } from "nish/crypto/bcrypt"
  *     import { Secret, secret } from "nish:secret"
@@ -27,8 +28,10 @@
  * the old sign-extension bug: when an 8-bit byte was sign-extended into a key
  * word and yet the buggy and the correct key came out equal, one bit of the
  * first P word is flipped, as crypt_blowfish flips it, so the `$2a$` digest of
- * such a password (`\xff\xff\xa3`) is not its `$2y$` one. `$2x$` (the bug
- * itself) is refused.
+ * such a password (`\xff\xff\xa3`) is not its `$2y$` one. OpenBSD and Go
+ * hash it as `$2y$` does, so their `$2a$` hash of it verifies false here. It
+ * takes a 0xff byte before another 8-bit byte in a key word, which UTF-8 never
+ * holds. `$2x$` (the bug itself) is refused.
  *
  * **Errors are `Err`s.** A salt that is not 16 bytes, a cost outside 4–31, or
  * a hash string that is not one (the wrong length, an unknown prefix, a cost

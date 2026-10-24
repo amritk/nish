@@ -29,6 +29,16 @@ const compiler = argValue("--compiler", path.join(root, "build", "nish"))
 const hashes = Number(argValue("--hashes", "8"))
 const rounds = Number(argValue("--rounds", "5"))
 const cost = Number(argValue("--cost", "10"))
+for (const [name, value, lo, hi] of [
+  ["--hashes", hashes, 1, 1e6],
+  ["--rounds", rounds, 1, 1e3],
+  ["--cost", cost, 4, 31],
+]) {
+  if (!Number.isInteger(value) || value < lo || value > hi) {
+    console.error(`${name} must be an integer from ${lo} to ${hi}`)
+    process.exit(1)
+  }
+}
 const setting = `$2b$${String(cost).padStart(2, "0")}$${".".repeat(22)}`
 
 /** The openbsd/src commit the OpenBSD files are fetched at. */
@@ -204,8 +214,13 @@ for (let round = 0; round <= rounds; round++) {
       process.exit(1)
     }
     outputs.add(fs.readFileSync(`${p.exe}.out`, "utf8").trim())
+    const seconds = Number(r.stderr.trim())
+    if (r.stderr.trim() === "" || !Number.isFinite(seconds)) {
+      console.error(`${p.name}: no CPU time in bash's output: ${JSON.stringify(r.stderr)}`)
+      process.exit(1)
+    }
     if (round > 0) {
-      samples[i].push((Number(r.stderr.trim()) * 1000) / hashes)
+      samples[i].push((seconds * 1000) / hashes)
     }
   })
 }

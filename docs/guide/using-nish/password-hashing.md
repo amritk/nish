@@ -78,8 +78,9 @@ own server stored, never one a client sends.
 ## What bcrypt reads of a password
 
 bcrypt reads at most **72 bytes** of a password, and it stops at the first NUL
-byte. Both are part of the format: every implementation does the same, so a
-hash made here verifies elsewhere. A user who types a 100-character passphrase
+byte. Both are part of the format: libxcrypt, crypt_blowfish and OpenBSD do the
+same, so a hash made here verifies there. Go's `x/crypto` differs on both: it
+keeps the bytes after a NUL, and it refuses to hash a password over 72 bytes. A user who types a 100-character passphrase
 is protected by its first 72 bytes only. If you want long passphrases to count
 in full, hash the password with `hmacSha256` from `nish/crypto/hmac` under a
 server-side key and pass that to bcrypt instead. Hex- or base64-encode the HMAC
@@ -88,9 +89,12 @@ users at sign-up.
 
 `bcryptVerify` reads hashes that begin `$2a$`, `$2b$` and `$2y$`. They differ
 only in how old implementations handled 8-bit bytes and long passwords, and
-each is checked the way libxcrypt and crypt_blowfish check it. One case
-differs from OpenBSD: a `$2a$` hash OpenBSD made from a password over 254
-bytes does not verify here. A `$2x$` hash
+each is checked the way libxcrypt and crypt_blowfish check it. Two cases
+differ from OpenBSD, and the second from Go: a `$2a$` hash OpenBSD made from a
+password over 254 bytes does not verify here, and neither does a `$2a$` hash
+OpenBSD or Go made from a password with a 0xff byte before another 8-bit byte
+(such as `\xff\xff\xa3`), which libxcrypt hashes with a countermeasure for
+an old bug. Text in UTF-8 never holds such bytes. A `$2x$` hash
 comes from a known-buggy implementation and is refused: such a hash cannot be
 verified safely, so ask that user to reset their password.
 
