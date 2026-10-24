@@ -1,6 +1,7 @@
 PASS  queries: every query in one write, DA1 last
 PASS  queries: under tmux, kitty graphics and the sizes go through its passthrough with ESC doubled
 PASS  queries: under screen, the sizes go through its passthrough and the queries holding an ST are left out
+PASS  queries: on the Linux console, the APC and DCS queries it would print are left out
 PASS  kitty: whole
 PASS  kitty: split at every byte
 PASS  kitty: one byte per read
@@ -23,7 +24,6 @@ PASS  iTerm2: whole
 PASS  iTerm2: split at every byte
 PASS  iTerm2: one byte per read
 PASS  Apple Terminal: whole
-PASS  Apple Terminal: split at every byte
 PASS  Apple Terminal: one byte per read
 PASS  Windows Terminal: whole
 PASS  Windows Terminal: split at every byte
@@ -44,7 +44,6 @@ PASS  Linux console: whole
 PASS  Linux console: split at every byte
 PASS  Linux console: one byte per read
 PASS  silent terminal: whole
-PASS  silent terminal: split at every byte
 PASS  silent terminal: one byte per read
 PASS  env: TERM with 256color, no answer for true colour: 256 colours
 PASS  env: a plain TERM: 16 colours
@@ -109,8 +108,13 @@ PASS  machine: an ESC held at the end is not given up early
 PASS  machine: timed out with an ESC held
 PASS  machine: the held ESC is given up as a key on the timeout
 PASS  machine: the answers before it still count
+PASS  machine: done on the DA1 an ESC follows
+PASS  machine: the ESC after DA1 is still held by the decoder
+PASS  machine: finish gives up the ESC after DA1 as a key
+PASS  machine: done on the DA1 a cut-off key follows
+PASS  machine: finish gives up a key cut off after DA1 byte by byte, as the decoder does
 PASS  machine: a DA1 cut off is not an answer
 PASS  machine: timed out on a DA1 cut off
 PASS  machine: nothing of an unterminated DCS reaches the result
 PASS  machine: answered is false on a timeout
-term probe: 115 passed, 0 failed, 0 skipped
+term probe: 119 passed, 0 failed, 0 skipped

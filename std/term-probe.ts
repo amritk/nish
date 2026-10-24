@@ -42,15 +42,19 @@
  *   `DCS tmux; … ST` with each ESC doubled; under GNU screen (`STY` set) the
  *   sizes go inside screen's `DCS … ST`, and the kitty graphics query and
  *   DECRQSS, which hold an ST of their own and which screen would forward
- *   rather than answer, are left out. DA1 is never wrapped: the multiplexer
+ *   rather than answer, are left out. On the Linux console (`TERM=linux`)
+ *   both are left out too: it has no string states and would print them. DA1 is never wrapped: the multiplexer
  *   answers it, so a multiplexer that forwards no reply still ends the probe.
  * - `TermProbe` — the probe in progress, made when the queries are sent.
  *   `feed(bytes, count, nowMs)` decodes a read through its own `KeyDecoder`
  *   (`nish/term`), keeping the replies and holding back every other event (a
  *   key typed while the probe ran) for `heldEvents()`, in order. `done()` is
  *   true once DA1 is answered; `timedOut(nowMs)` once `timeoutMs` (250 by
- *   default) has passed since the send with no answer to DA1, when it also
- *   gives up whatever the decoder still holds. `rttMs()` is the time from the
+ *   default) has passed since the send with no answer to DA1. Either way
+ *   the program then calls `finish(nowMs)` once: it gives up whatever the
+ *   decoder still holds (a key cut off at the end of the read with DA1, say)
+ *   and returns `heldEvents()` complete, and later reads go to the program's
+ *   own decoder. `rttMs()` is the time from the
  *   send to the answer to DA1, -1 before it. `result()` reads the replies and
  *   the environment into a `TermCaps`, and can be called at any point.
  * - `TermCaps` — what the terminal can do: `colors` (16, 256 or 16777216),
@@ -72,7 +76,16 @@
  * answers pick; a pixel backend the terminal did not answer for is refused
  * when it would come out as garbage or nothing — on the Linux console, under
  * a multiplexer, or when the terminal answered nothing at all. `overrides`
- * says what each variable did, refusals included.
+ * says what each variable did, refusals included. The match is exact:
+ * `kitty`, `sixel`, `halfblock` or `ascii`, lower case, nothing around it.
+ *
+ * Under a multiplexer the probe sees the multiplexer first. tmux and screen
+ * answer DA1 themselves, so `done()` comes on their answer, before any reply
+ * forwarded through the passthrough; `probeRttMs` is the round trip to the
+ * multiplexer, and graphics come from what the multiplexer itself answers
+ * (tmux's own sixel, say). The environment is taken at face value: an
+ * `SSH_*` variable or `COLORTERM` left in a tmux session by the client that
+ * started it still counts, though the client attached now may differ.
  */
 import { EVENT_REPLY, KeyDecoder, TermEvent } from "nish/term"
 import { replaceAll } from "nish/text"
@@ -209,13 +222,14 @@ const termPassthrough = (multiplexer: string, query: string): string => {
 export const probeQueries = (env: TermEnv): string => {
   const mux: string = termMultiplexer(env)
   const parts: string[] = ["\x1b[>q", "\x1b[?2026$p", "\x1b[?1016$p", "\x1b[?u"]
-  if (mux !== "screen") {
+  const strings: boolean = mux !== "screen" && env.term !== "linux"
+  if (strings) {
     parts.push(termPassthrough(mux, "\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\"))
   }
   parts.push("\x1b[?1;1;0S")
   parts.push(termPassthrough(mux, "\x1b[16t"))
   parts.push(termPassthrough(mux, "\x1b[14t"))
-  if (mux !== "screen") {
+  if (strings) {
     parts.push("\x1b[48;2;1;2;3m\x1bP$qm\x1b\\\x1b[m")
   }
   parts.push("\x1b[c")
@@ -309,15 +323,26 @@ export class TermProbe {
 
   /**
    * Whether `timeoutMs` has passed since the send with DA1 unanswered. Once it
-   * has, what the decoder still holds is given up (an ESC as a key, an
-   * unfinished reply as nothing), so `heldEvents` is complete.
+   * has, it calls `finish(nowMs)`, so `heldEvents` is complete.
    */
   timedOut(nowMs: f64): boolean {
     if (this.done() || nowMs - this.sentAtMs < this.timeoutMs) {
       return false
     }
-    this.take(this.decoder.pollEvents(nowMs + this.decoder.escapeTimeoutMs), nowMs)
+    this.finish(nowMs)
     return true
+  }
+
+  /**
+   * End the probe at `nowMs`: what the decoder still holds — an ESC or the
+   * start of a key that came in the read with DA1, or an unfinished reply on a
+   * timeout — is given up (the ESC as a key, the reply as nothing) and
+   * `heldEvents` returned complete. Call it once, when `done()` or `timedOut`
+   * ends the probe, and hand every later read to the program's own decoder.
+   */
+  finish(nowMs: f64): TermEvent[] {
+    this.take(this.decoder.pollEvents(nowMs + this.decoder.escapeTimeoutMs), nowMs)
+    return this.held
   }
 
   /** The events that were not replies — keys typed, a paste — in the order they came, for the program to handle. */

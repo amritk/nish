@@ -85,7 +85,9 @@ const checkFixture = (s: Suite, f: Fixture): void => {
       split = `split at ${k}: ${finished(p)}`;
     }
   }
-  s.eqStr(`${f.name}: split at every byte`, split, f.expected);
+  if (n > 0) {
+    s.eqStr(`${f.name}: split at every byte`, split, f.expected);
+  }
   const each: TermProbe = started(f.env);
   for (let k: i32 = 0; k < n; k++) {
     each.feed(part(bytes, k, k + 1), 1, toF64(1));
@@ -125,6 +127,11 @@ const queries = (s: Suite): void => {
     "queries: under screen, the sizes go through its passthrough and the queries holding an ST are left out",
     shown(probeQueries(screen)),
     "^[[>q^[[?2026$p^[[?1016$p^[[?u^[[?1;1;0S^[P^[[16t^[\\^[P^[[14t^[\\^[[c",
+  );
+  s.eqStr(
+    "queries: on the Linux console, the APC and DCS queries it would print are left out",
+    shown(probeQueries(termEnv("linux"))),
+    "^[[>q^[[?2026$p^[[?1016$p^[[?u^[[?1;1;0S^[[16t^[[14t^[[c",
   );
 };
 
@@ -409,6 +416,22 @@ const machine = (s: Suite): void => {
   s.eqBool("machine: timed out with an ESC held", cut.timedOut(toF64(250)), true);
   s.eqStr("machine: the held ESC is given up as a key on the timeout", heldLines(cut.heldEvents()), "key 8:27");
   s.eqBool("machine: the answers before it still count", cut.result().sync, true);
+
+  const stranded: TermProbe = new TermProbe(env, 80, 24, toF64(0));
+  const withEsc: u8[] = ascii("\x1b[?62;4c\x1b");
+  stranded.feed(withEsc, withEsc.length, toF64(10));
+  s.eqBool("machine: done on the DA1 an ESC follows", stranded.done(), true);
+  s.eqStr("machine: the ESC after DA1 is still held by the decoder", heldLines(stranded.heldEvents()), "");
+  s.eqStr("machine: finish gives up the ESC after DA1 as a key", heldLines(stranded.finish(toF64(11))), "key 8:27");
+  const keyCut: TermProbe = new TermProbe(env, 80, 24, toF64(0));
+  const withPrefix: u8[] = ascii("\x1b[?62;4c\x1b[1");
+  keyCut.feed(withPrefix, withPrefix.length, toF64(10));
+  s.eqBool("machine: done on the DA1 a cut-off key follows", keyCut.done(), true);
+  s.eqStr(
+    "machine: finish gives up a key cut off after DA1 byte by byte, as the decoder does",
+    heldLines(keyCut.finish(toF64(11))),
+    "key 8:27 | key 1:91 | key 1:49",
+  );
 
   const unfinished: TermProbe = new TermProbe(env, 80, 24, toF64(0));
   const da1: u8[] = ascii("\x1bP>|xterm(390\x1b[?62");
