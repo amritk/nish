@@ -9,6 +9,7 @@
 import { Suite } from "nish/testing";
 import {
   ACTION_PRESS,
+  ACTION_RELEASE,
   EVENT_FOCUS,
   EVENT_KEY,
   EVENT_MOUSE,
@@ -148,6 +149,38 @@ const decode = (s: string): TermEvent[] => {
   return d.feedEvents(bytes, bytes.length, toF64(0));
 };
 
+/** How many of `events` have action `action`. */
+const actions = (events: TermEvent[], action: i32): i32 => {
+  let n: i32 = 0;
+  for (let k: i32 = 0; k < toI32(events.length); k++) {
+    if (events[k].type === EVENT_KEY && events[k].action === action) {
+      n = n + 1;
+    }
+  }
+  return n;
+};
+
+/**
+ * `a` held from 0: its first repeat read at `first`, then reads `gap` ms apart
+ * to 3000 ms carrying `repeats`, with `tick` every 16 ms between reads. The
+ * presses and releases made, as "presses/releases", then the releases a tick
+ * 1000 ms after the last read makes.
+ */
+const held = (first: i32, gap: i32, repeats: string): string => {
+  const keys: KeyState = new KeyState();
+  const seen: TermEvent[] = keys.apply(decode("a"), toF64(0));
+  let last: i32 = 0;
+  for (let read: i32 = first; read <= 3000; read = read + gap) {
+    for (let at: i32 = last + 16; at < read; at = at + 16) {
+      append(seen, keys.tick(toF64(at)));
+    }
+    append(seen, keys.apply(decode(read === first ? "a" : repeats), toF64(read)));
+    last = read;
+  }
+  const after: TermEvent[] = keys.tick(toF64(last + 1000));
+  return `${actions(seen, ACTION_PRESS)}/${actions(seen, ACTION_RELEASE)} then ${lines(after)}`;
+};
+
 export const main = (): i32 => {
   const s: Suite = new Suite("term events");
   const plain: KeyDecoder = new KeyDecoder(toF64(50));
@@ -271,26 +304,34 @@ export const main = (): i32 => {
   s.eqBool("a is down", keys.isDown(KEY_CHAR, 97), true);
   s.eqBool("A is the same key", keys.isDown(KEY_CHAR, 65), true);
   s.eqStr("the press again is a repeat", lines(keys.apply(decode("a"), toF64(300))), "key 1:97 a2");
-  s.eqStr("under releaseGapMs after the repeat, nothing", lines(keys.tick(toF64(399))), "");
-  s.eqStr("releaseGapMs after the repeat, a release", lines(keys.tick(toF64(400))), "key 1:97 a3");
+  s.eqStr("under 2 * repeatGapMs after the repeat, nothing", lines(keys.tick(toF64(599))), "");
+  s.eqStr("2 * repeatGapMs after the repeat, a release", lines(keys.tick(toF64(600))), "key 1:97 a3");
   s.eqBool("a is up", keys.isDown(KEY_CHAR, 97), false);
   keys.apply(decode("B"), toF64(1000));
-  s.eqStr("under firstRepeatMs, nothing", lines(keys.tick(toF64(1599))), "");
-  s.eqStr("firstRepeatMs after a press, a release with the press's code", lines(keys.tick(toF64(1600))), "key 1:66 a3");
+  s.eqStr("a tap: under firstRepeatMs + repeatGapMs, nothing", lines(keys.tick(toF64(1849))), "");
+  s.eqStr("a tap: 850 ms after it, a release with the press's code", lines(keys.tick(toF64(1850))), "key 1:66 a3");
   keys.apply(decode("a"), toF64(2000));
-  s.eqStr("releases due come before the events", lines(keys.apply(decode("\x1b[A"), toF64(2700))), "key 1:97 a3 | key 2:65");
+  s.eqStr("releases due come before the events", lines(keys.apply(decode("\x1b[A"), toF64(2900))), "key 1:97 a3 | key 2:65");
   s.eqBool("up is down, whatever the code", keys.isDown(KEY_UP, 0), true);
 
   // Repeats that wait in a read longer than releaseGapMs keep the key down.
-  const held: KeyState = new KeyState();
-  held.apply(decode("a"), toF64(0));
-  held.apply(decode("a"), toF64(50));
-  s.eqStr("repeats read 200 ms after the last are repeats", lines(held.apply(decode("aa"), toF64(250))), "key 1:97 a2 | key 1:97 a2");
-  s.eqBool("a is still down", held.isDown(KEY_CHAR, 97), true);
-  s.eqStr("under releaseGapMs after them, nothing", lines(held.tick(toF64(349))), "");
-  s.eqStr("with no repeat for releaseGapMs, a release", lines(held.tick(toF64(350))), "key 1:97 a3");
-  held.apply(decode("\x1b[97;3u"), toF64(1000));
-  s.eqStr("a release carries the press's modifiers", lines(held.tick(toF64(1600))), "key 1:97 m2 a3");
+  const burst: KeyState = new KeyState();
+  burst.apply(decode("a"), toF64(0));
+  burst.apply(decode("a"), toF64(50));
+  s.eqStr("repeats read 200 ms after the last are repeats", lines(burst.apply(decode("aa"), toF64(250))), "key 1:97 a2 | key 1:97 a2");
+  s.eqBool("a is still down", burst.isDown(KEY_CHAR, 97), true);
+  s.eqF64("repeatGapMs rises to the 200 ms gap", burst.repeatGapMs, toF64(200));
+  s.eqStr("under 2 * repeatGapMs after them, nothing", lines(burst.tick(toF64(649))), "");
+  s.eqStr("with no repeat for 2 * repeatGapMs, a release", lines(burst.tick(toF64(650))), "key 1:97 a3");
+  burst.apply(decode("\x1b[97;3u"), toF64(1000));
+  s.eqStr("a release carries the press's modifiers", lines(burst.tick(toF64(1900))), "key 1:97 m2 a3");
+
+  // A key held from a standing start, ticked every 16 ms between reads: one
+  // press, no release while it is held, and one release once it goes quiet.
+  s.eqStr("held locally, repeats 40 ms apart from 660 ms", held(660, 40, "a"), "1/0 then key 1:97 a3");
+  s.eqStr("held over a link, reads 150 ms apart", held(660, 150, "aaaa"), "1/0 then key 1:97 a3");
+  s.eqStr("held over a link, reads 250 ms apart", held(660, 250, "aaaaaa"), "1/0 then key 1:97 a3");
+  s.eqStr("held under X11's 660 ms delay, a first read at 800 ms", held(800, 150, "aaaa"), "1/0 then key 1:97 a3");
 
   const real: KeyState = new KeyState();
   real.apply(decode("\x1b[97u\x1b[99u"), toF64(0));
@@ -308,6 +349,7 @@ export const main = (): i32 => {
   const quit: KeyState = new KeyState();
   s.eqStr("Ctrl-C is a quit", lines(quit.apply(decode("\x03"), toF64(0))), "quit");
   s.eqStr("kitty Ctrl-c is a quit", lines(quit.apply(decode("\x1b[99;5u"), toF64(0))), "quit");
+  s.eqStr("kitty Ctrl-c with Num Lock on is a quit", lines(quit.apply(decode("\x1b[99;133u"), toF64(0))), "quit");
   s.eqStr("its repeat and release are dropped", lines(quit.apply(decode("\x1b[99;5:2u\x1b[99;5:3u"), toF64(0))), "");
   quit.quitOnCtrlC = false;
   s.eqStr("without quitOnCtrlC, Ctrl-C is a key", lines(quit.apply(decode("\x03"), toF64(0))), "key 9:3");

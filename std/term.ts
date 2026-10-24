@@ -77,11 +77,16 @@
  * nowMs)` answers the events to act on and `tick(nowMs)` the releases due
  * meanwhile; `isDown(key, code)` asks. A terminal without the kitty protocol
  * sends no releases, so while `releasesAreSynthetic` is set (until the first
- * real release) a key counts as let go when its repeats stop: `firstRepeatMs`
- * after its press, then `releaseGapMs` after its last repeat — counted to the
- * read, so a key the batch `apply` takes names stays down. A made-up release
+ * real release) a key counts as let go when its repeats stop, after a silence
+ * that grows with how far apart reads carrying repeats arrive (`repeatGapMs`):
+ * a tap comes up 0.85 s after its press and a held key 0.3 s after its last
+ * repeat until reads are seen closer together, which locally settles to about
+ * 0.75 s and 100 ms. A key the batch `apply` takes names stays down. A made-up release
  * carries the code and modifiers the key last came with. Losing focus lets
  * every key go, and Ctrl-C becomes `EVENT_QUIT` while `quitOnCtrlC` is set.
+ * Under the kitty protocol a non-Latin layout sends Ctrl-C as its own letter
+ * (`ESC [ 1089 ; 5 u` for Russian С), which is not read as a quit: the
+ * base-layout key that flag 4 (report alternate keys) adds is not read yet.
  *
  * **The same bytes under Node.** Natively a string is UTF-8 bytes, and `flush`
  * builds its answer as bytes and makes one string of them. Under Node a string
@@ -1344,16 +1349,23 @@ export class KeyDecoder {
  * Which keys are down, from the events a `KeyDecoder` made — what a game asks
  * each frame. Under the kitty protocol with event types (flag 2) a terminal
  * sends real releases. Without it a terminal sends nothing when a key comes
- * up, only the press again as it auto-repeats, so a key is let go once no
- * repeat has come for `releaseGapMs`, or, before its first repeat, for
- * `firstRepeatMs` (a terminal waits 250–500 ms before repeating). Pure, with
- * the caller's clock, as `KeyDecoder` is.
+ * up, only the press again as it auto-repeats, so a key is let go once its
+ * repeats stop. Input can arrive late and in bursts (over SSH, reads 150–250
+ * ms apart are usual), so the silence that counts scales with `repeatGapMs`,
+ * the gap seen between reads carrying repeats: a key that has repeated is let
+ * go `max(releaseGapMs, 2 * repeatGapMs)` after its last repeat, and one that
+ * has not `firstRepeatMs + repeatGapMs` after its press. The system waits
+ * before its first repeat — 660 ms under X11 by default, 500 under Windows,
+ * shorter under macOS — and a longer setting needs `firstRepeatMs` raised. Pure,
+ * with the caller's clock, as `KeyDecoder` is.
  */
 export class KeyState {
   /** How long after its last repeat a key is let go, in milliseconds (100 by default). */
   releaseGapMs: f64
-  /** How long after its press a key that has not repeated is let go, in milliseconds (600 by default). */
+  /** How long the system waits before a held key's first repeat, at most, in milliseconds (700 by default, above X11's 660). */
   firstRepeatMs: f64
+  /** The gap between reads that carry a held key's repeats, in milliseconds: rises at once to a longer gap and eases toward shorter ones (150 to start). */
+  repeatGapMs: f64
   /** The keys down, each as `termKeyId` names it. */
   downKeys: i32[]
   /** When each key down last pressed or repeated. */
@@ -1373,7 +1385,8 @@ export class KeyState {
   constructor() {
     this.releasesAreSynthetic = true
     this.releaseGapMs = 100.0
-    this.firstRepeatMs = 600.0
+    this.firstRepeatMs = 700.0
+    this.repeatGapMs = 150.0
     this.quitOnCtrlC = true
     this.downKeys = []
     this.downSince = []
@@ -1437,7 +1450,9 @@ export class KeyState {
     }
     let k: i32 = 0
     while (k < toI32(this.downKeys.length)) {
-      const gap: f64 = this.downRepeated[k] ? this.releaseGapMs : this.firstRepeatMs
+      const gap: f64 = this.downRepeated[k]
+        ? termMaxF64(this.releaseGapMs, 2.0 * this.repeatGapMs)
+        : this.firstRepeatMs + this.repeatGapMs
       if (nowMs - this.downSince[k] >= gap && !termNamesKey(batch, this.downKeys[k])) {
         this.release(k, out)
       } else {
@@ -1464,6 +1479,11 @@ export class KeyState {
       this.downCodes.push(e.code)
       this.downMods.push(e.modifiers)
       return
+    }
+    const since: f64 = nowMs - this.downSince[at]
+    if (this.downRepeated[at] && since > 0.0) {
+      this.repeatGapMs =
+        since > this.repeatGapMs ? since : this.repeatGapMs + (since - this.repeatGapMs) / 8.0
     }
     this.downSince[at] = nowMs
     this.downRepeated[at] = true
@@ -1928,6 +1948,9 @@ const termLetterKind = (f: i32): i32 => {
 /** Whether key event `e` is Ctrl-C: byte 3, or kitty's `c` with Ctrl alone. */
 const termIsCtrlC = (e: TermEvent): boolean =>
   e.key === KEY_CTRL_C || (e.key === KEY_CHAR && e.code === 99 && e.modifiers === MOD_CTRL)
+
+/** The larger of `a` and `b`. */
+const termMaxF64 = (a: f64, b: f64): f64 => (a > b ? a : b)
 
 /** Whether a key event in `batch` is of key `id`, as `termKeyId` names it. */
 const termNamesKey = (batch: TermEvent[], id: i32): boolean => {
