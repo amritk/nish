@@ -2,8 +2,9 @@
 // two 64-byte keys are RFC 7914 §11's PBKDF2-HMAC-SHA256 vectors; the 20-byte
 // one is the first of them cut short, which RFC 8018 §5.2 step 4 makes a
 // prefix. The long password and the empty salt sit on no RFC vector and were
-// checked against Python's `hashlib.pbkdf2_hmac`. The null checks pin that
-// bad input answers an error and never panics.
+// checked against Python's `hashlib.pbkdf2_hmac`, the four-block key also
+// against OpenSSL. The null checks pin that bad input answers an error and
+// never panics.
 import { Suite } from "nish/testing";
 import { pbkdf2HmacSha256 } from "nish/crypto/hmac";
 import { Secret, expose, secret, wipe } from "nish:secret";
@@ -104,12 +105,19 @@ export const pbkdf2Checks = (): i32 => {
     derive("pw", "", 3, 32),
     "72508a5bfcf14df34dcfcfd2a123ace17fbca71efd70a2a72a82275d270fbf67"
   );
+  // 100 bytes is four blocks (the last cut to 4 bytes), so INT_32_BE(i)
+  // runs to 4. Checked against Python's `hashlib.pbkdf2_hmac` and OpenSSL's
+  // `openssl kdf ... PBKDF2`, which agree.
+  t.eqStr(
+    "dkLen=100 runs to block 4, c=2",
+    derive("passwd", "salt", 2, 100),
+    "2d412f896e76685e30df569f0a740634e31f031f749d607d9e44210bffb91a6ab670f500c78862001959f7d7b9f96afb3605700298acb14427e0239463c66f20bb7478be71d96f1b6e33189869c4347dfc250fde2b2a17437d19db2893c6d26457136493"
+  );
 
   t.eqStr("0 iterations answers null", derive("passwd", "salt", zero, full), "null");
   t.eqStr("-1 iterations answers null", derive("passwd", "salt", minus, full), "null");
   t.eqStr("dkLen=0 answers null", derive("passwd", "salt", one, zero), "null");
   t.eqStr("dkLen=-1 answers null", derive("passwd", "salt", one, minus), "null");
-
 
   // Each round's digests die in the call that made them, so a thousand
   // rounds keep no more than one does.

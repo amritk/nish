@@ -779,7 +779,10 @@ const pbkdf2HmacSha256Exposed = (password: u8[], request: Pbkdf2Request): u8[] |
  * and the working one are wiped before the key is answered; the digests on
  * the way are wiped in the call that made them. The time taken depends on
  * `iterations`, `dkLen` and the password's length past a block, all of which
- * RFC 8018 treats as public, and on nothing of the password's bytes.
+ * RFC 8018 treats as public, and on nothing of the password's bytes. The time
+ * is linear in `iterations` and nothing here bounds it, so a caller that takes
+ * the count from an untrusted peer (a SCRAM server's `i=`) must cap it first:
+ * 2^31 - 1 rounds is about 2^32 compressions.
  */
 export const pbkdf2HmacSha256 = (
   password: Secret<u8[]>,
