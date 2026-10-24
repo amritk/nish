@@ -2195,7 +2195,7 @@ export class PgPool {
         s.pop()
       } else if (event === PG_FAILED) {
         if (s.state === PG_SLOT_STARTING && this.queueCount > 0 && !this.anyReady()) {
-          s.push(this.queue[this.queueHead], 0)
+          s.push(this.queue[this.queueHead], toI32(0))
           this.queueHead = (this.queueHead + 1) % toI32(this.queue.length)
           this.queueCount -= 1
         }
