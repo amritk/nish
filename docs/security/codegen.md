@@ -82,6 +82,28 @@ panics instead, and no `nsw` the compiler writes is an assumption.
 - **What the IR changes.** `tests/nish-cmp.js` was run with the base
   compiler as reference and the declarations emptied, so that every byte
   this stage moves in the corpus is listed rather than admitted.
+- **Generated programs against the elision-off oracle and ASan** (#883, at
+  `3313da3`). `tests/differential/soundness.js --gen --asan` takes its
+  programs from `tests/differential/proofgen.js`, which builds each one out of
+  blocks around the accesses the prover reasons about, 26 kinds in eight
+  families (`derived`, `bounds`, `pushpop`, `slice`, `alias`, `closure`,
+  `arena`, `threads`), and makes about half of them end in a one-past variant
+  of their last block, an access that reaches index `length` and no further.
+  Each program is built twice at `clang -O2`, by default and with
+  `--no-elision` (every proof-backed elision off: the oracle), and both runs
+  must print and end the same. A program must also panic `index out of range`
+  exactly when it ends in a one-past block, which catches an elision that
+  removes the check both builds share, and its default build runs a third time
+  under AddressSanitizer (`tests/differential/asan.js`: `sanitize_address` on
+  every definition, the runtime built with `-fsanitize=address,undefined`),
+  where it must panic or finish cleanly as the first run did. A one-past read
+  that stays inside the array's block (`ASAN_BLIND`) is not counted as an ASan
+  verdict, and `threads:mapinto`'s panic belongs to the library
+  (`LIBRARY_CHECKED`). A failure is reduced by ddmin to a `min.ts` with the
+  one-past block kept whole. CI runs 600 programs from seed 20261024 on every
+  pull request (`nish-cmp`, both architectures), and
+  `.github/workflows/soundness-fuzz.yml` runs 20 000 from a random, printed
+  seed each week. The results are under "The generated-program pass" below.
 
 ## Findings
 
@@ -99,6 +121,29 @@ panics instead, and no `nsw` the compiler writes is an assumption.
 | CG-9 | Low | `runtime/runtime-wasm.c:61` | The wasm32 runtime's `nish_alloc_struct` rounds and adds without an overflow check, the same shape as CG-2 | **Open**, for the runtime stage. *Since fixed there as RT-7* (`docs/security/runtime.md`, `tests/link/rt_sec_wasm_arena`) |
 | CG-10 | Low | `src/emit-arrays.ts:1059` (`emitElementAssignment`) | `xs[0] += grow(xs)` computes the slot's address before evaluating the right side, so when `grow` pushes until `xs` moves, the store lands in the old block: 1 where JavaScript gives 6. `zs[2] += shrink(zs)` stores past the new length, inside the old capacity. Arena memory is not freed, so neither is a memory error | **Fixed** (#427). `emitElementAssignment` keeps JavaScript's order (array, index, check, load, right side) and, when the right side can resize the array (`rightSideMayResize`: a `push`, a `pop`, a call the fixpoint says resizes, or a `new` of a class), checks the index again against the length the right side left and takes the slot's address again before the store. *Since CG-11 the predicate is `mayResize`, which counts a `new` only when its constructor resizes.* A hoisted header and an inline field are left as they were: neither can move. Only programs whose right side can resize change, so no existing golden moved; the plain `xs[i] = e` already evaluates `e` before its check and address. `collectArrayFacts` lists the second check's panic wherever the first was proved away and the right side calls anything, so `willreturn` cannot survive it. Tests: `tests/cases/cg_sec_compound_element_order` (`+=`, `*=` and `|=` after a growing call print what Node prints, 61505; a shrinking call panics `index out of range: 2 >= 1` in a child process) |
 | CG-11 | Low | `src/emit-arrays.ts:544` (`callMayResize`); `src/attributes.ts:3205` (`bodyMayExtend`) (lines at `69e5fe8`) | A loop's array header is hoisted only when nothing in the loop can move it, and the question asked a call's callee but not a `new`'s constructor, though the checker records it for the `new` in `nodeCallees` too. A `while` over `xs` that runs `new P(xs)`, whose constructor pushes until `xs` moves, kept the `len` and `data` it loaded before the loop: 6 where JavaScript gives 706 (#435). `isCountedLoop` asked the same question without the constructor, so a `for...of` whose body runs such a `new` on every pass, and so never ends over a non-empty array, was `willreturn`. Arena memory is not freed, so the stale block is a wrong answer rather than a memory error | **Fixed** (#435). `callMayResize` and `bodyMayExtend` read the callee `nodeCallees` holds for a `new` as they do for a call, and so its constructor's fixpoint `resizesArray` fact; a class with no constructor stores constants only. CG-10's `rightSideMayResize` counted every `new` of a class as resizing, so it folds into the same predicate, `mayResize`, which narrows it to the constructors that resize. Two kinds of code change. A loop whose body runs a `new` whose constructor resizes now reloads its header on every pass, or loses `willreturn`. A compound element store whose right side runs a `new` whose constructor does not resize now checks its slot and takes its address once, where CG-10 did both a second time. Against `main`'s compiler, no golden and no corpus program but the new case moved. Tests: `tests/cases/cg_sec_hoist_new_resize` (the #435 loop reloads its header each pass and prints what Node prints, 706; a `for...of` over the same constructor prints 706; `new Q(xs)`, whose constructor only reads, keeps the hoist; `forOfGrows` is not `willreturn`; `xs[0] += new Q(xs).n` stores into the slot it read with no second check) |
+
+## The generated-program pass
+
+No miscompile and no unsound acceptance was found, so this pass adds no row
+to the table. On x86-64 at `3313da3`, with `--asan`:
+
+| Seed | Programs | Ending one-past | Agree | Differ / unexpected / ASan | Time (4 lanes) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 20261024 | 6 000 | 2 980 | 6 000 | 0 / 0 / 0 | 734 s |
+
+Each family was in 1 444 to 1 554 of seed 20261024's programs and ended
+346 to 398 of them one-past. The
+wiring was checked against a compiler that drops every bounds check unless
+`--no-elision` is passed: over six programs it reported the two that end
+one-past in an elided access (`derived:addlit!`, `derived:u16!`) as DIFFER,
+with an ASan `heap-buffer-overflow` as the witness, and reduced them to 21 of
+32 and 20 of 23 lines.
+
+What this does not cover: the shapes are proofgen's, so a rule the generator
+never exercises (an elision added after it, or a combination its blocks do
+not form) is not tested; `PROOF_MISSES` shapes prove nothing to remove; an
+`ASAN_BLIND` one-past read is caught only by the panic check, not by ASan; and
+the aarch64 row of CI is the only run on that target.
 
 ## Status after the runtime stage
 
