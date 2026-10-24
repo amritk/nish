@@ -58,9 +58,11 @@ PASS  and the next request prepares it again, not the one before it
 PASS  a notice is the request's in flight
 PASS  a connection that fails loses each request it took, oldest first
 PASS  the cause stays on its connection
-PASS  it answers PG_FAILED after
+PASS  it answers nothing after PG_FAILED
+PASS  about no request
 PASS  the next request finds no connection
 PASS  so the slot is wanted again
+PASS  wanted, it still answers nothing
 PASS  and rebuilt
 PASS  the request goes to it
 PASS  the waiting ticket
@@ -68,7 +70,27 @@ PASS  a connection that fails starting, none ready, takes the oldest request wit
 PASS  one is left
 PASS  a request being built when its connection fails is lost
 PASS  and need not be sent
+PASS  a full ring takes no third, and the queue holds it
+PASS  the rings wrap, and every request is answered once, in order
+PASS  and nothing is left waiting
+PASS  the first group leads with the prepare, the others only bind
+PASS  a unique violation in a group the prepare does not lead fails only that group
+PASS  the error is its own
+PASS  and the statement stays prepared
+PASS  two requests, one in flight a connection: slot 0 wanted
+PASS  and slot 1
+PASS  slot 1 fails starting while slot 0 is ready: it takes no request
+PASS  both still wait
+PASS  the first goes to slot 0
+PASS  the second finds slot 0 full
+PASS  so slot 1 is wanted again
+PASS  and rebuilt
+PASS  the second goes to it
+PASS  its ticket
+PASS  two slots fail starting, none ready: the first takes the oldest
+PASS  the second the next
+PASS  one is left
 PASS  dispose wipes the pool's password
 PASS  and its connections'
 PASS  and may be called twice
-postgres pool: 73 passed, 0 failed, 0 skipped
+postgres pool: 95 passed, 0 failed, 0 skipped

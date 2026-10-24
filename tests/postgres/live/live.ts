@@ -30,6 +30,7 @@ import {
   PG_GROUP_DONE,
   PG_LOST,
   PG_NEED_MORE,
+  PG_POOL_NONE,
   PG_ROW,
   PgArrayWalker,
   PgConfig,
@@ -145,7 +146,7 @@ class Driver {
           }
         } else if ((this.ready[2 * k + 1] & READABLE) !== 0) {
           const got: i32 = netRead(socket.fd, conn.inputBuffer(), conn.inputEnd(), conn.inputRoom())
-          if (got === 0) {
+          if (got === 0 || (got < 0 && got !== AGAIN)) {
             conn.closed()
           } else if (got > 0) {
             conn.received(got)
@@ -318,15 +319,59 @@ const login = (port: i32, extra: string, label: string): i32 => {
 
 const auth = (port: i32): i32 => login(port, "", "right password") + login(port, "!", "wrong password")
 
-/** `groups`: 100 groups through 4 connections; every 25th from the 7th inserts a duplicate key first. */
+/** The first column of the first row `sql` answers, on a connection of its own; "" for none. */
+const one = (port: i32, sql: string): string => {
+  const pool = makePool(toI32(1), toI32(1), "")
+  const d = new Driver(pool, port)
+  pool.request()
+  let text: string = ""
+  let over: boolean = false
+  while (!over) {
+    const slot: i32 = pool.dispatch()
+    if (slot >= 0) {
+      const conn = pool.connection(slot)
+      adhoc(conn, sql, noTypes())
+      conn.bindEnd()
+      pool.send()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log("timed out")
+      over = true
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      if (event === PG_ROW && text === "") {
+        text = conn.columnText(toI32(0))
+      } else if (event === PG_ERROR) {
+        console.log(failed(pool.ticket, conn))
+      } else if (event === PG_GROUP_DONE || event === PG_FAILED) {
+        over = true
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  return text
+}
+
+/**
+ * `groups`: 100 groups through 4 connections, once all 4 are ready. Each
+ * inserts its ticket into `live_rows` and doubles it; every 25th from the 7th
+ * inserts a duplicate key into `live_uniq` first, so its own insert and probe
+ * are skipped and the groups beside it on the connection commit.
+ */
 const groups = (port: i32): i32 => {
   const total: i32 = 100
-  const pool = makePool(toI32(4), toI32(128), "")
+  const size: i32 = 4
+  const pool = makePool(size, toI32(128), "")
   pool.register("probe", "select $1::int4 * 2", [toI32(23)])
   pool.register("dup", "insert into live_uniq values (1)", noTypes())
+  pool.register("put", "insert into live_rows values ($1::int4)", [toI32(23)])
   const d = new Driver(pool, port)
   const rows: i32[] = new Array<i32>(total)
   const dones: i32[] = new Array<i32>(total)
+  const carried: i32[] = new Array<i32>(size)
   const codes: string[] = []
   for (let t: i32 = 0; t < total; t++) {
     codes.push("")
@@ -335,14 +380,29 @@ const groups = (port: i32): i32 => {
   let done: i32 = 0
   let peak: i32 = 0
   let bad: i32 = 0
+  // With no connection ready, each dispatch wants one more: all four start at once.
+  for (let s: i32 = 0; s < size; s++) {
+    pool.dispatch()
+  }
   while (done < total && bad === 0) {
-    let slot: i32 = pool.dispatch()
+    // Hold the requests until every connection is ready, so each carries some.
+    let warm: boolean = d.made === size
+    for (let s: i32 = 0; s < size && warm; s++) {
+      warm = pool.connection(s).txStatus !== 0
+    }
+    let slot: i32 = warm ? pool.dispatch() : PG_POOL_NONE
     while (slot >= 0) {
       const conn = pool.connection(slot)
+      if (slot < toI32(carried.length)) {
+        carried[slot] += 1
+      }
       if (pool.ticket % 25 === 7) {
         conn.bindStart("dup")
         conn.bindEnd()
       }
+      conn.bindStart("put")
+      conn.paramInt(toI64(pool.ticket))
+      conn.bindEnd()
       conn.bindStart("probe")
       conn.paramInt(toI64(pool.ticket))
       conn.bindEnd()
@@ -386,9 +446,16 @@ const groups = (port: i32): i32 => {
       answered += rows[t] === 1 ? 1 : 0
     }
   }
+  let used: i32 = 0
+  for (let s: i32 = 0; s < size && s < toI32(carried.length); s++) {
+    used += carried[s] > 0 ? 1 : 0
+  }
   console.log(`${once} of ${total} groups done exactly once`)
   console.log(`${answered} groups answered their probe`)
-  console.log(`${d.made} connections, at most ${peak} groups in flight on one`)
+  console.log(`${d.made} connections, ${used} of them carried groups, at most ${peak} in flight on one`)
+  console.log(
+    `committed: ${one(port, "select count(*) || ' rows, ' || count(*) filter (where k % 25 = 7) || ' from the failed groups, ' || coalesce(sum(k), 0) || ' summed' from live_rows")}`,
+  )
   return bad
 }
 
@@ -401,6 +468,8 @@ const terminate = (port: i32): i32 => {
   // 0: ask the victim its pid; 1: end it from the killer; 2: wait for the victim to fail; 3: ask again; 4: done.
   let phase: i32 = 0
   let pid: string = ""
+  // The victim's failure can be read before the killer's answer: it is printed once both are in.
+  let lost: string = ""
   victim.request()
   let rounds: i32 = 0
   while (phase < 4) {
@@ -444,11 +513,7 @@ const terminate = (port: i32): i32 => {
       } else if (event === PG_LOST) {
         console.log(`victim: request ${victim.ticket} lost`)
       } else if (event === PG_FAILED) {
-        console.log(`victim: connection failed: ${conn.failure} ${errorOf(conn)}`)
-        if (phase === 2) {
-          phase = 3
-          victim.request()
-        }
+        lost = `victim: connection failed: ${conn.failure} ${errorOf(conn)}`
       }
       event = v.next()
     }
@@ -463,6 +528,11 @@ const terminate = (port: i32): i32 => {
         console.log(failed(killer.ticket, conn))
       }
       event = k.next()
+    }
+    if (phase === 2 && lost !== "") {
+      console.log(lost)
+      phase = 3
+      victim.request()
     }
   }
   v.close()

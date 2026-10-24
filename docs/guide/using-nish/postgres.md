@@ -257,37 +257,57 @@ while (slot >= 0) {
   // tcpConnect, pollAdd, and remember which socket is slot's
   slot = pool.wanted();
 }
-// ... read and write each slot's socket through pool.connection(slot), as above ...
-let event: i32 = pool.next(slot); // PG_ROW, PG_GROUP_DONE, ...: pool.ticket says whose
+// For each slot s whose socket was readable:
+const conn = pool.connection(s);
+const got: i32 = netRead(fd, conn.inputBuffer(), conn.inputEnd(), conn.inputRoom());
+if (got > 0) conn.received(got);
+else if (got !== -11) conn.closed(); // 0, or a socket error such as ECONNRESET
+let event: i32 = pool.next(s); // PG_ROW, PG_GROUP_DONE, ...: pool.ticket says whose
+while (event !== PG_NEED_MORE) {
+  // ... PG_FAILED: pollRemove and netClose the socket ...
+  event = pool.next(s);
+}
 ```
 
 - **Requests.** `request()` queues a request and answers its ticket.
   `dispatch()` hands the oldest one to the ready connection with the fewest
   groups in flight, never more than `PgConfig.maxInFlight` on one; build its
-  group on `connection(slot)` and end it with `send()`. A connection is made
-  only when the waiting requests outgrow the ones there are, one for every
-  `maxInFlight` of them, up to `size`.
+  group on `connection(slot)` and end it with `send()`. Until it is sent,
+  `dispatch()` answers `PG_POOL_NONE`: a request handed out and never sent
+  holds the pool. `send()` answers `false` when nothing was handed out, when
+  a bind is still open (finish it and call again), and when no message of the
+  group was written, which drops the request. A connection is made only when
+  the waiting requests outgrow the ones there are, one for every
+  `maxInFlight` of them, up to `size`; each `dispatch()` that finds no room
+  wants at most one more.
 - **Statements.** A statement given to `register` is prepared on each
   connection in the same write as its first request, so a request binds it by
   name at once. Register them all before the first `connect`; after it,
-  `register` answers `false`.
+  `register` answers `false`, as it does for a name or SQL holding a NUL and
+  past 256 statements.
 - **Events.** `next(slot)` answers what `PgConnection.next()` does, with
   `ticket` naming the request. An error fails only its own request's group:
   the other requests on the connection are answered.
 - **Failures.** When a connection fails, `next(slot)` answers `PG_LOST` for
   each request it took with it, oldest first, then `PG_FAILED`: close the
-  socket. The slot is connected again when a request next needs it. A
-  connection that fails before it is ready, while no other is, takes the
-  oldest waiting request with it, so a server that cannot be reached empties
-  the queue rather than holds it. When a socket's connect fails, or the
-  socket ends, call `connection(slot).closed()`.
+  socket. After it, `next(slot)` answers `PG_NEED_MORE` until the slot is
+  connected again, when a request next needs it. A connection that fails
+  before it is ready, while no other is, takes the oldest waiting request
+  with it, so a server that cannot be reached empties the queue rather than
+  holds it. When a socket's connect fails, its read answers 0 or an error
+  other than -11, or its write fails, call `connection(slot).closed()`.
+- **Sockets.** The sockets are the program's: it closes one on `PG_FAILED`,
+  and at the end. `dispose()` neither sends `Terminate` nor closes a socket;
+  call `terminate()` on each connection, flush it and close its socket
+  first.
 - **The password.** `dispose()` wipes the pool's copy and every
   connection's; `passwordWiped()` says whether it is gone.
 
-The constructor panics on a `size` outside 1 to 1024, a `queueSize` outside 1
-to 2^20, or a `maxInFlight` over 1024, as well as on what `PgConnection`
-panics on. `connect` panics on a slot that wants no connection, or after
-`dispose()`; `connection` on a slot that never had one.
+The constructor panics on a `size` outside 1 to 1024, on a `queueSize`
+outside 1 to 2^20, and on a `maxInFlight` over 1024, as well as on what
+`PgConnection` panics on. `connect` panics on a slot that wants no connection,
+and after `dispose()`; `connection` and `next` on a slot outside 0 to
+`size - 1` or one that never had a connection.
 
 [`tests/postgres/carrier.ts`](../../../tests/postgres/carrier.ts) is a whole
 program: one `pollWait` loop holding the pool's sockets beside an HTTP server,

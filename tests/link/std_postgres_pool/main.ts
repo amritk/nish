@@ -345,10 +345,12 @@ const failures = (t: Suite): void => {
     `${PG_LOST}@0,${PG_LOST}@1,${PG_FAILED}@-1`,
   );
   t.eqI32("the cause stays on its connection", p.connection(s).failure, PG_ERR_CLOSED);
-  t.eqI32("it answers PG_FAILED after", p.next(s), PG_FAILED);
+  t.eqI32("it answers nothing after PG_FAILED", p.next(s), PG_NEED_MORE);
+  t.eqI32("about no request", p.ticket, -1);
   const ticket: i32 = p.request();
   t.eqI32("the next request finds no connection", p.dispatch(), PG_POOL_NONE);
   t.eqI32("so the slot is wanted again", p.wanted(), s);
+  t.eqI32("wanted, it still answers nothing", p.next(s), PG_NEED_MORE);
   up(p);
   t.eqI32("and rebuilt", p.connection(s).failure, PG_ERR_NONE);
   t.eqI32("the request goes to it", run(p, ""), s);
@@ -381,6 +383,106 @@ const failures = (t: Suite): void => {
   t.ok("and need not be sent", !building.send());
 };
 
+/** Two requests per round on a ring of two, through a queue of three: both rings wrap four times over. */
+const wraps = (t: Suite): void => {
+  const c = config();
+  c.maxInFlight = 2;
+  const p = pool(c, 1, 3);
+  p.request();
+  p.dispatch();
+  const s: i32 = up(p);
+  run(p, "");
+  drain(p, s);
+  feed(p, s, cat(DONE(), IDLE()));
+  const done: string[] = [];
+  let order: boolean = true;
+  for (let round: i32 = 0; round < 4; round++) {
+    const first: i32 = p.request();
+    p.request();
+    p.request();
+    const a: i32 = run(p, "");
+    const b: i32 = run(p, "");
+    order = order && a === s && b === s && run(p, "") === PG_POOL_NONE && p.waiting() === 1;
+    drain(p, s);
+    done.push(feed(p, s, cat(DONE(), IDLE())));
+    order = order && run(p, "") === s && p.ticket === first + 2;
+    drain(p, s);
+    done.push(feed(p, s, cat(cat(DONE(), IDLE()), cat(DONE(), IDLE()))));
+  }
+  t.ok("a full ring takes no third, and the queue holds it", order);
+  const want: string[] = [];
+  for (let k: i32 = 1; k < 12; k += 3) {
+    want.push(`${PG_COMPLETE}@${k},${PG_GROUP_DONE}@${k}`);
+    want.push(`${PG_COMPLETE}@${k + 1},${PG_GROUP_DONE}@${k + 1},${PG_COMPLETE}@${k + 2},${PG_GROUP_DONE}@${k + 2}`);
+  }
+  t.eqStr("the rings wrap, and every request is answered once, in order", done.join(";"), want.join(";"));
+  t.eqI32("and nothing is left waiting", p.waiting(), 0);
+};
+
+/** A 23505 in the second of three groups on one connection, the first led by the pool's prepare. */
+const isolates = (t: Suite): void => {
+  const p = pool(config(), 1, 8);
+  p.register("ins", "insert into t values (1)", none());
+  p.request();
+  p.dispatch();
+  const s: i32 = up(p);
+  run(p, "ins");
+  p.request();
+  run(p, "ins");
+  p.request();
+  run(p, "ins");
+  t.eqStr("the first group leads with the prepare, the others only bind", drain(p, s), "PDBESBESBES");
+  t.eqStr(
+    "a unique violation in a group the prepare does not lead fails only that group",
+    feed(p, s, cat(cat(cat(cat(DESCRIBED(), DONE()), IDLE()), cat(ERROR("23505"), IDLE())), cat(DONE(), IDLE()))),
+    `${PG_COMPLETE}@0,${PG_GROUP_DONE}@0,${PG_ERROR}@1,${PG_GROUP_DONE}@1,${PG_COMPLETE}@2,${PG_GROUP_DONE}@2`,
+  );
+  const err = p.connection(s).lastError;
+  t.eqStr("the error is its own", err === null ? "none" : err.code, "23505");
+  p.request();
+  run(p, "ins");
+  t.eqStr("and the statement stays prepared", drain(p, s), "BES");
+};
+
+/** Two slots, one request in flight each: a failure while another slot is ready, and failures while none is. */
+const slots = (t: Suite): void => {
+  const c = config();
+  c.maxInFlight = 1;
+  const p = pool(c, 2, 8);
+  p.request();
+  p.request();
+  p.dispatch();
+  p.dispatch();
+  t.eqI32("two requests, one in flight a connection: slot 0 wanted", up(p), 0);
+  t.eqI32("and slot 1", p.wanted(), 1);
+  p.connect(1, z("nish-postgres-test"));
+  drain(p, 1);
+  p.connection(1).closed();
+  t.eqStr("slot 1 fails starting while slot 0 is ready: it takes no request", feed(p, 1, []), `${PG_FAILED}@-1`);
+  t.eqI32("both still wait", p.waiting(), 2);
+  t.eqI32("the first goes to slot 0", run(p, ""), 0);
+  t.eqI32("the second finds slot 0 full", p.dispatch(), PG_POOL_NONE);
+  t.eqI32("so slot 1 is wanted again", p.wanted(), 1);
+  t.eqI32("and rebuilt", up(p), 1);
+  t.eqI32("the second goes to it", run(p, ""), 1);
+  t.eqI32("its ticket", p.ticket, 1);
+
+  const down = pool(c, 2, 8);
+  down.request();
+  down.request();
+  down.request();
+  down.dispatch();
+  down.dispatch();
+  down.dispatch();
+  down.connect(down.wanted(), z("nish-postgres-test"));
+  down.connect(down.wanted(), z("nish-postgres-test"));
+  down.connection(0).closed();
+  down.connection(1).closed();
+  t.eqStr("two slots fail starting, none ready: the first takes the oldest", feed(down, 0, []), `${PG_LOST}@0,${PG_FAILED}@-1`);
+  t.eqStr("the second the next", feed(down, 1, []), `${PG_LOST}@1,${PG_FAILED}@-1`);
+  t.eqI32("one is left", down.waiting(), 1);
+};
+
 const disposes = (t: Suite): void => {
   const p = pool(config(), 2, 8);
   p.request();
@@ -404,6 +506,9 @@ export const main = (): number => {
   connects(t);
   statements(t);
   failures(t);
+  wraps(t);
+  isolates(t);
+  slots(t);
   disposes(t);
   return t.done();
 };

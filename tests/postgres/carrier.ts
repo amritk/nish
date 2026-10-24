@@ -4,8 +4,11 @@
 //
 //   carrier <pg port> <user> <password> <database> <http port> <seconds>
 //
-// `tests/postgres/live/run.mjs` runs it against a live server and requests
-// `/` while the query sleeps; the answer says whether the query was in flight.
+// It prints `listening` once its HTTP port is open and `query sent` once the
+// query is handed to a connection. `tests/postgres/live/run.mjs` runs it
+// against a live server and requests `/` after the second; the answer says
+// whether the query was in flight. A socket error on a pool connection, not
+// only an orderly close, ends the connection: run.mjs's `reset` check.
 import { connectResult, netAddress, netClose, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpConnect, tcpListen } from "nish:net"
 import { secret, wipe } from "nish:secret"
 import {
@@ -79,6 +82,7 @@ export const main = (): i32 => {
     console.log(`listen failed: ${listener}`)
     return 1
   }
+  console.log("listening")
   const server = new Http1Server(new Http1Config(), listener, toI32(16))
   const loop: i32 = pollCreate()
   const ready: i32[] = new Array<i32>(64)
@@ -133,6 +137,7 @@ export const main = (): i32 => {
       conn.paramText(process.argv[6])
       conn.bindEnd()
       pool.send()
+      console.log("query sent")
       slot = pool.dispatch()
     }
     slot = pool.wanted()
@@ -220,7 +225,10 @@ export const main = (): i32 => {
           }
         } else if ((ready[2 * k + 1] & 5) !== 0) {
           const got: i32 = netRead(socket.fd, conn.inputBuffer(), conn.inputEnd(), conn.inputRoom())
-          if (got === 0) {
+          if (got < 0 && got !== AGAIN) {
+            console.log(`slot ${s} read failed: ${got}`)
+            conn.closed()
+          } else if (got === 0) {
             conn.closed()
           } else if (got > 0) {
             conn.received(got)
