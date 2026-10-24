@@ -1716,7 +1716,19 @@ const buildIntoCache = (
     outputs.push(file)
   }
   const built = `${work}/${name}`
-  let status = linkProgram(outputs, pkg, built, profile, cpu, debugInfo, threads, sqlite, sqliteLines, json, true)
+  let status = linkProgram(
+    outputs,
+    pkg,
+    built,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    sqlite,
+    sqliteLines,
+    json,
+    true
+  )
   if (status === 0) {
     writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--", built, `${cacheEntry}/${name}`]
