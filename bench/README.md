@@ -476,6 +476,16 @@ from one host to the next is pinned instead:
   (0.0008%).
   The program's own code is the same on every host already: `--profile speed`
   does not pass `-march`.
+- **The hash key.** A string-keyed `Map` or `Set` seeds its SipHash key from
+  `getentropy` before `main`, and each key lays the same strings out
+  differently. Unpinned, map-presize counted from 70,038,447 to 70,286,417
+  (+0.35%) between two runs of one binary, and five counts of map-wordcount,
+  map-presize and map-vs-stringmap spread by 168,476, 121,100 and 669,844.
+  Each counted run preloads `bench/fixed-key.c`, a `getentropy` that returns
+  fixed bytes, as `./fixed-key.so` from the program's directory. All
+  twenty-two then count with a spread of 0. Loading it costs about 13
+  thousand instructions a run. Only this harness builds or names it: a
+  shipped binary still seeds from the system.
 
 **Measured determinism, at `4fed2b7`.** Three counts of each program in one run,
 and a second run of the whole set, agree to the instruction for thirteen of the
