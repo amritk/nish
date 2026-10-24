@@ -82,7 +82,7 @@ is counted as fixed or open in the index.
 | BCRYPT-3 | Low | `bcryptSetKey`, `bcryptParse` | `$2x$` hashes, made by the sign-extension bug, cannot be verified. | **Accepted.** Verifying them means running the bug; the systems that made them were told to rehash in 2011. `$2a$` keeps the countermeasure, so a `$2a$` hash made with the bug verifies false rather than verifying the wrong password. |
 | BCRYPT-4 | Low | `bcryptDecodeSalt` | A hash whose last salt character has the dropped bits set verifies false for its own password. | **Accepted.** It is `crypt_r`'s answer: it rebuilds the string with the bits cleared and compares the whole of it. Accepting it would make a hash string that verifies here and not there. |
 | BCRYPT-5 | Low if it failed | `bcryptVerify`, `bcryptParse` | A hash string of any length or bytes must not panic or read past itself. | **Holds.** The length is checked to be 60 first; every character after that is read at an index below 60 and checked against the alphabet, each refusal an `Err`. |
-| BCRYPT-6 | Low | `bcryptEncrypt` | Each Blowfish round loads four S-box words at indexes taken from the secret state, so the cache lines touched follow the password. | **Accepted.** It is the algorithm: every bcrypt does it, and the expensive key setup that is bcrypt's point is made of these loads. A local attacker sharing a cache with the hashing core could in principle learn about the state; a remote one times a cost-10 hash of ~50 ms, against which the loads' variance is noise. The key schedule (`bcryptSetKey`) does not branch on a password byte, and the verify's compare is constant-time. |
+| BCRYPT-6 | Low | `bcryptEncrypt` | Each Blowfish round loads four S-box words at indexes taken from the secret state, so the cache lines touched follow the password. | **Accepted.** It is the algorithm: every bcrypt does it, and the expensive key setup that is bcrypt's point is made of these loads. A local attacker sharing a cache with the hashing core could in principle learn about the state; a remote one times a cost-10 hash of ~50 ms, against which the loads' variance is noise. The key schedule (`bcryptSetKey`) does not branch on a password byte, the base64 that encodes the digest (`bcryptCharOf`, `bcryptSextetOf`) is branchless, since the digest is the stored hash when the password is right, and the verify's compare is constant-time. |
 | BCRYPT-7 | Low | `bcryptExposed` | Values the generated code holds in registers, and any it spills to the stack, are not wiped; nor is the caller's own copy of the password before it became a `Secret`. | **Accepted.** No store from the language reaches a register or a spill slot (as AEAD-4 for the AES kernels). Every array the hash allocates is wiped; the `Secret` the caller passes is the caller's to wipe, and the checker makes it do so. |
 
 ## Properties verified
@@ -116,7 +116,8 @@ first NUL", "and verifies as ab".
 **8-bit bytes and the sign-extension bug** (BCRYPT-3): "$2y$ \xff\xff\xa3",
 "$2b$ \xff\xff\xa3 is $2y$'s digest", "$2a$ \xff\xff\xa3 takes the
 countermeasure", "and is not the $2y$ digest under $2a$", "$2a$ \xa3 (one
-8-bit byte: no countermeasure needed)", "$2a$ \xff\xa334\xff\xff\xff\xa3345",
+8-bit byte: no countermeasure needed)", "$2y$ \xa3", "$2b$ \xa3",
+"$2a$ \xff\xa3345", "$2y$ \xff\xa3345", "$2a$ \xff\xa334\xff\xff\xff\xa3345",
 "$2y$ \xff\xa334\xff\xff\xff\xa3345", "$2a$ \xa3ab", "$2y$ \xa3ab", "hash
 \xa3", "hash \xff\xa334\xff\xff\xff\xa3345", "$2x$ \xa3 is refused", "$2x$
 \xd1\x91 is refused".
@@ -144,9 +145,9 @@ must be handled, not discarded"`).
 
 **The wipes survive `-O2`**: `crypto: the wipes survive opt -O2 (bcrypt's
 Blowfish state, expanded key, key stream, block and digest in bcryptExposed)`
-(`tests/wipes/crypto.js`) counts six volatile wipes reached from
+(`tests/wipes/crypto.js`) counts five volatile wipes reached from
 `bcryptExposed`, `bcryptHash` and `bcryptVerify` after `opt -O2`. Turning the
-state's `wipe` into `fill(0)` drops each count to five.
+state's `wipe` into `fill(0)` drops each count to four.
 
 **wasm32**: the module has no I/O and no C; `crypto_bcrypt` builds and runs
 under WASI with the rest of `std/crypto` (`node tests/run.js wasi`).

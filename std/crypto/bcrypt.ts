@@ -35,8 +35,8 @@
  * `Ok(false)`, and so is one whose last salt character has bits set the
  * reference drops, since the hash the reference makes from it differs.
  *
- * **Pure.** No I/O and no C, so a `std/threads` worker can run it and it
- * builds for wasm32. A cost-12 hash takes a few hundred milliseconds of one
+ * **Pure.** No I/O and no C, so it builds for wasm32. A `std/threads` task
+ * cannot call it yet, because it wipes (docs/security/crypto-bcrypt.md). A cost-12 hash takes a few hundred milliseconds of one
  * core; a server runs it off its event loop
  * (docs/guide/using-nish/password-hashing.md).
  *
@@ -131,47 +131,52 @@ interface BcryptParsed {
   prefix: u8[]
 }
 
-/** The bcrypt alphabet's character for a sextet, `./A-Za-z0-9` (public data, so a branch is fine). */
-const bcryptCharOf = (v: i32): u8 => {
-  if (v < 2) {
-    return toU8(46 + v)
-  }
-  if (v < 28) {
-    return toU8(63 + v)
-  }
-  if (v < 54) {
-    return toU8(69 + v)
-  }
-  return toU8(v - 6)
-}
+/**
+ * All ones when `lo <= c <= hi`, else zero, without a branch: the encoding
+ * reads the digest, which is the stored hash when the password is right. The
+ * sums are in `u32`, as in `base64urlRangeMask` (std/crypto/base64url.ts), so
+ * no overflow check branches on them.
+ */
+const bcryptRangeMask = (c: i32, lo: i32, hi: i32): i32 =>
+  toI32((toU32(lo) - 1 - toU32(c)) & (toU32(c) - toU32(hi) - 1)) >> 31
 
-/** The sextet of a bcrypt alphabet character, or -1 for any other byte. */
+/**
+ * The bcrypt alphabet's character for the sextet `v`, `./A-Za-z0-9`: `.` + `v`,
+ * plus the step to each range `v` has reached (2 lands on `A`, 28 on `a`, 54
+ * on `0`).
+ */
+const bcryptCharOf = (v: i32): u8 =>
+  toU8(
+    46 +
+      toU32(v) +
+      toU32(bcryptRangeMask(v, 2, 63) & 17) +
+      toU32(bcryptRangeMask(v, 28, 63) & 6) -
+      toU32(bcryptRangeMask(v, 54, 63) & 75)
+  )
+
+/** The sextet of a bcrypt alphabet character, or -1 for any other byte, without a branch. */
 const bcryptSextetOf = (c: i32): i32 => {
-  if (c === 46 || c === 47) {
-    return c - 46
-  }
-  if (c >= 65 && c <= 90) {
-    return c - 63
-  }
-  if (c >= 97 && c <= 122) {
-    return c - 69
-  }
-  if (c >= 48 && c <= 57) {
-    return c + 6
-  }
-  return -1
+  const punct: i32 = bcryptRangeMask(c, 46, 47)
+  const upper: i32 = bcryptRangeMask(c, 65, 90)
+  const lower: i32 = bcryptRangeMask(c, 97, 122)
+  const digit: i32 = bcryptRangeMask(c, 48, 57)
+  const value: i32 =
+    (punct & toI32(toU32(c) - 46)) |
+    (upper & toI32(toU32(c) - 63)) |
+    (lower & toI32(toU32(c) - 69)) |
+    (digit & toI32(toU32(c) + 6))
+  return value | ~(punct | upper | lower | digit)
 }
 
 /**
- * `BF_encode`: `n` bytes of `src` as bcrypt base64 into `dst` from `at`, three
- * bytes to four characters, and a one- or two-byte tail to two or three.
+ * `BF_encode`: the first `n` bytes of `src` as bcrypt base64, three bytes to
+ * four characters, and a one- or two-byte tail to two or three.
  */
-const bcryptEncode = (src: u8[]): u8[] => {
-  const n: i32 = toI32(src.length)
+const bcryptEncode = (src: u8[], n: i32): u8[] => {
   const out: u8[] = new Array<u8>((n * 4 + 2) / 3)
   let i: i32 = 0
   let o: i32 = 0
-  while (i + 2 < toI32(src.length) && o + 3 < toI32(out.length)) {
+  while (i + 2 < n && i + 2 < toI32(src.length) && o + 3 < toI32(out.length)) {
     const c1: i32 = toI32(src[i])
     const c2: i32 = toI32(src[i + 1])
     const c3: i32 = toI32(src[i + 2])
@@ -182,10 +187,10 @@ const bcryptEncode = (src: u8[]): u8[] => {
     i += 3
     o += 4
   }
-  if (i >= 0 && i < toI32(src.length) && o >= 0 && o + 1 < toI32(out.length)) {
+  if (i >= 0 && i < n && i < toI32(src.length) && o >= 0 && o + 1 < toI32(out.length)) {
     const c1: i32 = toI32(src[i])
     out[o] = bcryptCharOf(c1 >> 2)
-    if (i + 1 < toI32(src.length) && o + 2 < toI32(out.length)) {
+    if (i + 1 < n && i + 1 < toI32(src.length) && o + 2 < toI32(out.length)) {
       const c2: i32 = toI32(src[i + 1])
       out[o + 1] = bcryptCharOf(((c1 & 0x03) << 4) | (c2 >> 4))
       out[o + 2] = bcryptCharOf((c2 & 0x0f) << 2)
@@ -224,7 +229,7 @@ const bcryptDecodeSalt = (text: string, at: i32): u32[] | null => {
     }
     sx[k] = v
   }
-  const bytes: u8[] = new Array<u8>(16)
+  const bytes: u8[] = new Array<u8>(BCRYPT_SALT_SIZE)
   let s: i32 = 0
   let d: i32 = 0
   while (s + 3 < toI32(sx.length) && d + 2 < toI32(bytes.length)) {
@@ -262,7 +267,7 @@ const bcryptSettingOf = (salt: u8[], cost: i32): u8[] => {
   out[4] = toU8(cost / 10 + 48)
   out[5] = toU8((cost % 10) + 48)
   out[6] = 36
-  bcryptPut(out, 7, bcryptEncode(salt))
+  bcryptPut(out, 7, bcryptEncode(salt, BCRYPT_SALT_SIZE))
   return out
 }
 
@@ -314,7 +319,7 @@ const bcryptParse = (text: string): Result<BcryptParsed, string> => {
  * state `st`. The rounds are `bcryptBody`'s, which repeats them inline.
  */
 const bcryptEncrypt = (st: u32[], lr: u32[]): void => {
-  if (st.length < 1042) {
+  if (toI32(st.length) < BCRYPT_STATE_WORDS) {
     return
   }
   if (lr.length < 2) {
@@ -344,7 +349,7 @@ const bcryptEncrypt = (st: u32[], lr: u32[]): void => {
  * 2^(cost+1) calls of 521 blocks each.
  */
 const bcryptBody = (st: u32[]): void => {
-  if (st.length < 1042) {
+  if (toI32(st.length) < BCRYPT_STATE_WORDS) {
     return
   }
   let l: u32 = 0
@@ -382,7 +387,7 @@ const bcryptBody = (st: u32[]): void => {
  * follow the password's length and NULs, decide a load.
  */
 const bcryptSetKey = (st: u32[], expanded: u32[], password: u8[], safety: u32): void => {
-  if (st.length < 1042) {
+  if (toI32(st.length) < BCRYPT_STATE_WORDS) {
     return
   }
   if (expanded.length < 18) {
@@ -392,7 +397,7 @@ const bcryptSetKey = (st: u32[], expanded: u32[], password: u8[], safety: u32): 
   // cycle below reads a NUL at 72 at the latest without testing the length.
   // It is 128 long so that the position, masked to 7 bits, needs no check.
   const key: u8[] = new Array<u8>(128)
-  for (let i: i32 = 0; i < toI32(password.length) && i < 72; i++) {
+  for (let i: i32 = 0; i < toI32(password.length) && i < BCRYPT_MAX_PASSWORD; i++) {
     key[i] = password[i]
   }
   let p: i32 = 0
@@ -652,12 +657,7 @@ const bcryptExposed = (password: u8[], setting: BcryptSetting): u8[] => {
   bcryptMagic(st, lr, digest, 8, 0x65686f6c, 0x64657253)
   bcryptMagic(st, lr, digest, 16, 0x63727944, 0x6f756274)
   // 23 of the 24 bytes, as the reference encodes them.
-  const head: u8[] = new Array<u8>(23)
-  for (let k: i32 = 0; k < toI32(head.length) && k < toI32(digest.length); k++) {
-    head[k] = digest[k]
-  }
-  const out: u8[] = bcryptEncode(head)
-  wipe(head)
+  const out: u8[] = bcryptEncode(digest, 23)
   wipe(st)
   wipe(expanded)
   wipe(lr)
@@ -703,7 +703,7 @@ const bcryptRun = (password: Secret<u8[]>, prefix: u8[], setting: BcryptSetting)
  * hash. An `Err` for a salt of another length or a cost outside 4–31.
  */
 export const bcryptHash = (password: Secret<u8[]>, salt: u8[], cost: i32): Result<string, string> => {
-  if (salt.length !== 16) {
+  if (toI32(salt.length) !== BCRYPT_SALT_SIZE) {
     return Err("bcrypt: the salt is not 16 bytes")
   }
   if (cost < BCRYPT_MIN_COST || cost > BCRYPT_MAX_COST) {
@@ -729,12 +729,16 @@ export const bcryptVerify = (password: Secret<u8[]>, hash: string): Result<boole
     return Err(parsed.error)
   }
   const given: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
+  let alphabet: i32 = 0
   for (let i: i32 = 0; i < toI32(given.length) && i < toI32(hash.length); i++) {
     const c: i32 = toI32(hash.charCodeAt(i))
-    if (i >= BCRYPT_SETTING_LENGTH && bcryptSextetOf(c) < 0) {
-      return Err("bcrypt: the digest is not bcrypt base64")
+    if (i >= BCRYPT_SETTING_LENGTH) {
+      alphabet |= bcryptSextetOf(c)
     }
     given[i] = toU8(c)
+  }
+  if (alphabet < 0) {
+    return Err("bcrypt: the digest is not bcrypt base64")
   }
   const expected: u8[] = bcryptRun(password, parsed.value.prefix, parsed.value.setting)
   return Ok(timingSafeEqual(expected, given))

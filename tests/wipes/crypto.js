@@ -196,18 +196,18 @@ export const wipeChecks = [
     ],
   },
   // `nish/crypto/bcrypt` wipes the Blowfish state and what the key reaches
-  // (docs/security/crypto-bcrypt.md). The roots: `bcryptExposed` 6 (the
-  // state, the expanded key, the block, the digest and its 23-byte head, and
-  // the 128-byte key stream of `bcryptSetKey`, which `opt` inlines), and
-  // `bcryptHash` and `bcryptVerify` 6 each, through `bcryptRun`.
+  // (docs/security/crypto-bcrypt.md). The roots: `bcryptExposed` 5 (the
+  // state, the expanded key, the block, the digest, and the 128-byte key
+  // stream of `bcryptSetKey`, which `opt` inlines), and `bcryptHash` and
+  // `bcryptVerify` 5 each, through `bcryptRun`.
   {
     name: "crypto: the wipes survive opt -O2 (bcrypt's Blowfish state, expanded key, key stream, block and digest in bcryptExposed)",
     program: "tests/link/crypto_bcrypt/main.ts",
     modules: BCRYPT_MODULES,
     roots: [
-      ["nish.bcryptExposed", 6],
-      ["nish.bcryptHash", 6],
-      ["nish.bcryptVerify", 6],
+      ["nish.bcryptExposed", 5],
+      ["nish.bcryptHash", 5],
+      ["nish.bcryptVerify", 5],
     ],
   },
 ]
