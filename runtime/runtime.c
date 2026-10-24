@@ -44,13 +44,15 @@ int __main_argc_argv(int argc, char **argv) { return nish_c_main(argc, argv); }
 /* ---- AddressSanitizer build (`-DNISH_ASAN`, tests/differential/asan.js)
    A bump arena hides every overflow from ASan: one 64 KB malloc holds many
    blocks, so a read past one block lands in the next and nothing is poisoned.
-   Under `NISH_ASAN` each arena block is a malloc of exactly the request, so a
-   read one past it hits ASan's redzone; the bytes the 8-byte rounding adds,
-   an array's spare capacity and an array's block left behind by growth are
-   poisoned by hand. Off, the macro is empty and the file compiles to the same
-   tokens it always did. What it cannot see: a `pop` leaves the popped element
-   addressable below `cap` (the pop is inline IR), and a block compiled code
-   bumps itself keeps up to 7 bytes of rounding unpoisoned. */
+   Under `NISH_ASAN` each arena block is a malloc of its own (`nish_asan_alloc`,
+   which asan.js also points compiled code's inline bump at), so a read one past
+   it hits ASan's redzone; the bytes the 8-byte rounding adds, an array's spare
+   capacity and an array's block left behind by growth are poisoned by hand.
+   Off, the macro is empty and the file compiles to the same object code it
+   always did. What it cannot see: a `pop` leaves the popped element
+   addressable below `cap` (the pop is inline IR), and a string's NUL is one
+   addressable byte past its `length`. `nish_arena_used` reads differently
+   under ASan, since every block is a chunk of its own. */
 #ifdef NISH_ASAN
 #include <sanitizer/asan_interface.h>
 #define NISH_POISON(p, n) __asan_poison_memory_region((p), (n))
@@ -188,8 +190,22 @@ void *nish_arena_grow(uint64_t size) {
   return nish_arena.buf;
 }
 
+#ifdef NISH_ASAN
+/* An instrumented program's every arena block: an exact chunk, so the inline
+   bump never fits again, with the bytes the rounding adds poisoned. */
+void *nish_asan_alloc(uint64_t size) {
+  uint64_t rounded = (size + 7) & ~(uint64_t)7;
+  char *p = nish_arena_grow(rounded);
+  NISH_POISON(p + size, rounded - size);
+  return p;
+}
+#endif
+
 /* Bump allocation, 8-byte rounded/aligned, uninitialised; the compiler inlines it. */
 void *nish_alloc_struct(uint64_t size) {
+#ifdef NISH_ASAN
+  return nish_asan_alloc(size);
+#endif
   size = (size + 7) & ~(uint64_t)7;
   if (nish_arena.off + size <= nish_arena.cap) {
     void *p = nish_arena.buf + nish_arena.off;
@@ -198,15 +214,26 @@ void *nish_alloc_struct(uint64_t size) {
   }
   return nish_arena_grow(size);
 }
-#ifdef NISH_ASAN
-/* The bytes `nish_alloc_struct` rounds a `size`-byte request up by. */
-static uint64_t nish_slack(uint64_t size) { return ((size + 7) & ~(uint64_t)7) - size; }
-#endif
 
+#ifdef NISH_ASAN
+/* The blocks `nish_array_grow` allocated with more room than it reports: `cap`
+   stays `len + 1`, since the push writes `data[len]` inline and spare capacity
+   would be addressable, but growing one slot at a time copies the whole array
+   on every push. So a block is allocated twice as large, its tail poisoned,
+   and the next grow of the same array unpoisons one more slot in place. A few
+   entries per thread, overwritten round robin; a miss only costs a copy. */
+#define NISH_GROW_SLOTS 16
+static NISH_TLS struct { const void *owner; char *data; uint64_t bytes; } nish_grown[NISH_GROW_SLOTS];
+static NISH_TLS unsigned nish_grown_next;
+#endif
 #ifdef NISH_ASAN
 void nish_free_arena(void);
 #endif
 static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
+#ifdef NISH_ASAN
+  /* A freed block's address comes back from malloc: forget every grown one. */
+  memset(nish_grown, 0, sizeof nish_grown);
+#endif
   while (c != end) { nish_chunk *n = c->next; free(c); c = n; }
 }
 
@@ -291,7 +318,6 @@ nish_str *nish_str_new(const char *bytes, uint64_t len) {
   s->len = len;
   if (len) memcpy(s->data, bytes, len);
   s->data[len] = 0;
-  NISH_POISON(s->data + len + 1, nish_slack(8 + len + 1));
   return s;
 }
 
@@ -308,7 +334,6 @@ nish_str *nish_str_concat(const nish_str *a, const nish_str *b) {
   memcpy(s->data, a->data, a->len);
   memcpy(s->data + a->len, b->data, b->len);
   s->data[len] = 0;
-  NISH_POISON(s->data + len + 1, nish_slack(8 + len + 1));
   return s;
 }
 
@@ -1260,7 +1285,6 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
   if (len > NISH_ARRAY_MAX) nish_oom();
   nish_array *a = nish_alloc_struct(sizeof *a);
   *a = (nish_array){ len, len, nish_alloc_struct(len * elem_size) };
-  NISH_POISON(a->data + len * elem_size, nish_slack(len * elem_size));
   return a;
 }
 
@@ -1327,9 +1351,18 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
  * the call costs nothing on a path that runs once per doubling. */
 __attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size) {
 #ifdef NISH_ASAN
-  /* One more slot, not double: the push writes `data[len]` inline, so spare
-     capacity would be addressable to ASan or, poisoned, a false report. */
+  /* One more slot, not double (see `nish_grown`): in place when this array's
+     block was allocated with room to spare. */
   uint64_t cap = a->len + 1;
+  for (unsigned i = 0; i < NISH_GROW_SLOTS; i++) {
+    if (nish_grown[i].owner == a && nish_grown[i].data == a->data && cap * elem_size <= nish_grown[i].bytes) {
+      __asan_unpoison_memory_region(a->data + a->len * elem_size, elem_size);
+      a->cap = cap;
+      return;
+    }
+  }
+  uint64_t room = cap < 2 ? 4 : cap * 2;
+  if (room > NISH_ARRAY_MAX) room = NISH_ARRAY_MAX;
 #else
   uint64_t cap = a->cap ? a->cap * 2 : 4;
 #endif
@@ -1337,14 +1370,21 @@ __attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size
     if (a->len >= NISH_ARRAY_MAX) nish_oom();
     cap = NISH_ARRAY_MAX;
   }
+#ifdef NISH_ASAN
+  if (room < cap) room = cap;
+  char *data = nish_alloc_struct(room * elem_size);
+  NISH_POISON(data + cap * elem_size, (room - cap) * elem_size);
+#else
   char *data = nish_alloc_struct(cap * elem_size);
+#endif
   if (a->len) memcpy(data, a->data, a->len * elem_size);
 #ifdef NISH_ASAN
   /* The old block is dead: a pointer kept across the push now reads poison.
      Only a heap block, as a literal's may be on the stack or a constant. */
   const char *kind = a->cap ? __asan_locate_address(a->data, 0, 0, 0, 0) : 0;
   if (kind && !strcmp(kind, "heap")) NISH_POISON(a->data, a->cap * elem_size);
-  NISH_POISON(data + cap * elem_size, nish_slack(cap * elem_size));
+  nish_grown[nish_grown_next] = (__typeof__(nish_grown[0])){ a, data, room * elem_size };
+  nish_grown_next = (nish_grown_next + 1) % NISH_GROW_SLOTS;
 #endif
   a->data = data;
   a->cap = cap;

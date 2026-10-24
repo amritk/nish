@@ -12,7 +12,12 @@
  *
  * The compiled program is instrumented by adding `sanitize_address` to every
  * function the IR defines: ASan only touches functions that carry the
- * attribute, and nish emits none. The link is done by hand here rather than
+ * attribute, and nish emits none. The module's own inline bump allocator,
+ * `nish_alloc_struct`, is replaced by a call to the runtime's
+ * `nish_asan_alloc`, which gives every block a malloc of its own and poisons
+ * the bytes the 8-byte rounding adds; without that a literal or
+ * `new Array(n)` shares a chunk with its neighbours and a read past it is
+ * invisible. The link is done by hand here rather than
  * through `scripts/build.sh`, which has no sanitizer profile.
  *
  * A run is classified as one of
@@ -20,14 +25,21 @@
  *   - `ubsan`: the C runtime hit undefined behaviour;
  *   - `panic`: the program stopped on one of its own checks (an index, a
  *     slice, arithmetic, out of memory);
- *   - `clean`: it exited without any of those (`status` says with what).
+ *   - `timeout`: it ran past the time limit and was killed;
+ *   - `signal`: it died on a signal with no sanitizer report;
+ *   - `error`: it exited non-zero without a known panic message;
+ *   - `clean`: it exited with status 0 and none of the above.
+ * Only `clean` exits 0; every other kind, and a program the compiler
+ * refuses, exits 1. A file with no `export const main` is skipped (exit 0).
  *
  * Usage: node tests/differential/asan.js <file.ts> [--compiler <nish>] [--unchecked] [--threads]
  *        node tests/differential/asan.js --self-test [--compiler <nish>]
  *
- * The self-test reads one past the end of an arena array in a build with
- * `--unchecked-indexing`, which no check can stop, and fails unless ASan
- * reports it; it also runs the in-bounds twin, which must come out clean.
+ * The self-test reads one past the end of arrays built every way the compiler
+ * allocates them (push, a literal, `new Array(n)`, 8-, 4- and 1-byte elements)
+ * in a build with `--unchecked-indexing`, which no check can stop, and fails
+ * unless ASan reports each; it also runs the in-bounds twins, which must come
+ * out clean, and a checked build, which must panic.
  * Without clang's ASan runtime (Debian: `libclang-rt-18-dev`) it says so and
  * exits 2 instead of passing.
  */
@@ -73,9 +85,13 @@ const hasAsanRuntime = () => {
     return false
   }
   fs.mkdirSync(asanDir, { recursive: true })
-  const probe = path.join(asanDir, "probe.c")
+  const probe = path.join(asanDir, `probe-${process.pid}.c`)
   fs.writeFileSync(probe, "int main(void) { return 0; }\n")
-  return run("clang", ["-fsanitize=address,undefined", probe, "-o", path.join(asanDir, "probe")]).status === 0
+  const exe = path.join(asanDir, `probe-${process.pid}`)
+  const ok = run("clang", ["-fsanitize=address,undefined", probe, "-o", exe]).status === 0
+  fs.rmSync(probe, { force: true })
+  fs.rmSync(exe, { force: true })
+  return ok
 }
 
 /**
@@ -84,8 +100,15 @@ const hasAsanRuntime = () => {
  * whatever it already carries, and the declarations (the runtime's functions,
  * compiled with ASan on their own) are left alone.
  */
-const instrument = (ir) =>
-  `${ir.replace(/^(define [^\n]*?)\s*\{$/gm, `$1 ${ASAN_GROUP} {`)}\nattributes ${ASAN_GROUP} = { sanitize_address }\n`
+const instrument = (ir) => {
+  let out = ir.replace(/^(define [^\n]*?)\s*\{$/gm, `$1 ${ASAN_GROUP} {`)
+  const bump = /^(define internal [^\n]*@nish_alloc_struct\(i64 noundef %size\)[^\n]*\{)\n[\s\S]*?^\}$/m
+  if (bump.test(out)) {
+    out = out.replace(bump, "$1\n  %p = call i8* @nish_asan_alloc(i64 %size)\n  ret i8* %p\n}")
+    out += "declare i8* @nish_asan_alloc(i64)\n"
+  }
+  return `${out}\nattributes ${ASAN_GROUP} = { sanitize_address }\n`
+}
 
 /**
  * The sanitized runtime objects, compiled once per set of sources and flags
@@ -96,7 +119,11 @@ const runtimeObjects = (threads) => {
   if (threads) {
     flags.push("-DNISH_THREADS=1", "-ftls-model=initial-exec", "-pthread")
   }
-  const hash = crypto.createHash("sha256").update(flags.join(" "))
+  // The clang version too: a cached object from another toolchain may not link.
+  const hash = crypto
+    .createHash("sha256")
+    .update(flags.join(" "))
+    .update(run("clang", ["--version"]).stdout ?? "")
   for (const unit of RUNTIME_UNITS) {
     hash.update(fs.readFileSync(unit))
   }
@@ -110,11 +137,12 @@ const runtimeObjects = (threads) => {
   }
   fs.mkdirSync(dir, { recursive: true })
   for (let i = 0; i < RUNTIME_UNITS.length; i++) {
-    const res = run("clang", [...flags, RUNTIME_UNITS[i], "-o", `${objects[i]}.tmp`])
+    const tmp = `${objects[i]}.${process.pid}.tmp`
+    const res = run("clang", [...flags, RUNTIME_UNITS[i], "-o", tmp])
     if (res.status !== 0) {
       return { error: `compiling ${path.basename(RUNTIME_UNITS[i])} with ASan failed:\n${res.stderr}` }
     }
-    fs.renameSync(`${objects[i]}.tmp`, objects[i])
+    fs.renameSync(tmp, objects[i])
   }
   return { objects }
 }
@@ -174,23 +202,35 @@ const build = (file, exe, { compiler, unchecked = false, threads = false }) => {
 }
 
 /**
- * Which of the four outcomes a finished run is. ASan wins over everything,
- * since a memory error can go on to cause a panic; UBSan's reports do not stop
- * the program, so a run that also panics is still `ubsan`.
+ * Which outcome a finished run is. ASan wins over everything, since a memory
+ * error can go on to cause a panic; UBSan's reports do not stop the program,
+ * so a run that also panics is still `ubsan`. A UBSan report is matched by its
+ * `file:line:col: runtime error:` prefix, so a program that prints the words
+ * is not one.
  */
 const classify = ({ status, signal, stdout = "", stderr = "" }) => {
   const firstLine = (pattern) => stderr.split("\n").find((line) => pattern.test(line)) ?? ""
   if (/ERROR: AddressSanitizer/.test(stderr)) {
     return { kind: "asan", status, detail: firstLine(/ERROR: AddressSanitizer/) }
   }
-  if (/runtime error:/.test(stderr)) {
-    return { kind: "ubsan", status, detail: firstLine(/runtime error:/) }
+  const ubsan = /^\S+:\d+:\d+: runtime error:/m
+  if (ubsan.test(stderr)) {
+    return { kind: "ubsan", status, detail: firstLine(ubsan) }
   }
-  const panic = /^(index out of range|slice out of range|attempt to |parallelMapInto: |nish: out of memory)/m
+  // The compiler's and the runtime's own checks; a program's `panic(...)` has
+  // a message of its own and comes out as `error`.
+  const panic =
+    /^(index out of range|slice out of range|attempt to |value out of range: |parallelMapInto: |crypto\.getRandomValues: |nish: out of memory)/m
   if (status === 1 && panic.test(stderr)) {
     return { kind: "panic", status, detail: firstLine(panic), stdout }
   }
-  return { kind: "clean", status, signal, stdout }
+  if (signal) {
+    return { kind: "signal", status, signal, detail: signal, stdout }
+  }
+  if (status !== 0) {
+    return { kind: "error", status, detail: `exit ${status}: ${stderr.trim().split("\n")[0] ?? ""}`, stdout }
+  }
+  return { kind: "clean", status, stdout }
 }
 
 /** Run `exe` under the sanitizers and classify how it ended. */
@@ -205,7 +245,7 @@ const runExe = (exe, timeoutMs = 20000) => {
     },
   })
   if (res.error?.code === "ETIMEDOUT") {
-    return { kind: "clean", status: null, signal: "SIGTERM", timedOut: true, stdout: res.stdout ?? "" }
+    return { kind: "timeout", status: null, detail: `killed after ${timeoutMs} ms`, stdout: res.stdout ?? "" }
   }
   return classify(res)
 }
@@ -213,7 +253,9 @@ const runExe = (exe, timeoutMs = 20000) => {
 /** Build and run in one: `{ kind, ... }`, or the `build` refusal or error. */
 const runUnderAsan = (file, opts) => {
   fs.mkdirSync(asanDir, { recursive: true })
-  const exe = opts.exe ?? path.join(asanDir, path.basename(file, ".ts"))
+  // Named by the whole path: every tests/link/*/main.ts has the same basename.
+  const tag = crypto.createHash("sha256").update(path.resolve(file)).digest("hex").slice(0, 8)
+  const exe = opts.exe ?? path.join(asanDir, `${path.basename(file, ".ts")}-${tag}`)
   const built = build(file, exe, opts)
   if (built.exe === undefined) {
     return built
@@ -222,38 +264,62 @@ const runUnderAsan = (file, opts) => {
 }
 
 /**
- * The self-test's program. The array is filled by `push`, so it lives in the
- * arena whatever escape analysis decides, and the loop reads `a[i]` for
- * `i <= a.length` when `past` is set: one element past the end.
+ * The self-test's programs. Each builds a 5- or 6-element array one way the
+ * compiler allocates arrays and reads `a[i]` for `i <= a.length` when `past`
+ * is set: one element past the end. The builders sit in a function of their
+ * own so the array escapes into the arena whatever escape analysis decides.
+ * Five 4-byte or 1-byte elements leave rounding slack the read lands in, which
+ * only the poisoning sees.
  */
-const selfTestSource = (past) => `export const main = (): void => {
-  const a: number[] = []
-  for (let i = 0; i < 6; i++) {
-    a.push(i * 3)
-  }
-  let s = 0
+const SELF_TEST_ARRAYS = {
+  push: {
+    type: "number[]",
+    make: "const a: number[] = []\n  for (let i = 0; i < 6; i++) {\n    a.push(i * 3)\n  }",
+  },
+  literal: { type: "number[]", builder: "(n: number): number[] => [1, 2, 3, n, 5]", arg: "4" },
+  "new-array": { type: "number[]", builder: "(n: number): number[] => new Array<number>(n)", arg: "5" },
+  f64: { type: "f64[]", builder: "(n: f64): f64[] => [1.5, 2.5, n, 4.5, 5.5]", arg: "3.5" },
+  i32: { type: "i32[]", builder: "(n: i32): i32[] => [1, 2, 3, n, 5]", arg: "4" },
+  u8: {
+    type: "u8[]",
+    builder: "(n: u8): u8[] => [1, 2, 3, n, 5]",
+    arg: "toU8(4)",
+    read: (e) => `toI32(${e})`,
+  },
+}
+
+const selfTestSource = (shape, past) => {
+  const spec = SELF_TEST_ARRAYS[shape]
+  const read = spec.read ?? ((e) => e)
+  const make = spec.make ?? `const a = make(${spec.arg})`
+  const sum = spec.type === "f64[]" ? "let s: f64 = 0" : "let s: i32 = 0"
+  return `${spec.builder ? `const make = ${spec.builder}\n` : ""}export const main = (): void => {
+  ${make}
+  ${sum}
   for (let i = 0; i ${past ? "<=" : "<"} a.length; i++) {
-    s += a[i]
+    s += ${read("a[i]")}
   }
   console.log(s)
 }
 `
+}
 
 const selfTest = (compiler) => {
-  const dir = path.join(asanDir, "self-test")
+  const dir = path.join(asanDir, `self-test-${process.pid}`)
   fs.mkdirSync(dir, { recursive: true })
-  const cases = [
-    { name: "one-past", past: true, unchecked: true, want: "asan" },
-    { name: "in-bounds", past: false, unchecked: true, want: "clean" },
-    { name: "one-past-checked", past: true, unchecked: false, want: "panic" },
-  ]
+  const cases = []
+  for (const shape of Object.keys(SELF_TEST_ARRAYS)) {
+    cases.push({ name: `${shape}-one-past`, shape, past: true, unchecked: true, want: "asan" })
+    cases.push({ name: `${shape}-in-bounds`, shape, past: false, unchecked: true, want: "clean" })
+  }
+  cases.push({ name: "push-one-past-checked", shape: "push", past: true, unchecked: false, want: "panic" })
   let failed = 0
   for (const c of cases) {
     const file = path.join(dir, `${c.name}.ts`)
-    fs.writeFileSync(file, selfTestSource(c.past))
+    fs.writeFileSync(file, selfTestSource(c.shape, c.past))
     const res = runUnderAsan(file, { compiler, unchecked: c.unchecked, exe: path.join(dir, c.name) })
     const got = res.kind ?? (res.rejected ? "rejected" : "error")
-    const ok = got === c.want && (got !== "clean" || res.status === 0)
+    const ok = got === c.want
     console.log(`  ${ok ? "ok  " : "FAIL"} ${c.name}: ${got}${res.detail ? ` (${res.detail.trim()})` : ""}`)
     if (!ok) {
       failed++
@@ -262,6 +328,7 @@ const selfTest = (compiler) => {
       }
     }
   }
+  fs.rmSync(dir, { recursive: true, force: true })
   return failed
 }
 
@@ -307,9 +374,17 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log(`asan self-test with ${compiler.label}`)
     process.exit(selfTest(compiler) === 0 ? 0 : 1)
   }
+  if (!/^export const main\b/m.test(fs.readFileSync(file, "utf8"))) {
+    console.log("skipped: no `export const main`")
+    process.exit(0)
+  }
   const res = runUnderAsan(path.resolve(file), { compiler, unchecked, threads })
+  if (res.rejected) {
+    console.log(`rejected: ${String(res.stderr).trim().split("\n")[0]}`)
+    process.exit(1)
+  }
   if (res.kind === undefined) {
-    console.error(res.error ?? res.stderr)
+    console.error(res.error)
     process.exit(2)
   }
   console.log(`${res.kind}${res.detail ? `: ${res.detail.trim()}` : ""}`)
