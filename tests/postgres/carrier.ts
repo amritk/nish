@@ -28,10 +28,11 @@ const POOL_TOKEN: i32 = -2
 /** `netRead` and `netWrite`: nothing to do now. */
 const AGAIN: i32 = -11
 
-/** A pool slot's socket: -1 for none, and whether its connect has finished. */
+/** A pool slot's socket: -1 for none, whether its connect has finished, and whether its connection has events to read. */
 class Socket {
   fd: i32 = -1
   connected: boolean = false
+  pending: boolean = false
 }
 
 const bytesOf = (s: string): u8[] => {
@@ -91,6 +92,39 @@ export const main = (): i32 => {
   let code: i32 = 0
 
   while ((!napDone || served === 0) && code === 0) {
+    // Read the events of the connections that read bytes, or failed.
+    for (let s: i32 = 0; s < toI32(sockets.length) && code === 0; s++) {
+      const socket = sockets[s]
+      if (socket.pending) {
+        socket.pending = false
+        const conn = pool.connection(s)
+        let event: i32 = pool.next(s)
+        while (event !== PG_NEED_MORE) {
+          if (event === PG_ROW && pool.ticket === nap) {
+            console.log(conn.columnText(toI32(0)))
+          } else if (event === PG_GROUP_DONE && pool.ticket === nap) {
+            napDone = true
+            code = conn.groupFailed ? 1 : 0
+          } else if (event === PG_LOST) {
+            console.log(`request ${pool.ticket} lost`)
+          } else if (event === PG_FAILED) {
+            console.log(`slot ${s} failed: ${conn.failure}`)
+            if (socket.fd >= 0) {
+              pollRemove(loop, socket.fd)
+              netClose(socket.fd)
+              socket.fd = -1
+            }
+            napDone = true
+            code = 1
+            break
+          }
+          event = pool.next(s)
+        }
+      }
+    }
+    if ((napDone && served > 0) || code !== 0) {
+      break
+    }
     // Hand waiting requests to ready connections, and make the ones wanted.
     let slot: i32 = pool.dispatch()
     while (slot >= 0) {
@@ -111,8 +145,17 @@ export const main = (): i32 => {
       socket.connected = false
       if (socket.fd < 0 || pollAdd(loop, socket.fd, H1_WANT_WRITE, POOL_TOKEN - slot) < 0) {
         pool.connection(slot).closed()
+        socket.pending = true
       }
       slot = pool.wanted()
+    }
+    // A connect that failed has its loss to report before the loop waits.
+    let failed: boolean = false
+    for (let s: i32 = 0; s < toI32(sockets.length); s++) {
+      failed = failed || sockets[s].pending
+    }
+    if (failed) {
+      continue
     }
     // Send what the connections queued, and ask for writability only while some stays.
     for (let s: i32 = 0; s < toI32(sockets.length); s++) {
@@ -121,6 +164,7 @@ export const main = (): i32 => {
         const conn = pool.connection(s)
         if (!flush(conn, socket.fd)) {
           conn.closed()
+          socket.pending = true
         }
         const wants: i32 = conn.outputEnd() > conn.outputStart() ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
         pollModify(loop, socket.fd, wants, POOL_TOKEN - s)
@@ -182,26 +226,7 @@ export const main = (): i32 => {
             conn.received(got)
           }
         }
-        let event: i32 = pool.next(s)
-        while (event !== PG_NEED_MORE) {
-          if (event === PG_ROW && pool.ticket === nap) {
-            console.log(conn.columnText(toI32(0)))
-          } else if (event === PG_GROUP_DONE && pool.ticket === nap) {
-            napDone = true
-            code = conn.groupFailed ? 1 : 0
-          } else if (event === PG_LOST) {
-            console.log(`request ${pool.ticket} lost`)
-          } else if (event === PG_FAILED) {
-            console.log(`slot ${s} failed: ${conn.failure}`)
-            pollRemove(loop, socket.fd)
-            netClose(socket.fd)
-            socket.fd = -1
-            napDone = true
-            code = 1
-            break
-          }
-          event = pool.next(s)
-        }
+        socket.pending = true
       }
     }
   }

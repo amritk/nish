@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // The live suite of nish/net/postgres's PgPool and carrier, against a real
 // PostgreSQL server: the scenarios of `live.ts`, each compared with
-// `expected/<scenario>.out`, and `../carrier.ts` serving HTTP while a query
-// sleeps.
+// `expected/<scenario>.out`, `../carrier.ts` serving HTTP while a query
+// sleeps, and the carrier reporting a server it cannot reach.
 //
 //   node tests/postgres/live/run.mjs [--update] [scenario ...]
 //
@@ -189,6 +189,21 @@ const carrier = async (exe, db) => {
   };
 };
 
+/** With nothing listening on its PostgreSQL port, the carrier must report the query lost and the slot failed, not wait. */
+const refused = async (exe) => {
+  const port = await freePort();
+  const http = await freePort();
+  const r = spawnSync(exe, [String(port), "u", "p", "d", String(http), "2"], {
+    encoding: "utf8",
+    timeout: 30_000,
+  });
+  const want = "request 0 lost\nslot 0 failed: 9\n";
+  return {
+    ok: r.status === 1 && r.stdout === want,
+    detail: `status ${r.status}, stdout ${JSON.stringify(r.stdout)}`,
+  };
+};
+
 const main = async () => {
   const db = process.env.PG_TEST_URL
     ? fromUrl(process.env.PG_TEST_URL)
@@ -239,6 +254,16 @@ const main = async () => {
       } else {
         failed += 1;
         console.log(`FAIL carrier: ${c.detail}`);
+      }
+    }
+    if (ONLY.length === 0 || ONLY.includes("refused")) {
+      const r = await refused(join(work, "carrier"));
+      if (r.ok) {
+        passed += 1;
+        console.log("ok   refused");
+      } else {
+        failed += 1;
+        console.log(`FAIL refused: ${r.detail}`);
       }
     }
     live(exe, db, "exec", ["drop schema nish_live cascade"]);
