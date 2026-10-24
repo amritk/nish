@@ -277,7 +277,7 @@ const sipRounds = (emitter: Emitter, slots: string[], rounds: i32): string[] => 
     v2 = rotl(emitter, v2, 32)
   }
   const v = [v0, v1, v2, v3]
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < v.length && i < slots.length; i++) {
     fn.emit(`store i64 ${v[i]}, i64* ${slots[i]}${a64}`)
   }
   return v
