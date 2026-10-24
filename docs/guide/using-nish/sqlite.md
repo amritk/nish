@@ -118,6 +118,11 @@ database; a statement or connection used after it is freed answers
 `step()` answers `true` when a row is ready to read and `false` when the
 statement has finished. Columns count from 0.
 
+Check `step()`'s `Result` inside the loop, as the examples here do, rather
+than assigning it to a variable declared outside: a `Result` made in one pass
+of a loop does not yet survive the loop
+([#899](https://github.com/amritk/nish/issues/899)).
+
 | Read | Answers |
 | --- | --- |
 | `columnCount()` | the number of columns in a row |

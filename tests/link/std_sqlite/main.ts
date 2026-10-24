@@ -144,7 +144,8 @@ const reads = (t: Suite, db: Database): void => {
   let rows: i32 = 0;
   let sum: i64 = 0;
   // The loop keeps a flag, not the last `Result`: a pass's arena is rewound
-  // when it ends, so a `Result` stepped inside it does not outlive the loop.
+  // when it ends, so a `Result` stepped inside it does not outlive the loop
+  // (#899). Carry the `Result` again once #899 is fixed.
   let done = false;
   for (;;) {
     const r = q.step();
