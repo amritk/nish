@@ -1203,22 +1203,22 @@ export class KeyDecoder {
   pending: u8[]
   /** When the first held byte arrived (`feed`), or the last (`feedEvents`). */
   pendingSince: f64
+  /** The bytes of the paste so far. */
+  pasteBytes: u8[]
   /**
    * How many cursor position reports (`ESC [ 6 n`) are awaited. `ESC [ r ; c R`
    * is both the report and F3 with modifiers; while this is above 0 it is the
    * report, and takes one off. Whoever writes the request adds one.
    */
   cprOutstanding: i32
-  /** Whether SGR mouse reports are in pixels (mode 1016), so `px` and `py` are set and `x`, `y` derived. */
-  pixelMouse: boolean
   /** A cell's width in pixels, to turn a 1016 report into a column; 0 while unknown. */
   cellWidthPx: i32
   /** A cell's height in pixels, to turn a 1016 report into a row; 0 while unknown. */
   cellHeightPx: i32
+  /** Whether SGR mouse reports are in pixels (mode 1016), so `px` and `py` are set and `x`, `y` derived. */
+  pixelMouse: boolean
   /** Whether a bracketed paste has begun and not ended. */
   pasting: boolean
-  /** The bytes of the paste so far. */
-  pasteBytes: u8[]
 
   /** A decoder that gives up on an unfinished sequence after `escapeTimeoutMs` (25–50 is usual). */
   constructor(escapeTimeoutMs: f64) {
@@ -1342,20 +1342,20 @@ export class KeyDecoder {
  * the caller's clock, as `KeyDecoder` is.
  */
 export class KeyState {
-  /** Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on. */
-  releasesAreSynthetic: boolean
   /** How long after its last repeat a key is let go, in milliseconds (100 by default). */
   releaseGapMs: f64
   /** How long after its press a key that has not repeated is let go, in milliseconds (600 by default). */
   firstRepeatMs: f64
-  /** Whether Ctrl-C (byte 3, or kitty `ESC [ 99 ; 5 u`) becomes `EVENT_QUIT` (true by default). */
-  quitOnCtrlC: boolean
   /** The keys down, each as `termKeyId` names it. */
   downKeys: i32[]
   /** When each key down last pressed or repeated. */
   downSince: f64[]
   /** Whether each key down has repeated. */
   downRepeated: boolean[]
+  /** Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on. */
+  releasesAreSynthetic: boolean
+  /** Whether Ctrl-C (byte 3, or kitty `ESC [ 99 ; 5 u`) becomes `EVENT_QUIT` (true by default). */
+  quitOnCtrlC: boolean
 
   /** No key down, releases synthesized, Ctrl-C a quit. */
   constructor() {
@@ -1934,7 +1934,7 @@ const termPasteEndByte = (k: i32): i32 => {
 const termDecodePaste = (d: KeyDecoder, bytes: u8[], i: i32, last: boolean, events: TermEvent[]): i32 => {
   const n: i32 = toI32(bytes.length)
   let k: i32 = i
-  while (k < n) {
+  while (k >= 0 && k < toI32(bytes.length)) {
     let m: i32 = 0
     while (m < 6 && k + m < n && toI32(bytes[k + m]) === termPasteEndByte(m)) {
       m = m + 1
@@ -2133,7 +2133,7 @@ const termDecodeCsi = (d: KeyDecoder, bytes: u8[], i: i32, last: boolean, events
     from = from + 1
   }
   let to: i32 = from
-  while (to < j && toI32(bytes[to]) >= TERM_DIGIT_0) {
+  while (to < j && termByte(bytes, to) >= TERM_DIGIT_0) {
     to = to + 1
   }
   termCsiEvent(d, bytes, from, to, prefix, to < j ? toI32(bytes[j - 1]) : 0, final, events)
@@ -2232,6 +2232,9 @@ const termDecodeString = (bytes: u8[], i: i32, last: boolean, events: TermEvent[
   return resume
 }
 
+/** The byte at `k` of `bytes`, or -1 past either end. */
+const termByte = (bytes: u8[], k: i32): i32 => (k >= 0 && k < toI32(bytes.length) ? toI32(bytes[k]) : -1)
+
 /** Whether `b`, after an ESC, opens a control string: DCS `P`, SOS `X`, OSC `]`, PM `^` or APC `_`. */
 const termOpensString = (b: i32): boolean => b === 80 || b === 88 || b === 93 || b === 94 || b === 95
 
@@ -2244,7 +2247,7 @@ const termOpensString = (b: i32): boolean => b === 80 || b === 88 || b === 93 ||
 const termDecodeEvents = (d: KeyDecoder, bytes: u8[], last: boolean, events: TermEvent[]): i32 => {
   const n: i32 = toI32(bytes.length)
   let i: i32 = 0
-  while (i < n) {
+  while (i < toI32(bytes.length)) {
     if (!(i >= 0)) {
       panic("nish/term: the event decoder stepped back")
     }
@@ -2261,17 +2264,17 @@ const termDecodeEvents = (d: KeyDecoder, bytes: u8[], last: boolean, events: Ter
       }
       events.push(termKeyEvent(KEY_ESCAPE, b, 0, ACTION_PRESS))
     } else if (b === TERM_ESC) {
-      const after: i32 = toI32(bytes[i + 1])
+      const after: i32 = termByte(bytes, i + 1)
       if (after === TERM_BRACKET) {
         next = termDecodeCsi(d, bytes, i, last, events)
       } else if (termOpensString(after)) {
         next = termDecodeString(bytes, i, last, events)
       } else if (after === 79 && i + 2 >= n && !last) {
         next = -1
-      } else if (after === 79 && i + 2 < n && toI32(bytes[i + 2]) >= 64 && toI32(bytes[i + 2]) < 127) {
+      } else if (after === 79 && termByte(bytes, i + 2) >= 64 && termByte(bytes, i + 2) < 127) {
         // SS3 `ESC O X`: the arrows, Home, End and F1–F4 in application
         // mode, and keypad Enter `ESC O M` (xterm ctlseqs, "PC-Style Function Keys").
-        const f: i32 = toI32(bytes[i + 2])
+        const f: i32 = termByte(bytes, i + 2)
         events.push(
           termKeyEvent(f === 77 ? KEY_ENTER : termLetterKind(f), f === 77 ? 13 : f, 0, ACTION_PRESS)
         )
