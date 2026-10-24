@@ -304,10 +304,14 @@ static void nish_term_finish(void) {
 }
 
 /* The atexit and panic restore: under the lock, so it waits out a Ctrl-Z
-   handler on another thread rather than leave the terminal to its re-entry. */
+   handler on another thread rather than leave the terminal to its re-entry,
+   and with every signal blocked, so one that lands mid-write runs its handler
+   once the bytes are out rather than end the program with them half written. */
 static void nish_term_leave(void) {
-  sigset_t old;
-  nish_term_hold(&old);
+  sigset_t all, old;
+  sigfillset(&all);
+  sigprocmask(SIG_BLOCK, &all, &old);
+  nish_term_hold(&all);
   nish_term_finish();
   nish_term_drop(&old);
 }
@@ -335,13 +339,18 @@ static void nish_term_on_signal(int sig);
    handler's own `raise` acts at once rather than after it returns, SIGTSTP
    aside. SIGTSTP is blocked in every handler, so a Ctrl-Z cannot stop one
    between its restore and its `raise`, and re-enter raw mode for the program
-   to die in. `SA_RESTART`, so a call that a Ctrl-Z and `fg` interrupt goes on
+   to die in. A handler that ends the program blocks every signal, its own
+   too, so a second one cannot nest into its write and end the program with
+   the bytes half out; its own `raise` then lands as the handler returns.
+   SIGTSTP's blocks only SIGTSTP, so a signal still ends a program its stop
+   holds. `SA_RESTART`, so a call that a Ctrl-Z and `fg` interrupt goes on
    where the system restarts it. */
 static void nish_term_catch(int sig) {
   struct sigaction sa;
   sa.sa_handler = nish_term_on_signal;
   sa.sa_flags = SA_RESETHAND | SA_ONSTACK | SA_NODEFER | SA_RESTART;
   sigemptyset(&sa.sa_mask);
+  if (sig != SIGTSTP) sigfillset(&sa.sa_mask);
   sigaddset(&sa.sa_mask, SIGTSTP);
   sigaction(sig, &sa, 0);
 }

@@ -1699,15 +1699,41 @@ if (!only || "term".includes(only)) {
   // or SIGSEGV; `cleared` clears its bytes first. The line the script
   // echoes next follows the program's output directly, so what lies between
   // `last <mode>` and it is exactly what the runtime wrote on the way out:
-  // `BYTES`, once, and nothing for `cleared`. `<old>` never appears, and
-  // `<bye>` once per mode that keeps it, so nothing went out early or twice.
+  // `BYTES`, once, nothing for `cleared` and all 4,096 bytes for `full`.
+  // `<old>` never appears, and `<bye>` once per run that keeps it, so nothing
+  // went out early or twice. On Linux one more `exit` runs with a preloaded
+  // `tcsetattr` that writes `<tcsetattr>` before it sets the termios, so
+  // the bytes before the mark are the ones written before the restore.
   const restoreExe = has("script") ? buildCaseIn(termDir, "term_restore") : null
   if (restoreExe !== null) {
     const sh = path.join(termDir, "restore.sh")
+    let shim = ""
+    if (process.platform === "linux") {
+      const c = path.join(termDir, "order.c")
+      fs.writeFileSync(
+        c,
+        [
+          "#define _GNU_SOURCE",
+          "#include <dlfcn.h>",
+          "#include <termios.h>",
+          "#include <unistd.h>",
+          "int tcsetattr(int fd, int when, const struct termios *t) {",
+          "  static int (*real)(int, int, const struct termios *);",
+          '  if (!real) real = (int (*)(int, int, const struct termios *))dlsym(RTLD_NEXT, "tcsetattr");',
+          '  write(1, "<tcsetattr>", 11);',
+          "  return real(fd, when, t);",
+          "}",
+          "",
+        ].join("\n")
+      )
+      shim = path.join(termDir, "order.so")
+      const cc = spawnSync("clang", ["-shared", "-fPIC", "-o", shim, c, "-ldl"], { encoding: "utf8" })
+      if (!check("term_restore: the preloaded tcsetattr builds", cc.status === 0, shown(cc))) shim = ""
+    }
     fs.writeFileSync(
       sh,
       [
-        'E="$1"; D="$2"',
+        'E="$1"; D="$2"; S="$3"',
         'if [ -t 0 ]; then echo pty; else echo "no pty"; exit 0; fi',
         'same() { stty -g | cmp -s - "$D/before" && echo same || echo changed; }',
         'stty -g > "$D/before"',
@@ -1717,6 +1743,9 @@ if (!only || "term".includes(only)) {
         'echo "end cleared $? stty $(same)"',
         '"$E" panic 2>/dev/null',
         'echo "end panic $? stty $(same)"',
+        '"$E" full',
+        'echo "end full $? stty $(same)"',
+        'if [ -n "$S" ]; then LD_PRELOAD="$S" "$E" exit; echo "end order $? stty $(same)"; fi',
         // The shell's own "Terminated" goes to its stderr, which is the pty.
         "exec 2>/dev/null",
         "for sig in TERM SEGV; do",
@@ -1731,12 +1760,18 @@ if (!only || "term".includes(only)) {
     )
     const argv =
       process.platform === "darwin"
-        ? ["-q", "/dev/null", "sh", sh, restoreExe, termDir]
-        : ["-qec", 'sh "$NISH_PTY_SH" "$NISH_PTY_EXE" "$NISH_PTY_DIR"', "/dev/null"]
+        ? ["-q", "/dev/null", "sh", sh, restoreExe, termDir, shim]
+        : ["-qec", 'sh "$NISH_PTY_SH" "$NISH_PTY_EXE" "$NISH_PTY_DIR" "$NISH_PTY_SO"', "/dev/null"]
     const r = spawnSync("script", argv, {
       cwd: root,
       encoding: "utf8",
-      env: { ...process.env, NISH_PTY_SH: sh, NISH_PTY_EXE: restoreExe, NISH_PTY_DIR: termDir },
+      env: {
+        ...process.env,
+        NISH_PTY_SH: sh,
+        NISH_PTY_EXE: restoreExe,
+        NISH_PTY_DIR: termDir,
+        NISH_PTY_SO: shim,
+      },
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30000,
     })
@@ -1749,14 +1784,17 @@ if (!only || "term".includes(only)) {
         `last exit\n${bytes}end exit 0 stty same\n`,
         "last cleared\nend cleared 0 stty same\n",
         `last panic\n${bytes}end panic 1 stty same\n`,
+        `full 0\nlast full\n${"a".repeat(4096)}end full 0 stty same\n`,
         `last hold\n${bytes}end TERM 143 stty same\n`,
         `last hold\n${bytes}end SEGV 139 stty same\n`,
       ]
+      if (shim !== "") want.push(`last exit\n${bytes}<tcsetattr>end order 0 stty same\n`)
+      const runs = shim === "" ? 6 : 7
       check(
-        "term_restore: under a pseudo-terminal the restore bytes are what follows the last output, once, on returning, a panic, SIGTERM and SIGSEGV, none once cleared, and the terminal is as it was",
+        "term_restore: under a pseudo-terminal the restore bytes are what follows the last output, once, on returning, a panic, SIGTERM and SIGSEGV, before the termios on Linux, all 4,096 at the cap, none once cleared, and the terminal is as it was",
         want.every((part) => out.includes(part)) &&
-          out.split("set 0 -7 0 0\n").length === 6 &&
-          out.split("<bye>").length === 5 &&
+          out.split("set 0 -7 0 0\n").length === runs + 1 &&
+          out.split("<bye>").length === runs - 1 &&
           !out.includes("<old>"),
         `want every part of ${JSON.stringify(want)}\n${shown(r)}`
       )

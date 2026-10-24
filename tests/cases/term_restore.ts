@@ -5,8 +5,9 @@
 // terminal is asked. Under `tests/run.js`'s pseudo-terminal each mode keeps
 // `<old>`, is refused 4,097 bytes, enters raw mode and replaces `<old>` with
 // `BYTES`, prints its last line, and leaves: `exit` returns, `panic` fails a
-// bounds check, `hold` waits until a signal ends it, and `cleared` clears the
-// bytes first, so nothing follows its last line. `hold` says `ready` on
+// bounds check, `hold` waits until a signal ends it, `cleared` clears the
+// bytes first, so nothing follows its last line, and `full` replaces them with
+// all 4,096 bytes the cap allows and returns. `hold` says `ready` on
 // stderr, because stdout must stay the terminal, and reads and drops what
 // comes meanwhile, as `term_pty` does.
 const BYTES: string = "\u001b[?25h<bye>";
@@ -29,6 +30,9 @@ export const main = (): number => {
   console.log(`set ${old} ${over} ${setRawMode(true)} ${setTerminalRestore(BYTES)}`);
   if (mode === "cleared") {
     setTerminalRestore("");
+  }
+  if (mode === "full") {
+    console.log(`full ${setTerminalRestore(full)}`);
   }
   console.log(`last ${mode}`);
   if (mode === "panic") {

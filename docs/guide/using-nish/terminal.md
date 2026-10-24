@@ -26,13 +26,14 @@ them says where they come from. A program that calls any of them carries the
 
 The functions that can fail answer a number, in the same shape as
 [`nish:net`](networking.md#errors-are-numbers): zero or more is success, and
-a negative number is a failure. Two of the failures are the same number on
+a negative number is a failure. Three of the failures are the same number on
 every platform, so a program can branch on them:
 
 | Answer | Meaning |
 | --- | --- |
+| `-7` | `setTerminalRestore`: more than 4,096 bytes, checked before the terminal is |
 | `-11` | `readStdin`: nothing is waiting yet |
-| `-25` | not a terminal: a pipe or a file — stdin for `setRawMode`, stdout and stderr both for `terminalSize` |
+| `-25` | not a terminal: a pipe or a file — stdin for `setRawMode`, stdout for `setTerminalRestore`, stdout and stderr both for `terminalSize` |
 
 `terminalSize()` answers a pair, `[columns, rows]`. When there is no terminal
 the first number is the error and the second is `0`, so `[-25, 0]` means "not

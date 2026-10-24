@@ -7856,11 +7856,11 @@ for its bytes: call `waitStdin` first, as the loop above does. For the same
 reason a `waitStdin` there waits at least 10 ms: Node's WASI counts a shorter
 wait from before it looks at stdin, and on a busy machine answers "nothing
 waiting" before it has looked. The checker
-accepts the five there, unlike `nish:net`'s, and refuses them on a
+accepts the six there, unlike `nish:net`'s, and refuses them on a
 freestanding `--target wasm32` build, whose runtime has no stdin
 (`reject_term_wasm`). Under Node,
 stdin is read only by the event loop, which a program that owns its loop never
-returns to, and Node's own raw mode turns Ctrl-C into a byte, so the three
+returns to, and Node's own raw mode turns Ctrl-C into a byte, so the four
 that would need either throw, each naming itself. The `term` and `term_wasi`
 blocks of `tests/run.js` feed `term_calls` and `term_import` over a pipe —
 four bytes after a delay, a pipe held open and never written, and a thousand
