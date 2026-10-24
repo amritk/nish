@@ -224,7 +224,7 @@ routes are
   # on the musl host, with its own clang and the runtime from this repository
   clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
     runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
-    runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-bytes.c -lm -o app
+    runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-term.c runtime/runtime-bytes.c -lm -o app
   ```
 
   `--link`ing inside the container is the mistake to avoid: it shells out to the
@@ -360,7 +360,7 @@ it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
 skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
-`runtime/` (the C runtime — nine translation units, the wasm subset and their header),
+`runtime/` (the C runtime — ten translation units, the wasm subset and their header),
 `scripts/build.sh` (the link pipeline), `std/` (the standard library) and
 `docs/AI.md` (the rules card). The
 compiler itself is not in it: it arrives as one prebuilt
@@ -372,12 +372,12 @@ working directory — and the binary runs from inside its own platform package
 for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
-on the `clang` line, and it is nine files:
+on the `clang` line, and it is ten files:
 
 ```bash
 clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
   runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
-  runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-bytes.c -lm -o app
+  runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-term.c runtime/runtime-bytes.c -lm -o app
 ```
 
 `runtime.c` is the part every program touches — the arena, strings, arrays,
@@ -389,13 +389,14 @@ needs `-DNISH_THREADS=1 -pthread` on the line), `runtime-cross.c` copies
 the strings and arrays a task answers, a channel sends or a `Mutex` keeps out
 of the arena they were made in, `runtime-host.c` holds the wall clock,
 entropy, file times and signals, `runtime-net.c` the sockets of `nish:net`,
-`runtime-simd.c` and `runtime-aes.c` the vector text search and AES-GCM, and
+`runtime-simd.c` and `runtime-aes.c` the vector text search and AES-GCM,
+`runtime-term.c` the stdin reads and terminal calls of `nish:term`, and
 `runtime-bytes.c` the byte-class runs of `nish/bytes`, which `nish/json` steps
 over.
 They are separate so that each carries its own measured size ceiling
 ([docs/wp7-runtime.md](wp7-runtime.md)); nothing in the core calls into the
 others, so a line that names only `runtime.c` and `runtime-os.c` still links a
-program that uses none of the other seven. `scripts/build.sh` compiles the other
+program that uses none of the other eight. `scripts/build.sh` compiles the other
 eight beside any
 `runtime.c` it is handed, so a build that goes through it — every `--link`,
 and every `--profile` recipe in these documents — needs to name only the one.

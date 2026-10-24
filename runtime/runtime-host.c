@@ -64,7 +64,7 @@ static NISH_COLD void nish_entropy_fail(uint64_t asked) {
   } else {
     dprintf(2, "crypto.getRandomValues: the system's entropy source failed\n");
   }
-  _exit(1);
+  nish_fatal_exit();
 }
 
 /* `crypto.getRandomValues(bytes)`: every byte of `bytes` from the kernel's

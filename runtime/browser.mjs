@@ -9,8 +9,9 @@
  *     a newline waits for the next one, for `exit`, or for the program to yield.
  *   - `exit(code)` throws a `NishExit` carrying the code, since a page cannot
  *     end itself; the caller that started the program catches it.
- *   - `monotonicNanos` reads `performance.now()`, `getenv` answers `null`, and
- *     `argv()` is the program alone.
+ *   - `monotonicNanos` reads `performance.now()`, `getenv` answers `null`,
+ *     `isTerminal` answers `false` and `terminalSize` `[-25, 0]`, and `argv()`
+ *     is the program alone.
  *   - Every file-system, process and machine call panics, naming itself and
  *     the browser.
  */
@@ -66,6 +67,9 @@ installHost({
   call(name) {
     if (name === "getenv") return null;
     if (name === "monotonicNanos") return BigInt(Math.round(performance.now() * 1e6));
+    // A page has no terminal, which `nish:term` answers as a pipe does.
+    if (name === "isTerminal") return false;
+    if (name === "terminalSize") return [-25, 0];
     return panic(`${name} is not available in a browser`);
   },
 });

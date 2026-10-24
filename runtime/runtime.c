@@ -116,6 +116,20 @@ void nish_panic_claim(void) {
 static inline void nish_panic_claim(void) {}
 #endif
 
+/* How a panic that skips atexit ends: `_exit(1)`, after `nish_fatal_hook` when
+   it is set. `setRawMode(true)` (runtime-term.c) sets the hook to its restore,
+   and without it a failed bounds check would leave the shell in raw mode. Each
+   panic path calls this where it called `_exit(1)`, so a call site costs no
+   more than it did; `exit(1)` paths need nothing, since the restore is also an
+   atexit handler. */
+__attribute__((noreturn)) void nish_fatal_exit(void);
+void (*nish_fatal_hook)(void);
+void nish_fatal_exit(void) {
+  void (*hook)(void) = __atomic_load_n(&nish_fatal_hook, __ATOMIC_ACQUIRE);
+  if (hook) hook();
+  _exit(1);
+}
+
 /* The message goes out through `nish_write_all`, below, which finishes a
    short write and retries one a signal interrupts (docs/security/runtime.md,
    RT-11); it is unbuffered, so the message leaves before `_exit`. It used
@@ -124,7 +138,7 @@ static void nish_write_all(int fd, const char *p, uint64_t n);
 static NISH_COLD void nish_die(const char *msg) {
   nish_panic_claim();
   nish_write_all(2, msg, strlen(msg));
-  _exit(1);
+  nish_fatal_exit();
 }
 /* A function rather than a macro around `nish_die`: seven call sites each
    loading the message's address cost more than one more symbol does. */
@@ -323,8 +337,9 @@ int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) { return nish_
    a write fails (docs/security/runtime.md, RT-11). A failure still ends the
    output, `EAGAIN` on a non-blocking stdout included, since spinning on it
    would burn a core. `EINTR` is retried, the newline's included: the only
-   handler this runtime installs (runtime-host.c) has `SA_RESTART`, but a C
-   host may install one without it. `panic`'s message, `expect`'s, and the
+   handlers this runtime installs that return (runtime-host.c's and
+   runtime-term.c's SIGTSTP) have `SA_RESTART`, but a C host may install one
+   without it. `panic`'s message, `expect`'s, and the
    arithmetic and out-of-memory panics (`nish_die`) are written here. The
    index and slice panics and the file and entropy failures use `dprintf`, and
    runtime-parallel.c's out of memory one `write`: neither retries `EINTR`. */
@@ -1301,7 +1316,7 @@ __attribute__((noinline)) void nish_wipe(nish_array *bytes) {
 void nish_panic_index(uint64_t idx, uint64_t len) {
   nish_panic_claim();
   dprintf(2, "index out of range: %" PRIu64 " >= %" PRIu64 "\n", idx, len);
-  _exit(1);
+  nish_fatal_exit();
 }
 
 /* `s.slice(start, end)` (WP15 section 4) with a range the string does not
@@ -1315,7 +1330,7 @@ void nish_panic_index(uint64_t idx, uint64_t len) {
 void nish_panic_slice(int64_t start, int64_t end, int64_t len) {
   nish_panic_claim();
   dprintf(2, "slice out of range: [%" PRId64 ", %" PRId64 ") of length %" PRId64 "\n", start, end, len);
-  _exit(1);
+  nish_fatal_exit();
 }
 
 /* ---- Checked arithmetic (Rust semantics): the failed-check paths. One table

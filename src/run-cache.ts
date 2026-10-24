@@ -20,7 +20,7 @@
 //
 // The runtime cache beside it (`runtimeCacheRoot`, `runtimeCacheKey`) keeps
 // the C runtime compiled once per recipe, for every `--link` and every run's
-// link: an entry there holds the runtime's nine objects and a key, on the same
+// link: an entry there holds the runtime's ten objects and a key, on the same
 // terms. It is a cache of what a link reads, so this key does not mention it.
 
 import { CLI, RUNTIME_HEADER, VERSION } from "./branding"
@@ -80,6 +80,7 @@ export const runtimeUnits = (): string[] => [
   "runtime-net.c",
   "runtime-simd.c",
   "runtime-aes.c",
+  "runtime-term.c",
   "runtime-bytes.c",
 ]
 
