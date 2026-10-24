@@ -19,7 +19,7 @@
 # Profiles:
 #   debug  clang defaults: no optimisation, symbols kept. The "before" number.
 #   speed  -O3 + ThinLTO on every core + section GC + strip. Rust `--release`
-#          equivalent (which also defaults to ThinLTO).
+#          equivalent.
 #   size   -Oz + LTO + section GC + strip + no unwind tables. Rust
 #          `opt-level="z"`, `panic="abort"`, `strip=true` equivalent.
 #   wasm   wasm32 freestanding module exporting every non-internal function;
@@ -283,7 +283,7 @@ case "$profile" in
 esac
 
 # The speed link runs ThinLTO's backends on every core; its output does not
-# depend on how many. size keeps full LTO, which is a little smaller. Every
+# depend on how many. size and napi keep full LTO. Every
 # count source is tried in turn: nproc (Linux), getconf (both), sysctl (macOS).
 lto_jobs=()
 if [ "$profile" = speed ]; then

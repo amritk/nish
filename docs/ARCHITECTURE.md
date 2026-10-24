@@ -667,7 +667,7 @@ intrinsics become libm calls for non-constant arguments).
 | Profile | Flags | Equivalent |
 | --- | --- | --- |
 | `debug` | clang defaults, `-lm` | the "before" number; symbols kept |
-| `speed` | `-O3 -flto=thin -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, linked with `-flto-jobs=<cores>` | Rust `--release` (ThinLTO) |
+| `speed` | `-O3 -flto=thin -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, linked with `-flto-jobs=<cores>` | Rust `--release` |
 | `size` | `speed` with full `-Oz -flto` for `-O3 -flto=thin`, plus `-fno-stack-protector -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
 | `wasm` | `--target=wasm32-unknown-unknown -Oz -nostdlib -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections` | freestanding module for modules that do not use the C runtime |
 | `napi` | `speed` with full `-O3 -flto` for `-flto=thin`, plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
@@ -682,8 +682,8 @@ functions vanish. `speed` uses ThinLTO, whose backends run in parallel
 (`-flto-jobs` takes the core count from `nproc`, `getconf
 _NPROCESSORS_ONLN` or `sysctl -n hw.ncpu`, and the output does not depend
 on it): it links `tests/link/net_relay_f64` in half the
-time full LTO takes, and the benchmarks run as fast. `size` keeps full LTO
-for its bytes. `CC` overrides the compiler; `NODE_INCLUDE` overrides the
+time full LTO takes, and the benchmarks run as fast. `size` and `napi`
+keep full LTO. `CC` overrides the compiler; `NODE_INCLUDE` overrides the
 Node header directory for `napi`.
 
 Profile-guided optimisation (WP9): `--pgo-generate` adds
