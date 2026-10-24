@@ -18948,9 +18948,10 @@ struct QuicListener (class) size=192 align=8 exported
   method opens -> @nish.QuicListener.opens
   method takeReset -> @nish.QuicListener.takeReset
   method statelessReset -> @nish.QuicListener.statelessReset
-struct QuicFlight (class) size=8 align=4 exported
+struct QuicFlight (class) size=12 align=4 exported
   field count: i32 index=0 offset=0 initialized
   field segment: i32 index=1 offset=4 initialized
+  field ecn: i32 index=2 offset=8 initialized
 function QuicListenerAnswer.constructor(this: QuicListenerAnswer, room: i32): void -> @nish.QuicListenerAnswer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: room
@@ -19343,18 +19344,20 @@ function quicListenerTakeFlight(conn: QuicConnection, now: i64, buf: u8[], at: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: now
-  calls: nish.QuicConnection.takeDatagramInto nish.QuicRecovery.onPaced nish.QuicRecovery.pacerDelay nish.quicListenerQuantum nish_panic_overflow
+  calls: nish.QuicConnection.takeDatagramInto nish.QuicRecovery.ecnCodepoint nish.QuicRecovery.onPaced nish.QuicRecovery.pacerDelay nish.quicListenerQuantum nish_panic_overflow
   pointer conn: size=592 writesThrough=true captured=false passedTo=nish.quicListenerQuantum#0 nish.QuicConnection.takeDatagramInto#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.QuicConnection.takeDatagramInto#1
-  pointer flight: size=8 writesThrough=true captured=false
+  pointer flight: size=12 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +2:7 length: i32 (let)
-  callee +3:7 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
-  callee +3:37 quicListenerQuantum -> @nish.quicListenerQuantum
-  callee +9:5 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
-  local +11:11 n: i32 (const)
-  callee +11:20 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
-  callee +15:5 QuicRecovery.onPaced -> @nish.QuicRecovery.onPaced
+  local +3:7 length: i32 (let)
+  callee +4:7 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
+  callee +4:37 quicListenerQuantum -> @nish.quicListenerQuantum
+  callee +10:5 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
+  local +13:11 next: i32 (const)
+  callee +13:41 QuicRecovery.ecnCodepoint -> @nish.QuicRecovery.ecnCodepoint
+  local +17:11 n: i32 (const)
+  callee +17:20 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
+  callee +21:5 QuicRecovery.onPaced -> @nish.QuicRecovery.onPaced
 function quicListenerReceiveSegments(conn: QuicConnection, buf: u8[], off: i32, len: i32, segment: i32, now: i64): i32 -> @nish.quicListenerReceiveSegments [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicConnection.receiveWindow
