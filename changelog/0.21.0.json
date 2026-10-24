@@ -1,0 +1,1459 @@
+{
+  "version": "0.21.0",
+  "date": "2026-10-24",
+  "tag": "v0.21.0",
+  "range": {
+    "from": "v0.20.0",
+    "to": "2f10882e"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-20-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.20.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "deaecd4"
+      ],
+      "pr": 835,
+      "author": "github-actions[bot]",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "a-foreign-call-does-not-resize-an-array",
+      "type": "perf",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "a foreign call does not resize an array",
+      "body": "A `declare function` now has `resizesArray = false`. C is lent a `u8[]`'s\n`buf->data` and a `string`'s `s->data` for the call. It never gets an array\nheader, so it can write bytes but cannot move a `len` or a `data` pointer\n(docs/wp40-ffi-buffers-handles.md §3c). It cannot re-enter Nish to do it\neither: an exported function that C calls back reaches no array its caller\nholds, because a module has no `let`, no array `const` and no `static` field.\nEvery other worst-case fact a foreign callee carries stays: `willReturn`,\n`sharedWrite`, `writesPastParams`, `writesElsewhere` and `readsMemory`. The\nchecker's index proof does not read the fact, so `bounds.ts` and `ranges.ts`\nstill forget every length at a foreign call (Q15), and the NL9007 on\n`buf[i]` after a `read` stays.\n\nThree emitter effects move, and the user functions that resize keep them all.\nThe IR below is `tests/cases/ffi_buffer_no_resize` compiled by 0.19.0\n(before) and by this change (after).\n\n- **A compound store after the call** (`addCount`,\n  `buf[i] += toU8(read(fd, buf, toU64(buf.length)))`). The store no longer\n  reloads `len`, re-checks and re-addresses the element after the call. It\n  stores to the slot `%16` it proved before the call:\n\n      before:\n        %28 = add i8 %17, %27\n        %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0\n        %30 = load i64, i64* %29, align 8, !alias.scope !3, !noalias !4, !tbaa !10\n        %31 = icmp ult i64 %12, %30\n        br i1 %31, label %bounds.ok, label %bounds.fail\n      bounds.fail:\n        call void @nish_panic_index(i64 %12, i64 %30)\n        unreachable\n      bounds.ok:\n        %32 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2\n        %33 = load i8*, i8** %32, align 8, !alias.scope !3, !noalias !4, !tbaa !11\n        %34 = bitcast i8* %33 to i8*\n        %35 = getelementptr inbounds i8, i8* %34, i64 %12\n        store i8 %28, i8* %35, align 1, !alias.scope !4, !noalias !3, !tbaa !13\n      after:\n        %28 = add i8 %17, %27\n        store i8 %28, i8* %16, align 1, !alias.scope !4, !noalias !3, !tbaa !13\n\n- **The `len` and `data` hoist in a counted loop** (`sumCounted`,\n  `for (let i = 0; i < buf.length; i++) { read(fd, buf, 1); s += toI32(buf[i]) }`).\n  The preheader loads them once. Before, the loop condition and the bounds\n  check each reloaded `len` per iteration, and the element access reloaded\n  `data`:\n\n      preheader (after only):\n        %4 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8\n        %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 0\n        %6 = load i64, i64* %5, align 8, !alias.scope !3, !noalias !4, !tbaa !10\n        %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %4, i64 0, i32 2\n        %8 = load i8*, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !11\n      for.cond, before:\n        %5 = load %struct.nish_array*, %struct.nish_array** %buf.addr, align 8\n        %6 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %5, i64 0, i32 0\n        %7 = load i64, i64* %6, align 8, !alias.scope !3, !noalias !4, !tbaa !10\n        %8 = trunc i64 %7 to i32\n      for.cond, after:\n        %10 = trunc i64 %6 to i32\n      the check after `read`, before:\n        %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 0\n        %22 = load i64, i64* %21, align 8, !alias.scope !3, !noalias !4, !tbaa !10\n        %23 = icmp ult i64 %20, %22\n        ...\n        %24 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %18, i64 0, i32 2\n        %25 = load i8*, i8** %24, align 8, !alias.scope !3, !noalias !4, !tbaa !11\n      the check after `read`, after:\n        %22 = icmp ult i64 %21, %6\n        ...\n        %23 = bitcast i8* %8 to i8*\n\n- **A `for…of` whose body calls C counts as bounded** (`sumEach`,\n  `for (const b of buf) { read(fd, buf, 1); s += toI32(b) }`). Its `.ll` does\n  not move, because `read`'s `willReturn = false` still keeps `willreturn` off\n  the caller. The fact shows in the `--emit-checked` facts line:\n\n      before: facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true ...\n      after:  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true ...\n\n  The same line moves for `findOf` (strdup) and `ofs` (strerror) in their\n  `tests/self/goldens/checked/` dumps.\n\nB1.2's narrow proof (`foreignBufferCountProven`) reads the fact too, through\n`bodyMayExtend`, so it widens. A later argument that is itself a foreign call\nnow proves `toU64(buf.length)` and drops the `ffi-length` check. A later\nargument that is a user function calling C *and* popping keeps it. Both are\npinned in `tests/cases/panics_ffi_length_foreign_arg`. For `credited`,\n`pwrite(-1, buf, toU64(buf.length), lseek(-1, 0, 1))`:\n\n      before:\n        %15 = call i64 @lseek(i32 -1, i64 0, i32 1)\n        %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 0\n        %17 = load i64, i64* %16, align 8, !alias.scope !3, !noalias !4, !tbaa !10\n        %18 = icmp ule i64 %14, %17\n        br i1 %18, label %ffi.ok, label %ffi.length\n      ffi.length:\n        call void @nish_panic(i8* bitcast ({ i64, [71 x i8] }* @.str.0 to i8*))\n        unreachable\n      ffi.ok:\n        %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2\n        %20 = load i8*, i8** %19, align 8, !alias.scope !3, !noalias !4, !tbaa !11\n        %21 = call i64 @pwrite(i32 -1, i8* %20, i64 %14, i64 %15)\n      after:\n        %15 = call i64 @lseek(i32 -1, i64 0, i32 1)\n        %16 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %9, i64 0, i32 2\n        %17 = load i8*, i8** %16, align 8, !alias.scope !3, !noalias !4, !tbaa !11\n        %18 = call i64 @pwrite(i32 -1, i8* %17, i64 %14, i64 %15)\n\n`--emit-panics` lists that site as `proven: true` (it was `false`). In\n`uncredited`, the later argument is `rewound(buf)`, which calls `lseek` and\nthen pops. The site stays `proven: false`, the IR keeps `ffi.length`, and the\nnative run compares 4 against 3 and panics with \"`pwrite`: argument 3 (n)\ncounts more bytes than argument 2 (buf) holds\". No other golden moved.\n\nThe pins in `tests/cases/ffi_buffer_no_resize` are `drain`, a user function\nthat reads and then pops. It is called from each of the three shapes, along\nwith a constructor that calls C, reached by `new`. A stale hoist in those\npins would show twice. In the golden, each drain function would lose its\nper-iteration reload, its re-check or `loopsBounded=false`. In the round trip,\n`sumDrained` would iterate past the length `drain` shrank and print another\nsum, or panic.\n\nMeasured: no change outside the noise band on a counted loop that calls\n`read` 2,048,000 times from /dev/zero, a loop bound by the syscall. Over 7\ninterleaved rounds the medians were 337 ms before and 340 ms after, against\n337 / 352 ms for the before binary timed against a byte-identical copy of\nitself.",
+      "metrics": [],
+      "refs": [
+        "docs/wp40-ffi-buffers-handles.md#3c",
+        "docs/IR_COOKBOOK.md"
+      ],
+      "tests": [
+        "tests/cases/ffi_buffer_no_resize",
+        "tests/cases/panics_ffi_length_foreign_arg"
+      ],
+      "commits": [
+        "977e87e"
+      ],
+      "pr": 836,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-22"
+    },
+    {
+      "id": "seed-the-interop-image-from-a-published-release",
+      "type": "ci",
+      "breaking": false,
+      "title": "seed the interop image from a published release",
+      "body": "Interop's server image pinned its seed to package.json's version, which names a release with no SHA256SUMS from the moment the Release PR merges until release.yml publishes it. Every Interop run in that window, starting with the release commit's own push, failed to fetch its seed.\n\nThe image now seeds from the newest published release, as ci.yml does, or from a SEED_VERSION build argument. interop.yml is also a reusable workflow with a `seed` input, and release.yml gains an `interop` job that needs `release` and runs it with the tag it just published, beside `npm`.",
+      "metrics": [],
+      "refs": [
+        "docs/wp12-release.md"
+      ],
+      "tests": [],
+      "commits": [
+        "c6fba45"
+      ],
+      "pr": 840,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "tell-an-integer-valued-json-number-by-its",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "tell an integer-valued JSON number by its value",
+      "body": "`JsonTokenizer.isIntegral()` and `JsonDocument.isIntegral(v)` answer whether a\nJSON number's value is a whole number, however it is written: `1.0`, `1e2`,\n`100e-2`, `12345678901234567890.0` and `1e400` are; `1.5`, `10e-2` and\n`1e-400` are not. That is JSON Schema 2020-12's \"integer\", and the tokenizer\nmethod answers it on the current token, so a validator can apply the rule\nduring the parse without building a document. The existing readers keep the\nspelling rule: `isInteger`, `isI64`, `isU64` and the `integral` field still\nsay no to `1.0`.\n\nThe answer comes from the token's text, never a double. With F fraction\ndigits, z trailing zeros and exponent E, a number whose digits are not all\nzero is whole when E >= F - z. The exponent's digits are compared with that\none bound and never summed past it or past an i32, so an exponent of any\nlength is exact and cannot overflow, with the same answer under Node and\nnatively. docs/security/json.md records the bound.",
+      "metrics": [],
+      "refs": [
+        "docs/security/json.md"
+      ],
+      "tests": [
+        "tests/link/std_json_tokenizer",
+        "tests/link/std_json_value"
+      ],
+      "commits": [
+        "a7d3b3f"
+      ],
+      "pr": 837,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "split-runtime-net-three-ways-and-run-only",
+      "type": "ci",
+      "breaking": false,
+      "title": "split runtime-net three ways and run only the platform's checks on macOS",
+      "body": "* ci: split runtime-net three ways and deal crypto-bench across the test shards\n\nThe macOS `runtime-net` job ran its 188 `net_` link programs one at a time,\nand a mac runner took from 11 to over 28 minutes for them on one image; run\n39877823045's first attempt was cancelled by the job's 30-minute limit a few\nprograms from the end. It now runs as three shards (`node tests/run.js net_\n--shard <i>/3`), each with a 20-minute limit. A filtered run deals only the\nlink programs its filter selects and starts shard 1 at nothing; dealt from\nthe whole table, the `net_` programs fell 1.3, 4.2, 7.4 and 7.6 minutes to four\nshards rather than about 5 each.\n\nShard 1 of the `test` job took 17 to 19 minutes against about 8 for the\nothers, because crypto-bench (4.5 minutes, building every twin of five\nfamilies) ran in its shard-1-only tail. crypto-bench is now dealt like WP14\nself-hosting: both are listed in `DEALT_SECTIONS`, sit before the point where\nother shards stop, and carry their cost in tests/shard-costs.json, which is\nregenerated from run 39878648000's four shards.\n\nEach link program's per-module `llvm-as` and `opt -passes=verify` now run\n`defaultJobs()` at a time, and its `--emit-panics` compile runs beside them;\nthe checks are still made in module order, with the same output. Delegations\nnow name \"shard i/n of this job\", since two jobs are sharded.\n\nMeasured: `node tests/run.js net_relay_bad` (15 link programs), 3m07s -> 2m21s on a 4-core container, one run each, identical PASS lines\nTests: node tests/run.js net_relay_bad --shard 1/3, 2/3, 3/3 (union equals the unsharded run's checks)\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01SKsxuWsbyc9RrCY15LjVqC\n\n* ci: run only the platform's checks of each net_ program on macOS\n\n`node tests/run.js --delegate-ir-checks`, which the `runtime-net` job now\npasses, links and runs each tests/link program and leaves every check of its\ncompile to the Linux `test` job: the module goldens, llvm-as and opt, the\ndeclare/define agreement, expected.ir, --warn-portability, --emit-panics, the\ncapability report, and the programs that are a rejection alone. Those read the\ncompiler's output rather than the host, and the `test` job makes them for every\nprogram with the same compiler. They are counted as delegated, not skipped,\nand the flag is honoured only under GitHub Actions, so a local run still makes\nevery check. A check reads ci.yml and fails if another job asks for the\ndelegation or the `test` job's suite line takes a filter.\n\nRefs: docs/wp10-ci.md#shards-and-time-limits\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\nClaude-Session: https://claude.ai/code/session_01SKsxuWsbyc9RrCY15LjVqC",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ed0bb44"
+      ],
+      "pr": 841,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "tie-nl8001-s-loop-cursor-to-the-string",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "tie NL8001's loop cursor to the string it counts",
+      "body": "A loop bounded by a UTF-8 offset now takes a local as its cursor only\nwhen the loop hands it to a method of the string the offset counted.\nBefore, any string's method made the cursor, so a loop over\n`word.length` that read only `other.charCodeAt(i)` was quiet; it is now\nreported. Once the offset has crossed into another function the string\nit counted is out of reach, and any string's method still makes the\ncursor there.\n\nThe arms that treated a string index as a cursor or a byte read are\ngone: only an array can be indexed, so the index picks an element. An\noffset leaving a parallel arrow is reported only for the map forms,\nwhich store each answer in an array; a `spawn` thunk answers `void`.\nThe walk-limits fixture now shows each documented gap: the return\nchain past the hop limit, a recursive helper, a parallel relay, a\nspawned answer and a crossed-function cursor.\n\nFixes #829",
+      "metrics": [],
+      "refs": [
+        "#822",
+        "#808"
+      ],
+      "tests": [
+        "tests/cases/port_utf8_offset_loop_bound",
+        "tests/link/port_utf8_offset_walk_limits"
+      ],
+      "commits": [
+        "407ad04"
+      ],
+      "pr": 845,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "split-the-node-runtime-into-a-host-agnostic",
+      "type": "refactor",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "split the Node runtime into a host-agnostic core and a Node adapter",
+      "body": "runtime/shim.mjs mixed what a program computes with what it asks of\nNode. Every host-agnostic export now lives in runtime/core/*.mjs behind\nruntime/core.mjs, which names no node: module, process or Buffer, and\nevery host-bound call goes through one installed host object in\nruntime/core/host.mjs; until a host is installed each member throws\nNishNoHost naming what was asked for. runtime/node.mjs holds the Node\nbodies unchanged and installs them on import, and shim.mjs is now that\nadapter plus the core, exporting every name it had, so every prelude,\ndifferential and frozen-rewrite check passes unmodified. This is\nwp33's R3 first half; the browser adapter and the package entry points\nfollow.",
+      "metrics": [],
+      "refs": [
+        "docs/wp33-round-trip.md#43-the-runtime-split-by-host"
+      ],
+      "tests": [
+        "node tests/run.js runtime-hosts"
+      ],
+      "commits": [
+        "ca29840"
+      ],
+      "pr": 848,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "vendor-the-yaml-test-suite-as-packed-test",
+      "type": "test",
+      "scope": "yaml",
+      "breaking": false,
+      "title": "vendor the yaml-test-suite as packed test data",
+      "body": "The yaml-test-suite's 402 cases (yaml-test-suite@0.1.0 from npm, the data\nmjst's YAML conformance test uses) packed into tests/yaml-suite/cases.txt,\none %XX-escaped record per line, so a Nish program and Node can both read\nthem. pack.js pins the tarball by sha256 and `--check` re-derives or\nvalidates the file without fetching. The MIT notice is recorded in\nTHIRD_PARTY_NOTICES.md.",
+      "metrics": [],
+      "refs": [
+        "#842"
+      ],
+      "tests": [
+        "node tests/yaml-suite/pack.js --check"
+      ],
+      "commits": [
+        "bb1396c"
+      ],
+      "pr": 849,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "add-nish-term-terminal-frames-and-key-decoding",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "add nish/term, terminal frames and key decoding with no I/O",
+      "body": "`std/term` (imported as \"nish/term\") is the drawing half of a terminal UI.\nIt turns state into strings and bytes into events and does no I/O itself:\nit reaches no capability, its output is golden-tested, and it prints the\nsame bytes under Node as natively.\n\n- `Screen` is width × height cells (code point, foreground, background,\n  bold/inverse), double-buffered. `flush()` returns the least ANSI that turns\n  the last frame into this one: a cursor move only where a run starts, only\n  the changed runs, a short gap bridged rather than jumped, and one SGR per\n  change of style. The byte buffer is sized by `resize`, so a frame loop\n  takes back each pass's string. With `sync` set, each flush that changes\n  anything is wrapped in the synchronized-output escapes (DEC mode 2026),\n  which kitty, foot, WezTerm and iTerm2 honour, so a frame drawn at 120 or\n  240 Hz is never shown half painted. A cell is printed only when it holds a\n  printable scalar: a C0 or C1 control, DEL, a surrogate or a negative goes\n  as U+FFFD, so untrusted text in a cell cannot open an escape.\n- `Canvas` draws pixels on a Screen with the upper half block \"▀\"\n  (foreground = top pixel, background = bottom pixel), with `setPixel`,\n  `fillRect`, `line` and text over the pixels.\n- Colours are 24-bit `rgb`. A flag the caller passes switches to the nearest\n  of the 256-colour palette (`paletteIndex`), so reading COLORTERM stays\n  outside the module.\n- The escapes are functions: alternate screen enter/leave, cursor hide/show,\n  clear, reset, move, and `beginSync`/`endSync`.\n- `KeyDecoder` turns bytes into key events: arrows as ESC [ A–D and\n  ESC O A–D, Enter, Space, Tab, Backspace, Escape, Ctrl-C (byte 3) and\n  printable UTF-8. It holds a partial sequence across calls and decides a\n  lone ESC by a timeout the caller supplies to `feed` and `poll`. Invalid\n  UTF-8 and C1 controls decode to U+FFFD.\n- `FixedStep(stepsPerSecond, maxSteps)` is a fixed-step clock on the\n  caller's time: `advance(nowMs)` answers the whole steps since the last\n  call, `alpha()` the remainder for drawing in between, and a clock more\n  than `maxSteps` behind drops the backlog and keeps its phase.\n\nTerminal size, raw mode and stdin are left to builtins; width and height\nare parameters.",
+      "metrics": [
+        "flush of a full 200x60 frame change (one colour) 72-113 us, median ~85 us; whole frame 101-160 us (3 runs x 5 rounds)",
+        "flush of a one-cell change on 200x60 23-31 us",
+        "canvas game frame on 200x60 (clear, 40 bricks, paddle, ball) 101-175 us whole, flush 24-36 us",
+        "worst case, a different 24-bit fg and bg in every cell (~380 KB out), flush 500-750 us, under 1 ms"
+      ],
+      "refs": [
+        "docs/guide/using-nish/standard-library.md#nishterm"
+      ],
+      "tests": [
+        "tests/link/std_term",
+        "tests/link/std_term_f64",
+        "tests/link/std_term_buffers_disagree",
+        "tests/link/reject_term_feed_string"
+      ],
+      "commits": [
+        "e9c7725"
+      ],
+      "pr": 846,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "publish-nish-runtime-with-a-browser-adapter-and",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "publish nish/runtime with a browser adapter and declarations",
+      "body": "The package now has three entry points for a JavaScript or TypeScript\ncaller: nish/runtime, the host-agnostic core; nish/runtime/node; and\nnish/runtime/browser, a new adapter built from web globals alone. The\nbrowser host prints line-buffered to the console, throws a NishExit\ncarrying the 8-bit exit code, reads the monotonic clock from\nperformance.now, answers getenv with null, and panics naming the\nbrowser on every file-system or process call. runtime/core.d.ts and\nruntime/core/*.d.ts declare every helper, with i64 and u64 as bigint and\nevery other width as number. A test loads the core and the browser\nadapter in a vm context holding only web globals and runs them, and the\nnew guide page, \"Back to TypeScript\", covers the entry points, what each\nhost answers, and that Bun is untested.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/to-typescript.md"
+      ],
+      "tests": [
+        "node tests/run.js runtime-hosts"
+      ],
+      "commits": [
+        "15fc08f"
+      ],
+      "pr": 851,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "check-the-owned-foreign-handle-class-850",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": false,
+      "title": "check the owned foreign handle class",
+      "body": "A class with a `CPtr` or `CPtr | null` field is a handle class: it owns the C\nresource, its constructor writes the field once from a `declare function`, its\nmethods read it only as `this.f`, and its `[Symbol.dispose]` is exactly the\nclose, declared once with no modifier. A handle is opened by `using`, called,\nor lent to a parameter of its type, and refused everywhere else. `using` of a\nhandle class is refused (NL2573, \"not lowered yet\") until a later release emits\nthe close at every exit of its block, so the checker never accepts a handle that\nnothing closes. A generic class's type arguments are now checked where it is\ninstantiated, as a generic function's were, so `new Empty<CPtr>()` is refused.",
+      "metrics": [],
+      "refs": [
+        "docs/wp40-ffi-buffers-handles.md#4a"
+      ],
+      "tests": [
+        "tests/cases/ffi_handle_positions",
+        "tests/cases/reject_ffi_handle_*"
+      ],
+      "commits": [
+        "9260a2c"
+      ],
+      "pr": 850,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "nish-yaml-a-yaml-parser-with-byte-ranges",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/yaml, a YAML parser with byte ranges, lines and paths",
+      "body": "nish/yaml parses a YAML 1.2 stream into a YamlStream: struct-of-arrays\nstorage with i32 handles, a [start, end) byte range on every node, pair and\ndiagnostic, and scalars decoded and resolved to the core schema only when\nread. It never panics on its input; problems come back as diagnostics with\nthe codes and spellings @amritk/yaml uses. nish/yaml-lines turns an offset\ninto a 1-based line, a character column and a byte column, so a linter can\nprint `line:col CODE message`. Paths resolve to a node or to the pair whose\nkey a report should point at, the last duplicate key winning.",
+      "metrics": [],
+      "refs": [
+        "#842"
+      ],
+      "tests": [
+        "tests/link/std_yaml"
+      ],
+      "commits": [
+        "ac72cb0"
+      ],
+      "pr": 852,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "write-a-program-back-out-as-typescript-with",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "write a program back out as TypeScript with --emit-ts",
+      "body": "`nish <entry> --emit-ts <dir>` writes the checked program back out as\nTypeScript that Node runs with type stripping. Each root-package module is\nwritten at its path relative to the directory the root modules share, and\neach standard-library module the program reaches is written under nish/.\nEvery other nish: builtin import becomes nish/runtime, and entry.ts\ninstalls the Node host, calls main and exits with its answer. A module\nwith no class-C site is copied byte for byte, and type imports are marked\nso strip-types drops them.\n\nA module that declares C functions is refused with NL4010, and signals or\nnish:net, imported or used as globals, with NL4011. Either refusal writes\nno file. A missing or empty directory, a clashing output flag, an\nunwritable layout, or an output path that would land on one of the\nprogram's own modules exits 2 before anything is written. The runtime\nimport goes after the leading comments and any #! line, where the lexer\nsays they end, so it never splits a line.\n\nThe per-construct translations are stubs here; later stages fill them in.\ntests/differential/emit-ts.js runs the whole corpus natively and through\n--emit-ts under Node, comparing stdout, stderr and exit status. It fails\non an unlisted disagreement, on a listed program that starts agreeing,\nmoves row or disappears, and on any emit, build or native-timeout error.\nThe programs the stubs cannot yet translate are listed by row in the\ngenerated tests/differential/emit-ts-known.txt.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/cli.md"
+      ],
+      "tests": [
+        "node tests/run.js emit-ts",
+        "tests/cases/reject_emit_ts_ffi",
+        "reject_emit_ts_net",
+        "reject_emit_ts_net_global",
+        "reject_emit_ts_signal"
+      ],
+      "commits": [
+        "2d65fc9"
+      ],
+      "pr": 853,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "compare-nish-yaml-with-amritk-yaml-856",
+      "type": "test",
+      "scope": "bench",
+      "breaking": false,
+      "title": "compare nish/yaml with @amritk/yaml",
+      "body": "bench/yaml-compare/ times nish/yaml against @amritk/yaml 0.8.0 under Node (and Bun when installed) on five pinned fixtures: an OpenAPI description, a multi-document Kubernetes manifest, a JSON-as-YAML file, a CI workflow full of block scalars, and a compose file with anchors and merge keys. Two workloads: parse, and parse plus a walk that reads every scalar's text. Both sides print a checksum of document count, node count per kind and error count, and a run whose checksums disagree fails. tests/run.js holds the Nish runner to a committed sample without the network; the bench itself never runs in npm test.\n\nThe baseline, on the parser before any tuning, has nish/yaml ahead in every row, 1.11x to 2.57x of @amritk/yaml under Node.",
+      "metrics": [
+        "Node/Nish median 1.11x (airflow walk) to 2.57x (citm parse), noise band 0.0-2.5%"
+      ],
+      "refs": [
+        "bench/README.md"
+      ],
+      "tests": [
+        "tests/run.js yaml-compare"
+      ],
+      "commits": [
+        "cb8c425"
+      ],
+      "pr": 856,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "add-nish-regex-a-linear-time-regex-engine",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "add nish/regex, a linear-time regex engine with a lazy DFA",
+      "body": "`nish/regex` matches regular expressions with JavaScript `RegExp` semantics\n(leftmost-first alternation, JS captures) in time linear in the text and in\nbounded memory, with no backtracking. A Pike VM gives captures and is the\nfallback. A lazy DFA, capped at 2,048 states and 1 MiB of transitions, does\nthe search, and a reverse DFA finds the leftmost start. Prefilters skip to\ncandidates: `indexOf` for a literal prefix, a first-byte table, an\ninner-literal search, and the new runtime kernel `nish_regex_scan`, which\ntests sixteen or thirty-two starts at a time against per-position byte sets.\n\nThe API is `regexCompile(pattern, flags)` returning a `Result`, then `test`,\n`exec`, `find`, `count`, `replace` (with `$1` and `$<name>`) and `split`,\nplus `regexEscape`. Against Rust's `regex` crate on nine patterns it is\nfaster on six and within 12% on digits, within 22% on captures.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/standard-library.md",
+        "docs/IR_COOKBOOK.md"
+      ],
+      "tests": [
+        "tests/link/std_regex",
+        "tests/link/std_regex_f64",
+        "tests/simd/regex-scan.c"
+      ],
+      "commits": [
+        "91dce9e"
+      ],
+      "pr": 858,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "add-issue-forms-that-ask-for-what-a",
+      "type": "docs",
+      "breaking": false,
+      "title": "add issue forms that ask for what a fix needs",
+      "body": "* docs: add issue forms that ask for what a fix needs\n\nBug reports, language or library requests and documentation problems now\nopen as GitHub issue forms. The bug form requires what a fix starts from:\nthe version or commit, install route, platform, the smallest program that\ncompiles as pasted, the exact command line, the full output and exit\ncode, and the expected behaviour with the rule or Node output behind it.\nIt also asks for the last good version, so a fix can begin from a bisect.\nBlank issues are off. The chooser links private vulnerability reporting,\nthe FAQ and the known inconsistencies.\n\nThe README, FAQ, INSTALL and the CLI guide page told a reporter that\n`NISH_DEBUG=1` prints a stack trace for exit 70. The self-hosted compiler\nhas none, and says so, so they now ask for the input, the command line\nand the printed report.\n\n* build: exempt .github/ISSUE_TEMPLATE from the kebab-case file-name rule\n\nGitHub reads issue forms only from a directory spelled that way, so it joins node_modules as a name a tool looks for.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "05dbb71"
+      ],
+      "pr": 860,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "cache-interop-s-tshark-packages-and-retry-them",
+      "type": "ci",
+      "breaking": false,
+      "title": "cache interop's tshark packages and retry them off the Azure mirror",
+      "body": "The quic-interop-runner jobs install tshark, 26.5 MB of packages, most of it libwireshark17t64. The Azure Ubuntu mirror sometimes serves that at a trickle that never trips apt's idle timeout, so the step's five-minute limit fired before any case ran. As in ci.yml's test job, the .debs are now kept in the Actions cache keyed by runner image, and on a miss each download attempt is cut at a minute and retried without the Azure mirror.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "732b40e"
+      ],
+      "pr": 863,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "count-code-points-in-std-text-838",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "count code points in std/text",
+      "body": "codePointLength(text) returns the number of Unicode code points in a string, the count JSON Schema's minLength and maxLength use, where .length counts UTF-8 bytes natively and UTF-16 units under Node. It reads which units the host gives and walks them accordingly: natively it counts non-continuation bytes, with the host probe folded away under -O2 and the walk vectorized; under Node it counts UTF-16 units less each paired low surrogate. The two hosts agree on any string written in the source, and differ only on text built from bytes and on text that is not well-formed, both documented and pinned by tests.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_text",
+        "tests/link/std_text_f64",
+        "tests/link/std_text_code_points_native"
+      ],
+      "commits": [
+        "a88134f"
+      ],
+      "pr": 838,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "disable-the-macos-jobs-865",
+      "type": "ci",
+      "breaking": false,
+      "title": "disable the macOS jobs",
+      "body": "The darwin `bootstrap` rows and the `runtime-net` job kept failing, so\nCI stops running them for now. The seeds job drops every row whose runner\nis a macOS image before `bootstrap` sees the matrix, and `runtime-net`\nis `if: false`. Both are kept in the file so they can be turned back on\nby deleting a step and a line. release.yml still builds the darwin seeds.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c3727a6"
+      ],
+      "pr": 865,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "nish-yaml-paths-follow-merge-keys-held-to",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/yaml paths follow merge keys, held to the yaml-test-suite",
+      "body": "* feat(std): nish/yaml paths follow merge keys, held to the yaml-test-suite\n\npathNode and pathPair now look a key a map does not hold up in the maps\nits << merge keys name, in order: the map's own keys win, then the first\nmerged map listed, depth first, with a visited check and the 100-hop\nbound so a recursive alias ends. With merge off, << is an ordinary key.\n\nA new link test runs the yaml-test-suite: error cases must report an\nerror, valid ones none, and each document must equal the case's JSON.\nA plain scalar's continuation line of blanks, tabs included, is now an\nempty line.\n\nTests: tests/link/std_yaml, tests/link/std_yaml_conformance\n\n* feat(std): nish/yaml reports a merge key that names no map, and an empty block scalar ends at its header\n\nA << value that is not a map, an alias to one or a sequence of those is\na BAD_MERGE error, on the value, on each bad item of a sequence, or on\nthe key when the value is empty. An empty block scalar's range now ends\nat its header instead of the start of the next line. The guide shows a\npath through a merge key.\n\nTests: tests/link/std_yaml\n\n* style(std): format nish/yaml\n\n* fix(std): type the merge search's start depth for f64 number mode\n\n* fix(std): nish/yaml merge keys accept `!!merge` and an alias to a sequence\n\nA `<<` key tagged `!!merge` is a merge key like an untagged one, and any\nother tag makes it an ordinary key. A merge value may now be an alias to a\nsequence of maps, which paths already followed; an item that is not a map\nis reported on the alias. The path walker reuses one array to track the\nmaps a merge search has visited, rather than allocating one per step.\n\nTests: tests/link/std_yaml\n\n* refactor(std): fold nish/yaml's merge value check into one loop\n\ncheckMerge walks a sequence the same way whether it was written in place or\nnamed by an alias. yamlIsMergeKey tests the two `<` bytes before the kind,\nstyle and tag, so most keys are ruled out by a length compare.\n\nTests: tests/link/std_yaml\n\n* test(self): regenerate the bench/yaml-compare golden for merge-aware nish/yaml\n\nTests: tests/self/goldens/checked/bench/yaml-compare\n\n* fix(std): nish/yaml marks each merged map searched in one store\n\nA path step that searched merge keys checked every map it had been through\nin a list, so one step over a map with N merge sources cost about N^2/2\ncompares: 50k sources written as `<<: [{}, {}, ...]` stalled a single\npathNode call for a second. Each node of the stream now carries the stamp\nof the last step that searched it, and a step takes a new stamp instead of\nclearing a list, so a step costs what it searches. The 100-merge depth cap\nstays; no YAML source can form a merge cycle, so both guards bound work.\n\nThe tests now reach both guards (a diamond, a chain of 120 merges, 20000\nsources and 20000 aliases to one map), the merged-key test reads the key's\nown line and column, and an expected yaml-test-suite failure must fail on\nthe error it is listed with.\n\nTests: tests/link/std_yaml, tests/link/std_yaml_conformance\n\n* test(std): nish/yaml units for a plain scalar's blank lines of tabs\n\nA plain scalar's line of only spaces and tabs is an empty line, so it folds\nto a break inside the scalar and ends it when it trails, at a break or at\nthe end of the text, quietly. These units pin that path through\nscanPlainScalar.\n\nTests: tests/link/std_yaml",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "034060b"
+      ],
+      "pr": 857,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "group-and-colour-help-and-keep-it-plain",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "group and colour --help, and keep it plain for agents",
+      "body": "nish --help is grouped by purpose (Build, Check, Capabilities, Interop,\nInspect, Code generation), followed by the exit codes and examples. It is\ncoloured on a terminal and plain when piped, under NO_COLOR or TERM=dumb.\n\nUnder a coding agent (CLAUDECODE, GEMINI_CLI or NISH_AGENT=1) the help is\nalways plain and ends with an Agents section naming the installed\ndocs/AI.md by absolute path, plus --json, --fix and nish run. docs/AI.md\nnow ships in the platform package and the release tarball so that path\nexists after an npm install. An unknown flag prints a one-line hint to\nnish --help instead of the whole menu, and still exits 2.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "79148a1"
+      ],
+      "pr": 855,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "translate-the-string-rows-in-emit-ts-859",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "translate the string rows in --emit-ts",
+      "body": "Nish counts string offsets in UTF-8 bytes and Node counts them in UTF-16\nunits, so `--emit-ts` now writes every string member that reads or gives\nan offset as a call of the core helper that counts bytes: `.length`,\n`charCodeAt`, `indexOf`, `slice` and `substring` on a string, and a\nstring's `.length` closing a `?.` chain as `strLenOpt`. `String.fromBytes`\ndecodes its range as UTF-8, and `String.fromCharCode` and `Number` of a\nstring go through the core's helpers rather than the globals.\n\nThe row names what it still leaves apart: byte-offset methods inside a\n`?.` chain (right for ASCII only), `fromCharCode` at 128 and above\n(Latin-1, as the C row), the lossy U+FFFD decode, and helper names that\nmay clash with a program's own bindings. The core strings module caches\nthe last string's UTF-8 bytes and searches them with\n`Uint8Array.indexOf`, so repeated offset calls on one string stop\nre-encoding it.\n\nMeasured: indexOf x200 on a 24 KB string 18 ms -> 1.7 ms; charCodeAt over\nevery byte 620 ms -> 0.5 ms; adversarial indexOf 23 ms -> 27 ms (Node 22,\nsingle runs)",
+      "metrics": [],
+      "refs": [
+        "docs/wp33-round-trip.md#32-strings"
+      ],
+      "tests": [
+        "tests/emit-ts/strings",
+        "tests/differential/emit-ts-known.txt (330 -> 305)"
+      ],
+      "commits": [
+        "d2eff02"
+      ],
+      "pr": 859,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "add-nish-term-terminal-input-for-real-time",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add nish:term, terminal input for real-time terminal programs",
+      "body": "A Nish program can now read keys as they are pressed. `nish:term` adds five\nbuiltins, each also a global: `readStdin(buf, off, len)` reads what is waiting\non stdin without blocking (-11 when nothing is), `waitStdin(timeoutMs)` waits\nuntil stdin is readable and serves as a frame clock, `isTerminal(fd)`,\n`terminalSize()` and `setRawMode(on)`. They need the new `tty` capability, not\n`net`, and pair with the std `nish/term` module for drawing.\n\nstdin is never made non-blocking, since that flag is shared with the shell;\n`readStdin` asks `select` first instead. Raw mode keeps `ISIG` and `OPOST`, so\nCtrl-C, Ctrl-Z and \"\\n\" behave as before. The saved terminal comes back on\n`setRawMode(false)`, at exit, on every panic, and on each signal whose default\nends the program, faults included, through handlers on an alternate stack.\nCtrl-Z restores the terminal while the program is stopped and `fg` puts raw\nmode back, and a wait a stop interrupts still ends at its deadline. The C\nruntime gains a ninth translation unit, linked only by programs that call\nthese. Under WASI the reads wait and the terminal questions answer \"not a\nterminal\"; under Node `isTerminal` and `terminalSize` answer and the others\nthrow.",
+      "metrics": [
+        "runtime-term.c .text is 1,419 bytes under a 1,536-byte ceiling (clang 18 -Oz, deterministic)"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/guide/using-nish/terminal.md"
+      ],
+      "tests": [
+        "tests/cases/term_calls",
+        "tests/cases/term_import",
+        "tests/cases/term_pty",
+        "tests/cases/caps_tty",
+        "tests/cases/reject_term_*"
+      ],
+      "commits": [
+        "dd4df49"
+      ],
+      "pr": 854,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "translate-the-number-rows-in-emit-ts-866",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "translate the number rows in --emit-ts",
+      "body": "A program translated with `--emit-ts` now prints under Node what its native\nbuild prints for the number rows. An i32 `+ - *` that may overflow panics\nthrough `checkedAdd`, `checkedSub` and `checkedMul`; a proven or\n`--wrapping` one wraps with `| 0` and `Math.imul`. Integer `/` and `%` go\nthrough `idiv` and `irem`, which panic on zero and on MIN / -1. u8, u16 and\nu32 wrap with masks and `>>> 0`, i64 and u64 are `bigint`, `>>>` on i32\nkeeps its sign width, the saturating conversions go through `convert`, f32\narithmetic rounds with `Math.fround`, and `Math.min`, `max` and `round` keep\nnative NaN and -0 answers. An i64 or u64 offset passed to `fill` or to a\nstring method becomes a number before the call, so the strings row still\ncounts UTF-8 bytes.\n\nA compound assignment whose target holds a call, a step or an element read\ncannot be written as `x = x op e` without reading that target twice, so it\nis refused with NL4012 rather than emitted wrong. The Node host now makes\nstdout and stderr blocking, so a program's output is never cut short when\nit exits under load.\n\nMeasured: 55 of 64 parallel runs of corpus/bit_fnv1a truncated before the\nblocking-stdout change, 0 of 256 after",
+      "metrics": [],
+      "refs": [
+        "docs/wp33-round-trip.md#31-numbers"
+      ],
+      "tests": [
+        "tests/emit-ts/numbers",
+        "tests/cases/reject_emit_ts_compound",
+        "tests/differential/emit-ts-known.txt (305 -> 236)"
+      ],
+      "commits": [
+        "c986ddc"
+      ],
+      "pr": 866,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "translate-orreturn-result-and-enums-in-emit-ts",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "translate orReturn, Result and enums in --emit-ts",
+      "body": "`--emit-ts` now translates the control row. A `Result`'s `orReturn` whose\nstatement can take a prelude becomes a temporary, an `isErr` test and a\nreturn of the `Err`, hoisted before the statement in the order the calls\nrun. Anywhere a hoist could change what runs or in what order — the right\nof `&&`, `||` or `??`, a `?:` branch, past a `?.`, after an effect, a field\nor element read, a write the call makes to a local read earlier, or an\noperand that may panic — the call stays and its function is wrapped so the\nruntime's thrown propagation comes back as the `Err`. An enum becomes a\n`const` object with the checker's member values and a type of its values,\n`Result` annotations import the runtime's `Result`, and `Arena` members\nbecome the runtime's arena functions.\n\nThe composer gains a prelude contract (`canHoist`, `hoist`, `temporary`)\nthat writes each block statement's preludes before it, with temporaries\nnumbered once per module so every generic instance writes the same text.",
+      "metrics": [],
+      "refs": [
+        "docs/wp33-round-trip.md#34-control-flow"
+      ],
+      "tests": [
+        "tests/emit-ts/control",
+        "tests/differential/emit-ts-known.txt (no control row left)"
+      ],
+      "commits": [
+        "f3fdbc1"
+      ],
+      "pr": 864,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "using-of-a-handle-class-closes-it-at",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "`using` of a handle class closes it at every exit of its block",
+      "body": "A `using f = new File(p)` of a WP40 handle class now lowers: every exit\nof its block -- fall-through, a non-tail return, break and continue,\nscope joins and orReturn() -- calls the close its [Symbol.dispose] names\non the CPtr field once, exactly as the dispose spells it (a null test\nonly when the dispose has one, whatever the field's type). A panic or\nprocess.exit does not close. Each declarator of a `using` opens before\nthe next initialiser runs (Q12(a)), so one that leaves the function\ncloses the ones before it. break, continue and fall-through close\nlast-opened-first; a return joins its scopes, computes its value, closes\nhandles and locks innermost first, then releases arenas. NL2573 is\nretired.",
+      "metrics": [],
+      "refs": [
+        "docs/wp40-ffi-buffers-handles.md",
+        "docs/security/runtime.md#rt-20"
+      ],
+      "tests": [
+        "tests/cases/ffi_handle_file",
+        "tests/cases/ffi_handle_exits",
+        "tests/cases/ffi_handle_shapes",
+        "tests/link/ffi_handle_mutex",
+        "tests/link/using_declarator_exit"
+      ],
+      "commits": [
+        "081d61e"
+      ],
+      "pr": 861,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "byte-class-runs-and-copybytes-in-nish-bytes",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "byte-class runs and copyBytes in nish/bytes, on runtime kernels",
+      "body": "* perf(std): parse JSON floats with Eisel-Lemire in nish/json-tokenizer\n\n`numberF64` read a number itself only when Clinger's exact path applied (at\nmost 15 significant digits, a decimal exponent within ±22) and handed every\nother number to `parseFloat`. canada.json's coordinates have 16 and 17\ndigits, so each one went to `strtod`, more than half of canada's tokenize\ntime. Numbers of up to 19 significant digits now take Eisel-Lemire: one\n64×64→128-bit product of the significand and a 128-bit power of five, or\ntwo when the first is ambiguous, then rounding to even. Mushtak and Lemire\nproved the product always decides the rounding for 19 digits or fewer, so\nthere is no fallback; only a longer significand still calls `parseFloat`.\n\nThe algorithm is ported from fast_float at 0de7a21 under BSL-1.0, with its\nnotice and a THIRD_PARTY_NOTICES.md row. The table of 651 powers of five is\ngenerated by scripts/gen-json-pow5.mjs with BigInt, and tests/run.js checks\nthe region in std/json-tokenizer.ts is byte for byte what it writes. The\ncode is ordinary Nish, so Node runs it too and is checked by the same tests.\n\nEvery answer is bit-for-bit parseFloat's on canada.json's 978,519 numbers,\non JSONTestSuite, and on 10^8 random doubles printed shortest and at 17\ndigits; new checks pin subnormals, the smallest normal, the largest finite\nvalue, the first overflow, 19 and 20 digits and halfway cases.\n\nMeasured: canada tokenize 18.03 -> 6.50 ms (2.78x), citm 2.10 -> 1.80 ms (1.17x), twitter unchanged; min ns over interleaved rounds, bands at most 6.9%\nRefs: docs/wp38-simd.md#6, docs/security/json.md\nTests: tests/link/std_json_tokenizer\n\n* docs: record bench/json-compare after Eisel-Lemire in numberF64\n\ncanada.json now tokenizes in 6.29 ms at the minimum, 1.06x simdjson's\nOn-Demand; citm_catalog in 1.82 ms (1.59x) and twitter in 0.99 ms (2.20x).\n\nMeasured: noise bands 0.2% twitter, 2.0% citm, canada within 1%, on the minimums\nRefs: docs/wp38-simd.md#6\n\n* fix(std): compile numberF64's Eisel-Lemire under --number-mode f64\n\nUnder `--number-mode f64` a literal on the left of an operator, and a sum of\nliterals, is an `f64`, so three of jsonTokEiselLemire's i32 expressions did\nnot compile there and the performance gate refused nish/json-tokenizer,\nnish/json-typed and nish/json-value. The typed operand now comes first, and\nupstream's two constant sums are folded.\n\nTests: tests/run.js performance\n\n* feat(std): byte-class runs and copyBytes in nish/bytes, on runtime kernels\n\nnish/bytes gains skipBlank, skipDigits and skipJsonText, the first index in\na clamped range whose byte is not a JSON blank, a digit or a byte a JSON\nstring holds as itself (printable ASCII but `\"` and `\\`, and well-formed\nUTF-8), and copyBytes, a window copied as one move that panics on a range\noutside its array. Each body calls a private walker, which is what runs\nunder Node; natively the compiler replaces the call with a kernel of the\nnew runtime/runtime-bytes.c (scalar, SSE2/NEON/wasm SIMD and AVX2 paths,\npinned by NISH_SIMD), or llvm.memmove for the copy. The unit is 1,303\nbytes of text against a 1,536 budget; folded into runtime-simd.c the two\nwould have measured 1,960 against its 768. A freestanding wasm32 build\nlinks it when the IR names its symbols, as it does runtime-aes.c.\n\nnish/json-tokenizer walks blanks and string bodies on these kernels after\nan inline check of the first bytes, and copies a string's plain runs into\nits decode buffer with copyBytes. Digits stay an inline loop: a number's\nruns are shorter than a call is worth. The runs are variable-time, and\nstd/crypto does not call them.\n\nMeasured: tokenize twitter 1.48x, citm_catalog 1.23x to 1.31x, canada 0.93x against a3935f1, 9 interleaved rounds, noise band 3-5%\nRefs: docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear, docs/LANGUAGE.md#byte-runs-skipblank-skipdigits-skipjsontext-and-copybytes-in-nishbytes\nTests: tests/link/std_bytes_runs, tests/link/std_bytes_copy_outside, tests/simd/byte-runs.c\n\n* docs: record S6a in wp38 and write the S6c structural-index design\n\nS6a's section now says what was built: runtime-bytes.c as a unit of its own,\nthe text class with DEL and in-kernel UTF-8, the measured guards, copyBytes in\nstringInto, and the writer's escape scan left as a follow-up. Q6 is decided as\nnish/bytes. S6c's design (Q5) is written for the owner: one bitmap per 64-byte\nblock built in chunks into a fixed buffer, the kernel's bits as hints only, so\nevery error stays the scalar code's at its offset. Nothing of S6c is built.\n\nRefs: docs/wp38-simd.md#8-decisions\n\n* docs: record bench/json-compare after the byte-class kernels\n\ntwitter.json now tokenizes in 0.74 ms at the minimum, 1.55x behind simdjson's\nOn-Demand (2.20x before), and citm_catalog in 1.47 ms, 1.24x behind (1.59x\nbefore). canada.json is 6.96 ms, 1.10x behind. Against the 06645ecf record\nS6a's bar is read from, tokenize is 1.69x faster on twitter and 1.63x on citm,\nso the stage's 1.2x bar is met. The serialize part is not reached: the writer\nwas not changed.\n\nMeasured: noise bands 0.1% twitter, 6.6% citm, 2.3% canada on the minimums; every other implementation's minimum rose 5-7% against the previous record, a noisier host\nRefs: docs/wp38-simd.md#7-stages-and-the-bar-each-must-clear\n\n* fix(std): keep the tokenizer's digit loop provably in bounds\n\nS6a folded the digit loop's two bounds into one clamped `to`, which the range\nproof cannot follow, so the read kept its bounds check and the performance gate\nfailed for std/json-tokenizer.ts and its importers. The loop tests `end` and the\narray's length again, as it did before S6a.\n\nTests: node tests/run.js performance\n\n* test(cli): count runtime-bytes.c among the runtime units a link compiles\n\nruntime-bytes.c made the runtime nine translation units, but the cpu-level test\nstill counted eight -march'd compiles, so it failed. The runtime-cache tests,\nthe CLI-11 record, the run cache's comments, INSTALL.md and the master plan now\nsay nine as well.\n\nTests: node tests/run.js cpu-level, node tests/run.js runtime-cache\n\n* docs(std): point the byte-class kernels at runtime-bytes.c and fix the run comment\n\nThe runtime table's comment named the wrong C unit for nish/bytes's\nbyte-class walkers, and JsonTokenizer.string()'s comment on the plain-run\nskip described the old per-byte loop. Goldens move by line offset only.\n\n* test(cli): drop str_surrogate_pair from the --emit-ts known list\n\nThe case agrees with native under --emit-ts on the head that merges main's\nstring-row translation (#859), so the corpus check reported it as an unexpected\npass. `node tests/differential/emit-ts.js --update` drops the entry.\n\nTests: tests/differential/emit-ts-known.txt\n\n* test(cli): keep str_surrogate_pair on the --emit-ts known list\n\nNode 22.23's type stripper rejects an escape the --emit-ts output of this case\nspells (\"Bad character escape sequence, expected 4 hex characters\"), so on CI\nthe case still differs from native; only an older Node 22 accepts it. The entry\nmain generated stays, and this reverts the drop.\n\nTests: tests/differential/emit-ts-known.txt\n\n* test(cli): count all ten runtime units in the --cpu level check\n\nThe merge of main brought runtime-term.c in beside runtime-bytes.c and renamed\nthe check to \"all ten runtime units\", but its count of `-c runtime*.c` lines\nstayed at nine, so the level link with ten compiles failed it.\n\nTests: tests/run.js (\"cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 ...\")",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c8017f2"
+      ],
+      "pr": 862,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "add-pbkdf2-hmac-sha256-to-nish-crypto-hmac",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add PBKDF2-HMAC-SHA256 to nish/crypto/hmac",
+      "body": "`pbkdf2HmacSha256(password, salt, iterations, length)` derives a key by RFC 8018 §5.2 with HMAC-SHA-256 as the PRF, for the SCRAM-SHA-256 client std/net/postgres will use. The password goes in and the key comes out as a `Secret<u8[]>`: the PRF is keyed once inside `exposeWith` and only the keyed state is copied per round, so no password-derived value is answered plain, and every U_j, T_i, digest and keyed hasher is wiped before return, pinned under opt -O2. Bad arguments answer `null`, like the HKDF Secret forms. Time is linear in `iterations`: a caller taking the count from an untrusted peer must cap it.",
+      "metrics": [],
+      "refs": [
+        "docs/security/crypto-k1.md (Addendum: PBKDF2-HMAC-SHA256)"
+      ],
+      "tests": [
+        "tests/link/std_pbkdf2",
+        "tests/link/std_pbkdf2_f64",
+        "tests/wipes/crypto.js"
+      ],
+      "commits": [
+        "8be6b8b"
+      ],
+      "pr": 871,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "bind-a-declare-function-in-a-package-to",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "bind a declare function in a package to its bare C symbol",
+      "body": "A `declare function` in a package other than the program's own (std/ included, which is package `nish`) was emitted under that package's symbol prefix, so `declare function abs` in package `probe` became `@probe.abs` and the link failed. C has one symbol namespace, so a declared function now keeps its name as written in every package. Declarations of one C name that agree on their parameter and return types are one function with one set of facts; declarations that differ are refused (NL3039, naming both). A function the program defines under a declared C name, judged on the symbol it is actually emitted as, is refused at the definition (NL3040), which is newly refused.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#calling-c"
+      ],
+      "tests": [
+        "tests/link/ffi_package_declare",
+        "ffi_package_declare_same",
+        "ffi_package_declare_apart",
+        "ffi_package_declare_clash",
+        "ffi_package_declare_mismatch",
+        "ffi_package_declare_root_clash"
+      ],
+      "commits": [
+        "804120e"
+      ],
+      "pr": 869,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "pin-use-after-close-of-a-handle-and",
+      "type": "test",
+      "scope": "checker",
+      "breaking": false,
+      "title": "pin use after close of a handle and its sibling shapes",
+      "body": "WP40 H1.3. A handle named after its `using` block is a scope error: after\nthe block, in the loop's next iteration, a `do` loop's condition, a `for`\nloop's update, a later `case` (and a `using` written straight into a\nclause), the `else`, and a constructor reached by `new`. A lent handle its\ncallee tries to keep is refused by §4d's rules: a local, a field of another\nclass, `h.l = this`, and a Map or a Channel at its instantiation. A module\nbinding is refused first by the module rules. In the handle class's own\nconstructor, `this` cannot be lent, called, stored or aliased (#566). Shapes\nH1.1 already pinned are cited, not duplicated. No shape compiled, so the\ncompiler is unchanged. LANGUAGE.md states which rule refuses each shape, and\nthe WP40 status and RT-20's test list record that H1's bar is met.",
+      "metrics": [],
+      "refs": [
+        "docs/wp40-ffi-buffers-handles.md#9-plan"
+      ],
+      "tests": [
+        "tests/cases/reject_ffi_handle_use_after_close",
+        "tests/cases/reject_ffi_handle_ctor_this_lend"
+      ],
+      "commits": [
+        "5d80b08"
+      ],
+      "pr": 874,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "give-math-round-min-and-max-javascript-s",
+      "type": "feat",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "give Math.round, min and max JavaScript's -0 and NaN, and add atan2, tan, hypot, sign, imul and f32ToBits",
+      "body": "Float `Math.round`, `Math.min` and `Math.max` now answer as JavaScript\ndoes: a NaN operand gives NaN, `min(0, -0)` is -0, and a value in\n[-0.5, 0) rounds to -0. That withdraws two documented deviations and\nretires NL8010. Native builds lower min and max to the compare-and-select\nC compilers emit; wasm keeps `llvm.minimum`/`maximum`.\n\n`Math.atan2`, `Math.tan` and `Math.hypot` are new, written in Nish in\n`std/math.ts` as ports of fdlibm and copied into each calling module as\ninternal functions, so no target calls libm for them and every target,\nwasm included, gives the same answer. Every NaN, signed zero and infinity\ncase is JavaScript's, and ordinary arguments are within one ulp of the\nexact value, pinned in CI by sampled mpmath references across every\nreduction branch. `Math.sign`, `Math.imul` and the `f32ToBits` builtin are\nnew too. Under `--emit-ts`, float min, max and round are plain `Math` again\nand an i64 `Math.sign` goes through a `bigint` helper.\n\nMeasured: atan2 224-229 ms vs Go 274-319 ms; tan 212-218 vs Go 231-235 ms;\nhypot 60.3 vs Go 68.5-71.3 ms; all three under C and Rust (min of 21\ninterleaved runs, band 0.3-2.8% Nish, 1.4-16% Go)",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "std/math.ts",
+        "bench/math-ulp"
+      ],
+      "tests": [
+        "tests/cases/math_*",
+        "tests/cases/f32_to_bits",
+        "tests/cases/math_ulp_samples",
+        "tests/emit-ts/numbers/mathcore"
+      ],
+      "commits": [
+        "95ae2c1"
+      ],
+      "pr": 847,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-23"
+    },
+    {
+      "id": "refuse-attacker-facing-code-that-ships-without-its",
+      "type": "ci",
+      "breaking": false,
+      "title": "refuse attacker-facing code that ships without its security record",
+      "body": "A std/net or std/crypto module, a runtime C file, or a builtin that reads\nthe network, the terminal or another process now lands with its\ndocs/security/ record and index row. CLAUDE.md's definition of done and\nARCHITECTURE.md's construct checklist say so, and scripts/security-scope.mjs,\nrun by CI and npm test, refuses a file that no record's Scope table or index\nrow names. The six files that predate the rule are listed under \"Not yet\naudited\" with a reason, and the list only shrinks.\n\nA CodeQL workflow analyses runtime/*.c with its actions pinned to commits;\nits first alerts are triaged in docs/security/runtime.md, which also records\nthe design of a debug arena that would trap a stale reference. SECURITY.md\nand std/README.md no longer say nothing in std/crypto is wiped.",
+      "metrics": [],
+      "refs": [
+        "docs/security/README.md",
+        "docs/security/runtime.md#static-analysis"
+      ],
+      "tests": [
+        "tests/run.js (security-scope)"
+      ],
+      "commits": [
+        "41b5efa"
+      ],
+      "pr": 893,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "make-ci-s-test-shards-the-full-suite",
+      "type": "docs",
+      "breaking": false,
+      "title": "make CI's test shards the full-suite gate",
+      "body": "Sessions no longer run the unsharded `npm test` locally before opening a\npull request and again after the last merge of main. Unsharded it takes 40\nto 70 minutes in a 4-core cloud session, while CI's `test` job already runs\nthe whole suite in four cost-dealt shards on every push (about 14 minutes\nwall, 46 runner-minutes).\n\nLocally a change now runs `npm run check`, `npm run lint` and\n`node tests/run.js <filter>` for every section or program it touches; a\n`src/` change still adds the `wasi` and `performance` sections and the\ngoldens regeneration. The full-suite gate is every CI `test` shard green on\nthe current head, each shard's summary read for skips and a `DEGRADED:`\nbanner the way a local run is, with delegated checks named by the job that\nproves them. A change to the suite itself, or a fork pull request whose CI\ndoes not run, still runs the whole suite locally and says so in its body.\n\nThe rule lives in CLAUDE.md's definition of done; AGENTS.md, the .claude\nguides, docs/AI.md, docs/MASTER_PLAN.md and the pending stages of the\nactive plans point at it.",
+      "metrics": [],
+      "refs": [
+        "CLAUDE.md#definition-of-done"
+      ],
+      "tests": [],
+      "commits": [
+        "e7e6ce4"
+      ],
+      "pr": 890,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "nish-term-setterminalrestore-writes-a-mode-reset-on",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "nish:term setTerminalRestore writes a mode reset on exit, panic and signal",
+      "body": "A full-screen program can now hand the runtime the bytes that undo its escape-sequence modes — alternate screen, hidden cursor, kitty keyboard flags, mouse reporting, bracketed paste — and the runtime writes them to the terminal before it restores termios, on a normal exit, on a panic and on every signal that ends the program (SIGKILL aside). A crash no longer leaves a blank alternate screen with no cursor, or a shell broken by kitty keyboard mode.\n\nsetTerminalRestore(bytes) answers 0 when the bytes are kept, -25 when stdout is not a terminal and -7 past 4,096 bytes; a new call replaces them and \"\" clears them. The bytes go out once, with write(2) only, while every signal is blocked, so a second fatal signal cannot cut them short. Ctrl-Z and setRawMode(false) write nothing. Under Node and in --emit-ts output the builtin throws, as setRawMode does; the WASI runtime answers -25.\n\nThis also registers the std modules nish/term-io, term-pixels, term-probe, term-rate and base64 as placeholders, so the stages that fill them touch neither the module list nor the release gates.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md (nish:term)",
+        "docs/guide/using-nish/terminal.md"
+      ],
+      "tests": [
+        "tests/cases/term_restore",
+        "reject_term_restore_arity",
+        "reject_term_restore_number",
+        "reject_term_restore_wasm; tests/run.js term (pseudo-terminal: exit",
+        "panic",
+        "signals",
+        "cleared",
+        "full cap",
+        "write before tcsetattr)"
+      ],
+      "commits": [
+        "b528555"
+      ],
+      "pr": 876,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "one-event-stream-from-nish-term-s-keydecoder",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "one event stream from nish/term's KeyDecoder",
+      "body": "KeyDecoder's new feedEvents and pollEvents turn a terminal's raw input into one stream of TermEvents:\n- keys with modifiers and press, repeat or release, from the kitty keyboard protocol and the legacy xterm, SS3 and Linux-console forms;\n- SGR mouse reports, with pixel coordinates under mode 1016;\n- a bracketed paste as one event, however many reads it spans;\n- focus in and out;\n- every terminal reply as an EVENT_REPLY, never a key.\n\nReplies are DA1, DA2, DSR, CPR, DECRPM, kitty keyboard flags, XTSMGRAPHICS, window reports, kitty graphics and XTVERSION. A CPR is told from F3 with modifiers by a counter of outstanding queries. `feed` and `poll` keep their results byte for byte.\n\nKeyState gives a game `isDown(key, code)`:\n- **Kitty:** it uses the terminal's real releases.\n- **Legacy terminals:** it synthesises a release once a key stops repeating, and reports that through `releasesAreSynthetic`.\n- **Timing:** synthesised releases are timed against a watermark, the send time of the newest acknowledged in-order query. So bursts, jitter and stalls over SSH never read a held key as up. Without acknowledgements it falls back to fixed wall-clock gaps.\n- **Quit:** Ctrl-C maps to EVENT_QUIT, both as byte 3 and as kitty's `CSI 99;5u`, with Num Lock and Caps Lock masked.\n\nThe module stays pure and reaches no capability.",
+      "metrics": [],
+      "refs": [
+        "std/term.ts (module header)",
+        "docs/guide/using-nish/standard-library.md#nishterm"
+      ],
+      "tests": [
+        "tests/link/std_term_events (240 checks: every form fed whole",
+        "split at every byte and one byte a read; KeyState under bursty",
+        "jittered and stalled input with and without acknowledgements)"
+      ],
+      "commits": [
+        "25e635a"
+      ],
+      "pr": 877,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "add-nish-cli-and-paint-help-in-the",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "add nish/cli, and paint --help in the terminal theme's colours",
+      "body": "`nish --help` painted its headings, flags and placeholders in fixed 256-colour tones, which ignored the colours the reader's terminal theme sets. It now uses only the eight basic ANSI colours, bold and faint, which every theme redefines, so the help takes on the reader's palette. On a terminal whose TERM terminfo declares no colours (`tput colors` below 8, as for TERM=vt100), headings and flags are bold and placeholders underlined instead. Forced colour (FORCE_COLOR, CLICOLOR_FORCE) is always the theme's and asks nothing, since its reader is a pager or an editor that paints the escapes itself.\n\nThe help menu moves into the standard library as `nish/cli`, so a Nish program can print a help that behaves the same way: `HelpMenu` builds it a line at a time with descriptions lined up at the caller's columns, `Style` paints it, and `styleFor(fd, agent)` and `agentDriven()` are the policy the compiler follows. `HelpMenu` and `Style` reach no capability. The compiler imports the module by a relative path, so `std/cli.ts` may use only what the last release compiles.\n\nThe colour probe runs tput as /usr/bin/tput or /bin/tput, never through PATH, so a PATH holding `.` cannot run a tput planted in a checkout when someone types `nish --help` there.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/standard-library.md#nishcli",
+        "docs/security/cli.md"
+      ],
+      "tests": [
+        "tests/link/std_cli; tests/run.js exit-codes (\"--help on a monochrome terminal (vt100)\"",
+        "\"--help: the colour probe never runs a `tput` found on PATH\")"
+      ],
+      "commits": [
+        "3dca351"
+      ],
+      "pr": 879,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "a-std-threads-task-may-call-a-function",
+      "type": "fix",
+      "scope": "checker",
+      "breaking": false,
+      "title": "a std/threads task may call a function that wipes memory the task allocated",
+      "body": "A `wipe` used to count as a shared write wherever it ran, because its\nbody is a call to `llvm.memset` and a call with no body is a shared\nwrite. NL2471 therefore refused any std/threads task or parallel body\nthat zeroed scratch it had allocated itself, so a password hash could not\nrun on a worker thread.\n\nThe wipe's write now moves to the argument it is given, composed like any\nother write through a call: an array the function allocated stays\nprivate, and a parameter, a capture, a field, a call's answer or a\n`Secret` made with `secret(...)` is still a shared write. The wipe is\nstill one volatile `llvm.memset`, and `sharedWrite` feeds no LLVM\nattribute, so the emitted IR does not change.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md (NL2471)",
+        "docs/security/secret.md"
+      ],
+      "tests": [
+        "tests/link/thread_task_wipe",
+        "tests/cases/reject_thread_wipe_{param",
+        "capture",
+        "field",
+        "helper",
+        "call_result",
+        "secret}"
+      ],
+      "commits": [
+        "22ebfca"
+      ],
+      "pr": 894,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "audit-regex-term-bytes-pbkdf2-and-the-browser",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "audit regex, term, bytes, PBKDF2 and the browser host",
+      "body": "Five attacker-facing areas had no security record. Each is now audited,\nits findings fixed with a test or accepted in writing, and its record\nindexed in docs/security/README.md.\n\n- nish/regex: compile time and memory are bounded for patterns an\n  attacker writes (empty-body repeats, 10,000-range classes, 1,024\n  groups, the slot table); iteration's quadratic case is documented.\n- nish:term: the screen, cell count and CSI parameters are capped, and\n  the terminal is restored on every catchable signal, including one\n  that arrives while raw mode is being entered.\n- nish/bytes: the N-API shim refuses a typed array longer than 2^31-1,\n  and no std/crypto module calls a variable-time scan kernel.\n- PBKDF2-HMAC-SHA256: recorded under crypto-k1 (K1-8, K1-9).\n- Browser adapter: runs with only web globals, with a declaration file.",
+      "metrics": [],
+      "refs": [
+        "docs/security/regex.md",
+        "docs/security/term.md",
+        "docs/security/bytes.md",
+        "docs/security/runtime-browser.md"
+      ],
+      "tests": [
+        "tests/link/std_regex",
+        "tests/link/std_term",
+        "tests/cases/term_pty"
+      ],
+      "commits": [
+        "a3b9beb"
+      ],
+      "pr": 904,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "link-the-speed-profile-in-parallel-907",
+      "type": "perf",
+      "scope": "cli",
+      "breaking": false,
+      "title": "link the speed profile in parallel",
+      "body": "The speed profile's link spent most of its time in full LTO's code\ngeneration, which ran on one core. When the link goes through lld, the\nspeed link now splits that code generation into one partition per core\n(-Wl,--lto-partitions=<cores>; cores from nproc, else getconf\n_NPROCESSORS_ONLN, else sysctl -n hw.ncpu). The whole program is still\noptimised as one module, so inlining is unchanged and the instructions a\nprogram runs stay within a few of bench/instructions.json. macOS ld64 and\nthe GNU ld fallback have no partition flag and link as before, and the\nsize, napi, debug, wasm and wasi profiles are unchanged.\n\nThinLTO linked faster (cold 5.6 s) but failed the instruction-count\ngate (sieve +51%, Permute +20%, nbody +12%), so it was not taken.\nCompiling the cached runtime to native objects needs a second compile\nflag list for the cache, so it was not taken either.\n\nThe bytes now depend on the partition count. One machine still links\none input to one output, as scripts/bootstrap.sh's stage comparison\nneeds, but machines with different core counts can produce slightly\ndifferent speed binaries. The runtime cache key fingerprints\nscripts/build.sh, so caches built with the old flags are rebuilt.\n\nMeasured: speed --link of tests/link/net_relay_f64, one 4-core machine,\n5 interleaved rounds: cold median 11.60 s -> 8.53 s (1.36x), warm 11.22 s\n-> 8.12 s; link step alone 8.08 -> 4.93 s (min). Noise band from a\nbyte-identical base re-run 1.2-1.9%. Runtime: node tests/run.js\nperformance 237/237; bench --instructions all 21 within +0.100% of\nbench/instructions.json. Size: npm run size-report byte-identical;\nbenchmark binaries within 32 B.",
+      "metrics": [],
+      "refs": [
+        "docs/ARCHITECTURE.md (profiles",
+        "platform notes)"
+      ],
+      "tests": [
+        "tests/link/net_relay_f64"
+      ],
+      "commits": [
+        "c7fb31d"
+      ],
+      "pr": 907,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "a-deadline-for-an-http-1-head-and",
+      "type": "fix",
+      "scope": "std",
+      "breaking": false,
+      "title": "a deadline for an HTTP/1 head and HPACK decoding into caller storage (H1-1, H2-1)",
+      "body": "An HTTP/1 slot was closed only when idle, and the idle clock restarts on every byte, so a client trickling its request head held its slot forever. Http1Config.headTimeout (30 s by default) now bounds a whole request head from its first byte to its blank line; on TLS the clock starts on any post-handshake ciphertext, so a record trickled without handing over plaintext is bounded too. expire(now) closes a slot that is idle or past its head deadline. H2-1 was already fixed by #473; H1-3 stays open, with its reason in docs/security/http1.md.",
+      "metrics": [],
+      "refs": [
+        "docs/security/http1.md#h1-1"
+      ],
+      "tests": [
+        "tests/link/net_http1_server",
+        "tests/link/net_http1_server_bad_head_timeout"
+      ],
+      "commits": [
+        "d429edd"
+      ],
+      "pr": 895,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "vendor-sqlite-and-link-it-when-a-program",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "vendor SQLite and link it when a program uses it",
+      "body": "The SQLite 3.54.1 amalgamation is vendored, unchanged and public domain, in runtime/sqlite/. scripts/build.sh compiles and links it whenever a program's IR declares an `@sqlite3_*` or `@nishsqlite_*` function, so `nish run`, `--link` and a hand-written build line all link it with no extra flag. A program that does not call SQLite keeps its link line, binary and cache key.\n\n`nish run` and `--link` cache the compiled SQLite objects in their own runtime-cache entry. Its key covers every runtime/sqlite/*.c and *.h, runtime/nish.h, the profile, `--cpu`, `--threads`, the compiler and `NISH_SQLITE_CFLAGS`. SQLite is compiled to native code even under the LTO profiles, so a warm link takes milliseconds rather than ten seconds.\n\nThe defaults are SQLite's recommended compile-time options, with `SQLITE_THREADSAFE=0`, or `2` (multi-thread mode: one connection per thread) under `--threads`. `NISH_SQLITE_CFLAGS` appends options, and an option naming a default replaces it.\n\nPer profile: wasi links SQLite and runs it, wasm refuses with exit 2, and a napi addon exports none of SQLite's symbols. docs/security/sqlite.md records the trust model, the options and how to update the version.",
+      "metrics": [
+        "speed-profile link of tests/link/sqlite_link, cold 18.1 s / warm 0.175 s; debug, cold 1.47 s / warm 0.14 s; npm tarball +2.65 MB packed"
+      ],
+      "refs": [
+        "docs/guide/using-nish/cli.md",
+        "runtime/sqlite/README.md",
+        "docs/security/sqlite.md"
+      ],
+      "tests": [
+        "tests/link/sqlite_link",
+        "tests/link/sqlite_link_threads",
+        "tests/link/sqlite_memory",
+        "tests/run.js sqlite-link"
+      ],
+      "commits": [
+        "5d48a29"
+      ],
+      "pr": 870,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "nish-term-rate-chooses-the-refresh-rate-a",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/term-rate chooses the refresh rate a machine and link sustain",
+      "body": "nish/term-rate is a pure refresh controller. A terminal program tells it each frame's size and build cost, and when the terminal acknowledges each frame, through the reply to an in-order query sent after it. It answers whether a frame may be drawn now and at what tier, from 5 to 60 fps (120 on request). It also answers what resolution divisor, backend cap and colour depth to draw at.\n\n- **What it measures.** It keeps three loads under a 70% budget: build cost against the frame time, bytes against the measured throughput, and the round trip against the frames allowed in flight. At most one or two frames are unacknowledged at once, so lag cannot build up on a slow link even when every write returns at once.\n- **When it changes rate.** It drops after 1 s over budget, rises after 3 s comfortably under, and settles after each change, so the rate does not oscillate.\n- **Starting rate and overrides.** It starts at 15 fps on a remote link and 30 on a local one; a probe round trip outranks stale SSH variables. Overrides are `fixedFps`, `maxFps`, `minFps`, `allow120` and `NISH_TERM_FPS`.\n- **When the lowest acceptable rate does not fit.** Under the default, prefer-rate, it cuts the bytes rather than the rate: half and quarter resolution, then half-blocks, then 256 colours, and undoes these as the link recovers. A link whose round trip is all latency instead falls below the floor at full detail, because smaller frames cannot help it.\n- **Throughput.** It is measured as bytes acknowledged over the time the link was busy, so a burst of acknowledgements does not read as unbounded bandwidth.\n- **Robustness.** An acknowledgement for a frame already given up as lost is swallowed rather than matched to a later frame. Non-finite inputs are ignored.\n- **Stats overlay.** drawStatsOverlay prints the current tier, backend, round trip, throughput, frame cost and dropped frames into a corner of a nish/term Screen.\n\nThe module reaches no capability and reads no clock.",
+      "metrics": [
+        "19.3 ns a frame for tick, mayDraw, frameSent and ackReceived together (19.25–19.98 ns over 4×6 warm runs of 2M frames)"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/link/std_term_rate (78 checks: a fast local terminal",
+        "a 100 ms 1 Mbit/s link",
+        "a link that degrades and recovers",
+        "a starved link",
+        "the unacknowledged limit",
+        "bursty and late acknowledgements",
+        "bad input)",
+        "tests/link/std_term_rate_f64"
+      ],
+      "commits": [
+        "7dbdb5b"
+      ],
+      "pr": 906,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "libfuzzer-harness-sanitizer-runtime-build-ci-fuzz-jobs",
+      "type": "test",
+      "scope": "security",
+      "breaking": false,
+      "title": "libFuzzer harness, sanitizer runtime build, CI fuzz jobs, JSON/URL/regex targets",
+      "body": "The std parsers that read untrusted bytes are now fuzzed with libFuzzer. scripts/fuzz.sh builds any tests/fuzz/targets/<name>.ts under -fsanitize=fuzzer,address,undefined and adds sanitize_address to every compiled Nish function, so ASan covers the Nish code as well as the C runtime and harness. UBSan covers only the C. Under -DNISH_FUZZ_ABORT a panic, a failed check or an out-of-memory aborts, so libFuzzer records it as a crash.\n\nThere are five targets with seed corpora: json-tokenizer, json-value, json-typed, url and regex. Each checks the parser against a second way of computing the same answer. tests/run.js gains a fuzz section, which replays the corpora and regressions, and a runtime_sanitize section, which runs the runtime unit test under ASan and UBSan. CI runs a fixed-seed smoke run on every PR, bounded by wall-clock time, and a weekly 30-minute run per target that uploads crash files.\n\nRT-21 is fixed: nish_argv_init tested malloc's result for null only after offsetting it.",
+      "metrics": [],
+      "refs": [
+        "tests/fuzz/README.md"
+      ],
+      "tests": [
+        "tests/fuzz/regressions/json-typed/f64-infinity-decode"
+      ],
+      "commits": [
+        "a9bc9d8"
+      ],
+      "pr": 908,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "link-most-tests-link-programs-under-a-cheaper",
+      "type": "perf",
+      "scope": "tests",
+      "breaking": false,
+      "title": "link most tests/link programs under a cheaper profile",
+      "body": "Most tests/link programs now link under --profile debug instead of build.sh's default speed profile (-O3 -flto). The profile changes the link, never the IR, so goldens, expected.ir and the wipe checks read what they read before. SPEED_LINK in tests/run.js names the 43 programs that keep speed, each with its reason: alias metadata in expected.ir, the arr_ aliasing domain, wipes that must survive -O2, SIMD kernels, RSS and timing bounds, and four programs whose debug run costs more than the speed link saves. A program whose args name a profile keeps it. The other sites that link a tests/link program go through the same linkProfile rule, and the startup-byte budgets and the p256 seam pin speed explicitly. A no-compile guard (node tests/run.js speed-link) fails when a listed name has no tests/link program, when a program with !tbaa, noalias or !alias.scope in its expected.ir, or one a wipe check covers, is missing from the list, or when a listed program's args already name a profile. tests/shard-costs.json is re-measured from this change's CI shards.\n\nNo program's exit code or stdout differed between the two profiles. The link loop stays sequential: no parallel link loop was on main to measure.",
+      "metrics": [
+        "unsharded npm test 2654 s and 2612 s on base (band 42 s, 1.6%), 2189 s with this change (-444 s, 17%); link loop over 541 positive tests/link programs 810.6 s under speed, 340.9 s under this policy (speed passes differ by 3%); CI link costs 1083 s -> 675 s summed over four shards"
+      ],
+      "refs": [
+        "#889"
+      ],
+      "tests": [
+        "node tests/run.js speed-link"
+      ],
+      "commits": [
+        "8e34aff"
+      ],
+      "pr": 909,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "translate-the-array-and-record-rows-in-emit",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "translate the array and record rows in --emit-ts",
+      "body": "`--emit-ts` now translates the array and record rows. An element read or\nstore the checker did not prove in range goes through the runtime's\n`idx`/`setIdx`, which panic with the native out-of-range message; a\ncompound element store checks the index again after its right side runs,\nas native does, so a right side that shrinks the array panics rather than\ngrowing it back. `new Array<T>(n)` is filled with T's zero (`0`, `0n`,\n`false`, or `null` for a nullable T), `pop` of an array not proven\nnon-empty panics, and `dst.set(src, at)` copies in place.\n\nA record held inline in an array is copied in at a push, a literal or a\nstore, decided by the slot's type, so a `(P | null)[]` slot still shares\nits reference. A generic whose instances would need different copies or\nzeros is refused with NL4013. A module that binds a helper's name, such as\nits own `idx`, gets the helper imported under a `__nish_` alias in the\nrecords and numbers rows.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/emit-ts/records",
+        "tests/cases/reject_emit_ts_instances*",
+        "tests/differential/emit-ts-known.txt (195 -> 96)"
+      ],
+      "commits": [
+        "6057c20"
+      ],
+      "pr": 867,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "nish-term-probe-detects-what-a-terminal-can",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/term-probe detects what a terminal can do",
+      "body": "nish/term-probe works out what the terminal on the other end can do, so a program never has to ask itself.\n- `probeQueries(env)` is one write. It holds XTVERSION, DECRQM for synchronized output and pixel mouse, the kitty keyboard query, a kitty graphics a=q query, XTSMGRAPHICS, the cell and text-area size reports, and a true-colour check, then DA1 last.\n- TermProbe reads the replies through nish/term's KeyDecoder until DA1 answers, or until 250 ms pass.\n- It keeps the keys the user typed during the probe in order, `finish()` releases any that were still in the decoder, and `result()` answers a TermCaps record. The record covers:\n  - colours and true colour;\n  - sync;\n  - the kitty keyboard protocol and kitty graphics;\n  - Sixel and its colour registers;\n  - the cell size in pixels;\n  - pixel mouse;\n  - the multiplexer;\n  - the Linux console;\n  - the remote hint;\n  - the DA1 round trip;\n  - the graphics backend to use;\n  - the terminal's name.\n\nUnder tmux and screen the queries that need the outer terminal are wrapped in passthrough, and DA1 is left for the multiplexer to answer. So a multiplexer that forwards nothing still ends the probe, and its own answers decide the graphics. The Linux console gets 16 colours and ASCII graphics, and is sent no APC or DCS query it would print. NO_COLOR forces 16 colours. NISH_TERM_GRAPHICS forces kitty, sixel, halfblock or ascii, and is refused only where the choice would print garbage.\n\nThe module is pure: the environment and the time are handed in, and it reaches no capability.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_term_probe (cited fixtures for kitty",
+        "Ghostty",
+        "WezTerm",
+        "foot",
+        "Alacritty",
+        "xterm",
+        "iTerm2",
+        "Apple Terminal",
+        "Windows Terminal",
+        "tmux",
+        "mosh",
+        "screen and the Linux console",
+        "plus a silent terminal and replies split at every byte)"
+      ],
+      "commits": [
+        "4b4c72b"
+      ],
+      "pr": 903,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "an-elision-off-reference-build-and-a-soundness",
+      "type": "test",
+      "scope": "codegen",
+      "breaking": false,
+      "title": "an elision-off reference build and a soundness differential",
+      "body": "An internal --no-elision flag compiles every bounds check, null check and\noverflow check the optimiser would otherwise prove away, so a program built\nwith it is a reference for the same program built with elision. The new\ntests/differential/soundness.js builds each generated or listed program both\nways at -O2 and requires that stdout and exit status match and that the\noptimised build takes no trap the checked build lacks. A difference is an\nelision the compiler should not have made.\n\ntests/run.js pins the no_elision section, and ci.yml runs a fixed-seed pass\nof the differential on every pull request. --run-timeout is bounded to what\nNode's timer accepts.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/differential/soundness.js"
+      ],
+      "commits": [
+        "d83195b"
+      ],
+      "pr": 897,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "seed-the-string-hash-of-every-map-and",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "seed the string hash of every Map and Set (JSON-13)",
+      "body": "Map<string, V> and Set<string> now hash strings with SipHash-1-3 under a per-process random 128-bit key, filled from getentropy by a module constructor before main. A program can no longer pick keys that all share one hash and turn every lookup into a linear scan. Insertion order is unchanged.\n\nThe instruction gate pins the key for counting only, with a getentropy preload in bench/, so string-map counts stay deterministic; the shipped runtime is unchanged.",
+      "metrics": [
+        "instruction counts map-wordcount +27.1%, map-presize +18.2%, map-vs-stringmap +16.4%; wall time string keys +25.6% to +30.7%, int keys within the -0.6% to +0.3% noise band"
+      ],
+      "refs": [
+        "docs/security/json.md"
+      ],
+      "tests": [
+        "tests/cases/map_hash_collide",
+        "tests/cases/map_hash_kat",
+        "tests/cases/map_hash_reject_key_name"
+      ],
+      "commits": [
+        "fbf6900"
+      ],
+      "pr": 900,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "framebuffer-and-the-kitty-sixel-half-block-and",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "Framebuffer and the kitty, Sixel, half-block and ASCII backends",
+      "body": "A program draws RGB pixels into a nish/term-pixels Framebuffer at a resolution it chooses. Pure encoders then turn it into four outputs:\n- **kitty graphics:** standard base64 in 4096-byte chunks, through one reused image id. Each frame is transmitted in place, so the old one stays on screen until the new one has fully arrived. kittyDelete frees the image on close. Direct transfer is the only mode; the module leaves a seam for shared memory and zlib.\n- **Sixel:** a fixed 6×7×6 palette, with optional 4×4 ordered dithering. Every register always holds the same colour, so nothing flickers from frame to frame.\n- **Half-blocks:** drawn through nish/term's Canvas, which diffs.\n- **ASCII:** a luminance ramp, limited to 16 colours on the Linux console.\n\nfitFramebuffer letterboxes the image into the window and keeps its aspect ratio. scaleFramebuffer downscales by an integer divisor, for the refresh controller's resolution step.\n\nThe encoders keep their working arrays on the caller's reused PixelBytes. Those arrays grow by doubling to the largest frame, so encoding frame after frame allocates nothing. Over 2000 frames, peak memory stays at 11 MB, where per-call scratch reached 562 MB.\n\nnish/base64 adds the standard RFC 4648 encoder with padding: base64EncodedLength, base64EncodeInto (no allocation) and base64Encode. It is separate from crypto's base64url.\n\nBoth modules are pure and give the same bytes under Node.",
+      "metrics": [
+        "per 480×270 frame into 200×60 cells, kitty 0.33 ms, Sixel 10.1 ms (20.7 ms dithered), half-block 0.08 ms, ASCII 0.04 ms (100 frames × 5 runs, noise ≈3%)"
+      ],
+      "refs": [],
+      "tests": [
+        "tests/link/std_term_pixels (byte goldens per backend",
+        "dithered and plain Sixel",
+        "a second kitty frame under the reused id",
+        "letterbox cases",
+        "framebuffers larger than their target",
+        "memory flat over 1000 frames proven to fail on per-call scratch)",
+        "tests/link/std_base64 (RFC 4648 §10 vectors",
+        "every length mod 3)",
+        "f64 and negative cases"
+      ],
+      "commits": [
+        "80718ba"
+      ],
+      "pr": 911,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "mark-ect-on-quic-datagrams-the-carriers-send",
+      "type": "fix",
+      "scope": "std",
+      "breaking": false,
+      "title": "mark ECT on QUIC datagrams the carriers send (QUIC-10)",
+      "body": "Recovery already validated ACK_ECN counts and reacted to CE, but no carrier marked ECT, so on a deployed server every ACK_ECN failed validation and a CE rise was never used. The HTTP/3 server now marks each slot's connection and sends every flight with its codepoint. A flight is cut where marking stops, at the end of the ten testing packets, because one GSO send carries one codepoint. Where the platform refuses a marked send (Darwin, -95), the send goes again unmarked and marking is turned off for every slot. QUIC-10 is closed in docs/security/quic.md.",
+      "metrics": [],
+      "refs": [
+        "docs/security/quic.md"
+      ],
+      "tests": [
+        "tests/link/net_http3_ecn",
+        "tests/link/net_quic_ecn"
+      ],
+      "commits": [
+        "c3e73a6"
+      ],
+      "pr": 914,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "refuse-a-dependency-s-unsafe-ffi-net-and",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": true,
+      "title": "refuse a dependency's unsafe, ffi, net and process.spawn unless the root package grants them",
+      "body": "A package loaded from node_modules that reaches one of the four gated capabilities (unsafe, ffi, net, process.spawn) is now refused at compile time with NL2576, unless the root package.json grants it that capability by name under \"nish\": { \"capabilities\": { \"dependencies\": { \"<pkg>\": [...] } } }. The error points into the dependency and names the package, the capability, the function and the chain of calls that reaches it.\n\nOnly the root manifest grants: no CLI flag grants, a dependency's own manifest is not read, and the root's deny still wins. A dependency's name comes from where it was installed, never from its own manifest. A malformed grant is NL3041, and an ungated name in a grant is NL3042.\n\nBREAKING CHANGE: a program whose dependency reaches unsafe, ffi, net or process.spawn no longer builds until the root package.json grants that capability to it; each NL2576 error names the grant to add.\n\nRefs: docs/wp40-dependency-capabilities.md, docs/security/capabilities.md\nTests: tests/link/caps_dep_*\n\nPart of #882",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "4eaa3b8"
+      ],
+      "pr": 905,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "a-proof-shaped-program-generator-and-an-addresssanitizer",
+      "type": "test",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a proof-shaped program generator and an AddressSanitizer build",
+      "body": "A checked build cannot show a wrong bounds proof: the elided access reads a\nneighbour's bytes and carries on. Two tools now make such a proof visible.\n\ntests/differential/proofgen.js generates programs shaped like the accesses\nthe elision reasons about, in 29 kinds: derived indices, trusted loop bounds,\npush and pop, the ranged set/slice/fromBytes operations, aliasing, closures,\narena scopes and nish/threads. Each shape has an in-bounds and a one-past\nvariant, so a checked build's panic is known in advance. It exports\ngenerate(seed, index) with KINDS, PROOF_MISSES, ASAN_BLIND and\nLIBRARY_CHECKED. --self-test builds every kind alone in both variants: each\nin-bounds variant must prove one of its own accesses, each one-past variant\nmust keep its check, and each must panic exactly when one past.\n\ntests/differential/asan.js runs a program under AddressSanitizer. It adds\nsanitize_address to every define, rewrites each module's inline\nnish_alloc_struct to call the runtime, and links against runtime units built\nwith -fsanitize=address,undefined -DNISH_ASAN. It classifies a run as asan,\nubsan, panic, signal, timeout, error or clean. --self-test has 17 cases.\n\nUnder NISH_ASAN only, runtime/runtime.c gives each block its own malloc chunk,\nkeeps an array's cap at len + 1, and mirrors a normal build's capacity\ngrowth in a global table, so a data pointer kept across a reallocating push\nreads poisoned memory and one kept across a non-reallocating push stays\nvalid. With the macro off, the runtime is unchanged.\n\nFindings: seed 1 with 200 programs and the catalogue found no unsound\nelision and no miscompile. The elision proves 382 of 603 accesses. A sweep\nof all tests/cases under ASan reported 0 asan, 0 ubsan and 0 signal.",
+      "metrics": [],
+      "refs": [
+        "#883"
+      ],
+      "tests": [
+        "tests/differential/proofgen.js --self-test",
+        "tests/differential/asan.js --self-test"
+      ],
+      "commits": [
+        "3313da3"
+      ],
+      "pr": 902,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "add-nish-sqlite-a-sqlite-client-878",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add nish/sqlite, a SQLite client",
+      "body": "A program imports `nish/sqlite` to open a database, run `exec`, and prepare a statement once to reuse it: bind, step, reset and read columns, with a `Result` for every failure. Nothing is added to the build line. `nish run` and `--link` link the vendored SQLite 3.54.1 as soon as a program uses the module.\n\nConnections and statements are integer handles into tables on the C side. They carry a generation, so a stale, closed or foreign handle answers SQLITE_MISUSE and never reaches a freed object. A slot whose generation wraps is retired rather than reused. Text and blob columns are read into the caller's `u8[]` with one copy (`columnInto`), and binds take windows into the caller's bytes.\n\nThe bind, step, reset and column paths allocate nothing. The tests measure the arena inside every pass of a 1,000-row loop and a 1,000-pass rebind loop.\n\nruntime/sqlite/nish-sqlite.c holds one adapter per SQLite call and nothing else: no SQL, no JSON, no application logic. Each adapter is small enough to inline under LTO.\n\nThe module needs the `ffi` capability. Under `--deny ffi` it is refused at the call that reaches C. The tables are per thread under `--threads`.\n\nThe record is in docs/security/sqlite.md, with SQL-1 (the generation wrap) fixed and SQL-2 (columnText reading a failed conversion as null under memory pressure) open.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/sqlite.md"
+      ],
+      "tests": [
+        "tests/link/std_sqlite",
+        "tests/link/std_sqlite_caps",
+        "tests/link/std_sqlite_deny_ffi",
+        "tests/link/std_sqlite_nul",
+        "tests/link/std_sqlite_wasi"
+      ],
+      "commits": [
+        "48ac8e0"
+      ],
+      "pr": 878,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "run-the-tests-link-programs-through-a-worker",
+      "type": "perf",
+      "scope": "self",
+      "breaking": false,
+      "title": "run the tests/link programs through a worker pool",
+      "body": "The tests/link loop in tests/run.js used to link and run its programs one at a time. It now runs them defaultJobs() at a time through tests/pool.js. Each program's body is an async function that records its checks and WROTE lines. The records are replayed through reportCase in linkTests order, so the output is byte-identical to the serial loop at any width, including under --update-link-goldens.\n\n- **Async spawns.** Every child process in the body is spawned asynchronously, so the event loop never blocks.\n- **Widths.** `--jobs N` sets the width, and `--jobs 1` is the serial loop. The per-module llvm-as/opt pool inside each program is capped at floor(defaultJobs() / N), so the two levels together stay within the cores.\n- **Serial list.** LINK_SERIAL names the programs that must run alone, after the pool. It is empty: two pooled full runs and one at --jobs 1 report identical PASS/FAIL/SKIP lines.\n- **Shared state.** Every piece of shared state is shown safe in comments: per-program build directories, the runtime object cache, counters owned by the replay, and port-0 sockets. net_prefork's close-then-rebind window is named, along with why it stays pooled.\n- **Shard costs.** tests/shard-costs.json is regenerated from a CI run of the pooled loop on top of #909's link profile, and docs/wp10-ci.md's shard figures cite that run.",
+      "metrics": [
+        "2.02x on node tests/run.js net_ (min 890.6 s -> 439.8 s, median 893.0 s -> 441.0 s, 3 interleaved runs each on 804120e, the pool alone without #909, band 1.6%)"
+      ],
+      "refs": [
+        "docs/wp10-ci.md#shards-and-time-limits"
+      ],
+      "tests": [
+        "tests/link"
+      ],
+      "commits": [
+        "e8acb05"
+      ],
+      "pr": 913,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "bring-the-audit-index-in-line-with-the",
+      "type": "docs",
+      "scope": "security",
+      "breaking": false,
+      "title": "bring the audit index in line with the records",
+      "body": "The index in docs/security/README.md listed as open nine findings its area records had closed: H1-1, H2-1, H2-4, JSON-13, QUIC-10, CLI-7, CLI-9 and X509-6. The Areas table, the Total row (now 3/10/25/112 fixed, 0/0/0/11 open, recomputed from the rows) and the Open findings table now match the records. RT-9 in runtime.md no longer says CLI-7 and CLI-9 stay open.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "f4a9c8b"
+      ],
+      "pr": 919,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "nish-term-io-opens-a-terminal-and-runs",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/term-io opens a terminal and runs a frame loop that adapts to it",
+      "body": "`nish/term-io` is the term module that does the I/O. `runTerminal(options,\nstate, update, render)` opens the terminal, steps `update` at a fixed rate and\ncalls `render` only when the refresh controller (`nish/term-rate`) lets a frame\ngo, then closes it. `openTerminal` answers a `Terminal` for a program's own\nloop, with `readEvents`, `present`, `stats` and `close`.\n\nOpening refuses a pipe on stdin or stdout with one sentence. It enters raw mode\nand the alternate screen and probes the terminal (`nish/term-probe`). Then it\nturns on the kitty keyboard, mouse, paste and focus reports the options ask\nfor. Before each change reaches the terminal, the runtime's restore string is\nset to undo everything so far, so a panic or a signal leaves the terminal as it\nwas.\n\n`present` draws the screen and the framebuffer in one write, with the best\nbackend the terminal has (kitty graphics, Sixel, half blocks, ASCII) capped by\nthe controller. A DSR 5 query follows the frame, and its answer acknowledges\nthe frame to the controller. The send time is taken before the write, so the\nround trip covers the frame's whole transmission. A frame's cost is update,\nrender and encode, without the write.\n\nEvery terminal reply stays inside term-io: only frame acknowledgements reach\nthe controller, and a late probe answer still teaches the cell size. Closing\nreads the acknowledgements still in flight before raw mode ends, so none\nechoes into the shell over a slow link.\n\n`examples/term-probe.ts` prints what was detected and a stats line a second,\nfor bug reports. `bench/term-io.mjs` measures `present` per backend. The guide\ngains a terminal-programs page, and the standard library reference gains\n`nish/base64` and the `nish/term` event API.\n\nThe tests run the module in a pseudo-terminal that answers like kitty and\nmodels a link's latency and bandwidth (`tests/term-io/relay.mjs`). They cover:\nthe guide's program quitting on q and on Ctrl-C; both pipe refusals; the\nrestore bytes after a panic; throttling on a slow link, including the\nbandwidth it measures and at most one unacknowledged frame; acknowledgements\ndrained on close; late replies kept from the program; the watermark; and\nsteady-state RSS per forced backend, with a planted leak caught.\n`--deny tty` refuses a program that opens the terminal.\n\nSmoke runs read /dev/null, and the soundness runner times a run out by its own\ntimer rather than racing spawn's SIGTERM.",
+      "metrics": [
+        "present at 200x60 cells, 480x270 framebuffer, median of 5 rounds of 200 frames (round range): kitty 4.08 ms (4.01-4.33), sixel 32.6 ms (31.7-33.1), halfblock 107 us (106-110), ascii 70.1 us (69.5-71.6); controller bookkeeping 22 ns a frame (22-22)"
+      ],
+      "refs": [
+        "docs/guide/using-nish/terminal.md"
+      ],
+      "tests": [
+        "tests/run.js term-io section",
+        "tests/link/std_term_io_deny"
+      ],
+      "commits": [
+        "06cc8e1"
+      ],
+      "pr": 920,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "measure-nish-sqlite-against-c-on-the-challenge",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "measure nish/sqlite against C on the challenge schema",
+      "body": "bench/sqlite runs the twelve-dollar server challenge's point lookup, its 20-post feed, and an insert in WAL mode two ways: through nish/sqlite, and through the same loop written against SQLite's C API. Both use the vendored sqlite3.c with the flags scripts/build.sh uses. `node bench/sqlite/run.mjs --validate` checks that both sides read the same rows and checksums.\n\nThe verdict statistic is the median. A difference is claimed only when it exceeds the noise band (the build against its byte-identical copy) and both sides' IQR. Under that rule:\n- the feed (21 steps, 100 column reads and a reset per call) costs under 1 µs more than C, 2 to 6 % across three sessions;\n- the lookup and both inserts are not measurable.\n\nNish − C includes the adapter's handle and row checks, which the C loop doesn't make.\n\nThe measurement found one adapter fix: `nishsqlite_column_into` asks SQLite for the column count once when a row is current, with every answer unchanged. tests/link/std_sqlite_norow pins the no-row branch. Before the fix the feed was at +1,319 ns, and most of that gap was the benchmark's own fold.\n\nThe challenge's schema and queries, and the seed generator ported from its seed/generate.mjs, are MIT and are listed in THIRD_PARTY_NOTICES.md.",
+      "metrics": [
+        "lookup nish 4783/5117, C 4739/4957 (min/median, ns); +160 median, inside C's IQR of 242; not measurable",
+        "feed nish 15002/15391, C 14520/14800; +591 median (4.0 %), noise band 144, IQRs 283/232; +266 to +877 across three sessions",
+        "insert nish 13866/14213, C 13588/14078; +136 median, IQRs 831/588; not measurable",
+        "insert-txn nish 4134/4196, C 4027/4294; −98 median, noise band 154; not measurable",
+        "callgrind, feed: 194,100 instructions per call against 186,300 (+4.2 %)"
+      ],
+      "refs": [
+        "bench/README.md#sqlite",
+        "docs/guide/using-nish/sqlite.md"
+      ],
+      "tests": [
+        "tests/link/std_sqlite_norow"
+      ],
+      "commits": [
+        "0e40dff"
+      ],
+      "pr": 921,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "a-capability-lockfile-that-fails-a-build-when",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "a capability lockfile that fails a build when a dependency reaches a new capability",
+      "body": "`--update-capability-lock` writes `nish-capabilities.lock.json` beside the nearest package.json. The file records the capabilities each dependency reaches. Once the file exists, every build is held to it. A dependency that reaches a capability its row does not record fails the build with NL2577. The message names the dependency, the capability, the function and the call chain. A dependency that reaches less than its row records still builds. The flag writes the file only after the dependency policy has passed. A lockfile that cannot be read is refused with NL3043. `nish run` checks the lockfile before it looks in the run cache, so a cached binary is still held to the current file.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md",
+        "docs/wp40-dependency-capabilities.md",
+        "docs/security/capabilities.md"
+      ],
+      "tests": [
+        "tests/link/caps_lock_*"
+      ],
+      "commits": [
+        "45c269f"
+      ],
+      "pr": 923,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "nish-term-rate-keeps-its-latency-and-bandwidth",
+      "type": "fix",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/term-rate keeps its latency and bandwidth estimates apart on small frames",
+      "body": "Over ssh with one frame in flight, 60 ms away at 300 kB/s, a run of 1.5 kB\nframes slid the latency to about 4 ms and left the bandwidth to carry the\nround trip: it decayed to about 24 kB/s, a twelfth of the link. The latency\ncrept up by a 256th of each answer's gap while every small trip pulled the\nbandwidth toward its own bytes over its whole round trip, so the two traded\noff.\n\nThey are now measured apart. A frame sent onto an idle link makes a trip,\nkept with the last 16 and the probe's. Two trips of different sizes measure\nthe bandwidth from the difference, which the latency is no part of; a frame\nthat waited behind the previous answer measures its bytes over the time\nsince that answer. The latency is the least, over the kept trips, of the\nround trip less the trip's bytes at the bandwidth. No sample divides by a\nnear-zero time, so the first answers no longer read hundreds of MB/s.\n\nFrames of one size with no probe cannot tell latency from bytes, so the\nbandwidth stays unknown there and the round-trip load decides alone; detail\nis no longer cut for a gain that is not there. Samples stop counting for\ndecisions 5 s after the last one, so a link that narrows is followed; the\nreported figure keeps the last sample until a newer one replaces it or three\ntrips in a row contradict it. A non-finite probe time, and an answer read no\nlater than its frame was sent, time nothing. The public API is unchanged.\n\nnish/term-io's throttle check now asserts the bandwidth estimate on the\nlast, small frames rather than the run's peak.\n\nMoved traces against main: swing falls 60, 15, 10 over a second instead of\nstraight to 10, because the latency step is no longer read as a narrow link;\nwiden restores detail 200 ms sooner, because the first quick answer proves\nthe bandwidth; thin gains a 20 ms probe, without which its equal frames\ncannot measure the bandwidth.",
+      "metrics": [
+        "small frames at 60 ms / 300 kB/s, probed: 24.7 kB/s and 4.3 ms before, 270.7 kB/s and 59.5 ms after (deterministic simulation); term-io throttle final estimate on a 300 kB/s link: main 70-86 kB/s (3 runs), this change 218-304 kB/s (9 runs)"
+      ],
+      "refs": [
+        "#872"
+      ],
+      "tests": [
+        "tests/link/std_term_rate",
+        "tests/link/std_term_rate_f64",
+        "term-io section of tests/run.js"
+      ],
+      "commits": [
+        "52dea23"
+      ],
+      "pr": 925,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "add-nish-net-postgres-a-sans-io-postgresql",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "add nish/net/postgres, a sans-IO PostgreSQL client",
+      "body": "A program imports `nish/net/postgres` to talk PostgreSQL's frontend/backend protocol 3.0 over a socket it owns. A `PgConnection` writes the messages it wants sent into an output buffer, frames what the program reads into its input buffer, and answers one event at a time. One nish:net loop can drive many connections, as with nish/net/http1-server.\n\nWhat it covers:\n- startup, with ParameterStatus, BackendKeyData and ReadyForQuery;\n- `trust` and SCRAM-SHA-256 (RFC 5802/7677) with gs2 header `n,,`. The server signature is checked in constant time before AuthenticationOk is believed;\n- the extended query protocol: Parse, Describe, Bind, Execute, Close and Sync. Named statements are prepared once, and Sync groups are pipelined up to `maxInFlight` (16 by default) with a FIFO. Each group's ReadyForQuery is its commit point, and after an error the connection recovers to the next Sync;\n- ErrorResponse, NoticeResponse and CommandComplete row counts.\n\nThe read path allocates nothing per row or column. Columns are windows into the receive buffer, read in place by `PgText` (int8, int4, bool, NULL, timestamptz as RFC 3339 UTC with 3 truncated digits) and by `PgArrayWalker` (text[]). Text[] parameters have an encoder.\n\n`maxMessage`, `maxOutput`, `maxColumns` and the SCRAM iteration range bound what a server can make the client hold or compute. A malformed or oversized message is a defined error code, never a panic or an unbounded buffer.\n\nThe password is a `Secret<u8[]>`. The salted password comes from the shared `pbkdf2HmacSha256`, every intermediate (the SHA-256 state over ClientKey included) is wiped, and the SCRAM nonce must come from a cryptographic random source. MD5 and cleartext are refused, and the record says why.\n\nPadded standard base64 now lives once in nish/crypto/base64url as `base64StdPadEncode`/`base64StdPadDecode`, written not to branch on its data. nish/crypto/x509 uses it in place of its private copy. The names are distinct from nish/base64's encoder, because std modules share one symbol namespace.\n\nThe tests:\n- PostgreSQL 18 exchanges recorded by tests/postgres/record.mjs are replayed byte for byte: whole, cut at every offset, and as 4,000 seeded mutants;\n- tests/link/std_postgres has a positive and a negative test for each function;\n- named panic tests cover the constructor's refusals.\n\nThe record is docs/security/postgres.md, with PG-12 and PG-13 fixed and its limits listed: no TLS, no require_auth equivalent, and timestamps trusted from the server.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/postgres.md",
+        "docs/security/postgres.md"
+      ],
+      "tests": [
+        "tests/link/std_postgres",
+        "tests/link/std_postgres_replay",
+        "tests/link/std_base64_padded",
+        "tests/link/std_base64_two_modules"
+      ],
+      "commits": [
+        "c0203c0"
+      ],
+      "pr": 891,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "nish-term-io-pins-the-restore-of-mouse",
+      "type": "test",
+      "scope": "std",
+      "breaking": false,
+      "title": "nish/term-io pins the restore of mouse and focus, the silent probe and the env overrides",
+      "body": "The term-io section now drives a panic with all-motion mouse and focus\nreports on, with the cell size answered in the probe and after it, and pins\nevery byte of the restore string. examples/term-probe.ts runs against a\nterminal that answers nothing (answered false, five stats lines, the first\nframe within 1500 ms), under NO_COLOR (16 colours and the override line),\nunder NISH_TERM_FPS=20 (tier 20 throughout) and under NISH_TERM_FPS=500\n(held at the 240 cap). The pure std/term* and std/base64 link fixtures deny\n`tty` as well.\n\n`nish/term-io` now records NISH_TERM_FPS in `TermCaps.overrides`, as\n`NISH_TERM_FPS=N: N frames a second`, so a bug report shows a forced rate.\nThe restore string turns modes off in the order they were turned on, and the\ndocs no longer say it reverses them. The standard-library guide gains a\n`nish/term-pixels` section.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/standard-library.md#nishterm-pixels"
+      ],
+      "tests": [
+        "tests/link/std_term_io_relay",
+        "tests/run.js term-io"
+      ],
+      "commits": [
+        "92ed878"
+      ],
+      "pr": 928,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "bcrypt-hash-and-verify-in-nish-crypto-bcrypt",
+      "type": "feat",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "bcrypt hash and verify in nish/crypto/bcrypt",
+      "body": "`nish/crypto/bcrypt` hashes a password with `$2b$` at cost 4 to 31 from a\n16-byte salt the caller draws, and verifies `$2a$`, `$2b$` and `$2y$`\nhashes, refusing `$2x$`. Each function returns a `Result`, and malformed\ninput is an `Err`, never a panic.\n\nThe password is a `Secret<u8[]>`. The key schedule and the 2^cost rounds\nrun inside `exposeWith`, and the Blowfish state (P-array and S-boxes, 1042\nwords), the expanded key and every other buffer holding key material are\nwiped before return. Verify rebuilds the whole hash and compares it with\n`timingSafeEqual`.\n\nThe key follows libxcrypt's `crypt_r` and crypt_blowfish:\n- the first 72 bytes up to the first NUL, plus one NUL;\n- a longer password truncated rather than refused, so that every stored\n  hash still verifies;\n- the `$2a$` sign-extension countermeasure.\n\ndocs/security/crypto-bcrypt.md has the table of where OpenBSD and Go differ.\nNone of those differences is reachable from a UTF-8 password.\n\nThe module is pure Nish, with no I/O and no C, and builds for wasm32. The\nS-box loads in the round function carry no bounds check.",
+      "metrics": [
+        "52.1 ms (51.9–52.4) CPU per cost-10 hash against libxcrypt crypt_r $2b$ 48.4 ms (47.5–48.6), OpenBSD bcrypt.c gcc -O2 48.4 ms (47.9–48.4) and clang -O2 53.9 ms (53.5–54.1); median of 5 rounds of 8 hashes, min–max band"
+      ],
+      "refs": [
+        "docs/security/crypto-bcrypt.md",
+        "docs/guide/using-nish/password-hashing.md"
+      ],
+      "tests": [
+        "tests/link/crypto_bcrypt",
+        "tests/link/crypto_bcrypt_f64",
+        "tests/differential/bcrypt.js",
+        "tests/cases/reject_bcrypt_*",
+        "tests/wipes/crypto.js"
+      ],
+      "commits": [
+        "af3e82f"
+      ],
+      "pr": 884,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "fuzz-targets-for-tls-quic-hpack-http-1",
+      "type": "test",
+      "scope": "security",
+      "breaking": false,
+      "title": "fuzz targets for TLS, QUIC, HPACK, HTTP/1, WebSocket and X.509",
+      "body": "Adds libFuzzer targets with seed corpora for the TLS record and handshake parsers, QUIC packet and frame parsing, HPACK, HTTP/1 requests and responses, WebSocket frames, and DER, PEM and X.509. They run on the ASan+UBSan harness from #908. The per-PR fuzz-smoke job now runs every target for 30 s, which keeps the step inside its timeout. The scheduled long run covers the new targets.\n\nThe runs found two C runtime findings, RT-20 (Medium) and RT-21 (Low). Both are fixed, regression-tested and recorded in docs/security/. Each area record now names its fuzz targets and their run results, and docs/security/README.md gains a Fuzzed section that maps records to targets.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/fuzz"
+      ],
+      "commits": [
+        "9089d20"
+      ],
+      "pr": 910,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    },
+    {
+      "id": "a-json-plain-byte-class-and-jsonwriter-s",
+      "type": "perf",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a JSON-plain byte class, and JsonWriter's byte writers on it",
+      "body": "nish/bytes gains skipJsonPlain, a fourth byte-class run: every byte a JSON writer copies unescaped, 0x20 to 0xff other than `\"` and `\\`, with no UTF-8 check. It lowers to a new kernel in runtime/runtime-bytes.c with scalar and 16-byte (SSE2, NEON, wasm SIMD) paths of its own, on its own pointer set by the existing resolver. The three existing classes' loops are instruction-identical to before. The unit is 1,525 of its 1,536-byte budget.\n\nJsonWriter.keyBytes and stringBytes now copy each run of plain bytes in a window of 16 bytes or more with copyBytes, escaping only where the kernel stops. Output is byte for byte unchanged, and a full buffer is still all-or-nothing. The string path that jsonEncode uses is unchanged.\n\nThe follow-up also records why S6a's serialize condition is not reached by the escape scan on citm_catalog.json: 95.8% of its strings are under 16 bytes, so the ceiling is 1.0139x, inside serialize's 1.4% band, and a free check would reach only 1.137x. Number writing (37.4% of serialize's instructions) is the next lead. The profile, the guard and the A/B are in docs/wp38-simd.md.\n\nIn the A/B against main, two json-compare rows sit just past their bands on unchanged code (tokenize citm 0.994x, typed-reuse 0.955x), recorded as layout noise. bench/json-tokenizer is 0.99x, inside its band.\n\ntests/run.js runs net_relay_soak alone after the link pool (#927): it bounds its resident growth per checkpoint interval, and pooled programs beside it changed that reading. No threshold or check changes.",
+      "metrics": [
+        "JsonDocument.write 1.49x on twitter.json (band 0.4%), 1.03x-1.07x on citm (band 2.7%); serialize on citm 0.988x (band 1.4%)"
+      ],
+      "refs": [
+        "docs/wp38-simd.md",
+        "docs/LANGUAGE.md#byte-runs-skipblank-skipdigits-skipjsontext-skipjsonplain-and-copybytes-in-nishbytes"
+      ],
+      "tests": [
+        "tests/simd/byte-runs.c",
+        "tests/link/std_bytes_runs",
+        "tests/link/std_json_writer"
+      ],
+      "commits": [
+        "2f10882"
+      ],
+      "pr": 892,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-24"
+    }
+  ]
+}
