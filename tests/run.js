@@ -8673,8 +8673,11 @@ for (const name of [
   "std_term_events",
   "std_term_probe",
   "std_term_rate",
+  "std_term_rate_f64",
   "std_term_pixels",
+  "std_term_pixels_f64",
   "std_base64",
+  "std_base64_f64",
 ]) {
   if (only && !name.includes(only) && !"term-under-node".includes(only)) {
     continue
