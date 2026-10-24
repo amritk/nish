@@ -6,12 +6,16 @@
 @.str.1 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
 @.str.2 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Map: no entry at this index\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"Map maximum size exceeded\00" }, align 8
-@.str.4 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
+@nish_hash_key = external global [2 x i64], align 8
+@.str.4 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"Map: the system's entropy source failed\00" }, align 8
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.hash.seed, i8* null }]
+@.str.5 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.dbg.value(metadata, metadata, metadata)
 declare void @llvm.dbg.declare(metadata, metadata, metadata)
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare i32 @getentropy(i8* noundef, i64 noundef)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
@@ -26,6 +30,27 @@ declare extern_weak void @nish_panic_overflow(i32 noundef) #5
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
+
+define internal void @nish.hash.seed() nounwind {
+entry:
+  %k = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  %filled = icmp ne i64 %k, 0
+  br i1 %filled, label %done, label %fill
+fill:
+  %got = call i32 @getentropy(i8* bitcast ([2 x i64]* @nish_hash_key to i8*), i64 16)
+  %failed = icmp ne i32 %got, 0
+  br i1 %failed, label %fail, label %mark
+fail:
+  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.4 to i8*))
+  unreachable
+mark:
+  %w = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  %set = or i64 %w, 1
+  store i64 %set, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  br label %done
+done:
+  ret void
+}
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
@@ -1021,7 +1046,11 @@ define internal noundef i64 @nish.probeTable$str(%struct.nish_array* noundef non
 entry:
   %h.addr = alloca i32, align 4
   %hash.i = alloca i64, align 8
-  %hash.h = alloca i32, align 4
+  %hash.v0 = alloca i64, align 8
+  %hash.v1 = alloca i64, align 8
+  %hash.v2 = alloca i64, align 8
+  %hash.v3 = alloca i64, align 8
+  %hash.b = alloca i64, align 8
   %fingerprint.addr = alloca i32, align 4
   %bucket.addr = alloca i32, align 4
   %word.addr = alloca i32, align 4
@@ -1034,175 +1063,379 @@ entry:
   %0 = bitcast i8* %key to i64*, !dbg !529
   %1 = load i64, i64* %0, align 8, !dbg !529
   %2 = getelementptr inbounds i8, i8* %key, i64 8, !dbg !529
+  %3 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8, !dbg !529
+  %4 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 1), align 8, !dbg !529
+  %5 = xor i64 %3, 8317987319222330741, !dbg !529
+  store i64 %5, i64* %hash.v0, align 8, !dbg !529
+  %6 = xor i64 %4, 7237128888997146477, !dbg !529
+  store i64 %6, i64* %hash.v1, align 8, !dbg !529
+  %7 = xor i64 %3, 7816392313619706465, !dbg !529
+  store i64 %7, i64* %hash.v2, align 8, !dbg !529
+  %8 = xor i64 %4, 8387220255154660723, !dbg !529
+  store i64 %8, i64* %hash.v3, align 8, !dbg !529
+  %9 = and i64 %1, -8, !dbg !529
   store i64 0, i64* %hash.i, align 8, !dbg !529
-  store i32 -2128831035, i32* %hash.h, align 4, !dbg !529
   br label %hash.test, !dbg !529
 
 hash.test:
-  %3 = load i64, i64* %hash.i, align 8, !dbg !529
-  %4 = icmp ult i64 %3, %1, !dbg !529
-  br i1 %4, label %hash.byte, label %hash.done, !dbg !529
+  %10 = load i64, i64* %hash.i, align 8, !dbg !529
+  %11 = icmp ult i64 %10, %9, !dbg !529
+  br i1 %11, label %hash.word, label %hash.tail, !dbg !529
 
-hash.byte:
-  %5 = getelementptr inbounds i8, i8* %2, i64 %3, !dbg !529
-  %6 = load i8, i8* %5, !dbg !529
-  %7 = zext i8 %6 to i32, !dbg !529
-  %8 = load i32, i32* %hash.h, align 4, !dbg !529
-  %9 = xor i32 %8, %7, !dbg !529
-  %10 = mul i32 %9, 16777619, !dbg !529
-  store i32 %10, i32* %hash.h, align 4, !dbg !529
-  %11 = add i64 %3, 1, !dbg !529
-  store i64 %11, i64* %hash.i, align 8, !dbg !529
+hash.word:
+  %12 = getelementptr inbounds i8, i8* %2, i64 %10, !dbg !529
+  %13 = bitcast i8* %12 to i64*, !dbg !529
+  %14 = load i64, i64* %13, align 1, !dbg !529
+  %15 = load i64, i64* %hash.v3, align 8, !dbg !529
+  %16 = xor i64 %15, %14, !dbg !529
+  store i64 %16, i64* %hash.v3, align 8, !dbg !529
+  %17 = load i64, i64* %hash.v0, align 8, !dbg !529
+  %18 = load i64, i64* %hash.v1, align 8, !dbg !529
+  %19 = load i64, i64* %hash.v2, align 8, !dbg !529
+  %20 = load i64, i64* %hash.v3, align 8, !dbg !529
+  %21 = add i64 %17, %18, !dbg !529
+  %22 = shl i64 %18, 13, !dbg !529
+  %23 = lshr i64 %18, 51, !dbg !529
+  %24 = or i64 %22, %23, !dbg !529
+  %25 = xor i64 %24, %21, !dbg !529
+  %26 = shl i64 %21, 32, !dbg !529
+  %27 = lshr i64 %21, 32, !dbg !529
+  %28 = or i64 %26, %27, !dbg !529
+  %29 = add i64 %19, %20, !dbg !529
+  %30 = shl i64 %20, 16, !dbg !529
+  %31 = lshr i64 %20, 48, !dbg !529
+  %32 = or i64 %30, %31, !dbg !529
+  %33 = xor i64 %32, %29, !dbg !529
+  %34 = add i64 %28, %33, !dbg !529
+  %35 = shl i64 %33, 21, !dbg !529
+  %36 = lshr i64 %33, 43, !dbg !529
+  %37 = or i64 %35, %36, !dbg !529
+  %38 = xor i64 %37, %34, !dbg !529
+  %39 = add i64 %29, %25, !dbg !529
+  %40 = shl i64 %25, 17, !dbg !529
+  %41 = lshr i64 %25, 47, !dbg !529
+  %42 = or i64 %40, %41, !dbg !529
+  %43 = xor i64 %42, %39, !dbg !529
+  %44 = shl i64 %39, 32, !dbg !529
+  %45 = lshr i64 %39, 32, !dbg !529
+  %46 = or i64 %44, %45, !dbg !529
+  store i64 %34, i64* %hash.v0, align 8, !dbg !529
+  store i64 %43, i64* %hash.v1, align 8, !dbg !529
+  store i64 %46, i64* %hash.v2, align 8, !dbg !529
+  store i64 %38, i64* %hash.v3, align 8, !dbg !529
+  %47 = xor i64 %34, %14, !dbg !529
+  store i64 %47, i64* %hash.v0, align 8, !dbg !529
+  %48 = add i64 %10, 8, !dbg !529
+  store i64 %48, i64* %hash.i, align 8, !dbg !529
   br label %hash.test, !dbg !529
 
+hash.tail:
+  %49 = shl i64 %1, 56, !dbg !529
+  store i64 %49, i64* %hash.b, align 8, !dbg !529
+  br label %hash.more, !dbg !529
+
+hash.more:
+  %50 = load i64, i64* %hash.i, align 8, !dbg !529
+  %51 = icmp ult i64 %50, %1, !dbg !529
+  br i1 %51, label %hash.byte, label %hash.done, !dbg !529
+
+hash.byte:
+  %52 = getelementptr inbounds i8, i8* %2, i64 %50, !dbg !529
+  %53 = load i8, i8* %52, !dbg !529
+  %54 = zext i8 %53 to i64, !dbg !529
+  %55 = sub i64 %50, %9, !dbg !529
+  %56 = shl i64 %55, 3, !dbg !529
+  %57 = load i64, i64* %hash.b, align 8, !dbg !529
+  %58 = shl i64 %54, %56, !dbg !529
+  %59 = or i64 %57, %58, !dbg !529
+  store i64 %59, i64* %hash.b, align 8, !dbg !529
+  %60 = add i64 %50, 1, !dbg !529
+  store i64 %60, i64* %hash.i, align 8, !dbg !529
+  br label %hash.more, !dbg !529
+
 hash.done:
-  %12 = load i32, i32* %hash.h, align 4, !dbg !529
-  %13 = icmp eq i32 %12, 0, !dbg !529
-  %14 = select i1 %13, i32 1, i32 %12, !dbg !529
-  store i32 %14, i32* %h.addr, align 4, !dbg !528
+  %61 = load i64, i64* %hash.b, align 8, !dbg !529
+  %62 = load i64, i64* %hash.v3, align 8, !dbg !529
+  %63 = xor i64 %62, %61, !dbg !529
+  store i64 %63, i64* %hash.v3, align 8, !dbg !529
+  %64 = load i64, i64* %hash.v0, align 8, !dbg !529
+  %65 = load i64, i64* %hash.v1, align 8, !dbg !529
+  %66 = load i64, i64* %hash.v2, align 8, !dbg !529
+  %67 = load i64, i64* %hash.v3, align 8, !dbg !529
+  %68 = add i64 %64, %65, !dbg !529
+  %69 = shl i64 %65, 13, !dbg !529
+  %70 = lshr i64 %65, 51, !dbg !529
+  %71 = or i64 %69, %70, !dbg !529
+  %72 = xor i64 %71, %68, !dbg !529
+  %73 = shl i64 %68, 32, !dbg !529
+  %74 = lshr i64 %68, 32, !dbg !529
+  %75 = or i64 %73, %74, !dbg !529
+  %76 = add i64 %66, %67, !dbg !529
+  %77 = shl i64 %67, 16, !dbg !529
+  %78 = lshr i64 %67, 48, !dbg !529
+  %79 = or i64 %77, %78, !dbg !529
+  %80 = xor i64 %79, %76, !dbg !529
+  %81 = add i64 %75, %80, !dbg !529
+  %82 = shl i64 %80, 21, !dbg !529
+  %83 = lshr i64 %80, 43, !dbg !529
+  %84 = or i64 %82, %83, !dbg !529
+  %85 = xor i64 %84, %81, !dbg !529
+  %86 = add i64 %76, %72, !dbg !529
+  %87 = shl i64 %72, 17, !dbg !529
+  %88 = lshr i64 %72, 47, !dbg !529
+  %89 = or i64 %87, %88, !dbg !529
+  %90 = xor i64 %89, %86, !dbg !529
+  %91 = shl i64 %86, 32, !dbg !529
+  %92 = lshr i64 %86, 32, !dbg !529
+  %93 = or i64 %91, %92, !dbg !529
+  store i64 %81, i64* %hash.v0, align 8, !dbg !529
+  store i64 %90, i64* %hash.v1, align 8, !dbg !529
+  store i64 %93, i64* %hash.v2, align 8, !dbg !529
+  store i64 %85, i64* %hash.v3, align 8, !dbg !529
+  %94 = xor i64 %81, %61, !dbg !529
+  store i64 %94, i64* %hash.v0, align 8, !dbg !529
+  %95 = load i64, i64* %hash.v2, align 8, !dbg !529
+  %96 = xor i64 %95, 255, !dbg !529
+  store i64 %96, i64* %hash.v2, align 8, !dbg !529
+  %97 = load i64, i64* %hash.v0, align 8, !dbg !529
+  %98 = load i64, i64* %hash.v1, align 8, !dbg !529
+  %99 = load i64, i64* %hash.v2, align 8, !dbg !529
+  %100 = load i64, i64* %hash.v3, align 8, !dbg !529
+  %101 = add i64 %97, %98, !dbg !529
+  %102 = shl i64 %98, 13, !dbg !529
+  %103 = lshr i64 %98, 51, !dbg !529
+  %104 = or i64 %102, %103, !dbg !529
+  %105 = xor i64 %104, %101, !dbg !529
+  %106 = shl i64 %101, 32, !dbg !529
+  %107 = lshr i64 %101, 32, !dbg !529
+  %108 = or i64 %106, %107, !dbg !529
+  %109 = add i64 %99, %100, !dbg !529
+  %110 = shl i64 %100, 16, !dbg !529
+  %111 = lshr i64 %100, 48, !dbg !529
+  %112 = or i64 %110, %111, !dbg !529
+  %113 = xor i64 %112, %109, !dbg !529
+  %114 = add i64 %108, %113, !dbg !529
+  %115 = shl i64 %113, 21, !dbg !529
+  %116 = lshr i64 %113, 43, !dbg !529
+  %117 = or i64 %115, %116, !dbg !529
+  %118 = xor i64 %117, %114, !dbg !529
+  %119 = add i64 %109, %105, !dbg !529
+  %120 = shl i64 %105, 17, !dbg !529
+  %121 = lshr i64 %105, 47, !dbg !529
+  %122 = or i64 %120, %121, !dbg !529
+  %123 = xor i64 %122, %119, !dbg !529
+  %124 = shl i64 %119, 32, !dbg !529
+  %125 = lshr i64 %119, 32, !dbg !529
+  %126 = or i64 %124, %125, !dbg !529
+  %127 = add i64 %114, %123, !dbg !529
+  %128 = shl i64 %123, 13, !dbg !529
+  %129 = lshr i64 %123, 51, !dbg !529
+  %130 = or i64 %128, %129, !dbg !529
+  %131 = xor i64 %130, %127, !dbg !529
+  %132 = shl i64 %127, 32, !dbg !529
+  %133 = lshr i64 %127, 32, !dbg !529
+  %134 = or i64 %132, %133, !dbg !529
+  %135 = add i64 %126, %118, !dbg !529
+  %136 = shl i64 %118, 16, !dbg !529
+  %137 = lshr i64 %118, 48, !dbg !529
+  %138 = or i64 %136, %137, !dbg !529
+  %139 = xor i64 %138, %135, !dbg !529
+  %140 = add i64 %134, %139, !dbg !529
+  %141 = shl i64 %139, 21, !dbg !529
+  %142 = lshr i64 %139, 43, !dbg !529
+  %143 = or i64 %141, %142, !dbg !529
+  %144 = xor i64 %143, %140, !dbg !529
+  %145 = add i64 %135, %131, !dbg !529
+  %146 = shl i64 %131, 17, !dbg !529
+  %147 = lshr i64 %131, 47, !dbg !529
+  %148 = or i64 %146, %147, !dbg !529
+  %149 = xor i64 %148, %145, !dbg !529
+  %150 = shl i64 %145, 32, !dbg !529
+  %151 = lshr i64 %145, 32, !dbg !529
+  %152 = or i64 %150, %151, !dbg !529
+  %153 = add i64 %140, %149, !dbg !529
+  %154 = shl i64 %149, 13, !dbg !529
+  %155 = lshr i64 %149, 51, !dbg !529
+  %156 = or i64 %154, %155, !dbg !529
+  %157 = xor i64 %156, %153, !dbg !529
+  %158 = shl i64 %153, 32, !dbg !529
+  %159 = lshr i64 %153, 32, !dbg !529
+  %160 = or i64 %158, %159, !dbg !529
+  %161 = add i64 %152, %144, !dbg !529
+  %162 = shl i64 %144, 16, !dbg !529
+  %163 = lshr i64 %144, 48, !dbg !529
+  %164 = or i64 %162, %163, !dbg !529
+  %165 = xor i64 %164, %161, !dbg !529
+  %166 = add i64 %160, %165, !dbg !529
+  %167 = shl i64 %165, 21, !dbg !529
+  %168 = lshr i64 %165, 43, !dbg !529
+  %169 = or i64 %167, %168, !dbg !529
+  %170 = xor i64 %169, %166, !dbg !529
+  %171 = add i64 %161, %157, !dbg !529
+  %172 = shl i64 %157, 17, !dbg !529
+  %173 = lshr i64 %157, 47, !dbg !529
+  %174 = or i64 %172, %173, !dbg !529
+  %175 = xor i64 %174, %171, !dbg !529
+  %176 = shl i64 %171, 32, !dbg !529
+  %177 = lshr i64 %171, 32, !dbg !529
+  %178 = or i64 %176, %177, !dbg !529
+  store i64 %166, i64* %hash.v0, align 8, !dbg !529
+  store i64 %175, i64* %hash.v1, align 8, !dbg !529
+  store i64 %178, i64* %hash.v2, align 8, !dbg !529
+  store i64 %170, i64* %hash.v3, align 8, !dbg !529
+  %179 = xor i64 %166, %175, !dbg !529
+  %180 = xor i64 %178, %170, !dbg !529
+  %181 = xor i64 %179, %180, !dbg !529
+  %182 = trunc i64 %181 to i32, !dbg !529
+  %183 = lshr i64 %181, 32, !dbg !529
+  %184 = trunc i64 %183 to i32, !dbg !529
+  %185 = xor i32 %182, %184, !dbg !529
+  %186 = icmp eq i32 %185, 0, !dbg !529
+  %187 = select i1 %186, i32 1, i32 %185, !dbg !529
+  store i32 %187, i32* %h.addr, align 4, !dbg !528
   call void @llvm.dbg.declare(metadata i32* %h.addr, metadata !531, metadata !DIExpression()), !dbg !528
-  %15 = load i32, i32* %h.addr, align 4, !dbg !533
-  %16 = lshr i32 %15, 24, !dbg !533
-  store i32 %16, i32* %fingerprint.addr, align 4, !dbg !532
+  %188 = load i32, i32* %h.addr, align 4, !dbg !533
+  %189 = lshr i32 %188, 24, !dbg !533
+  store i32 %189, i32* %fingerprint.addr, align 4, !dbg !532
   call void @llvm.dbg.declare(metadata i32* %fingerprint.addr, metadata !534, metadata !DIExpression()), !dbg !532
-  %17 = load i32, i32* %h.addr, align 4, !dbg !537
-  %18 = call i32 @nish.homeBucket(i32 %17, i32 %mask), !dbg !536
-  store i32 %18, i32* %bucket.addr, align 4, !dbg !535
+  %190 = load i32, i32* %h.addr, align 4, !dbg !537
+  %191 = call i32 @nish.homeBucket(i32 %190, i32 %mask), !dbg !536
+  store i32 %191, i32* %bucket.addr, align 4, !dbg !535
   call void @llvm.dbg.declare(metadata i32* %bucket.addr, metadata !539, metadata !DIExpression()), !dbg !535
-  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !540
-  %20 = load i64, i64* %19, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !540
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !540
-  %22 = load i8*, i8** %21, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !540
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !540
-  %24 = load i64, i64* %23, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !540
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !540
-  %26 = load i8*, i8** %25, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !540
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 0, !dbg !540
-  %28 = load i64, i64* %27, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !540
-  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 2, !dbg !540
-  %30 = load i8*, i8** %29, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !540
+  %192 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0, !dbg !540
+  %193 = load i64, i64* %192, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !540
+  %194 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2, !dbg !540
+  %195 = load i8*, i8** %194, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !540
+  %196 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0, !dbg !540
+  %197 = load i64, i64* %196, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !540
+  %198 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2, !dbg !540
+  %199 = load i8*, i8** %198, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !540
+  %200 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 0, !dbg !540
+  %201 = load i64, i64* %200, align 8, !alias.scope !137, !noalias !138, !tbaa !144, !dbg !540
+  %202 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 2, !dbg !540
+  %203 = load i8*, i8** %202, align 8, !alias.scope !137, !noalias !138, !tbaa !145, !dbg !540
   br label %while.cond, !dbg !540
 
 while.cond:
-  %31 = load i32, i32* %bucket.addr, align 4, !dbg !544
-  %32 = icmp sge i32 %31, 0, !dbg !544
-  br i1 %32, label %land.rhs, label %land.end, !dbg !544
+  %204 = load i32, i32* %bucket.addr, align 4, !dbg !544
+  %205 = icmp sge i32 %204, 0, !dbg !544
+  br i1 %205, label %land.rhs, label %land.end, !dbg !544
 
 land.rhs:
-  %33 = load i32, i32* %bucket.addr, align 4, !dbg !546
-  %34 = trunc i64 %20 to i32, !dbg !541
-  %35 = icmp slt i32 %33, %34, !dbg !546
+  %206 = load i32, i32* %bucket.addr, align 4, !dbg !546
+  %207 = trunc i64 %193 to i32, !dbg !541
+  %208 = icmp slt i32 %206, %207, !dbg !546
   br label %land.end, !dbg !544
 
 land.end:
-  %36 = phi i1 [ false, %while.cond ], [ %35, %land.rhs ], !dbg !544
-  br i1 %36, label %while.body, label %while.end, !dbg !540
+  %209 = phi i1 [ false, %while.cond ], [ %208, %land.rhs ], !dbg !544
+  br i1 %209, label %while.body, label %while.end, !dbg !540
 
 while.body:
-  %37 = load i32, i32* %bucket.addr, align 4, !dbg !551
-  %38 = sext i32 %37 to i64, !dbg !550
-  %39 = bitcast i8* %22 to i32*, !dbg !550
-  %40 = getelementptr inbounds i32, i32* %39, i64 %38, !dbg !550
-  %41 = load i32, i32* %40, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !550
-  store i32 %41, i32* %word.addr, align 4, !dbg !549
+  %210 = load i32, i32* %bucket.addr, align 4, !dbg !551
+  %211 = sext i32 %210 to i64, !dbg !550
+  %212 = bitcast i8* %195 to i32*, !dbg !550
+  %213 = getelementptr inbounds i32, i32* %212, i64 %211, !dbg !550
+  %214 = load i32, i32* %213, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !550
+  store i32 %214, i32* %word.addr, align 4, !dbg !549
   call void @llvm.dbg.declare(metadata i32* %word.addr, metadata !552, metadata !DIExpression()), !dbg !549
-  %42 = load i32, i32* %word.addr, align 4, !dbg !554
-  %43 = icmp eq i32 %42, 0, !dbg !554
-  br i1 %43, label %if.then, label %if.end, !dbg !553
+  %215 = load i32, i32* %word.addr, align 4, !dbg !554
+  %216 = icmp eq i32 %215, 0, !dbg !554
+  br i1 %216, label %if.then, label %if.end, !dbg !553
 
 if.then:
-  %44 = load i32, i32* %bucket.addr, align 4, !dbg !559
-  %45 = load i32, i32* %h.addr, align 4, !dbg !560
-  %46 = tail call i64 @nish.absentAt(i32 %44, i32 %45), !dbg !558
-  ret i64 %46, !dbg !557
+  %217 = load i32, i32* %bucket.addr, align 4, !dbg !559
+  %218 = load i32, i32* %h.addr, align 4, !dbg !560
+  %219 = tail call i64 @nish.absentAt(i32 %217, i32 %218), !dbg !558
+  ret i64 %219, !dbg !557
 
 if.end:
-  %47 = load i32, i32* %word.addr, align 4, !dbg !562
-  %48 = lshr i32 %47, 24, !dbg !562
-  %49 = load i32, i32* %fingerprint.addr, align 4, !dbg !563
-  %50 = icmp eq i32 %48, %49, !dbg !562
-  br i1 %50, label %if.then.1, label %if.end.1, !dbg !561
+  %220 = load i32, i32* %word.addr, align 4, !dbg !562
+  %221 = lshr i32 %220, 24, !dbg !562
+  %222 = load i32, i32* %fingerprint.addr, align 4, !dbg !563
+  %223 = icmp eq i32 %221, %222, !dbg !562
+  br i1 %223, label %if.then.1, label %if.end.1, !dbg !561
 
 if.then.1:
-  %51 = load i32, i32* %word.addr, align 4, !dbg !567
-  %52 = and i32 %51, 16777215, !dbg !567
-  %53 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %52, i32 1), !dbg !566
-  %54 = extractvalue { i32, i1 } %53, 0, !dbg !566
-  %55 = extractvalue { i32, i1 } %53, 1, !dbg !566
-  br i1 %55, label %ovf.fail, label %ovf.ok, !dbg !566
+  %224 = load i32, i32* %word.addr, align 4, !dbg !567
+  %225 = and i32 %224, 16777215, !dbg !567
+  %226 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %225, i32 1), !dbg !566
+  %227 = extractvalue { i32, i1 } %226, 0, !dbg !566
+  %228 = extractvalue { i32, i1 } %226, 1, !dbg !566
+  br i1 %228, label %ovf.fail, label %ovf.ok, !dbg !566
 
 ovf.ok:
-  store i32 %54, i32* %at.addr, align 4, !dbg !565
+  store i32 %227, i32* %at.addr, align 4, !dbg !565
   call void @llvm.dbg.declare(metadata i32* %at.addr, metadata !570, metadata !DIExpression()), !dbg !565
-  %56 = load i32, i32* %at.addr, align 4, !dbg !572
-  %57 = icmp sge i32 %56, 0, !dbg !572
-  br i1 %57, label %land.rhs.4, label %land.end.4, !dbg !572
+  %229 = load i32, i32* %at.addr, align 4, !dbg !572
+  %230 = icmp sge i32 %229, 0, !dbg !572
+  br i1 %230, label %land.rhs.4, label %land.end.4, !dbg !572
 
 land.rhs.4:
-  %58 = load i32, i32* %at.addr, align 4, !dbg !574
-  %59 = trunc i64 %24 to i32, !dbg !542
-  %60 = icmp slt i32 %58, %59, !dbg !574
+  %231 = load i32, i32* %at.addr, align 4, !dbg !574
+  %232 = trunc i64 %197 to i32, !dbg !542
+  %233 = icmp slt i32 %231, %232, !dbg !574
   br label %land.end.4, !dbg !572
 
 land.end.4:
-  %61 = phi i1 [ false, %ovf.ok ], [ %60, %land.rhs.4 ], !dbg !572
-  br i1 %61, label %land.rhs.3, label %land.end.3, !dbg !572
+  %234 = phi i1 [ false, %ovf.ok ], [ %233, %land.rhs.4 ], !dbg !572
+  br i1 %234, label %land.rhs.3, label %land.end.3, !dbg !572
 
 land.rhs.3:
-  %62 = load i32, i32* %at.addr, align 4, !dbg !577
-  %63 = sext i32 %62 to i64, !dbg !576
-  %64 = bitcast i8* %26 to i32*, !dbg !576
-  %65 = getelementptr inbounds i32, i32* %64, i64 %63, !dbg !576
-  %66 = load i32, i32* %65, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !576
-  %67 = load i32, i32* %h.addr, align 4, !dbg !578
-  %68 = icmp eq i32 %66, %67, !dbg !576
+  %235 = load i32, i32* %at.addr, align 4, !dbg !577
+  %236 = sext i32 %235 to i64, !dbg !576
+  %237 = bitcast i8* %199 to i32*, !dbg !576
+  %238 = getelementptr inbounds i32, i32* %237, i64 %236, !dbg !576
+  %239 = load i32, i32* %238, align 4, !alias.scope !138, !noalias !137, !tbaa !155, !dbg !576
+  %240 = load i32, i32* %h.addr, align 4, !dbg !578
+  %241 = icmp eq i32 %239, %240, !dbg !576
   br label %land.end.3, !dbg !572
 
 land.end.3:
-  %69 = phi i1 [ false, %land.end.4 ], [ %68, %land.rhs.3 ], !dbg !572
-  br i1 %69, label %land.rhs.2, label %land.end.2, !dbg !572
+  %242 = phi i1 [ false, %land.end.4 ], [ %241, %land.rhs.3 ], !dbg !572
+  br i1 %242, label %land.rhs.2, label %land.end.2, !dbg !572
 
 land.rhs.2:
-  %70 = load i32, i32* %at.addr, align 4, !dbg !579
-  %71 = trunc i64 %28 to i32, !dbg !543
-  %72 = icmp slt i32 %70, %71, !dbg !579
+  %243 = load i32, i32* %at.addr, align 4, !dbg !579
+  %244 = trunc i64 %201 to i32, !dbg !543
+  %245 = icmp slt i32 %243, %244, !dbg !579
   br label %land.end.2, !dbg !572
 
 land.end.2:
-  %73 = phi i1 [ false, %land.end.3 ], [ %72, %land.rhs.2 ], !dbg !572
-  br i1 %73, label %land.rhs.1, label %land.end.1, !dbg !572
+  %246 = phi i1 [ false, %land.end.3 ], [ %245, %land.rhs.2 ], !dbg !572
+  br i1 %246, label %land.rhs.1, label %land.end.1, !dbg !572
 
 land.rhs.1:
-  %74 = load i32, i32* %at.addr, align 4, !dbg !583
-  %75 = sext i32 %74 to i64, !dbg !582
-  %76 = bitcast i8* %30 to i8**, !dbg !582
-  %77 = getelementptr inbounds i8*, i8** %76, i64 %75, !dbg !582
-  %78 = load i8*, i8** %77, align 8, !alias.scope !138, !noalias !137, !tbaa !446, !dbg !582
-  %79 = call zeroext i1 @nish_str_eq(i8* %78, i8* %key), !dbg !581
+  %247 = load i32, i32* %at.addr, align 4, !dbg !583
+  %248 = sext i32 %247 to i64, !dbg !582
+  %249 = bitcast i8* %203 to i8**, !dbg !582
+  %250 = getelementptr inbounds i8*, i8** %249, i64 %248, !dbg !582
+  %251 = load i8*, i8** %250, align 8, !alias.scope !138, !noalias !137, !tbaa !446, !dbg !582
+  %252 = call zeroext i1 @nish_str_eq(i8* %251, i8* %key), !dbg !581
   br label %land.end.1, !dbg !572
 
 land.end.1:
-  %80 = phi i1 [ false, %land.end.2 ], [ %79, %land.rhs.1 ], !dbg !572
-  br i1 %80, label %if.then.2, label %if.end.2, !dbg !571
+  %253 = phi i1 [ false, %land.end.2 ], [ %252, %land.rhs.1 ], !dbg !572
+  br i1 %253, label %if.then.2, label %if.end.2, !dbg !571
 
 if.then.2:
-  %81 = load i32, i32* %bucket.addr, align 4, !dbg !588
-  %82 = load i32, i32* %at.addr, align 4, !dbg !589
-  %83 = tail call i64 @nish.foundAt(i32 %81, i32 %82), !dbg !587
-  ret i64 %83, !dbg !586
+  %254 = load i32, i32* %bucket.addr, align 4, !dbg !588
+  %255 = load i32, i32* %at.addr, align 4, !dbg !589
+  %256 = tail call i64 @nish.foundAt(i32 %254, i32 %255), !dbg !587
+  ret i64 %256, !dbg !586
 
 if.end.2:
   br label %if.end.1, !dbg !561
 
 if.end.1:
-  %84 = load i32, i32* %bucket.addr, align 4, !dbg !592
-  %85 = add nsw i32 %84, 1, !dbg !592
-  %86 = and i32 %85, %mask, !dbg !591
-  store i32 %86, i32* %bucket.addr, align 4, !dbg !590
+  %257 = load i32, i32* %bucket.addr, align 4, !dbg !592
+  %258 = add nsw i32 %257, 1, !dbg !592
+  %259 = and i32 %258, %mask, !dbg !591
+  store i32 %259, i32* %bucket.addr, align 4, !dbg !590
   br label %while.cond, !dbg !540
 
 while.end:
-  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.4 to i8*)), !dbg !595
+  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.5 to i8*)), !dbg !595
   unreachable, !dbg !595
 
 ovf.fail:
@@ -1511,10 +1744,10 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !8 = !DILocation(line: 4, column: 1, scope: !7)
 !9 = !DILocation(line: 5, column: 3, scope: !7)
 !10 = !DILocation(line: 5, column: 13, scope: !7)
-!11 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "Map<string, i32>", file: !13, line: 272, size: 448, align: 64, elements: !47)
+!11 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "Map<string, i32>", file: !13, line: 273, size: 448, align: 64, elements: !47)
 !12 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !11, size: 64)
 !13 = !DIFile(filename: "std/collections.ts", directory: ".")
-!14 = !DIDerivedType(tag: DW_TAG_member, name: "size", scope: !11, file: !13, line: 274, baseType: !4, size: 32, offset: 0)
+!14 = !DIDerivedType(tag: DW_TAG_member, name: "size", scope: !11, file: !13, line: 275, baseType: !4, size: 32, offset: 0)
 !15 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "u32[]", file: !1, size: 192, align: 64, elements: !22)
 !16 = !DIBasicType(name: "long", size: 64, encoding: DW_ATE_signed)
 !17 = !DIDerivedType(tag: DW_TAG_member, name: "len", scope: !15, baseType: !16, size: 64, offset: 0)
@@ -1524,9 +1757,9 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !21 = !DIDerivedType(tag: DW_TAG_member, name: "data", scope: !15, baseType: !20, size: 64, offset: 128)
 !22 = !{!17, !18, !21}
 !23 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !15, size: 64)
-!24 = !DIDerivedType(tag: DW_TAG_member, name: "slots", scope: !11, file: !13, line: 276, baseType: !23, size: 64, offset: 64)
-!25 = !DIDerivedType(tag: DW_TAG_member, name: "mask", scope: !11, file: !13, line: 278, baseType: !4, size: 32, offset: 128)
-!26 = !DIDerivedType(tag: DW_TAG_member, name: "live", scope: !11, file: !13, line: 280, baseType: !4, size: 32, offset: 160)
+!24 = !DIDerivedType(tag: DW_TAG_member, name: "slots", scope: !11, file: !13, line: 277, baseType: !23, size: 64, offset: 64)
+!25 = !DIDerivedType(tag: DW_TAG_member, name: "mask", scope: !11, file: !13, line: 279, baseType: !4, size: 32, offset: 128)
+!26 = !DIDerivedType(tag: DW_TAG_member, name: "live", scope: !11, file: !13, line: 281, baseType: !4, size: 32, offset: 160)
 !27 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "string[]", file: !1, size: 192, align: 64, elements: !34)
 !28 = !DIDerivedType(tag: DW_TAG_member, name: "len", scope: !27, baseType: !16, size: 64, offset: 0)
 !29 = !DIDerivedType(tag: DW_TAG_member, name: "cap", scope: !27, baseType: !16, size: 64, offset: 64)
@@ -1536,7 +1769,7 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !33 = !DIDerivedType(tag: DW_TAG_member, name: "data", scope: !27, baseType: !32, size: 64, offset: 128)
 !34 = !{!28, !29, !33}
 !35 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !27, size: 64)
-!36 = !DIDerivedType(tag: DW_TAG_member, name: "entryKeys", scope: !11, file: !13, line: 281, baseType: !35, size: 64, offset: 192)
+!36 = !DIDerivedType(tag: DW_TAG_member, name: "entryKeys", scope: !11, file: !13, line: 282, baseType: !35, size: 64, offset: 192)
 !37 = distinct !DICompositeType(tag: DW_TAG_structure_type, name: "i32[]", file: !1, size: 192, align: 64, elements: !42)
 !38 = !DIDerivedType(tag: DW_TAG_member, name: "len", scope: !37, baseType: !16, size: 64, offset: 0)
 !39 = !DIDerivedType(tag: DW_TAG_member, name: "cap", scope: !37, baseType: !16, size: 64, offset: 64)
@@ -1544,9 +1777,9 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !41 = !DIDerivedType(tag: DW_TAG_member, name: "data", scope: !37, baseType: !40, size: 64, offset: 128)
 !42 = !{!38, !39, !41}
 !43 = !DIDerivedType(tag: DW_TAG_pointer_type, baseType: !37, size: 64)
-!44 = !DIDerivedType(tag: DW_TAG_member, name: "entryValues", scope: !11, file: !13, line: 282, baseType: !43, size: 64, offset: 256)
-!45 = !DIDerivedType(tag: DW_TAG_member, name: "entryHashes", scope: !11, file: !13, line: 284, baseType: !23, size: 64, offset: 320)
-!46 = !DIDerivedType(tag: DW_TAG_member, name: "walks", scope: !11, file: !13, line: 290, baseType: !4, size: 32, offset: 384)
+!44 = !DIDerivedType(tag: DW_TAG_member, name: "entryValues", scope: !11, file: !13, line: 283, baseType: !43, size: 64, offset: 256)
+!45 = !DIDerivedType(tag: DW_TAG_member, name: "entryHashes", scope: !11, file: !13, line: 285, baseType: !23, size: 64, offset: 320)
+!46 = !DIDerivedType(tag: DW_TAG_member, name: "walks", scope: !11, file: !13, line: 291, baseType: !4, size: 32, offset: 384)
 !47 = !{!14, !24, !25, !26, !36, !44, !45, !46}
 !48 = !DILocalVariable(name: "m", scope: !7, file: !1, line: 5, type: !12)
 !49 = !DILocation(line: 6, column: 3, scope: !7)
@@ -1568,72 +1801,72 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !65 = !DILocation(line: 4, column: 1, scope: !64)
 !66 = !{!4, !19, !4}
 !67 = !DISubroutineType(types: !66)
-!68 = distinct !DISubprogram(name: "homeBucket", linkageName: "nish.homeBucket", scope: !13, file: !13, line: 78, type: !67, scopeLine: 78, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!69 = !DILocation(line: 78, column: 1, scope: !68)
-!70 = !DILocalVariable(name: "h", arg: 1, scope: !68, file: !13, line: 78, type: !19)
-!71 = !DILocalVariable(name: "mask", arg: 2, scope: !68, file: !13, line: 78, type: !4)
-!72 = !DILocation(line: 78, column: 48, scope: !68)
-!73 = !DILocation(line: 78, column: 54, scope: !68)
-!74 = !DILocation(line: 78, column: 58, scope: !68)
-!75 = !DILocation(line: 78, column: 59, scope: !68)
-!76 = !DILocation(line: 78, column: 72, scope: !68)
+!68 = distinct !DISubprogram(name: "homeBucket", linkageName: "nish.homeBucket", scope: !13, file: !13, line: 79, type: !67, scopeLine: 79, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!69 = !DILocation(line: 79, column: 1, scope: !68)
+!70 = !DILocalVariable(name: "h", arg: 1, scope: !68, file: !13, line: 79, type: !19)
+!71 = !DILocalVariable(name: "mask", arg: 2, scope: !68, file: !13, line: 79, type: !4)
+!72 = !DILocation(line: 79, column: 48, scope: !68)
+!73 = !DILocation(line: 79, column: 54, scope: !68)
+!74 = !DILocation(line: 79, column: 58, scope: !68)
+!75 = !DILocation(line: 79, column: 59, scope: !68)
+!76 = !DILocation(line: 79, column: 72, scope: !68)
 !77 = !{!19, !19, !4}
 !78 = !DISubroutineType(types: !77)
-!79 = distinct !DISubprogram(name: "slotWord", linkageName: "nish.slotWord", scope: !13, file: !13, line: 81, type: !78, scopeLine: 81, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!80 = !DILocation(line: 81, column: 1, scope: !79)
-!81 = !DILocalVariable(name: "h", arg: 1, scope: !79, file: !13, line: 81, type: !19)
-!82 = !DILocalVariable(name: "index", arg: 2, scope: !79, file: !13, line: 81, type: !4)
-!83 = !DILocation(line: 81, column: 47, scope: !79)
-!84 = !DILocation(line: 81, column: 48, scope: !79)
-!85 = !DILocation(line: 81, column: 49, scope: !79)
-!86 = !DILocation(line: 81, column: 68, scope: !79)
-!87 = !DILocation(line: 81, column: 74, scope: !79)
-!88 = !DILocation(line: 81, column: 82, scope: !79)
+!79 = distinct !DISubprogram(name: "slotWord", linkageName: "nish.slotWord", scope: !13, file: !13, line: 82, type: !78, scopeLine: 82, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!80 = !DILocation(line: 82, column: 1, scope: !79)
+!81 = !DILocalVariable(name: "h", arg: 1, scope: !79, file: !13, line: 82, type: !19)
+!82 = !DILocalVariable(name: "index", arg: 2, scope: !79, file: !13, line: 82, type: !4)
+!83 = !DILocation(line: 82, column: 47, scope: !79)
+!84 = !DILocation(line: 82, column: 48, scope: !79)
+!85 = !DILocation(line: 82, column: 49, scope: !79)
+!86 = !DILocation(line: 82, column: 68, scope: !79)
+!87 = !DILocation(line: 82, column: 74, scope: !79)
+!88 = !DILocation(line: 82, column: 82, scope: !79)
 !89 = !{!16, !4, !4}
 !90 = !DISubroutineType(types: !89)
-!91 = distinct !DISubprogram(name: "foundAt", linkageName: "nish.foundAt", scope: !13, file: !13, line: 84, type: !90, scopeLine: 84, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!92 = !DILocation(line: 84, column: 1, scope: !91)
-!93 = !DILocalVariable(name: "bucket", arg: 1, scope: !91, file: !13, line: 84, type: !4)
-!94 = !DILocalVariable(name: "index", arg: 2, scope: !91, file: !13, line: 84, type: !4)
-!95 = !DILocation(line: 84, column: 51, scope: !91)
-!96 = !DILocation(line: 84, column: 52, scope: !91)
-!97 = !DILocation(line: 84, column: 58, scope: !91)
-!98 = !DILocation(line: 84, column: 75, scope: !91)
-!99 = !DILocation(line: 84, column: 81, scope: !91)
+!91 = distinct !DISubprogram(name: "foundAt", linkageName: "nish.foundAt", scope: !13, file: !13, line: 85, type: !90, scopeLine: 85, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!92 = !DILocation(line: 85, column: 1, scope: !91)
+!93 = !DILocalVariable(name: "bucket", arg: 1, scope: !91, file: !13, line: 85, type: !4)
+!94 = !DILocalVariable(name: "index", arg: 2, scope: !91, file: !13, line: 85, type: !4)
+!95 = !DILocation(line: 85, column: 51, scope: !91)
+!96 = !DILocation(line: 85, column: 52, scope: !91)
+!97 = !DILocation(line: 85, column: 58, scope: !91)
+!98 = !DILocation(line: 85, column: 75, scope: !91)
+!99 = !DILocation(line: 85, column: 81, scope: !91)
 !100 = !{!16, !4, !19}
 !101 = !DISubroutineType(types: !100)
-!102 = distinct !DISubprogram(name: "absentAt", linkageName: "nish.absentAt", scope: !13, file: !13, line: 87, type: !101, scopeLine: 87, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!103 = !DILocation(line: 87, column: 1, scope: !102)
-!104 = !DILocalVariable(name: "bucket", arg: 1, scope: !102, file: !13, line: 87, type: !4)
-!105 = !DILocalVariable(name: "h", arg: 2, scope: !102, file: !13, line: 87, type: !19)
-!106 = !DILocation(line: 87, column: 48, scope: !102)
-!107 = !DILocation(line: 87, column: 54, scope: !102)
-!108 = !DILocation(line: 87, column: 60, scope: !102)
-!109 = !DILocation(line: 87, column: 61, scope: !102)
-!110 = !DILocation(line: 87, column: 62, scope: !102)
-!111 = !DILocation(line: 87, column: 68, scope: !102)
-!112 = !DILocation(line: 87, column: 85, scope: !102)
-!113 = !DILocation(line: 87, column: 91, scope: !102)
+!102 = distinct !DISubprogram(name: "absentAt", linkageName: "nish.absentAt", scope: !13, file: !13, line: 88, type: !101, scopeLine: 88, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!103 = !DILocation(line: 88, column: 1, scope: !102)
+!104 = !DILocalVariable(name: "bucket", arg: 1, scope: !102, file: !13, line: 88, type: !4)
+!105 = !DILocalVariable(name: "h", arg: 2, scope: !102, file: !13, line: 88, type: !19)
+!106 = !DILocation(line: 88, column: 48, scope: !102)
+!107 = !DILocation(line: 88, column: 54, scope: !102)
+!108 = !DILocation(line: 88, column: 60, scope: !102)
+!109 = !DILocation(line: 88, column: 61, scope: !102)
+!110 = !DILocation(line: 88, column: 62, scope: !102)
+!111 = !DILocation(line: 88, column: 68, scope: !102)
+!112 = !DILocation(line: 88, column: 85, scope: !102)
+!113 = !DILocation(line: 88, column: 91, scope: !102)
 !114 = !{null, !23, !4, !19, !4}
 !115 = !DISubroutineType(types: !114)
-!116 = distinct !DISubprogram(name: "fileEntry", linkageName: "nish.fileEntry", scope: !13, file: !13, line: 129, type: !115, scopeLine: 129, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!117 = !DILocation(line: 129, column: 1, scope: !116)
-!118 = !DILocalVariable(name: "slots", arg: 1, scope: !116, file: !13, line: 129, type: !23)
-!119 = !DILocalVariable(name: "mask", arg: 2, scope: !116, file: !13, line: 129, type: !4)
-!120 = !DILocalVariable(name: "h", arg: 3, scope: !116, file: !13, line: 129, type: !19)
-!121 = !DILocalVariable(name: "index", arg: 4, scope: !116, file: !13, line: 129, type: !4)
-!122 = !DILocation(line: 130, column: 3, scope: !116)
-!123 = !DILocation(line: 130, column: 16, scope: !116)
-!124 = !DILocation(line: 130, column: 25, scope: !116)
-!125 = !DILocation(line: 130, column: 28, scope: !116)
-!126 = !DILocalVariable(name: "word", scope: !116, file: !13, line: 130, type: !19)
-!127 = !DILocation(line: 131, column: 3, scope: !116)
-!128 = !DILocation(line: 131, column: 16, scope: !116)
-!129 = !DILocation(line: 131, column: 27, scope: !116)
-!130 = !DILocation(line: 131, column: 30, scope: !116)
-!131 = !DILocalVariable(name: "bucket", scope: !116, file: !13, line: 131, type: !4)
-!132 = !DILocation(line: 132, column: 3, scope: !116)
-!133 = !DILocation(line: 132, column: 40, scope: !116)
+!116 = distinct !DISubprogram(name: "fileEntry", linkageName: "nish.fileEntry", scope: !13, file: !13, line: 130, type: !115, scopeLine: 130, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!117 = !DILocation(line: 130, column: 1, scope: !116)
+!118 = !DILocalVariable(name: "slots", arg: 1, scope: !116, file: !13, line: 130, type: !23)
+!119 = !DILocalVariable(name: "mask", arg: 2, scope: !116, file: !13, line: 130, type: !4)
+!120 = !DILocalVariable(name: "h", arg: 3, scope: !116, file: !13, line: 130, type: !19)
+!121 = !DILocalVariable(name: "index", arg: 4, scope: !116, file: !13, line: 130, type: !4)
+!122 = !DILocation(line: 131, column: 3, scope: !116)
+!123 = !DILocation(line: 131, column: 16, scope: !116)
+!124 = !DILocation(line: 131, column: 25, scope: !116)
+!125 = !DILocation(line: 131, column: 28, scope: !116)
+!126 = !DILocalVariable(name: "word", scope: !116, file: !13, line: 131, type: !19)
+!127 = !DILocation(line: 132, column: 3, scope: !116)
+!128 = !DILocation(line: 132, column: 16, scope: !116)
+!129 = !DILocation(line: 132, column: 27, scope: !116)
+!130 = !DILocation(line: 132, column: 30, scope: !116)
+!131 = !DILocalVariable(name: "bucket", scope: !116, file: !13, line: 132, type: !4)
+!132 = !DILocation(line: 133, column: 3, scope: !116)
+!133 = !DILocation(line: 133, column: 40, scope: !116)
 !134 = !{!"nish array"}
 !135 = !{!"header", !134}
 !136 = !{!"elements", !134}
@@ -1646,173 +1879,173 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !143 = !{!"array header", !141, i64 0, !141, i64 8, !142, i64 16}
 !144 = !{!143, !141, i64 0}
 !145 = !{!143, !142, i64 16}
-!146 = !DILocation(line: 132, column: 10, scope: !116)
-!147 = !DILocation(line: 132, column: 20, scope: !116)
-!148 = !DILocation(line: 132, column: 25, scope: !116)
-!149 = !DILocation(line: 132, column: 34, scope: !116)
-!150 = !DILocation(line: 132, column: 55, scope: !116)
-!151 = !DILocation(line: 133, column: 5, scope: !116)
-!152 = !DILocation(line: 133, column: 9, scope: !116)
-!153 = !DILocation(line: 133, column: 15, scope: !116)
+!146 = !DILocation(line: 133, column: 10, scope: !116)
+!147 = !DILocation(line: 133, column: 20, scope: !116)
+!148 = !DILocation(line: 133, column: 25, scope: !116)
+!149 = !DILocation(line: 133, column: 34, scope: !116)
+!150 = !DILocation(line: 133, column: 55, scope: !116)
+!151 = !DILocation(line: 134, column: 5, scope: !116)
+!152 = !DILocation(line: 134, column: 9, scope: !116)
+!153 = !DILocation(line: 134, column: 15, scope: !116)
 !154 = !{!"element i32", !140, i64 0}
 !155 = !{!154, !154, i64 0}
-!156 = !DILocation(line: 133, column: 27, scope: !116)
-!157 = !DILocation(line: 133, column: 30, scope: !116)
-!158 = !DILocation(line: 134, column: 7, scope: !116)
-!159 = !DILocation(line: 134, column: 13, scope: !116)
-!160 = !DILocation(line: 134, column: 23, scope: !116)
-!161 = !DILocation(line: 135, column: 7, scope: !116)
-!162 = !DILocation(line: 137, column: 5, scope: !116)
-!163 = !DILocation(line: 137, column: 14, scope: !116)
-!164 = !DILocation(line: 137, column: 15, scope: !116)
-!165 = !DILocation(line: 137, column: 24, scope: !116)
-!166 = !DILocation(line: 137, column: 29, scope: !116)
+!156 = !DILocation(line: 134, column: 27, scope: !116)
+!157 = !DILocation(line: 134, column: 30, scope: !116)
+!158 = !DILocation(line: 135, column: 7, scope: !116)
+!159 = !DILocation(line: 135, column: 13, scope: !116)
+!160 = !DILocation(line: 135, column: 23, scope: !116)
+!161 = !DILocation(line: 136, column: 7, scope: !116)
+!162 = !DILocation(line: 138, column: 5, scope: !116)
+!163 = !DILocation(line: 138, column: 14, scope: !116)
+!164 = !DILocation(line: 138, column: 15, scope: !116)
+!165 = !DILocation(line: 138, column: 24, scope: !116)
+!166 = !DILocation(line: 138, column: 29, scope: !116)
 !167 = !{null, !23}
 !168 = !DISubroutineType(types: !167)
-!169 = distinct !DISubprogram(name: "compactHashes", linkageName: "nish.compactHashes", scope: !13, file: !13, line: 157, type: !168, scopeLine: 157, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!170 = !DILocation(line: 157, column: 1, scope: !169)
-!171 = !DILocalVariable(name: "hashes", arg: 1, scope: !169, file: !13, line: 157, type: !23)
-!172 = !DILocation(line: 158, column: 3, scope: !169)
-!173 = !DILocation(line: 158, column: 16, scope: !169)
-!174 = !DILocation(line: 158, column: 22, scope: !169)
-!175 = !DILocalVariable(name: "used", scope: !169, file: !13, line: 158, type: !4)
-!176 = !DILocation(line: 159, column: 3, scope: !169)
-!177 = !DILocation(line: 159, column: 17, scope: !169)
-!178 = !DILocalVariable(name: "to", scope: !169, file: !13, line: 159, type: !4)
-!179 = !DILocation(line: 160, column: 3, scope: !169)
-!180 = !DILocation(line: 160, column: 24, scope: !169)
-!181 = !DILocalVariable(name: "from", scope: !169, file: !13, line: 160, type: !4)
-!182 = !DILocation(line: 161, column: 15, scope: !169)
-!183 = !DILocation(line: 160, column: 27, scope: !169)
-!184 = !DILocation(line: 160, column: 34, scope: !169)
-!185 = !DILocation(line: 160, column: 48, scope: !169)
-!186 = !DILocation(line: 161, column: 5, scope: !169)
-!187 = !DILocation(line: 161, column: 22, scope: !169)
-!188 = !DILocalVariable(name: "h", scope: !169, file: !13, line: 161, type: !19)
-!189 = !DILocation(line: 162, column: 5, scope: !169)
-!190 = !DILocation(line: 162, column: 9, scope: !169)
-!191 = !DILocation(line: 162, column: 15, scope: !169)
-!192 = !DILocation(line: 162, column: 20, scope: !169)
-!193 = !DILocation(line: 162, column: 26, scope: !169)
-!194 = !DILocation(line: 162, column: 31, scope: !169)
-!195 = !DILocation(line: 162, column: 36, scope: !169)
-!196 = !DILocation(line: 162, column: 42, scope: !169)
-!197 = !DILocation(line: 163, column: 7, scope: !169)
-!198 = !DILocation(line: 163, column: 14, scope: !169)
-!199 = !DILocation(line: 163, column: 20, scope: !169)
-!200 = !DILocation(line: 164, column: 7, scope: !169)
-!201 = !DILocation(line: 160, column: 40, scope: !169)
-!202 = !DILocation(line: 167, column: 3, scope: !169)
-!203 = !DILocation(line: 167, column: 10, scope: !169)
-!204 = !DILocation(line: 167, column: 16, scope: !169)
-!205 = !DILocation(line: 167, column: 33, scope: !169)
-!206 = !DILocation(line: 167, column: 37, scope: !169)
-!207 = !DILocation(line: 168, column: 5, scope: !169)
+!169 = distinct !DISubprogram(name: "compactHashes", linkageName: "nish.compactHashes", scope: !13, file: !13, line: 158, type: !168, scopeLine: 158, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!170 = !DILocation(line: 158, column: 1, scope: !169)
+!171 = !DILocalVariable(name: "hashes", arg: 1, scope: !169, file: !13, line: 158, type: !23)
+!172 = !DILocation(line: 159, column: 3, scope: !169)
+!173 = !DILocation(line: 159, column: 16, scope: !169)
+!174 = !DILocation(line: 159, column: 22, scope: !169)
+!175 = !DILocalVariable(name: "used", scope: !169, file: !13, line: 159, type: !4)
+!176 = !DILocation(line: 160, column: 3, scope: !169)
+!177 = !DILocation(line: 160, column: 17, scope: !169)
+!178 = !DILocalVariable(name: "to", scope: !169, file: !13, line: 160, type: !4)
+!179 = !DILocation(line: 161, column: 3, scope: !169)
+!180 = !DILocation(line: 161, column: 24, scope: !169)
+!181 = !DILocalVariable(name: "from", scope: !169, file: !13, line: 161, type: !4)
+!182 = !DILocation(line: 162, column: 15, scope: !169)
+!183 = !DILocation(line: 161, column: 27, scope: !169)
+!184 = !DILocation(line: 161, column: 34, scope: !169)
+!185 = !DILocation(line: 161, column: 48, scope: !169)
+!186 = !DILocation(line: 162, column: 5, scope: !169)
+!187 = !DILocation(line: 162, column: 22, scope: !169)
+!188 = !DILocalVariable(name: "h", scope: !169, file: !13, line: 162, type: !19)
+!189 = !DILocation(line: 163, column: 5, scope: !169)
+!190 = !DILocation(line: 163, column: 9, scope: !169)
+!191 = !DILocation(line: 163, column: 15, scope: !169)
+!192 = !DILocation(line: 163, column: 20, scope: !169)
+!193 = !DILocation(line: 163, column: 26, scope: !169)
+!194 = !DILocation(line: 163, column: 31, scope: !169)
+!195 = !DILocation(line: 163, column: 36, scope: !169)
+!196 = !DILocation(line: 163, column: 42, scope: !169)
+!197 = !DILocation(line: 164, column: 7, scope: !169)
+!198 = !DILocation(line: 164, column: 14, scope: !169)
+!199 = !DILocation(line: 164, column: 20, scope: !169)
+!200 = !DILocation(line: 165, column: 7, scope: !169)
+!201 = !DILocation(line: 161, column: 40, scope: !169)
+!202 = !DILocation(line: 168, column: 3, scope: !169)
+!203 = !DILocation(line: 168, column: 10, scope: !169)
+!204 = !DILocation(line: 168, column: 16, scope: !169)
+!205 = !DILocation(line: 168, column: 33, scope: !169)
+!206 = !DILocation(line: 168, column: 37, scope: !169)
+!207 = !DILocation(line: 169, column: 5, scope: !169)
 !208 = !{!23, !23, !4, !4}
 !209 = !DISubroutineType(types: !208)
-!210 = distinct !DISubprogram(name: "rebuiltSlots", linkageName: "nish.rebuiltSlots", scope: !13, file: !13, line: 179, type: !209, scopeLine: 179, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!211 = !DILocation(line: 179, column: 1, scope: !210)
-!212 = !DILocalVariable(name: "slots", arg: 1, scope: !210, file: !13, line: 179, type: !23)
-!213 = !DILocalVariable(name: "live", arg: 2, scope: !210, file: !13, line: 179, type: !4)
-!214 = !DILocalVariable(name: "used", arg: 3, scope: !210, file: !13, line: 179, type: !4)
-!215 = !DILocation(line: 180, column: 3, scope: !210)
-!216 = !DILocation(line: 180, column: 13, scope: !210)
-!217 = !DILocation(line: 180, column: 19, scope: !210)
-!218 = !DILocalVariable(name: "n", scope: !210, file: !13, line: 180, type: !4)
-!219 = !DILocation(line: 181, column: 3, scope: !210)
-!220 = !DILocation(line: 181, column: 7, scope: !210)
-!221 = !DILocation(line: 181, column: 14, scope: !210)
-!222 = !DILocation(line: 181, column: 18, scope: !210)
-!223 = !DILocation(line: 181, column: 24, scope: !210)
-!224 = !DILocation(line: 182, column: 5, scope: !210)
-!225 = !DILocation(line: 182, column: 16, scope: !210)
-!226 = !DILocation(line: 183, column: 5, scope: !210)
-!227 = !DILocation(line: 183, column: 12, scope: !210)
-!228 = !DILocation(line: 185, column: 3, scope: !210)
-!229 = !DILocation(line: 185, column: 10, scope: !210)
-!230 = !DILocation(line: 185, column: 25, scope: !210)
-!231 = !DILocation(line: 185, column: 29, scope: !210)
+!210 = distinct !DISubprogram(name: "rebuiltSlots", linkageName: "nish.rebuiltSlots", scope: !13, file: !13, line: 180, type: !209, scopeLine: 180, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!211 = !DILocation(line: 180, column: 1, scope: !210)
+!212 = !DILocalVariable(name: "slots", arg: 1, scope: !210, file: !13, line: 180, type: !23)
+!213 = !DILocalVariable(name: "live", arg: 2, scope: !210, file: !13, line: 180, type: !4)
+!214 = !DILocalVariable(name: "used", arg: 3, scope: !210, file: !13, line: 180, type: !4)
+!215 = !DILocation(line: 181, column: 3, scope: !210)
+!216 = !DILocation(line: 181, column: 13, scope: !210)
+!217 = !DILocation(line: 181, column: 19, scope: !210)
+!218 = !DILocalVariable(name: "n", scope: !210, file: !13, line: 181, type: !4)
+!219 = !DILocation(line: 182, column: 3, scope: !210)
+!220 = !DILocation(line: 182, column: 7, scope: !210)
+!221 = !DILocation(line: 182, column: 14, scope: !210)
+!222 = !DILocation(line: 182, column: 18, scope: !210)
+!223 = !DILocation(line: 182, column: 24, scope: !210)
+!224 = !DILocation(line: 183, column: 5, scope: !210)
+!225 = !DILocation(line: 183, column: 16, scope: !210)
+!226 = !DILocation(line: 184, column: 5, scope: !210)
+!227 = !DILocation(line: 184, column: 12, scope: !210)
+!228 = !DILocation(line: 186, column: 3, scope: !210)
+!229 = !DILocation(line: 186, column: 10, scope: !210)
+!230 = !DILocation(line: 186, column: 25, scope: !210)
+!231 = !DILocation(line: 186, column: 29, scope: !210)
 !232 = !{!143, !141, i64 8}
 !233 = !{null, !23, !23}
 !234 = !DISubroutineType(types: !233)
-!235 = distinct !DISubprogram(name: "refile", linkageName: "nish.refile", scope: !13, file: !13, line: 193, type: !234, scopeLine: 193, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!236 = !DILocation(line: 193, column: 1, scope: !235)
-!237 = !DILocalVariable(name: "slots", arg: 1, scope: !235, file: !13, line: 193, type: !23)
-!238 = !DILocalVariable(name: "hashes", arg: 2, scope: !235, file: !13, line: 193, type: !23)
-!239 = !DILocation(line: 194, column: 3, scope: !235)
-!240 = !DILocation(line: 194, column: 16, scope: !235)
-!241 = !DILocation(line: 194, column: 22, scope: !235)
-!242 = !DILocation(line: 194, column: 38, scope: !235)
-!243 = !DILocalVariable(name: "mask", scope: !235, file: !13, line: 194, type: !4)
-!244 = !DILocation(line: 195, column: 3, scope: !235)
-!245 = !DILocation(line: 195, column: 21, scope: !235)
-!246 = !DILocalVariable(name: "i", scope: !235, file: !13, line: 195, type: !4)
-!247 = !DILocation(line: 195, column: 34, scope: !235)
-!248 = !DILocation(line: 195, column: 24, scope: !235)
-!249 = !DILocation(line: 195, column: 28, scope: !235)
-!250 = !DILocation(line: 195, column: 55, scope: !235)
-!251 = !DILocation(line: 196, column: 5, scope: !235)
-!252 = !DILocation(line: 196, column: 15, scope: !235)
-!253 = !DILocation(line: 196, column: 22, scope: !235)
-!254 = !DILocalVariable(name: "h", scope: !235, file: !13, line: 196, type: !19)
-!255 = !DILocation(line: 197, column: 5, scope: !235)
-!256 = !DILocation(line: 197, column: 9, scope: !235)
-!257 = !DILocation(line: 197, column: 15, scope: !235)
-!258 = !DILocation(line: 197, column: 18, scope: !235)
-!259 = !DILocation(line: 198, column: 7, scope: !235)
-!260 = !DILocation(line: 198, column: 17, scope: !235)
-!261 = !DILocation(line: 198, column: 24, scope: !235)
-!262 = !DILocation(line: 198, column: 30, scope: !235)
-!263 = !DILocation(line: 198, column: 33, scope: !235)
-!264 = !DILocation(line: 195, column: 50, scope: !235)
-!265 = distinct !DISubprogram(name: "clearSlots", linkageName: "nish.clearSlots", scope: !13, file: !13, line: 224, type: !168, scopeLine: 224, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!266 = !DILocation(line: 224, column: 1, scope: !265)
-!267 = !DILocalVariable(name: "slots", arg: 1, scope: !265, file: !13, line: 224, type: !23)
-!268 = !DILocation(line: 225, column: 3, scope: !265)
-!269 = !DILocation(line: 225, column: 21, scope: !265)
-!270 = !DILocalVariable(name: "i", scope: !265, file: !13, line: 225, type: !4)
-!271 = !DILocation(line: 225, column: 34, scope: !265)
-!272 = !DILocation(line: 225, column: 24, scope: !265)
-!273 = !DILocation(line: 225, column: 28, scope: !265)
-!274 = !DILocation(line: 225, column: 54, scope: !265)
-!275 = !DILocation(line: 226, column: 5, scope: !265)
-!276 = !DILocation(line: 226, column: 11, scope: !265)
-!277 = !DILocation(line: 226, column: 16, scope: !265)
-!278 = !DILocation(line: 225, column: 49, scope: !265)
+!235 = distinct !DISubprogram(name: "refile", linkageName: "nish.refile", scope: !13, file: !13, line: 194, type: !234, scopeLine: 194, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!236 = !DILocation(line: 194, column: 1, scope: !235)
+!237 = !DILocalVariable(name: "slots", arg: 1, scope: !235, file: !13, line: 194, type: !23)
+!238 = !DILocalVariable(name: "hashes", arg: 2, scope: !235, file: !13, line: 194, type: !23)
+!239 = !DILocation(line: 195, column: 3, scope: !235)
+!240 = !DILocation(line: 195, column: 16, scope: !235)
+!241 = !DILocation(line: 195, column: 22, scope: !235)
+!242 = !DILocation(line: 195, column: 38, scope: !235)
+!243 = !DILocalVariable(name: "mask", scope: !235, file: !13, line: 195, type: !4)
+!244 = !DILocation(line: 196, column: 3, scope: !235)
+!245 = !DILocation(line: 196, column: 21, scope: !235)
+!246 = !DILocalVariable(name: "i", scope: !235, file: !13, line: 196, type: !4)
+!247 = !DILocation(line: 196, column: 34, scope: !235)
+!248 = !DILocation(line: 196, column: 24, scope: !235)
+!249 = !DILocation(line: 196, column: 28, scope: !235)
+!250 = !DILocation(line: 196, column: 55, scope: !235)
+!251 = !DILocation(line: 197, column: 5, scope: !235)
+!252 = !DILocation(line: 197, column: 15, scope: !235)
+!253 = !DILocation(line: 197, column: 22, scope: !235)
+!254 = !DILocalVariable(name: "h", scope: !235, file: !13, line: 197, type: !19)
+!255 = !DILocation(line: 198, column: 5, scope: !235)
+!256 = !DILocation(line: 198, column: 9, scope: !235)
+!257 = !DILocation(line: 198, column: 15, scope: !235)
+!258 = !DILocation(line: 198, column: 18, scope: !235)
+!259 = !DILocation(line: 199, column: 7, scope: !235)
+!260 = !DILocation(line: 199, column: 17, scope: !235)
+!261 = !DILocation(line: 199, column: 24, scope: !235)
+!262 = !DILocation(line: 199, column: 30, scope: !235)
+!263 = !DILocation(line: 199, column: 33, scope: !235)
+!264 = !DILocation(line: 196, column: 50, scope: !235)
+!265 = distinct !DISubprogram(name: "clearSlots", linkageName: "nish.clearSlots", scope: !13, file: !13, line: 225, type: !168, scopeLine: 225, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!266 = !DILocation(line: 225, column: 1, scope: !265)
+!267 = !DILocalVariable(name: "slots", arg: 1, scope: !265, file: !13, line: 225, type: !23)
+!268 = !DILocation(line: 226, column: 3, scope: !265)
+!269 = !DILocation(line: 226, column: 21, scope: !265)
+!270 = !DILocalVariable(name: "i", scope: !265, file: !13, line: 226, type: !4)
+!271 = !DILocation(line: 226, column: 34, scope: !265)
+!272 = !DILocation(line: 226, column: 24, scope: !265)
+!273 = !DILocation(line: 226, column: 28, scope: !265)
+!274 = !DILocation(line: 226, column: 54, scope: !265)
+!275 = !DILocation(line: 227, column: 5, scope: !265)
+!276 = !DILocation(line: 227, column: 11, scope: !265)
+!277 = !DILocation(line: 227, column: 16, scope: !265)
+!278 = !DILocation(line: 226, column: 49, scope: !265)
 !279 = !{null, !23, !4, !4, !19, !4}
 !280 = !DISubroutineType(types: !279)
-!281 = distinct !DISubprogram(name: "fileAppended", linkageName: "nish.fileAppended", scope: !13, file: !13, line: 258, type: !280, scopeLine: 258, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!282 = !DILocation(line: 258, column: 1, scope: !281)
-!283 = !DILocalVariable(name: "slots", arg: 1, scope: !281, file: !13, line: 258, type: !23)
-!284 = !DILocalVariable(name: "mask", arg: 2, scope: !281, file: !13, line: 258, type: !4)
-!285 = !DILocalVariable(name: "bucket", arg: 3, scope: !281, file: !13, line: 258, type: !4)
-!286 = !DILocalVariable(name: "h", arg: 4, scope: !281, file: !13, line: 258, type: !19)
-!287 = !DILocalVariable(name: "used", arg: 5, scope: !281, file: !13, line: 258, type: !4)
-!288 = !DILocation(line: 259, column: 3, scope: !281)
-!289 = !DILocation(line: 259, column: 7, scope: !281)
-!290 = !DILocation(line: 259, column: 17, scope: !281)
-!291 = !DILocation(line: 259, column: 22, scope: !281)
-!292 = !DILocation(line: 259, column: 31, scope: !281)
-!293 = !DILocation(line: 259, column: 37, scope: !281)
-!294 = !DILocation(line: 259, column: 52, scope: !281)
-!295 = !DILocation(line: 260, column: 5, scope: !281)
-!296 = !DILocation(line: 260, column: 11, scope: !281)
-!297 = !DILocation(line: 260, column: 21, scope: !281)
-!298 = !DILocation(line: 260, column: 30, scope: !281)
-!299 = !DILocation(line: 260, column: 33, scope: !281)
-!300 = !DILocation(line: 260, column: 40, scope: !281)
-!301 = !DILocation(line: 261, column: 10, scope: !281)
-!302 = !DILocation(line: 262, column: 5, scope: !281)
-!303 = !DILocation(line: 262, column: 15, scope: !281)
-!304 = !DILocation(line: 262, column: 22, scope: !281)
-!305 = !DILocation(line: 262, column: 28, scope: !281)
-!306 = !DILocation(line: 262, column: 31, scope: !281)
-!307 = !DILocation(line: 262, column: 38, scope: !281)
+!281 = distinct !DISubprogram(name: "fileAppended", linkageName: "nish.fileAppended", scope: !13, file: !13, line: 259, type: !280, scopeLine: 259, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!282 = !DILocation(line: 259, column: 1, scope: !281)
+!283 = !DILocalVariable(name: "slots", arg: 1, scope: !281, file: !13, line: 259, type: !23)
+!284 = !DILocalVariable(name: "mask", arg: 2, scope: !281, file: !13, line: 259, type: !4)
+!285 = !DILocalVariable(name: "bucket", arg: 3, scope: !281, file: !13, line: 259, type: !4)
+!286 = !DILocalVariable(name: "h", arg: 4, scope: !281, file: !13, line: 259, type: !19)
+!287 = !DILocalVariable(name: "used", arg: 5, scope: !281, file: !13, line: 259, type: !4)
+!288 = !DILocation(line: 260, column: 3, scope: !281)
+!289 = !DILocation(line: 260, column: 7, scope: !281)
+!290 = !DILocation(line: 260, column: 17, scope: !281)
+!291 = !DILocation(line: 260, column: 22, scope: !281)
+!292 = !DILocation(line: 260, column: 31, scope: !281)
+!293 = !DILocation(line: 260, column: 37, scope: !281)
+!294 = !DILocation(line: 260, column: 52, scope: !281)
+!295 = !DILocation(line: 261, column: 5, scope: !281)
+!296 = !DILocation(line: 261, column: 11, scope: !281)
+!297 = !DILocation(line: 261, column: 21, scope: !281)
+!298 = !DILocation(line: 261, column: 30, scope: !281)
+!299 = !DILocation(line: 261, column: 33, scope: !281)
+!300 = !DILocation(line: 261, column: 40, scope: !281)
+!301 = !DILocation(line: 262, column: 10, scope: !281)
+!302 = !DILocation(line: 263, column: 5, scope: !281)
+!303 = !DILocation(line: 263, column: 15, scope: !281)
+!304 = !DILocation(line: 263, column: 22, scope: !281)
+!305 = !DILocation(line: 263, column: 28, scope: !281)
+!306 = !DILocation(line: 263, column: 31, scope: !281)
+!307 = !DILocation(line: 263, column: 38, scope: !281)
 !308 = !{null, !12}
 !309 = !DISubroutineType(types: !308)
-!310 = distinct !DISubprogram(name: "Map<string, i32>.constructor", linkageName: "nish.Map$str$i32.constructor", scope: !13, file: !13, line: 292, type: !309, scopeLine: 292, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!311 = !DILocation(line: 292, column: 3, scope: !310)
-!312 = !DILocalVariable(name: "this", arg: 1, scope: !310, file: !13, line: 292, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!310 = distinct !DISubprogram(name: "Map<string, i32>.constructor", linkageName: "nish.Map$str$i32.constructor", scope: !13, file: !13, line: 293, type: !309, scopeLine: 293, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!311 = !DILocation(line: 293, column: 3, scope: !310)
+!312 = !DILocalVariable(name: "this", arg: 1, scope: !310, file: !13, line: 293, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
 !313 = !{!"i32", !140, i64 0}
 !314 = !{!"ptr", !140, i64 0}
 !315 = !{!"Map$str$i32", !313, i64 0, !314, i64 8, !313, i64 16, !313, i64 20, !314, i64 24, !314, i64 32, !314, i64 40, !313, i64 48}
@@ -1820,372 +2053,372 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !317 = !{!315, !313, i64 16}
 !318 = !{!315, !313, i64 20}
 !319 = !{!315, !313, i64 48}
-!320 = !DILocation(line: 293, column: 5, scope: !310)
-!321 = !DILocation(line: 293, column: 18, scope: !310)
-!322 = !DILocation(line: 293, column: 33, scope: !310)
+!320 = !DILocation(line: 294, column: 5, scope: !310)
+!321 = !DILocation(line: 294, column: 18, scope: !310)
+!322 = !DILocation(line: 294, column: 33, scope: !310)
 !323 = !{!315, !314, i64 8}
-!324 = !DILocation(line: 294, column: 5, scope: !310)
-!325 = !DILocation(line: 294, column: 22, scope: !310)
+!324 = !DILocation(line: 295, column: 5, scope: !310)
+!325 = !DILocation(line: 295, column: 22, scope: !310)
 !326 = !{!315, !314, i64 24}
-!327 = !DILocation(line: 295, column: 5, scope: !310)
-!328 = !DILocation(line: 295, column: 24, scope: !310)
+!327 = !DILocation(line: 296, column: 5, scope: !310)
+!328 = !DILocation(line: 296, column: 24, scope: !310)
 !329 = !{!315, !314, i64 32}
-!330 = !DILocation(line: 296, column: 5, scope: !310)
-!331 = !DILocation(line: 296, column: 24, scope: !310)
+!330 = !DILocation(line: 297, column: 5, scope: !310)
+!331 = !DILocation(line: 297, column: 24, scope: !310)
 !332 = !{!315, !314, i64 40}
 !333 = !{!16, !12, !31}
 !334 = !DISubroutineType(types: !333)
-!335 = distinct !DISubprogram(name: "Map<string, i32>.probe", linkageName: "nish.Map$str$i32.probe", scope: !13, file: !13, line: 300, type: !334, scopeLine: 300, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!336 = !DILocation(line: 300, column: 3, scope: !335)
-!337 = !DILocalVariable(name: "this", arg: 1, scope: !335, file: !13, line: 300, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!338 = !DILocalVariable(name: "key", arg: 2, scope: !335, file: !13, line: 300, type: !31)
-!339 = !DILocation(line: 301, column: 5, scope: !335)
-!340 = !DILocation(line: 301, column: 12, scope: !335)
-!341 = !DILocation(line: 301, column: 23, scope: !335)
-!342 = !DILocation(line: 301, column: 35, scope: !335)
-!343 = !DILocation(line: 301, column: 46, scope: !335)
-!344 = !DILocation(line: 301, column: 64, scope: !335)
-!345 = !DILocation(line: 301, column: 80, scope: !335)
+!335 = distinct !DISubprogram(name: "Map<string, i32>.probe", linkageName: "nish.Map$str$i32.probe", scope: !13, file: !13, line: 301, type: !334, scopeLine: 301, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!336 = !DILocation(line: 301, column: 3, scope: !335)
+!337 = !DILocalVariable(name: "this", arg: 1, scope: !335, file: !13, line: 301, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!338 = !DILocalVariable(name: "key", arg: 2, scope: !335, file: !13, line: 301, type: !31)
+!339 = !DILocation(line: 302, column: 5, scope: !335)
+!340 = !DILocation(line: 302, column: 12, scope: !335)
+!341 = !DILocation(line: 302, column: 23, scope: !335)
+!342 = !DILocation(line: 302, column: 35, scope: !335)
+!343 = !DILocation(line: 302, column: 46, scope: !335)
+!344 = !DILocation(line: 302, column: 64, scope: !335)
+!345 = !DILocation(line: 302, column: 80, scope: !335)
 !346 = !{!12, !12, !31, !4}
 !347 = !DISubroutineType(types: !346)
-!348 = distinct !DISubprogram(name: "Map<string, i32>.set", linkageName: "nish.Map$str$i32.set", scope: !13, file: !13, line: 309, type: !347, scopeLine: 309, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!349 = !DILocation(line: 309, column: 3, scope: !348)
-!350 = !DILocalVariable(name: "this", arg: 1, scope: !348, file: !13, line: 309, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!351 = !DILocalVariable(name: "key", arg: 2, scope: !348, file: !13, line: 309, type: !31)
-!352 = !DILocalVariable(name: "value", arg: 3, scope: !348, file: !13, line: 309, type: !4)
-!353 = !DILocation(line: 310, column: 5, scope: !348)
-!354 = !DILocation(line: 310, column: 19, scope: !348)
-!355 = !DILocation(line: 310, column: 30, scope: !348)
-!356 = !DILocalVariable(name: "found", scope: !348, file: !13, line: 310, type: !16)
-!357 = !DILocation(line: 311, column: 5, scope: !348)
-!358 = !DILocation(line: 311, column: 9, scope: !348)
-!359 = !DILocation(line: 311, column: 18, scope: !348)
-!360 = !DILocation(line: 311, column: 21, scope: !348)
-!361 = !DILocation(line: 312, column: 7, scope: !348)
-!362 = !DILocation(line: 312, column: 23, scope: !348)
-!363 = !DILocation(line: 312, column: 29, scope: !348)
-!364 = !DILocation(line: 312, column: 37, scope: !348)
-!365 = !DILocation(line: 313, column: 12, scope: !348)
-!366 = !DILocation(line: 314, column: 7, scope: !348)
-!367 = !DILocation(line: 314, column: 21, scope: !348)
-!368 = !DILocation(line: 314, column: 28, scope: !348)
-!369 = !DILocation(line: 314, column: 33, scope: !348)
-!370 = !DILocation(line: 316, column: 5, scope: !348)
-!371 = !DILocation(line: 316, column: 12, scope: !348)
+!348 = distinct !DISubprogram(name: "Map<string, i32>.set", linkageName: "nish.Map$str$i32.set", scope: !13, file: !13, line: 310, type: !347, scopeLine: 310, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!349 = !DILocation(line: 310, column: 3, scope: !348)
+!350 = !DILocalVariable(name: "this", arg: 1, scope: !348, file: !13, line: 310, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!351 = !DILocalVariable(name: "key", arg: 2, scope: !348, file: !13, line: 310, type: !31)
+!352 = !DILocalVariable(name: "value", arg: 3, scope: !348, file: !13, line: 310, type: !4)
+!353 = !DILocation(line: 311, column: 5, scope: !348)
+!354 = !DILocation(line: 311, column: 19, scope: !348)
+!355 = !DILocation(line: 311, column: 30, scope: !348)
+!356 = !DILocalVariable(name: "found", scope: !348, file: !13, line: 311, type: !16)
+!357 = !DILocation(line: 312, column: 5, scope: !348)
+!358 = !DILocation(line: 312, column: 9, scope: !348)
+!359 = !DILocation(line: 312, column: 18, scope: !348)
+!360 = !DILocation(line: 312, column: 21, scope: !348)
+!361 = !DILocation(line: 313, column: 7, scope: !348)
+!362 = !DILocation(line: 313, column: 23, scope: !348)
+!363 = !DILocation(line: 313, column: 29, scope: !348)
+!364 = !DILocation(line: 313, column: 37, scope: !348)
+!365 = !DILocation(line: 314, column: 12, scope: !348)
+!366 = !DILocation(line: 315, column: 7, scope: !348)
+!367 = !DILocation(line: 315, column: 21, scope: !348)
+!368 = !DILocation(line: 315, column: 28, scope: !348)
+!369 = !DILocation(line: 315, column: 33, scope: !348)
+!370 = !DILocation(line: 317, column: 5, scope: !348)
+!371 = !DILocation(line: 317, column: 12, scope: !348)
 !372 = !{!4, !12, !4}
 !373 = !DISubroutineType(types: !372)
-!374 = distinct !DISubprogram(name: "Map<string, i32>.valueAt", linkageName: "nish.Map$str$i32.valueAt", scope: !13, file: !13, line: 375, type: !373, scopeLine: 375, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!375 = !DILocation(line: 375, column: 3, scope: !374)
-!376 = !DILocalVariable(name: "this", arg: 1, scope: !374, file: !13, line: 375, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!377 = !DILocalVariable(name: "index", arg: 2, scope: !374, file: !13, line: 375, type: !4)
-!378 = !DILocation(line: 376, column: 5, scope: !374)
-!379 = !DILocation(line: 376, column: 9, scope: !374)
-!380 = !DILocation(line: 376, column: 17, scope: !374)
-!381 = !DILocation(line: 376, column: 22, scope: !374)
-!382 = !DILocation(line: 376, column: 31, scope: !374)
-!383 = !DILocation(line: 376, column: 37, scope: !374)
-!384 = !DILocation(line: 376, column: 63, scope: !374)
-!385 = !DILocation(line: 377, column: 7, scope: !374)
-!386 = !DILocation(line: 377, column: 13, scope: !374)
-!387 = !DILocation(line: 379, column: 5, scope: !374)
-!388 = !DILocation(line: 379, column: 12, scope: !374)
-!389 = !DILocation(line: 379, column: 29, scope: !374)
+!374 = distinct !DISubprogram(name: "Map<string, i32>.valueAt", linkageName: "nish.Map$str$i32.valueAt", scope: !13, file: !13, line: 376, type: !373, scopeLine: 376, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!375 = !DILocation(line: 376, column: 3, scope: !374)
+!376 = !DILocalVariable(name: "this", arg: 1, scope: !374, file: !13, line: 376, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!377 = !DILocalVariable(name: "index", arg: 2, scope: !374, file: !13, line: 376, type: !4)
+!378 = !DILocation(line: 377, column: 5, scope: !374)
+!379 = !DILocation(line: 377, column: 9, scope: !374)
+!380 = !DILocation(line: 377, column: 17, scope: !374)
+!381 = !DILocation(line: 377, column: 22, scope: !374)
+!382 = !DILocation(line: 377, column: 31, scope: !374)
+!383 = !DILocation(line: 377, column: 37, scope: !374)
+!384 = !DILocation(line: 377, column: 63, scope: !374)
+!385 = !DILocation(line: 378, column: 7, scope: !374)
+!386 = !DILocation(line: 378, column: 13, scope: !374)
+!387 = !DILocation(line: 380, column: 5, scope: !374)
+!388 = !DILocation(line: 380, column: 12, scope: !374)
+!389 = !DILocation(line: 380, column: 29, scope: !374)
 !390 = !{null, !12, !4, !4}
 !391 = !DISubroutineType(types: !390)
-!392 = distinct !DISubprogram(name: "Map<string, i32>.setValueAt", linkageName: "nish.Map$str$i32.setValueAt", scope: !13, file: !13, line: 383, type: !391, scopeLine: 383, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!393 = !DILocation(line: 383, column: 3, scope: !392)
-!394 = !DILocalVariable(name: "this", arg: 1, scope: !392, file: !13, line: 383, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!395 = !DILocalVariable(name: "index", arg: 2, scope: !392, file: !13, line: 383, type: !4)
-!396 = !DILocalVariable(name: "value", arg: 3, scope: !392, file: !13, line: 383, type: !4)
-!397 = !DILocation(line: 384, column: 5, scope: !392)
-!398 = !DILocation(line: 384, column: 9, scope: !392)
-!399 = !DILocation(line: 384, column: 18, scope: !392)
-!400 = !DILocation(line: 384, column: 23, scope: !392)
-!401 = !DILocation(line: 384, column: 31, scope: !392)
-!402 = !DILocation(line: 384, column: 37, scope: !392)
-!403 = !DILocation(line: 384, column: 63, scope: !392)
-!404 = !DILocation(line: 385, column: 7, scope: !392)
-!405 = !DILocation(line: 385, column: 24, scope: !392)
-!406 = !DILocation(line: 385, column: 33, scope: !392)
+!392 = distinct !DISubprogram(name: "Map<string, i32>.setValueAt", linkageName: "nish.Map$str$i32.setValueAt", scope: !13, file: !13, line: 384, type: !391, scopeLine: 384, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!393 = !DILocation(line: 384, column: 3, scope: !392)
+!394 = !DILocalVariable(name: "this", arg: 1, scope: !392, file: !13, line: 384, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!395 = !DILocalVariable(name: "index", arg: 2, scope: !392, file: !13, line: 384, type: !4)
+!396 = !DILocalVariable(name: "value", arg: 3, scope: !392, file: !13, line: 384, type: !4)
+!397 = !DILocation(line: 385, column: 5, scope: !392)
+!398 = !DILocation(line: 385, column: 9, scope: !392)
+!399 = !DILocation(line: 385, column: 18, scope: !392)
+!400 = !DILocation(line: 385, column: 23, scope: !392)
+!401 = !DILocation(line: 385, column: 31, scope: !392)
+!402 = !DILocation(line: 385, column: 37, scope: !392)
+!403 = !DILocation(line: 385, column: 63, scope: !392)
+!404 = !DILocation(line: 386, column: 7, scope: !392)
+!405 = !DILocation(line: 386, column: 24, scope: !392)
+!406 = !DILocation(line: 386, column: 33, scope: !392)
 !407 = !{null, !12, !16, !31, !4}
 !408 = !DISubroutineType(types: !407)
-!409 = distinct !DISubprogram(name: "Map<string, i32>.insertAt", linkageName: "nish.Map$str$i32.insertAt", scope: !13, file: !13, line: 390, type: !408, scopeLine: 390, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!410 = !DILocation(line: 390, column: 3, scope: !409)
-!411 = !DILocalVariable(name: "this", arg: 1, scope: !409, file: !13, line: 390, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!412 = !DILocalVariable(name: "absent", arg: 2, scope: !409, file: !13, line: 390, type: !16)
-!413 = !DILocalVariable(name: "key", arg: 3, scope: !409, file: !13, line: 390, type: !31)
-!414 = !DILocalVariable(name: "value", arg: 4, scope: !409, file: !13, line: 390, type: !4)
-!415 = !DILocation(line: 391, column: 5, scope: !409)
-!416 = !DILocation(line: 391, column: 20, scope: !409)
-!417 = !DILocation(line: 391, column: 25, scope: !409)
-!418 = !DILocalVariable(name: "packed", scope: !409, file: !13, line: 391, type: !16)
-!419 = !DILocation(line: 392, column: 5, scope: !409)
-!420 = !DILocation(line: 392, column: 18, scope: !409)
-!421 = !DILocation(line: 392, column: 24, scope: !409)
-!422 = !DILocalVariable(name: "bucket", scope: !409, file: !13, line: 392, type: !4)
-!423 = !DILocation(line: 393, column: 5, scope: !409)
-!424 = !DILocation(line: 393, column: 15, scope: !409)
-!425 = !DILocation(line: 393, column: 21, scope: !409)
-!426 = !DILocalVariable(name: "h", scope: !409, file: !13, line: 393, type: !19)
-!427 = !DILocation(line: 394, column: 5, scope: !409)
-!428 = !DILocation(line: 394, column: 9, scope: !409)
-!429 = !DILocation(line: 394, column: 15, scope: !409)
-!430 = !DILocation(line: 394, column: 41, scope: !409)
-!431 = !DILocation(line: 394, column: 52, scope: !409)
-!432 = !DILocation(line: 397, column: 7, scope: !409)
-!433 = !DILocation(line: 397, column: 11, scope: !409)
-!434 = !DILocation(line: 397, column: 24, scope: !409)
-!435 = !DILocation(line: 397, column: 37, scope: !409)
-!436 = !DILocation(line: 397, column: 50, scope: !409)
-!437 = !DILocation(line: 397, column: 53, scope: !409)
-!438 = !DILocation(line: 398, column: 9, scope: !409)
-!439 = !DILocation(line: 398, column: 15, scope: !409)
-!440 = !DILocation(line: 400, column: 7, scope: !409)
-!441 = !DILocation(line: 401, column: 7, scope: !409)
-!442 = !DILocation(line: 401, column: 16, scope: !409)
-!443 = !DILocation(line: 403, column: 5, scope: !409)
-!444 = !DILocation(line: 403, column: 25, scope: !409)
+!409 = distinct !DISubprogram(name: "Map<string, i32>.insertAt", linkageName: "nish.Map$str$i32.insertAt", scope: !13, file: !13, line: 391, type: !408, scopeLine: 391, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!410 = !DILocation(line: 391, column: 3, scope: !409)
+!411 = !DILocalVariable(name: "this", arg: 1, scope: !409, file: !13, line: 391, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!412 = !DILocalVariable(name: "absent", arg: 2, scope: !409, file: !13, line: 391, type: !16)
+!413 = !DILocalVariable(name: "key", arg: 3, scope: !409, file: !13, line: 391, type: !31)
+!414 = !DILocalVariable(name: "value", arg: 4, scope: !409, file: !13, line: 391, type: !4)
+!415 = !DILocation(line: 392, column: 5, scope: !409)
+!416 = !DILocation(line: 392, column: 20, scope: !409)
+!417 = !DILocation(line: 392, column: 25, scope: !409)
+!418 = !DILocalVariable(name: "packed", scope: !409, file: !13, line: 392, type: !16)
+!419 = !DILocation(line: 393, column: 5, scope: !409)
+!420 = !DILocation(line: 393, column: 18, scope: !409)
+!421 = !DILocation(line: 393, column: 24, scope: !409)
+!422 = !DILocalVariable(name: "bucket", scope: !409, file: !13, line: 393, type: !4)
+!423 = !DILocation(line: 394, column: 5, scope: !409)
+!424 = !DILocation(line: 394, column: 15, scope: !409)
+!425 = !DILocation(line: 394, column: 21, scope: !409)
+!426 = !DILocalVariable(name: "h", scope: !409, file: !13, line: 394, type: !19)
+!427 = !DILocation(line: 395, column: 5, scope: !409)
+!428 = !DILocation(line: 395, column: 9, scope: !409)
+!429 = !DILocation(line: 395, column: 15, scope: !409)
+!430 = !DILocation(line: 395, column: 41, scope: !409)
+!431 = !DILocation(line: 395, column: 52, scope: !409)
+!432 = !DILocation(line: 398, column: 7, scope: !409)
+!433 = !DILocation(line: 398, column: 11, scope: !409)
+!434 = !DILocation(line: 398, column: 24, scope: !409)
+!435 = !DILocation(line: 398, column: 37, scope: !409)
+!436 = !DILocation(line: 398, column: 50, scope: !409)
+!437 = !DILocation(line: 398, column: 53, scope: !409)
+!438 = !DILocation(line: 399, column: 9, scope: !409)
+!439 = !DILocation(line: 399, column: 15, scope: !409)
+!440 = !DILocation(line: 401, column: 7, scope: !409)
+!441 = !DILocation(line: 402, column: 7, scope: !409)
+!442 = !DILocation(line: 402, column: 16, scope: !409)
+!443 = !DILocation(line: 404, column: 5, scope: !409)
+!444 = !DILocation(line: 404, column: 25, scope: !409)
 !445 = !{!"element ptr", !140, i64 0}
 !446 = !{!445, !445, i64 0}
-!447 = !DILocation(line: 404, column: 5, scope: !409)
-!448 = !DILocation(line: 404, column: 27, scope: !409)
-!449 = !DILocation(line: 405, column: 5, scope: !409)
-!450 = !DILocation(line: 405, column: 27, scope: !409)
-!451 = !DILocation(line: 406, column: 5, scope: !409)
-!452 = !DILocation(line: 406, column: 17, scope: !409)
-!453 = !DILocation(line: 406, column: 29, scope: !409)
-!454 = !DILocation(line: 407, column: 5, scope: !409)
-!455 = !DILocation(line: 407, column: 17, scope: !409)
-!456 = !DILocation(line: 407, column: 29, scope: !409)
-!457 = !DILocation(line: 410, column: 5, scope: !409)
-!458 = !DILocation(line: 410, column: 18, scope: !409)
-!459 = !DILocation(line: 410, column: 24, scope: !409)
-!460 = !DILocalVariable(name: "used", scope: !409, file: !13, line: 410, type: !4)
-!461 = !DILocation(line: 411, column: 5, scope: !409)
-!462 = !DILocation(line: 411, column: 9, scope: !409)
-!463 = !DILocation(line: 411, column: 16, scope: !409)
-!464 = !DILocation(line: 411, column: 20, scope: !409)
-!465 = !DILocation(line: 411, column: 26, scope: !409)
-!466 = !DILocation(line: 411, column: 47, scope: !409)
-!467 = !DILocation(line: 411, column: 50, scope: !409)
-!468 = !DILocation(line: 412, column: 7, scope: !409)
-!469 = !DILocation(line: 413, column: 12, scope: !409)
-!470 = !DILocation(line: 414, column: 7, scope: !409)
-!471 = !DILocation(line: 414, column: 20, scope: !409)
-!472 = !DILocation(line: 414, column: 32, scope: !409)
-!473 = !DILocation(line: 414, column: 43, scope: !409)
-!474 = !DILocation(line: 414, column: 51, scope: !409)
-!475 = !DILocation(line: 414, column: 54, scope: !409)
-!476 = distinct !DISubprogram(name: "Map<string, i32>.rebuild", linkageName: "nish.Map$str$i32.rebuild", scope: !13, file: !13, line: 423, type: !309, scopeLine: 423, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!477 = !DILocation(line: 423, column: 3, scope: !476)
-!478 = !DILocalVariable(name: "this", arg: 1, scope: !476, file: !13, line: 423, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
-!479 = !DILocation(line: 424, column: 5, scope: !476)
-!480 = !DILocation(line: 424, column: 18, scope: !476)
-!481 = !DILocation(line: 424, column: 24, scope: !476)
-!482 = !DILocalVariable(name: "used", scope: !476, file: !13, line: 424, type: !4)
-!483 = !DILocation(line: 425, column: 5, scope: !476)
-!484 = !DILocation(line: 425, column: 21, scope: !476)
-!485 = !DILocation(line: 425, column: 34, scope: !476)
+!447 = !DILocation(line: 405, column: 5, scope: !409)
+!448 = !DILocation(line: 405, column: 27, scope: !409)
+!449 = !DILocation(line: 406, column: 5, scope: !409)
+!450 = !DILocation(line: 406, column: 27, scope: !409)
+!451 = !DILocation(line: 407, column: 5, scope: !409)
+!452 = !DILocation(line: 407, column: 17, scope: !409)
+!453 = !DILocation(line: 407, column: 29, scope: !409)
+!454 = !DILocation(line: 408, column: 5, scope: !409)
+!455 = !DILocation(line: 408, column: 17, scope: !409)
+!456 = !DILocation(line: 408, column: 29, scope: !409)
+!457 = !DILocation(line: 411, column: 5, scope: !409)
+!458 = !DILocation(line: 411, column: 18, scope: !409)
+!459 = !DILocation(line: 411, column: 24, scope: !409)
+!460 = !DILocalVariable(name: "used", scope: !409, file: !13, line: 411, type: !4)
+!461 = !DILocation(line: 412, column: 5, scope: !409)
+!462 = !DILocation(line: 412, column: 9, scope: !409)
+!463 = !DILocation(line: 412, column: 16, scope: !409)
+!464 = !DILocation(line: 412, column: 20, scope: !409)
+!465 = !DILocation(line: 412, column: 26, scope: !409)
+!466 = !DILocation(line: 412, column: 47, scope: !409)
+!467 = !DILocation(line: 412, column: 50, scope: !409)
+!468 = !DILocation(line: 413, column: 7, scope: !409)
+!469 = !DILocation(line: 414, column: 12, scope: !409)
+!470 = !DILocation(line: 415, column: 7, scope: !409)
+!471 = !DILocation(line: 415, column: 20, scope: !409)
+!472 = !DILocation(line: 415, column: 32, scope: !409)
+!473 = !DILocation(line: 415, column: 43, scope: !409)
+!474 = !DILocation(line: 415, column: 51, scope: !409)
+!475 = !DILocation(line: 415, column: 54, scope: !409)
+!476 = distinct !DISubprogram(name: "Map<string, i32>.rebuild", linkageName: "nish.Map$str$i32.rebuild", scope: !13, file: !13, line: 424, type: !309, scopeLine: 424, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!477 = !DILocation(line: 424, column: 3, scope: !476)
+!478 = !DILocalVariable(name: "this", arg: 1, scope: !476, file: !13, line: 424, type: !12, flags: DIFlagArtificial | DIFlagObjectPointer)
+!479 = !DILocation(line: 425, column: 5, scope: !476)
+!480 = !DILocation(line: 425, column: 18, scope: !476)
+!481 = !DILocation(line: 425, column: 24, scope: !476)
+!482 = !DILocalVariable(name: "used", scope: !476, file: !13, line: 425, type: !4)
+!483 = !DILocation(line: 426, column: 5, scope: !476)
+!484 = !DILocation(line: 426, column: 21, scope: !476)
+!485 = !DILocation(line: 426, column: 34, scope: !476)
 !486 = !DIBasicType(name: "bool", size: 8, encoding: DW_ATE_boolean)
-!487 = !DILocalVariable(name: "walking", scope: !476, file: !13, line: 425, type: !486)
-!488 = !DILocation(line: 426, column: 5, scope: !476)
-!489 = !DILocation(line: 426, column: 19, scope: !476)
-!490 = !DILocation(line: 426, column: 32, scope: !476)
-!491 = !DILocation(line: 426, column: 44, scope: !476)
-!492 = !DILocation(line: 426, column: 54, scope: !476)
-!493 = !DILocation(line: 426, column: 61, scope: !476)
-!494 = !DILocation(line: 426, column: 72, scope: !476)
-!495 = !DILocalVariable(name: "slots", scope: !476, file: !13, line: 426, type: !23)
-!496 = !DILocation(line: 427, column: 5, scope: !476)
-!497 = !DILocation(line: 427, column: 9, scope: !476)
-!498 = !DILocation(line: 427, column: 10, scope: !476)
-!499 = !DILocation(line: 427, column: 21, scope: !476)
-!500 = !DILocation(line: 427, column: 33, scope: !476)
-!501 = !DILocation(line: 427, column: 39, scope: !476)
-!502 = !DILocation(line: 428, column: 7, scope: !476)
-!503 = !DILocation(line: 428, column: 22, scope: !476)
-!504 = !DILocation(line: 428, column: 38, scope: !476)
-!505 = !DILocation(line: 429, column: 7, scope: !476)
-!506 = !DILocation(line: 429, column: 22, scope: !476)
-!507 = !DILocation(line: 429, column: 40, scope: !476)
-!508 = !DILocation(line: 430, column: 7, scope: !476)
-!509 = !DILocation(line: 430, column: 21, scope: !476)
-!510 = !DILocation(line: 432, column: 5, scope: !476)
-!511 = !DILocation(line: 432, column: 18, scope: !476)
-!512 = !DILocation(line: 433, column: 5, scope: !476)
-!513 = !DILocation(line: 433, column: 17, scope: !476)
-!514 = !DILocation(line: 433, column: 23, scope: !476)
-!515 = !DILocation(line: 433, column: 39, scope: !476)
-!516 = !DILocation(line: 434, column: 5, scope: !476)
-!517 = !DILocation(line: 434, column: 12, scope: !476)
-!518 = !DILocation(line: 434, column: 19, scope: !476)
+!487 = !DILocalVariable(name: "walking", scope: !476, file: !13, line: 426, type: !486)
+!488 = !DILocation(line: 427, column: 5, scope: !476)
+!489 = !DILocation(line: 427, column: 19, scope: !476)
+!490 = !DILocation(line: 427, column: 32, scope: !476)
+!491 = !DILocation(line: 427, column: 44, scope: !476)
+!492 = !DILocation(line: 427, column: 54, scope: !476)
+!493 = !DILocation(line: 427, column: 61, scope: !476)
+!494 = !DILocation(line: 427, column: 72, scope: !476)
+!495 = !DILocalVariable(name: "slots", scope: !476, file: !13, line: 427, type: !23)
+!496 = !DILocation(line: 428, column: 5, scope: !476)
+!497 = !DILocation(line: 428, column: 9, scope: !476)
+!498 = !DILocation(line: 428, column: 10, scope: !476)
+!499 = !DILocation(line: 428, column: 21, scope: !476)
+!500 = !DILocation(line: 428, column: 33, scope: !476)
+!501 = !DILocation(line: 428, column: 39, scope: !476)
+!502 = !DILocation(line: 429, column: 7, scope: !476)
+!503 = !DILocation(line: 429, column: 22, scope: !476)
+!504 = !DILocation(line: 429, column: 38, scope: !476)
+!505 = !DILocation(line: 430, column: 7, scope: !476)
+!506 = !DILocation(line: 430, column: 22, scope: !476)
+!507 = !DILocation(line: 430, column: 40, scope: !476)
+!508 = !DILocation(line: 431, column: 7, scope: !476)
+!509 = !DILocation(line: 431, column: 21, scope: !476)
+!510 = !DILocation(line: 433, column: 5, scope: !476)
+!511 = !DILocation(line: 433, column: 18, scope: !476)
+!512 = !DILocation(line: 434, column: 5, scope: !476)
+!513 = !DILocation(line: 434, column: 17, scope: !476)
+!514 = !DILocation(line: 434, column: 23, scope: !476)
+!515 = !DILocation(line: 434, column: 39, scope: !476)
+!516 = !DILocation(line: 435, column: 5, scope: !476)
+!517 = !DILocation(line: 435, column: 12, scope: !476)
+!518 = !DILocation(line: 435, column: 19, scope: !476)
 !519 = !{!16, !23, !4, !23, !35, !31}
 !520 = !DISubroutineType(types: !519)
-!521 = distinct !DISubprogram(name: "probeTable<string>", linkageName: "nish.probeTable$str", scope: !13, file: !13, line: 96, type: !520, scopeLine: 96, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!522 = !DILocation(line: 96, column: 1, scope: !521)
-!523 = !DILocalVariable(name: "slots", arg: 1, scope: !521, file: !13, line: 96, type: !23)
-!524 = !DILocalVariable(name: "mask", arg: 2, scope: !521, file: !13, line: 96, type: !4)
-!525 = !DILocalVariable(name: "hashes", arg: 3, scope: !521, file: !13, line: 96, type: !23)
-!526 = !DILocalVariable(name: "keys", arg: 4, scope: !521, file: !13, line: 96, type: !35)
-!527 = !DILocalVariable(name: "key", arg: 5, scope: !521, file: !13, line: 96, type: !31)
-!528 = !DILocation(line: 97, column: 3, scope: !521)
-!529 = !DILocation(line: 97, column: 13, scope: !521)
-!530 = !DILocation(line: 97, column: 21, scope: !521)
-!531 = !DILocalVariable(name: "h", scope: !521, file: !13, line: 97, type: !19)
-!532 = !DILocation(line: 98, column: 3, scope: !521)
-!533 = !DILocation(line: 98, column: 23, scope: !521)
-!534 = !DILocalVariable(name: "fingerprint", scope: !521, file: !13, line: 98, type: !19)
-!535 = !DILocation(line: 99, column: 3, scope: !521)
-!536 = !DILocation(line: 99, column: 16, scope: !521)
-!537 = !DILocation(line: 99, column: 27, scope: !521)
-!538 = !DILocation(line: 99, column: 30, scope: !521)
-!539 = !DILocalVariable(name: "bucket", scope: !521, file: !13, line: 99, type: !4)
-!540 = !DILocation(line: 102, column: 3, scope: !521)
-!541 = !DILocation(line: 102, column: 40, scope: !521)
-!542 = !DILocation(line: 111, column: 20, scope: !521)
-!543 = !DILocation(line: 113, column: 20, scope: !521)
-!544 = !DILocation(line: 102, column: 10, scope: !521)
-!545 = !DILocation(line: 102, column: 20, scope: !521)
-!546 = !DILocation(line: 102, column: 25, scope: !521)
-!547 = !DILocation(line: 102, column: 34, scope: !521)
-!548 = !DILocation(line: 102, column: 55, scope: !521)
-!549 = !DILocation(line: 103, column: 5, scope: !521)
-!550 = !DILocation(line: 103, column: 18, scope: !521)
-!551 = !DILocation(line: 103, column: 24, scope: !521)
-!552 = !DILocalVariable(name: "word", scope: !521, file: !13, line: 103, type: !19)
-!553 = !DILocation(line: 104, column: 5, scope: !521)
-!554 = !DILocation(line: 104, column: 9, scope: !521)
-!555 = !DILocation(line: 104, column: 18, scope: !521)
-!556 = !DILocation(line: 104, column: 21, scope: !521)
-!557 = !DILocation(line: 105, column: 7, scope: !521)
-!558 = !DILocation(line: 105, column: 14, scope: !521)
-!559 = !DILocation(line: 105, column: 23, scope: !521)
-!560 = !DILocation(line: 105, column: 31, scope: !521)
-!561 = !DILocation(line: 107, column: 5, scope: !521)
-!562 = !DILocation(line: 107, column: 9, scope: !521)
-!563 = !DILocation(line: 107, column: 25, scope: !521)
-!564 = !DILocation(line: 107, column: 38, scope: !521)
-!565 = !DILocation(line: 108, column: 7, scope: !521)
-!566 = !DILocation(line: 108, column: 18, scope: !521)
-!567 = !DILocation(line: 108, column: 24, scope: !521)
-!568 = !DILocation(line: 108, column: 31, scope: !521)
-!569 = !DILocation(line: 108, column: 43, scope: !521)
-!570 = !DILocalVariable(name: "at", scope: !521, file: !13, line: 108, type: !4)
-!571 = !DILocation(line: 109, column: 7, scope: !521)
-!572 = !DILocation(line: 110, column: 9, scope: !521)
-!573 = !DILocation(line: 110, column: 15, scope: !521)
-!574 = !DILocation(line: 111, column: 9, scope: !521)
-!575 = !DILocation(line: 111, column: 14, scope: !521)
-!576 = !DILocation(line: 112, column: 9, scope: !521)
-!577 = !DILocation(line: 112, column: 16, scope: !521)
-!578 = !DILocation(line: 112, column: 24, scope: !521)
-!579 = !DILocation(line: 113, column: 9, scope: !521)
-!580 = !DILocation(line: 113, column: 14, scope: !521)
-!581 = !DILocation(line: 114, column: 9, scope: !521)
-!582 = !DILocation(line: 114, column: 17, scope: !521)
-!583 = !DILocation(line: 114, column: 22, scope: !521)
-!584 = !DILocation(line: 114, column: 27, scope: !521)
-!585 = !DILocation(line: 115, column: 9, scope: !521)
-!586 = !DILocation(line: 116, column: 9, scope: !521)
-!587 = !DILocation(line: 116, column: 16, scope: !521)
-!588 = !DILocation(line: 116, column: 24, scope: !521)
-!589 = !DILocation(line: 116, column: 32, scope: !521)
-!590 = !DILocation(line: 119, column: 5, scope: !521)
-!591 = !DILocation(line: 119, column: 14, scope: !521)
-!592 = !DILocation(line: 119, column: 15, scope: !521)
-!593 = !DILocation(line: 119, column: 24, scope: !521)
-!594 = !DILocation(line: 119, column: 29, scope: !521)
-!595 = !DILocation(line: 121, column: 3, scope: !521)
-!596 = !DILocation(line: 121, column: 9, scope: !521)
+!521 = distinct !DISubprogram(name: "probeTable<string>", linkageName: "nish.probeTable$str", scope: !13, file: !13, line: 97, type: !520, scopeLine: 97, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!522 = !DILocation(line: 97, column: 1, scope: !521)
+!523 = !DILocalVariable(name: "slots", arg: 1, scope: !521, file: !13, line: 97, type: !23)
+!524 = !DILocalVariable(name: "mask", arg: 2, scope: !521, file: !13, line: 97, type: !4)
+!525 = !DILocalVariable(name: "hashes", arg: 3, scope: !521, file: !13, line: 97, type: !23)
+!526 = !DILocalVariable(name: "keys", arg: 4, scope: !521, file: !13, line: 97, type: !35)
+!527 = !DILocalVariable(name: "key", arg: 5, scope: !521, file: !13, line: 97, type: !31)
+!528 = !DILocation(line: 98, column: 3, scope: !521)
+!529 = !DILocation(line: 98, column: 13, scope: !521)
+!530 = !DILocation(line: 98, column: 21, scope: !521)
+!531 = !DILocalVariable(name: "h", scope: !521, file: !13, line: 98, type: !19)
+!532 = !DILocation(line: 99, column: 3, scope: !521)
+!533 = !DILocation(line: 99, column: 23, scope: !521)
+!534 = !DILocalVariable(name: "fingerprint", scope: !521, file: !13, line: 99, type: !19)
+!535 = !DILocation(line: 100, column: 3, scope: !521)
+!536 = !DILocation(line: 100, column: 16, scope: !521)
+!537 = !DILocation(line: 100, column: 27, scope: !521)
+!538 = !DILocation(line: 100, column: 30, scope: !521)
+!539 = !DILocalVariable(name: "bucket", scope: !521, file: !13, line: 100, type: !4)
+!540 = !DILocation(line: 103, column: 3, scope: !521)
+!541 = !DILocation(line: 103, column: 40, scope: !521)
+!542 = !DILocation(line: 112, column: 20, scope: !521)
+!543 = !DILocation(line: 114, column: 20, scope: !521)
+!544 = !DILocation(line: 103, column: 10, scope: !521)
+!545 = !DILocation(line: 103, column: 20, scope: !521)
+!546 = !DILocation(line: 103, column: 25, scope: !521)
+!547 = !DILocation(line: 103, column: 34, scope: !521)
+!548 = !DILocation(line: 103, column: 55, scope: !521)
+!549 = !DILocation(line: 104, column: 5, scope: !521)
+!550 = !DILocation(line: 104, column: 18, scope: !521)
+!551 = !DILocation(line: 104, column: 24, scope: !521)
+!552 = !DILocalVariable(name: "word", scope: !521, file: !13, line: 104, type: !19)
+!553 = !DILocation(line: 105, column: 5, scope: !521)
+!554 = !DILocation(line: 105, column: 9, scope: !521)
+!555 = !DILocation(line: 105, column: 18, scope: !521)
+!556 = !DILocation(line: 105, column: 21, scope: !521)
+!557 = !DILocation(line: 106, column: 7, scope: !521)
+!558 = !DILocation(line: 106, column: 14, scope: !521)
+!559 = !DILocation(line: 106, column: 23, scope: !521)
+!560 = !DILocation(line: 106, column: 31, scope: !521)
+!561 = !DILocation(line: 108, column: 5, scope: !521)
+!562 = !DILocation(line: 108, column: 9, scope: !521)
+!563 = !DILocation(line: 108, column: 25, scope: !521)
+!564 = !DILocation(line: 108, column: 38, scope: !521)
+!565 = !DILocation(line: 109, column: 7, scope: !521)
+!566 = !DILocation(line: 109, column: 18, scope: !521)
+!567 = !DILocation(line: 109, column: 24, scope: !521)
+!568 = !DILocation(line: 109, column: 31, scope: !521)
+!569 = !DILocation(line: 109, column: 43, scope: !521)
+!570 = !DILocalVariable(name: "at", scope: !521, file: !13, line: 109, type: !4)
+!571 = !DILocation(line: 110, column: 7, scope: !521)
+!572 = !DILocation(line: 111, column: 9, scope: !521)
+!573 = !DILocation(line: 111, column: 15, scope: !521)
+!574 = !DILocation(line: 112, column: 9, scope: !521)
+!575 = !DILocation(line: 112, column: 14, scope: !521)
+!576 = !DILocation(line: 113, column: 9, scope: !521)
+!577 = !DILocation(line: 113, column: 16, scope: !521)
+!578 = !DILocation(line: 113, column: 24, scope: !521)
+!579 = !DILocation(line: 114, column: 9, scope: !521)
+!580 = !DILocation(line: 114, column: 14, scope: !521)
+!581 = !DILocation(line: 115, column: 9, scope: !521)
+!582 = !DILocation(line: 115, column: 17, scope: !521)
+!583 = !DILocation(line: 115, column: 22, scope: !521)
+!584 = !DILocation(line: 115, column: 27, scope: !521)
+!585 = !DILocation(line: 116, column: 9, scope: !521)
+!586 = !DILocation(line: 117, column: 9, scope: !521)
+!587 = !DILocation(line: 117, column: 16, scope: !521)
+!588 = !DILocation(line: 117, column: 24, scope: !521)
+!589 = !DILocation(line: 117, column: 32, scope: !521)
+!590 = !DILocation(line: 120, column: 5, scope: !521)
+!591 = !DILocation(line: 120, column: 14, scope: !521)
+!592 = !DILocation(line: 120, column: 15, scope: !521)
+!593 = !DILocation(line: 120, column: 24, scope: !521)
+!594 = !DILocation(line: 120, column: 29, scope: !521)
+!595 = !DILocation(line: 122, column: 3, scope: !521)
+!596 = !DILocation(line: 122, column: 9, scope: !521)
 !597 = !{null, !35, !23}
 !598 = !DISubroutineType(types: !597)
-!599 = distinct !DISubprogram(name: "compactEntries<string>", linkageName: "nish.compactEntries$str", scope: !13, file: !13, line: 142, type: !598, scopeLine: 142, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!600 = !DILocation(line: 142, column: 1, scope: !599)
-!601 = !DILocalVariable(name: "items", arg: 1, scope: !599, file: !13, line: 142, type: !35)
-!602 = !DILocalVariable(name: "hashes", arg: 2, scope: !599, file: !13, line: 142, type: !23)
-!603 = !DILocation(line: 143, column: 3, scope: !599)
-!604 = !DILocation(line: 143, column: 16, scope: !599)
-!605 = !DILocation(line: 143, column: 22, scope: !599)
-!606 = !DILocalVariable(name: "used", scope: !599, file: !13, line: 143, type: !4)
-!607 = !DILocation(line: 144, column: 3, scope: !599)
-!608 = !DILocation(line: 144, column: 17, scope: !599)
-!609 = !DILocalVariable(name: "to", scope: !599, file: !13, line: 144, type: !4)
-!610 = !DILocation(line: 145, column: 3, scope: !599)
-!611 = !DILocation(line: 145, column: 24, scope: !599)
-!612 = !DILocalVariable(name: "from", scope: !599, file: !13, line: 145, type: !4)
-!613 = !DILocation(line: 145, column: 55, scope: !599)
-!614 = !DILocation(line: 146, column: 68, scope: !599)
-!615 = !DILocation(line: 145, column: 27, scope: !599)
-!616 = !DILocation(line: 145, column: 34, scope: !599)
-!617 = !DILocation(line: 145, column: 42, scope: !599)
-!618 = !DILocation(line: 145, column: 49, scope: !599)
-!619 = !DILocation(line: 145, column: 79, scope: !599)
-!620 = !DILocation(line: 146, column: 5, scope: !599)
-!621 = !DILocation(line: 146, column: 9, scope: !599)
-!622 = !DILocation(line: 146, column: 16, scope: !599)
-!623 = !DILocation(line: 146, column: 26, scope: !599)
-!624 = !DILocation(line: 146, column: 31, scope: !599)
-!625 = !DILocation(line: 146, column: 37, scope: !599)
-!626 = !DILocation(line: 146, column: 42, scope: !599)
-!627 = !DILocation(line: 146, column: 47, scope: !599)
-!628 = !DILocation(line: 146, column: 55, scope: !599)
-!629 = !DILocation(line: 146, column: 62, scope: !599)
-!630 = !DILocation(line: 146, column: 83, scope: !599)
-!631 = !DILocation(line: 147, column: 7, scope: !599)
-!632 = !DILocation(line: 147, column: 13, scope: !599)
-!633 = !DILocation(line: 147, column: 19, scope: !599)
-!634 = !DILocation(line: 147, column: 25, scope: !599)
-!635 = !DILocation(line: 148, column: 7, scope: !599)
-!636 = !DILocation(line: 145, column: 71, scope: !599)
-!637 = !DILocation(line: 151, column: 3, scope: !599)
-!638 = !DILocation(line: 151, column: 10, scope: !599)
-!639 = !DILocation(line: 151, column: 16, scope: !599)
-!640 = !DILocation(line: 151, column: 32, scope: !599)
-!641 = !DILocation(line: 151, column: 36, scope: !599)
-!642 = !DILocation(line: 152, column: 5, scope: !599)
+!599 = distinct !DISubprogram(name: "compactEntries<string>", linkageName: "nish.compactEntries$str", scope: !13, file: !13, line: 143, type: !598, scopeLine: 143, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!600 = !DILocation(line: 143, column: 1, scope: !599)
+!601 = !DILocalVariable(name: "items", arg: 1, scope: !599, file: !13, line: 143, type: !35)
+!602 = !DILocalVariable(name: "hashes", arg: 2, scope: !599, file: !13, line: 143, type: !23)
+!603 = !DILocation(line: 144, column: 3, scope: !599)
+!604 = !DILocation(line: 144, column: 16, scope: !599)
+!605 = !DILocation(line: 144, column: 22, scope: !599)
+!606 = !DILocalVariable(name: "used", scope: !599, file: !13, line: 144, type: !4)
+!607 = !DILocation(line: 145, column: 3, scope: !599)
+!608 = !DILocation(line: 145, column: 17, scope: !599)
+!609 = !DILocalVariable(name: "to", scope: !599, file: !13, line: 145, type: !4)
+!610 = !DILocation(line: 146, column: 3, scope: !599)
+!611 = !DILocation(line: 146, column: 24, scope: !599)
+!612 = !DILocalVariable(name: "from", scope: !599, file: !13, line: 146, type: !4)
+!613 = !DILocation(line: 146, column: 55, scope: !599)
+!614 = !DILocation(line: 147, column: 68, scope: !599)
+!615 = !DILocation(line: 146, column: 27, scope: !599)
+!616 = !DILocation(line: 146, column: 34, scope: !599)
+!617 = !DILocation(line: 146, column: 42, scope: !599)
+!618 = !DILocation(line: 146, column: 49, scope: !599)
+!619 = !DILocation(line: 146, column: 79, scope: !599)
+!620 = !DILocation(line: 147, column: 5, scope: !599)
+!621 = !DILocation(line: 147, column: 9, scope: !599)
+!622 = !DILocation(line: 147, column: 16, scope: !599)
+!623 = !DILocation(line: 147, column: 26, scope: !599)
+!624 = !DILocation(line: 147, column: 31, scope: !599)
+!625 = !DILocation(line: 147, column: 37, scope: !599)
+!626 = !DILocation(line: 147, column: 42, scope: !599)
+!627 = !DILocation(line: 147, column: 47, scope: !599)
+!628 = !DILocation(line: 147, column: 55, scope: !599)
+!629 = !DILocation(line: 147, column: 62, scope: !599)
+!630 = !DILocation(line: 147, column: 83, scope: !599)
+!631 = !DILocation(line: 148, column: 7, scope: !599)
+!632 = !DILocation(line: 148, column: 13, scope: !599)
+!633 = !DILocation(line: 148, column: 19, scope: !599)
+!634 = !DILocation(line: 148, column: 25, scope: !599)
+!635 = !DILocation(line: 149, column: 7, scope: !599)
+!636 = !DILocation(line: 146, column: 71, scope: !599)
+!637 = !DILocation(line: 152, column: 3, scope: !599)
+!638 = !DILocation(line: 152, column: 10, scope: !599)
+!639 = !DILocation(line: 152, column: 16, scope: !599)
+!640 = !DILocation(line: 152, column: 32, scope: !599)
+!641 = !DILocation(line: 152, column: 36, scope: !599)
+!642 = !DILocation(line: 153, column: 5, scope: !599)
 !643 = !{null, !43, !23}
 !644 = !DISubroutineType(types: !643)
-!645 = distinct !DISubprogram(name: "compactEntries<i32>", linkageName: "nish.compactEntries$i32", scope: !13, file: !13, line: 142, type: !644, scopeLine: 142, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
-!646 = !DILocation(line: 142, column: 1, scope: !645)
-!647 = !DILocalVariable(name: "items", arg: 1, scope: !645, file: !13, line: 142, type: !43)
-!648 = !DILocalVariable(name: "hashes", arg: 2, scope: !645, file: !13, line: 142, type: !23)
-!649 = !DILocation(line: 143, column: 3, scope: !645)
-!650 = !DILocation(line: 143, column: 16, scope: !645)
-!651 = !DILocation(line: 143, column: 22, scope: !645)
-!652 = !DILocalVariable(name: "used", scope: !645, file: !13, line: 143, type: !4)
-!653 = !DILocation(line: 144, column: 3, scope: !645)
-!654 = !DILocation(line: 144, column: 17, scope: !645)
-!655 = !DILocalVariable(name: "to", scope: !645, file: !13, line: 144, type: !4)
-!656 = !DILocation(line: 145, column: 3, scope: !645)
-!657 = !DILocation(line: 145, column: 24, scope: !645)
-!658 = !DILocalVariable(name: "from", scope: !645, file: !13, line: 145, type: !4)
-!659 = !DILocation(line: 145, column: 55, scope: !645)
-!660 = !DILocation(line: 146, column: 68, scope: !645)
-!661 = !DILocation(line: 145, column: 27, scope: !645)
-!662 = !DILocation(line: 145, column: 34, scope: !645)
-!663 = !DILocation(line: 145, column: 42, scope: !645)
-!664 = !DILocation(line: 145, column: 49, scope: !645)
-!665 = !DILocation(line: 145, column: 79, scope: !645)
-!666 = !DILocation(line: 146, column: 5, scope: !645)
-!667 = !DILocation(line: 146, column: 9, scope: !645)
-!668 = !DILocation(line: 146, column: 16, scope: !645)
-!669 = !DILocation(line: 146, column: 26, scope: !645)
-!670 = !DILocation(line: 146, column: 31, scope: !645)
-!671 = !DILocation(line: 146, column: 37, scope: !645)
-!672 = !DILocation(line: 146, column: 42, scope: !645)
-!673 = !DILocation(line: 146, column: 47, scope: !645)
-!674 = !DILocation(line: 146, column: 55, scope: !645)
-!675 = !DILocation(line: 146, column: 62, scope: !645)
-!676 = !DILocation(line: 146, column: 83, scope: !645)
-!677 = !DILocation(line: 147, column: 7, scope: !645)
-!678 = !DILocation(line: 147, column: 13, scope: !645)
-!679 = !DILocation(line: 147, column: 19, scope: !645)
-!680 = !DILocation(line: 147, column: 25, scope: !645)
-!681 = !DILocation(line: 148, column: 7, scope: !645)
-!682 = !DILocation(line: 145, column: 71, scope: !645)
-!683 = !DILocation(line: 151, column: 3, scope: !645)
-!684 = !DILocation(line: 151, column: 10, scope: !645)
-!685 = !DILocation(line: 151, column: 16, scope: !645)
-!686 = !DILocation(line: 151, column: 32, scope: !645)
-!687 = !DILocation(line: 151, column: 36, scope: !645)
-!688 = !DILocation(line: 152, column: 5, scope: !645)
+!645 = distinct !DISubprogram(name: "compactEntries<i32>", linkageName: "nish.compactEntries$i32", scope: !13, file: !13, line: 143, type: !644, scopeLine: 143, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagLocalToUnit, unit: !0)
+!646 = !DILocation(line: 143, column: 1, scope: !645)
+!647 = !DILocalVariable(name: "items", arg: 1, scope: !645, file: !13, line: 143, type: !43)
+!648 = !DILocalVariable(name: "hashes", arg: 2, scope: !645, file: !13, line: 143, type: !23)
+!649 = !DILocation(line: 144, column: 3, scope: !645)
+!650 = !DILocation(line: 144, column: 16, scope: !645)
+!651 = !DILocation(line: 144, column: 22, scope: !645)
+!652 = !DILocalVariable(name: "used", scope: !645, file: !13, line: 144, type: !4)
+!653 = !DILocation(line: 145, column: 3, scope: !645)
+!654 = !DILocation(line: 145, column: 17, scope: !645)
+!655 = !DILocalVariable(name: "to", scope: !645, file: !13, line: 145, type: !4)
+!656 = !DILocation(line: 146, column: 3, scope: !645)
+!657 = !DILocation(line: 146, column: 24, scope: !645)
+!658 = !DILocalVariable(name: "from", scope: !645, file: !13, line: 146, type: !4)
+!659 = !DILocation(line: 146, column: 55, scope: !645)
+!660 = !DILocation(line: 147, column: 68, scope: !645)
+!661 = !DILocation(line: 146, column: 27, scope: !645)
+!662 = !DILocation(line: 146, column: 34, scope: !645)
+!663 = !DILocation(line: 146, column: 42, scope: !645)
+!664 = !DILocation(line: 146, column: 49, scope: !645)
+!665 = !DILocation(line: 146, column: 79, scope: !645)
+!666 = !DILocation(line: 147, column: 5, scope: !645)
+!667 = !DILocation(line: 147, column: 9, scope: !645)
+!668 = !DILocation(line: 147, column: 16, scope: !645)
+!669 = !DILocation(line: 147, column: 26, scope: !645)
+!670 = !DILocation(line: 147, column: 31, scope: !645)
+!671 = !DILocation(line: 147, column: 37, scope: !645)
+!672 = !DILocation(line: 147, column: 42, scope: !645)
+!673 = !DILocation(line: 147, column: 47, scope: !645)
+!674 = !DILocation(line: 147, column: 55, scope: !645)
+!675 = !DILocation(line: 147, column: 62, scope: !645)
+!676 = !DILocation(line: 147, column: 83, scope: !645)
+!677 = !DILocation(line: 148, column: 7, scope: !645)
+!678 = !DILocation(line: 148, column: 13, scope: !645)
+!679 = !DILocation(line: 148, column: 19, scope: !645)
+!680 = !DILocation(line: 148, column: 25, scope: !645)
+!681 = !DILocation(line: 149, column: 7, scope: !645)
+!682 = !DILocation(line: 146, column: 71, scope: !645)
+!683 = !DILocation(line: 152, column: 3, scope: !645)
+!684 = !DILocation(line: 152, column: 10, scope: !645)
+!685 = !DILocation(line: 152, column: 16, scope: !645)
+!686 = !DILocation(line: 152, column: 32, scope: !645)
+!687 = !DILocation(line: 152, column: 36, scope: !645)
+!688 = !DILocation(line: 153, column: 5, scope: !645)

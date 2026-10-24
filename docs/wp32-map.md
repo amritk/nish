@@ -28,7 +28,7 @@ the evidence behind each, and the trigger that would reopen §10.
 | 5 | Names | `class Map<K, V>`, `class Set<T>`, mangled like any template; a module with its own `Map` gets no implicit import; one program with both is refused. | 4.2 | a reserved IR prefix |
 | 6 | Keys | Strings, every integer width, `number`, `f64`, `f32`, `boolean`, enums, class instances by identity. Not interfaces, arrays, `T \| null` or `Result`. | 5 | records by value |
 | 7 | Values | Anything but an `interface` (stored inline, so copied) and `void`. | 5.1 | copying records in |
-| 8 | Hashing | FNV-1a for strings, `fmix32`/`fmix64` for integers, pointers and floats; floats normalised, equality SameValueZero; a hash of 0 moved to 1; unseeded. | 5.2 | a seeded hash; raw float bits |
+| 8 | Hashing | SipHash-1-3 under a per-process random key for strings (JSON-13), `fmix32`/`fmix64` for integers, pointers and floats; floats normalised, equality SameValueZero; a hash of 0 moved to 1. | 5.2 | an unkeyed string hash; raw float bits |
 | 9 | `delete` | A tombstone and a stored hash of 0; at the load bound, compact in place when more than half are dead, double otherwise; never shrink. | 6.1 | backward-shift deletion |
 | 10 | Mutation during iteration | Exact JavaScript semantics; a live-walk counter defers compaction. | 6.2 | weaker semantics, or a refusal |
 | 11 | `Set` | The same table with no values. | 6.3 | — |
@@ -217,7 +217,7 @@ Nish literal cannot spell.
 
 | `K` | `hashKey` | `sameKey` |
 | --- | --- | --- |
-| `string` | FNV-1a, 32-bit, over the UTF-8 bytes | `nish_str_eq` |
+| `string` | SipHash-1-3 of the UTF-8 bytes under `nish_hash_key`, halves XORed | `nish_str_eq` |
 | ≤ 32-bit integer, `boolean`, enum | `fmix32` of the zero-extended value | `icmp eq` |
 | `i64`, `u64` | `fmix64`, halves XORed | `icmp eq` |
 | `f64` | normalise, then its bits as `i64` | `fcmp oeq`, or both NaN |
@@ -226,10 +226,12 @@ Nish literal cannot spell.
 
 Normalising makes −0 into +0 and every NaN the canonical one, so keys
 SameValueZero calls equal hash equal; `storedKey` stores a −0 key as +0, as
-JavaScript does (`map_key_negzero`). **Hash flooding is out of scope**: the hash
-is unseeded, and since insertion order decides iteration order, it never
-reaches a program's output, so a seeded hash can come later without changing
-what any program prints.
+JavaScript does (`map_key_negzero`). The string hash is keyed against hash
+flooding (JSON-13 in `docs/security/json.md`): `@nish_hash_key` is filled from
+`getentropy` before `main`, so whoever chooses the keys cannot choose their
+buckets (`map_hash_collide`), and `map_hash_kat` pins the hash to reference
+SipHash-1-3. Insertion order decides iteration order, so the key never reaches
+a program's output. The integer, float and pointer hashes stay unkeyed.
 
 ## 6. Deletion, iteration and `Set`
 
