@@ -1245,8 +1245,8 @@ nish_array *nish_argv;
 
 void nish_argv_init(int32_t argc, char **argv) {
   nish_array *a = malloc(sizeof *a + argc * sizeof(nish_str *));
-  nish_str **d = (nish_str **)(a + 1);
   if (!a) nish_oom();
+  nish_str **d = (nish_str **)(a + 1);
   *a = (nish_array){ argc, argc, (char *)d };
   nish_argv = a;
   while (argc-- > 0) {
