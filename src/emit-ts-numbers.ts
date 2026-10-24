@@ -370,7 +370,8 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
     // records row writes one whose index is unproven as `idx(a, i)`, which is
     // no target; a proven one keeps its plain read.
     if (target.kind === N_INDEX && !walk.program.uncheckedIndexing) {
-      const args = operands.changed[0] && idxArguments(name) !== "" ? idxArguments(name) : elementArguments(name)
+      const args =
+        operands.changed[0] && idxArguments(name) !== "" ? idxArguments(name) : elementArguments(name)
       if (args !== "") {
         walk.useHelper("setIdx")
         return `setIdx(${args}, ${value})`
