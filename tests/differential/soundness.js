@@ -25,6 +25,7 @@
  *                      only on a difference
  *   --compiler <nish>  the compiler (default build/nish; it has to know the flag,
  *                      so the seed in build/seed will not do)
+ *   --run-timeout <s>  the bound on one run of a program (default 30)
  *
  * The link is the one `tests/run.js` gives a case: the module's IR, `clang -O2`,
  * against the runtime compiled once at `-O2`, and `tests/driver.c` (or the
@@ -70,8 +71,11 @@
  * compiler's. So does one that is `nondeterministic`, either side answering
  * differently on a second run: every corpus case has one expected run, and a
  * read of freed memory may show up that way rather than as a difference. A
- * build or run that outlives its bound is a `timeout`, counted and listed,
- * and fails nothing. The summary line counts every verdict, and `elided`, the programs whose two
+ * build or run that outlives its bound on both sides is a `timeout`, counted
+ * and listed, and fails nothing: the runner's limit, not a finding. On one
+ * side only it is a difference -- a proof that turns a loop infinite, or a
+ * check whose panic ends one -- so it fails the run like any other. The
+ * summary line counts every verdict, and `elided`, the programs whose two
  * builds' IR differs: none at all means the flag changed nothing, and the run
  * answers 2, since every agreement compared a build with itself.
  *
@@ -115,6 +119,9 @@ const DRIVER_C = path.join(root, "tests", "driver.c")
 
 /** One run of a binary, killed if it outlives this; the suite's bound is 120 s. */
 const RUN_TIMEOUT_MS = 30_000
+
+/** The bound `execute` holds a run to: `RUN_TIMEOUT_MS`, or `--run-timeout`. */
+let runTimeoutMs = RUN_TIMEOUT_MS
 
 /** One compile or link: the reference compile proves nothing, so it is slower, and a slow runner is no finding. */
 const BUILD_TIMEOUT_MS = 180_000
@@ -362,6 +369,7 @@ const execute = (prog, dir, tag) =>
   run(path.join(dir, "app"), prog.argv, {
     cwd: scratchRoot(path.join(dir, `cwd-${tag}`)),
     env: prog.env,
+    timeout: runTimeoutMs,
   })
 
 /** How a run ended, in a word: `exit 0`, `SIGSEGV`, `timeout`. */
@@ -428,7 +436,7 @@ const describe = (a, b) => {
       `stdout line ${at + 1}: default ${JSON.stringify(la[at])}, --no-elision ${JSON.stringify(lb[at])}`
     )
   }
-  if (lines.length === 0 && !a.stderr.equals(b.stderr)) {
+  if (!a.stderr.equals(b.stderr)) {
     const la = String(a.stderr).split("\n")
     const lb = String(b.stderr).split("\n")
     const at = la.findIndex((l, k) => l !== lb[k])
@@ -455,9 +463,10 @@ const irText = (dir) => {
  * elided }` with `verdict` one of agree | differ | nondeterministic | broken |
  * timeout, and `elided` whether the two builds' IR differs. A program that will
  * not build on one side only is a difference too: the flag is meant to change
- * nothing the checker accepts. A build or a run that outlives its bound is a
- * `timeout`, the runner's limit rather than a finding: the reference proves
- * nothing, so it may be the slower side by design.
+ * nothing the checker accepts. A build or a run that outlives its bound on
+ * both sides is a `timeout`, the runner's limit rather than a finding; on one
+ * side only it is a `differ`, since a hang one build alone takes is a
+ * difference in what the program does.
  */
 const compare = async (compiler, prog) => {
   const dir = path.join(work, prog.name.replace(/[\\/]/g, "_"))
@@ -469,10 +478,12 @@ const compare = async (compiler, prog) => {
     build(compiler, prog, ref, true),
   ])
   if (defErr === TIMED_OUT || refErr === TIMED_OUT) {
+    const both = defErr === TIMED_OUT && refErr === TIMED_OUT
+    const side = both ? "both builds" : `the ${defErr === TIMED_OUT ? "default" : "--no-elision"} build`
     return {
       name: prog.name,
-      verdict: "timeout",
-      detail: `the ${defErr === TIMED_OUT ? "default" : "--no-elision"} build outlived ${BUILD_TIMEOUT_MS / 1000} s`,
+      verdict: both ? "timeout" : "differ",
+      detail: `${side} outlived ${BUILD_TIMEOUT_MS / 1000} s`,
       dir,
       elided: false,
     }
@@ -495,11 +506,13 @@ const compare = async (compiler, prog) => {
   if (same(a, b)) {
     return { name: prog.name, verdict: "agree", detail: "", dir, elided }
   }
-  if (a.timedOut || b.timedOut) {
+  // A hang on one side only falls through: `describe` names it in the
+  // ending, and it fails the run unless the second runs say it is noise.
+  if (a.timedOut && b.timedOut) {
     return {
       name: prog.name,
       verdict: "timeout",
-      detail: `the ${a.timedOut ? "default" : "--no-elision"} run outlived ${RUN_TIMEOUT_MS / 1000} s`,
+      detail: `both runs outlived ${runTimeoutMs / 1000} s`,
       dir,
       elided,
     }
@@ -575,6 +588,8 @@ const parse = (argv) => {
       o.budget = Number(next())
     } else if (a === "--compiler") {
       o.compiler = path.resolve(next())
+    } else if (a === "--run-timeout") {
+      runTimeoutMs = Number(next()) * 1000
     } else {
       throw new Error(`unknown option: ${a}`)
     }

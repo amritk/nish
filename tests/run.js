@@ -11396,6 +11396,98 @@ if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
     ffiIr[0]
   )
   check("no_elision: the reference checks the count", ffiIr[1].includes("ffi.length"), ffiIr[1])
+  // One function per switch of `Options.noElision` the first program does not
+  // reach, each with the mark its proof leaves in the default IR and the
+  // reference must not have. The flag changes every function's attributes, so
+  // only a pin per switch shows that one is wired.
+  const switches = path.join(dir, "switches.ts")
+  fs.writeFileSync(
+    switches,
+    [
+      'import { parallelFrom } from "nish/threads"',
+      "class Board { cells: i32[]; constructor() { this.cells = [0, 0, 0, 0] } }",
+      "const clampHead = (s: string): string => { const n = s.length; return s.substring(0, n) }",
+      "const entry = (b: u8): integer<0, 255> => { const r: integer<0, 255> = toI32(b); return r }",
+      "const disjoint = (): u8[] => { const dst: u8[] = [0, 0, 0, 0]; const src: u8[] = [1, 2]; dst.set(src, 1); return dst }",
+      "const raise = (m: Map<string, number>, k: string): boolean => { if (m.has(k)) { m.set(k, 10); return true } return false }",
+      "const piece = (i: i32): string => `${i},`",
+      "const joined = (n: i32): string => { let s = \"\"; for (let i = 0; i < n; i++) { s = s + piece(i) } return s }",
+      "const pick = (xs: i32[], i: i32): i32 => xs[i]",
+      "const picks = (xs: i32[]): i32 => { let t = 0; for (let i = 0; i < xs.length; i++) { t = t + pick(xs, i) } return t }",
+      "const last = <T>(xs: T[], x: T): T => { let r = x; for (let i = 0; i < xs.length; i++) { r = xs[i] } return r }",
+      "const widths = (n: i32): i32[] => parallelFrom(n, (i) => `${i}`.length)",
+      "export const main = (): void => {",
+      "  const m = new Map<string, number>()",
+      "  m.set(\"a\", 1)",
+      "  const w = widths(12)",
+      "  console.log(`${new Board().cells.length} ${clampHead(\"abc\")} ${entry(7)} ${disjoint().length} ${raise(m, \"a\")}`)",
+      "  console.log(`${joined(3)} ${picks([1, 2])} ${last([1, 2], 0)} ${last([\"x\"], \"y\")} ${w[11]}`)",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const [sw, swRef] = [[], ["--no-elision"]].map((extra) => {
+    const out = path.join(dir, `switches${extra.length ? "-reference" : ""}${path.sep}`)
+    const r = spawnSync(NISH, [switches, "-o", out, "--no-warn-performance", ...extra], { cwd: root, encoding: "utf8" })
+    const ll = path.join(out, "switches.ll")
+    return r.status === 0 && fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : `compile: ${r.stderr}`
+  })
+  const fn = (ir, name) => {
+    const at = ir.search(new RegExp(`^define [^\\n]*@${name.replace(/\$/g, "\\$")}\\(`, "m"))
+    return at < 0 ? `no @${name}` : ir.slice(at, ir.indexOf("\n}\n", at) + 2)
+  }
+  const count = (text, re) => (text.match(re) ?? []).length
+  const clamps = /@llvm\.smin\.i64\(/g
+  for (const [what, ok, detail] of [
+    [
+      "a proven `substring` bound is not clamped",
+      count(fn(sw, "clampHead"), clamps) < count(fn(swRef, "clampHead"), clamps),
+      `${fn(sw, "clampHead")}\n---\n${fn(swRef, "clampHead")}`,
+    ],
+    [
+      "a proven range entry has no check",
+      !fn(sw, "entry").includes("rng.fail") && fn(swRef, "entry").includes("rng.fail"),
+      `${fn(sw, "entry")}\n---\n${fn(swRef, "entry")}`,
+    ],
+    [
+      "a disjoint `set` is a memcpy",
+      fn(sw, "disjoint").includes("@llvm.memcpy") && fn(swRef, "disjoint").includes("@llvm.memmove"),
+      `${fn(sw, "disjoint")}\n---\n${fn(swRef, "disjoint")}`,
+    ],
+    [
+      "a fused `has`/`set` shares one probe",
+      fn(sw, "raise$").includes(".setValueAt(") && !fn(swRef, "raise$").includes(".setValueAt("),
+      `${fn(sw, "raise$")}\n---\n${fn(swRef, "raise$")}`,
+    ],
+    [
+      "a call site reclaims what its callee left",
+      fn(sw, "joined").includes("@nish_arena_keep(") && !fn(swRef, "joined").includes("@nish_arena_keep("),
+      `${fn(sw, "joined")}\n---\n${fn(swRef, "joined")}`,
+    ],
+    [
+      "a fixed-length array field is laid inline",
+      /^%struct\.Board = type \{ \{ %struct\.nish_array, \[4 x i32\] \} \}$/m.test(sw) &&
+        /^%struct\.Board = type \{ %struct\.nish_array\* \}$/m.test(swRef),
+      `${sw.match(/^%struct\.Board = .*$/m)}\n---\n${swRef.match(/^%struct\.Board = .*$/m)}`,
+    ],
+    [
+      "an index every call site proves has no check",
+      !fn(sw, "pick").includes("nish_panic_index") && fn(swRef, "pick").includes("nish_panic_index"),
+      `${fn(sw, "pick")}\n---\n${fn(swRef, "pick")}`,
+    ],
+    [
+      "an instantiation's proven index has no check",
+      ["last$i32", "last$str"].every((f) => !fn(sw, f).includes("nish_panic_index") && fn(swRef, f).includes("nish_panic_index")),
+      `${fn(sw, "last$i32")}\n---\n${fn(swRef, "last$i32")}`,
+    ],
+    [
+      "a parallel body gets an arena scope",
+      fn(sw, "widths$arrow0").includes("@nish_arena_mark(") && !fn(swRef, "widths$arrow0").includes("nish_arena_"),
+      `${fn(sw, "widths$arrow0")}\n---\n${fn(swRef, "widths$arrow0")}`,
+    ],
+  ]) {
+    check(`no_elision: ${what}; the reference keeps it`, ok, detail)
+  }
   // The runner, as CI runs it, through the differential itself.
   const soundness = (args) =>
     spawnSync(process.execPath, [path.join(root, "tests", "differential", "soundness.js"), ...args], {
@@ -11448,11 +11540,24 @@ if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
     ].join("\n")
   )
   fs.chmodSync(swap, 0o755)
-  const differs = soundness(["--corpus", path.join(pair, "default"), "--compiler", swap])
+  const differs = soundness(["--corpus", path.join(pair, "default"), "--only", "panics", "--compiler", swap])
   check(
     "no_elision: a panic only stderr tells apart is a difference",
     differs.status === 1 && differs.stdout.includes("panic: default one, --no-elision two"),
     `exit ${differs.status}\n${differs.stdout}\n${differs.stderr}`
+  )
+  // And a hang on one side only is a difference, not the runner's limit: the
+  // reference never ends, and the default prints and exits.
+  fs.writeFileSync(path.join(pair, "default", "hangs.ts"), 'export const main = (): void => { console.log("a") }\n')
+  fs.writeFileSync(
+    path.join(pair, "reference", "hangs.ts"),
+    'export const main = (): void => { console.log("a"); while (true) {} }\n'
+  )
+  const hangs = soundness(["--corpus", path.join(pair, "default"), "--only", "hangs", "--run-timeout", "2", "--compiler", swap])
+  check(
+    "no_elision: a run that hangs on one side only is a difference",
+    hangs.status === 1 && hangs.stdout.includes("ending: default exit 0, --no-elision timeout") && summary(hangs).differ === 1,
+    `exit ${hangs.status}\n${hangs.stdout}\n${hangs.stderr}`
   )
 }
 
