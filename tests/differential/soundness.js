@@ -611,6 +611,40 @@ const underAsan = async (compiler, prog, dir) => {
   return { kind: m[1], detail: m[2] ?? "" }
 }
 
+/** The panic a one-past access raises: the runtime's range check. */
+const BOUNDS_PANIC = /^(index out of range: |slice out of range: )/
+
+/**
+ * Why a generated program's run is not the one it promises, or null. Every
+ * block prints its sum on the way out, so a run that panics in the one-past
+ * block, which is last, printed one line fewer than the program has blocks: a
+ * panic elsewhere, a hang or a signal is a miss. A clean program exits 0 with
+ * a line for every block. A `library` shape's panic is the library's own
+ * message, so only its place is checked.
+ */
+const expectedRun = (prog, got, library) => {
+  const printed = String(got.stdout)
+    .split("\n")
+    .filter((l) => l.length > 0).length
+  const blocks = prog.shapes.length
+  if (got.timedOut || got.signal !== null) {
+    return `ended ${ending(got)}`
+  }
+  if (!prog.expectPanic) {
+    return got.status === 0 && printed === blocks
+      ? null
+      : `ended ${ending(got)} after ${printed} of ${blocks} blocks`
+  }
+  const panic = panicOf(got)
+  if (got.status !== 1 || panic === null) {
+    return `ended ${ending(got)} without a panic`
+  }
+  if (printed !== blocks - 1) {
+    return `panicked after ${printed} of ${blocks} blocks, not in the last`
+  }
+  return library || BOUNDS_PANIC.test(panic) ? null : "panicked, not with a bounds panic"
+}
+
 /** The one-past shape a generated program ends on (`family:kind`, no `!`), or null. */
 const pastShape = (prog) => {
   const last = prog.shapes.at(-1)
@@ -648,13 +682,14 @@ const judge = async (compiler, prog, asan) => {
     r.detail += `${await witness()}${owner}`
     return r
   }
-  const panicked = panicOf(r.run) !== null
-  if (panicked !== prog.expectPanic) {
+  const miss = expectedRun(prog, r.run, library)
+  if (miss !== null) {
+    const panic = panicOf(r.run)
     r.verdict = "unexpected"
-    r.key = `unexpected:${ending(r.run)}`
+    r.key = `unexpected:${ending(r.run)}:${panic ?? ""}`
     r.detail =
-      `expected ${prog.expectPanic ? "a panic" : "a clean exit"}, both builds ended ${ending(r.run)}` +
-      `${panicked ? `: ${panicOf(r.run)}` : ""}${await witness()}${owner}`
+      `expected ${prog.expectPanic ? "a bounds panic in the last block" : "a clean exit"}, both builds ${miss}` +
+      `${panic !== null ? `: ${panic}` : ""}${await witness()}${owner}`
     return r
   }
   if (asan) {
@@ -672,6 +707,9 @@ const judge = async (compiler, prog, asan) => {
 
 /** At most this many candidate programs per minimisation: each is two builds and their runs. */
 const MINIMISE_TRIES = 120
+
+/** And at most this long, so a hanging failure's reproducer prints before CI's step timeout. */
+const MINIMISE_MS = 60_000
 
 /**
  * The smallest program, by deleted lines, that still fails like `r` (ddmin
@@ -691,8 +729,13 @@ const minimise = async (compiler, prog, r, asan) => {
   }
   let kept = lines.map((_, i) => i).filter((i) => !frozen.has(i))
   let tries = 0
+  const until = Date.now() + MINIMISE_MS
   const fails = async (keep) => {
     tries++
+    if (Date.now() > until) {
+      tries = MINIMISE_TRIES
+      return false
+    }
     const set = new Set([...keep, ...frozen])
     const entry = prog.entry.replace(/\.ts$/, `.min${tries}.ts`)
     fs.writeFileSync(entry, lines.filter((_, i) => set.has(i)).join("\n"))
@@ -912,6 +955,12 @@ const main = async () => {
       if (r.verdict === "agree") {
         fs.rmSync(r.dir, { recursive: true, force: true })
       } else {
+        // The scratch roots link to the whole checkout: an artifact upload
+        // follows them.
+        for (const tag of ["1", "2"]) {
+          fs.rmSync(path.join(r.dir, "default", `cwd-${tag}`), { recursive: true, force: true })
+          fs.rmSync(path.join(r.dir, "no-elision", `cwd-${tag}`), { recursive: true, force: true })
+        }
         console.log(`${r.verdict.toUpperCase()}  ${r.name}  ${r.detail.replace(/\n/g, "\n    ")}`)
       }
     }
@@ -942,7 +991,7 @@ const main = async () => {
       )
     } else if (prog.expectPanic !== undefined) {
       console.log(
-        `        reproduce: node tests/differential/soundness.js --gen --seed ${o.seed} --index ${prog.index}${o.asan ? " --asan" : ""}`
+        `        reproduce: node tests/differential/soundness.js --gen --seed ${o.seed} --index ${prog.index}${o.asan ? " --asan" : ""} --compiler ${path.relative(root, o.compiler)}`
       )
       console.log(`        shapes: ${prog.shapes.join(" ")}`)
       if (why === undefined) {
@@ -981,7 +1030,7 @@ const main = async () => {
   console.log(
     `\nsoundness: agree=${count("agree")} elided=${elided} differ=${differ.length} ` +
       (o.gen ? `unexpected=${count("unexpected")} asan=${count("asan")} ` : "") +
-      `known=${differ.length - failures.length} nondeterministic=${count("nondeterministic")} ` +
+      `known=${differ.length - differ.filter((r) => !known.has(r.name)).length} nondeterministic=${count("nondeterministic")} ` +
       `broken=${count("broken")} timeout=${count("timeout")} skipped=${skipped.length} ` +
       `unreached=${unreached.length} (${((Date.now() - started) / 1000).toFixed(1)} s)`
   )

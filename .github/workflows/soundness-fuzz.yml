@@ -112,5 +112,11 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: soundness-fuzz-${{ steps.seed.outputs.seed }}
-          path: build/test/differential/soundness/
+          # The failures' directories only: generated/ holds every program and
+          # runtime-obj/ the runtime, both there on every run.
+          path: |
+            build/test/differential/soundness/
+            !build/test/differential/soundness/generated/
+            !build/test/differential/soundness/runtime-obj/
+            !build/test/differential/soundness/**/cwd-*/
           if-no-files-found: ignore
