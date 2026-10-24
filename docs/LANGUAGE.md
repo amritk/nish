@@ -3802,6 +3802,14 @@ element's arena, which a task does not share, and each rule is reported at the
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`; hand a value the parent needs back as the task's answer, or run it on the thread that called it, `out[0] = bump(c)` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
+  A `wipe` is a write through its argument like any other, so it is shared
+  exactly when its target is: an array the task, or a function it calls,
+  allocated itself is private, and wiping it is allowed
+  (`tests/link/thread_task_wipe`); wiping the task's argument, a captured
+  local, a field, an array a call answered, or a `Secret` made with
+  `secret(...)`, which keeps its value, is NL2471
+  (`reject_thread_wipe_param`, `_capture`, `_field`, `_helper`,
+  `_call_result`). The wipe itself is unchanged, one volatile `llvm.memset`.
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
   tasks of one scope may look keys up in the same table
   (`tests/link/thread_scope_task_map_reads`). A mutator — `set`, `add`,
