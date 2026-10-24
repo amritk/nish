@@ -170,7 +170,7 @@ them does not run under Node yet.
 
 The `nish:term` functions are written as imports from `nish/runtime` too, and
 they resolve. Under Node, `isTerminal` and `terminalSize` answer, and
-`readStdin`, `waitStdin` and `setRawMode` throw, naming themselves, as they do
+`readStdin`, `waitStdin`, `setRawMode` and `setTerminalRestore` throw, naming themselves, as they do
 when a program is [run under Node](terminal.md#where-it-runs).
 
 `--emit-ts` writes a directory instead of IR, so it exits 2 if you also
@@ -270,9 +270,16 @@ no escape codes. Diagnostics are never coloured. These variables change that:
 | `FORCE_COLOR` or `CLICOLOR_FORCE`, neither empty nor one of those | colour even when piped, unless an agent is running `nish` |
 | `CLICOLOR` set to one of those, or `TERM=dumb` | no colour, unless one of the two above forces it |
 
-The palette uses 256 colours when `TERM` names a 256-colour terminal,
-`COLORTERM` is set or `FORCE_COLOR` is `2` or `3`, and the 16 basic ones
-otherwise.
+The colours are your terminal's own: the basic ANSI colours, bold and faint,
+which your theme defines, so the help takes on whatever palette you chose (a
+terminal with no theme shows its built-in defaults). On a terminal whose
+`TERM` terminfo entry declares no colours at all (`tput colors` prints fewer
+than 8, as it does for `TERM=vt100`), the help marks headings and flags in
+bold and placeholders with an underline instead, which a monochrome terminal
+still shows. Forced colour (`FORCE_COLOR`, `CLICOLOR_FORCE`) is always the
+theme's, whatever `TERM` says, because what reads it is a pager or an editor
+that paints the escapes itself. Your own tools can print a help that behaves the same way with
+[`nish/cli`](standard-library.md#nishcli).
 
 **Coding agents get a plain help with an extra section.** When `nish` runs
 under an agent — `CLAUDECODE` or `GEMINI_CLI` is set to anything but empty

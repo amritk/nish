@@ -36,8 +36,12 @@
 // - An i64 or u64 string index, or offset of an array's `fill`,
 //   goes through `Number`.
 // - The conversions whose source or target is unsigned or f32 go through
-//   `convert(x, from, to)`; `Math.min`, `Math.max`, `Math.round` and
-//   `Math.abs` through the core where Math answers differently.
+//   `convert(x, from, to)`; `Math.min`, `Math.max` and `Math.sign` on an
+//   i64 or u64, and `Math.abs` on an i64, through the core, where Math
+//   refuses a BigInt. On an i32, `abs` is inlined `| 0` and the rest are
+//   Math's own.
+//   On a float, `min`, `max` and `round` are Math's own, which native code
+//   matches, NaN and `-0` included.
 //
 // Every rewrite is one parenthesised expression or one call, so it can be
 // spliced into any parent without asking how tightly that parent binds. The
@@ -590,11 +594,9 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
       replacement = method === "min" ? "minI64" : "maxI64"
     } else if (type === T_U64) {
       replacement = method === "min" ? "minU64" : "maxU64"
-    } else if (type === T_F32 || type === T_F64) {
-      replacement = method === "min" ? "minF64" : "maxF64"
     }
-  } else if (method === "round" && (type === T_F32 || type === T_F64)) {
-    replacement = "roundF64"
+  } else if (method === "sign" && isBig(type)) {
+    replacement = "signI64"
   } else if (method === "abs") {
     if (type === T_I64) {
       replacement = "absI64"

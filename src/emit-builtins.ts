@@ -45,6 +45,7 @@ import {
 import { N_IDENT, Node } from "./nodes"
 import { Options } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
+import { isWasmBuild } from "./visibility"
 import { rangedStoreOf } from "./emit-util"
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime"
 import { f64Hex } from "./strings"
@@ -164,7 +165,10 @@ const builtinConversionTarget = (name: string): i32 => {
 
 // ---- Math ---------------------------------------------------------------------------
 
-/** The `llvm.<f>.f64` behind a one-argument `Math.*`, or the empty string. */
+/**
+ * The `llvm.<f>.f64` behind a one-argument `Math.*`, or the empty string.
+ * `Math.tan` is not here: it is a call into `std/math.ts` (`importMath`).
+ */
 const f64UnaryIntrinsic = (name: string): string => {
   if (
     name === "sqrt" ||
@@ -192,10 +196,20 @@ const absIntrinsic = (table: TypeTable, type: i32): string => {
   return isInteger(type) ? `llvm.abs.${table.llvmType(type)}` : `llvm.fabs.${type === T_F32 ? "f32" : "f64"}`
 }
 
-/** `llvm.umin`/`umax` for the unsigned widths, `smin`/`smax` for the signed ones. */
+/** `llvm.copysign` at a float's width. */
+const copysignIntrinsic = (type: i32): string => `llvm.copysign.${type === T_F32 ? "f32" : "f64"}`
+
+/**
+ * `llvm.umin`/`umax` for the unsigned widths, `smin`/`smax` for the signed
+ * ones, and `llvm.minimum`/`maximum` for a float: a NaN operand answers NaN
+ * and `-0` orders below `+0`, which is JavaScript's rule, where `minnum`
+ * would drop the NaN. A native float takes `emitFloatMinMax`'s branches
+ * instead; the callee list names the intrinsic all the same, which is
+ * `readnone` and so moves no attribute.
+ */
 const minMaxIntrinsic = (table: TypeTable, which: string, type: i32): string => {
   if (!isInteger(type)) {
-    return `llvm.${which}num.${type === T_F32 ? "f32" : "f64"}`
+    return `llvm.${which}imum.${type === T_F32 ? "f32" : "f64"}`
   }
   return `llvm.${isUnsigned(type) ? "u" : "s"}${which}.${table.llvmType(type)}`
 }
@@ -222,7 +236,9 @@ const emitMathPow = (emitter: Emitter, expr: Node): string => {
 /**
  * `Math.round(x)`: JavaScript rounds half toward +infinity, which is neither
  * `llvm.round` nor `llvm.roundeven`, and `floor(x + 0.5)` is wrong for
- * 0.49999999999999994. `f = floor(x)`, plus one when `x - f >= 0.5`.
+ * 0.49999999999999994. `f = floor(x)`, plus one when `x - f >= 0.5`, then
+ * `x`'s sign put back: a value in `[-0.5, 0)` rounds to `-0`, and a NaN stays
+ * NaN, as they do in JavaScript.
  */
 const emitMathRound = (emitter: Emitter, expr: Node): string => {
   const x = emitter.emitExpression(firstArgument(expr))
@@ -230,7 +246,36 @@ const emitMathRound = (emitter: Emitter, expr: Node): string => {
   const frac = emitter.fn.emitValue(`fsub double ${x}, ${floor}`)
   const up = emitter.fn.emitValue(`fcmp oge double ${frac}, ${f64Hex(0.5)}`)
   const next = emitter.fn.emitValue(`fadd double ${floor}, ${f64Hex(1.0)}`)
-  return emitter.fn.emitValue(`select i1 ${up}, double ${next}, double ${floor}`)
+  const r = emitter.fn.emitValue(`select i1 ${up}, double ${next}, double ${floor}`)
+  return callIntrinsic(emitter, "llvm.copysign.f64", "double", `double ${r}, double ${x}`)
+}
+
+/**
+ * `Math.sign(x)`: `(x > 0) - (x < 0)` for a signed integer and `x != 0` for an
+ * unsigned one. A float answers `copysign(1, x)`, or `x` itself when it is
+ * `±0` or NaN (`fcmp ueq x, 0`), which is how `-0` and NaN come back as
+ * JavaScript gives them. One compare and one select, where two of each timed
+ * about 15% slower in `bench/math`.
+ */
+const emitMathSign = (emitter: Emitter, expr: Node): string => {
+  const arg = firstArgument(expr)
+  const type = emitter.table.baseOf(emitter.typeOf(arg))
+  const x = emitter.emitExpression(arg)
+  const ty = emitter.llvm(type)
+  if (!isInteger(type)) {
+    const unit = callIntrinsic(emitter, copysignIntrinsic(type), ty, `${ty} 1.0, ${ty} ${x}`)
+    const zeroOrNaN = emitter.fn.emitValue(`fcmp ueq ${ty} ${x}, 0.0`)
+    return emitter.fn.emitValue(`select i1 ${zeroOrNaN}, ${ty} ${x}, ${ty} ${unit}`)
+  }
+  if (isUnsigned(type)) {
+    const nonzero = emitter.fn.emitValue(`icmp ne ${ty} ${x}, 0`)
+    return emitter.fn.emitValue(`zext i1 ${nonzero} to ${ty}`)
+  }
+  const above = emitter.fn.emitValue(`icmp sgt ${ty} ${x}, 0`)
+  const below = emitter.fn.emitValue(`icmp slt ${ty} ${x}, 0`)
+  const plus = emitter.fn.emitValue(`zext i1 ${above} to ${ty}`)
+  const minus = emitter.fn.emitValue(`zext i1 ${below} to ${ty}`)
+  return emitter.fn.emitValue(`sub ${ty} ${plus}, ${minus}`)
 }
 
 const emitMathAbs = (emitter: Emitter, expr: Node): string => {
@@ -251,7 +296,44 @@ const emitMathMinMax = (emitter: Emitter, expr: Node, which: string): string => 
   const a = emitter.emitExpression(args.children[0])
   const b = emitter.emitExpression(args.children[1])
   const ty = emitter.llvm(type)
+  if (!isInteger(type) && !isWasmBuild(emitter.opts)) {
+    return emitFloatMinMax(emitter, which, ty, a, b)
+  }
   return callIntrinsic(emitter, minMaxIntrinsic(emitter.table, which, type), ty, `${ty} ${a}, ${ty} ${b}`)
+}
+
+/**
+ * A native float `Math.min`/`max`: `llvm.minimum`'s answer as the branches
+ * clang writes for the same C. A NaN operand jumps to NaN; equal operands,
+ * which differ only as `+0` and `-0`, pick by `a`'s sign bit; anything else
+ * is one compare and select. x86-64 has no instruction for `llvm.minimum`,
+ * whose expansion timed 25–55% slower than this in `bench/math`; wasm32 has
+ * one, and keeps the intrinsic.
+ */
+const emitFloatMinMax = (emitter: Emitter, which: string, ty: string, a: string, b: string): string => {
+  const fn = emitter.fn
+  const num = fn.newBlock(`${which}.num`)
+  const same = fn.newBlock(`${which}.same`)
+  const done = fn.newBlock(`${which}.end`)
+  const entry = fn.currentBlock().label
+  const nan = fn.emitValue(`fcmp uno ${ty} ${a}, ${b}`)
+  fn.emit(`br i1 ${nan}, label %${done.label}, label %${num.label}`)
+  fn.placeBlock(num)
+  const wins = fn.emitValue(`fcmp ${which === "min" ? "olt" : "ogt"} ${ty} ${a}, ${b}`)
+  const picked = fn.emitValue(`select i1 ${wins}, ${ty} ${a}, ${ty} ${b}`)
+  const equal = fn.emitValue(`fcmp oeq ${ty} ${a}, ${b}`)
+  fn.emit(`br i1 ${equal}, label %${same.label}, label %${done.label}`)
+  fn.placeBlock(same)
+  const int = ty === "float" ? "i32" : "i64"
+  const bits = fn.emitValue(`bitcast ${ty} ${a} to ${int}`)
+  const negative = fn.emitValue(`icmp slt ${int} ${bits}, 0`)
+  const zeros = which === "min" ? `${ty} ${a}, ${ty} ${b}` : `${ty} ${b}, ${ty} ${a}`
+  const zero = fn.emitValue(`select i1 ${negative}, ${zeros}`)
+  fn.emit(`br label %${done.label}`)
+  fn.placeBlock(done)
+  return fn.emitValue(
+    `phi ${ty} [ 0x7FF8000000000000, %${entry} ], [ ${picked}, %${num.label} ], [ ${zero}, %${same.label} ]`
+  )
 }
 
 // ---- Constant time (WP34 N6) -----------------------------------------------------------
@@ -483,6 +565,9 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "Math.abs") {
     return emitMathAbs(emitter, expr)
   }
+  if (name === "Math.sign") {
+    return emitMathSign(emitter, expr)
+  }
   if (name === "Math.min") {
     return emitMathMinMax(emitter, expr, "min")
   }
@@ -492,6 +577,13 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   if (name === "Math.clz32") {
     const x = emitter.emitExpression(firstArgument(expr))
     return callIntrinsic(emitter, "llvm.ctlz.i32", "i32", `i32 ${x}, i1 false`)
+  }
+  // The low 32 bits of the product, which a wrapping `mul` is: no overflow check.
+  if (name === "Math.imul") {
+    const args = expr.children[1]
+    const a = emitter.emitExpression(args.children[0])
+    const b = emitter.emitExpression(args.children[1])
+    return emitter.fn.emitValue(`mul i32 ${a}, ${b}`)
   }
   if (name === "Math.random") {
     return emitter.fn.emitValue(`call double ${emitter.useRuntime("nish_random")}()`)
@@ -586,12 +678,20 @@ export const builtinCalleesNamed = (
   }
   if (name === "Math.round") {
     out.push("llvm.floor.f64")
+    out.push("llvm.copysign.f64")
     return out
   }
   if (name === "Math.abs") {
     const intrinsic = absIntrinsic(table, firstType)
     if (intrinsic.length > 0) {
       out.push(intrinsic)
+    }
+    return out
+  }
+  if (name === "Math.sign") {
+    const base = table.baseOf(firstType)
+    if (isFloat(base)) {
+      out.push(copysignIntrinsic(base))
     }
     return out
   }
@@ -667,6 +767,9 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   }
   if (name === "f64ToBits") {
     return emitter.fn.emitValue(`bitcast double ${emitter.emitExpression(firstArgument(expr))} to i64`)
+  }
+  if (name === "f32ToBits") {
+    return emitter.fn.emitValue(`bitcast float ${emitter.emitExpression(firstArgument(expr))} to i32`)
   }
   if (name === "bitsToF64") {
     return emitter.fn.emitValue(`bitcast i64 ${emitter.emitExpression(firstArgument(expr))} to double`)
@@ -915,6 +1018,11 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     const on = emitter.emitExpression(firstArgument(expr))
     return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_raw_mode")}(i1 zeroext ${on})`)
   }
+  if (name === "setTerminalRestore") {
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_set_terminal_restore")}(${stringArgs(emitter, expr)})`
+    )
+  }
   if (isNetExport(name)) {
     return emitNetCall(emitter, expr, name)
   }
@@ -1123,6 +1231,10 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_set_raw_mode")
     return out
   }
+  if (name === "setTerminalRestore") {
+    out.push("nish_set_terminal_restore")
+    return out
+  }
   // WP34 N5: one symbol each, and the slice panic behind the range check of
   // `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` unless
   // `--unchecked-indexing` dropped it.
@@ -1139,11 +1251,14 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   // Declared here rather than left to fall through, so the table says it:
-  // `f64ToBits` / `bitsToF64` are one bitcast, `ctSelect` / `ctEq` are
+  // `f64ToBits` / `f32ToBits` / `bitsToF64` are one bitcast, `ctSelect` / `ctEq` are
   // bitwise instructions and an empty asm (WP34 N6), and the other `nish:unsafe`
   // functions are a load, a store or one instruction, with no panic behind
   // any of them. None calls anything.
-  if (name === "f64ToBits" || name === "bitsToF64" || name === "ctSelect" || name === "ctEq") {
+  if (name === "f64ToBits" || name === "f32ToBits" || name === "bitsToF64") {
+    return out
+  }
+  if (name === "ctSelect" || name === "ctEq") {
     return out
   }
   if (name === "uncheckedGet" || name === "uncheckedSet") {

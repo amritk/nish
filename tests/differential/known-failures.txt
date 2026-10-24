@@ -7,8 +7,6 @@
 
 # By design (documented in docs/wp7-runtime.md and README.md)
 corpus/f64_libm            # glibc libm vs V8 fdlibm: 1-ulp differences in sin/cos/log/pow
-corpus/f64_minmax_nan      # llvm.minnum/maxnum return the non-NaN operand; JS returns NaN
-corpus/f64_round_negzero   # Math.round(-0.3) is +0 here, -0 in JS
 
 # By design (Rust semantics): integer division checks its divisor and panics with exit 1
 corpus/int_div_overflow    # INT_MIN / -1: "attempt to divide with overflow"; JS gives INT_MIN
