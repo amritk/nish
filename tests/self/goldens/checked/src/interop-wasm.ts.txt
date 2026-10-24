@@ -345,7 +345,7 @@ function generateWasmLoader(compilation: Compilation, fns: ExternalFunction[], d
   sharedWrite: via wasmBridged
   escaping: dtsFile
   calls: banner basename nish_alloc_struct nish_array_grow nish_str_concat pushAll tsSignatureLine wasmBridged wasmRangeHelper wasmResultHelpers wasmWrapper
-  pointer compilation: size=128 writesThrough=false captured=false passedTo=banner#0
+  pointer compilation: size=144 writesThrough=false captured=false passedTo=banner#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=wasmBridged#1
   stackSites=1 stackLocals=1
   local +0:9 table: TypeTable (const)

@@ -1,0 +1,9 @@
+{
+  "name": "caps-dep-manifest-escaped-name",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": { "pkg\u005fhttp": ["n\u0065t"] }
+    }
+  }
+}

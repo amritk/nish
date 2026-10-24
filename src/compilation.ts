@@ -82,7 +82,14 @@ import {
   everyCapabilityName,
   optInCapabilities,
 } from "./capabilities"
-import { functionIndex, witnessChain } from "./capability-report"
+import {
+  dependencyMasks,
+  dependencyPackages,
+  dependencyWitness,
+  functionIndex,
+  gatedCapabilities,
+  witnessChain,
+} from "./capability-report"
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
@@ -168,7 +175,7 @@ import {
 } from "./parallel"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
-import { splitByte } from "./strings"
+import { jsonQuote, splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
@@ -421,6 +428,13 @@ export class Compilation {
    */
   manifestAllow: i32
   manifestDeny: i32
+  /**
+   * WP40: the root package's `"nish".capabilities.dependencies` grants, read
+   * by `readCapabilityPolicy`: each named dependency and the gated
+   * capabilities granted it, as a mask, side by side.
+   */
+  grantNames: string[]
+  grantMasks: i32[]
 
   constructor(opts: Options) {
     this.opts = opts
@@ -441,6 +455,8 @@ export class Compilation {
     this.panicScope = []
     this.manifestAllow = -1
     this.manifestDeny = 0
+    this.grantNames = []
+    this.grantMasks = []
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -1256,6 +1272,7 @@ export class Compilation {
       }
     }
     this.refuseCapabilities()
+    this.refuseDependencyCapabilities()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -1353,6 +1370,12 @@ export class Compilation {
    * `package.json` writes it, so that a typo never quietly widens the policy:
    * the wrong shape (NL3032), a name that is no capability (NL3033), `unsafe`
    * under `allow` (NL3034), and a capability under both (NL3035).
+   *
+   * WP40: its `dependencies` grants (docs/wp40-dependency-capabilities.md) as
+   * `grantNames` and `grantMasks`, refused the same way: the wrong shape
+   * (NL3041), a name that is no capability (NL3033) and one that is not gated
+   * (NL3042). A grant may name `unsafe`, and may name a package the program
+   * does not load.
    */
   readCapabilityPolicy(source: SourceFile | null, nish: NishManifest | null): void {
     if (source === null || nish === null) {
@@ -1387,6 +1410,54 @@ export class Compilation {
     }
     this.manifestAllow = policy.allowGiven ? allow : -1
     this.manifestDeny = deny
+    if (policy.grantsProblem.length > 0) {
+      this.sink.report(
+        source,
+        policy.grantsProblemStart,
+        policy.grantsProblemEnd,
+        `${policy.grantsProblem}: the root package's \`${PACKAGE_CONDITION}.capabilities.dependencies\` is an object that names each dependency once, with an array of the capabilities granted it`
+      )
+      return
+    }
+    let k = 0
+    while (k < policy.grantees.length && k < policy.grants.length) {
+      this.grantNames.push(policy.grantees[k])
+      this.grantMasks.push(this.grantMask(source, policy.grants[k]))
+      k = k + 1
+    }
+  }
+
+  /** One dependency's grant as a mask, refusing each entry that names no capability or one that is not gated. */
+  grantMask(source: SourceFile, list: ManifestList): i32 {
+    const names = everyCapabilityName()
+    const gated = gatedCapabilities()
+    let mask = 0
+    let k = 0
+    while (k < list.entries.length && k < list.offsets.length) {
+      const entry = list.entries[k]
+      const at = list.offsets[k]
+      const end = k < list.ends.length ? list.ends[k] : at + 1
+      const index = capabilityIndex(entry)
+      if (index < 0) {
+        this.sink.report(
+          source,
+          at,
+          end,
+          `\`${entry}\` is no capability: a policy names capabilities as \`--emit-capabilities\` reports them, one of ${names}`
+        )
+      } else if ((gated & (1 << index)) === 0) {
+        this.sink.report(
+          source,
+          at,
+          end,
+          `\`${entry}\` is not a gated capability: a dependency is granted only \`ffi\`, \`net\`, \`process.spawn\` and \`unsafe\`, and reaches every other capability without a grant`
+        )
+      } else {
+        mask = mask | (1 << index)
+      }
+      k = k + 1
+    }
+    return mask
   }
 
   /** One `allow` or `deny` list of the root package's policy as a mask, refusing each entry that names no capability. */
@@ -1504,6 +1575,73 @@ export class Compilation {
       site.start,
       site.end,
       `\`${sig.sourceName}\` reaches \`${capabilityName(c)}\`, which the capability policy does not grant (${this.refusedBy(c)}); the chain that reaches it: ${hops.join(", ")}`
+    )
+  }
+
+  /**
+   * WP40: refuse a dependency's gated capabilities -- `ffi`, `net`,
+   * `process.spawn` and `unsafe` -- that the root package's
+   * `"nish".capabilities.dependencies` does not grant it
+   * (docs/wp40-dependency-capabilities.md). A dependency's set is the union
+   * over every function its modules define, exported or not, so what it
+   * reaches through the standard library or another dependency is its own;
+   * the standard library itself is never refused. One error per dependency
+   * and capability, spanned at the first call of the witness chain from the
+   * dependency's first function, in source order, that reaches it; the sink
+   * prints them by position, like every diagnostic. No flag grants anything here, and a
+   * grant never widens the root's own policy, which `refuseCapabilities` has
+   * already applied.
+   */
+  refuseDependencyCapabilities(): void {
+    const reach = dependencyPackages(this)
+    if (reach.names.length === 0) {
+      return
+    }
+    const facts = this.analyze()
+    const index = functionIndex(this, facts)
+    dependencyMasks(reach, index)
+    const gated = gatedCapabilities()
+    let p = 0
+    while (p < reach.names.length && p < reach.masks.length) {
+      const name = reach.names[p]
+      const g = this.grantNames.indexOf(name)
+      const granted = g >= 0 && g < this.grantMasks.length ? this.grantMasks[g] : 0
+      const refused = reach.masks[p] & gated & ~granted
+      let c = 0
+      while (c < CAPABILITY_COUNT) {
+        if ((refused & (1 << c)) !== 0) {
+          const chain = dependencyWitness(index, facts, reach, p, c)
+          const source: SourceFile | null = chain.length > 0 ? chain[0].source : null
+          const site: Node | null = chain.length > 0 ? chain[0].site : null
+          if (source !== null && site !== null) {
+            const hops: string[] = []
+            for (const hop of chain) {
+              hops.push(`${hop.at} calls ${hop.calls}`)
+            }
+            this.reportDependencyRefusal(source, site, name, chain[0].caller, c, hops)
+          }
+        }
+        c = c + 1
+      }
+      p = p + 1
+    }
+  }
+
+  /** The refusal of dependency `name`'s capability `c`, a method of its own for the reason `reportRefusal` is. */
+  reportDependencyRefusal(
+    source: SourceFile,
+    site: Node,
+    name: string,
+    caller: string,
+    c: i32,
+    hops: string[]
+  ): void {
+    const cap = capabilityName(c)
+    this.sink.report(
+      source,
+      site.start,
+      site.end,
+      `the dependency \`${name}\` reaches \`${cap}\` through \`${caller}\`, which the root package does not grant it; grant it with "${PACKAGE_CONDITION}": { "capabilities": { "dependencies": { ${jsonQuote(name)}: ["${cap}"] } } } — the chain that reaches it: ${hops.join(", ")}`
     )
   }
 

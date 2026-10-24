@@ -1,0 +1,13 @@
+{
+  "name": "caps-dep-unsafe-granted",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_fast": [
+          "unsafe"
+        ]
+      }
+    }
+  }
+}

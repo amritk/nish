@@ -63,13 +63,18 @@ struct NishManifest (class) size=24 align=8 exported
   field noPanicAt: i32 index=3 offset=16
   field capabilitiesAt: i32 index=4 offset=20
   constructor -> @NishManifest.constructor
-struct CapabilityManifest (class) size=40 align=8 exported
+struct CapabilityManifest (class) size=72 align=8 exported
   field problem: string index=0 offset=0
   field problemStart: i32 index=1 offset=8
   field problemEnd: i32 index=2 offset=12
   field allowGiven: boolean index=3 offset=16
   field allow: ManifestList index=4 offset=24
   field deny: ManifestList index=5 offset=32
+  field grantsProblem: string index=6 offset=40
+  field grantsProblemStart: i32 index=7 offset=48
+  field grantsProblemEnd: i32 index=8 offset=52
+  field grantees: string[] index=9 offset=56
+  field grants: ManifestList[] index=10 offset=64
   constructor -> @CapabilityManifest.constructor
 struct ManifestEntry (class) size=16 align=8 exported
   field status: i32 index=0 offset=0 initialized
@@ -262,12 +267,44 @@ function manifestNoPanic(manifest: string, at: i32): ManifestList -> @manifestNo
 function CapabilityManifest.constructor(this: CapabilityManifest): void -> @CapabilityManifest.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: ManifestList.constructor nish_alloc_struct
-  pointer this: size=40 writesThrough=true captured=false
+  pointer this: size=72 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:18 new ManifestList -> @ManifestList.constructor
   callee +1:17 new ManifestList -> @ManifestList.constructor
+function manifestGrantsProblem(out: CapabilityManifest, problem: string, start: i32, end: i32): void -> @manifestGrantsProblem
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: end problem start
+  calls: manifestSpanEnd
+  pointer out: size=72 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +2:26 manifestSpanEnd -> @manifestSpanEnd
+function manifestReadGrants(manifest: string, at: i32, out: CapabilityManifest): void -> @manifestReadGrants
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: at manifest
+  calls: ManifestList.constructor manifestEndOfValue manifestGrantsProblem manifestMembers manifestReadList manifestRepeatedMember nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
+  pointer out: size=72 writesThrough=true captured=false passedTo=manifestGrantsProblem#0 manifestGrantsProblem#0 manifestGrantsProblem#0 manifestGrantsProblem#0
+  stackSites=0 stackLocals=0
+  local -39:9 members: ManifestMembers (const)
+  callee -39:19 manifestMembers -> @manifestMembers
+  callee -37:5 manifestGrantsProblem -> @manifestGrantsProblem
+  callee -37:71 manifestEndOfValue -> @manifestEndOfValue
+  local -34:9 repeated: i32 (const)
+  callee -34:20 manifestRepeatedMember -> @manifestRepeatedMember
+  callee -32:5 manifestGrantsProblem -> @manifestGrantsProblem
+  local -24:7 k: i32 (let)
+  local -22:11 name: string (const)
+  local -21:11 valueAt: i32 (const)
+  callee -19:7 manifestGrantsProblem -> @manifestGrantsProblem
+  local -16:11 list: ManifestList (const)
+  callee -16:18 new ManifestList -> @ManifestList.constructor
+  callee -15:5 manifestReadList -> @manifestReadList
+  local -14:9 e: i32 (let)
+  local -12:13 entryAt: i32 (const)
+  callee -10:9 manifestGrantsProblem -> @manifestGrantsProblem
 function manifestPolicyProblem(problem: string, start: i32, end: i32): CapabilityManifest -> @manifestPolicyProblem
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=72
   escaping: end problem start
   calls: CapabilityManifest.constructor manifestSpanEnd nish_alloc_struct
   stackSites=0 stackLocals=0
@@ -275,10 +312,10 @@ function manifestPolicyProblem(problem: string, start: i32, end: i32): Capabilit
   callee +0:15 new CapabilityManifest -> @CapabilityManifest.constructor
   callee +3:20 manifestSpanEnd -> @manifestSpanEnd
 function manifestCapabilities(manifest: string, at: i32): CapabilityManifest -> @manifestCapabilities [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: via manifestReadList
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=72
+  sharedWrite: via manifestReadGrants
   escaping: at manifest
-  calls: CapabilityManifest.constructor manifestEndOfValue manifestMembers manifestPolicyProblem manifestReadList manifestRepeatedMember nish_alloc_struct nish_panic_index nish_str_concat nish_str_eq
+  calls: CapabilityManifest.constructor manifestEndOfValue manifestMembers manifestPolicyProblem manifestReadGrants manifestReadList manifestRepeatedMember nish_alloc_struct nish_panic_index nish_str_concat nish_str_eq
   stackSites=0 stackLocals=0
   local +0:9 out: CapabilityManifest (const)
   callee +0:15 new CapabilityManifest -> @CapabilityManifest.constructor
@@ -292,10 +329,11 @@ function manifestCapabilities(manifest: string, at: i32): CapabilityManifest -> 
   local +16:7 k: i32 (let)
   local +24:11 key: string (const)
   local +25:11 valueAt: i32 (const)
-  callee +27:14 manifestPolicyProblem -> @manifestPolicyProblem
-  callee +34:14 manifestPolicyProblem -> @manifestPolicyProblem
-  callee +38:7 manifestReadList -> @manifestReadList
-  callee +40:7 manifestReadList -> @manifestReadList
+  callee +27:7 manifestReadGrants -> @manifestReadGrants
+  callee +32:14 manifestPolicyProblem -> @manifestPolicyProblem
+  callee +39:14 manifestPolicyProblem -> @manifestPolicyProblem
+  callee +43:7 manifestReadList -> @manifestReadList
+  callee +45:7 manifestReadList -> @manifestReadList
 function manifestTarget(raw: string): string | null -> @manifestTarget
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_at nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new splitByte

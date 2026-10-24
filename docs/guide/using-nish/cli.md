@@ -312,6 +312,25 @@ unchanged.
   `nish run --capabilities hello.ts` prints
   `capabilities: none (deterministic)` before the program's own output. See
   [Capabilities](../../LANGUAGE.md#capabilities).
+- **A dependency needs your grant** for `unsafe`, `ffi`, `net` and
+  `process.spawn`. A package under `node_modules` that reaches one of them,
+  itself or through anything it calls, stops the build until your
+  `package.json` names it:
+
+  ```json
+  { "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } }
+  ```
+
+  Without it the build stops with exit code 1, and the error names the
+  grant to add and the calls that reach the capability:
+
+  ```text
+  node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+  ```
+
+  Only your own `package.json` grants: `--allow` does not, and neither does
+  the dependency's. The standard library needs no grant. See
+  [A dependency's capabilities](../../LANGUAGE.md#a-dependencys-capabilities).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](../../LANGUAGE.md#the-no-panic-scope)).

@@ -1,0 +1,9 @@
+{
+  "name": "caps-dep-manifest-repeated",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": { "pkg_http": ["net"], "pkg_http": ["net"] }
+    }
+  }
+}

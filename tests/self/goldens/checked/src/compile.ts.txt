@@ -136,7 +136,7 @@ function report(compilation: Compilation, json: boolean): void -> @report
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_write
   calls: Diagnostic.json DiagnosticSink.format DiagnosticSink.sorted nish_print nish_str_concat nish_write
-  pointer compilation: size=128 writesThrough=false captured=false
+  pointer compilation: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:19 DiagnosticSink.format -> @DiagnosticSink.format
   local +3:14 diagnostic: Diagnostic (const)
@@ -147,7 +147,7 @@ function reportPerformance(compilation: Compilation, enabled: boolean, deprecati
   sharedWrite: via reportWarnings
   escaping: json
   calls: isDeprecationWarning nish_array_grow reportWarnings
-  pointer compilation: size=128 writesThrough=false captured=false
+  pointer compilation: size=144 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   callee +0:5 reportWarnings -> @reportWarnings
   local +6:11 kept: Diagnostic[] (const)
@@ -159,7 +159,7 @@ function reportPortability(compilation: Compilation, json: boolean): void -> @re
   sharedWrite: via reportWarnings
   escaping: json
   calls: reportWarnings
-  pointer compilation: size=128 writesThrough=false captured=false
+  pointer compilation: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 reportWarnings -> @reportWarnings
 function reportDeprecations(compilation: Compilation, json: boolean): void -> @reportDeprecations
@@ -167,7 +167,7 @@ function reportDeprecations(compilation: Compilation, json: boolean): void -> @r
   sharedWrite: via reportWarnings
   escaping: json
   calls: reportWarnings
-  pointer compilation: size=128 writesThrough=false captured=false
+  pointer compilation: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 reportWarnings -> @reportWarnings
 function reportWarnings(warnings: Diagnostic[], kind: string, json: boolean): void -> @reportWarnings
@@ -193,7 +193,7 @@ function reportLoadFailure(compilation: Compilation, json: boolean): void -> @re
   sharedWrite: via reportRootFailure
   escaping: json
   calls: DiagnosticSink.hasErrors nish_str_concat report reportRootFailure
-  pointer compilation: size=128 writesThrough=false captured=false passedTo=report#0
+  pointer compilation: size=144 writesThrough=false captured=false passedTo=report#0
   stackSites=0 stackLocals=0
   callee +0:5 reportRootFailure -> @reportRootFailure
   callee +1:14 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
@@ -593,7 +593,7 @@ function cDeclared(compilation: Compilation, fns: ExternalFunction[]): ExternalF
   sharedWrite: via napiBridges
   escaping: fns
   calls: napiBridges nish_array_grow
-  pointer compilation: size=128 writesThrough=false captured=false
+  pointer compilation: size=144 writesThrough=false captured=false
   pointer fns: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   local +0:9 opts: Options (const)
@@ -604,7 +604,7 @@ function writeSidecars(compilation: Compilation, fns: ExternalFunction[]): boole
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via makeDirectoryFor
   calls: generateDts generateHeader generateNapiShim generateWasmLoader makeDirectoryFor nish_str_concat nish_write nish_write_file wasmLoaderPath
-  pointer compilation: size=128 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
+  pointer compilation: size=144 writesThrough=false captured=false passedTo=generateHeader#0 generateDts#0 generateWasmLoader#0 generateNapiShim#0 generateNapiShim#0
   pointer fns: size=0 writesThrough=false captured=false passedTo=generateHeader#1 generateDts#1 generateWasmLoader#1 generateNapiShim#1 generateNapiShim#1
   stackSites=0 stackLocals=0
   local +0:9 opts: Options (const)

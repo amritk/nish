@@ -9097,6 +9097,55 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   `caps_policy_manifest_granted`). `nish run` takes both flags and refuses
   before it links; `--fix` and `--emit-ast` refuse them.
 
+##### A dependency's capabilities
+
+A dependency — a package loaded from `node_modules` — may reach `ffi`, `net`,
+`process.spawn` and `unsafe`, the **gated** capabilities, only when the root
+`package.json` grants them to it by name; it reaches every other capability
+without one ([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)):
+
+```json
+{ "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } }
+```
+
+A dependency that reaches one it is not granted is refused (NL2574), in the
+dependency, naming the package, the capability and the function:
+
+```text
+node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+```
+
+- A dependency's capabilities are the union over **every** function its
+  modules define, exported or not, called or not
+  (`tests/link/caps_dep_unexported`), and what it reaches through another
+  dependency is its own: granting the package that dials refuses the one that
+  calls it (`caps_dep_transitive`). One error per package and capability,
+  spanned at the first call of the witness chain from the package's first
+  function, in source order, that reaches it (`caps_dep_order`; one refused and
+  one granted program per capability, `caps_dep_net_refused` …
+  `caps_dep_unsafe_granted`).
+- The standard library is never refused, and what decides is where a module
+  was resolved, not its package's name: a dependency that calls itself `nish`
+  is judged like any other (`caps_dep_std_not_refused`, `caps_dep_named_nish`).
+  The ungated capabilities need no grant (`caps_dep_ungated`).
+- A function argument counts where it is instantiated: the root's function
+  passed to a dependency's template makes the instantiation, which is the
+  dependency's, reach what that function reaches, so the dependency is
+  refused for it (`caps_dep_fnarg_callback`).
+- Only the root manifest grants: no flag does (`--allow net` leaves the
+  dependency refused, `caps_dep_cli_cannot_grant`), nor the dependency's own
+  manifest (`caps_dep_self_grant`), and a grant never widens
+  the root's own policy — a capability the root denies is refused by NL2459
+  whoever is granted it (`caps_dep_root_deny_wins`).
+- `dependencies` is read as strictly as the rest of the field: a value that is
+  not an object, a package named twice, a grant that is not an array and an
+  entry that is not a string are NL3041 (`caps_dep_manifest_not_object`,
+  `_repeated`, `_not_array`, `_non_string`), a name that is no capability is
+  NL3033 (`caps_dep_manifest_unknown`) and one that is not gated NL3042
+  (`caps_dep_manifest_ungated`). `unsafe` may be granted, keys are decoded as
+  JSON, and a grant to a package the program does not load is no error
+  (`caps_dep_manifest_unsafe`, `_escaped_name`, `_unloaded`).
+
 ## Semantics decisions
 
 - **Signed integer overflow is a checked panic; `wrappingAdd`,

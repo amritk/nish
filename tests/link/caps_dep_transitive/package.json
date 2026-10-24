@@ -1,0 +1,13 @@
+{
+  "name": "caps-dep-transitive",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_http": [
+          "net"
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_dep_manifest_non_string/package.json","line":6,"column":45,"endLine":6,"endColumn":46,"severity":"error","code":"NL3041","message":"`7` in the grant of `pkg_http` is not a string: the root package's `nish.capabilities.dependencies` is an object that names each dependency once, with an array of the capabilities granted it"}

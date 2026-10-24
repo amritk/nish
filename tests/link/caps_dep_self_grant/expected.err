@@ -1,0 +1,1 @@
+the dependency `pkg_http` reaches `net` through `dial`

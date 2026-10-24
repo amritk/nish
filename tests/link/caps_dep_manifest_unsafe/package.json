@@ -1,0 +1,16 @@
+{
+  "name": "caps-dep-manifest-unsafe",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "allow": [
+        "clock"
+      ],
+      "dependencies": {
+        "pkg_fast": [
+          "unsafe"
+        ]
+      }
+    }
+  }
+}

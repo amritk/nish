@@ -479,7 +479,7 @@ function generateNapiShim(compilation: Compilation, fns: ExternalFunction[], asy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via napiPlan
   calls: banner cPrototype jsExportName napiAsyncSkipReason napiAsyncWrapper napiPlan napiSkipReason napiWrapper nish_alloc_struct nish_array_grow nish_str_at nish_str_concat nish_str_eq pushAll resultDefinitions tsSignatureLine typedView
-  pointer compilation: size=128 writesThrough=false captured=false passedTo=banner#0
+  pointer compilation: size=144 writesThrough=false captured=false passedTo=banner#0
   pointer fns: size=0 writesThrough=false captured=false
   stackSites=7 stackLocals=7
   local +0:9 table: TypeTable (const)

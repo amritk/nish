@@ -1,0 +1,9 @@
+{
+  "name": "ffi-package-declare-same",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": { "wide": ["ffi"] }
+    }
+  }
+}

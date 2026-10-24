@@ -5,6 +5,7 @@ import FactsTable from "./attributes" -> struct FactsTable
 import FunctionFacts from "./attributes" -> struct FunctionFacts
 import CLI from "./branding" -> const CLI
 import CAPABILITY_COUNT from "./capabilities" -> const CAPABILITY_COUNT
+import capabilityIndex from "./capabilities" -> function @capabilityIndex
 import capabilityName from "./capabilities" -> function @capabilityName
 import capabilityNames from "./capabilities" -> function @capabilityNames
 import isDeterministic from "./capabilities" -> function @isDeterministic
@@ -38,10 +39,15 @@ struct WitnessHop (class) size=40 align=8 exported
   field source: SourceFile | null index=3 offset=24
   field site: Node | null index=4 offset=32
   constructor -> @WitnessHop.constructor
+struct DependencyReach (class) size=24 align=8 exported
+  field names: string[] index=0 offset=0
+  field masks: i32[] index=1 offset=8
+  field packageOf: i32[] index=2 offset=16
+  constructor -> @DependencyReach.constructor
 function isLibrary(compilation: Compilation, unit: ModuleUnit): boolean -> @isLibrary
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Compilation.libraryRoot isStdModule
-  pointer compilation: size=128 writesThrough=false captured=false passedTo=Compilation.libraryRoot#0
+  pointer compilation: size=144 writesThrough=false captured=false passedTo=Compilation.libraryRoot#0
   pointer unit: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 isStdModule -> @isStdModule
@@ -50,7 +56,7 @@ function modulePath(compilation: Compilation, root: string, unit: ModuleUnit): s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: root
   calls: isLibrary relativePath
-  pointer compilation: size=128 writesThrough=false captured=false passedTo=isLibrary#0
+  pointer compilation: size=144 writesThrough=false captured=false passedTo=isLibrary#0
   pointer unit: size=88 writesThrough=false captured=false passedTo=isLibrary#1
   stackSites=0 stackLocals=0
   callee +0:3 isLibrary -> @isLibrary
@@ -66,7 +72,7 @@ function capsOf(facts: FactsTable, sig: FunctionSig): i32 -> @capsOf
 function programCapabilities(compilation: Compilation, facts: FactsTable): i32 -> @programCapabilities
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: Compilation.entry FunctionSig.definedIn capsOf
-  pointer compilation: size=128 writesThrough=false captured=false passedTo=Compilation.entry#0
+  pointer compilation: size=144 writesThrough=false captured=false passedTo=Compilation.entry#0
   pointer facts: size=16 writesThrough=false captured=false passedTo=capsOf#0 capsOf#0
   stackSites=0 stackLocals=0
   local +0:9 entry: ModuleUnit (const)
@@ -112,7 +118,7 @@ function functionIndex(compilation: Compilation, facts: FactsTable): FunctionInd
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via StringMap.set
   calls: Compilation.entry FunctionIndex.constructor FunctionSig.definedIn StringMap.get StringMap.set capsOf dirname modulePath nish_alloc_struct nish_array_grow nish_panic_overflow
-  pointer compilation: size=128 writesThrough=false captured=false passedTo=Compilation.entry#0 modulePath#0
+  pointer compilation: size=144 writesThrough=false captured=false passedTo=Compilation.entry#0 modulePath#0
   pointer facts: size=16 writesThrough=false captured=false passedTo=capsOf#0
   stackSites=0 stackLocals=0
   local +0:9 index: FunctionIndex (const)
@@ -168,12 +174,63 @@ function witnessChain(index: FunctionIndex, facts: FactsTable, sig: FunctionSig,
   callee +21:54 FactsTable.get -> @FactsTable.get
   local +22:11 nextSig: FunctionSig (const)
   callee +23:16 new WitnessHop -> @WitnessHop.constructor
+function gatedCapabilities(): i32 -> @gatedCapabilities [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: capabilityIndex
+  stackSites=0 stackLocals=0
+  callee +0:9 capabilityIndex -> @capabilityIndex
+  callee +1:9 capabilityIndex -> @capabilityIndex
+  callee +2:9 capabilityIndex -> @capabilityIndex
+  callee +3:9 capabilityIndex -> @capabilityIndex
+function DependencyReach.constructor(this: DependencyReach): void -> @DependencyReach.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
+  pointer this: size=24 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function dependencyPackages(compilation: Compilation): DependencyReach -> @dependencyPackages [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
+  calls: DependencyReach.constructor isLibrary nish_alloc_struct nish_array_grow nish_str_eq sortTogether
+  pointer compilation: size=144 writesThrough=false captured=false passedTo=isLibrary#0 isLibrary#0
+  stackSites=2 stackLocals=2
+  local +0:9 reach: DependencyReach (const)
+  callee +0:17 new DependencyReach -> @DependencyReach.constructor
+  local +1:9 ties: string[] (const)
+  local +2:9 order: i32[] (const)
+  local +3:14 unit: ModuleUnit (const)
+  callee +5:8 isLibrary -> @isLibrary
+  callee +15:3 sortTogether -> @sortTogether
+  local +16:14 unit: ModuleUnit (const)
+  callee +17:26 isLibrary -> @isLibrary
+function dependencyMasks(reach: DependencyReach, index: FunctionIndex): void -> @dependencyMasks [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  pointer reach: size=24 writesThrough=false captured=false
+  pointer index: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -4:7 m: i32 (let)
+  local -2:11 p: i32 (const)
+function dependencyWitness(index: FunctionIndex, facts: FactsTable, reach: DependencyReach, p: i32, c: i32): WitnessHop[] -> @dependencyWitness [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: c
+  calls: nish_array_grow sortTogether witnessChain
+  pointer index: size=40 writesThrough=false captured=false passedTo=witnessChain#0
+  pointer facts: size=16 writesThrough=false captured=false passedTo=witnessChain#1
+  pointer reach: size=24 writesThrough=false captured=false
+  stackSites=3 stackLocals=3
+  local +0:9 paths: string[] (const)
+  local +1:9 ties: string[] (const)
+  local +2:9 order: i32[] (const)
+  local +3:7 m: i32 (let)
+  callee +12:3 sortTogether -> @sortTogether
+  local +13:14 at: i32 (const)
+  local +14:9 k: i32 (let)
+  local +17:15 chain: WitnessHop[] (const)
+  callee +17:23 witnessChain -> @witnessChain
 function writeCapabilityReport(compilation: Compilation, file: string, cpu: string): void -> @writeCapabilityReport [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
   escaping: cpu
   calls: Compilation.analyze Compilation.entry FactsTable.get FunctionSig.definedIn capabilityName dirname functionIndex isDeterministic isLibrary jsonQuote modulePath nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_write_file programCapabilities pushNames pushPanics sortTogether witnessChain
-  pointer compilation: size=128 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.entry#0 functionIndex#0 isLibrary#0 programCapabilities#0 modulePath#0 Compilation.entry#0
+  pointer compilation: size=144 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.entry#0 functionIndex#0 isLibrary#0 programCapabilities#0 modulePath#0 Compilation.entry#0
   stackSites=16 stackLocals=16
   local +0:9 facts: FactsTable (const)
   callee +0:17 Compilation.analyze -> @Compilation.analyze
@@ -276,7 +333,7 @@ function capabilitySummary(compilation: Compilation): string -> @capabilitySumma
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
   calls: Compilation.analyze capabilityNames isDeterministic nish_alloc_struct nish_str_concat programCapabilities
-  pointer compilation: size=128 writesThrough=true captured=false passedTo=programCapabilities#0 Compilation.analyze#0
+  pointer compilation: size=144 writesThrough=true captured=false passedTo=programCapabilities#0 Compilation.analyze#0
   stackSites=0 stackLocals=0
   local +0:9 program: i32 (const)
   callee +0:19 programCapabilities -> @programCapabilities

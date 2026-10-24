@@ -1,0 +1,1 @@
+`main` reaches `net`, which the capability policy does not grant (the root package's `deny`)

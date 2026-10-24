@@ -21927,6 +21927,24 @@ docs/cookbook/builtin-capabilities.ts:15:15: error: `main` reaches `fs.read`, wh
 `tests/run.js` compiles the snippet both ways and holds the block above to
 what the compiler prints and the granted IR to the ungranted one.
 
+A dependency is judged on the same report, against a grant only the root
+`package.json` writes (`docs/LANGUAGE.md` -> The capability policy -> A
+dependency's capabilities). `tests/link/caps_dep_net_refused` loads `pkg_http`,
+whose private `dial` reaches `net`, and grants it nothing; the error is in the
+dependency, at the first call of the witness chain, and names the grant that
+lets it compile, as the same program granted `net` does
+(`caps_dep_net_granted`).
+
+<!-- capabilities-refusal caps_dep_net_refused -->
+```text
+tests/link/caps_dep_net_refused/node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+  6 |   return netAddress(addr, "127.0.0.1", port) >= 0 && tcpConnect(addr) >= 0;
+    |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+`tests/run.js` compiles the program and holds the block above to what the
+compiler prints.
+
 ### Builtin modules (`nish:`)
 
 An import from `nish:fs` / `nish:process` / `nish:io` renames a builtin rather

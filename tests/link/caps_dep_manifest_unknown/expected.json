@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_dep_manifest_unknown/package.json","line":6,"column":38,"endLine":6,"endColumn":47,"severity":"error","code":"NL3033","message":"`network` is no capability: a policy names capabilities as `--emit-capabilities` reports them, one of clock, entropy, env, exit, ffi, fs.read, fs.write, net, process.spawn, signal, tty, unsafe"}

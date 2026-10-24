@@ -18587,6 +18587,26 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       ),
     shownRefusal === null ? "no capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(refusedRun)
   )
+  // WP40: the refused dependency the same section shows, from its link program.
+  const shownDependency = /<!-- capabilities-refusal caps_dep_net_refused -->\n```text\n([\s\S]*?)```\n/.exec(
+    cookbookText
+  )
+  const dependencyRun = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "caps_dep_net_refused", "main.ts"),
+      "-o",
+      path.join(capsDir, "dependency") + path.sep,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capability policy: the dependency refusal docs/IR_COOKBOOK.md shows is the one tests/link/caps_dep_net_refused prints",
+    shownDependency !== null &&
+      dependencyRun.status === 1 &&
+      dependencyRun.stderr.startsWith(shownDependency[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
+    shownDependency === null ? "no caps_dep_net_refused capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(dependencyRun)
+  )
   const grantedDir = path.join(capsDir, "granted") + path.sep
   const grantedRun = spawnSync(
     NISH,
@@ -24004,6 +24024,9 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       "export const sub = (a: i32): i32 => wrappingSub(a, 1);\n" +
       "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
       'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n',
+    // The root grants `pkg_fast` its `unsafe` (docs/wp40-dependency-capabilities.md).
+    "package.json":
+      '{ "name": "caps-unsafe", "private": true, "nish": { "capabilities": { "dependencies": { "pkg_fast": ["unsafe"] } } } }\n',
     "node_modules/pkg_fast/package.json":
       '{ "name": "pkg_fast", "version": "1.0.0", "exports": { ".": { "nish": "./src/index.ts" } } }\n',
     "node_modules/pkg_fast/src/index.ts":

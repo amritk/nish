@@ -1,0 +1,9 @@
+{
+  "name": "ffi-package-declare-root-clash",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": { "probe": ["ffi"], "probe2": ["ffi"] }
+    }
+  }
+}

@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_dep_manifest_ungated/package.json","line":6,"column":45,"endLine":6,"endColumn":54,"severity":"error","code":"NL3042","message":"`fs.read` is not a gated capability: a dependency is granted only `ffi`, `net`, `process.spawn` and `unsafe`, and reaches every other capability without a grant"}

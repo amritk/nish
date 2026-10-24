@@ -103,5 +103,9 @@ compile anyway, so a policy costs only the walk over the refused bits.
   refused here.
 - Directory scopes (`fs.read=<dir>`), refused as §2 says until WP37
   ([wp37-os-sandbox.md](wp37-os-sandbox.md#2-the-flags)).
-- Per-dependency policies, and argument-level checks such as a literal path.
+- Per-dependency policies: WP40's grants
+  ([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)), which
+  refuse a dependency's `unsafe`, `ffi`, `net` and `process.spawn` unless the
+  root package grants them.
+- Argument-level checks such as a literal path.
 - What C behind `ffi` does: that is `ffi`, and nothing finer.
