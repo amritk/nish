@@ -1,0 +1,1 @@
+reject_ffi_handle_ctor_this_lend.ts:14:10: error: A `File` cannot be used here

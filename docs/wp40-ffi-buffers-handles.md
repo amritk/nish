@@ -1338,16 +1338,20 @@ B1's bar is that `read` and `write` on a `u8[]` are callable with no shim.
 H1's bar is a class that owns an `fopen` handle and is closed by `using`, with
 use after close refused and one negative case per sibling. `ffi_handle_file`,
 the §6 cases and H1.3's are that bar, and it is met. H1.3's siblings are the
-loop's next iteration (`reject_ffi_handle_use_after_close_loop`), a later
-`case` (`_use_after_close_switch`, and `_use_after_close_switch_clause` for a
-`using` written straight into a clause), the `else` (`_use_after_close_else`),
-a constructor reached by `new` (`_use_after_close_ctor`), and the keeps: a
-module binding (`_use_after_close_keep_module`, `_keep_module_expr`), a field
-of another class (`_use_after_close_keep_field`, `_walk_ctor_param` for
-`new Keeper(f)`), `h.l = this` (`_use_after_close_keep_this`), a `Map` and a
-`Channel` (`_use_after_close_keep_map`, `_keep_channel`), and the shapes §6
-already pins (`_alias`, `_array`, `_closure_capture`, `_return`, `_scope_task`,
-`_type_argument`, `_walk_function_type`).
+loop's next iteration (`reject_ffi_handle_use_after_close_loop`), a `do` loop's
+condition and a `for` loop's update (`_use_after_close_do_while`,
+`_use_after_close_for_update`), a later `case` (`_use_after_close_switch`, and
+`_use_after_close_switch_clause` for a `using` written straight into a clause),
+the `else` (`_use_after_close_else`), a constructor reached by `new`
+(`_use_after_close_ctor`), and the keeps: a module binding
+(`_use_after_close_keep_module`, `_keep_module_expr`), a field of another class
+(`_use_after_close_keep_field`, `_walk_ctor_param` for `new Keeper(f)`), `h.l =
+this` (`_use_after_close_keep_this`), `this` leaving the handle class's own
+constructor, lent, called, stored or aliased
+(`reject_ffi_handle_ctor_this_lend`, `_receiver`, `_store`, `_alias`), a `Map`
+and a `Channel` (`_use_after_close_keep_map`, `_keep_channel`), and the shapes
+§6 already pins (`_alias`, `_array`, `_closure_capture`, `_return`,
+`_scope_task`, `_type_argument`, `_walk_function_type`).
 
 ## 10. Decisions
 
