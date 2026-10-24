@@ -2533,6 +2533,7 @@ const SPEED_LINK = new Map([
   // compile these, so the binary the link loop runs is the optimised one too.
   ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
   ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
+  ["crypto_bcrypt", "tests/wipes counts its wipes after -O2"],
   ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
   ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
   ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
