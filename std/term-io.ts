@@ -25,8 +25,8 @@
  * Ctrl-C as a key), mouse reports (1000, 1002 or 1003, in SGR form 1006, with
  * pixel coordinates 1016 when the terminal has them), bracketed paste (2004)
  * and focus reports (1004). Before each change reaches the terminal, the
- * runtime's restore string (`setTerminalRestore`) is set to undo everything in
- * reverse — cancel any half-written escape (CAN), end synchronized output,
+ * runtime's restore string (`setTerminalRestore`) is set to undo everything —
+ * cancel any half-written escape (CAN), end synchronized output,
  * delete the kitty image, pop the kitty keyboard flags, turn mouse, paste and
  * focus reports off, reset the style, show the cursor and leave the alternate
  * screen — so a panic or a signal leaves the terminal as it was.
@@ -334,6 +334,11 @@ export class Terminal {
     rateOptions.remoteHint = caps.remoteHint
     rateOptions.envFps = parseInt(termIoGetenv("NISH_TERM_FPS"))
     this.rate = new RateController(rateOptions)
+    // The probe carries `NISH_TERM_FPS` without reading it; the controller applies it, so say so here.
+    if (rateOptions.envFps > 0) {
+      const forced: string = `NISH_TERM_FPS=${termIoGetenv("NISH_TERM_FPS")}: ${this.rate.fixedFps} frames a second`
+      caps.overrides = caps.overrides === "" ? forced : `${caps.overrides}; ${forced}`
+    }
     this.held = held
     this.ackSent = new Array<f64>(TERM_IO_ACKS)
     this.ackSent.fill(0.0)
@@ -366,7 +371,7 @@ export class Terminal {
     this.kittyImage = false
   }
 
-  /** The bytes that undo everything turned on, in reverse: what `close` writes and the runtime writes on a panic or signal. */
+  /** The bytes that undo everything turned on: what `close` writes and the runtime writes on a panic or signal. */
   restoreString(): string {
     let s: string = "\x18\x1b[?2026l"
     if (this.kittyImage) {
@@ -425,7 +430,7 @@ export class Terminal {
   }
 
   /**
-   * Undo everything `openTerminal` did, in reverse, and leave raw mode. The
+   * Undo everything `openTerminal` did and leave raw mode. The
    * acknowledgements still in flight are read first, for twice the round trip
    * (the controller's or the last frame's, whichever is longer; 50 to
    * 500 ms), so the terminal's answers are not echoed after the program. A

@@ -1870,7 +1870,8 @@ if (!only || "term".includes(only)) {
 // under script(1): the guide's program (the `runTerminal` block of
 // docs/guide/using-nish/terminal.md) quits on `q` and on kitty's Ctrl-C and
 // refuses a pipe on either side; a panic mid-frame leaves the restore string
-// as the last bytes and the termios as it was; over a slow modelled link the
+// as the last bytes and the termios as it was, mouse and focus reports among
+// what it turns off when they are on; over a slow modelled link the
 // tier falls, no more than one frame is ever in flight, a key still reaches
 // `update` within a frame of the lowest rate, no terminal reply reaches
 // `update`, and a cell size answered late is learned; closing waits out the
@@ -1878,8 +1879,9 @@ if (!only || "term".includes(only)) {
 // state's watermark holds while an answer is in and lapses after a second
 // without one; a present loop of each backend draws with that backend and
 // keeps its memory while one that leaks 0.27 MB a frame does not; and
-// examples/term-probe.ts reports what it found. Linux only: the relay finds
-// the program through /proc.
+// examples/term-probe.ts reports what it found, from a silent terminal within
+// the probe's timeout, and what NO_COLOR and NISH_TERM_FPS forced. Linux only:
+// the relay finds the program through /proc.
 if (!only || "term".includes(only) || "term-io".includes(only)) {
   const ioDir = path.join(buildDir, "term-io")
   if (process.platform !== "linux" || !has("script")) {
@@ -1887,7 +1889,7 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
   } else {
     fs.rmSync(ioDir, { recursive: true, force: true })
     fs.mkdirSync(ioDir, { recursive: true })
-    const { relay } = await import("./term-io/relay.mjs")
+    const { relay, KITTY_REPLY } = await import("./term-io/relay.mjs")
     const guidePage = path.join(root, "docs", "guide", "using-nish", "terminal.md")
     const guideSrc = [...fs.readFileSync(guidePage, "utf8").matchAll(/```ts nish:ok\n([\s\S]*?)```/g)]
       .map((m) => m[1])
@@ -1937,9 +1939,18 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
       }
     }
     if (probeExe !== null) {
-      const r = await relay(probeExe, "", { dir: at("probe"), timeoutMs: 20000 })
-      const lines = r.out.split("\n")
-      const statsLines = lines.filter((l) => /^\ds frames \d+ tier \d+ backend kitty /.test(l))
+      // A terminal that answers nothing: the probe gives up after 250 ms and
+      // the first frame follows, with CI's slack; a missing timeout hangs.
+      const silent = await relay(probeExe, "", { dir: at("probe-silent"), reply: null, timeoutMs: 20000 })
+      const [r, noColor, fps, fpsCapped] = await Promise.all([
+        relay(probeExe, "", { dir: at("probe"), timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-no-color"), env: { NO_COLOR: "1" }, timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-fps"), env: { NISH_TERM_FPS: "20" }, timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-fps-capped"), env: { NISH_TERM_FPS: "500" }, timeoutMs: 20000 }),
+      ])
+      const stats = (run, backend = "\\w+") =>
+        run.out.split("\n").filter((l) => new RegExp(`^\\ds frames \\d+ tier \\d+ backend ${backend} `).test(l))
+      const statsLines = stats(r, "kitty")
       check(
         "term-io: examples/term-probe.ts prints the caps it found under kitty field by field and a stats line a second for 5 s",
         r.status === 0 &&
@@ -1950,6 +1961,42 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
           statsLines.length === 5,
         `${said(r)}\nstats lines ${JSON.stringify(statsLines)}`
       )
+      check(
+        "term-io: examples/term-probe.ts under a silent terminal reports answered false and 5 stats lines, its first frame within 1500 ms of the start",
+        silent.status === 0 &&
+          silent.sameStty &&
+          silent.out.includes("answered false\n") &&
+          stats(silent).length === 5 &&
+          silent.firstFrameMs >= 0 &&
+          silent.firstFrameMs < 1500,
+        `${said(silent)}\nfirst frame at ${Math.round(silent.firstFrameMs)} ms, stats lines ${JSON.stringify(stats(silent))}`
+      )
+      check(
+        "term-io: examples/term-probe.ts under NO_COLOR reports 16 colours and the override that forced them",
+        noColor.status === 0 &&
+          noColor.out.includes("colors 16\n") &&
+          /^overrides .*NO_COLOR: 16 colours/m.test(noColor.out) &&
+          stats(noColor).length === 5,
+        said(noColor)
+      )
+      const fpsLines = stats(fps)
+      check(
+        "term-io: examples/term-probe.ts under NISH_TERM_FPS=20 holds tier 20 throughout and reports the override",
+        fps.status === 0 &&
+          /^overrides .*NISH_TERM_FPS=20: 20 frames a second/m.test(fps.out) &&
+          fpsLines.length === 5 &&
+          fpsLines.every((l) => / tier 20 /.test(l)),
+        `${said(fps)}\nstats lines ${JSON.stringify(fpsLines)}`
+      )
+      const cappedLines = stats(fpsCapped)
+      check(
+        "term-io: examples/term-probe.ts under NISH_TERM_FPS=500 holds the 240 cap and reports it in the override",
+        fpsCapped.status === 0 &&
+          /^overrides .*NISH_TERM_FPS=500: 240 frames a second/m.test(fpsCapped.out) &&
+          cappedLines.length === 5 &&
+          cappedLines.every((l) => / tier 240 /.test(l)),
+        `${said(fpsCapped)}\nstats lines ${JSON.stringify(cappedLines)}`
+      )
     }
     if (loopExe !== null) {
       const panic = await relay(loopExe, "panic", { dir: at("panic") })
@@ -1957,7 +2004,7 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
         "\x18\x1b[?2026l\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b[<u\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l"
       const afterPanic = panic.out.slice(panic.out.lastIndexOf("<panic>") + "<panic>".length)
       check(
-        "term-io: a panic in the tenth render leaves the restore string as the last bytes, in reverse of turning on, and the termios as it was",
+        "term-io: a panic in the tenth render leaves the restore string as the last bytes and the termios as it was",
         panic.status === 1 &&
           panic.err.includes("index out of range: 10 >= 3") &&
           panic.out.includes("<panic>") &&
@@ -1965,6 +2012,25 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
           panic.sameStty,
         `${said(panic)}\nafter <panic>: ${JSON.stringify(afterPanic)}\nwant: ${JSON.stringify(restore)}`
       )
+      // With mouse and focus reports on, the restore string turns them off
+      // too: pixel mouse (1016) first, then SGR (1006) and the mode, before
+      // paste and focus. A terminal that answers the cell size only after the
+      // probe has 1016 turned on late, and the restore string must follow it.
+      const cellSize = "\x1b[6;20;10t\x1b[4;480;800t"
+      const mouseRestore =
+        "\x18\x1b[?2026l\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b[<u\x1b[?1016l\x1b[?1006l\x1b[?1003l\x1b[?2004l\x1b[?1004l\x1b[0m\x1b[?25h\x1b[?1049l"
+      for (const [when, options] of [
+        ["in the probe", {}],
+        ["after the probe", { reply: KITTY_REPLY.replace(cellSize, ""), keys: [{ afterFrames: 3, bytes: "\x1b[6;20;10t" }] }],
+      ]) {
+        const r = await relay(loopExe, "panic-mouse", { dir: at(`panic-mouse-${when.replaceAll(" ", "-")}`), ...options })
+        const after = r.out.slice(r.out.lastIndexOf("<panic>") + "<panic>".length)
+        check(
+          `term-io: a panic with mouse and focus reports on, the cell size answered ${when}, turns them off`,
+          r.status === 1 && r.out.includes("<panic>") && after === mouseRestore && r.sameStty,
+          `${said(r)}\nafter <panic>: ${JSON.stringify(after)}\nwant: ${JSON.stringify(mouseRestore)}`
+        )
+      }
 
       const throttle = await relay(loopExe, "throttle", {
         dir: at("throttle"),
@@ -2021,7 +2087,6 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
       // Answers the program did not wait for: the probe's, after its timeout,
       // and a second DA1 and cell size mid-run. None reaches `update`; a cell
       // size the probe missed is learned.
-      const { KITTY_REPLY } = await import("./term-io/relay.mjs")
       for (const [name, silent, extra] of [
         ["after the probe timed out", true, KITTY_REPLY],
         ["after DA1", false, "\x1b[?62;52;c\x1b[6;20;10t\x1bP>|kitty(0.49.2)\x1b\\\x1b[?2026;2$y"],
@@ -2779,6 +2844,7 @@ const SPEED_LINK = new Map([
   // compile these, so the binary the link loop runs is the optimised one too.
   ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
   ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
+  ["crypto_bcrypt", "tests/wipes counts its wipes after -O2"],
   ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
   ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
   ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
@@ -11073,6 +11139,58 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       "nish:secret: an inferred `Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is deleted",
       inferred.ok && inferredPlain.ok && volatileSet.test(inferred.text) && inferredPlainStores === 0,
       `inferred:\n${inferred.text}\n--- plain: ${inferredPlainStores} stores\n${inferredPlain.text}`
+    )
+  }
+}
+
+// `nish/crypto/bcrypt` against libxcrypt's `crypt_r` on random passwords (NULs,
+// 8-bit bytes and keys past 72 bytes among them) and salts at cost 4 to 6, both
+// ways: Nish makes crypt_r's `$2b$` hash, crypt_r accepts Nish's, and Nish
+// answers crypt_r's `$2a$`, `$2b$` and `$2y$` hashes and a wrong password as
+// crypt_r does (tests/differential/bcrypt.js). Without a C compiler or
+// libxcrypt it skips and says which.
+if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includes(only))) {
+  const r = spawnSync("node", [path.join(root, "tests", "differential", "bcrypt.js"), "--compiler", NISH], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const summary = r.stdout.trimEnd().split("\n").at(-1) ?? ""
+  if (r.status === 2) {
+    skip(summary.replace(/^SKIP {2}/, ""))
+  } else {
+    check(
+      "bcrypt differential: Nish and libxcrypt crypt_r agree on random passwords and salts, both ways",
+      r.status === 0,
+      r.status === 0 ? summary : `${r.stdout}${r.stderr}`,
+    )
+  }
+}
+
+// The bcrypt vectors of tests/link/crypto_bcrypt as a `--profile wasi` module
+// under Node's WASI: the module is pure, so it builds for wasm32 and answers
+// every vector there as natively.
+if (!only || ["crypto_bcrypt", "bcrypt", "wasi"].some((name) => name.includes(only))) {
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const dir = path.join(buildDir, "wasi_crypto_bcrypt")
+    const wasm = path.join(dir, "app.wasm")
+    const built = spawnSync(
+      NISH,
+      [path.join(linkDir, "crypto_bcrypt", "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, "crypto_bcrypt", "expected.out"), "utf8")
+    check(
+      `link/crypto_bcrypt: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: link/crypto_bcrypt: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the bcrypt vectors is not run`
     )
   }
 }
