@@ -53,6 +53,7 @@ function callsSqlite(ir: string): boolean -> @callsSqlite
   local +4:11 quote: i32 (const)
   local +5:11 stop: i32 (const)
   local +6:9 name: i32 (let)
+  local +8:13 rest: i32 (const)
 function anyCallsSqlite(modules: EmittedModule[]): boolean -> @anyCallsSqlite [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: callsSqlite

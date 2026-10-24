@@ -19721,10 +19721,10 @@ if (!only || "sqlite-link".includes(only)) {
       callsUnit,
       [
         "declare function sqlite3_libversion(): string;",
-        "declare function nish_throwaway_unit(): i32;",
+        "declare function throwaway_unit(): i32;",
         "",
         "export const main = (): i32 => {",
-        "  console.log(`${sqlite3_libversion()} ${nish_throwaway_unit()}`);",
+        "  console.log(`${sqlite3_libversion()} ${throwaway_unit()}`);",
         "  return 0;",
         "};",
         "",
@@ -19735,7 +19735,7 @@ if (!only || "sqlite-link".includes(only)) {
     const baseEntries = sqliteEntries()
     fs.writeFileSync(
       path.join(sqCopy, "runtime", "sqlite", "nish_throwaway.h"),
-      "int nish_throwaway_unit(void);\n"
+      "int throwaway_unit(void);\n"
     )
     const withHeader = linkSqCopy("copy-header")
     const headerC = compiledC()
@@ -19751,7 +19751,7 @@ if (!only || "sqlite-link".includes(only)) {
     )
     fs.writeFileSync(
       path.join(sqCopy, "runtime", "sqlite", "nish_throwaway.c"),
-      '#include "nish_throwaway.h"\n\nint nish_throwaway_unit(void) { return 7; }\n'
+      '#include "nish_throwaway.h"\n\nint throwaway_unit(void) { return 7; }\n'
     )
     const withUnit = linkSqCopy("copy-unit", callsUnit)
     const unitC = compiledC()

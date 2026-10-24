@@ -138,7 +138,11 @@ const callsSqlite = (ir: string): boolean => {
     const stop = quote >= 0 ? quote : line.length
     let name = line.indexOf("@")
     while (name >= 0 && name < stop) {
-      if (line.slice(name, name + 9) === "@sqlite3_" || line.slice(name, name + 13) === "@nish_sqlite_") {
+      const rest = line.length - name
+      if (
+        (rest >= 9 && line.slice(name, name + 9) === "@sqlite3_") ||
+        (rest >= 13 && line.slice(name, name + 13) === "@nish_sqlite_")
+      ) {
         return true
       }
       name = line.indexOf("@", name + 1)
