@@ -49,11 +49,18 @@ Each capability `main` does not reach is withheld:
 | `process.spawn` | starting a program or forking a process (threads are fine), and executing a file |
 | `net` | creating, connecting, binding and accepting sockets |
 
-A few things are refused whatever `main` reaches: attaching to or writing
-into another process (`ptrace`, `process_vm_writev`), and io_uring unless the
+Reaching `process.spawn` grants back executing, reading and device `ioctl`s
+on every file beneath `/`, since a child has to load its program and
+libraries. So a program that reaches `process.spawn` can read any file the
+user can, even when its `main` does not reach `fs.read`.
+
+A few things are refused whatever `main` reaches: attaching to, reading or
+writing another process (`ptrace`, `process_vm_readv`, `process_vm_writev`)
+and taking its descriptors (`pidfd_getfd`), x32 system calls and system calls
+of another architecture (a 32-bit `int 0x80`), and io_uring unless the
 program reaches both `net` and `process.spawn`. The other capabilities —
-`clock`, `entropy`, `env`, `exit`, `signal`, `ffi`, `unsafe` — withhold
-nothing.
+`clock`, `entropy`, `env`, `exit`, `signal`, `tty`, `ffi`, `unsafe` —
+withhold nothing.
 
 A refused file operation fails with an error your program sees, as a missing
 permission would. A refused process or socket call **ends the program** with
@@ -88,7 +95,9 @@ the signal and abstract socket scopes, so they are not confined`.
 
 A program built with `--sandbox` also refuses to run, with status 126, if its
 C library skipped the step that applies the sandbox (musl does), or if its
-`.ll` is linked on a platform other than Linux.
+`.ll` is linked on a platform other than Linux. On such a C library every
+constructor, in your program and the libraries it links, has already run
+unconfined by the time it refuses.
 
 ## Where it does not apply
 
@@ -96,5 +105,6 @@ C library skipped the step that applies the sandbox (musl does), or if its
   flag (NL3044).
 - **WebAssembly** targets accept it and add nothing: the host already decides
   what a module may import.
-- `--emit-ast`, `--emit-checked`, `--fix` and `--emit-napi` refuse it, and so
-  does a program with no `main`: there is nothing to confine.
+- `--emit-ast`, `--emit-checked`, `--emit-ts`, `--fix`, `--emit-napi` and
+  `--emit-napi-async` refuse it, and so does a program with no `main`: there
+  is nothing to confine.

@@ -262,10 +262,12 @@ the sandbox's entry is first, and §8 pins that.
 **What `nish_sandbox` does**, in this order, before any constructor:
 
 1. Prime what confinement would break: the pool's hardware ceiling, which
-   reads files (§4, `--threads`). This step reads no environment variable:
-   on dynamic glibc `getenv` answers `NULL` from a `.preinit_array` entry,
-   because libc has not yet set `environ` (measured on glibc 2.39, where a
-   static link answered).
+   reads files (§4, `--threads`). This step reaches one environment
+   variable, `NISH_NUM_THREADS`, through `nish_cpu_online`'s `getenv`
+   (`runtime/runtime-os.c`), which can only lower the ceiling and confines
+   nothing. On dynamic glibc that `getenv` answers `NULL` from a
+   `.preinit_array` entry, because libc has not yet set `environ` (measured
+   on glibc 2.39, where a static link answered).
 2. `prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)`. Both Landlock and seccomp need it
    for an unprivileged process, and after it no `execve` gains a capability
    or an identity: the kernel caps a new program's permitted set at the
@@ -491,7 +493,8 @@ older than Landlock; a kernel with no seccomp filter at all, or older than
 
 **No environment variable or runtime knob weakens the sandbox.** The mode is
 a constant in the IR; `nish_sandbox` reads no environment variable, file or
-argument that can widen it. `nish_cpu_count` reads `NISH_NUM_THREADS`
+argument that can widen it (step 1's `NISH_NUM_THREADS` only lowers the
+pool's ceiling). `nish_cpu_count` reads `NISH_NUM_THREADS`
 (`runtime/runtime-parallel.c:157`) after the sandbox applies (§4), and the
 variable only lowers the pool's size. The only way to a weaker sandbox is to rebuild with a
 different flag, which changes the binary and its run-cache key. Testing the

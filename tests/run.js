@@ -8564,48 +8564,101 @@ if (!only || "sandbox".includes(only)) {
     const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], {
       cwd: root,
     })
+    if (a.status !== 0) check("sandbox: the Landlock ABI probe compiles", false, shown(a))
     const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
 
-    // The filter kills each of these in every mode, whatever main reaches.
-    const kills = [
-      ["fork", "fork from ffi without process.spawn dies of SIGSYS"],
-      ["execve", "execve from ffi without process.spawn dies of SIGSYS"],
-      ["socket", "socket from ffi without net dies of SIGSYS"],
-      ["io_uring_setup", "io_uring_setup from ffi without net dies of SIGSYS"],
-      ["process_vm_writev", "process_vm_writev into the parent dies of SIGSYS"],
-      ["ptrace", "ptrace(PTRACE_ATTACH) on the parent dies of SIGSYS"],
+    // The filter kills each of these in every mode when main does not reach
+    // what they need. The calls into another process aim at a `sleep` started
+    // here, so a filter that let one through would reach it, not this runner.
+    const sleeper = spawn("sleep", ["600"], { stdio: "ignore" })
+    const victim = String(sleeper.pid)
+    const withheld = [
+      ["fork", [], "fork from ffi without process.spawn dies of SIGSYS"],
+      ["execve", [], "execve from ffi without process.spawn dies of SIGSYS"],
+      ["execveat", [], "execveat from ffi without process.spawn dies of SIGSYS"],
+      ["socket", [], "socket from ffi without net dies of SIGSYS"],
+      ["connect", [], "connect from ffi without net dies of SIGSYS"],
+      ["socketpair", [], "socketpair from ffi without net dies of SIGSYS"],
+      ["accept4", [], "accept4 from ffi without net dies of SIGSYS"],
+      ["io_uring_setup", [], "io_uring_setup from ffi without net dies of SIGSYS"],
+      ["thread-socket", [], "socket from a second thread without net dies of SIGSYS"],
     ]
+    // These are killed whatever main reaches, so they also run against a
+    // program that holds fs.read, fs.write and process.spawn.
+    const always = [
+      ["process_vm_writev", [victim], "process_vm_writev into another process dies of SIGSYS"],
+      ["process_vm_readv", [victim], "process_vm_readv from another process dies of SIGSYS"],
+      ["ptrace", [victim], "ptrace(PTRACE_ATTACH) on another process dies of SIGSYS"],
+      ["pidfd_getfd", [], "pidfd_getfd dies of SIGSYS"],
+    ]
+    const plain = build("none-plain", "none", [])
     if (process.arch === "x64") {
-      kills.push(["x32-socket", "an x32 socket from ffi dies of SIGSYS"])
+      withheld.push(
+        ["raw-fork", [], "the raw fork system call without process.spawn dies of SIGSYS"],
+        ["raw-vfork", [], "the raw vfork system call without process.spawn dies of SIGSYS"]
+      )
+      always.push(["x32-socket", [], "an x32 socket from ffi dies of SIGSYS"])
+      // The arch row: a 32-bit entry reports AUDIT_ARCH_I386 and is killed
+      // before any number is read. A kernel without IA32 emulation cannot make
+      // the call at all, which the unconfined run shows.
+      const i386 = run(plain, ["i386"])
+      if (i386 !== null && i386.status === 0 && i386.stdout === "i386: start\ni386: ok\n") {
+        always.push(["i386", [], "a 32-bit system call from a 64-bit program dies of SIGSYS"])
+      } else {
+        skip(`sandbox: this kernel runs no 32-bit system call; the arch check did not run (${said(i386).trim()})`)
+      }
     } else {
-      skip("sandbox: x32 is an x86-64 ABI; the bit-30 check did not run")
+      skip("sandbox: x32, raw fork and the 32-bit entry are x86-64's; those checks did not run")
     }
     for (const [mode, flag] of [
       ["strict", "--sandbox"],
       ["best-effort", "--sandbox=best-effort"],
     ]) {
       const none = build(`none-${mode}`, "none", [flag])
-      for (const [op, why] of kills) {
-        const r = run(none, [op])
-        check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === `${op}: start\n`, said(r))
+      const every = build(`every-${mode}`, "every", [flag])
+      for (const [exe, holds, rows] of [
+        [none, "", [...withheld, ...always]],
+        [every, ", holding fs and process.spawn", always],
+      ]) {
+        for (const [op, args, why] of rows) {
+          const r = run(exe, [op, ...args])
+          check(`sandbox: ${why} (${mode}${holds})`, killed(r) && r.stdout === `${op}: start\n`, said(r))
+        }
       }
     }
+    sleeper.kill("SIGKILL")
 
     // The control: the same program without the flag forks, so the kill above
     // is the sandbox's and not the probe's.
-    const plain = build("none-plain", "none", [])
     const forked = run(plain, ["fork"])
     check(
       "sandbox: without --sandbox the same probe forks (the control)",
       forked !== null && forked.status === 0 && forked.stdout === "fork: start\nfork: ok\n",
       said(forked)
     )
-    const spawn = build("spawn-strict", "spawn", ["--sandbox"])
-    const child = run(spawn, ["fork"])
+    const spawner = build("spawn-strict", "spawn", ["--sandbox"])
+    const child = run(spawner, ["fork"])
     check(
       "sandbox: a process.spawn-granted program runs a child",
       child !== null && child.status === 0 && child.stdout === "fork: start\nfork: ok\n",
       said(child)
+    )
+
+    // clone3's flags are out of the filter's sight, so without process.spawn
+    // it answers ENOSYS and the C library falls back to clone, which it reads.
+    const clone3 = run(built.get("none-strict"), ["clone3"])
+    const clone3Plain = run(plain, ["clone3"])
+    const clone3Spawn = run(spawner, ["clone3"])
+    check(
+      "sandbox: clone3 without process.spawn answers ENOSYS, and with it reaches the kernel",
+      clone3 !== null &&
+        clone3.stdout === "clone3: ENOSYS\n" &&
+        clone3Plain !== null &&
+        clone3Plain.status === 0 &&
+        clone3Plain.stdout !== "clone3: ENOSYS\n" &&
+        clone3Spawn !== null &&
+        clone3Spawn.stdout === clone3Plain.stdout,
+      `${said(clone3)}\n--- without --sandbox\n${said(clone3Plain)}\n--- with process.spawn\n${said(clone3Spawn)}`
     )
 
     // seccomp answers EPERM to the metadata calls Landlock does not decide, so
@@ -8626,8 +8679,22 @@ if (!only || "sandbox".includes(only)) {
         after.mtimeMs === before.mtimeMs,
       said(meta)
     )
+    // The control: unconfined, the same probe changes the mode and the times.
+    // The extended attribute is left to the filesystem, which may not keep one.
+    const metaPlain = run(plain, ["meta", target])
+    check(
+      "sandbox: without --sandbox the same probe chmods and touches the file (the control)",
+      metaPlain !== null &&
+        metaPlain.status === 0 &&
+        metaPlain.stdout.startsWith("chmod: ok\nutimensat: ok\nsetxattr: ") &&
+        !metaPlain.stdout.includes("EPERM") &&
+        fs.statSync(target).mtimeMs !== before.mtimeMs,
+      said(metaPlain)
+    )
 
-    if (abi < 1) {
+    if (a.status !== 0) {
+      skip("sandbox: the Landlock ABI probe did not build; the fs checks did not run")
+    } else if (abi < 1) {
       skip(`sandbox: this kernel has no Landlock (ABI ${abi}); the fs checks did not run`)
     } else {
       const none = built.get("none-strict")
@@ -8677,7 +8744,8 @@ if (!only || "sandbox".includes(only)) {
       }
 
       // The child inherits the Landlock domain, so the redirect it opens is
-      // refused there and nothing is created.
+      // refused there, nothing is created, and spawnSyncTo answers -1, as for a
+      // child that could not be started.
       const spawnto = build("spawnto", "spawnto", ["--sandbox"], {
         driver: null,
       })
@@ -8685,7 +8753,7 @@ if (!only || "sandbox".includes(only)) {
       const to = run(spawnto, ["true", redirect])
       check(
         "sandbox: a spawn redirect without fs.write fails in the child",
-        to !== null && to.status === 0 && to.stdout !== "status 0\n" && !fs.existsSync(redirect),
+        to !== null && to.status === 0 && to.stdout === "status -1\n" && !fs.existsSync(redirect),
         said(to)
       )
 
@@ -8749,6 +8817,13 @@ if (!only || "sandbox".includes(only)) {
             lenient.stderr === warning &&
             lenient.stdout === (sim === 0 ? "open: ok\n" : "open: EACCES\n"),
           said(lenient)
+        )
+        // Whatever Landlock lacks, the seccomp filter is still loaded.
+        const still = run(built.get(`none-be-abi${sim}`), ["socket"])
+        check(
+          `sandbox: best-effort still loads the seccomp filter (ABI ${sim})`,
+          killed(still) && still.stdout === "socket: start\n",
+          said(still)
         )
       }
       const writeAbi2 = run(
@@ -8822,10 +8897,10 @@ if (!only || "sandbox".includes(only)) {
 
     // The pool under the sandbox: the CPU count is primed before the filter
     // refuses the cgroup read, and NISH_NUM_THREADS still lowers it.
-    const threadsBuild = (name, flags) => {
+    const threadsBuild = (name, flags, fixture = "threads") => {
       const out = path.join(dir, name) + path.sep
       const exe = path.join(dir, `${name}-app`)
-      const c = spawnSync(NISH, [path.join(fixtures, "threads.ts"), "--threads", ...flags, "-o", out], {
+      const c = spawnSync(NISH, [path.join(fixtures, `${fixture}.ts`), "--threads", ...flags, "-o", out], {
         cwd: root,
         encoding: "utf8",
       })
@@ -8848,7 +8923,7 @@ if (!only || "sandbox".includes(only)) {
             )
           : c
       if (l.status !== 0)
-        check(`sandbox: threads.ts ${flags.join(" ")} --threads compiles and links`, false, shown(l))
+        check(`sandbox: ${fixture}.ts ${flags.join(" ")} --threads compiles and links`, false, shown(l))
       return l.status === 0 ? exe : null
     }
     const tSandbox = threadsBuild("threads-sandbox", ["--sandbox"])
@@ -8870,6 +8945,44 @@ if (!only || "sandbox".includes(only)) {
         `${said(s)}\n--- without --sandbox\n${said(p)}`
       )
     }
+    // The primed count, read where it matters: pool.ts does not reach fs.read,
+    // so once confined it cannot read the cgroup quota, and only the count
+    // primed before confinement keeps its pool to the quota. A tmpfs over
+    // /sys/fs/cgroup in a private mount namespace sets one at the root, as
+    // runtime-parallel's quota check does; `tasks` counts the threads, the
+    // pool's workers and main, without a file.
+    const cpus = os.availableParallelism()
+    const userCgroup = has("unshare")
+      ? spawnSync("unshare", ["-rm", "sh", "-c", "mount -t tmpfs none /sys/fs/cgroup"], { encoding: "utf8" })
+      : null
+    if (cpus < 3 || userCgroup === null || userCgroup.status !== 0) {
+      skip(
+        `sandbox: ${cpus < 3 ? `${cpus} CPUs leave no quota below the count` : "no mount namespace with a cgroup tmpfs"}; the primed CPU count was not checked`
+      )
+    } else {
+      const ceiling = cpus - 1
+      const underQuota = (exe) =>
+        exe === null
+          ? null
+          : spawnSync(
+              "unshare",
+              [
+                "-rm",
+                "sh",
+                "-c",
+                `set -e\nmount -t tmpfs none /sys/fs/cgroup\nprintf '%s\\n' '${ceiling * 100000} 100000' > /sys/fs/cgroup/cpu.max\nexec '${exe}' tasks`,
+              ],
+              { cwd: W, encoding: "utf8", timeout: 60000, env: envWithThreads(null) }
+            )
+      const tasks = (r) => (r === null ? null : (/^tasks: (\d+)$/m.exec(r.stdout) ?? [])[1])
+      const quotaSandbox = underQuota(threadsBuild("pool-sandbox", ["--sandbox"], "pool"))
+      const quotaPlain = underQuota(threadsBuild("pool-plain", [], "pool"))
+      check(
+        `sandbox: a pool without fs.read keeps to a cgroup quota of ${ceiling} CPUs, primed before confinement`,
+        tasks(quotaSandbox) === String(ceiling) && tasks(quotaPlain) === String(ceiling),
+        `${said(quotaSandbox)}\n--- without --sandbox\n${said(quotaPlain)}`
+      )
+    }
 
     // `nish run --sandbox` builds and runs the confined program.
     const viaRun = spawnSync(NISH, ["run", "--sandbox", path.join(fixtures, "status.ts")], {
@@ -8881,6 +8994,23 @@ if (!only || "sandbox".includes(only)) {
       "sandbox: nish run --sandbox runs the program, and the child it starts, with no_new_privs and a seccomp filter",
       viaRun.status === 0 && /NoNewPrivs:\s+1/.test(viaRun.stdout) && /Seccomp:\s+2/.test(viaRun.stdout),
       shown(viaRun)
+    )
+    // The control: without the flag the program and its child hold what this
+    // runner holds, which on a runner with neither is no_new_privs off and no
+    // filter, so the lines above are the sandbox's.
+    const runnerStatus = fs.readFileSync("/proc/self/status", "utf8")
+    const runnerLine = (key) => (new RegExp(`^${key}:\\s+(\\d+)`, "m").exec(runnerStatus) ?? [])[1]
+    const runPlain = spawnSync(NISH, ["run", path.join(fixtures, "status.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 120000,
+    })
+    check(
+      "sandbox: nish run without --sandbox leaves no_new_privs and the filter as the runner has them (the control)",
+      runPlain.status === 0 &&
+        runPlain.stdout.includes(`NoNewPrivs:\t${runnerLine("NoNewPrivs")}\n`) &&
+        runPlain.stdout.includes(`Seccomp:\t${runnerLine("Seccomp")}\n`),
+      shown(runPlain)
     )
   }
 
@@ -22773,6 +22903,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-cross.c",
       // And the ninth: stdin and the terminal of `nish:term`.
       "runtime/runtime-term.c",
+      // And the tenth: the confinement `--sandbox` applies before `main`, which
+      // build.sh pairs with runtime.c on every native link.
+      "runtime/runtime-sandbox.c",
       // The vendored SQLite, which build.sh compiles for a program that calls
       // it, and the notice that names its dedication to the public domain.
       // Read from the directory, so a unit added there is held to shipping too.

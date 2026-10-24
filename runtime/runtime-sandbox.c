@@ -39,7 +39,9 @@
  * both modes. Best-effort differs only where the kernel lacks a feature: no
  * Landlock, or a Landlock too old to withhold a right; it then says what it
  * could not withhold, once, and runs. No environment variable, file or
- * argument is read that could widen any of it. The one knob,
+ * argument is read that could widen any of it: step 1 reaches
+ * `getenv("NISH_NUM_THREADS")` through `nish_cpu_online`, which can only
+ * lower the pool's ceiling, and confines nothing. The one knob,
  * `-DNISH_SANDBOX_SIMULATE_ABI=<n>`, makes the ABI probe answer `n` in a
  * test-only build of this file; scripts/build.sh never passes it.
  *
@@ -386,8 +388,14 @@ static void nish_sb_seccomp(int32_t caps) {
   }
   prog[at++] = (struct sock_filter)BPF_STMT(BPF_RET | BPF_K, SECCOMP_RET_ALLOW);
   struct sock_fprog fprog = {(unsigned short)at, prog};
-  if (syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, &fprog) != 0)
-    nish_sb_fail("cannot load the seccomp filter");
+  /* Under TSYNC a thread that cannot take the filter is answered with its id,
+   * not -1, and errno says nothing, so that failure names no errno. */
+  long loaded = syscall(SYS_seccomp, SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_TSYNC, &fprog);
+  if (loaded > 0) {
+    nish_sb_say("cannot load the seccomp filter: a thread could not take it", 0, 0);
+    _exit(126);
+  }
+  if (loaded != 0) nish_sb_fail("cannot load the seccomp filter");
 }
 
 void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs) {

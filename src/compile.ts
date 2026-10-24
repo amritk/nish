@@ -752,17 +752,25 @@ export const main = (): number => {
     } else if (value === "--sandbox" || value.startsWith("--sandbox=")) {
       // WP37 §2: a mode the note does not name is refused rather than read
       // as strict, so a misspelt `best-effort` never builds the wrong binary.
+      let mode = 0
       if (value === "--sandbox") {
-        opts.sandbox = 1
+        mode = 1
       } else if (value === "--sandbox=best-effort") {
-        opts.sandbox = 2
+        mode = 2
       } else {
         console.error(
           `compile: unknown sandbox mode \`${value.slice(10)}\`; write \`--sandbox\` or \`--sandbox=best-effort\``
         )
         return 2
       }
-      irFlag = irFlag.length === 0 ? "--sandbox" : irFlag
+      // Two modes on one line are refused rather than the last winning, since
+      // either reading builds a binary the other did not ask for.
+      if (opts.sandbox !== 0 && opts.sandbox !== mode) {
+        console.error("compile: `--sandbox` and `--sandbox=best-effort` cannot both be given; write one")
+        return 2
+      }
+      opts.sandbox = mode
+      irFlag = irFlag.length === 0 ? value : irFlag
     } else if (value.startsWith("-")) {
       console.error(`compile: unknown flag \`${value}\`; ${helpHint()}`)
       return 2

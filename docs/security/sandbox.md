@@ -14,7 +14,10 @@ functions rather than lines, so it has no `file:line` anchors to move.
 | --- | --- |
 | `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_seccomp` and its syscall tables; the non-Linux stubs |
 | `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, and the call of `@nish_sandbox_check` first in `@main` |
-| `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-ast`, `--emit-checked`, `--fix`, an entry with no `main` |
+| `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3044), `--emit-napi`, `--emit-napi-async`, `--emit-ts`, `--emit-ast`, `--emit-checked`, `--fix`, two modes at once, an entry with no `main` |
+| `runtime/runtime-parallel.c` | `nish_cpu_prime` and the ceiling `nish_cpu_count` clamps to, step 1 |
+| `runtime/nish.h` | the declarations of `nish_sandbox`, `nish_sandbox_check` and `nish_cpu_prime` |
+| `scripts/build.sh` | the refusal of `--sandbox` IR under the wasm and wasi profiles |
 
 Out of scope, for stage 2: the `fs.read=<dir>` and `fs.write=<dir>` scopes
 (still refused beside `--sandbox`, word for word), widening `ffi` (open
@@ -79,8 +82,9 @@ first as well, and the program then refuses to run (§3, §7).
 - io_uring, when both `net` and `process.spawn` are granted;
 - the same-uid routes no row kills: SysV shared memory and message queues
   (`shmget`, `shmat`, `msgget`) shared with an unconfined process of the
-  same user, `perf_event_open` within what `perf_event_paranoid` allows, and
-  `kcmp`'s comparison of another process's descriptors;
+  same user, `perf_event_open` within what `perf_event_paranoid` allows,
+  `kcmp`'s comparison of another process's descriptors, and
+  `process_madvise` (440) on a same-uid process it holds a pidfd to;
 - signals to its own uid (until ABI 6), the clock, entropy and the
   environment;
 - under best-effort without Landlock, every file the user can reach,
@@ -99,8 +103,11 @@ one of these:
   `open_by_handle_at` walks past path rules, but it needs
   `CAP_DAC_READ_SEARCH`, which step 3 drops.
 - **Processes:** the `process.spawn` row, `clone3`'s `ENOSYS` and the
-  io_uring kill. A module that loads one (`finit_module`) and `bpf` are
-  refused `EPERM` after step 3.
+  io_uring kill. A module that loads one (`finit_module`) is refused `EPERM`
+  after step 3. `bpf` is refused `EPERM` where
+  `kernel.unprivileged_bpf_disabled` is 1 or 2, the default of most
+  distributions; where it is 0, an unprivileged process may still load a
+  socket filter, which reaches no capability the mask withholds.
 - **The network:** the `net` row, the io_uring kill and the x32 kill.
 - **Another process:** the always-on `ptrace`, `process_vm_*` and
   `pidfd_getfd` kills.

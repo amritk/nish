@@ -1,6 +1,5 @@
 // A `--sandbox` program granted everything it does: tests/run.js runs `<exe>
-// <dir>` with and without `--sandbox`, with and without `--threads`, and holds
-// the four to one stdout.
+// <dir>` with and without `--sandbox` and holds the two to one stdout.
 export const main = (): number => {
   const file = `${process.argv[1]}/granted.txt`
   writeFileSync(file, "written and read back")

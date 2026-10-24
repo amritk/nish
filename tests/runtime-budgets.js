@@ -259,6 +259,8 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * `availableParallelism` calls in every build, and `nish_cpu_count` here keeps only its
  * cache and the call. The ceiling comes down with it, to the next 256-byte boundary
  * above the measurement, so the room the move freed is not left for something else.
+ * WP37's `nish_cpu_prime` and the ceiling `nish_cpu_count` clamps to took it to
+ * **2,558 bytes** on 2026-10-24, 2 under the ceiling.
  *
  * WP37's `nish_cpu_prime` measured **2,558 bytes** on 2026-10-24 with clang 18.1.3 on
  * linux-x64, 39 more than the 2,519 the file measured before it: the call `--sandbox`
@@ -470,7 +472,7 @@ const RUNTIME_BYTES_TEXT_BUDGET = 1536
  * `nish_sandbox_check`, which its `main` calls first, with the capability drop, the
  * Landlock ruleset and the seccomp filter they build.
  *
- * Measured **2,253 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64. An eleventh
+ * Measured **2,264 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64. An eleventh
  * translation unit rather than more of `runtime-os.c`, so a program built without
  * `--sandbox` links none of it: the linker drops the object nothing references. The
  * budget is the next 256-byte boundary above the measurement, as every ceiling here was

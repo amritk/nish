@@ -1,6 +1,6 @@
 // A `--sandbox` probe whose main reaches ffi alone: tests/run.js
-// links it with probe.c and runs `<exe> <op> [path]`. The guarded call is never
-// made; it is there so that main's capability set holds what it names.
+// links it with probe.c and runs `<exe> <op> [path]`. main reaches no other
+// capability, so the probe runs with every one withheld.
 declare function sb_probe(op: string, path: string): i32;
 
 export const main = (): number => {
