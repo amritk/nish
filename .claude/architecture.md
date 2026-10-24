@@ -78,7 +78,7 @@ Compilation                                                            src/compi
   raising an existing one**, as `runtime-parallel.c` and `runtime-host.c` were.
   `runtime/sqlite/` is outside this: it is SQLite's vendored amalgamation, never
   edited, and `scripts/build.sh` compiles it only for a link whose IR declares
-  an `sqlite3_*` or `nish_sqlite_*` function, so it has no ceiling
+  an `sqlite3_*` or `nishsqlite_*` function, so it has no ceiling
   (`runtime/sqlite/README.md`).
 - **A link line names the runtime through `scripts/build.sh`.** It compiles
   the other units beside any `runtime.c` it is handed, which is what keeps

@@ -70,7 +70,7 @@
 # stops with SIGILL on a CPU without AVX2. `nish --link --cpu x86-64-v3`
 # passes it through.
 #
-# SQLite: an input .ll that declares an `sqlite3_*` or `nish_sqlite_*` function
+# SQLite: an input .ll that declares an `sqlite3_*` or `nishsqlite_*` function
 # also compiles and links every runtime/sqlite/*.c, the vendored amalgamation
 # (runtime/sqlite/README.md). Any other program compiles none of it. sqlite3.c
 # is compiled to native code at the profile's level, even where the profile
@@ -224,7 +224,7 @@ done
 
 # SQLite (runtime/sqlite/) is an optional unit, and the IR selects it. A module
 # that declares a function of SQLite's C API (`sqlite3_*`) or of the adapter
-# beside it (`nish_sqlite_*`) gets every runtime/sqlite/*.c compiled and
+# beside it (`nishsqlite_*`) gets every runtime/sqlite/*.c compiled and
 # linked. Any other program compiles none of it, so its link line and binary
 # stay as they were. The test reads `declare` lines, and only before the first
 # `"` on one, rather than any `@sqlite3_` in the file, because a string
@@ -244,12 +244,12 @@ if [ -n "$sqlite_to" ]; then
 fi
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
-    *.ll) if grep -Eq '^declare [^"]*@(sqlite3|nish_sqlite)_' "$i"; then sqlite_wanted=1; fi ;;
+    *.ll) if grep -Eq '^declare [^"]*@(sqlite3|nishsqlite)_' "$i"; then sqlite_wanted=1; fi ;;
   esac
 done
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
-    *.c) if [ "$(cd "$(dirname -- "$i")" && pwd -P)" = "$sqlite_dir" ]; then sqlite_wanted=0; break; fi ;;
+    *.c) if [ -n "$sqlite_dir" ] && [ "$(cd "$(dirname -- "$i")" && pwd -P)" = "$sqlite_dir" ]; then sqlite_wanted=0; break; fi ;;
   esac
 done
 if [ "$sqlite_wanted" = 1 ] && [ -z "$sqlite_dir" ]; then

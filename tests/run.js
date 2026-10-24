@@ -19553,7 +19553,7 @@ if (!only || "runtime-cache".includes(only)) {
 
 // ---- SQLite: the vendored amalgamation, linked when the IR calls it --------------------
 // scripts/build.sh compiles runtime/sqlite/*.c for a link whose IR declares an
-// `sqlite3_*` or `nish_sqlite_*` function, and `--link` and `nish run` cache
+// `sqlite3_*` or `nishsqlite_*` function, and `--link` and `nish run` cache
 // those objects in an entry of their own beside the runtime's (src/compile.ts
 // `cachedRuntime`). The `CC` wrapper logs every `.c` the compiler is handed, so
 // "compiled" and "reused" are read off what reached it.
@@ -19929,6 +19929,37 @@ if (!only || "sqlite-link".includes(only)) {
         sqliteEntries().length === baseEntries.length + 2,
       `${withUnit.stderr}${reused.stderr}compiled: ${unitC.join(", ")}, then ${reusedC.join(", ")}; new entries: ${unitEntries.join(", ")}` +
         (unitEntry.length > 0 ? ` / ${fs.readdirSync(unitEntry).join(", ")}` : "")
+    )
+
+    // The second prefix alone triggers the link: the program declares only an
+    // adapter-style `nishsqlite_` function, defined in a unit added to the
+    // copy's runtime/sqlite/, which answers SQLite's version number.
+    fs.writeFileSync(
+      path.join(sqCopy, "runtime", "sqlite", "nishsqlite_probe.c"),
+      '#include "sqlite3.h"\n\nint nishsqlite_probe(void) { return sqlite3_libversion_number(); }\n'
+    )
+    const callsAdapter = path.join(sqDir, "calls-adapter.ts")
+    fs.writeFileSync(
+      callsAdapter,
+      [
+        "declare function nishsqlite_probe(): i32;",
+        "",
+        "export const main = (): i32 => {",
+        "  console.log(`${nishsqlite_probe()}`);",
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const adapterLink = linkSqCopy("copy-adapter", callsAdapter)
+    const adapterC = compiledC()
+    check(
+      "sqlite-link: a module whose only SQLite declaration is a `nishsqlite_` function links runtime/sqlite/ in",
+      adapterLink.status === 0 &&
+        runOut("copy-adapter").stdout === "3054001\n" &&
+        adapterC.includes("nishsqlite_probe.c") &&
+        adapterC.includes("sqlite3.c"),
+      `${adapterLink.stderr}compiled: ${adapterC.join(", ")}`
     )
 
     // A Node addon links SQLite too, and keeps its API to itself: a Node that

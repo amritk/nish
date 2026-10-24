@@ -122,9 +122,9 @@ export const sqliteUnits = (root: string): string[] => {
 
 /**
  * Whether a module declares a function of SQLite's (`sqlite3_`) or of its
- * adapter's (`nish_sqlite_`), so a link asks the cache for those objects
+ * adapter's (`nishsqlite_`), so a link asks the cache for those objects
  * exactly when `scripts/build.sh` would link them. The rule is the script's
- * `grep -Eq '^declare [^"]*@(sqlite3|nish_sqlite)_'`, and the two move
+ * `grep -Eq '^declare [^"]*@(sqlite3|nishsqlite)_'`, and the two move
  * together: a line that starts `declare ` and names either prefix after an `@`
  * that no `"` comes before. A mention in a string, a comment, a definition or
  * a quoted name does not count.
@@ -141,7 +141,7 @@ const callsSqlite = (ir: string): boolean => {
       const rest = line.length - name
       if (
         (rest >= 9 && line.slice(name, name + 9) === "@sqlite3_") ||
-        (rest >= 13 && line.slice(name, name + 13) === "@nish_sqlite_")
+        (rest >= 12 && line.slice(name, name + 12) === "@nishsqlite_")
       ) {
         return true
       }

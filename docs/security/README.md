@@ -59,6 +59,7 @@ the record that found it. The notes below the table name each such finding.
 | Percent-decoding and query strings | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
+| SQLite amalgamation | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | **Total** ⁸ | | | **3 / 10 / 17 / 94** | **0 / 0 / 3 / 13** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
