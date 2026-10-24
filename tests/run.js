@@ -1595,6 +1595,11 @@ if (!only || "term".includes(only)) {
   // with `-`.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   const tstpStatus = 128 + os.constants.signals.SIGTSTP
+  // Signals that end a program by default and that the list of named signals
+  // runtime-term.c caught once missed (docs/security/term.md, TERM-1): Linux's
+  // SIGIO, SIGPWR and SIGSTKFLT, and glibc's SIGRTMIN, 34.
+  const { SIGIO, SIGPWR, SIGSTKFLT } = os.constants.signals
+  const extraSigs = process.platform === "linux" ? [SIGIO, SIGPWR, SIGSTKFLT, 34] : []
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
   } else if (ptyExe !== null) {
@@ -1623,6 +1628,23 @@ if (!only || "term".includes(only)) {
         "i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
         'kill -SEGV $pid; wait $pid',
         'echo "fault $? stty $(same)"',
+        'for s in $NISH_PTY_SIGS; do',
+        '  : > "$D/hold.out"',
+        '  "$E" hold </dev/tty > "$D/hold.out" & pid=$!',
+        "  i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        '  kill -"$s" $pid; wait $pid',
+        '  echo "signal $s $? stty $(same)"',
+        "done",
+        "n=0; k=0",
+        "while [ $k -lt 200 ]; do",
+        '  : > "$D/hold.out"',
+        '  "$E" flip </dev/tty > "$D/hold.out" & pid=$!',
+        '  while ! grep -q ready "$D/hold.out"; do :; done',
+        '  kill -TERM $pid; wait $pid',
+        '  if [ "$(same)" != same ]; then n=$((n + 1)); stty "$(cat "$D/before")"; fi',
+        "  k=$((k + 1))",
+        "done",
+        'echo "flipped $n raw"',
         "icanon() { stty -a | tr ' ;' '\\n\\n' | grep -x -- '-\\{0,1\\}icanon'; }",
         "set -m",
         ': > "$D/hold.out"',
@@ -1663,9 +1685,10 @@ if (!only || "term".includes(only)) {
         NISH_PTY_EXE: ptyExe,
         NISH_PTY_DIR: termDir,
         NISH_PTY_TSTP: String(tstpStatus),
+        NISH_PTY_SIGS: extraSigs.join(" "),
       },
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: 30000,
+      timeout: 60000,
     })
     const lines = String(r.stdout).replaceAll("\r", "").split("\n")
     if (!lines.includes("pty")) {
@@ -1685,10 +1708,25 @@ if (!only || "term".includes(only)) {
         "continued 143 stty same was -icanon said raw 0 ready ",
         `deadline ${tstpStatus} 0 stty same said raw 0 ready timed false `,
       ]
+      const caught = extraSigs.map((sig) => `signal ${sig} ${128 + sig} stty same`)
       check(
         "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early, and once stopped mid-wait only until its deadline",
         want.every((line) => lines.includes(line)),
         `want every line of ${JSON.stringify(want)}\n${shown(r)}`
+      )
+      if (extraSigs.length > 0) {
+        check(
+          "term_pty: SIGIO, SIGPWR, SIGSTKFLT and SIGRTMIN each leave the terminal as it was",
+          caught.every((line) => lines.includes(line)),
+          `want every line of ${JSON.stringify(caught)}\n${shown(r)}`
+        )
+      }
+      // Before the fix about one SIGTERM in fifty landed between the switch
+      // into raw mode and the flag that says so, and left the terminal raw.
+      check(
+        "term_pty: SIGTERM sent while a loop enters and leaves raw mode never leaves the terminal raw (200 tries)",
+        lines.includes("flipped 0 raw"),
+        shown(r)
       )
     }
   }
@@ -8292,6 +8330,18 @@ for (const name of ["std_term", "std_term_f64"]) {
   )
 }
 
+// `nish/cli`'s menu, under styles the program makes by hand, is a pure function
+// of its rows: the same bytes under runtime/nish.mjs as compiled.
+if (!only || "std_cli".includes(only) || "cli-under-node".includes(only)) {
+  const run = runFixtureUnderNode(path.join(linkDir, "std_cli", "main.ts"), "utf8")
+  const want = fs.readFileSync(path.join(linkDir, "std_cli", "expected.out"), "utf8")
+  check(
+    "link/std_cli: nish/cli prints the same menu under runtime/nish.mjs as natively",
+    run.status === 0 && run.stdout === want,
+    `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
 // A game calls `flush` on a screen made before its frame loop. Were the call to
 // store into the screen (growing its byte buffer, say), the loop could not take
 // a pass's string back, and a 200×60 frame would keep its ~100 KB to the end of
@@ -10008,6 +10058,37 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       `inferred:\n${inferred.text}\n--- plain: ${inferredPlainStores} stores\n${inferredPlain.text}`
     )
   }
+}
+
+// `isPureRuntime` lets code inside `expose` call the byte-class runs of
+// `nish/bytes` and `nish_str_index_of_any`, which take time that depends on the
+// bytes they scan. `std/crypto` keeps out of them (docs/security/bytes.md,
+// BYTES-2): no module's IR names one. `std_bytes_runs` is the control that
+// shows the pattern still matches what a caller of the runs declares.
+if (!only || "std/crypto calls no variable-time scan".includes(only)) {
+  const scanDir = path.join(buildDir, "crypto-scans")
+  fs.rmSync(scanDir, { recursive: true, force: true })
+  const scan = /@(nish_bytes_skip_\w+|nish_str_index_of_any)\b/g
+  /** Each scan kernel the IR of `file` and its imports names, or the failure to compile it. */
+  const scansOf = (file, dir) => {
+    const c = spawnSync(NISH, [file, "-o", `${dir}/`], { cwd: root, encoding: "utf8" })
+    if (c.status !== 0) {
+      return [`${file}: ${c.stderr}`]
+    }
+    return fs
+      .readdirSync(dir)
+      .flatMap((ll) => (fs.readFileSync(path.join(dir, ll), "utf8").match(scan) || []).map((m) => `${ll}: ${m}`))
+  }
+  const cryptoFiles = fs.readdirSync(path.join(root, "std", "crypto")).filter((f) => f.endsWith(".ts"))
+  const found = [
+    ...new Set(cryptoFiles.flatMap((f) => scansOf(path.join("std", "crypto", f), path.join(scanDir, "crypto")))),
+  ]
+  const control = scansOf(path.join("tests", "link", "std_bytes_runs", "main.ts"), path.join(scanDir, "control"))
+  check(
+    `std/crypto: no module's IR calls a variable-time scan kernel (${cryptoFiles.length} modules; std_bytes_runs, the control, names ${control.length})`,
+    found.length === 0 && control.some((m) => m.includes("@nish_bytes_skip_")),
+    `std/crypto names:\n${found.join("\n")}\ncontrol names:\n${control.join("\n")}`
+  )
 }
 
 // The wipes of key material in `std/` survive `-O2`: one check per group of
@@ -16733,6 +16814,11 @@ if (!only || "interop".includes(only)) {
         ? [
             `const strings = createRequire(import.meta.url)(${JSON.stringify(stringsAddon)});`,
             'let serr = ""; try { strings.pick(true, 1, "b"); } catch (e) { serr = e.message; }',
+            // BYTES-1 (docs/security/bytes.md): an array longer than 2^31-1 would
+            // read as a negative `.length`, so the shim refuses it. The buffer is
+            // zero pages the kernel maps on touch, and nothing touches it.
+            'let lerr = ""; try { apis.napi.sumI32(new Int32Array(2 ** 31 + 5)); } catch (e) { lerr = e.constructor.name + ": " + e.message; }',
+            "console.log('long | ' + lerr);",
             'console.log(["strings", strings.pick(true, "hello", "world"), strings.identity("caf\\u00e9 \\u{1F600}"), strings.len2("x"), serr].join(" | "));',
           ]
         : []),
@@ -16764,6 +16850,11 @@ if (!only || "interop".includes(only)) {
       check(
         "N-API: strings cross both ways (UTF-8 preserved) and a non-string argument is a TypeError",
         lines.includes("strings | hello | café \u{1F600} | 2 | pick: argument 2 (a) must be a string"),
+        detail
+      )
+      check(
+        "N-API: a typed array longer than 2^31-1 is a TypeError, not an array whose length reads negative",
+        lines.includes("long | TypeError: sumI32: argument 1 (xs) has more than 2147483647 elements"),
         detail
       )
       const ex = spawnSync("node", ["examples/node-addon.mjs", addon], { cwd: root })
@@ -17853,7 +17944,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     v.stdout + v.stderr
   )
 
-  // The help is painted only for a person at a terminal (src/cli-style.ts).
+  // The help is painted only for a person at a terminal (std/cli.ts's `styleFor`).
   // Every help run sets the variables the policy reads first -- `NO_COLOR`,
   // the forcing ones and `NISH_AGENT` -- so the runner's own environment, an
   // agent's or a CI's, cannot decide the answer; a run that unsets `NO_COLOR`
@@ -17945,22 +18036,99 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
   const wide = help.stdout.split("\n").filter((line) => line.length > 80)
   check("--help: every line fits in 80 columns", wide.length === 0, wide.join("\n"))
+  // The colours are the theme's: the eight basic SGR colours every theme
+  // redefines, never a fixed 256-palette or RGB tone that ignores it.
+  const fixedTone = /\u001b\[(?:[0-9;]*;)?(?:38|48|9[0-7]|10[0-7])[;m]/
   const forced = run(["--help"], { ...plainEnv, FORCE_COLOR: "1", TERM: "xterm-256color" })
   check(
     "--help with FORCE_COLOR=1: coloured, and the same text under the escapes",
     forced.status === 0 &&
-      forced.stdout.includes(`${ESC}38;5;`) &&
+      forced.stdout.includes(`${ESC}1;35m`) &&
       forced.stdout.replace(/\u001b\[[0-9;]*m/g, "") === help.stdout,
     JSON.stringify(forced.stdout.slice(0, 200))
   )
-  const basic = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "xterm", COLORTERM: "" })
   check(
-    "--help with CLICOLOR_FORCE=1 on an 8-colour TERM: the basic palette only",
-    basic.stdout.includes(`${ESC}36m`) &&
-      !basic.stdout.includes("38;5;") &&
-      !/\u001b\[(?:[0-9;]*;)?(?:9[0-7]|10[0-7])[;m]/.test(basic.stdout),
-    JSON.stringify(basic.stdout.slice(0, 200))
+    "--help on a 256-colour TERM: the theme's basic colours, no fixed tone",
+    forced.stdout.includes(`${ESC}36m`) && !fixedTone.test(forced.stdout),
+    JSON.stringify(forced.stdout.slice(0, 200))
   )
+  const truecolour = run(["--help"], { ...plainEnv, FORCE_COLOR: "3", TERM: "xterm", COLORTERM: "truecolor" })
+  check(
+    "--help with FORCE_COLOR=3 and COLORTERM=truecolor: still the theme's colours",
+    truecolour.stdout.includes(`${ESC}36m`) && !fixedTone.test(truecolour.stdout),
+    JSON.stringify(truecolour.stdout.slice(0, 200))
+  )
+  // Forced colour is the theme's whatever `TERM` says: the reader is a pager or
+  // an editor that paints the escapes itself (Emacs's shell sets TERM=dumb).
+  for (const term of ["dumb", "vt100"]) {
+    const forcedOn = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: term })
+    check(
+      `--help with CLICOLOR_FORCE=1 on TERM=${term}: the theme's colours`,
+      forcedOn.stdout.includes(`${ESC}36m`) && !fixedTone.test(forcedOn.stdout),
+      JSON.stringify(forcedOn.stdout.slice(0, 200))
+    )
+  }
+  // The terminal path, under a pseudo-terminal: `script` gives `nish` one, so
+  // `[ -t 1 ]` holds and the colour count `tput` reads decides. The run's
+  // output is the terminal's, with CR LF line ends.
+  const helpOnTerminal = (env) => {
+    const argv =
+      process.platform === "darwin"
+        ? ["-q", "/dev/null", NISH, "--help"]
+        : ["-qec", '"$NISH_HELP_EXE" --help', "/dev/null"]
+    const r = spawnSync("script", argv, {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, ...plainEnv, NISH_HELP_EXE: NISH, ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30000,
+    })
+    return { status: r.status, stdout: (r.stdout ?? "").replace(/\r\n/g, "\n").replace(/\n$/, "") }
+  }
+  const absoluteTput = ["/usr/bin/tput", "/bin/tput"].some((t) => fs.existsSync(t))
+  if (!has("script") || !absoluteTput) {
+    skip(
+      "--help on a terminal: the colour probe was not run under a pseudo-terminal " +
+        (has("script") ? "(no tput at /usr/bin or /bin)" : "(no `script`)")
+    )
+  } else {
+    const themed = helpOnTerminal({ TERM: "xterm-256color" })
+    check(
+      "--help on a terminal (xterm-256color): the theme's colours, and the same text under the escapes",
+      themed.status === 0 &&
+        themed.stdout.includes(`${ESC}36m`) &&
+        !fixedTone.test(themed.stdout) &&
+        themed.stdout.replace(/\u001b\[[0-9;]*m/g, "").trimEnd() === help.stdout.trimEnd(),
+      JSON.stringify(themed.stdout.slice(0, 200))
+    )
+    // The failsafe: a TERM whose terminfo declares no colours gets the
+    // structure in bold and underline, which a monochrome terminal still shows.
+    const mono = helpOnTerminal({ TERM: "vt100" })
+    check(
+      "--help on a monochrome terminal (vt100): bold and underline, no colour",
+      mono.status === 0 &&
+        mono.stdout.includes(`${ESC}1m`) &&
+        mono.stdout.includes(`${ESC}4m`) &&
+        !/\u001b\[(?:[0-9;]*;)?(?:3[0-9]|4[0-9]|9[0-7]|10[0-7]|2)[;m]/.test(mono.stdout) &&
+        mono.stdout.replace(/\u001b\[[0-9;]*m/g, "").trimEnd() === help.stdout.trimEnd(),
+      JSON.stringify(mono.stdout.slice(0, 200))
+    )
+    // The probe runs `tput` by absolute path: one first on `PATH`, as a
+    // checkout's own is under a `PATH` holding `.`, is never run.
+    const planted = fs.mkdtempSync(path.join(os.tmpdir(), "nish-tput-"))
+    const marker = path.join(planted, "ran")
+    fs.writeFileSync(path.join(planted, "tput"), `#!/bin/sh\n: > '${marker}'\necho 256\n`, { mode: 0o755 })
+    const plantedRun = helpOnTerminal({
+      TERM: "xterm",
+      PATH: `${planted}${path.delimiter}${process.env.PATH ?? ""}`,
+    })
+    check(
+      "--help: the colour probe never runs a `tput` found on PATH",
+      plantedRun.status === 0 && plantedRun.stdout.includes(ESC) && !fs.existsSync(marker),
+      fs.existsSync(marker) ? `ran ${path.join(planted, "tput")}` : JSON.stringify(plantedRun.stdout.slice(0, 200))
+    )
+    fs.rmSync(planted, { recursive: true, force: true })
+  }
   const noColor = run(["--help"], { ...plainEnv, NO_COLOR: "1", FORCE_COLOR: "1" })
   check(
     "--help: NO_COLOR wins over FORCE_COLOR",
@@ -17978,12 +18146,6 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--help: FORCE_COLOR=0 turns colour off, over CLICOLOR_FORCE",
     zeroWins.stdout === help.stdout,
     JSON.stringify(zeroWins.stdout.slice(0, 200))
-  )
-  const level2 = run(["--help"], { ...plainEnv, FORCE_COLOR: "2", TERM: "xterm", COLORTERM: "" })
-  check(
-    "--help with FORCE_COLOR=2 on an 8-colour TERM: 256 colours",
-    level2.stdout.includes(`${ESC}38;5;`),
-    JSON.stringify(level2.stdout.slice(0, 200))
   )
   const dumbForced = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "dumb" })
   check(
@@ -18192,6 +18354,8 @@ if (!only || "secret alias mutation".includes(only) || only.startsWith("reject_s
   const mutDir = path.join(buildDir, "secret-alias-mutation")
   fs.rmSync(mutDir, { recursive: true, force: true })
   fs.cpSync(path.join(root, "src"), path.join(mutDir, "src"), { recursive: true })
+  // The compiler imports from `../std/` (its help's colour policy is `std/cli.ts`).
+  fs.cpSync(path.join(root, "std"), path.join(mutDir, "std"), { recursive: true })
   const secretTs = path.join(mutDir, "src", "secret.ts")
   const live = fs.readFileSync(secretTs, "utf8")
   const edits = [
@@ -20338,6 +20502,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/core.d.ts",
       "runtime/node.mjs",
       "runtime/browser.mjs",
+      "runtime/browser.d.ts",
       "runtime/host.d.ts",
       "runtime/core/arrays.mjs",
       "runtime/core/checks.mjs",

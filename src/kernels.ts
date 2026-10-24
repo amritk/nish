@@ -21,7 +21,8 @@
 // for a window of bytes each in its position's set that starts every match
 // search, lowered to `nish_regex_scan`. Its callers hand it a `from` in
 // `[0, length]`, a depth of 1 to 8, a window of 1 to 4 positions inside it and
-// a mask array 32 bytes a position, the contract `runtime/nish.h` states.
+// a mask array of 288 bytes a position (a 32-byte nibble mask and a 256-byte
+// table), the contract `runtime/nish.h` states.
 //
 // WP38 S5: four private functions of `std/crypto/aes.ts` — the key schedule,
 // one block, GCTR over a run of bytes and GHASH over a run of bytes — have a

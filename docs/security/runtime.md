@@ -15,6 +15,7 @@ answer. Line numbers in the findings table refer to `main` at `bc6ad66`.
 | `runtime/runtime-net.c` | every address, length and control-message buffer, descriptor flags and leaks on each error path, the readiness loop's output bounds |
 | `runtime/runtime-parallel.c` | the partition arithmetic, the scope task list, thread-local state, thread-creation failure |
 | `runtime/runtime-wasm.c` | the linear-memory arena, `nish_alloc_array`, `nish_array_grow` |
+| `runtime/runtime-term.c` | its signal handlers' flags, read here for the `waitpid` property; the rest of the file is audited in [`term.md`](term.md) |
 
 Read beside them, without owning them: `src/runtime.ts` (the declarations and
 the inline allocator), the range checks `src/emit-builtins.ts` puts in front of
@@ -140,7 +141,7 @@ A finding is any of these, reachable through a runtime entry point:
 | No wasm allocation can claim memory the module does not have | RT-7 | `tests/link/rt_sec_wasm_arena` |
 | A parallel range is divided without overflow and every chunk runs, however many threads could be made | RT-8; the chunks a failed `pthread_create` left run on the caller | RT-8 and `test_parallel_*` in `tests/runtime-test.c` |
 | `kill` reaches one process, never a group or every process, and sends only 0, SIGINT, SIGKILL or SIGTERM | RT-19 | `tests/cases/os_kill`; `test_process` in `tests/runtime-test.c` |
-| `waitpid` is not interrupted into leaving a child behind | the only handler the runtime installs is `SA_RESTART` | by reading; nothing automated |
+| `waitpid` is not interrupted into leaving a child behind | every handler the runtime installs is `SA_RESTART`: the signal pipe's for SIGINT and SIGTERM in `runtime-host.c`, and `nish:term`'s in `runtime-term.c` (`nish_term_catch`) | by reading; nothing automated |
 | Every runtime unit stays inside its `.text*` ceiling | measured after #387: `runtime.c` 3,583 / 3,584 (3,708 / 3,840 threaded), `runtime-os.c` 1,530 / 1,536, `runtime-host.c` 764 / 768, `runtime-net.c` 2,087 / 2,304, `runtime-parallel.c` 286 / 320 (905 / 1,024 threaded); after WP34 N12 (RT-19), `runtime-os.c` 2,383 / 2,560 and `runtime-parallel.c` threaded 2,522 / 2,560 | the budget checks in `tests/run.js` |
 
 ## Static analysis
