@@ -101,14 +101,9 @@ cases/caps_signal refused  # refused: NL4011 under --emit-ts
 cases/cls_inline_array records  # differ: exit 0 vs 1
 cases/ct_asm_p256 numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 cases/ct_asm_x25519 records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
-cases/ctor_empty_init_tag control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/deny_panics_overflow_wrapping numbers  # differ: stdout line 1 differs
 cases/deny_panics_overflow_wrapping_add numbers  # differ: stdout line 1 differs
 cases/deny_panics_unsafe records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
-cases/enum_loop_for_update control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/enum_loop_held_several control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/enum_loop_join_gap control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/enum_narrowing control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/ffi_buffer_call_sites ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_count_proved ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_declared ffi  # refused: NL4010 under --emit-ts
@@ -126,37 +121,17 @@ cases/ffi_string_return ffi  # refused: NL4010 under --emit-ts
 cases/io_nish_import numbers  # differ: stdout line 2 differs
 cases/io_nish_rename numbers  # differ: stdout line 1 differs
 cases/map_fingerprint_miss ffi  # refused: NL4010 under --emit-ts
-cases/map_get_value_widths control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/map_iter_break control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/map_iter_callee control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/map_iter_compaction_deferred control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/map_iter_exit_edges control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/map_iter_nested control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/map_iter_or_return numbers  # differ: exit 0 vs 1: Propagate { error: 'negative -3' }
-cases/map_iter_return control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/map_key_enum control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/mem_arena_builtins control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_callee_scope control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_callee_scope_control control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_callee_scope_tree control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_join_parts_same_pass control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_join_parts_scope control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_loop_scope control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
+cases/mem_arena_builtins numbers  # differ: stdout line 2 differs
+cases/mem_join_parts_same_pass numbers  # differ: stdout line 1 differs
+cases/mem_join_parts_scope numbers  # differ: stdout line 1 differs
+cases/mem_loop_scope numbers  # differ: stdout line 1 differs
 cases/mem_loop_scope_chunk numbers  # differ: stdout line 1 differs
-cases/mem_loop_scope_control control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_loop_scope_forof control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_loop_scope_threads control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
+cases/mem_loop_scope_control numbers  # differ: stdout line 1 differs
 cases/mem_nullable numbers  # differ: stdout line 10 differs
-cases/mem_reclaim_guards control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_return_array_scope control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_scope_dynamic_array control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_scope_string_temp control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_scope_tail_call_guards control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
+cases/mem_return_array_scope records  # differ: exit 0 vs 1: TypeError: Cannot read properties of undefined (reading 'length')
+cases/mem_scope_dynamic_array numbers  # differ: stdout line 1 differs
 cases/mem_stack_array_literal records  # differ: stdout line 2 differs
-cases/mem_stack_loop control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_using_arena control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_using_arena_or_return control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/mem_using_arena_tail control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
+cases/mem_using_arena_tail numbers  # differ: stdout line 1 differs
 cases/mem_wait_pid_scope numbers  # differ: exit 0 vs 1: throw new Error(
 cases/net_dual_stack refused  # refused: NL4011 under --emit-ts
 cases/net_loop_calls refused  # refused: NL4011 under --emit-ts
@@ -189,8 +164,7 @@ cases/panics_overflow numbers  # differ: stdout line 1 differs
 cases/panics_overflow_via records  # differ: stdout line 1 differs
 cases/panics_overflow_wrapping numbers  # differ: stdout line 1 differs
 cases/panics_slice records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
-cases/perf_arena_control control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/perf_arena_loop control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
+cases/perf_arena_control numbers  # differ: stdout line 4 differs
 cases/perf_rng_counter numbers  # differ: exit 1 vs 0
 cases/port_array_zero_fill numbers  # differ: exit 0 vs 1: TypeError: Cannot convert undefined to a BigInt
 cases/port_rec_alias_copy numbers  # differ: stdout line 1 differs
@@ -220,24 +194,6 @@ cases/str_surrogate_pair numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALI
 cases/term_calls numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_import numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_pty numbers  # differ: exit 0 vs 1: throw new Error(
-cases/union_arena control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_forms control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing_arms control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing_index control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing_index_const control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing_join control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing_loop_flow control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing_loop_reads control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing_paths control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing_switch_join control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_narrowing_tested_join control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_switch control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_switch_flow control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_switch_generic control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_switch_narrowed control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_switch_secret control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/union_types control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/unsafe_get_set records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 corpus/argv_words numbers  # differ: exit 29 vs 106
 corpus/arr_oob_exit records  # differ: exit 1 vs 0
