@@ -1,7 +1,8 @@
 /* The agreement test for runtime/runtime-bytes.c's byte-class runs (WP38 S6a):
- * `nish_bytes_skip_blank`, `nish_bytes_skip_digits` and
- * `nish_bytes_skip_json_text`. Every path the file has for this machine --
- * scalar, base and, when the CPU has it, AVX2 -- answers every class boundary
+ * `nish_bytes_skip_blank`, `nish_bytes_skip_digits`, `nish_bytes_skip_json_text`
+ * and `nish_bytes_skip_json_plain`. Every path the file has for this machine --
+ * scalar, base and, when the CPU has it, AVX2 for the first three classes; the
+ * plain class has a scalar and a base path only -- answers every class boundary
  * at every block offset, every UTF-8 lead cut short at every byte by `to`, and
  * a seeded, fuzzed corpus exactly as a plain reference loop does, and the
  * resolver picks the path `NISH_SIMD` and the CPU say it should.
@@ -40,7 +41,8 @@ static uint64_t rnd(void) {
   return rng_state * 2685821657736338717ull;
 }
 
-static const char *class_name[3] = {"blank", "digits", "json-text"};
+#define NCLASSES 4
+static const char *class_name[NCLASSES] = {"blank", "digits", "json-text", "json-plain"};
 
 /* The length of the well-formed sequence at `p[i]` that ends by `to`, or 0,
    from the code point it decodes to. */
@@ -72,6 +74,7 @@ static int64_t reference(int cls, const uint8_t *p, int64_t from, int64_t to) {
     uint8_t b = p[i];
     int in = cls == NISH_RUN_BLANK   ? (b == ' ' || b == '\t' || b == '\n' || b == '\r')
              : cls == NISH_RUN_DIGIT ? (b >= '0' && b <= '9')
+             : cls == NISH_RUN_PLAIN ? (b >= 0x20 && b != '"' && b != '\\')
                                      : (b >= 0x20 && b <= 0x7f && b != '"' && b != '\\');
     if (in) {
       i++;
@@ -109,7 +112,7 @@ static const uint8_t *place(const uint8_t *bytes, int64_t to) {
 
 typedef struct {
   const char *name;
-  nish_run_path fn;
+  nish_run_path fn, plain; /* the class path, and the plain kernel's beside it */
 } path_t;
 
 static path_t paths[3];
@@ -121,7 +124,7 @@ static int check(int cls, const uint8_t *bytes, int64_t from, int64_t to, uint64
   const uint8_t *p = place(bytes, to);
   int64_t want = reference(cls, p, from, to);
   for (int k = 0; k < npaths; k++) {
-    int64_t got = paths[k].fn(cls, p, from, to);
+    int64_t got = (cls == NISH_RUN_PLAIN ? paths[k].plain : paths[k].fn)(cls, p, from, to);
     if (got != want) {
       printf("FAIL seed %llu: %s path %s answered %lld, the reference %lld (from %lld, to %lld)\n  bytes:",
              (unsigned long long)seed, class_name[cls], paths[k].name, (long long)got, (long long)want,
@@ -139,7 +142,7 @@ static int check(int cls, const uint8_t *bytes, int64_t from, int64_t to, uint64
 static uint8_t member(int cls, uint64_t j) {
   if (cls == NISH_RUN_BLANK) return (const uint8_t[]){' ', '\t', '\n', '\r'}[j % 4];
   if (cls == NISH_RUN_DIGIT) return (uint8_t)('0' + j % 10);
-  uint8_t b = (uint8_t)(0x20 + j % 96);
+  uint8_t b = (uint8_t)(0x20 + j % (cls == NISH_RUN_PLAIN ? 224 : 96));
   return b == '"' || b == '\\' ? 'a' : b;
 }
 
@@ -147,6 +150,13 @@ static uint8_t member(int cls, uint64_t j) {
 static const uint8_t blank_stops[] = {0x00, 0x08, 0x0b, 0x0c, 0x0e, 0x1f, 0x21, 0x2c, 0x80, 0xa0, 0xff};
 static const uint8_t digit_stops[] = {0x00, 0x2e, 0x2f, 0x3a, 0x45, 0x65, 0xb0, 0xb9, 0xff};
 static const uint8_t text_stops[] = {0x00, 0x09, 0x1f, '"', '\\', 0x80, 0xbf, 0xc0, 0xc1, 0xf5, 0xff};
+static const uint8_t plain_stops[] = {0x00, 0x09, 0x0a, 0x1f, '"', '\\'};
+
+/* The plain class's edges, inside it and out: each is planted at every offset
+   of a run of the class on its own, so a path that misplaces one of them --
+   a signed compare at 0x7f/0x80, a lost 0x5c beside 0x5b and 0x5d -- answers
+   wrong at some offset of some block. */
+static const uint8_t plain_edges[] = {0x1f, 0x20, 0x21, 0x22, 0x5b, 0x5c, 0x5d, 0x7f, 0x80, 0xff};
 
 /* Byte sequences for the text class: well formed at every length and at each
    narrowed edge, and malformed just past it. */
@@ -160,19 +170,24 @@ static const struct {
     {4, {0xf4, 0x90, 0x80, 0x80}}, {4, {0xf1, 0x80, 0x80, 0xc0}}, {4, {0xf3, 0xbf, 0xbf, 0xbf}},
 };
 
-/* The resolver, once per pin, as index-of-any.c checks `nish_any`'s. */
-static int resolves(const char *pin, nish_run_path want, const char *want_name) {
+/* The resolver, once per pin, as index-of-any.c checks `nish_any`'s: the first
+   call, made through the plain kernel, sets both pointers. */
+static int resolves(const char *pin, nish_run_path want, nish_run_path want_plain, const char *want_name) {
   if (pin == NULL) {
     unsetenv("NISH_SIMD");
   } else {
     setenv("NISH_SIMD", pin, 1);
   }
   __atomic_store_n(&nish_run, nish_run_resolve, __ATOMIC_RELAXED);
+  __atomic_store_n(&nish_plain, nish_run_resolve, __ATOMIC_RELAXED);
   static const uint8_t text[] = "  \t 1234567890123456789012345678901234567890x";
-  int64_t blank = nish_bytes_skip_blank(text, 0, 44);
+  int64_t plain = nish_bytes_skip_json_plain(text, 0, 44);
   nish_run_path got = __atomic_load_n(&nish_run, __ATOMIC_RELAXED);
-  if (got != want || blank != 4 || nish_bytes_skip_digits(text, 4, 44) != 44 ||
-      nish_bytes_skip_json_text(text, 0, 44) != 2 || nish_bytes_skip_json_text(text, 3, 44) != 44) {
+  nish_run_path got_plain = __atomic_load_n(&nish_plain, __ATOMIC_RELAXED);
+  int64_t blank = nish_bytes_skip_blank(text, 0, 44);
+  if (got != want || got_plain != want_plain || plain != 2 || blank != 4 || nish_bytes_skip_digits(text, 4, 44) != 44 ||
+      nish_bytes_skip_json_text(text, 0, 44) != 2 || nish_bytes_skip_json_text(text, 3, 44) != 44 ||
+      nish_bytes_skip_json_plain(text, 0, 44) != 2 || nish_bytes_skip_json_plain(text, 3, 44) != 44) {
     printf("FAIL resolver: NISH_SIMD=%s did not pick %s\n", pin ? pin : "<unset>", want_name);
     return 0;
   }
@@ -193,9 +208,9 @@ int main(int argc, char **argv) {
   page_end = map + page;
 #endif
 
-  paths[npaths++] = (path_t){"scalar", nish_run_scalar};
+  paths[npaths++] = (path_t){"scalar", nish_run_scalar, nish_plain_scalar};
 #if defined(NISH_SIMD_SSE2) || defined(NISH_SIMD_NEON) || defined(NISH_SIMD_WASM)
-  paths[npaths++] = (path_t){"base", nish_run_base};
+  paths[npaths++] = (path_t){"base", nish_run_base, nish_plain_base};
   const char *base_name = "base";
 #else
   const char *base_name = "base (the scalar path on this target)";
@@ -204,7 +219,7 @@ int main(int argc, char **argv) {
   nish_run_path best = nish_run_base;
 #if defined(NISH_SIMD_SSE2)
   if (nish_cpu_has_avx2()) {
-    paths[npaths++] = (path_t){"avx2", nish_run_avx2};
+    paths[npaths++] = (path_t){"avx2", nish_run_avx2, nish_plain_base};
     best = nish_run_avx2;
     avx2_note = NULL;
   } else {
@@ -215,13 +230,13 @@ int main(int argc, char **argv) {
 #endif
 
   uint8_t bytes[RUN_MAX];
-  const uint8_t *stops[3] = {blank_stops, digit_stops, text_stops};
-  const size_t nstops[3] = {sizeof blank_stops, sizeof digit_stops, sizeof text_stops};
+  const uint8_t *stops[NCLASSES] = {blank_stops, digit_stops, text_stops, plain_stops};
+  const size_t nstops[NCLASSES] = {sizeof blank_stops, sizeof digit_stops, sizeof text_stops, sizeof plain_stops};
 
   /* Every class's edge bytes planted at every position of every length, run
      from every start up to two AVX2 blocks before it and one past it, and cut
      at the stop and after it: the exhaustive half. */
-  for (int cls = 0; cls < 3; cls++) {
+  for (int cls = 0; cls < NCLASSES; cls++) {
     for (int64_t len = 0; len <= 160; len++) {
       for (int64_t at = 0; at <= len; at++) {
         for (int64_t j = 0; j < len; j++) bytes[j] = member(cls, (uint64_t)j);
@@ -230,6 +245,24 @@ int main(int argc, char **argv) {
         for (int64_t from = first; from <= len && from <= at + 1; from++) {
           if (!check(cls, bytes, from, len, seed)) return 1;
           if (at < len && from <= at && !check(cls, bytes, from, at, seed)) return 1;
+        }
+      }
+    }
+  }
+
+  /* Each plain-class edge at every offset of every length up to two AVX2
+     blocks and a half, from every start before it and the one after, with
+     `to` at the run's end, at the edge and just past it: shorter than a
+     block, a block exactly, and every tail. */
+  for (size_t e = 0; e < sizeof plain_edges; e++) {
+    for (int64_t len = 1; len <= 80; len++) {
+      for (int64_t at = 0; at < len; at++) {
+        for (int64_t j = 0; j < len; j++) bytes[j] = member(NISH_RUN_PLAIN, (uint64_t)j * 5);
+        bytes[at] = plain_edges[e];
+        for (int64_t from = 0; from <= at + 1 && from <= len; from++) {
+          if (!check(NISH_RUN_PLAIN, bytes, from, len, seed)) return 1;
+          if (from <= at && !check(NISH_RUN_PLAIN, bytes, from, at + 1, seed)) return 1;
+          if (from <= at && !check(NISH_RUN_PLAIN, bytes, from, at, seed)) return 1;
         }
       }
     }
@@ -259,14 +292,14 @@ int main(int argc, char **argv) {
      the class, with its edge bytes and UTF-8 lead and continuation bytes mixed
      in at a rate that leaves runs of every length. */
   for (int trial = 0; trial < 150000; trial++) {
-    int cls = (int)(rnd() % 3);
+    int cls = (int)(rnd() % NCLASSES);
     int64_t len = (int64_t)(rnd() % RUN_MAX);
     uint64_t rate = 1 + rnd() % 64;
     for (int64_t j = 0; j < len; j++) {
       uint64_t r = rnd();
       if (r % rate != 0) {
         bytes[j] = member(cls, r >> 8);
-      } else if (cls == NISH_RUN_TEXT && (r & 0x100)) {
+      } else if (cls >= NISH_RUN_TEXT && (r & 0x100)) {
         size_t s = (size_t)(r >> 16) % (sizeof sequences / sizeof sequences[0]);
         for (int k = 0; k < sequences[s].len && j < len; k++) bytes[j++] = sequences[s].bytes[k];
         j--;
@@ -283,13 +316,15 @@ int main(int argc, char **argv) {
 
   /* The resolver: each pin, and the best path for no pin, `avx2` and a value
      it does not know. */
-  if (!resolves("scalar", nish_run_scalar, "scalar") || !resolves("base", nish_run_base, base_name) ||
-      !resolves(NULL, best, "the best path") || !resolves("avx2", best, "the best path") ||
-      !resolves("sse9", best, "the best path"))
+  if (!resolves("scalar", nish_run_scalar, nish_plain_scalar, "scalar") ||
+      !resolves("base", nish_run_base, nish_plain_base, base_name) ||
+      !resolves(NULL, best, nish_plain_base, "the best path") ||
+      !resolves("avx2", best, nish_plain_base, "the best path") ||
+      !resolves("sse9", best, nish_plain_base, "the best path"))
     return 1;
 
   printf("byte-runs: %ld cases agree across", cases);
   for (int k = 0; k < npaths; k++) printf(" %s", paths[k].name);
-  printf("%s%s; the resolver picks every pin\n", avx2_note ? "; " : "", avx2_note ? avx2_note : "");
+  printf(" (plain: scalar base)%s%s; the resolver picks every pin\n", avx2_note ? "; " : "", avx2_note ? avx2_note : "");
   return 0;
 }

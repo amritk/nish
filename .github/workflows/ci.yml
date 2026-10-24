@@ -403,7 +403,7 @@ jobs:
         run: |
           set -o pipefail
           build/test/simd/index-of-any | grep -E '^index-of-any: [0-9]+ cases agree across scalar base avx2;'
-          build/test/simd/byte-runs | grep -E '^byte-runs: [0-9]+ cases agree across scalar base avx2;'
+          build/test/simd/byte-runs | grep -E '^byte-runs: [0-9]+ cases agree across scalar base avx2 \(plain: scalar base\);'
 
       # WP38 S5: likewise for runtime/runtime-aes.c, whose `simd` section passes
       # with the reference alone on a CPU without AES-NI. These runners have it
@@ -1023,7 +1023,7 @@ jobs:
           set -o pipefail
           node tests/run.js simd | tee "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
-          grep -E '^PASS  simd: byte-runs native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: byte-runs native arm64: [0-9]+ cases agree across scalar base \(plain: scalar base\);' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: aes-gcm native arm64: [0-9]+ cases agree across armv8-aes-pmull;' "$RUNNER_TEMP/simd.log"
 
       # WP38 S5's lowering on AArch64: the compiler's branch to the ARMv8 AES and
