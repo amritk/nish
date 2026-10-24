@@ -51,7 +51,7 @@ Compilation                                                            src/compi
 | Emitter | `src/emit.ts` + `emit-util.ts`, `emit-ops.ts`, `emit-control.ts`, `emit-strings.ts`, `emit-arrays.ts`, `emit-classes.ts`, `emit-builtins.ts`, `emit-result.ts`, `emit-map.ts`, `tbaa.ts`, `debug.ts` | Lowers the checked program to IR text: module assembly, function setup, `declare`s for imports, the `@main` wrapper, the runtime prelude, and dispatch to per-construct lowerings. Contains no user-facing error handling. |
 | IR builder | `src/ir.ts` | `IRModule`, `IRFunction`, `IRBlock`: named blocks, hoisted allocas, SSA temp numbering (`%0` is always the first temp because every block and parameter is named), attribute-group interning. |
 | Runtime ABI | `src/runtime.ts` | The `declare` lines, attributes, and memory effects of every runtime symbol and intrinsic (the `RuntimeTable`); the IR text of the inline arena allocator; the `%struct.nish_arena` / `%struct.nish_array` layouts. |
-| Runtime | `runtime/runtime.c`, `runtime/runtime-os.c`, `runtime/runtime-host.c`, `runtime/runtime-parallel.c`, `runtime/runtime-cross.c`, `runtime/runtime-net.c`, `runtime/runtime-simd.c`, `runtime/runtime-aes.c`, `runtime/runtime-term.c`, `runtime/runtime-bytes.c`, `runtime/nish.h`, `runtime/runtime-wasm.c` | The C implementation, in ten translation units so that each carries its own code-size ceiling. `runtime.c` is what every program touches whatever it does: the chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, `process.argv`, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. `runtime-os.c` is everything that wraps a system call — `process.exit`, files, directories, subprocesses, `getenv`, the monotonic clock, `process.platform` / `arch` — which is the surface that grows as the language reaches further into the operating system. The header is the public C ABI for both, and it defines one `static inline`, `nish_cpath`, which every path, name and spawn argument the runtime hands the OS goes through, so a string holding a NUL names nothing ([docs/security/runtime.md](security/runtime.md), RT-3); it is written with `__builtin_strlen`, so the header still includes no libc header and still compiles for wasm32. `runtime-host.c` holds the host primitives (the wall clock, entropy, file times, signals) and the ownership and executability checks `nish_lstat_owner_mode`, `nish_euid` and `nish_is_executable` (RT-9). `runtime-parallel.c` divides a range of work across threads, `runtime-cross.c` copies the strings and arrays a task answers, a channel sends or a `Mutex` keeps out of the arena they were made in, `runtime-net.c` holds the sockets of `nish:net`, `runtime-simd.c` and `runtime-aes.c` the vector text search and AES-GCM, `runtime-term.c` the stdin reads and terminal calls of `nish:term`, and `runtime-bytes.c` the byte-class runs of `nish/bytes`. `runtime-wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. `runtime/nish.d.ts` declares the builtins so that `tsc` can type-check a Nish program. `runtime/sqlite/` is SQLite's amalgamation, vendored byte for byte, which `scripts/build.sh` compiles only for a link whose IR declares an `sqlite3_*` or `nish_sqlite_*` function; it carries no size ceiling ([runtime/sqlite/README.md](../runtime/sqlite/README.md)). |
+| Runtime | `runtime/runtime.c`, `runtime/runtime-os.c`, `runtime/runtime-host.c`, `runtime/runtime-parallel.c`, `runtime/runtime-cross.c`, `runtime/runtime-net.c`, `runtime/runtime-simd.c`, `runtime/runtime-aes.c`, `runtime/runtime-term.c`, `runtime/runtime-bytes.c`, `runtime/nish.h`, `runtime/runtime-wasm.c` | The C implementation, in ten translation units so that each carries its own code-size ceiling. `runtime.c` is what every program touches whatever it does: the chunked bump arena with marks (`nish_arena_mark` / `release` / `used`), strings, number formatting, `Math.random`, `process.argv`, array growth and `nish_alloc_array` (the host entry the wasm loader uses), the bounds-check and division panics. `runtime-os.c` is everything that wraps a system call — `process.exit`, files, directories, subprocesses, `getenv`, the monotonic clock, `process.platform` / `arch` — which is the surface that grows as the language reaches further into the operating system. The header is the public C ABI for both, and it defines one `static inline`, `nish_cpath`, which every path, name and spawn argument the runtime hands the OS goes through, so a string holding a NUL names nothing ([docs/security/runtime.md](security/runtime.md), RT-3); it is written with `__builtin_strlen`, so the header still includes no libc header and still compiles for wasm32. `runtime-host.c` holds the host primitives (the wall clock, entropy, file times, signals) and the ownership and executability checks `nish_lstat_owner_mode`, `nish_euid` and `nish_is_executable` (RT-9). `runtime-parallel.c` divides a range of work across threads, `runtime-cross.c` copies the strings and arrays a task answers, a channel sends or a `Mutex` keeps out of the arena they were made in, `runtime-net.c` holds the sockets of `nish:net`, `runtime-simd.c` and `runtime-aes.c` the vector text search and AES-GCM, `runtime-term.c` the stdin reads and terminal calls of `nish:term`, and `runtime-bytes.c` the byte-class runs of `nish/bytes`. `runtime-wasm.c` is the freestanding subset (arena over linear memory, arrays, trapping panics) for the wasm profile. `runtime/shim.mjs` is the Node-side twin used by the differential tests. `runtime/nish.d.ts` declares the builtins so that `tsc` can type-check a Nish program. `runtime/sqlite/` is SQLite's amalgamation, vendored byte for byte, which `scripts/build.sh` compiles only for a link whose IR declares an `sqlite3_*` or `nishsqlite_*` function; it carries no size ceiling ([runtime/sqlite/README.md](../runtime/sqlite/README.md)). |
 | Interop | `src/interop-abi.ts`, `interop-header.ts`, `interop-dts.ts`, `interop-wasm.ts`, `interop-napi.ts` | C header, wasm `.d.ts` and its loader, and N-API shim generators, all derived from the same checked signatures the IR was emitted from. |
 | Dumps | `src/dump.ts`, `src/ast-text.ts`, `src/dump-checked.ts`, `src/dump-ast.ts`, `src/dump-tokens.ts` | The `--emit-checked` and `--emit-ast` text, and the one-file entry points the self-hosting goldens and oracles spawn. |
 | Packages | `src/manifest.ts`, `src/paths.ts`, `src/nish-modules.ts`, `src/std-modules.ts` | Module resolution: the root and dependency `package.json` reads (the `nish` export condition, `engines.nish`, and the root's `nish` field with `noPanic` and `capabilities`), the `nish:` builtin modules, and the `nish/` standard-library modules. |
@@ -239,6 +239,17 @@ own source until the seed compiles it, which is the next release.
     commit message, its conventional subject and its body: `scripts/changelog-gen.mjs`
     writes `CHANGELOG.md` from the commits when a release is cut, so the
     file is never edited by hand.
+11. **Security record.** Code an attacker's bytes reach — a `std/net` or
+    `std/crypto` module, a `runtime/*.c` file, a builtin or `nish:` module
+    that reads the network, the terminal or another process's output — ships
+    with its record in [`docs/security/`](security/README.md#writing-a-record)
+    in the same pull request: its Scope table names the files and functions,
+    every finding is fixed with a test that fails before the fix or recorded
+    as open or accepted, and the index's Areas row and totals move with it.
+    `node scripts/security-scope.mjs` (in `npm test` and CI) refuses a
+    `std/net`, `std/crypto` or `runtime/*.c` file that no record's scope
+    names, unless the index lists it under "Not yet audited", and that list
+    only shrinks.
 
 ## ABI contracts and the tests that guard them
 
@@ -667,10 +678,10 @@ intrinsics become libm calls for non-constant arguments).
 | Profile | Flags | Equivalent |
 | --- | --- | --- |
 | `debug` | clang defaults, `-lm` | the "before" number; symbols kept |
-| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s` | Rust `--release` |
-| `size` | `speed` plus `-Oz -fno-stack-protector -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
+| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, plus `-Wl,--lto-partitions=<cores>` under lld | Rust `--release` |
+| `size` | `speed` (one LTO partition) plus `-Oz -fno-stack-protector -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
 | `wasm` | `--target=wasm32-unknown-unknown -Oz -nostdlib -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections` | freestanding module for modules that do not use the C runtime |
-| `napi` | `speed` plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
+| `napi` | `speed` (one LTO partition) plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
 | `wasi` | `--target=wasm32-wasi --sysroot=<WASI sysroot> -Oz -DNDEBUG -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all`, plus `-nodefaultlibs -lc <libclang_rt.builtins-wasm32.a>` when clang has no wasm32 compiler-rt of its own | a WASI command module (`_start` runs `main`; `node examples/wasi-host.mjs`, `wasmtime`); see [wp7-runtime.md](wp7-runtime.md#wasi-target) |
 
 Platform notes: on macOS the script uses ld64's `-dead_strip` / `-x` instead
@@ -678,7 +689,15 @@ of `--gc-sections` / `-s`, skips `-fuse-ld=lld` and `-fno-plt`; on Linux it
 prefers `lld` because GNU `ld` needs the gold plugin for LTO. `-flto`
 matters more here than for C: LLVM sees the Nish module and the runtime
 as one unit, so `nish_str_len` inlines into a load and unreferenced runtime
-functions vanish. `CC` overrides the compiler; `NODE_INCLUDE` overrides the
+functions vanish. Under lld the `speed` link splits LTO code generation
+into one partition per core (`nproc`, else `getconf _NPROCESSORS_ONLN`,
+else `sysctl -n hw.ncpu`) and runs them in parallel; the program is still
+optimised as one module, so the instructions it runs stay within a few of
+`bench/instructions.json`, and on a 4-core machine the link of
+`tests/link/net_relay_f64` takes about 0.7x the time. The bytes depend on
+the partition count, so they are the same for every link on one machine.
+ld64 and the GNU ld fallback have no such flag and link in one partition.
+`CC` overrides the compiler; `NODE_INCLUDE` overrides the
 Node header directory for `napi`.
 
 Profile-guided optimisation (WP9): `--pgo-generate` adds
@@ -771,7 +790,7 @@ the skip count is the number to read, not only the exit code.
   saturating conversions) and there is no live rewriter any more — so a corpus
   program with no frozen rewrite is named in a register rather than skipped
   in silence. Programs listed in `tests/differential/known-failures.txt`
-  (libm 1-ulp differences, `minnum`/`maxnum` with NaN, `Math.round(-0)`, the
+  (libm 1-ulp differences, the
   division panics, raw `Arena.used()` prints) are reported but do not fail.
   `tests/differential/fuzz.js --stage1` generates random integer/boolean
   programs from a printed seed, compiles each with the released compiler and

@@ -18,7 +18,8 @@
 #
 # Profiles:
 #   debug  clang defaults: no optimisation, symbols kept. The "before" number.
-#   speed  -O3 + LTO + section GC + strip. Rust `--release` equivalent.
+#   speed  -O3 + LTO + section GC + strip. Rust `--release` equivalent. With
+#          lld, LTO code generation runs on every core.
 #   size   -Oz + LTO + section GC + strip + no unwind tables. Rust
 #          `opt-level="z"`, `panic="abort"`, `strip=true` equivalent.
 #   wasm   wasm32 freestanding module exporting every non-internal function;
@@ -70,7 +71,7 @@
 # stops with SIGILL on a CPU without AVX2. `nish --link --cpu x86-64-v3`
 # passes it through.
 #
-# SQLite: an input .ll that declares an `sqlite3_*` or `nish_sqlite_*` function
+# SQLite: an input .ll that declares an `sqlite3_*` or `nishsqlite_*` function
 # also compiles and links every runtime/sqlite/*.c, the vendored amalgamation
 # (runtime/sqlite/README.md). Any other program compiles none of it. sqlite3.c
 # is compiled to native code at the profile's level, even where the profile
@@ -224,7 +225,7 @@ done
 
 # SQLite (runtime/sqlite/) is an optional unit, and the IR selects it. A module
 # that declares a function of SQLite's C API (`sqlite3_*`) or of the adapter
-# beside it (`nish_sqlite_*`) gets every runtime/sqlite/*.c compiled and
+# beside it (`nishsqlite_*`) gets every runtime/sqlite/*.c compiled and
 # linked. Any other program compiles none of it, so its link line and binary
 # stay as they were. The test reads `declare` lines, and only before the first
 # `"` on one, rather than any `@sqlite3_` in the file, because a string
@@ -244,12 +245,12 @@ if [ -n "$sqlite_to" ]; then
 fi
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
-    *.ll) if grep -Eq '^declare [^"]*@(sqlite3|nish_sqlite)_' "$i"; then sqlite_wanted=1; fi ;;
+    *.ll) if grep -Eq '^declare [^"]*@(sqlite3|nishsqlite)_' "$i"; then sqlite_wanted=1; fi ;;
   esac
 done
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
-    *.c) if [ "$(cd "$(dirname -- "$i")" && pwd -P)" = "$sqlite_dir" ]; then sqlite_wanted=0; break; fi ;;
+    *.c) if [ -n "$sqlite_dir" ] && [ "$(cd "$(dirname -- "$i")" && pwd -P)" = "$sqlite_dir" ]; then sqlite_wanted=0; break; fi ;;
   esac
 done
 if [ "$sqlite_wanted" = 1 ] && [ -z "$sqlite_dir" ]; then
@@ -264,6 +265,7 @@ fi
 CC=${CC:-clang}
 common=(-Wno-override-module)          # our IR is target-neutral; clang fills the triple in
 elf=()                                 # flags that only make sense for ELF targets
+lld=0                                  # 1 when the link goes through ld.lld
 
 # Platform-specific dead-stripping, symbol stripping and LTO linker selection.
 case "$(uname -s)" in
@@ -295,7 +297,7 @@ case "$(uname -s)" in
     gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none); strip_flag=(-s)
     elf=(-fno-plt)
     # GNU ld needs the gold plugin for LTO; prefer lld when clang can find it.
-    if command -v ld.lld >/dev/null 2>&1; then common+=(-fuse-ld=lld); fi ;;
+    if command -v ld.lld >/dev/null 2>&1; then common+=(-fuse-ld=lld); lld=1; fi ;;
 esac
 
 # -g: compile everything with debug info and never strip, whatever the profile,
@@ -358,6 +360,22 @@ case "$profile" in
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}) ;;
 esac
 
+# The speed link splits full LTO's code generation into one partition per core,
+# run in parallel: lld's --lto-partitions, after the whole program is optimised
+# as one module, so inlining and the instructions a program runs do not change
+# (bench/instructions.json agrees to a few instructions in hundreds of
+# millions). The bytes depend on the count, so one machine links one input to
+# one output, as scripts/bootstrap.sh needs. ld64 and GNU ld have no such flag
+# and link as before, and so does every other profile. The count comes
+# from nproc (Linux), else getconf (both), else sysctl (macOS).
+lto_parts=()
+if [ "$profile" = speed ] && [ "$lld" = 1 ]; then
+  cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null ||
+    sysctl -n hw.ncpu 2>/dev/null || echo 1)
+  # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
+  lto_parts=(-Wl,--lto-partitions="$cores")
+fi
+
 # --runtime-objects and --runtime-from: the one-command link split in two, with
 # every compile it held run at once. A `$CC -c` takes `common` and `optimise`,
 # which is what the one command compiles each input with -- less
@@ -412,7 +430,8 @@ case "$CC" in /*) ;; */*) CC="$(pwd)/$CC" ;; esac
 # statistics, no progress callback, no shared cache and no loadable extensions.
 # Expression depth is bounded by the stack, not a counter. A program has one
 # thread unless it was built with --threads. SQLite takes no mutex for one
-# thread (THREADSAFE=0) and serialises each connection for several (=2). wasi
+# thread (THREADSAFE=0). Under --threads it is multi-thread mode (=2): no mutex
+# guards a connection, so a program must not share one across threads. wasi
 # has no threads, so it gets 0 whatever the module says. NISH_SQLITE_CFLAGS is
 # appended: `read` takes its first line and splits it on whitespace, so a
 # word cannot hold a space and a quote is an ordinary character. A relative
@@ -550,7 +569,7 @@ case "$profile" in
   debug)
     "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
   speed|size)
-    "$CC" "${common[@]}" "${optimise[@]}" \
+    "$CC" "${common[@]}" "${optimise[@]}" ${lto_parts[@]+"${lto_parts[@]}"} \
       "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   wasm)
     # clang resolves wasm-ld next to its own binary first, then on PATH; ask it

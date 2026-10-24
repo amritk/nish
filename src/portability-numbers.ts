@@ -1,7 +1,11 @@
 // The WP33 portability rows for numbers (docs/wp33-round-trip.md §3.1 and 3.5):
 // integer division (NL8006), wrapping arithmetic (NL8007), the i32 `>>>`
-// (NL8008), 64-bit integers (NL8009) and libm's NaN and signed-zero rules
-// (NL8010).
+// (NL8008) and 64-bit integers (NL8009).
+//
+// NL8010, libm's NaN and signed-zero rules, is retired: `Math.min` and
+// `Math.max` of a float test for NaN and pick a zero by its sign bit, and
+// `Math.round` puts its operand's sign back, so each answers what JavaScript
+// does and there is no site left for the row to name.
 //
 // NL8011, a printed negative zero, is retired: `runtime/nish.mjs` installs a
 // console that prints `String(x)`, and `String(-0)` is `"0"`, so `-0` prints
@@ -23,7 +27,6 @@ import { isFractional, parseIntegerLiteral } from "./constants"
 import {
   FLAG_PREFIX,
   N_BINARY,
-  N_CALL,
   N_CONSTRUCTOR,
   N_EMPTY,
   N_NUMBER,
@@ -32,9 +35,8 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes"
-import { dottedName, receiverIsValue } from "./emit-util"
 import { PortabilityFinding, PortabilityWalk } from "./portability"
-import { intBits, isFloat, isInteger, isUnsigned, T_I32 } from "./types"
+import { intBits, isInteger, isUnsigned, T_I32 } from "./types"
 
 /**
  * The numbers rows, asked about one node at a time.
@@ -67,9 +69,6 @@ export const numberFindings = (walk: PortabilityWalk, node: Node, out: Portabili
       return
     case N_UNARY:
       stepFinding(walk, node, out)
-      return
-    case N_CALL:
-      builtinCallFinding(walk, node, out)
       return
     case N_VAR_DECL:
       localFinding(walk, node, out)
@@ -169,36 +168,6 @@ const operatorFinding = (
   fragment: string
 ): PortabilityFinding =>
   new PortabilityFinding(node, `this \`${node.text}\` on ${walk.table.typeName(type)} ${fragment}`)
-
-// ---- NL8010: the builtins ----------------------------------------------------
-
-/**
- * `Math.min` and `Math.max` of a float are `llvm.minnum` and `llvm.maxnum`,
- * which drop a NaN, and `Math.round` rounds `-0.4` to +0 (NL8010). The operand
- * types were settled by the checker: `min` and `max` take two of one type, and
- * `round` only takes an `f64`, so the first argument answers for the call.
- */
-const builtinCallFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
-  // The emitter's own test for a builtin call (`emitCall`): a dotted name
-  // whose receiver the checker gave no type, because it is a namespace.
-  const callee = node.children[0]
-  const name = dottedName(callee)
-  const args = node.children[1].children
-  if (name === "" || args.length === 0 || receiverIsValue(walk.program, callee.children[0])) {
-    return
-  }
-  if (!isFloat(walk.table.baseOf(walk.program.nodeTypes[args[0].id]))) {
-    return
-  }
-  if (name === "Math.min" || name === "Math.max" || name === "Math.round") {
-    out.push(
-      new PortabilityFinding(
-        node,
-        `\`${name}\` follows the native NaN and signed-zero rules here, not JavaScript's`
-      )
-    )
-  }
-}
 
 // ---- NL8009: 64-bit declarations ----------------------------------------------
 

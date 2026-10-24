@@ -1,0 +1,1 @@
+reject_ffi_handle_use_after_close_keep_channel.ts:28:19: error: `File` is a handle class, and its name may be written only as the type of a parameter that borrows one
