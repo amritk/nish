@@ -78,9 +78,9 @@ header, `nish_array a = { n, n, (char *)buf };`. Otherwise
 
 `scripts/build.sh --profile wasm` links a freestanding module with
 `--export-all`, against `runtime/runtime-wasm.c`. That file is an arena over
-linear memory, the array cold paths, trapping panics, and the `fmin`, `fmax`,
-`fminf` and `fmaxf` that `Math.min` and `Math.max` of a float become on wasm32,
-which has no instruction with `minnum`'s NaN rule
+linear memory, the array cold paths and trapping panics. `Math.min` and
+`Math.max` of a float need nothing from it: on wasm32 they are `llvm.minimum`
+and `llvm.maximum`, which are `f64.min` and `f32.max` there
 (`tests/cases/math_minmax_float`). It has no strings, no I/O and no other libm:
 `Math.pow`, `sin`, `cos`, `exp` and `log` still need a libm the profile does
 not link. An array argument is a pointer into linear memory, which is not

@@ -1,0 +1,121 @@
+# The weekly fuzzing campaign: every target in tests/fuzz/targets/ fuzzed for
+# half an hour (a dispatch sets the time) under
+# -fsanitize=fuzzer,address,undefined, one runner per target. ci.yml's
+# `fuzz-smoke` job runs the same targets for a minute on every pull request;
+# this is the run long enough to go deep.
+#
+# A crash, a sanitizer report, a timeout (an input over a second) or an
+# out-of-memory stops the target's run and fails its job, and the input is
+# uploaded as `fuzz-<target>` with the corpus the run grew. Reading one and
+# turning it into a fix: tests/fuzz/README.md, "Reading a crash". The grown
+# corpus is never committed by this workflow; a person copies the inputs worth
+# keeping into tests/fuzz/corpus/<target>/.
+name: Fuzz
+
+on:
+  schedule:
+    # Saturdays, 03:17 UTC: off the hour, where most scheduled jobs queue.
+    - cron: "17 3 * * 6"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "Fuzzing time per target, in seconds"
+        type: number
+        default: 1800
+
+permissions:
+  contents: read
+
+# ci.yml says why this cache is set for every job, and why it is outside the checkout.
+env:
+  NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
+  APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
+
+concurrency:
+  group: fuzz
+  cancel-in-progress: false
+
+jobs:
+  targets:
+    name: targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      names: ${{ steps.list.outputs.names }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: List the targets
+        id: list
+        run: |
+          names="$(for f in tests/fuzz/targets/*.ts; do basename "$f" .ts; done | jq -R . | jq -sc .)"
+          echo "names=$names" >> "$GITHUB_OUTPUT"
+
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    needs: targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      # One target's crash says nothing about another's.
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.names) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld + the sanitizer runtimes
+        timeout-minutes: 5
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 libclang-rt-18-dev
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        run: bash scripts/fetch-seed.sh
+
+      - name: Build the compiler
+        timeout-minutes: 10
+        run: npm run build
+
+      # The replay first, so an input already checked in that crashes is
+      # named as that rather than rediscovered.
+      - name: Replay the corpus and regressions
+        env:
+          TARGET: ${{ matrix.target }}
+        run: bash scripts/fuzz.sh --replay "$TARGET"
+
+      # The schedule has no inputs, so its runs take the default.
+      - name: Fuzz
+        timeout-minutes: 60
+        env:
+          TARGET: ${{ matrix.target }}
+          SECONDS_PER_TARGET: ${{ inputs.seconds || 1800 }}
+        run: |
+          bash scripts/fuzz.sh --run "$TARGET" -- \
+            -max_total_time="$SECONDS_PER_TARGET" -print_final_stats=1
+
+      - name: Upload the crash inputs and the grown corpus
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-${{ matrix.target }}
+          path: |
+            build/fuzz/artifacts/${{ matrix.target }}/
+            build/fuzz/work/${{ matrix.target }}/
+          if-no-files-found: ignore

@@ -440,8 +440,14 @@ fixture reads, as a copy or otherwise. Their constant time rests on review.
   building. (`ct_asm_k1_base64url` reads `base64urlCharOf` and
   `base64urlSextetOf` verbatim, and one encode group and one decode group, as
   copies.)
-- **`std/crypto/hmac.ts`**: `hmacPadBlock`, `hmacSha256`, `hmacSha384`,
-  `hmacSha256Verify`, `hmacSha384Verify`.
+- **`std/crypto/hmac.ts`**: `hmacPadInto`, `hmacPadBlock`, `hmacCheckKey`,
+  `hmacPadsSha256`/`384`/`512`, `hmacKeySha256`/`384`/`512`, `hmacSha256`,
+  `hmacSha384`, `hmacSha512`, their `*Secret` forms, `hmacSha256Verify`,
+  `hmacSha384Verify`, `hmacSha512Verify`, `hmacCopySha256`, `hmacCopySha384`,
+  the classes `HmacSha256`, `HmacSha384`, `HmacSha512`, `HmacSha256Scratch`
+  and `HmacSha384Scratch`, and PBKDF2: `pbkdf2HmacSha256`,
+  `pbkdf2HmacSha256Exposed`, `pbkdf2Finish` ([crypto-k1.md](crypto-k1.md),
+  K1-8).
 - **`std/crypto/hkdf.ts`**: `hkdfSalt`, `hkdfAppend`, `hkdfExtractSha256`,
   `hkdfExtractSha384`, `hkdfExpandSha256`, `hkdfExpandSha384`.
 - **`std/crypto/sha256.ts`**: `sha256Compress`, `sha256LoadWord`,

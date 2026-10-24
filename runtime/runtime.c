@@ -117,16 +117,23 @@ static inline void nish_panic_claim(void) {}
 #endif
 
 /* How a panic that skips atexit ends: `_exit(1)`, after `nish_fatal_hook` when
-   it is set. `setRawMode(true)` (runtime-term.c) sets the hook to its restore,
-   and without it a failed bounds check would leave the shell in raw mode. Each
+   it is set. `setRawMode(true)` and `setTerminalRestore` (runtime-term.c) set
+   the hook to the terminal's restore, and without it a failed bounds check
+   would leave the shell in raw mode. Each
    panic path calls this where it called `_exit(1)`, so a call site costs no
    more than it did; `exit(1)` paths need nothing, since the restore is also an
-   atexit handler. */
+   atexit handler. Built with `-DNISH_FUZZ_ABORT` (scripts/fuzz.sh), this and
+   `nish_panic` end in `abort()` instead, so libFuzzer records a panic, a failed
+   bounds or division check and an out-of-memory as a crash; the default build
+   compiles neither. */
 __attribute__((noreturn)) void nish_fatal_exit(void);
 void (*nish_fatal_hook)(void);
 void nish_fatal_exit(void) {
   void (*hook)(void) = __atomic_load_n(&nish_fatal_hook, __ATOMIC_ACQUIRE);
   if (hook) hook();
+#ifdef NISH_FUZZ_ABORT
+  abort();
+#endif
   _exit(1);
 }
 
@@ -363,6 +370,9 @@ void nish_print(const nish_str *s) { nish_write(s, 1, 1); }
 __attribute__((noreturn)) void nish_panic(const nish_str *s) {
   nish_panic_claim();
   nish_write(s, 2, 1);
+#ifdef NISH_FUZZ_ABORT
+  abort();
+#endif
   exit(1);
 }
 
@@ -1234,10 +1244,18 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
    this first. */
 nish_array *nish_argv;
 
+/* The key of every `Map` and `Set` string hash (docs/security/json.md, JSON-13):
+   SipHash-1-3's 128 bits, zero until the constructor each module that hashes
+   a string registers fills it from `getentropy` before `main`. Data, not code,
+   so it costs this file's `.text` budget nothing, and not NISH_TLS, for the
+   reason `nish_argv` is not: it is written once before any thread exists, and
+   a table one thread fills is probed by another under the same key. */
+uint64_t nish_hash_key[2];
+
 void nish_argv_init(int32_t argc, char **argv) {
   nish_array *a = malloc(sizeof *a + argc * sizeof(nish_str *));
-  nish_str **d = (nish_str **)(a + 1);
   if (!a) nish_oom();
+  nish_str **d = (nish_str **)(a + 1);
   *a = (nish_array){ argc, argc, (char *)d };
   nish_argv = a;
   while (argc-- > 0) {

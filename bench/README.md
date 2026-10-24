@@ -51,6 +51,7 @@ Build products go to `build/bench/`.
 | `strbuild` | template literals with a number hole, `+` on immutable strings, the arena allocator | | 131072 pieces | `806394` (final length) |
 | `vec3` | a `Vec3` class with methods called in a tight loop, no allocation in the loop | `--number-mode f64` | 5e7 iterations | position and energy |
 | `result` | a fallible function returning `Result<number, number>` and one taking it, both by value in a register (WP17); the accumulator feeds the next input, so the loop carries a dependency | | 2e8 calls | `15873` |
+| `math` | ten kernels, each its own row (`math/<kernel>`, the kernel named on the command line): `Math.atan2`, `tan` and `hypot` (Nish's from `std/math.ts`, a port of fdlibm; libm in C and Rust, Go's own `math` package in the Go column), `Math.sign` on `i32` and `f64`, `Math.imul`, and float `Math.round`, `min` and `max` with JavaScript's -0 and NaN, and `f32ToBits`; inputs walk a 4096-entry table seeded with NaN, ±0, ±Infinity and the round-half edges, and every result is folded through its f32 bits | `--number-mode f64` | 2e7 libm calls, 1.6e8 for the rest | one line per kernel |
 
 Every size is chosen so the C version runs for at least a quarter of a second
 on the reference machine (a 2.1 GHz Xeon virtual machine): fib(35) and a
@@ -475,6 +476,16 @@ from one host to the next is pinned instead:
   (0.0008%).
   The program's own code is the same on every host already: `--profile speed`
   does not pass `-march`.
+- **The hash key.** A string-keyed `Map` or `Set` seeds its SipHash key from
+  `getentropy` before `main`, and each key lays the same strings out
+  differently. Unpinned, map-presize counted from 70,038,447 to 70,286,417
+  (+0.35%) between two runs of one binary, and five counts of map-wordcount,
+  map-presize and map-vs-stringmap spread by 168,476, 121,100 and 669,844.
+  Each counted run preloads `bench/fixed-key.c`, a `getentropy` that returns
+  fixed bytes, as `./fixed-key.so` from the program's directory. All
+  twenty-two then count with a spread of 0. Loading it costs about 13
+  thousand instructions a run. Only this harness builds or names it: a
+  shipped binary still seeds from the system.
 
 **Measured determinism, at `4fed2b7`.** Three counts of each program in one run,
 and a second run of the whole set, agree to the instruction for thirteen of the
@@ -1348,8 +1359,46 @@ These scans still step one byte at a time:
 - `plainColonAt`, the search for an implicit key's `: `.
 - `skipInlineSpaces` and the indentation counts.
 
+## Math accuracy
+
+How far `Math.tan`, `Math.atan2` and `Math.hypot` (fdlibm ports in
+[std/math.ts](../std/math.ts)) land from the exact result. Not run in CI: the
+reference is mpmath, which CI does not install. What CI holds instead is
+[tests/cases/math_ulp_samples.ts](../tests/cases/math_ulp_samples.ts), a few
+hundred operands per function with their correctly rounded results, drawn by
+`python3 bench/math-ulp/ulp.py --samples`.
+
+```bash
+npm run build
+build/nish bench/math-ulp/operands.ts --link build/math-ulp
+build/math-ulp > build/math-ulp.out          # 2,800,536 lines
+pip install mpmath                           # 1.4.1 measured
+python3 bench/math-ulp/ulp.py build/math-ulp.out
+```
+
+`operands.ts` prints each operand and the shipped answer as 64-bit patterns:
+every special value paired every way, then log-uniform operands over every
+exponent and draws aimed at each reduction branch (`tan` beside multiples of
+pi/2, through Cody-Waite and past 2^20 * pi/2 into Payne-Hanek, Kahan's hard
+case; `atan2` with close and far-apart exponents; `hypot` where the squares
+overflow or underflow). `ulp.py` measures every finite nonzero answer against
+mpmath at 200 bits and more, and holds every special answer (a NaN, zero or
+infinite operand or result) to Node's `Math` bit for bit through
+`bench/math-ulp/ref.mjs`. It exits 1 on any special mismatch.
+
+| function | max error | special mismatches |
+| --- | ---: | ---: |
+| `tan` | 0.8253 ulp | 0 |
+| `atan2` | 0.8367 ulp | 0 |
+| `hypot` | 0.9270 ulp | 0 |
+
+Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
+1.4.1, about 40 s on four cores.
+
 ## Other files
 
+- `math-ulp/`: the operands and the mpmath measure behind `std/math.ts`'s
+  accuracy figures ("Math accuracy" above).
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
   not part of this suite.
 - `substr.ts`: what proving a `substring` bound is worth (WP15 §8 `NL9009`),

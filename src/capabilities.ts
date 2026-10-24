@@ -181,6 +181,7 @@ export const builtinCapability = (name: string): i32 => {
     name === "toF64" ||
     name === "f64ToBits" ||
     name === "bitsToF64" ||
+    name === "f32ToBits" ||
     name === "ctSelect" ||
     name === "ctEq" ||
     name === "secureZero" ||
@@ -203,13 +204,18 @@ export const builtinCapability = (name: string): i32 => {
     name === "Math.round" ||
     name === "Math.sin" ||
     name === "Math.cos" ||
+    name === "Math.tan" ||
     name === "Math.exp" ||
     name === "Math.log" ||
     name === "Math.pow" ||
+    name === "Math.atan2" ||
+    name === "Math.hypot" ||
     name === "Math.abs" ||
+    name === "Math.sign" ||
     name === "Math.min" ||
     name === "Math.max" ||
     name === "Math.clz32" ||
+    name === "Math.imul" ||
     name === "Arena.reset" ||
     name === "Arena.mark" ||
     name === "Arena.release" ||
@@ -285,7 +291,8 @@ export const builtinCapability = (name: string): i32 => {
     return CAP_SIGNAL
   }
   // `setRawMode` changes the terminal's state for every process sharing it,
-  // and the four reads ask it; one label for the module, as `net` is.
+  // `setTerminalRestore` writes to it on the way out, and the four reads ask
+  // it; one label for the module, as `net` is.
   if (isTermExport(name)) {
     return CAP_TTY
   }

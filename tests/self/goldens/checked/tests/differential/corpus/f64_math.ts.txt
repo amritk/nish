@@ -3,12 +3,12 @@
 entry --number-mode f64: tests/differential/corpus/f64_math.ts
 function roundAll(x: f64): string -> @roundAll
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.ceil.f64 llvm.floor.f64 llvm.trunc.f64 nish_str_concat nish_str_from_f64
+  calls: llvm.ceil.f64 llvm.copysign.f64 llvm.floor.f64 llvm.trunc.f64 nish_str_concat nish_str_from_f64
   stackSites=0 stackLocals=0
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: llvm.ceil.f64 llvm.cos.f64 llvm.exp.f64 llvm.fabs.f64 llvm.floor.f64 llvm.log.f64 llvm.maxnum.f64 llvm.minnum.f64 llvm.pow.f64 llvm.sin.f64 llvm.sqrt.f64 llvm.trunc.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64 roundAll
+  calls: llvm.ceil.f64 llvm.copysign.f64 llvm.cos.f64 llvm.exp.f64 llvm.fabs.f64 llvm.floor.f64 llvm.log.f64 llvm.maximum.f64 llvm.minimum.f64 llvm.pow.f64 llvm.sin.f64 llvm.sqrt.f64 llvm.trunc.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64 roundAll
   stackSites=0 stackLocals=0
   callee +0:15 roundAll -> @roundAll
   callee +1:15 roundAll -> @roundAll

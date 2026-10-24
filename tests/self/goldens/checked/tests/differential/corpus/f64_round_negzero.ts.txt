@@ -4,6 +4,6 @@ entry --number-mode f64: tests/differential/corpus/f64_round_negzero.ts
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: llvm.ceil.f64 llvm.floor.f64 llvm.trunc.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64
+  calls: llvm.ceil.f64 llvm.copysign.f64 llvm.floor.f64 llvm.trunc.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64
   stackSites=0 stackLocals=0
   local +0:9 x: f64 (const)
