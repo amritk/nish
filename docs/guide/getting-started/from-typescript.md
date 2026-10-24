@@ -75,6 +75,11 @@ declarations for `i32`, `Result` and the other built-in names
 reverse does not hold: `nish` is the authority, as the reference's
 [It is still TypeScript](../../LANGUAGE.md#it-is-still-typescript) says.
 
+`Math` carries over too, with JavaScript's answers down to the corner cases —
+`Math.round(-0.3)` is `-0`, `Math.max(1, NaN)` is `NaN`, `Math.imul` wraps —
+but `Math.min`, `max` and `hypot` take exactly two arguments, and the float
+functions want an `f64`, as [Types](../language/types.md#math) shows.
+
 Each refusal below gives the error code the compiler reports.
 
 ## `number` is an integer
