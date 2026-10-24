@@ -413,9 +413,17 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
  * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
- * `terminalSize` and `setRawMode`, with the restore that the exit, a panic and
- * every signal whose default ends the program run while raw mode holds, and the
- * SIGTSTP handler that gives the terminal back on Ctrl-Z and raw mode on `fg`.
+ * `terminalSize`, `setRawMode` and `setTerminalRestore`, with the restore that the
+ * exit, a panic and every signal whose default ends the program run while raw
+ * mode holds or restore bytes wait, and the SIGTSTP handler that gives the
+ * terminal back on Ctrl-Z and raw mode on `fg`.
+ *
+ * Raised to 1,792 on 2026-10-24 by `setTerminalRestore`, measured **1,777 bytes**:
+ * `nish_set_terminal_restore` 238, `nish_term_finish` 94 (the one `write` loop of
+ * the bytes, inlined into it), the handlers' setup split out of `setRawMode` as
+ * `nish_term_arm` for both callers (+16) and the restore's keeping the panic hook
+ * while bytes wait (+10). Raised in place rather than split into a file of its
+ * own because the bytes go out from this file's static handlers, under its lock.
  *
  * Measured **1,419 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
  * `.text`, 333 of them the SIGTSTP handler and the lock it shares with
@@ -429,7 +437,7 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  * measured ceiling, never a raised one. The budget is the next 256-byte boundary
  * above the measurement, as every ceiling here was set.
  */
-const RUNTIME_TERM_TEXT_BUDGET = 1536
+const RUNTIME_TERM_TEXT_BUDGET = 1792
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena

@@ -453,6 +453,7 @@ cases/str_surrogate_pair added after R6: no rewriter to freeze it with
 cases/term_calls added after R6: no rewriter to freeze it with
 cases/term_import added after R6: no rewriter to freeze it with
 cases/term_pty added after R6: no rewriter to freeze it with
+cases/term_restore added after R6: no rewriter to freeze it with
 cases/union_arena added after R6: no rewriter to freeze it with
 cases/union_forms added after R6: no rewriter to freeze it with
 cases/union_narrowing added after R6: no rewriter to freeze it with

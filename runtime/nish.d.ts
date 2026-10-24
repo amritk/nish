@@ -386,7 +386,7 @@ declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
 // keys of a terminal UI, with no `net` capability. -11 is "nothing is
 // waiting" and -25 "not a terminal" on every platform; any other failure is
 // the host's `-errno`. Under WASI the reading works, `readStdin` waiting for
-// its bytes (ask `waitStdin` first), and the terminal answers -25. Under Node `isTerminal` and `terminalSize` answer and the other three
+// its bytes (ask `waitStdin` first), and the terminal answers -25. Under Node `isTerminal` and `terminalSize` answer and the other four
 // throw.
 
 /** Up to `len` bytes of stdin into `buf` from `off`, never blocking: the count, 0 at end of stream, or -11 when nothing is waiting. */
@@ -404,6 +404,8 @@ declare function terminalSize(): i32[];
  * every signal that ends the program, SIGKILL aside.
  */
 declare function setRawMode(on: boolean): i32;
+/** Bytes the runtime writes to the terminal on stdout at exit, on a panic and on every signal that ends the program (SIGKILL aside), before termios is restored. Replaces the previous string; "" clears it. 0, -25 when stdout is not a terminal, -7 (E2BIG) past NISH_TERM_RESTORE_MAX bytes. The cap is 4096 bytes. */
+declare function setTerminalRestore(bytes: string): i32;
 
 // ---- `Date` and `crypto` (WP34 N3) -----------------------------------------------
 //
@@ -571,6 +573,8 @@ declare module "nish:term" {
   export function terminalSize(): i32[];
   /** Raw mode on stdin's terminal (0), or the mode it had back; -25 when stdin is not a terminal. Restored at exit, on a panic and on every signal that ends the program, SIGKILL aside. */
   export function setRawMode(on: boolean): i32;
+  /** Bytes the runtime writes to the terminal on stdout at exit, on a panic and on every signal that ends the program (SIGKILL aside), before termios is restored. Replaces the previous string; "" clears it. 0, -25 when stdout is not a terminal, -7 (E2BIG) past NISH_TERM_RESTORE_MAX bytes. */
+  export function setTerminalRestore(bytes: string): i32;
 }
 
 // `nish:secret` has source behind it, `std/secret.ts`, but a program imports it

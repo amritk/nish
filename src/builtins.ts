@@ -1107,6 +1107,12 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     }
     return T_I32
   }
+  if (name === "setTerminalRestore") {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+    }
+    return T_I32
+  }
   if (isNetExport(name)) {
     return checkNet(ctx, call, scope, name)
   }
