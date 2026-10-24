@@ -1,0 +1,1 @@
+reject_ffi_handle_use_after_close_keep_module.ts:27:1: error: Top-level `let` is not supported; a module has no top-level code, so only `const` is available

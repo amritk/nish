@@ -4,7 +4,7 @@ entry --number-mode f64: tests/differential/corpus/f64_minmax_nan.ts
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: llvm.maxnum.f64 llvm.minnum.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64
+  calls: llvm.maximum.f64 llvm.minimum.f64 nish_arena_mark nish_arena_release nish_print nish_str_from_f64
   stackSites=0 stackLocals=0
   local +0:9 z: f64 (const)
   local +1:9 nan: f64 (const)

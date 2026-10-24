@@ -47,7 +47,7 @@ the record that found it. The notes below the table name each such finding.
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 17 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
 | C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 7 / 8 ⁴ | 0 / 0 / 0 / 0 |
-| CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `src/cli-style.ts` (the terminal probe) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
+| CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
 | TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 3 ⁹ | 0 / 0 / 0 / 1 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 8 ¹¹ | 0 / 0 / 0 / 1 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
@@ -165,6 +165,25 @@ the record that found it. The notes below the table name each such finding.
     matched as bytes, and ROUTE-9 (Low), the path matched before it is
     decoded, are accepted, with the reason in their record, and are not
     counted, as SC-17 is not.
+
+## Not yet audited
+
+Files of the attacker-facing surface (`std/net/**/*.ts`, `std/crypto/*.ts`,
+`runtime/*.c`) that no record's `## Scope` table names yet.
+`node scripts/security-scope.mjs` (run by `npm test` and CI) fails on a file
+of that surface that is in no scope and not listed here, and on a row here
+whose file is now in a scope or gone, so this list only shrinks: a new module
+ships with its record (CLAUDE.md, "Definition of done"), and an audit that
+takes a file in deletes its row.
+
+| File | Why it is not in a record yet |
+| --- | --- |
+| `std/crypto/sha1.ts` | Reached only from WebSocket's `Sec-WebSocket-Accept`, where SHA-1 is a fixed RFC 6455 transform of a public key, not a security primitive; `http1.md` names it but no Scope table does. |
+| `std/crypto/x509-random.ts` | The private key and serial `x509MintSelfSigned` needs, drawn from the OS CSPRNG; `crypto-x509.md` (X509-6) and `secret.md` cover it in their bodies, not in a Scope table. |
+| `std/net/buffer-pool.ts` | Holds no parser: it lends fixed-size buffers and zeroes what a borrower used on give-back. No record has reviewed that zeroing yet. |
+| `std/net/prefork.ts` | A supervisor over `spawn` and signals that reads no network input; its descriptor hygiene is RT-17 and RT-19 in `runtime.md`. |
+| `std/net/qpack.ts` | HTTP/3's field decoder, which `http3.md` audits through its callers (the refusals of a field section) but does not list in its Scope table. |
+| `std/net/tls/ticket.ts` | The session-ticket seal, open and strike register; `tls.md`'s Resumption section and its ticket-seal stage record the design and tests, but its Scope table does not list the file. |
 
 ## Open findings
 

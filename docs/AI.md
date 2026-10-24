@@ -2743,10 +2743,12 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    prove is an error
    naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)); an
    `uncheckedGet` or `uncheckedSet` behind its `nish:unsafe` import is allowed.
-11. If you are adding to this repository: `npm run check` and `npm test` green,
-   and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
-   trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a
-   conventional commit message, which is its changelog entry.
+11. If you are adding to this repository: `npm run check` and the touched
+   `node tests/run.js` sections green locally, every CI `test` shard green
+   ([CLAUDE.md](../CLAUDE.md#definition-of-done)), and a new construct ships a
+   golden `.ll`, an `llvm-as` pass, a native round trip, a negative test, its
+   `LANGUAGE.md` rule and cookbook entry, and a conventional commit message,
+   which is its changelog entry.
 
 Every `ts nish:ok` and `ts nish:err` block on this page is compiled by
 `npm test`, so an example that has gone stale is a failing test rather than a

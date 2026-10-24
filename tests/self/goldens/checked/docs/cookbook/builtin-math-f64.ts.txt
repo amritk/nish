@@ -7,9 +7,9 @@ function hypot(a: f64, b: f64): f64 -> @hypot$
   stackSites=0 stackLocals=0
 function roundHalfUp(x: f64): f64 -> @roundHalfUp
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.floor.f64
+  calls: llvm.copysign.f64 llvm.floor.f64
   stackSites=0 stackLocals=0
 function clamp01(x: f64): f64 -> @clamp01
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.maxnum.f64 llvm.minnum.f64
+  calls: llvm.maximum.f64 llvm.minimum.f64
   stackSites=0 stackLocals=0

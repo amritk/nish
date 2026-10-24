@@ -117,8 +117,9 @@ static inline void nish_panic_claim(void) {}
 #endif
 
 /* How a panic that skips atexit ends: `_exit(1)`, after `nish_fatal_hook` when
-   it is set. `setRawMode(true)` (runtime-term.c) sets the hook to its restore,
-   and without it a failed bounds check would leave the shell in raw mode. Each
+   it is set. `setRawMode(true)` and `setTerminalRestore` (runtime-term.c) set
+   the hook to the terminal's restore, and without it a failed bounds check
+   would leave the shell in raw mode. Each
    panic path calls this where it called `_exit(1)`, so a call site costs no
    more than it did; `exit(1)` paths need nothing, since the restore is also an
    atexit handler. */

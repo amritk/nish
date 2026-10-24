@@ -1,0 +1,242 @@
+PASS  a letter: whole
+PASS  a letter: split at every byte
+PASS  a letter: a byte a read
+PASS  the up arrow: whole
+PASS  the up arrow: split at every byte
+PASS  the up arrow: a byte a read
+PASS  Ctrl-up: whole
+PASS  Ctrl-up: split at every byte
+PASS  Ctrl-up: a byte a read
+PASS  an SS3 F1: whole
+PASS  an SS3 F1: split at every byte
+PASS  an SS3 F1: a byte a read
+PASS  keypad Enter: whole
+PASS  keypad Enter: split at every byte
+PASS  keypad Enter: a byte a read
+PASS  Delete: whole
+PASS  Delete: split at every byte
+PASS  Delete: a byte a read
+PASS  Shift-F5: whole
+PASS  Shift-F5: split at every byte
+PASS  Shift-F5: a byte a read
+PASS  Home, Insert, Page Up, Page Down, End, F12: whole
+PASS  Home, Insert, Page Up, Page Down, End, F12: split at every byte
+PASS  Home, Insert, Page Up, Page Down, End, F12: a byte a read
+PASS  F6 and F11: whole
+PASS  F6 and F11: split at every byte
+PASS  F6 and F11: a byte a read
+PASS  Home and End as 7~ and 4~: whole
+PASS  Home and End as 7~ and 4~: split at every byte
+PASS  Home and End as 7~ and 4~: a byte a read
+PASS  F4 as 14~, F7 to F10: whole
+PASS  F4 as 14~, F7 to F10: split at every byte
+PASS  F4 as 14~, F7 to F10: a byte a read
+PASS  Ctrl-Home, Ctrl-End, Shift-F2, Shift-F4: whole
+PASS  Ctrl-Home, Ctrl-End, Shift-F2, Shift-F4: split at every byte
+PASS  Ctrl-Home, Ctrl-End, Shift-F2, Shift-F4: a byte a read
+PASS  SS3 Home, End, F2, F4: whole
+PASS  SS3 Home, End, F2, F4: split at every byte
+PASS  SS3 Home, End, F2, F4: a byte a read
+PASS  Shift-Tab: whole
+PASS  Shift-Tab: split at every byte
+PASS  Shift-Tab: a byte a read
+PASS  the Linux console's F1: whole
+PASS  the Linux console's F1: split at every byte
+PASS  the Linux console's F1: a byte a read
+PASS  the Linux console's F2 to F5: whole
+PASS  the Linux console's F2 to F5: split at every byte
+PASS  the Linux console's F2 to F5: a byte a read
+PASS  an unknown Linux console key: whole
+PASS  an unknown Linux console key: split at every byte
+PASS  an unknown Linux console key: a byte a read
+PASS  Alt-x: whole
+PASS  Alt-x: split at every byte
+PASS  Alt-x: a byte a read
+PASS  Alt-Backspace: whole
+PASS  Alt-Backspace: split at every byte
+PASS  Alt-Backspace: a byte a read
+PASS  ESC then the up arrow: whole
+PASS  ESC then the up arrow: split at every byte
+PASS  ESC then the up arrow: a byte a read
+PASS  a lone ESC: whole
+PASS  a lone ESC: split at every byte
+PASS  a lone ESC: a byte a read
+PASS  ESC O given up: whole
+PASS  ESC O given up: split at every byte
+PASS  ESC O given up: a byte a read
+PASS  a broken CSI: whole
+PASS  a broken CSI: split at every byte
+PASS  a broken CSI: a byte a read
+PASS  an unknown CSI: whole
+PASS  an unknown CSI: split at every byte
+PASS  an unknown CSI: a byte a read
+PASS  UTF-8: whole
+PASS  UTF-8: split at every byte
+PASS  UTF-8: a byte a read
+PASS  broken UTF-8: whole
+PASS  broken UTF-8: split at every byte
+PASS  broken UTF-8: a byte a read
+PASS  UTF-8 cut off: whole
+PASS  UTF-8 cut off: split at every byte
+PASS  UTF-8 cut off: a byte a read
+PASS  kitty Ctrl-a: whole
+PASS  kitty Ctrl-a: split at every byte
+PASS  kitty Ctrl-a: a byte a read
+PASS  kitty a released: whole
+PASS  kitty a released: split at every byte
+PASS  kitty a released: a byte a read
+PASS  kitty Shift-a repeating, with its text: whole
+PASS  kitty Shift-a repeating, with its text: split at every byte
+PASS  kitty Shift-a repeating, with its text: a byte a read
+PASS  kitty text of two code points: whole
+PASS  kitty text of two code points: split at every byte
+PASS  kitty text of two code points: a byte a read
+PASS  kitty text past ASCII: whole
+PASS  kitty text past ASCII: split at every byte
+PASS  kitty text past ASCII: a byte a read
+PASS  kitty text that is no scalar value: whole
+PASS  kitty text that is no scalar value: split at every byte
+PASS  kitty text that is no scalar value: a byte a read
+PASS  kitty Enter, Tab, Backspace, Escape, Space: whole
+PASS  kitty Enter, Tab, Backspace, Escape, Space: split at every byte
+PASS  kitty Enter, Tab, Backspace, Escape, Space: a byte a read
+PASS  kitty code 1 with Ctrl, a control: whole
+PASS  kitty code 1 with Ctrl, a control: split at every byte
+PASS  kitty code 1 with Ctrl, a control: a byte a read
+PASS  kitty left Shift: whole
+PASS  kitty left Shift: split at every byte
+PASS  kitty left Shift: a byte a read
+PASS  kitty Up released: whole
+PASS  kitty Up released: split at every byte
+PASS  kitty Up released: a byte a read
+PASS  kitty F3 as 13~: whole
+PASS  kitty F3 as 13~: split at every byte
+PASS  kitty F3 as 13~: a byte a read
+PASS  modifyOtherKeys Ctrl-i: whole
+PASS  modifyOtherKeys Ctrl-i: split at every byte
+PASS  modifyOtherKeys Ctrl-i: a byte a read
+PASS  a left press: whole
+PASS  a left press: split at every byte
+PASS  a left press: a byte a read
+PASS  a right release: whole
+PASS  a right release: split at every byte
+PASS  a right release: a byte a read
+PASS  a move with no button: whole
+PASS  a move with no button: split at every byte
+PASS  a move with no button: a byte a read
+PASS  the wheel down: whole
+PASS  the wheel down: split at every byte
+PASS  the wheel down: a byte a read
+PASS  a Ctrl-left press: whole
+PASS  a Ctrl-left press: split at every byte
+PASS  a Ctrl-left press: a byte a read
+PASS  a Shift-Alt-left press: whole
+PASS  a Shift-Alt-left press: split at every byte
+PASS  a Shift-Alt-left press: a byte a read
+PASS  button 8: whole
+PASS  button 8: split at every byte
+PASS  button 8: a byte a read
+PASS  a pixel press, cell size unknown: whole
+PASS  a pixel press, cell size unknown: split at every byte
+PASS  a pixel press, cell size unknown: a byte a read
+PASS  a pixel press, 8x16 cells: whole
+PASS  a pixel press, 8x16 cells: split at every byte
+PASS  a pixel press, 8x16 cells: a byte a read
+PASS  a paste with ESC and a newline: whole
+PASS  a paste with ESC and a newline: split at every byte
+PASS  a paste with ESC and a newline: a byte a read
+PASS  a paste with half a terminator: whole
+PASS  a paste with half a terminator: split at every byte
+PASS  a paste with half a terminator: a byte a read
+PASS  an empty paste: whole
+PASS  an empty paste: split at every byte
+PASS  an empty paste: a byte a read
+PASS  a stray paste end: whole
+PASS  a stray paste end: split at every byte
+PASS  a stray paste end: a byte a read
+PASS  focus: whole
+PASS  focus: split at every byte
+PASS  focus: a byte a read
+PASS  replies among keys: whole
+PASS  replies among keys: split at every byte
+PASS  replies among keys: a byte a read
+PASS  a DA2 reply: whole
+PASS  a DA2 reply: split at every byte
+PASS  a DA2 reply: a byte a read
+PASS  an XTSMGRAPHICS reply: whole
+PASS  an XTSMGRAPHICS reply: split at every byte
+PASS  an XTSMGRAPHICS reply: a byte a read
+PASS  an R with no CPR awaited is F3: whole
+PASS  an R with no CPR awaited is F3: split at every byte
+PASS  an R with no CPR awaited is F3: a byte a read
+PASS  a CPR awaited, then F3: whole
+PASS  a CPR awaited, then F3: split at every byte
+PASS  a CPR awaited, then F3: a byte a read
+PASS  a CPR takes one off cprOutstanding
+PASS  an OSC broken off by a key: whole
+PASS  an OSC broken off by a key: split at every byte
+PASS  an OSC broken off by a key: a byte a read
+PASS  a DCS over three reads 40 ms apart
+PASS  an unterminated OSC is dropped at the timeout
+PASS  nothing is held after it
+PASS  the next key comes through
+PASS  ESC, then [A 100 ms later
+PASS  a paste is never timed out
+PASS  a press passes through
+PASS  a is down
+PASS  A is the same key
+PASS  the press again is a repeat
+PASS  under releaseGapMs after the repeat, nothing
+PASS  releaseGapMs after the repeat, a release
+PASS  a is up
+PASS  a tap: under firstRepeatMs, nothing
+PASS  a tap: firstRepeatMs after it, a release with the press's code
+PASS  releases due come before the events
+PASS  up is down, whatever the code
+PASS  repeats read 200 ms after the last are repeats
+PASS  a is still down
+PASS  under releaseGapMs after them, nothing
+PASS  with no repeat for releaseGapMs, a release
+PASS  a release carries the press's modifiers
+PASS  acked, read every 20 ms (the first repeat at 660)
+PASS  acked, reads 200 ms apart (B1)
+PASS  acked, reads 150 ms apart, ticks between (B2)
+PASS  acked, reads 250 ms apart, ticks between (B2)
+PASS  acked, reads 350 ms apart
+PASS  acked, a 5 s stall mid-hold, then let go promptly (B4)
+PASS  acked, the first repeat read at 900 after bursts without it (B5)
+PASS  acked, a tap comes up once the watermark passes firstRepeatMs (B3)
+PASS  acks stop: no release, no backstop
+PASS  without acks, read every 20 ms: held, then let go
+PASS  without acks, reads 150 ms apart flicker
+PASS  an older ack leaves the watermark
+PASS  past it by releaseGapMs, a release on the next tick
+PASS  an hour on with no ack, still down
+PASS  cleared, the clock lets it go
+PASS  no watermark, no age
+PASS  its age is how long ago the answered query was sent
+PASS  a NaN ack sets no watermark
+PASS  nor moves one
+PASS  a NaN tick releases nothing
+PASS  a press at NaN is a repeat
+PASS  and keeps the key's time
+PASS  a new key at infinity is timed from the watermark
+PASS  and comes up firstRepeatMs after it
+PASS  a real release
+PASS  releases are real from then on
+PASS  and none are made up
+PASS  c is still down
+PASS  a press again stays a press
+PASS  a release of a key not down is dropped
+PASS  made up from silence
+PASS  the real release then is dropped
+PASS  but still makes releases real
+PASS  losing focus lets every key go
+PASS  x is up
+PASS  Ctrl-C is a quit
+PASS  kitty Ctrl-c is a quit
+PASS  kitty Ctrl-c with Num Lock on is a quit
+PASS  its repeat and release are dropped
+PASS  without quitOnCtrlC, Ctrl-C is a key
+term events: 240 passed, 0 failed, 0 skipped
+
