@@ -236,17 +236,26 @@ const emitMathPow = (emitter: Emitter, expr: Node): string => {
 /**
  * `Math.round(x)`: JavaScript rounds half toward +infinity, which is neither
  * `llvm.round` nor `llvm.roundeven`, and `floor(x + 0.5)` is wrong for
- * 0.49999999999999994. `f = floor(x)`, plus one when `x - f >= 0.5`, then
- * `x`'s sign put back: a value in `[-0.5, 0)` rounds to `-0`, and a NaN stays
- * NaN, as they do in JavaScript.
+ * 0.49999999999999994. Adding and taking away `copysign(2^52, x)` rounds a
+ * `|x| < 2^52` to the nearest integer `t`, ties to even. The answer is `t`
+ * except on a tie `t` took downward (`x - t == 0.5`), where it is `t + 1`.
+ * Anything at or past 2^52, and NaN and the infinities, are their own answer.
+ * Then `x`'s sign goes back on, so a value in `[-0.5, 0)` rounds to `-0`, as it
+ * does in JavaScript. Every step is plain SSE2: `llvm.floor` is a libm call
+ * without SSE4.1, and that call timed about 10% slower in `bench/math`.
  */
 const emitMathRound = (emitter: Emitter, expr: Node): string => {
   const x = emitter.emitExpression(firstArgument(expr))
-  const floor = callIntrinsic(emitter, "llvm.floor.f64", "double", `double ${x}`)
-  const frac = emitter.fn.emitValue(`fsub double ${x}, ${floor}`)
-  const up = emitter.fn.emitValue(`fcmp oge double ${frac}, ${f64Hex(0.5)}`)
-  const next = emitter.fn.emitValue(`fadd double ${floor}, ${f64Hex(1.0)}`)
-  const r = emitter.fn.emitValue(`select i1 ${up}, double ${next}, double ${floor}`)
+  const abs = callIntrinsic(emitter, "llvm.fabs.f64", "double", `double ${x}`)
+  const small = emitter.fn.emitValue(`fcmp olt double ${abs}, ${f64Hex(4503599627370496.0)}`)
+  const magic = callIntrinsic(emitter, "llvm.copysign.f64", "double", `double ${f64Hex(4503599627370496.0)}, double ${x}`)
+  const shifted = emitter.fn.emitValue(`fadd double ${x}, ${magic}`)
+  const nearest = emitter.fn.emitValue(`fsub double ${shifted}, ${magic}`)
+  const frac = emitter.fn.emitValue(`fsub double ${x}, ${nearest}`)
+  const tie = emitter.fn.emitValue(`fcmp oeq double ${frac}, ${f64Hex(0.5)}`)
+  const next = emitter.fn.emitValue(`fadd double ${nearest}, ${f64Hex(1.0)}`)
+  const rounded = emitter.fn.emitValue(`select i1 ${tie}, double ${next}, double ${nearest}`)
+  const r = emitter.fn.emitValue(`select i1 ${small}, double ${rounded}, double ${x}`)
   return callIntrinsic(emitter, "llvm.copysign.f64", "double", `double ${r}, double ${x}`)
 }
 
@@ -677,7 +686,7 @@ export const builtinCalleesNamed = (
     return out
   }
   if (name === "Math.round") {
-    out.push("llvm.floor.f64")
+    out.push("llvm.fabs.f64")
     out.push("llvm.copysign.f64")
     return out
   }
