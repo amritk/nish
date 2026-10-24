@@ -542,7 +542,9 @@ corpus, CI's jobs, and "Reading a crash". The rules a change has to keep:
 - **One recipe**: `bash scripts/fuzz.sh --build|--run|--replay|--smoke`. It
   compiles the target with `build/nish` (built from this checkout, so the std
   under test is this one), and links it with `tests/fuzz/harness.c` and the
-  runtime under `-fsanitize=fuzzer,address,undefined -DNISH_FUZZ_ABORT`. A
+  runtime under `-fsanitize=fuzzer,address,undefined -DNISH_FUZZ_ABORT`,
+  after marking every `define` in the target's `.ll` `sanitize_address`
+  (clang instruments nothing without it; UBSan reaches only the C). A
   `panic`, a failed check, a sanitizer report, an input over a second and an
   out-of-memory are all crashes. The sanitizer runtimes come from
   `libclang-rt-18-dev`.

@@ -112,6 +112,17 @@ build() {
     cat "$ir.log" >&2
     die "$name: compile failed"
   fi
+  # clang instruments only functions carrying `sanitize_address`, which the
+  # compiler never emits, so every definition is given it here; without it the
+  # compiled Nish code links under ASan uninstrumented. Every `define` line
+  # ends `) {` or `) #N {` (an attribute group), and `#N sanitize_address` is a
+  # valid mixed list. UBSan instruments in clang's frontend, so it never
+  # reaches a .ll: the compiled code's own bounds and division checks stand
+  # in for it. A define this misses fails the build rather than going quiet.
+  sed -i -E 's/^(define .*\) (#[0-9]+ )?)\{$/\1sanitize_address {/' "$ir"/*.ll
+  if grep -h '^define ' "$ir"/*.ll | grep -qv ' sanitize_address {$'; then
+    die "$name: a define in $ir/ was not given sanitize_address"
+  fi
   # A library build writes one module per source module, the std modules the
   # target imports included, and the link takes them all.
   "$CC" "${SAN_FLAGS[@]}" -Wno-override-module "$ir"/*.ll "${runtime_objs[@]}" -lm \

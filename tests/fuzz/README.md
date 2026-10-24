@@ -3,7 +3,10 @@
 libFuzzer targets for the parsers in `std/` that take untrusted bytes:
 JSON, percent-decoding and query strings, and regular expressions. Each is
 built with the repository's own compiler and std and linked under
-`-fsanitize=fuzzer,address,undefined`.
+`-fsanitize=fuzzer,address,undefined`. `scripts/fuzz.sh` marks every function
+in the compiled `.ll` `sanitize_address`, so ASan checks the Nish code too.
+UBSan instruments only C (the runtime and the harness); the Nish code's own
+bounds and division checks cover that ground.
 
 | Path | What it is |
 | --- | --- |
@@ -100,7 +103,8 @@ artifact. Then work it the way the security records require
 
 - **`fuzz-smoke`** (`.github/workflows/ci.yml`, every pull request): builds
   every target, replays its corpus and regressions, and fuzzes it for 60
-  seconds from `-seed=1`. It then runs `node tests/run.js runtime_sanitize`:
+  seconds from `-seed=1`. The seed is fixed, but the run is bounded by wall
+  clock, so how many inputs it reaches varies from run to run. It then runs `node tests/run.js runtime_sanitize`:
   the runtime unit test under ASan and UBSan, single-threaded and with
   threads.
 - **`Fuzz`** (`.github/workflows/fuzz.yml`, Saturdays and on dispatch): one

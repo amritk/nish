@@ -9,11 +9,16 @@
  * `urlQueryGet` as a string. The answers are checked against each other: a
  * decode reports an error exactly when `percentDecodeErrorAt` names a byte,
  * writes no more bytes than it reads, and a lenient decode of a text the
- * strict one accepts writes the same bytes. A refusal is a negative code or
+ * strict one accepts writes the same bytes. A query past its pair cap ends
+ * `URL_QUERY_ERR_PAIRS` after exactly the cap, and `urlDecode` is null
+ * whenever the strict decode refuses, and never when it accepts and writes
+ * only ASCII. A refusal is a negative code or
  * a null; a panic, or answers that disagree, is a crash.
  */
 import {
   URL_DECODE_LENIENT,
+  URL_QUERY_END,
+  URL_QUERY_ERR_PAIRS,
   URL_QUERY_PAIR,
   UrlPathSegments,
   UrlQuery,
@@ -95,7 +100,8 @@ export const fuzzOne = (data: u8[]): void => {
   const from: i32 = at < 0 ? 0 : at + 1
   q.reset(data, from, len - from)
   let pairs: i32 = 0
-  while (q.next() === URL_QUERY_PAIR) {
+  let last: i32 = q.next()
+  while (last === URL_QUERY_PAIR) {
     if (q.keyStart < from || q.keyLength < 0 || q.keyStart + q.keyLength > len) {
       panic("url: a query key is outside the query")
     }
@@ -108,12 +114,35 @@ export const fuzzOne = (data: u8[]): void => {
     if (pairs > limits.maxPairs) {
       panic("url: the query answered more pairs than its cap")
     }
+    last = q.next()
+  }
+  if (last !== URL_QUERY_END) {
+    if (last !== URL_QUERY_ERR_PAIRS || q.failed !== URL_QUERY_ERR_PAIRS || pairs !== limits.maxPairs) {
+      panic(`url: the query ended ${last} (failed ${q.failed}) after ${pairs} pairs`)
+    }
   }
   q.reset(data, from, len - from)
   urlQueryFind(q, "a")
 
+  // `String.fromBytes` copies the bytes as they are, so `text` is `data`.
   const text: string = String.fromBytes(data, 0, len)
-  urlDecode(text, 0)
+  const strict: u8[] = new Array<u8>(len)
+  const strictLen: i32 = percentDecode(data, 0, len, strict, 0, 0)
+  let ascii: boolean = true
+  let i: i32 = 0
+  while (i < strictLen) {
+    if (strict[i] >= 128) {
+      ascii = false
+    }
+    i += 1
+  }
+  const decoded: string | null = urlDecode(text, 0)
+  if (strictLen < 0 && decoded !== null) {
+    panic(`url: urlDecode accepted a text percentDecode refuses (${strictLen})`)
+  }
+  if (strictLen >= 0 && ascii && decoded === null) {
+    panic("url: urlDecode refused a text that decodes to ASCII")
+  }
   urlDecode(text, 1)
   urlQueryGet(text, "a")
 }

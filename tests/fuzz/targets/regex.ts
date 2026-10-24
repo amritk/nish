@@ -7,7 +7,8 @@
  * `exec`, `find`, `findAll`, `count`, `replace`, `replaceAll` and `split`,
  * whose answers are checked against each other: `test` is whether `exec`
  * finds a match, `find` answers the same match, `count` is how many
- * `findAll` returns, and every match lies inside the subject. The pattern is
+ * `findAll` returns, every match lies inside the subject, and `replaceAll`
+ * with `$&` gives the subject back. The pattern is
  * also escaped with `regexEscape`, which must compile and match the pattern
  * itself unless it is not UTF-8, which `regexCompile` refuses. A refusal is an error result; a panic, or answers that disagree, is
  * a crash.
@@ -76,6 +77,9 @@ const exercise = (re: Regex, subject: string): void => {
   }
   re.replace(subject, "<$&|$`|$'>")
   re.replaceAll(subject, "[$1$<n>$$]")
+  if (re.replaceAll(subject, "$&") !== subject) {
+    panic("regex: replaceAll with $& changed the subject")
+  }
   re.split(subject)
 }
 

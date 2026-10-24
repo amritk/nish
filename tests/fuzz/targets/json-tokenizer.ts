@@ -7,11 +7,13 @@
  * short inputs; bit 1 calls `skipValue` at every container instead of
  * stepping into it. Every token is read back the way a decoder would: its
  * string into a buffer of exactly `stringLength()` bytes, its number as an
- * integer, an unsigned and an `f64`. A refusal is a negative token; nothing
- * the text holds may panic.
+ * integer, an unsigned and an `f64`. A refusal is a negative token, never
+ * `JSON_TOK_ERR_WINDOW`, since the window is valid; nothing the text holds
+ * may panic.
  */
 import {
   JSON_TOK_ARRAY_BEGIN,
+  JSON_TOK_ERR_WINDOW,
   JSON_TOK_KEY,
   JSON_TOK_NUMBER,
   JSON_TOK_OBJECT_BEGIN,
@@ -68,5 +70,9 @@ export const fuzzOne = (data: u8[]): void => {
   }
   if (steps > n) {
     panic("json-tokenizer: more tokens than bytes")
+  }
+  // The window `[1, n)` always lies inside `data`.
+  if (k === JSON_TOK_ERR_WINDOW || tok.failed === JSON_TOK_ERR_WINDOW) {
+    panic("json-tokenizer: a valid window was refused as JSON_TOK_ERR_WINDOW")
   }
 }

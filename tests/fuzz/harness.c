@@ -3,7 +3,8 @@
    A target is a library module, `tests/fuzz/targets/<name>.ts`, that exports
    `fuzzOne(data: u8[]): void`; an exported function is a plain C symbol and a
    `u8[]` is a `nish_array *`. Each input is copied into a heap block of exactly
-   its length, so ASan sees a read past its end, and the block is freed after
+   its length, so ASan sees a read past its end (scripts/fuzz.sh marks the
+   target's compiled functions `sanitize_address`; UBSan reaches only C), and the block is freed after
    the call, so a target that kept it is a use after free. The arena is reset
    after every input: nothing a target allocates outlives the input that made
    it. scripts/fuzz.sh links this with the target's `.ll` and the runtime built
