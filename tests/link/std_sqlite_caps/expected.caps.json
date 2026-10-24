@@ -180,11 +180,11 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.bindBlob", "at": "std/sqlite.ts:314:17", "calls": "nishsqlite_bind_bytes" }
+                  { "function": "Statement.bindBlob", "at": "std/sqlite.ts:311:17", "calls": "nishsqlite_bind_bytes" }
                 ]
               },
               "panics": [
-                { "kind": "ffi-length", "at": "std/sqlite.ts:314:55", "proven": true }
+                { "kind": "ffi-length", "at": "std/sqlite.ts:311:55", "proven": true }
               ]
             },
             {
@@ -193,7 +193,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.bindF64", "at": "std/sqlite.ts:294:17", "calls": "nishsqlite_bind_f64" }
+                  { "function": "Statement.bindF64", "at": "std/sqlite.ts:291:17", "calls": "nishsqlite_bind_f64" }
                 ]
               },
               "panics": []
@@ -204,7 +204,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.bindI64", "at": "std/sqlite.ts:289:17", "calls": "nishsqlite_bind_i64" }
+                  { "function": "Statement.bindI64", "at": "std/sqlite.ts:286:17", "calls": "nishsqlite_bind_i64" }
                 ]
               },
               "panics": []
@@ -215,7 +215,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.bindNull", "at": "std/sqlite.ts:299:17", "calls": "nishsqlite_bind_null" }
+                  { "function": "Statement.bindNull", "at": "std/sqlite.ts:296:17", "calls": "nishsqlite_bind_null" }
                 ]
               },
               "panics": []
@@ -226,11 +226,11 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.bindText", "at": "std/sqlite.ts:304:17", "calls": "nishsqlite_bind_text" }
+                  { "function": "Statement.bindText", "at": "std/sqlite.ts:301:17", "calls": "nishsqlite_bind_text" }
                 ]
               },
               "panics": [
-                { "kind": "ffi-nul", "at": "std/sqlite.ts:304:54", "proven": false }
+                { "kind": "ffi-nul", "at": "std/sqlite.ts:301:54", "proven": false }
               ]
             },
             {
@@ -239,11 +239,11 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.bindTextBytes", "at": "std/sqlite.ts:309:17", "calls": "nishsqlite_bind_bytes" }
+                  { "function": "Statement.bindTextBytes", "at": "std/sqlite.ts:306:17", "calls": "nishsqlite_bind_bytes" }
                 ]
               },
               "panics": [
-                { "kind": "ffi-length", "at": "std/sqlite.ts:309:55", "proven": true }
+                { "kind": "ffi-length", "at": "std/sqlite.ts:306:55", "proven": true }
               ]
             },
             {
@@ -252,7 +252,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.clearBindings", "at": "std/sqlite.ts:319:17", "calls": "nishsqlite_clear_bindings" }
+                  { "function": "Statement.clearBindings", "at": "std/sqlite.ts:316:17", "calls": "nishsqlite_clear_bindings" }
                 ]
               },
               "panics": []
@@ -263,7 +263,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.columnBytes", "at": "std/sqlite.ts:366:12", "calls": "nishsqlite_column_bytes" }
+                  { "function": "Statement.columnBytes", "at": "std/sqlite.ts:363:12", "calls": "nishsqlite_column_bytes" }
                 ]
               },
               "panics": []
@@ -274,7 +274,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.columnCount", "at": "std/sqlite.ts:346:12", "calls": "nishsqlite_column_count" }
+                  { "function": "Statement.columnCount", "at": "std/sqlite.ts:343:12", "calls": "nishsqlite_column_count" }
                 ]
               },
               "panics": []
@@ -285,7 +285,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.columnF64", "at": "std/sqlite.ts:361:12", "calls": "nishsqlite_column_f64" }
+                  { "function": "Statement.columnF64", "at": "std/sqlite.ts:358:12", "calls": "nishsqlite_column_f64" }
                 ]
               },
               "panics": []
@@ -296,7 +296,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.columnI64", "at": "std/sqlite.ts:356:12", "calls": "nishsqlite_column_i64" }
+                  { "function": "Statement.columnI64", "at": "std/sqlite.ts:353:12", "calls": "nishsqlite_column_i64" }
                 ]
               },
               "panics": []
@@ -307,12 +307,12 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.columnInto", "at": "std/sqlite.ts:382:20", "calls": "nishsqlite_column_into" }
+                  { "function": "Statement.columnInto", "at": "std/sqlite.ts:379:20", "calls": "nishsqlite_column_into" }
                 ]
               },
               "panics": [
-                { "kind": "ffi-length", "at": "std/sqlite.ts:382:59", "proven": true },
-                { "kind": "overflow", "at": "std/sqlite.ts:384:18", "proven": false }
+                { "kind": "ffi-length", "at": "std/sqlite.ts:379:59", "proven": true },
+                { "kind": "overflow", "at": "std/sqlite.ts:381:18", "proven": false }
               ]
             },
             {
@@ -321,11 +321,11 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.columnText", "at": "std/sqlite.ts:371:12", "calls": "nishsqlite_column_text" }
+                  { "function": "Statement.columnText", "at": "std/sqlite.ts:368:12", "calls": "nishsqlite_column_text" }
                 ]
               },
               "panics": [
-                { "kind": "oom", "at": "std/sqlite.ts:371:12", "allowed": true }
+                { "kind": "oom", "at": "std/sqlite.ts:368:12", "allowed": true }
               ]
             },
             {
@@ -334,7 +334,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.columnType", "at": "std/sqlite.ts:351:12", "calls": "nishsqlite_column_type" }
+                  { "function": "Statement.columnType", "at": "std/sqlite.ts:348:12", "calls": "nishsqlite_column_type" }
                 ]
               },
               "panics": []
@@ -352,14 +352,14 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.error", "at": "std/sqlite.ts:391:51", "calls": "nishsqlite_stmt_errmsg" }
+                  { "function": "Statement.error", "at": "std/sqlite.ts:388:51", "calls": "nishsqlite_stmt_errmsg" }
                 ]
               },
               "panics": [
-                { "kind": "oom", "at": "std/sqlite.ts:391:12", "allowed": true },
-                { "kind": "call", "at": "std/sqlite.ts:391:34", "callee": "messageFor", "via": "ffi-null" },
-                { "kind": "ffi-null", "at": "std/sqlite.ts:391:51", "proven": false },
-                { "kind": "oom", "at": "std/sqlite.ts:391:51", "allowed": true }
+                { "kind": "oom", "at": "std/sqlite.ts:388:12", "allowed": true },
+                { "kind": "call", "at": "std/sqlite.ts:388:34", "callee": "messageFor", "via": "ffi-null" },
+                { "kind": "ffi-null", "at": "std/sqlite.ts:388:51", "proven": false },
+                { "kind": "oom", "at": "std/sqlite.ts:388:51", "allowed": true }
               ]
             },
             {
@@ -368,7 +368,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.finalize", "at": "std/sqlite.ts:341:17", "calls": "nishsqlite_finalize" }
+                  { "function": "Statement.finalize", "at": "std/sqlite.ts:338:17", "calls": "nishsqlite_finalize" }
                 ]
               },
               "panics": []
@@ -379,7 +379,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.reset", "at": "std/sqlite.ts:336:17", "calls": "nishsqlite_reset" }
+                  { "function": "Statement.reset", "at": "std/sqlite.ts:333:17", "calls": "nishsqlite_reset" }
                 ]
               },
               "panics": []
@@ -390,7 +390,7 @@
               "capabilities": ["ffi"],
               "witnesses": {
                 "ffi": [
-                  { "function": "Statement.step", "at": "std/sqlite.ts:324:21", "calls": "nishsqlite_step" }
+                  { "function": "Statement.step", "at": "std/sqlite.ts:321:21", "calls": "nishsqlite_step" }
                 ]
               },
               "panics": []

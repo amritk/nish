@@ -245,7 +245,7 @@ export class Database {
     if (s < 0) {
       return Err(this.error(-s))
     }
-    return Ok(new Statement(s, this.handle))
+    return Ok(new Statement(s))
   }
 
   /** The error for `code`, which this connection's last call answered. Ask before the next call. */
@@ -276,12 +276,9 @@ export class Database {
 export class Statement {
   /** The adapter's handle. */
   handle: i32
-  /** The handle of the connection it was prepared on. */
-  database: i32
 
-  constructor(handle: i32, database: i32) {
+  constructor(handle: i32) {
     this.handle = handle
-    this.database = database
   }
 
   /** Binds an integer to parameter `i`. */

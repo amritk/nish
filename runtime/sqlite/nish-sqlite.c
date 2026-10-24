@@ -66,7 +66,7 @@ static NISH_TLS char nishsqlite_open_message[256];
 
 static inline nishsqlite_slot *slot_of(nishsqlite_table *t, int32_t h) {
   int32_t i = h & NISH_SQLITE_INDEX;
-  if (h <= 0 || i == 0 || i >= t->len) return NULL;
+  if (h <= 0 || i >= t->len) return NULL;
   nishsqlite_slot *s = &t->at[i];
   if (s->p == NULL || s->gen != (h >> 16)) return NULL;
   return s;
@@ -95,6 +95,7 @@ static int32_t slot_take(nishsqlite_table *t, void *p, int32_t owner) {
       int32_t cap = t->cap ? t->cap * 2 : 16;
       nishsqlite_slot *at = realloc(t->at, (size_t)cap * sizeof *at);
       if (at == NULL) return 0;
+      memset(at + t->cap, 0, (size_t)(cap - t->cap) * sizeof *at); /* at[0] stays empty */
       t->at = at;
       t->cap = cap;
     }
