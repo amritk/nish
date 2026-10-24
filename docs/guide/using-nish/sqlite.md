@@ -239,7 +239,10 @@ Some answers are not errors, or not the error you might expect:
 
 A call through `nish/sqlite` costs about what the same call to SQLite's C API
 costs. `bench/sqlite/` measures the challenge schema's queries both ways,
-against the same SQLite with the same options:
+against the same SQLite with the same options. Each workload is judged by its
+median per call: a difference is reported only when it is larger than the gap
+between two byte-identical copies of the same Nish binary and than the spread
+of either side's own runs. Otherwise it is "not measurable".
 
 | Workload | Through `nish/sqlite` | Through C | Difference |
 | --- | --- | --- | --- |
@@ -248,16 +251,14 @@ against the same SQLite with the same options:
 | Insert a post, autocommit | 14,213 ns | 14,078 ns | not measurable (commit cost dominates) |
 | Insert a post, in a transaction | 4,196 ns | 4,294 ns | not measurable |
 
-The figures are medians per call, on a four-core Xeon virtual machine. "Not
-measurable" means the difference is smaller than the gap between two
-byte-identical copies of the same Nish binary, or than the spread of either
-side's own runs. The difference includes the module's own checks.
+The figures are medians per call, on a four-core Xeon virtual machine. The
+difference includes the module's own checks.
 
 - **Reading many columns is where the module shows.** Reading the 20 newest
   posts reads 100 columns, steps 21 times and resets once, and costs under
-  1 µs more than in C, about 2 to 6 % of the call. Each read checks the
-  statement's handle and asks whether a row is current, and `columnInto` asks
-  the column's type.
+  1 µs more than in C. Across three measurements the difference ranged from
+  about 2 to 6 % of the call. Which part of the call carries it, the column
+  reads, the steps or the reset, is not measured.
 - **An autocommit insert's cost is mostly the commit.** Its runs vary by more
   than the module could add; in a transaction the difference is not
   measurable.

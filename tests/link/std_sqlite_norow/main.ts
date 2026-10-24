@@ -24,7 +24,11 @@ const noRow = (t: Suite, when: string, db: Database, q: Statement, buf: u8[]): v
   t.ok(`${when}: column 99 is RANGE`, far.isErr() && far.error === SQLITE_RANGE);
   const negative = q.columnInto(-1, buf, 0);
   t.ok(`${when}: column -1 is RANGE`, negative.isErr() && negative.error === SQLITE_RANGE);
-  t.eqI32(`${when}: and writes nothing`, toI32(buf[0]), 7);
+  let sevens = 0;
+  for (let i = 0; i < buf.length; i++) {
+    if (toI32(buf[i]) === 7) sevens = sevens + 1;
+  }
+  t.eqI32(`${when}: and writes nothing`, sevens, buf.length);
   t.eqStr(`${when}: the connection's message is unchanged`, db.error(SQLITE_ERROR).message, before);
 };
 
