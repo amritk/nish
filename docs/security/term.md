@@ -25,6 +25,16 @@ area's runtime record (TERM-5).
 | `std/term.ts` | `Screen` (`resize`, `put`, `flush`), `Canvas` constructor, `KeyDecoder` (`feed`, `poll`), `termDecodeKeys` |
 | `src/` | the `nish:term` builtins' checker rules (capability `tty`, the wasm refusal, aliasing) and the slice check emitted before `nish_read_stdin` |
 
+Added after the audit, with `setTerminalRestore` (#876, at `b528555`):
+`nish_set_terminal_restore`, `nish_term_write_out`, `nish_term_finish` and
+`nish_term_arm`, read for the same threat model. The bytes they write come
+from the program, not from stdin or a signal. They are refused past
+`NISH_TERM_RESTORE_MAX` (4,096) before the `memcpy` into a buffer of that
+size, published by swapping one word after the copy so a handler sees the
+old bytes or the new ones, and written once, by `write` alone, with every
+signal blocked. No finding. The handlers it arms are TERM-1's, so the
+restore bytes go out on every signal TERM-1's fix catches.
+
 Out of scope: the rendering of `std/term` output by the terminal emulator;
 `runtime/nish.mjs`'s browser and Node adapters beyond the parity checks
 named below; WASI hosts' own stdin; threads other than the one that armed raw
@@ -51,7 +61,7 @@ or its arguments. A win is:
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| TERM-1 | Low | `runtime/runtime-term.c:364-371` (`nish_term_set`) | The terminal is restored only for the signals in a fixed list. SIGIO/SIGPOLL, SIGPWR, SIGSTKFLT, SIGRTMIN..SIGRTMAX (and SIGEMT on Darwin) also end the process by default, are not caught, and leave the terminal raw. This contradicts `docs/LANGUAGE.md:7784` and `docs/guide/using-nish/terminal.md:82` | Fixed. `nish_term_set` catches every signal from 1 to `SIGRTMAX` that is at `SIG_DFL` and whose default ends the program; the ones a default ignores or that stop it are skipped by name ("term_pty: SIGIO, SIGPWR, SIGSTKFLT and SIGRTMIN each leave the terminal as it was") |
+| TERM-1 | Low | `runtime/runtime-term.c:364-371` (`nish_term_set`) | The terminal is restored only for the signals in a fixed list. SIGIO/SIGPOLL, SIGPWR, SIGSTKFLT, SIGRTMIN..SIGRTMAX (and SIGEMT on Darwin) also end the process by default, are not caught, and leave the terminal raw. This contradicts `docs/LANGUAGE.md:7784` and `docs/guide/using-nish/terminal.md:82` | Fixed. `nish_term_arm` (in `nish_term_set` at the anchor; #876 moved it into its own function) catches every signal from 1 to `SIGRTMAX` that is at `SIG_DFL` and whose default ends the program; the ones a default ignores or that stop it are skipped by name ("term_pty: SIGIO, SIGPWR, SIGSTKFLT and SIGRTMIN each leave the terminal as it was") |
 | TERM-2 | Low | `runtime/runtime-term.c:270-275` (`nish_term_enter`), reached from `:326` and `:373` | `nish_term_raw` is set after `tcsetattr` returns. A fatal signal that lands between the kernel's switch and the store finds the flag clear, restores nothing, and dies with the terminal raw. Measured: 6 of 300 SIGTERMs sent to a loop of `setRawMode(true/false)`. The order is deliberate, so that a signal during a TCSAFLUSH drain or a SIGTTOU stop does not call `tcsetattr` from the background | Fixed. `nish_term_entering` is set across the `tcsetattr`; while it is set, `nish_term_restore` asks `tcgetattr`, which is allowed from the background, and restores only if the terminal already holds the raw settings. 0 of 300 after the fix ("term_pty: SIGTERM sent while a loop enters and leaves raw mode never leaves the terminal raw (200 tries)") |
 | TERM-3 | Medium | `std/term.ts:437`, `:448` (`Screen.resize`); `:810` (`Canvas`) | `terminalSize()` answers `ws_col`/`ws_row` up to 65535 each. `width * height` and `cells * 64 + 64` are checked i32 arithmetic. A size above about 5793 x 5793 panics with `attempt to multiply with overflow`, and 20000 x 20000 panics with `nish: out of memory`. The panic restores the terminal, and nothing is read or written out of bounds | Fixed. `resize` clamps each side to `TERM_MAX_SIDE` (4096) and the cell count to `TERM_MAX_CELLS` (1,048,576), and `Canvas` takes its size from the clamped screen; `docs/guide/` states the caps ("link/std_term: exits with 0 and stdout matches expected.out", the line "a 65535 x 65535 screen is 4096 x 256") |
 | TERM-4 | Low | `std/term.ts:1151-1160` (`termDecodeKeys`), `:984` (`KeyDecoder.feed`) | An `ESC [` followed by parameter bytes (0x20-0x3F) is held until a final byte arrives or `escapeTimeoutMs` passes, with no cap on length. Each `feed` copies the held bytes again. Measured with 4096-byte reads and a real clock: 344,064 bytes held at most, 16.8 ms for the worst `feed`, about 5x the time of plain input. It is bounded only by the timeout, so a caller whose `nowMs` does not advance holds input without limit | Fixed. A run longer than `TERM_MAX_CSI_PARAMS` (32) gives the ESC up as `KEY_ESCAPE` at once and decodes what follows as plain input ("link/std_term: exits with 0 and stdout matches expected.out", the lines "ESC [ 32 parameters A" and "ESC [ and 4000 parameters: 4002 keys, the first escape") |
