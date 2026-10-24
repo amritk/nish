@@ -18,7 +18,8 @@
 #
 # Profiles:
 #   debug  clang defaults: no optimisation, symbols kept. The "before" number.
-#   speed  -O3 + LTO + section GC + strip. Rust `--release` equivalent.
+#   speed  -O3 + ThinLTO on every core + section GC + strip. Rust `--release`
+#          equivalent (which also defaults to ThinLTO).
 #   size   -Oz + LTO + section GC + strip + no unwind tables. Rust
 #          `opt-level="z"`, `panic="abort"`, `strip=true` equivalent.
 #   wasm   wasm32 freestanding module exporting every non-internal function;
@@ -271,7 +272,7 @@ fi
 optimise=()
 case "$profile" in
   speed)
-    optimise=(-O3 -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"}
+    optimise=(-O3 -flto=thin -DNDEBUG ${pgo[@]+"${pgo[@]}"}
       -ffunction-sections -fdata-sections -fomit-frame-pointer
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}) ;;
   size)
@@ -281,12 +282,22 @@ case "$profile" in
       -fno-stack-protector -fvisibility=hidden) ;;
 esac
 
+# The speed link runs ThinLTO's backends on every core; its output does not
+# depend on how many. size keeps full LTO, which is a little smaller. Every
+# count source is tried in turn: nproc (Linux), getconf (both), sysctl (macOS).
+lto_jobs=()
+if [ "$profile" = speed ]; then
+  cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null ||
+    sysctl -n hw.ncpu 2>/dev/null || echo 1)
+  lto_jobs=(-flto-jobs="$cores")
+fi
+
 # --runtime-objects and --runtime-from: the one-command link split in two, with
 # every compile it held run at once. A `$CC -c` takes `common` and `optimise`,
 # which is what the one command compiles each input with -- less
 # -fuse-ld=lld, which only names the linker -- so a runtime unit compiles to the
-# same object either way: native code for debug, -flto bitcode for speed and
-# size, which the link still optimises together with the program. The link
+# same object either way: native code for debug, LTO bitcode for speed (ThinLTO)
+# and size, which the link still optimises together with the program. The link
 # takes the same line the profile always uses, with objects for sources.
 if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
   compile=()
@@ -386,7 +397,7 @@ case "$profile" in
   debug)
     "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
   speed|size)
-    "$CC" "${common[@]}" "${optimise[@]}" \
+    "$CC" "${common[@]}" "${optimise[@]}" ${lto_jobs[@]+"${lto_jobs[@]}"} \
       "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   wasm)
     # clang resolves wasm-ld next to its own binary first, then on PATH; ask it

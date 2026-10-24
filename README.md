@@ -106,7 +106,7 @@ export const main = (): number => {
 ```
 
 ```bash
-nish hello.ts --link hello    # writes hello.ll, then builds hello with clang -O3 -flto
+nish hello.ts --link hello    # writes hello.ll, then builds hello with clang -O3 -flto=thin
 ./hello                            # hello from Nish
 nish hello.ts -o hello.ll     # IR only
 nish run hello.ts             # build into a cache and run it: a script, still native
@@ -409,7 +409,7 @@ dynamically linked (`npm run size-report`):
 | Profile | Bytes | What it does |
 |:---|---:|:---|
 | `debug` | 15,072 | `clang` defaults: no optimisation, symbols kept. |
-| `speed` | 4,528 | `-O3 -flto`, section GC, unwind tables off, stripped. Rust `--release`. |
+| `speed` | 4,528 | `-O3 -flto=thin` (ThinLTO on every core), section GC, unwind tables off, stripped. Rust `--release`. |
 | `size` | 4,512 | `-Oz -flto`, plus hidden visibility and no stack protector. Rust `opt-level="z"`. |
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
