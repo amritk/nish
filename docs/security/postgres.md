@@ -8,7 +8,7 @@ wiped, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the database layer starts
 from evidence.
 
-Anchors are function names in `std/net/postgres.ts` at `023b3bc`, the last
+Anchors are function names in `std/net/postgres.ts` at `eed1ae3`, the last
 commit to change it on the head that merges this record.
 
 **Result.** Every message is framed once, by its length, and a length under 4
@@ -26,12 +26,6 @@ finding is open, Low: the hasher state of one SHA-256 over ClientKey is not
 wiped (PG-12). Three properties a reader might assume are not provided, by
 design, and are recorded as accepted: no TLS (PG-9), no way to require SCRAM
 of a server (PG-10), and MD5 and cleartext refused (PG-11).
-
-**Pending.** `pgSaltedPassword`, PBKDF2-HMAC-SHA-256, answers `null` until
-the shared `pbkdf2HmacSha256` in `std/crypto/hmac.ts` is wired in, so a SCRAM
-exchange today ends with `PG_ERR_SCRAM` after the server's first message. Every
-check before that point holds and is tested; PG-6's signature mismatch is
-tested once the proof can be computed.
 
 ## Scope
 
@@ -117,9 +111,14 @@ flight", "a row with no group in flight", "an unknown message",
 that adds nothing", "a server nonce with a space", "no salt", "a salt that is
 not base64", "iterations under minIterations", "iterations over
 maxIterations", "iterations that would overflow", "iterations that are not
-digits", "AuthenticationOk before the server proved the password"; "SASL
-without SCRAM-SHA-256", "a SASL list without its end", "SASLContinue before
-SASL".
+digits", "AuthenticationOk before the server proved the password"; "a server
+signature the password does not make" (PG-6's `PG_ERR_SERVER_SIGNATURE`), "a
+server signature of 31 bytes", "a server signature that is not base64", "a
+server final without v=", "a server final of one byte"; "SASL without
+SCRAM-SHA-256", "a SASL list without its end", "SASLContinue before SASL".
+The recorded `scram-ok` exchange computes the proof PostgreSQL accepts and
+checks the signature it sends, and `scram-wrong-password` ends with the
+server's `FATAL 28P01`.
 
 **Refused methods** (PG-11): "MD5 is refused", "cleartext is refused", and
 the recorded `cleartext` exchange.
