@@ -1212,6 +1212,10 @@ export class Compilation {
       checked.push(unit.checker.program)
     }
     spellCSymbolsApart(checked, this.opts.strictExports)
+    this.rejectForeignShadows()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     this.rejectCLibrarySymbols()
     if (this.sink.hasErrors()) {
       return false
@@ -2141,6 +2145,14 @@ export class Compilation {
    * before packages did, and for it the rule, the message and the emitted
    * symbol are all exactly what they were.
    *
+   * A `declare function` is not a package's symbol but C's, so it keeps its
+   * name in every package and two packages can make one key of it. That is
+   * accepted when the two declarations agree on their types, because a foreign
+   * signature's facts are read off those types and so are the same facts, and
+   * otherwise refused (NL3039). A definition whose symbol is the declared C
+   * name is refused too (NL3040), but by `rejectForeignShadows`, once
+   * `spellCSymbolsApart` has given every definition its final symbol.
+   *
    * A constructor or method of a class in `clashed` is skipped: `declaredStructs`
    * has already refused the second class, and the member the two share is a
    * consequence of that one mistake rather than a second one. The bare name is
@@ -2151,8 +2163,12 @@ export class Compilation {
     const owners = new StringMap()
     const ownerSigs: (FunctionSig | null)[] = []
     const ownerModules: ModuleUnit[] = []
+    const declared = new StringMap()
+    const declaredSigs: FunctionSig[] = []
+    const declaredModules: ModuleUnit[] = []
     const entry = this.entry()
-    if (entry.checker.program.entryMain !== null) {
+    const hasWrapper = entry.checker.program.entryMain !== null
+    if (hasWrapper) {
       owners.set("main", ownerSigs.length)
       ownerSigs.push(null)
       ownerModules.push(entry)
@@ -2202,6 +2218,24 @@ export class Compilation {
         if (owner !== null && clashed.has(owner.name)) {
           continue
         }
+        if (sig.foreign() && !(sig.name === "main" && hasWrapper)) {
+          // C's symbol, in a table of its own: a template of the name mints
+          // only `name$T` symbols, and a definition is measured against it by
+          // `rejectForeignShadows` once its own symbol is final.
+          const seen = declared.get(sig.name, -1)
+          if (seen < 0) {
+            declared.set(sig.name, declaredSigs.length)
+            declaredSigs.push(sig)
+            declaredModules.push(unit)
+          } else if (
+            seen < declaredSigs.length &&
+            seen < declaredModules.length &&
+            !sameSignature(sig, declaredSigs[seen])
+          ) {
+            this.reportForeignMismatch(unit, sig, declaredSigs[seen], declaredModules[seen])
+          }
+          continue // agreeing: one C function declared twice, one symbol and the same facts under it
+        }
         const at = owners.get(sig.name, -1)
         if (at < 0) {
           owners.set(sig.name, ownerSigs.length)
@@ -2229,6 +2263,70 @@ export class Compilation {
         this.sink.report(unit.source, at2.start, at2.end, message)
       }
     }
+  }
+
+  /**
+   * NL3039: two `declare function`s of one C name whose types differ. Its own
+   * method so the two rendered signatures are released when it returns rather
+   * than kept for the rest of `rejectSymbolClashes`'s loop.
+   */
+  reportForeignMismatch(
+    unit: ModuleUnit,
+    sig: FunctionSig,
+    previousSig: FunctionSig,
+    previousModule: ModuleUnit
+  ): void {
+    const at = nameNode(sig)
+    this.sink.report(
+      unit.source,
+      at.start,
+      at.end,
+      `C function \`${sig.name}\` is declared as ${signatureText(this.table, sig)} in ${unit.name} and as ${signatureText(this.table, previousSig)} in ${previousModule.name}; C has one namespace, so every \`declare function\` of one name must agree on its parameter and return types`
+    )
+  }
+
+  /**
+   * NL3040: a defined function whose symbol is a name some module declares as
+   * a C function, which the link would bind both to and the fact table would
+   * key both under. Only the root package's functions can be one, as every
+   * other package's carry its prefix. It runs after `spellCSymbolsApart`, so
+   * it reads the symbol that is emitted: a private `abs` is `abs$` and meets
+   * nothing, where an exported `abs` or a private `myc` beside a
+   * `declare function myc` keeps the C name and is refused.
+   */
+  rejectForeignShadows(): void {
+    const declared = new StringMap()
+    const declaredModules: ModuleUnit[] = []
+    for (const unit of this.modules) {
+      for (const sig of unit.checker.program.functions) {
+        if (sig.foreign() && sig.definedIn(unit.source) && !declared.has(sig.name)) {
+          declared.set(sig.name, declaredModules.length)
+          declaredModules.push(unit)
+        }
+      }
+    }
+    for (const unit of this.modules) {
+      for (const sig of unit.checker.program.functions) {
+        if (sig.foreign() || !sig.definedIn(unit.source)) {
+          continue
+        }
+        const at = declared.get(sig.name, -1)
+        if (at >= 0 && at < declaredModules.length) {
+          this.reportForeignShadow(unit, sig, declaredModules[at])
+        }
+      }
+    }
+  }
+
+  /** NL3040's report, at the definition: the declaration may be in a package the reader did not write. */
+  reportForeignShadow(unit: ModuleUnit, sig: FunctionSig, declarer: ModuleUnit): void {
+    const at = nameNode(sig)
+    this.sink.report(
+      unit.source,
+      at.start,
+      at.end,
+      `Function \`${sig.name}\` is defined in ${unit.name} and declared as a C function in ${declarer.name}; a \`declare function\` binds the C symbol of its name in every package, so rename the defined function`
+    )
   }
 
   /**
@@ -2616,6 +2714,33 @@ const clashMessage = (
     return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`
   }
   return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`
+}
+
+/**
+ * Whether two `declare function`s of one C name declare the same C function:
+ * the same parameter and return types, which the shared `TypeTable` makes a
+ * comparison of ids. Parameter names are not part of it, as they are not part
+ * of the C prototype.
+ */
+const sameSignature = (a: FunctionSig, b: FunctionSig): boolean => {
+  if (a.returnType !== b.returnType || a.paramTypes.length !== b.paramTypes.length) {
+    return false
+  }
+  for (let i = 0; i < a.paramTypes.length; i++) {
+    if (a.paramTypes[i] !== b.paramTypes[i]) {
+      return false
+    }
+  }
+  return true
+}
+
+/** A signature as its types, `(i32, u8[]) => i32`, for a message that sets two side by side. */
+const signatureText = (table: TypeTable, sig: FunctionSig): string => {
+  const params: string[] = []
+  for (const type of sig.paramTypes) {
+    params.push(table.typeName(type))
+  }
+  return `(${params.join(", ")}) => ${table.typeName(sig.returnType)}`
 }
 
 /**
