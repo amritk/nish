@@ -212,7 +212,9 @@ for (let round = 0; round <= timed; round++) {
 
 const ns = (v) => `${v.toFixed(0)} ns`
 const signed = (v) => `${v >= 0 ? "+" : ""}${v.toFixed(0)} ns`
-const version = /#define SQLITE_VERSION\s+"([^"]+)"/.exec(fs.readFileSync(path.join(sqliteDir, "sqlite3.h"), "utf8"))
+const version = /#define SQLITE_VERSION\s+"([^"]+)"/.exec(
+  fs.readFileSync(path.join(sqliteDir, "sqlite3.h"), "utf8")
+)
 console.log(`sqlite: ${timed} rounds; SQLite ${version?.[1] ?? "of unknown version"}`)
 for (let w = 0; w < WORKLOADS.length; w++) {
   const [n, c, t] = times[w]

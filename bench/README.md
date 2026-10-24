@@ -1166,6 +1166,104 @@ other non-2xx row, when its row count differs from the requests h2load says
 it completed, or when more than 5 % of rows have no status. Results gathered
 before the error are still written and reported.
 
+## SQLite
+
+`sqlite/run.mjs` measures what [`nish/sqlite`](../docs/guide/using-nish/sqlite.md)
+adds to a call of SQLite. It runs the same loop twice: through the module
+(`sqlite/main.ts`) and through SQLite's own C API (`sqlite/twin.c`). The
+database and the queries are those of the twelve-dollar server challenge. It is
+not in this suite's tables.
+
+```bash
+npm run build
+node bench/sqlite/run.mjs --validate     # small counts: both sides must read the same rows and checksums
+node bench/sqlite/run.mjs --rounds 10    # timed; the first run also builds the seed
+```
+
+**The database.** `sqlite/schema.sql` is the challenge's schema. `twin seed`
+fills it from one fixed generator with 50,000 users, 500,000 posts and
+2,000,000 likes, in WAL mode. It is made once in `build/bench/sqlite/` and made
+again only when `schema.sql` or `twin.c` changes. Nothing is downloaded.
+
+**The workloads.** Each call binds, steps, reads every column and resets, on a
+statement prepared once. Text is copied into one reused buffer, with
+`columnInto` on the Nish side and `memcpy` on the C side.
+
+| Workload | Calls in a timed run | What one call does |
+| --- | --- | --- |
+| `lookup` | 200,000 | Reads one post by a random id, with its author and its like count. |
+| `feed` | 10,000 | Reads the 20 newest posts: 20 rows of five columns. |
+| `insert` | 20,000 | Runs `INSERT … RETURNING id, created_at` in autocommit. |
+| `insert-txn` | 100,000 | Makes the same calls inside one transaction, which separates the cost of a call from the cost of its commit. |
+
+The inserts run with `synchronous=NORMAL`. Every value read is folded into a
+checksum inside the timed loop on both sides, so the optimiser cannot drop a
+read. Each side's fold keeps its sum in a local variable.
+
+**The builds.**
+
+- **Nish:** `main.ts` is built with `--link`, which uses the speed profile. The
+  binary is then copied byte for byte.
+- **C:** `twin.c` is compiled against the same vendored
+  `runtime/sqlite/sqlite3.c`, with the flags `scripts/build.sh` gives SQLite in
+  that link:
+  - `-O3 -DNDEBUG` with `-fno-plt` and the section and unwind flags;
+  - the same `SQLITE_*` options, `SQLITE_THREADSAFE=0` among them;
+  - `sqlite3.c` as a native object of its own, as the link builds it.
+
+Both sides open the database with the same flags and PRAGMAs.
+
+**The protocol.**
+
+- A warm-up round runs first and is not counted. Then come `--rounds` rounds,
+  rounded up to an even number.
+- Each round runs every workload on the build, its copy and the C twin. The
+  order rotates by round, so each binary goes first equally often.
+- A run times its own loop. Every run of a workload must print the same row
+  count and checksum.
+- The report is ns per call, min and median over the rounds.
+- The module's cost is the build less the twin. The noise band is the build
+  against its byte-identical copy: a difference inside the band is one this
+  machine cannot see.
+
+**The figures, at `23b1469`.** Ten rounds on a four-core Intel Xeon virtual
+machine at 2.10 GHz, with Ubuntu clang 18.1.3 and SQLite 3.54.1. All figures
+are ns per call.
+
+| Workload | Nish min / median | C min / median | Nish − C, min / median | Noise band, min / median |
+| --- | --- | --- | --- | --- |
+| `lookup` | 4,684 / 4,982 | 4,661 / 4,925 | +23 / +56 (1.1 %) | 96 / 139 |
+| `feed` | 15,114 / 15,276 | 14,264 / 14,399 | +850 / +877 (6.1 %) | 75 / 92 |
+| `insert` | 14,058 / 14,301 | 13,972 / 14,280 | +86 / +22 (0.2 %) | 8 / 69 |
+| `insert-txn` | 4,120 / 4,240 | 4,127 / 4,325 | −7 / −85 (−2.0 %) | 59 / 11 |
+
+**What the figures say.**
+
+- **Only `feed` shows a cost outside the noise band.** `lookup`, `insert` and
+  `insert-txn` differ from C by less than their bands.
+- **`feed`'s cost is per column read, about 9 ns.** One call reads 100 columns,
+  and each read checks its handle and asks SQLite whether a row is current,
+  which is what lets a read with no current row answer 0, as the module
+  documents. `columnInto` also asks the column's type, because it
+  copies a blob as bytes and anything else as text.
+- **Under callgrind, over 300 `feed` calls,** the build runs 58.8M
+  instructions against C's 56.4M. All of the difference is in the adapter
+  calls.
+
+**Before this measurement's fixes.** The same protocol at `2214032` put `feed`
+at +1,319 ns median (9.0 %), against a noise band of 244 ns. Two causes made up
+the difference:
+
+- **The benchmark's text fold.** It stored `this.sum` on every byte, so the
+  optimiser reloaded the buffer on every byte too. About 7.1M of the 9.7M
+  instructions that separated the two sides were the fold, not the module.
+- **The adapter.** `columnInto` asked SQLite for the column count and the data
+  count separately. It now asks once when a row is current.
+
+`insert-txn` ran 193 ns under C then as well, and runs under C in both
+measurements. Nish adds calls to that loop rather than removing any, so the
+lead is most likely the layout of the two binaries, not the module.
+
 ## YAML against @amritk/yaml
 
 `yaml-compare/` times nish/yaml against @amritk/yaml, a YAML parser written in
