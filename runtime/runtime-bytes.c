@@ -1,5 +1,6 @@
 /* Nish runtime, the byte-class half: the runs `nish/bytes` steps over -- JSON's
- * blanks, the digits, and the bytes a JSON string holds as themselves -- read
+ * blanks, the digits, the bytes a JSON string holds as themselves, and the bytes
+ * a JSON writer copies without an escape -- read
  * sixteen or thirty-two bytes at a time (WP38 S6a, docs/wp38-simd.md §3.1).
  *
  * A translation unit of its own for the reason runtime-aes.c is one: each file
@@ -55,12 +56,14 @@ static int nish_cpu_has_avx2(void) {
 }
 #endif
 
-/* The byte-class runs of `nish/bytes` -- `skipBlank`, `skipDigits` and
-   `skipJsonText` -- which answer the first index in [from, to) whose byte
-   is outside a class, or `to`. The contracts are in nish.h. All three share
-   one resolver and one chooser, because they are one question asked of three
-   classes: a path is one function taking the class, and each exported kernel
-   calls it with its own constant.
+/* The byte-class runs of `nish/bytes` -- `skipBlank`, `skipDigits`,
+   `skipJsonText` and `skipJsonPlain` -- which answer the first index in
+   [from, to) whose byte is outside a class, or `to`. The contracts are in
+   nish.h. The first three share one resolver and one chooser, because they
+   are one question asked of three classes: a path is one function taking the
+   class, and each exported kernel calls it with its own constant. The fourth
+   has paths and a pointer of its own, the same shape, which the one resolver
+   sets beside the first's.
 
    The JSON text class is the bytes a string's scan steps over without a
    second look: printable ASCII other than `"` and `\`, and every complete,
@@ -71,10 +74,25 @@ static int nish_cpu_has_avx2(void) {
    at a time, as is every sequence after it until the next ASCII byte, so a
    run of CJK text costs one block load per run rather than one per
    character. A sequence that is malformed, or cut short by `to`, ends the
-   run at its lead, where the caller's own checks judge it. */
-enum { NISH_RUN_BLANK = 0, NISH_RUN_DIGIT = 1, NISH_RUN_TEXT = 2 };
+   run at its lead, where the caller's own checks judge it.
 
-/* One path of the three run kernels: the class, then the nish.h contract. */
+   The JSON plain class is the bytes a writer copies into a string as they
+   are: every byte from 0x20 up other than `"` and `\`. It is the text class
+   with no UTF-8 check -- a writer passes what it is given through, and the
+   reader that checks it is on the other side -- so its vector stops are the
+   text class's without the high bytes, and nothing in it resumes. It is kept
+   out of the class paths because a fourth class there costs the other three:
+   choosing its stops inside the shared block loop is a branch on the class in
+   every block of the text loop JsonTokenizer runs, and a test on entry costs
+   each path its loop unswitching at -O3 and a prologue's worth of bytes at
+   -Oz. Its base path is the 16-byte one on every machine, AVX2 or not: a
+   writer's strings are short, and a 32-byte copy would not fit the file's
+   ceiling. */
+enum { NISH_RUN_BLANK = 0, NISH_RUN_DIGIT = 1, NISH_RUN_TEXT = 2, NISH_RUN_PLAIN = 3 };
+
+/* One path of a run kernel: the class, then the nish.h contract. The plain
+   kernel's paths take the class too and ignore it, so one resolver serves
+   both pointers. */
 typedef int64_t (*nish_run_path)(int cls, const uint8_t *p, int64_t from, int64_t to);
 
 /* The length of the well-formed UTF-8 sequence whose lead is at `p[i]` and
@@ -120,6 +138,13 @@ static inline int64_t nish_run_wide(const uint8_t *p, int64_t i, int64_t to) {
     if (n == 0) return i;
     i += n;
   }
+  return i;
+}
+
+/* The plain class's scalar path, and the tail of its vector ones. */
+static int64_t nish_plain_scalar(int cls, const uint8_t *p, int64_t i, int64_t to) {
+  (void)cls;
+  while (i < to && p[i] >= 0x20 && p[i] != 0x22 && p[i] != 0x5c) i++;
   return i;
 }
 
@@ -171,6 +196,17 @@ static inline unsigned nish_run_stops_sse2(int cls, __m128i v) {
   __m128i stop = _mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(0x22)), _mm_cmpeq_epi8(v, _mm_set1_epi8(0x5c))),
                               _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8(0x1f)), v));
   return (unsigned)_mm_movemask_epi8(_mm_or_si128(stop, v));
+}
+
+static int64_t nish_plain_base(int cls, const uint8_t *p, int64_t i, int64_t to) {
+  for (; to - i >= 16; i += 16) {
+    __m128i v = _mm_loadu_si128((const __m128i *)(p + i));
+    __m128i stop = _mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(0x22)), _mm_cmpeq_epi8(v, _mm_set1_epi8(0x5c))),
+                                _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8(0x1f)), v));
+    unsigned m = (unsigned)_mm_movemask_epi8(stop);
+    if (m != 0) return i + __builtin_ctz(m);
+  }
+  return nish_plain_scalar(cls, p, i, to);
 }
 
 static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to) {
@@ -237,6 +273,16 @@ static inline uint64_t nish_run_stops_neon(int cls, uint8x16_t v) {
   return vget_lane_u64(vreinterpret_u64_u8(vshrn_n_u16(vreinterpretq_u16_u8(stop), 4)), 0);
 }
 
+static int64_t nish_plain_base(int cls, const uint8_t *p, int64_t i, int64_t to) {
+  for (; to - i >= 16; i += 16) {
+    uint8x16_t v = vld1q_u8(p + i);
+    uint8x16_t stop = vorrq_u8(vorrq_u8(vceqq_u8(v, vdupq_n_u8(0x22)), vceqq_u8(v, vdupq_n_u8(0x5c))), vcleq_u8(v, vdupq_n_u8(0x1f)));
+    uint64_t m = vget_lane_u64(vreinterpret_u64_u8(vshrn_n_u16(vreinterpretq_u16_u8(stop), 4)), 0);
+    if (m != 0) return i + (int64_t)(__builtin_ctzll(m) >> 2);
+  }
+  return nish_plain_scalar(cls, p, i, to);
+}
+
 static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to) {
   int64_t i = from;
   while (to - i >= 16) {
@@ -266,6 +312,17 @@ static inline uint32_t nish_run_stops_wasm(int cls, v128_t v) {
   return wasm_i8x16_bitmask(stop);
 }
 
+static int64_t nish_plain_base(int cls, const uint8_t *p, int64_t i, int64_t to) {
+  for (; to - i >= 16; i += 16) {
+    v128_t v = wasm_v128_load(p + i);
+    v128_t stop = wasm_v128_or(wasm_v128_or(wasm_i8x16_eq(v, wasm_i8x16_splat(0x22)), wasm_i8x16_eq(v, wasm_i8x16_splat(0x5c))),
+                               wasm_u8x16_le(v, wasm_i8x16_splat(0x1f)));
+    uint32_t m = wasm_i8x16_bitmask(stop);
+    if (m != 0) return i + __builtin_ctz(m);
+  }
+  return nish_plain_scalar(cls, p, i, to);
+}
+
 static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to) {
   int64_t i = from;
   while (to - i >= 16) {
@@ -282,6 +339,7 @@ static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to
 }
 #else
 #define nish_run_base nish_run_scalar
+#define nish_plain_base nish_plain_scalar
 #endif
 
 #if defined(NISH_RUN_CHOOSES)
@@ -302,18 +360,28 @@ static int64_t nish_run_resolve(int cls, const uint8_t *p, int64_t from, int64_t
 /* runtime-simd.c's `nish_any`, for the run kernels: a pointer that starts at
    the resolver, read and written with relaxed atomics, plain moves, because
    under `--threads` two workers may make the first call at once and both
-   store the same path. */
+   store the same path. The plain kernel has a pointer of its own. */
 static nish_run_path nish_run = nish_run_resolve;
+static nish_run_path nish_plain = nish_run_resolve;
 
-static int64_t nish_run_resolve(int cls, const uint8_t *p, int64_t from, int64_t to) {
+/* Asks the chooser once and sets both pointers: the plain kernel takes its
+   scalar path when the chooser picks the scalar one, else its base path. */
+static void nish_run_settle(void) {
   nish_run_path path = nish_run_choose();
   __atomic_store_n(&nish_run, path, __ATOMIC_RELAXED);
-  return path(cls, p, from, to);
+  __atomic_store_n(&nish_plain, path == nish_run_scalar ? nish_plain_scalar : nish_plain_base, __ATOMIC_RELAXED);
 }
 
 #define NISH_RUN_PATH __atomic_load_n(&nish_run, __ATOMIC_RELAXED)
+#define NISH_PLAIN_PATH __atomic_load_n(&nish_plain, __ATOMIC_RELAXED)
+
+static int64_t nish_run_resolve(int cls, const uint8_t *p, int64_t from, int64_t to) {
+  nish_run_settle();
+  return (cls == NISH_RUN_PLAIN ? NISH_PLAIN_PATH : NISH_RUN_PATH)(cls, p, from, to);
+}
 #else
 #define NISH_RUN_PATH nish_run_base
+#define NISH_PLAIN_PATH nish_plain_base
 #endif
 
 int64_t nish_bytes_skip_blank(const uint8_t *p, int64_t from, int64_t to) {
@@ -326,4 +394,8 @@ int64_t nish_bytes_skip_digits(const uint8_t *p, int64_t from, int64_t to) {
 
 int64_t nish_bytes_skip_json_text(const uint8_t *p, int64_t from, int64_t to) {
   return NISH_RUN_PATH(NISH_RUN_TEXT, p, from, to);
+}
+
+int64_t nish_bytes_skip_json_plain(const uint8_t *p, int64_t from, int64_t to) {
+  return NISH_PLAIN_PATH(NISH_RUN_PLAIN, p, from, to);
 }

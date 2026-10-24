@@ -54,7 +54,7 @@ import {
   TLS_TCP_START_BYTES,
 } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
-import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
+import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
@@ -621,9 +621,12 @@ if (
 // -- a later section reads the `.ll` a case left in `build/test` -- so every
 // case has finished before the next section starts, and the checks are
 // reported in corpus order, which keeps the output the same at any width.
-const only = withoutSeed(process.argv.slice(2).filter((_, i) => i + 2 !== shardAt && i + 1 !== shardAt)).find(
-  (arg) => !arg.startsWith("-")
-)
+// The filter is the first argument that is neither a flag nor the value of
+// one (`--shard 2/4`, `--jobs 4`).
+const jobsAt = process.argv.indexOf("--jobs")
+const only = withoutSeed(
+  process.argv.slice(2).filter((_, i) => ![shardAt, jobsAt].some((at) => i + 2 === at || i + 1 === at))
+).find((arg) => !arg.startsWith("-"))
 const cases = fs
   .readdirSync(casesDir)
   .filter((f) => f.endsWith(".ts"))
@@ -1864,6 +1867,313 @@ if (!only || "term".includes(only)) {
   )
 }
 
+// `nish/term-io` against the fake terminal `tests/term-io/relay.mjs` plays
+// under script(1): the guide's program (the `runTerminal` block of
+// docs/guide/using-nish/terminal.md) quits on `q` and on kitty's Ctrl-C and
+// refuses a pipe on either side; a panic mid-frame leaves the restore string
+// as the last bytes and the termios as it was, mouse and focus reports among
+// what it turns off when they are on; over a slow modelled link the
+// tier falls, no more than one frame is ever in flight, a key still reaches
+// `update` within a frame of the lowest rate, no terminal reply reaches
+// `update`, and a cell size answered late is learned; closing waits out the
+// acknowledgements still on the link, so none is echoed after exit; the key
+// state's watermark holds while an answer is in and lapses after a second
+// without one; a present loop of each backend draws with that backend and
+// keeps its memory while one that leaks 0.27 MB a frame does not; and
+// examples/term-probe.ts reports what it found, from a silent terminal within
+// the probe's timeout, and what NO_COLOR and NISH_TERM_FPS forced. Linux only:
+// the relay finds the program through /proc.
+if (!only || "term".includes(only) || "term-io".includes(only)) {
+  const ioDir = path.join(buildDir, "term-io")
+  if (process.platform !== "linux" || !has("script")) {
+    skip("term-io: needs Linux and `script` for the pseudo-terminal the relay plays the terminal on")
+  } else {
+    fs.rmSync(ioDir, { recursive: true, force: true })
+    fs.mkdirSync(ioDir, { recursive: true })
+    const { relay, KITTY_REPLY } = await import("./term-io/relay.mjs")
+    const guidePage = path.join(root, "docs", "guide", "using-nish", "terminal.md")
+    const guideSrc = [...fs.readFileSync(guidePage, "utf8").matchAll(/```ts nish:ok\n([\s\S]*?)```/g)]
+      .map((m) => m[1])
+      .find((block) => block.includes("runTerminal"))
+    const build = (name, src) => {
+      const dir = path.join(ioDir, name)
+      fs.mkdirSync(dir, { recursive: true })
+      const exe = path.join(dir, "app")
+      const r = spawnSync(NISH, [src, "-o", dir + path.sep, "--link", exe], { cwd: root, encoding: "utf8" })
+      return check(`term-io: ${name} links`, r.status === 0, shown(r)) ? exe : null
+    }
+    const guideTs = path.join(ioDir, "guide.ts")
+    if (guideSrc === undefined) {
+      check("term-io: docs/guide/using-nish/terminal.md has a nish:ok block that calls runTerminal", false)
+    } else {
+      fs.writeFileSync(guideTs, guideSrc)
+    }
+    const guideExe = guideSrc === undefined ? null : build("guide", guideTs)
+    const loopExe = build("loop", path.join(root, "tests", "link", "std_term_io_relay", "loop.ts"))
+    const probeExe = build("term-probe", path.join(root, "examples", "term-probe.ts"))
+    const at = (name) => path.join(ioDir, "runs", name)
+    const said = (r) =>
+      `exit ${r.status}${r.timedOut ? " (timed out)" : ""}, frames ${r.frames}, same stty ${r.sameStty}\n` +
+      `stderr: ${r.err}${r.scriptErr}\nstdout tail: ${JSON.stringify(r.out.slice(-400))}`
+    if (guideExe !== null) {
+      for (const [how, bytes] of [
+        ["q", "q"],
+        ["kitty's Ctrl-C", "\x1b[99;5u"],
+      ]) {
+        const r = await relay(guideExe, "", { dir: at(`guide-${how.length}`), keys: [{ afterFrames: 5, bytes }] })
+        check(
+          `term-io: the guide's program quits on ${how} with 0, and the terminal is as it was`,
+          r.status === 0 && r.sameStty && !r.timedOut && r.frames >= 5,
+          said(r)
+        )
+      }
+      for (const [side, options, needle] of [
+        ["stdin", { stdinNull: true }, "stdin is not a terminal"],
+        ["stdout", { stdoutPipe: true }, "stdout is not a terminal"],
+      ]) {
+        const r = await relay(guideExe, "", { dir: at(`refuse-${side}`), ...options })
+        check(
+          `term-io: the guide's program refuses ${side} off a terminal with one sentence on stderr and 1`,
+          r.status === 1 && r.err.trim().split("\n").length === 1 && r.err.includes(needle) && r.sameStty,
+          said(r)
+        )
+      }
+    }
+    if (probeExe !== null) {
+      // A terminal that answers nothing: the probe gives up after 250 ms and
+      // the first frame follows, with CI's slack; a missing timeout hangs.
+      const silent = await relay(probeExe, "", { dir: at("probe-silent"), reply: null, timeoutMs: 20000 })
+      const [r, noColor, fps, fpsCapped] = await Promise.all([
+        relay(probeExe, "", { dir: at("probe"), timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-no-color"), env: { NO_COLOR: "1" }, timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-fps"), env: { NISH_TERM_FPS: "20" }, timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-fps-capped"), env: { NISH_TERM_FPS: "500" }, timeoutMs: 20000 }),
+      ])
+      const stats = (run, backend = "\\w+") =>
+        run.out.split("\n").filter((l) => new RegExp(`^\\ds frames \\d+ tier \\d+ backend ${backend} `).test(l))
+      const statsLines = stats(r, "kitty")
+      check(
+        "term-io: examples/term-probe.ts prints the caps it found under kitty field by field and a stats line a second for 5 s",
+        r.status === 0 &&
+          r.sameStty &&
+          ["name kitty(0.49.2)", "answered true", "graphics kitty", "cellWidthPx 10", "multiplexer none"].every((l) =>
+            r.out.includes(`${l}\n`)
+          ) &&
+          statsLines.length === 5,
+        `${said(r)}\nstats lines ${JSON.stringify(statsLines)}`
+      )
+      check(
+        "term-io: examples/term-probe.ts under a silent terminal reports answered false and 5 stats lines, its first frame within 1500 ms of the start",
+        silent.status === 0 &&
+          silent.sameStty &&
+          silent.out.includes("answered false\n") &&
+          stats(silent).length === 5 &&
+          silent.firstFrameMs >= 0 &&
+          silent.firstFrameMs < 1500,
+        `${said(silent)}\nfirst frame at ${Math.round(silent.firstFrameMs)} ms, stats lines ${JSON.stringify(stats(silent))}`
+      )
+      check(
+        "term-io: examples/term-probe.ts under NO_COLOR reports 16 colours and the override that forced them",
+        noColor.status === 0 &&
+          noColor.out.includes("colors 16\n") &&
+          /^overrides .*NO_COLOR: 16 colours/m.test(noColor.out) &&
+          stats(noColor).length === 5,
+        said(noColor)
+      )
+      const fpsLines = stats(fps)
+      check(
+        "term-io: examples/term-probe.ts under NISH_TERM_FPS=20 holds tier 20 throughout and reports the override",
+        fps.status === 0 &&
+          /^overrides .*NISH_TERM_FPS=20: 20 frames a second/m.test(fps.out) &&
+          fpsLines.length === 5 &&
+          fpsLines.every((l) => / tier 20 /.test(l)),
+        `${said(fps)}\nstats lines ${JSON.stringify(fpsLines)}`
+      )
+      const cappedLines = stats(fpsCapped)
+      check(
+        "term-io: examples/term-probe.ts under NISH_TERM_FPS=500 holds the 240 cap and reports it in the override",
+        fpsCapped.status === 0 &&
+          /^overrides .*NISH_TERM_FPS=500: 240 frames a second/m.test(fpsCapped.out) &&
+          cappedLines.length === 5 &&
+          cappedLines.every((l) => / tier 240 /.test(l)),
+        `${said(fpsCapped)}\nstats lines ${JSON.stringify(cappedLines)}`
+      )
+    }
+    if (loopExe !== null) {
+      const panic = await relay(loopExe, "panic", { dir: at("panic") })
+      const restore =
+        "\x18\x1b[?2026l\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b[<u\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l"
+      const afterPanic = panic.out.slice(panic.out.lastIndexOf("<panic>") + "<panic>".length)
+      check(
+        "term-io: a panic in the tenth render leaves the restore string as the last bytes and the termios as it was",
+        panic.status === 1 &&
+          panic.err.includes("index out of range: 10 >= 3") &&
+          panic.out.includes("<panic>") &&
+          afterPanic === restore &&
+          panic.sameStty,
+        `${said(panic)}\nafter <panic>: ${JSON.stringify(afterPanic)}\nwant: ${JSON.stringify(restore)}`
+      )
+      // With mouse and focus reports on, the restore string turns them off
+      // too: pixel mouse (1016) first, then SGR (1006) and the mode, before
+      // paste and focus. A terminal that answers the cell size only after the
+      // probe has 1016 turned on late, and the restore string must follow it.
+      const cellSize = "\x1b[6;20;10t\x1b[4;480;800t"
+      const mouseRestore =
+        "\x18\x1b[?2026l\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b[<u\x1b[?1016l\x1b[?1006l\x1b[?1003l\x1b[?2004l\x1b[?1004l\x1b[0m\x1b[?25h\x1b[?1049l"
+      for (const [when, options] of [
+        ["in the probe", {}],
+        ["after the probe", { reply: KITTY_REPLY.replace(cellSize, ""), keys: [{ afterFrames: 3, bytes: "\x1b[6;20;10t" }] }],
+      ]) {
+        const r = await relay(loopExe, "panic-mouse", { dir: at(`panic-mouse-${when.replaceAll(" ", "-")}`), ...options })
+        const after = r.out.slice(r.out.lastIndexOf("<panic>") + "<panic>".length)
+        check(
+          `term-io: a panic with mouse and focus reports on, the cell size answered ${when}, turns them off`,
+          r.status === 1 && r.out.includes("<panic>") && after === mouseRestore && r.sameStty,
+          `${said(r)}\nafter <panic>: ${JSON.stringify(after)}\nwant: ${JSON.stringify(mouseRestore)}`
+        )
+      }
+
+      const throttle = await relay(loopExe, "throttle", {
+        dir: at("throttle"),
+        link: { rttMs: 60, bytesPerSec: 300000 },
+        keys: [
+          { afterFrames: 30, bytes: "k" },
+          { afterFrames: 90, bytes: "q" },
+        ],
+        timeoutMs: 60000,
+      })
+      const tier = /tier (\d+) (\d+)/.exec(throttle.out)
+      const keyNs = /key (\d+)/.exec(throttle.out)
+      const peak = /peak (\d+) B\/s cost (\S+) ms/.exec(throttle.out)
+      const final = /final (\d+) B\/s/.exec(throttle.out)
+      const latencyMs =
+        keyNs === null || throttle.keySentNs.length === 0
+          ? -1
+          : Number(BigInt(keyNs[1]) - throttle.keySentNs[0]) / 1e6
+      const linkMs = (throttle.maxFrameBytes * 1000) / 300000
+      const measured = `final ${final?.[1]} B/s, peak ${peak?.[1]} B/s, peak cost ${peak?.[2]} ms, largest frame ${throttle.maxFrameBytes} bytes (${Math.round(linkMs)} ms on the link)`
+      // The limit is `RateOptions.maxUnacked`, 1 unless a program asks for 2;
+      // the relay counts it, as the program cannot see past its own gate.
+      check(
+        "term-io: over a 60 ms, 300 kB/s link the tier falls, no more frames go unacknowledged than the limit of one, and a key reaches update within 250 ms",
+        throttle.status === 0 &&
+          tier !== null &&
+          Number(tier[2]) < Number(tier[1]) &&
+          throttle.maxUnacked <= 1 &&
+          latencyMs >= 0 &&
+          latencyMs < 250,
+        `${said(throttle)}\ntier ${tier?.slice(1)}, relay saw ${throttle.maxUnacked} unacknowledged, key latency ${latencyMs} ms, ${measured}`
+      )
+      // The estimate on the last frame, once the tier has fallen and the frames
+      // have been 1.5 kB for about 12 s (so `q` comes after 90 frames, not
+      // sooner): the round trip is most of each answer's wait, so an
+      // estimator that divides bytes by the whole trip drifts down towards
+      // bytes over the round trip, far under the link. term-rate keeps what
+      // the large frames measured until a sample replaces it or the trips
+      // contradict it. A send time taken after the write, which blocks while
+      // the link drains, leaves the transmission out and reads several times
+      // the rate.
+      check(
+        "term-io: over a 300 kB/s link the bandwidth estimate on the last, small frames is within 0.5×–2× of the link's",
+        final !== null && Number(final[1]) >= 150000 && Number(final[1]) <= 600000,
+        `${said(throttle)}\n${measured}`
+      )
+      // A write the link holds back for over a second is not the frame's cost.
+      check(
+        "term-io: a frame's cost excludes its write: under 25 ms while the link needs over 250 ms for the largest frame",
+        peak !== null && Number(peak[2]) < 25 && linkMs > 250,
+        `${said(throttle)}\n${measured}`
+      )
+
+      // Answers the program did not wait for: the probe's, after its timeout,
+      // and a second DA1 and cell size mid-run. None reaches `update`; a cell
+      // size the probe missed is learned.
+      for (const [name, silent, extra] of [
+        ["after the probe timed out", true, KITTY_REPLY],
+        ["after DA1", false, "\x1b[?62;52;c\x1b[6;20;10t\x1bP>|kitty(0.49.2)\x1b\\\x1b[?2026;2$y"],
+      ]) {
+        const r = await relay(loopExe, "throttle", {
+          dir: at(`replies-${silent ? "late" : "again"}`),
+          ...(silent ? { reply: null } : {}),
+          keys: [
+            { afterFrames: 3, bytes: extra },
+            { afterFrames: 8, bytes: "q" },
+          ],
+        })
+        check(
+          `term-io: a terminal's answers that arrive ${name} never reach update` +
+            (silent ? ", and the cell size among them is learned" : ""),
+          r.status === 0 && r.out.includes("replies 0\n") && (!silent || r.out.includes("cell 10\n")) && r.sameStty,
+          said(r)
+        )
+      }
+
+      // The frame drawn as `q` arrives is answered 150 ms later: closing waits
+      // for that answer in raw mode, so it is not echoed into the shell.
+      const late = await relay(loopExe, "throttle", {
+        dir: at("late-ack"),
+        link: { rttMs: 150, bytesPerSec: 10000000 },
+        keys: [{ afterFrames: 5, bytes: "q" }],
+        lingerMs: 500,
+      })
+      const afterExit = late.out.slice(late.out.lastIndexOf("\x1b[?1049l"))
+      check(
+        "term-io: an acknowledgement still in flight when the program quits is read before raw mode ends, not echoed after it",
+        late.status === 0 && late.out.includes("\x1b[?1049l") && !afterExit.includes("[0n") && late.sameStty,
+        `${said(late)}\nafter leaving the alternate screen: ${JSON.stringify(afterExit)}`
+      )
+
+      const watermark = await relay(loopExe, "watermark", { dir: at("watermark") })
+      check(
+        "term-io: the key state is watermarked once a frame's answer is in, and not after a second without one",
+        watermark.status === 0 && watermark.out.includes("answered true watermarked true then false") && watermark.sameStty,
+        said(watermark)
+      )
+
+      // Each backend's resident memory at frame 50 and at frame 250; 0.27 MB a
+      // frame over the 200 between is 54 MB, and the bound is 8.
+      const boundKb = 8 * 1024
+      const runs = [
+        ["kitty", "rss"],
+        ["sixel", "rss"],
+        ["halfblock", "rss"],
+        ["ascii", "rss"],
+        ["kitty", "rss-leak"],
+      ]
+      const rssRuns = await Promise.all(
+        runs.map(([backend, mode]) =>
+          relay(loopExe, mode, {
+            dir: at(`${mode}-${backend}`),
+            env: { NISH_TERM_GRAPHICS: backend },
+            rssAt: [50, 250],
+            keys: [{ afterFrames: 250, bytes: "q" }],
+            timeoutMs: 60000,
+          })
+        )
+      )
+      // The `GRAPHICS_*` each name forces, which the program prints as `backend N`.
+      const graphics = { ascii: 0, halfblock: 1, sixel: 2, kitty: 3 }
+      runs.forEach(([backend, mode], i) => {
+        const r = rssRuns[i]
+        const used = /backend (\d+)/.exec(r.out)
+        const grew = r.rss.length === 2 && r.rss.every((s) => s.kb > 0) ? r.rss[1].kb - r.rss[0].kb : NaN
+        const leaks = mode === "rss-leak"
+        check(
+          leaks
+            ? `term-io: a ${backend} present loop that keeps 0.27 MB a frame grows past the 8 MB bound`
+            : `term-io: a ${backend} present loop of 250 frames draws with ${backend} and grows less than 8 MB`,
+          r.status === 0 &&
+            r.out.includes("frames 250") &&
+            used !== null &&
+            Number(used[1]) === graphics[backend] &&
+            (leaks ? grew > boundKb : grew < boundKb),
+          `${said(r)}\nrss ${JSON.stringify(r.rss)}`
+        )
+      })
+    }
+  }
+}
+
 // The same two reading programs as `--profile wasi` builds under Node's WASI,
 // where `readStdin` reads without asking whether stdin is ready (runtime-term.c) and the terminal
 // questions answer "not a terminal", so the native expected lines hold; and a
@@ -2535,6 +2845,7 @@ const SPEED_LINK = new Map([
   // compile these, so the binary the link loop runs is the optimised one too.
   ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
   ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
+  ["crypto_bcrypt", "tests/wipes counts its wipes after -O2"],
   ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
   ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
   ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
@@ -5219,22 +5530,89 @@ const { linkShard, sectionShard } = (() => {
  * runs here. A check in the WP14 section holds ci.yml to it.
  */
 const DELEGATE_IR_CHECKS = process.argv.includes("--delegate-ir-checks") && process.env.GITHUB_ACTIONS === "true"
-let irDelegated = 0
 const linkDealtAway = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) !== SHARD)
+/**
+ * How many link programs are in flight at once: `--jobs N`, `defaultJobs()`
+ * without it. `--jobs 1` is the sequential loop. Whatever the width, every
+ * program's checks are replayed in `linkTests` order, so the output is the same
+ * byte for byte.
+ */
+const LINK_JOBS = jobsFrom(process.argv)
+/**
+ * How many of one program's modules llvm-as and opt read at once. The programs
+ * around it are already filling the cores, so the two pools share
+ * `defaultJobs()` between them rather than each taking all of it: `LINK_JOBS`
+ * programs each forking `defaultJobs()` verifiers would be `defaultJobs()`
+ * squared processes, more than the cores and more than the memory a CI runner
+ * has for that many module graphs. At `--jobs 1` one program gets every core.
+ */
+const MODULE_JOBS = Math.max(1, Math.floor(defaultJobs() / LINK_JOBS))
+/**
+ * The link programs that run alone, one at a time, after the pool has drained,
+ * each with why. A program belongs here when other programs beside it change
+ * what it measures (a wall-clock bound, a resident size), not when it shares a
+ * file or a port: no program does (see `runLinkProgram`).
+ */
+const LINK_SERIAL = new Map([
+  [
+    "net_relay_soak",
+    "bounds its resident growth per checkpoint interval, and pooled programs beside it change that (#927)",
+  ],
+])
 
-for (const name of linkTests) {
-  if (only && !name.includes(only)) {
-    continue
+/**
+ * One link program from its compile to its last native run, with what it found
+ * kept as steps, as section A's `runCase` keeps them, rather than printed:
+ * `{ steps, irDelegated }`. The programs run `LINK_JOBS` at a time and finish in
+ * any order, so nothing here reaches the output or the counters; the loop below
+ * replays each record in `linkTests` order with `reportCase`, and counts
+ * `irDelegated` from the records.
+ *
+ * What two programs in flight could share, and why they do not:
+ * - Their outputs. Every directory written here is named after the program --
+ *   `build/test/link/<name>/`, `build/test/link/<name>.portability/` and
+ *   `build/test/link-panics/<name>/` -- and the names are directory names
+ *   under tests/link, so no two programs ever share one.
+ * - The compiled runtime. Every `--link` takes it from
+ *   `$XDG_CACHE_HOME/nish/runtime`, the suite's own cache, which
+ *   `cachedRuntime` (src/compile.ts) keeps safe for concurrent links (CLI-5):
+ *   a miss compiles into a scratch directory of its own, moves whole objects
+ *   in with `rename` and writes the key last, so two misses at once each
+ *   compile the same recipe and a link reading an object always reads a whole
+ *   one. scripts/build.sh's own scratch (`--runtime-from`) is a `mktemp -d`
+ *   per link.
+ * - The process. Nothing here changes `process.env` or the working
+ *   directory; an environment a native run needs (`envWithThreads`) is a copy
+ *   handed to that one spawn.
+ * - The world the programs run in. The four that write files write paths
+ *   named after themselves (`build/net_relay/`, `build/rt_sec_read_cap/`,
+ *   `build/rt_sec_wasm_arena/`, and net_relay_soak's server's
+ *   `build/net_relay_soak_<n>.*`), and nothing else reads them;
+ *   net_interop_server writes only when started by hand. Every socket a
+ *   program's checks open is bound to port 0, which the kernel picks free; the
+ *   literal ports in tests/link are a server's CLI argument or bytes in a
+ *   replayed trace. One port is held by nobody for a moment: net_prefork's
+ *   `freePort` binds port 0, reads the number, closes it and hands it to the
+ *   supervisor it spawns, which binds it again. A program in flight beside it
+ *   could take that number with its own port 0 bind in between. It stays in
+ *   the pool rather than LINK_SERIAL because the kernel would have to pick
+ *   that one number out of the ephemeral range within a spawn's time, and if
+ *   it did, the supervisor's bind fails and net_prefork's checks fail loudly,
+ *   never a wrong pass. Three full runs at two widths never saw it.
+ */
+const runLinkProgram = async (name) => {
+  const steps = []
+  const expect = (label, ok, detail) => {
+    steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
-  if (linkShard(name) !== SHARD) {
-    continue
-  }
+  const record = { steps, irDelegated: false }
   const dir = path.join(linkDir, name)
   const side = (f) => path.join(dir, f)
   const read = (f) => fs.readFileSync(side(f), "utf8")
   const args = fs.existsSync(side("args")) ? read("args").trim().split(/\s+/).filter(Boolean) : []
   const outDir = path.join(buildDir, "link", name) + path.sep
   const exe = path.join(outDir, "app")
+  // This program's own directory: no other program in flight names it.
   fs.rmSync(outDir, { recursive: true, force: true })
   // WP35: the report is written beside the modules by the same compile, since
   // nothing here compares the IR of a second one.
@@ -5242,10 +5620,12 @@ for (const name of linkTests) {
   const capsArgs =
     !DELEGATE_IR_CHECKS && fs.existsSync(side("expected.caps.json")) ? ["--emit-capabilities", capsJson] : []
   if (DELEGATE_IR_CHECKS && fs.existsSync(side("expected.err"))) {
-    irDelegated++
-    continue
+    record.irDelegated = true
+    return record
   }
-  const r = spawnSync(
+  // The link reads the suite's runtime cache, which concurrent links share
+  // safely (CLI-5; see above).
+  const r = await spawnAsync(
     NISH,
     [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...linkProfile(name, args), ...capsArgs],
     { cwd: root }
@@ -5254,37 +5634,38 @@ for (const name of linkTests) {
 
   if (fs.existsSync(side("expected.err"))) {
     const needle = read("expected.err").trim()
-    check(
+    expect(
       `link/${name}: rejected with "${needle}"`,
       r.status === 1 && stderr.includes(needle),
       stderr || "(compiled successfully)"
     )
     if (fs.existsSync(side("expected.json"))) {
-      const json = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--json", ...args], {
+      const json = await spawnAsync(NISH, [side("main.ts"), "-o", outDir, "--json", ...args], {
         cwd: root,
         encoding: "utf8",
       })
       const got = json.stdout.split(`${root}/`).join("").trim()
       const want = read("expected.json").trim()
-      check(
+      expect(
         `link/${name}: --json reports every diagnostic in expected.json, and no other`,
         json.status === 1 && got === want,
         `--- expected\n${want}\n--- actual (exit ${json.status})\n${got}\n${json.stderr}`
       )
     }
-    continue
+    return record
   }
   if (r.status !== 0) {
-    check(`link/${name}: compiles and links`, false, stderr)
-    continue
+    expect(`link/${name}: compiles and links`, false, stderr)
+    return record
   }
   if (DELEGATE_IR_CHECKS) {
-    irDelegated++
+    record.irDelegated = true
   } else {
     // The `--emit-panics` compile below reads nothing this loop writes, so it
     // runs while the modules are checked rather than after them. Nothing between
     // here and its `await` leaves the iteration, so no compile outlives its program.
     const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
+    // Named after the program, like `outDir`.
     fs.rmSync(panicsDir, { recursive: true, force: true })
     const panicsFile = path.join(panicsDir, "panics.json")
     const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
@@ -5298,10 +5679,10 @@ for (const name of linkTests) {
       .sort()
       .map((f) => ({ file: f, ir: fs.readFileSync(path.join(outDir, f), "utf8") }))
     // A program that imports std/net is about a hundred modules, and llvm-as and
-    // opt read each one alone, so they run `defaultJobs()` modules at a time; the
+    // opt read each one alone, so they run `MODULE_JOBS` modules at a time; the
     // checks are still made in module order, so the output is the sequential
     // loop's. One at a time they were a fifth of the runtime-net job's wall clock.
-    const verified = await pool(modules, defaultJobs(), async (m) => ({
+    const verified = await pool(modules, MODULE_JOBS, async (m) => ({
       as: HAS_LLVM_AS ? await spawnAsync("llvm-as", [path.join(outDir, m.file), "-o", "/dev/null"]) : null,
       v: HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)]) : null,
     }))
@@ -5310,10 +5691,10 @@ for (const name of linkTests) {
         const actual = stripHeader(m.ir)
         if (UPDATE_LINK_GOLDENS && read(m.file).trim() !== actual) {
           fs.writeFileSync(side(m.file), `${actual}\n`)
-          console.log(`WROTE link/${name}/${m.file}`)
+          steps.push({ kind: "log", text: `WROTE link/${name}/${m.file}` })
         }
         const expected = read(m.file).trim()
-        check(
+        expect(
           `link/${name}: ${m.file} matches golden`,
           actual === expected,
           `--- expected\n${expected}\n--- actual\n${actual}`
@@ -5321,17 +5702,18 @@ for (const name of linkTests) {
       }
       const { as, v } = verified[i]
       if (as !== null) {
-        check(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
+        expect(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
       }
       if (v !== null) {
-        check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
+        expect(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
       }
     }
 
     if (fs.existsSync(side("expected.portability"))) {
       const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
+      // Named after the program, like `outDir`.
       fs.rmSync(warnedDir, { recursive: true, force: true })
-      const warned = spawnSync(
+      const warned = await spawnAsync(
         NISH,
         [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
         {
@@ -5346,12 +5728,12 @@ for (const name of linkTests) {
         .join("\n")
         .split(`${root}/`)
         .join("")
-      check(
+      expect(
         `link/${name}: --warn-portability --json matches expected.portability`,
         warned.status === 0 && got === want,
         `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
       )
-      check(
+      expect(
         `link/${name}: --warn-portability changes no byte of the IR`,
         modules.every(
           (m) =>
@@ -5387,7 +5769,7 @@ for (const name of linkTests) {
         }
       }
     }
-    check(
+    expect(
       `link/${name}: ${declares} imported declare(s) match their define(s) attribute for attribute`,
       declares > 0 && mismatches.length === 0,
       mismatches.join("\n") || "(no cross-module declares found)"
@@ -5400,7 +5782,7 @@ for (const name of linkTests) {
         .map((l) => l.trim())
         .filter(Boolean)
         .filter((l) => !all.includes(l))
-      check(
+      expect(
         `link/${name}: emitted IR contains every expected.ir line`,
         missing.length === 0,
         missing.map((l) => `missing: ${l}`).join("\n")
@@ -5415,7 +5797,7 @@ for (const name of linkTests) {
     // That compile was started beside the module checks above (`listing`).
     const listed = await listing
     if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
-      check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
+      expect(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
     } else {
       const listText = fs.readFileSync(panicsFile, "utf8")
       const ir = fs
@@ -5428,7 +5810,7 @@ for (const name of linkTests) {
       // drift check too; a module of a library that writes no `.ll` of its own
       // stays skipped (`panicOracle`'s `module`).
       const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
-      check(
+      expect(
         `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
         oracle.failures.length === 0 && oracle.own > 0,
         oracle.own > 0
@@ -5438,7 +5820,7 @@ for (const name of linkTests) {
       if (fs.existsSync(side("expected.panics"))) {
         const want = read("expected.panics").trim()
         const got = listText.split(`${root}/`).join("").trim()
-        check(
+        expect(
           `link/${name}: --emit-panics matches expected.panics`,
           got === want,
           `--- expected\n${want}\n--- actual\n${got}`
@@ -5449,7 +5831,7 @@ for (const name of linkTests) {
     if (capsArgs.length > 0) {
       const want = read("expected.caps.json")
       const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
-      check(
+      expect(
         `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
         got === want,
         `--- expected\n${want}\n--- actual\n${got}`
@@ -5457,14 +5839,17 @@ for (const name of linkTests) {
     }
   }
 
+  // The programs in flight share the repository root as their working
+  // directory, and nothing in it: each writes only a directory of its own and
+  // binds port 0 (see above, with net_prefork's one rebind).
   const run = await runNative(`link/${name}`, exe, [])
   if (run.death !== null) {
-    check(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
-    continue
+    expect(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
+    return record
   }
   const wantCode = Number(read("expected.code").trim())
   const wantOut = fs.existsSync(side("expected.out")) ? read("expected.out").trim() : ""
-  check(
+  expect(
     `link/${name}: exits with ${wantCode} and stdout matches expected.out`,
     run.status === wantCode && String(run.stdout).trim() === wantOut,
     `--- expected exit ${wantCode}, stdout:\n${wantOut}\n--- actual exit ${run.status}, stdout:\n${run.stdout}${run.stderr}`
@@ -5479,7 +5864,7 @@ for (const name of linkTests) {
       const sized = await runNative(`link/${name} (NISH_NUM_THREADS=${threads})`, exe, [], {
         env: envWithThreads(threads),
       })
-      check(
+      expect(
         sized.death ?? `link/${name}: the same exit and stdout under NISH_NUM_THREADS=${threads}`,
         sized.death === null && sized.status === wantCode && String(sized.stdout).trim() === wantOut,
         `--- actual exit ${sized.status}, stdout:\n${sized.stdout}${sized.stderr}`
@@ -5507,12 +5892,39 @@ for (const name of linkTests) {
         }
       }
     }
-    check(
+    expect(
       `link/${name}: every one of ${PANIC_ONCE_RUNS} runs at 2 and 8 threads prints expected.stderr once and exits ${wantCode}`,
       bad.length === 0,
       `--- expected stderr ${JSON.stringify(wantErr)}\n${bad.join("\n")}`
     )
   }
+  return record
+}
+
+// Each program is reported as soon as every program before it has been, so the
+// log moves while the pool runs. A program of `LINK_SERIAL` holds the report
+// at its place until the pool has drained and it has run alone; the programs
+// after it are reported then, in order, with it.
+const linkSelected = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) === SHARD)
+const linkRuns = new Array(linkSelected.length).fill(null)
+let linkReported = 0
+let irDelegated = 0
+const reportLink = (record) => {
+  reportCase(record)
+  if (record.irDelegated) {
+    irDelegated++
+  }
+  linkReported++
+}
+await pool(linkSelected, LINK_JOBS, async (name, at) => {
+  linkRuns[at] = LINK_SERIAL.has(name) ? { serial: true } : await runLinkProgram(name)
+  while (linkReported < linkRuns.length && linkRuns[linkReported] !== null && !linkRuns[linkReported].serial) {
+    reportLink(linkRuns[linkReported])
+  }
+})
+while (linkReported < linkRuns.length) {
+  const at = linkReported
+  reportLink(linkRuns[at].serial ? await runLinkProgram(linkSelected[at]) : linkRuns[at])
 }
 
 /** The `.ll` files an output directory holds, in name order. */
@@ -8261,6 +8673,18 @@ if (!only || "par_alloc".includes(only)) {
   )
 }
 
+/**
+ * A resolve hook that answers a relative specifier written without an
+ * extension (`./fixtures`, as the compiler takes it) with its `.ts` file.
+ * runtime/nish.mjs answers only `nish/` and `nish:`, and Node resolves no
+ * extension itself, so a fixture split across files needs this to run there.
+ */
+const tsExtensionHook = `data:text/javascript,${encodeURIComponent(
+  'import { registerHooks } from "node:module";' +
+    "registerHooks({ resolve: (s, c, next) => " +
+    '/^\\.\\.?\\//.test(s) && !/\\.[cm]?[jt]s$/.test(s) ? next(s + ".ts", c) : next(s, c) });'
+)}`
+
 /** Run a link fixture's `main` under runtime/nish.mjs, its output read as `encoding`. */
 const runFixtureUnderNode = (entry, encoding) =>
   spawnSync(
@@ -8271,6 +8695,8 @@ const runFixtureUnderNode = (entry, encoding) =>
       "--no-warnings",
       "--import",
       path.join(root, "runtime", "nish.mjs"),
+      "--import",
+      tsExtensionHook,
       "-e",
       `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
     ],
@@ -8489,16 +8915,37 @@ for (const name of [
 // text: the canvas lines carry raw half blocks, and Node builds them from
 // UTF-16 code units where the native screen builds UTF-8, so a wrong lead or
 // continuation byte would decode to U+FFFD on both sides of a string compare.
-for (const name of ["std_term", "std_term_f64"]) {
+// The pure modules nish/term-io drives (an event stream, the probe, the rate
+// controller, the pixel encoders and the base64 they send) are held to the same
+// bytes. Trailing newlines are not compared, as the link loop trims them too.
+for (const name of [
+  "std_term",
+  "std_term_f64",
+  "std_term_events",
+  "std_term_probe",
+  "std_term_rate",
+  "std_term_rate_f64",
+  "std_term_pixels",
+  "std_term_pixels_f64",
+  "std_base64",
+  "std_base64_f64",
+]) {
   if (only && !name.includes(only) && !"term-under-node".includes(only)) {
     continue
   }
   const entry = path.join(linkDir, name, "main.ts")
   const run = runFixtureUnderNode(entry, "buffer")
   const want = fs.readFileSync(path.join(linkDir, name, "expected.out"))
+  const untrailed = (bytes) => {
+    let end = bytes.length
+    while (end > 0 && bytes[end - 1] === 0x0a) {
+      end--
+    }
+    return bytes.subarray(0, end)
+  }
   check(
-    `link/${name}: nish/term prints the same bytes under runtime/nish.mjs as natively`,
-    run.status === 0 && Buffer.compare(run.stdout, want) === 0,
+    `link/${name}: prints the same bytes under runtime/nish.mjs as natively`,
+    run.status === 0 && Buffer.compare(untrailed(run.stdout), untrailed(want)) === 0,
     `exit ${run.status}\n--- native (expected.out)\n${want.toString("utf8")}--- node\n${run.stdout.toString("utf8")}${run.stderr.toString("utf8")}`
   )
 }
@@ -8768,8 +9215,11 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `sqlite_memory` builds the vendored SQLite for wasm32 against wasi-libc
 // (scripts/build.sh's wasi `sqlite_objects`) and opens an in-memory database
 // with it, so a wasi compile of the amalgamation that breaks fails here.
+// `std_sqlite_wasi` runs `nish/sqlite` itself there: prepare, bind, step,
+// `columnInto` and a constraint error, as docs/LANGUAGE.md says it does.
 for (const name of [
   "sqlite_memory",
+  "std_sqlite_wasi",
   "thread_atomic_tasks",
   "par_atomic",
   "thread_channel_pipeline",
@@ -10266,6 +10716,58 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       "nish:secret: an inferred `Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is deleted",
       inferred.ok && inferredPlain.ok && volatileSet.test(inferred.text) && inferredPlainStores === 0,
       `inferred:\n${inferred.text}\n--- plain: ${inferredPlainStores} stores\n${inferredPlain.text}`
+    )
+  }
+}
+
+// `nish/crypto/bcrypt` against libxcrypt's `crypt_r` on random passwords (NULs,
+// 8-bit bytes and keys past 72 bytes among them) and salts at cost 4 to 6, both
+// ways: Nish makes crypt_r's `$2b$` hash, crypt_r accepts Nish's, and Nish
+// answers crypt_r's `$2a$`, `$2b$` and `$2y$` hashes and a wrong password as
+// crypt_r does (tests/differential/bcrypt.js). Without a C compiler or
+// libxcrypt it skips and says which.
+if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includes(only))) {
+  const r = spawnSync("node", [path.join(root, "tests", "differential", "bcrypt.js"), "--compiler", NISH], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const summary = r.stdout.trimEnd().split("\n").at(-1) ?? ""
+  if (r.status === 2) {
+    skip(summary.replace(/^SKIP {2}/, ""))
+  } else {
+    check(
+      "bcrypt differential: Nish and libxcrypt crypt_r agree on random passwords and salts, both ways",
+      r.status === 0,
+      r.status === 0 ? summary : `${r.stdout}${r.stderr}`,
+    )
+  }
+}
+
+// The bcrypt vectors of tests/link/crypto_bcrypt as a `--profile wasi` module
+// under Node's WASI: the module is pure, so it builds for wasm32 and answers
+// every vector there as natively.
+if (!only || ["crypto_bcrypt", "bcrypt", "wasi"].some((name) => name.includes(only))) {
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const dir = path.join(buildDir, "wasi_crypto_bcrypt")
+    const wasm = path.join(dir, "app.wasm")
+    const built = spawnSync(
+      NISH,
+      [path.join(linkDir, "crypto_bcrypt", "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, "crypto_bcrypt", "expected.out"), "utf8")
+    check(
+      `link/crypto_bcrypt: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: link/crypto_bcrypt: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the bcrypt vectors is not run`
     )
   }
 }
@@ -14676,7 +15178,9 @@ if (!only || "simd".includes(only)) {
   // WP38 S6a: the byte-class runs of runtime-bytes.c, which `nish/bytes`'s skips
   // lower to, are held to the same standard by tests/simd/byte-runs.c: every class
   // edge planted at every offset of every length 0..160, every UTF-8 sequence at each
-  // narrowed second-byte edge cut by `to` at every byte, and 150,000 fuzzed runs,
+  // narrowed second-byte edge cut by `to` at every byte, each edge of the writer's
+  // plain class (0x1f to 0xff) at every offset of every range up to 80 bytes and
+  // stopped by `to` on either side of it, and 150,000 fuzzed runs,
   // each read up to a guard page so a path that loads past `to` faults, against a
   // reference that decodes the code point; then the resolver under each `NISH_SIMD`.
   // It runs everywhere the byte search's driver does.
@@ -19628,6 +20132,40 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       ),
     shownRefusal === null ? "no capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(refusedRun)
   )
+  // WP40: the refused dependency the same section shows, from its link program.
+  const shownDependency = /<!-- capabilities-refusal caps_dep_net_refused -->\n```text\n([\s\S]*?)```\n/.exec(
+    cookbookText
+  )
+  const dependencyRun = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "caps_dep_net_refused", "main.ts"),
+      "-o",
+      path.join(capsDir, "dependency") + path.sep,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capability policy: the dependency refusal docs/IR_COOKBOOK.md shows is the one tests/link/caps_dep_net_refused prints",
+    shownDependency !== null &&
+      dependencyRun.status === 1 &&
+      dependencyRun.stderr.startsWith(shownDependency[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
+    shownDependency === null ? "no caps_dep_net_refused capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(dependencyRun)
+  )
+  // WP40: and the lockfile refusal after it, from its link program.
+  const shownLock = /<!-- capabilities-refusal caps_lock_growth -->\n```text\n([\s\S]*?)```\n/.exec(cookbookText)
+  const lockRefusedRun = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "caps_lock_growth", "main.ts"), "-o", path.join(capsDir, "lock-cookbook") + path.sep],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capability lock: the refusal docs/IR_COOKBOOK.md shows is the one tests/link/caps_lock_growth prints",
+    shownLock !== null &&
+      lockRefusedRun.status === 1 &&
+      lockRefusedRun.stderr.startsWith(shownLock[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
+    shownLock === null ? "no caps_lock_growth capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(lockRefusedRun)
+  )
   const grantedDir = path.join(capsDir, "granted") + path.sep
   const grantedRun = spawnSync(
     NISH,
@@ -19646,6 +20184,136 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       fs.existsSync(ungrantedLl) &&
       fs.readFileSync(grantedLl, "utf8") === fs.readFileSync(ungrantedLl, "utf8"),
     shown(grantedRun)
+  )
+
+  // WP40: the capability lockfile. `--update-capability-lock` writes it beside
+  // the root package.json, byte-stable, and a rebuild holds the build to it.
+  // The fixtures are copied out first, so the run writes no tracked file.
+  const lockName = "nish-capabilities.lock.json"
+  const lockCopy = (name) => {
+    const dir = path.join(capsDir, "lock", name)
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.cpSync(path.join(linkDir, name), dir, { recursive: true })
+    return dir
+  }
+  const lockBuild = (dir, extra) =>
+    spawnSync(NISH, [path.join(dir, "main.ts"), "-o", path.join(dir, "out") + path.sep, ...extra], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  const updated = lockCopy("caps_lock_growth")
+  const updateRun = lockBuild(updated, ["--update-capability-lock"])
+  const writtenLock = fs.existsSync(path.join(updated, lockName))
+    ? fs.readFileSync(path.join(updated, lockName), "utf8")
+    : ""
+  check(
+    "capability lock: --update-capability-lock rewrites the lockfile it would refuse, sorted, two-space, one trailing newline",
+    updateRun.status === 0 &&
+      updateRun.stderr.includes(`wrote ${path.join(updated, lockName)}`) &&
+      writtenLock === '{\n  "version": 1,\n  "packages": {\n    "pkg_http": ["net"]\n  }\n}\n',
+    `${shown(updateRun)}\n--- written\n${writtenLock}`
+  )
+  const rebuilt = lockBuild(updated, [])
+  check(
+    "capability lock: the build after --update-capability-lock passes the lockfile it wrote",
+    rebuilt.status === 0,
+    shown(rebuilt)
+  )
+  const rewritten = lockBuild(updated, ["--update-capability-lock"])
+  check(
+    "capability lock: a second --update-capability-lock writes the same bytes",
+    rewritten.status === 0 && fs.readFileSync(path.join(updated, lockName), "utf8") === writtenLock,
+    shown(rewritten)
+  )
+  // A row is every capability the dependency reaches, not only the four the
+  // dependency policy gates: `fs.read` is written beside the granted `net`.
+  const ungatedLock = lockCopy("caps_lock_ungated")
+  const ungatedRun = lockBuild(ungatedLock, ["--update-capability-lock"])
+  const ungatedWritten = fs.existsSync(path.join(ungatedLock, lockName))
+    ? fs.readFileSync(path.join(ungatedLock, lockName), "utf8")
+    : ""
+  check(
+    "capability lock: --update-capability-lock records a capability the dependency policy does not gate",
+    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"fs\.read"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
+    `${shown(ungatedRun)}\n--- written\n${ungatedWritten}`
+  )
+  check(
+    "capability lock: the build after recording an ungated capability passes",
+    lockBuild(ungatedLock, []).status === 0,
+    ungatedWritten
+  )
+  // Every dependency has a row, `[]` for one that reaches nothing; std and the
+  // root package have none.
+  const pureLock = lockCopy("caps_lock_no_row_pure")
+  const pureRun = lockBuild(pureLock, ["--update-capability-lock"])
+  check(
+    "capability lock: a dependency that reaches nothing is written with an empty row",
+    pureRun.status === 0 &&
+      fs.readFileSync(path.join(pureLock, lockName), "utf8") ===
+        '{\n  "version": 1,\n  "packages": {\n    "pkg_pure": []\n  }\n}\n',
+    shown(pureRun)
+  )
+  const refusedLock = lockCopy("caps_lock_refused")
+  const refusedUpdate = lockBuild(refusedLock, ["--update-capability-lock"])
+  check(
+    "capability lock: a build the dependency policy refuses writes no lockfile under --update-capability-lock",
+    refusedUpdate.status === 1 &&
+      refusedUpdate.stderr.includes("which the root package does not grant it") &&
+      !fs.existsSync(path.join(refusedLock, lockName)),
+    shown(refusedUpdate)
+  )
+  // The flag skips the comparison: a lockfile it would refuse, even a
+  // malformed one, is replaced rather than read.
+  const malformedLock = lockCopy("caps_lock_bad_json")
+  const malformedUpdate = lockBuild(malformedLock, ["--update-capability-lock"])
+  check(
+    "capability lock: --update-capability-lock replaces a malformed lockfile instead of reading it",
+    malformedUpdate.status === 0 && fs.readFileSync(path.join(malformedLock, lockName), "utf8") === writtenLock,
+    shown(malformedUpdate)
+  )
+  for (const [other, refusal] of [
+    ["--fix", "`--update-capability-lock` cannot be used with --fix"],
+    ["--emit-ast", "`--update-capability-lock` reports on a checked program, and --emit-ast stops before the check"],
+  ]) {
+    const refusedFlag = spawnSync(
+      NISH,
+      [path.join(lockCopy("caps_lock_matches"), "main.ts"), "--update-capability-lock", other],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `capability lock: --update-capability-lock with ${other} is a usage error, exit 2`,
+      refusedFlag.status === 2 && refusedFlag.stderr.includes(refusal),
+      shown(refusedFlag)
+    )
+  }
+  // `nish run` checks the program, lockfile included, before it looks in its
+  // cache, so the lockfile is not part of the key and a cache hit is still
+  // held to it: the third run below emits the IR the first two cached.
+  const runLock = lockCopy("caps_lock_matches")
+  const lockCache = path.join(capsDir, "lock", "run-cache")
+  fs.rmSync(lockCache, { recursive: true, force: true })
+  const lockRun = (extra) =>
+    spawnSync(NISH, ["run", ...extra, path.join(runLock, "main.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: lockCache },
+    })
+  const firstRun = lockRun(["--update-capability-lock"])
+  const secondRun = lockRun([])
+  const cached = fs.existsSync(path.join(lockCache, "nish", "run"))
+    ? fs.readdirSync(path.join(lockCache, "nish", "run")).length
+    : 0
+  fs.writeFileSync(path.join(runLock, lockName), '{\n  "version": 1,\n  "packages": {\n    "pkg_http": []\n  }\n}\n')
+  const hitRun = lockRun([])
+  check(
+    "capability lock: `nish run` takes --update-capability-lock, and a run cache hit is still held to the lockfile",
+    firstRun.status === 0 &&
+      firstRun.stderr.includes(`wrote ${path.join(runLock, lockName)}`) &&
+      secondRun.status === 0 &&
+      cached === 1 &&
+      hitRun.status === 1 &&
+      hitRun.stderr.includes(`which \`${lockName}\` does not record for it`),
+    `cache entries: ${cached}\n${shown(firstRun)}\n${shown(secondRun)}\n${shown(hitRun)}`
   )
 
   // A program that will not run gets the refusal alone: the line is promised
@@ -20492,35 +21160,35 @@ if (!only || "sqlite-link".includes(only)) {
       .readdirSync(path.join(root, "runtime"))
       .filter((f) => f.endsWith(".c") && f !== "runtime-wasm.c").length
     const program = "tests/link/sqlite_link/main.ts"
+    // The units of runtime/sqlite/: the amalgamation and the `nish/sqlite`
+    // adapter. `sqliteUnits` (src/run-cache.ts) reads the directory, so a unit
+    // added there compiles, lands in the entry and is linked.
+    const sqliteC = fs
+      .readdirSync(path.join(root, "runtime", "sqlite"))
+      .filter((f) => f.endsWith(".c"))
+      .sort()
+    const vendored = sqliteC.map((f) => f.replace(/\.c$/, ".o"))
 
     const first = link(program, "first")
     const firstC = compiledC()
     const sq = sqliteEntries()
     const sqEntry = sq.length === 1 ? path.join(cacheRoot, sq[0]) : ""
     check(
-      "sqlite-link: the first link of a program that calls SQLite compiles the runtime and sqlite3.c once each",
+      "sqlite-link: the first link of a program that calls SQLite compiles the runtime and runtime/sqlite/ once each",
       first.status === 0 &&
         runOut("first").stdout === "3.54.1 3054001 0\n" &&
-        firstC.length === runtimeUnits + 1 &&
-        firstC.filter((c) => c === "sqlite3.c").length === 1,
+        firstC.length === runtimeUnits + sqliteC.length &&
+        sqliteC.every((u) => firstC.filter((c) => c === u).length === 1),
       first.stderr + firstC.join(", ")
     )
     check(
-      "sqlite-link: SQLite's objects are an entry of their own, named by 64 hex digits, holding sqlite3.o and the key alone",
+      "sqlite-link: SQLite's objects are an entry of their own, named by 64 hex digits, holding runtime/sqlite/'s objects and the key alone",
       entries().length === 2 &&
         sqEntry.length > 0 &&
         /^[0-9a-f]{64}$/.test(sq[0]) &&
-        fs.readdirSync(sqEntry).sort().join(",") === "key,sqlite3.o",
+        fs.readdirSync(sqEntry).sort().join(",") === ["key", ...vendored].join(","),
       entries().join(", ") + (sqEntry.length > 0 ? ` / ${fs.readdirSync(sqEntry).join(", ")}` : "")
     )
-    // The cache holds what runtime/sqlite/ holds: `sqliteUnits`
-    // (src/run-cache.ts) reads the directory, so a unit added there compiles,
-    // lands in the entry and is linked.
-    const vendored = fs
-      .readdirSync(path.join(root, "runtime", "sqlite"))
-      .filter((f) => f.endsWith(".c"))
-      .map((f) => f.replace(/\.c$/, ".o"))
-      .sort()
     check(
       "sqlite-link: the SQLite entry holds one object for every runtime/sqlite/*.c",
       sqEntry.length > 0 &&
@@ -20618,10 +21286,10 @@ if (!only || "sqlite-link".includes(only)) {
     // NISH_SQLITE_CFLAGS is in the key, and a -D in it for a default replaces it.
     const flagged = link(program, "flagged", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_THREADSAFE=1" })
     check(
-      "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles sqlite3.c alone again, into a new entry, and replaces the default",
+      "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles runtime/sqlite/ alone again, into a new entry, and replaces the default",
       flagged.status === 0 &&
         runOut("flagged").stdout === "3.54.1 3054001 1\n" &&
-        compiledC().join(",") === "sqlite3.c" &&
+        compiledC().join(",") === sqliteC.join(",") &&
         sqliteEntries().length === 2 &&
         entries().length === 3,
       flagged.stderr
@@ -20709,18 +21377,18 @@ if (!only || "sqlite-link".includes(only)) {
       path.join(sqDir, "missing"),
     ])
     check(
-      "sqlite-link: build.sh --sqlite-from a directory without sqlite3.o fails with exit 2, naming the object",
-      missing.status === 2 && missing.stderr.includes("sqlite3.o is missing"),
+      "sqlite-link: build.sh --sqlite-from a directory without runtime/sqlite/'s objects fails with exit 2, naming one",
+      missing.status === 2 && vendored.some((o) => missing.stderr.includes(`${o} is missing`)),
       missing.stderr
     )
     const objects = path.join(sqDir, "objects")
     const compiled = buildSh(["--sqlite-objects", objects])
     const fromObjects = buildSh([...lls, runtimeC, "--sqlite-from", objects, "-o", path.join(sqDir, "from")])
     check(
-      "sqlite-link: build.sh --sqlite-objects compiles sqlite3.o alone, printing nothing, and --sqlite-from links it",
+      "sqlite-link: build.sh --sqlite-objects compiles runtime/sqlite/ alone, printing nothing, and --sqlite-from links it",
       compiled.status === 0 &&
         compiled.stdout === "" &&
-        fs.readdirSync(objects).join(",") === "sqlite3.o" &&
+        fs.readdirSync(objects).sort().join(",") === vendored.join(",") &&
         fromObjects.status === 0 &&
         runOut("from").stdout === "3.54.1 3054001 0\n",
       compiled.stderr + fromObjects.stderr
@@ -20801,7 +21469,7 @@ if (!only || "sqlite-link".includes(only)) {
       copyBase.status === 0 &&
         withHeader.status === 0 &&
         runOut("copy-header").stdout === "3.54.1 3054001 0\n" &&
-        headerC.join(",") === "sqlite3.c" &&
+        headerC.join(",") === sqliteC.join(",") &&
         headerEntries.length === 1,
       `${copyBase.stderr}${withHeader.stderr}compiled: ${headerC.join(", ")}; new entries: ${headerEntries.join(", ")}`
     )
@@ -20819,9 +21487,9 @@ if (!only || "sqlite-link".includes(only)) {
       "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside sqlite3.o, links into a program that calls it, and a second link reuses it",
       withUnit.status === 0 &&
         runOut("copy-unit").stdout === "3.54.1 7\n" &&
-        unitC.join(",") === "nish_throwaway.c,sqlite3.c" &&
+        unitC.join(",") === [...sqliteC, "nish_throwaway.c"].sort().join(",") &&
         unitEntry.length > 0 &&
-        fs.readdirSync(unitEntry).sort().join(",") === "key,nish_throwaway.o,sqlite3.o" &&
+        fs.readdirSync(unitEntry).sort().join(",") === ["key", ...vendored, "nish_throwaway.o"].sort().join(",") &&
         reused.status === 0 &&
         runOut("copy-unit-again").stdout === "3.54.1 7\n" &&
         reusedC.length === 0 &&
@@ -25616,6 +26284,9 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       "export const sub = (a: i32): i32 => wrappingSub(a, 1);\n" +
       "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
       'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n',
+    // The root grants `pkg_fast` its `unsafe` (docs/wp40-dependency-capabilities.md).
+    "package.json":
+      '{ "name": "caps-unsafe", "private": true, "nish": { "capabilities": { "dependencies": { "pkg_fast": ["unsafe"] } } } }\n',
     "node_modules/pkg_fast/package.json":
       '{ "name": "pkg_fast", "version": "1.0.0", "exports": { ".": { "nish": "./src/index.ts" } } }\n',
     "node_modules/pkg_fast/src/index.ts":

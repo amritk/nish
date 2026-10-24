@@ -673,6 +673,11 @@ export const main = (): number => {
       } else {
         opts.denyCapabilities = opts.denyCapabilities | mask
       }
+    } else if (value === "--update-capability-lock") {
+      // Judged on the analysed program, as a policy is, so `--fix` and
+      // `--emit-ast` refuse it with the policy flags.
+      policyFlag = policyFlag.length === 0 ? value : policyFlag
+      opts.updateCapabilityLock = true
     } else if (value === "--fix") {
       notForRun = notForRun.length === 0 ? value : notForRun
       fix = true
@@ -1042,6 +1047,12 @@ export const main = (): number => {
       `${asker}: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
     )
     return 1
+  }
+  // WP40: computed by the check, which has passed every policy by here, so
+  // a refused build writes no lockfile.
+  if (opts.updateCapabilityLock && compilation.capabilityLockText.length > 0) {
+    writeFileSync(compilation.capabilityLockPath, compilation.capabilityLockText)
+    console.error(`wrote ${compilation.capabilityLockPath}`)
   }
   // WP35: read off the checked program, so answered here, before the dump
   // returns and before `run` starts the program -- the line is the last

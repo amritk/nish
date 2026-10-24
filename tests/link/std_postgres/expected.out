@@ -1,0 +1,263 @@
+PASS  starts needing input
+PASS  startup message: protocol 3.0, user, database, UTF8, ISO dates in UTC
+PASS  startup message: no database, an application name and options
+PASS  trust: AuthenticationOk, BackendKeyData, ReadyForQuery
+PASS  the backend's process id
+PASS  idle
+PASS  no failure
+PASS  a ready connection may send
+PASS  a starting one may not
+PASS  a length under 4 is a framing failure
+PASS  a failed connection stays failed
+PASS  a message over maxMessage is refused before it is read
+PASS  inputSize under 64 is raised to 64
+PASS  receive copies only what fits
+PASS  a message larger than the buffer grows it
+PASS  and is read whole
+PASS  a message a little over the buffer
+PASS  doubles it
+PASS  and is read whole after it
+PASS  a byte at a time
+PASS  a row before authentication
+PASS  authentication once started
+PASS  BackendKeyData once ready
+PASS  ReadyForQuery with no group in flight
+PASS  a row with no group in flight
+PASS  an ERROR with no group in flight
+PASS  an unknown message
+PASS  a CopyInResponse
+PASS  a CopyOutResponse
+PASS  ReadyForQuery for a group not yet synced
+PASS  a notification is ignored
+PASS  an error without its terminator
+PASS  a ParameterStatus without its value
+PASS  an authentication request under 4 bytes
+PASS  AuthenticationOk with data
+PASS  BackendKeyData of 4 bytes
+PASS  ReadyForQuery with a status other than I, T, E
+PASS  ParseComplete with a body
+PASS  a tag without its NUL
+PASS  EmptyQueryResponse with a body
+PASS  NoData with a body
+PASS  ParameterDescription short of its count
+PASS  a column longer than its row
+PASS  a row with bytes after its columns
+PASS  a column length of -2
+PASS  a RowDescription field cut short
+PASS  a row over maxColumns
+PASS  MD5 is refused
+PASS  cleartext is refused
+PASS  GSS is refused
+PASS  SSPI is refused
+PASS  SASL without SCRAM-SHA-256
+PASS  a SASL list without its end
+PASS  SASLContinue before SASL
+PASS  SASL offering SCRAM-SHA-256
+PASS  SASLInitialResponse: the mechanism, then client-first-message
+PASS  a server nonce that is not ours
+PASS  a server nonce that adds nothing
+PASS  a server nonce with a space
+PASS  no salt
+PASS  a salt that is not base64
+PASS  iterations under minIterations
+PASS  iterations over maxIterations
+PASS  iterations that would overflow
+PASS  iterations that are not digits
+PASS  SASLResponse: no channel binding, the joined nonce, a proof
+PASS  and a proof of 32 bytes
+PASS  a server signature the password does not make
+PASS  a server signature of 31 bytes
+PASS  a server signature that is not base64
+PASS  a server final without v=
+PASS  a server final of one byte
+PASS  the password is held while SCRAM runs
+PASS  AuthenticationOk before the server proved the password
+PASS  a failed connection holds no password: its copy is zeros
+PASS  a new connection holds its copy of the password
+PASS  still after SASL starts
+PASS  zeros once the proof is computed
+PASS  a framing failure
+PASS  zeros after fail()
+PASS  zeros after dispose()
+PASS  trust computes no proof: zeros once AuthenticationOk arrives
+PASS  an error during startup fails the connection
+PASS  its code
+PASS  its message
+PASS  FATAL once ready fails it too
+PASS  an ERROR ends the statement, then the group
+PASS  the non-localised severity, code, message, detail, hint, constraint, position
+PASS  the group failed
+PASS  in a failed transaction
+PASS  nothing in flight
+PASS  a notice without V takes the localised severity
+PASS  a notice does not end the group
+PASS  whose statements did not fail
+PASS  a client_encoding other than UTF8
+PASS  DateStyle ISO
+PASS  DateStyle ISO, MDY
+PASS  DateStyle German, DMY
+PASS  DateStyle ISOX
+PASS  DateStyle empty
+PASS  TimeZone UTC
+PASS  TimeZone Europe/Paris
+PASS  TimeZone UTC0
+PASS  a SET TimeZone once ready fails the connection
+PASS  the end of the stream
+PASS  is a failure
+PASS  reported once
+PASS  the first cause stays
+PASS  dispose may be called twice
+PASS  Terminate
+PASS  Terminate drops an open bind
+PASS  Parse and Describe
+PASS  their bytes
+PASS  a group is open
+PASS  Bind
+PASS  no sync while a bind is open
+PASS  no prepare while a bind is open
+PASS  Bind with every parameter kind, then Execute
+PASS  Sync
+PASS  its bytes
+PASS  no sync without a group
+PASS  Close
+PASS  its bytes
+PASS  a NUL in a name is refused
+PASS  a NUL in SQL is refused
+PASS  a NUL in a closed name is refused
+PASS  a NUL in a bound name is refused
+PASS  and nothing is written
+PASS  the open group may take more
+PASS  maxInFlight groups sent: no more
+PASS  prepare is refused
+PASS  bindStart is refused
+PASS  a group done
+PASS  frees a place
+PASS  before ready, nothing may be prepared
+PASS  a field is 18 bytes after its name
+PASS  RowDescription
+PASS  two columns
+PASS  the first is int4
+PASS  the second bool
+PASS  a row
+PASS  int
+PASS  bool
+PASS  columnText
+PASS  colLength
+PASS  colStart points into the input buffer
+PASS  a row with a NULL
+PASS  isNull
+PASS  columnText of NULL
+PASS  int of NULL is 0
+PASS  and sets failed
+PASS  a row wider than the column arrays grows them
+PASS  its last column
+PASS  a tag
+PASS  tagIs a whole word
+PASS  not a prefix of one
+PASS  tagRows
+PASS  a tag without a count
+PASS  tagIs of two words
+PASS  a count past an i64
+PASS  leaves text.failed alone
+PASS  a count while text.failed is set
+PASS  keeps it set
+PASS  EmptyQueryResponse is the empty tag
+PASS  NoData
+PASS  no columns
+PASS  ParseComplete, BindComplete, CloseComplete, ParameterDescription say nothing
+PASS  a notice
+PASS  counted
+PASS  a prepare that would pass maxOutput is refused
+PASS  and opens no group
+PASS  and writes nothing
+PASS  one byte less fits
+PASS  exactly maxOutput less the tail
+PASS  no Bind after it
+PASS  Sync still fits
+PASS  516 and 5 bytes queued
+PASS  a partial send under half the buffer keeps its place
+PASS  a message that fits under maxOutput but not after the end
+PASS  moves the unsent bytes to the start
+PASS  instead of growing the buffer
+PASS  the unsent bytes as they were
+PASS  the new message after them
+PASS  unsent bytes count against maxOutput
+PASS  a send past half the buffer moves the rest to its start
+PASS  all of it
+PASS  whose last bytes are the Describe
+PASS  a message that ends the buffer exactly
+PASS  keeps the sent bytes before it
+PASS  Sync after it
+PASS  moves the unsent bytes to the start too
+PASS  rather than double the buffer
+PASS  an open Bind is not yet sendable
+PASS  a parameter that would pass maxOutput is refused
+PASS  a smaller one fits
+PASS  bindEnd is never refused for room
+PASS  nor is Sync
+PASS  the refused parameter left nothing behind
+PASS  paramText without a bind is refused
+PASS  paramBytes too
+PASS  paramNull too
+PASS  paramInt too
+PASS  paramTextArray too
+PASS  bindEnd too
+PASS  and nothing is written
+PASS  paramBytes: a negative start
+PASS  paramBytes: a negative length
+PASS  paramBytes: a window past the end
+PASS  paramBytes: a window that would overflow
+PASS  paramBytes: the whole array
+PASS  paramBytes: an empty window at the end
+PASS  only the two good windows were bound
+PASS  sixteen groups, the default maxInFlight, go out unanswered
+PASS  all in flight
+PASS  a seventeenth may not start
+PASS  the first answer frees one place
+PASS  so the seventeenth goes out
+PASS  sixteen in flight again
+PASS  the answers come back in the order the groups were sent
+PASS  nothing in flight
+PASS  one answer more than was asked for
+PASS  int
+PASS  int: negative
+PASS  int: the most negative i64
+PASS  int: the largest i64
+PASS  int: one past the largest
+PASS  int: one past the most negative
+PASS  int: empty
+PASS  int: a sign alone
+PASS  int: a letter
+PASS  int: a plus sign
+PASS  int: a window past the buffer
+PASS  bool: t
+PASS  bool: f
+PASS  bool: anything else
+PASS  timestamptz
+PASS  timestamptz, one fraction digit
+PASS  timestamp, no fraction, no offset
+PASS  an offset other than +00
+PASS  infinity
+PASS  BC
+PASS  year 0000
+PASS  leaves out as it was
+PASS  a year past 9999
+PASS  seven fraction digits
+PASS  a dot without digits
+PASS  a T where the space goes
+PASS  no room in out
+PASS  an empty array
+PASS  plain, NULL, quoted, escaped
+PASS  null in any case
+PASS  a quoted NULL is text
+PASS  an element longer than out
+PASS  not braced
+PASS  nested
+PASS  dimensions
+PASS  an empty element
+PASS  an unclosed quote
+PASS  text after a quote
+PASS  a space unquoted
+PASS  a window too short
+PASS  stays bad
+postgres: 262 passed, 0 failed, 0 skipped

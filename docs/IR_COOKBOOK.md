@@ -2692,7 +2692,7 @@ no kernel (`tests/run.js`, "kernels:").
 
 ### `nish/bytes`: the runs on their kernels, the copy as one move
 
-`skipBlank`, `skipDigits` and `skipJsonText` are lowered as `indexOfAny` is:
+`skipBlank`, `skipDigits`, `skipJsonText` and `skipJsonPlain` are lowered as `indexOfAny` is:
 each clamps its range in Nish and makes one call to a private walker, and in
 the module that is `nish/bytes` that call becomes a kernel of
 `runtime/runtime-bytes.c` (`src/kernels.ts`, `bytesWalkOf`). The kernel is
@@ -23692,6 +23692,38 @@ docs/cookbook/builtin-capabilities.ts:15:15: error: `main` reaches `fs.read`, wh
 `tests/run.js` compiles the snippet both ways and holds the block above to
 what the compiler prints and the granted IR to the ungranted one.
 
+A dependency is judged on the same report, against a grant only the root
+`package.json` writes (`docs/LANGUAGE.md` -> The capability policy -> A
+dependency's capabilities). `tests/link/caps_dep_net_refused` loads `pkg_http`,
+whose private `dial` reaches `net`, and grants it nothing; the error is in the
+dependency, at the first call of the witness chain, and names the grant that
+lets it compile, as the same program granted `net` does
+(`caps_dep_net_granted`).
+
+<!-- capabilities-refusal caps_dep_net_refused -->
+```text
+tests/link/caps_dep_net_refused/node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+  6 |   return netAddress(addr, "127.0.0.1", port) >= 0 && tcpConnect(addr) >= 0;
+    |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+`tests/run.js` compiles the program and holds the block above to what the
+compiler prints.
+
+The capability lockfile is judged on the same report too, after both policies
+(`docs/LANGUAGE.md` -> The capability policy -> The capability lockfile), and
+it changes no byte of the IR either. `tests/link/caps_lock_growth` grants
+`pkg_http` its `net`, but its `nish-capabilities.lock.json` records an empty
+row for it, so the build is refused where the dependency refusal above is, with
+the same chain:
+
+<!-- capabilities-refusal caps_lock_growth -->
+```text
+tests/link/caps_lock_growth/node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it; review the chain, then record it with `--update-capability-lock` — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+  6 |   return netAddress(addr, "127.0.0.1", port) >= 0 && tcpConnect(addr) >= 0;
+    |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
 ### Builtin modules (`nish:`)
 
 An import from `nish:fs` / `nish:process` / `nish:io` renames a builtin rather
@@ -24067,6 +24099,7 @@ declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocaptur
 declare i64 @nish_bytes_skip_blank(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_bytes_skip_digits(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_bytes_skip_json_text(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
+declare i64 @nish_bytes_skip_json_plain(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #6
 declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #4
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4

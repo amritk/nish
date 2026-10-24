@@ -6,6 +6,7 @@ declare void @llvm.memmove.p0i8.p0i8.i64(i8* nocapture writeonly, i8* nocapture 
 declare i64 @nish_bytes_skip_blank(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #4
 declare i64 @nish_bytes_skip_digits(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #4
 declare i64 @nish_bytes_skip_json_text(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #4
+declare i64 @nish_bytes_skip_json_plain(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #4
 declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #5
 declare void @nish_panic_index(i64 noundef, i64 noundef) #5
 declare extern_weak void @nish_panic_overflow(i32 noundef) #5
@@ -901,6 +902,23 @@ entry:
   ret i32 %9
 }
 
+define noundef i32 @nish.skipJsonPlain(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %from, i32 noundef %to) #3 {
+entry:
+  %end.addr = alloca i32, align 4
+  %0 = call i32 @nish.bytesRunEnd(%struct.nish_array* %b, i32 %to)
+  store i32 %0, i32* %end.addr, align 4
+  %1 = load i32, i32* %end.addr, align 4
+  %2 = call i32 @nish.bytesRunStart(i32 %from, i32 %1)
+  %3 = load i32, i32* %end.addr, align 4
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = sext i32 %2 to i64
+  %7 = sext i32 %3 to i64
+  %8 = call i64 @nish_bytes_skip_json_plain(i8* %5, i64 %6, i64 %7)
+  %9 = trunc i64 %8 to i32
+  ret i32 %9
+}
+
 define void @nish.copyBytes(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %src, i32 noundef %from, i32 noundef %count) #0 {
 entry:
   %0 = icmp slt i32 %count, 0
@@ -1484,6 +1502,86 @@ while.end:
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
   unreachable
+}
+
+define internal noundef i32 @nish.skipJsonPlainWalk(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %b, i32 noundef %from, i32 noundef %to) #3 {
+entry:
+  %i.addr = alloca i32, align 4
+  %c.addr = alloca i32, align 4
+  store i32 %from, i32* %i.addr, align 4
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %3 = load i8*, i8** %2, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  br label %while.cond
+
+while.cond:
+  %4 = load i32, i32* %i.addr, align 4
+  %5 = icmp sge i32 %4, 0
+  br i1 %5, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %6 = load i32, i32* %i.addr, align 4
+  %7 = icmp slt i32 %6, %to
+  br label %land.end.1
+
+land.end.1:
+  %8 = phi i1 [ false, %while.cond ], [ %7, %land.rhs.1 ]
+  br i1 %8, label %land.rhs, label %land.end
+
+land.rhs:
+  %9 = load i32, i32* %i.addr, align 4
+  %10 = trunc i64 %1 to i32
+  %11 = icmp slt i32 %9, %10
+  br label %land.end
+
+land.end:
+  %12 = phi i1 [ false, %land.end.1 ], [ %11, %land.rhs ]
+  br i1 %12, label %while.body, label %while.end
+
+while.body:
+  %13 = load i32, i32* %i.addr, align 4
+  %14 = sext i32 %13 to i64
+  %15 = bitcast i8* %3 to i8*
+  %16 = getelementptr inbounds i8, i8* %15, i64 %14
+  %17 = load i8, i8* %16, align 1, !alias.scope !4, !noalias !3, !tbaa !13
+  %18 = zext i8 %17 to i32
+  store i32 %18, i32* %c.addr, align 4
+  %19 = load i32, i32* %c.addr, align 4
+  %20 = icmp slt i32 %19, 32
+  br i1 %20, label %lor.end.1, label %lor.rhs.1
+
+lor.rhs.1:
+  %21 = load i32, i32* %c.addr, align 4
+  %22 = icmp eq i32 %21, 34
+  br label %lor.end.1
+
+lor.end.1:
+  %23 = phi i1 [ true, %while.body ], [ %22, %lor.rhs.1 ]
+  br i1 %23, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %24 = load i32, i32* %c.addr, align 4
+  %25 = icmp eq i32 %24, 92
+  br label %lor.end
+
+lor.end:
+  %26 = phi i1 [ true, %lor.end.1 ], [ %25, %lor.rhs ]
+  br i1 %26, label %if.then, label %if.end
+
+if.then:
+  %27 = load i32, i32* %i.addr, align 4
+  ret i32 %27
+
+if.end:
+  %28 = load i32, i32* %i.addr, align 4
+  %29 = add nsw i32 %28, 1
+  store i32 %29, i32* %i.addr, align 4
+  br label %while.cond
+
+while.end:
+  %30 = load i32, i32* %i.addr, align 4
+  ret i32 %30
 }
 
 define internal void @nish.copyBytesWalk(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) nocapture %dst, i32 noundef %at, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %src, i32 noundef %from, i32 noundef %count) #0 {
