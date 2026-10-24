@@ -17822,38 +17822,77 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     truecolour.stdout.includes(`${ESC}36m`) && !fixedTone.test(truecolour.stdout),
     JSON.stringify(truecolour.stdout.slice(0, 200))
   )
-  // The failsafe: a TERM whose terminfo declares no colours gets the structure
-  // in bold and underline, which a monochrome terminal still shows.
-  if (!has("tput")) {
-    skip("--help on a monochrome TERM: no `tput` on this host to read terminfo's colour count")
-  } else {
-    const mono = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "vt100" })
+  // Forced colour is the theme's whatever `TERM` says: the reader is a pager or
+  // an editor that paints the escapes itself (Emacs's shell sets TERM=dumb).
+  for (const term of ["dumb", "vt100"]) {
+    const forcedOn = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: term })
     check(
-      "--help on a monochrome TERM (vt100): bold and underline, no colour",
-      mono.stdout.includes(`${ESC}1m`) &&
-        mono.stdout.includes(`${ESC}4m`) &&
-        !/\u001b\[(?:[0-9;]*;)?(?:3[0-9]|4[0-9]|9[0-7]|10[0-7]|2)[;m]/.test(mono.stdout) &&
-        mono.stdout.replace(/\u001b\[[0-9;]*m/g, "") === help.stdout,
-      JSON.stringify(mono.stdout.slice(0, 200))
+      `--help with CLICOLOR_FORCE=1 on TERM=${term}: the theme's colours`,
+      forcedOn.stdout.includes(`${ESC}36m`) && !fixedTone.test(forcedOn.stdout),
+      JSON.stringify(forcedOn.stdout.slice(0, 200))
     )
   }
-  // The colour probe runs `tput` by absolute path: one first on `PATH`, as a
-  // checkout's own is under a `PATH` holding `.`, is never run.
-  const planted = fs.mkdtempSync(path.join(os.tmpdir(), "nish-tput-"))
-  const marker = path.join(planted, "ran")
-  fs.writeFileSync(path.join(planted, "tput"), `#!/bin/sh\n: > '${marker}'\necho 256\n`, { mode: 0o755 })
-  const plantedRun = run(["--help"], {
-    ...plainEnv,
-    CLICOLOR_FORCE: "1",
-    TERM: "xterm",
-    PATH: `${planted}${path.delimiter}${process.env.PATH ?? ""}`,
-  })
-  check(
-    "--help: the colour probe never runs a `tput` found on PATH",
-    plantedRun.status === 0 && plantedRun.stdout.includes(ESC) && !fs.existsSync(marker),
-    fs.existsSync(marker) ? `ran ${path.join(planted, "tput")}` : JSON.stringify(plantedRun.stdout.slice(0, 200))
-  )
-  fs.rmSync(planted, { recursive: true, force: true })
+  // The terminal path, under a pseudo-terminal: `script` gives `nish` one, so
+  // `[ -t 1 ]` holds and the colour count `tput` reads decides. The run's
+  // output is the terminal's, with CR LF line ends.
+  const helpOnTerminal = (env) => {
+    const argv =
+      process.platform === "darwin"
+        ? ["-q", "/dev/null", NISH, "--help"]
+        : ["-qec", '"$NISH_HELP_EXE" --help', "/dev/null"]
+    const r = spawnSync("script", argv, {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, ...plainEnv, NISH_HELP_EXE: NISH, ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30000,
+    })
+    return { status: r.status, stdout: (r.stdout ?? "").replace(/\r\n/g, "\n").replace(/\n$/, "") }
+  }
+  const absoluteTput = ["/usr/bin/tput", "/bin/tput"].some((t) => fs.existsSync(t))
+  if (!has("script") || !absoluteTput) {
+    skip(
+      "--help on a terminal: the colour probe was not run under a pseudo-terminal " +
+        (has("script") ? "(no tput at /usr/bin or /bin)" : "(no `script`)")
+    )
+  } else {
+    const themed = helpOnTerminal({ TERM: "xterm-256color" })
+    check(
+      "--help on a terminal (xterm-256color): the theme's colours, and the same text under the escapes",
+      themed.status === 0 &&
+        themed.stdout.includes(`${ESC}36m`) &&
+        !fixedTone.test(themed.stdout) &&
+        themed.stdout.replace(/\u001b\[[0-9;]*m/g, "").trimEnd() === help.stdout.trimEnd(),
+      JSON.stringify(themed.stdout.slice(0, 200))
+    )
+    // The failsafe: a TERM whose terminfo declares no colours gets the
+    // structure in bold and underline, which a monochrome terminal still shows.
+    const mono = helpOnTerminal({ TERM: "vt100" })
+    check(
+      "--help on a monochrome terminal (vt100): bold and underline, no colour",
+      mono.status === 0 &&
+        mono.stdout.includes(`${ESC}1m`) &&
+        mono.stdout.includes(`${ESC}4m`) &&
+        !/\u001b\[(?:[0-9;]*;)?(?:3[0-9]|4[0-9]|9[0-7]|10[0-7]|2)[;m]/.test(mono.stdout) &&
+        mono.stdout.replace(/\u001b\[[0-9;]*m/g, "").trimEnd() === help.stdout.trimEnd(),
+      JSON.stringify(mono.stdout.slice(0, 200))
+    )
+    // The probe runs `tput` by absolute path: one first on `PATH`, as a
+    // checkout's own is under a `PATH` holding `.`, is never run.
+    const planted = fs.mkdtempSync(path.join(os.tmpdir(), "nish-tput-"))
+    const marker = path.join(planted, "ran")
+    fs.writeFileSync(path.join(planted, "tput"), `#!/bin/sh\n: > '${marker}'\necho 256\n`, { mode: 0o755 })
+    const plantedRun = helpOnTerminal({
+      TERM: "xterm",
+      PATH: `${planted}${path.delimiter}${process.env.PATH ?? ""}`,
+    })
+    check(
+      "--help: the colour probe never runs a `tput` found on PATH",
+      plantedRun.status === 0 && plantedRun.stdout.includes(ESC) && !fs.existsSync(marker),
+      fs.existsSync(marker) ? `ran ${path.join(planted, "tput")}` : JSON.stringify(plantedRun.stdout.slice(0, 200))
+    )
+    fs.rmSync(planted, { recursive: true, force: true })
+  }
   const noColor = run(["--help"], { ...plainEnv, NO_COLOR: "1", FORCE_COLOR: "1" })
   check(
     "--help: NO_COLOR wins over FORCE_COLOR",
@@ -18079,9 +18118,8 @@ if (!only || "secret alias mutation".includes(only) || only.startsWith("reject_s
   const mutDir = path.join(buildDir, "secret-alias-mutation")
   fs.rmSync(mutDir, { recursive: true, force: true })
   fs.cpSync(path.join(root, "src"), path.join(mutDir, "src"), { recursive: true })
-  // The compiler imports its help's colour policy from `../std/cli`.
-  fs.mkdirSync(path.join(mutDir, "std"), { recursive: true })
-  fs.copyFileSync(path.join(root, "std", "cli.ts"), path.join(mutDir, "std", "cli.ts"))
+  // The compiler imports from `../std/` (its help's colour policy is `std/cli.ts`).
+  fs.cpSync(path.join(root, "std"), path.join(mutDir, "std"), { recursive: true })
   const secretTs = path.join(mutDir, "src", "secret.ts")
   const live = fs.readFileSync(secretTs, "utf8")
   const edits = [

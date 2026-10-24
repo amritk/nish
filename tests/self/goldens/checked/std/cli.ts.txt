@@ -3,6 +3,7 @@
 const CSI: string = "\u001b["
 const PALETTE_THEME: i32 = 0
 const PALETTE_MONO: i32 = 2
+const SPACE_RUN: string = "                                                                                "
 struct Style (class) size=2 align=1 exported
   field on: boolean index=0 offset=0
   field colour: boolean index=1 offset=1
@@ -118,7 +119,7 @@ function envSaysYes(name: string): boolean -> @envSaysYes
   calls: nish_getenv saysYes
   stackSites=0 stackLocals=0
   callee +0:47 saysYes -> @saysYes
-function paletteOf(fd: i32, terminal: boolean): i32 -> @paletteOf
+function paletteOf(fd: i32): i32 -> @paletteOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_spawn
   calls: nish_spawn nish_str_concat nish_str_from_i32
@@ -153,8 +154,7 @@ function styleFor(fd: i32, agent: boolean): Style -> @styleFor [exported]
   callee +2:12 new Style -> @Style.constructor
   callee +4:7 saysYes -> @saysYes
   callee +4:25 envSaysYes -> @envSaysYes
-  callee +5:12 styleOfPalette -> @styleOfPalette
-  callee +5:27 paletteOf -> @paletteOf
+  callee +5:12 new Style -> @Style.constructor
   local +7:9 term: string | null (const)
   callee +8:7 envSaysNo -> @envSaysNo
   callee +9:12 new Style -> @Style.constructor
@@ -162,7 +162,7 @@ function styleFor(fd: i32, agent: boolean): Style -> @styleFor [exported]
   callee +11:25 paletteOf -> @paletteOf
 function spaces(count: i32): string -> @spaces
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_alloc_struct nish_array_grow
+  calls: nish_alloc_struct nish_array_grow nish_str_new
   stackSites=1 stackLocals=1
   local +0:9 out: string[] (const)
   local +1:12 i: i32 (let)

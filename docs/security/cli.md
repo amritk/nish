@@ -22,7 +22,8 @@ fixed: `scripts/build.sh` (how the link's arguments reach `clang`),
 
 Added after the audit, with the grouped `--help`: `paletteOf`
 (`std/cli.ts`) starts `/bin/sh -c` by absolute path on the paths that print
-the usage, with a constant script that takes nothing from the arguments:
+the usage, unless a variable has already forced colour on or off, with a
+constant script that takes nothing from the arguments:
 `[ -t N ]`, N the descriptor 1 or 2, then `tput colors`, which reads how many
 colours `TERM`'s terminfo entry declares. `tput` is run as `/usr/bin/tput` or
 `/bin/tput`, never looked up on `PATH`, so a `PATH` holding `.` or an empty

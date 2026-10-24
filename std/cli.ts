@@ -18,7 +18,7 @@
  * chose, and a terminal with no theme set paints them in its built-in
  * defaults. A terminal with no colours at all (`tput colors` says fewer than
  * eight) gets the failsafe: the same structure in bold and underline, which a
- * monochrome terminal still shows.
+ * monochrome terminal still shows. Colour that is forced is the theme's.
  *
  * **Colour is for a person reading a terminal**, and nothing else may see it:
  * a script that captures `--help`, a test that compares it, a pipe into `less`
@@ -35,7 +35,8 @@
  * is then plain whatever forcing variable its shell inherited.
  *
  * **What it reaches.** `Style` and `HelpMenu` reach no capability. `styleFor`
- * reads the environment and forks a shell once (`env` and `process.spawn`),
+ * reads the environment and, on the terminal check, forks a shell
+ * (`env` and `process.spawn`),
  * and `agentDriven` reads the environment; a program that builds its `Style`
  * by hand reaches neither.
  *
@@ -155,20 +156,20 @@ const envSaysNo = (name: string): boolean => saysNo(getenv(name))
 const envSaysYes = (name: string): boolean => saysYes(getenv(name))
 
 /**
- * What descriptor `fd` can show: `PALETTE_THEME`, `PALETTE_MONO`, or anything
- * else for plain text. The shell answers: a child inherits the descriptors and
- * the environment, `[ -t 1 ]` is POSIX, and `tput colors` reads the count
- * `TERM`'s terminfo entry declares (`-1` for none). With `terminal` unset
- * (colour was forced) only the count is asked. `tput` is run by absolute path,
- * never looked up on `PATH`, so a `PATH` with `.` in it cannot run a `tput`
- * planted in the working directory (`docs/security/cli.md`). When there is no
- * `tput` there, or it does not know `TERM`, the answer is the theme: almost
- * every terminal has colours, and an escape a monochrome one does not know it
- * drops. It costs one fork. Where nothing can be spawned (a WebAssembly build)
- * the answer is `-1`, which is plain text, the safe side.
+ * What terminal descriptor `fd` is: `PALETTE_THEME`, `PALETTE_MONO`, or
+ * anything else for no terminal, which is plain text. The shell answers: a
+ * child inherits the descriptors and the environment, `[ -t 1 ]` is POSIX,
+ * and `tput colors` reads the count `TERM`'s terminfo entry declares (`-1` for
+ * none). `tput` is run by absolute path, never looked up on `PATH`, so a
+ * `PATH` with `.` in it cannot run a `tput` planted in the working directory
+ * (`docs/security/cli.md`). When there is no `tput` there, or it does not know
+ * `TERM`, the answer is the theme: almost every terminal has colours, and an
+ * escape a monochrome one does not know it drops. It costs one fork of the
+ * shell and, on a terminal, one of `tput`. Where nothing can be spawned (a
+ * WebAssembly build) the answer is `-1`, which is plain text, the safe side.
  */
-const paletteOf = (fd: i32, terminal: boolean): i32 => {
-  const tty = terminal ? `[ -t ${fd} ] || exit 1; ` : ""
+const paletteOf = (fd: i32): i32 => {
+  const tty = `[ -t ${fd} ] || exit 1; `
   const find = "t=/usr/bin/tput; [ -x $t ] || t=/bin/tput; [ -x $t ] || exit 0; "
   const count = "c=$($t colors 2>/dev/null) || exit 0; case $c in ''|*[!0-9-]*) exit 0;; esac; "
   return toI32(spawnSync(["/bin/sh", "-c", `${tty}${find}${count}[ "$c" -ge 8 ] || exit ${PALETTE_MONO}`]))
@@ -201,9 +202,11 @@ export const agentDriven = (): boolean => {
  * agent or not (`agentDriven`, asked once by the caller). `NO_COLOR` wins,
  * then an agent, then `FORCE_COLOR` saying no (`isNo`; Node reads `0` and
  * `false` so), then a forcing variable, then `CLICOLOR` saying no or
- * `TERM=dumb`, and only then the terminal check. Whichever way it is on, the
- * colours `TERM` declares choose between the theme and the failsafe
- * (`paletteOf`).
+ * `TERM=dumb`, and only then the terminal check, where the colours `TERM`
+ * declares choose between the theme and the failsafe (`paletteOf`). Forced
+ * colour is the theme's, asked of nothing: the reader is a pager or an editor
+ * that renders the escapes itself (Emacs's shell sets `TERM=dumb` and paints
+ * ANSI colour), so `TERM` does not describe it, and forcing forks nothing.
  */
 export const styleFor = (fd: i32, agent: boolean): Style => {
   const level = getenv("FORCE_COLOR")
@@ -211,17 +214,26 @@ export const styleFor = (fd: i32, agent: boolean): Style => {
     return new Style(false, false)
   }
   if (saysYes(level) || envSaysYes("CLICOLOR_FORCE")) {
-    return styleOfPalette(paletteOf(fd, false))
+    return new Style(true, true)
   }
   const term = getenv("TERM")
   if (envSaysNo("CLICOLOR") || (term !== null && term === "dumb")) {
     return new Style(false, false)
   }
-  return styleOfPalette(paletteOf(fd, true))
+  return styleOfPalette(paletteOf(fd))
 }
 
-/** `count` spaces, or none when `count` is not positive. */
+/** A run of spaces to cut padding from, as wide as a terminal's usual 80 columns. */
+const SPACE_RUN: string = "                                                                                "
+
+/** `count` spaces, or none when `count` is not positive: a cut of `SPACE_RUN`, built only past its width. */
 const spaces = (count: i32): string => {
+  if (count <= 0) {
+    return ""
+  }
+  if (count <= toI32(SPACE_RUN.length)) {
+    return SPACE_RUN.substring(0, count)
+  }
   const out: string[] = []
   for (let i: i32 = 0; i < count; i++) {
     out.push(" ")

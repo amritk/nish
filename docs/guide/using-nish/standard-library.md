@@ -953,7 +953,8 @@ magenta, flags in cyan, placeholders in yellow and descriptions faint, using
 the basic ANSI colours your terminal theme defines, never a fixed shade, so
 the menu takes on whatever palette the reader chose. A terminal that declares
 no colours (`tput colors` below 8, as for `TERM=vt100`) gets the same
-structure in bold and underline instead.
+structure in bold and underline instead; forced colour is always the
+theme's.
 
 **`styleFor(fd, agent)`** decides for descriptor `fd` (1 for stdout, 2 for
 stderr) whether to paint at all, the same way `nish --help` does: colour on a
@@ -961,14 +962,16 @@ terminal, plain text in a pipe or a file, `NO_COLOR` always off,
 `FORCE_COLOR` or `CLICOLOR_FORCE` on even when piped, and `TERM=dumb` or
 `CLICOLOR=0` off ([the CLI page](cli.md#colour-and-when-an-agent-runs-nish)
 has the full table). `agentDriven()` says whether a coding agent is running
-the program (`CLAUDECODE`, `GEMINI_CLI` or `NISH_AGENT` is set), and with
-`agent` true `styleFor` is always plain: the escapes would only cost the
-agent tokens.
+the program: `NISH_AGENT` decides when it is set, a no (`0`, `false`, `no`,
+`off`) for no and anything else for yes, and otherwise `CLAUDECODE` or
+`GEMINI_CLI` set to anything but empty or a no means yes. With `agent` true
+`styleFor` is always plain: the escapes would only cost the agent tokens.
 
 `HelpMenu` and `Style` reach no
 [capability](../../LANGUAGE.md#capabilities). `styleFor` and `agentDriven`
-reach `env`, and `styleFor` reaches `process.spawn` too: it asks a shell
-whether the descriptor is a terminal and how many colours it has. To keep a
+reach `env`, and `styleFor` reaches `process.spawn` too: unless colour is
+forced or refused first, it asks a shell whether the descriptor is a terminal
+and how many colours it has. To keep a
 program free of both, make the style yourself: `new Style(on, colour)`, where
 `on` turns painting on and `colour` picks the theme's colours over the
 monochrome failsafe.
