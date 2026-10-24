@@ -136,7 +136,7 @@ while [ $# -gt 0 ]; do
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
       pgo=("-fprofile-use=$2"); shift 2 ;;
-    -h|--help) sed -n '2,/^[^#]/{/^#/p}' "$0"; exit 0 ;;   # the header comment, to its last line
+    -h|--help) sed -n '2,/^set -euo pipefail$/{/^set -euo pipefail$/!p;}' "$0"; exit 0 ;;   # the header, to the first command
     *) inputs+=("$1"); shift ;;
   esac
 done

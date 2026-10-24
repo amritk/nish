@@ -322,6 +322,10 @@ const fileFingerprint = (path: string): string => {
   return text === null ? "-" : sha256Hex(text)
 }
 
+/** The line for `runtime/nish.h`, the header the runtime units and SQLite's units include. */
+const runtimeHeaderLine = (root: string): string =>
+  `${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`
+
 /**
  * One line per file of the package a link reads: `scripts/build.sh`, every
  * runtime unit and `nish.h`, the only header they include. Both keys carry
@@ -330,7 +334,7 @@ const fileFingerprint = (path: string): string => {
 const addRecipeFingerprints = (key: StringBuilder, root: string): void => {
   key.add(`build.sh ${fileFingerprint(`${root}/scripts/build.sh`)}\n`)
   addUnitFingerprints(key, `${root}/runtime`, "", runtimeUnits(), 0)
-  key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`)
+  key.add(runtimeHeaderLine(root))
 }
 
 /**
@@ -348,7 +352,7 @@ const addRecipeFingerprints = (key: StringBuilder, root: string): void => {
 export const sqliteFingerprint = (root: string, sqliteFlags: string): string => {
   const key = new StringBuilder()
   addUnitFingerprints(key, `${root}/runtime`, "sqlite/", sqliteFiles(root), 0)
-  key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`)
+  key.add(runtimeHeaderLine(root))
   key.add(`sqlite-cflags ${sqliteFlags.length}\n`)
   key.add(sqliteFlags)
   key.add("\n")

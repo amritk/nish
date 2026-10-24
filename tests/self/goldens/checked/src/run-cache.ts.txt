@@ -140,10 +140,17 @@ function fileFingerprint(path: string): string -> @fileFingerprint
   stackSites=0 stackLocals=0
   local +0:9 text: string | null (const)
   callee +1:32 sha256Hex -> @sha256Hex
+function runtimeHeaderLine(root: string): string -> @runtimeHeaderLine
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fileFingerprint
+  calls: fileFingerprint nish_str_concat
+  stackSites=0 stackLocals=0
+  callee +0:24 fileFingerprint -> @fileFingerprint
 function addRecipeFingerprints(key: StringBuilder, root: string): void -> @addRecipeFingerprints
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
-  calls: StringBuilder.add addUnitFingerprints fileFingerprint nish_str_concat runtimeUnits
+  escaping: root
+  calls: StringBuilder.add addUnitFingerprints fileFingerprint nish_str_concat runtimeHeaderLine runtimeUnits
   pointer key: size=8 writesThrough=false captured=false passedTo=StringBuilder.add#0 addUnitFingerprints#0 StringBuilder.add#0
   stackSites=0 stackLocals=0
   callee +0:3 StringBuilder.add -> @StringBuilder.add
@@ -151,19 +158,19 @@ function addRecipeFingerprints(key: StringBuilder, root: string): void -> @addRe
   callee +1:3 addUnitFingerprints -> @addUnitFingerprints
   callee +1:51 runtimeUnits -> @runtimeUnits
   callee +2:3 StringBuilder.add -> @StringBuilder.add
-  callee +2:32 fileFingerprint -> @fileFingerprint
+  callee +2:11 runtimeHeaderLine -> @runtimeHeaderLine
 function sqliteFingerprint(root: string, sqliteFlags: string): string -> @sqliteFingerprint [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via addUnitFingerprints
   escaping: root sqliteFlags
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addUnitFingerprints fileFingerprint nish_str_concat nish_str_from_i32 sqliteFiles
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addUnitFingerprints nish_str_concat nish_str_from_i32 runtimeHeaderLine sqliteFiles
   stackSites=1 stackLocals=1
   local +0:9 key: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
   callee +1:3 addUnitFingerprints -> @addUnitFingerprints
   callee +1:58 sqliteFiles -> @sqliteFiles
   callee +2:3 StringBuilder.add -> @StringBuilder.add
-  callee +2:32 fileFingerprint -> @fileFingerprint
+  callee +2:11 runtimeHeaderLine -> @runtimeHeaderLine
   callee +3:3 StringBuilder.add -> @StringBuilder.add
   callee +4:3 StringBuilder.add -> @StringBuilder.add
   callee +5:3 StringBuilder.add -> @StringBuilder.add
