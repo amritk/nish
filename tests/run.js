@@ -2505,6 +2505,83 @@ if (!only || "net_loop".includes(only)) {
   )
 }
 
+// ---- The link profile of a `tests/link` program (WP5) -------------------------
+//
+// A program links under `--profile debug` (no optimiser, no LTO, the runtime's asserts
+// on) unless it is on `SPEED_LINK` or its args name a profile of its own. The profile
+// changes the link, never a byte of the IR (src/compile.ts), so the goldens, expected.ir
+// and the wipe checks read what they always read. Measured on main at 804120e, every
+// positive program built under each profile on one 4-core machine, speed twice:
+//   541 positive programs   build    run   total
+//   speed, first          738.5 s  83.6 s  822.1 s
+//   speed, second         735.1 s  64.0 s  799.1 s
+//   debug                 173.1 s 171.7 s  344.8 s
+// The two speed passes differ by 0.5% in build and 23 s in run (the first run of each
+// binary pays a cold start), so the band is about 3%; debug saves 454-477 s, far
+// outside it, and the default is debug. No program's exit code or stdout differed
+// between the profiles; only stderr's timings and addresses did.
+// The programs below keep the speed profile, each for the reason beside it.
+const SPEED_LINK = new Map([
+  // expected.ir pins alias metadata, which only an optimised link acts on.
+  ["class_export", "expected.ir pins `noalias`"],
+  ["generic_import", "expected.ir pins `noalias`"],
+  ["net_prefork", "expected.ir pins `noalias`"],
+  ["result_import", "expected.ir pins `noalias`"],
+  // arr_* aliasing domains.
+  ["arr_bounds_returned_import", "an arr_* aliasing domain"],
+  // Wipes that must survive optimisation: tests/wipes and the `-O2` wipe checks
+  // compile these, so the binary the link loop runs is the optimised one too.
+  ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
+  ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
+  ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
+  ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
+  ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
+  ["crypto_p256", "tests/wipes and the p256ScalarInverse wipes survive opt -O2"],
+  ["net_quic_server_wipes", "tests/wipes counts its wipes after -O2"],
+  ["net_quic_server_wipes_f64", "the f64 twin of net_quic_server_wipes"],
+  ["net_quic_wipes", "tests/wipes counts its wipes after -O2"],
+  ["net_quic_wipes_f64", "the f64 twin of net_quic_wipes"],
+  ["net_tls_rfc8448", "tests/wipes counts its wipes after -O2"],
+  ["net_tls_ticket", "tests/wipes counts its wipes after -O2"],
+  ["net_tls_wipes", "tests/wipes counts its wipes after -O2"],
+  ["net_tls_wipes_f64", "the f64 twin of net_tls_wipes"],
+  ["std_pbkdf2", "tests/wipes counts its wipes after -O2"],
+  // SIMD kernels: runtime-simd.c's byte search and regex scan, runtime-aes.c's
+  // AES rounds, and a parallel map whose element loop vectorises.
+  ["crypto_aes", "runtime-aes.c's kernels"],
+  ["crypto_aes_agree", "runtime-aes.c's kernels"],
+  ["crypto_aes_f64", "runtime-aes.c's kernels"],
+  ["crypto_aes_into", "runtime-aes.c's kernels"],
+  ["crypto_aes_into_f64", "runtime-aes.c's kernels"],
+  ["par_map_vector", "its element loop vectorises"],
+  ["std_regex", "runtime-simd.c's regex scan"],
+  ["std_regex_f64", "runtime-simd.c's regex scan"],
+  ["std_text_index_of_any", "runtime-simd.c's byte search"],
+  ["std_text_index_of_any_non_ascii_offset", "runtime-simd.c's byte search"],
+  // Size and performance figures a check after the loop reads from the binary.
+  ["net_tls_resume_bench", "a timed handshake ratio"],
+  ["par_map_idle", "an RSS bound"],
+  ["par_map_join_small", "an RSS bound"],
+  ["par_map_reclaim", "an RSS bound"],
+  ["par_map_release", "an RSS bound"],
+  ["thread_channel_string_many", "a wall-clock bound"],
+  ["thread_scope_reclaim", "an RSS bound"],
+  ["thread_task_release", "an RSS bound"],
+  ["net_relay_soak", "an RSS bound, and 4.9 s of run becomes 37.8 s"],
+  // Run so much slower unoptimised that the debug build costs more in all
+  // (speed build + run, then debug build + run).
+  ["crypto_x25519", "1.7 + 0.2 s, against 0.2 + 2.3 s"],
+  ["crypto_x509_malformed", "2.2 + 2.0 s, against 0.5 + 11.7 s"],
+  ["net_tls_memory", "4.8 + 1.3 s, against 0.8 + 14.4 s"],
+  ["net_tls_memory_f64", "4.7 + 1.5 s, against 0.8 + 15.2 s"],
+])
+/**
+ * The `--profile` flags a link of `tests/link/<name>` adds: none when its `args` name a
+ * profile or it is on `SPEED_LINK` (build.sh's default, speed), and `debug` otherwise.
+ */
+const linkProfile = (name, args = []) =>
+  args.includes("--profile") || SPEED_LINK.has(name) ? [] : ["--profile", "debug"]
+
 // ---- `nish/net/tls-tcp`, against openssl s_client and Node's TLS (WP34 T2) -------
 //
 // What the Nish client in `tests/link/net_tls_record_tcp` cannot say: that a
@@ -2532,6 +2609,7 @@ if (!only || "net_tls_tcp".includes(only)) {
       tlsDir + path.sep,
       "--link",
       exe,
+      ...linkProfile("net_tls_record_tcp"),
     ],
     { cwd: root, encoding: "utf8" }
   )
@@ -4958,11 +5036,11 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
 
 // ---- WP5: link -------------------------------------------------------------------
 // Multi-module programs in tests/link/<name>/. `main.ts` is the entry; the program is
-// compiled with `-o <dir>/` (one .ll per module) and `--link` (scripts/build.sh, speed
-// profile) into build/test/link/<name>/app. Nothing can print yet (console.log is
-// WP3), so each program returns its result from `main` and the harness compares the
-// process exit code with `expected.code`; `expected.out` is the expected stdout
-// (empty for now). Other optional files:
+// compiled with `-o <dir>/` (one .ll per module) and `--link` (scripts/build.sh, under
+// the profile `linkProfile` picks) into build/test/link/<name>/app. Nothing can print
+// yet (console.log is WP3), so each program returns its result from `main` and the
+// harness compares the process exit code with `expected.code`; `expected.out` is the
+// expected stdout (empty for now). Other optional files:
 //   expected.err   compile must fail and stderr must contain this text
 //   expected.json  beside expected.err: the `--json` diagnostics of the refused compile,
 //                  one object per line and paths relative to the repository, compared
@@ -5162,9 +5240,11 @@ for (const name of linkTests) {
     irDelegated++
     continue
   }
-  const r = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...capsArgs], {
-    cwd: root,
-  })
+  const r = spawnSync(
+    NISH,
+    [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...linkProfile(name, args), ...capsArgs],
+    { cwd: root }
+  )
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("expected.err"))) {
@@ -7339,6 +7419,61 @@ if (!only) {
     `not in tests/link: ${gone.join(", ")}`
   )
 }
+// `SPEED_LINK` against the tree, with no compile: every name is a program, every
+// program whose optimised binary something checks is on it, and no listed program
+// names a profile of its own, which `linkProfile` would honour over the list. An
+// optimisation marker is alias metadata in expected.ir, or a wipe check that covers
+// the program: a tests/wipes group, or a check here that runs `opt -O2` on it.
+if (!only || "speed-link".includes(only)) {
+  const missing = [...SPEED_LINK.keys()].filter((name) => !linkTests.includes(name))
+  check(
+    "every program on SPEED_LINK has a tests/link/<name>/main.ts",
+    missing.length === 0,
+    `no tests/link/<name>/main.ts: ${missing.join(", ")}`
+  )
+  const wipesDir = path.join(root, "tests", "wipes")
+  const wiped = new Set(
+    fs
+      .readdirSync(wipesDir)
+      .filter((file) => file.endsWith(".js"))
+      .flatMap((file) =>
+        [...fs.readFileSync(path.join(wipesDir, file), "utf8").matchAll(/tests\/link\/(\w+)\//g)].map(
+          (m) => m[1]
+        )
+      )
+  )
+  const self = fs.readFileSync(import.meta.filename, "utf8").split("\n")
+  self.forEach((line, i) => {
+    const program = line.match(/"tests\/link\/(\w+)\/main\.ts"/)
+    if (program && self.slice(i, i + 15).some((next) => next.includes('"opt", ["-O2"'))) {
+      wiped.add(program[1])
+    }
+  })
+  const unmarked = linkTests.filter((name) => {
+    if (SPEED_LINK.has(name)) {
+      return false
+    }
+    const ir = path.join(linkDir, name, "expected.ir")
+    return (
+      wiped.has(name) ||
+      (fs.existsSync(ir) && /!tbaa|noalias|!alias\.scope/.test(fs.readFileSync(ir, "utf8")))
+    )
+  })
+  check(
+    "every tests/link program with alias metadata in expected.ir or a wipe check is on SPEED_LINK",
+    unmarked.length === 0,
+    `not on SPEED_LINK: ${unmarked.join(", ")}`
+  )
+  const ownProfile = [...SPEED_LINK.keys()].filter((name) => {
+    const args = path.join(linkDir, name, "args")
+    return fs.existsSync(args) && fs.readFileSync(args, "utf8").split(/\s+/).includes("--profile")
+  })
+  check(
+    "no program on SPEED_LINK names a profile in its args",
+    ownProfile.length === 0,
+    `args name a profile: ${ownProfile.join(", ")}`
+  )
+}
 
 // X509-6: `nish/crypto/x509-random` draws from `crypto.getRandomValues`, so
 // `tests/link/crypto_x509_random_wasm` (a wasm32 build importing it) is refused
@@ -7401,10 +7536,12 @@ const p256SeamProgram = ({ label, dir, program, source, extra, nativeName }) => 
   const entry = path.join(programDir, "main.ts")
   if (only !== "wasi") {
     const exe = path.join(seamDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe], {
-      cwd: root,
-      encoding: "utf8",
-    })
+    // Speed, not `linkProfile`'s debug: on CI the agree corpus ran 73.7 s debug, 9.7 s speed.
+    const built = spawnSync(
+      NISH,
+      [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe, "--profile", "speed"],
+      { cwd: root, encoding: "utf8" }
+    )
     const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
     check(nativeName, built.status === 0 && ran.status === 0 && ran.stdout === want, shown(ran))
   }
@@ -7580,7 +7717,15 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
   const exe = path.join(dir, "app")
   const built = spawnSync(
     NISH,
-    [path.join(root, "tests", "link", "net_http1_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    [
+      path.join(root, "tests", "link", "net_http1_server", "startup.ts"),
+      "-o",
+      dir + path.sep,
+      "--link",
+      exe,
+      "--profile",
+      "speed",
+    ],
     { cwd: root, encoding: "utf8" }
   )
   if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
@@ -7629,7 +7774,15 @@ for (const [unit, program, name, ceiling, ceilingName] of [
   const exe = path.join(dir, "app")
   const built = spawnSync(
     NISH,
-    [path.join(root, "tests", "link", unit, program), "-o", dir + path.sep, "--link", exe],
+    [
+      path.join(root, "tests", "link", unit, program),
+      "-o",
+      dir + path.sep,
+      "--link",
+      exe,
+      "--profile",
+      "speed",
+    ],
     {
       cwd: root,
       encoding: "utf8",
@@ -7661,7 +7814,15 @@ if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only
   const exe = path.join(dir, "app")
   const built = spawnSync(
     NISH,
-    [path.join(root, "tests", "link", "net_http3_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    [
+      path.join(root, "tests", "link", "net_http3_server", "startup.ts"),
+      "-o",
+      dir + path.sep,
+      "--link",
+      exe,
+      "--profile",
+      "speed",
+    ],
     { cwd: root, encoding: "utf8" }
   )
   if (check("net_http3_server: startup.ts links", built.status === 0, shown(built))) {
@@ -8809,7 +8970,11 @@ if (!only || "std_json_tokenizer".includes(only)) {
   if (HAS_CLANG) {
     const outDir = path.join(buildDir, "json_tokenizer_node") + path.sep
     const exe = path.join(outDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const built = spawnSync(
+      NISH,
+      [entry, "-o", outDir, "--link", exe, ...linkProfile("std_json_tokenizer")],
+      { cwd: root, encoding: "utf8" }
+    )
     const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
     check(
       "link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to",
@@ -8847,10 +9012,14 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
   if (HAS_CLANG) {
     const outDir = path.join(buildDir, "std_url_alloc") + path.sep
     const exe = path.join(outDir, "app")
-    const built = spawnSync(NISH, [path.join(urlDir, "alloc.ts"), "-o", outDir, "--link", exe], {
-      cwd: root,
-      encoding: "utf8",
-    })
+    const built = spawnSync(
+      NISH,
+      [path.join(urlDir, "alloc.ts"), "-o", outDir, "--link", exe, ...linkProfile("std_url")],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
     const run = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
     check(
       "link/std_url: 10,000 targets split, decoded and searched leave Arena.used() where it was",
@@ -8879,7 +9048,10 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
     if (HAS_CLANG) {
       const outDir = path.join(buildDir, `std_url_${file}`) + path.sep
       const exe = path.join(outDir, "app")
-      const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+      const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe, ...linkProfile("std_url")], {
+        cwd: root,
+        encoding: "utf8",
+      })
       const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
       check(
         `link/std_url: ${file}.ts built natively exits 1 with "${message}"`,
@@ -8901,7 +9073,10 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
   if (HAS_CLANG) {
     const outDir = path.join(buildDir, "std_url_fuzz") + path.sep
     const exe = path.join(outDir, "app")
-    const built = spawnSync(NISH, [fuzzEntry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const built = spawnSync(NISH, [fuzzEntry, "-o", outDir, "--link", exe, ...linkProfile("std_url")], {
+      cwd: root,
+      encoding: "utf8",
+    })
     const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8", maxBuffer: 1 << 24 }) : built
     const fromNative = urlFuzzVerdict(native.stdout ?? "")
     check(
@@ -9171,10 +9346,14 @@ if (!only || "std_json_writer".includes(only)) {
     const outDir = path.join(buildDir, "link", "std_json_writer_node")
     fs.rmSync(outDir, { recursive: true, force: true })
     const exe = path.join(outDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", `${outDir}${path.sep}`, "--link", exe], {
-      cwd: root,
-      encoding: "utf8",
-    })
+    const built = spawnSync(
+      NISH,
+      [entry, "-o", `${outDir}${path.sep}`, "--link", exe, ...linkProfile("std_json_writer")],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
     const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
     check(
       "link/std_json_writer: node.ts built natively prints the same JSON.stringify lines",
@@ -9365,10 +9544,14 @@ if (!only || "std_json_typed".includes(only)) {
     const outDir = path.join(buildDir, "link", "std_json_typed_readers")
     fs.rmSync(outDir, { recursive: true, force: true })
     const app = path.join(outDir, "app")
-    const built = spawnSync(NISH, [readers, "-o", `${outDir}${path.sep}`, "--link", app], {
-      cwd: root,
-      encoding: "utf8",
-    })
+    const built = spawnSync(
+      NISH,
+      [readers, "-o", `${outDir}${path.sep}`, "--link", app, ...linkProfile("std_json_typed")],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
     const native = built.status === 0 ? spawnSync(app, [], { encoding: "utf8" }) : built
     check(
       "link/std_json_typed: readers.ts built natively prints the same lines",
@@ -9531,7 +9714,10 @@ if (!only || "std_json_value".includes(only)) {
     const outDir = path.join(buildDir, "link", "std_json_value_node") + path.sep
     fs.rmSync(outDir, { recursive: true, force: true })
     const app = path.join(outDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", app], { cwd: root, encoding: "utf8" })
+    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", app, ...linkProfile("std_json_value")], {
+      cwd: root,
+      encoding: "utf8",
+    })
     const native = built.status === 0 ? spawnSync(app, [], { encoding: "utf8" }) : built
     check(
       "link/std_json_value: the same node.ts, built natively, prints the same lines",
@@ -9753,10 +9939,14 @@ if (!only || "std_json_conformance".includes(only)) {
     const outDir = path.join(buildDir, "link", outName)
     fs.rmSync(outDir, { recursive: true, force: true })
     const exe = path.join(outDir, "app")
-    const r = spawnSync(NISH, ["main.ts", second, "-o", `${outDir}${path.sep}`, "--link", exe], {
-      cwd: twiceDir,
-      encoding: "utf8",
-    })
+    const r = spawnSync(
+      NISH,
+      ["main.ts", second, "-o", `${outDir}${path.sep}`, "--link", exe, ...linkProfile("root_named_twice")],
+      {
+        cwd: twiceDir,
+        encoding: "utf8",
+      }
+    )
     const wroteTypes = r.stderr.split("\n").filter((l) => l.startsWith("wrote ") && l.endsWith("types.ll"))
     const run = r.status === 0 ? spawnSync(exe) : { status: null }
     check(
@@ -9838,7 +10028,7 @@ if (fs.existsSync(path.join(aboveDir, "src", "main.ts"))) {
   const outDir = path.join(buildDir, "link", "package_above") + path.sep
   fs.rmSync(outDir, { recursive: true, force: true })
   const exe = path.join(buildDir, "link", "package_above-app")
-  const r = spawnSync(NISH, ["main.ts", "-o", outDir, "--link", exe], {
+  const r = spawnSync(NISH, ["main.ts", "-o", outDir, "--link", exe, ...linkProfile("package_above")], {
     cwd: path.join(aboveDir, "src"),
     encoding: "utf8",
   })
@@ -9893,10 +10083,14 @@ if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
   const outDir = path.join(buildDir, "link", "package_doubled") + path.sep
   fs.rmSync(outDir, { recursive: true, force: true })
   const exe = path.join(buildDir, "link", "package_doubled-app")
-  const inside = spawnSync(NISH, ["main.ts", "-o", outDir, "--link", exe], {
-    cwd: doubledApp,
-    encoding: "utf8",
-  })
+  const inside = spawnSync(
+    NISH,
+    ["main.ts", "-o", outDir, "--link", exe, ...linkProfile("package_doubled")],
+    {
+      cwd: doubledApp,
+      encoding: "utf8",
+    }
+  )
   const ir =
     inside.status === 0
       ? llFilesIn(outDir)
