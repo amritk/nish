@@ -13,7 +13,7 @@ declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 
 define noundef double @angle(double noundef %y, double noundef %x) #0 {
 entry:
-  %0 = tail call double @nish.atan2(double %y, double %x)
+  %0 = tail call double @nish.atan2F64(double %y, double %x)
   ret double %0
 }
 
@@ -160,7 +160,7 @@ sw.default:
   ret double 0x3C91A62633145C07
 }
 
-define internal noundef double @nish.atan2(double noundef %y, double noundef %x) #0 {
+define internal noundef double @nish.atan2F64(double noundef %y, double noundef %x) #0 {
 entry:
   %piO4.addr = alloca double, align 8
   %piO2.addr = alloca double, align 8

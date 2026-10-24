@@ -411,7 +411,7 @@ export class Checker {
         }
       }
       if (!bound) {
-        this.program.imports.push(new ImportBinding(MATH_SPECIFIER, name, local, call, call))
+        this.program.imports.push(new ImportBinding(MATH_SPECIFIER, `${name}F64`, local, call, call))
       }
     }
   }

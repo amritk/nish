@@ -14,7 +14,7 @@ declare i32 @llvm.ctlz.i32(i32, i1) #1
 
 define noundef double @tangent(double noundef %x) #0 {
 entry:
-  %0 = tail call double @nish.tan(double %x)
+  %0 = tail call double @nish.tanF64(double %x)
   ret double %0
 }
 
@@ -28,7 +28,7 @@ entry:
   store double 0x3FF0000000000000, double* %one.addr, align 8
   %0 = load double, double* %one.addr, align 8
   %1 = load double, double* %one.addr, align 8
-  %2 = call double @nish.atan2(double %0, double %1)
+  %2 = call double @nish.atan2F64(double %0, double %1)
   store double %2, double* %quarter.addr, align 8
   %3 = load double, double* %zero.addr, align 8
   %4 = call double @tangent(double %3)
@@ -1259,7 +1259,7 @@ if.end.3:
   ret double %127
 }
 
-define internal noundef double @nish.tan(double noundef %x) #0 {
+define internal noundef double @nish.tanF64(double noundef %x) #0 {
 entry:
   %ax.addr = alloca double, align 8
   %hx.addr = alloca i32, align 4
@@ -1465,7 +1465,7 @@ sw.default:
   ret double 0x3C91A62633145C07
 }
 
-define internal noundef double @nish.atan2(double noundef %y, double noundef %x) #0 {
+define internal noundef double @nish.atan2F64(double noundef %y, double noundef %x) #0 {
 entry:
   %piO4.addr = alloca double, align 8
   %piO2.addr = alloca double, align 8

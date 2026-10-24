@@ -1,5 +1,5 @@
 // Math.hypot(a, b) is `std/math.ts`'s `hypot` with two operands, copied into the
-// module as `internal` `@nish.hypot`. It does not overflow where `Math.sqrt(a * a + b * b)` would, and an
+// module as `internal` `@nish.hypotF64`. It does not overflow where `Math.sqrt(a * a + b * b)` would, and an
 // infinite operand wins over a NaN one, as in JavaScript.
 export const hyp = (a: f64, b: f64): f64 => Math.hypot(a, b);
 

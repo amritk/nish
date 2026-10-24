@@ -108,220 +108,220 @@ entry:
   store double 0x3FF921FB54442D18, double* %halfPi.addr, align 8
   %6 = load double, double* %zero.addr, align 8
   %7 = load double, double* %zero.addr, align 8
-  %8 = call double @nish.atan2(double %6, double %7)
+  %8 = call double @nish.atan2F64(double %6, double %7)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.1 to i8*), double %8)
   %9 = load double, double* %zero.addr, align 8
   %10 = fneg double %9
   %11 = load double, double* %zero.addr, align 8
-  %12 = call double @nish.atan2(double %10, double %11)
+  %12 = call double @nish.atan2F64(double %10, double %11)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.2 to i8*), double %12)
   %13 = load double, double* %zero.addr, align 8
   %14 = load double, double* %zero.addr, align 8
   %15 = fneg double %14
-  %16 = call double @nish.atan2(double %13, double %15)
+  %16 = call double @nish.atan2F64(double %13, double %15)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.3 to i8*), double %16)
   %17 = load double, double* %zero.addr, align 8
   %18 = fneg double %17
   %19 = load double, double* %zero.addr, align 8
   %20 = fneg double %19
-  %21 = call double @nish.atan2(double %18, double %20)
+  %21 = call double @nish.atan2F64(double %18, double %20)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.4 to i8*), double %21)
   %22 = load double, double* %zero.addr, align 8
   %23 = load double, double* %one.addr, align 8
   %24 = fneg double %23
-  %25 = call double @nish.atan2(double %22, double %24)
+  %25 = call double @nish.atan2F64(double %22, double %24)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.5 to i8*), double %25)
   %26 = load double, double* %zero.addr, align 8
   %27 = fneg double %26
   %28 = load double, double* %one.addr, align 8
   %29 = fneg double %28
-  %30 = call double @nish.atan2(double %27, double %29)
+  %30 = call double @nish.atan2F64(double %27, double %29)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.6 to i8*), double %30)
   %31 = load double, double* %zero.addr, align 8
   %32 = load double, double* %one.addr, align 8
-  %33 = call double @nish.atan2(double %31, double %32)
+  %33 = call double @nish.atan2F64(double %31, double %32)
   call void @show(i8* bitcast ({ i64, [12 x i8] }* @.str.7 to i8*), double %33)
   %34 = load double, double* %zero.addr, align 8
   %35 = fneg double %34
   %36 = load double, double* %one.addr, align 8
-  %37 = call double @nish.atan2(double %35, double %36)
+  %37 = call double @nish.atan2F64(double %35, double %36)
   call void @show(i8* bitcast ({ i64, [12 x i8] }* @.str.8 to i8*), double %37)
   %38 = load double, double* %one.addr, align 8
   %39 = load double, double* %zero.addr, align 8
-  %40 = call double @nish.atan2(double %38, double %39)
+  %40 = call double @nish.atan2F64(double %38, double %39)
   call void @show(i8* bitcast ({ i64, [12 x i8] }* @.str.9 to i8*), double %40)
   %41 = load double, double* %one.addr, align 8
   %42 = fneg double %41
   %43 = load double, double* %zero.addr, align 8
   %44 = fneg double %43
-  %45 = call double @nish.atan2(double %42, double %44)
+  %45 = call double @nish.atan2F64(double %42, double %44)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.10 to i8*), double %45)
   %46 = load double, double* %inf.addr, align 8
   %47 = load double, double* %inf.addr, align 8
-  %48 = call double @nish.atan2(double %46, double %47)
+  %48 = call double @nish.atan2F64(double %46, double %47)
   call void @show(i8* bitcast ({ i64, [15 x i8] }* @.str.11 to i8*), double %48)
   %49 = load double, double* %inf.addr, align 8
   %50 = load double, double* %inf.addr, align 8
   %51 = fneg double %50
-  %52 = call double @nish.atan2(double %49, double %51)
+  %52 = call double @nish.atan2F64(double %49, double %51)
   call void @show(i8* bitcast ({ i64, [16 x i8] }* @.str.12 to i8*), double %52)
   %53 = load double, double* %inf.addr, align 8
   %54 = fneg double %53
   %55 = load double, double* %inf.addr, align 8
-  %56 = call double @nish.atan2(double %54, double %55)
+  %56 = call double @nish.atan2F64(double %54, double %55)
   call void @show(i8* bitcast ({ i64, [16 x i8] }* @.str.13 to i8*), double %56)
   %57 = load double, double* %inf.addr, align 8
   %58 = fneg double %57
   %59 = load double, double* %inf.addr, align 8
   %60 = fneg double %59
-  %61 = call double @nish.atan2(double %58, double %60)
+  %61 = call double @nish.atan2F64(double %58, double %60)
   call void @show(i8* bitcast ({ i64, [17 x i8] }* @.str.14 to i8*), double %61)
   %62 = load double, double* %one.addr, align 8
   %63 = load double, double* %inf.addr, align 8
-  %64 = call double @nish.atan2(double %62, double %63)
+  %64 = call double @nish.atan2F64(double %62, double %63)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.15 to i8*), double %64)
   %65 = load double, double* %one.addr, align 8
   %66 = fneg double %65
   %67 = load double, double* %inf.addr, align 8
-  %68 = call double @nish.atan2(double %66, double %67)
+  %68 = call double @nish.atan2F64(double %66, double %67)
   call void @show(i8* bitcast ({ i64, [14 x i8] }* @.str.16 to i8*), double %68)
   %69 = load double, double* %one.addr, align 8
   %70 = load double, double* %inf.addr, align 8
   %71 = fneg double %70
-  %72 = call double @nish.atan2(double %69, double %71)
+  %72 = call double @nish.atan2F64(double %69, double %71)
   call void @show(i8* bitcast ({ i64, [14 x i8] }* @.str.17 to i8*), double %72)
   %73 = load double, double* %one.addr, align 8
   %74 = fneg double %73
   %75 = load double, double* %inf.addr, align 8
   %76 = fneg double %75
-  %77 = call double @nish.atan2(double %74, double %76)
+  %77 = call double @nish.atan2F64(double %74, double %76)
   call void @show(i8* bitcast ({ i64, [15 x i8] }* @.str.18 to i8*), double %77)
   %78 = load double, double* %inf.addr, align 8
   %79 = load double, double* %one.addr, align 8
-  %80 = call double @nish.atan2(double %78, double %79)
+  %80 = call double @nish.atan2F64(double %78, double %79)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.19 to i8*), double %80)
   %81 = load double, double* %inf.addr, align 8
   %82 = fneg double %81
   %83 = load double, double* %one.addr, align 8
   %84 = fneg double %83
-  %85 = call double @nish.atan2(double %82, double %84)
+  %85 = call double @nish.atan2F64(double %82, double %84)
   call void @show(i8* bitcast ({ i64, [15 x i8] }* @.str.20 to i8*), double %85)
   %86 = load double, double* %nan.addr, align 8
   %87 = load double, double* %one.addr, align 8
-  %88 = call double @nish.atan2(double %86, double %87)
+  %88 = call double @nish.atan2F64(double %86, double %87)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.21 to i8*), double %88)
   %89 = load double, double* %one.addr, align 8
   %90 = load double, double* %nan.addr, align 8
-  %91 = call double @nish.atan2(double %89, double %90)
+  %91 = call double @nish.atan2F64(double %89, double %90)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.22 to i8*), double %91)
   %92 = load double, double* %inf.addr, align 8
   %93 = load double, double* %nan.addr, align 8
-  %94 = call double @nish.atan2(double %92, double %93)
+  %94 = call double @nish.atan2F64(double %92, double %93)
   call void @show(i8* bitcast ({ i64, [15 x i8] }* @.str.23 to i8*), double %94)
   %95 = load double, double* %big.addr, align 8
   %96 = load double, double* %tiny.addr, align 8
-  %97 = call double @nish.atan2(double %95, double %96)
+  %97 = call double @nish.atan2F64(double %95, double %96)
   call void @show(i8* bitcast ({ i64, [16 x i8] }* @.str.24 to i8*), double %97)
   %98 = load double, double* %tiny.addr, align 8
   %99 = load double, double* %big.addr, align 8
   %100 = fneg double %99
-  %101 = call double @nish.atan2(double %98, double %100)
+  %101 = call double @nish.atan2F64(double %98, double %100)
   call void @show(i8* bitcast ({ i64, [17 x i8] }* @.str.25 to i8*), double %101)
   %102 = load double, double* %one.addr, align 8
-  %103 = call double @nish.atan2(double %102, double 0x4008000000000000)
+  %103 = call double @nish.atan2F64(double %102, double 0x4008000000000000)
   call void @show(i8* bitcast ({ i64, [11 x i8] }* @.str.26 to i8*), double %103)
   %104 = fneg double 0x401C000000000000
   %105 = fneg double 0x4000000000000000
-  %106 = call double @nish.atan2(double %104, double %105)
+  %106 = call double @nish.atan2F64(double %104, double %105)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.27 to i8*), double %106)
   %107 = load double, double* %zero.addr, align 8
-  %108 = call double @nish.tan(double %107)
+  %108 = call double @nish.tanF64(double %107)
   call void @show(i8* bitcast ({ i64, [8 x i8] }* @.str.28 to i8*), double %108)
   %109 = load double, double* %zero.addr, align 8
   %110 = fneg double %109
-  %111 = call double @nish.tan(double %110)
+  %111 = call double @nish.tanF64(double %110)
   call void @show(i8* bitcast ({ i64, [8 x i8] }* @.str.29 to i8*), double %111)
   %112 = load double, double* %tiny.addr, align 8
-  %113 = call double @nish.tan(double %112)
+  %113 = call double @nish.tanF64(double %112)
   call void @show(i8* bitcast ({ i64, [10 x i8] }* @.str.30 to i8*), double %113)
   %114 = load double, double* %inf.addr, align 8
-  %115 = call double @nish.tan(double %114)
+  %115 = call double @nish.tanF64(double %114)
   call void @show(i8* bitcast ({ i64, [9 x i8] }* @.str.31 to i8*), double %115)
   %116 = load double, double* %inf.addr, align 8
   %117 = fneg double %116
-  %118 = call double @nish.tan(double %117)
+  %118 = call double @nish.tanF64(double %117)
   call void @show(i8* bitcast ({ i64, [10 x i8] }* @.str.32 to i8*), double %118)
   %119 = load double, double* %nan.addr, align 8
-  %120 = call double @nish.tan(double %119)
+  %120 = call double @nish.tanF64(double %119)
   call void @show(i8* bitcast ({ i64, [9 x i8] }* @.str.33 to i8*), double %120)
   %121 = load double, double* %halfPi.addr, align 8
-  %122 = call double @nish.tan(double %121)
+  %122 = call double @nish.tanF64(double %121)
   call void @show(i8* bitcast ({ i64, [10 x i8] }* @.str.34 to i8*), double %122)
   %123 = load double, double* %halfPi.addr, align 8
   %124 = fneg double %123
-  %125 = call double @nish.tan(double %124)
+  %125 = call double @nish.tanF64(double %124)
   call void @show(i8* bitcast ({ i64, [11 x i8] }* @.str.35 to i8*), double %125)
-  %126 = call double @nish.tan(double 0x4012D97C7F3321D2)
+  %126 = call double @nish.tanF64(double 0x4012D97C7F3321D2)
   call void @show(i8* bitcast ({ i64, [11 x i8] }* @.str.36 to i8*), double %126)
-  %127 = call double @nish.tan(double 0x400921FB54442D18)
+  %127 = call double @nish.tanF64(double 0x400921FB54442D18)
   call void @show(i8* bitcast ({ i64, [8 x i8] }* @.str.37 to i8*), double %127)
-  %128 = call double @nish.tan(double 0x412E848000000000)
+  %128 = call double @nish.tanF64(double 0x412E848000000000)
   call void @show(i8* bitcast ({ i64, [9 x i8] }* @.str.38 to i8*), double %128)
-  %129 = call double @nish.tan(double 0x413921FB00000000)
+  %129 = call double @nish.tanF64(double 0x413921FB00000000)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.39 to i8*), double %129)
-  %130 = call double @nish.tan(double 0x4480F0CF064DD592)
+  %130 = call double @nish.tanF64(double 0x4480F0CF064DD592)
   call void @show(i8* bitcast ({ i64, [10 x i8] }* @.str.40 to i8*), double %130)
   %131 = fneg double 0x4480F0CF064DD592
-  %132 = call double @nish.tan(double %131)
+  %132 = call double @nish.tanF64(double %131)
   call void @show(i8* bitcast ({ i64, [11 x i8] }* @.str.41 to i8*), double %132)
   %133 = load double, double* %big.addr, align 8
-  %134 = call double @nish.tan(double %133)
+  %134 = call double @nish.tanF64(double %133)
   call void @show(i8* bitcast ({ i64, [11 x i8] }* @.str.42 to i8*), double %134)
-  %135 = call double @nish.tan(double 0x7FEFFFFFFFFFFFFF)
+  %135 = call double @nish.tanF64(double 0x7FEFFFFFFFFFFFFF)
   call void @show(i8* bitcast ({ i64, [9 x i8] }* @.str.43 to i8*), double %135)
-  %136 = call double @nish.tan(double 0x7506AC5B262CA1FF)
+  %136 = call double @nish.tanF64(double 0x7506AC5B262CA1FF)
   call void @show(i8* bitcast ({ i64, [28 x i8] }* @.str.44 to i8*), double %136)
-  %137 = call double @nish.hypot(double 0x4008000000000000, double 0x4010000000000000)
+  %137 = call double @nish.hypotF64(double 0x4008000000000000, double 0x4010000000000000)
   call void @show(i8* bitcast ({ i64, [11 x i8] }* @.str.45 to i8*), double %137)
   %138 = load double, double* %zero.addr, align 8
   %139 = fneg double %138
   %140 = load double, double* %zero.addr, align 8
   %141 = fneg double %140
-  %142 = call double @nish.hypot(double %139, double %141)
+  %142 = call double @nish.hypotF64(double %139, double %141)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.46 to i8*), double %142)
   %143 = load double, double* %inf.addr, align 8
   %144 = load double, double* %nan.addr, align 8
-  %145 = call double @nish.hypot(double %143, double %144)
+  %145 = call double @nish.hypotF64(double %143, double %144)
   call void @show(i8* bitcast ({ i64, [15 x i8] }* @.str.47 to i8*), double %145)
   %146 = load double, double* %nan.addr, align 8
   %147 = load double, double* %inf.addr, align 8
   %148 = fneg double %147
-  %149 = call double @nish.hypot(double %146, double %148)
+  %149 = call double @nish.hypotF64(double %146, double %148)
   call void @show(i8* bitcast ({ i64, [16 x i8] }* @.str.48 to i8*), double %149)
   %150 = load double, double* %nan.addr, align 8
   %151 = load double, double* %one.addr, align 8
-  %152 = call double @nish.hypot(double %150, double %151)
+  %152 = call double @nish.hypotF64(double %150, double %151)
   call void @show(i8* bitcast ({ i64, [13 x i8] }* @.str.49 to i8*), double %152)
   %153 = load double, double* %big.addr, align 8
   %154 = load double, double* %big.addr, align 8
-  %155 = call double @nish.hypot(double %153, double %154)
+  %155 = call double @nish.hypotF64(double %153, double %154)
   call void @show(i8* bitcast ({ i64, [15 x i8] }* @.str.50 to i8*), double %155)
-  %156 = call double @nish.hypot(double 0x7FEFFFFFFFFFFFFF, double 0x7FEFFFFFFFFFFFFF)
+  %156 = call double @nish.hypotF64(double 0x7FEFFFFFFFFFFFFF, double 0x7FEFFFFFFFFFFFFF)
   call void @show(i8* bitcast ({ i64, [15 x i8] }* @.str.51 to i8*), double %156)
   %157 = load double, double* %tiny.addr, align 8
   %158 = load double, double* %tiny.addr, align 8
-  %159 = call double @nish.hypot(double %157, double %158)
+  %159 = call double @nish.hypotF64(double %157, double %158)
   call void @show(i8* bitcast ({ i64, [17 x i8] }* @.str.52 to i8*), double %159)
-  %160 = call double @nish.hypot(double 0x00000000000017B8, double 0x0000000000001FA0)
+  %160 = call double @nish.hypotF64(double 0x00000000000017B8, double 0x0000000000001FA0)
   call void @show(i8* bitcast ({ i64, [21 x i8] }* @.str.53 to i8*), double %160)
-  %161 = call double @nish.hypot(double 0x16687E92154EF7AC, double 0x16687E92154EF7AC)
+  %161 = call double @nish.hypotF64(double 0x16687E92154EF7AC, double 0x16687E92154EF7AC)
   call void @show(i8* bitcast ({ i64, [21 x i8] }* @.str.54 to i8*), double %161)
   %162 = load double, double* %one.addr, align 8
-  %163 = call double @nish.hypot(double %162, double 0x3C670EF54646D497)
+  %163 = call double @nish.hypotF64(double %162, double 0x3C670EF54646D497)
   call void @show(i8* bitcast ({ i64, [15 x i8] }* @.str.55 to i8*), double %163)
   %164 = fneg double 0x4014000000000000
   %165 = load double, double* %zero.addr, align 8
-  %166 = call double @nish.hypot(double %164, double %165)
+  %166 = call double @nish.hypotF64(double %164, double %165)
   call void @show(i8* bitcast ({ i64, [12 x i8] }* @.str.56 to i8*), double %166)
   ret i32 0
 }
@@ -1515,7 +1515,7 @@ if.end.3:
   ret double %127
 }
 
-define internal noundef double @nish.tan(double noundef %x) #0 {
+define internal noundef double @nish.tanF64(double noundef %x) #0 {
 entry:
   %ax.addr = alloca double, align 8
   %hx.addr = alloca i32, align 4
@@ -1721,7 +1721,7 @@ sw.default:
   ret double 0x3C91A62633145C07
 }
 
-define internal noundef double @nish.atan2(double noundef %y, double noundef %x) #0 {
+define internal noundef double @nish.atan2F64(double noundef %y, double noundef %x) #0 {
 entry:
   %piO4.addr = alloca double, align 8
   %piO2.addr = alloca double, align 8
@@ -2513,7 +2513,7 @@ if.end.3:
   ret double %29
 }
 
-define internal noundef double @nish.hypot(double noundef %x, double noundef %y) #0 {
+define internal noundef double @nish.hypotF64(double noundef %x, double noundef %y) #0 {
 entry:
   %ax.addr = alloca double, align 8
   %ay.addr = alloca double, align 8

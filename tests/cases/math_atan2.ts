@@ -1,5 +1,5 @@
 // Math.atan2(y, x) is `std/math.ts`'s `atan2`, copied into the module as `internal`
-// `@nish.atan2` with no libm call. The quadrant comes from both signs, so a -0 `y` gives -pi, as in JavaScript.
+// `@nish.atan2F64` with no libm call. The quadrant comes from both signs, so a -0 `y` gives -pi, as in JavaScript.
 export const angle = (y: f64, x: f64): f64 => Math.atan2(y, x);
 
 export const main = (): i32 => {

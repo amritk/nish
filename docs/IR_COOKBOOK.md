@@ -19238,7 +19238,7 @@ A wasm build calls `llvm.minimum`/`maximum` instead, which are `f64.min`/`max`
 there. All of these are `readnone willreturn`, so the callers stay pure.
 `Math.tan`, `Math.atan2` and `Math.hypot` are not builtins in the IR at all:
 each is a call to `std/math.ts`'s Nish port of fdlibm, copied into the module
-as `internal @nish.tan`, `@nish.atan2` and `@nish.hypot`, so no target calls
+as `internal @nish.tanF64`, `@nish.atan2F64` and `@nish.hypotF64`, so no target calls
 libm and the optimiser sees the whole body.
 
 <!-- cookbook:begin builtin-math-f64 -->

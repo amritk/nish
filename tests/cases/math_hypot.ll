@@ -13,7 +13,7 @@ declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 
 define noundef double @hyp(double noundef %a, double noundef %b) #0 {
 entry:
-  %0 = tail call double @nish.hypot(double %a, double %b)
+  %0 = tail call double @nish.hypotF64(double %a, double %b)
   ret double %0
 }
 
@@ -259,7 +259,7 @@ if.end.3:
   ret double %29
 }
 
-define internal noundef double @nish.hypot(double noundef %x, double noundef %y) #0 {
+define internal noundef double @nish.hypotF64(double noundef %x, double noundef %y) #0 {
 entry:
   %ax.addr = alloca double, align 8
   %ay.addr = alloca double, align 8

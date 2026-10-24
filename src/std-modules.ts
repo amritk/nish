@@ -175,7 +175,8 @@ export const isRegexModule = (packageName: string, name: string): boolean =>
  * `nish/math`: `Math.atan2`, `Math.tan` and `Math.hypot` on `f64`, in Nish
  * rather than libm. Like `nish/collections` a program never imports it: a call
  * to one of the three is what loads it, and the functions it reaches are
- * copied into the calling module, so it writes no `.ll` of its own.
+ * copied into the calling module, so it writes no `.ll` of its own. Each is
+ * exported as `<name>F64`: `tan`, `atan2` and `hypot` are the C library's names.
  */
 export const MATH_SPECIFIER: string = "nish/math"
 

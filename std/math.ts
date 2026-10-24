@@ -343,7 +343,7 @@ const kernelTan = (x0: f64, y0: f64, odd: boolean): f64 => {
   return t + a * (t * zz + 1.0 + t * vv)
 }
 /** `Math.tan(x)`: fdlibm's reduction and kernel, with `tanLarge` past 2^20 * pi/2. */
-export const tan = (x: f64): f64 => {
+export const tanF64 = (x: f64): f64 => {
   const ax: f64 = Math.abs(x)
   if (ax < 0.7853984832763672) {
     if (ax < 7.450580596923828e-9) {
@@ -408,7 +408,7 @@ const atanlo = (id: i32): f64 => {
 }
 
 /** `Math.atan2(y, x)`: fdlibm's, with a compensated quotient and a double-double pi - atan. */
-export const atan2 = (y: f64, x: f64): f64 => {
+export const atan2F64 = (y: f64, x: f64): f64 => {
   const piO4: f64 = 7.85398163397448279e-1
   const piO2: f64 = 1.570796326794896558
   const pi: f64 = 3.141592653589793116
@@ -588,7 +588,7 @@ const hypotRest = (ax: f64, ay: f64, a: f64, b: f64): f64 => {
 }
 
 /** `Math.hypot(x, y)`: fdlibm's core, rescaled by a power of two outside [1e-150, 1e150]. */
-export const hypot = (x: f64, y: f64): f64 => {
+export const hypotF64 = (x: f64, y: f64): f64 => {
   const ax: f64 = Math.abs(x)
   const ay: f64 = Math.abs(y)
   const a: f64 = ax > ay ? ax : ay
