@@ -139,6 +139,9 @@ const EVIDENCE = [
 /** The compiler's dump flags, which take no value and `--emit-ts` refuses alongside it. */
 const DUMPS = ["--emit-ast", "--emit-checked"]
 
+/** Native-only build flags `--emit-ts` refuses: they confine the process and change nothing it prints. */
+const NATIVE_ONLY = ["--sandbox", "--sandbox=best-effort"]
+
 /** Two lines that print the same floats but for their last digits: the libm row. */
 const ulpApart = (a, b) => {
   const fa = (a ?? "").match(/-?\d+\.\d+(e[-+]?\d+)?/g)
@@ -208,8 +211,9 @@ const compare = async (prog, compiler) => {
   // `--json`, so a refusal names its code, which is the row it is filed under.
   // A dump flag a case passes for its own test is dropped: it prints the
   // checked program and changes nothing the build does, and `--emit-ts`
-  // refuses it as a usage error.
-  const emitArgs = prog.args.filter((arg) => !DUMPS.includes(arg))
+  // refuses it as a usage error. So is `--sandbox`, which confines only a
+  // native process.
+  const emitArgs = prog.args.filter((arg) => !DUMPS.includes(arg) && !NATIVE_ONLY.includes(arg))
   const emitted = await run(compiler, [prog.entry, "--json", "--emit-ts", out, ...emitArgs])
   const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL40(10|11|12))"/)
   // The native build is read first, so a program that is both refused and

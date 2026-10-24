@@ -79,8 +79,10 @@
  * decides how many threads a loop is divided into. */
 static int64_t nish_cpu_cached = 0;
 
+#ifdef NISH_PAR_REAL
 /* What `nish_cpu_prime` read before `--sandbox` confined the process, or 0. */
 static int64_t nish_cpu_ceiling = 0;
+#endif
 
 /* The CPUs a region may use: `nish_cpu_online` (runtime-os.c), which
  * `availableParallelism` reads in every build, and 1 in the sequential one,

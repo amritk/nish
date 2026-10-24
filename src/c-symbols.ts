@@ -578,6 +578,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "powr" ||
   name === "powrf" ||
   name === "powrl" ||
+  name === "prctl" ||
   name === "pread" ||
   name === "printf" ||
   name === "program_invocation_name" ||
@@ -736,6 +737,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "strxfrm" ||
   name === "symlink" ||
   name === "symlinkat" ||
+  name === "syscall" ||
   name === "sysconf" ||
   name === "system" ||
   name === "tan" ||
