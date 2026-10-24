@@ -1,0 +1,16 @@
+{
+  "name": "caps-dep-transitive-granted",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_app": [
+          "net"
+        ],
+        "pkg_http": [
+          "net"
+        ]
+      }
+    }
+  }
+}

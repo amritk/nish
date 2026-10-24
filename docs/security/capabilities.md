@@ -8,8 +8,8 @@ dependency, the capability and the function. It says what the check covers,
 what it cannot reach, and the test that pins each property. It is written
 with the code rather than after an audit.
 
-Anchors are function names in the files below at `70f503e`, the commit
-that adds the check.
+Anchors are function names in the files below at the commit that adds the
+check, the squash merge of #905.
 
 **Result.** Every function a dependency's modules define counts toward that
 dependency, so a capability it reaches through the standard library, another
@@ -87,18 +87,27 @@ and with the grant, `link/caps_dep_net_granted: exits with 0 and stdout matches 
 (through another dependency),
 `link/caps_dep_unexported: rejected with "the dependency `pkg_quiet` reaches `net` through `dial`"`
 (a function no one imports). A dependency that reaches no gated capability
-needs no grant: `link/caps_dep_ungated: exits with 5 and stdout matches expected.out`.
+needs no grant: `link/caps_dep_ungated: exits with 5 and stdout matches expected.out`;
+nor does the root's own reach, which is not blamed on a dependency it calls:
+`link/caps_dep_root_net: exits with 0 and stdout matches expected.out`.
+A chain whose every package is granted compiles:
+`link/caps_dep_transitive_granted: exits with 0 and stdout matches expected.out`.
 
 **The library is told by where it was resolved** (CAPS-2):
 `link/caps_dep_std_not_refused: exits with 5 and stdout matches expected.out`
 (the library's own `net` is not refused) and
 `link/caps_dep_named_nish: rejected with "the dependency `nish` reaches `net` through `dial`"`.
+A scoped package is named whole:
+`link/caps_dep_scoped: rejected with "the dependency `@acme/http` reaches `net` through `dial`"`.
 
 **Only the root grants** (CAPS-3):
 `link/caps_dep_cli_cannot_grant: rejected with "the dependency `pkg_http` reaches `net` through `dial`"`
 (under `--allow net`),
 `link/caps_dep_self_grant: rejected with "the dependency `pkg_http` reaches `net` through `dial`"`
-(the dependency's own manifest allows and grants `net`), and
+(the dependency's own manifest allows and grants `net`),
+`link/caps_dep_partial_grant: rejected with "the dependency `pkg_b` reaches `unsafe` through `fetchMixed`"`
+(granted `net` alone, it reaches `net` and `unsafe`: its `expected.json` holds
+the one `unsafe` error and no `net` one), and
 ``link/caps_dep_root_deny_wins: rejected with "`main` reaches `net`, which the capability policy does not grant (the root package's `deny`)"``.
 
 **A malformed grant stops the build** (CAPS-4):

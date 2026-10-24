@@ -88,8 +88,8 @@ capability stopped building. Add the grant each error names to the root
 ## 7. Tests
 
 `tests/link/caps_dep_*`: one refused and one granted program per gated
-capability, and the transitive, unexported, standard-library, `nish`-named,
-command-line, self-grant, root-deny, function-argument, ordering and
-manifest cases. Each negative fixture holds its whole `--json` output.
+capability, and the transitive (refused and granted), unexported,
+standard-library, `nish`-named, scoped, root-reach, command-line, self-grant,
+partial-grant, root-deny, function-argument, ordering and manifest cases. Each negative fixture holds its whole `--json` output.
 `tests/run.js` holds the refusal `docs/IR_COOKBOOK.md` shows to what the
 compiler prints.

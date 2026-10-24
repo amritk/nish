@@ -1,0 +1,1 @@
+the dependency `@acme/http` reaches `net` through `dial`
