@@ -10397,9 +10397,10 @@ by the caller.
   one. The fifth refusal is such a generic in the program's own modules whose
   body copies an element into an array slot, in a module that holds records
   inline, or fills `new Array<T>(n)` with `T`'s zero, which only an instance
-  would decide, whatever else in it needs a type (NL4014,
-  `tests/emit-ts/refused/uncalled-zero.ts`, `uncalled-copy.ts`,
-  `uncalled-ctor-zero.ts`, `uncalled-field-zero.ts`); in the standard library the same body is a stub,
+  would decide, whatever else in it needs a type, a 64-bit integer or a
+  builtin call included (NL4014, `tests/emit-ts/refused/uncalled-zero.ts`,
+  `uncalled-copy.ts`, `uncalled-ctor-zero.ts`, `uncalled-field-zero.ts`,
+  `uncalled-wide-zero.ts`); in the standard library the same body is a stub,
   without a warning, and the program is written.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,

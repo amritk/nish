@@ -530,7 +530,16 @@ const ambientCallee = (walk: Walk, node: Node): string => {
   if (program.nodeCallees[node.id] !== null || program.nodeBuiltins[node.id].length > 0) {
     return ""
   }
-  return listedWord(AMBIENT_NAMES, name) ? name : ""
+  if (!listedWord(AMBIENT_NAMES, name)) {
+    return ""
+  }
+  // An untyped body binds no call, so a function of the program's own of an
+  // ambient name looks ambient.
+  if (walk.untyped) {
+    walk.missType()
+    return ""
+  }
+  return name
 }
 
 /**
@@ -867,7 +876,10 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     walk.stubbed[node.id]
   ) {
     const choices = walk.choiceNodes.length
-    let stub = needsTypes(node) ? stubText(walk, node) : ""
+    // The program's own body is walked whatever its spelling, so a copy or a
+    // zero in it is refused even beside a 64-bit integer or a builtin call.
+    const spelled = needsTypes(node)
+    let stub = spelled && !walk.warnStubs ? stubText(walk, node) : ""
     if (stub.length === 0) {
       walk.untyped = true
       walk.typeMiss = false
@@ -879,7 +891,7 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
       // would hide the element type the reader has to name.
       if (chose && walk.warnStubs) {
         walk.refuse(walk.choiceNodes[choices], UNTYPED_REFUSAL)
-      } else if (chose || walk.typeMiss) {
+      } else if (chose || walk.typeMiss || spelled) {
         stub = stubText(walk, node)
       }
       walk.typeMiss = false

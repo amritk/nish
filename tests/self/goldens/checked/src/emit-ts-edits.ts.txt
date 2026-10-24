@@ -258,19 +258,21 @@ function listedWord(names: string, name: string): boolean -> @listedWord
   calls: nish_arena_mark nish_arena_release nish_str_concat nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
 function ambientCallee(walk: Walk, node: Node): string -> @ambientCallee
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: listedWord nish_panic_index
-  pointer walk: size=200 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.missType
+  calls: Walk.missType listedWord nish_panic_index
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.missType#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 program: CheckedProgram (const)
   local +1:9 name: string (const)
-  callee +5:10 listedWord -> @listedWord
+  callee +5:8 listedWord -> @listedWord
+  callee +11:5 Walk.missType -> @Walk.missType
 function observe(walk: Walk, node: Node): string -> @observe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
   calls: StringSet.add Walk.helperName Walk.refuse ambientCallee isNetExport listedWord nish_panic_index nish_str_eq
-  pointer walk: size=200 writesThrough=false captured=false passedTo=Walk.refuse#0 ambientCallee#0 Walk.helperName#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.refuse#0 ambientCallee#0 Walk.helperName#0
   pointer node: size=40 writesThrough=true captured=true passedTo=Walk.refuse#1 ambientCallee#1
   stackSites=0 stackLocals=0
   callee +0:35 listedWord -> @listedWord
@@ -427,10 +429,11 @@ function changedText(walk: Walk, node: Node, out: Operands, slot: i32): void -> 
   pointer node: size=40 writesThrough=true captured=true passedTo=needsTypes#0 stubText#1 changedText#1 stubText#1 bodyIndex#0 changedAcrossInstances#1 observe#1 Operands.constructor#1 hoistChild#0 readsState#1 readsLocal#1 inOptionalChain#0 writes#0 numbersRow#1 stringsRow#1 recordsRow#1 controlRow#1 Walk.spanOf#1 hasEffect#0 mayPanic#1 Walk.spanOf#1 splice#1
   pointer out: size=40 writesThrough=false captured=false passedTo=changedText#2 changedAcrossInstances#2
   stackSites=1 stackLocals=1
-  local -3:11 choices: i32 (const)
+  local -6:11 choices: i32 (const)
+  local -3:11 spelled: boolean (const)
+  callee -3:21 needsTypes -> @needsTypes
   local -2:9 stub: string (let)
-  callee -2:16 needsTypes -> @needsTypes
-  callee -2:35 stubText -> @stubText
+  callee -2:45 stubText -> @stubText
   callee +2:7 changedText -> @changedText
   local +4:13 chose: boolean (const)
   callee +9:9 Walk.refuse -> @Walk.refuse
@@ -551,7 +554,7 @@ function collectNames(walk: Walk, node: Node): void -> @collectNames
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
   calls: StringSet.add ambientCallee collectNames
-  pointer walk: size=200 writesThrough=false captured=false passedTo=ambientCallee#0 collectNames#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=ambientCallee#0 collectNames#0
   pointer node: size=40 writesThrough=false captured=false passedTo=ambientCallee#1
   stackSites=0 stackLocals=0
   callee +0:5 StringSet.add -> @StringSet.add

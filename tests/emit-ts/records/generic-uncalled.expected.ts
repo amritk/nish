@@ -5,7 +5,8 @@
 // `xs.push(v)` is a string, whether `item` and `n` are 64-bit, `wide`'s `i64`,
 // which is a `bigint`, `s.length`, which counts UTF-8 bytes only where `s` is
 // known to be a string, and `Tally`'s `0`, a `bigint` beside its `u64` field,
-// in the initializer and the compare.
+// in the initializer and the compare. `drain`'s `p.pop()` is `Pile`'s own,
+// which without a bound call reads as an array's `pop`.
 import { idx } from "nish/runtime"
 import type { i64, i32, u64 } from "nish/runtime"
 const first = <T>(xs: T[]): T => {
@@ -59,6 +60,20 @@ class Bag {
     throw new Error("--emit-ts: a generic no instance reaches")
   }
 }
+
+class Pile {
+  top: i32
+  constructor() {
+    this.top = 0
+  }
+  pop(): i32 {
+    return this.top
+  }
+}
+
+const drain = <T>(p: Pile, x: T): i32 => {
+    throw new Error("--emit-ts: a generic no instance reaches")
+  }
 
 export const main = (): number => {
   const b = new Bag()

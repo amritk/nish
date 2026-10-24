@@ -4835,6 +4835,7 @@ if (!only || "emit-ts".includes(only)) {
     ["NL4014", "refused/uncalled-copy", 9],
     ["NL4014", "refused/uncalled-ctor-zero", 6],
     ["NL4014", "refused/uncalled-field-zero", 7],
+    ["NL4014", "refused/uncalled-wide-zero", 5],
   ]) {
     // A `refused/` name is a program under tests/emit-ts, which has no `.out`
     // and so is no fixture.
@@ -4867,15 +4868,16 @@ if (!only || "emit-ts".includes(only)) {
     [
       "records/generic-uncalled",
       [
-        stubWarning("first", 9),
-        stubWarning("wide", 13),
-        stubWarning("put", 17),
-        stubWarning("size", 21),
-        stubWarning("Box.constructor", 27),
-        stubWarning("Counter.constructor", 37),
-        stubWarning("Tally.n", 43),
-        stubWarning("Tally.empty", 44),
-        stubWarning("Bag.pick", 54),
+        stubWarning("first", 10),
+        stubWarning("wide", 14),
+        stubWarning("put", 18),
+        stubWarning("size", 22),
+        stubWarning("Box.constructor", 28),
+        stubWarning("Counter.constructor", 38),
+        stubWarning("Tally.n", 44),
+        stubWarning("Tally.empty", 45),
+        stubWarning("Bag.pick", 55),
+        stubWarning("drain", 70),
       ],
     ],
     ["identity/maps", []],

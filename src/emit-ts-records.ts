@@ -308,6 +308,15 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
   if (!written.endsWith(`.${method}`)) {
     return null
   }
+  // An untyped body binds no call, so a method of the program's own named
+  // `pop` would read as the array's: whether it is needs a type. A `push`
+  // still goes on to `copied`, which records the choice of a copy.
+  if (walk.untyped) {
+    walk.missType()
+    if (method !== "push" || args.length !== 1) {
+      return null
+    }
+  }
   const receiver = writtenReceiver(written, method)
   // The web's own takes only a typed array, so `tsc` refuses the `u8[]` it is
   // given; the runtime's takes either (`runtime/core/host.d.ts`).
@@ -494,6 +503,11 @@ const processArgv = (walk: Walk, node: Node): string | null => {
     walk.program.nodeLocals[receiver.id] !== null ||
     walk.program.nodeConstants[receiver.id] !== null
   ) {
+    return null
+  }
+  // An untyped body binds no local, so a `process` of its own looks global.
+  if (walk.untyped) {
+    walk.missType()
     return null
   }
   return `${walk.helperName("argv")}()`

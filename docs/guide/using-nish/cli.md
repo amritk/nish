@@ -229,6 +229,7 @@ app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; ke
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
 app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
 app.ts:9:1: error: --emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type
+app.ts:12:15: error: --emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type
 ```
 
 The second is reported at each `nish:net` import and at each call to a
@@ -257,7 +258,8 @@ is the program's own; the standard library's are written without one. The
 fifth refusal (NL4014) is a generic of your own whose body fills
 `new Array<T>(n)` with `T`'s zero, or copies an element into an array slot in a
 module that keeps records inline: which code those need depends on a `T` no
-call names, so it is refused rather than stubbed. Call it, or write a function per element type. The same
+call names, so it is refused rather than stubbed, even where a 64-bit integer
+or a builtin call in the same body would have made it a stub. Call it, or write a function per element type. The same
 body in the standard library is a stub, and the program is written.
 
 The `nish:unsafe` functions are imports from `nish/runtime` too:
