@@ -29,17 +29,15 @@ class Path {
     this.points.push(new Point(x, y))
   }
 
-  // The Manhattan length: every step is axis-aligned, so no square root.
-  length(): number {
-    let total = 0
-    let i = 1
-    while (i < this.points.length) {
-      const a = this.points[i - 1]
-      const b = this.points[i]
-      total = total + Math.abs(b.x - a.x) + Math.abs(b.y - a.y)
-      i = i + 1
+  // The route as one line: the points joined by arrows.
+  route(): string {
+    let line = ""
+    let first = true
+    for (const p of this.points) {
+      line = first ? `(${p.x}, ${p.y})` : `${line} -> (${p.x}, ${p.y})`
+      first = false
     }
-    return total
+    return line
   }
 }
 
@@ -56,6 +54,6 @@ export const main = (): number => {
   for (const p of path.points) {
     console.log(`(${p.x}, ${p.y})`)
   }
-  console.log(`length ${path.length()}`)
+  console.log(`route ${path.route()}`)
   return 0
 }

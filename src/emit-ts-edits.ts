@@ -20,7 +20,40 @@
 // a node and the types differ per instance. TypeScript has one copy of the
 // body, so two instances that would write it differently cannot both be
 // right; that is reported as an internal error naming the node, not guessed.
+//
+// A hook may also put statements before the statement its node is part of, for
+// a rewrite that JavaScript cannot spell as an expression (`x.orReturn()`, which
+// returns from the function). It asks `walk.canHoist()` first and, when that
+// answers true, calls `walk.hoist(text)` once per statement, in the order they
+// run; `walk.temporary()` names a local for it. The composer writes them ahead
+// of the enclosing statement, each on its own line at that statement's
+// indentation. It answers true only where moving the node's evaluation to the
+// start of its statement keeps the program's meaning:
+//
+// - the node is evaluated exactly once whenever its statement runs, so it is
+//   not the right of `&&`, `||` or `??`, a branch of `?:`, a loop's condition
+//   or update, an `if` or loop body that is not a block, a `case` label, a
+//   field initializer, a concise arrow body, a link of an optional chain past
+//   its first `?.` or an argument of one, or a module-level statement
+//   (`hoistChild` lists the positions that are; a block's statements start
+//   afresh, so a nested function's block body hoists into itself); and
+// - nothing ran in the statement before it that the move would reorder it
+//   against, except what an earlier hoist already moved: an effect (a call, a
+//   `new`, an assignment, `++`, `--`, or a declarator with an initializer,
+//   which binds a name a later declarator may read), an operation that may
+//   panic (an integer `/` or `%`, or checked arithmetic, neither proven), or
+//   a read of a field or an element, which the node may change.
+//   `this.pos + this.read().orReturn()` reads `this.pos` first, and
+//   `a / b + f().orReturn()` may stop at the division first, so neither is
+//   hoisted. A read of a local blocks the hoist only when the node itself
+//   writes something (`n + g(n++).orReturn()`): an arrow captures nothing, so
+//   no call can reach a local, and an assignment to it before the node is an
+//   effect already.
+//
+// A hook that cannot hoist writes the node some other way; the control row
+// has one for every node it hoists.
 
+import { checksOverflow } from "./bounds"
 import { Edit, SourceFile } from "./diagnostics"
 import { controlRow } from "./emit-ts-control"
 import { numbersRow } from "./emit-ts-numbers"
@@ -30,18 +63,45 @@ import { StringSet } from "./map"
 import { isNetExport } from "./nish-modules"
 import {
   FLAG_FOREIGN,
+  FLAG_OPTIONAL,
   FLAG_TYPE_ONLY,
+  N_ARRAY,
+  N_ARROW,
+  N_AS,
+  N_BINARY,
+  N_BLOCK,
   N_CALL,
+  N_EMPTY,
+  N_EXPR_STMT,
+  N_FOR,
+  N_FOR_OF,
   N_FUNCTION,
   N_IDENT,
+  N_IF,
   N_IMPORT,
   N_IMPORT_SPEC,
+  N_INDEX,
   N_LIST,
+  N_MEMBER,
+  N_MODULE_CONST,
+  N_NEW,
+  N_OBJECT,
+  N_PAREN,
+  N_PROPERTY,
+  N_RETURN,
+  N_SPREAD,
+  N_SWITCH,
+  N_TEMPLATE,
+  N_THROW,
   N_TYPE_REF,
+  N_UNARY,
+  N_VAR,
+  N_VAR_DECL,
   Node,
 } from "./nodes"
 import { CheckedProgram, Instantiation, STRUCT_INTERFACE } from "./program"
 import { StringBuilder } from "./strings"
+import { isInteger, TypeTable } from "./types"
 
 /**
  * The names a module may use without importing them, because Nish declares
@@ -85,6 +145,8 @@ const FOREIGN_REFUSAL: string =
 export class Walk {
   program: CheckedProgram
   source: SourceFile
+  /** The compilation's types, which `mayPanic` reads a node's base type in. */
+  table: TypeTable
   /**
    * Per node id, the first entry of `instances` whose function was declared by
    * that node, or -1; `instanceNext` chains the rest. Two arrays rather than a
@@ -115,9 +177,22 @@ export class Walk {
   refusals: string[]
   /** An internal error the walk ran into, or the empty string. */
   failure: string
+  /** The statements hoisted out of the current statement so far, in order. */
+  preludes: string[]
+  /** The next number `temporary` tries. */
+  temps: i32
+  /** The node being walked may hoist, by its position alone (`hoistChild`). */
+  hoistHere: boolean
+  /** What `canHoist` answers to the hook being asked about the current node. */
+  hoistable: boolean
+  /** An effect, a possible panic or a read of a field or an element ran in the current statement, and was not hoisted. */
+  effects: boolean
+  /** A local was read in the current statement, outside what was hoisted. */
+  localsRead: boolean
 
-  constructor(program: CheckedProgram, source: SourceFile, nodeCount: i32) {
+  constructor(program: CheckedProgram, table: TypeTable, source: SourceFile, nodeCount: i32) {
     this.program = program
+    this.table = table
     this.source = source
     this.instanceHead = []
     let i = 0
@@ -153,6 +228,12 @@ export class Walk {
     this.refusedAt = []
     this.refusals = []
     this.failure = ""
+    this.hoistHere = false
+    this.hoistable = false
+    this.effects = false
+    this.localsRead = false
+    this.preludes = []
+    this.temps = 0
     // Only the instances whose body is in this module: an imported generic is
     // walked by the module that declares it.
     for (const sig of program.functions) {
@@ -171,6 +252,36 @@ export class Walk {
    */
   useHelper(name: string): void {
     this.helpers.add(name)
+  }
+
+  /** Whether the node a hook is asked about may put statements before its statement. */
+  canHoist(): boolean {
+    return this.hoistable
+  }
+
+  /**
+   * A local name for a hoisted statement to bind: `__t<n>`, numbered through
+   * the module, skipping any number the source already spells.
+   */
+  temporary(): string {
+    let name = `__t${this.temps}`
+    while (this.source.text.indexOf(name) >= 0) {
+      this.temps = this.temps + 1
+      name = `__t${this.temps}`
+    }
+    this.temps = this.temps + 1
+    return name
+  }
+
+  /** Put `statement` before the current node's statement, after any hoisted already. */
+  hoist(statement: string): void {
+    if (!this.hoistable) {
+      this.fail(
+        `--emit-ts: a statement was hoisted from ${this.source.path} where \`canHoist\` answered false`
+      )
+      return
+    }
+    this.preludes.push(statement)
   }
 
   /** Refuse the module at `node`, once even when a generic body is walked per instance. */
@@ -261,6 +372,205 @@ const observe = (walk: Walk, node: Node): void => {
   }
 }
 
+/**
+ * Whether child `i` of `node` runs exactly once, in order, whenever `node`
+ * does, so that what may hoist at `node` may hoist from the child too. A kind
+ * not named here keeps its children from hoisting: an arrow's body runs later,
+ * a class member's initializer at construction, a loop's condition each time.
+ */
+const hoistChild = (node: Node, i: i32): boolean => {
+  const kind = node.kind
+  if (kind === N_BINARY) {
+    return i === 0 || (node.text !== "&&" && node.text !== "||" && node.text !== "??")
+  }
+  if (kind === N_IF || kind === N_SWITCH || kind === N_FOR) {
+    return i === 0
+  }
+  if (kind === N_FOR_OF) {
+    return i < 2
+  }
+  if (kind === N_CALL || kind === N_MEMBER || kind === N_INDEX) {
+    return i === 0 || !inOptionalChain(node)
+  }
+  return (
+    kind === N_VAR ||
+    kind === N_MODULE_CONST ||
+    kind === N_LIST ||
+    kind === N_VAR_DECL ||
+    kind === N_EXPR_STMT ||
+    kind === N_RETURN ||
+    kind === N_THROW ||
+    kind === N_NEW ||
+    kind === N_PAREN ||
+    kind === N_UNARY ||
+    kind === N_ARRAY ||
+    kind === N_OBJECT ||
+    kind === N_PROPERTY ||
+    kind === N_TEMPLATE ||
+    kind === N_AS ||
+    kind === N_SPREAD
+  )
+}
+
+/**
+ * Whether `node` is a link of an optional chain at or past its first `?.`:
+ * `a?.b`, `a?.b.c` and `a?.f(x)` are, `a.b` and `a` itself are not. Such a
+ * link runs only when nothing before it in the chain was null.
+ */
+const inOptionalChain = (node: Node): boolean => {
+  let link = node
+  while (link.kind === N_CALL || link.kind === N_MEMBER || link.kind === N_INDEX) {
+    if ((link.flags & FLAG_OPTIONAL) !== 0) {
+      return true
+    }
+    link = link.children[0]
+  }
+  return false
+}
+
+/** Whether evaluating `node` itself, apart from its children, may have an effect. */
+const hasEffect = (node: Node): boolean => {
+  if (node.kind === N_CALL || node.kind === N_NEW) {
+    return true
+  }
+  if (node.kind === N_VAR_DECL) {
+    return node.children[2].kind !== N_EMPTY
+  }
+  if (node.kind === N_UNARY) {
+    return node.text === "++" || node.text === "--"
+  }
+  if (node.kind !== N_BINARY) {
+    return false
+  }
+  const op = node.text
+  return (
+    op.endsWith("=") &&
+    op !== "==" &&
+    op !== "===" &&
+    op !== "!=" &&
+    op !== "!==" &&
+    op !== "<=" &&
+    op !== ">="
+  )
+}
+
+/**
+ * Whether evaluating `node` itself may panic: an integer `/` or `%` whose
+ * divisor is not proven nonzero, or checked signed arithmetic the bounds walk
+ * did not prove fits (`checksOverflow`). A hoist past it would run the hoisted
+ * call before the panic that should have stopped the statement first.
+ */
+const mayPanic = (walk: Walk, node: Node): boolean => {
+  const program = walk.program
+  if (node.kind === N_BINARY) {
+    const op = node.text
+    if (op === "/" || op === "%" || op === "/=" || op === "%=") {
+      const left = program.nodeTypes[node.children[0].id]
+      return left >= 0 && isInteger(walk.table.baseOf(left)) && !program.nodeProvenIndex[node.id]
+    }
+  }
+  return (
+    !program.wrapping && checksOverflow(program, walk.table, node) && !program.nodeProvenNoOverflow[node.id]
+  )
+}
+
+/**
+ * Whether child `i` of `node` reads a local. The target of a plain `=` is
+ * written, not read.
+ */
+const readsLocal = (walk: Walk, node: Node, i: i32): boolean => {
+  const child = node.children[i]
+  if (child.kind !== N_IDENT || walk.program.nodeLocals[child.id] === null) {
+    return false
+  }
+  return !(i === 0 && node.kind === N_BINARY && node.text === "=")
+}
+
+/**
+ * Whether `node` assigns, increments or decrements anything, outside the
+ * functions inside it. Hoisting it past an earlier read of a local would let
+ * the read see a write to that local; a write to a field or an element blocks
+ * the hoist too, which is more than it needs.
+ */
+const writes = (node: Node): boolean => {
+  if (node.kind === N_ARROW || node.kind === N_FUNCTION) {
+    return false
+  }
+  if (hasEffect(node) && node.kind !== N_CALL && node.kind !== N_NEW && node.kind !== N_VAR_DECL) {
+    return true
+  }
+  for (const child of node.children) {
+    if (writes(child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether child `i` of `node` reads a field or an element, which a call later
+ * in the statement may change. The target of a plain `=` is written, not
+ * read, and a member of an enum is a constant.
+ */
+const readsState = (walk: Walk, node: Node, i: i32): boolean => {
+  const child = node.children[i]
+  if (child.kind !== N_MEMBER && child.kind !== N_INDEX) {
+    return false
+  }
+  if (i === 0 && node.kind === N_BINARY && node.text === "=") {
+    return false
+  }
+  const target = child.children[0]
+  return !(
+    child.kind === N_MEMBER &&
+    target.kind === N_IDENT &&
+    walk.program.nodeLocals[target.id] === null &&
+    walk.program.enumNamed(target.text) !== null
+  )
+}
+
+/**
+ * `changedText` for a statement of a block: the statements hoisted out of it
+ * are written before it, each followed by a line break and the statement's own
+ * indentation, or by a space when it shares its line.
+ */
+const statementText = (walk: Walk, stmt: Node, out: Operands, slot: i32): void => {
+  const here = walk.hoistHere
+  const effects = walk.effects
+  const localsRead = walk.localsRead
+  const mark = walk.preludes.length
+  walk.hoistHere = true
+  walk.effects = false
+  walk.localsRead = false
+  changedText(walk, stmt, out, slot)
+  walk.hoistHere = here
+  walk.effects = effects
+  walk.localsRead = localsRead
+  if (walk.preludes.length === mark) {
+    return
+  }
+  const text = walk.source.text
+  let lineStart = stmt.start
+  while (lineStart > 0 && (text.charCodeAt(lineStart - 1) === 32 || text.charCodeAt(lineStart - 1) === 9)) {
+    lineStart = lineStart - 1
+  }
+  const ownLine = lineStart === 0 || text.charCodeAt(lineStart - 1) === 10
+  const sep = ownLine ? `\n${text.substring(lineStart, stmt.start)}` : " "
+  const sb = new StringBuilder()
+  let k = mark
+  while (k < walk.preludes.length) {
+    sb.add(walk.preludes[k])
+    sb.add(sep)
+    k = k + 1
+  }
+  sb.add(out.changed[slot] ? out.texts[slot] : walk.spanOf(stmt))
+  out.texts[slot] = sb.toText()
+  out.changed[slot] = true
+  while (walk.preludes.length > mark) {
+    walk.preludes.pop()
+  }
+}
+
 /** Whether two answers of `changedText` agree: both unchanged, or the same text. */
 const sameAnswer = (aChanged: boolean, a: string, bChanged: boolean, b: string): boolean =>
   aChanged === bChanged && (!aChanged || a === b)
@@ -282,17 +592,34 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     return
   }
   observe(walk, node)
+  const here = walk.hoistHere
+  const effectsBefore = walk.effects
+  const localsBefore = walk.localsRead
   const operands = new Operands(node, walk.source.text)
   let i = 0
   while (i < node.children.length) {
     operands.texts.push("")
     operands.changed.push(false)
-    changedText(walk, node.children[i], operands, i)
+    if (node.kind === N_BLOCK) {
+      statementText(walk, node.children[i], operands, i)
+    } else {
+      walk.hoistHere = here && hoistChild(node, i)
+      changedText(walk, node.children[i], operands, i)
+      if (readsState(walk, node, i)) {
+        walk.effects = true
+      }
+      if (readsLocal(walk, node, i)) {
+        walk.localsRead = true
+      }
+    }
     if (operands.changed[i]) {
       operands.any = true
     }
     i = i + 1
   }
+  walk.hoistHere = here
+  walk.hoistable = here && !effectsBefore && !inOptionalChain(node) && !(localsBefore && writes(node))
+  const hoisted = walk.preludes.length
   // The fixed order. A later row sees a node only when every earlier row left
   // it alone, so two rows never both rewrite one node.
   let rewritten = numbersRow(walk, node, operands)
@@ -304,6 +631,15 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
   }
   if (rewritten === null) {
     rewritten = controlRow(walk, node, operands)
+  }
+  walk.hoistable = false
+  if (walk.preludes.length > hoisted) {
+    // What ran before this node ran before the statement now, so it is as if
+    // nothing in the node had run yet.
+    walk.effects = effectsBefore
+    walk.localsRead = localsBefore
+  } else if (hasEffect(node) || mayPanic(walk, node)) {
+    walk.effects = true
   }
   if (rewritten !== null) {
     if (rewritten !== walk.spanOf(node)) {
@@ -328,7 +664,16 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
   let first = true
   let firstChanged = false
   let firstText = ""
+  // Every instance numbers its temporaries from the same place, or no two
+  // could agree; the walk goes on from the furthest any of them reached.
+  const temps = walk.temps
+  let tempsAfter = temps
+  const effects = walk.effects
+  const localsRead = walk.localsRead
   while (k >= 0) {
+    walk.temps = temps
+    walk.effects = effects
+    walk.localsRead = localsRead
     program.enterInstance(walk.instances[k])
     walk.inInstance = true
     walk.repeat = !first
@@ -338,6 +683,9 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
     walk.inInstance = false
     walk.repeat = false
     program.leaveInstance()
+    if (walk.temps > tempsAfter) {
+      tempsAfter = walk.temps
+    }
     if (first) {
       firstChanged = out.changed[slot]
       firstText = out.texts[slot]
@@ -350,6 +698,7 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
     }
     k = walk.instanceNext[k]
   }
+  walk.temps = tempsAfter
   out.texts[slot] = firstText
   out.changed[slot] = firstChanged
 }
@@ -360,7 +709,7 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
  * the previous one, cannot be placed, and that is an internal error rather
  * than a guess at where it goes.
  */
-const splice = (walk: Walk, node: Node, operands: Operands): string => {
+export const splice = (walk: Walk, node: Node, operands: Operands): string => {
   const text = walk.source.text
   const sb = new StringBuilder()
   let cursor = node.start

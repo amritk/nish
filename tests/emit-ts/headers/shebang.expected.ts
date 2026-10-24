@@ -4,6 +4,6 @@ import type { i32 } from "nish/runtime"
 const three: i32 = 3
 
 export const main = (): number => {
-  console.log(`${three + 1}`)
+  console.log(`${((three + 1) | 0)}`)
   return 0
 }
