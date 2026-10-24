@@ -22,6 +22,7 @@ const BYTES_WALK_BLANK: i32 = 1
 const BYTES_WALK_DIGITS: i32 = 2
 const BYTES_WALK_JSON_TEXT: i32 = 3
 const BYTES_WALK_COPY: i32 = 4 [exported]
+const BYTES_WALK_JSON_PLAIN: i32 = 5
 function isIndexOfAnyWalk(program: CheckedProgram, sig: FunctionSig): boolean -> @isIndexOfAnyWalk [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isTextModule nish_str_eq
@@ -56,7 +57,7 @@ function bytesWalkOf(program: CheckedProgram, sig: FunctionSig): i32 -> @bytesWa
   stackSites=0 stackLocals=0
   local +0:9 name: string (const)
   local +1:7 walk: i32 (let)
-  callee +11:36 isBytesModule -> @isBytesModule
+  callee +13:36 isBytesModule -> @isBytesModule
 function bytesKernelOf(walk: i32): string -> @bytesKernelOf [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

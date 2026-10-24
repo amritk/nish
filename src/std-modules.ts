@@ -152,9 +152,9 @@ export const isTextModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(TEXT_SPECIFIER)
 
 /**
- * `nish/bytes`: ordinary Nish but for four calls, the walks of `skipBlank`,
- * `skipDigits`, `skipJsonText` and `copyBytes`, which the emitter replaces with
- * runtime kernels and a `memmove` (`src/kernels.ts`).
+ * `nish/bytes`: ordinary Nish but for five calls, the walks of `skipBlank`,
+ * `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes`, which the
+ * emitter replaces with runtime kernels and a `memmove` (`src/kernels.ts`).
  */
 const BYTES_SPECIFIER: string = "nish/bytes"
 
