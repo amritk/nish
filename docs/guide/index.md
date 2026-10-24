@@ -57,7 +57,7 @@ Save it as `squares.ts` and `nish run squares.ts` prints `1² + … + 10² = 385
   [the standard library](using-nish/standard-library.md),
   [calling Nish from other languages](using-nish/interop.md),
   [threads](using-nish/threads.md) and
-  [terminal input](using-nish/terminal.md).
+  [Terminal programs](using-nish/terminal.md).
 
 This guide teaches; it is not the definition of the language. That is the
 [language reference](../LANGUAGE.md), and each page here links the section of

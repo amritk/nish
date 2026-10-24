@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "packages": {
+    "pkg_http": ["clock", "fs.read", "net"]
+  }
+}

@@ -22,8 +22,8 @@ const USAGE_COLUMN: i32 = 46
 
 /**
  * The help: every flag a user passes -- not `--strict-exports`, which only
- * restates the default, `--nsw`, which is refused, or the test hook
- * `--range-reference` -- grouped by what a person reaches for it to do, one per line, inside 80
+ * restates the default, `--nsw`, which is refused, or the test hooks
+ * `--range-reference` and `--no-elision` -- grouped by what a person reaches for it to do, one per line, inside 80
  * columns but for an agent's path to the card, as long as the install made
  * it. `--help` prints it on stdout and a bare `nish` on stderr, each styled
  * for its own stream; with colour off the two are the same bytes. `guide`,
@@ -60,6 +60,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
   menu.row("--emit-capabilities", "<file.json>", "write the capability report")
+  menu.row("--update-capability-lock", "", "record what each dependency reaches")
 
   menu.section("Interop")
   menu.row("--emit-header", "<file.h>", "a C header for the exports")

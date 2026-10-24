@@ -1,0 +1,17 @@
+PASS  before the first step: an in-range column answers 0
+PASS  before the first step: one past the last column is RANGE
+PASS  before the first step: column 99 is RANGE
+PASS  before the first step: column -1 is RANGE
+PASS  before the first step: and writes nothing
+PASS  before the first step: the connection's message is unchanged
+PASS  bind
+PASS  step: no row is DONE
+PASS  after DONE: an in-range column answers 0
+PASS  after DONE: one past the last column is RANGE
+PASS  after DONE: column 99 is RANGE
+PASS  after DONE: column -1 is RANGE
+PASS  after DONE: and writes nothing
+PASS  after DONE: the connection's message is unchanged
+PASS  finalize
+PASS  close
+std_sqlite_norow: 16 passed, 0 failed, 0 skipped
