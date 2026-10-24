@@ -270,7 +270,7 @@ export const base64Decode = (text: string): u8[] | null => {
   let j: i32 = 0
   // The padding is past `chars` and is not data; which positions those are is
   // a fact about the length. A `=` before them is outside the alphabet.
-  for (let k: i32 = 0; k < chars; k++) {
+  for (let k: i32 = 0; k < chars && k < toI32(text.length); k++) {
     const v: i32 = base64SextetOf(toI32(text.charCodeAt(k)))
     bad = bad | (v >> 31)
     acc = ((acc << 6) | (v & 63)) & 0xfff
