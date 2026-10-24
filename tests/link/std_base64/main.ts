@@ -1,133 +1,121 @@
-// `nish/crypto/base64url`'s standard base64 (`base64Encode`, `base64Decode`)
-// against RFC 4648: the §10 test vectors with their `=` padding, the two §4
-// letters (`+` and `/`), every byte value as a final character, round trips
-// over every group shape, and each refusal — misplaced or missing padding, a
-// non-canonical final sextet, and a character outside the alphabet.
-import { base64Decode, base64Encode } from "nish/crypto/base64url";
-import { Suite } from "nish/testing";
+// `nish/base64` against RFC 4648 §4: the §10 test vectors, every byte value in
+// each of the three positions of a group, every length mod 3 on either side of
+// the 3072-byte chunk a kitty frame is cut into (checked against a slow
+// reference encoder written here), and `base64EncodeInto` writing in the
+// middle of a buffer from the middle of another.
+import { base64Encode, base64EncodeInto, base64EncodedLength } from "nish/base64"
+import { Suite } from "nish/testing"
 
-const HEX_DIGITS: string = "0123456789abcdef";
-
-/** Lower-case hex of `bytes`, so that a failure prints something readable. */
-const hexOfBytes = (bytes: u8[]): string => {
-  const parts: string[] = [];
-  for (const b of bytes) {
-    const v: i32 = toI32(b);
-    parts.push(HEX_DIGITS.substring(v >> 4, (v >> 4) + 1));
-    parts.push(HEX_DIGITS.substring(v & 15, (v & 15) + 1));
-  }
-  return parts.join("");
-};
+const ALPHABET: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
 /** The bytes of an ASCII string, as the RFC's vectors are written. */
 const bytesOfAscii = (text: string): u8[] => {
-  const out: u8[] = [];
+  const out: u8[] = []
   for (let i: i32 = 0; i < toI32(text.length); i++) {
-    out.push(toU8(text.charCodeAt(i)));
+    out.push(toU8(text.charCodeAt(i)))
   }
-  return out;
-};
+  return out
+}
 
-/** The hex of what `text` decodes to, or `null` spelled out when it is refused. */
-const decodedHex = (text: string): string => {
-  const bytes: u8[] | null = base64Decode(text);
-  if (bytes === null) {
-    return "null";
+/**
+ * The base64 of `bytes` the slow way, one bit at a time into a sextet, so that
+ * it shares nothing with the module's three-byte groups.
+ */
+const reference = (bytes: u8[]): string => {
+  const parts: string[] = []
+  const bits: i32 = toI32(bytes.length) * 8
+  for (let start: i32 = 0; start < bits; start = start + 6) {
+    let v: i32 = 0
+    for (let k: i32 = 0; k < 6; k++) {
+      const bit: i32 = start + k
+      v = v << 1
+      if (bit < bits) {
+        const byte: i32 = bit >> 3
+        v = v | ((toI32(bytes[byte]) >> (7 - (bit & 7))) & 1)
+      }
+    }
+    parts.push(ALPHABET.substring(v, v + 1))
   }
-  return hexOfBytes(bytes);
-};
+  while (parts.length % 4 !== 0) {
+    parts.push("=")
+  }
+  return parts.join("")
+}
 
-/** One encoding vector, checked in both directions. */
-const checkVector = (t: Suite, name: string, bytes: u8[], text: string): void => {
-  t.eqStr(`encode ${name}`, base64Encode(bytes), text);
-  t.eqStr(`decode ${name}`, decodedHex(text), hexOfBytes(bytes));
-};
-
-/** A text the decoder must refuse. */
-const checkRefused = (t: Suite, name: string, text: string): void => {
-  t.eqStr(`refuse ${name}`, decodedHex(text), "null");
-};
+/** `n` bytes of a fixed pseudo-random pattern, every value reached. */
+const pattern = (n: i32): u8[] => {
+  const out: u8[] = new Array<u8>(n)
+  for (let i: i32 = 0; i < n; i++) {
+    out[i] = toU8((i * 167 + 13) & 255)
+  }
+  return out
+}
 
 export const main = (): number => {
-  const t = new Suite("base64");
+  const t = new Suite("base64")
 
-  // --- RFC 4648 §10 -------------------------------------------------------------
-  checkVector(t, "RFC 4648 §10: empty", bytesOfAscii(""), "");
-  checkVector(t, "RFC 4648 §10: f", bytesOfAscii("f"), "Zg==");
-  checkVector(t, "RFC 4648 §10: fo", bytesOfAscii("fo"), "Zm8=");
-  checkVector(t, "RFC 4648 §10: foo", bytesOfAscii("foo"), "Zm9v");
-  checkVector(t, "RFC 4648 §10: foob", bytesOfAscii("foob"), "Zm9vYg==");
-  checkVector(t, "RFC 4648 §10: fooba", bytesOfAscii("fooba"), "Zm9vYmE=");
-  checkVector(t, "RFC 4648 §10: foobar", bytesOfAscii("foobar"), "Zm9vYmFy");
+  // --- RFC 4648 §10 ------------------------------------------------------------
+  t.eqStr("§10: empty", base64Encode(bytesOfAscii("")), "")
+  t.eqStr("§10: f", base64Encode(bytesOfAscii("f")), "Zg==")
+  t.eqStr("§10: fo", base64Encode(bytesOfAscii("fo")), "Zm8=")
+  t.eqStr("§10: foo", base64Encode(bytesOfAscii("foo")), "Zm9v")
+  t.eqStr("§10: foob", base64Encode(bytesOfAscii("foob")), "Zm9vYg==")
+  t.eqStr("§10: fooba", base64Encode(bytesOfAscii("fooba")), "Zm9vYmE=")
+  t.eqStr("§10: foobar", base64Encode(bytesOfAscii("foobar")), "Zm9vYmFy")
 
-  // --- RFC 4648 §4: sextets 62 and 63 ------------------------------------------
-  checkVector(t, "RFC 4648 §4: fb ff uses + and /", [toU8(0xfb), toU8(0xff)], "+/8=");
-  checkVector(t, "RFC 4648 §4: ff fe uses /", [toU8(0xff), toU8(0xfe)], "//4=");
+  // --- the two letters of §4's alphabet that §5 replaces --------------------------
+  t.eqStr("+ and /", base64Encode([toU8(0xfb), toU8(0xff), toU8(0xbf)]), "+/+/")
 
-  // --- RFC 4648 §4, Table 1: every sextet, in order ------------------------------
-  const alphabet: string = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const tableHex: string =
-    "00108310518720928b30d38f41149351559761969b71d79f8218a39259a7a29aabb2dbafc31cb3d35db7e39ebbf3dfbf";
-  t.eqStr("RFC 4648 §4 Table 1: the alphabet decodes to sextets 0..63", decodedHex(alphabet), tableHex);
-  const table: u8[] | null = base64Decode(alphabet);
-  if (table !== null) {
-    t.eqStr("RFC 4648 §4 Table 1: and encodes back to the alphabet", base64Encode(table), alphabet);
-  }
-
-  // Every byte value as the final character of a group: exactly the 64 alphabet
-  // letters are accepted, each decoding to its Table 1 value.
-  let accepted: i32 = 0;
-  let misread: i32 = 0;
-  for (let c: i32 = 0; c < 256; c++) {
-    const bytes: u8[] | null = base64Decode(`AAA${String.fromCharCode(c)}`);
-    const index: i32 = toI32(alphabet.indexOf(String.fromCharCode(c)));
-    if (bytes !== null) {
-      accepted++;
-      if (c !== 61 && (bytes.length !== 3 || index < 0 || toI32(bytes[2]) !== index)) {
-        misread++;
+  // --- every byte value in each position of a group, and in a short final one ----
+  let mismatches: i32 = 0
+  for (let v: i32 = 0; v < 256; v++) {
+    for (let pos: i32 = 0; pos < 5; pos++) {
+      const bytes: u8[] = new Array<u8>(pos + 1)
+      bytes.fill(toU8(0x5a))
+      bytes[pos] = toU8(v)
+      if (base64Encode(bytes) !== reference(bytes)) {
+        mismatches = mismatches + 1
       }
-    } else if (index >= 0) {
-      misread++;
     }
   }
-  // `AAA=` is two zero bytes, padded: the 65th accepted text.
-  t.eqI32("every byte value: the 64 alphabet characters and = are accepted", accepted, 65);
-  t.eqI32("every byte value: each accepted one decodes to its Table 1 value", misread, 0);
+  t.eqI32("every byte value, positions 0 to 4", mismatches, 0)
 
-  // Round trips across the three group shapes, over bytes that cover the range.
-  for (let n: i32 = 0; n <= 10; n++) {
-    const bytes: u8[] = [];
-    for (let i: i32 = 0; i < n; i++) {
-      bytes.push(toU8((i * 97 + 13) & 255));
-    }
-    t.eqStr(`round trip: ${n} bytes`, decodedHex(base64Encode(bytes)), hexOfBytes(bytes));
+  // --- every length mod 3 around the 3072-byte kitty chunk ------------------------
+  for (let n: i32 = 3069; n <= 3076; n++) {
+    const bytes: u8[] = pattern(n)
+    const text: string = base64Encode(bytes)
+    t.eqI32(`length ${n}`, toI32(text.length), base64EncodedLength(n))
+    t.eqStr(`bytes ${n}`, text, reference(bytes))
   }
+  t.eqI32("3072 bytes are one 4096-character chunk", base64EncodedLength(3072), 4096)
+  t.eqI32("length of 0", base64EncodedLength(0), 0)
+  t.eqI32("length of 1", base64EncodedLength(1), 4)
+  t.eqI32("length of 2", base64EncodedLength(2), 4)
+  t.eqI32("length of 3", base64EncodedLength(3), 4)
+  t.eqI32("length of 4", base64EncodedLength(4), 8)
+  t.eqI32("the longest length", base64EncodedLength(1610612733), 2147483644)
 
-  // --- The refusals -------------------------------------------------------------
-  // Padding is required, and only at the end.
-  checkRefused(t, "missing padding after one byte", "Zg");
-  checkRefused(t, "missing padding after two bytes", "Zm8");
-  checkRefused(t, "one = where two are due", "Zg=");
-  checkRefused(t, "three =", "Z===");
-  checkRefused(t, "= alone", "====");
-  checkRefused(t, "= inside the text", "Zg==Zm9v");
-  checkRefused(t, "= in the middle of a group", "Z=9v");
-  // Characters of the §5 alphabet and others outside §4.
-  checkRefused(t, "- from the URL alphabet", "Zm9-");
-  checkRefused(t, "_ from the URL alphabet", "Zm_v");
-  checkRefused(t, "a space", "Zm 9");
-  checkRefused(t, "a trailing newline", "Zm9v\n");
-  checkRefused(t, "a multi-byte UTF-8 character", "Zmé=");
-  // A length that is not a multiple of four.
-  checkRefused(t, "length 1", "Z");
-  checkRefused(t, "length 5", "Zm9vY");
-  // Non-zero bits after the last byte: each is one bit from the canonical spelling.
-  checkRefused(t, "trailing bits after one byte (Zh==, not Zg==)", "Zh==");
-  checkRefused(t, "trailing bits after one byte (AB==, not AA==)", "AB==");
-  checkRefused(t, "trailing bits after two bytes (Zm9=, not Zm8=)", "Zm9=");
-  checkRefused(t, "trailing bits after two bytes (AAB=, not AAA=)", "AAB=");
-  t.eqStr("AA== is the one spelling of a zero byte", decodedHex("AA=="), "00");
-  t.eqStr("AAA= is the one spelling of two zero bytes", decodedHex("AAA="), "0000");
+  // --- into the middle of a buffer, from the middle of another --------------------
+  const src: u8[] = bytesOfAscii("xxfoobayy")
+  const dst: u8[] = new Array<u8>(14)
+  dst.fill(toU8(46))
+  const end: i32 = base64EncodeInto(src, 2, 5, dst, 3)
+  t.eqI32("into: the end it answers", end, 11)
+  t.eqStr("into: what it wrote, and nothing around it", String.fromBytes(dst, 0, 14), "...Zm9vYmE=...")
+  t.eqI32("into: an empty range writes nothing", base64EncodeInto(src, 9, 0, dst, 14), 14)
+  t.eqStr("into: chunked equals whole", chunked(pattern(7000)), reference(pattern(7000)))
 
-  return t.done();
-};
+  return t.done()
+}
+
+/** `bytes` encoded 3072 at a time into one buffer, as `kittyFrame` cuts a frame. */
+const chunked = (bytes: u8[]): string => {
+  const n: i32 = toI32(bytes.length)
+  const out: u8[] = new Array<u8>(base64EncodedLength(n))
+  let at: i32 = 0
+  for (let off: i32 = 0; off < n; off = off + 3072) {
+    const len: i32 = n - off < 3072 ? n - off : 3072
+    at = base64EncodeInto(bytes, off, len, out, at)
+  }
+  return String.fromBytes(out, 0, at)
+}

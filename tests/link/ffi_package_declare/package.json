@@ -1,0 +1,9 @@
+{
+  "name": "ffi-package-declare",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": { "cstr": ["ffi"], "probe": ["ffi"] }
+    }
+  }
+}

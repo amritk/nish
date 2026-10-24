@@ -1883,7 +1883,7 @@ const H3_SERVER_RECEIVE_BURST: i32 = 256 [exported]
 const H3_SERVER_ANSWER_BURST: i32 = 16 [exported]
 const H3_SERVER_ANSWER_INTERVAL: i64 = 100 [exported]
 const H3_SERVER_ADDRESS: i32 = 18
-const H3_SERVER_NO_GSO: i32 = -95
+const H3_SERVER_UNSUPPORTED: i32 = -95
 const H3_SERVER_RECEIVE_SIZE: i32 = 65536
 const H3_SERVER_KEYS: i32 = 5
 const H3_SERVER_ZERO: i32 = 0
@@ -1956,9 +1956,10 @@ struct Http3Server (class) size=280 align=8 exported
   field refused: i32 index=35 offset=240 initialized
   field limited: i32 index=36 offset=244 initialized
   field sendErrors: i32 index=37 offset=248 initialized
-  field streamPools: QuicStreamPools | null index=38 offset=256 initialized
-  field dataPool: BufferPool index=39 offset=264
-  field sectionPool: BufferPool index=40 offset=272
+  field ecn: boolean index=38 offset=252 initialized
+  field streamPools: QuicStreamPools | null index=39 offset=256 initialized
+  field dataPool: BufferPool index=40 offset=264
+  field sectionPool: BufferPool index=41 offset=272
   constructor -> @nish.Http3Server.constructor
   method build -> @nish.Http3Server.build
   method slotAt -> @nish.Http3Server.slotAt
@@ -1980,6 +1981,7 @@ struct Http3Server (class) size=280 align=8 exported
   method serve -> @nish.Http3Server.serve
   method refile -> @nish.Http3Server.refile
   method send -> @nish.Http3Server.send
+  method unmark -> @nish.Http3Server.unmark
   method flush -> @nish.Http3Server.flush
   method flushSlot -> @nish.Http3Server.flushSlot
   method unindex -> @nish.Http3Server.unindex
@@ -2163,13 +2165,13 @@ function Http3Server.build(this: Http3Server): void -> @nish.Http3Server.build [
   stackSites=0 stackLocals=0
   local +1:11 quic: QuicConnection (const)
   callee +1:18 new QuicConnection -> @nish.QuicConnection.constructor
-  local +3:11 pools: QuicStreamPools | null (const)
-  callee +5:7 QuicStreams.share -> @nish.QuicStreams.share
-  local +7:11 conn: Http3Connection (const)
-  callee +7:35 new Http3Connection -> @nish.Http3Connection.constructor
-  callee +8:5 Http3Connection.share -> @nish.Http3Connection.share
-  callee +9:17 HttpDate.current -> @nish.HttpDate.current
-  callee +13:7 Http3Connection.release -> @nish.Http3Connection.release
+  local +4:11 pools: QuicStreamPools | null (const)
+  callee +6:7 QuicStreams.share -> @nish.QuicStreams.share
+  local +8:11 conn: Http3Connection (const)
+  callee +8:35 new Http3Connection -> @nish.Http3Connection.constructor
+  callee +9:5 Http3Connection.share -> @nish.Http3Connection.share
+  callee +10:17 HttpDate.current -> @nish.HttpDate.current
+  callee +14:7 Http3Connection.release -> @nish.Http3Connection.release
 function Http3Server.slotAt(this: Http3Server, slot: i32): i32 -> @nish.Http3Server.slotAt [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Http3Server.build
@@ -2361,20 +2363,31 @@ function Http3Server.refile(this: Http3Server, slot: i32): void -> @nish.Http3Se
   local +4:13 entry: QuicCidEntry (const)
   callee +6:9 Http3CidIndex.insert -> @nish.Http3CidIndex.insert
   callee +10:7 Http3CidIndex.insert -> @nish.Http3CidIndex.insert
-function Http3Server.send(this: Http3Server, buf: u8[], at: i32, len: i32, to: u8[], segment: i32): boolean -> @nish.Http3Server.send [exported method]
+function Http3Server.send(this: Http3Server, buf: u8[], at: i32, len: i32, to: u8[], segment: i32, ecn: i32): boolean -> @nish.Http3Server.send [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: at segment
-  calls: nish.h3Count nish_panic_overflow nish_panic_slice nish_udp_send_to
-  pointer this: size=280 writesThrough=true captured=false
+  escaping: at ecn len segment
+  calls: nish.Http3Server.unmark nish.h3Count nish_panic_overflow nish_panic_slice nish_udp_send_to
+  pointer this: size=280 writesThrough=true captured=false passedTo=nish.Http3Server.unmark#0 nish.Http3Server.unmark#0
   pointer buf: size=0 writesThrough=false captured=false
   pointer to: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -5:11 sent: i32 (const)
   callee +0:25 h3Count -> @nish.h3Count
-  local +4:9 p: i32 (let)
-  local +6:13 n: i32 (const)
-  callee +8:27 h3Count -> @nish.h3Count
+  local +5:9 mark: i32 (let)
+  callee +7:7 Http3Server.unmark -> @nish.Http3Server.unmark
+  local +10:11 step: i32 (const)
+  local +11:9 p: i32 (let)
+  local +13:13 n: i32 (const)
+  local +14:11 one: i32 (let)
+  callee +19:9 Http3Server.unmark -> @nish.Http3Server.unmark
+  callee +24:27 h3Count -> @nish.h3Count
+function Http3Server.unmark(this: Http3Server): void -> @nish.Http3Server.unmark [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer this: size=280 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +1:14 slot: i32 (let)
 function Http3Server.flush(this: Http3Server, now: i64): void -> @nish.Http3Server.flush [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

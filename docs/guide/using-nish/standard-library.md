@@ -43,6 +43,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and the keys it reads decoded |
+| [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url |
@@ -1221,6 +1222,14 @@ decoder has to look at next.
 Natively each run reads 16 or 32 bytes at a time and the copy is one block
 move; under Node they are plain loops with the same answers. The runs take
 longer the longer the run is, so they are for text, never for secret data.
+
+## `nish/sqlite`
+
+A SQLite database in a file or in memory: `openDatabase` for a `Database`,
+`exec` and `prepare` for a `Statement` you bind, step and reset as often as you
+like, and every failure a `Result`. SQLite itself is compiled into your
+program, so there is nothing to install. It has a page of its own,
+[SQLite](sqlite.md).
 
 ## `nish/threads`
 
