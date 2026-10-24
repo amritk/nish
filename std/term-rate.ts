@@ -56,8 +56,8 @@
  * counts for the decisions for 5 seconds with no newer one, so a link that
  * narrows is not held to its old rate; the bandwidth reported keeps it until
  * a newer sample, which starts the average afresh, replaces it, or three
- * trips in a row take over twice what it and the quickest kept trip
- * predict. The figure
+ * trips in a row take over twice what it and the quickest trip kept when
+ * it was taken predict. The figure
  * is at least the most of the last 16 answers' bytes over their whole round
  * trips, since the bytes took no longer than that, so a link that widens shows on its first quick answer; but that
  * bound counts the latency as bytes' time, so alone it never makes the
@@ -356,6 +356,8 @@ export class RateController {
   bytesPerSec: f64
   /** When the bandwidth was last sampled, by a frame that waited behind another or by two trips. */
   rateAtMs: f64
+  /** The quickest kept trip, or the round trip with none kept, when the bandwidth was last sampled: at least the latency then. */
+  rateQuickMs: f64
   /** When frames were last given up on, while `stale` waits for their late answers. */
   staleSinceMs: f64
   /** The smoothed frame cost, in milliseconds. */
@@ -469,6 +471,7 @@ export class RateController {
     this.ackBusyMs = 0.0
     this.bytesPerSec = 0.0
     this.rateAtMs = 0.0
+    this.rateQuickMs = 0.0
     this.heldLatencyMs = 0.0
     this.stale = 0
     this.staleSinceMs = 0.0
@@ -593,15 +596,9 @@ export class RateController {
       this.measureTrip(rtt, bytes)
     }
     if (!this.haveRate && this.ackBusyMs > 0.0 && bytes > 0.0) {
-      // The aged sample still reported is kept while trips take what it predicts: the quickest kept trip, which holds
-      // the whole latency and perhaps some bytes, so the prediction errs long, plus these bytes' time at the sample.
-      let quickest: f64 = rtt
-      for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
-        if (this.tripMs[i] < quickest) {
-          quickest = this.tripMs[i]
-        }
-      }
-      const expected: f64 = quickest + (bytes * this.ackBusyMs) / this.ackBytes
+      // The aged sample still reported is kept while trips take what it predicts: the quickest trip when it was taken,
+      // which holds the whole latency and perhaps some bytes, so the prediction errs long, plus these bytes' time.
+      const expected: f64 = this.rateQuickMs + (bytes * this.ackBusyMs) / this.ackBytes
       this.contradicted = rtt > rateStaleFactor * expected ? this.contradicted + 1 : 0
       if (this.contradicted >= rateStaleTrips) {
         this.ackBytes = 0.0
@@ -665,6 +662,13 @@ export class RateController {
     // A sample after the last aged out starts afresh, so a link that narrowed meanwhile is not averaged with its old rate.
     const first: boolean = this.ackBusyMs <= 0.0 || !this.haveRate
     this.rateAtMs = this.lastAckMs
+    let quickest: f64 = this.rttMs
+    for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
+      if (i === 0 || this.tripMs[i] < quickest) {
+        quickest = this.tripMs[i]
+      }
+    }
+    this.rateQuickMs = quickest
     this.ackBytes = rateSmooth(this.ackBytes, bytes, 0.25, first)
     this.ackBusyMs = rateSmooth(this.ackBusyMs, busyMs, 0.25, first)
     this.updateRate()
