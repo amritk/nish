@@ -104,6 +104,16 @@ licence. Each file also names the program it comes from and its contributors.
 Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy. Revised BSD licence; see bench/LICENSE-benchmarksgame.md.
 ```
 
+### `bench/sqlite/LICENSE.md`
+
+The [twelve-dollar server challenge](https://github.com/arjaythedev/twelve-dollar-server-challenge),
+Copyright (c) 2026 arjaythedev and the challenge contributors, under the MIT
+licence: its schema, and the seed generator the SQLite benchmark ports.
+
+```notice
+Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see bench/sqlite/LICENSE.md.
+```
+
 ### `bench/awfy/LICENSE.md`
 
 The [Are We Fast Yet](https://github.com/smarr/are-we-fast-yet) benchmarks.
@@ -285,6 +295,9 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 | `bench/nbody.go` | the same, through `bench/nbody.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/nbody.rs` | the same, through `bench/nbody.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `examples/nbody.ts` | the same | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `bench/sqlite/schema.sql` | the twelve-dollar server challenge's `schema.sql`, unchanged | MIT | `bench/sqlite/LICENSE.md` |
+| `bench/sqlite/twin.c` | the seed: a port of the challenge's `seed/generate.mjs` (mulberry32 and seed 42, the table sizes, the author skew, the `ADJECTIVES` and `NOUNS` lists, part of the word list), and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
+| `bench/sqlite/main.ts` | the challenge's table sizes, `USERS` and `POSTS`, and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
 | `bench/spectral.ts` | Benchmarks Game spectral-norm, Node.js #1 (Ian Osgood, modified by Isaac Gouy) | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.go` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
