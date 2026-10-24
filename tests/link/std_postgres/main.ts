@@ -21,6 +21,7 @@ import {
   PG_ERR_NONE,
   PG_ERR_SCRAM,
   PG_ERR_SERVER,
+  PG_ERR_SERVER_SIGNATURE,
   PG_ERR_TOO_BIG,
   PG_ERR_UNEXPECTED,
   PG_FAILED,
@@ -328,6 +329,22 @@ const first = (serverFirst: string): string => {
   return feed(c, auth(11, z(serverFirst)));
 };
 
+/** A connection that sent its proof for a well-formed server-first-message. */
+const proved = (): PgConnection => {
+  const c = open(config());
+  feed(c, auth(10, z("SCRAM-SHA-256||")));
+  drain(c);
+  feed(c, auth(11, z(`r=${CLIENT_NONCE}xyz,s=c2FsdA==,i=4096`)));
+  return c;
+};
+
+/** A connection's answer to `serverFinal` once it sent its proof. */
+const final = (serverFinal: string): string => {
+  const c = proved();
+  drain(c);
+  return feed(c, auth(12, z(serverFinal)));
+};
+
 const auths = (t: Suite): void => {
   t.eqStr("MD5 is refused", feed(open(config()), auth(5, z("salt"))), `failed:${PG_ERR_AUTH_UNSUPPORTED}`);
   t.eqStr("cleartext is refused", feed(open(config()), auth(3, [])), `failed:${PG_ERR_AUTH_UNSUPPORTED}`);
@@ -358,6 +375,17 @@ const auths = (t: Suite): void => {
   t.eqStr("iterations over maxIterations", first(`r=${CLIENT_NONCE}xyz,s=c2FsdA==,i=100001`), scram);
   t.eqStr("iterations that would overflow", first(`r=${CLIENT_NONCE}xyz,s=c2FsdA==,i=99999999999999`), scram);
   t.eqStr("iterations that are not digits", first(`r=${CLIENT_NONCE}xyz,s=c2FsdA==,i=40x6`), scram);
+
+  const sent: string = drain(proved());
+  t.ok("SASLResponse: no channel binding, the joined nonce, a proof", sent.indexOf(`c=biws,r=${CLIENT_NONCE}xyz,p=`) > 0);
+  t.ok("and a proof of 32 bytes", sent.length === sent.indexOf(",p=") + 3 + 44);
+  // 32 bytes of zeros: the right length, but not the signature the password makes.
+  const zeros: string = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+  t.eqStr("a server signature the password does not make", final(`v=${zeros}`), `failed:${PG_ERR_SERVER_SIGNATURE}`);
+  t.eqStr("a server signature of 31 bytes", final("v=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="), scram);
+  t.eqStr("a server signature that is not base64", final("v=*"), scram);
+  t.eqStr("a server final without v=", final(`x=${zeros}`), scram);
+  t.eqStr("a server final of one byte", final("v"), scram);
 
   const skipped = open(config());
   feed(skipped, auth(10, z("SCRAM-SHA-256||")));

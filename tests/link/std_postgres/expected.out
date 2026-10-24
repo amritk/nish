@@ -55,6 +55,13 @@ PASS  iterations under minIterations
 PASS  iterations over maxIterations
 PASS  iterations that would overflow
 PASS  iterations that are not digits
+PASS  SASLResponse: no channel binding, the joined nonce, a proof
+PASS  and a proof of 32 bytes
+PASS  a server signature the password does not make
+PASS  a server signature of 31 bytes
+PASS  a server signature that is not base64
+PASS  a server final without v=
+PASS  a server final of one byte
 PASS  AuthenticationOk before the server proved the password
 PASS  a failed connection holds no password
 PASS  an error during startup fails the connection
@@ -170,4 +177,4 @@ PASS  text after a quote
 PASS  a space unquoted
 PASS  a window too short
 PASS  stays bad
-postgres: 172 passed, 0 failed, 0 skipped
+postgres: 179 passed, 0 failed, 0 skipped

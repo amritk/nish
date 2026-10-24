@@ -80,7 +80,7 @@
 import { getI32BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
 import { base64Decode, base64Encode } from "nish/crypto/base64url"
 import { timingSafeEqual } from "nish/crypto/ct"
-import { hmacSha256 } from "nish/crypto/hmac"
+import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac"
 import { sha256 } from "nish/crypto/sha256"
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 
@@ -295,11 +295,11 @@ const pgBytesAre = (b: u8[], start: i32, length: i32, text: string): boolean => 
  * The salted password, PBKDF2-HMAC-SHA-256 over the password and the salt
  * (RFC 5802 §3, `Hi`), 32 bytes, or `null` when it cannot be computed.
  *
- * PBKDF2-PENDING: `pbkdf2HmacSha256` from `nish/crypto/hmac` computes this;
- * until it lands the seam answers `null`, which fails the exchange with
- * `PG_ERR_SCRAM`.
+ * The caller has bounded `iterations` by `maxIterations`, since the time is
+ * linear in it.
  */
-const pgSaltedPassword = (_password: Secret<u8[]>, _salt: u8[], _iterations: i32): Secret<u8[]> | null => null
+const pgSaltedPassword = (password: Secret<u8[]>, salt: u8[], iterations: i32): Secret<u8[]> | null =>
+  pbkdf2HmacSha256(password, salt, iterations, 32)
 
 /**
  * RFC 5802 §3 from the salted password and the AuthMessage: the ClientProof

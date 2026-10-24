@@ -394,9 +394,48 @@ const trustQueryLog = (): string[] => [
   "closed 8 9",
 ];
 
-/** The SCRAM exchange up to the client's proof. */
-const scram = (name: string, password: string, chunk: i32): string[] => {
-  const r = new Replay(name, "scrammy", "nish", password, chunk);
+/** SCRAM-SHA-256 to the end: the proof, the server's signature checked, one query, then Terminate. */
+const scramOk = (chunk: i32): string[] => {
+  const r = new Replay("scram-ok", "scrammy", "nish", PASSWORD, chunk);
+  const conn = r.conn;
+  const none: i32[] = [];
+  r.wrote();
+  r.answer();
+  r.wrote();
+  r.answer();
+  r.wrote();
+  r.answer();
+  conn.prepare("", "select current_user", none);
+  conn.bindStart("");
+  conn.bindEnd();
+  conn.sync();
+  r.wrote();
+  r.answer();
+  conn.terminate();
+  r.wrote();
+  r.log.push(`closed ${conn.closed()} ${conn.failure}`);
+  return r.log;
+};
+
+const scramOkLog = (): string[] => [
+  "wrote 84",
+  "wrote 55",
+  "wrote 109",
+  `ready I pid true ${VERSION}`,
+  "wrote 63",
+  "described 19",
+  "row scrammy",
+  "complete SELECT 1",
+  "done I failed false in flight 0",
+  "wrote 5",
+  "closed 8 9",
+];
+
+/** The proof from the wrong password, which the server refuses. */
+const scramWrongPassword = (chunk: i32): string[] => {
+  const r = new Replay("scram-wrong-password", "scrammy", "nish", "wrong password", chunk);
+  r.wrote();
+  r.answer();
   r.wrote();
   r.answer();
   r.wrote();
@@ -404,9 +443,7 @@ const scram = (name: string, password: string, chunk: i32): string[] => {
   return r.log;
 };
 
-// The SCRAM proof needs PBKDF2, which nish/crypto/hmac does not have yet: the
-// connection fails at the server-first-message, where it would derive it.
-const scramUntilProofLog = (): string[] => ["wrote 84", "wrote 55", "failed 5"];
+const scramWrongPasswordLog = (): string[] => ["wrote 84", "wrote 55", "wrote 109", "failed 7 FATAL 28P01"];
 
 const noDatabase = (chunk: i32): string[] => {
   const r = new Replay("no-database", "trusty", "missing", "", chunk);
@@ -432,8 +469,8 @@ export const main = (): number => {
   for (const chunk of chunks) {
     const by: string = chunk > 0 ? `in ${chunk}-byte pieces` : "whole";
     t.eqLines(`trust-query, ${by}`, trustQuery(chunk), trustQueryLog());
-    t.eqLines(`scram-ok, ${by}`, scram("scram-ok", PASSWORD, chunk), scramUntilProofLog());
-    t.eqLines(`scram-wrong-password, ${by}`, scram("scram-wrong-password", "wrong password", chunk), scramUntilProofLog());
+    t.eqLines(`scram-ok, ${by}`, scramOk(chunk), scramOkLog());
+    t.eqLines(`scram-wrong-password, ${by}`, scramWrongPassword(chunk), scramWrongPasswordLog());
     t.eqLines(`no-database, ${by}`, noDatabase(chunk), noDatabaseLog());
     t.eqLines(`cleartext, ${by}`, cleartext(chunk), cleartextLog());
   }
