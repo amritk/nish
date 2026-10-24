@@ -4744,6 +4744,56 @@ export const main = (): i32 => {
   so they are for text, never for secret data: `std/crypto` does not call
   them.
 
+### SQLite: `nish/sqlite`
+
+`nish/sqlite` is the SQLite C library, linked into a program that imports the
+module, with a `Database` and a `Statement` to drive it. A statement is
+prepared once and bound, stepped and reset as often as wanted:
+
+```typescript
+import { openDatabase, OPEN_READWRITE, OPEN_CREATE } from "nish/sqlite";
+
+export const main = (): i32 => {
+  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
+  db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)").expect("create");
+  const insert = db.prepare("INSERT INTO t (name) VALUES (?1)").expect("prepare");
+  insert.bindText(1, "ada").expect("bind");
+  insert.step().expect("insert");
+  insert.reset().expect("reset");
+  console.log(`${db.lastInsertRowid()}`);
+  db.close().expect("close");
+  return 0;
+};
+```
+
+- **Every failure is a `Result`.** `openDatabase` and `prepare` answer a
+  `SqliteError`, with SQLite's extended code (`extendedCode`, such as 2067 for
+  `SQLITE_CONSTRAINT_UNIQUE`), its primary code (`code`, the low byte) and
+  SQLite's message. Every other call answers the bare extended code, and
+  `error(code)` on the `Database` or `Statement` that answered it builds the
+  `SqliteError`, so a failure allocates only for the caller who asks.
+  `step()` answers `true` with a row to read and `false` when the statement
+  has finished.
+- **A row allocates nothing.** Binding, `step`, `reset`, `columnI64`,
+  `columnF64` and `columnInto` answer scalars; `columnInto(c, buf, at)` copies
+  a text or blob column into the caller's `u8[]`, and answers its length,
+  copying only when all of it fits. `columnText(c)` is the call that makes a
+  string, and it stops at the first NUL byte. Parameters count from 1 and columns from 0, as in SQLite.
+- **`exec(sql)`** runs every statement of `sql` and discards any rows, and
+  `begin()`, `commit()` and `rollback()` are `exec` of `BEGIN`, `COMMIT` and
+  `ROLLBACK`; pragmas, such as `journal_mode=WAL`, are SQL too. A binding is
+  copied by SQLite, and `reset` keeps the bindings.
+- **A handle is an `i32`** into tables the C adapter keeps per thread. `close`
+  finalizes every statement the connection still has, and a handle used after
+  `close` or `finalize` answers `SQLITE_MISUSE` rather than reaching freed
+  memory. A connection and its statements belong to the thread that opened
+  them.
+- **It reaches `ffi`.** The module calls C through `declare function`, so a
+  program that imports it is reported with [`ffi`](#capabilities) and
+  `--deny ffi` refuses it, naming the call. The files SQLite opens are opened
+  by C, which the `fs.read` and `fs.write` capabilities do not see. It is
+  tested natively and under `--profile wasi` (`tests/link/std_sqlite*`).
+
 ### Interfaces and object literals
 
 ```ts
@@ -9099,7 +9149,9 @@ and `"nish": { "capabilities": { "allow": [...], "deny": [...] } }` in the
 root `package.json` (the one nearest above the entry, where `noPanic` is read)
 are a **capability policy**, and a program whose entry reaches a capability
 the policy does not grant is refused
-([wp36-capability-policy.md](wp36-capability-policy.md)):
+([wp36-capability-policy.md](wp36-capability-policy.md)). The same object's
+`dependencies` key grants a dependency its gated capabilities, as [a
+dependency's capabilities](#a-dependencys-capabilities) says (NL3041, NL3042):
 
 ```text
 main.ts:6:36: error: `main` reaches `net`, which the capability policy does not grant (the root package's `deny`); the chain that reaches it: main.ts:6:36 calls dial, client.ts:5:10 calls netAddress
@@ -9161,6 +9213,55 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   it does with none (`tests/link/caps_policy_granted`,
   `caps_policy_manifest_granted`). `nish run` takes both flags and refuses
   before it links; `--fix` and `--emit-ast` refuse them.
+
+##### A dependency's capabilities
+
+A dependency — a package loaded from `node_modules` — may reach `ffi`, `net`,
+`process.spawn` and `unsafe`, the **gated** capabilities, only when the root
+`package.json` grants them to it by name; it reaches every other capability
+without one ([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)):
+
+```json
+{ "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } }
+```
+
+A dependency that reaches one it is not granted is refused (NL2576), in the
+dependency, naming the package, the capability and the function:
+
+```text
+node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+```
+
+- A dependency's capabilities are the union over **every** function its
+  modules define, exported or not, called or not
+  (`tests/link/caps_dep_unexported`), and what it reaches through another
+  dependency is its own: granting the package that dials refuses the one that
+  calls it (`caps_dep_transitive`). One error per package and capability,
+  spanned at the first call of the witness chain from the package's first
+  function, in source order, that reaches it (`caps_dep_order`; one refused and
+  one granted program per capability, `caps_dep_net_refused` …
+  `caps_dep_unsafe_granted`).
+- The standard library is never refused, and what decides is where a module
+  was resolved, not its package's name: a dependency that calls itself `nish`
+  is judged like any other (`caps_dep_std_not_refused`, `caps_dep_named_nish`).
+  The ungated capabilities need no grant (`caps_dep_ungated`).
+- A function argument counts where it is instantiated: the root's function
+  passed to a dependency's template makes the instantiation, which is the
+  dependency's, reach what that function reaches, so the dependency is
+  refused for it (`caps_dep_fnarg_callback`).
+- Only the root manifest grants: no flag does (`--allow net` leaves the
+  dependency refused, `caps_dep_cli_cannot_grant`), nor the dependency's own
+  manifest (`caps_dep_self_grant`), and a grant never widens the root's own
+  policy — a capability the root denies is refused by NL2459 whoever is
+  granted it (`caps_dep_root_deny_wins`).
+- `dependencies` is read as strictly as the rest of the field: a value that is
+  not an object, a package named twice, a grant that is not an array and an
+  entry that is not a string are NL3041 (`caps_dep_manifest_not_object`,
+  `_repeated`, `_not_array`, `_non_string`), a name that is no capability is
+  NL3033 (`caps_dep_manifest_unknown`) and one that is not gated NL3042
+  (`caps_dep_manifest_ungated`). `unsafe` may be granted, keys are decoded as
+  JSON, and a grant to a package the program does not load is no error
+  (`caps_dep_manifest_unsafe`, `_escaped_name`, `_unloaded`).
 
 ## Semantics decisions
 

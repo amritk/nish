@@ -1,0 +1,13 @@
+{
+  "name": "caps-dep-ffi-granted",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_c": [
+          "ffi"
+        ]
+      }
+    }
+  }
+}

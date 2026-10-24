@@ -19,7 +19,13 @@
 
 import { FactsTable, FunctionFacts } from "./attributes"
 import { CLI } from "./branding"
-import { CAPABILITY_COUNT, capabilityName, capabilityNames, isDeterministic } from "./capabilities"
+import {
+  CAPABILITY_COUNT,
+  capabilityIndex,
+  capabilityName,
+  capabilityNames,
+  isDeterministic,
+} from "./capabilities"
 import { Compilation, ModuleUnit } from "./compilation"
 import { StringMap } from "./map"
 import { ROOT_PACKAGE } from "./packages"
@@ -132,7 +138,9 @@ const pushNames = (out: string[], mask: i32): void => {
  * Every function the program defines, by symbol, with the report's path of
  * the module it is defined in: what a witness chain is followed through, since
  * a chain names its next hop by symbol. `moduleMasks` is each module's set,
- * the union over the functions defined in it, in `modules` order.
+ * the union over the functions defined in it, in `modules` order, and
+ * `moduleStarts` where its functions begin in `sigs`: a module's functions
+ * are pushed together, so they run to the next module's start.
  */
 export class FunctionIndex {
   bySymbol: StringMap
@@ -140,6 +148,7 @@ export class FunctionIndex {
   sigModules: i32[]
   paths: string[]
   moduleMasks: i32[]
+  moduleStarts: i32[]
 
   constructor() {
     this.bySymbol = new StringMap()
@@ -147,6 +156,7 @@ export class FunctionIndex {
     this.sigModules = []
     this.paths = []
     this.moduleMasks = []
+    this.moduleStarts = []
   }
 }
 
@@ -157,6 +167,7 @@ export const functionIndex = (compilation: Compilation, facts: FactsTable): Func
   for (const unit of compilation.modules) {
     const program = unit.checker.program
     let mask = 0
+    index.moduleStarts.push(index.sigs.length)
     for (const sig of program.functions) {
       if (sig.definedIn(program.source)) {
         mask = mask | capsOf(facts, sig)
@@ -236,6 +247,117 @@ export const witnessChain = (
     hopSig = nextSig
   }
   return chain
+}
+
+/**
+ * The capabilities a dependency reaches only when the root package grants
+ * them (docs/wp40-dependency-capabilities.md): the ones that step outside
+ * what the language checks or that reach another machine or program. Every
+ * other capability a dependency reaches without a word.
+ */
+export const gatedCapabilities = (): i32 =>
+  (1 << capabilityIndex("ffi")) |
+  (1 << capabilityIndex("net")) |
+  (1 << capabilityIndex("process.spawn")) |
+  (1 << capabilityIndex("unsafe"))
+
+/**
+ * The program's dependencies -- every package but the root and the standard
+ * library, asked by where a module was resolved (`isLibrary`) -- in name
+ * order. `packageOf` is each module's place in `names`, in `modules` order,
+ * or -1 for one of the root's or the library's. `masks` is each one's set
+ * once `dependencyMasks` has filled it in.
+ */
+export class DependencyReach {
+  names: string[]
+  masks: i32[]
+  packageOf: i32[]
+
+  constructor() {
+    this.names = []
+    this.masks = []
+    this.packageOf = []
+  }
+}
+
+/** The program's dependencies, with no set yet: read off the modules alone, so asking costs no analysis. */
+export const dependencyPackages = (compilation: Compilation): DependencyReach => {
+  const reach = new DependencyReach()
+  const ties: string[] = []
+  const order: i32[] = []
+  for (const unit of compilation.modules) {
+    if (
+      !isLibrary(compilation, unit) &&
+      unit.packageName !== ROOT_PACKAGE &&
+      reach.names.indexOf(unit.packageName) < 0
+    ) {
+      order.push(reach.names.length)
+      reach.names.push(unit.packageName)
+      reach.masks.push(0)
+      ties.push("")
+    }
+  }
+  sortTogether(reach.names, ties, order)
+  for (const unit of compilation.modules) {
+    reach.packageOf.push(isLibrary(compilation, unit) ? -1 : reach.names.indexOf(unit.packageName))
+  }
+  return reach
+}
+
+/**
+ * Each dependency's set: the union over every function its modules define,
+ * so what it reaches through the standard library or another dependency is
+ * its own.
+ */
+export const dependencyMasks = (reach: DependencyReach, index: FunctionIndex): void => {
+  let m = 0
+  while (m < reach.packageOf.length && m < index.moduleMasks.length) {
+    const p = reach.packageOf[m]
+    if (p >= 0 && p < reach.masks.length) {
+      reach.masks[p] = reach.masks[p] | index.moduleMasks[m]
+    }
+    m = m + 1
+  }
+}
+
+/**
+ * The witness chain of capability `c` from the first function of dependency
+ * `p`, in source order (its modules by path, each one's functions as
+ * declared), that reaches it: what a refusal of the dependency is spanned at
+ * and names. Empty when none does.
+ */
+export const dependencyWitness = (
+  index: FunctionIndex,
+  facts: FactsTable,
+  reach: DependencyReach,
+  p: i32,
+  c: i32
+): WitnessHop[] => {
+  const paths: string[] = []
+  const ties: string[] = []
+  const order: i32[] = []
+  let m = 0
+  while (m < reach.packageOf.length && m < index.paths.length) {
+    if (reach.packageOf[m] === p) {
+      paths.push(index.paths[m])
+      ties.push("")
+      order.push(m)
+    }
+    m = m + 1
+  }
+  sortTogether(paths, ties, order)
+  for (const at of order) {
+    let k = at < index.moduleStarts.length ? index.moduleStarts[at] : index.sigs.length
+    const end = at + 1 < index.moduleStarts.length ? index.moduleStarts[at + 1] : index.sigs.length
+    while (k < end && k < index.sigs.length) {
+      const chain = witnessChain(index, facts, index.sigs[k], c)
+      if (chain.length > 0 && chain[0].source !== null && chain[0].site !== null) {
+        return chain
+      }
+      k = k + 1
+    }
+  }
+  return []
 }
 
 /**

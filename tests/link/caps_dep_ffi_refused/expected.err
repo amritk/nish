@@ -1,0 +1,1 @@
+the dependency `pkg_c` reaches `ffi` through `magnitude`
