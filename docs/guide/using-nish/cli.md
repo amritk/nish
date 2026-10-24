@@ -74,8 +74,9 @@ Without `run`, `nish` compiles the entry file and every module it imports.
 likely to add to it:
 
 - **`--profile speed|size|debug|wasi`** — `speed` (the default) is `-O3` with
-  link-time optimisation and a stripped binary; `size` optimises for bytes;
-  `debug` links fastest and keeps symbols; `wasi` builds a `wasm32-wasi`
+  link-time optimisation (its code generation spread over every core when
+  the link goes through lld) and a stripped binary; `size` optimises for
+  bytes; `debug` links fastest and keeps symbols; `wasi` builds a `wasm32-wasi`
   module instead of a native binary.
 - **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64
   CPUs with AVX2 (Intel Haswell, AMD Excavator and later), which can make
@@ -96,6 +97,55 @@ likely to add to it:
 The sidecars that let C, Node and WebAssembly call your code —
 `--emit-header`, `--emit-napi`, `--emit-dts` — have a page of their own:
 [Calling Nish from other languages](interop.md).
+
+### SQLite is linked when your program calls it
+
+`nish` ships [SQLite](https://sqlite.org/) 3.54.1 as source, and `--link`
+compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
+any other `sqlite3_*`). You need no SQLite library on your system, and a
+program that does not call SQLite gets none of it.
+
+```ts nish:ok
+declare function sqlite3_libversion(): string;
+
+export const main = (): i32 => {
+  console.log(sqlite3_libversion());
+  return 0;
+};
+```
+
+```console
+$ nish run version.ts
+3.54.1
+```
+
+- **The first link that uses it is slower.** SQLite is about 9.6 MB of C. The
+  first link compiles it once, which takes about 1.5 s under `debug` (and
+  `nish run`) and about 18 s under `speed`. `nish` keeps the result in the
+  runtime cache, so every later link takes about as long as one without
+  SQLite.
+- **One thread, unless you build with `--threads`.** SQLite is compiled with
+  `SQLITE_THREADSAFE=0`, and with `=2` under `--threads`: multi-thread mode,
+  where no mutex guards a connection, so open one per thread and never share it.
+- **The defaults are most of SQLite's
+  [recommended options](https://sqlite.org/compile.html#recommended_compile_time_options).**
+  Two are left out. `SQLITE_OMIT_DECLTYPE` would remove
+  `sqlite3_column_decltype`, which reports a column's declared type.
+  `SQLITE_OMIT_AUTOINIT` would make any call before `sqlite3_initialize()`
+  undefined behaviour.
+- **`NISH_SQLITE_CFLAGS` adds compile-time options.** Its words are added to
+  SQLite's compile line, and a `-D` or `-U` for an option `nish` already sets
+  replaces it. For example, `NISH_SQLITE_CFLAGS="-DSQLITE_ENABLE_FTS5"` adds
+  full-text search. The cache keeps a separate copy for each value. Only the
+  first line is read, and it is split on whitespace: quotes are not removed,
+  so a word cannot hold a space. A relative `-I` path is taken from
+  `runtime/sqlite/`, where SQLite is compiled, so give an absolute one.
+- **`--profile napi` links it with hidden visibility.** The addon uses SQLite
+  but does not export its functions to Node or to other addons.
+- **`--profile wasi` links it.** There SQLite locks a database with lock
+  files and has no WAL mode across processes. `scripts/build.sh --profile
+  wasm`, which links no C library, refuses a module that calls SQLite with
+  exit 2.
 
 ## Writing TypeScript: `--emit-ts`
 
@@ -270,9 +320,16 @@ no escape codes. Diagnostics are never coloured. These variables change that:
 | `FORCE_COLOR` or `CLICOLOR_FORCE`, neither empty nor one of those | colour even when piped, unless an agent is running `nish` |
 | `CLICOLOR` set to one of those, or `TERM=dumb` | no colour, unless one of the two above forces it |
 
-The palette uses 256 colours when `TERM` names a 256-colour terminal,
-`COLORTERM` is set or `FORCE_COLOR` is `2` or `3`, and the 16 basic ones
-otherwise.
+The colours are your terminal's own: the basic ANSI colours, bold and faint,
+which your theme defines, so the help takes on whatever palette you chose (a
+terminal with no theme shows its built-in defaults). On a terminal whose
+`TERM` terminfo entry declares no colours at all (`tput colors` prints fewer
+than 8, as it does for `TERM=vt100`), the help marks headings and flags in
+bold and placeholders with an underline instead, which a monochrome terminal
+still shows. Forced colour (`FORCE_COLOR`, `CLICOLOR_FORCE`) is always the
+theme's, whatever `TERM` says, because what reads it is a pager or an editor
+that paints the escapes itself. Your own tools can print a help that behaves the same way with
+[`nish/cli`](standard-library.md#nishcli).
 
 **Coding agents get a plain help with an extra section.** When `nish` runs
 under an agent — `CLAUDECODE` or `GEMINI_CLI` is set to anything but empty

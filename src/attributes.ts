@@ -3842,12 +3842,18 @@ const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
  * the parameter's own slots, so the write reaches past them too: a caller that
  * hands it `this.k` writes what `this` reaches, which is what a scope's region
  * rule reads of a holder's `wipe()` called beside a task that borrows the key.
+ * That parameter write is the whole of it: the `llvm.memset` the instance
+ * calls stores only into the target's bytes, so `writesShared` does not count
+ * it again as a write elsewhere. A caller's wipe then composes as its argument
+ * does (`composeArguments`): a fresh array of its own stays private, and a
+ * parameter, a field or anything it does not know is written as before.
  */
 const markWipe = (facts: FunctionFacts): void => {
   facts.effect = EFFECT_WRITE
   facts.readsMemory = true
   facts.sharedWrite = true
   facts.callees.add(WIPE_MEMSET)
+  facts.writeVia = WIPE_MEMSET // the reason is the memset still, though `writesShared` skips it
   if (facts.pointerParams.length > 0) {
     const pp = facts.pointerParams[0]
     pp.writesThrough = true
@@ -4757,6 +4763,9 @@ const writesShared = (
   }
   if (callee === "nish_alloc_struct") {
     return false // the inline arena allocator; see `FunctionFacts.sharedWrite`
+  }
+  if (callee === WIPE_MEMSET) {
+    return false // only a `wipe` calls it, into its target's bytes; see `markWipe`
   }
   if ((callee === "nish_write" || callee === "nish_exit") && !f.writesOutput) {
     return false // only a panic's tail (`FunctionFacts.writesOutput`)
