@@ -16,5 +16,5 @@ function main(): i32 -> @nish_main [exported entry]
   callee +2:12 probe -> @probe
   local +10:11 xs: i32[] (const)
   local +14:11 buf: u8[] (const)
-  local +21:11 buf: u8[] (const)
-  local +22:9 n: i32 (let)
+  local +27:11 buf: u8[] (const)
+  local +28:9 n: i32 (let)

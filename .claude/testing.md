@@ -403,6 +403,11 @@ node tests/differential/goldens.js --fresh  # the frozen WP13 rewrites: hashes, 
 npm run test:cli                    # the CLI contract, through the Nish harness
 ```
 
+A filter is what a session runs before pushing: one for every section or
+program the change touches. The unfiltered suite is CI's four `test` shards,
+read per [`CLAUDE.md`](../CLAUDE.md#definition-of-done); run it locally only for
+a change to the suite itself or a fork PR.
+
 **A filtered run's count is a measurement only after `rm -rf build/test`.**
 `run.js` is one process and section A compiles the goldens before anything else
 reads them, so a later check can be handed an artifact it did not write itself.

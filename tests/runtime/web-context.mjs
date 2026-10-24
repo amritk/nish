@@ -51,18 +51,23 @@ async function instantiate(path) {
   return module.namespace;
 }
 
+const { NishExit } = await instantiate("../../runtime/browser.mjs");
+
 /** Run `f` and answer the `NishExit` it throws; anything else fails the check. */
 function exitOf(f) {
   try {
     f();
   } catch (e) {
-    assert.equal(e.name, "NishExit", `expected a NishExit, got ${e.stack}`);
+    assert.ok(e instanceof NishExit, `expected a NishExit, got ${e.stack}`);
     return e.code;
   }
   assert.fail("expected a NishExit, and nothing was thrown");
 }
 
-await instantiate("../../runtime/browser.mjs");
+// BROWSER-3: the class is exported, so a thrown object that only carries its
+// name is not taken for an exit.
+const impostor = Object.assign(new Error("not an exit"), { name: "NishExit", code: 0 });
+assert.equal(impostor instanceof NishExit, false);
 const core = await instantiate("../../runtime/core.mjs");
 assert.equal(vm.runInContext("typeof process + typeof Buffer + typeof require", context), "undefinedundefinedundefined");
 
@@ -98,4 +103,16 @@ core.write("partial");
 assert.deepEqual(lines, []);
 await Promise.resolve();
 assert.deepEqual(lines, [["out", "%s", "partial"]]);
+
+// BROWSER-1: a write with no newline appends to the pending line and splits
+// nothing, so 400,000 one-byte writes are one line, printed whole, in well
+// under a second. Splitting the whole pending line on every write took 29 s.
+lines.length = 0;
+const started = performance.now();
+for (let i = 0; i < 400000; i++) core.write("x");
+core.write("\n");
+const took = performance.now() - started;
+assert.equal(lines.length, 1);
+assert.equal(lines[0][2].length, 400000);
+assert.ok(took < 1000, `400,000 one-byte writes took ${Math.round(took)} ms`);
 console.log("web-context: ok");

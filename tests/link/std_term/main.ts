@@ -97,6 +97,18 @@ const kindName = (kind: i32): string => {
   return "unknown";
 };
 
+/** `ESC [`, `n` parameter bytes and then `last`. */
+const csiRun = (n: i32, last: i32[]): u8[] => {
+  const codes: i32[] = [27, 91];
+  for (let k = 0; k < n; k++) {
+    codes.push(48);
+  }
+  for (const c of last) {
+    codes.push(c);
+  }
+  return bytesOf(codes);
+};
+
 const events = (label: string, keys: KeyEvent[], d: KeyDecoder): void => {
   const parts: string[] = [];
   for (const k of keys) {
@@ -289,5 +301,16 @@ export const main = (): number => {
   events("C1 control, then U+00A0", d.feed(bytesOf([194, 155, 194, 160]), 4, toF64(2150)), d);
   events("overlong, surrogate, too high", d.feed(bytesOf([224, 128, 128, 237, 160, 128, 244, 144, 128, 128]), 10, toF64(2200)), d);
   events("four bytes", d.feed(bytesOf([240, 159, 152, 128]), 4, toF64(2200)), d);
+  // A parameter run of 32 is a key still; one longer gives the ESC up at once
+  // rather than holding, and copying on every feed, all that follows.
+  events("ESC [ 32 parameters A", d.feed(csiRun(32, [65]), 35, toF64(2300)), d);
+  const long = d.feed(csiRun(4000, []), 4002, toF64(2400));
+  console.log(`ESC [ and 4000 parameters: ${long.length} keys${long.length > 0 ? `, the first ${kindName(long[0].kind)}` : ""}${d.waiting() ? ", holding" : ""}`);
+
+  // --- a size no screen needs, as a terminal may report it -----------------
+  const huge = new Screen(65535, 65535, false);
+  const canvas = new Canvas(huge);
+  canvas.clear(rgb(0, 0, 255));
+  console.log(`a 65535 x 65535 screen is ${huge.width} x ${huge.height}, its canvas ${canvas.width} x ${canvas.height}, and flushes ${huge.flush().length > 0}`);
   return 0;
 };

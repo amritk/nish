@@ -119,7 +119,8 @@ const AMBIENT_NAMES: string =
   " spawn kill waitPid availableParallelism totalMemory monotonicNanos" +
   " statMtimeSync lstatOwnerModeSync geteuid isExecutableSync toI32 toI64" +
   " toF64 f64ToBits f32ToBits bitsToF64 ctSelect ctEq parseInt parseFloat secureZero" +
-  " Ok Err arena readStdin waitStdin isTerminal terminalSize setRawMode "
+  " Ok Err arena readStdin waitStdin isTerminal terminalSize setRawMode" +
+  " setTerminalRestore "
 
 /**
  * The width types `nish/runtime` declares (`runtime/core.d.ts`). Node's type

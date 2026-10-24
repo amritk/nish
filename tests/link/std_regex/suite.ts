@@ -44,6 +44,16 @@ const row = (t: Suite, pattern: string, flags: string, text: string, expected: s
   }
 }
 
+/** A pattern the engine refuses, named for its shape rather than its text. */
+const refuses = (t: Suite, name: string, pattern: string, expected: string): void => {
+  const c = regexCompile(pattern, "")
+  if (c.isErr()) {
+    t.eqStr(name, c.error, expected)
+  } else {
+    t.fail(name, "compiled")
+  }
+}
+
 /** `unit`, `n` times over. */
 const rep = (unit: string, n: i32): string => {
   const parts: string[] = []
@@ -381,6 +391,21 @@ export const runSuite = (): i32 => {
   t.eqI32("(a*)*b counts no matches", compile("(a*)*b", "").count(long), toI32(0))
   t.eqI32("a{1000} counts 20 matches", compile("a{1000}", "").count(long), toI32(20))
   t.eqStr("(a+)+ matches everything", compile("(a+)+", "").replace(long, "x"), "x")
+
+  // Compile-time bounds (docs/security/regex.md): each pattern here took
+  // seconds, quadratic time or hundreds of MiB to compile before its cap.
+  t.ok("an empty body repeated 1000^4 times compiles", compile("(?:(?:(?:(?:){1000}){1000}){1000}){1000}", "").test(""))
+  t.ok("a{0} repeated 1000^3 times compiles", compile("(?:(?:(?:a{0}){1000}){1000}){1000}", "").test("b"))
+  refuses(t, "a class of 10001 ranges", `[${rep("a", toI32(10001))}]`, "regex: a class has more than 10000 ranges at byte 0")
+  t.ok("a class of 10000 ranges compiles", regexCompile(`[${rep("a", toI32(10000))}]`, "").isOk())
+  refuses(t, "1025 groups", rep("()", toI32(1025)), "regex: too many groups at byte 2048")
+  t.ok("500 groups compile", regexCompile(rep("()", toI32(500)), "").isOk())
+  refuses(
+    t,
+    "a backtrack stack past the slot table",
+    `(?:(?:(?:(?:${rep("(){0}", toI32(1000))}){1000})*)*)*`,
+    "regex: too many groups for the pattern's size"
+  )
 
   return t.done()
 }
