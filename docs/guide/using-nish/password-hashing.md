@@ -188,8 +188,8 @@ end to end, and a verify of hashes with different costs runs each cost as its
 own group. A malformed hash in any given lane makes the whole verify an `Err`
 that names the lane, before anything is hashed.
 
-A task cannot call the batch yet: it makes its state as a `Secret` and wipes
-it, and the compiler does not yet count that as the task's own scratch
+A task may call the batch too: the `Secret` it makes its state in comes from
+an array the call made, so its wipe is the task's own scratch
 ([BCRYPT-9](../../security/crypto-bcrypt.md#findings)). On a server with
-spare cores, hash singly on tasks as above; on one core, or a server whose
-other cores are busy, batch the logins that arrive together.
+spare cores, hash singly on tasks as above, or give each task a batch of four;
+on one core, batch the logins that arrive together.

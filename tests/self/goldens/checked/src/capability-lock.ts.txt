@@ -243,8 +243,7 @@ function lockHexDigit(code: i32): i32 -> @lockHexDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function readCapabilityLock(text: string): CapabilityLock -> @readCapabilityLock [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
-  sharedWrite: via CapabilityLock.read
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=48
   escaping: text
   calls: CapabilityLock.constructor CapabilityLock.read nish_alloc_struct
   stackSites=0 stackLocals=0
@@ -252,8 +251,7 @@ function readCapabilityLock(text: string): CapabilityLock -> @readCapabilityLock
   callee +0:16 new CapabilityLock -> @CapabilityLock.constructor
   callee +1:3 CapabilityLock.read -> @CapabilityLock.read
 function capabilityLockText(names: string[], masks: i32[]): string -> @capabilityLockText [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via jsonQuote
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText capabilityNames jsonQuote nish_panic_overflow nish_str_concat
   pointer names: size=0 writesThrough=false captured=false
   pointer masks: size=0 writesThrough=true captured=false

@@ -341,8 +341,7 @@ function runIntMap(keys: i32[], n: i32, timing: boolean): string[] -> @runIntMap
   callee +65:41 sumIntMap -> @sumIntMap
   callee +66:3 lap -> @lap
 function fillStringMap(keys: string[], n: i32): StringMap -> @fillStringMap
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: via StringMap.set
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=40
   calls: StringMap.constructor StringMap.set nish_alloc_struct
   pointer keys: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0

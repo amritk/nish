@@ -332,8 +332,7 @@ function jsonMapCallees(emitter: Emitter): FunctionSig[] -> @jsonMapCallees
   callee +13:19 StructInfo.method -> @StructInfo.method
   local +18:11 ctor: FunctionSig | null (const)
 function jsonLibraryReach(emitter: Emitter, library: CheckedProgram): FunctionSig[] -> @jsonLibraryReach
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringSet.add
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get FunctionSig.definedIn StringSet.add StringSet.at StringSet.constructor StringSet.has StringSet.size jsonMapCallees libraryReach mapIntrinsicOf nish_array_grow
   pointer emitter: size=272 writesThrough=false captured=false passedTo=jsonMapCallees#0 libraryReach#0
   pointer library: size=656 writesThrough=false captured=false passedTo=libraryReach#1

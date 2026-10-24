@@ -48,7 +48,10 @@ how a program stores hashes or rate-limits guesses.
 A `std/threads` task may call `bcryptHash` and `bcryptVerify`: everything
 they wipe is an array the call made itself, which a task may wipe
 (`tests/link/thread_task_wipe`), and a task hashing a password its parent owns
-is `tests/link/thread_bcrypt_task`. It may not call the batch (BCRYPT-9).
+is `tests/link/thread_bcrypt_task`. It may call the batch too
+(`tests/link/thread_bcrypt_batch`, BCRYPT-9): the batch's state is a
+`Secret` made with `secret(...)` from an array the call made, which a task may
+wipe.
 
 ## Threat model
 
@@ -182,8 +185,8 @@ which the caller chose.
 Rows BCRYPT-1 to BCRYPT-5 are the decisions a reviewer might question, each
 following the reference; BCRYPT-6 and BCRYPT-7 are what a wipe and a
 constant-time compare cannot reach; BCRYPT-8 and BCRYPT-9 are the batch's.
-They are accepted or a limitation of the language, not flaws, and none is
-counted as fixed or open in the index.
+They are accepted, or a limitation of the language since lifted, not flaws,
+and none is counted as fixed or open in the index.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
@@ -195,7 +198,7 @@ counted as fixed or open in the index.
 | BCRYPT-6 | Low | `bcryptEncrypt` | Each Blowfish round loads four S-box words at indexes taken from the secret state, so the cache lines touched follow the password. | **Accepted.** It is the algorithm: every bcrypt does it, and the expensive key setup that is bcrypt's point is made of these loads. A local attacker sharing a cache with the hashing core could in principle learn about the state; a remote one times a cost-10 hash of ~50 ms, against which the loads' variance is noise. The key schedule (`bcryptSetKey`) does not branch on a password byte's value, but the copy's trip count follows the password's length (up to 72), and the cycle position `p` of the `key[p & 0x7f]` loads restarts at its first NUL (or at 72), so which of the 128-byte key array's two cache lines each load touches follows the length up to that NUL. A local attacker who can watch those lines learns the length (to within the line split), not a byte; C implementations walk a C string the same way. The base64 that encodes the digest (`bcryptCharOf`, `bcryptSextetOf`) is branchless, since the digest is the stored hash when the password is right, and the verify's compare is constant-time. |
 | BCRYPT-7 | Low | `bcryptExposed`, `bcryptKeyWord`, `bcryptLoadLane` | Values the generated code holds in registers, and any it spills to the stack, are not wiped; nor is the caller's own copy of the password before it became a `Secret`. | **Accepted.** No store from the language reaches a register or a spill slot (as AEAD-4 for the AES kernels). Every array holding key material is wiped; the `Secret` the caller passes is the caller's to wipe, and the checker makes it do so. The batch's 19 key words per lane each pass through `bcryptLoadLane`'s `word`, an unwiped `u32` local, on their way from `bcryptKeyWord`'s wiped array into the state: a register, or a spill slot if the code generator spills it, which no wipe reaches; the same reach as a round's working values. |
 | BCRYPT-8 | Low | `bcryptRun4` | A null lane, or a lane of another cost in a `bcryptVerify4` group, runs through the kernel with π and no key, and its digest is computed and dropped. | **Accepted.** Nothing secret is in it, its digest is wiped with the rest of the state's block and digests, and running it costs nothing a lane-count branch inside the kernel would save: the four chains run side by side either way. |
-| BCRYPT-9 | Low | `bcryptRun4` | The batch cannot run in a `std/threads` task: `tests/link/thread_bcrypt_batch_refused` is refused, "`hashFour` writes memory its caller can see through `bcryptHash4`". | **Open limitation, not a flaw.** `bcryptRun4` makes its state with `secret(new Array…)` and wipes it; the task rule counts that wipe as a shared write: [`threads.md`](../guide/using-nish/threads.md) and [`LANGUAGE.md`](../LANGUAGE.md) (NL2471) say a `wipe` of a `Secret` made with `secret(...)` is a write to memory the caller can see, since the rule does not follow a fresh array through `secret(…)`. The way round it costs more than it buys: a plain `u32[]` state would hold every lane's key schedule and S-boxes outside a `Secret` and outside `expose`, where the checker no longer makes each use go through `exposeWith` nor makes the function wipe it, and a zeroing loop in place of the wipe is a store `opt -O2` may drop. The language change it needs: a `Secret` made by `secret(e)` from a fresh allocation `e` that the function neither returns nor stores is the function's own scratch, as the fresh array is, so its `wipe` and its `exposeWith` writes are local writes. Until then, a server runs single hashes on tasks and batches on its own thread ([the guide](../guide/using-nish/password-hashing.md)). |
+| BCRYPT-9 | Low | `bcryptRun4`, `bcryptVerify4` | The batch could not run in a `std/threads` task: a task calling `bcryptHash4` was refused, "`hashFour` writes memory its caller can see through `bcryptHash4`". | **Closed: the language limitation is lifted.** A task may now wipe a `Secret` it made with `secret(...)` from a fresh value ([`secret.md`](secret.md), [`LANGUAGE.md`](../LANGUAGE.md) NL2471), and `bcryptVerify4` no longer counts as writing the caller's `hashes`: handing a `string` element to a call writes nothing, since a string has no slot a callee can store into. Before: `tests/link/thread_bcrypt_batch_refused`, refused. After: `tests/link/thread_bcrypt_batch` runs `bcryptHash4` and `bcryptVerify4` on two tasks under `NISH_NUM_THREADS` of 1, 2 and 8, and checks the hashes against `bcryptHash`. The analysis as it stood: `bcryptRun4` makes its state with `secret(new Array…)` and wipes it; the task rule counts that wipe as a shared write: [`threads.md`](../guide/using-nish/threads.md) and [`LANGUAGE.md`](../LANGUAGE.md) (NL2471) say a `wipe` of a `Secret` made with `secret(...)` is a write to memory the caller can see, since the rule does not follow a fresh array through `secret(…)`. The way round it costs more than it buys: a plain `u32[]` state would hold every lane's key schedule and S-boxes outside a `Secret` and outside `expose`, where the checker no longer makes each use go through `exposeWith` nor makes the function wipe it, and a zeroing loop in place of the wipe is a store `opt -O2` may drop. The language change it needs: a `Secret` made by `secret(e)` from a fresh allocation `e` that the function neither returns nor stores is the function's own scratch, as the fresh array is, so its `wipe` and its `exposeWith` writes are local writes. That is the change made. |
 
 ## Properties verified
 
@@ -297,8 +300,9 @@ volatile wipes reached from `bcryptKeyWord` (2), `bcryptEks4` (3),
 
 **Threads**: `link/thread_bcrypt_task: exits with 0 and stdout matches
 expected.out` hashes two passwords and verifies one on three tasks, natively
-and under `NISH_NUM_THREADS` of 1, 2 and 8; `link/thread_bcrypt_batch_refused`
-pins BCRYPT-9.
+and under `NISH_NUM_THREADS` of 1, 2 and 8; `link/thread_bcrypt_batch` runs
+the batch's hash and verify on two tasks at the same sizes, and its hashes
+match `bcryptHash`'s (BCRYPT-9).
 
 **wasm32**: the module has no I/O and no C; `crypto_bcrypt` and
 `crypto_bcrypt_batch` build and run under WASI with the rest of `std/crypto`

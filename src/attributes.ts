@@ -236,6 +236,14 @@ export class PointerParamFacts {
   align: i32
   /** Stores through the pointer, directly or via a callee (fixpoint). */
   writesThrough: boolean
+  /**
+   * `writesThrough`, less a `string` element handed to a call (`p[i]` as an
+   * argument), which `classifyElementUse` counts as a write for LLVM's sake
+   * though a string has no slot a callee can store into: what a caller's
+   * shared write asks of its callee (`writesArgument`), so a function that
+   * reads `hashes[k]` into a callee does not write the caller's `hashes`.
+   */
+  writesShared: boolean
   /** The pointer may outlive the call: returned, stored, aliased, or captured by a callee. */
   captured: boolean
   /**
@@ -279,6 +287,7 @@ export class PointerParamFacts {
     this.size = size
     this.align = align
     this.writesThrough = false
+    this.writesShared = false
     this.captured = false
     this.outlives = false
     this.writesReach = false
@@ -1910,6 +1919,7 @@ class FactCollector {
         pointer.captured = true
         pointer.outlives = true
         pointer.writesThrough = true // an alias may be written through later
+        pointer.writesShared = true
       }
       return
     }
@@ -1927,7 +1937,20 @@ class FactCollector {
     }
     if (found.kind === USE_WRITE && pointer !== null) {
       pointer.writesThrough = true
+      if (!this.handsStringElement(ref)) {
+        pointer.writesShared = true
+      }
     }
+  }
+
+  /** `ref` is indexed for a `string` handed straight to a call: `f(p[i])` (`PointerParamFacts.writesShared`). */
+  handsStringElement(ref: Node): boolean {
+    const access = this.unit.parents.parentOf(ref)
+    if (access === null || access.kind !== N_INDEX || access.children[0] !== ref) {
+      return false
+    }
+    const list = this.unit.parents.parentOf(access)
+    return list !== null && list.kind === N_LIST && this.unit.program.nodeTypes[access.id] === T_STRING
   }
 
   /**
@@ -2042,6 +2065,7 @@ class FactCollector {
       return
     }
     pointer.writesThrough = true
+    pointer.writesShared = true
     this.noteSharedWrite(node)
   }
 
@@ -2771,7 +2795,16 @@ class FactCollector {
     }
     const pointer = this.pointerParamOf(e)
     const name = pointer === null ? "" : pointer.name
-    this.facts.argEdges.push(this.ownEdge(new ArgEdge(callee.name, index, name, null, this.pathOf(e))))
+    // A number, a `boolean`, an enum or a string names no memory a store can
+    // reach, and a function given for a compile-time function parameter is no
+    // value at run time (WP29): a callee can neither write below it nor store
+    // into it, so it pollutes none of the caller's.
+    const type = this.unit.program.nodeTypes[e.id]
+    const path =
+      callee.isCompileTime(index) || type === T_STRING || isScalarArgument(this.table, type)
+        ? new MemPath(ROOT_NONE, "", "")
+        : this.pathOf(e)
+    this.facts.argEdges.push(this.ownEdge(new ArgEdge(callee.name, index, name, null, path)))
   }
 
   visit(node: Node): void {
@@ -3705,6 +3738,7 @@ const collectFacts = (
       if (isPointerParam(table, sig.paramTypes[p])) {
         if (isForeignBuffer(table, sig.paramTypes[p]) && !table.isReadonlyArray(sig.paramTypes[p])) {
           facts.pointerParams[at].writesThrough = true
+          facts.pointerParams[at].writesShared = true
         }
         at = at + 1
       }
@@ -3759,6 +3793,7 @@ const collectFacts = (
     const self = facts.pointerParam("this")
     if (self !== null) {
       self.writesThrough = true
+      self.writesShared = true
     }
   }
   // WP31 §9: the prologue that checks a host's arguments may take the panic
@@ -3862,6 +3897,7 @@ const markParallelEntry = (facts: FunctionFacts, runtime: string, joined: boolea
     pp.captured = true
     pp.outlives = pp.outlives || !joined
     pp.writesThrough = true
+    pp.writesShared = true
   }
 }
 
@@ -3944,6 +3980,7 @@ const markWipe = (facts: FunctionFacts): void => {
   if (facts.pointerParams.length > 0) {
     const pp = facts.pointerParams[0]
     pp.writesThrough = true
+    pp.writesShared = true
     pp.writesReach = true
     pp.writesDeep = true
   }
@@ -3988,6 +4025,7 @@ const markChannelSend = (facts: FunctionFacts): void => {
   facts.callees.add("nish_channel_send")
   if (facts.pointerParams.length > 0) {
     facts.pointerParams[0].writesThrough = true
+    facts.pointerParams[0].writesShared = true
   }
 }
 
@@ -4009,6 +4047,7 @@ const markAtomic = (facts: FunctionFacts): void => {
   facts.returnsScalar = true
   if (facts.pointerParams.length > 0) {
     facts.pointerParams[0].writesThrough = true
+    facts.pointerParams[0].writesShared = true
   }
 }
 
@@ -4607,18 +4646,24 @@ const propagate = (facts: FactsTable, runtime: RuntimeTable): void => {
         while (i < pp.passedToCallees.length) {
           const g = facts.get(pp.passedToCallees[i])
           let writes = true
+          let shared = true
           let captures = true
           let outlives = true
           if (g !== null) {
             const target = g.pointerParamAt(pp.passedToIndices[i])
             if (target !== null) {
               writes = target.writesThrough
+              shared = target.writesShared
               captures = target.captured
               outlives = target.outlives
             }
           }
           if (writes && !pp.writesThrough) {
             pp.writesThrough = true
+            changed = true
+          }
+          if (shared && !pp.writesShared) {
+            pp.writesShared = true
             changed = true
           }
           if (captures && !pp.captured) {
@@ -4895,7 +4940,7 @@ const writesArgument = (g: FunctionFacts | null, index: i32): boolean => {
     return true
   }
   const target = g.pointerParamAt(index)
-  return g.sharedWrite && target !== null && target.writesThrough
+  return g.sharedWrite && target !== null && target.writesShared
 }
 
 /** Whether `g` may keep an array it is handed as its parameter `index`. An unknown callee is assumed to. */
@@ -5180,7 +5225,8 @@ const PAST_ELSEWHERE: i32 = 2
 
 /**
  * The past write the call along `edge` makes its caller when the callee
- * writes below its parameters (`writesElsewhere` clear): none for an object
+ * writes below its parameters (`writesElsewhere` clear): none when not below
+ * the one it is handed (its `writesDeep`), none for an object
  * of the caller's own whose memory below it no parameter reaches, below the
  * caller's parameter for memory rooted at one, and anywhere otherwise. A
  * private array is taken as anywhere, as it was before the distinction.
@@ -5189,7 +5235,10 @@ const pastBelow = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): i32 => {
   const g = facts.get(edge.callee)
   // A table's receiver, taken whole (`wholeReaches`), is its `this`.
   const index = edge.index < 0 ? 0 : edge.index
-  if (g === null || !g.writesPastParams || g.writesElsewhere || g.pointerParamAt(index) === null) {
+  // Every write below a parameter marks it `writesDeep`, so a callee writes
+  // below the one it is handed only when that one is.
+  const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(index)
+  if (g === null || !g.writesPastParams || g.writesElsewhere || target === null || !target.writesDeep) {
     return PAST_NONE
   }
   if (edge.owner !== null) {
@@ -5315,6 +5364,11 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     if (past !== PAST_NONE && markPastWrite(f, past === PAST_ELSEWHERE)) {
       changed = true
     }
+    // Below the receiver is below the caller's parameter: `pastBelow` reads
+    // that parameter's `writesDeep`.
+    if (past === PAST_BELOW && callWrites(f, edge, true)) {
+      changed = true
+    }
   }
   for (const store of f.paramStores) {
     if (!valueClean(facts, f, store.value) && polluteName(f, store.name)) {
@@ -5384,6 +5438,10 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     }
     if (!pointer.writesThrough) {
       pointer.writesThrough = true
+      changed = true
+    }
+    if (!pointer.writesShared) {
+      pointer.writesShared = true
       changed = true
     }
   }

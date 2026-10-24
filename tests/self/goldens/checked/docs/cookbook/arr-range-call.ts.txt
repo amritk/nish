@@ -38,7 +38,7 @@ function Counts.fill(this: Counts): void -> @Counts.fill [method]
   callee +2:7 Counts.bump -> @Counts.bump
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via Counts.fill
+  sharedWrite: via nish_print
   calls: Counts.constructor Counts.fill nish_arena_mark nish_arena_release nish_print nish_str_from_i32
   stackSites=1 stackLocals=1
   local +0:9 c: Counts (const)

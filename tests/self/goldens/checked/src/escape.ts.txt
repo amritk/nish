@@ -1273,7 +1273,7 @@ function isArenaUsing(program: CheckedProgram, stmt: Node): boolean -> @isArenaU
   callee +1:30 unwrapParens -> @unwrapParens
 function decideArenaBlock(unit: AnalysisUnit, table: TypeTable, facts: FactsTable, sig: FunctionSig, f: FunctionFacts, block: Node, from: i32): LoopScope -> @decideArenaBlock
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: via PassWalk.visit
+  sharedWrite: +0:7
   escaping: from
   calls: LoopScope.constructor PassWalk.constructor PassWalk.refuse PassWalk.refuseCarriedStores PassWalk.visit TypeTable.resultByValue initialisesUsing isArenaCall nish_alloc_struct nish_array_grow nish_panic_index unwrapParens
   pointer unit: size=16 writesThrough=true captured=true passedTo=PassWalk.constructor#1 initialisesUsing#0
@@ -1283,24 +1283,24 @@ function decideArenaBlock(unit: AnalysisUnit, table: TypeTable, facts: FactsTabl
   pointer f: size=408 writesThrough=false captured=false passedTo=PassWalk.refuseCarriedStores#1
   pointer block: size=40 writesThrough=true captured=true passedTo=LoopScope.constructor#1 LoopScope.constructor#2
   stackSites=1 stackLocals=1
-  local +0:9 scope: LoopScope (const)
-  callee +0:17 new LoopScope -> @LoopScope.constructor
-  local +1:9 walk: PassWalk (const)
-  callee +1:16 new PassWalk -> @PassWalk.constructor
-  callee +3:25 TypeTable.resultByValue -> @TypeTable.resultByValue
-  local +7:9 decls: Node[] (const)
-  local +8:7 last: i32 (let)
-  local +9:7 d: i32 (let)
-  callee +11:9 isArenaCall -> @isArenaCall
-  callee +11:35 unwrapParens -> @unwrapParens
-  local +18:11 local: Local | null (const)
-  local +24:7 i: i32 (let)
-  callee +26:5 PassWalk.visit -> @PassWalk.visit
-  local +29:9 start: i32 (const)
-  local +30:14 node: Node (const)
-  callee +31:58 initialisesUsing -> @initialisesUsing
-  callee +32:7 PassWalk.refuse -> @PassWalk.refuse
-  callee +35:3 PassWalk.refuseCarriedStores -> @PassWalk.refuseCarriedStores
+  local -20:9 scope: LoopScope (const)
+  callee -20:17 new LoopScope -> @LoopScope.constructor
+  local -19:9 walk: PassWalk (const)
+  callee -19:16 new PassWalk -> @PassWalk.constructor
+  callee -17:25 TypeTable.resultByValue -> @TypeTable.resultByValue
+  local -13:9 decls: Node[] (const)
+  local -12:7 last: i32 (let)
+  local -11:7 d: i32 (let)
+  callee -9:9 isArenaCall -> @isArenaCall
+  callee -9:35 unwrapParens -> @unwrapParens
+  local -2:11 local: Local | null (const)
+  local +4:7 i: i32 (let)
+  callee +6:5 PassWalk.visit -> @PassWalk.visit
+  local +9:9 start: i32 (const)
+  local +10:14 node: Node (const)
+  callee +11:58 initialisesUsing -> @initialisesUsing
+  callee +12:7 PassWalk.refuse -> @PassWalk.refuse
+  callee +15:3 PassWalk.refuseCarriedStores -> @PassWalk.refuseCarriedStores
 function initialisesUsing(unit: AnalysisUnit, node: Node): boolean -> @initialisesUsing
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: node

@@ -38,8 +38,7 @@ function Assigned.constructor(this: Assigned, isTerminated: boolean): void -> @A
   stackSites=0 stackLocals=0
   callee +0:19 new StringSet -> @StringSet.constructor
 function Assigned.copy(this: Assigned): Assigned -> @Assigned.copy [method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
-  sharedWrite: via StringSet.add
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: Assigned.constructor StringSet.add StringSet.at StringSet.size nish_alloc_struct
   pointer this: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0

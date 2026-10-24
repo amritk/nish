@@ -122,7 +122,7 @@ struct Operands (class) size=40 align=8 exported
   method at -> @Operands.at
 function Walk.constructor(this: Walk, program: CheckedProgram, table: TypeTable, source: SourceFile, nodeCount: i32): void -> @Walk.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via StringSet.add
+  sharedWrite: via Walk.stub
   escaping: nodeCount program source table
   calls: FunctionSig.definedIn StringMap.get StringSet.add StringSet.constructor StringSet.has Walk.stub nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
   pointer this: size=200 writesThrough=true captured=false passedTo=Walk.stub#0 Walk.stub#0 Walk.stub#0 Walk.stub#0 Walk.stub#0

@@ -3216,9 +3216,12 @@ from the whole-program facts, and each rule is reported there:
   `console.error` and `process.exit` as much as `console.log`
   (`reject_par_console_error`, `reject_par_process_exit`). Reading a shared
   `Map` or `Set` that an element reaches, with `get`, `has` or `size`, is a
-  read (`tests/link/par_map_table_reads`). The instance performs every store
-  itself, into slots the partitioner has made disjoint, so a function that
-  writes nothing cannot race.
+  read (`tests/link/par_map_table_reads`). Handing a helper a number, a
+  `boolean`, an enum or a `string` — a `string` element of the caller's array
+  included, `verify(hashes[k])` — gives it no slot to store into, so it is a
+  read (`tests/link/thread_bcrypt_batch`, whose task verifies against the
+  parent's hashes). The instance performs every store itself, into slots the
+  partitioner has made disjoint, so a function that writes nothing cannot race.
 - **A store into an array only this call reaches is not a shared write.** A
   `const` the function binds to its own array literal or `new Array(n)` —
   one whose elements are not stored inline — is *private* while every use of

@@ -118,8 +118,7 @@ function structText(table: TypeTable, info: StructInfo, out: string[]): void -> 
   local +30:7 i: i32 (let)
   callee +32:26 StringMap.keyAt -> @StringMap.keyAt
 function constantSyntax(info: ConstInfo): string -> @constantSyntax
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via jsonQuote
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: jsonQuote nish_str_from_f64 nish_str_from_i64
   pointer info: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0

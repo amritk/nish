@@ -256,8 +256,7 @@ function manifestNish(manifest: string, condition: string): NishManifest -> @man
   callee +50:16 manifestNishProblem -> @manifestNishProblem
   callee +56:14 manifestNishProblem -> @manifestNishProblem
 function manifestNoPanic(manifest: string, at: i32): ManifestList -> @manifestNoPanic [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
-  sharedWrite: via manifestReadList
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
   escaping: at manifest
   calls: ManifestList.constructor manifestReadList nish_alloc_struct
   stackSites=0 stackLocals=0
