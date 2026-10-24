@@ -278,6 +278,9 @@ const logicSteps = (fps: i32): i32 => {
   return steps
 }
 
+/** `n` milliseconds, or any whole number, as an `f64`. */
+const ms = (n: i32): f64 => toF64(n)
+
 /** A controller with `opts`, run over a fresh link for `ms` milliseconds. */
 const trace = (opts: RateOptions, link: Link, scene: Scene, ms: i32): Record => {
   const c = new RateController(opts)
@@ -325,9 +328,9 @@ export const main = (): i32 => {
   t.ok("ssh: every answer within 150 ms", ssh.maxWaitMs < 150.0)
 
   // Trace 3: a link that degrades and recovers. Five seconds local, then ten at
-  // a 60 ms round trip, then local again. The rate falls within a second and
-  // a half, a step and then a settle later the rest of the way, and climbs
-  // back a tier at a time, three seconds apiece.
+  // a 60 ms round trip, then local again. The rate falls to 10 within about
+  // half a second, in one step since the round trip alone sets the tier, and
+  // climbs back a tier at a time, three seconds apiece.
   const swing = new RateController(new RateOptions())
   const swingLink = new Link(1.0, 50000000.0)
   const swingScene = new Scene(20000, 2000000.0)
@@ -340,12 +343,11 @@ export const main = (): i32 => {
   show("swing", sw)
   t.eqLines("swing: the decisions", sw.lines, [
     "3002ms 60fps /1 full",
-    "5579ms 15fps /1 full",
-    "6579ms 10fps /1 full",
-    "18369ms 15fps /1 full",
-    "21370ms 20fps /1 full",
-    "24371ms 30fps /1 full",
-    "27372ms 60fps /1 full",
+    "5513ms 10fps /1 full",
+    "18303ms 15fps /1 full",
+    "21304ms 20fps /1 full",
+    "24305ms 30fps /1 full",
+    "27306ms 60fps /1 full",
   ])
   t.ok("swing: at most one change a second", leastGap(sw) >= 1000.0)
   t.eqBool("swing: no change undone within three seconds", flipped(sw, 3000.0), false)
@@ -371,7 +373,8 @@ export const main = (): i32 => {
   t.ok("starved: the backend is capped before a rate below the floor", slower < 0 || capIndex < slower)
   t.ok("starved: two frames in flight at most", starved.maxUnacked <= 2)
 
-  // The same link preferring detail: every tier down to 5 first, then detail.
+  // The same link preferring detail: every tier down to 5 first, then detail. At 5 a
+  // second the half blocks leave room for the full backend again, which comes back.
   const detailOpts = new RateOptions()
   detailOpts.maxUnacked = 2
   detailOpts.prefer = DETAIL_FIRST
@@ -382,6 +385,7 @@ export const main = (): i32 => {
     "2760ms 5fps /2 full",
     "3760ms 5fps /4 full",
     "4760ms 5fps /4 half",
+    "10764ms 5fps /4 full",
   ])
 
   const none: string[] = []
@@ -419,13 +423,13 @@ export const main = (): i32 => {
     "2760ms 10fps /2 full",
     "3760ms 10fps /4 full",
     "4760ms 10fps /4 half",
-    "13036ms 10fps /4 full",
-    "16037ms 10fps /2 full",
-    "19038ms 10fps /1 full",
-    "22039ms 15fps /1 full",
-    "25040ms 20fps /1 full",
-    "28041ms 30fps /1 full",
-    "31042ms 60fps /1 full",
+    "13236ms 10fps /4 full",
+    "16237ms 10fps /2 full",
+    "19238ms 10fps /1 full",
+    "22239ms 15fps /1 full",
+    "25240ms 20fps /1 full",
+    "28241ms 30fps /1 full",
+    "31242ms 60fps /1 full",
   ])
   // An answer lands on the millisecond after the 1.8 ms its frame takes, so the round trip reads 2. With one frame of
   // one size in flight the latency and the bytes cannot be told apart, so the split is anyone's; their sum is right.
@@ -470,9 +474,10 @@ export const main = (): i32 => {
   const mute = new RateController(new RateOptions())
   const mr = new Record(mute.decision())
   run(mute, muteLink, new Scene(20000, 2000000.0), 0, 7000, mr)
-  // A frame at 0, 2001, 4002 and 6003 ms: each waits out the two-second timeout.
-  t.eqI32("mute: frames given up", mute.stats().lost, 3)
-  t.eqI32("mute: frames drawn", mr.frames, 4)
+  // A frame at 0 ms, given up at 2001; its answer might still come, so nothing is drawn until a second timeout
+  // passes at 4002, when the next frame goes, to be given up at 6003.
+  t.eqI32("mute: frames given up", mute.stats().lost, 2)
+  t.eqI32("mute: frames drawn", mr.frames, 2)
   t.eqLines("mute: no decision without an answer", mr.lines, none)
 
   // A 25 ms link at a fixed 60 fps with two frames allowed in flight: every
@@ -494,6 +499,7 @@ export const main = (): i32 => {
   const at10: i32 = logicSteps(10)
   t.ok("fixed step: logic steps at 60 fps drawing", at60 >= 59 && at60 <= 60)
   t.ok("fixed step: logic steps at 10 fps drawing", at10 >= 59 && at10 <= 60)
+  t.eqI32("fixed step: the same steps at either rate", at60, at10)
 
   // The overlay in each corner of a 40 by 6 screen.
   const stats = new TermStats()
@@ -558,6 +564,137 @@ export const main = (): i32 => {
   t.eqI32("options: unacknowledged limit clamped", tame.maxUnacked, 2)
   t.eqI32("options: unknown preference", tame.prefer, RATE_FIRST)
   t.eqI32("options: floor rounds up to a tier", tame.floorFps, 15)
+
+  // The ssh link with two frames allowed in flight carries twice the frames a round trip, so it holds 10 at full detail,
+  // not 5. Each frame is sent before the answer ahead of it but reaches the link after, so the link's time on it is
+  // its bytes', not the gap between the answers.
+  const ssh2Opts = new RateOptions()
+  ssh2Opts.remoteHint = true
+  ssh2Opts.probeRttMs = 100.0
+  ssh2Opts.maxUnacked = 2
+  const ssh2 = trace(ssh2Opts, new Link(100.0, 125000.0), new Scene(2000, 1000000.0), 30000)
+  show("ssh 2", ssh2)
+  t.eqLines("ssh 2: the decisions", ssh2.lines, ["1000ms 10fps /1 full"])
+  t.ok("ssh 2: two frames in flight at most", ssh2.maxUnacked <= 2)
+
+  // A link so starved that even half blocks overrun it at the floor takes the last step, 256 colours.
+  const paletteRun = trace(starvedOpts, new Link(10.0, 4000.0), new Scene(40000, 4000000.0), 30000)
+  show("palette", paletteRun)
+  t.eqLines("palette: the decisions", paletteRun.lines, [
+    "10510ms 10fps /1 full",
+    "11510ms 10fps /2 full",
+    "12510ms 10fps /4 full",
+    "13510ms 10fps /4 half",
+    "14510ms 10fps /4 half 256",
+    "15510ms 5fps /4 half 256",
+  ])
+
+  const costNs: f64 = toF64(1000000)
+  const zero: f64 = 0.0
+  const nan: f64 = zero / zero
+  const inf: f64 = ms(1) / zero
+  // Answers read in a burst: a 5 ms link at 100 kB/s, 1000-byte frames at a fixed 60 with two in flight, and the
+  // answers read only every 25 ms, so two often arrive in the same millisecond. The second took no time of its own;
+  // averaged as a rate it would read as 2 MB/s, and lift the average far over the link.
+  const burstOpts = new RateOptions()
+  burstOpts.fixedFps = 60
+  burstOpts.maxUnacked = 2
+  const burst = new RateController(burstOpts)
+  const burstLink = new Link(5.0, 100000.0)
+  let burstT: i32 = 0
+  while (burstT < 5000) {
+    const now: f64 = ms(burstT)
+    if (burstT % 25 === 0) {
+      while (burstLink.answered(now)) {
+        burst.ackReceived(now)
+      }
+    }
+    burst.tick(now)
+    if (burst.mayDraw(now)) {
+      burst.frameSent(1000, costNs, now)
+      burstLink.send(1000, now)
+    }
+    burstT = burstT + 1
+  }
+  const burstRate: f64 = burst.stats().bytesPerSec
+  t.ok("burst: the bandwidth reads near the link's 100 kB/s", burstRate > 50000.0 && burstRate < 200000.0)
+
+  // A late answer for a frame given up on: nothing is drawn until it comes, and it is not taken for the next frame's.
+  const late = new RateController(new RateOptions())
+  const zeroMs: f64 = 0.0
+  t.eqBool("late: the first frame", late.mayDraw(zeroMs), true)
+  late.frameSent(1000, costNs, zeroMs)
+  let lateT: i32 = 1
+  let heldDraws: i32 = 0
+  while (lateT < 2600) {
+    const now: f64 = toF64(lateT)
+    late.tick(now)
+    if (late.mayDraw(now)) {
+      heldDraws = heldDraws + 1
+    }
+    lateT = lateT + 1
+  }
+  t.eqI32("late: given up", late.stats().lost, 1)
+  t.eqI32("late: nothing drawn while its answer may come", heldDraws, 0)
+  const lateAckMs: f64 = 2600.0
+  late.ackReceived(lateAckMs)
+  late.tick(lateAckMs)
+  t.eqF64("late: its answer measures no round trip", late.stats().rttMs, zeroMs)
+  let nextMs: f64 = -1.0
+  while (lateT < 3000 && nextMs < 0.0) {
+    const now: f64 = toF64(lateT)
+    if (late.mayDraw(now)) {
+      nextMs = now
+    }
+    lateT = lateT + 1
+  }
+  t.ok("late: drawing resumes after the answer", nextMs > 0.0)
+  late.frameSent(1000, costNs, nextMs)
+  late.ackReceived(nextMs + ms(20))
+  late.tick(nextMs + ms(20))
+  t.ok("late: the next answer is the next frame's", late.stats().rttMs > 19.9 && late.stats().rttMs < 20.1)
+
+  // Times, costs and sizes that are not finite numbers, or are negative, measure nothing.
+  const bad = new RateController(new RateOptions())
+  t.eqBool("bad input: no frame at a NaN time", bad.mayDraw(nan), false)
+  bad.frameSent(1000, costNs, nan)
+  t.eqI32("bad input: a frame sent at a NaN time is ignored", bad.unacked(), 0)
+  bad.frameSent(1000, nan, zero)
+  bad.frameSent(-5, -costNs, ms(1))
+  t.eqI32("bad input: frames with a bad cost or size are sent", bad.unacked(), 2)
+  bad.ackReceived(inf)
+  bad.ackReceived(zero + ms(1) / ms(2))
+  bad.tick(nan)
+  t.eqI32("bad input: both answered", bad.unacked(), 0)
+  t.eqF64("bad input: no cost measured", bad.stats().frameCostMs, zero)
+  t.eqF64("bad input: an answer before its send is a round trip of 0", bad.stats().rttMs, zero)
+  t.eqF64("bad input: no bandwidth measured", bad.stats().bytesPerSec, zero)
+  bad.frameSent(1000, costNs * ms(2), ms(10))
+  bad.ackReceived(ms(20))
+  bad.frameSent(4000, costNs * ms(2), ms(30))
+  bad.ackReceived(ms(45))
+  bad.tick(ms(45))
+  const goodRate: f64 = bad.stats().bytesPerSec
+  t.ok("bad input: good frames after them measure", goodRate > 0.0 && goodRate - goodRate === 0.0)
+  t.ok("bad input: the cost is the good frames'", bad.stats().frameCostMs > 1.99 && bad.stats().frameCostMs < 2.01)
+  // An empty frame says nothing about bandwidth.
+  bad.frameSent(0, costNs * ms(2), ms(50))
+  bad.ackReceived(ms(60))
+  bad.tick(ms(60))
+  t.eqF64("empty frame: the bandwidth stands", bad.stats().bytesPerSec, goodRate)
+
+  // Stats past what an i32 holds, or NaN, show clamped in the overlay rather than wrapped.
+  const wildStats = new TermStats()
+  wildStats.tier = 30
+  wildStats.rttMs = nan
+  wildStats.bytesPerSec = 1.0e300
+  wildStats.frameCostMs = -inf
+  wildStats.backend = BACKEND_CAP_KITTY
+  const wildRows: string[] = overlay(40, 2, CORNER_TOP_LEFT, wildStats)
+  t.eqLines("overlay: NaN and huge stats clamped", wildRows, [
+    "30fps 0ms 1000000000kB/s                ",
+    "0ms drop 0 full                         ",
+  ])
 
   return t.done()
 }

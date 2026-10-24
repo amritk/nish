@@ -39,13 +39,14 @@
  * **What is measured.** Four running averages (exponentially weighted, so
  * recent frames count most and none is stored): the round trip from a frame's
  * send to its acknowledgement (weight 1/8, as TCP smooths its round trip, so
- * one late answer moves it little); the bytes a second the link delivered, each
- * acknowledged frame's bytes over the time the link spent on it (weight 1/4);
- * the cost to build a frame and the bytes in one (weight 1/4 each, so a change
- * of scene shows within a few frames). The link's time on a frame starts at the
- * previous acknowledgement when the frame was sent before it (the link was busy
- * until then), and otherwise at the send plus the base latency, which an idle
- * link spends on every frame and which says nothing about bandwidth. The base
+ * one late answer moves it little); the bytes a second the link delivered, the
+ * smoothed bytes of an acknowledged frame over the smoothed time the link spent
+ * on it (weight 1/4 each, averaged apart so that answers arriving in a burst,
+ * each taking almost no time, do not read as unbounded bandwidth); the cost to build a frame and the bytes in one (weight 1/4 each, so a change
+ * of scene shows within a few frames). The link's time on a frame starts at the send
+ * plus the base latency, which an idle link spends on every frame and which
+ * says nothing about bandwidth, or at the previous acknowledgement when the
+ * frame was sent before it and that came later (the link was busy until then). The base
  * latency is the least, over answers to frames sent onto an idle link, of the
  * round trip less the frame's bytes at the measured bandwidth; it creeps up
  * 1/256 of the gap per answer so a changed route shows in time. Before the
@@ -60,7 +61,11 @@
  * unacknowledged limit is reached is dropped and counted; one not answered
  * within `rateAckTimeoutMs` plus four round trips is given up and counted as
  * lost, so a lost answer
- * stalls drawing for seconds, not for ever.
+ * stalls drawing for seconds, not for ever. Its answer may still come late, and
+ * would otherwise be matched to the next frame, so after a give-up no frame is
+ * drawn until as many answers have arrived, or one more timeout has passed
+ * without them. A time, cost or size that is not a finite number, or is
+ * negative, is not measured, and an empty frame says nothing about bandwidth.
  *
  * **What is decided.** The frame rate is a tier: 120 (only with `allow120` and
  * a `maxFps` of 120), 60, 30, 20, 15, 10 or 5. A tier fits when three loads
@@ -179,6 +184,9 @@ const rateLevelScale = (from: i32, to: i32): f64 => {
   }
   return scale
 }
+
+/** Whether `x` is a number, not NaN or an infinity. */
+const rateFinite = (x: f64): boolean => x - x === 0.0
 
 /** `average` moved toward `sample` by `weight`, or `sample` itself for the first one. */
 const rateSmooth = (average: f64, sample: f64, weight: f64, first: boolean): f64 =>
@@ -301,8 +309,14 @@ export class RateController {
   baseRttMs: f64
   /** The bytes of the first answered frame while `haveRate` waits, to take its latency once the bandwidth is known. */
   heldBytes: f64
-  /** The smoothed bytes a second delivered. */
+  /** The smoothed bytes of an answered frame, for the bandwidth. */
+  ackBytes: f64
+  /** The smoothed time the link spent on an answered frame, in milliseconds, for the bandwidth. */
+  ackBusyMs: f64
+  /** The bytes a second delivered: `ackBytes` over `ackBusyMs`. */
   bytesPerSec: f64
+  /** When frames were last given up on, while `stale` waits for their late answers. */
+  staleSinceMs: f64
   /** The smoothed frame cost, in milliseconds. */
   costMs: f64
   /** The smoothed bytes per frame. */
@@ -325,6 +339,8 @@ export class RateController {
   head: i32
   dropped: i32
   lost: i32
+  /** Frames given up on whose answers may still come: the next answers are theirs, and no frame is drawn meanwhile. */
+  stale: i32
   /** Whether a frame has been asked for, so the pacer's clock runs. */
   paced: boolean
   /** Whether a round trip, from the probe or an answer, is known. */
@@ -386,7 +402,11 @@ export class RateController {
     this.haveAck = false
     this.haveRate = false
     this.heldBytes = 0.0
+    this.ackBytes = 0.0
+    this.ackBusyMs = 0.0
     this.bytesPerSec = 0.0
+    this.stale = 0
+    this.staleSinceMs = 0.0
     this.costMs = 0.0
     this.frameBytes = 0.0
     this.haveFrame = false
@@ -406,9 +426,14 @@ export class RateController {
    * Whether a frame may be drawn at `nowMs`: one is due at the tier's pace and
    * fewer than `maxUnacked` frames await their acknowledgement. The first call
    * starts the pace and answers a frame at once. A due frame refused for the
-   * limit is counted as dropped, and the next waits for the next step.
+   * limit, or while the answers to frames given up on may still come, is
+   * counted as dropped, and the next waits for the next step. A time that is
+   * not a finite number is refused.
    */
   mayDraw(nowMs: f64): boolean {
+    if (!rateFinite(nowMs)) {
+      return false
+    }
     let due: boolean = true
     if (this.paced) {
       due = this.pacer.advance(nowMs) > 0
@@ -419,15 +444,24 @@ export class RateController {
     if (!due) {
       return false
     }
-    if (this.unacked() >= this.maxUnacked) {
+    if (this.unacked() >= this.maxUnacked || this.stale > 0) {
       this.dropped = this.dropped + 1
       return false
     }
     return true
   }
 
-  /** A frame of `bytes` bytes, which took `costNs` nanoseconds to build, was sent at `nowMs`. */
+  /**
+   * A frame of `bytes` bytes, which took `costNs` nanoseconds to build, was
+   * sent at `nowMs`. A call whose time is not a finite number is ignored; a
+   * cost that is not a finite number or is negative is not measured, and
+   * negative bytes count as none.
+   */
   frameSent(bytes: i32, costNs: f64, nowMs: f64): void {
+    if (!rateFinite(nowMs)) {
+      return
+    }
+    const size: i32 = bytes > 0 ? bytes : 0
     const length: i32 = toI32(this.sentMs.length)
     if (this.head > 0 && this.head * 2 >= length) {
       // Drop the answered prefix once it is half the queue: a link always a frame behind never empties it.
@@ -442,26 +476,38 @@ export class RateController {
       this.head = 0
     }
     this.sentMs.push(nowMs)
-    this.sentBytes.push(bytes)
-    const first: boolean = !this.haveFrame
-    this.costMs = rateSmooth(this.costMs, costNs / 1000000.0, 0.25, first)
-    this.frameBytes = rateSmooth(this.frameBytes, toF64(bytes), 0.25, first)
-    this.haveFrame = true
+    this.sentBytes.push(size)
+    if (rateFinite(costNs) && costNs >= 0.0) {
+      const first: boolean = !this.haveFrame
+      this.costMs = rateSmooth(this.costMs, costNs / 1000000.0, 0.25, first)
+      this.frameBytes = rateSmooth(this.frameBytes, toF64(size), 0.25, first)
+      this.haveFrame = true
+    }
   }
 
   /**
    * An acknowledgement arrived at `nowMs`; it answers the oldest frame not yet
-   * answered. One with no frame waiting (a stray answer, or one for a frame
-   * already given up on) is ignored.
+   * answered. While frames given up on may still be answered, it is theirs,
+   * since the terminal answers in order. One with no frame waiting (a stray
+   * answer) is ignored, and one whose time is not a finite number answers its
+   * frame and measures nothing.
    */
   ackReceived(nowMs: f64): void {
+    if (this.stale > 0) {
+      this.stale = this.stale - 1
+      return
+    }
     if (this.unacked() === 0) {
       return
     }
     const sent: f64 = this.sentMs[this.head]
     const bytes: f64 = toF64(this.sentBytes[this.head])
     this.head = this.head + 1
-    const rtt: f64 = nowMs - sent
+    if (!rateFinite(nowMs)) {
+      return
+    }
+    // A clock that stepped back would make the round trip negative.
+    const rtt: f64 = nowMs > sent ? nowMs - sent : 0.0
     const firstRtt: boolean = !this.haveRtt
     if (firstRtt) {
       this.baseRttMs = rtt
@@ -483,9 +529,20 @@ export class RateController {
       this.heldBytes = bytes
       return
     }
-    const busy: f64 = queued ? nowMs - previous : rtt - this.baseRttMs
-    const rate: f64 = (bytes * 1000.0) / (busy > rateMinBusyMs ? busy : rateMinBusyMs)
-    this.bytesPerSec = rateSmooth(this.bytesPerSec, rate, 0.25, !this.haveRate)
+    if (bytes <= 0.0) {
+      // An empty frame says nothing about bandwidth, and would read as none.
+      return
+    }
+    // Bytes and time are smoothed apart, not their ratio: answers that arrive in a burst
+    // spent almost no time each, and averaging their rates would read as unbounded bandwidth.
+    // The link took the frame up once the latency had passed, or once the answer ahead of it came if that was later:
+    // a frame sent after the one ahead of it but before its answer did not wait the whole gap between the answers.
+    const reached: f64 = sent + this.baseRttMs
+    const took: f64 = nowMs - (queued && previous > reached ? previous : reached)
+    const busy: f64 = took > rateMinBusyMs ? took : rateMinBusyMs
+    this.ackBytes = rateSmooth(this.ackBytes, bytes, 0.25, !this.haveRate)
+    this.ackBusyMs = rateSmooth(this.ackBusyMs, busy, 0.25, !this.haveRate)
+    this.bytesPerSec = (this.ackBytes * 1000.0) / this.ackBusyMs
     if (!this.haveRate && this.heldBytes > 0.0) {
       // The first answer's round trip was taken whole as the latency; now its bytes' time comes off.
       const held: f64 = this.baseRttMs - (this.heldBytes * 1000.0) / this.bytesPerSec
@@ -612,9 +669,20 @@ export class RateController {
    * acknowledgement, nor at a fixed rate.
    */
   tick(nowMs: f64): void {
-    while (this.unacked() > 0 && nowMs - this.sentMs[this.head] > rateAckTimeoutMs + 4.0 * this.rttMs) {
+    if (!rateFinite(nowMs)) {
+      this.publish()
+      return
+    }
+    const wait: f64 = rateAckTimeoutMs + 4.0 * this.rttMs
+    if (this.stale > 0 && nowMs - this.staleSinceMs > wait) {
+      // Their answers were lost too; with nothing drawn since, the next answer is a new frame's.
+      this.stale = 0
+    }
+    while (this.unacked() > 0 && nowMs - this.sentMs[this.head] > wait) {
       this.head = this.head + 1
       this.lost = this.lost + 1
+      this.stale = this.stale + 1
+      this.staleSinceMs = nowMs
     }
     if (this.fixedFps === 0 && this.haveAck) {
       this.decide(nowMs)
@@ -679,7 +747,13 @@ export class RateController {
 }
 
 /** `x` rounded to a whole number, for the overlay. */
-const rateWhole = (x: f64): i32 => toI32(Math.round(x))
+const rateWhole = (x: f64): i32 => {
+  if (!(x > -1000000000.0 && x < 1000000000.0)) {
+    // NaN and the far ends, which do not fit in an i32, show as 0 and the clamp.
+    return x > 0.0 ? 1000000000 : 0
+  }
+  return toI32(Math.round(x))
+}
 
 /** The short name of a `BACKEND_CAP_*`. */
 const rateBackendName = (cap: i32): string => {
