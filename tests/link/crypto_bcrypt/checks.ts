@@ -5,10 +5,17 @@
 // kept to show the refusal. `tests/differential/bcrypt.js` checks random
 // passwords and salts against `crypt_r` on top of these.
 //
+// The `$2a$10$` hash is the one github.com/arjaythedev/multicore-server-challenge
+// seeds its users with (`bench/seed/seed.go` at c3012257f2ee); the other `$2a$` hashes from Go
+// were made with golang.org/x/crypto v0.58.0's `bcrypt.GenerateFromPassword`
+// and verified by `crypt_r` too. OpenBSD's tree carries no
+// `regress/lib/libc/bcrypt` (only `libutil/bcrypt_pbkdf`), so wrapper.c's
+// table is the only published vector set.
+//
 // The groups: the reference's vectors, the `$2a$` sign-extension
 // countermeasure and the 8-bit bytes behind it, the 72-byte cut and the
-// terminating NUL, what `bcryptHash` makes for a salt and cost, and every way
-// a salt, a cost or a hash string is refused.
+// terminating NUL, what `bcryptHash` makes for a salt and cost, hashes Go
+// made, and every way a salt, a cost or a hash string is refused.
 import { Suite } from "nish/testing";
 import { Secret, secret, wipe } from "nish:secret";
 import { bcryptHash, bcryptVerify } from "nish/crypto/bcrypt";
@@ -77,11 +84,15 @@ export const bcryptChecks = (): i32 => {
   const c4: i32 = 4;
   const c5: i32 = 5;
   const c6: i32 = 6;
+  const c10: i32 = 10;
   const c32: i32 = 32;
   const n24: i32 = 24;
   const n36: i32 = 36;
   const n72: i32 = 72;
   const n200: i32 = 200;
+  const n255: i32 = 255;
+  const n256: i32 = 256;
+  const n300: i32 = 300;
   const saltC: u8[] = joined(cycled("104104", c5), fromHex("10"));
   const saltOK: u8[] = fromHex("05030085d5ed4c176b2ac3cbee47291c");
   const saltAbc: u8[] = fromHex("71d79f8218a39259a7a29aabb2dbafc3");
@@ -131,9 +142,26 @@ export const bcryptChecks = (): i32 => {
   t.eqStr("a 73rd byte changes nothing", hashOf(joined(digits72, bytesOf("!")), saltAbc, c6), "$2b$06$abcdefghijklmnopqrstuuxkol5yPsyoUVI1gypYXOs1LB/kvo9O.");
   t.eqStr("200 x hash as 72", hashOf(cycled("78", n200), saltZero, c4), "$2b$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi");
   t.eqStr("72 x", hashOf(cycled("78", n72), saltZero, c4), "$2b$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi");
+  t.eqStr("255 x hash as 72 under $2b$", hashOf(cycled("78", n255), saltZero, c4), "$2b$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi");
+  t.eqStr("256 x", hashOf(cycled("78", n256), saltZero, c4), "$2b$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi");
+  t.eqStr("300 x", hashOf(cycled("78", n300), saltZero, c4), "$2b$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi");
+  // OpenBSD wraps a $2a$ key's length to a byte past 254; crypt_r reads the
+  // first 72 bytes at any length, and so does the module.
+  t.eqStr("255 x verify as 72 under $2a$", verifyOf(cycled("78", n255), "$2a$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi"), "true");
+  t.eqStr("256 x under $2a$", verifyOf(cycled("78", n256), "$2a$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi"), "true");
+  t.eqStr("300 x under $2a$", verifyOf(cycled("78", n300), "$2a$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi"), "true");
+  t.eqStr("hash at cost 10", hashOf(bytesOf("password123"), saltOK, c10), "$2b$10$/OK.fbVrR/bpIqNJ5ianF.Qrsl67.FGD/Dk.h7tC/VKy1qgxnTM1W");
   t.eqStr("a hash verifies under its own password", verifyOf(bytesOf("U*U"), hashOf(bytesOf("U*U"), saltC, c4)), "true");
   t.eqStr("and not under another", verifyOf(bytesOf("U*V"), "$2b$04$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGSK"), "false");
   t.eqStr("nor under the empty password", verifyOf(empty, "$2b$04$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGSK"), "false");
+
+  // --- hashes Go's golang.org/x/crypto made -----------------------------------
+  const seedHash: string = "$2a$10$ZSfEoPvlcsj2XfvsSeK25em4NZ9Jm7ntGqXuLgQfHEeZPYB8899wq";
+  t.eqStr("the Go seed hash verifies", verifyOf(bytesOf("password123"), seedHash), "true");
+  t.eqStr("and not under another password", verifyOf(bytesOf("password124"), seedHash), "false");
+  t.eqStr("Go, cost 10", verifyOf(bytesOf("password123"), "$2a$10$VRoruzpep1fJZEdd4rIDpO82hIWn2InkoP314JonxT7S16YbAWY42"), "true");
+  t.eqStr("Go, cost 4", verifyOf(bytesOf("password123"), "$2a$04$.v8aPp6VeEEwgKR9HIRd0u1SUqZOE9HIPPdLRu7.MIjGzu.9zH4jS"), "true");
+  t.eqStr("Go, a passphrase", verifyOf(bytesOf("correct horse battery staple"), "$2a$04$vFubl1seXCkf66coasYUPejdDXuUoIs1rZPmDfhWHjKuXGu1DUBn."), "true");
 
   // --- the last salt character carries 2 bits; the rest are not the hash ---
   t.eqStr("the canonical last salt character verifies", verifyOf(bytesOf("U*U"), "$2b$04$CCCCCCCCCCCCCCCCCCCCCeeICtgb3Ps6TDRViMsPFh0iKmeknYgLS"), "true");
@@ -144,9 +172,9 @@ export const bcryptChecks = (): i32 => {
   t.eqStr("cost 32 is refused", hashOf(bytesOf("U*U"), saltC, c32), "Err: bcrypt: the cost is outside 4 to 31");
   t.eqStr("a 15-byte salt is refused", hashOf(bytesOf("U*U"), cycled("00", 15), c4), "Err: bcrypt: the salt is not 16 bytes");
   t.eqStr("a 17-byte salt is refused", hashOf(bytesOf("U*U"), cycled("00", 17), c4), "Err: bcrypt: the salt is not 16 bytes");
-  t.contains("a 59-character hash is refused", verifyOf(bytesOf("U*U"), "$2b$04$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGS"), "Err: bcrypt: ");
-  t.contains("a 61-character hash is refused", verifyOf(bytesOf("U*U"), "$2b$04$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGSKK"), "Err: bcrypt: ");
-  t.contains("the empty string is refused", verifyOf(bytesOf("U*U"), ""), "Err: bcrypt: ");
+  t.eqStr("a 59-character hash is refused", verifyOf(bytesOf("U*U"), "$2b$04$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGS"), "Err: bcrypt: a hash is 60 characters");
+  t.eqStr("a 61-character hash is refused", verifyOf(bytesOf("U*U"), "$2b$04$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGSKK"), "Err: bcrypt: a hash is 60 characters");
+  t.eqStr("the empty string is refused", verifyOf(bytesOf("U*U"), ""), "Err: bcrypt: a hash is 60 characters");
   t.eqStr("$2c$ is refused", verifyOf(bytesOf("U*U"), "$2c$04$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGSK"), not2x);
   t.eqStr("$3b$ is refused", verifyOf(bytesOf("U*U"), "$3b$04$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGSK"), not2x);
   t.eqStr("a cost that is not two digits is refused", verifyOf(bytesOf("U*U"), "$2b$0a$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGSK"), "Err: bcrypt: the cost is not two digits");

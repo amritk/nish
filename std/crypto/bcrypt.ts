@@ -24,9 +24,11 @@
  * other way round; docs/security/crypto-bcrypt.md says why a longer password
  * is cut rather than refused. Bytes above 127 are unsigned, as `$2b$` and
  * `$2y$` define them. A `$2a$` hash gets crypt_blowfish's countermeasure for
- * the old sign-extension bug: when the buggy and the correct key differ, one
- * bit of the first P word is flipped, so no `$2a$` hash made by the bug
- * verifies a password with 8-bit bytes. `$2x$` (the bug itself) is refused.
+ * the old sign-extension bug: when an 8-bit byte was sign-extended into a key
+ * word and yet the buggy and the correct key came out equal, one bit of the
+ * first P word is flipped, as crypt_blowfish flips it, so the `$2a$` digest of
+ * such a password (`\xff\xff\xa3`) is not its `$2y$` one. `$2x$` (the bug
+ * itself) is refused.
  *
  * **Errors are `Err`s.** A salt that is not 16 bytes, a cost outside 4–31, or
  * a hash string that is not one (the wrong length, an unknown prefix, a cost
@@ -35,10 +37,14 @@
  * `Ok(false)`, and so is one whose last salt character has bits set the
  * reference drops, since the hash the reference makes from it differs.
  *
+ * **The cost comes from the hash.** `bcryptVerify` runs 2^cost rounds for the
+ * cost the hash names, so a `$2b$31$` hash someone hands you takes 2^31
+ * rounds, hours of one core. Verify only hashes you stored.
+ *
  * **Pure.** No I/O and no C, so it builds for wasm32. A `std/threads` task
- * cannot call it yet, because it wipes (docs/security/crypto-bcrypt.md). A cost-12 hash takes a few hundred milliseconds of one
- * core; a server runs it off its event loop
- * (docs/guide/using-nish/password-hashing.md).
+ * cannot call it yet, because it wipes (docs/security/crypto-bcrypt.md). A
+ * cost-12 hash takes a few hundred milliseconds of one core; a server runs it
+ * off its event loop (docs/guide/using-nish/password-hashing.md).
  *
  * The algorithm is Provos and Mazières's ("A Future-Adaptable Password
  * Scheme", USENIX 1999). The code is adapted from Solar Designer's
@@ -111,9 +117,9 @@ export const BCRYPT_MAX_PASSWORD: i32 = 72
 
 /**
  * The state's words: P (18) then S0–S3 (4 × 256). The guards before the
- * rounds and the key copy write 1042, 72 and 16 as literals: the range prover
- * reads a literal bound, not a named constant, and keeps every S-box bounds
- * check without it.
+ * rounds and the key copy write 1042, 72 (`BCRYPT_MAX_PASSWORD`) and 16 as
+ * literals: the range prover reads a literal bound, not a named constant, and
+ * keeps every S-box bounds check without it.
  */
 const BCRYPT_STATE_WORDS: i32 = 1042
 
@@ -386,8 +392,9 @@ const bcryptBody = (st: u32[]): void => {
  * them, for `password` read as its bytes to the first NUL and one NUL,
  * repeated. `safety` is 0x10000 for `$2a$` and 0 otherwise: for `$2a$` the
  * key is also built with each byte sign-extended, as the old bug built it,
- * and if any 8-bit byte made the two differ, bit 16 of P[0] is flipped, so
- * that no hash the bug made matches. All of it is computed without a branch
+ * and if an 8-bit byte was sign-extended into a word (`sign`) yet the two
+ * keys came out equal (`diff` is 0), bit 16 of P[0] is flipped, as
+ * crypt_blowfish flips it. All of it is computed without a branch
  * on a password byte: only the copy's length and the cycle position, which
  * follow the password's length and NULs, decide a load.
  */

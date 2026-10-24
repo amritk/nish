@@ -2,9 +2,9 @@
  * `nish/crypto/bcrypt` against libxcrypt's `crypt_r`, in both directions, on
  * random passwords and salts.
  *
- * A seeded generator draws passwords of 0 to 80 bytes from all 256 byte values
- * (so NULs, 8-bit bytes and keys past the 72-byte limit all occur), a 16-byte
- * salt and a cost of 4 to 6. A C harness built against `<crypt.h>` makes the
+ * A seeded generator draws passwords of 0 to 309 bytes from all 256 byte
+ * values (so NULs, 8-bit bytes, keys past the 72-byte limit and keys past 255
+ * bytes all occur), a 16-byte salt and a cost of 4 to 6, or now and then 10. A C harness built against `<crypt.h>` makes the
  * `$2a$`, `$2b$` and `$2y$` hashes of each; a generated Nish program then makes
  * its own `$2b$` hash of the same inputs and verifies the three C hashes and a
  * wrong password against them; and the harness finally checks each Nish hash
@@ -49,10 +49,19 @@ const hex = (b) => b.map((v) => v.toString(16).padStart(2, "0")).join("")
 
 /**
  * A password: mostly any byte, sometimes printable ASCII, sometimes high bytes
- * only (the sign-extension case), with a NUL forced into some.
+ * only (the sign-extension case), with a NUL forced into some. Most are under
+ * 40 bytes, some just past 72, and some past 255, where OpenBSD's `$2a$`
+ * wraps the length in a byte and `crypt_r` does not.
  */
 const password = () => {
-  const n = below(5) === 0 ? 72 + below(9) : below(40)
+  const r = below(10)
+  const length = () => {
+    if (r === 0) {
+      return 250 + below(60)
+    }
+    return r < 3 ? 72 + below(9) : below(40)
+  }
+  const n = length()
   const kind = below(3)
   const shape = [(v) => v, (v) => 0x20 + (v % 95), (v) => 0x80 | v][kind]
   const p = bytes(n).map(shape)
@@ -203,18 +212,35 @@ const cc = process.env.CC || "cc"
 if (spawnSync(cc, ["--version"]).status !== 0) {
   skip(`no C compiler (${cc}) to build the crypt_r harness`)
 }
+// A one-line link test decides the skip, so a harness that fails to build is
+// a failure rather than a missing library.
+fs.writeFileSync(
+  path.join(buildDir, "probe.c"),
+  '#include <crypt.h>\nint main(void) { return crypt("", "$2b$04$") == 0; }\n'
+)
+const probed = spawnSync(
+  cc,
+  ["-o", path.join(buildDir, "probe"), path.join(buildDir, "probe.c"), "-lcrypt"],
+  {
+    encoding: "utf8",
+  }
+)
+if (probed.status !== 0) {
+  skip(`no libxcrypt to compare against (${probed.stderr.split("\n")[0]})`)
+}
 fs.writeFileSync(path.join(buildDir, "harness.c"), HARNESS)
 const harness = path.join(buildDir, "harness")
 const built = spawnSync(cc, ["-O2", "-o", harness, path.join(buildDir, "harness.c"), "-lcrypt"], {
   encoding: "utf8",
 })
 if (built.status !== 0) {
-  skip(`no libxcrypt to compare against (${built.stderr.split("\n")[0]})`)
+  console.log(`FAIL  bcrypt differential: the crypt_r harness did not build\n${built.stderr}`)
+  process.exit(1)
 }
 
 const all = Array.from({ length: cases }, () => {
   const p = password()
-  return { password: p, wrong: wrong(p), salt: bytes(16), cost: 4 + below(3) }
+  return { password: p, wrong: wrong(p), salt: bytes(16), cost: below(16) === 0 ? 10 : 4 + below(3) }
 })
 const made = oracle(
   harness,
@@ -274,8 +300,11 @@ for (const f of failures) {
 const withNul = all.filter((c) => c.password.includes(0)).length
 const highBit = all.filter((c) => c.password.some((v) => v >= 0x80)).length
 const long = all.filter((c) => c.password.length > 72).length
+const veryLong = all.filter((c) => c.password.length > 255).length
+const cost10 = all.filter((c) => c.cost === 10).length
 console.log(
   `bcrypt differential: ${cases - failed.size} of ${cases} cases agree ` +
-    `(${withNul} with a NUL, ${highBit} with an 8-bit byte, ${long} past 72 bytes; seed ${argValue("--seed", "873")})`
+    `(${withNul} with a NUL, ${highBit} with an 8-bit byte, ${long} past 72 bytes, ${veryLong} past 255, ` +
+    `${cost10} at cost 10; seed ${argValue("--seed", "873")})`
 )
 process.exit(failures.length === 0 ? 0 : 1)

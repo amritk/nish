@@ -71,6 +71,10 @@ later does not break old hashes: verify as usual, and when a login succeeds
 against a hash with a lower cost, hash the password again at the new cost and
 store that.
 
+`bcryptVerify` takes the cost from the hash it is given, not from you. A
+`$2b$31$` hash runs 2^31 rounds, hours of one core, so verify only hashes your
+own server stored, never one a client sends.
+
 ## What bcrypt reads of a password
 
 bcrypt reads at most **72 bytes** of a password, and it stops at the first NUL
@@ -84,7 +88,9 @@ users at sign-up.
 
 `bcryptVerify` reads hashes that begin `$2a$`, `$2b$` and `$2y$`. They differ
 only in how old implementations handled 8-bit bytes and long passwords, and
-each is checked the way the reference implementation checks it. A `$2x$` hash
+each is checked the way libxcrypt and crypt_blowfish check it. One case
+differs from OpenBSD: a `$2a$` hash OpenBSD made from a password over 254
+bytes does not verify here. A `$2x$` hash
 comes from a known-buggy implementation and is refused: such a hash cannot be
 verified safely, so ask that user to reset their password.
 

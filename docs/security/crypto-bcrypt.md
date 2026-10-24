@@ -19,7 +19,10 @@ the block and the digest are wiped by stores `opt -O2` keeps; the verify
 compares the whole 60-character hash in constant time. Two things are not
 reached, by the nature of the algorithm or of the language, and are recorded:
 the secret-indexed S-box loads (BCRYPT-6) and registers and spills (BCRYPT-7).
-Nothing was found to fix or left open.
+Nothing was found to fix or left open. Two rows diverge from one reference on
+purpose: `$2x$` is refused, as OpenBSD refuses it, where `crypt_r` verifies it;
+and a `$2a$` password past 254 bytes is read as `crypt_r` reads it, not as
+OpenBSD's wrapped length.
 
 ## Scope
 
@@ -53,8 +56,10 @@ or the password, or the state derived from it, left in memory.
 
 The references are OpenBSD's `bcrypt.c`, Solar Designer's crypt_blowfish 1.3
 (the code the module adapts) and libxcrypt's `crypt_r`, which uses
-crypt_blowfish. They agree on every row but the last two, where OpenBSD differs
-and the module follows crypt_blowfish and libxcrypt.
+crypt_blowfish. They differ on two rows. On `$2x$` crypt_blowfish and
+libxcrypt reproduce the bug and OpenBSD refuses it; the module follows OpenBSD.
+On a `$2a$` password past 254 bytes OpenBSD wraps the length; the module
+follows crypt_blowfish and libxcrypt.
 
 | Input | What the references do | What the module does |
 | --- | --- | --- |
@@ -62,11 +67,11 @@ and the module follows crypt_blowfish and libxcrypt.
 | A password of 72 bytes or more | The first 72 bytes are used; the terminating NUL is not reached, and the rest is ignored. | The same (BCRYPT-1). |
 | An embedded NUL | The key ends at it: C reads a string to its first NUL, so `ab\0cd` is the key of `ab`. | The same (BCRYPT-2). |
 | 8-bit bytes, `$2b$` and `$2y$` | Read unsigned. | The same. |
-| 8-bit bytes, `$2a$` | crypt_blowfish's countermeasure: if building the key with sign-extended bytes, as the old bug did, gives a different key, bit 16 of P[0] is flipped, so no hash the bug made verifies. | The same (BCRYPT-3). |
+| 8-bit bytes, `$2a$` | crypt_blowfish's countermeasure: the key is also built with sign-extended bytes, as the old bug built it; if an 8-bit byte was sign-extended into a word and yet the two keys come out equal, bit 16 of P[0] is flipped, so the `$2a$` digest of such a password (`\xff\xff\xa3`) is not its `$2y$` one. | The same (BCRYPT-3). |
 | `$2x$` | crypt_blowfish and libxcrypt reproduce the bug, for old hashes; OpenBSD refuses it. | Refused (BCRYPT-3). |
-| The salt's last character | It carries 4 bits of the 128; the 2 low bits of its sextet are dropped, and the hash made is written with them cleared. | The same; a hash string with them set verifies false, as `crypt_r`'s whole-string compare does (BCRYPT-4). |
+| The salt's last character | It carries 2 bits of the 128; the 4 low bits of its sextet are dropped, and the hash made is written with them cleared. | The same; a hash string with them set verifies false, as `crypt_r`'s whole-string compare does (BCRYPT-4). |
 | A cost outside 04–31, a bad prefix or character | Refused (`*0`/`*1` from `crypt_r`, -1 from OpenBSD). | An `Err` naming it (BCRYPT-5). |
-| `$2b$` with a password over 255 bytes | OpenBSD's old `$2a$` wrapped the length in a `u8`; `$2b$` was made to mark the fix. | Not reachable: no length is stored. |
+| `$2a$` with a password over 254 bytes | OpenBSD computes the key length as a `u8`, the password's length plus its NUL, so it wraps: a 255-byte password gets length 0. `$2b$` caps the length at 72 first; it was made to mark the fix. crypt_blowfish and libxcrypt take the first 72 bytes at any length under every prefix. Go's `x/crypto` refuses a password over 72 bytes. | crypt_blowfish's: the first 72 bytes. An OpenBSD `$2a$` hash of such a password does not verify here; one from crypt_r or crypt_blowfish does ("255 x verify as 72 under $2a$"). |
 
 ## Findings
 
@@ -101,16 +106,27 @@ cost 5", "hash ab".
 
 **Against `crypt_r`, both ways, on random inputs**: `bcrypt differential: Nish
 and libxcrypt crypt_r agree on random passwords and salts, both ways`
-(`tests/differential/bcrypt.js`): 48 seeded cases of 0 to 80 bytes over every
-byte value at cost 4 to 6, of which 16 hold a NUL, 35 an 8-bit byte and 12 run
-past 72 bytes. Each passes when the module's `$2b$` hash is `crypt_r`'s,
+(`tests/differential/bcrypt.js`): 48 seeded cases of 0 to 309 bytes over every
+byte value at cost 4 to 6 or 10, of which 7 hold a NUL, 31 an 8-bit byte, 11
+run past 72 bytes and 3 past 255, and 1 is at cost 10. A separate one-line link
+test decides the skip, so a harness that does not build fails. Each passes when the module's `$2b$` hash is `crypt_r`'s,
 `crypt_r` accepts it, and the module verifies `crypt_r`'s `$2a$`, `$2b$` and
 `$2y$` hashes and refuses a wrong password as `crypt_r` does. Without a C
 compiler or libxcrypt it skips, saying which.
 
+**Hashes from Go** (`golang.org/x/crypto` v0.58.0): "the Go seed hash
+verifies" (the `$2a$10$` hash github.com/arjaythedev/multicore-server-challenge
+seeds at c3012257f2ee), "and not under another password", "Go, cost 10", "Go,
+cost 4", "Go, a passphrase". "hash at cost 10" is a `$2b$10$` known answer
+from `crypt_r`. OpenBSD's tree has no libc bcrypt regress
+(`regress/lib/libutil/bcrypt_pbkdf` only), so crypt_blowfish's wrapper.c table
+is the published vector set.
+
 **The 72-byte cut and the NUL** (BCRYPT-1, BCRYPT-2): "a key past 72 bytes:
 the rest is ignored", "hash a 72-byte password at cost 6", "a 73rd byte changes
-nothing", "200 x hash as 72", "72 x", "ab\0cd hashes as ab: the key ends at its
+nothing", "200 x hash as 72", "72 x", "255 x hash as 72 under $2b$", "256 x",
+"300 x", "255 x verify as 72 under $2a$", "256 x under $2a$", "300 x under
+$2a$", "ab\0cd hashes as ab: the key ends at its
 first NUL", "and verifies as ab".
 
 **8-bit bytes and the sign-extension bug** (BCRYPT-3): "$2y$ \xff\xff\xa3",

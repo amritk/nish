@@ -34,9 +34,21 @@ PASS  hash a 72-byte password at cost 6
 PASS  a 73rd byte changes nothing
 PASS  200 x hash as 72
 PASS  72 x
+PASS  255 x hash as 72 under $2b$
+PASS  256 x
+PASS  300 x
+PASS  255 x verify as 72 under $2a$
+PASS  256 x under $2a$
+PASS  300 x under $2a$
+PASS  hash at cost 10
 PASS  a hash verifies under its own password
 PASS  and not under another
 PASS  nor under the empty password
+PASS  the Go seed hash verifies
+PASS  and not under another password
+PASS  Go, cost 10
+PASS  Go, cost 4
+PASS  Go, a passphrase
 PASS  the canonical last salt character verifies
 PASS  one with dropped bits set does not, as with crypt_r
 PASS  cost 3 is refused
@@ -53,4 +65,4 @@ PASS  cost 03 is refused
 PASS  cost 32 in a hash is refused
 PASS  a salt character outside bcrypt base64 is refused
 PASS  a digest character outside bcrypt base64 is refused
-bcrypt: 55 passed, 0 failed, 0 skipped
+bcrypt: 67 passed, 0 failed, 0 skipped

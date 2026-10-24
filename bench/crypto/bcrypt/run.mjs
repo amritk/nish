@@ -7,7 +7,8 @@
  * the last hash, which must be the same for all of them. The programs run in
  * interleaved rounds; a round's figure is the child's user CPU time (bash's
  * `time`) over the hashes, so the report is CPU, not wall, time. Each row is
- * the median of `--rounds` rounds and their spread, which is the noise band.
+ * the median of `--rounds` rounds and their spread, which is the noise band;
+ * one more round runs first as a warm-up and is not counted.
  *
  * Usage: node bench/crypto/bcrypt/run.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N]
  * A missing C compiler, libxcrypt or network leaves its rows out with a note.
@@ -30,7 +31,10 @@ const rounds = Number(argValue("--rounds", "5"))
 const cost = Number(argValue("--cost", "10"))
 const setting = `$2b$${String(cost).padStart(2, "0")}$${".".repeat(22)}`
 
-/** The OpenBSD files, from the tree's `master`; each file's `$OpenBSD$` line is printed with the report. */
+/** The openbsd/src commit the OpenBSD files are fetched at. */
+const OPENBSD_COMMIT = "65a9769f762528944cb8c228592381427b188551"
+
+/** The OpenBSD files, at `OPENBSD_COMMIT`; each file's `$OpenBSD$` line is printed with the report. */
 const OPENBSD = {
   "bcrypt.c": "lib/libc/crypt/bcrypt.c",
   "blowfish.c": "lib/libc/crypt/blowfish.c",
@@ -129,7 +133,7 @@ if (have(cc)) {
   notes.push(`libxcrypt left out: no C compiler (${cc})`)
 }
 
-const openbsd = path.join(dir, "openbsd")
+const openbsd = path.join(dir, `openbsd-${OPENBSD_COMMIT.slice(0, 12)}`)
 fs.mkdirSync(openbsd, { recursive: true })
 for (const [file, from] of Object.entries(OPENBSD)) {
   const to = path.join(openbsd, file)
@@ -138,7 +142,7 @@ for (const [file, from] of Object.entries(OPENBSD)) {
       "-fsSL",
       "-o",
       to,
-      `https://raw.githubusercontent.com/openbsd/src/master/${from}`,
+      `https://raw.githubusercontent.com/openbsd/src/${OPENBSD_COMMIT}/${from}`,
     ])
     if (got.status !== 0) {
       fs.rmSync(to, { force: true })
@@ -191,7 +195,8 @@ if (fetched) {
 
 const outputs = new Set()
 const samples = programs.map(() => [])
-for (let round = 0; round < rounds; round++) {
+// Round 0 warms the page cache and the CPU's clocks and is not counted.
+for (let round = 0; round <= rounds; round++) {
   programs.forEach((p, i) => {
     const r = run("bash", ["-c", 'TIMEFORMAT=%3U; time "$0" > "$0.out"', p.exe])
     if (r.status !== 0) {
@@ -199,7 +204,9 @@ for (let round = 0; round < rounds; round++) {
       process.exit(1)
     }
     outputs.add(fs.readFileSync(`${p.exe}.out`, "utf8").trim())
-    samples[i].push((Number(r.stderr.trim()) * 1000) / hashes)
+    if (round > 0) {
+      samples[i].push((Number(r.stderr.trim()) * 1000) / hashes)
+    }
   })
 }
 if (outputs.size !== 1) {
