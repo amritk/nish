@@ -278,6 +278,43 @@ class TlsClient {
   }
 }
 
+/** The first held slot of `lb`'s TLS server whose connection waits on a head deadline, or -1. */
+const tlsTimedSlot = (lb: H1Loop): i32 => {
+  for (let k: i32 = 0; k < toI32(lb.secure.connections.length); k++) {
+    if (lb.secure.holds(k) && lb.secure.connections[k].headTimed) {
+      return k;
+    }
+  }
+  return -1;
+};
+
+/** The first held slot of `lb`'s plain server whose connection waits on a head deadline, or -1. */
+const plainTimedSlot = (lb: H1Loop): i32 => {
+  for (let k: i32 = 0; k < toI32(lb.plain.connections.length); k++) {
+    if (lb.plain.holds(k) && lb.plain.connections[k].headTimed) {
+      return k;
+    }
+  }
+  return -1;
+};
+
+/**
+ * Waits up to half a second for `lb`'s loop to wake, then settles it: a
+ * record can land after `settle` has seen a quiet millisecond. Nothing waking
+ * is not a failure here, since a server that ignores the bytes has nothing
+ * more to do.
+ */
+const settleLonger = (lb: H1Loop): void => {
+  for (let k: i32 = 0; k < 10; k++) {
+    const n: i32 = pollWait(lb.loop, lb.ready, toI32(50));
+    if (n > 0) {
+      lb.dispatch(n, toI32(-1));
+      lb.settle();
+      return;
+    }
+  }
+};
+
 /** `server`'s next accept, waiting on `loop` up to a second for the connection to arrive; the slot, or what `accept` answered last. */
 const acceptWaiting = (server: Http1Server, loop: i32, ready: i32[]): i32 => {
   let slot: i32 = server.accept();
@@ -775,8 +812,16 @@ export const serverChecks = (): i32 => {
   lb.send(kept, ascii("GET /hello HTTP/1.1\r\nHost: a\r\n\r\n"));
   lb.response(kept, false);
   const slow: i32 = lb.connect(false);
-  lb.send(slow, ascii("GET /hello HTTP/1.1\r\nHost: a\r\n"));
+  lb.send(slow, ascii("GET /hello HTTP/1.1\r\n"));
   lb.settle();
+  const slowSlot: i32 = plainTimedSlot(lb);
+  const slowSince: i64 = slowSlot >= 0 ? lb.plain.connection(slowSlot).headSince : toI64(-1);
+  lb.send(slow, ascii("Host: a\r\n"));
+  lb.settle();
+  t.ok(
+    "a second piece of a head leaves its clock where the first piece started it",
+    slowSlot >= 0 && lb.plain.connection(slowSlot).headTimed && lb.plain.connection(slowSlot).headSince === slowSince
+  );
   t.eqI32("a head that has just begun is not past headTimeout", lb.plain.expire(monotonicNanos()), ZERO);
   t.eqI32(
     "a head still unfinished past headTimeout closes its slot, though the slot is not idle",
@@ -786,6 +831,30 @@ export const serverChecks = (): i32 => {
   t.ok("and its client sees the end, while the kept-alive client's slot stays open", lb.awaitEnd(slow) && lb.plain.busy() === 1);
   lb.plain.expire(monotonicNanos() + toI64(2000000000));
   lb.awaitEnd(kept);
+
+  // A head that comes in pieces but ends within headTimeout is served, and
+  // its slot then waits for the next head under the idle timeout alone.
+  const patient: i32 = lb.connect(false);
+  lb.send(patient, ascii("GET /hello HTTP/1.1\r\n"));
+  lb.settle();
+  lb.send(patient, ascii("Host: a\r\n\r\n"));
+  t.eqStr("a head finished in pieces within headTimeout is answered", lb.response(patient, false).text(), "hello from nish/net/http1\n");
+  t.eqI32("and its slot outlives headTimeout", lb.plain.expire(monotonicNanos() + toI64(750000000)), ZERO);
+  lb.plain.expire(monotonicNanos() + toI64(2000000000));
+  lb.awaitEnd(patient);
+
+  // A head pipelined behind a request waits without a clock while that
+  // exchange is open, and starts one when the exchange is over.
+  const piped: i32 = lb.connect(false);
+  lb.send(piped, ascii("GET /hello HTTP/1.1\r\nHost: a\r\n\r\nGET /hello HTTP/1.1\r\n"));
+  t.eqStr("a request with an unfinished head pipelined behind it is answered", lb.response(piped, false).text(), "hello from nish/net/http1\n");
+  lb.settle();
+  t.eqI32(
+    "and the pipelined head, still unfinished past headTimeout, closes the slot",
+    lb.plain.expire(monotonicNanos() + toI64(750000000)),
+    toI32(1)
+  );
+  t.ok("and its client sees the end", lb.awaitEnd(piped) && lb.plain.busy() === 0);
 
   const pool: i32[] = [];
   for (let k: i32 = 0; k < 4; k++) {
@@ -898,16 +967,34 @@ export const serverChecks = (): i32 => {
 
   const sl = new TlsClient(lb);
   sl.handshake(noAlpn);
-  sl.send("GET /hello HTTP/1.1\r\nHost: a\r\n");
-  // The record can land after `settle` has seen a quiet millisecond, so wait
-  // on the loop until the slot holding it has the head's first bytes.
-  const slowConn: Http1Connection = lb.secure.connection(ZERO);
-  for (let k: i32 = 0; k < 10 && !slowConn.headTimed; k++) {
-    lb.step(toI32(-1));
-  }
+  sl.send("GET /hello HTTP/1.1\r\n");
+  settleLonger(lb);
+  const slSlot: i32 = tlsTimedSlot(lb);
+  const slSince: i64 = slSlot >= 0 ? lb.secure.connection(slSlot).headSince : toI64(-1);
+  sl.send("Host: a\r\n");
+  settleLonger(lb);
+  t.ok(
+    "a second TLS record of a head leaves its clock where it started",
+    slSlot >= 0 && lb.secure.connection(slSlot).headTimed && lb.secure.connection(slSlot).headSince === slSince
+  );
   t.eqI32("a TLS head that has just begun is not past headTimeout", lb.secure.expire(monotonicNanos()), ZERO);
   t.eqI32("a TLS head still unfinished past headTimeout closes its slot", lb.secure.expire(monotonicNanos() + toI64(750000000)), toI32(1));
   t.ok("and its client sees the end", lb.awaitEnd(sl.index) && lb.secure.busy() === 0);
+
+  // A record trickled a byte at a time hands the connection no plaintext
+  // until it is whole, so the clock must start on its ciphertext.
+  const rec = new TlsClient(lb);
+  rec.handshake(noAlpn);
+  const sealed: u8[] = sealOne(rec.write, TLS_CONTENT_APPLICATION_DATA, ascii("GET /hello HTTP/1.1\r\nHost: a\r\n\r\n"), ZERO);
+  lb.send(rec.index, range(sealed, ZERO, toI32(3)));
+  settleLonger(lb);
+  t.eqI32("a TLS record that has just begun is not past headTimeout", lb.secure.expire(monotonicNanos()), ZERO);
+  t.eqI32(
+    "a TLS record still unfinished past headTimeout closes its slot, though it has handed over no plaintext",
+    lb.secure.expire(monotonicNanos() + toI64(750000000)),
+    toI32(1)
+  );
+  t.ok("and its client sees the end", lb.awaitEnd(rec.index) && lb.secure.busy() === 0);
 
   const h = new TlsClient(lb);
   t.ok("a client offering only h2 completes the handshake", h.handshake(["h2"]));

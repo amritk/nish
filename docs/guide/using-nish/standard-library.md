@@ -1414,7 +1414,10 @@ a pool sized for 16,384 connections costs some 16 KiB until they come;
 and then: it closes a slot that has moved no byte for `idleTimeout`
 milliseconds, and one whose request head has been arriving for longer than
 `headTimeout` (30 s by default), so a client that trickles its head a byte at
-a time cannot hold a slot. Both are `Http1Config` fields. `TlsTcpServer`,
+a time cannot hold a slot. Over TLS the head's clock starts with the first
+bytes after the handshake, so a client that finishes its handshake and then
+sends nothing is closed after `headTimeout` too. Both are `Http1Config`
+fields, and a value of 0 or less stops start-up. `TlsTcpServer`,
 `Http1TlsServer`, `Http2TlsServer` and `Http3Server` build a slot the same
 way, on the first connection accepted into it (an `Http2TlsServer` builds slot
 0 in its constructor), so a pool's size is a ceiling on its connections. What

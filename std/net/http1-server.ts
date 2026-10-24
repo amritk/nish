@@ -793,6 +793,10 @@ export class Http1Connection {
           this.state = H1_S_CLOSING
           return H1_NEED_MORE
         }
+        // A pipelined head that waited behind the exchange starts its clock
+        // now that it is the one being read. The carrier stamped `lastActive`
+        // when it last moved a byte, which is no earlier than these bytes came.
+        this.headArrived(this.lastActive)
       }
       const event: i32 = this.parser.next()
       if (event === HTTP1_HEAD) {
@@ -1209,10 +1213,24 @@ export class Http1Connection {
    * request head wait to be read and its clock has not started. The carriers
    * call it after each `feed`; a program that feeds a connection itself calls
    * it the same way. Bytes that wait while the previous exchange is still
-   * open start no clock: they count from the first feed once it is over.
+   * open start no clock: they count from when it is over (`nextRequest`).
    */
   headArrived(now: i64): void {
-    if (!this.headTimed && this.state === H1_S_HTTP && !this.requestOpen && this.parser.buffered() > 0) {
+    if (this.parser.buffered() > 0) {
+      this.headAwaited(now)
+    }
+  }
+
+  /**
+   * Starts the head deadline at `now` (`monotonicNanos`) when the connection
+   * waits for a head and its clock has not started, whether or not a byte of
+   * it has been read. `Http1TlsServer` calls it when ciphertext arrives after
+   * the handshake: a record trickled a byte at a time hands no plaintext to
+   * `headArrived` until it is whole, so its bytes would otherwise only keep
+   * the slot from going idle.
+   */
+  headAwaited(now: i64): void {
+    if (!this.headTimed && this.state === H1_S_HTTP && !this.requestOpen) {
       this.headTimed = true
       this.headSince = now
     }
@@ -1680,10 +1698,19 @@ export class Http1TlsServer {
 
   /** The socket of `slot` is readable: TLS reads it, and what the connection has to send goes after. Answers the interest. */
   readable(slot: i32): i32 {
-    if (this.live(slot)) {
-      this.connections[slot].lastActive = monotonicNanos()
+    const live: boolean = this.live(slot)
+    const now: i64 = monotonicNanos()
+    if (live) {
+      this.connections[slot].lastActive = now
     }
     this.tls.readable(slot)
+    // Ciphertext after the handshake is the start of a head, or of a record
+    // that will hold one, so the head's clock starts here; a record trickled
+    // a byte at a time would hand `next` no plaintext until it is whole. The
+    // handshake itself is bounded by `idleTimeout` alone (TLS-4).
+    if (live && this.tls.connection(slot).state === TLS_RECORD_STATE_OPEN) {
+      this.connections[slot].headAwaited(now)
+    }
     return this.flush(slot)
   }
 
@@ -1709,7 +1736,6 @@ export class Http1TlsServer {
       return H1_ERROR
     }
     const conn: Http1Connection = this.connections[slot]
-    let fed: boolean = false
     while (true) {
       const room: i32 = conn.inputRoom()
       const want: i32 = room < toI32(this.scratch.length) ? room : toI32(this.scratch.length)
@@ -1724,13 +1750,6 @@ export class Http1TlsServer {
         break
       }
       conn.feed(this.scratch, H1_ZERO, n)
-      fed = true
-    }
-    // TLS hands the plaintext over here rather than in `readable`, so the
-    // head's clock starts here; `readable` stamped `lastActive` before the
-    // record was read, which would start it early.
-    if (fed) {
-      conn.headArrived(monotonicNanos())
     }
     // A held-back write finds its room here, as in `Http1Server.next`.
     if (conn.writeHeld) {

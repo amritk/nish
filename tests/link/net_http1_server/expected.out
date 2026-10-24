@@ -54,9 +54,15 @@ PASS  a client gone in the middle of a response: the write fails and the slot is
 PASS  a slot that has just moved is not idle
 PASS  past idleTimeout it is closed
 PASS  and its client sees the end
+PASS  a second piece of a head leaves its clock where the first piece started it
 PASS  a head that has just begun is not past headTimeout
 PASS  a head still unfinished past headTimeout closes its slot, though the slot is not idle
 PASS  and its client sees the end, while the kept-alive client's slot stays open
+PASS  a head finished in pieces within headTimeout is answered
+PASS  and its slot outlives headTimeout
+PASS  a request with an unfinished head pipelined behind it is answered
+PASS  and the pipelined head, still unfinished past headTimeout, closes the slot
+PASS  and its client sees the end
 PASS  four clients fill the pool
 PASS  which has then built its four slots
 PASS  one of them hangs up
@@ -107,8 +113,12 @@ PASS  a client offering no ALPN completes the handshake
 PASS  and is served HTTP/1.1
 PASS  an idle TLS slot is closed past idleTimeout
 PASS  and its client sees the end
+PASS  a second TLS record of a head leaves its clock where it started
 PASS  a TLS head that has just begun is not past headTimeout
 PASS  a TLS head still unfinished past headTimeout closes its slot
+PASS  and its client sees the end
+PASS  a TLS record that has just begun is not past headTimeout
+PASS  a TLS record still unfinished past headTimeout closes its slot, though it has handed over no plaintext
 PASS  and its client sees the end
 PASS  a client offering only h2 completes the handshake
 PASS  but ALPN h2 is shut down with close_notify, before any HTTP/1.1 byte
@@ -188,4 +198,4 @@ PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input ca
 PASS  an aborted connection is done at once
 PASS  a body event is a window onto the parser's buffer
 PASS  a body cut by the end of the stream ends the connection
-http1 server: 190 passed, 0 failed, 0 skipped
+http1 server: 200 passed, 0 failed, 0 skipped
