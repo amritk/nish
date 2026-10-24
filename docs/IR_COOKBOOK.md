@@ -2547,7 +2547,7 @@ no kernel (`tests/run.js`, "kernels:").
 
 ### `nish/bytes`: the runs on their kernels, the copy as one move
 
-`skipBlank`, `skipDigits` and `skipJsonText` are lowered as `indexOfAny` is:
+`skipBlank`, `skipDigits`, `skipJsonText` and `skipJsonPlain` are lowered as `indexOfAny` is:
 each clamps its range in Nish and makes one call to a private walker, and in
 the module that is `nish/bytes` that call becomes a kernel of
 `runtime/runtime-bytes.c` (`src/kernels.ts`, `bytesWalkOf`). The kernel is
@@ -22268,6 +22268,7 @@ declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocaptur
 declare i64 @nish_bytes_skip_blank(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_bytes_skip_digits(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_bytes_skip_json_text(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
+declare i64 @nish_bytes_skip_json_plain(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #6
 declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #4
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4

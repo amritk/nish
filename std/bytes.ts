@@ -50,16 +50,17 @@
  * refuses.
  *
  * The module also has the runs a parser walks and the copy it makes of them.
- * `skipBlank`, `skipDigits` and `skipJsonText` each answer the first index in
- * a range whose byte is not in their class — JSON's blanks, the ASCII digits,
- * the bytes a JSON string holds as themselves — and `copyBytes` copies a
+ * `skipBlank`, `skipDigits`, `skipJsonText` and `skipJsonPlain` each answer
+ * the first index in a range whose byte is not in their class — JSON's blanks,
+ * the ASCII digits, the bytes a JSON string holds as themselves, the bytes a
+ * JSON writer copies without an escape — and `copyBytes` copies a
  * window of one array into another, or into itself, as one move:
  *
  *     const text: u8[] = [32, 32, 52, 50, 44]; // "  42,"
  *     const start = skipBlank(text, 0, 5); // 2
  *     const end = skipDigits(text, start, 5); // 4
  *
- * The three runs clamp their range and never panic; `copyBytes` panics on a
+ * The four runs clamp their range and never panic; `copyBytes` panics on a
  * range outside its array. Natively each is a runtime kernel
  * (docs/LANGUAGE.md, "Byte runs"), and the runs are variable-time: they are
  * for text, never for secret data.
@@ -251,6 +252,21 @@ export const skipJsonText = (b: u8[], from: i32, to: i32): i32 => {
 }
 
 /**
+ * The first index in `[from, to)` whose byte a JSON writer cannot copy as
+ * itself — a control byte below `0x20`, a quote or a backslash — or `to`, with
+ * the range clamped as `skipBlank`'s is. Every byte from `0x20` up is in the
+ * run, `0x7f` and the bytes from `0x80` up included, and no UTF-8 is checked:
+ * where `skipJsonText` is the reader's run, this is the writer's, which passes
+ * the bytes of a string through as they are. Natively the scan is
+ * `nish_bytes_skip_json_plain`, 16 or 32 bytes at a time. Variable-time, as
+ * `skipBlank` is.
+ */
+export const skipJsonPlain = (b: u8[], from: i32, to: i32): i32 => {
+  const end: i32 = bytesRunEnd(b, to)
+  return skipJsonPlainWalk(b, bytesRunStart(from, end), end)
+}
+
+/**
  * `count` bytes of `src` from `from` written over `dst` from `at`, as one
  * copy: where `dst` and `src` are one array and the two ranges overlap, the
  * bytes land as if every one were read before any was written, as
@@ -270,7 +286,7 @@ export const copyBytes = (dst: u8[], at: i32, src: u8[], from: i32, count: i32):
 }
 
 /**
- * `skipBlank`'s walk, once its range is clamped. This loop and the three
+ * `skipBlank`'s walk, once its range is clamped. This loop and the four
  * below are what run under Node; natively the compiler replaces the one call
  * each public function makes with the runtime kernel (`src/kernels.ts`), as it
  * does `indexOfAny`'s walk, so each loop is its kernel's meaning written in
@@ -364,6 +380,19 @@ const skipJsonTextWalk = (b: u8[], from: i32, to: i32): i32 => {
       i += n
       continue
     }
+    if (c < BYTES_SPACE || c === BYTES_QUOTE || c === BYTES_BACKSLASH) {
+      return i
+    }
+    i += 1
+  }
+  return i
+}
+
+/** `skipJsonPlain`'s walk, once its range is clamped. */
+const skipJsonPlainWalk = (b: u8[], from: i32, to: i32): i32 => {
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(b.length)) {
+    const c: i32 = toI32(b[i])
     if (c < BYTES_SPACE || c === BYTES_QUOTE || c === BYTES_BACKSLASH) {
       return i
     }

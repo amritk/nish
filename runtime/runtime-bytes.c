@@ -1,5 +1,6 @@
 /* Nish runtime, the byte-class half: the runs `nish/bytes` steps over -- JSON's
- * blanks, the digits, and the bytes a JSON string holds as themselves -- read
+ * blanks, the digits, the bytes a JSON string holds as themselves, and the bytes
+ * a JSON writer copies without an escape -- read
  * sixteen or thirty-two bytes at a time (WP38 S6a, docs/wp38-simd.md §3.1).
  *
  * A translation unit of its own for the reason runtime-aes.c is one: each file
@@ -55,12 +56,12 @@ static int nish_cpu_has_avx2(void) {
 }
 #endif
 
-/* The byte-class runs of `nish/bytes` -- `skipBlank`, `skipDigits` and
-   `skipJsonText` -- which answer the first index in [from, to) whose byte
-   is outside a class, or `to`. The contracts are in nish.h. All three share
-   one resolver and one chooser, because they are one question asked of three
-   classes: a path is one function taking the class, and each exported kernel
-   calls it with its own constant.
+/* The byte-class runs of `nish/bytes` -- `skipBlank`, `skipDigits`,
+   `skipJsonText` and `skipJsonPlain` -- which answer the first index in
+   [from, to) whose byte is outside a class, or `to`. The contracts are in
+   nish.h. All four share one resolver and one chooser, because they are one
+   question asked of four classes: a path is one function taking the class,
+   and each exported kernel calls it with its own constant.
 
    The JSON text class is the bytes a string's scan steps over without a
    second look: printable ASCII other than `"` and `\`, and every complete,
@@ -71,10 +72,16 @@ static int nish_cpu_has_avx2(void) {
    at a time, as is every sequence after it until the next ASCII byte, so a
    run of CJK text costs one block load per run rather than one per
    character. A sequence that is malformed, or cut short by `to`, ends the
-   run at its lead, where the caller's own checks judge it. */
-enum { NISH_RUN_BLANK = 0, NISH_RUN_DIGIT = 1, NISH_RUN_TEXT = 2 };
+   run at its lead, where the caller's own checks judge it.
 
-/* One path of the three run kernels: the class, then the nish.h contract. */
+   The JSON plain class is the bytes a writer copies into a string as they
+   are: every byte from 0x20 up other than `"` and `\`. It is the text class
+   with no UTF-8 check -- a writer passes what it is given through, and the
+   reader that checks it is on the other side -- so its vector stops are the
+   text class's without the high bytes, and nothing in it resumes. */
+enum { NISH_RUN_BLANK = 0, NISH_RUN_DIGIT = 1, NISH_RUN_TEXT = 2, NISH_RUN_PLAIN = 3 };
+
+/* One path of the four run kernels: the class, then the nish.h contract. */
 typedef int64_t (*nish_run_path)(int cls, const uint8_t *p, int64_t from, int64_t to);
 
 /* The length of the well-formed UTF-8 sequence whose lead is at `p[i]` and
@@ -104,11 +111,12 @@ static inline int64_t nish_run_utf8(const uint8_t *p, int64_t i, int64_t to) {
   return n;
 }
 
-/* Whether ASCII-range byte `b` is in the class; for the text class a byte
-   with its top bit set answers no here and is taken by `nish_run_utf8`. */
+/* Whether byte `b` is in the class; for the text class a byte with its top
+   bit set answers no here and is taken by `nish_run_utf8`. */
 static inline int nish_run_in(int cls, uint8_t b) {
   if (cls == NISH_RUN_BLANK) return b == 0x20 || b == 0x0a || b == 0x0d || b == 0x09;
   if (cls == NISH_RUN_DIGIT) return (uint8_t)(b - 0x30) < 10;
+  if (cls == NISH_RUN_PLAIN) return b >= 0x20 && b != 0x22 && b != 0x5c;
   return b >= 0x20 && b < 0x80 && b != 0x22 && b != 0x5c;
 }
 
@@ -153,7 +161,8 @@ static inline int64_t nish_run_resume(int cls, const uint8_t *p, int64_t i, int6
 
 /* Each vector path computes a mask of the block's stops -- the bytes outside
    the class, where for text every byte with its top bit set counts as a stop
-   -- and either moves on a whole block or jumps to the first stop. */
+   -- and either moves on a whole block or jumps to the first stop. The plain
+   class is the text class's stops less that one term. */
 #if defined(NISH_SIMD_SSE2)
 static inline unsigned nish_run_stops_sse2(int cls, __m128i v) {
   if (cls == NISH_RUN_BLANK) {
@@ -170,7 +179,8 @@ static inline unsigned nish_run_stops_sse2(int cls, __m128i v) {
      its own sign bit, which movemask reads straight off `v`. */
   __m128i stop = _mm_or_si128(_mm_or_si128(_mm_cmpeq_epi8(v, _mm_set1_epi8(0x22)), _mm_cmpeq_epi8(v, _mm_set1_epi8(0x5c))),
                               _mm_cmpeq_epi8(_mm_min_epu8(v, _mm_set1_epi8(0x1f)), v));
-  return (unsigned)_mm_movemask_epi8(_mm_or_si128(stop, v));
+  if (cls == NISH_RUN_TEXT) stop = _mm_or_si128(stop, v);
+  return (unsigned)_mm_movemask_epi8(stop);
 }
 
 static int64_t nish_run_base(int cls, const uint8_t *p, int64_t from, int64_t to) {
@@ -203,7 +213,8 @@ __attribute__((target("avx2"))) static inline unsigned nish_run_stops_avx2(int c
   __m256i stop = _mm256_or_si256(
       _mm256_or_si256(_mm256_cmpeq_epi8(v, _mm256_set1_epi8(0x22)), _mm256_cmpeq_epi8(v, _mm256_set1_epi8(0x5c))),
       _mm256_cmpeq_epi8(_mm256_min_epu8(v, _mm256_set1_epi8(0x1f)), v));
-  return (unsigned)_mm256_movemask_epi8(_mm256_or_si256(stop, v));
+  if (cls == NISH_RUN_TEXT) stop = _mm256_or_si256(stop, v);
+  return (unsigned)_mm256_movemask_epi8(stop);
 }
 
 /* Thirty-two bytes a block, then the base path for what is left. */
@@ -230,8 +241,8 @@ static inline uint64_t nish_run_stops_neon(int cls, uint8x16_t v) {
   } else if (cls == NISH_RUN_DIGIT) {
     stop = vcgtq_u8(vsubq_u8(v, vdupq_n_u8(0x30)), vdupq_n_u8(9));
   } else {
-    stop = vorrq_u8(vorrq_u8(vceqq_u8(v, vdupq_n_u8(0x22)), vceqq_u8(v, vdupq_n_u8(0x5c))),
-                    vorrq_u8(vcleq_u8(v, vdupq_n_u8(0x1f)), vcgeq_u8(v, vdupq_n_u8(0x80))));
+    stop = vorrq_u8(vorrq_u8(vceqq_u8(v, vdupq_n_u8(0x22)), vceqq_u8(v, vdupq_n_u8(0x5c))), vcleq_u8(v, vdupq_n_u8(0x1f)));
+    if (cls == NISH_RUN_TEXT) stop = vorrq_u8(stop, vcgeq_u8(v, vdupq_n_u8(0x80)));
   }
   /* runtime-simd.c's NEON movemask: four bits a byte, in order. */
   return vget_lane_u64(vreinterpret_u64_u8(vshrn_n_u16(vreinterpretq_u16_u8(stop), 4)), 0);
@@ -261,7 +272,8 @@ static inline uint32_t nish_run_stops_wasm(int cls, v128_t v) {
     stop = wasm_u8x16_gt(wasm_i8x16_sub(v, wasm_i8x16_splat(0x30)), wasm_i8x16_splat(9));
   } else {
     stop = wasm_v128_or(wasm_v128_or(wasm_i8x16_eq(v, wasm_i8x16_splat(0x22)), wasm_i8x16_eq(v, wasm_i8x16_splat(0x5c))),
-                        wasm_v128_or(wasm_u8x16_le(v, wasm_i8x16_splat(0x1f)), v));
+                        wasm_u8x16_le(v, wasm_i8x16_splat(0x1f)));
+    if (cls == NISH_RUN_TEXT) stop = wasm_v128_or(stop, v);
   }
   return wasm_i8x16_bitmask(stop);
 }
@@ -326,4 +338,8 @@ int64_t nish_bytes_skip_digits(const uint8_t *p, int64_t from, int64_t to) {
 
 int64_t nish_bytes_skip_json_text(const uint8_t *p, int64_t from, int64_t to) {
   return NISH_RUN_PATH(NISH_RUN_TEXT, p, from, to);
+}
+
+int64_t nish_bytes_skip_json_plain(const uint8_t *p, int64_t from, int64_t to) {
+  return NISH_RUN_PATH(NISH_RUN_PLAIN, p, from, to);
 }

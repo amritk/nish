@@ -49,10 +49,11 @@
 // branch to: the call is emitted as written there, and the module references
 // no `nish_aes_` symbol at all.
 //
-// WP38 S6a: `nish/bytes` has four walks lowered S1's way, the call replaced
-// outright (`bytesWalkOf`). Three are byte-class runs — JSON's blanks, the
-// digits, and the bytes a JSON string holds as themselves — each a kernel in
-// `runtime/runtime-bytes.c` with a scalar path of its own; the fourth,
+// WP38 S6a: `nish/bytes` has five walks lowered S1's way, the call replaced
+// outright (`bytesWalkOf`). Four are byte-class runs — JSON's blanks, the
+// digits, the bytes a JSON string holds as themselves, and the bytes a JSON
+// writer copies without an escape — each a kernel in
+// `runtime/runtime-bytes.c` with a scalar path of its own; the fifth,
 // `copyBytes`'s, is one `llvm.memmove`. Each public function clamps or checks
 // its range before its one call, so a kernel is handed only the
 // `0 <= from <= to <= length` its contract in `runtime/nish.h` asks for, and
@@ -161,6 +162,8 @@ const BYTES_WALK_DIGITS: i32 = 2
 const BYTES_WALK_JSON_TEXT: i32 = 3
 /** `copyBytesWalk(dst, at, src, from, count)`: one `llvm.memmove`. */
 export const BYTES_WALK_COPY: i32 = 4
+/** `skipJsonPlainWalk(b, from, to)`: `nish_bytes_skip_json_plain`. */
+const BYTES_WALK_JSON_PLAIN: i32 = 5
 
 /**
  * Which of `nish/bytes`'s walks a call in `program` to `sig` is, or
@@ -183,6 +186,8 @@ export const bytesWalkOf = (program: CheckedProgram, sig: FunctionSig): i32 => {
     walk = BYTES_WALK_JSON_TEXT
   } else if (name === "copyBytesWalk") {
     walk = BYTES_WALK_COPY
+  } else if (name === "skipJsonPlainWalk") {
+    walk = BYTES_WALK_JSON_PLAIN
   }
   if (walk === BYTES_WALK_NONE || !isBytesModule(program.packageName, program.source.path)) {
     return BYTES_WALK_NONE
@@ -197,6 +202,9 @@ export const bytesKernelOf = (walk: i32): string => {
   }
   if (walk === BYTES_WALK_DIGITS) {
     return "nish_bytes_skip_digits"
+  }
+  if (walk === BYTES_WALK_JSON_PLAIN) {
+    return "nish_bytes_skip_json_plain"
   }
   return "nish_bytes_skip_json_text"
 }

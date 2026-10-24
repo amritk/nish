@@ -4681,22 +4681,23 @@ On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
 with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
 
-### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` in `nish/bytes`
+### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` in `nish/bytes`
 
-The three runs answer the first index in `[from, to)` of a `u8[]` whose byte
+The four runs answer the first index in `[from, to)` of a `u8[]` whose byte
 is not in their class, or `to` when every byte there is; `copyBytes` copies a
 window of one array into another, or into itself
 ([wp38-simd.md](wp38-simd.md), S6a). They are the scans and the copy a parser
 spends its time in, and `std/json` is written over them.
 
 ```typescript
-import { copyBytes, skipBlank, skipDigits, skipJsonText } from "nish/bytes";
+import { copyBytes, skipBlank, skipDigits, skipJsonPlain, skipJsonText } from "nish/bytes";
 
 export const main = (): i32 => {
   const text: u8[] = [32, 10, 52, 50, 44, 34, 104, 105, 34]; // " \n42,\"hi\""
   const start = skipBlank(text, 0, 9);
   console.log(`${start} ${skipDigits(text, start, 9)}`);   // 2 4
   console.log(`${skipJsonText(text, 6, 9)}`);              // 8, the closing quote
+  console.log(`${skipJsonPlain(text, 0, 9)}`);             // 1, the newline
   const word: u8[] = [0, 0];
   copyBytes(word, 0, text, 6, 2);
   console.log(`${word[0]} ${word[1]}`);                    // 104 105
@@ -4712,6 +4713,9 @@ export const main = (): i32 => {
   backslash or a control byte, and at the lead byte of a sequence that is
   overlong, a surrogate, past U+10FFFF, a stray continuation byte or cut short
   by `to`, so where it stops is the byte a decoder has to look at.
+  `skipJsonPlain` skips what a JSON writer copies without an escape: every
+  byte from 0x20 up other than `"` and `\`, DEL and 0x80–0xff included, with
+  no UTF-8 check. It stops at a quote, a backslash or a byte below 0x20.
 - **The runs never panic.** `to` is clamped into `[0, b.length]` and `from`
   into `[0, to]`, as `indexOfAny` clamps: a negative `from` scans from the
   start, and a `from` at or past `to` answers it
@@ -4726,7 +4730,7 @@ export const main = (): i32 => {
   which is what runs under Node. Natively the compiler recognises that call by
   module and name (`src/kernels.ts`), as it does `indexOfAny`'s, and emits the
   runtime's `nish_bytes_skip_blank`, `nish_bytes_skip_digits` or
-  `nish_bytes_skip_json_text` (`runtime/runtime-bytes.c`) in its place, or one
+  `nish_bytes_skip_json_text` or `nish_bytes_skip_json_plain` (`runtime/runtime-bytes.c`) in its place, or one
   `llvm.memmove` for the copy. The kernels pick a scalar, a 16-byte (SSE2,
   NEON or wasm SIMD) or a 32-byte (AVX2) path on their first call, and
   `NISH_SIMD=scalar|base|avx2` pins it, except in a freestanding wasm32 build,

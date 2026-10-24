@@ -6,26 +6,26 @@ stages:
     title: "perf(runtime): JsonWriter's escape scan on a byte-class kernel"
     goal: Serialize of bench/json-compare citm_catalog.json is faster than the current record outside its band, with no workload slower outside its band, the writer's output byte for byte unchanged, and the result recorded in docs/BENCHMARKS.md and docs/wp38-simd.md
     verification: npm run check, npm run lint, an undegraded npm test, node tests/run.js wasi (WASI_SYSROOT=/usr) and node tests/run.js performance green; tests/simd/byte-runs.c passes under its tests/run.js section; the bench/json-compare A/B against main is recorded
-    status: pending
+    status: blocked
     todos:
       - id: kernel-class
         content: Add the fourth class to runtime/runtime-bytes.c — a run of bytes JsonWriter copies unescaped (0x20–0xff except `"` and `\`, no UTF-8 check), on the scalar, SSE2/NEON/simd128 and AVX2 paths behind the existing resolver, exported under the `nish_bytes_skip_` prefix scripts/build.sh keys on, with the unit within RUNTIME_BYTES_TEXT_BUDGET's 1,536 bytes — see The kernel
-        status: pending
+        status: done
       - id: kernel-agree
         content: Extend tests/simd/byte-runs.c so the scalar, 16-byte and 32-byte paths agree on the new class with every class boundary (0x1f/0x20, `"`, `\`, 0x7f/0x80, 0xff) at every offset of a block — see The agreement test
-        status: pending
+        status: done
       - id: bytes-walker
         content: Add the nish/bytes walker (std/bytes.ts, src/std-modules.ts) lowered by bytesWalkOf in src/kernels.ts, clamping its range and never panicking like the other runs, on isPureRuntime's list and marked variable-time, with tests/link/std_bytes_runs and its golden .ll covering it — see The walker
-        status: pending
+        status: done
       - id: writer-use
         content: Move JsonWriter's string writer in std/json.ts onto the walker, copying each plain run with copyBytes and escaping only the bytes the walker stops at, with a measured inline guard so a short string makes no call, as jsonTokSkipBlank's guard does — see The writer
-        status: pending
+        status: blocked
       - id: ab-record
         content: A/B against main on bench/json-compare (interleaved rounds, minima, noise band) and bench/json-tokenizer; record it in docs/BENCHMARKS.md's JSON section and docs/wp38-simd.md, replacing the "Not done" note and updating the S6a row's serialize verdict — see The record
-        status: pending
+        status: blocked
       - id: docs-surface
         content: Document the walker in docs/LANGUAGE.md's byte-runs rule, std/README.md, docs/guide/using-nish/standard-library.md and docs/IR_COOKBOOK.md where the other runs are; regenerate tests/self/goldens with node tests/self/goldens.js --update and read the diff — see The surface
-        status: pending
+        status: done
 ---
 
 # WP38 S6a follow-up — JsonWriter's escape scan on a byte-class kernel

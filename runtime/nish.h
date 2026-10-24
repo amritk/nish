@@ -162,12 +162,15 @@ int64_t nish_str_index_of_any(const nish_str *s, const nish_str *set, int64_t fr
    newline, carriage return) and `skip_digits` over 0-9. `skip_json_text` steps
    over printable ASCII other than `"` and `\`, and over every well-formed
    UTF-8 sequence (RFC 3629) that ends at or before `to`; a malformed or cut-off
-   sequence stops the run at its lead byte. They live in runtime/runtime-bytes.c
-   and choose their path as `nish_str_index_of_any` does. Variable-time: never
-   call them on a secret. */
+   sequence stops the run at its lead byte. `skip_json_plain` steps over every
+   byte from 0x20 up other than `"` and `\` -- what a JSON writer copies without
+   an escape -- with no UTF-8 check. They live in runtime/runtime-bytes.c and
+   choose their path as `nish_str_index_of_any` does. Variable-time: never call
+   them on a secret. */
 int64_t nish_bytes_skip_blank(const uint8_t *p, int64_t from, int64_t to);
 int64_t nish_bytes_skip_digits(const uint8_t *p, int64_t from, int64_t to);
 int64_t nish_bytes_skip_json_text(const uint8_t *p, int64_t from, int64_t to);
+int64_t nish_bytes_skip_json_plain(const uint8_t *p, int64_t from, int64_t to);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
 void nish_print(const nish_str *s);
 /* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */

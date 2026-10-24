@@ -2556,6 +2556,7 @@ export const isPureRuntime = (symbol: string): boolean =>
   symbol === "nish_bytes_skip_blank" ||
   symbol === "nish_bytes_skip_digits" ||
   symbol === "nish_bytes_skip_json_text" ||
+  symbol === "nish_bytes_skip_json_plain" ||
   symbol === "nish_regex_scan" ||
   symbol === "nish_str_len" ||
   symbol === "nish_str_from_i32" ||

@@ -3208,6 +3208,16 @@ function skipJsonText(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonText [e
   callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
   callee +1:10 skipJsonTextWalk -> @nish.skipJsonTextWalk
   callee +1:30 bytesRunStart -> @nish.bytesRunStart
+function skipJsonPlain(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPlain [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipJsonPlainWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipJsonPlainWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipJsonPlainWalk -> @nish.skipJsonPlainWalk
+  callee +1:31 bytesRunStart -> @nish.bytesRunStart
 function copyBytes(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytes [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.copyBytesWalk
@@ -3254,6 +3264,13 @@ function skipJsonTextWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonTex
   local +2:11 c: i32 (const)
   local +4:13 n: i32 (const)
   callee +4:22 bytesUtf8Length -> @nish.bytesUtf8Length
+function skipJsonPlainWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPlainWalk
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
 function copyBytesWalk(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytesWalk
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7

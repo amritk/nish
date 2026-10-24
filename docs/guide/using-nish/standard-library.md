@@ -39,7 +39,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column` |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
-| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` for the runs a parser skips and the bytes it copies |
+| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` for the runs a parser skips and a writer copies |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and the keys it reads decoded |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
@@ -1098,7 +1098,8 @@ Natively every function answers for every value. Under Node the `u16` and
 ### Runs and copies
 
 A parser spends its time skipping: the blanks between tokens, the digits of a
-number, the plain text inside a string. Three functions answer where such a
+number, the plain text inside a string; a writer skips the bytes it can copy
+without an escape. Four functions answer where such a
 run ends — the first index in `[from, to)` whose byte is not in the class, or
 `to` if every byte is:
 
@@ -1107,6 +1108,7 @@ run ends — the first index in `[from, to)` whose byte is not in the class, or
 | `skipBlank(b, from, to)` | JSON's blanks: space, tab, newline, carriage return |
 | `skipDigits(b, from, to)` | the ASCII digits `0` to `9` |
 | `skipJsonText(b, from, to)` | what a JSON string holds as itself: printable ASCII other than `"` and `\`, and well-formed UTF-8 |
+| `skipJsonPlain(b, from, to)` | what a JSON writer copies as it is: every byte from 0x20 up other than `"` and `\`, with no UTF-8 check |
 
 `copyBytes(dst, at, src, from, count)` copies `count` bytes of `src` from
 `from` into `dst` at `at`. The two arrays may be the same one, and the ranges
@@ -1132,7 +1134,8 @@ range past the end answers the end. `copyBytes` panics with
 `copyBytes: the range lies outside an array` if either window does not fit,
 before it writes anything. `skipJsonText` stops at a quote, a backslash, a
 control byte or the first byte of a malformed UTF-8 sequence — the byte your
-decoder has to look at next.
+decoder has to look at next. `skipJsonPlain` stops at a quote, a backslash or a
+control byte — the byte your writer has to escape.
 
 Natively each run reads 16 or 32 bytes at a time and the copy is one block
 move; under Node they are plain loops with the same answers. The runs take

@@ -433,13 +433,14 @@ const RUNTIME_TERM_TEXT_BUDGET = 1536
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-bytes.c`
  * -- the byte-class runs of `nish/bytes` (WP38 S6a): `nish_bytes_skip_blank`,
- * `nish_bytes_skip_digits` and `nish_bytes_skip_json_text`, their scalar, SSE2 and AVX2
- * paths, the UTF-8 step the JSON text class takes, and the resolver with its CPUID
- * question and `NISH_SIMD` pin.
+ * `nish_bytes_skip_digits`, `nish_bytes_skip_json_text` and `nish_bytes_skip_json_plain`,
+ * their scalar, SSE2 and AVX2 paths, the UTF-8 step the JSON text class takes, and the
+ * resolver with its CPUID question and `NISH_SIMD` pin.
  *
- * Measured **1,303 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
- * `.text`: the scalar path 137, the SSE2 path 265, the AVX2 path 368, the UTF-8 step
- * 238 and its resume 29, the resolver 204 and the three entry points 62. A tenth
+ * Measured **1,407 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the scalar path 157, the SSE2 path 290, the AVX2 path 406, the UTF-8 step
+ * 238 and its resume 29, the resolver 204 and the four entry points 83. It was 1,303
+ * with three classes; the fourth, the writer's plain bytes, added 104. A tenth
  * translation unit rather than more of `runtime-simd.c`: folded in, the two measured
  * 1,960 bytes against that file's ceiling of 768, and the rule is a new file with its
  * own measured ceiling, never a raised one. Apart, a program that searches text carries

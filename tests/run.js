@@ -13726,7 +13726,9 @@ if (!only || "simd".includes(only)) {
   // WP38 S6a: the byte-class runs of runtime-bytes.c, which `nish/bytes`'s skips
   // lower to, are held to the same standard by tests/simd/byte-runs.c: every class
   // edge planted at every offset of every length 0..160, every UTF-8 sequence at each
-  // narrowed second-byte edge cut by `to` at every byte, and 150,000 fuzzed runs,
+  // narrowed second-byte edge cut by `to` at every byte, each edge of the writer's
+  // plain class (0x1f to 0xff) at every offset of every range up to 80 bytes and
+  // stopped by `to` on either side of it, and 150,000 fuzzed runs,
   // each read up to a guard page so a path that loads past `to` faults, against a
   // reference that decodes the code point; then the resolver under each `NISH_SIMD`.
   // It runs everywhere the byte search's driver does.
