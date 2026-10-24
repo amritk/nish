@@ -38,7 +38,7 @@ function addStringConstant(module: IRModule, index: i32, text: string): string -
   sharedWrite: via IRModule.addGlobal
   escaping: text
   calls: IRModule.addGlobal irEscape nish_panic_overflow nish_str_concat nish_str_from_i32
-  pointer module: size=80 writesThrough=false captured=false passedTo=IRModule.addGlobal#0
+  pointer module: size=96 writesThrough=false captured=false passedTo=IRModule.addGlobal#0
   stackSites=0 stackLocals=0
   local +0:9 array: string (const)
   local +1:9 type: string (const)

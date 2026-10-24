@@ -2445,15 +2445,16 @@ while.end:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind readonly }
-attributes #3 = { nounwind willreturn }
-attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #5 = { nounwind willreturn memory(argmem: read) }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #5 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #6 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!49, !50, !51, !52, !53}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"ptr", !1, i64 0}
@@ -2503,3 +2504,8 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !46 = !{!41, !2, i64 8}
 !47 = !{!41, !2, i64 24}
 !48 = !{!41, !2, i64 32}
+!49 = !{i32 8, !"cf-protection-branch", i32 1}
+!50 = !{i32 8, !"cf-protection-return", i32 1}
+!51 = !{i32 8, !"branch-target-enforcement", i32 1}
+!52 = !{i32 8, !"sign-return-address", i32 1}
+!53 = !{i32 4, !"probe-stack", !"inline-asm"}

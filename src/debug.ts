@@ -221,9 +221,8 @@ export class DebugInfo {
       `distinct !DICompileUnit(language: DW_LANG_C99, file: ${this.file}, producer: ${quote(`${CLI} ${VERSION}`)}, isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)`
     )
     module.addNamedMetadata(`!llvm.dbg.cu = !{${this.cu}}`)
-    const dwarf = module.addMetadata('!{i32 7, !"Dwarf Version", i32 5}')
-    const version = module.addMetadata('!{i32 2, !"Debug Info Version", i32 3}')
-    module.addNamedMetadata(`!llvm.module.flags = !{${dwarf}, ${version}}`)
+    module.addModuleFlag('!{i32 7, !"Dwarf Version", i32 5}')
+    module.addModuleFlag('!{i32 2, !"Debug Info Version", i32 3}')
   }
 
   /** The `DIFile` of one source file, interned so the module's own is written once. */

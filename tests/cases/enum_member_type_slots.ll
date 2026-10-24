@@ -2131,15 +2131,15 @@ while.end:
   ret void, !dbg !927
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readnone }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
 !llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!2, !3}
+!llvm.module.flags = !{!2, !3, !970, !971, !972, !973, !974}
 !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "nish <version>", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/enum_member_type_slots.ts", directory: ".")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
@@ -3110,3 +3110,8 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !967 = !DILocation(line: 151, column: 32, scope: !926)
 !968 = !DILocation(line: 151, column: 36, scope: !926)
 !969 = !DILocation(line: 152, column: 5, scope: !926)
+!970 = !{i32 8, !"cf-protection-branch", i32 1}
+!971 = !{i32 8, !"cf-protection-return", i32 1}
+!972 = !{i32 8, !"branch-target-enforcement", i32 1}
+!973 = !{i32 8, !"sign-return-address", i32 1}
+!974 = !{i32 4, !"probe-stack", !"inline-asm"}

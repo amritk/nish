@@ -3131,6 +3131,12 @@ const DECLARED = [
     changelog: "Do not hoist a loop's array header across a new whose constructor resizes it",
     why: "the case for CG-11 (#435): `whileLoop` reloads `len` and `data` every pass, because `new P(xs)` runs a constructor that pushes, where the reference hoisted them; and `forOfGrows`, whose `new R(xs)` pushes on every pass, loses the `willreturn` the reference gave it; and `compoundKeeps`, whose `new Q(xs)` cannot move `xs`, stores into the slot it read where the reference checked the index and took the address a second time",
   },
+  {
+    changelog: "Harden every native binary",
+    why: 'every native module carries the control-flow and stack-clash module flags, numbered last, and every definition `"probe-stack"="inline-asm"`; `undo` removes exactly those, so a file that differs in anything else is still a difference',
+    // An arrow, because `withoutHardening` is defined further down.
+    undo: (text) => withoutHardening(text),
+  },
   // Last, because it covers every program and a narrower entry above must
   // still be the one a difference is reported under.
   {
@@ -3317,6 +3323,89 @@ const withoutOwnVersion = (text, ownVersion) => {
     return text
   }
   return text.split(`producer: "${ownVersion}"`).join('producer: "<own version>"')
+}
+
+/** The module flags `hardeningModuleFlags` in `src/target.ts` gives every native module, as each line reads. */
+const HARDENING_FLAGS = new Set([
+  '!{i32 8, !"cf-protection-branch", i32 1}',
+  '!{i32 8, !"cf-protection-return", i32 1}',
+  '!{i32 8, !"branch-target-enforcement", i32 1}',
+  '!{i32 8, !"sign-return-address", i32 1}',
+  '!{i32 4, !"probe-stack", !"inline-asm"}',
+])
+
+/**
+ * `text` without what the binary hardening adds to a native module: the five
+ * module flags, their references on the `!llvm.module.flags` line (and that
+ * line when nothing else is left on it), and the `"probe-stack"="inline-asm"`
+ * every definition carries. The flags are numbered last, so no other `!N`
+ * moved for them and removing them leaves the module the reference wrote.
+ * A declaration's `undo`: it is applied to the candidate alone, so a
+ * reference that already carries the flags still differs.
+ */
+const withoutHardening = (text) => {
+  const ids = new Set()
+  const kept = []
+  for (const line of text.split("\n")) {
+    const m = /^(!\d+) = (.*)$/.exec(line)
+    if (m !== null && HARDENING_FLAGS.has(m[2])) {
+      ids.add(m[1])
+    } else {
+      kept.push(line)
+    }
+  }
+  const flagsLine = "!llvm.module.flags = !{"
+  const out = []
+  for (const line of kept) {
+    if (line.startsWith(flagsLine) && line.endsWith("}")) {
+      const refs = line
+        .slice(flagsLine.length, -1)
+        .split(", ")
+        .filter((ref) => !ids.has(ref))
+      if (refs.length > 0) {
+        out.push(`${flagsLine}${refs.join(", ")}}`)
+      }
+    } else {
+      out.push(line.split(' "probe-stack"="inline-asm"').join(""))
+    }
+  }
+  return out.join("\n")
+}
+
+/**
+ * `withoutHardening` over fabricated modules, for the reason
+ * `selfCheckVersions` gives: it can make two differing files look equal.
+ * Returns the reason it failed, or null.
+ */
+const selfCheckHardening = () => {
+  const flags = [...HARDENING_FLAGS]
+  const plain = "define i32 @f() #0 {\n  ret i32 0\n}\nattributes #0 = { nounwind }"
+  const hardened =
+    'define i32 @f() #0 {\n  ret i32 0\n}\nattributes #0 = { nounwind "probe-stack"="inline-asm" }\n' +
+    "!llvm.module.flags = !{!0, !1, !2, !3, !4}\n" +
+    flags.map((flag, i) => `!${i} = ${flag}`).join("\n")
+  const debug = (extra) =>
+    `!llvm.module.flags = !{!2, !3${extra}}\n!2 = !{i32 7, !"Dwarf Version", i32 5}\n` +
+    '!3 = !{i32 2, !"Debug Info Version", i32 3}'
+  const cases = [
+    [hardened, plain],
+    // The debug flags stay, and so does their line.
+    [`${debug(", !9")}\n!9 = ${flags[0]}`, debug("")],
+    // An attribute with no group, on the definition itself.
+    ['define void @g() "probe-stack"="inline-asm" {', "define void @g() {"],
+    // A flag with another value is not one of these, and stays.
+    ['!llvm.module.flags = !{!0}\n!0 = !{i32 8, !"cf-protection-branch", i32 0}', null],
+    // Anything else is left alone.
+    [plain, plain],
+    ["", ""],
+  ]
+  for (const [text, want] of cases) {
+    const got = withoutHardening(text)
+    if (got !== (want ?? text)) {
+      return `withoutHardening(${JSON.stringify(text)}) gave ${JSON.stringify(got)}`
+    }
+  }
+  return null
 }
 
 /**
@@ -3739,10 +3828,14 @@ const compare = (pair, work, file, options = {}) => {
       }
       continue
     }
+    const wantPlain = withoutOwnVersion(wantRooted, pair.reference.version)
+    const gotPlain = withoutOwnVersion(gotRooted, pair.candidate.version)
+    const undone = DECLARED.find((entry) => entry.undo !== undefined && entry.undo(gotPlain) === wantPlain)
     const where = excerpt(wantText, gotText, limit)
     differences.push({
       surface: name,
       detail: `differs (${where.differing} of ${where.total} lines)\n${where.text}`,
+      ...(undone === undefined ? {} : { undone }),
     })
   }
   if (differences.length > 0) {
@@ -3758,6 +3851,11 @@ const compare = (pair, work, file, options = {}) => {
  */
 const declaredFor = (program, surface) => {
   for (const entry of DECLARED) {
+    // An `undo` covers a file only when it turns one side into the other,
+    // which `compare` decides with both texts in hand.
+    if (entry.undo !== undefined) {
+      continue
+    }
     if (entry.program !== undefined && entry.program !== program) {
       continue
     }
@@ -3892,6 +3990,11 @@ const main = (argv) => {
     process.stderr.write(`nish-cmp: its own producer-version comparison is wrong: ${selfCheckVersion}\n`)
     return 2
   }
+  const selfCheckUndo = selfCheckHardening()
+  if (selfCheckUndo !== null) {
+    process.stderr.write(`nish-cmp: its own hardening undo is wrong: ${selfCheckUndo}\n`)
+    return 2
+  }
   const selfCheckNote = selfCheckNotes()
   if (selfCheckNote !== null) {
     process.stderr.write(`nish-cmp: its own release-note lookup is wrong: ${selfCheckNote}\n`)
@@ -3946,7 +4049,7 @@ const main = (argv) => {
       refused.push(`${program}: both refuse it: ${result.refused}`)
     } else if (result.differences !== undefined) {
       for (const difference of result.differences) {
-        const entry = declaredFor(program, difference.surface)
+        const entry = difference.undone ?? declaredFor(program, difference.surface)
         const row = { program, ...difference, declared: entry }
         ;(entry === null ? undeclared : declared).push(row)
       }
@@ -4077,10 +4180,12 @@ export {
   resolveCompiler,
   resolvePair,
   seedFromEnvironment,
+  selfCheckHardening,
   selfCheckNotes,
   selfCheckRoots,
   selfCheckVersions,
   isNamed,
+  withoutHardening,
   withoutOwnRoot,
   withoutOwnVersion,
 }

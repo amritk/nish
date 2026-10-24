@@ -259,6 +259,38 @@ if [ "$debug" = 1 ]; then common+=(-g); strip_flag=(); fi
 # float than the baseline build (docs/LANGUAGE.md, "The CPU level").
 if [ -n "$cpu" ]; then common+=(-march=x86-64-v3 -ffp-contract=off); fi
 
+# Hardening, on every native profile (the wasm and wasi ones build their own
+# command line and have none of these to give). docs/security/runtime.md
+# records what each one closes and what it costs.
+#
+# The control-flow flag names the target's own scheme: -fcf-protection is an
+# error on arm64 and -mbranch-protection one on x86, so the triple decides.
+# Nish's IR carries both targets' module flags, and each backend reads its own;
+# these make clang's C units agree, because the linker marks the binary only
+# when every object asks for it. -fstack-clash-protection is ELF's alone: on
+# Mach-O clang ignores it with a warning, and the kernel's guard is the stack
+# itself. -z relro -z now leaves the GOT read-only after relocation, and
+# -z noexecstack says so even when an object without the note slips in.
+#
+# -fstack-protector-strong and _FORTIFY_SOURCE reach the C runtime alone: on a
+# .ll input clang adds no ssp attribute and the macro has no source to change,
+# so one flag list serves the one-command link too. FORTIFY wants an optimiser
+# and is left out of debug, where it would only warn. -U first, because a
+# distribution clang may already define it at another level.
+case "$("$CC" -dumpmachine 2>/dev/null)" in
+  x86_64*|amd64*) common+=(-fcf-protection=full) ;;
+  aarch64*|arm64*) common+=(-mbranch-protection=standard) ;;
+esac
+common+=(-fstack-protector-strong)
+if [ "$profile" != debug ]; then common+=(-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3); fi
+case "$(uname -s)" in
+  Darwin) ;;
+  *)
+    common+=(-fstack-clash-protection)
+    # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
+    common+=(-Wl,-z,relro,-z,now -Wl,-z,noexecstack) ;;
+esac
+
 tls=()
 if [ "$threads" = 1 ]; then
   common+=(-DNISH_THREADS=1 -ftls-model=initial-exec -pthread)
@@ -278,22 +310,28 @@ case "$profile" in
     optimise=(-Oz -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"}
       -ffunction-sections -fdata-sections -fomit-frame-pointer
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}
-      -fno-stack-protector -fvisibility=hidden) ;;
+      -fvisibility=hidden) ;;
 esac
 
 # --runtime-objects and --runtime-from: the one-command link split in two, with
 # every compile it held run at once. A `$CC -c` takes `common` and `optimise`,
 # which is what the one command compiles each input with -- less
-# -fuse-ld=lld, which only names the linker -- so a runtime unit compiles to the
-# same object either way: native code for debug, -flto bitcode for speed and
+# -fuse-ld=lld and the -Wl, flags, which only speak to the linker -- so a
+# runtime unit compiles to the same object either way: native code for debug, -flto bitcode for speed and
 # size, which the link still optimises together with the program. The link
 # takes the same line the profile always uses, with objects for sources.
 if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
   compile=()
   for flag in "${common[@]}"; do
-    case "$flag" in -fuse-ld=*) ;; *) compile+=("$flag") ;; esac
+    case "$flag" in -fuse-ld=*|-Wl,*) ;; *) compile+=("$flag") ;; esac
   done
   compile+=(${optimise[@]+"${optimise[@]}"})
+  # A program's modules are .ll alone, and clang warns that a -U it cannot
+  # apply to one went unused, so their compile leaves the FORTIFY pair out.
+  module_compile=()
+  for flag in "${compile[@]}"; do
+    case "$flag" in -U_FORTIFY_SOURCE|-D_FORTIFY_SOURCE=*) ;; *) module_compile+=("$flag") ;; esac
+  done
   # Waits for every job, not just the last, and fails when any of them did.
   # bash 3.2 has no `wait -n`, so the jobs are waited for in order.
   pids=()
@@ -360,7 +398,7 @@ if [ -n "$objects_from" ]; then
   for i in "${inputs[@]}"; do
     case "$i" in */runtime.c|runtime.c) echo "error: --runtime-from links the runtime in $objects_from, so $i is not an input" >&2; exit 2 ;; esac
     n=$((n + 1))
-    "$CC" "${compile[@]}" -c "$i" -o "$work/$n.o" &
+    "$CC" "${module_compile[@]}" -c "$i" -o "$work/$n.o" &
     pids+=("$!")
     objects+=("$work/$n.o")
   done

@@ -4,6 +4,7 @@ entry: src/target.ts
 const X86_64_LINUX_LAYOUT: string = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 const X86_64_DARWIN_LAYOUT: string = "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 const WASM32_LAYOUT: string = "e-m:e-p:32:32-p10:8:8-p20:8:8-i64:64-n32:64-S128-ni:1:10:20"
+const HARDENING_ATTRS: string = "\"probe-stack\"=\"inline-asm\"" [exported]
 struct Target (class) size=16 align=8 exported
   field triple: string index=0 offset=0
   field datalayout: string index=1 offset=8
@@ -53,3 +54,6 @@ function targetHeader(target: Target): string[] -> @targetHeader [exported]
   pointer target: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 lines: string[] (const)
+function hardeningModuleFlags(): string[] -> @hardeningModuleFlags [exported]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0

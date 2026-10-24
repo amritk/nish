@@ -438,6 +438,19 @@ jobs:
         run: |
           grep -E '^PASS  cpu level: a --cpu x86-64-v3 link of hello prints what the baseline link prints' "$RUNNER_TEMP/test.log"
 
+      # The `hardening` section reads the headers of what `--link` and `nish run`
+      # produce, and skips where no clang or readelf is installed. A runner
+      # without them would take the skip and stay green, so the lines that say
+      # each profile's link, and the reader's own negative case, were read are
+      # required here (docs/security/runtime.md, RT-HARDEN).
+      - name: Every profile's link is hardened, read from its headers
+        if: matrix.shard == 1
+        run: |
+          for what in "a --profile debug link" "a --profile speed link" "a --profile size link" "a nish run binary"; do
+            grep -F "PASS  hardening: $what of hello is PIE, full RELRO, a non-executable stack and control-flow protected" "$RUNNER_TEMP/test.log"
+          done
+          grep -F "PASS  hardening: a link with every protection off is reported" "$RUNNER_TEMP/test.log"
+
       #
       # `build/nish` is what the steps after the suite drive: stage1, one
       # directory below the repository root, which is where its package root is
@@ -722,6 +735,19 @@ jobs:
         run: |
           "$SEED" --version
           NISH_BOOTSTRAP="$SEED" bash scripts/bootstrap.sh --verify
+
+      # The compiler a release ships is stage2, linked by this checkout's
+      # scripts/build.sh: its headers must say PIE, full RELRO and a stack that
+      # does not execute, with control-flow protection on ELF. On Linux the C
+      # runtime's stack protector and _FORTIFY_SOURCE show as the imports they
+      # add (docs/security/runtime.md, RT-HARDEN).
+      - name: The self-hosted compiler is hardened
+        run: |
+          if [ "$(uname)" = Linux ]; then
+            node scripts/check-hardening.mjs build/nish --imports __stack_chk_fail,__memcpy_chk
+          else
+            node scripts/check-hardening.mjs build/nish
+          fi
 
       # The command line's contract, asked of the compiler that outlives stage0.
       # `tests/nish/cli.ts` is a Nish program reading the compiler's own output —

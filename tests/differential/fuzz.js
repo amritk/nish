@@ -535,13 +535,23 @@ const DECLARED = []
  * group change it makes under a function `DECLARED` names, or it counts
  * toward none of them (`groupTransitions`).
  *
- * Empty for the same reason as `DECLARED`: 0.17.0 shipped the dropped
- * division and `pop` checks its last entry declared, with
+ * 0.17.0 shipped the dropped division and `pop` checks an earlier entry
+ * declared, with
  * `explains: (reference, candidate) => onlyDropsChecks(reference, candidate)`.
  * `onlyDropsChecks` stays, held to fabricated pairs on every `npm test`, for
  * the next release that drops a check.
+ *
+ * The binary hardening adds lines rather than dropping any, and is stated the
+ * way `tests/nish-cmp.js` states it: the candidate, less exactly what
+ * `withoutHardening` removes, is the reference.
  */
-const DECLARED_CHECKS = []
+const DECLARED_CHECKS = [
+  {
+    changelog: "Harden every native binary",
+    why: 'every native module carries the control-flow and stack-clash module flags, and every definition `"probe-stack"="inline-asm"`',
+    explains: (reference, candidate) => cmp.withoutHardening(candidate) === reference,
+  },
+]
 
 /** How many times each runtime panic is called, and each check block opened, in an IR text. */
 const panicCounts = (ir) => {

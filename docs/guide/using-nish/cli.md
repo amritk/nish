@@ -77,6 +77,12 @@ likely to add to it:
   link-time optimisation and a stripped binary; `size` optimises for bytes;
   `debug` links fastest and keeps symbols; `wasi` builds a `wasm32-wasi`
   module instead of a native binary.
+  Every native profile links a hardened binary: position independent, with a
+  read-only GOT (full RELRO), a non-executable stack, stack-clash probes,
+  control-flow protection (CET on x86-64, BTI and pointer authentication on
+  arm64) and the stack protector in the C runtime. You do not need a flag for
+  it, and `node scripts/check-hardening.mjs <binary>` in a checkout reads the
+  protections back from a binary's headers.
 - **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64
   CPUs with AVX2 (Intel Haswell, AMD Excavator and later), which can make
   tight loops faster. It is the one level `nish` accepts; anything else, and

@@ -174,6 +174,8 @@ import inlineAllocatorAttrs from "./runtime" -> function @inlineAllocatorAttrs
 import RuntimeTable from "./runtime" -> struct RuntimeTable
 import Local from "./symbols" -> struct Local
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
+import HARDENING_ATTRS from "./target" -> const HARDENING_ATTRS
+import hardeningModuleFlags from "./target" -> function @hardeningModuleFlags
 import resolveTarget from "./target" -> function @resolveTarget
 import targetHeader from "./target" -> function @targetHeader
 import isForeignBuffer from "./types" -> function @isForeignBuffer
@@ -307,11 +309,11 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via DebugInfo.constructor
   escaping: facts opts runtime table
-  calls: DebugInfo.constructor FunctionFacts.constructor IRFunction.constructor IRModule.constructor StringMap.constructor StringSet.constructor internalErrorFor nish_alloc_struct nish_array_grow nish_exit nish_str_concat resolveTarget targetHeader
+  calls: DebugInfo.constructor FunctionFacts.constructor IRFunction.constructor IRModule.constructor StringMap.constructor StringSet.constructor internalErrorFor isWasmBuild nish_alloc_struct nish_array_grow nish_exit nish_str_concat resolveTarget targetHeader
   pointer this: size=272 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=96 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
-  pointer opts: size=160 writesThrough=true captured=true
+  pointer opts: size=160 writesThrough=true captured=true passedTo=isWasmBuild#0
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=16 writesThrough=true captured=true
   pointer libraries: size=0 writesThrough=false captured=false
@@ -326,14 +328,15 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   callee +31:26 new StringSet -> @StringSet.constructor
   local +32:16 library: AnalysisUnit (const)
   callee +36:20 new DebugInfo -> @DebugInfo.constructor
-  local +40:13 target: Target | null (const)
-  callee +40:22 resolveTarget -> @resolveTarget
-  callee +42:22 internalErrorFor -> @internalErrorFor
-  callee +44:36 targetHeader -> @targetHeader
+  callee +38:10 isWasmBuild -> @isWasmBuild
+  local +43:13 target: Target | null (const)
+  callee +43:22 resolveTarget -> @resolveTarget
+  callee +45:22 internalErrorFor -> @internalErrorFor
+  callee +47:36 targetHeader -> @targetHeader
 function Emitter.emitModule(this: Emitter): string -> @Emitter.emitModule [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via structTypeDeclarations
-  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance Emitter.emitEntryWrapper Emitter.emitFunction Emitter.emitImportDeclarations Emitter.emitRuntimePrelude Emitter.foreignDeclarationFor FunctionSig.definedIn FunctionSig.foreign IRModule.addDeclaration IRModule.addFunction IRModule.addTypeDecl IRModule.toText emitJsonParts emitLibraryCopies jsonRouteOf libraryReach structTypeDeclarations
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance Emitter.emitEntryWrapper Emitter.emitFunction Emitter.emitImportDeclarations Emitter.emitRuntimePrelude Emitter.foreignDeclarationFor FunctionSig.definedIn FunctionSig.foreign IRModule.addDeclaration IRModule.addFunction IRModule.addModuleFlag IRModule.addTypeDecl IRModule.toText emitJsonParts emitLibraryCopies hardeningModuleFlags isWasmBuild jsonRouteOf libraryReach structTypeDeclarations
   pointer this: size=272 writesThrough=true captured=false passedTo=structTypeDeclarations#0 Emitter.foreignDeclarationFor#0 Emitter.emitFunction#0 Emitter.emitEntryWrapper#0 emitLibraryCopies#0 libraryReach#0 emitJsonParts#0 Emitter.emitImportDeclarations#0 Emitter.emitRuntimePrelude#0
   stackSites=0 stackLocals=0
   local +0:16 decl: string (const)
@@ -359,7 +362,11 @@ function Emitter.emitModule(this: Emitter): string -> @Emitter.emitModule [expor
   callee +36:5 emitJsonParts -> @emitJsonParts
   callee +37:5 Emitter.emitImportDeclarations -> @Emitter.emitImportDeclarations
   callee +38:5 Emitter.emitRuntimePrelude -> @Emitter.emitRuntimePrelude
-  callee +39:12 IRModule.toText -> @IRModule.toText
+  callee +41:10 isWasmBuild -> @isWasmBuild
+  local +42:18 flag: string (const)
+  callee +42:26 hardeningModuleFlags -> @hardeningModuleFlags
+  callee +43:9 IRModule.addModuleFlag -> @IRModule.addModuleFlag
+  callee +46:12 IRModule.toText -> @IRModule.toText
 function Emitter.factsFor(this: Emitter, sig: FunctionSig): FunctionFacts -> @Emitter.factsFor [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=408
   sharedWrite: via nish_exit

@@ -23,8 +23,10 @@
 //
 // The metadata list is the `-g` half (`src/debug.ts`): numbered nodes that
 // are interned by text so identical `!DILocation`s share one, plus the named
-// lines (`!llvm.dbg.cu`) that must precede them. Without `-g` nothing is
-// added and the module text is byte for byte what it was.
+// lines (`!llvm.dbg.cu`) that must precede them. The module flags share that
+// list: `-g`'s two and the hardening ones `src/target.ts` gives every
+// native module are gathered into the one `!llvm.module.flags` line a module
+// may have.
 
 import { StringBuilder } from "./strings"
 import { StringMap } from "./map"
@@ -347,7 +349,12 @@ export class IRFunction {
     this.current = block
   }
 
-  toText(): string {
+  /**
+   * The function's `define` line and body. `inlineAttrs` is written after the
+   * group reference; a function with no group still gets it, which is how a
+   * `--plain` module carries the hardening attributes.
+   */
+  toText(inlineAttrs: string): string {
     const params: string[] = []
     for (const p of this.params) {
       const parts: string[] = [p.type]
@@ -362,7 +369,8 @@ export class IRFunction {
       retParts.push(attr)
     }
     retParts.push(this.returnType)
-    const attrs = this.attrGroup.length > 0 ? ` ${this.attrGroup}` : ""
+    const group = this.attrGroup.length > 0 ? ` ${this.attrGroup}` : ""
+    const attrs = this.attrGroup.length === 0 && inlineAttrs.length > 0 ? ` ${inlineAttrs}` : group
     const linkage = this.linkage.length > 0 ? `${this.linkage} ` : ""
     const dbg = this.subprogram.length > 0 ? ` !dbg ${this.subprogram}` : ""
     const out = new StringBuilder()
@@ -412,6 +420,13 @@ export class IRModule {
   metadata: string[]
   /** Named metadata lines (`!llvm.dbg.cu = !{...}`), printed before the numbered nodes. */
   namedMetadata: string[]
+  /** `!N` of each `!llvm.module.flags` entry, printed as that one named line after the others. */
+  moduleFlags: string[]
+  /**
+   * Function attributes every definition carries, written into each group and
+   * on a definition that has none. Empty leaves the module as it was.
+   */
+  definitionAttrs: string
 
   constructor(sourceFileName: string) {
     this.sourceFileName = sourceFileName
@@ -424,6 +439,8 @@ export class IRModule {
     this.targetHeader = []
     this.metadata = []
     this.namedMetadata = []
+    this.moduleFlags = []
+    this.definitionAttrs = ""
   }
 
   /** Intern a metadata node and answer its reference (`!N`). */
@@ -449,6 +466,11 @@ export class IRModule {
 
   setMetadata(ref: string, text: string): void {
     this.metadata[metadataIndex(ref)] = text
+  }
+
+  /** Add a `!llvm.module.flags` entry, interned like any other node. */
+  addModuleFlag(text: string): void {
+    this.moduleFlags.push(this.addMetadata(text))
   }
 
   addNamedMetadata(line: string): void {
@@ -521,7 +543,7 @@ export class IRModule {
     if (this.functions.length > 0) {
       const bodies: string[] = []
       for (const fn of this.functions) {
-        bodies.push(fn.toText())
+        bodies.push(fn.toText(this.definitionAttrs))
       }
       sections.push(bodies.join("\n\n"))
     }
@@ -529,7 +551,7 @@ export class IRModule {
       const groups: string[] = []
       let i = 0
       while (i < this.attrGroups.length) {
-        groups.push(`attributes #${i} = { ${this.attrGroups[i]} }`)
+        groups.push(`attributes #${i} = { ${withAttrs(this.attrGroups[i], this.definitionAttrs)} }`)
         i = i + 1
       }
       sections.push(groups.join("\n"))
@@ -538,6 +560,9 @@ export class IRModule {
       const nodes: string[] = []
       for (const line of this.namedMetadata) {
         nodes.push(line)
+      }
+      if (this.moduleFlags.length > 0) {
+        nodes.push(`!llvm.module.flags = !{${this.moduleFlags.join(", ")}}`)
       }
       let m = 0
       while (m < this.metadata.length) {
@@ -548,6 +573,18 @@ export class IRModule {
     }
     return `${sections.join("\n\n")}\n`
   }
+}
+
+/**
+ * A group's attributes with `extra` after them. A group a declaration shares
+ * gets them too, where they are inert: LLVM reads a function attribute such as
+ * `probe-stack` only when it lays out a frame, and a declaration has none.
+ */
+const withAttrs = (attrs: string, extra: string): string => {
+  if (extra.length === 0) {
+    return attrs
+  }
+  return attrs.length === 0 ? extra : `${attrs} ${extra}`
 }
 
 /**

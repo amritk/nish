@@ -1700,17 +1700,17 @@ while.end:
   ret void, !dbg !719
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind readonly }
-attributes #3 = { nounwind willreturn }
-attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #5 = { nounwind willreturn memory(argmem: read) }
-attributes #6 = { nounwind noreturn cold }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #5 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #6 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
 !llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!2, !3}
+!llvm.module.flags = !{!2, !3, !762, !763, !764, !765, !766}
 !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "nish <version>", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/dbg_map_iter.ts", directory: ".")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
@@ -2473,3 +2473,8 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !759 = !DILocation(line: 151, column: 32, scope: !718)
 !760 = !DILocation(line: 151, column: 36, scope: !718)
 !761 = !DILocation(line: 152, column: 5, scope: !718)
+!762 = !{i32 8, !"cf-protection-branch", i32 1}
+!763 = !{i32 8, !"cf-protection-return", i32 1}
+!764 = !{i32 8, !"branch-target-enforcement", i32 1}
+!765 = !{i32 8, !"sign-return-address", i32 1}
+!766 = !{i32 4, !"probe-stack", !"inline-asm"}

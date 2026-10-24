@@ -68,8 +68,10 @@ import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
+import { hardeningProblems } from "../scripts/check-hardening.mjs"
 import {
   packageRootOf,
+  selfCheckHardening,
   selfCheckNotes,
   selfCheckRoots,
   selfCheckVersions,
@@ -5848,6 +5850,13 @@ if (DEALT_SECTIONS.selfHosting.selected && SHARD === sectionShard("selfHosting")
     "nish-cmp: its own producer-version normalisation is right (stand-in inputs, not the corpus)",
     selfCheckVersions() === null,
     String(selfCheckVersions())
+  )
+  // The one rewrite a declaration may apply to the candidate: the binary
+  // hardening's module flags and attribute, removed and nothing else.
+  check(
+    "nish-cmp: its hardening undo removes the hardening and nothing else (stand-in inputs, not the corpus)",
+    selfCheckHardening() === null,
+    String(selfCheckHardening())
   )
   // And the lookup that decides whether a declared difference is excused: its
   // words may be in CHANGELOG.md or in the section scripts/changelog-gen.mjs
@@ -12761,10 +12770,12 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
   const getByte = compileRng("perf_rng_getbyte", "perf_rng_getbyte_report.ll")
   const getByteIr =
     getByte.status === 0 ? fs.readFileSync(path.join(buildDir, "perf_rng_getbyte_report.ll"), "utf8") : ""
+  // Every native group also carries the stack-clash probe, which says nothing
+  // about what the function reads, so the comparison sets it aside.
   const groupOf = (fn) => {
     const define = new RegExp(`^define [^\\n]*@${fn}\\([^\\n]*\\) (#\\d+) \\{$`, "m").exec(getByteIr)
     const group = define === null ? null : new RegExp(`^attributes ${define[1]} = (.*)$`, "m").exec(getByteIr)
-    return group === null ? "" : group[1]
+    return group === null ? "" : group[1].replace(' "probe-stack"="inline-asm"', "")
   }
   check(
     "performance: wp31 §12's getByte, sumCalled and sumInline are all { nounwind willreturn readonly }, with no check left",
@@ -17106,7 +17117,10 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
   const getbyteFile = path.join("bench", "getbyte.ts")
   const getbyte = benchIr(getbyteFile, "getbyte", [])
   const getbyteU = benchIr(getbyteFile, "getbyte_unchecked", ["--unchecked-indexing"])
-  const readonlyGroup = /^attributes (#\d+) = \{ nounwind willreturn readonly \}$/m.exec(getbyte.ir)
+  const readonlyGroup =
+    /^attributes (#\d+) = \{ nounwind willreturn readonly(?: "probe-stack"="inline-asm")? \}$/m.exec(
+      getbyte.ir
+    )
   check(
     "bench: bench/getbyte.ts is one module with and without --unchecked-indexing, with no check in it, and getByte, sumInline and sumCalled are { nounwind willreturn readonly } (WP31 §10 step 3)",
     getbyte.ir !== "" &&
@@ -19484,11 +19498,12 @@ if (!only || "cpu-level".includes(only)) {
         const dir = path.join(cache, "nish", kind)
         return fs.existsSync(dir) ? fs.readdirSync(dir).length : 0
       }
-      // Each clang line a link made, but the `--version` probes the driver asks.
+      // Each clang line a link made, but the `--version` probes the driver asks
+      // and the `-dumpmachine` scripts/build.sh asks to pick its control-flow flag.
       const ccLines = () => {
         const lines = fs.existsSync(ccLog) ? fs.readFileSync(ccLog, "utf8").split("\n") : []
         fs.rmSync(ccLog, { force: true })
-        return lines.filter((l) => l.length > 0 && l !== "--version")
+        return lines.filter((l) => l.length > 0 && l !== "--version" && l !== "-dumpmachine")
       }
       const base = nish(["examples/hello.ts", "--link", path.join(cpuDir, "hello-base")], env)
       const baseLines = ccLines()
@@ -19544,6 +19559,87 @@ if (!only || "cpu-level".includes(only)) {
           `${runBase.stderr}${runLevel.stderr}${entries("run")} run entries`
         )
       }
+    }
+  }
+}
+
+// ---- Binary hardening -----------------------------------------------------------------
+// scripts/build.sh links every native program with full RELRO, a non-executable
+// stack and control-flow protection, and compiles the runtime with the stack
+// protector (docs/security/runtime.md, RT-HARDEN). The flags are only the
+// cause: scripts/check-hardening.mjs reads the effect from the binary's own
+// headers, for a link in each native profile and for a `nish run` binary.
+// Only a debug link is sure to import __stack_chk_fail; in speed and size the
+// optimiser leaves hello no runtime function with a protected frame.
+if (!only || "hardening".includes(only)) {
+  const hardDir = path.join(buildDir, "hardening")
+  fs.rmSync(hardDir, { recursive: true, force: true })
+  fs.mkdirSync(hardDir, { recursive: true })
+  if (!HAS_CLANG || process.platform === "win32") {
+    skip("hardening: no clang to link with")
+  } else {
+    const env = { ...process.env, XDG_CACHE_HOME: path.join(hardDir, "cache") }
+    const linked = ["debug", "speed", "size"].map((profile) => {
+      const exe = path.join(hardDir, `hello-${profile}`)
+      const r = spawnSync(NISH, ["examples/hello.ts", "--link", exe, "--profile", profile], {
+        cwd: root,
+        encoding: "utf8",
+        env,
+      })
+      return {
+        what: `a --profile ${profile} link`,
+        exe,
+        r,
+        imports: profile === "debug" ? ["__stack_chk_fail"] : [],
+      }
+    })
+    const ran = spawnSync(NISH, ["run", "examples/hello.ts"], { cwd: root, encoding: "utf8", env })
+    const runDir = path.join(hardDir, "cache", "nish", "run")
+    const runEntries = fs.existsSync(runDir) ? fs.readdirSync(runDir) : []
+    const runExe =
+      runEntries.length === 1
+        ? fs
+            .readdirSync(path.join(runDir, runEntries[0]))
+            .map((name) => path.join(runDir, runEntries[0], name))
+            .find((file) => path.basename(file) !== "key" && (fs.statSync(file).mode & 0o111) !== 0)
+        : undefined
+    linked.push({ what: "a nish run binary", exe: runExe ?? "", r: ran, imports: [] })
+    for (const { what, exe, r, imports } of linked) {
+      const result = r.status === 0 && exe !== "" ? hardeningProblems(exe, imports) : null
+      if (result !== null && result.skip !== null) {
+        skip(`hardening: ${what} (${result.skip})`)
+        continue
+      }
+      check(
+        `hardening: ${what} of hello is PIE, full RELRO, a non-executable stack and control-flow protected`,
+        result !== null && result.problems.length === 0,
+        result === null ? `${r.status}: ${r.stderr} ${exe}` : result.problems.join("\n")
+      )
+    }
+    // And the reading can fail: a program linked with each protection turned
+    // off is reported on every count, so a pass above is not a reader that
+    // cannot see.
+    if (process.platform === "linux") {
+      const bareC = path.join(hardDir, "bare.c")
+      const bare = path.join(hardDir, "bare")
+      fs.writeFileSync(bareC, "int main(void) { return 0; }\n")
+      const cc = spawnSync(
+        "clang",
+        [bareC, "-o", bare, "-no-pie", "-fcf-protection=none", "-Wl,-z,norelro,-z,lazy,-z,execstack"],
+        { encoding: "utf8" }
+      )
+      const result = cc.status === 0 ? hardeningProblems(bare, ["__stack_chk_fail"]) : null
+      const said = result === null ? [] : result.problems
+      check(
+        "hardening: a link with every protection off is reported for PIE, RELRO, binding, the stack, CET and the import",
+        result !== null &&
+          (result.skip !== null ||
+            (said.length === 6 &&
+              ["DYN", "GNU_RELRO", "bind now", "executable", "feature", "__stack_chk_fail"].every((word) =>
+                said.some((problem) => problem.includes(word))
+              ))),
+        result === null ? cc.stderr : said.join("\n")
+      )
     }
   }
 }

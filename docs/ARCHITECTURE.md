@@ -668,10 +668,21 @@ intrinsics become libm calls for non-constant arguments).
 | --- | --- | --- |
 | `debug` | clang defaults, `-lm` | the "before" number; symbols kept |
 | `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s` | Rust `--release` |
-| `size` | `speed` plus `-Oz -fno-stack-protector -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
+| `size` | `speed` plus `-Oz -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
 | `wasm` | `--target=wasm32-unknown-unknown -Oz -nostdlib -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections` | freestanding module for modules that do not use the C runtime |
 | `napi` | `speed` plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
 | `wasi` | `--target=wasm32-wasi --sysroot=<WASI sysroot> -Oz -DNDEBUG -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all`, plus `-nodefaultlibs -lc <libclang_rt.builtins-wasm32.a>` when clang has no wasm32 compiler-rt of its own | a WASI command module (`_start` runs `main`; `node examples/wasi-host.mjs`, `wasmtime`); see [wp7-runtime.md](wp7-runtime.md#wasi-target) |
+
+Every native profile (`debug`, `speed`, `size`, `napi`) also hardens the
+binary: `-fcf-protection=full` on x86-64 or `-mbranch-protection=standard` on
+arm64 (the triple from `$CC -dumpmachine` decides), `-fstack-protector-strong`,
+`-D_FORTIFY_SOURCE=3` (not in `debug`, where it needs an optimiser it lacks),
+and on ELF `-fstack-clash-protection -Wl,-z,relro,-z,now -Wl,-z,noexecstack`.
+The stack protector and FORTIFY reach the C runtime alone; the IR carries the
+control-flow and probe-stack module flags itself (`src/ir.ts`, numbered last,
+not on wasm). `scripts/check-hardening.mjs` reads the result back from the
+binary's headers. What each flag closes, what it costs and what it leaves
+uncovered: [security/runtime.md](security/runtime.md#binary-hardening-rt-harden).
 
 Platform notes: on macOS the script uses ld64's `-dead_strip` / `-x` instead
 of `--gc-sections` / `-s`, skips `-fuse-ld=lld` and `-fno-plt`; on Linux it
