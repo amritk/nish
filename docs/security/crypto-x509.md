@@ -104,6 +104,17 @@ No finding reached Medium or above: nothing panicked, looped or allocated
 beyond the input's size, and no edited input produced a signature, key or
 certificate that passes for the original.
 
+## Fuzzing
+
+Fuzzed by `tests/fuzz/targets/x509-der.ts`, `tests/fuzz/targets/x509-pem.ts`.
+
+| Target | What it drives | Executions |
+| --- | --- | ---: |
+| `x509-der` | `x509DerSignatureRS` and `x509ParseCertificate` over the input, and a parsed certificate's signature through `x509DerSignatureRS` and `x509VerifySignature` | 179,115,232 |
+| `x509-pem` | `pemToDer` under three labels, `x509ParseChain` (each certificate verified against the next) and `x509ParseP256PrivateKey`, whose key is wiped | 12,181,605 |
+
+Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM, (a target's own contract check fails by panicking, so it counts too). A new finding adds a row to Findings above, its input to `tests/fuzz/regressions/<target>/` and a `tests/link/fuzz_<area>_<name>/` check.
+
 ## Properties verified
 
 | Property | Pinned by |
