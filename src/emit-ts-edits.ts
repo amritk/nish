@@ -170,6 +170,13 @@ export class Walk {
    * rather than reported as an internal error.
    */
   instanceChoice: boolean
+  /**
+   * The nodes inside the instance being walked whose text the records row
+   * chose from the instance's types, each with that text, in walk order: where
+   * two instances that disagree are refused.
+   */
+  choiceNodes: Node[]
+  choiceTexts: string[]
   /** Every name the emitted module must import from `nish/runtime`, in first-use order. */
   helpers: StringSet
   /** Every width type the module spells, in first-use order. */
@@ -218,6 +225,8 @@ export class Walk {
     this.inInstance = false
     this.repeat = false
     this.instanceChoice = false
+    this.choiceNodes = []
+    this.choiceTexts = []
     this.helpers = new StringSet()
     this.widths = new StringSet()
     this.names = new StringSet()
@@ -675,6 +684,8 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
   walk.hoistHere = here
   walk.hoistable = here && !effectsBefore && !inOptionalChain(node) && !(localsBefore && writes(node))
   const hoisted = walk.preludes.length
+  const choiceBefore = walk.instanceChoice
+  walk.instanceChoice = false
   // The fixed order. A later row sees a node only when every earlier row left
   // it alone, so two rows never both rewrite one node.
   let rewritten = numbersRow(walk, node, operands)
@@ -687,6 +698,11 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
   if (rewritten === null) {
     rewritten = controlRow(walk, node, operands)
   }
+  if (walk.instanceChoice) {
+    walk.choiceNodes.push(node)
+    walk.choiceTexts.push(rewritten === null ? walk.spanOf(node) : rewritten)
+  }
+  walk.instanceChoice = choiceBefore || walk.instanceChoice
   walk.hoistable = false
   if (walk.preludes.length > hoisted) {
     // What ran before this node ran before the statement now, so it is as if
@@ -729,6 +745,9 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
   const localsRead = walk.localsRead
   const choiceBefore = walk.instanceChoice
   let choice = false
+  // The first instance's choices, which every later one's are held to.
+  const choicesFrom = walk.choiceNodes.length
+  let firstChoices = choicesFrom
   while (k >= 0) {
     walk.temps = temps
     walk.effects = effects
@@ -750,12 +769,14 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
     if (first) {
       firstChanged = out.changed[slot]
       firstText = out.texts[slot]
+      firstChoices = walk.choiceNodes.length
       first = false
     } else if (!sameAnswer(firstChanged, firstText, out.changed[slot], out.texts[slot])) {
-      if (choice) {
+      const differs = differingChoice(walk, choicesFrom, firstChoices)
+      if (choice && differs !== null) {
         // One body is written for every instance, so instances that need
         // a different copy or zero cannot all be served by it.
-        walk.refuse(node, INSTANCES_REFUSAL)
+        walk.refuse(differs, INSTANCES_REFUSAL)
       } else {
         const at = node.start
         walk.fail(
@@ -765,12 +786,40 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
       k = -1
       continue
     }
+    if (!first) {
+      // A later instance's choices were compared; only the first's are kept.
+      while (walk.choiceNodes.length > firstChoices) {
+        walk.choiceNodes.pop()
+        walk.choiceTexts.pop()
+      }
+    }
     k = walk.instanceNext[k]
+  }
+  while (walk.choiceNodes.length > choicesFrom) {
+    walk.choiceNodes.pop()
+    walk.choiceTexts.pop()
   }
   walk.instanceChoice = choiceBefore
   walk.temps = tempsAfter
   out.texts[slot] = firstText
   out.changed[slot] = firstChanged
+}
+
+/**
+ * The first node at which the instance just walked chose other text than the
+ * first instance did, whose choices are `walk.choiceNodes[from..firstEnd)` and
+ * the just-walked one's those after; or `null` where every choice agrees.
+ */
+const differingChoice = (walk: Walk, from: i32, firstEnd: i32): Node | null => {
+  const count = firstEnd - from
+  let i = 0
+  while (i < count && firstEnd + i < walk.choiceNodes.length) {
+    if (walk.choiceTexts[from + i] !== walk.choiceTexts[firstEnd + i]) {
+      return walk.choiceNodes[firstEnd + i]
+    }
+    i = i + 1
+  }
+  return null
 }
 
 /**

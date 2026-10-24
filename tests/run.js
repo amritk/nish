@@ -4574,16 +4574,18 @@ if (!only || "emit-ts".includes(only)) {
   )
 
   // The refusals: a finding about the program, exit 1, under its code, with
-  // not one file written -- the output is all or nothing.
-  for (const [code, name] of [
+  // not one file written -- the output is all or nothing. A line, where given,
+  // is where the finding points: NL4013 at the node whose instances differ,
+  // not the whole generic.
+  for (const [code, name, line] of [
     ["NL4010", "reject_emit_ts_ffi"],
     ["NL4011", "reject_emit_ts_net"],
     ["NL4011", "reject_emit_ts_net_global"],
     ["NL4011", "reject_emit_ts_signal"],
     ["NL4012", "reject_emit_ts_compound"],
-    ["NL4013", "reject_emit_ts_instances"],
-    ["NL4013", "reject_emit_ts_instances_zero"],
-    ["NL4013", "reject_emit_ts_instances_zero_string"],
+    ["NL4013", "reject_emit_ts_instances", 10],
+    ["NL4013", "reject_emit_ts_instances_zero", 5],
+    ["NL4013", "reject_emit_ts_instances_zero_string", 5],
   ]) {
     const dir = path.join(work, name)
     const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
@@ -4591,8 +4593,12 @@ if (!only || "emit-ts".includes(only)) {
       encoding: "utf8",
     })
     check(
-      `emit-ts: ${name} is refused with ${code}, exit 1, and nothing written`,
-      r.status === 1 && r.stdout.includes(`"code":"${code}"`) && !fs.existsSync(dir),
+      `emit-ts: ${name} is refused with ${code}${line === undefined ? "" : ` at line ${line}`}, exit 1, and nothing written`,
+      r.status === 1 &&
+        r.stdout
+          .split("\n")
+          .some((l) => l.includes(`"code":"${code}"`) && (line === undefined || l.includes(`"line":${line},`))) &&
+        !fs.existsSync(dir),
       `exit ${r.status}\n${r.stdout}${r.stderr}`
     )
   }
