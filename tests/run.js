@@ -10892,6 +10892,35 @@ if (!only || "map_hash_collide".includes(only)) {
   }
 }
 
+// docs/security/json.md, JSON-13: a known answer for the string hash. Under the
+// key 00..0f each pair in `map_hash_kat.ts` collides in the reference
+// SipHash-1-3 of `map_hash_kat.c` (itself checked against SipHash-2-4's
+// published vector), so a lookup of a pair's absent half compares one key only
+// when the emitted hash and its 32-bit fold agree with the reference bit for bit.
+if (!only || "map_hash_kat".includes(only)) {
+  if (!HAS_CLANG || !has("ld.lld")) {
+    skip("map_hash_kat: the key-compare count needs clang and ld.lld for --wrap")
+  } else {
+    const { exe, linked, wrapUnsupported } = linkCountingStrEq("map_hash_kat", "map_hash_kat")
+    if (wrapUnsupported) {
+      skip("map_hash_kat: this ld.lld has no --wrap")
+    } else {
+      const run = linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : linked
+      check(
+        "map_hash_kat: the string hash is SipHash-1-3 folded to 32 bits, as the reference computes it under key 00..0f",
+        run.status === 0 &&
+          run.stdout ===
+            "reference SipHash-2-4 vector matches\n" +
+              "2y0ea 50575391, z7dnaa 50575391: -1, 1 key compare\n" +
+              "b7ylaaaa 159576390, ozanaaaa 159576390: -1, 1 key compare\n" +
+              "74uiaaaaaaaaaaaa 4778237, 5efjaaaaaaa 4778237: -1, 1 key compare\n" +
+              "l2ccaaaaaaaaaaaaaaaaaaa 35261890, hxkkaaa 35261890: -1, 1 key compare\n",
+        `${run.stdout ?? ""}${run.stderr ?? ""}`
+      )
+    }
+  }
+}
+
 // ---- WP32 S5: one probe per fused lookup, counted in the goldens ----------------
 // docs/wp32-map.md §9, acceptance criterion 3: word count and `getOrInsert` are
 // one hash and one search per iteration. The loop is the whole of one function

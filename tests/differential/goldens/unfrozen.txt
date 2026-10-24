@@ -224,6 +224,7 @@ cases/map_get_value_string added after R6: no rewriter to freeze it with
 cases/map_get_value_widths added after R6: no rewriter to freeze it with
 cases/map_growth added after R6: no rewriter to freeze it with
 cases/map_hash_collide added after R6: no rewriter to freeze it with
+cases/map_hash_kat added after R6: no rewriter to freeze it with
 cases/map_iter_break added after R6: no rewriter to freeze it with
 cases/map_iter_callee added after R6: no rewriter to freeze it with
 cases/map_iter_clear added after R6: no rewriter to freeze it with

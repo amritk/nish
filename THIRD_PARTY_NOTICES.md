@@ -298,7 +298,10 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 These are named here so that nobody has to audit them again. They need no
 notice, and each is marked public domain where its constants appear:
 
-- FNV-1a (`src/map.ts`, `src/emit-map.ts`, `std/collections.ts`).
+- FNV-1a (`src/map.ts`).
+- SipHash-1-3, Aumasson and Bernstein's, whose reference implementation is
+  CC0 (`src/emit-map.ts`, `std/collections.ts`, and the test reference in
+  `tests/cases/map_hash_kat.c`, written from the paper).
 - MurmurHash3's `fmix32` and `fmix64` finalisers (`src/emit-map.ts`,
   `std/collections.ts`, and `fmix32` in `std/random.ts`).
 - xorshift64* in `nish_random` (`runtime/runtime.c`).
