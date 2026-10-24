@@ -1,6 +1,6 @@
 ---
 name: std/sqlite and std/postgres — database clients in the standard library
-overview: Add `nish/sqlite`, a SQLite client on a vendored public-domain amalgamation and a thin C adapter, linked automatically when a program uses it and measured per call against C on the $12-server challenge schema; and `nish/postgres`, a PostgreSQL client written in Nish over the v3 wire protocol on `nish:net`, with SCRAM-SHA-256 from a new PBKDF2 in `nish/crypto/hmac`. Fixes the compiler bug that keeps a `declare function` in any package from binding to its C symbol, which the SQLite module needs first.
+overview: Add `nish/sqlite`, a SQLite client on a vendored public-domain amalgamation and a thin C adapter, linked automatically when a program uses it and measured per call against C on the $12-server challenge schema; and `nish/net/postgres`, a sans-IO PostgreSQL client for the multicore Conduit challenge, with SCRAM-SHA-256 on a new PBKDF2, a pool, a carrier on the program's own loop, and a benchmark against libpq. Fixes the compiler bug that keeps a `declare function` in any package from binding to its C symbol, which the SQLite module needs first.
 stages:
   - id: ffi-package-symbols
     title: "fix(checker): bind a declare function in a package to its bare C symbol"
@@ -83,29 +83,65 @@ stages:
       - id: pbkdf2-docs
         content: Record it in its docs/security record, std/README.md and the standard-library guide page — see Stage E, Docs
         status: pending
-  - id: std-postgres
-    title: "feat(runtime): add nish/postgres, a PostgreSQL wire-protocol client"
-    goal: Programs import `nish/postgres` to connect to PostgreSQL over TCP, authenticate with SCRAM-SHA-256, cleartext or trust, run simple and extended queries with prepared statements reused, bind and read int8, float8, text, bytea and null with no allocation per row, and get every server error as a Result carrying its SQLSTATE
-    verification: npm run check, npm run lint, npm run lint:dead, node tests/run.js std_postgres against a live PostgreSQL 16 with no skips, node tests/run.js wasi, node docs/check-links.mjs, then an undegraded npm test, all green with the goldens regenerated and read
+  - id: pg-protocol
+    title: "feat(runtime): add nish/net/postgres, a sans-IO PostgreSQL client"
+    goal: A sans-IO PostgreSQL protocol-3 client in std/net/postgres — startup, SCRAM-SHA-256, the extended query protocol with prepared statements and capped pipelining, errors and notices, and text results read as byte windows with the decoders the Conduit spec needs — proven by exchanges recorded from PostgreSQL 18 and replayed byte for byte in npm test
+    verification: npm run check, npm run lint, npm run lint:dead, node tests/run.js std_postgres, node tests/run.js base64, node tests/run.js x509, node docs/check-links.mjs, then an undegraded npm test, all green with the goldens regenerated and read
     status: pending
     todos:
-      - id: pg-protocol
-        content: Write the sans-IO protocol core in std/postgres.ts, bytes in and bytes out with no socket, every message bounded and no input able to panic — see Stage F, Two layers
+      - id: pg-base64
+        content: Lift padded standard base64 out of std/crypto/x509.ts into one exported copy in std/crypto/base64url.ts and make x509 use it — see Stage F1, Base64
         status: pending
-      - id: pg-auth
-        content: Implement trust, cleartext and SCRAM-SHA-256 with the server signature verified, and refuse MD5, GSS and SSPI with one clear error — see Stage F, Authentication
+      - id: pg-core
+        content: Write the sans-IO connection state machine in std/net/postgres.ts with bounded framing, startup, ParameterStatus, BackendKeyData and ReadyForQuery — see Stage F1, The core
         status: pending
-      - id: pg-queries
-        content: Implement simple query, Parse, Bind, Execute and Sync with named statements, binary int8 and float8, columns read into a caller u8[], command tags and ErrorResponse fields — see Stage F, Queries
+      - id: pg-scram
+        content: Implement SCRAM-SHA-256 over SASL on Stage E's PBKDF2 with gs2 header n,, and the server signature checked, and record why MD5 is left out — see Stage F1, Authentication
         status: pending
-      - id: pg-connection
-        content: Write PgConnection, which drives the core over nish:net with its own poll, plus a pipelined form for a program that owns its loop — see Stage F, Two layers
+      - id: pg-extended
+        content: Implement Parse, Bind, Describe, Execute, Sync and Close with named statements prepared once per connection, Sync groups pipelined under a cap with a FIFO, and recovery to the next Sync after an error — see Stage F1, Queries and pipelining
         status: pending
-      - id: pg-tests
-        content: Add byte-exact transcript tests, a seeded fuzz of the decoder, and live tests against a throwaway PostgreSQL started by the harness, with CI installing it — see Stage F, Tests
+      - id: pg-results
+        content: Expose result columns as windows into the receive buffer, with the int8, int4, bool, NULL, timestamptz and text[] decoders and the text[] parameter encoder — see Stage F1, Results
+        status: pending
+      - id: pg-replay
+        content: Record exchanges from a real PostgreSQL 18 and replay them byte for byte in tests/link/std_postgres*, plus the negatives — see Stage F1, Tests
         status: pending
       - id: pg-docs
-        content: Add docs/guide/using-nish/postgres.md and its route, the std/README.md row, docs/security/postgres.md, the std-modules registry and the release.yml presence gates — see Stage F, Docs
+        content: Add docs/security/postgres.md, the guide page and its route, std/README.md and the std registry entries — see Stage F1, Docs
+        status: pending
+  - id: pg-pool
+    title: "feat(runtime): a connection pool and an epoll carrier for nish/net/postgres"
+    goal: A pool whose size is a cap with each slot's connection built on first use, a carrier that runs it on the program's own nish:net loop so a query never blocks HTTP, and a CI job that runs the client live against a postgres:18 service container
+    verification: npm run check, npm run lint, npm run lint:dead, node tests/run.js std_postgres, the new live suite against PostgreSQL 18 locally with no skips, node docs/check-links.mjs, then an undegraded npm test, all green with the goldens regenerated and read
+    status: pending
+    todos:
+      - id: pool-cap
+        content: Add PgPool to std/net/postgres.ts, a cap on slots with each connection built on first use and requests routed to the least-loaded ready slot — see Stage F2, The pool
+        status: pending
+      - id: pool-carrier
+        content: Write the carrier example on tcpConnect, pollAdd and pollWait, used by the guide page and the live tests — see Stage F2, The carrier
+        status: pending
+      - id: pool-live
+        content: Add the live suite in tests/postgres/ and a CI job on a postgres:18 service container that runs it — see Stage F2, Live tests and CI
+        status: pending
+      - id: pool-docs
+        content: Extend the postgres guide page and security record with the pool and the carrier — see Stage F2, Docs
+        status: pending
+  - id: pg-bench
+    title: "perf(runtime): measure nish/net/postgres against libpq pipeline mode"
+    goal: A benchmark on PostgreSQL 18 with the challenge's --dev seed comparing client CPU microseconds per query and queries per second against libpq in pipeline mode, for a primary-key SELECT 16 deep, the article-list query and an INSERT, and changes that drive the added cost toward zero
+    verification: node bench/postgres/run.mjs --validate and a full run with Measured lines and noise bands in the PR body, then npm run check, npm run lint, node tests/run.js std_postgres and an undegraded npm test green
+    status: pending
+    todos:
+      - id: pgb-setup
+        content: Script the PostgreSQL 18 and --dev seed setup the benchmark runs on, with nothing hard-coded to one machine — see Stage F3, The setup
+        status: pending
+      - id: pgb-twins
+        content: Write the Nish and libpq pipeline-mode twins of the three workloads and bench/postgres/run.mjs — see Stage F3, The twins
+        status: pending
+      - id: pgb-overhead
+        content: Measure client CPU per query with getrusage and the noise band, and drive the Nish cost down in std/net/postgres.ts — see Stage F3, Driving it to zero
         status: pending
   - id: sqlite-bench
     title: "perf(runtime): measure nish/sqlite against C on the challenge schema"
@@ -516,7 +552,7 @@ costs" with the figures. Neither is docs/BENCHMARKS.md, which is generated.
 
 ## Stage E — pbkdf2
 
-**Owns:** `std/crypto/hmac.ts`, `tests/link/std_pbkdf2*/**`, `docs/security/**`, `std/README.md`, `docs/guide/using-nish/standard-library.md`, `tests/self/goldens/checked/**` (generated)
+**Owns:** `std/crypto/hmac.ts`, `tests/link/std_pbkdf2*/**`, `docs/security/crypto-k1.md`, `std/README.md`, `docs/guide/using-nish/standard-library.md`, `tests/self/goldens/checked/**` (generated)
 
 ### The function
 
@@ -557,151 +593,312 @@ format that `docs/security/README.md` → "Writing a record" requires. Note
 what a wipe cannot reach. The function also goes in the hmac row of
 `std/README.md` and in standard-library.md.
 
-## Stage F — std-postgres
+## Postgres — what it is for, and the decisions
 
-**Owns:** `std/postgres.ts`, `std/postgres/**`, `src/std-modules.ts`, `tests/link/std_postgres*/**`, `tests/postgres/**`, `tests/run.js`, `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `.claude/hooks/session-start.sh`, `std/README.md`, `docs/guide/using-nish/postgres.md`, `docs/guide/using-nish/standard-library.md`, `scalar.config.json`, `docs/security/postgres.md`, `docs/security/README.md`, `docs/LANGUAGE.md`, `docs/AI.md`, `llms.txt`, `tests/self/goldens/checked/**` (generated)
+`nish/net/postgres` is the client for the multicore server challenge
+([arjaythedev/multicore-server-challenge](https://github.com/arjaythedev/multicore-server-challenge)).
+That challenge is the RealWorld "Conduit" API on PostgreSQL 18, on 8 vCPUs.
+In every top entry, Postgres takes 70–80 % of the box (LEADERBOARD.md). So
+the client is judged on two things: **round trips**, and **the client CPU it
+costs per query**. `docs/wp39-http-server.md` E6 and decision D4 plan it. This
+plan supersedes the earlier `std/postgres.ts` stage.
 
-### Decision — Nish over the wire protocol, not libpq
+- **P1. Sans-IO, in `std/net/postgres.ts`** (D4), in the style of
+  `std/net/http1-server.ts`: bytes in, bytes out. A carrier owns the socket,
+  using `tcpConnect` and `pollAdd` on the program's own loop, so a query never
+  blocks HTTP. There is no blocking driver. Every call answers what the
+  connection wants next, as the other `nish/net` modules do.
+- **P2. Authentication is SCRAM-SHA-256** (RFC 5802, RFC 7677) over SASL, as
+  `box/setup-box.sh` forces it for 127.0.0.1. With no TLS there is no channel
+  binding: the gs2 header is `n,,`, and `SCRAM-SHA-256-PLUS` is never chosen.
+  Cleartext `AuthenticationCleartextPassword` and trust are also accepted;
+  they are a few lines each.
+  - The salted password is Stage E's PBKDF2-HMAC-SHA256, on the `Secret`
+    path. The password is a `Secret<u8[]>` end to end, and `ClientKey`,
+    `StoredKey`, `ClientSignature` and `ClientProof` are each wiped
+    (CLAUDE.md "Security").
+  - `ServerSignature` is checked in constant time before
+    `AuthenticationOk` is believed.
+  - **MD5 is left out.** `setup-box.sh` forces SCRAM, PostgreSQL 18
+    deprecates MD5 passwords, and MD5 would need a new `nish/crypto/md5`. The
+    security record and the guide page say so. An MD5 request answers a
+    defined `PG_ERR_AUTH_UNSUPPORTED`.
+- **P3. Padded standard base64 exists once.** SCRAM's messages are base64, and
+  `std/crypto/x509.ts` already has the codec inside `pemToDer`. Lift it into
+  `std/crypto/base64url.ts` as exported `base64Encode` and `base64Decode`
+  (RFC 4648 §4, padded, canonical), beside `base64url`, and make `x509.ts`
+  import it. No second copy, and no new module, so the registries and release
+  gates are untouched.
+- **P4. Text format everywhere.** Results are read as byte windows into the
+  receive buffer: a column is `(offset, length)` or NULL. A caller copies
+  bytes straight into JSON, with no string per column. This is what the
+  fastest C entry, c-iouring-tigokraft, does. Binary format comes in only if
+  Stage F3 measures a win.
+- **P5. Pipelining with a cap.** Many requests' Bind/Execute/Sync groups are
+  in flight on one connection without waiting for each other.
+  - At most `maxInFlight` groups go out per connection (default 16, as
+    c-iouring-tigokraft measured: 2–4 starve the backends, 8–64 are equal).
+    The rest wait in a FIFO, so requests are served in arrival order.
+  - Each Sync group is its own implicit transaction. The caller learns when
+    its group's `ReadyForQuery` has arrived. That is the commit that the
+    challenge's rule 6 requires before a response.
+- **P6. Bounded everything.** Every length field is checked against a cap
+  before it is trusted. The receive and send buffers have fixed maximums. A
+  malformed or oversized message is a defined `PG_ERR_*` and closes the
+  connection. It never panics and never grows a buffer without bound.
 
-The client is written in Nish, over protocol 3.0 on `nish:net`, with no C.
+## Stage F1 — pg-protocol
 
-- It runs inside the program's own readiness loop (the program is the loop,
-  as in `nish/net/tls-tcp`), so a server can pipeline queries on one
-  connection.
-- It reads rows straight into the caller's buffers. libpq copies every result
-  into a `PGresult` it allocates.
-- It needs no system library on the build machine.
-- It reaches the `net` capability, not `ffi`, so `--deny net` refuses an
-  importer that connects, and `--deny ffi` does not.
+**Owns:** `std/net/postgres.ts`, `std/crypto/base64url.ts`, `std/crypto/x509.ts`, `src/std-modules.ts`, `tests/link/std_postgres*/**`, `tests/link/std_base64*/**`, `tests/postgres/recordings/**`, `tests/postgres/record.mjs`, `.github/workflows/release.yml`, `std/README.md`, `docs/guide/using-nish/postgres.md`, `docs/guide/using-nish/standard-library.md`, `scalar.config.json`, `docs/security/postgres.md`, `docs/security/README.md`, `docs/security/crypto-x509.md`, `docs/wp39-http-server.md`, `llms.txt`, `tests/self/goldens/checked/**` (generated)
 
-What it gives up, all because of what `nish:net` and std/ have today:
+Shared files: `src/std-modules.ts`, `release.yml`, `std/README.md`,
+`scalar.config.json` and `standard-library.md` are also edited by Stage C,
+and `std/README.md` by Stage E. The edits are one row or one name each in a
+list. Whichever stage reaches its merge second runs `npm run sync-main` and
+keeps both entries. See "Merge order".
 
-- **No TLS.** std/ has a TLS 1.3 server but no client.
-- **No host names.** `nish:net` takes numeric hosts only.
-- **No Unix-domain sockets.**
-- **No MD5, GSS or SSPI authentication.**
+### Base64
 
-The guide page lists each limit. A server that requires TLS, or offers only
-MD5, is refused with one clear error.
+Move the codec and its comments out of `x509.ts` unchanged, into
+`base64url.ts`, as `base64Encode(data: u8[]): string` and
+`base64Decode(text: string): u8[] | null`, strict and canonical. `x509`'s
+tests and `docs/security/crypto-x509.md` must still hold. Give it its own
+vectors (RFC 4648 §10) and negatives: bad padding, a non-canonical last
+sextet, and a character outside the alphabet.
 
-### Two layers
+### The core
 
-1. **`PgProtocol`, the sans-IO core.** It encodes front-end messages into a
-   caller's `u8[]` and decodes back-end messages from bytes it is fed. Every
-   call answers what the connection wants next, the way `TlsTcpServer` does.
-   - No socket, no clock, no allocation per row.
-   - Every length field is checked against a cap before it is trusted.
-   - No input can panic or read outside its window.
-   - It is the layer a server using its own `pollWait` loop drives, with
-     queries pipelined: several `Bind`/`Execute` pairs before one `Sync`.
-2. **`PgConnection`.** It drives the core over `tcpConnect`, `netRead` and
-   `netWrite`, with a private poll, for a program that wants
-   `connect(...)` → `query` → rows. Its waits are bounded by a timeout the
-   caller passes, so a dead server is an error, not a hang.
+`PgConnection` holds the state of one connection.
+
+- Startup message: protocol 3.0, `user`, `database`, `client_encoding=UTF8`,
+  `DateStyle=ISO`, `TimeZone=UTC`, `application_name`, and caller-supplied
+  session options such as `plan_cache_mode` and `jit`.
+- Every `ParameterStatus` is consumed. `server_version` and
+  `client_encoding` are kept, and an encoding other than UTF8 is refused.
+- `BackendKeyData` is kept, for a cancel the carrier may send later; cancel
+  itself is not in scope.
+- `ReadyForQuery` exposes its transaction status, `I`, `T` or `E`.
+- `NoticeResponse` is parsed and counted. The last one's fields are readable,
+  and nothing accumulates.
+- Framing: a 1-byte type plus a 4-byte length. The length is checked against
+  `maxMessage`, default 1 MiB and set by the caller, before any byte of the
+  body is read.
 
 ### Authentication
 
-- **Trust and cleartext.** Cleartext takes the password as `Secret<u8[]>`.
-- **SCRAM-SHA-256** (RFC 5802, RFC 7677):
-  - client-first with a nonce from the OS entropy the runtime already
-    exposes;
-  - `SaltedPassword` from Stage E's PBKDF2, and `ClientKey`, `StoredKey`,
-    `ClientSignature` and `ClientProof` through `nish/crypto/hmac` and
-    `sha256`, each a `Secret` and wiped;
-  - the server's `ServerSignature` verified in constant time
-    (`nish/crypto/ct`) before `AuthenticationOk` is believed;
-  - `SCRAM-SHA-256-PLUS` (channel binding) is not offered, since there is no
-    TLS.
-- **MD5, GSS, SSPI and the KRB methods** answer
-  `PG_ERR_AUTH_UNSUPPORTED`, naming the method.
-- `SSLRequest` is never sent. A server whose `pg_hba` demands `hostssl`
-  answers its own error, which surfaces as a `PgError`.
+The SCRAM state machine follows P2:
 
-### Queries
+- client-first with a nonce from the runtime's entropy;
+- the server-first message parsed strictly (`r=`, `s=`, `i=`), with the
+  server's nonce required to start with ours and the iteration count bounded;
+- client-final with the proof;
+- server-final checked.
 
-- `exec(sql)`: the simple query protocol, for DDL, `SET`, `BEGIN` and
-  `COMMIT`. Several statements are allowed, and each command tag is read.
-- `prepare(name, sql, paramTypes)`: `Parse` with the parameter OIDs, then
-  `Describe`, so the result columns' types are known once. Reused across
-  executes, the way `std/sqlite` is.
-- Bind and execute:
-  - Parameters are `int8` and `float8` in binary format, `text` and `bytea`
-    in binary (text from a string or from a window of a `u8[]`), and `null`.
-  - Result columns are requested in binary for `int8`/`int4`/`float8`/`bool`
-    and in text for the rest.
-  - `columnI64`, `columnF64`, `columnIsNull`, `columnLength`, and
-    `columnInto(col, buf, at)` copy from the receive buffer into the
-    caller's, with no allocation.
-- `CommandComplete` gives `rowsAffected`. `RETURNING` rows are read like any
-  others. There is no "last insert id" in PostgreSQL; the guide page says to
-  use `RETURNING`.
+Each failure is its own `PG_ERR_*`.
+
+### Queries and pipelining
+
+- `prepare(name, sql, paramOids)`: `Parse` and then `Describe` of the
+  statement, once per connection. The connection remembers which names it
+  has prepared, so a pool can prepare lazily.
+- A group is one request: one or more Bind/Execute pairs and one Sync.
+  `Close` is available for statements and portals.
+- Parameters are text format. `null` is length -1. A `text[]` parameter is
+  encoded as an array literal from a list of byte windows, with quoting and
+  backslash escapes.
+- The cap and FIFO follow P5. A caller tags each group, and learns per group:
+  - its rows and `CommandComplete` tags, with the parsed row count for
+    INSERT, UPDATE, DELETE and SELECT;
+  - its error, if any;
+  - its `ReadyForQuery`, which means committed.
+- After an `ErrorResponse`, the server skips to the next Sync. The client marks
+  the rest of that group failed, and resumes cleanly with the next group.
+  Other requests' groups are unaffected.
 - `ErrorResponse` becomes `PgError` with the severity, SQLSTATE (`C`) and
-  message (`M`), plus detail and hint when present. It is allocated only on
-  failure. After an error in an extended-query batch, the client
-  resynchronises at `ReadyForQuery`, so the connection stays usable.
-- `NoticeResponse` and `ParameterStatus` are consumed. `ParameterStatus` keeps
-  `server_version` and `client_encoding`, which is required to be UTF8 or the
-  connection is refused.
-- `begin()`, `commit()` and `rollback()` are convenience wrappers over `exec`.
-  `ReadyForQuery`'s status byte answers whether the connection is inside a
-  transaction.
-- `Terminate` and close.
+  message (`M`). Detail, hint, constraint and position are kept when present.
+  These are allocated only on failure, never on the hot path.
 
-Errors are `Result`s in the style of std/ (match `std/sqlite` and
-`std/net`). On the hot path a `Result` must not allocate; measure it.
+### Results
+
+`DataRow` columns are windows into the receive buffer, valid until the
+group's next row is read.
+
+Decoders work on windows and allocate nothing:
+
+- `int8` and `int4` to `i64`;
+- `bool` (`t` and `f`);
+- NULL;
+- `timestamptz` text (`YYYY-MM-DD HH:MM:SS[.ffffff]+00`) to RFC 3339 UTC with
+  exactly 3 fractional digits, truncated, written into a caller's `u8[]`.
+  This is the challenge's SPEC.md "Formats" rule;
+- the `text[]` literal (`{a,"b c","d\"e",NULL}`) walked element by element,
+  quoting and escapes included, each element unescaped into a caller buffer.
+  The reference SQL returns `tag_list` this way.
+
+Test each decoder against PostgreSQL's own output, from recordings: an empty
+array, a quoted element, an escape, and a NULL element.
 
 ### Tests
 
-- **Transcripts, with no server.** Byte-exact front-end messages for
-  startup, `Parse`/`Bind`/`Execute`/`Sync` and `Terminate`, and a decode of
-  recorded back-end messages. Use the SCRAM exchange from RFC 7677 §3 as
-  the auth vector.
-- **Seeded fuzz of the decoder** over random and truncated messages. It never
-  panics and never reads past its window, in the manner of
-  `tests/link/std_json_tokenizer`.
-- **Live tests against PostgreSQL 16:**
-  - The harness, in `tests/postgres/`, runs `initdb` into a temp dir and
-    starts `postgres` on a free port bound to 127.0.0.1. It creates one user
-    with a SCRAM password and one with trust auth, and stops the server when
-    the run ends.
-  - Each `tests/link/std_postgres*` program connects, creates tables,
-    inserts with every bind type through a prepared statement reused 1,000
-    times, and reads it back.
-  - It checks `RETURNING`, `rowsAffected`, `ON CONFLICT DO NOTHING` (0
-    rows), a transaction that rolls back, a pipelined batch of 20
-    `Execute`s, and an arena-flat read loop over 100,000 rows.
-- **Negatives, each with its SQLSTATE or code:**
-  - a wrong password: `28P01`;
-  - a syntax error: `42601`, with the server's message;
-  - a unique violation: `23505`, after which the connection still serves a
-    query;
-  - a refused port: the `-111` from `nish:net`, as a Result;
-  - a server that offers only MD5: `PG_ERR_AUTH_UNSUPPORTED`;
-  - a forged `ServerSignature` from a fake server in the harness: refused;
-  - a connect timeout;
-  - `--deny net` refusing an importer, with `expected.err`;
-  - an `expected.caps.json` showing `net` and no `ffi`.
-- **The live tests must not skip in CI.**
-  - Install `postgresql` in the `test` job of `.github/workflows/ci.yml`:
-    the apt package and nothing else, with no service container.
-  - Make `.claude/hooks/session-start.sh` install it if it is absent.
-  - A missing PostgreSQL locally is reported as a `DEGRADED:` reason,
-    like a missing LLVM tool, never as a silent skip.
+- **Recordings.** `tests/postgres/record.mjs` drives a real PostgreSQL 18 and
+  writes each exchange's bytes, both directions, into
+  `tests/postgres/recordings/`. Install `postgresql-18` from
+  apt.postgresql.org in the worker container; the network allows it. The
+  recordings cover:
+  - SCRAM success;
+  - SCRAM with a wrong password (`28P01`);
+  - prepare and execute for each type the Conduit SQL returns (bigint, int,
+    text, timestamptz, bool, `text[]`, NULL);
+  - a 16-deep pipeline;
+  - an error mid-pipeline (`23505` in group 3 of 5, groups 4 and 5 fine);
+  - INSERT, UPDATE and DELETE tags;
+  - a notice.
+- **Replay.** The `tests/link/std_postgres*` programs replay each recording
+  byte for byte. The client's output must equal the recorded front-end bytes,
+  except for SCRAM's client nonce. Seed it through a test-only entropy hook,
+  or record with a fixed nonce. Decoded values go to expected stdout. `npm
+  test` needs no server.
+- **Negatives:**
+  - a malformed message (a bad type byte, or a length under 4);
+  - an oversized message, over `maxMessage`;
+  - truncated input at every byte offset of a recording;
+  - a forged `ServerSignature`;
+  - a server nonce that does not extend ours;
+  - an iteration count over the bound;
+  - an MD5 request;
+  - a `text[]` literal with an unterminated quote;
+  - a seeded fuzz of the decoder that never panics, in the manner of
+    `tests/link/std_json_tokenizer`.
+- **Capabilities.** The module is sans-IO, so it reaches no `net` capability
+  itself. Pin that with an `expected.caps.json`.
 
 ### Docs
 
-- `docs/guide/using-nish/postgres.md`, a new page: connecting, the limits
-  (no TLS, numeric hosts, the auth methods), prepared statements, binding,
-  reading into a buffer, pipelining from your own loop, transactions,
-  errors and SQLSTATEs, and capabilities. Every example is fenced
-  `ts nish:ok`.
-- Its route `/postgres` in scalar.config.json.
-- A row in std/README.md.
-- The `std-modules.ts` registry entry.
-- `postgres` in each of the three release.yml presence gates.
-- `docs/security/postgres.md`, a record for a parser of untrusted network
-  input: the caps, what can and cannot panic, the SCRAM verification, and
-  what a wipe cannot reach. Add it to the list in `docs/security/README.md`.
+- `docs/security/postgres.md`, a new record in the format of
+  `docs/security/README.md` → "Writing a record". It covers:
+  - the parser of untrusted network input: caps, what can and cannot panic,
+    what a malformed message does;
+  - SCRAM, and what a wipe cannot reach;
+  - why MD5 and TLS are absent.
+  List it in `docs/security/README.md`.
+- `docs/guide/using-nish/postgres.md` and its route `/postgres` in
+  scalar.config.json. It covers connecting through a carrier: give a minimal
+  one here, and Stage F2 adds the pool. It also covers prepared statements,
+  a pipelined group, reading windows and decoders, errors and SQLSTATEs, and
+  the limits: no TLS, SCRAM, cleartext or trust only, numeric hosts.
+- `std/README.md` rows: postgres, and base64 in the base64url row.
+- `standard-library.md`.
+- `net/postgres` in the std registry and in the three release.yml presence
+  gates.
+- Mark E6 progress in `docs/wp39-http-server.md`.
+
+## Stage F2 — pg-pool
+
+**Owns:** `std/net/postgres.ts`, `tests/link/std_postgres_pool*/**`, `tests/postgres/live/**`, `tests/postgres/carrier.ts`, `.github/workflows/ci.yml`, `docs/guide/using-nish/postgres.md`, `docs/security/postgres.md`, `tests/self/goldens/checked/**` (generated)
+
+F2 starts when F1 has merged, so the shared files are sequential.
+
+### The pool
+
+`PgPool` is sans-IO too. Its size is a cap, and no slot is built at start-up:
+a slot's connection is made the first time a request needs it and none is
+free, as in N9's discipline (wp39 E6).
+
+- A request goes to the ready slot with the fewest groups in flight.
+- When every slot is at its cap, it waits in the pool's FIFO.
+- A slot whose connection failed is rebuilt on next use.
+- The pool tells the carrier which slots need a socket, and when.
+- Statements registered on the pool are prepared on each slot before its
+  first use, in the same pipeline as the first request, which saves a round
+  trip.
+
+### The carrier
+
+`tests/postgres/carrier.ts`, and the guide page's copy of it, is a small loop:
+
+- `tcpConnect` to `127.0.0.1` (numeric hosts; no DNS in `nish:net`);
+- `pollAdd` with each slot's token;
+- on readiness, `netRead` into the slot's receive window and `netWrite` of
+  what the pool wants sent.
+
+It shares the loop with an HTTP listener, which shows a query not blocking
+HTTP: a slow query (`pg_sleep`) is in flight while an HTTP request is served.
+
+### Live tests and CI
+
+- `tests/postgres/live/` runs the carrier and the pool against a real server
+  at `$PG_TEST_URL`. Cover:
+  - auth;
+  - a pipeline of 100 groups through a pool of 4, with the cap at 16;
+  - a slot killed with `pg_terminate_backend` and rebuilt;
+  - an error mid-pipeline;
+  - the Conduit article-list query on a small fixture schema.
+- Run it locally against apt's postgresql-18.
+- A new CI job in `.github/workflows/ci.yml` on a `postgres:18` service
+  container, with the scram-sha-256 password set through the container's env,
+  runs the suite. It is a separate job, so `npm test` stays server-free. This
+  is the workflow edit the user asked for.
+
+### Docs
+
+The guide page gets the pool and the full carrier. The security record gets
+the pool's bounds.
+
+## Stage F3 — pg-bench
+
+**Owns:** `bench/postgres/**`, `bench/README.md`, `std/net/postgres.ts`, `docs/guide/using-nish/postgres.md`, `knip.json`, `tests/self/goldens/checked/**` (generated)
+
+F3 starts when F2 has merged. It may change `postgres.ts` only to cut cost,
+never its behaviour, and every F1 and F2 test stays green unmodified.
+
+### The setup
+
+`bench/postgres/setup.sh` does the following:
+
+- installs or uses a PostgreSQL 18;
+- applies the challenge's `box/pg-conf.sh` settings, scaled to the machine;
+- builds the challenge's `--dev` seed with its `seed/make-seed.sh`, cloned at
+  a pinned commit into a scratch directory. That needs Go 1.27 or later and
+  `psql`;
+- creates role `conduit` with scram-sha-256.
+
+Nothing from the challenge is vendored, except a pinned commit hash and the
+SQL quoted with its source.
+
+### The twins
+
+Each workload is a Nish program on `nish/net/postgres` and a C program on
+libpq in pipeline mode (`PQenterPipelineMode`, `PQsendQueryPrepared`,
+`PQpipelineSync`), doing the same work over one connection, with text
+results:
+
+1. a primary-key `SELECT … FROM users WHERE id = $1`, pipelined 16 deep;
+2. the article-list query from SPEC.md (`ARTICLE_LIST_SELECT` with
+   `ORDER BY a.id DESC LIMIT $2 OFFSET $3`), with every column read and the
+   timestamp and `text[]` decoded;
+3. an INSERT (`INSERT INTO follows … ON CONFLICT DO NOTHING`, or a comment),
+   one per Sync, waiting for `ReadyForQuery`.
+
+`bench/postgres/run.mjs` builds both, checks that their checksums agree
+(`--validate`), then reports, for each:
+
+- client CPU µs per query, from `getrusage` of the client process only;
+- queries per second.
+
+### Driving it to zero
+
+The number to drive toward 0 is Nish's added client CPU per query over libpq.
+
+- Measure it per `.claude/testing.md` → "A `Measured:` trailer", with the
+  noise band from a rerun of an identical build.
+- Read the IR of the hot loop, and fix what it shows:
+  - allocation per row;
+  - a string per column;
+  - a copy of the receive buffer;
+  - framing work done twice.
+- The PR states the before and after figures as `Measured:` lines.
+- Try the binary format for `int8` only if it measures a win; per P4, keep
+  text otherwise.
 
 ## Merge order
 
@@ -710,19 +907,25 @@ Errors are `Result`s in the style of std/ (match `std/sqlite` and
 | A `ffi-package-symbols` | at once | — |
 | B `sqlite-link` | at once | — |
 | E `pbkdf2` | at once | — |
+| F1 `pg-protocol` | at once; picks up E's PBKDF2 by syncing `main` once E merges | E, B |
 | C `std-sqlite` | when A, B and E have merged | A, B, E |
 | D `sqlite-bench` | when C has merged | C |
-| F `std-postgres` | when C has merged | C, E |
+| F2 `pg-pool` | when F1 has merged | F1 |
+| F3 `pg-bench` | when F2 has merged | F2 |
 
-- **A, B and E run in parallel.** Their `Owns` sets are disjoint apart from
-  the generated goldens.
-- **C waits for A, B and E.** It needs A's fix to link at all, and B's
-  build.sh to link with no hand-written line. It also shares
-  `std/README.md` and `standard-library.md` with E.
-- **D and F run in parallel once C has merged.** Their sets are disjoint.
-- **F waits for C** because both edit the shared registries:
-  `src/std-modules.ts`, the release.yml gates, `scalar.config.json` and
-  `std/README.md`.
+**F1 overlaps three stages on one-line list edits.** It shares them with C
+(`src/std-modules.ts`, the release.yml gates, `std/README.md`,
+`scalar.config.json`, `standard-library.md`), with B (the release.yml gates)
+and with E (`std/README.md`). F1 merges after B and E, so those two overlaps
+are ordered. The first to converge merges
+first. The other runs `npm run sync-main`, keeps both entries, and pushes.
+This is deliberate: holding F1 until C merged would put the Postgres chain
+past the deadline. Every other pair that runs at once is disjoint apart from
+the generated goldens.
+
+A parallel session outside this run is writing `std/crypto/bcrypt`. No stage
+touches it. A conflict with it in a shared list is resolved the same way, on
+sync.
 
 ## Acceptance criteria
 
@@ -748,33 +951,35 @@ Errors are `Result`s in the style of std/ (match `std/sqlite` and
    insert-in-WAL, through Nish and through C, on the challenge schema at the
    challenge's sizes. It prints ns/op for each and the per-call cost Nish
    adds, and the merged PR records them with their noise band.
-8. PBKDF2-HMAC-SHA256 from `nish/crypto/hmac` reproduces the RFC 7914 §11
-   vectors.
-9. A program importing `nish/postgres`, under plain `nish run`, does all of
-   this against a local PostgreSQL 16 at 127.0.0.1:
-   - connects with SCRAM-SHA-256;
-   - creates a table;
-   - inserts int8, float8, text, bytea and null through a prepared statement
-     executed repeatedly;
-   - reads the rows back, text into a caller buffer;
-   - prints the expected values.
-10. PostgreSQL failures answer a `Result` with the SQLSTATE, never a crash or
-    a hang:
-    - a wrong password: `28P01`;
-    - a syntax error: `42601`;
-    - a unique violation: `23505`, after which the connection is still
-      usable;
-    - a refused port;
-    - an MD5-only server: unsupported auth.
-11. `--deny net` refuses a program that connects with `nish/postgres`, and
-    `--deny ffi` does not.
-12. The `sqlite` and `postgres` guide pages are reachable at their routes in
-    `scalar.config.json`. `std/README.md` lists both modules,
+8. PBKDF2-HMAC-SHA256 reproduces the RFC 7914 §11 vectors, with the password
+   and output as `Secret`s. Padded standard base64 is exported once, and
+   `x509` uses it.
+9. Through the guide page's carrier, a program on `nish/net/postgres` does all
+   of this against PostgreSQL 18 at 127.0.0.1 with SCRAM-SHA-256:
+   - prepares the Conduit article-list query once;
+   - runs it pipelined;
+   - prints the rows: timestamps as RFC 3339 with 3 truncated fractional
+     digits, `tag_list` as a JSON array, NULL `bio` as `null`.
+10. Through the pool, 100 pipelined groups on 4 connections never exceed 16 in
+    flight per connection. Each group learns its own `ReadyForQuery`. An
+    error in one group (`23505`) fails only that group, and the connection
+    serves the next.
+11. A wrong password answers `28P01`. A malformed or oversized message, a
+    forged server signature, and an MD5 request each answer a defined error,
+    with no panic and no unbounded buffer.
+12. `npm test` replays the recorded PostgreSQL 18 exchanges byte for byte with
+    no server. A CI job on a `postgres:18` service container runs the live
+    suite green.
+13. `node bench/postgres/run.mjs` reports client CPU µs per query and
+    queries/s for Nish and for libpq pipeline mode: the PK SELECT 16 deep, the
+    article list, and an INSERT. The merged PR states them as `Measured:`
+    lines with noise bands.
+14. The `sqlite` and `postgres` guide pages are reachable at their routes.
+    `std/README.md` lists both modules, `docs/security/postgres.md` exists,
     THIRD_PARTY_NOTICES lists the amalgamation, and
     `node tests/run.js third-party-licence` and `node docs/check-links.mjs`
     pass.
-13. `npm pack --dry-run` includes `runtime/sqlite/sqlite3.c`,
-    `std/sqlite.ts` and `std/postgres.ts`.
-14. On `main` after the last merge:
-    - `npm run check`, `npm run lint` and an undegraded `npm test` are green;
-    - CI's `test` job ran the live PostgreSQL tests, not skipped them.
+15. `npm pack --dry-run` includes `runtime/sqlite/sqlite3.c`, `std/sqlite.ts`
+    and `std/net/postgres.ts`.
+16. On `main` after the last merge, `npm run check`, `npm run lint` and an
+    undegraded `npm test` are green.
