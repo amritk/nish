@@ -19496,7 +19496,7 @@ if (!only || "cpu-level".includes(only)) {
       check(
         "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all ten runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 9 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 10 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
