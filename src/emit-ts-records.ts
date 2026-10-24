@@ -162,15 +162,21 @@ export const elementArguments = (text: string): string => {
   }
   let depth = 0
   let open = -1
-  let i = 0
-  while (i < text.length) {
+  // The quote a quoted string opened, whose brackets are text, or 0.
+  let quote = 0
+  let escaped = false
+  for (let i = 0; i < text.length; i++) {
     const c = text.charCodeAt(i)
-    if (c === 34 || c === 39) {
-      // A quoted string, whose brackets are text: skip to its closing quote.
-      i = i + 1
-      while (i < text.length && text.charCodeAt(i) !== c) {
-        i = i + (text.charCodeAt(i) === 92 ? 2 : 1)
+    if (quote !== 0) {
+      if (escaped) {
+        escaped = false
+      } else if (c === 92) {
+        escaped = true
+      } else if (c === quote) {
+        quote = 0
       }
+    } else if (c === 34 || c === 39) {
+      quote = c
     } else if (c === 40 || c === 91 || c === 123) {
       if (depth === 0 && c === 91) {
         open = i
@@ -179,7 +185,6 @@ export const elementArguments = (text: string): string => {
     } else if (c === 41 || c === 93 || c === 125) {
       depth = depth - 1
     }
-    i = i + 1
   }
   if (depth !== 0 || open <= 0) {
     return ""

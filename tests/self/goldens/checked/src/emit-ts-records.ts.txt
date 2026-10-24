@@ -97,12 +97,14 @@ function idxArguments(text: string): string -> @idxArguments [exported]
   stackSites=0 stackLocals=0
 function elementArguments(text: string): string -> @elementArguments [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
+  calls: nish_panic_overflow nish_str_at nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
   local +0:7 depth: i32 (let)
   local +1:7 open: i32 (let)
-  local +2:7 i: i32 (let)
-  local +4:11 c: i32 (const)
+  local +3:7 quote: i32 (let)
+  local +4:7 escaped: boolean (let)
+  local +5:12 i: i32 (let)
+  local +6:11 c: i32 (const)
 function writtenReceiver(text: string, name: string): string -> @writtenReceiver
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_new
