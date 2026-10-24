@@ -12877,6 +12877,117 @@ if (!only || "runtime_test".includes(only)) {
   )
 }
 
+/**
+ * Whether clang can link a program under `flags` (`-fsanitize=...`): null when
+ * it can, `{ skip }` when the toolchain lacks the sanitizer runtimes, and
+ * `{ error }` for any other failure to link. The sanitizer runtimes are a separate package on
+ * Debian and Ubuntu (libclang-rt-18-dev, which .claude/hooks/session-start.sh
+ * and CI's LLVM step install), so a toolchain without them is a named skip.
+ */
+const sanitizerProbe = (flags) => {
+  if (!has("clang")) {
+    return { skip: "no clang" }
+  }
+  const dir = path.join(buildDir, "sanitizer-probe")
+  fs.mkdirSync(dir, { recursive: true })
+  const src = path.join(dir, "probe.c")
+  fs.writeFileSync(
+    src,
+    flags.some((f) => f.includes("fuzzer"))
+      ? "#include <stddef.h>\n#include <stdint.h>\nint LLVMFuzzerTestOneInput(const uint8_t *d, size_t n) { (void)d; (void)n; return 0; }\n"
+      : "int main(void) { return 0; }\n"
+  )
+  const cc = spawnSync("clang", [...flags, src, "-o", path.join(dir, "probe")], { encoding: "utf8" })
+  if (cc.status === 0) {
+    return null
+  }
+  return /libclang_rt|clang_rt\./.test(cc.stderr)
+    ? { skip: "the clang_rt sanitizer libraries are missing (install libclang-rt-18-dev)" }
+    : { error: `clang ${flags.join(" ")} could not link a probe:\n${cc.stderr}` }
+}
+
+// The runtime unit test again, under AddressSanitizer and UndefinedBehavior-
+// Sanitizer, built single-threaded and with -DNISH_THREADS: a report is a
+// runtime finding (docs/security/runtime.md), not noise to suppress.
+// `-fno-sanitize-recover=undefined` makes the first UB report exit non-zero
+// rather than print and carry on, so the check cannot pass over one.
+if (!only || "runtime_sanitize".includes(only)) {
+  const flags = ["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
+  const probe = sanitizerProbe(flags)
+  for (const [label, defines] of [
+    ["single-threaded", []],
+    ["-DNISH_THREADS", ["-DNISH_THREADS=1", "-pthread"]],
+  ]) {
+    const name = `runtime_sanitize: the runtime unit test (${label}) runs clean under ASan and UBSan`
+    if (probe?.skip !== undefined) {
+      skip(`${name} (${probe.skip})`)
+      continue
+    }
+    const exe = path.join(buildDir, `runtime_test_sanitize${defines.length > 0 ? "_threads" : ""}`)
+    const cc =
+      probe === null
+        ? spawnSync(
+            "clang",
+            ["-std=c11", "-g", "-O1", ...flags, ...defines, ...RUNTIME_C, "tests/runtime-test.c", "-o", exe],
+            { cwd: root, encoding: "utf8" }
+          )
+        : { status: 1, stderr: probe.error }
+    const run =
+      cc.status === 0
+        ? spawnSync(exe, [], {
+            encoding: "utf8",
+            env: { ...envWithThreads(null), ASAN_OPTIONS: "detect_leaks=1:abort_on_error=0", UBSAN_OPTIONS: "print_stacktrace=1" },
+            timeout: 120_000,
+          })
+        : null
+    check(
+      name,
+      run !== null && run.status === 0,
+      cc.status !== 0 ? cc.stderr : `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}`.slice(-4000)
+    )
+  }
+}
+
+// The libFuzzer targets (tests/fuzz/README.md): every tests/fuzz/targets/*.ts
+// built by scripts/fuzz.sh with this checkout's compiler, and replayed once
+// over its seed corpus and its regressions. A regression input is a crash a
+// fix removed, so a replay that crashes is that bug back. Fuzzing itself is
+// CI's `fuzz-smoke` job and the scheduled fuzz.yml, not this suite.
+if (!only || "fuzz".includes(only)) {
+  const script = fs.readFileSync(path.join(root, "scripts", "fuzz.sh"), "utf8")
+  const listed = (script.match(/^RUNTIME_C=\(\n([\s\S]*?)\n\)/m)?.[1] ?? "").split(/\s+/).filter(Boolean)
+  check(
+    "fuzz: scripts/fuzz.sh links the runtime units tests/run.js's RUNTIME_C names",
+    listed.join(" ") === RUNTIME_C.join(" "),
+    `fuzz.sh: ${listed.join(" ")}\nrun.js:  ${RUNTIME_C.join(" ")}`
+  )
+  const targets = fs
+    .readdirSync(path.join(root, "tests", "fuzz", "targets"))
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => f.slice(0, -3))
+    .sort()
+  const probe = sanitizerProbe(["-fsanitize=fuzzer,address,undefined"])
+  for (const target of targets) {
+    const name = `fuzz: ${target} builds and replays its corpus and regressions without a crash`
+    if (probe?.skip !== undefined) {
+      skip(`${name} (${probe.skip})`)
+      continue
+    }
+    const corpus = path.join(root, "tests", "fuzz", "corpus", target)
+    const seeds = fs.existsSync(corpus) ? fs.readdirSync(corpus).length : 0
+    const r =
+      probe === null
+        ? spawnSync("bash", ["scripts/fuzz.sh", "--replay", target], {
+            cwd: root,
+            encoding: "utf8",
+            env: { ...process.env, NISH, FUZZ_OUT: path.join(buildDir, "fuzz") },
+            maxBuffer: 1 << 26,
+          })
+        : { status: 1, stdout: "", stderr: probe.error }
+    check(name, r.status === 0 && seeds > 0, seeds === 0 ? `no seed corpus in ${corpus}` : `${r.stdout}${r.stderr}`.slice(-4000))
+  }
+}
+
 if (!only) {
   // Emit the runtime prelude, append an IR test that uses the inline allocator, and
   // link it against runtime.c: proves the IR struct layout matches the C struct.
