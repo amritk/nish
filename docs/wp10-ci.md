@@ -112,17 +112,19 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   every program before it are done, so a gap is a program's share of its
   shard's pooled wall clock rather than its own run time: one that finished
   behind a slower predecessor reads near 0. A shard's gaps still add up to its
-  link wall clock, which is what the deal balances. The table's figures are
-  still the serial ones #909 measured under its cheaper link profile, so they
-  overstate the link programs against the dealt sections. That costs nothing
-  while shard 1's own sections (`shardOne`, 620 s) exceed every other shard's
-  share. [Run 40084480854](https://github.com/amritk/nish/actions/runs/40084480854)
-  (`6483ea9`, the first with the pool, before #909) shows the shape: its
-  shards built stage1 in 34-49 s, ran the pre-link sections in 125-145 s and
-  then spent 430, 398, 331 and 285 s (jobs of 614, 635, 546 and 489 s), and
-  regenerated from its own gaps the deal would have given 430 s to shard 1
-  and 338 s to each of the others. Regenerate from a pooled run once shard 1
-  stops being the longest. The shard-1
+  link wall clock, which is what the deal balances. The table is measured from
+  [run 40093958447](https://github.com/amritk/nish/actions/runs/40093958447)
+  (`0a1cbcd`, the pool on top of #909's cheaper link profile): its shards built
+  stage1 in 39-55 s and ran the pre-link sections in 123-192 s (shards 2 and 4
+  on the slower runners), then spent 512, 344, 223 and 254 s on the link
+  programs and the dealt sections (jobs of 719, 617, 411 and 538 s). The 719
+  link programs came to 431 s of wall clock in all, but the serial table it ran
+  on dealt them unevenly, 254 s to shard 4 against 76-86 s to shards 2 and 3.
+  Dealt again on the regenerated table (`shardOne` 496 s, `selfHosting` 137 s,
+  `cryptoBench` 268 s), the same costs come to 512 s on shard 1 and 273 s on
+  each of the others. Shard 1's own sections are the floor no deal moves, so a
+  regeneration evens out shards 2-4 and leaves the longest job where it is. The
+  shard-1
   steps after the suite that require a `PASS` line (`simd`, the AES kernels,
   `cpu-level`) grep the Test step's log for it rather than running their
   section again.
@@ -318,14 +320,14 @@ with them.
 
 Since the link programs run through a worker pool (`defaultJobs()`, four on a
 hosted runner), they are no longer most of a shard. In
-[run 40084480854](https://github.com/amritk/nish/actions/runs/40084480854),
-before #909's cheaper link profile (which took the serial link costs from
-1083 s to 675 s summed over the shards), the 669 programs took 636 s of wall clock across the four `test` shards, 16 to
-285 s per shard, against 125-145 s per shard for the sections before them and
-34-49 s for stage1. The largest single spans were crypto-bench (259 s, shard
-2), shard 1's sections after the link programs (396 s, with 18 s of steps
-after the suite) and WP14 self-hosting (135 s, shard 3). The longest `test`
-job took 10 min 35 s.
+[run 40093958447](https://github.com/amritk/nish/actions/runs/40093958447),
+with #909's cheaper link profile as well, the 719 programs took 431 s of wall
+clock across the four `test` shards, 16 to 254 s per shard, against 123-192 s
+per shard for the sections before them and 39-55 s for stage1. The largest
+single spans were shard 1's sections after the link programs (475 s, with 21 s
+of steps after the suite), crypto-bench (268 s, shard 2) and WP14
+self-hosting (137 s, shard 3). The longest `test` job took 11 min 59 s, on
+shard 1.
 
 ## Running the same steps locally
 
