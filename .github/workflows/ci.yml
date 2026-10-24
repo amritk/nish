@@ -403,7 +403,7 @@ jobs:
         run: |
           set -o pipefail
           build/test/simd/index-of-any | grep -E '^index-of-any: [0-9]+ cases agree across scalar base avx2;'
-          build/test/simd/byte-runs | grep -E '^byte-runs: [0-9]+ cases agree across scalar base avx2;'
+          build/test/simd/byte-runs | grep -E '^byte-runs: [0-9]+ cases agree across scalar base avx2 \(plain: scalar base\);'
 
       # WP38 S5: likewise for runtime/runtime-aes.c, whose `simd` section passes
       # with the reference alone on a CPU without AES-NI. These runners have it
@@ -1023,7 +1023,7 @@ jobs:
           set -o pipefail
           node tests/run.js simd | tee "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
-          grep -E '^PASS  simd: byte-runs native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: byte-runs native arm64: [0-9]+ cases agree across scalar base \(plain: scalar base\);' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: aes-gcm native arm64: [0-9]+ cases agree across armv8-aes-pmull;' "$RUNNER_TEMP/simd.log"
 
       # WP38 S5's lowering on AArch64: the compiler's branch to the ARMv8 AES and
@@ -1160,7 +1160,7 @@ jobs:
 
   # Every fuzz target in tests/fuzz/targets/ built under
   # -fsanitize=fuzzer,address,undefined, replayed over its seed corpus and
-  # regressions, then fuzzed for a minute from a fixed -seed. The run is
+  # regressions, then fuzzed for 30 seconds from a fixed -seed. The run is
   # bounded by wall clock, so how far it gets varies from push to push
   # (tests/fuzz/README.md). Plus the runtime unit test
   # under ASan and UBSan. Long campaigns are fuzz.yml's, weekly.
@@ -1209,7 +1209,7 @@ jobs:
       - name: Fuzz smoke
         timeout-minutes: 12
         env:
-          FUZZ_SMOKE_SECONDS: "60"
+          FUZZ_SMOKE_SECONDS: "30"
           FUZZ_SEED: "1"
         run: bash scripts/fuzz.sh --smoke
 

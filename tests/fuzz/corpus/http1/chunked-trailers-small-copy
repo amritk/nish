@@ -1,0 +1,14 @@
+!POST /up HTTP/1.1
+Host: a
+Transfer-Encoding: chunked
+
+5;name=value
+hello
+1A 	;x
+ abcdefghijklmnopqrstuvwxy
+0
+Expires: never
+
+GET / HTTP/1.1
+Host: a
+
