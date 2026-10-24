@@ -40,6 +40,8 @@ import isMapOwner from "./generics" -> function @isMapOwner
 import Local from "./symbols" -> struct Local
 import STORAGE_PARAM from "./symbols" -> const STORAGE_PARAM
 import isUndefined from "./validator" -> function @isUndefined
+import HASH_KEY_GLOBAL from "./runtime" -> const HASH_KEY_GLOBAL
+import isWasmBuild from "./visibility" -> function @isWasmBuild
 import intBits from "./types" -> function @intBits
 import isFloat from "./types" -> function @isFloat
 import T_BOOL from "./types" -> const T_BOOL
@@ -142,67 +144,209 @@ function nonZero(emitter: Emitter, h: string): string -> @nonZero
   callee +0:16 IRFunction.emitValue -> @IRFunction.emitValue
   callee +1:10 IRFunction.emitValue -> @IRFunction.emitValue
 function emitStringHash(emitter: Emitter, str: string): string -> @emitStringHash
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via seedHashKey
+  calls: Emitter.align Emitter.alignSuffix IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock compress hashKeyWord nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 seedHashKey sipRounds
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=seedHashKey#0 Emitter.alignSuffix#0 Emitter.align#0 Emitter.align#0 Emitter.align#0 compress#0 compress#0 sipRounds#0
+  stackSites=1 stackLocals=1
+  local +0:9 fn: IRFunction (const)
+  callee +1:3 seedHashKey -> @seedHashKey
+  local +2:9 a64: string (const)
+  callee +2:15 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +3:9 index: string (const)
+  callee +3:17 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee +3:48 Emitter.align -> @Emitter.align
+  local +4:9 slots: string[] (const)
+  local +5:12 i: i32 (let)
+  callee +6:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee +6:51 Emitter.align -> @Emitter.align
+  local +8:9 last: string (const)
+  callee +8:16 IRFunction.emitAlloca -> @IRFunction.emitAlloca
+  callee +8:47 Emitter.align -> @Emitter.align
+  local +9:9 header: string (const)
+  callee +9:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local +10:9 len: string (const)
+  callee +10:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local +11:9 data: string (const)
+  callee +11:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +12:9 k0: string (const)
+  callee +12:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +12:45 hashKeyWord -> @hashKeyWord
+  local +13:9 k1: string (const)
+  callee +13:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +13:45 hashKeyWord -> @hashKeyWord
+  callee +15:3 IRFunction.emit -> @IRFunction.emit
+  callee +15:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +16:3 IRFunction.emit -> @IRFunction.emit
+  callee +16:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +17:3 IRFunction.emit -> @IRFunction.emit
+  callee +17:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +18:3 IRFunction.emit -> @IRFunction.emit
+  callee +18:24 IRFunction.emitValue -> @IRFunction.emitValue
+  local +19:9 words: string (const)
+  callee +19:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +20:3 IRFunction.emit -> @IRFunction.emit
+  local +21:9 test: IRBlock (const)
+  callee +21:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +22:9 word: IRBlock (const)
+  callee +22:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +23:9 tail: IRBlock (const)
+  callee +23:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +24:9 more: IRBlock (const)
+  callee +24:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +25:9 byte: IRBlock (const)
+  callee +25:16 IRFunction.newBlock -> @IRFunction.newBlock
+  local +26:9 done: IRBlock (const)
+  callee +26:16 IRFunction.newBlock -> @IRFunction.newBlock
+  callee +27:3 IRFunction.emit -> @IRFunction.emit
+  callee +28:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +29:9 at: string (const)
+  callee +29:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +30:3 IRFunction.emit -> @IRFunction.emit
+  callee +30:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +31:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +32:9 address: string (const)
+  callee +32:19 IRFunction.emitValue -> @IRFunction.emitValue
+  local +33:9 m: string (const)
+  callee +33:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +33:44 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +34:3 compress -> @compress
+  callee +35:3 IRFunction.emit -> @IRFunction.emit
+  callee +35:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +36:3 IRFunction.emit -> @IRFunction.emit
+  callee +38:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +39:3 IRFunction.emit -> @IRFunction.emit
+  callee +39:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +40:3 IRFunction.emit -> @IRFunction.emit
+  callee +41:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +42:9 rest: string (const)
+  callee +42:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +43:3 IRFunction.emit -> @IRFunction.emit
+  callee +43:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +44:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  local +45:9 from: string (const)
+  callee +45:16 IRFunction.emitValue -> @IRFunction.emitValue
+  local +46:9 wide: string (const)
+  callee +46:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +46:40 IRFunction.emitValue -> @IRFunction.emitValue
+  local +47:9 shift: string (const)
+  callee +47:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +47:41 IRFunction.emitValue -> @IRFunction.emitValue
+  local +48:9 b: string (const)
+  callee +48:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +49:3 IRFunction.emit -> @IRFunction.emit
+  callee +49:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +49:53 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +50:3 IRFunction.emit -> @IRFunction.emit
+  callee +50:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +51:3 IRFunction.emit -> @IRFunction.emit
+  callee +52:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +53:3 compress -> @compress
+  callee +53:28 IRFunction.emitValue -> @IRFunction.emitValue
+  local +54:9 v2: string (const)
+  callee +54:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +55:3 IRFunction.emit -> @IRFunction.emit
+  callee +55:24 IRFunction.emitValue -> @IRFunction.emitValue
+  local +56:9 v: string[] (const)
+  callee +56:13 sipRounds -> @sipRounds
+  local +57:9 x: string (const)
+  callee +57:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +57:37 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +57:82 IRFunction.emitValue -> @IRFunction.emitValue
+  local +58:9 low: string (const)
+  callee +58:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local +59:9 high: string (const)
+  callee +59:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +59:42 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +60:10 IRFunction.emitValue -> @IRFunction.emitValue
+function hashKeyWord(i: i32): string -> @hashKeyWord
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_from_i32
+  stackSites=0 stackLocals=0
+function compress(emitter: Emitter, slots: string[], m: string, rounds: i32): void -> @compress
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via IRFunction.emitAlloca
-  calls: Emitter.align Emitter.alignSuffix IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock nish_str_concat
-  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.align#0 Emitter.align#0 Emitter.alignSuffix#0 Emitter.alignSuffix#0 Emitter.alignSuffix#0 Emitter.alignSuffix#0 Emitter.alignSuffix#0 Emitter.alignSuffix#0 Emitter.alignSuffix#0 Emitter.alignSuffix#0
+  sharedWrite: via IRFunction.emitValue
+  escaping: rounds
+  calls: Emitter.alignSuffix IRFunction.emit IRFunction.emitValue nish_panic_index nish_str_concat sipRounds
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.alignSuffix#0 sipRounds#0
+  pointer slots: size=0 writesThrough=false captured=false passedTo=sipRounds#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
-  local +1:9 index: string (const)
-  callee +1:17 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee +1:48 Emitter.align -> @Emitter.align
-  local +2:9 state: string (const)
-  callee +2:17 IRFunction.emitAlloca -> @IRFunction.emitAlloca
-  callee +2:48 Emitter.align -> @Emitter.align
-  local +3:9 header: string (const)
-  callee +3:18 IRFunction.emitValue -> @IRFunction.emitValue
-  local +4:9 len: string (const)
-  callee +4:15 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +4:55 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +5:9 data: string (const)
-  callee +5:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +6:3 IRFunction.emit -> @IRFunction.emit
-  callee +6:40 Emitter.alignSuffix -> @Emitter.alignSuffix
-  callee +7:3 IRFunction.emit -> @IRFunction.emit
-  callee +7:50 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +8:9 test: IRBlock (const)
-  callee +8:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local +9:9 body: IRBlock (const)
-  callee +9:16 IRFunction.newBlock -> @IRFunction.newBlock
-  local +10:9 done: IRBlock (const)
-  callee +10:16 IRFunction.newBlock -> @IRFunction.newBlock
-  callee +11:3 IRFunction.emit -> @IRFunction.emit
-  callee +12:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +13:9 at: string (const)
-  callee +13:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +13:53 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +14:9 more: string (const)
-  callee +14:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +15:3 IRFunction.emit -> @IRFunction.emit
-  callee +16:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  local +17:9 address: string (const)
-  callee +17:19 IRFunction.emitValue -> @IRFunction.emitValue
-  local +18:9 byte: string (const)
-  callee +18:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local +19:9 wide: string (const)
-  callee +19:16 IRFunction.emitValue -> @IRFunction.emitValue
-  local +20:9 h: string (const)
-  callee +20:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +20:52 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +21:9 mixed: string (const)
-  callee +21:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local +22:9 next: string (const)
-  callee +22:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +23:3 IRFunction.emit -> @IRFunction.emit
-  callee +23:46 Emitter.alignSuffix -> @Emitter.alignSuffix
-  local +24:9 step: string (const)
-  callee +24:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +25:3 IRFunction.emit -> @IRFunction.emit
-  callee +25:46 Emitter.alignSuffix -> @Emitter.alignSuffix
-  callee +26:3 IRFunction.emit -> @IRFunction.emit
-  callee +27:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +28:10 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +28:49 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +1:9 a64: string (const)
+  callee +1:15 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +2:9 v3: string (const)
+  callee +2:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +3:3 IRFunction.emit -> @IRFunction.emit
+  callee +3:24 IRFunction.emitValue -> @IRFunction.emitValue
+  local +4:9 v: string[] (const)
+  callee +4:13 sipRounds -> @sipRounds
+  callee +5:3 IRFunction.emit -> @IRFunction.emit
+  callee +5:24 IRFunction.emitValue -> @IRFunction.emitValue
+function sipRounds(emitter: Emitter, slots: string[], rounds: i32): string[] -> @sipRounds
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  calls: Emitter.alignSuffix IRFunction.emit IRFunction.emitValue nish_panic_index nish_str_concat rotl
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.alignSuffix#0 rotl#0 rotl#0 rotl#0 rotl#0 rotl#0 rotl#0
+  pointer slots: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 a64: string (const)
+  callee +1:15 Emitter.alignSuffix -> @Emitter.alignSuffix
+  local +2:7 v0: string (let)
+  callee +2:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +3:7 v1: string (let)
+  callee +3:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +4:7 v2: string (let)
+  callee +4:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +5:7 v3: string (let)
+  callee +5:12 IRFunction.emitValue -> @IRFunction.emitValue
+  local +6:12 r: i32 (let)
+  callee +7:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +8:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +8:34 rotl -> @rotl
+  callee +9:10 rotl -> @rotl
+  callee +10:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:34 rotl -> @rotl
+  callee +12:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +13:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +13:34 rotl -> @rotl
+  callee +14:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +15:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +15:34 rotl -> @rotl
+  callee +16:10 rotl -> @rotl
+  local +18:9 v: string[] (const)
+  local +19:12 i: i32 (let)
+  callee +20:5 IRFunction.emit -> @IRFunction.emit
+function rotl(emitter: Emitter, x: string, by: i32): string -> @rotl
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via IRFunction.emitValue
+  calls: IRFunction.emitValue nish_str_concat nish_str_from_i32
+  pointer emitter: size=272 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 fn: IRFunction (const)
+  local +1:9 up: string (const)
+  callee +1:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +2:40 IRFunction.emitValue -> @IRFunction.emitValue
+function seedHashKey(emitter: Emitter): void -> @seedHashKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Emitter.declareGlobal
+  calls: Emitter.declare Emitter.declareGlobal Emitter.stringConstant Emitter.useRuntime IRModule.addRawDefinition hashKeyWord isWasmBuild nish_str_concat
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.declareGlobal#0 Emitter.declare#0 Emitter.useRuntime#0 Emitter.stringConstant#0 Emitter.declareGlobal#0
+  stackSites=0 stackLocals=0
+  callee +0:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+  local +1:9 size: string (const)
+  callee +1:16 isWasmBuild -> @isWasmBuild
+  callee +2:3 Emitter.declare -> @Emitter.declare
+  local +3:9 panic: string (const)
+  callee +3:17 Emitter.useRuntime -> @Emitter.useRuntime
+  local +4:9 message: string (const)
+  callee +4:19 Emitter.stringConstant -> @Emitter.stringConstant
+  local +5:9 word0: string (const)
+  callee +5:17 hashKeyWord -> @hashKeyWord
+  callee +6:3 Emitter.declareGlobal -> @Emitter.declareGlobal
+  callee +9:3 IRModule.addRawDefinition -> @IRModule.addRawDefinition
 function fmix32(emitter: Emitter, x: string): string -> @fmix32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue

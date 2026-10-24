@@ -10692,6 +10692,51 @@ if (!only || "map_fingerprint_miss".includes(only)) {
   }
 }
 
+// docs/security/json.md, JSON-13: the string hash is keyed. 4096 keys that share
+// one FNV-1a hash cost 8,386,560 key compares to insert under the unkeyed hash
+// and none under SipHash, bar a full 32-bit collision, which the bound of 16
+// allows for. Linked like `map_fingerprint_miss`, with a wrapper that counts
+// the compares and also answers the key, so two runs show it is filled, and
+// filled differently each time.
+if (!only || "map_hash_collide".includes(only)) {
+  if (!HAS_CLANG || !has("ld.lld")) {
+    skip("map_hash_collide: the key-compare count needs clang and ld.lld for --wrap")
+  } else {
+    const dir = path.join(buildDir, "map_hash_collide")
+    fs.mkdirSync(dir, { recursive: true })
+    const source = path.join(root, "tests", "cases", "map_hash_collide.ts")
+    const shim = path.join(root, "tests", "cases", "map_hash_collide.c")
+    const ll = path.join(dir, "map_hash_collide.ll")
+    const exe = path.join(dir, "map_hash_collide")
+    const built = spawnSync(NISH, [source, "-o", ll], { cwd: root, encoding: "utf8" })
+    const wrapped = ["-Wno-override-module", "-O2", "-Iruntime", "-fuse-ld=lld", "-Wl,--wrap=nish_str_eq"]
+    const linked =
+      built.status === 0
+        ? spawnSync("clang", [...wrapped, ll, shim, ...RUNTIME_C, "-o", exe], { cwd: root, encoding: "utf8" })
+        : built
+    if (linked.status !== 0 && /unknown argument.*--wrap|--wrap.*(unknown|unsupported)/.test(linked.stderr)) {
+      skip("map_hash_collide: this ld.lld has no --wrap")
+    } else {
+      const runs = [0, 1].map(() => (linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : linked))
+      const read = (run, pattern) => Number((pattern.exec(run.stdout ?? "") ?? [])[1])
+      const first = runs[0]
+      const inserts = read(first, /^inserts: (\d+) key compares$/m)
+      const hits = read(first, /^hits 4096: (\d+) key compares$/m)
+      const seeds = runs.map((run) => read(run, /^seed (-?\d+)$/m))
+      check(
+        "map_hash_collide: 4096 keys with one FNV-1a hash insert with under 16 key compares (8,386,560 unkeyed)",
+        first.status === 0 && /^size 4096$/m.test(first.stdout) && inserts < 16 && hits >= 4096 && hits < 4096 + 16,
+        `${first.stdout ?? ""}${first.stderr ?? ""}`
+      )
+      check(
+        "map_hash_collide: the hash key is filled before main, and differently in two runs",
+        runs.every((run) => run.status === 0) && seeds[0] !== 0 && seeds[1] !== 0 && seeds[0] !== seeds[1],
+        runs.map((run) => `${run.stdout ?? ""}${run.stderr ?? ""}`).join("---\n")
+      )
+    }
+  }
+}
+
 // ---- WP32 S5: one probe per fused lookup, counted in the goldens ----------------
 // docs/wp32-map.md §9, acceptance criterion 3: word count and `getOrInsert` are
 // one hash and one search per iteration. The loop is the whole of one function
@@ -10699,7 +10744,7 @@ if (!only || "map_fingerprint_miss".includes(only)) {
 // golden — which section A has already compared with what the compiler writes —
 // proves it without trusting anyone's eye: exactly one call of the table's
 // `probe`, whose hash is inside it, no hash loop of its own (`hash.test` is the
-// block FNV-1a is lowered to), and no call of `get`, `set`, `has` or of
+// head of the loop the string hash reads its words in), and no call of `get`, `set`, `has` or of
 // `getOrInsert` itself. The negatives are counted too, so the rule is proven
 // on both sides. A golden that is not there reads as no function at all,
 // which fails the check, so a renamed fixture fails here rather than dropping it.

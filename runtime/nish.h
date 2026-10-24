@@ -348,6 +348,13 @@ void nish_panic_slice(int64_t start, int64_t end, int64_t len);
 extern nish_array *nish_argv;
 void nish_argv_init(int32_t argc, char **argv);
 
+/* The 128-bit SipHash-1-3 key of every `Map` and `Set` string hash
+ * (docs/security/json.md, JSON-13). A constructor the compiled module
+ * registers fills it from `getentropy` before `main`, once per process, and
+ * sets bit 0 of word 0 so a filled key is never all zero; nothing writes it
+ * afterwards. A host must not change it while any table exists. */
+extern uint64_t nish_hash_key[2];
+
 /* ---- Directories and subprocesses (WP14 D4) -----------------------------
  * The calls a self-hosted driver needs to find its inputs and link its own
  * output. Every one of them answers a value instead of exiting, exactly as

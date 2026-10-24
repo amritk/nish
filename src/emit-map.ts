@@ -17,13 +17,13 @@
 //     Nish bodies are what the checker and the fact fixpoint read; a call to one
 //     is lowered here, in place, per key type, and the instance itself is never
 //     emitted (`emitMapIntrinsic`, `emitStoredKey`). No runtime function is
-//     added: the runtime's `.text` budget has no room, and `nish_str_eq` is the
-//     one symbol reached.
+//     added: the runtime's `.text` budget has no room, so `nish_str_eq` is the
+//     one function reached, and the string hash's key is data (`seedHashKey`).
 //
 // The hashes are §5.2's, and a hash of 0 is moved to 1 because a stored hash
 // of 0 marks a deleted entry:
 //
-//   string                    FNV-1a, 32-bit, over the UTF-8 bytes
+//   string                    SipHash-1-3 of the UTF-8 bytes under a per-process key, halves XORed
 //   <= 32-bit integer, boolean, enum   murmur3's fmix32 of the zero-extended value
 //   i64, u64                  fmix64, the two halves XORed
 //   f64                       -0 -> +0 (`fadd 0.0`), every NaN -> 0x7FF8000000000000, then as i64
@@ -75,6 +75,8 @@ import { packResultObject, privateAbi, unpackReturnedResult } from "./emit-resul
 import { isMapOwner } from "./generics"
 import { Local, STORAGE_PARAM } from "./symbols"
 import { isUndefined } from "./validator"
+import { HASH_KEY_GLOBAL } from "./runtime"
+import { isWasmBuild } from "./visibility"
 import { intBits, isFloat, T_BOOL, T_F32, T_F64, T_I32, T_I64, T_STRING, TypeTable } from "./types"
 
 /** The `MAP_*` role of `sig`, or `MAP_NONE` when it is not an instantiation of one of the two intrinsics. */
@@ -162,45 +164,175 @@ const nonZero = (emitter: Emitter, h: string): string => {
 }
 
 /**
- * FNV-1a over the string's bytes, as `hashString` in `src/map.ts` computes
- * it. The loop state lives in two entry-block slots, as every loop the emitter
- * writes keeps its state, and `mem2reg` makes them the phis.
+ * SipHash-1-3 of the string's bytes under the process's key `@nish_hash_key`,
+ * folded to 32 bits by XORing the halves (JSON-13 in docs/security/json.md:
+ * an unkeyed hash lets whoever chooses the keys choose their buckets). The
+ * 8-byte words are read in the `hash.test` loop, the at most seven bytes left
+ * over in the `hash.more` one, and the state lives in entry-block slots, as
+ * every loop the emitter writes keeps its state, which `mem2reg` makes phis.
+ * Reading the key is the one memory access the hash adds, and the key is
+ * filled before `main` (`seedHashKey`), so a probe still writes nothing.
+ * SipHash is Aumasson and Bernstein's, published with a CC0 reference.
  */
 const emitStringHash = (emitter: Emitter, str: string): string => {
   const fn = emitter.fn
+  seedHashKey(emitter)
+  const a64 = emitter.alignSuffix(T_I64)
   const index = fn.emitAlloca("hash.i", "i64", emitter.align(T_I64))
-  const state = fn.emitAlloca("hash.h", "i32", emitter.align(T_I32))
+  const slots: string[] = []
+  for (let i = 0; i < 4; i++) {
+    slots.push(fn.emitAlloca(`hash.v${i}`, "i64", emitter.align(T_I64)))
+  }
+  const last = fn.emitAlloca("hash.b", "i64", emitter.align(T_I64))
   const header = fn.emitValue(`bitcast i8* ${str} to i64*`)
-  const len = fn.emitValue(`load i64, i64* ${header}${emitter.alignSuffix(T_I64)}`)
+  const len = fn.emitValue(`load i64, i64* ${header}${a64}`)
   const data = fn.emitValue(`getelementptr inbounds i8, i8* ${str}, i64 8`)
-  fn.emit(`store i64 0, i64* ${index}${emitter.alignSuffix(T_I64)}`)
-  fn.emit(`store i32 -2128831035, i32* ${state}${emitter.alignSuffix(T_I32)}`)
+  const k0 = fn.emitValue(`load i64, i64* ${hashKeyWord(0)}${a64}`)
+  const k1 = fn.emitValue(`load i64, i64* ${hashKeyWord(1)}${a64}`)
+  // "somepseudorandomlygeneratedbytes", the four words SipHash starts from.
+  fn.emit(`store i64 ${fn.emitValue(`xor i64 ${k0}, 8317987319222330741`)}, i64* ${slots[0]}${a64}`)
+  fn.emit(`store i64 ${fn.emitValue(`xor i64 ${k1}, 7237128888997146477`)}, i64* ${slots[1]}${a64}`)
+  fn.emit(`store i64 ${fn.emitValue(`xor i64 ${k0}, 7816392313619706465`)}, i64* ${slots[2]}${a64}`)
+  fn.emit(`store i64 ${fn.emitValue(`xor i64 ${k1}, 8387220255154660723`)}, i64* ${slots[3]}${a64}`)
+  const words = fn.emitValue(`and i64 ${len}, -8`)
+  fn.emit(`store i64 0, i64* ${index}${a64}`)
   const test = fn.newBlock("hash.test")
-  const body = fn.newBlock("hash.byte")
+  const word = fn.newBlock("hash.word")
+  const tail = fn.newBlock("hash.tail")
+  const more = fn.newBlock("hash.more")
+  const byte = fn.newBlock("hash.byte")
   const done = fn.newBlock("hash.done")
   fn.emit(`br label %${test.label}`)
   fn.placeBlock(test)
-  const at = fn.emitValue(`load i64, i64* ${index}${emitter.alignSuffix(T_I64)}`)
-  const more = fn.emitValue(`icmp ult i64 ${at}, ${len}`)
-  fn.emit(`br i1 ${more}, label %${body.label}, label %${done.label}`)
-  fn.placeBlock(body)
+  const at = fn.emitValue(`load i64, i64* ${index}${a64}`)
+  fn.emit(`br i1 ${fn.emitValue(`icmp ult i64 ${at}, ${words}`)}, label %${word.label}, label %${tail.label}`)
+  fn.placeBlock(word)
   const address = fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${at}`)
-  const byte = fn.emitValue(`load i8, i8* ${address}`)
-  const wide = fn.emitValue(`zext i8 ${byte} to i32`)
-  const h = fn.emitValue(`load i32, i32* ${state}${emitter.alignSuffix(T_I32)}`)
-  const mixed = fn.emitValue(`xor i32 ${h}, ${wide}`)
-  const next = fn.emitValue(`mul i32 ${mixed}, 16777619`)
-  fn.emit(`store i32 ${next}, i32* ${state}${emitter.alignSuffix(T_I32)}`)
-  const step = fn.emitValue(`add i64 ${at}, 1`)
-  fn.emit(`store i64 ${step}, i64* ${index}${emitter.alignSuffix(T_I64)}`)
+  const m = fn.emitValue(`load i64, i64* ${fn.emitValue(`bitcast i8* ${address} to i64*`)}, align 1`)
+  compress(emitter, slots, m, 1)
+  fn.emit(`store i64 ${fn.emitValue(`add i64 ${at}, 8`)}, i64* ${index}${a64}`)
   fn.emit(`br label %${test.label}`)
+  // The last word: the length's low byte on top, the leftover bytes below it.
+  fn.placeBlock(tail)
+  fn.emit(`store i64 ${fn.emitValue(`shl i64 ${len}, 56`)}, i64* ${last}${a64}`)
+  fn.emit(`br label %${more.label}`)
+  fn.placeBlock(more)
+  const rest = fn.emitValue(`load i64, i64* ${index}${a64}`)
+  fn.emit(`br i1 ${fn.emitValue(`icmp ult i64 ${rest}, ${len}`)}, label %${byte.label}, label %${done.label}`)
+  fn.placeBlock(byte)
+  const from = fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${rest}`)
+  const wide = fn.emitValue(`zext i8 ${fn.emitValue(`load i8, i8* ${from}`)} to i64`)
+  const shift = fn.emitValue(`shl i64 ${fn.emitValue(`sub i64 ${rest}, ${words}`)}, 3`)
+  const b = fn.emitValue(`load i64, i64* ${last}${a64}`)
+  fn.emit(`store i64 ${fn.emitValue(`or i64 ${b}, ${fn.emitValue(`shl i64 ${wide}, ${shift}`)}`)}, i64* ${last}${a64}`)
+  fn.emit(`store i64 ${fn.emitValue(`add i64 ${rest}, 1`)}, i64* ${index}${a64}`)
+  fn.emit(`br label %${more.label}`)
   fn.placeBlock(done)
-  return fn.emitValue(`load i32, i32* ${state}${emitter.alignSuffix(T_I32)}`)
+  compress(emitter, slots, fn.emitValue(`load i64, i64* ${last}${a64}`), 1)
+  const v2 = fn.emitValue(`load i64, i64* ${slots[2]}${a64}`)
+  fn.emit(`store i64 ${fn.emitValue(`xor i64 ${v2}, 255`)}, i64* ${slots[2]}${a64}`)
+  const v = sipRounds(emitter, slots, 3)
+  const x = fn.emitValue(`xor i64 ${fn.emitValue(`xor i64 ${v[0]}, ${v[1]}`)}, ${fn.emitValue(`xor i64 ${v[2]}, ${v[3]}`)}`)
+  const low = fn.emitValue(`trunc i64 ${x} to i32`)
+  const high = fn.emitValue(`trunc i64 ${fn.emitValue(`lshr i64 ${x}, 32`)} to i32`)
+  return fn.emitValue(`xor i32 ${low}, ${high}`)
+}
+
+/** Word `i` of `@nish_hash_key`, as an `i64*` constant. */
+const hashKeyWord = (i: i32): string =>
+  `getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 ${i})`
+
+/** One SipHash compression of the word `m`: `v3 ^= m`, `rounds` rounds, `v0 ^= m`. */
+const compress = (emitter: Emitter, slots: string[], m: string, rounds: i32): void => {
+  const fn = emitter.fn
+  const a64 = emitter.alignSuffix(T_I64)
+  const v3 = fn.emitValue(`load i64, i64* ${slots[3]}${a64}`)
+  fn.emit(`store i64 ${fn.emitValue(`xor i64 ${v3}, ${m}`)}, i64* ${slots[3]}${a64}`)
+  const v = sipRounds(emitter, slots, rounds)
+  fn.emit(`store i64 ${fn.emitValue(`xor i64 ${v[0]}, ${m}`)}, i64* ${slots[0]}${a64}`)
+}
+
+/** `rounds` SipRounds over the four slots, stored back; answers the four new values. */
+const sipRounds = (emitter: Emitter, slots: string[], rounds: i32): string[] => {
+  const fn = emitter.fn
+  const a64 = emitter.alignSuffix(T_I64)
+  let v0 = fn.emitValue(`load i64, i64* ${slots[0]}${a64}`)
+  let v1 = fn.emitValue(`load i64, i64* ${slots[1]}${a64}`)
+  let v2 = fn.emitValue(`load i64, i64* ${slots[2]}${a64}`)
+  let v3 = fn.emitValue(`load i64, i64* ${slots[3]}${a64}`)
+  for (let r = 0; r < rounds; r++) {
+    v0 = fn.emitValue(`add i64 ${v0}, ${v1}`)
+    v1 = fn.emitValue(`xor i64 ${rotl(emitter, v1, 13)}, ${v0}`)
+    v0 = rotl(emitter, v0, 32)
+    v2 = fn.emitValue(`add i64 ${v2}, ${v3}`)
+    v3 = fn.emitValue(`xor i64 ${rotl(emitter, v3, 16)}, ${v2}`)
+    v0 = fn.emitValue(`add i64 ${v0}, ${v3}`)
+    v3 = fn.emitValue(`xor i64 ${rotl(emitter, v3, 21)}, ${v0}`)
+    v2 = fn.emitValue(`add i64 ${v2}, ${v1}`)
+    v1 = fn.emitValue(`xor i64 ${rotl(emitter, v1, 17)}, ${v2}`)
+    v2 = rotl(emitter, v2, 32)
+  }
+  const v = [v0, v1, v2, v3]
+  for (let i = 0; i < 4; i++) {
+    fn.emit(`store i64 ${v[i]}, i64* ${slots[i]}${a64}`)
+  }
+  return v
+}
+
+/** `x` rotated left by `by` bits, as a shift pair the optimiser folds into one rotate. */
+const rotl = (emitter: Emitter, x: string, by: i32): string => {
+  const fn = emitter.fn
+  const up = fn.emitValue(`shl i64 ${x}, ${by}`)
+  return fn.emitValue(`or i64 ${up}, ${fn.emitValue(`lshr i64 ${x}, ${64 - by}`)}`)
+}
+
+/**
+ * Declare `@nish_hash_key` and register the constructor that fills it, once
+ * per module: an `internal` function in `@llvm.global_ctors`, which `appending`
+ * linkage merges across the modules of a program, so every module that hashes
+ * a string seeds the key and the first to run does it. A key already filled is
+ * left alone — bit 0 of word 0 is set so a filled one never reads as zero —
+ * and the priority, 101, is the first an ordinary constructor may take, so a
+ * host's own constructor that fills a table finds the key in place. There is no
+ * weaker source to fall back to when `getentropy` fails, so it panics before
+ * `main` instead. `size_t` is 32 bits on wasm32, which reaches `getentropy`
+ * through WASI's `random_get`.
+ */
+const seedHashKey = (emitter: Emitter): void => {
+  emitter.declareGlobal(HASH_KEY_GLOBAL)
+  const size = isWasmBuild(emitter.opts) ? "i32" : "i64"
+  emitter.declare(`declare i32 @getentropy(i8* noundef, ${size} noundef)`)
+  const panic = emitter.useRuntime("nish_panic")
+  const message = emitter.stringConstant("Map: the system's entropy source failed")
+  const word0 = hashKeyWord(0)
+  emitter.declareGlobal(
+    "@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.hash.seed, i8* null }]"
+  )
+  emitter.module.addRawDefinition(`define internal void @nish.hash.seed() nounwind {
+entry:
+  %k = load i64, i64* ${word0}, align 8
+  %filled = icmp ne i64 %k, 0
+  br i1 %filled, label %done, label %fill
+fill:
+  %got = call i32 @getentropy(i8* bitcast ([2 x i64]* @nish_hash_key to i8*), ${size} 16)
+  %failed = icmp ne i32 %got, 0
+  br i1 %failed, label %fail, label %mark
+fail:
+  call void ${panic}(i8* ${message})
+  unreachable
+mark:
+  %w = load i64, i64* ${word0}, align 8
+  %set = or i64 %w, 1
+  store i64 %set, i64* ${word0}, align 8
+  br label %done
+done:
+  ret void
+}`)
 }
 
 /**
  * murmur3's 32-bit finaliser. Every multiply wraps, which is what it is written
- * against. MurmurHash3 and its constants are public domain, as are FNV's above.
+ * against. MurmurHash3 and its constants are public domain.
  */
 const fmix32 = (emitter: Emitter, x: string): string => {
   const fn = emitter.fn

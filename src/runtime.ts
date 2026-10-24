@@ -50,6 +50,12 @@ export const ARENA_GLOBAL_TLS: string =
  * `nish_argv_init(argc, argv)`; every module that reads it loads this global.
  */
 export const ARGV_GLOBAL: string = "@nish_argv = external global %struct.nish_array*, align 8"
+/**
+ * The 128-bit key every `Map` and `Set` string hash reads (JSON-13):
+ * `uint64_t nish_hash_key[2]` in runtime.c, filled before `main` by the
+ * constructor `src/emit-map.ts` registers beside the first string hash.
+ */
+export const HASH_KEY_GLOBAL: string = "@nish_hash_key = external global [2 x i64], align 8"
 
 /** What calling a function does to memory; the rank is the order they merge in. */
 export const EFFECT_NONE: i32 = 0

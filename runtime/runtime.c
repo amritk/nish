@@ -1234,6 +1234,14 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
    this first. */
 nish_array *nish_argv;
 
+/* The key of every `Map` and `Set` string hash (docs/security/json.md, JSON-13):
+   SipHash-1-3's 128 bits, zero until the constructor each module that hashes
+   a string registers fills it from `getentropy` before `main`. Data, not code,
+   so it costs this file's `.text` budget nothing, and not NISH_TLS, for the
+   reason `nish_argv` is not: it is written once before any thread exists, and
+   a table one thread fills is probed by another under the same key. */
+uint64_t nish_hash_key[2];
+
 void nish_argv_init(int32_t argc, char **argv) {
   nish_array *a = malloc(sizeof *a + argc * sizeof(nish_str *));
   nish_str **d = (nish_str **)(a + 1);

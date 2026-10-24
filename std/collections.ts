@@ -53,11 +53,12 @@ const INDEX_CAP: i32 = 16777215
 const INITIAL_SLOTS: i32 = 8
 
 /**
- * The key's hash, never 0: FNV-1a over a string's bytes, murmur3's `fmix32`
- * for an integer of 32 bits or fewer, `fmix64` folded to 32 bits for a 64-bit
- * integer, a float (normalised first, so that -0 and +0, and every NaN, hash
- * alike) and a class instance's address (§5.2). FNV, MurmurHash3 and their
- * constants are public domain.
+ * The key's hash, never 0: SipHash-1-3 of a string's bytes under the process's
+ * random key, folded to 32 bits (docs/security/json.md, JSON-13), murmur3's
+ * `fmix32` for an integer of 32 bits or fewer, `fmix64` folded to 32 bits for a
+ * 64-bit integer, a float (normalised first, so that -0 and +0, and every NaN,
+ * hash alike) and a class instance's address (§5.2). SipHash's reference is
+ * CC0; MurmurHash3 and its constants are public domain.
  *
  * The body is never emitted. Every call is lowered in place, per key type, by
  * `src/emit-map.ts`; the constant is what the checker and the whole-program

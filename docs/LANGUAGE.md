@@ -8336,6 +8336,17 @@ export const main = (): i32 => {
   copied into the table rather than shared:
   `` `Point` cannot be the value type of `Map<string, Point>` ``
   (`reject_map_value_interface`, `reject_map_value_void`).
+- **A string key is hashed under a per-process random key**: SipHash-1-3 of
+  its UTF-8 bytes, keyed with 128 bits drawn from the system's entropy source
+  before `main`, so a program's input cannot choose keys that share a bucket.
+  4096 keys that collide under an unkeyed FNV-1a insert with no key compare
+  (`tests/cases/map_hash_collide`, counted the same way as below), and two runs
+  of one program hash under two keys. Iteration is still insertion order, so
+  nothing a program prints depends on the key. When the entropy source fails
+  the program panics before `main`: `` Map: the system's entropy source
+  failed ``. On wasm32 the key comes from WASI's `random_get`, and a reactor
+  module is keyed only once its host calls `_initialize`
+  (docs/security/json.md, JSON-13).
 - **Every `set`, `add`, `has` and `delete` is one probe.** A bucket holds eight
   bits of the key's hash beside the entry's index, and each entry keeps its
   full hash, so a probe reads a key only when both match: 10000 lookups of
@@ -8916,9 +8927,9 @@ export const main = (): i32 => {
   it is read ("map limit: one key past it: code", "map limit: 820 small maps,
   4,100 keys, are refused"); `d.reset` starts the count again. At `0` or below
   no map may take a key, and `{}` is the one map value accepted. The global
-  `Map` hashes a string with no seed, so a body can choose keys that all
-  collide, and this limit is what bounds the probes all the maps of one
-  decoding cost together (docs/security/json.md, JSON-13).
+  `Map` hashes a string under a per-process random key, so a body cannot
+  choose keys that collide, and this limit bounds what all the maps of one
+  decoding hold together (docs/security/json.md, JSON-13).
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps
