@@ -927,6 +927,28 @@ the count, in one process, and fails if the checksum differs from the one
 pinned in the driver. Every build of `std/crypto/p256.ts`, window or table,
 must keep printing it.
 
+## bcrypt
+
+`crypto/bcrypt/run.mjs` times one cost-10 hash of `nish/crypto/bcrypt` against
+libxcrypt's `crypt_r` (`$2b$`) and OpenBSD's `bcrypt.c`, which it fetches from
+the OpenBSD tree into `build/bench/bcrypt/` and builds with `gcc -O2` and
+`clang -O2` behind a small shim for what OpenBSD's libc adds. It is not a
+`crypto/` family (it has no `family.json`) and is not in this suite's tables;
+[docs/security/crypto-bcrypt.md](../docs/security/crypto-bcrypt.md#speed)
+carries its figures.
+
+```bash
+npm run build
+node bench/crypto/bcrypt/run.mjs                    # 8 hashes a round, 5 rounds, cost 10
+node bench/crypto/bcrypt/run.mjs --rounds 9 --cost 12
+```
+
+Each program hashes "U*U" under an all-zero salt and prints its last hash; the
+runner fails unless every program prints the same one. The programs run in
+interleaved rounds, a round's figure is the child's user CPU time over its
+hashes, and each row is the median of the rounds with their spread, the noise
+band. A missing compiler, libxcrypt or network leaves its row out with a note.
+
 ## TLS handshake
 
 `tls-handshake.mjs` times what one TLS 1.3 handshake costs the server, in CPU:
