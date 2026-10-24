@@ -66,21 +66,22 @@ struct Walk (class) size=144 align=8 exported
   field instances: Instantiation[] index=5 offset=40
   field inInstance: boolean index=6 offset=48
   field repeat: boolean index=7 offset=49
-  field helpers: StringSet index=8 offset=56
-  field widths: StringSet index=9 offset=64
-  field names: StringSet index=10 offset=72
-  field typeNames: StringSet index=11 offset=80
-  field specifierFrom: string[] index=12 offset=88
-  field specifierTo: string[] index=13 offset=96
-  field refusedAt: Node[] index=14 offset=104
-  field refusals: string[] index=15 offset=112
-  field failure: string index=16 offset=120
-  field preludes: string[] index=17 offset=128
-  field temps: i32 index=18 offset=136
-  field hoistHere: boolean index=19 offset=140
-  field hoistable: boolean index=20 offset=141
-  field effects: boolean index=21 offset=142
-  field localsRead: boolean index=22 offset=143
+  field instanceChoice: boolean index=8 offset=50
+  field helpers: StringSet index=9 offset=56
+  field widths: StringSet index=10 offset=64
+  field names: StringSet index=11 offset=72
+  field typeNames: StringSet index=12 offset=80
+  field specifierFrom: string[] index=13 offset=88
+  field specifierTo: string[] index=14 offset=96
+  field refusedAt: Node[] index=15 offset=104
+  field refusals: string[] index=16 offset=112
+  field failure: string index=17 offset=120
+  field preludes: string[] index=18 offset=128
+  field temps: i32 index=19 offset=136
+  field hoistHere: boolean index=20 offset=140
+  field hoistable: boolean index=21 offset=141
+  field effects: boolean index=22 offset=142
+  field localsRead: boolean index=23 offset=143
   constructor -> @Walk.constructor
   method useHelper -> @Walk.useHelper
   method helperName -> @Walk.helperName
@@ -109,20 +110,20 @@ function Walk.constructor(this: Walk, program: CheckedProgram, table: TypeTable,
   pointer source: size=24 writesThrough=true captured=true passedTo=FunctionSig.definedIn#1
   stackSites=0 stackLocals=0
   local +0:9 i: i32 (let)
-  callee +9:20 new StringSet -> @StringSet.constructor
-  callee +10:19 new StringSet -> @StringSet.constructor
-  callee +11:18 new StringSet -> @StringSet.constructor
-  callee +12:22 new StringSet -> @StringSet.constructor
-  local +13:16 imp: ImportBinding (const)
-  local +14:13 struct: StructInfo | null (const)
-  local +15:13 template: StructTemplateInfo | null (const)
-  callee +20:9 StringSet.add -> @StringSet.add
-  local +24:16 imp: ImportBinding (const)
-  callee +25:11 StringMap.get -> @StringMap.get
-  callee +26:9 StringSet.add -> @StringSet.add
-  local +42:16 sig: FunctionSig (const)
-  local +43:13 instance: Instantiation | null (const)
-  callee +44:32 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee +10:20 new StringSet -> @StringSet.constructor
+  callee +11:19 new StringSet -> @StringSet.constructor
+  callee +12:18 new StringSet -> @StringSet.constructor
+  callee +13:22 new StringSet -> @StringSet.constructor
+  local +14:16 imp: ImportBinding (const)
+  local +15:13 struct: StructInfo | null (const)
+  local +16:13 template: StructTemplateInfo | null (const)
+  callee +21:9 StringSet.add -> @StringSet.add
+  local +25:16 imp: ImportBinding (const)
+  callee +26:11 StringMap.get -> @StringMap.get
+  callee +27:9 StringSet.add -> @StringSet.add
+  local +43:16 sig: FunctionSig (const)
+  local +44:13 instance: Instantiation | null (const)
+  callee +45:32 FunctionSig.definedIn -> @FunctionSig.definedIn
 function Walk.useHelper(this: Walk, name: string): void -> @Walk.useHelper [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
@@ -340,25 +341,31 @@ function changedAcrossInstances(walk: Walk, node: Node, out: Operands, slot: i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: slot
-  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance Walk.refuse changedText nish_panic_index sameAnswer
-  pointer walk: size=144 writesThrough=true captured=false passedTo=changedText#0 Walk.refuse#0
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance SourceFile.columnOf SourceFile.lineOf Walk.fail Walk.refuse changedText nish_panic_index nish_str_concat nish_str_from_i32 sameAnswer
+  pointer walk: size=144 writesThrough=true captured=false passedTo=changedText#0 Walk.refuse#0 Walk.fail#0
   pointer node: size=40 writesThrough=true captured=true passedTo=changedText#1 Walk.refuse#1
   pointer out: size=40 writesThrough=false captured=false passedTo=changedText#2
   stackSites=0 stackLocals=0
-  local -12:9 program: CheckedProgram (const)
-  local -11:7 k: i32 (let)
-  local -10:7 first: boolean (let)
-  local -9:7 firstChanged: boolean (let)
-  local -8:7 firstText: string (let)
-  local -5:9 temps: i32 (const)
-  local -4:7 tempsAfter: i32 (let)
-  local -3:9 effects: boolean (const)
-  local -2:9 localsRead: boolean (const)
+  local -14:9 program: CheckedProgram (const)
+  local -13:7 k: i32 (let)
+  local -12:7 first: boolean (let)
+  local -11:7 firstChanged: boolean (let)
+  local -10:7 firstText: string (let)
+  local -7:9 temps: i32 (const)
+  local -6:7 tempsAfter: i32 (let)
+  local -5:9 effects: boolean (const)
+  local -4:9 localsRead: boolean (const)
+  local -3:9 choiceBefore: boolean (const)
+  local -2:7 choice: boolean (let)
   callee +3:5 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee +8:5 changedText -> @changedText
-  callee +11:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  callee +19:17 sameAnswer -> @sameAnswer
-  callee +22:7 Walk.refuse -> @Walk.refuse
+  callee +9:5 changedText -> @changedText
+  callee +13:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  callee +21:17 sameAnswer -> @sameAnswer
+  callee +25:9 Walk.refuse -> @Walk.refuse
+  local +27:15 at: i32 (const)
+  callee +28:9 Walk.fail -> @Walk.fail
+  callee +29:77 SourceFile.lineOf -> @SourceFile.lineOf
+  callee +29:103 SourceFile.columnOf -> @SourceFile.columnOf
 function splice(walk: Walk, node: Node, operands: Operands): string -> @splice [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.fail

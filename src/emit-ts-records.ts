@@ -36,7 +36,8 @@
 // written once for all its instances, so there the runtime's `copyIn` and
 // `storeIdx` decide by looking at the value: any plain object is a record. A
 // generic whose instances would need different TypeScript (an element inline
-// in one and by reference in another) is refused with NL4013 by the composer.
+// in one and by reference in another, or two zeros) is refused with NL4013 by
+// the composer, which this row tells by setting `walk.instanceChoice`.
 
 import { Operands, Walk } from "./emit-ts-edits"
 import {
@@ -104,6 +105,7 @@ const recordReference = (walk: Walk, type: i32): boolean =>
 /** How a value put into a slot of type `slot` is copied in. */
 const slotCopy = (walk: Walk, slot: i32): i32 => {
   if (walk.inInstance) {
+    walk.instanceChoice = true
     return hasInlineRecords(walk.program) && !recordReference(walk, slot) ? COPY_AT_RUN : COPY_NONE
   }
   return inlineRecord(walk.program, slot) ? COPY_SPREAD : COPY_NONE
@@ -397,6 +399,7 @@ const fillZero = (walk: Walk, type: Node): string => {
   }
   const instance = program.activeInstance
   if (instance !== null) {
+    walk.instanceChoice = true
     return primitiveZero(walk, instance.bindings.get(name, -1))
   }
   return ""

@@ -163,6 +163,12 @@ export class Walk {
   inInstance: boolean
   /** The second or a later instance of one template is being walked: its refusals were already recorded. */
   repeat: boolean
+  /**
+   * The records row chose a copy or a zero from the instance's types while
+   * this instance was walked, so instances that disagree are refused (NL4013)
+   * rather than reported as an internal error.
+   */
+  instanceChoice: boolean
   /** Every name the emitted module must import from `nish/runtime`, in first-use order. */
   helpers: StringSet
   /** Every width type the module spells, in first-use order. */
@@ -210,6 +216,7 @@ export class Walk {
     this.instances = []
     this.inInstance = false
     this.repeat = false
+    this.instanceChoice = false
     this.helpers = new StringSet()
     this.widths = new StringSet()
     this.names = new StringSet()
@@ -678,8 +685,9 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
 
 /**
  * A template node, walked once per instance. The first instance's answer is
- * the one written; every later one has to agree with it, or the generic is
- * refused (NL4013).
+ * the one written; every later one has to agree with it. A disagreement the
+ * records row caused by choosing a copy or a zero per instance is refused
+ * (NL4013); any other is a bug in a row, and fails.
  */
 const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32): void => {
   const program = walk.program
@@ -693,6 +701,8 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
   let tempsAfter = temps
   const effects = walk.effects
   const localsRead = walk.localsRead
+  const choiceBefore = walk.instanceChoice
+  let choice = false
   while (k >= 0) {
     walk.temps = temps
     walk.effects = effects
@@ -700,9 +710,11 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
     program.enterInstance(walk.instances[k])
     walk.inInstance = true
     walk.repeat = !first
+    walk.instanceChoice = false
     out.texts[slot] = ""
     out.changed[slot] = false
     changedText(walk, node, out, slot)
+    choice = choice || walk.instanceChoice
     walk.inInstance = false
     walk.repeat = false
     program.leaveInstance()
@@ -714,14 +726,22 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
       firstText = out.texts[slot]
       first = false
     } else if (!sameAnswer(firstChanged, firstText, out.changed[slot], out.texts[slot])) {
-      // One body is written for every instance, so instances that need
-      // different text cannot all be served by it.
-      walk.refuse(node, INSTANCES_REFUSAL)
+      if (choice) {
+        // One body is written for every instance, so instances that need
+        // a different copy or zero cannot all be served by it.
+        walk.refuse(node, INSTANCES_REFUSAL)
+      } else {
+        const at = node.start
+        walk.fail(
+          `--emit-ts: two instances of the generic at ${walk.source.path}:${walk.source.lineOf(at)}:${walk.source.columnOf(at)} would be written as different TypeScript`
+        )
+      }
       k = -1
       continue
     }
     k = walk.instanceNext[k]
   }
+  walk.instanceChoice = choiceBefore
   walk.temps = tempsAfter
   out.texts[slot] = firstText
   out.changed[slot] = firstChanged
