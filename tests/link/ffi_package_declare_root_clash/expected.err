@@ -1,0 +1,1 @@
+; a `declare function` binds the C symbol of its name in every package, so rename the defined function

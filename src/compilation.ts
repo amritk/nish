@@ -2141,6 +2141,14 @@ export class Compilation {
    * before packages did, and for it the rule, the message and the emitted
    * symbol are all exactly what they were.
    *
+   * A `declare function` is not a package's symbol but C's, so it keeps its
+   * name in every package and two packages can make one key of it. That is
+   * accepted when the two declarations agree on their types, because a foreign
+   * signature's facts are read off those types and so are the same facts;
+   * otherwise it is refused (NL3039), as is a defined function of the root
+   * package whose symbol is the declared C name (NL3040), which the fact table
+   * would otherwise hand the C function's facts.
+   *
    * A constructor or method of a class in `clashed` is skipped: `declaredStructs`
    * has already refused the second class, and the member the two share is a
    * consequence of that one mistake rather than a second one. The bare name is
@@ -2212,7 +2220,34 @@ export class Compilation {
         const previousSig = ownerSigs[at]
         const previousModule = ownerModules[at]
         let message = ""
-        if (previousSig === null) {
+        if (previousSig !== null && (sig.foreign() || previousSig.foreign())) {
+          if (sig.foreign() && previousSig.foreign()) {
+            if (sameSignature(sig, previousSig)) {
+              continue // one C function declared twice: one symbol, and the same facts under it
+            }
+            message = `C function \`${sig.name}\` is declared as ${signatureText(this.table, sig)} in ${unit.name} and as ${signatureText(this.table, previousSig)} in ${previousModule.name}; C has one namespace, so every \`declare function\` of one name must agree on its parameter and return types`
+          } else {
+            // At the definition, which is the one to rename: the declaration
+            // may be in a package the reader did not write.
+            const defined = sig.foreign() ? previousSig : sig
+            const definer = sig.foreign() ? previousModule : unit
+            const declarer = sig.foreign() ? unit : previousModule
+            const at3 = nameNode(defined)
+            this.sink.report(
+              definer.source,
+              at3.start,
+              at3.end,
+              `Function \`${sig.name}\` is defined in ${definer.name} and declared as a C function in ${declarer.name}; a \`declare function\` binds the C symbol of its name in every package, so rename the defined function`
+            )
+            if (sig.foreign()) {
+              // A later declaration is measured against this one, so a third
+              // that agrees with it is not a second report at the definition.
+              ownerSigs[at] = sig
+              ownerModules[at] = unit
+            }
+            continue
+          }
+        } else if (previousSig === null) {
           message = `Function \`main\` in ${unit.name} collides with the entry wrapper \`@main\` that ${previousModule.name} needs; rename it`
         } else {
           message = clashMessage(
@@ -2616,6 +2651,33 @@ const clashMessage = (
     return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`
   }
   return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`
+}
+
+/**
+ * Whether two `declare function`s of one C name declare the same C function:
+ * the same parameter and return types, which the shared `TypeTable` makes a
+ * comparison of ids. Parameter names are not part of it, as they are not part
+ * of the C prototype.
+ */
+const sameSignature = (a: FunctionSig, b: FunctionSig): boolean => {
+  if (a.returnType !== b.returnType || a.paramTypes.length !== b.paramTypes.length) {
+    return false
+  }
+  for (let i = 0; i < a.paramTypes.length; i++) {
+    if (a.paramTypes[i] !== b.paramTypes[i]) {
+      return false
+    }
+  }
+  return true
+}
+
+/** A signature as its types, `(i32, u8[]) => i32`, for a message that sets two side by side. */
+const signatureText = (table: TypeTable, sig: FunctionSig): string => {
+  const params: string[] = []
+  for (const type of sig.paramTypes) {
+    params.push(table.typeName(type))
+  }
+  return `(${params.join(", ")}) => ${table.typeName(sig.returnType)}`
 }
 
 /**

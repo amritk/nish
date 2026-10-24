@@ -1304,8 +1304,10 @@ export const main = (): i32 => {
 ### Calling C
 
 `declare function name(params): T;` declares a C function this program calls but
-does not define. The symbol is the identifier, unmangled, and the call is an
-ordinary call.
+does not define. The symbol is the identifier, unmangled, in any package
+(a package's own functions are prefixed, its declarations are not), and the
+call is an ordinary call. Two declarations of one name must have the same
+types.
 
 ```ts nish:ok
 declare function abs(n: i32): i32;

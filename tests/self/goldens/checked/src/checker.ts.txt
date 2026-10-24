@@ -304,12 +304,13 @@ function Checker.importCollection(this: Checker, name: string, at: Node | null):
 function Checker.qualifySymbols(this: Checker): void -> @Checker.qualifySymbols [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: FunctionSig.definedIn nish_str_concat
+  calls: FunctionSig.definedIn FunctionSig.foreign nish_str_concat
   pointer this: size=24 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -16:11 prefix: string (const)
   local -12:16 sig: FunctionSig (const)
-  callee -1:36 FunctionSig.definedIn -> @FunctionSig.definedIn
+  callee -1:37 FunctionSig.foreign -> @FunctionSig.foreign
+  callee -1:54 FunctionSig.definedIn -> @FunctionSig.definedIn
 function Checker.declareAlias(this: Checker, stmt: Node): void -> @Checker.declareAlias [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
