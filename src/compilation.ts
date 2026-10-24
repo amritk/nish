@@ -91,6 +91,7 @@ import {
   gatedCapabilities,
   witnessChain,
 } from "./capability-report"
+import { capabilityLockName, capabilityLockText, readCapabilityLock } from "./capability-lock"
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
@@ -436,6 +437,13 @@ export class Compilation {
    */
   grantNames: string[]
   grantMasks: i32[]
+  /**
+   * WP40: the capability lockfile's path and, under `--update-capability-lock`,
+   * the text `checkCapabilityLock` computed for it, which the driver writes
+   * once the build has passed (`src/capability-lock.ts`).
+   */
+  capabilityLockPath: string
+  capabilityLockText: string
 
   constructor(opts: Options) {
     this.opts = opts
@@ -458,6 +466,8 @@ export class Compilation {
     this.manifestDeny = 0
     this.grantNames = []
     this.grantMasks = []
+    this.capabilityLockPath = ""
+    this.capabilityLockText = ""
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -1285,6 +1295,10 @@ export class Compilation {
     if (this.sink.hasErrors()) {
       return false
     }
+    this.checkCapabilityLock()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     if (this.opts.warnPortability) {
       this.reportPortability()
     }
@@ -1651,6 +1665,86 @@ export class Compilation {
       site.start,
       site.end,
       `the dependency \`${name}\` reaches \`${cap}\` through \`${caller}\`, which the root package does not grant it; grant it with "${PACKAGE_CONDITION}": { "capabilities": { "dependencies": { ${jsonQuote(name)}: ["${cap}"] } } } — the chain that reaches it: ${hops.join(", ")}`
+    )
+  }
+
+  /**
+   * WP40: hold each dependency to the capability lockfile beside the root
+   * package's `package.json` (the entry's own directory when there is none),
+   * or, under `--update-capability-lock`, compute the file instead of reading
+   * it. Only growth is refused: a capability a dependency's row does not
+   * record, or anything at all reached by a dependency with no row, one error
+   * per dependency and capability, in the order and at the witness
+   * `refuseDependencyCapabilities` uses. A row that records more than the
+   * dependency reaches, or a package the program no longer loads, is
+   * accepted. With no file there is nothing to hold the build to. A file that
+   * is not the shape is refused where it breaks (NL3043), and no row of it
+   * is read.
+   */
+  checkCapabilityLock(): void {
+    if (this.modules.length === 0) {
+      return
+    }
+    const entryPath = this.entry().path
+    const manifestDir = this.manifestDirAbove(entryPath)
+    const dir = manifestDir !== null ? manifestDir : dirname(normalizePath(entryPath))
+    this.capabilityLockPath = joinPath([dir, capabilityLockName()])
+    const text: string | null = this.opts.updateCapabilityLock ? null : readFileSyncOrNull(this.capabilityLockPath)
+    if (!this.opts.updateCapabilityLock && text === null) {
+      return
+    }
+    const reach = dependencyPackages(this)
+    const facts = this.analyze()
+    const index = functionIndex(this, facts)
+    dependencyMasks(reach, index)
+    if (text === null) {
+      this.capabilityLockText = capabilityLockText(reach.names, reach.masks)
+      return
+    }
+    const source = new SourceFile(this.capabilityLockPath, text)
+    const lock = readCapabilityLock(text)
+    if (lock.problem.length > 0) {
+      this.sink.report(
+        source,
+        lock.problemStart,
+        lock.problemEnd,
+        `${lock.problem}: the capability lockfile is one object, \`{ "version": 1, "packages": { ... } }\`, that names each dependency once with an array of the capabilities it reaches; rewrite it with \`--update-capability-lock\``
+      )
+      return
+    }
+    let p = 0
+    while (p < reach.names.length && p < reach.masks.length) {
+      const name = reach.names[p]
+      const row = lock.names.indexOf(name)
+      const recorded = row >= 0 && row < lock.masks.length ? lock.masks[row] : 0
+      const grown = reach.masks[p] & ~recorded
+      let c = 0
+      while (c < CAPABILITY_COUNT) {
+        if ((grown & (1 << c)) !== 0) {
+          const chain = dependencyWitness(index, facts, reach, p, c)
+          const at: SourceFile | null = chain.length > 0 ? chain[0].source : null
+          const site: Node | null = chain.length > 0 ? chain[0].site : null
+          if (at !== null && site !== null) {
+            const hops: string[] = []
+            for (const hop of chain) {
+              hops.push(`${hop.at} calls ${hop.calls}`)
+            }
+            this.reportLockGrowth(at, site, name, chain[0].caller, c, hops)
+          }
+        }
+        c = c + 1
+      }
+      p = p + 1
+    }
+  }
+
+  /** Dependency `name`'s capability `c`, which the lockfile does not record, refused as `reportDependencyRefusal` refuses a grant. */
+  reportLockGrowth(source: SourceFile, site: Node, name: string, caller: string, c: i32, hops: string[]): void {
+    this.sink.report(
+      source,
+      site.start,
+      site.end,
+      `the dependency \`${name}\` reaches \`${capabilityName(c)}\` through \`${caller}\`, which \`${capabilityLockName()}\` does not record for it; review the chain, then record it with \`--update-capability-lock\` — the chain that reaches it: ${hops.join(", ")}`
     )
   }
 
