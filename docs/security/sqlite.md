@@ -20,9 +20,27 @@ it is patched. Nothing was found to fix or left open.
 | --- | --- |
 | `runtime/sqlite/sqlite3.c` | The amalgamation, upstream 3.54.1, unchanged |
 | `runtime/sqlite/sqlite3.h` | Its public header, upstream 3.54.1, unchanged |
+| `runtime/sqlite/nish-sqlite.c` | The `nishsqlite_*` adapters `nish/sqlite` calls: handles, and the bounds of a buffer SQLite reads or writes |
+| `std/sqlite.ts` | `nish/sqlite`, the module over the adapters |
 
-Out of scope: the `nishsqlite_*` adapters and the `std/` module built on them,
-which come with their own record, and the program's own SQL.
+Out of scope: the program's own SQL.
+
+## The adapter
+
+`nish/sqlite` never holds a C pointer. A connection or a statement is an `i32`
+handle, `(generation << 16) | index` into a thread-local table, and every
+adapter looks it up before it touches SQLite: an index past the table, an empty
+slot or a stale generation is `SQLITE_MISUSE`, so a handle used after `close`
+or `finalize`, or forged, reaches no freed or foreign object. Slot 0 is never
+handed out, so the zero handle names nothing.
+
+The adapter bounds every buffer it is given with the buffer's length: a bind of
+`buf[off, off + len)` outside `0..n` is `SQLITE_MISUSE` and binds nothing, and
+`columnInto` copies only when the whole column fits after `at`, otherwise
+answering the length it needs and writing nothing. Text and blobs are bound
+`SQLITE_TRANSIENT`, so SQLite copies them and no Nish array is read after the
+call returns. Tests: `tests/link/std_sqlite` (stale and forged handles, windows
+out of range, a buffer too small).
 
 ## Trust model
 

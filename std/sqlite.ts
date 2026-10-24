@@ -45,7 +45,7 @@
 // biome-ignore-all lint/style/useNamingConvention: the declarations name C symbols
 // The adapters are `nishsqlite_`, not `nish_sqlite_`: `nish_` names are the
 // runtime's (NL2202). scripts/build.sh links SQLite for a module that declares
-// an `sqlite3_` function: `sqlite3_errstr` and `sqlite3_libversion` below.
+// an `sqlite3_` or a `nishsqlite_` function, as this one does.
 declare function nishsqlite_open(path: string, flags: i32): i32
 declare function nishsqlite_open_errmsg(): string
 declare function nishsqlite_close(h: i32): i32
