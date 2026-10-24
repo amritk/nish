@@ -11416,12 +11416,17 @@ if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
       "const picks = (xs: i32[]): i32 => { let t = 0; for (let i = 0; i < xs.length; i++) { t = t + pick(xs, i) } return t }",
       "const last = <T>(xs: T[], x: T): T => { let r = x; for (let i = 0; i < xs.length; i++) { r = xs[i] } return r }",
       "const widths = (n: i32): i32[] => parallelFrom(n, (i) => `${i}`.length)",
+      "const headOf = <T>(s: string, x: T): string => { const n = s.length; return s.substring(0, n) }",
+      "const entryOf = <T>(b: u8, x: T): integer<0, 255> => { const r: integer<0, 255> = toI32(b); return r }",
+      "const spliceOf = <T>(x: T): u8[] => { const dst: u8[] = [0, 0, 0, 0]; const src: u8[] = [1, 2]; dst.set(src, 1); return dst }",
+      "const raiseOf = <T>(m: Map<string, T>, k: string, v: T): boolean => { if (m.has(k)) { m.set(k, v); return true } return false }",
       "export const main = (): void => {",
       "  const m = new Map<string, number>()",
       "  m.set(\"a\", 1)",
       "  const w = widths(12)",
       "  console.log(`${new Board().cells.length} ${clampHead(\"abc\")} ${entry(7)} ${disjoint().length} ${raise(m, \"a\")}`)",
       "  console.log(`${joined(3)} ${picks([1, 2])} ${last([1, 2], 0)} ${last([\"x\"], \"y\")} ${w[11]}`)",
+      "  console.log(`${headOf(\"abc\", 1)} ${entryOf(7, 1)} ${spliceOf(1).length} ${raiseOf(m, \"a\", 20)}`)",
       "}",
       "",
     ].join("\n")
@@ -11479,6 +11484,33 @@ if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
       "an instantiation's proven index has no check",
       ["last$i32", "last$str"].every((f) => !fn(sw, f).includes("nish_panic_index") && fn(swRef, f).includes("nish_panic_index")),
       `${fn(sw, "last$i32")}\n---\n${fn(swRef, "last$i32")}`,
+    ],
+    // The instantiation tables, one switch at a time: `forgetProofs` clears
+    // each table of each instance apart from the program's own.
+    [
+      "an instantiation's proven no-overflow is `nsw`",
+      fn(sw, "last$i32").includes("add nsw") && !fn(swRef, "last$i32").includes("add nsw"),
+      `${fn(sw, "last$i32")}\n---\n${fn(swRef, "last$i32")}`,
+    ],
+    [
+      "an instantiation's proven `substring` bound is not clamped",
+      count(fn(sw, "headOf$i32"), clamps) < count(fn(swRef, "headOf$i32"), clamps),
+      `${fn(sw, "headOf$i32")}\n---\n${fn(swRef, "headOf$i32")}`,
+    ],
+    [
+      "an instantiation's proven range entry has no check",
+      !fn(sw, "entryOf$i32").includes("rng.fail") && fn(swRef, "entryOf$i32").includes("rng.fail"),
+      `${fn(sw, "entryOf$i32")}\n---\n${fn(swRef, "entryOf$i32")}`,
+    ],
+    [
+      "an instantiation's disjoint `set` is a memcpy",
+      fn(sw, "spliceOf$i32").includes("@llvm.memcpy") && fn(swRef, "spliceOf$i32").includes("@llvm.memmove"),
+      `${fn(sw, "spliceOf$i32")}\n---\n${fn(swRef, "spliceOf$i32")}`,
+    ],
+    [
+      "an instantiation's fused `has`/`set` shares one probe",
+      fn(sw, "raiseOf$i32").includes(".setValueAt(") && !fn(swRef, "raiseOf$i32").includes(".setValueAt("),
+      `${fn(sw, "raiseOf$i32")}\n---\n${fn(swRef, "raiseOf$i32")}`,
     ],
     [
       "a parallel body gets an arena scope",

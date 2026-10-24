@@ -123,7 +123,11 @@ const RUN_TIMEOUT_MS = 30_000
 /** The bound `execute` holds a run to: `RUN_TIMEOUT_MS`, or `--run-timeout`. */
 let runTimeoutMs = RUN_TIMEOUT_MS
 
-/** One compile or link: the reference compile proves nothing, so it is slower, and a slow runner is no finding. */
+/**
+ * One compile or link: the reference compile proves nothing, so it is slower.
+ * A build that outlives this on both sides is a slow runner, not a finding; on
+ * one side only, it is a difference.
+ */
 const BUILD_TIMEOUT_MS = 180_000
 
 const work = path.join(buildDir, "soundness")
@@ -519,13 +523,15 @@ const compare = async (compiler, prog) => {
   }
   // Asked only of a difference, so an agreeing program costs two runs. Each
   // side runs again: a side that answers differently the second time is
-  // nondeterministic, and its difference says nothing about a proof.
+  // nondeterministic, and its difference says nothing about a proof. A side
+  // that outlives the bound both times is steady, whatever it printed before
+  // it was killed: where the kill cuts the output is the clock's doing.
   const [againA, againB] = [await execute(prog, def, "2"), await execute(prog, ref, "2")]
   for (const [tag, first, again] of [
     ["default", a, againA],
     ["--no-elision", b, againB],
   ]) {
-    if (!same(first, again)) {
+    if (!(first.timedOut && again.timedOut) && !same(first, again)) {
       return {
         name: prog.name,
         verdict: "nondeterministic",
@@ -589,7 +595,11 @@ const parse = (argv) => {
     } else if (a === "--compiler") {
       o.compiler = path.resolve(next())
     } else if (a === "--run-timeout") {
-      runTimeoutMs = Number(next()) * 1000
+      const seconds = Number(next())
+      if (!(seconds > 0)) {
+        throw new Error(`--run-timeout takes a positive number of seconds, not ${seconds}`)
+      }
+      runTimeoutMs = seconds * 1000
     } else {
       throw new Error(`unknown option: ${a}`)
     }
