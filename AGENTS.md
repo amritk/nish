@@ -45,7 +45,7 @@ npm install                 # install (npm ci in CI)
 bash scripts/fetch-seed.sh  # the last release into build/seed/, once (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
-npm test                    # the full suite, which CI runs in four shards (goldens, llvm-as, native, runtime, differential)
+npm test                    # the full suite; CI runs it in four shards
 node tests/run.js <sub>     # only cases whose name contains <sub>
 npm run test:update         # write missing .ll goldens for new cases
 npm run lint                # file names + biome, formatting included; any finding fails CI
