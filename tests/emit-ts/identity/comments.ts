@@ -4,20 +4,20 @@
  * lose them; `--emit-ts` edits the source text, so every one survives.
  */
 
-// The sum of the first `n` odd numbers is `n * n`.
-const oddSum = (n: number): number => {
-  let sum = 0 // the running total
+// A row of `n` stars, one per step.
+const stars = (n: number): string => {
+  const row: string[] = [] // the stars so far
   for (let i = 0; i < n; i++) {
-    /* the i-th odd number */
-    sum = sum + (2 * i + 1)
+    /* the i-th star */
+    row.push("*")
   }
-  return sum
+  return row.join("")
 }
 
 /** Prints a line per `n`, then exits cleanly. */
 export const main = (): number => {
   for (const n of [1, 2, 3, 10]) {
-    console.log(`${n} -> ${oddSum(n /* how many */)}`)
+    console.log(`${n} -> ${stars(n /* how many */)}`)
   }
   return 0 // success
 }

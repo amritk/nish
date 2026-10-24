@@ -1,0 +1,14 @@
+f ab
+ok 6
+f 
+err empty
+f abc
+ok 4
+f 
+err empty
+f a
+ok 100001
+f 
+err empty
+half ab
+ok 0.75
