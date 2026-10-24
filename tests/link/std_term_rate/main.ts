@@ -37,6 +37,12 @@ class Link {
   head: i32
   /** Whether the terminal answers at all. */
   answering: boolean
+  /** How much longer the first frame takes, in milliseconds: a fresh connection starts slow, as TCP does. */
+  warmupMs: f64
+  /** The most an answer is held up on its way back, in milliseconds: none, half or all of it, in turn. */
+  jitterMs: f64
+  /** The most bytes a second the controller read of this link, after any answer; the driver keeps it. */
+  readPeak: f64
 
   constructor(rttMs: f64, bytesPerSec: f64) {
     this.rttMs = rttMs
@@ -45,13 +51,30 @@ class Link {
     this.answers = []
     this.head = 0
     this.answering = true
+    this.warmupMs = 0.0
+    this.jitterMs = 0.0
+    this.readPeak = 0.0
   }
 
   send(bytes: i32, nowMs: f64): void {
     const start: f64 = nowMs > this.busyUntil ? nowMs : this.busyUntil
-    this.busyUntil = start + (toF64(bytes) * 1000.0) / this.bytesPerSec
+    this.busyUntil = start + (toF64(bytes) * 1000.0) / this.bytesPerSec + this.warmupMs
+    this.warmupMs = 0.0
     if (this.answering) {
-      this.answers.push(this.busyUntil + this.rttMs)
+      // Answers still come in order: one held up holds up those behind it.
+      let at: f64 = this.busyUntil + this.rttMs + (this.jitterMs * toF64(this.answers.length % 3)) / 2.0
+      const n: i32 = toI32(this.answers.length)
+      if (n > 0 && this.answers[n - 1] > at) {
+        at = this.answers[n - 1]
+      }
+      this.answers.push(at)
+    }
+  }
+
+  /** Note what `c` reads of the link now. */
+  observe(c: RateController): void {
+    if (c.bytesPerSec > this.readPeak) {
+      this.readPeak = c.bytesPerSec
     }
   }
 
@@ -135,6 +158,7 @@ const run = (c: RateController, link: Link, scene: Scene, fromMs: i32, toMs: i32
     const now: f64 = toF64(t)
     while (link.answered(now)) {
       c.ackReceived(now)
+      link.observe(c)
     }
     c.tick(now)
     const key: string = keyOf(c.decision())
@@ -281,6 +305,39 @@ const logicSteps = (fps: i32): i32 => {
 /** `n` milliseconds, or any whole number, as an `f64`. */
 const ms = (n: i32): f64 => toF64(n)
 
+// A relay over ssh, 60 ms away at 300 kB/s, whose connection starts slow: its first frame takes 300 ms longer.
+const sshLink = (jitterMs: f64): Link => {
+  const link = new Link(60.0, 300000.0)
+  link.warmupMs = 300.0
+  link.jitterMs = jitterMs
+  return link
+}
+
+// A few big frames over `link`, halving from 520 kB, then 1.5 kB frames for half a minute, one in flight. The small
+// frames' trips are nearly all latency: the latency must not slide to nothing and leave the bandwidth to carry the
+// round trip, which over ssh would read 1.5 kB a trip, a twelfth of the link.
+const smallFrames = (opts: RateOptions, link: Link): RateController => {
+  const c = new RateController(opts)
+  let big: i32 = 520000
+  let now: i32 = 0
+  while (now < 30000) {
+    const at: f64 = ms(now)
+    while (link.answered(at)) {
+      c.ackReceived(at)
+      link.observe(c)
+    }
+    c.tick(at)
+    if (c.mayDraw(at)) {
+      const bytes: i32 = big >= 32000 ? big : 1500
+      big = (big / 2) | 0
+      c.frameSent(bytes, toF64(1000000), at)
+      link.send(bytes, at)
+    }
+    now = now + 1
+  }
+  return c
+}
+
 /** A controller with `opts`, run over a fresh link for `ms` milliseconds. */
 const trace = (opts: RateOptions, link: Link, scene: Scene, ms: i32): Record => {
   const c = new RateController(opts)
@@ -329,8 +386,9 @@ export const main = (): i32 => {
 
   // Trace 3: a link that degrades and recovers. Five seconds local, then ten at
   // a 60 ms round trip, then local again. The rate falls to 10 within about
-  // half a second, in one step since the round trip alone sets the tier, and
-  // climbs back a tier at a time, three seconds apiece.
+  // a second and a half, following the round trip as it climbs: 15, then 10.
+  // The link stays fast through the swing, so its bandwidth never reads as the
+  // latency's. It climbs back a tier at a time, three seconds apiece.
   const swing = new RateController(new RateOptions())
   const swingLink = new Link(1.0, 50000000.0)
   const swingScene = new Scene(20000, 2000000.0)
@@ -343,11 +401,12 @@ export const main = (): i32 => {
   show("swing", sw)
   t.eqLines("swing: the decisions", sw.lines, [
     "3002ms 60fps /1 full",
-    "5513ms 10fps /1 full",
-    "18303ms 15fps /1 full",
-    "21304ms 20fps /1 full",
-    "24305ms 30fps /1 full",
-    "27306ms 60fps /1 full",
+    "5579ms 15fps /1 full",
+    "6579ms 10fps /1 full",
+    "18369ms 15fps /1 full",
+    "21370ms 20fps /1 full",
+    "24371ms 30fps /1 full",
+    "27372ms 60fps /1 full",
   ])
   t.ok("swing: at most one change a second", leastGap(sw) >= 1000.0)
   t.eqBool("swing: no change undone within three seconds", flipped(sw, 3000.0), false)
@@ -423,13 +482,13 @@ export const main = (): i32 => {
     "2760ms 10fps /2 full",
     "3760ms 10fps /4 full",
     "4760ms 10fps /4 half",
-    "13236ms 10fps /4 full",
-    "16237ms 10fps /2 full",
-    "19238ms 10fps /1 full",
-    "22239ms 15fps /1 full",
-    "25240ms 20fps /1 full",
-    "28241ms 30fps /1 full",
-    "31242ms 60fps /1 full",
+    "13036ms 10fps /4 full",
+    "16037ms 10fps /2 full",
+    "19038ms 10fps /1 full",
+    "22039ms 15fps /1 full",
+    "25040ms 20fps /1 full",
+    "28041ms 30fps /1 full",
+    "31042ms 60fps /1 full",
   ])
   // An answer lands on the millisecond after the 1.8 ms its frame takes, so the round trip reads 2. With one frame of
   // one size in flight the latency and the bytes cannot be told apart, so the split is anyone's; their sum is right.
@@ -577,7 +636,9 @@ export const main = (): i32 => {
   t.eqLines("ssh 2: the decisions", ssh2.lines, ["1000ms 10fps /1 full"])
   t.ok("ssh 2: two frames in flight at most", ssh2.maxUnacked <= 2)
 
-  // A link so starved that even half blocks overrun it at the floor takes the last step, 256 colours.
+  // A link so starved that even half blocks overrun it at the floor takes the last step, 256 colours. A frame takes
+  // ten seconds, longer than it is waited for, so the answers are booked to later frames and the bandwidth misreads;
+  // the steps come from the age of the frame overdue, and the last waits until it shows.
   const paletteRun = trace(starvedOpts, new Link(10.0, 4000.0), new Scene(40000, 4000000.0), 30000)
   show("palette", paletteRun)
   t.eqLines("palette: the decisions", paletteRun.lines, [
@@ -585,8 +646,8 @@ export const main = (): i32 => {
     "11510ms 10fps /2 full",
     "12510ms 10fps /4 full",
     "13510ms 10fps /4 half",
-    "14510ms 10fps /4 half 256",
-    "15510ms 5fps /4 half 256",
+    "15342ms 10fps /4 half 256",
+    "16342ms 5fps /4 half 256",
   ])
 
   const costNs: f64 = toF64(1000000)
@@ -695,6 +756,49 @@ export const main = (): i32 => {
     "30fps 0ms 1000000000kB/s                ",
     "0ms drop 0 full                         ",
   ])
+
+  const smallOpts = new RateOptions()
+  smallOpts.remoteHint = true
+  const smallLink = sshLink(0.0)
+  const small = smallFrames(smallOpts, smallLink)
+  const smallRate: f64 = small.stats().bytesPerSec
+  t.ok("small frames: the bandwidth reads within a factor of two of 300 kB/s", smallRate > ms(150000) && smallRate < ms(600000))
+  t.ok("small frames: the latency reads within a quarter of 60 ms", small.baseRttMs > ms(45) && small.baseRttMs < ms(75))
+  smallOpts.probeRttMs = 60.0
+  const probedLink = sshLink(0.0)
+  const probed = smallFrames(smallOpts, probedLink)
+  const probedRate: f64 = probed.stats().bytesPerSec
+  t.ok("small frames, probed: the bandwidth within a factor of two", probedRate > ms(150000) && probedRate < ms(600000))
+  t.ok("small frames, probed: the latency within a quarter", probed.baseRttMs > ms(45) && probed.baseRttMs < ms(75))
+  t.ok("small frames: no answer reads more than twice the link", smallLink.readPeak < ms(600000))
+  t.ok("small frames, probed: no answer reads more than twice the link", probedLink.readPeak < ms(600000))
+  // The same with answers held up by as much as 20 ms, so that a smaller frame's can come back with no time between.
+  const jitterLink = sshLink(20.0)
+  const jittered = smallFrames(smallOpts, jitterLink)
+  const jitteredRate: f64 = jittered.stats().bytesPerSec
+  t.ok("small frames, jittered: no answer reads more than twice the link", jitterLink.readPeak < ms(600000))
+  t.ok("small frames, jittered: the bandwidth within a factor of two", jitteredRate > ms(150000) && jitteredRate < ms(600000))
+  t.ok("small frames, jittered: the latency within a quarter", jittered.baseRttMs > ms(45) && jittered.baseRttMs < ms(75))
+  // The same frames on a local terminal, 2 ms away at 50 MB/s.
+  const nearLink = new Link(2.0, 50000000.0)
+  const near2 = smallFrames(new RateOptions(), nearLink)
+  const near2Rate: f64 = near2.stats().bytesPerSec
+  t.ok("small frames, local: the bandwidth within a factor of two of 50 MB/s", near2Rate > ms(25000000) && near2Rate < ms(100000000))
+  t.ok("small frames, local: the latency under 5 ms", near2.baseRttMs < ms(5))
+  t.eqI32("small frames, local: 60 a second", near2.decision().fps, 60)
+  t.ok("small frames, local: no answer reads more than twice the link", nearLink.readPeak < ms(100000000))
+  // A bandwidth-bound link, 20 ms away at 30 kB/s, under 20 kB frames: the rate falls to the floor, then the detail
+  // goes, before any rate below it.
+  const thin = new RateController(new RateOptions())
+  const thinRecord = new Record(thin.decision())
+  const thinLink = new Link(20.0, 30000.0)
+  run(thin, thinLink, new Scene(20000, 2000000.0), 0, 30000, thinRecord)
+  show("thin", thinRecord)
+  t.eqLines("thin: the decisions", thinRecord.lines, ["1187ms 10fps /1 full", "2187ms 10fps /2 full", "3187ms 10fps /4 full"])
+  const thinRate: f64 = thin.stats().bytesPerSec
+  t.ok("thin: the bandwidth within a factor of two of 30 kB/s", thinRate > ms(15000) && thinRate < ms(60000))
+  t.ok("thin: the latency within a quarter of 20 ms", thin.baseRttMs > ms(15) && thin.baseRttMs < ms(25))
+  t.ok("thin: no answer reads more than twice the link", thinLink.readPeak < ms(60000))
 
   return t.done()
 }

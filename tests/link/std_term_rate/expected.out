@@ -14,13 +14,14 @@ PASS  ssh: starts at 15, remote
 PASS  ssh: the decisions
 PASS  ssh: one frame in flight at most
 PASS  ssh: every answer within 150 ms
-swing: start 30fps /1 full, 1302 frames, 1 unacked at most, longest wait 60ms
+swing: start 30fps /1 full, 1304 frames, 1 unacked at most, longest wait 60ms
   3002ms 60fps /1 full
-  5513ms 10fps /1 full
-  18303ms 15fps /1 full
-  21304ms 20fps /1 full
-  24305ms 30fps /1 full
-  27306ms 60fps /1 full
+  5579ms 15fps /1 full
+  6579ms 10fps /1 full
+  18369ms 15fps /1 full
+  21370ms 20fps /1 full
+  24371ms 30fps /1 full
+  27372ms 60fps /1 full
 PASS  swing: the decisions
 PASS  swing: at most one change a second
 PASS  swing: no change undone within three seconds
@@ -48,18 +49,18 @@ PASS  limit 1: a fixed rate never changes
 PASS  limit 1: frames
 PASS  limit 2: frames
 PASS  limit 2: a fixed rate never changes
-widen: start 30fps /1 full, 898 frames, 2 unacked at most, longest wait 2493ms
+widen: start 30fps /1 full, 908 frames, 2 unacked at most, longest wait 2493ms
   1760ms 10fps /1 full
   2760ms 10fps /2 full
   3760ms 10fps /4 full
   4760ms 10fps /4 half
-  13236ms 10fps /4 full
-  16237ms 10fps /2 full
-  19238ms 10fps /1 full
-  22239ms 15fps /1 full
-  25240ms 20fps /1 full
-  28241ms 30fps /1 full
-  31242ms 60fps /1 full
+  13036ms 10fps /4 full
+  16037ms 10fps /2 full
+  19038ms 10fps /1 full
+  22039ms 15fps /1 full
+  25040ms 20fps /1 full
+  28041ms 30fps /1 full
+  31042ms 60fps /1 full
 PASS  widen: the decisions
 PASS  widen: stats tier
 PASS  widen: stats backend
@@ -99,13 +100,13 @@ ssh 2: start 15fps /1 full, 305 frames, 2 unacked at most, longest wait 116ms
   1000ms 10fps /1 full
 PASS  ssh 2: the decisions
 PASS  ssh 2: two frames in flight at most
-palette: start 30fps /1 full, 9 frames, 2 unacked at most, longest wait 59976ms
+palette: start 30fps /1 full, 14 frames, 2 unacked at most, longest wait 59976ms
   10510ms 10fps /1 full
   11510ms 10fps /2 full
   12510ms 10fps /4 full
   13510ms 10fps /4 half
-  14510ms 10fps /4 half 256
-  15510ms 5fps /4 half 256
+  15342ms 10fps /4 half 256
+  16342ms 5fps /4 half 256
 PASS  palette: the decisions
 PASS  burst: the bandwidth reads near the link's 100 kB/s
 PASS  late: the first frame
@@ -125,4 +126,25 @@ PASS  bad input: good frames after them measure
 PASS  bad input: the cost is the good frames'
 PASS  empty frame: the bandwidth stands
 PASS  overlay: NaN and huge stats clamped
-term-rate: 78 passed, 0 failed, 0 skipped
+PASS  small frames: the bandwidth reads within a factor of two of 300 kB/s
+PASS  small frames: the latency reads within a quarter of 60 ms
+PASS  small frames, probed: the bandwidth within a factor of two
+PASS  small frames, probed: the latency within a quarter
+PASS  small frames: no answer reads more than twice the link
+PASS  small frames, probed: no answer reads more than twice the link
+PASS  small frames, jittered: no answer reads more than twice the link
+PASS  small frames, jittered: the bandwidth within a factor of two
+PASS  small frames, jittered: the latency within a quarter
+PASS  small frames, local: the bandwidth within a factor of two of 50 MB/s
+PASS  small frames, local: the latency under 5 ms
+PASS  small frames, local: 60 a second
+PASS  small frames, local: no answer reads more than twice the link
+thin: start 30fps /1 full, 274 frames, 1 unacked at most, longest wait 687ms
+  1187ms 10fps /1 full
+  2187ms 10fps /2 full
+  3187ms 10fps /4 full
+PASS  thin: the decisions
+PASS  thin: the bandwidth within a factor of two of 30 kB/s
+PASS  thin: the latency within a quarter of 20 ms
+PASS  thin: no answer reads more than twice the link
+term-rate: 95 passed, 0 failed, 0 skipped
