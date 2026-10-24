@@ -386,6 +386,30 @@ export const main = (): i32 => {
   s.eqStr("an hour on with no ack, still down", lines(acked.tick(toF64(3600000))), "");
   acked.watermarked = false;
   s.eqStr("cleared, the clock lets it go", lines(acked.tick(toF64(3600000))), "key 1:98 a3");
+  s.eqF64("no watermark, no age", acked.deliveredAgoMs(toF64(5)), toF64(-1));
+  acked.delivered(toF64(900));
+  s.eqF64("its age is how long ago the answered query was sent", acked.deliveredAgoMs(toF64(1250)), toF64(350));
+
+  // A non-finite time is ignored, so it cannot stick the watermark or a key.
+  const zero: f64 = toF64(0);
+  const nan: f64 = zero / zero;
+  const inf: f64 = toF64(1) / zero;
+  const odd: KeyState = new KeyState();
+  odd.delivered(nan);
+  s.eqBool("a NaN ack sets no watermark", odd.watermarked, false);
+  odd.delivered(toF64(100));
+  odd.delivered(inf);
+  odd.delivered(nan);
+  s.eqF64("nor moves one", odd.watermarkMs, toF64(100));
+  odd.apply(decode("a"), toF64(0));
+  odd.apply(decode("a"), toF64(50));
+  s.eqStr("a NaN tick releases nothing", lines(odd.tick(nan)), "");
+  s.eqStr("a press at NaN is a repeat", lines(odd.apply(decode("a"), nan)), "key 1:97 a2");
+  s.eqStr("and keeps the key's time", lines(odd.apply(decode("b"), inf)), "key 1:98");
+  odd.delivered(toF64(150));
+  s.eqStr("a new key at infinity is timed from the watermark", lines(odd.tick(toF64(0))), "key 1:97 a3");
+  odd.delivered(toF64(800));
+  s.eqStr("and comes up firstRepeatMs after it", lines(odd.tick(toF64(0))), "key 1:98 a3");
 
   const real: KeyState = new KeyState();
   real.apply(decode("\x1b[97u\x1b[99u"), toF64(0));
@@ -394,6 +418,14 @@ export const main = (): i32 => {
   s.eqStr("and none are made up", lines(real.tick(toF64(5000))), "");
   s.eqBool("c is still down", real.isDown(KEY_CHAR, 99), true);
   s.eqStr("a press again stays a press", lines(real.apply(decode("\x1b[99u"), toF64(6000))), "key 1:99");
+  s.eqStr("a release of a key not down is dropped", lines(real.apply(decode("\x1b[97;1:3u"), toF64(6010))), "");
+
+  // A real release that comes after its key was made up as released is not reported twice.
+  const twice: KeyState = new KeyState();
+  twice.apply(decode("a"), toF64(0));
+  s.eqStr("made up from silence", lines(twice.tick(toF64(700))), "key 1:97 a3");
+  s.eqStr("the real release then is dropped", lines(twice.apply(decode("\x1b[97;1:3u"), toF64(710))), "");
+  s.eqBool("but still makes releases real", twice.releasesAreSynthetic, false);
 
   const focus: KeyState = new KeyState();
   focus.apply(decode("xy"), toF64(0));

@@ -78,23 +78,34 @@
  * meanwhile; `isDown(key, code)` asks. A terminal without the kitty protocol
  * sends no releases, so while `releasesAreSynthetic` is set (until the first
  * real release) a key counts as let go when its repeats stop: `firstRepeatMs`
- * (700 ms) after a press that has not repeated and `releaseGapMs` (100 ms) after
- * its last repeat. Silence is measured in stream time when the caller has one:
- * term-io sends an in-order query after each frame and calls `delivered` with
- * the send time of each one answered, since by then everything the terminal
- * generated before it has arrived. Measured that way a stall, a burst or
- * jittery reads delay the watermark as much as the keys, so a held key never
+ * (700 ms) after a press that has not repeated and `releaseGapMs` (100 ms)
+ * after its last repeat. Silence is measured in stream time when the caller has
+ * one: term-io sends an in-order query after each frame and calls `delivered`
+ * with the send time of each one answered, since by then everything the
+ * terminal generated before it has arrived. Measured that way a stall, a burst
+ * or jittery reads delay the watermark as much as the keys, so a held key never
  * flickers and a tap comes up 700 ms plus one round trip after its press. With
  * no watermark yet, silence is wall-clock time between `apply`s, which a link
  * that reads in bursts more than `releaseGapMs` apart can mistake for a key let
  * go. While acks stop, nothing is released: there is no wall-clock backstop,
  * and a caller that stops getting answers clears `watermarked` to fall back to
- * the wall clock. A key the batch `apply` takes names stays down. A made-up release
- * carries the code and modifiers the key last came with. Losing focus lets
- * every key go, and Ctrl-C becomes `EVENT_QUIT` while `quitOnCtrlC` is set.
- * Under the kitty protocol a non-Latin layout sends Ctrl-C as its own letter
- * (`ESC [ 1089 ; 5 u` for Russian С), which is not read as a quit: the
- * base-layout key that flag 4 (report alternate keys) adds is not read yet.
+ * the wall clock. term-io does so once `deliveredAgoMs(nowMs)` passes 1000 ms,
+ * a second of frames with no query answered, which no working link reaches.
+ * Within one read the caller `apply`s its events before calling `delivered` for
+ * the answer it carries: a `tick` between the two would judge keys against a
+ * watermark that already covers repeats not yet applied, and report a release
+ * and then a press. A non-finite time is ignored. Under X11 and Windows only
+ * the last key pressed auto-repeats, so holding W and then pressing D lets W go
+ * `releaseGapMs` after its last repeat. A real release of a key not down is
+ * dropped, so one arriving after its key was made up as released is not
+ * reported twice. Under kitty a real release that is lost leaves its key down
+ * until focus is lost, and for good without focus reporting. A key the batch
+ * `apply` takes names stays down. A made-up release carries the code and
+ * modifiers the key last came with. Losing focus lets every key go, and Ctrl-C
+ * becomes `EVENT_QUIT` while `quitOnCtrlC` is set. Under the kitty protocol a
+ * non-Latin layout sends Ctrl-C as its own letter (`ESC [ 1089 ; 5 u` for
+ * Russian С), which is not read as a quit: the base-layout key that flag 4
+ * (report alternate keys) adds is not read yet.
  *
  * **The same bytes under Node.** Natively a string is UTF-8 bytes, and `flush`
  * builds its answer as bytes and makes one string of them. Under Node a string
@@ -1428,7 +1439,11 @@ export class KeyState {
    * gap), then each event, with
    * Ctrl-C as `EVENT_QUIT` (its repeats and release dropped) and a press of a
    * key already down marked `ACTION_REPEAT` while releases are synthetic.
-   * Losing focus lets every key go, since its release goes elsewhere.
+   * A real release of a key not down is dropped: it was let go already, made
+   * up from silence or by losing focus. Losing focus lets every key go, since
+   * its release goes elsewhere. A non-finite `nowMs` releases nothing; a key
+   * it presses keeps its last time, and a new one is timed from the watermark
+   * (0 without one).
    */
   apply(events: TermEvent[], nowMs: f64): TermEvent[] {
     const out: TermEvent[] = this.releaseDue(nowMs, events)
@@ -1444,8 +1459,8 @@ export class KeyState {
           out.push(new TermEvent(EVENT_QUIT))
         }
         continue
-      } else if (e.type === EVENT_KEY) {
-        this.press(e, nowMs)
+      } else if (e.type === EVENT_KEY && !this.press(e, nowMs)) {
+        continue
       }
       out.push(e)
     }
@@ -1455,13 +1470,25 @@ export class KeyState {
   /**
    * Everything the terminal generated before `sentAtMs`, on the caller's
    * clock, has arrived: the answer to an in-order query sent then has come
-   * back. From now on silence is measured against the latest such time.
+   * back. From now on silence is measured against the latest such time. A
+   * non-finite `sentAtMs` is ignored.
    */
   delivered(sentAtMs: f64): void {
+    if (!termFinite(sentAtMs)) {
+      return
+    }
     if (!this.watermarked || sentAtMs > this.watermarkMs) {
       this.watermarkMs = sentAtMs
     }
     this.watermarked = true
+  }
+
+  /**
+   * How long before `nowMs` the latest answered query was sent, or -1 with no
+   * watermark: the caller clears `watermarked` once this passes its bound.
+   */
+  deliveredAgoMs(nowMs: f64): f64 {
+    return this.watermarked ? nowMs - this.watermarkMs : toF64(-1)
   }
 
   /** The releases due by `nowMs` while releases are synthetic: each key whose gap has passed, let go. */
@@ -1473,7 +1500,7 @@ export class KeyState {
   /** The releases due by `nowMs`, as `tick` makes them, for the keys no key event in `batch` names. */
   releaseDue(nowMs: f64, batch: TermEvent[]): TermEvent[] {
     const out: TermEvent[] = []
-    if (!this.releasesAreSynthetic) {
+    if (!this.releasesAreSynthetic || !termFinite(nowMs)) {
       return out
     }
     const clock: f64 = this.watermarked ? this.watermarkMs : nowMs
@@ -1489,31 +1516,40 @@ export class KeyState {
     return out
   }
 
-  /** Record key event `e` at `nowMs`. */
-  press(e: TermEvent, nowMs: f64): void {
+  /** Record key event `e` at `nowMs`; false for a release of a key not down, which `apply` drops. */
+  press(e: TermEvent, nowMs: f64): boolean {
     const at: i32 = this.find(termKeyId(e.key, e.code))
     if (e.action === ACTION_RELEASE) {
       this.releasesAreSynthetic = false
-      if (at >= 0) {
-        this.remove(at)
+      if (at < 0) {
+        return false
       }
-      return
+      this.remove(at)
+      return true
     }
+    const known: boolean = termFinite(nowMs)
     if (at < 0) {
+      let since: f64 = known ? nowMs : toF64(0)
+      if (!known && this.watermarked) {
+        since = this.watermarkMs
+      }
       this.downKeys.push(termKeyId(e.key, e.code))
-      this.downSince.push(nowMs)
+      this.downSince.push(since)
       this.downRepeated.push(false)
       this.downCodes.push(e.code)
       this.downMods.push(e.modifiers)
-      return
+      return true
     }
-    this.downSince[at] = nowMs
+    if (known) {
+      this.downSince[at] = nowMs
+    }
     this.downRepeated[at] = true
     this.downCodes[at] = e.code
     this.downMods[at] = e.modifiers
     if (this.releasesAreSynthetic) {
       e.action = ACTION_REPEAT
     }
+    return true
   }
 
   /** Let key `at` go, appending its release to `out`. */
@@ -1968,6 +2004,9 @@ const termLetterKind = (f: i32): i32 => {
 }
 
 /** Whether key event `e` is Ctrl-C: byte 3, or kitty's `c` with Ctrl alone. */
+/** Whether `x` is a number other than NaN and the infinities, for which `x - x` is NaN. */
+const termFinite = (x: f64): boolean => x - x === 0.0
+
 const termIsCtrlC = (e: TermEvent): boolean =>
   e.key === KEY_CTRL_C || (e.key === KEY_CHAR && e.code === 99 && e.modifiers === MOD_CTRL)
 

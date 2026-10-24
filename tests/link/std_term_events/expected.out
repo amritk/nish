@@ -213,11 +213,24 @@ PASS  an older ack leaves the watermark
 PASS  past it by releaseGapMs, a release on the next tick
 PASS  an hour on with no ack, still down
 PASS  cleared, the clock lets it go
+PASS  no watermark, no age
+PASS  its age is how long ago the answered query was sent
+PASS  a NaN ack sets no watermark
+PASS  nor moves one
+PASS  a NaN tick releases nothing
+PASS  a press at NaN is a repeat
+PASS  and keeps the key's time
+PASS  a new key at infinity is timed from the watermark
+PASS  and comes up firstRepeatMs after it
 PASS  a real release
 PASS  releases are real from then on
 PASS  and none are made up
 PASS  c is still down
 PASS  a press again stays a press
+PASS  a release of a key not down is dropped
+PASS  made up from silence
+PASS  the real release then is dropped
+PASS  but still makes releases real
 PASS  losing focus lets every key go
 PASS  x is up
 PASS  Ctrl-C is a quit
@@ -225,5 +238,5 @@ PASS  kitty Ctrl-c is a quit
 PASS  kitty Ctrl-c with Num Lock on is a quit
 PASS  its repeat and release are dropped
 PASS  without quitOnCtrlC, Ctrl-C is a key
-term events: 227 passed, 0 failed, 0 skipped
+term events: 240 passed, 0 failed, 0 skipped
 
