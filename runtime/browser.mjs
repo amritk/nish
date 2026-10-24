@@ -8,7 +8,8 @@
  *   - Output goes to the console a line at a time: what `write` leaves without
  *     a newline waits for the next one, for `exit`, or for the program to yield.
  *   - `exit(code)` throws a `NishExit` carrying the code, since a page cannot
- *     end itself; the caller that started the program catches it.
+ *     end itself; the caller that started the program catches it, and does
+ *     not call the module again (docs/security/runtime-browser.md, BROWSER-2).
  *   - `monotonicNanos` reads `performance.now()`, `getenv` answers `null`,
  *     `isTerminal` answers `false` and `terminalSize` `[-25, 0]`, and `argv()`
  *     is the program alone.
@@ -17,8 +18,12 @@
  */
 import { installHost, panic } from "./core/host.mjs";
 
-/** What `exit(code)` throws: `code` is the 8-bit status a native exit would leave. */
-class NishExit extends Error {
+/**
+ * What `exit(code)` throws: `code` is the 8-bit status a native exit would
+ * leave. Exported so a caller tells it apart with `instanceof`, which a thrown
+ * object that only carries the name does not pass.
+ */
+export class NishExit extends Error {
   constructor(code) {
     super(`the program exited with ${code}`);
     this.name = "NishExit";
@@ -40,9 +45,17 @@ function lineStream(print) {
   };
   return {
     write(s) {
-      const lines = (pending + s).split("\n");
-      pending = lines.pop();
-      for (const line of lines) print("%s", line);
+      // Only the text up to the last newline is split, so a run of writes
+      // with no newline costs their length once, not once per write.
+      const text = String(s);
+      const last = text.lastIndexOf("\n");
+      if (last < 0) {
+        pending += text;
+      } else {
+        const lines = (pending + text.slice(0, last)).split("\n");
+        pending = text.slice(last + 1);
+        for (const line of lines) print("%s", line);
+      }
       if (pending !== "" && !scheduled) {
         scheduled = true;
         queueMicrotask(flush);

@@ -104,16 +104,31 @@ own line. A page cannot end itself, so the code that starts the program
 catches the `NishExit`:
 
 ```js
-import "nish/runtime/browser";
+import { NishExit } from "nish/runtime/browser";
 import { main } from "./program.js";
 
 try {
   main();
 } catch (e) {
-  if (e.name !== "NishExit") throw e;
+  if (!(e instanceof NishExit)) throw e;
   console.info(`exited with ${e.code}`);
 }
 ```
+
+Tell the exit apart with `instanceof`: any thrown object can carry the name
+`NishExit`.
+
+A native exit ends the process, so nothing sees the state the program stopped
+in. In a page the module's state outlives the `NishExit`: a panic between two
+writes leaves the first done and the second not. Do not call into the module
+again after it has exited. To run a program more than once, run it in a
+`Worker` and `terminate` the worker when it exits.
+
+A native string is always valid UTF-8. A JavaScript string the page hands the
+program may hold a lone surrogate, which the core reads as U+FFFD while `===`
+still tells the two apart: `indexOf("x\uD800", "\uFFFD")` is 1. Pass
+`s.toWellFormed()` where a string from outside reaches the program, so both
+readings agree.
 
 ## Bun and other hosts
 
