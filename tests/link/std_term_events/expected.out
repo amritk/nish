@@ -186,23 +186,33 @@ PASS  a press passes through
 PASS  a is down
 PASS  A is the same key
 PASS  the press again is a repeat
-PASS  under 2 * repeatGapMs after the repeat, nothing
-PASS  2 * repeatGapMs after the repeat, a release
+PASS  under releaseGapMs after the repeat, nothing
+PASS  releaseGapMs after the repeat, a release
 PASS  a is up
-PASS  a tap: under firstRepeatMs + repeatGapMs, nothing
-PASS  a tap: 850 ms after it, a release with the press's code
+PASS  a tap: under firstRepeatMs, nothing
+PASS  a tap: firstRepeatMs after it, a release with the press's code
 PASS  releases due come before the events
 PASS  up is down, whatever the code
 PASS  repeats read 200 ms after the last are repeats
 PASS  a is still down
-PASS  repeatGapMs rises to the 200 ms gap
-PASS  under 2 * repeatGapMs after them, nothing
-PASS  with no repeat for 2 * repeatGapMs, a release
+PASS  under releaseGapMs after them, nothing
+PASS  with no repeat for releaseGapMs, a release
 PASS  a release carries the press's modifiers
-PASS  held locally, repeats 40 ms apart from 660 ms
-PASS  held over a link, reads 150 ms apart
-PASS  held over a link, reads 250 ms apart
-PASS  held under X11's 660 ms delay, a first read at 800 ms
+PASS  acked, read every 20 ms (the first repeat at 660)
+PASS  acked, reads 200 ms apart (B1)
+PASS  acked, reads 150 ms apart, ticks between (B2)
+PASS  acked, reads 250 ms apart, ticks between (B2)
+PASS  acked, reads 350 ms apart
+PASS  acked, a 5 s stall mid-hold, then let go promptly (B4)
+PASS  acked, the first repeat read at 900 after bursts without it (B5)
+PASS  acked, a tap comes up once the watermark passes firstRepeatMs (B3)
+PASS  acks stop: no release, no backstop
+PASS  without acks, read every 20 ms: held, then let go
+PASS  without acks, reads 150 ms apart flicker
+PASS  an older ack leaves the watermark
+PASS  past it by releaseGapMs, a release on the next tick
+PASS  an hour on with no ack, still down
+PASS  cleared, the clock lets it go
 PASS  a real release
 PASS  releases are real from then on
 PASS  and none are made up
@@ -215,5 +225,5 @@ PASS  kitty Ctrl-c is a quit
 PASS  kitty Ctrl-c with Num Lock on is a quit
 PASS  its repeat and release are dropped
 PASS  without quitOnCtrlC, Ctrl-C is a key
-term events: 217 passed, 0 failed, 0 skipped
+term events: 227 passed, 0 failed, 0 skipped
 

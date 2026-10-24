@@ -77,11 +77,19 @@
  * nowMs)` answers the events to act on and `tick(nowMs)` the releases due
  * meanwhile; `isDown(key, code)` asks. A terminal without the kitty protocol
  * sends no releases, so while `releasesAreSynthetic` is set (until the first
- * real release) a key counts as let go when its repeats stop, after a silence
- * that grows with how far apart reads carrying repeats arrive (`repeatGapMs`):
- * a tap comes up 0.85 s after its press and a held key 0.3 s after its last
- * repeat until reads are seen closer together, which locally settles to about
- * 0.75 s and 100 ms. A key the batch `apply` takes names stays down. A made-up release
+ * real release) a key counts as let go when its repeats stop: `firstRepeatMs`
+ * (700 ms) after a press that has not repeated and `releaseGapMs` (100 ms) after
+ * its last repeat. Silence is measured in stream time when the caller has one:
+ * term-io sends an in-order query after each frame and calls `delivered` with
+ * the send time of each one answered, since by then everything the terminal
+ * generated before it has arrived. Measured that way a stall, a burst or
+ * jittery reads delay the watermark as much as the keys, so a held key never
+ * flickers and a tap comes up 700 ms plus one round trip after its press. With
+ * no watermark yet, silence is wall-clock time between `apply`s, which a link
+ * that reads in bursts more than `releaseGapMs` apart can mistake for a key let
+ * go. While acks stop, nothing is released: there is no wall-clock backstop,
+ * and a caller that stops getting answers clears `watermarked` to fall back to
+ * the wall clock. A key the batch `apply` takes names stays down. A made-up release
  * carries the code and modifiers the key last came with. Losing focus lets
  * every key go, and Ctrl-C becomes `EVENT_QUIT` while `quitOnCtrlC` is set.
  * Under the kitty protocol a non-Latin layout sends Ctrl-C as its own letter
@@ -1350,22 +1358,27 @@ export class KeyDecoder {
  * each frame. Under the kitty protocol with event types (flag 2) a terminal
  * sends real releases. Without it a terminal sends nothing when a key comes
  * up, only the press again as it auto-repeats, so a key is let go once its
- * repeats stop. Input can arrive late and in bursts (over SSH, reads 150–250
- * ms apart are usual), so the silence that counts scales with `repeatGapMs`,
- * the gap seen between reads carrying repeats: a key that has repeated is let
- * go `max(releaseGapMs, 2 * repeatGapMs)` after its last repeat, and one that
- * has not `firstRepeatMs + repeatGapMs` after its press. The system waits
- * before its first repeat — 660 ms under X11 by default, 500 under Windows,
- * shorter under macOS — and a longer setting needs `firstRepeatMs` raised. Pure,
- * with the caller's clock, as `KeyDecoder` is.
+ * repeats stop: `releaseGapMs` after its last repeat, and `firstRepeatMs` after
+ * a press that has not repeated. The system waits before its first repeat —
+ * 660 ms under X11 by default, 500 under Windows, shorter under macOS — and
+ * repeats every 30–40 ms; a longer delay needs `firstRepeatMs` raised, and a
+ * slower rate `releaseGapMs`. Input arrives late and in bursts (over SSH, reads
+ * 150–250 ms apart are usual), so when the reads alone are known the silence
+ * is not: a caller that sends in-order queries calls `delivered(sentAtMs)` as
+ * each is answered, and silence is then measured against that watermark rather
+ * than the clock. A key last seen in a read at `A` is let go once the watermark
+ * reaches `A + gap`: had it still been down, the terminal would have generated
+ * a repeat before then, and it would have arrived ahead of the answer. Until
+ * the first `delivered`, and after the caller clears `watermarked`, the gap is
+ * measured against `nowMs`. Pure, with the caller's clock, as `KeyDecoder` is.
  */
 export class KeyState {
   /** How long after its last repeat a key is let go, in milliseconds (100 by default). */
   releaseGapMs: f64
   /** How long the system waits before a held key's first repeat, at most, in milliseconds (700 by default, above X11's 660). */
   firstRepeatMs: f64
-  /** The gap between reads that carry a held key's repeats, in milliseconds: rises at once to a longer gap and eases toward shorter ones (150 to start). */
-  repeatGapMs: f64
+  /** The latest send time of an answered query that `delivered` was given: everything the terminal generated before it has arrived. */
+  watermarkMs: f64
   /** The keys down, each as `termKeyId` names it. */
   downKeys: i32[]
   /** When each key down last pressed or repeated. */
@@ -1378,6 +1391,8 @@ export class KeyState {
   downMods: i32[]
   /** Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on. */
   releasesAreSynthetic: boolean
+  /** Whether silence is measured against `watermarkMs` rather than the clock; set by `delivered`, which the caller may clear when answers stop. */
+  watermarked: boolean
   /** Whether Ctrl-C (byte 3, or kitty `ESC [ 99 ; 5 u`) becomes `EVENT_QUIT` (true by default). */
   quitOnCtrlC: boolean
 
@@ -1386,7 +1401,8 @@ export class KeyState {
     this.releasesAreSynthetic = true
     this.releaseGapMs = 100.0
     this.firstRepeatMs = 700.0
-    this.repeatGapMs = 150.0
+    this.watermarkMs = 0.0
+    this.watermarked = false
     this.quitOnCtrlC = true
     this.downKeys = []
     this.downSince = []
@@ -1436,6 +1452,18 @@ export class KeyState {
     return out
   }
 
+  /**
+   * Everything the terminal generated before `sentAtMs`, on the caller's
+   * clock, has arrived: the answer to an in-order query sent then has come
+   * back. From now on silence is measured against the latest such time.
+   */
+  delivered(sentAtMs: f64): void {
+    if (!this.watermarked || sentAtMs > this.watermarkMs) {
+      this.watermarkMs = sentAtMs
+    }
+    this.watermarked = true
+  }
+
   /** The releases due by `nowMs` while releases are synthetic: each key whose gap has passed, let go. */
   tick(nowMs: f64): TermEvent[] {
     const none: TermEvent[] = []
@@ -1448,12 +1476,11 @@ export class KeyState {
     if (!this.releasesAreSynthetic) {
       return out
     }
+    const clock: f64 = this.watermarked ? this.watermarkMs : nowMs
     let k: i32 = 0
     while (k < toI32(this.downKeys.length)) {
-      const gap: f64 = this.downRepeated[k]
-        ? termMaxF64(this.releaseGapMs, 2.0 * this.repeatGapMs)
-        : this.firstRepeatMs + this.repeatGapMs
-      if (nowMs - this.downSince[k] >= gap && !termNamesKey(batch, this.downKeys[k])) {
+      const gap: f64 = this.downRepeated[k] ? this.releaseGapMs : this.firstRepeatMs
+      if (clock - this.downSince[k] >= gap && !termNamesKey(batch, this.downKeys[k])) {
         this.release(k, out)
       } else {
         k = k + 1
@@ -1479,11 +1506,6 @@ export class KeyState {
       this.downCodes.push(e.code)
       this.downMods.push(e.modifiers)
       return
-    }
-    const since: f64 = nowMs - this.downSince[at]
-    if (this.downRepeated[at] && since > 0.0) {
-      this.repeatGapMs =
-        since > this.repeatGapMs ? since : this.repeatGapMs + (since - this.repeatGapMs) / 8.0
     }
     this.downSince[at] = nowMs
     this.downRepeated[at] = true
@@ -1948,9 +1970,6 @@ const termLetterKind = (f: i32): i32 => {
 /** Whether key event `e` is Ctrl-C: byte 3, or kitty's `c` with Ctrl alone. */
 const termIsCtrlC = (e: TermEvent): boolean =>
   e.key === KEY_CTRL_C || (e.key === KEY_CHAR && e.code === 99 && e.modifiers === MOD_CTRL)
-
-/** The larger of `a` and `b`. */
-const termMaxF64 = (a: f64, b: f64): f64 => (a > b ? a : b)
 
 /** Whether a key event in `batch` is of key `id`, as `termKeyId` names it. */
 const termNamesKey = (batch: TermEvent[], id: i32): boolean => {

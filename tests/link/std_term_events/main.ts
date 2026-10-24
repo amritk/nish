@@ -160,25 +160,57 @@ const actions = (events: TermEvent[], action: i32): i32 => {
   return n;
 };
 
-/**
- * `a` held from 0: its first repeat read at `first`, then reads `gap` ms apart
- * to 3000 ms carrying `repeats`, with `tick` every 16 ms between reads. The
- * presses and releases made, as "presses/releases", then the releases a tick
- * 1000 ms after the last read makes.
- */
-const held = (first: i32, gap: i32, repeats: string): string => {
-  const keys: KeyState = new KeyState();
-  const seen: TermEvent[] = keys.apply(decode("a"), toF64(0));
-  let last: i32 = 0;
-  for (let read: i32 = first; read <= 3000; read = read + gap) {
-    for (let at: i32 = last + 16; at < read; at = at + 16) {
-      append(seen, keys.tick(toF64(at)));
+/** How many key events X11's defaults generate in `(from, to]` for `a` held from 0 to `up`: the press at 0, a repeat at 660 ms and every 40 ms after. */
+const generated = (from: i32, to: i32, up: i32): i32 => {
+  let n: i32 = 0;
+  for (let g: i32 = from + 1; g <= to && g < up; g++) {
+    if (g === 0 || (g >= 660 && (g - 660) % 40 === 0)) {
+      n = n + 1;
     }
-    append(seen, keys.apply(decode(read === first ? "a" : repeats), toF64(read)));
-    last = read;
   }
-  const after: TermEvent[] = keys.tick(toF64(last + 1000));
-  return `${actions(seen, ACTION_PRESS)}/${actions(seen, ACTION_RELEASE)} then ${lines(after)}`;
+  return n;
+};
+
+/**
+ * `a` held from 0 to `up` under X11's defaults, read at each time in `reads`
+ * and then every `then` ms to `up + 3000`. Each read carries every event
+ * generated since the last. The program ticks every 16 ms and sends a query
+ * after each tick; a read up to `ackUntil` answers the last one sent, which it
+ * passes to `delivered`. Gives "presses/releases" made while `a` was down,
+ * then how long after `up` it was let go, or "never".
+ */
+const hold = (reads: i32[], then: i32, up: i32, ackUntil: i32): string => {
+  const keys: KeyState = new KeyState();
+  let presses: i32 = 0;
+  let early: i32 = 0;
+  let late: i32 = -1;
+  let listed: i32 = 0;
+  let last: i32 = -1;
+  for (let t: i32 = 0; t <= up + 3000; t++) {
+    const got: TermEvent[] = t % 16 === 0 ? keys.tick(toF64(t)) : [];
+    const read: boolean = listed < toI32(reads.length) ? reads[listed] === t : t > last && (t - last) % then === 0;
+    if (read) {
+      listed = listed + 1;
+      let bytes: string = "";
+      for (let k: i32 = generated(last, t, up); k > 0; k--) {
+        bytes = bytes + "a";
+      }
+      append(got, keys.apply(decode(bytes), toF64(t)));
+      if (t <= ackUntil) {
+        keys.delivered(toF64(t - (t % 16)));
+      }
+      last = t;
+    }
+    presses = presses + actions(got, ACTION_PRESS);
+    if (actions(got, ACTION_RELEASE) > 0) {
+      if (t < up) {
+        early = early + actions(got, ACTION_RELEASE);
+      } else if (late < 0) {
+        late = t - up;
+      }
+    }
+  }
+  return `${presses}/${early} then ${late < 0 ? "never" : `${late} ms`}`;
 };
 
 export const main = (): i32 => {
@@ -304,14 +336,14 @@ export const main = (): i32 => {
   s.eqBool("a is down", keys.isDown(KEY_CHAR, 97), true);
   s.eqBool("A is the same key", keys.isDown(KEY_CHAR, 65), true);
   s.eqStr("the press again is a repeat", lines(keys.apply(decode("a"), toF64(300))), "key 1:97 a2");
-  s.eqStr("under 2 * repeatGapMs after the repeat, nothing", lines(keys.tick(toF64(599))), "");
-  s.eqStr("2 * repeatGapMs after the repeat, a release", lines(keys.tick(toF64(600))), "key 1:97 a3");
+  s.eqStr("under releaseGapMs after the repeat, nothing", lines(keys.tick(toF64(399))), "");
+  s.eqStr("releaseGapMs after the repeat, a release", lines(keys.tick(toF64(400))), "key 1:97 a3");
   s.eqBool("a is up", keys.isDown(KEY_CHAR, 97), false);
   keys.apply(decode("B"), toF64(1000));
-  s.eqStr("a tap: under firstRepeatMs + repeatGapMs, nothing", lines(keys.tick(toF64(1849))), "");
-  s.eqStr("a tap: 850 ms after it, a release with the press's code", lines(keys.tick(toF64(1850))), "key 1:66 a3");
+  s.eqStr("a tap: under firstRepeatMs, nothing", lines(keys.tick(toF64(1699))), "");
+  s.eqStr("a tap: firstRepeatMs after it, a release with the press's code", lines(keys.tick(toF64(1700))), "key 1:66 a3");
   keys.apply(decode("a"), toF64(2000));
-  s.eqStr("releases due come before the events", lines(keys.apply(decode("\x1b[A"), toF64(2900))), "key 1:97 a3 | key 2:65");
+  s.eqStr("releases due come before the events", lines(keys.apply(decode("\x1b[A"), toF64(2700))), "key 1:97 a3 | key 2:65");
   s.eqBool("up is down, whatever the code", keys.isDown(KEY_UP, 0), true);
 
   // Repeats that wait in a read longer than releaseGapMs keep the key down.
@@ -320,18 +352,40 @@ export const main = (): i32 => {
   burst.apply(decode("a"), toF64(50));
   s.eqStr("repeats read 200 ms after the last are repeats", lines(burst.apply(decode("aa"), toF64(250))), "key 1:97 a2 | key 1:97 a2");
   s.eqBool("a is still down", burst.isDown(KEY_CHAR, 97), true);
-  s.eqF64("repeatGapMs rises to the 200 ms gap", burst.repeatGapMs, toF64(200));
-  s.eqStr("under 2 * repeatGapMs after them, nothing", lines(burst.tick(toF64(649))), "");
-  s.eqStr("with no repeat for 2 * repeatGapMs, a release", lines(burst.tick(toF64(650))), "key 1:97 a3");
+  s.eqStr("under releaseGapMs after them, nothing", lines(burst.tick(toF64(349))), "");
+  s.eqStr("with no repeat for releaseGapMs, a release", lines(burst.tick(toF64(350))), "key 1:97 a3");
   burst.apply(decode("\x1b[97;3u"), toF64(1000));
-  s.eqStr("a release carries the press's modifiers", lines(burst.tick(toF64(1900))), "key 1:97 m2 a3");
+  s.eqStr("a release carries the press's modifiers", lines(burst.tick(toF64(1700))), "key 1:97 m2 a3");
 
-  // A key held from a standing start, ticked every 16 ms between reads: one
-  // press, no release while it is held, and one release once it goes quiet.
-  s.eqStr("held locally, repeats 40 ms apart from 660 ms", held(660, 40, "a"), "1/0 then key 1:97 a3");
-  s.eqStr("held over a link, reads 150 ms apart", held(660, 150, "aaaa"), "1/0 then key 1:97 a3");
-  s.eqStr("held over a link, reads 250 ms apart", held(660, 250, "aaaaaa"), "1/0 then key 1:97 a3");
-  s.eqStr("held under X11's 660 ms delay, a first read at 800 ms", held(800, 150, "aaaa"), "1/0 then key 1:97 a3");
+  // Measured against acks, a held key stays down however its input arrives:
+  // one press, no release while it is down, and one release soon after.
+  const start: i32[] = [0];
+  s.eqStr("acked, read every 20 ms (the first repeat at 660)", hold(start, 20, 2000, 99999), "1/0 then 96 ms");
+  s.eqStr("acked, reads 200 ms apart (B1)", hold(start, 200, 2000, 99999), "1/0 then 208 ms");
+  s.eqStr("acked, reads 150 ms apart, ticks between (B2)", hold(start, 150, 2000, 99999), "1/0 then 256 ms");
+  s.eqStr("acked, reads 250 ms apart, ticks between (B2)", hold(start, 250, 2000, 99999), "1/0 then 256 ms");
+  s.eqStr("acked, reads 350 ms apart", hold(start, 350, 2000, 99999), "1/0 then 464 ms");
+  const stall: i32[] = [0, 700, 740, 780, 5800];
+  s.eqStr("acked, a 5 s stall mid-hold, then let go promptly (B4)", hold(stall, 20, 7000, 99999), "1/0 then 104 ms");
+  const jitter: i32[] = [0, 250, 500, 650, 900];
+  s.eqStr("acked, the first repeat read at 900 after bursts without it (B5)", hold(jitter, 250, 2000, 99999), "1/0 then 416 ms");
+  s.eqStr("acked, a tap comes up once the watermark passes firstRepeatMs (B3)", hold(start, 20, 1, 99999), "1/0 then 735 ms");
+  s.eqStr("acks stop: no release, no backstop", hold(start, 20, 2000, 1000), "1/0 then never");
+  s.eqStr("without acks, read every 20 ms: held, then let go", hold(start, 20, 2000, -1), "1/0 then 80 ms");
+  s.eqStr("without acks, reads 150 ms apart flicker", hold(start, 150, 2000, -1), "11/9 then 64 ms");
+
+  // The watermark only moves forward, and clearing `watermarked` falls back to the clock.
+  const acked: KeyState = new KeyState();
+  acked.apply(decode("a"), toF64(0));
+  acked.apply(decode("a"), toF64(700));
+  acked.delivered(toF64(800));
+  acked.delivered(toF64(500));
+  s.eqF64("an older ack leaves the watermark", acked.watermarkMs, toF64(800));
+  s.eqStr("past it by releaseGapMs, a release on the next tick", lines(acked.tick(toF64(801))), "key 1:97 a3");
+  acked.apply(decode("b"), toF64(1000));
+  s.eqStr("an hour on with no ack, still down", lines(acked.tick(toF64(3600000))), "");
+  acked.watermarked = false;
+  s.eqStr("cleared, the clock lets it go", lines(acked.tick(toF64(3600000))), "key 1:98 a3");
 
   const real: KeyState = new KeyState();
   real.apply(decode("\x1b[97u\x1b[99u"), toF64(0));
