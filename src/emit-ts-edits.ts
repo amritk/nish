@@ -194,6 +194,12 @@ export class Walk {
    */
   instanceChoice: boolean
   /**
+   * Whether a stub written with a throwing body is warned about: the driver's
+   * answer, true for the program's own modules and false for the standard
+   * library's, whose stubs (`insertAt` and the like) are not the reader's to change.
+   */
+  warnStubs: boolean
+  /**
    * The nodes inside the instance being walked whose text the records row
    * chose from the instance's types, each with that text, in walk order: where
    * two instances that disagree are refused.
@@ -221,12 +227,6 @@ export class Walk {
   /** Each declaration `stub` marked, by node id, and the name it is warned about by. */
   stubIds: i32[]
   stubNames: string[]
-  /**
-   * Whether a stub written with a throwing body is warned about: the driver's
-   * answer, true for the program's own modules and false for the standard
-   * library's, whose stubs (`insertAt` and the like) are not the reader's to change.
-   */
-  warnStubs: boolean
   /** The declarations written with a throwing body while `warnStubs` held, with the warning for each. */
   stubbedAt: Node[]
   stubWarnings: string[]
