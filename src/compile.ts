@@ -1571,7 +1571,7 @@ const runProgram = (
     return 3
   }
   const file = runBinaryName(name)
-  const sqliteFlags = getenv("NISH_SQLITE_CFLAGS")
+  const sqlite = anyCallsSqlite(emitted)
   const key = runCacheKey(
     emitted,
     file,
@@ -1581,7 +1581,8 @@ const runProgram = (
     debugInfo,
     threads,
     cCompiler(),
-    sqliteFlags === null ? "" : sqliteFlags
+    sqlite,
+    sqliteCflags()
   )
   const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
   const binary = `${cacheEntry}/${file}`
@@ -1599,6 +1600,7 @@ const runProgram = (
       cpu,
       debugInfo,
       threads,
+      sqlite,
       json
     )
     if (status !== 0) {
@@ -1685,6 +1687,7 @@ const buildIntoCache = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  sqlite: boolean,
   json: boolean
 ): number => {
   const problem = missingToolchain("run")
@@ -1718,18 +1721,7 @@ const buildIntoCache = (
     outputs.push(file)
   }
   const built = `${work}/${name}`
-  let status = linkProgram(
-    outputs,
-    pkg,
-    built,
-    profile,
-    cpu,
-    debugInfo,
-    threads,
-    anyCallsSqlite(emitted),
-    json,
-    true
-  )
+  let status = linkProgram(outputs, pkg, built, profile, cpu, debugInfo, threads, sqlite, json, true)
   if (status === 0) {
     writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--", built, `${cacheEntry}/${name}`]
@@ -1875,16 +1867,22 @@ class CachedObjects {
   }
 }
 
+/** `NISH_SQLITE_CFLAGS`, which adds to SQLite's options; empty when unset. */
+const sqliteCflags = (): string => {
+  const flags = getenv("NISH_SQLITE_CFLAGS")
+  return flags === null ? "" : flags
+}
+
 /**
  * The runtime cache: the directories holding the runtime compiled for this
  * recipe and, when `sqlite` says the program calls it, `runtime/sqlite/`
  * compiled for it, each compiled into its entry first when no link has needed
  * it before. Nearly all of a link was the runtime's translation units,
  * compiled again on every one; an entry is compiled once per key
- * (`runtimeCacheKey`) and every later link only compiles the program. A directory is empty when the link should
- * compile those units itself, as it always did: the wasi profile, which the
- * cache does not take, and a cache root that is not there or cannot be made
- * private, so a `--link` that works without the cache works without it, and an
+ * (`runtimeCacheKey`) and every later link only compiles the program. A
+ * directory is empty when the link should compile those units itself, as it
+ * always did: the wasi profile, which the cache does not take, and a cache
+ * root that is not there or cannot be made private, so a `--link` that works without the cache works without it, and an
  * entry the compile left nothing to fill. SQLite's entry is apart from the
  * runtime's (`sqliteCacheKey`), so the nine objects every link reads are not
  * compiled again when it changes. Null when either did not compile,
@@ -1973,7 +1971,6 @@ const cachedRuntime = (
   if (sqliteDir === null) {
     return new CachedObjects(runtime, "")
   }
-  const flags = getenv("NISH_SQLITE_CFLAGS")
   const sqliteKey = sqliteCacheKey(
     root,
     sqliteDir,
@@ -1983,7 +1980,7 @@ const cachedRuntime = (
     threads,
     cc,
     version,
-    flags === null ? "" : flags
+    sqliteCflags()
   )
   const sqliteRecipe: string[] = ["--sqlite-objects"]
   const objects = cachedEntry(

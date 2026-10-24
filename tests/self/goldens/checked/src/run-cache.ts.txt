@@ -165,12 +165,12 @@ function profileLine(profile: string, cpu: string, debugInfo: boolean, threads: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function runCacheKey(modules: EmittedModule[], name: string, root: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, cc: string, sqliteFlags: string): string -> @runCacheKey [exported]
+function runCacheKey(modules: EmittedModule[], name: string, root: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, cc: string, sqlite: boolean, sqliteFlags: string): string -> @runCacheKey [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
   escaping: cpu debugInfo profile root sqliteFlags threads
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addRecipeFingerprints addSqliteFingerprints anyCallsSqlite nish_str_concat nish_str_from_i32 profileLine
-  pointer modules: size=0 writesThrough=false captured=false passedTo=anyCallsSqlite#0
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addRecipeFingerprints addSqliteFingerprints nish_str_concat nish_str_from_i32 profileLine
+  pointer modules: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 key: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
@@ -180,7 +180,6 @@ function runCacheKey(modules: EmittedModule[], name: string, root: string, profi
   callee +3:11 profileLine -> @profileLine
   callee +4:3 StringBuilder.add -> @StringBuilder.add
   callee +5:3 addRecipeFingerprints -> @addRecipeFingerprints
-  callee +6:7 anyCallsSqlite -> @anyCallsSqlite
   callee +7:5 addSqliteFingerprints -> @addSqliteFingerprints
   local +9:14 module: EmittedModule (const)
   callee +10:5 StringBuilder.add -> @StringBuilder.add

@@ -19299,7 +19299,10 @@ if (!only || "sqlite-link".includes(only)) {
         env: env(extra),
       })
     const runOut = (out) => spawnSync(path.join(sqDir, out), [], { encoding: "utf8" })
-    const runtimeUnits = 9
+    // Every runtime unit but the wasm subset, which a native link never compiles.
+    const runtimeUnits = fs
+      .readdirSync(path.join(root, "runtime"))
+      .filter((f) => f.endsWith(".c") && f !== "runtime-wasm.c").length
     const program = "tests/link/sqlite_link/main.ts"
 
     const first = link(program, "first")

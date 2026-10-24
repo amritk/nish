@@ -352,9 +352,9 @@ const profileLine = (profile: string, cpu: string, debugInfo: boolean, threads: 
  * the script will run (`CC`, or `clang`), since a different compiler is a
  * different binary. `cpu` is the `--cpu` level, empty for the baseline, which
  * the profile line names only when it is set, so a baseline key is the bytes
- * it was before the flag existed. `sqliteFlags` is `NISH_SQLITE_CFLAGS`, which
- * the key carries, with the files of `runtime/sqlite/`, only when a module
- * calls SQLite.
+ * it was before the flag existed. `sqlite` is whether a module calls SQLite
+ * (`anyCallsSqlite`); only then does the key carry `sqliteFlags`, which is
+ * `NISH_SQLITE_CFLAGS`, and the files of `runtime/sqlite/`.
  */
 export const runCacheKey = (
   modules: EmittedModule[],
@@ -365,6 +365,7 @@ export const runCacheKey = (
   debugInfo: boolean,
   threads: boolean,
   cc: string,
+  sqlite: boolean,
   sqliteFlags: string
 ): string => {
   const key = new StringBuilder()
@@ -373,7 +374,7 @@ export const runCacheKey = (
   key.add(profileLine(profile, cpu, debugInfo, threads))
   key.add(`cc ${cc}\n`)
   addRecipeFingerprints(key, root)
-  if (anyCallsSqlite(modules)) {
+  if (sqlite) {
     addSqliteFingerprints(key, root, sqliteFlags)
   }
   for (const module of modules) {

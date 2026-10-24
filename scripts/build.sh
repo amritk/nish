@@ -228,9 +228,9 @@ done
 sqlite_dir="$(cd "$(dirname "$0")/../runtime/sqlite" 2>/dev/null && pwd)" || sqlite_dir=""
 sqlite_wanted=0
 if [ -n "$sqlite_to" ]; then
-  for i in ${inputs[@]+"${inputs[@]}"}; do
-    echo "error: --sqlite-objects compiles runtime/sqlite/ alone, not $i" >&2; exit 2
-  done
+  if [ ${#inputs[@]} -gt 0 ]; then
+    echo "error: --sqlite-objects compiles runtime/sqlite/ alone, not ${inputs[0]}" >&2; exit 2
+  fi
   sqlite_wanted=1
 fi
 for i in ${inputs[@]+"${inputs[@]}"}; do
