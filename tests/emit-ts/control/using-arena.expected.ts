@@ -6,7 +6,7 @@
 // row pins the shape and the result, not the release. (`using s =
 // scope()` is the same block to this row, but `nish/threads` imports
 // `nish:unsafe`'s wrapping arithmetic, which the numbers row brings to Node.)
-import { Result, Ok, Err, arena } from "nish/runtime"
+import { Result, Ok, Err, arena, checkedAdd } from "nish/runtime"
 import type { i32 } from "nish/runtime"
 const check = (ok: boolean): Result<i32, i32> => (ok ? Ok(3) : Err(-1))
 
@@ -19,7 +19,7 @@ const run = (ok: boolean): Result<i32, i32> => {
     const v = __t0.value
     const xs: i32[] = [v, v, v]
     for (const x of xs) {
-      total = total + x
+      total = checkedAdd(total, x)
     }
   }
   return Ok(total)

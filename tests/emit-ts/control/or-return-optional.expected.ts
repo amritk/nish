@@ -2,7 +2,7 @@
 // right runs, so a call there cannot run ahead of the statement and takes the
 // throw path. A null receiver with an argument that would fail returns `ok`.
 // (`?.[`, the other link an argument can sit under, is refused by Nish.)
-import { Result, Ok, Err, caught } from "nish/runtime"
+import { Result, Ok, Err, checkedAdd, caught } from "nish/runtime"
 import type { i32 } from "nish/runtime"
 const parse = (s: string): Result<i32, string> => (s === "one" ? Ok(1) : Err(`cannot parse ${s}`))
 
@@ -12,7 +12,7 @@ class Table {
     this.base = base
   }
   get(k: i32): i32 {
-    return this.base + k
+    return checkedAdd(this.base, k)
   }
 }
 

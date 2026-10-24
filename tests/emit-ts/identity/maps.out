@@ -1,5 +1,5 @@
-red: 3
-green: 2
-blue: 1
+red: ***
+green: **
+blue: *
 distinct 3
 has blue true, has pink false

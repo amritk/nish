@@ -6,7 +6,7 @@
 // called over operands the range analysis cannot close (a divisor of either
 // sign, factors up to 100000 each), so no proof takes its check away. A float
 // division cannot panic, so `ratio` still hoists.
-import { Result, strLen, Ok, Err, toF64, caught } from "nish/runtime"
+import { Result, strLen, Ok, Err, toF64, idiv, checkedAdd, caught, irem, checkedMul } from "nish/runtime"
 import type { i32, f64 } from "nish/runtime"
 const f = (s: string): Result<i32, string> => {
   console.log(`f ${s}`)
@@ -19,17 +19,17 @@ const half = (s: string): Result<f64, string> => {
 }
 
 const divide = (a: i32, b: i32, s: string): Result<i32, string> => { try {
-  const v = a / b + f(s).orReturn()
+  const v = checkedAdd(idiv(a, b), f(s).orReturn())
   return Ok(v)
 } catch (__t0) { return caught(__t0) } }
 
 const rest = (a: i32, b: i32, s: string): Result<i32, string> => { try {
-  const v = a % b + f(s).orReturn()
+  const v = checkedAdd(irem(a, b), f(s).orReturn())
   return Ok(v)
 } catch (__t1) { return caught(__t1) } }
 
 const scale = (a: i32, b: i32, s: string): Result<i32, string> => { try {
-  const v = a * b + f(s).orReturn()
+  const v = checkedAdd(checkedMul(a, b), f(s).orReturn())
   return Ok(v)
 } catch (__t2) { return caught(__t2) } }
 

@@ -3,9 +3,9 @@
 // becomes the runtime's `arenaUsed()`) composes with it. Where a call runs
 // before it, after `&&`, or in a concise arrow body, nothing may hoist, and
 // the function's body is wrapped in a `try` that `caught` answers instead.
-import { Result, Ok, Err, caught, arenaUsed } from "nish/runtime"
+import { Result, irem, Ok, idiv, Err, caught, arenaUsed, checkedAdd } from "nish/runtime"
 import type { i32 } from "nish/runtime"
-const half = (n: i32): Result<i32, string> => (n % 2 === 0 ? Ok(n / 2) : Err(`${n} is odd`))
+const half = (n: i32): Result<i32, string> => (irem(n, 2) === 0 ? Ok(idiv(n, 2)) : Err(`${n} is odd`))
 
 const note = (noted: string[], s: string): i32 => {
   noted.push(s)
@@ -19,14 +19,14 @@ const nested = (n: i32): Result<string, string> => {
   if (__t1.isErr()) return Err(__t1.error);
   const __t2 = half(__t1.value);
   if (__t2.isErr()) return Err(__t2.error);
-  const __t3 = half(n + (arenaUsed() >= 0 ? 0 : 1));
+  const __t3 = half(checkedAdd(n, (arenaUsed() >= 0n ? 0 : 1)));
   if (__t3.isErr()) return Err(__t3.error);
   const s = `${__t2.value} ${__t3.value}`
   return Ok(s)
 }
 
 const late = (noted: string[], n: i32): Result<i32, string> => { try {
-  const v = note(noted, "late") + half(n).orReturn()
+  const v = ((note(noted, "late") + half(n).orReturn()) | 0)
   return Ok(v)
 } catch (__t4) { return caught(__t4) } }
 

@@ -64,7 +64,7 @@ _Static_assert(offsetof(nish_xchunk, cap) == 8, "runtime.c's nish_chunk: cap sec
 static void nish_cross_oom(void) {
   nish_panic_claim();
   (void)!write(2, "nish: out of memory\n", 20);
-  _exit(1);
+  nish_fatal_exit();
 }
 
 static void *nish_cross_block(uint64_t size) {
