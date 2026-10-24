@@ -4581,6 +4581,9 @@ if (!only || "emit-ts".includes(only)) {
     ["NL4011", "reject_emit_ts_net_global"],
     ["NL4011", "reject_emit_ts_signal"],
     ["NL4012", "reject_emit_ts_compound"],
+    ["NL4013", "reject_emit_ts_instances"],
+    ["NL4013", "reject_emit_ts_instances_zero"],
+    ["NL4013", "reject_emit_ts_instances_zero_string"],
   ]) {
     const dir = path.join(work, name)
     const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
