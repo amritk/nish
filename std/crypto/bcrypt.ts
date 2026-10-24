@@ -109,7 +109,12 @@ export const BCRYPT_MAX_COST: i32 = 31
 /** The number of password bytes the key schedule reads; the rest are not. */
 export const BCRYPT_MAX_PASSWORD: i32 = 72
 
-/** The state's words: P (18) then S0–S3 (4 × 256). */
+/**
+ * The state's words: P (18) then S0–S3 (4 × 256). The guards before the
+ * rounds and the key copy write 1042, 72 and 16 as literals: the range prover
+ * reads a literal bound, not a named constant, and keeps every S-box bounds
+ * check without it.
+ */
 const BCRYPT_STATE_WORDS: i32 = 1042
 
 /** The length of the setting, `$2b$NN$` and the 22 salt characters. */
@@ -319,7 +324,7 @@ const bcryptParse = (text: string): Result<BcryptParsed, string> => {
  * state `st`. The rounds are `bcryptBody`'s, which repeats them inline.
  */
 const bcryptEncrypt = (st: u32[], lr: u32[]): void => {
-  if (toI32(st.length) < BCRYPT_STATE_WORDS) {
+  if (st.length < 1042) {
     return
   }
   if (lr.length < 2) {
@@ -349,7 +354,7 @@ const bcryptEncrypt = (st: u32[], lr: u32[]): void => {
  * 2^(cost+1) calls of 521 blocks each.
  */
 const bcryptBody = (st: u32[]): void => {
-  if (toI32(st.length) < BCRYPT_STATE_WORDS) {
+  if (st.length < 1042) {
     return
   }
   let l: u32 = 0
@@ -387,7 +392,7 @@ const bcryptBody = (st: u32[]): void => {
  * follow the password's length and NULs, decide a load.
  */
 const bcryptSetKey = (st: u32[], expanded: u32[], password: u8[], safety: u32): void => {
-  if (toI32(st.length) < BCRYPT_STATE_WORDS) {
+  if (st.length < 1042) {
     return
   }
   if (expanded.length < 18) {
@@ -397,7 +402,7 @@ const bcryptSetKey = (st: u32[], expanded: u32[], password: u8[], safety: u32): 
   // cycle below reads a NUL at 72 at the latest without testing the length.
   // It is 128 long so that the position, masked to 7 bits, needs no check.
   const key: u8[] = new Array<u8>(128)
-  for (let i: i32 = 0; i < toI32(password.length) && i < BCRYPT_MAX_PASSWORD; i++) {
+  for (let i: i32 = 0; i < toI32(password.length) && i < 72; i++) {
     key[i] = password[i]
   }
   let p: i32 = 0
@@ -703,7 +708,7 @@ const bcryptRun = (password: Secret<u8[]>, prefix: u8[], setting: BcryptSetting)
  * hash. An `Err` for a salt of another length or a cost outside 4–31.
  */
 export const bcryptHash = (password: Secret<u8[]>, salt: u8[], cost: i32): Result<string, string> => {
-  if (toI32(salt.length) !== BCRYPT_SALT_SIZE) {
+  if (salt.length !== 16) {
     return Err("bcrypt: the salt is not 16 bytes")
   }
   if (cost < BCRYPT_MIN_COST || cost > BCRYPT_MAX_COST) {
