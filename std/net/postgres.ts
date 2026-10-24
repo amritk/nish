@@ -1996,8 +1996,11 @@ export class PgPool {
    */
   constructor(config: PgConfig, password: Secret<u8[]>, size: i32, queueSize: i32) {
     pgCheckConfig(config)
-    if (size < 1 || size > PG_POOL_MAX_SLOTS || queueSize < 1 || queueSize > PG_POOL_MAX_QUEUE) {
+    if (size < 1 || size > PG_POOL_MAX_SLOTS) {
       panic("nish/net/postgres: a PgPool size out of range")
+    }
+    if (queueSize < 1 || queueSize > PG_POOL_MAX_QUEUE) {
+      panic("nish/net/postgres: a PgPool queueSize out of range")
     }
     if (config.maxInFlight > PG_POOL_MAX_IN_FLIGHT) {
       panic("nish/net/postgres: a PgPool connection's maxInFlight is over 1024")
@@ -2063,7 +2066,9 @@ export class PgPool {
    * `connection(slot)`, then `send()`. `PG_POOL_NONE` when nothing waits, a
    * request is still being built, or no ready connection has room; then a
    * connection may be wanted (`wanted()`): one more for every `maxInFlight`
-   * waiting requests that the connections already starting cannot take.
+   * waiting requests that the connections already starting cannot take. A
+   * request handed out is the program's to end with `send()`: until then no
+   * other is handed out.
    */
   dispatch(): i32 {
     if (this.building >= 0 || this.queueCount === 0) {
@@ -2193,10 +2198,16 @@ export class PgPool {
    * `PG_FAILED`: close its socket. A connection that fails before it is ready,
    * while no other is, takes the oldest waiting request with it, so that a
    * server that cannot be reached empties the queue rather than holds it.
+   * `PG_NEED_MORE` once `PG_FAILED` was answered, until `connect` builds the
+   * slot again. Panics as `connection(slot)` does.
    */
   next(slot: i32): i32 {
-    const s: PgPoolSlot = this.slots[slot]
     const conn: PgConnection = this.connection(slot)
+    const s: PgPoolSlot = this.slots[slot]
+    if (s.state === PG_SLOT_IDLE || s.state === PG_SLOT_WANTED) {
+      this.ticket = -1
+      return PG_NEED_MORE
+    }
     while (s.state === PG_SLOT_STARTING || s.state === PG_SLOT_READY) {
       this.ticket = s.count > 0 ? s.tickets[s.head] : -1
       const event: i32 = conn.next()
