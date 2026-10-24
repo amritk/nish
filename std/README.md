@@ -59,8 +59,13 @@ keys are `Secret`s.** `crypto/p256.ts`, `crypto/x25519.ts`, `crypto/ed25519.ts`,
 `crypto/x509.ts` and `crypto/x509-random.ts` take and give a private key as a `Secret<u8[]>` from
 `nish:secret`, compute on it only inside `expose`, and wipe every intermediate
 the key reaches before they return, with a store the optimiser may not remove
-(ECC-2, X509-7, closed). The other modules
-take their keys as plain arrays and do not wipe them yet.
+(ECC-2, X509-7, closed); `crypto/hmac.ts` (`hmacSha256Secret` and its two
+siblings, `pbkdf2HmacSha256`) and `crypto/hkdf.ts` take a key as a `Secret`
+too. `crypto/aes.ts` and
+`crypto/chacha20poly1305.ts` take their keys as plain arrays, the caller's to
+wipe, and wipe everything they derive from one (`aesKeyWipe` drops an
+`AesKey`). What no store reaches, registers and vector registers among them,
+is listed in [`SECURITY.md`](../SECURITY.md#threat-model).
 
 | Module | What it is | Reproduces |
 | --- | --- | --- |

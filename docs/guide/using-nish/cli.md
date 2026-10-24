@@ -170,7 +170,7 @@ them does not run under Node yet.
 
 The `nish:term` functions are written as imports from `nish/runtime` too, and
 they resolve. Under Node, `isTerminal` and `terminalSize` answer, and
-`readStdin`, `waitStdin` and `setRawMode` throw, naming themselves, as they do
+`readStdin`, `waitStdin`, `setRawMode` and `setTerminalRestore` throw, naming themselves, as they do
 when a program is [run under Node](terminal.md#where-it-runs).
 
 `--emit-ts` writes a directory instead of IR, so it exits 2 if you also
