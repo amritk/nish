@@ -5235,9 +5235,9 @@ const pastBelow = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): i32 => {
   const g = facts.get(edge.callee)
   // A table's receiver, taken whole (`wholeReaches`), is its `this`.
   const index = edge.index < 0 ? 0 : edge.index
-  // Every write to or below a parameter marks it `writesReach` (an escape,
-  // `writesThrough`), so a callee writes below the one it is handed only when
-  // that one is marked.
+  // Every write to or below a parameter marks it `writesReach`, or
+  // `writesThrough` for an escape: a callee writes below the one it is handed
+  // only when that one is marked.
   const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(index)
   if (g === null || !g.writesPastParams || g.writesElsewhere || target === null) {
     return PAST_NONE
