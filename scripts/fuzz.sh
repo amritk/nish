@@ -56,7 +56,7 @@ RUNTIME_C=(
   runtime/runtime-bytes.c
 )
 
-SAN_FLAGS=(-g -O1 -fsanitize=fuzzer,address,undefined -fno-sanitize-recover=undefined)
+SAN_FLAGS=(-g -O1 "-fsanitize=fuzzer,address,undefined" -fno-sanitize-recover=undefined)
 LIBFUZZER_DEFAULTS=(-timeout=1 -rss_limit_mb=2048)
 
 die() {
