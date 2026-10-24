@@ -12,7 +12,8 @@
  * `crypt_r` accepts the hash Nish makes, and Nish answers every verify as
  * `crypt_r` does. `crypt_r` reads the key as a C string, so a password with a
  * NUL in it is the reference's answer for the bytes before it, which is the
- * rule the module follows.
+ * rule the module follows. It assumes a libxcrypt built with its `$2a$`,
+ * `$2b$` and `$2y$` hashes (`--enable-hashes`), as distributions ship it.
  *
  * Usage: node tests/differential/bcrypt.js [--compiler <nish>] [--cases N] [--seed S]
  * Prints one line per failure and a summary; exits 0 when every case agrees,

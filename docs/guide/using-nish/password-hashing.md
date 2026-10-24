@@ -90,8 +90,8 @@ users at sign-up.
 only in how old implementations handled 8-bit bytes and long passwords, and
 each is checked the way libxcrypt and crypt_blowfish check it. Other
 implementations answer otherwise for a few passwords: one with a NUL byte, one
-over 72 bytes, or one with a 0xff byte before another 8-bit byte (such as
-`\xff\xff\xa3`) under `$2a$`. A hash another implementation made of such a
+over 72 bytes, or one whose 8-bit bytes each follow only 0xff bytes in their
+four-byte key word (such as `\xff\xff\xa3`) under `$2a$`. A hash another implementation made of such a
 password may not verify here; the
 [interoperability table](../../security/crypto-bcrypt.md#interoperability) in
 the security record says which, implementation by implementation. Text in

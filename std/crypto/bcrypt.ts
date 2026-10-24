@@ -29,8 +29,9 @@
  * the old sign-extension bug: when an 8-bit byte was sign-extended into a key
  * word and yet the buggy and the correct key came out equal, one bit of the
  * first P word is flipped, as crypt_blowfish flips it, so the `$2a$` digest of
- * such a password (`\xff\xff\xa3`) is not its `$2y$` one. It takes a 0xff byte before another 8-bit byte in a key word, which UTF-8 never
- * holds. `$2x$` (the bug itself) is refused.
+ * such a password (`\xff\xff\xa3`) is not its `$2y$` one. It takes an 8-bit
+ * byte after the first byte of a key word with only 0xff bytes before it, every
+ * such byte in all 18 words being so placed, which UTF-8 never holds. `$2x$` (the bug itself) is refused.
  *
  * **Errors are `Err`s.** A salt that is not 16 bytes, a cost outside 4–31, or
  * a hash string that is not one (the wrong length, an unknown prefix, a cost
