@@ -202,7 +202,9 @@ there, fix the rate or the backend with the overrides below.
 | `NISH_TERM_FPS` | a fixed frame rate, over everything else |
 
 The variables are the user's: they let someone running your program fix it
-for their terminal without a rebuild.
+for their terminal without a rebuild. What each one changed is listed in
+`frame.caps.overrides`, joined by `; `, so a bug report shows it, for example
+`NO_COLOR: 16 colours; NISH_TERM_FPS=20: 20 frames a second`.
 
 ## Reporting a terminal that draws wrong
 
