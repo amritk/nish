@@ -785,7 +785,7 @@ export const pbkdf2HmacSha256 = (
   password: Secret<u8[]>,
   salt: u8[],
   iterations: i32,
-  length: i32,
+  length: i32
 ): Secret<u8[]> | null => {
   const request: Pbkdf2Request = { salt: salt, iterations: iterations, length: length }
   const dk: u8[] | null = exposeWith(password, request, pbkdf2HmacSha256Exposed)
