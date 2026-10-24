@@ -119,7 +119,8 @@ const PIXELS_ANSI16: string =
 /** The value of the hex digits `text[at..at+count)`. */
 const pixelsHex = (text: string, at: i32, count: i32): i32 => {
   let v: i32 = 0
-  for (let i: i32 = at; i < at + count; i++) {
+  const length: i32 = toI32(text.length)
+  for (let i: i32 = at; i < at + count && i >= 0 && i < length; i++) {
     const c: i32 = toI32(text.charCodeAt(i))
     v = (v << 4) | (c >= 97 ? c - 87 : c - 48)
   }
@@ -389,7 +390,7 @@ export class PixelBytes {
  */
 const pixelsSampleMap = (n: i32, source: i32): i32[] => {
   const map: i32[] = new Array<i32>(n)
-  for (let i: i32 = 0; i < n; i++) {
+  for (let i: i32 = 0; i < toI32(map.length); i++) {
     const s: i32 = toI32(Math.floor(((toF64(i) + 0.5) * toF64(source)) / toF64(n)))
     map[i] = s >= source ? source - 1 : s
   }
@@ -447,7 +448,8 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
   while (sent < total) {
     // The next chunk's pixels as RGB bytes, 1024 pixels to a full chunk.
     const n: i32 = total - sent < PIXELS_KITTY_RAW ? total - sent : PIXELS_KITTY_RAW
-    for (let k: i32 = 0; k < n; k = k + 3) {
+    // `k + 2 < raw.length` always holds below `n`; it proves the stores in range.
+    for (let k: i32 = 0; k < n && k + 2 < toI32(raw.length); k = k + 3) {
       const c: i32 = fb.pixels[pixel]
       raw[k] = toU8((c >> 16) & 255)
       raw[k + 1] = toU8((c >> 8) & 255)
@@ -549,9 +551,11 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   const reg: i32[] = new Array<i32>(w * h)
   const used: u8[] = new Array<u8>(SIXEL_REGISTERS)
   used.fill(0)
-  for (let y: i32 = 0; y < h; y++) {
+  // `ys` is `h` long and `xs` `w`: bounding the loops by their lengths is what
+  // proves the reads in range.
+  for (let y: i32 = 0; y < toI32(ys.length); y++) {
     const from: i32 = ys[y] * fb.width
-    for (let x: i32 = 0; x < w; x++) {
+    for (let x: i32 = 0; x < toI32(xs.length); x++) {
       const c: i32 = fb.pixels[from + xs[x]]
       let br: i32 = 0
       let bg: i32 = 0
@@ -568,7 +572,10 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
         pixelsLevel(c & 255, bb, 6)
       )
       reg[y * w + x] = n
-      used[n] = 1
+      // Always true (a register is 0 to 251); it proves the store in range.
+      if (n >= 0 && n < toI32(used.length)) {
+        used[n] = 1
+      }
     }
   }
   out.putText(moveCursor(rect.col, rect.row))
@@ -577,7 +584,7 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   out.putDecimal(w)
   out.put(PIXELS_SEMICOLON)
   out.putDecimal(h)
-  for (let n: i32 = 0; n < SIXEL_REGISTERS; n++) {
+  for (let n: i32 = 0; n < toI32(used.length); n++) {
     if (used[n] !== 0) {
       const r: i32 = (n / 42) | 0
       const g: i32 = ((n / 6) | 0) % 7
@@ -607,6 +614,11 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
       const bit: i32 = PIXELS_ONE << (y - top)
       for (let x: i32 = 0; x < w; x++) {
         const n: i32 = reg[y * w + x]
+        // Never taken (a register is 0 to 251); it proves `first[n]` and
+        // `last[n]` in range.
+        if (n < 0 || n >= toI32(first.length) || n >= toI32(last.length)) {
+          continue
+        }
         bits[n * w + x] = bits[n * w + x] | bit
         if (first[n] < 0) {
           first[n] = x
@@ -622,8 +634,11 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
       out.put(SIXEL_NEXT_LINE)
     }
     let firstColour: boolean = true
-    for (let n: i32 = 0; n < SIXEL_REGISTERS; n++) {
-      if (first[n] < 0) {
+    for (let n: i32 = 0; n < toI32(first.length) && n < toI32(last.length); n++) {
+      // Read once: the calls below drop what proves `n` in range.
+      const start: i32 = first[n]
+      const end: i32 = last[n]
+      if (start < 0) {
         continue
       }
       if (!firstColour) {
@@ -633,11 +648,11 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
       out.put(SIXEL_COLOUR)
       out.putDecimal(n)
       // Blank columns before the colour's first one, then its runs to its last.
-      pixelsSixelRun(out, 0, first[n])
+      pixelsSixelRun(out, 0, start)
       let runBits: i32 = -1
       let runCount: i32 = 0
       const row: i32 = n * w
-      for (let x: i32 = first[n]; x <= last[n]; x++) {
+      for (let x: i32 = start; x <= end; x++) {
         const sixel: i32 = bits[row + x]
         bits[row + x] = 0
         if (sixel === runBits) {
@@ -677,13 +692,15 @@ export const drawHalfBlocks = (fb: Framebuffer, canvas: Canvas, rect: PixelRect)
     if (py < 0 || py >= canvas.height) {
       continue
     }
-    for (let x: i32 = 0; x < rect.width; x++) {
+    // `xs` is `rect.width` long and `ys` `rect.height`; their lengths bound the
+    // reads so the prover sees them in range.
+    for (let x: i32 = 0; x < toI32(xs.length); x++) {
       const px: i32 = left + x
       if (px < 0 || px >= canvas.width) {
         continue
       }
       canvas.pixels[py * canvas.width + px] =
-        y < rect.height ? fb.pixels[ys[y] * fb.width + xs[x]] : COLOR_DEFAULT
+        y < toI32(ys.length) ? fb.pixels[ys[y] * fb.width + xs[x]] : COLOR_DEFAULT
     }
   }
   for (let row: i32 = rect.row; row < rect.row + rect.rows; row++) {
@@ -735,9 +752,11 @@ export const drawAscii = (fb: Framebuffer, screen: Screen, rect: PixelRect, colo
   const xs: i32[] = pixelsSampleMap(rect.width, fb.width)
   const ys: i32[] = pixelsSampleMap(rect.height, fb.height)
   const ramp: i32 = toI32(PIXELS_RAMP.length)
-  for (let y: i32 = 0; y < rect.height; y++) {
+  // `ys` is `rect.height` long and `xs` `rect.width`; bounding the loops by
+  // their lengths proves the reads in range.
+  for (let y: i32 = 0; y < toI32(ys.length); y++) {
     const from: i32 = ys[y] * fb.width
-    for (let x: i32 = 0; x < rect.width; x++) {
+    for (let x: i32 = 0; x < toI32(xs.length); x++) {
       const c: i32 = fb.pixels[from + xs[x]]
       const luma: i32 = ((((c >> 16) & 255) * 299 + ((c >> 8) & 255) * 587 + (c & 255) * 114) / 1000) | 0
       const glyph: i32 = toI32(PIXELS_RAMP.charCodeAt(((luma * ramp) / 256) | 0))

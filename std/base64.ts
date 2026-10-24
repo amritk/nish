@@ -62,17 +62,21 @@ export const base64EncodeInto = (src: u8[], off: i32, len: i32, dst: u8[], at: i
   if (src.length > 2147483647 || dst.length > 2147483647) {
     panic("base64EncodeInto: an array longer than 2^31 - 1 bytes")
   }
-  if (off < 0 || len < 0 || off > toI32(src.length) - len) {
+  const srcLength: i32 = toI32(src.length)
+  const dstLength: i32 = toI32(dst.length)
+  if (off < 0 || len < 0 || off > srcLength - len) {
     panic("base64EncodeInto: the source range is outside the array")
   }
   const need: i32 = base64EncodedLength(len)
-  if (at < 0 || at > toI32(dst.length) - need) {
+  if (at < 0 || at > dstLength - need) {
     panic("base64EncodeInto: the encoding does not fit in the destination")
   }
   let i: i32 = off
   let o: i32 = at
   const whole: i32 = off + len - (len % 3)
-  while (i < whole) {
+  // The checks above make every term after the first true; they are written out
+  // because they are what proves the loop's accesses in range.
+  while (i < whole && i >= 0 && i + 2 < srcLength && o >= 0 && o + 3 < dstLength) {
     const group: i32 = (toI32(src[i]) << 16) | (toI32(src[i + 1]) << 8) | toI32(src[i + 2])
     dst[o] = base64CharOf(group >> 18)
     dst[o + 1] = base64CharOf((group >> 12) & 63)
