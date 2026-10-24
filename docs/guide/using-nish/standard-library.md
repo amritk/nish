@@ -1324,7 +1324,7 @@ test vectors. A byte string is a `u8[]`.
 | --- | --- |
 | `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`) |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
-| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time |
+| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
 | `nish/crypto/base64url` | `base64urlEncode` and a strict `base64urlDecode`, unpadded |
@@ -1359,6 +1359,28 @@ export const main = (): i32 => {
 ```console
 $ nish run digest.ts
 ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0
+```
+
+A password-derived key is a `Secret` on both sides of `pbkdf2HmacSha256`, and
+the program wipes both:
+
+```ts nish:ok
+import { pbkdf2HmacSha256 } from "nish/crypto/hmac";
+import { Secret, secret, wipe } from "nish:secret";
+
+export const main = (): i32 => {
+  const passwordBytes: u8[] = [112, 97, 115, 115, 119, 100]; // "passwd"
+  const password: Secret<u8[]> = secret(passwordBytes);
+  const salt: u8[] = [115, 97, 108, 116]; // "salt"
+  const key: Secret<u8[]> | null = pbkdf2HmacSha256(password, salt, 4096, 32);
+  wipe(password);
+  if (key === null) {
+    return 1;
+  }
+  console.log("derived 32 bytes");
+  wipe(key);
+  return 0;
+};
 ```
 
 A function that returns `u8[] | null` answers `null` for an input it refuses —
