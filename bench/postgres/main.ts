@@ -63,6 +63,11 @@ declare function calloc(count: u64, size: u64): CPtr | null
 declare function free(p: CPtr): void
 declare function getrusage(who: i32, usage: CPtr): i32
 declare function bcopy(src: CPtr, dst: u8[], n: u64): void
+declare function setsockopt(fd: i32, level: i32, name: i32, value: u8[], length: u64): i32
+
+/** IPPROTO_TCP and TCP_NODELAY, as Linux numbers them. */
+const IPPROTO_TCP: i32 = 6
+const TCP_NODELAY: i32 = 1
 
 const PK_SQL: string = "SELECT id, username, email, bio, image FROM users WHERE id = $1"
 const LIST_SQL: string =
@@ -373,6 +378,13 @@ class Bench {
         crypto.getRandomValues(nonce)
         pool.connect(0, nonce)
         this.fd = tcpConnect(this.address)
+        // libpq turns Nagle off on every TCP connection, and tcpConnect leaves it on;
+        // the twin's socket and this one must match, or the kernel's work differs.
+        const one: u8[] = [toU8(1), toU8(0), toU8(0), toU8(0)]
+        if (this.fd >= 0 && setsockopt(this.fd, IPPROTO_TCP, TCP_NODELAY, one, toU64(4)) < 0) {
+          console.log("setsockopt TCP_NODELAY failed")
+          return false
+        }
         this.connected = false
         this.mask = WANT_WRITE
         if (this.fd < 0 || pollAdd(this.loop, this.fd, WANT_WRITE, 0) < 0) {

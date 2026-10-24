@@ -43,6 +43,9 @@ PASS  ParameterDescription short of its count
 PASS  a column longer than its row
 PASS  a row with bytes after its columns
 PASS  a column length of -2
+PASS  a column length with its top bit set
+PASS  a column length whose high byte is set
+PASS  a message length with its top bit set
 PASS  a RowDescription field cut short
 PASS  a row over maxColumns
 PASS  MD5 is refused
@@ -144,6 +147,9 @@ PASS  bool
 PASS  columnText
 PASS  colLength
 PASS  colStart points into the input buffer
+PASS  a column of 258 bytes, its length in two bytes
+PASS  its length
+PASS  the next column follows it
 PASS  a row with a NULL
 PASS  isNull
 PASS  columnText of NULL
@@ -245,6 +251,13 @@ PASS  a year past 9999
 PASS  seven fraction digits
 PASS  a dot without digits
 PASS  a T where the space goes
+PASS  year 0001
+PASS  year 1000
+PASS  a letter in a digit's place
+PASS  a colon in a digit's place
+PASS  a digit in a separator's place
+PASS  a separator moved one place
+PASS  the space and a dash swapped
 PASS  no room in out
 PASS  an empty array
 PASS  plain, NULL, quoted, escaped
@@ -260,4 +273,4 @@ PASS  text after a quote
 PASS  a space unquoted
 PASS  a window too short
 PASS  stays bad
-postgres: 262 passed, 0 failed, 0 skipped
+postgres: 275 passed, 0 failed, 0 skipped

@@ -524,25 +524,30 @@ export class PgText {
       this.failed = true
       return -1
     }
-    // The fixed part: YYYY-MM-DD HH:MM:SS, its separators where they belong.
-    for (let i: i32 = 0; i < 19; i++) {
-      const c: i32 = toI32(b[start + i])
-      let ok: boolean = c >= 48 && c <= 57
-      if (i === 4 || i === 7) {
-        ok = c === 45
-      } else if (i === 10) {
-        ok = c === 32
-      } else if (i === 13 || i === 16) {
-        ok = c === 58
-      }
-      if (!ok) {
-        this.failed = true
-        return -1
-      }
-    }
+    // The fixed part: YYYY-MM-DD HH:MM:SS. Its five separators are where they
+    // belong and are not digits, so the other fourteen bytes are digits
+    // exactly when the part holds five non-digits.
     let p: i32 = start + 19
     const end: i32 = start + length
     if (p < 0 || end > toI32(b.length)) {
+      this.failed = true
+      return -1
+    }
+    let others: i32 = 0
+    for (let i: i32 = start; i < p && i < toI32(b.length); i++) {
+      const c: i32 = toI32(b[i])
+      if (c < 48 || c > 57) {
+        others++
+      }
+    }
+    if (
+      others !== 5 ||
+      toI32(b[start + 4]) !== 45 ||
+      toI32(b[start + 7]) !== 45 ||
+      toI32(b[start + 10]) !== 32 ||
+      toI32(b[start + 13]) !== 58 ||
+      toI32(b[start + 16]) !== 58
+    ) {
       this.failed = true
       return -1
     }
@@ -569,13 +574,13 @@ export class PgText {
     if (p + 3 === end && toI32(b[p]) === 43 && toI32(b[p + 1]) === 48 && toI32(b[p + 2]) === 48) {
       p = end
     }
-    if (p !== end || pgBytesAre(b, start, 4, "0000")) {
+    // The year's four bytes are digits, so their OR is '0' exactly when the year is 0000.
+    const year: i32 = toI32(b[start]) | toI32(b[start + 1]) | toI32(b[start + 2]) | toI32(b[start + 3])
+    if (p !== end || year === 48) {
       this.failed = true
       return -1
     }
-    for (let i: i32 = 0; i < 19; i++) {
-      out[at + i] = b[start + i]
-    }
+    copyBytes(out, at, b, start, 19)
     out[at + 10] = toU8(84)
     out[at + 19] = toU8(46)
     out[at + 20] = toU8(millis / 100 + 48)
@@ -928,8 +933,15 @@ export class PgConnection {
         return PG_NEED_MORE
       }
       const at: i32 = this.inStart
-      const type: i32 = toI32(this.input[at])
-      const length: i32 = getI32BE(this.input, at + 1)
+      const b: u8[] = this.input
+      // inStart and inEnd stay within the buffer, so this test never fails; it proves the indices.
+      if (at < 0 || at + 4 >= toI32(b.length)) {
+        return this.fail(PG_ERR_FRAME)
+      }
+      const type: i32 = toI32(b[at])
+      // getI32BE written out, as in readRow: this runs once per message.
+      const length: i32 =
+        (toI32(b[at + 1]) << 24) | (toI32(b[at + 2]) << 16) | (toI32(b[at + 3]) << 8) | toI32(b[at + 4])
       if (length < 4) {
         return this.fail(PG_ERR_FRAME)
       }
@@ -1152,18 +1164,24 @@ export class PgConnection {
       return this.fail(PG_ERR_TOO_BIG)
     }
     this.reserveColumns(n)
+    const starts: i32[] = this.colStarts
+    const lengths: i32[] = this.colLengths
     let p: i32 = body + 2
-    for (let c: i32 = 0; c < n; c++) {
-      if (end - p < 4) {
+    // reserveColumns made both arrays hold n; the length tests prove the indices.
+    for (let c: i32 = 0; c < n && c < toI32(starts.length) && c < toI32(lengths.length); c++) {
+      // The buffer tests never fail on a frame next() cut from it; they prove the indices.
+      if (end - p < 4 || p < 0 || p + 3 >= toI32(b.length)) {
         return this.fail(PG_ERR_FRAME)
       }
-      const length: i32 = getI32BE(b, p)
+      // getI32BE written out: a call per column was a fifth of the row's cost.
+      const length: i32 =
+        (toI32(b[p]) << 24) | (toI32(b[p + 1]) << 16) | (toI32(b[p + 2]) << 8) | toI32(b[p + 3])
       p += 4
       if (length < -1 || length > end - p) {
         return this.fail(PG_ERR_FRAME)
       }
-      this.colStarts[c] = p
-      this.colLengths[c] = length
+      starts[c] = p
+      lengths[c] = length
       if (length > 0) {
         p += length
       }
