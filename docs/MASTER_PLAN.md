@@ -298,7 +298,9 @@ two packages that edit the checker do not run in parallel.
 1. Work on a branch off `main` and open a pull request into it.
    [AGENTS.md](../AGENTS.md#shipping-a-change-what-a-pull-request-must-be-and-who-merges-it)
    says what a pull request must be and who merges it.
-2. `npm run check` and an undegraded `npm test` must be green, and every new
+2. The [definition of done](../CLAUDE.md#definition-of-done) holds:
+   `npm run check`, `npm run lint` and the touched `node tests/run.js`
+   sections locally, and every CI `test` shard green and undegraded. Every new
    construct needs: a golden `.ll`, an `llvm-as` pass, a native round trip
    with expected stdout, and at least one negative test. Run
    `opt -passes=verify` on every emitted module.
@@ -337,15 +339,17 @@ compiler. The compiler is src/, written in Nish and built by the last
 released nish (the seed): `npm run build` leaves build/nish. Read
 .claude/orientation.md, .claude/selfhost.md, docs/MASTER_PLAN.md (§2 design
 rules, §7 conventions), docs/ARCHITECTURE.md and the package's note
-docs/wp<N>-*.md first. Run `npm test` before changing anything.
+docs/wp<N>-*.md first.
 
 Scope: <the note's stage being built>.
 Out of scope: <neighbouring packages>.
 
 Definition of done:
 - <acceptance criteria from the note>
-- `npm run check` and an undegraded `npm test` green, new goldens under
-  tests/cases/, docs updated.
+- `npm run check`, `npm run lint` and the touched `node tests/run.js`
+  sections green locally, every CI `test` shard green and undegraded
+  (CLAUDE.md, "Definition of done"), new goldens under tests/cases/, docs
+  updated.
 - src/ does not use the new construct in its own source until the next
   release (the rolling freeze).
 - A pull request into `main` with the IR for each new construct shown in its
