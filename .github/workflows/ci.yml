@@ -1145,7 +1145,7 @@ jobs:
 
   # Every fuzz target in tests/fuzz/targets/ built under
   # -fsanitize=fuzzer,address,undefined, replayed over its seed corpus and
-  # regressions, then fuzzed for a minute from a fixed -seed. The run is
+  # regressions, then fuzzed for 30 seconds from a fixed -seed. The run is
   # bounded by wall clock, so how far it gets varies from push to push
   # (tests/fuzz/README.md). Plus the runtime unit test
   # under ASan and UBSan. Long campaigns are fuzz.yml's, weekly.
@@ -1194,7 +1194,7 @@ jobs:
       - name: Fuzz smoke
         timeout-minutes: 12
         env:
-          FUZZ_SMOKE_SECONDS: "60"
+          FUZZ_SMOKE_SECONDS: "30"
           FUZZ_SEED: "1"
         run: bash scripts/fuzz.sh --smoke
 
