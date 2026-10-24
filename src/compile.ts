@@ -61,7 +61,8 @@
 import { astText } from "./ast-text"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
-import { agentDriven, helpHint, helpText, styleFor } from "./cli-style"
+import { agentDriven, styleFor } from "../std/cli"
+import { helpHint, helpText } from "./cli-style"
 import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
 import { Compilation, EmittedModule, isDeprecationWarning } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
@@ -98,7 +99,7 @@ import {
 /**
  * The help, painted for the stream it goes to: `--help` answers on stdout and
  * a usage error on stderr, and either may be a terminal while the other is a
- * pipe. `src/cli-style.ts` holds the text and the colour policy. An agent's
+ * pipe. `src/cli-style.ts` holds the text and `std/cli.ts` the colour policy. An agent's
  * help also names the rules card shipped with the package, by the path it can
  * read, so the package is looked for only then, and through `findPackage`: the
  * owner checks a compile runs keep a card in a package this user may not trust
