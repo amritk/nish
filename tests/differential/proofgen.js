@@ -494,28 +494,22 @@ const selfTest = (seed, count) => {
     const file = path.join(dir, `p${i}.ts`)
     fs.writeFileSync(file, program.source)
     const out = path.join(dir, `p${i}`)
+    const link = run ? ["--link", `${out}.exe`] : []
     const compile = spawnSync(
       compiler.cmd,
-      [...compiler.prefix, file, "--no-warn-performance", "-o", `${out}/`],
+      [...compiler.prefix, file, "--no-warn-performance", "-o", `${out}/`, ...link],
       { encoding: "utf8" }
     )
     if (compile.status !== 0) {
-      failures.push(`#${i} [${program.shapes.join(" ")}]: the seed rejects it:\n${compile.stderr.trim()}`)
+      failures.push(
+        `#${i} [${program.shapes.join(" ")}]: the seed rejects or cannot link it:\n${compile.stderr.trim()}`
+      )
       continue
     }
     accesses += countAccesses(program.source)
     sites +=
       fs.readFileSync(path.join(out, `p${i}.ll`), "utf8").match(/call void @nish_panic_index\(/g)?.length ?? 0
     if (!run) {
-      continue
-    }
-    const link = spawnSync(
-      compiler.cmd,
-      [...compiler.prefix, file, "--no-warn-performance", "--link", `${out}.exe`],
-      { encoding: "utf8" }
-    )
-    if (link.status !== 0) {
-      failures.push(`#${i} [${program.shapes.join(" ")}]: the link fails:\n${link.stderr.trim()}`)
       continue
     }
     const result = spawnSync(`${out}.exe`, [], { encoding: "utf8", timeout: 20000 })
@@ -563,6 +557,8 @@ const selfTest = (seed, count) => {
 
 export { generate }
 
+const USAGE = "usage: proofgen.js --self-test [--seed S] [--count N] | --print [--seed S] [--index I]"
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2)
   const option = (name, fallback) => {
@@ -573,7 +569,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const count = option("--count", 200)
   const index = option("--index", 0)
   if (![seed, count, index].every(Number.isInteger) || count < 1) {
-    console.error("usage: proofgen.js --self-test [--seed S] [--count N] | --print [--seed S] [--index I]")
+    console.error(USAGE)
     process.exit(2)
   }
   if (args.includes("--self-test")) {
@@ -584,7 +580,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       `// shapes: ${program.shapes.join(" ")}; expectPanic: ${program.expectPanic}\n${program.source}`
     )
   } else {
-    console.error("usage: proofgen.js --self-test [--seed S] [--count N] | --print [--seed S] [--index I]")
+    console.error(USAGE)
     process.exit(2)
   }
 }

@@ -120,7 +120,7 @@ const runtimeObjects = (threads) => {
 }
 
 /**
- * Compile `file` with `compiler` (a `resolveSeed` result) and link it under
+ * Compile `file` with `compiler` (a `lib.compilerFor` result) and link it under
  * ASan into `exe`. `unchecked` builds with `--unchecked-indexing`, `threads`
  * with `--threads`. The compiler writes one `.ll` per module (a program that
  * imports `nish/threads` has two) and each is instrumented. Returns `{ exe }`,
