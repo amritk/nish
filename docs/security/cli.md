@@ -11,7 +11,7 @@ at `083339e`.
 | `src/run-cache.ts` | `runCacheRoot`, `runBinaryName` (new), `fnv1a64Hex`, `fileFingerprint`, `runCacheKey` |
 | `src/compile.ts` | `main` (the `run` split and `--link` probe), `makeDirectory`, `makeDirectoryFor`, `planOutputs`, `perModule`, `cCompiler`, `missingToolchain`, `programOnPath`, `packageRootCandidates`, `runProgram`, `buildIntoCache`, `linkProgram`, `writeSidecars`; and, since #546 (at `02d90e7`), `distrustOf`, `refuseCacheRoot`, `considerRoot`, `findPackage` and `PackageSearch`, which replaced the audit's `packageRoot` and `libraryRoot` |
 | `src/run-cache.ts`, `src/compile.ts`, `scripts/build.sh` (CLI-11, the runtime cache) | `runtimeCacheRoot`, `runtimeUnits`, `addRecipeFingerprints`, `addUnitFingerprints`, `runtimeCacheKey`; `cachedRuntime`, `pushRecipeFlags`, and `linkProgram`'s call into them; `build.sh`'s `--runtime-objects` and `--runtime-from` modes, `join_jobs` and `stop_jobs` |
-| `src/cli-style.ts` | `isTerminal`, `styleFor`, `agentDriven`: added after the audit, with the grouped `--help`, and read for process and environment access only (below) |
+| `std/cli.ts` | `paletteOf`, `styleFor`, `agentDriven`: added after the audit, with the grouped `--help` (in `src/cli-style.ts` until they moved to the standard library, which the compiler imports by a relative path), and read for process and environment access only (below) |
 | `src/compilation.ts` | `Compilation.resolveSpecifier` (where `nish/<module>` is read from); the rest of the file was read for file and process access and has none beyond `readFileSyncOrNull` on module paths |
 
 Read but not owned, so any finding in them is recorded as open rather than
@@ -20,11 +20,19 @@ fixed: `scripts/build.sh` (how the link's arguments reach `clang`),
 `runtime/runtime-os.c` (`nish_put_file`, `nish_mkdir`, `nish_spawn_impl`,
 `nish_realpath`: what each builtin actually does to the file system).
 
-Added after the audit, with the grouped `--help`: `isTerminal`
-(`src/cli-style.ts`) starts `/bin/sh -c '[ -t N ]'` by absolute path, with N
-the descriptor 1 or 2, on the paths that print the usage: the command is a
-constant and takes nothing from the arguments, and the shell inherits the
-environment as every spawn of `nish` does; and `usageText` (`src/compile.ts`) calls
+Added after the audit, with the grouped `--help`: `paletteOf`
+(`std/cli.ts`) starts `/bin/sh -c` by absolute path on the paths that print
+the usage, with a constant script that takes nothing from the arguments:
+`[ -t N ]`, N the descriptor 1 or 2, then `tput colors`, which reads how many
+colours `TERM`'s terminfo entry declares. `tput` is run as `/usr/bin/tput` or
+`/bin/tput`, never looked up on `PATH`, so a `PATH` holding `.` or an empty
+entry cannot run a `tput` a checkout planted; with neither there the probe
+answers without it ("--help: the colour probe never runs a `tput` found on
+PATH"). The shell and `tput` inherit the environment as every spawn of `nish`
+does, so `TERM`, `TERMINFO` and `TERMINFO_DIRS` choose the terminfo file
+`tput` parses: the victim's own settings, the misconfiguration case of the
+threat model, and the answer is only ever a colour count. `usageText`
+(`src/compile.ts`) calls
 `findPackage` for an agent's help only to print the absolute path of the
 package's `docs/AI.md`, which `nish` neither reads nor runs. The root it
 settles on is the one CLI-9 already covers.

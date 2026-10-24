@@ -276,7 +276,8 @@ terminal with no theme shows its built-in defaults). When `TERM`'s terminfo
 entry declares no colours at all (`tput colors` prints fewer than 8, as it
 does for `TERM=vt100`), the help marks headings and flags in bold and
 placeholders with an underline instead, which a monochrome terminal still
-shows.
+shows. Your own tools can print a help that behaves the same way with
+[`nish/cli`](standard-library.md#nishcli).
 
 **Coding agents get a plain help with an extra section.** When `nish` runs
 under an agent — `CLAUDECODE` or `GEMINI_CLI` is set to anything but empty

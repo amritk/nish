@@ -8136,6 +8136,18 @@ for (const name of ["std_term", "std_term_f64"]) {
   )
 }
 
+// `nish/cli`'s menu, under styles the program makes by hand, is a pure function
+// of its rows: the same bytes under runtime/nish.mjs as compiled.
+if (!only || "std_cli".includes(only) || "cli-under-node".includes(only)) {
+  const run = runFixtureUnderNode(path.join(linkDir, "std_cli", "main.ts"), "utf8")
+  const want = fs.readFileSync(path.join(linkDir, "std_cli", "expected.out"), "utf8")
+  check(
+    "link/std_cli: nish/cli prints the same menu under runtime/nish.mjs as natively",
+    run.status === 0 && run.stdout === want,
+    `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
 // A game calls `flush` on a screen made before its frame loop. Were the call to
 // store into the screen (growing its byte buffer, say), the loop could not take
 // a pass's string back, and a 200×60 frame would keep its ~100 KB to the end of
@@ -17696,7 +17708,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     v.stdout + v.stderr
   )
 
-  // The help is painted only for a person at a terminal (src/cli-style.ts).
+  // The help is painted only for a person at a terminal (std/cli.ts's `styleFor`).
   // Every help run sets the variables the policy reads first -- `NO_COLOR`,
   // the forcing ones and `NISH_AGENT` -- so the runner's own environment, an
   // agent's or a CI's, cannot decide the answer; a run that unsets `NO_COLOR`
@@ -17825,6 +17837,23 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
       JSON.stringify(mono.stdout.slice(0, 200))
     )
   }
+  // The colour probe runs `tput` by absolute path: one first on `PATH`, as a
+  // checkout's own is under a `PATH` holding `.`, is never run.
+  const planted = fs.mkdtempSync(path.join(os.tmpdir(), "nish-tput-"))
+  const marker = path.join(planted, "ran")
+  fs.writeFileSync(path.join(planted, "tput"), `#!/bin/sh\n: > '${marker}'\necho 256\n`, { mode: 0o755 })
+  const plantedRun = run(["--help"], {
+    ...plainEnv,
+    CLICOLOR_FORCE: "1",
+    TERM: "xterm",
+    PATH: `${planted}${path.delimiter}${process.env.PATH ?? ""}`,
+  })
+  check(
+    "--help: the colour probe never runs a `tput` found on PATH",
+    plantedRun.status === 0 && plantedRun.stdout.includes(ESC) && !fs.existsSync(marker),
+    fs.existsSync(marker) ? `ran ${path.join(planted, "tput")}` : JSON.stringify(plantedRun.stdout.slice(0, 200))
+  )
+  fs.rmSync(planted, { recursive: true, force: true })
   const noColor = run(["--help"], { ...plainEnv, NO_COLOR: "1", FORCE_COLOR: "1" })
   check(
     "--help: NO_COLOR wins over FORCE_COLOR",
