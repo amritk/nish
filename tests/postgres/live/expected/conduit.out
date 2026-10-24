@@ -1,0 +1,11 @@
+request 0: {"slug":"bare-3","title":"Untagged","description":"No tags at all","tagList":[],"createdAt":"1999-06-07T08:09:10.500Z","updatedAt":"1999-06-07T08:09:10.500Z","favorited":false,"favoritesCount":0,"author":{"username":"brendan","bio":null,"image":null,"following":false}}
+request 0: {"slug":"quotes-2","title":"Say \"hi\" \\ back","description":"A tab:\u0009here","tagList":["a,b","back\\slash","say \"hi\""],"createdAt":"2025-12-31T23:59:59.000Z","updatedAt":"2026-01-01T00:00:00.000Z","favorited":false,"favoritesCount":2,"author":{"username":"grace","bio":"Line one.\u000aLine two.","image":null,"following":false}}
+request 0: {"slug":"notes-1","title":"Notes","description":"On the engine","tagList":["a,b","engines"],"createdAt":"2024-01-02T03:04:05.123Z","updatedAt":"2024-01-02T03:04:05.999Z","favorited":false,"favoritesCount":1,"author":{"username":"ada","bio":"Writes the engines' notes.","image":"https://example.com/ada.png","following":false}}
+request 0 done
+request 1: {"slug":"bare-3","title":"Untagged","description":"No tags at all","tagList":[],"createdAt":"1999-06-07T08:09:10.500Z","updatedAt":"1999-06-07T08:09:10.500Z","favorited":false,"favoritesCount":0,"author":{"username":"brendan","bio":null,"image":null,"following":false}}
+request 1: {"slug":"quotes-2","title":"Say \"hi\" \\ back","description":"A tab:\u0009here","tagList":["a,b","back\\slash","say \"hi\""],"createdAt":"2025-12-31T23:59:59.000Z","updatedAt":"2026-01-01T00:00:00.000Z","favorited":true,"favoritesCount":2,"author":{"username":"grace","bio":"Line one.\u000aLine two.","image":null,"following":true}}
+request 1 done
+request 2: {"slug":"notes-1","title":"Notes","description":"On the engine","tagList":["a,b","engines"],"createdAt":"2024-01-02T03:04:05.123Z","updatedAt":"2024-01-02T03:04:05.999Z","favorited":false,"favoritesCount":1,"author":{"username":"ada","bio":"Writes the engines' notes.","image":"https://example.com/ada.png","following":true}}
+request 2 done
+1 connection, the statement prepared once
+exit 0

@@ -1251,6 +1251,70 @@ jobs:
           path: build/fuzz/artifacts/
           if-no-files-found: ignore
 
+  # nish/net/postgres's pool and carrier against a real PostgreSQL 18:
+  # tests/postgres/live/run.mjs prints a line a check and a summary that names
+  # its skips, which must be none. The service's role and password are a
+  # throwaway the job alone reaches; they match the names the expected
+  # outputs print, the same as the cluster run.mjs starts locally.
+  postgres-live:
+    name: postgres-live
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+        env:
+          POSTGRES_USER: nish_live
+          POSTGRES_PASSWORD: nish-live
+          POSTGRES_DB: nish_live
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nish_live"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        timeout-minutes: 5
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        run: bash scripts/fetch-seed.sh
+
+      - name: Build the compiler
+        timeout-minutes: 10
+        run: npm run build
+
+      - name: The live PostgreSQL suite
+        timeout-minutes: 5
+        env:
+          PG_TEST_URL: postgres://nish_live:nish-live@127.0.0.1:5432/nish_live
+        run: |
+          set -o pipefail
+          node tests/postgres/live/run.mjs | tee "$RUNNER_TEMP/postgres-live.log"
+          grep -E '^[1-9][0-9]* passed, 0 failed, 0 skipped$' "$RUNNER_TEMP/postgres-live.log"
+
   lint:
     name: lint
     runs-on: ubuntu-latest
