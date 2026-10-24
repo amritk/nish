@@ -2219,35 +2219,36 @@ export class Compilation {
         }
         const previousSig = ownerSigs[at]
         const previousModule = ownerModules[at]
-        let message = ""
         if (previousSig !== null && (sig.foreign() || previousSig.foreign())) {
           if (sig.foreign() && previousSig.foreign()) {
-            if (sameSignature(sig, previousSig)) {
-              continue // one C function declared twice: one symbol, and the same facts under it
+            if (!sameSignature(sig, previousSig)) {
+              this.reportForeignMismatch(unit, sig, previousSig, previousModule)
             }
-            message = `C function \`${sig.name}\` is declared as ${signatureText(this.table, sig)} in ${unit.name} and as ${signatureText(this.table, previousSig)} in ${previousModule.name}; C has one namespace, so every \`declare function\` of one name must agree on its parameter and return types`
-          } else {
-            // At the definition, which is the one to rename: the declaration
-            // may be in a package the reader did not write.
-            const defined = sig.foreign() ? previousSig : sig
-            const definer = sig.foreign() ? previousModule : unit
-            const declarer = sig.foreign() ? unit : previousModule
-            const at3 = nameNode(defined)
-            this.sink.report(
-              definer.source,
-              at3.start,
-              at3.end,
-              `Function \`${sig.name}\` is defined in ${definer.name} and declared as a C function in ${declarer.name}; a \`declare function\` binds the C symbol of its name in every package, so rename the defined function`
-            )
-            if (sig.foreign()) {
-              // A later declaration is measured against this one, so a third
-              // that agrees with it is not a second report at the definition.
-              ownerSigs[at] = sig
-              ownerModules[at] = unit
-            }
-            continue
+            continue // agreeing: one C function declared twice, one symbol and the same facts under it
           }
-        } else if (previousSig === null) {
+          // At the definition, which is the one to rename: the declaration
+          // may be in a package the reader did not write.
+          const defined = sig.foreign() ? previousSig : sig
+          const definer = sig.foreign() ? previousModule : unit
+          const declarer = sig.foreign() ? unit : previousModule
+          const at3 = nameNode(defined)
+          this.sink.report(
+            definer.source,
+            at3.start,
+            at3.end,
+            `Function \`${sig.name}\` is defined in ${definer.name} and declared as a C function in ${declarer.name}; a \`declare function\` binds the C symbol of its name in every package, so rename the defined function`
+          )
+          if (sig.foreign()) {
+            // A later declaration is measured against this one, so a third
+            // that agrees with it is not a second report at the definition.
+            owners.set(sig.name, ownerSigs.length)
+            ownerSigs.push(sig)
+            ownerModules.push(unit)
+          }
+          continue
+        }
+        let message = ""
+        if (previousSig === null) {
           message = `Function \`main\` in ${unit.name} collides with the entry wrapper \`@main\` that ${previousModule.name} needs; rename it`
         } else {
           message = clashMessage(
@@ -2264,6 +2265,26 @@ export class Compilation {
         this.sink.report(unit.source, at2.start, at2.end, message)
       }
     }
+  }
+
+  /**
+   * NL3039: two `declare function`s of one C name whose types differ. Its own
+   * method so the two rendered signatures are released when it returns rather
+   * than kept for the rest of `rejectSymbolClashes`'s loop.
+   */
+  reportForeignMismatch(
+    unit: ModuleUnit,
+    sig: FunctionSig,
+    previousSig: FunctionSig,
+    previousModule: ModuleUnit
+  ): void {
+    const at = nameNode(sig)
+    this.sink.report(
+      unit.source,
+      at.start,
+      at.end,
+      `C function \`${sig.name}\` is declared as ${signatureText(this.table, sig)} in ${unit.name} and as ${signatureText(this.table, previousSig)} in ${previousModule.name}; C has one namespace, so every \`declare function\` of one name must agree on its parameter and return types`
+    )
   }
 
   /**

@@ -222,6 +222,7 @@ struct Compilation (class) size=128 align=8 exported
   method declaredStructs -> @Compilation.declaredStructs
   method reportTemplateClash -> @Compilation.reportTemplateClash
   method rejectSymbolClashes -> @Compilation.rejectSymbolClashes
+  method reportForeignMismatch -> @Compilation.reportForeignMismatch
   method rejectCLibrarySymbols -> @Compilation.rejectCLibrarySymbols
   method analyze -> @Compilation.analyze
   method panicsText -> @Compilation.panicsText
@@ -1079,8 +1080,8 @@ function Compilation.reportTemplateClash(this: Compilation, unit: ModuleUnit, te
 function Compilation.rejectSymbolClashes(this: Compilation, clashed: StringSet): void -> @Compilation.rejectSymbolClashes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringMap.set
-  calls: Compilation.entry DiagnosticSink.report FunctionSig.definedIn FunctionSig.foreign StringMap.constructor StringMap.get StringMap.set StringSet.has clashMessage nameNode nish_array_grow nish_panic_index nish_str_concat sameSignature signatureText
-  pointer this: size=128 writesThrough=false captured=false passedTo=Compilation.entry#0
+  calls: Compilation.entry Compilation.reportForeignMismatch DiagnosticSink.report FunctionSig.definedIn FunctionSig.foreign StringMap.constructor StringMap.get StringMap.set StringSet.has clashMessage nameNode nish_array_grow nish_panic_index nish_str_concat sameSignature
+  pointer this: size=128 writesThrough=false captured=false passedTo=Compilation.entry#0 Compilation.reportForeignMismatch#0
   pointer clashed: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   stackSites=3 stackLocals=3
   local +0:11 owners: StringMap (const)
@@ -1106,28 +1107,43 @@ function Compilation.rejectSymbolClashes(this: Compilation, clashed: StringSet):
   callee +56:11 StringMap.set -> @StringMap.set
   local +61:15 previousSig: FunctionSig | null (const)
   local +62:15 previousModule: ModuleUnit (const)
-  local +63:13 message: string (let)
-  callee +64:38 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +64:55 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +65:15 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +65:32 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +66:17 sameSignature -> @sameSignature
-  callee +69:68 signatureText -> @signatureText
-  callee +69:125 signatureText -> @signatureText
-  local +73:19 defined: FunctionSig (const)
-  callee +73:29 FunctionSig.foreign -> @FunctionSig.foreign
-  local +74:19 definer: ModuleUnit (const)
-  callee +74:29 FunctionSig.foreign -> @FunctionSig.foreign
-  local +75:19 declarer: ModuleUnit (const)
-  callee +75:30 FunctionSig.foreign -> @FunctionSig.foreign
-  local +76:19 at3: Node (const)
-  callee +76:25 nameNode -> @nameNode
-  callee +77:13 DiagnosticSink.report -> @DiagnosticSink.report
-  callee +83:17 FunctionSig.foreign -> @FunctionSig.foreign
-  callee +94:21 clashMessage -> @clashMessage
-  local +104:15 at2: Node (const)
-  callee +104:21 nameNode -> @nameNode
-  callee +105:9 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +63:38 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +63:55 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +64:15 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +64:32 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +65:18 sameSignature -> @sameSignature
+  callee +66:15 Compilation.reportForeignMismatch -> @Compilation.reportForeignMismatch
+  local +72:17 defined: FunctionSig (const)
+  callee +72:27 FunctionSig.foreign -> @FunctionSig.foreign
+  local +73:17 definer: ModuleUnit (const)
+  callee +73:27 FunctionSig.foreign -> @FunctionSig.foreign
+  local +74:17 declarer: ModuleUnit (const)
+  callee +74:28 FunctionSig.foreign -> @FunctionSig.foreign
+  local +75:17 at3: Node (const)
+  callee +75:23 nameNode -> @nameNode
+  callee +76:11 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +82:15 FunctionSig.foreign -> @FunctionSig.foreign
+  callee +85:13 StringMap.set -> @StringMap.set
+  local +91:13 message: string (let)
+  callee +95:21 clashMessage -> @clashMessage
+  local +105:15 at2: Node (const)
+  callee +105:21 nameNode -> @nameNode
+  callee +106:9 DiagnosticSink.report -> @DiagnosticSink.report
+function Compilation.reportForeignMismatch(this: Compilation, unit: ModuleUnit, sig: FunctionSig, previousSig: FunctionSig, previousModule: ModuleUnit): void -> @Compilation.reportForeignMismatch [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via DiagnosticSink.report
+  calls: DiagnosticSink.report nameNode nish_str_concat signatureText
+  pointer this: size=128 writesThrough=false captured=false
+  pointer unit: size=88 writesThrough=false captured=false
+  pointer sig: size=136 writesThrough=false captured=false passedTo=nameNode#0 signatureText#1
+  pointer previousSig: size=136 writesThrough=false captured=false passedTo=signatureText#1
+  pointer previousModule: size=88 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 at: Node (const)
+  callee +0:16 nameNode -> @nameNode
+  callee +1:5 DiagnosticSink.report -> @DiagnosticSink.report
+  callee +5:52 signatureText -> @signatureText
+  callee +5:109 signatureText -> @signatureText
 function Compilation.rejectCLibrarySymbols(this: Compilation): void -> @Compilation.rejectCLibrarySymbols [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
