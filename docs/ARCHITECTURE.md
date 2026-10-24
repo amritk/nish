@@ -692,10 +692,12 @@ as one unit, so `nish_str_len` inlines into a load and unreferenced runtime
 functions vanish. Under lld the `speed` link splits LTO code generation
 into one partition per core (`nproc`, else `getconf _NPROCESSORS_ONLN`,
 else `sysctl -n hw.ncpu`) and runs them in parallel; the program is still
-optimised as one module, so the instructions it runs are unchanged, and the
-link of `tests/link/net_relay_f64` takes about 0.7x the time. The bytes
-depend on the partition count, so they are the same for every link on one
-machine. ld64 has no such flag. `CC` overrides the compiler; `NODE_INCLUDE` overrides the
+optimised as one module, so the instructions it runs stay within a few of
+`bench/instructions.json`, and on a 4-core machine the link of
+`tests/link/net_relay_f64` takes about 0.7x the time. The bytes depend on
+the partition count, so they are the same for every link on one machine.
+ld64 and the GNU ld fallback have no such flag and link in one partition.
+`CC` overrides the compiler; `NODE_INCLUDE` overrides the
 Node header directory for `napi`.
 
 Profile-guided optimisation (WP9): `--pgo-generate` adds
