@@ -129,8 +129,24 @@ export class TermEnv {
 
 /** What a terminal can do, from its answers to `probeQueries` and the environment. */
 export class TermCaps {
+  /** The multiplexer in between: "none", "tmux" (`TMUX` set) or "screen" (`STY` set). */
+  multiplexer: string
+  /** The time from the send to the answer to DA1, in milliseconds; -1 unanswered. */
+  probeRttMs: f64
+  /** The graphics backend to draw with, best first — "kitty", "sixel" (256 registers or more), "halfblock", "ascii" — after `NISH_TERM_GRAPHICS`. */
+  graphics: string
+  /** The terminal's name and version from XTVERSION, else `TERM_PROGRAM`, else "". */
+  name: string
+  /** What the environment forced, one `VARIABLE: effect` per entry joined by `; `; "" when nothing. */
+  overrides: string
   /** How many colours to draw with: 16, 256 or 16777216. */
   colors: i32
+  /** How many sixel colour registers there are, from XTSMGRAPHICS; 0 unanswered. */
+  sixelRegisters: i32
+  /** A cell's width in pixels: `CSI 16 t`, else the text area's from `CSI 14 t` over the columns; 0 unknown. */
+  cellWidthPx: i32
+  /** A cell's height in pixels: `CSI 16 t`, else the text area's from `CSI 14 t` over the rows; 0 unknown. */
+  cellHeightPx: i32
   /** Whether 24-bit colour works: `COLORTERM`, or the background DECRQSS read back. */
   trueColor: boolean
   /** Whether synchronized output (mode 2026) is known: DECRPM answered set or reset. */
@@ -141,30 +157,14 @@ export class TermCaps {
   kittyGraphics: boolean
   /** Whether sixel is there: DA1 lists 4. */
   sixel: boolean
-  /** How many sixel colour registers there are, from XTSMGRAPHICS; 0 unanswered. */
-  sixelRegisters: i32
-  /** A cell's width in pixels: `CSI 16 t`, else the text area's from `CSI 14 t` over the columns; 0 unknown. */
-  cellWidthPx: i32
-  /** A cell's height in pixels: `CSI 16 t`, else the text area's from `CSI 14 t` over the rows; 0 unknown. */
-  cellHeightPx: i32
   /** Whether SGR mouse reports in pixels (mode 1016) are known: DECRPM answered set or reset. */
   pixelMouse: boolean
-  /** The multiplexer in between: "none", "tmux" (`TMUX` set) or "screen" (`STY` set). */
-  multiplexer: string
   /** Whether this is the Linux console (`TERM=linux`). */
   linuxConsole: boolean
   /** Whether the session looks remote (`SSH_CONNECTION`, `SSH_CLIENT` or `SSH_TTY` set), so slow. */
   remoteHint: boolean
   /** Whether the terminal answered DA1; false when the probe timed out. */
   answered: boolean
-  /** The time from the send to the answer to DA1, in milliseconds; -1 unanswered. */
-  probeRttMs: f64
-  /** The graphics backend to draw with, best first — "kitty", "sixel" (256 registers or more), "halfblock", "ascii" — after `NISH_TERM_GRAPHICS`. */
-  graphics: string
-  /** The terminal's name and version from XTVERSION, else `TERM_PROGRAM`, else "". */
-  name: string
-  /** What the environment forced, one `VARIABLE: effect` per entry joined by `; `; "" when nothing. */
-  overrides: string
 
   /** Caps of a terminal that answered nothing: 16 colours, ASCII. */
   constructor() {
