@@ -12,6 +12,7 @@ import Walk from "./emit-ts-edits" -> struct Walk
 import StringSet from "./map" -> struct StringSet
 import Lexer from "./lexer" -> struct Lexer
 import isBuiltinSpecifier from "./nish-modules" -> function @isBuiltinSpecifier
+import SECRET_SPECIFIER from "./nish-modules" -> const SECRET_SPECIFIER
 import N_IMPORT from "./nodes" -> const N_IMPORT
 import ROOT_PACKAGE from "./packages" -> const ROOT_PACKAGE
 import dirname from "./paths" -> function @dirname

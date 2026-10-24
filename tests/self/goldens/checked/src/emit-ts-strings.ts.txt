@@ -4,10 +4,17 @@ entry: src/emit-ts-strings.ts src/emit-ts-edits.ts src/bounds.ts src/annotations
 import Operands from "./emit-ts-edits" -> struct Operands
 import Walk from "./emit-ts-edits" -> struct Walk
 import isOptionalChain from "./emit-util" -> function @isOptionalChain
+import N_BINARY from "./nodes" -> const N_BINARY
 import N_CALL from "./nodes" -> const N_CALL
+import N_EMPTY from "./nodes" -> const N_EMPTY
 import N_IDENT from "./nodes" -> const N_IDENT
 import N_MEMBER from "./nodes" -> const N_MEMBER
+import N_STRING from "./nodes" -> const N_STRING
+import N_TEMPLATE_TEXT from "./nodes" -> const N_TEMPLATE_TEXT
+import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
+import hexOfI64 from "./strings" -> function @hexOfI64
+import StringBuilder from "./strings" -> struct StringBuilder
 import T_STRING from "./types" -> const T_STRING
 const OFFSET_METHODS: string = " charCodeAt indexOf slice substring "
 function stringStaticHelper(member: string): string -> @stringStaticHelper
@@ -17,7 +24,7 @@ function stringStaticHelper(member: string): string -> @stringStaticHelper
 function typedString(walk: Walk, node: Node): boolean -> @typedString
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer walk: size=160 writesThrough=false captured=false
+  pointer walk: size=168 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function stringHelperCall(walk: Walk, helper: string, args: string): string -> @stringHelperCall
@@ -25,14 +32,14 @@ function stringHelperCall(walk: Walk, helper: string, args: string): string -> @
   sharedWrite: via Walk.helperName
   escaping: helper
   calls: Walk.helperName nish_str_concat
-  pointer walk: size=160 writesThrough=false captured=false passedTo=Walk.helperName#0
+  pointer walk: size=168 writesThrough=false captured=false passedTo=Walk.helperName#0
   stackSites=0 stackLocals=0
   callee +0:6 Walk.helperName -> @Walk.helperName
 function methodReceiverText(walk: Walk, member: Node, memberText: string): string | null -> @methodReceiverText
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.fail
   calls: Walk.fail Walk.spanOf nish_str_at nish_str_concat nish_str_new
-  pointer walk: size=160 writesThrough=true captured=false passedTo=Walk.fail#0 Walk.spanOf#0
+  pointer walk: size=168 writesThrough=true captured=false passedTo=Walk.fail#0 Walk.spanOf#0
   pointer member: size=40 writesThrough=false captured=false passedTo=Walk.spanOf#1
   stackSites=0 stackLocals=0
   local +0:9 suffix: string (const)
@@ -42,7 +49,7 @@ function stringLengthRewrite(walk: Walk, node: Node, operands: Operands): string
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stringHelperCall
   calls: Operands.at isOptionalChain nish_panic_index nish_str_eq stringHelperCall typedString
-  pointer walk: size=160 writesThrough=false captured=false passedTo=typedString#0 stringHelperCall#0
+  pointer walk: size=168 writesThrough=false captured=false passedTo=typedString#0 stringHelperCall#0
   pointer node: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
@@ -54,7 +61,7 @@ function stringCallRewrite(walk: Walk, node: Node, operands: Operands): string |
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stringHelperCall
   calls: Operands.at isOptionalChain methodReceiverText nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from stringHelperCall stringStaticHelper typedString
-  pointer walk: size=160 writesThrough=true captured=false passedTo=typedString#0 stringHelperCall#0 stringHelperCall#0 typedString#0 methodReceiverText#0 stringHelperCall#0
+  pointer walk: size=168 writesThrough=true captured=false passedTo=typedString#0 stringHelperCall#0 stringHelperCall#0 typedString#0 methodReceiverText#0 stringHelperCall#0
   pointer node: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 Operands.at#0 Operands.at#0
   stackSites=0 stackLocals=0
@@ -75,13 +82,67 @@ function stringCallRewrite(walk: Walk, node: Node, operands: Operands): string |
   callee +32:51 Operands.at -> @Operands.at
   callee +36:10 stringHelperCall -> @stringHelperCall
   callee +36:60 Operands.at -> @Operands.at
+function escapeDigit(c: i32): i32 -> @escapeDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function unbracedEscapes(text: string): string | null -> @unbracedEscapes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText escapeDigit hexOfI64 nish_panic_index nish_panic_overflow nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
+  stackSites=1 stackLocals=1
+  local +0:9 out: StringBuilder (const)
+  callee +0:15 new StringBuilder -> @StringBuilder.constructor
+  local +1:7 i: i32 (let)
+  local +3:11 c: i32 (const)
+  callee +5:7 StringBuilder.add -> @StringBuilder.add
+  local +10:9 end: i32 (let)
+  local +11:9 value: i64 (let)
+  local +12:9 digits: i32 (let)
+  callee +14:35 escapeDigit -> @escapeDigit
+  callee +15:36 escapeDigit -> @escapeDigit
+  callee +21:7 StringBuilder.add -> @StringBuilder.add
+  callee +26:7 StringBuilder.add -> @StringBuilder.add
+  callee +26:21 hexOfI64 -> @hexOfI64
+  callee +27:7 StringBuilder.add -> @StringBuilder.add
+  callee +27:21 hexOfI64 -> @hexOfI64
+  callee +29:7 StringBuilder.add -> @StringBuilder.add
+  callee +29:21 hexOfI64 -> @hexOfI64
+  callee +33:10 StringBuilder.toText -> @StringBuilder.toText
+function widenedBinding(walk: Walk, node: Node, operands: Operands): string | null -> @widenedBinding
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: Operands.at nish_panic_index nish_str_concat nish_str_eq nish_str_new
+  pointer walk: size=168 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0
+  stackSites=0 stackLocals=0
+  local +0:9 name: Node (const)
+  local +1:9 init: Node (const)
+  local +5:9 text: string (const)
+  local +6:7 before: i32 (let)
+  callee +13:13 Operands.at -> @Operands.at
+  callee +13:77 Operands.at -> @Operands.at
+function literalComparison(walk: Walk, node: Node, operands: Operands): string | null -> @literalComparison
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: Operands.at nish_panic_index nish_str_concat nish_str_eq nish_str_new
+  pointer walk: size=168 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false
+  pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0
+  stackSites=0 stackLocals=0
+  local +0:9 left: Node (const)
+  local +1:9 right: Node (const)
+  local +5:9 text: string (const)
+  callee +6:14 Operands.at -> @Operands.at
+  callee +6:82 Operands.at -> @Operands.at
 function stringsRow(walk: Walk, node: Node, operands: Operands): string | null -> @stringsRow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stringLengthRewrite
-  calls: stringCallRewrite stringLengthRewrite
-  pointer walk: size=160 writesThrough=true captured=false passedTo=stringLengthRewrite#0 stringCallRewrite#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=stringLengthRewrite#1 stringCallRewrite#1
-  pointer operands: size=40 writesThrough=false captured=false passedTo=stringLengthRewrite#2 stringCallRewrite#2
+  calls: Walk.spanOf literalComparison stringCallRewrite stringLengthRewrite unbracedEscapes widenedBinding
+  pointer walk: size=168 writesThrough=true captured=false passedTo=Walk.spanOf#0 stringLengthRewrite#0 widenedBinding#0 literalComparison#0 stringCallRewrite#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=Walk.spanOf#1 stringLengthRewrite#1 widenedBinding#1 literalComparison#1 stringCallRewrite#1
+  pointer operands: size=40 writesThrough=false captured=false passedTo=stringLengthRewrite#2 widenedBinding#2 literalComparison#2 stringCallRewrite#2
   stackSites=0 stackLocals=0
-  callee +0:12 stringLengthRewrite -> @stringLengthRewrite
-  callee +3:12 stringCallRewrite -> @stringCallRewrite
+  callee +0:12 unbracedEscapes -> @unbracedEscapes
+  callee +0:28 Walk.spanOf -> @Walk.spanOf
+  callee +3:12 stringLengthRewrite -> @stringLengthRewrite
+  callee +6:12 widenedBinding -> @widenedBinding
+  callee +9:12 literalComparison -> @literalComparison
+  callee +12:12 stringCallRewrite -> @stringCallRewrite
