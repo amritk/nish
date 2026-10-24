@@ -12,6 +12,7 @@ declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare double @llvm.copysign.f64(double, double) #0
 declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #0
+declare float @llvm.copysign.f32(float, float) #0
 
 define noundef double @signF64(double noundef %x) #0 {
 entry:
@@ -55,6 +56,28 @@ entry:
   ret i64 %1
 }
 
+define noundef float @signF32(float noundef %x) #0 {
+entry:
+  %0 = call float @llvm.copysign.f32(float 1.0, float %x)
+  %1 = fcmp ueq float %x, 0.0
+  %2 = select i1 %1, float %x, float %0
+  ret float %2
+}
+
+define noundef i8 @signU8(i8 noundef %x) #0 {
+entry:
+  %0 = icmp ne i8 %x, 0
+  %1 = zext i1 %0 to i8
+  ret i8 %1
+}
+
+define noundef i16 @signU16(i16 noundef %x) #0 {
+entry:
+  %0 = icmp ne i16 %x, 0
+  %1 = zext i1 %0 to i16
+  ret i16 %1
+}
+
 define noundef i32 @nish_main() #1 {
 entry:
   %zero.addr = alloca double, align 8
@@ -62,6 +85,10 @@ entry:
   %top.addr = alloca i32, align 4
   %low.addr = alloca i64, align 8
   %high.addr = alloca i64, align 8
+  %zero32.addr = alloca float, align 4
+  %negZero32.addr = alloca double, align 8
+  %byte.addr = alloca i8, align 1
+  %half.addr = alloca i16, align 2
   %arena.mark = call i64 @nish_arena_mark()
   store double 0x0000000000000000, double* %zero.addr, align 8
   store double 0x3FF0000000000000, double* %one.addr, align 8
@@ -159,6 +186,61 @@ ovf.ok:
   %81 = call i8* @nish_str_from_u64(i64 %80)
   %82 = call i8* @nish_str_concat(i8* %78, i8* %81)
   call void @nish_print(i8* %82)
+  store float 0x0000000000000000, float* %zero32.addr, align 4
+  %83 = load float, float* %zero32.addr, align 4
+  %84 = fneg float %83
+  %85 = call float @signF32(float %84)
+  %86 = fpext float %85 to double
+  store double %86, double* %negZero32.addr, align 8
+  %87 = fneg float 0x4004000000000000
+  %88 = call float @signF32(float %87)
+  %89 = fpext float %88 to double
+  %90 = call i8* @nish_str_from_f64(double %89)
+  %91 = call i8* @nish_str_concat(i8* %90, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %92 = call float @signF32(float 0x4008000000000000)
+  %93 = fpext float %92 to double
+  %94 = call i8* @nish_str_from_f64(double %93)
+  %95 = call i8* @nish_str_concat(i8* %91, i8* %94)
+  %96 = call i8* @nish_str_concat(i8* %95, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %97 = load double, double* %one.addr, align 8
+  %98 = load double, double* %negZero32.addr, align 8
+  %99 = fdiv double %97, %98
+  %100 = call i8* @nish_str_from_f64(double %99)
+  %101 = call i8* @nish_str_concat(i8* %96, i8* %100)
+  %102 = call i8* @nish_str_concat(i8* %101, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %103 = load float, float* %zero32.addr, align 4
+  %104 = load float, float* %zero32.addr, align 4
+  %105 = fdiv float %103, %104
+  %106 = call float @signF32(float %105)
+  %107 = fpext float %106 to double
+  %108 = call i8* @nish_str_from_f64(double %107)
+  %109 = call i8* @nish_str_concat(i8* %102, i8* %108)
+  call void @nish_print(i8* %109)
+  store i8 255, i8* %byte.addr, align 1
+  store i16 65535, i16* %half.addr, align 2
+  %110 = load i8, i8* %byte.addr, align 1
+  %111 = call i8 @signU8(i8 %110)
+  %112 = zext i8 %111 to i64
+  %113 = call i8* @nish_str_from_u64(i64 %112)
+  %114 = call i8* @nish_str_concat(i8* %113, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %115 = trunc i32 0 to i8
+  %116 = call i8 @signU8(i8 %115)
+  %117 = zext i8 %116 to i64
+  %118 = call i8* @nish_str_from_u64(i64 %117)
+  %119 = call i8* @nish_str_concat(i8* %114, i8* %118)
+  %120 = call i8* @nish_str_concat(i8* %119, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %121 = load i16, i16* %half.addr, align 2
+  %122 = call i16 @signU16(i16 %121)
+  %123 = zext i16 %122 to i64
+  %124 = call i8* @nish_str_from_u64(i64 %123)
+  %125 = call i8* @nish_str_concat(i8* %120, i8* %124)
+  %126 = call i8* @nish_str_concat(i8* %125, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %127 = trunc i32 0 to i16
+  %128 = call i16 @signU16(i16 %127)
+  %129 = zext i16 %128 to i64
+  %130 = call i8* @nish_str_from_u64(i64 %129)
+  %131 = call i8* @nish_str_concat(i8* %126, i8* %130)
+  call void @nish_print(i8* %131)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 

@@ -1349,8 +1349,46 @@ These scans still step one byte at a time:
 - `plainColonAt`, the search for an implicit key's `: `.
 - `skipInlineSpaces` and the indentation counts.
 
+## Math accuracy
+
+How far `Math.tan`, `Math.atan2` and `Math.hypot` (fdlibm ports in
+[std/math.ts](../std/math.ts)) land from the exact result. Not run in CI: the
+reference is mpmath, which CI does not install. What CI holds instead is
+[tests/cases/math_ulp_samples.ts](../tests/cases/math_ulp_samples.ts), a few
+hundred operands per function with their correctly rounded results, drawn by
+`python3 bench/math-ulp/ulp.py --samples`.
+
+```bash
+npm run build
+build/nish bench/math-ulp/operands.ts --link build/math-ulp
+build/math-ulp > build/math-ulp.out          # 2,800,536 lines
+pip install mpmath                           # 1.4.1 measured
+python3 bench/math-ulp/ulp.py build/math-ulp.out
+```
+
+`operands.ts` prints each operand and the shipped answer as 64-bit patterns:
+every special value paired every way, then log-uniform operands over every
+exponent and draws aimed at each reduction branch (`tan` beside multiples of
+pi/2, through Cody-Waite and past 2^20 * pi/2 into Payne-Hanek, Kahan's hard
+case; `atan2` with close and far-apart exponents; `hypot` where the squares
+overflow or underflow). `ulp.py` measures every finite nonzero answer against
+mpmath at 200 bits and more, and holds every special answer (a NaN, zero or
+infinite operand or result) to Node's `Math` bit for bit through
+`bench/math-ulp/ref.mjs`. It exits 1 on any special mismatch.
+
+| function | max error | special mismatches |
+| --- | ---: | ---: |
+| `tan` | 0.8253 ulp | 0 |
+| `atan2` | 0.8367 ulp | 0 |
+| `hypot` | 0.9270 ulp | 0 |
+
+Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
+1.4.1, about 40 s on four cores.
+
 ## Other files
 
+- `math-ulp/`: the operands and the mpmath measure behind `std/math.ts`'s
+  accuracy figures ("Math accuracy" above).
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
   not part of this suite.
 - `substr.ts`: what proving a `substring` bound is worth (WP15 §8 `NL9009`),

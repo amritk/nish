@@ -171,27 +171,27 @@ function tanLarge(x: f64, ix: i32, hx: i32): f64 -> @nish.tanLarge
   local +25:11 k0: u64 (const)
   local +27:11 k1: u64 (const)
   local +30:7 sh: i32 (let)
-  local +37:9 lz: i32 (const)
-  callee +37:19 clz64 -> @nish.clz64
-  local +43:9 a: f64 (const)
-  callee +43:43 pow2 -> @nish.pow2
-  local +44:9 b: f64 (const)
-  callee +44:81 pow2 -> @nish.pow2
-  local +46:9 p1h: f64 (const)
-  local +47:9 p1l: f64 (const)
-  local +48:9 t: f64 (const)
-  local +49:9 split: f64 (const)
-  local +50:9 ac: f64 (const)
-  local +51:9 ah: f64 (const)
-  local +52:9 al: f64 (const)
-  local +53:9 pc: f64 (const)
-  local +54:9 ph: f64 (const)
-  local +55:9 pl: f64 (const)
-  local +56:9 err: f64 (const)
-  local +57:9 tail: f64 (const)
-  local +58:7 y0: f64 (let)
-  local +59:7 y1: f64 (let)
-  callee +64:10 kernelTan -> @nish.kernelTan
+  local +39:9 lz: i32 (const)
+  callee +39:19 clz64 -> @nish.clz64
+  local +45:9 a: f64 (const)
+  callee +45:43 pow2 -> @nish.pow2
+  local +46:9 b: f64 (const)
+  callee +46:81 pow2 -> @nish.pow2
+  local +48:9 p1h: f64 (const)
+  local +49:9 p1l: f64 (const)
+  local +50:9 t: f64 (const)
+  local +51:9 split: f64 (const)
+  local +52:9 ac: f64 (const)
+  local +53:9 ah: f64 (const)
+  local +54:9 al: f64 (const)
+  local +55:9 pc: f64 (const)
+  local +56:9 ph: f64 (const)
+  local +57:9 pl: f64 (const)
+  local +58:9 err: f64 (const)
+  local +59:9 tail: f64 (const)
+  local +60:7 y0: f64 (let)
+  local +61:7 y1: f64 (let)
+  callee +66:10 kernelTan -> @nish.kernelTan
 function kernelTan(x0: f64, y0: f64, odd: boolean): f64 -> @nish.kernelTan
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: x0 y0
@@ -233,9 +233,9 @@ function tanF64(x: f64): f64 -> @nish.tanF64 [exported]
   local +16:7 r: f64 (let)
   local +17:7 w: f64 (let)
   local +18:7 y0: f64 (let)
-  local +20:9 t: f64 (let)
-  local +33:9 y1: f64 (const)
-  callee +34:10 kernelTan -> @nish.kernelTan
+  local +23:9 t: f64 (let)
+  local +36:9 y1: f64 (const)
+  callee +37:10 kernelTan -> @nish.kernelTan
 function atanhi(id: i32): f64 -> @nish.atanhi
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: id
@@ -344,5 +344,5 @@ function hypotF64(x: f64, y: f64): f64 -> @nish.hypotF64 [exported]
   local +1:9 ay: f64 (const)
   local +2:9 a: f64 (const)
   local +3:9 b: f64 (const)
-  callee +5:12 hypotCoreF -> @nish.hypotCoreF
-  callee +7:10 hypotRest -> @nish.hypotRest
+  callee +7:28 hypotCoreF -> @nish.hypotCoreF
+  callee +9:10 hypotRest -> @nish.hypotRest

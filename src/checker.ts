@@ -393,10 +393,11 @@ export class Checker {
    * the dotted spelling as its local name, which no declaration can take.
    * `checkMath` records that function as the call's callee, and from there it
    * is an ordinary call into a library copied like `nish/collections`. A
-   * module that calls none of the three loads nothing.
+   * module that calls none of the three loads nothing. The gate is the scan
+   * itself, not the source text, so `Math\n  .tan(x)` is found too.
    */
   importMath(): void {
-    if (this.program.isMathLibrary() || this.program.source.text.indexOf("Math.") < 0) {
+    if (this.program.isMathLibrary()) {
       return
     }
     const calls: Node[] = []

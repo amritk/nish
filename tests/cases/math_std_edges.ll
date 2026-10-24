@@ -2569,18 +2569,31 @@ land.end:
   br i1 %18, label %if.then, label %if.end
 
 if.then:
-  %19 = load double, double* %a.addr, align 8
-  %20 = load double, double* %b.addr, align 8
-  %21 = tail call double @nish.hypotCoreF(double %19, double %20)
-  ret double %21
+  %19 = load double, double* %b.addr, align 8
+  %20 = fcmp oeq double %19, 0x0000000000000000
+  br i1 %20, label %cond.true.2, label %cond.false.2
+
+cond.true.2:
+  %21 = load double, double* %a.addr, align 8
+  br label %cond.end.2
+
+cond.false.2:
+  %22 = load double, double* %a.addr, align 8
+  %23 = load double, double* %b.addr, align 8
+  %24 = call double @nish.hypotCoreF(double %22, double %23)
+  br label %cond.end.2
+
+cond.end.2:
+  %25 = phi double [ %21, %cond.true.2 ], [ %24, %cond.false.2 ]
+  ret double %25
 
 if.end:
-  %22 = load double, double* %ax.addr, align 8
-  %23 = load double, double* %ay.addr, align 8
-  %24 = load double, double* %a.addr, align 8
-  %25 = load double, double* %b.addr, align 8
-  %26 = tail call double @nish.hypotRest(double %22, double %23, double %24, double %25)
-  ret double %26
+  %26 = load double, double* %ax.addr, align 8
+  %27 = load double, double* %ay.addr, align 8
+  %28 = load double, double* %a.addr, align 8
+  %29 = load double, double* %b.addr, align 8
+  %30 = tail call double @nish.hypotRest(double %26, double %27, double %28, double %29)
+  ret double %30
 }
 
 attributes #0 = { nounwind }

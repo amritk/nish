@@ -23444,8 +23444,8 @@ if (fs.existsSync(threadsLl)) {
 //     leaves undefined and what it defines (`fmin`, `fmaxf`, ...);
 //   - the N-API shim `--emit-napi` writes for `tests/c-symbols/napi.ts`: what
 //     it leaves undefined, apart from the program's own exports it calls;
-//   - `tests/c-symbols/math.ts`, which calls every `Math` builtin and `%` on
-//     `f64` and `f32`, linked with the runtime at `-O0`, and at `-Oz` and `-O3`
+//   - `tests/c-symbols/math.ts`, which calls every `Math` builtin LLVM can
+//     lower to libm and `%` on `f64` and `f32`, linked with the runtime at `-O0`, and at `-Oz` and `-O3`
 //     with LTO and `--save-temps`: what its LTO object and its executable
 //     leave undefined, so the libm calls LLVM lowers the program's arithmetic
 //     to are read rather than guessed.

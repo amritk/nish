@@ -9,10 +9,10 @@
  * function, so this file writes no `.ll` of its own. Under Node and `tsc` the
  * calls are the platform's `Math`, so nothing here runs there.
  *
- * **Exactness.** Each answers JavaScript's value for every NaN, signed zero
- * and infinity — every `atan2` infinity pairing, and `hypot`'s Infinity when
- * either operand is infinite, even beside a NaN — and is within one ulp of
- * the correctly rounded result elsewhere. Measured against mpmath over 2.8
+ * **Exactness.** Each is within one ulp of the correctly rounded result, and
+ * exactly JavaScript's value for every NaN, signed zero and infinity — every
+ * `atan2` infinity pairing, and `hypot`'s Infinity when either operand is
+ * infinite, even beside a NaN. Measured against mpmath over 2.8
  * million random and edge-case operands: `tan` 0.83 ulp, `atan2` 0.84 ulp,
  * `hypot` 0.93 ulp (`tests/cases/math_std_edges` pins the special values).
  *
@@ -29,8 +29,8 @@
 
 /*
  * Ported from fdlibm (https://www.netlib.org/fdlibm/), as FreeBSD msun carries
- * it, lib/msun/src/k_tan.c, s_tan.c, e_atan2.c, s_atan.c, e_hypot.c and
- * k_rem_pio2.c. Copyright (C) 1993 by Sun Microsystems, Inc. Used under the
+ * it, lib/msun/src/k_tan.c, s_tan.c, e_rem_pio2.c, k_rem_pio2.c, e_atan2.c,
+ * s_atan.c and e_hypot.c. Copyright (C) 1993 by Sun Microsystems, Inc. Used under the
  * fdlibm licence; see std/LICENSE-fdlibm.
  *
  * fdlibm's notice, as those files carry it:
@@ -266,6 +266,8 @@ const tanLarge = (x: f64, ix: i32, hx: i32): f64 => {
     q0 = toU64(0)
     sh = 64
   }
+  // lz is below 64: the fraction of an argument a double can name is never within 2^-128 of a
+  // multiple of pi/2, so after the one word shift above q2 is nonzero (a shift by 64 would be poison).
   const lz: i32 = clz64(q2)
   if (lz > 0) {
     q2 = (q2 << toU64(lz)) | (q1 >> toU64(64 - lz))
@@ -363,6 +365,9 @@ export const tanF64 = (x: f64): f64 => {
   let r: f64 = x - fn * 1.57079632673412561417
   let w: f64 = fn * 6.07710050650619224932e-11
   let y0: f64 = r - w
+  // e_rem_pio2.c's refinement steps, taken when |y0| is below 2^-15 and 2^-48 of |x| rather than
+  // when the exponents differ by more than 16 and 49 as fdlibm tests them: a deliberate widening,
+  // since the compare can take a refinement fdlibm skips but never skip one fdlibm takes.
   if (Math.abs(y0) < ax * 3.0517578125e-5) {
     let t: f64 = r
     w = fn * 6.0771005063039659766e-11
@@ -594,7 +599,9 @@ export const hypotF64 = (x: f64, y: f64): f64 => {
   const a: f64 = ax > ay ? ax : ay
   const b: f64 = ax > ay ? ay : ax
   if (a < 1.0e150 && a > 1.0e-150) {
-    return hypotCoreF(a, b)
+    // JavaScript's `hypot(x, 0)` is `|x|` exactly, which one compare guarantees and the core,
+    // a square root of a rounded sum, only almost always gives.
+    return b === 0.0 ? a : hypotCoreF(a, b)
   }
   return hypotRest(ax, ay, a, b)
 }

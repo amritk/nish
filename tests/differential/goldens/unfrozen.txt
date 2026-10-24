@@ -262,8 +262,10 @@ cases/math_minmax_nan added after R6: no rewriter to freeze it with
 cases/math_numeric_separators added after R6: no rewriter to freeze it with
 cases/math_round_negzero added after R6: no rewriter to freeze it with
 cases/math_sign added after R6: no rewriter to freeze it with
+cases/math_split_member added after R6: no rewriter to freeze it with
 cases/math_std_edges added after R6: no rewriter to freeze it with
 cases/math_tan added after R6: no rewriter to freeze it with
+cases/math_ulp_samples added after R6: no rewriter to freeze it with
 cases/mem_callee_scope added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_control added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_escape added after R6: no rewriter to freeze it with

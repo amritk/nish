@@ -61,6 +61,22 @@ entry:
   %31 = call i8* @nish_str_from_f64(double %30)
   %32 = call i8* @nish_str_concat(i8* %27, i8* %31)
   call void @nish_print(i8* %32)
+  %33 = fneg double 0x3FB999999999999A
+  %34 = load double, double* %zero.addr, align 8
+  %35 = call double @hyp(double %33, double %34)
+  %36 = call i8* @nish_str_from_f64(double %35)
+  %37 = call i8* @nish_str_concat(i8* %36, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %38 = load double, double* %zero.addr, align 8
+  %39 = fneg double %38
+  %40 = call double @hyp(double 0x40FE240C9FBE76C9, double %39)
+  %41 = call i8* @nish_str_from_f64(double %40)
+  %42 = call i8* @nish_str_concat(i8* %37, i8* %41)
+  %43 = call i8* @nish_str_concat(i8* %42, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %44 = load double, double* %zero.addr, align 8
+  %45 = call double @hyp(double %44, double 0x401C000000000001)
+  %46 = call i8* @nish_str_from_f64(double %45)
+  %47 = call i8* @nish_str_concat(i8* %43, i8* %46)
+  call void @nish_print(i8* %47)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
@@ -315,18 +331,31 @@ land.end:
   br i1 %18, label %if.then, label %if.end
 
 if.then:
-  %19 = load double, double* %a.addr, align 8
-  %20 = load double, double* %b.addr, align 8
-  %21 = tail call double @nish.hypotCoreF(double %19, double %20)
-  ret double %21
+  %19 = load double, double* %b.addr, align 8
+  %20 = fcmp oeq double %19, 0x0000000000000000
+  br i1 %20, label %cond.true.2, label %cond.false.2
+
+cond.true.2:
+  %21 = load double, double* %a.addr, align 8
+  br label %cond.end.2
+
+cond.false.2:
+  %22 = load double, double* %a.addr, align 8
+  %23 = load double, double* %b.addr, align 8
+  %24 = call double @nish.hypotCoreF(double %22, double %23)
+  br label %cond.end.2
+
+cond.end.2:
+  %25 = phi double [ %21, %cond.true.2 ], [ %24, %cond.false.2 ]
+  ret double %25
 
 if.end:
-  %22 = load double, double* %ax.addr, align 8
-  %23 = load double, double* %ay.addr, align 8
-  %24 = load double, double* %a.addr, align 8
-  %25 = load double, double* %b.addr, align 8
-  %26 = tail call double @nish.hypotRest(double %22, double %23, double %24, double %25)
-  ret double %26
+  %26 = load double, double* %ax.addr, align 8
+  %27 = load double, double* %ay.addr, align 8
+  %28 = load double, double* %a.addr, align 8
+  %29 = load double, double* %b.addr, align 8
+  %30 = tail call double @nish.hypotRest(double %26, double %27, double %28, double %29)
+  ret double %30
 }
 
 attributes #0 = { nounwind }

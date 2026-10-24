@@ -16,6 +16,7 @@
 import { readonlyWriteMessage } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
+import { internalErrorFor } from "./ice"
 import { checkIndexArgument } from "./members"
 import {
   isNetBufferLetter,
@@ -598,6 +599,12 @@ const checkMath = (
     const at = ctx.sigs.get(name, -1)
     if (at >= 0) {
       ctx.program.nodeCallees[call.id] = ctx.program.functions[at]
+    } else if (member === "atan2" || member === "tan" || member === "hypot") {
+      // `importMath` binds every such call its scan finds, so one it missed
+      // would otherwise reach the emitter as a builtin it has no lowering for.
+      process.exit(
+        internalErrorFor(`checker: \`${name}\` has no \`nish/math\` import (importMath)`, ctx.table.json)
+      )
     }
     return T_F64
   }

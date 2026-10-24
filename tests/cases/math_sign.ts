@@ -6,6 +6,9 @@ export const signI32 = (x: i32): i32 => Math.sign(x);
 export const signU32 = (x: u32): u32 => Math.sign(x);
 export const signWide = (x: i64): i64 => Math.sign(x);
 export const signUWide = (x: u64): u64 => Math.sign(x);
+export const signF32 = (x: f32): f32 => Math.sign(x);
+export const signU8 = (x: u8): u8 => Math.sign(x);
+export const signU16 = (x: u16): u16 => Math.sign(x);
 
 export const main = (): i32 => {
   const zero = toF64(0);
@@ -18,5 +21,11 @@ export const main = (): i32 => {
   const low: i64 = -9000000000;
   const high: u64 = toU64(-1);
   console.log(`${signWide(low)} ${signWide(toI64(0))} ${signWide(-low)} ${signUWide(high)} ${signUWide(toU64(0))}`);
+  const zero32 = toF32(0);
+  const negZero32 = toF64(signF32(-zero32));
+  console.log(`${signF32(toF32(-2.5))} ${signF32(toF32(3))} ${one / negZero32} ${signF32(zero32 / zero32)}`);
+  const byte: u8 = 255;
+  const half: u16 = 65535;
+  console.log(`${signU8(byte)} ${signU8(toU8(0))} ${signU16(half)} ${signU16(toU16(0))}`);
   return 0;
 };

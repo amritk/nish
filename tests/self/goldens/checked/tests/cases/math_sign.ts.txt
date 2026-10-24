@@ -17,10 +17,20 @@ function signWide(x: i64): i64 -> @signWide [exported]
 function signUWide(x: u64): u64 -> @signUWide [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function signF32(x: f32): f32 -> @signF32 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.copysign.f32
+  stackSites=0 stackLocals=0
+function signU8(x: u8): u8 -> @signU8 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function signU16(x: u16): u16 -> @signU16 [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_from_u64 signF64 signI32 signU32 signUWide signWide
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_from_u64 signF32 signF64 signI32 signU16 signU32 signU8 signUWide signWide
   stackSites=0 stackLocals=0
   local +0:9 zero: f64 (const)
   local +1:9 one: f64 (const)
@@ -44,3 +54,15 @@ function main(): i32 -> @nish_main [exported entry]
   callee +9:57 signWide -> @signWide
   callee +9:75 signUWide -> @signUWide
   callee +9:94 signUWide -> @signUWide
+  local +10:9 zero32: f32 (const)
+  local +11:9 negZero32: f64 (const)
+  callee +11:27 signF32 -> @signF32
+  callee +12:18 signF32 -> @signF32
+  callee +12:42 signF32 -> @signF32
+  callee +12:82 signF32 -> @signF32
+  local +13:9 byte: u8 (const)
+  local +14:9 half: u16 (const)
+  callee +15:18 signU8 -> @signU8
+  callee +15:34 signU8 -> @signU8
+  callee +15:53 signU16 -> @signU16
+  callee +15:70 signU16 -> @signU16

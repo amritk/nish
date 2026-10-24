@@ -196,6 +196,9 @@ const absIntrinsic = (table: TypeTable, type: i32): string => {
   return isInteger(type) ? `llvm.abs.${table.llvmType(type)}` : `llvm.fabs.${type === T_F32 ? "f32" : "f64"}`
 }
 
+/** `llvm.copysign` at a float's width. */
+const copysignIntrinsic = (type: i32): string => `llvm.copysign.${type === T_F32 ? "f32" : "f64"}`
+
 /**
  * `llvm.umin`/`umax` for the unsigned widths, `smin`/`smax` for the signed
  * ones, and `llvm.minimum`/`maximum` for a float: a NaN operand answers NaN
@@ -204,8 +207,6 @@ const absIntrinsic = (table: TypeTable, type: i32): string => {
  * instead; the callee list names the intrinsic all the same, which is
  * `readnone` and so moves no attribute.
  */
-const copysignIntrinsic = (type: i32): string => `llvm.copysign.${type === T_F32 ? "f32" : "f64"}`
-
 const minMaxIntrinsic = (table: TypeTable, which: string, type: i32): string => {
   if (!isInteger(type)) {
     return `llvm.${which}imum.${type === T_F32 ? "f32" : "f64"}`
