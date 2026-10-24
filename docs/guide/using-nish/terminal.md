@@ -38,7 +38,7 @@ const update = (b: Ball, input: TermInput): boolean => {
       return false; // q
     }
   }
-  if (b.x + b.dx < 0 || b.x + b.dx > 150) {
+  if (b.x + b.dx < 0 || b.x + b.dx > 80) {
     b.dx = -b.dx;
   }
   b.x = b.x + b.dx;
@@ -53,12 +53,12 @@ const render = (b: Ball, frame: Frame): void => {
     }
   }
   frame.screen.clear(COLOR_DEFAULT);
-  frame.screen.text(0, 0, `${frame.stats.tier} fps, q quits`, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+  frame.screen.text(0, 0, `${frame.stats.tier} fps`, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
 };
 
 export const main = (): i32 => {
   const options = defaultTerminalOptions();
-  options.framebufferWidth = 160;
+  options.framebufferWidth = 90;
   options.framebufferHeight = 90;
   const ran = runTerminal(options, new Ball(), update, render);
   if (ran.isErr()) {
@@ -75,15 +75,29 @@ moves at the same speed on a fast terminal and on a slow one; the slow one
 just shows fewer of its positions. `frame.alpha` says how far the clock is
 past the last step, to draw between two positions.
 
+The framebuffer is drawn as large as the screen allows with its shape kept,
+centred, and over the text cells it covers: text under the image is hidden.
+So the example's framebuffer is square, and its label goes at the left edge,
+in the columns a terminal wider than it is tall leaves free.
+
 `input.events` holds `nish/term`'s `TermEvent`s: keys (with releases, on a
 terminal that has the kitty keyboard protocol), mouse reports when
 `options.mouse` asks for them, pastes, focus changes, and `EVENT_RESIZE` when
 the window changes size, with the screen already resized. `input.isDown(key,
 code)` asks whether a key is held, for movement that lasts as long as the
-key. The program also stops on Ctrl-C, and the terminal is put back.
+key.
+
+The program also stops on Ctrl-C, and the terminal is put back. Without the
+kitty keyboard protocol Ctrl-C is a signal, as it is [in raw
+mode](#raw-mode). With it, Ctrl-C arrives as a key, `KEY_CHAR` with code `99`
+and `MOD_CTRL`, and `options.quitOnCtrlC` (true) makes it stop the loop; set
+it to `false` and that key reaches `update` instead. `KEY_CTRL_C`, the byte
+`3`, never arrives under `runTerminal`.
 
 `runTerminal` answers `Err` with one sentence when it cannot start, and the
-program above prints it. A pipe on either side is the usual reason:
+program above prints it, or `Err("stdin ended")` when stdin closes while the
+program runs, after putting the terminal back. A pipe on either side is the
+usual reason it cannot start:
 
 ```
 $ ./ball < /dev/null
@@ -117,16 +131,22 @@ first. What it finds:
 | What | Where it comes from | Without it |
 | --- | --- | --- |
 | Pixels: kitty graphics | the terminal answers a kitty graphics query | sixel |
-| Pixels: sixel | the terminal reports 256 or more sixel colour registers | half blocks, two pixels to a cell (`▀`) |
+| Pixels: sixel | the terminal lists sixel (`4`) in its DA1 answer and reports 256 or more sixel colour registers | half blocks, two pixels to a cell (`▀`) |
 | Pixels: half blocks | any terminal but `TERM=dumb` and the Linux console | ASCII shading |
-| True colour | `COLORTERM=truecolor` or `24bit`, or the terminal reads a 24-bit colour back | 256 colours with `256color` in `TERM`, else 16 |
+| True colour | `COLORTERM=truecolor` or `24bit`, or the terminal reads a 24-bit colour back | text cells in the 256-colour palette; ASCII image shading in 256 colours with `256color` in `TERM`, else 16 |
 | Key releases, Ctrl-C as a key | the kitty keyboard protocol | a key counts as released `options.releaseGapMs` after its last repeat |
 | Tear-free frames | synchronized output (mode 2026) | frames are drawn as they arrive |
 | Mouse in pixels | mode 1016, and the terminal reports its cell size | mouse in cells |
 
 `frame.caps` holds what was found, and `frame.stats.backend` the pixel
-backend in force. The Linux console (`TERM=linux`) gets 16 colours and ASCII,
-whatever it answers.
+backend in force: `GRAPHICS_ASCII` (0), `GRAPHICS_HALFBLOCK` (1),
+`GRAPHICS_SIXEL` (2) or `GRAPHICS_KITTY` (3), the same numbers as
+`nish/term-rate`'s `BACKEND_CAP_*`. The Linux console (`TERM=linux`) gets no
+true colour and ASCII, whatever it answers.
+
+Without true colour, text cells are drawn in the 256-colour palette — on the
+Linux console and under `NO_COLOR` too. Only the ASCII backend's shading of
+the image drops to 16 colours there, or wherever `TERM` lacks `256color`.
 
 ## How the frame rate adapts
 
@@ -138,12 +158,15 @@ room to spare. At most one frame is unanswered at a time, so a slow link
 shows fewer frames instead of a growing backlog, and a key you press is never
 queued behind seconds of drawing. Below `options.minFps` (10), it draws with
 less detail instead: a cheaper pixel backend, a coarser framebuffer, 256
-colours. `options.prefer = DETAIL_FIRST` cuts the rate first.
+colours. `options.prefer = DETAIL_FIRST` cuts the rate first; `RATE_FIRST`
+and `DETAIL_FIRST` come from `nish/term-rate`.
 
 It starts at 30 frames a second, or 15 when an `SSH_*` variable says the
-session is remote and the first answer was slow, and settles within a few
-seconds. `frame.stats` shows the numbers; `options.overlay` draws them in a
-corner.
+session is remote and the probe's first answer took 5 ms or more, or never
+came; it settles within a few seconds. `frame.stats` shows the numbers;
+`options.overlay` draws them in a corner, one of `nish/term-rate`'s
+`CORNER_TOP_LEFT`, `CORNER_TOP_RIGHT`, `CORNER_BOTTOM_LEFT` and
+`CORNER_BOTTOM_RIGHT`, or `-1`, the default, for none.
 
 **Under SSH and multiplexers the measure is only as good as the answer.**
 tmux and GNU screen answer the status query themselves, so inside them the
@@ -160,9 +183,9 @@ there, fix the rate or the backend with the overrides below.
 | --- | --- |
 | `options.fixedFps` | a fixed frame rate; the measuring stops choosing |
 | `options.minFps`, `options.maxFps`, `options.allow120` | the range the rate is chosen in (10 to 60; 120 only when allowed) |
-| `options.prefer` | `RATE_FIRST` (cut detail below `minFps`) or `DETAIL_FIRST` (cut the rate first) |
+| `options.prefer` | `RATE_FIRST` (cut detail below `minFps`) or `DETAIL_FIRST` (cut the rate first), from `nish/term-rate` |
 | `options.mouse`, `paste`, `focus`, `kittyKeyboard`, `quitOnCtrlC` | what is turned on: mouse `1000` clicks, `1002` drags, `1003` all motion, `0` none |
-| `NO_COLOR` set to anything | 16 colours, nothing else changed |
+| `NO_COLOR` set to anything | no true colour: text in the 256-colour palette, ASCII shading in 16 colours; nothing else changed |
 | `NISH_TERM_GRAPHICS` | `kitty`, `sixel`, `halfblock` or `ascii` instead of what was detected; a pixel backend the terminal did not answer for is refused under a multiplexer, on the Linux console, or when nothing answered |
 | `NISH_TERM_FPS` | a fixed frame rate, over everything else |
 

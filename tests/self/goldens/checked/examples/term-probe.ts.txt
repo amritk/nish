@@ -1590,6 +1590,8 @@ const TERM_IO_IMAGE_ID: i32 = 1
 const TERM_IO_ESCAPE_MS: f64 = 40
 const TERM_IO_WATERMARK_MS: f64 = 1000
 const TERM_IO_ACKS: i32 = 64
+const TERM_IO_DRAIN_MIN_MS: f64 = 50
+const TERM_IO_DRAIN_MAX_MS: f64 = 500
 const TERM_IO_READ: i32 = 4096
 const TERM_IO_COLS: i32 = 80
 const TERM_IO_ROWS: i32 = 24
@@ -1610,7 +1612,7 @@ struct TerminalOptions (class) size=56 align=8 exported
   field framebufferHeight: i32 index=13 offset=44
   field overlay: i32 index=14 offset=48
   constructor -> @nish.TerminalOptions.constructor
-struct Terminal (class) size=168 align=8 exported
+struct Terminal (class) size=208 align=8 exported
   field options: TerminalOptions index=0 offset=0
   field caps: TermCaps index=1 offset=8
   field screen: Screen index=2 offset=16
@@ -1627,36 +1629,46 @@ struct Terminal (class) size=168 align=8 exported
   field ackCount: i32 index=13 offset=100
   field readBuf: u8[] index=14 offset=104
   field rect: PixelRect index=15 offset=112
-  field rectCols: i32 index=16 offset=120
-  field rectRows: i32 index=17 offset=124
-  field rectBackend: i32 index=18 offset=128
-  field graphics: i32 index=19 offset=132
-  field backend: i32 index=20 offset=136
-  field cellWidthPx: i32 index=21 offset=140
-  field cellHeightPx: i32 index=22 offset=144
-  field sizeCols: i32 index=23 offset=148
-  field sizeRows: i32 index=24 offset=152
-  field mouseMode: i32 index=25 offset=156
-  field open: boolean index=26 offset=160
-  field kittyKeyboardOn: boolean index=27 offset=161
-  field pixelMouseOn: boolean index=28 offset=162
-  field pasteOn: boolean index=29 offset=163
-  field focusOn: boolean index=30 offset=164
-  field kittyImage: boolean index=31 offset=165
-  field palette256: boolean index=32 offset=166
+  field lastAckMs: f64 index=16 offset=120
+  field lastRttMs: f64 index=17 offset=128
+  field workNs: f64 index=18 offset=136
+  field sendStartNs: i64 index=19 offset=144
+  field rectCols: i32 index=20 offset=152
+  field rectRows: i32 index=21 offset=156
+  field rectBackend: i32 index=22 offset=160
+  field graphics: i32 index=23 offset=164
+  field backend: i32 index=24 offset=168
+  field cellWidthPx: i32 index=25 offset=172
+  field cellHeightPx: i32 index=26 offset=176
+  field sizeCols: i32 index=27 offset=180
+  field sizeRows: i32 index=28 offset=184
+  field shownCols: i32 index=29 offset=188
+  field shownRows: i32 index=30 offset=192
+  field mouseMode: i32 index=31 offset=196
+  field open: boolean index=32 offset=200
+  field kittyKeyboardOn: boolean index=33 offset=201
+  field pixelMouseOn: boolean index=34 offset=202
+  field pasteOn: boolean index=35 offset=203
+  field focusOn: boolean index=36 offset=204
+  field kittyImage: boolean index=37 offset=205
+  field palette256: boolean index=38 offset=206
   constructor -> @nish.Terminal.constructor
   method restoreString -> @nish.Terminal.restoreString
   method turnOn -> @nish.Terminal.turnOn
   method enable -> @nish.Terminal.enable
   method close -> @nish.Terminal.close
+  method drainAcks -> @nish.Terminal.drainAcks
   method stats -> @nish.Terminal.stats
   method readSize -> @nish.Terminal.readSize
   method checkResize -> @nish.Terminal.checkResize
+  method dropLost -> @nish.Terminal.dropLost
   method ackPush -> @nish.Terminal.ackPush
   method acked -> @nish.Terminal.acked
+  method lateReply -> @nish.Terminal.lateReply
   method take -> @nish.Terminal.take
   method readEvents -> @nish.Terminal.readEvents
   method fit -> @nish.Terminal.fit
+  method send -> @nish.Terminal.send
   method present -> @nish.Terminal.present
 struct TermInput (class) size=16 align=8 exported
   field events: TermEvent[] index=0 offset=0
@@ -1726,26 +1738,17 @@ function termIoOnlyAcks(buf: u8[], n: i32): i32 -> @nish.termIoOnlyAcks
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:12 i: i32 (let)
-function termIoSend(screen: Screen, pixels: PixelBytes, withPixels: boolean, sync: boolean): i32 -> @nish.termIoSend
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish.Screen.flush
-  calls: nish.PixelBytes.text nish.Screen.flush nish.beginSync nish.endSync nish_arena_mark nish_arena_release nish_str_concat nish_write
-  pointer screen: size=88 writesThrough=true captured=false passedTo=nish.Screen.flush#0
-  pointer pixels: size=80 writesThrough=false captured=false passedTo=nish.PixelBytes.text#0
+function termIoParam(e: TermEvent, i: i32): i32 -> @nish.termIoParam
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  pointer e: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 body: string (const)
-  callee +0:24 Screen.flush -> @nish.Screen.flush
-  local +1:9 image: string (const)
-  callee +1:38 PixelBytes.text -> @nish.PixelBytes.text
-  local +2:9 frame: string (const)
-  callee +2:35 beginSync -> @nish.beginSync
-  callee +2:64 endSync -> @nish.endSync
 function Terminal.constructor(this: Terminal, options: TerminalOptions, caps: TermCaps, cols: i32, rows: i32, held: TermEvent[]): void -> @nish.Terminal.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.Screen.constructor
   escaping: caps cols held options rows
   calls: llvm.fptosi.sat.i32.f64 nish.Canvas.constructor nish.Framebuffer.constructor nish.KeyDecoder.constructor nish.KeyState.constructor nish.PixelBytes.constructor nish.PixelRect.constructor nish.RateController.constructor nish.RateOptions.constructor nish.Screen.constructor nish.termIoCellPx nish.termIoGetenv nish.termIoGraphics nish_alloc_struct nish_panic nish_parse_number
-  pointer this: size=168 writesThrough=true captured=false
+  pointer this: size=208 writesThrough=true captured=false
   pointer options: size=56 writesThrough=true captured=true
   pointer caps: size=72 writesThrough=true captured=true
   pointer held: size=0 writesThrough=true captured=true
@@ -1770,7 +1773,7 @@ function Terminal.constructor(this: Terminal, options: TerminalOptions, caps: Te
 function Terminal.restoreString(this: Terminal): string -> @nish.Terminal.restoreString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.kittyDelete nish.leaveAltScreen nish.resetStyle nish.showCursor nish_str_concat nish_str_from_i32
-  pointer this: size=168 writesThrough=false captured=false
+  pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 s: string (let)
   callee +2:15 kittyDelete -> @nish.kittyDelete
@@ -1781,14 +1784,14 @@ function Terminal.turnOn(this: Terminal, bytes: string): void -> @nish.Terminal.
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_set_terminal_restore
   calls: nish.Terminal.restoreString nish_arena_mark nish_arena_release nish_set_terminal_restore nish_write
-  pointer this: size=168 writesThrough=false captured=false passedTo=nish.Terminal.restoreString#0
+  pointer this: size=208 writesThrough=false captured=false passedTo=nish.Terminal.restoreString#0
   stackSites=0 stackLocals=0
   callee +0:24 Terminal.restoreString -> @nish.Terminal.restoreString
 function Terminal.enable(this: Terminal): void -> @nish.Terminal.enable [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish.Terminal.restoreString nish.Terminal.turnOn nish_arena_mark nish_arena_release nish_set_terminal_restore nish_str_concat nish_str_from_i32
-  pointer this: size=168 writesThrough=true captured=false passedTo=nish.Terminal.turnOn#0 nish.Terminal.turnOn#0 nish.Terminal.turnOn#0 nish.Terminal.turnOn#0 nish.Terminal.restoreString#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Terminal.turnOn#0 nish.Terminal.turnOn#0 nish.Terminal.turnOn#0 nish.Terminal.turnOn#0 nish.Terminal.restoreString#0
   stackSites=0 stackLocals=0
   local -2:11 o: TerminalOptions (const)
   callee +2:7 Terminal.turnOn -> @nish.Terminal.turnOn
@@ -1797,17 +1800,41 @@ function Terminal.enable(this: Terminal): void -> @nish.Terminal.enable [exporte
   callee +18:7 Terminal.turnOn -> @nish.Terminal.turnOn
   callee +23:26 Terminal.restoreString -> @nish.Terminal.restoreString
 function Terminal.close(this: Terminal): void -> @nish.Terminal.close [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.Terminal.restoreString nish_arena_mark nish_arena_release nish_set_raw_mode nish_set_terminal_restore nish_write
-  pointer this: size=168 writesThrough=true captured=false passedTo=nish.Terminal.restoreString#0
+  calls: nish.Terminal.drainAcks nish.Terminal.restoreString nish_set_raw_mode nish_set_terminal_restore nish_write
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Terminal.restoreString#0 nish.Terminal.drainAcks#0
   stackSites=0 stackLocals=0
   callee +1:11 Terminal.restoreString -> @nish.Terminal.restoreString
+  callee +2:5 Terminal.drainAcks -> @nish.Terminal.drainAcks
+function Terminal.drainAcks(this: Terminal): void -> @nish.Terminal.drainAcks [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:22
+  calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64 nish.KeyDecoder.feedEvents nish.KeyDecoder.waiting nish.RateController.unacked nish.termIoIsAck nish.termIoNowMs nish.termIoOnlyAcks nish_panic_overflow nish_panic_slice nish_read_stdin nish_wait_stdin
+  pointer this: size=208 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -12:9 owed: i32 (let)
+  callee -12:21 RateController.unacked -> @nish.RateController.unacked
+  local -11:11 rtt: f64 (const)
+  local -10:9 bound: f64 (let)
+  local -7:11 deadline: f64 (const)
+  callee -7:27 termIoNowMs -> @nish.termIoNowMs
+  local -6:9 ended: boolean (let)
+  local -4:13 left: i32 (const)
+  callee -4:52 termIoNowMs -> @nish.termIoNowMs
+  local +0:13 n: i32 (const)
+  local +2:15 only: i32 (const)
+  callee +2:27 KeyDecoder.waiting -> @nish.KeyDecoder.waiting
+  callee +2:57 termIoOnlyAcks -> @nish.termIoOnlyAcks
+  local +6:22 e: TermEvent (const)
+  callee +6:27 KeyDecoder.feedEvents -> @nish.KeyDecoder.feedEvents
+  callee +6:68 termIoNowMs -> @nish.termIoNowMs
+  callee +7:17 termIoIsAck -> @nish.termIoIsAck
 function Terminal.stats(this: Terminal): TermStats -> @nish.Terminal.stats [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true returnDeref=48
   sharedWrite: +0:5
   calls: nish.RateController.stats
-  pointer this: size=168 writesThrough=false captured=false
+  pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -1:11 s: TermStats (const)
   callee -1:26 RateController.stats -> @nish.RateController.stats
@@ -1815,59 +1842,87 @@ function Terminal.readSize(this: Terminal): void -> @nish.Terminal.readSize [exp
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_arena_mark nish_arena_release nish_terminal_size
-  pointer this: size=168 writesThrough=true captured=false
+  pointer this: size=208 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:11 size: i32[] (const)
 function Terminal.checkResize(this: Terminal): boolean -> @nish.Terminal.checkResize [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.Canvas.constructor nish.Screen.invalidate nish.Screen.resize nish.Terminal.readSize nish_alloc_struct
-  pointer this: size=168 writesThrough=true captured=false passedTo=nish.Terminal.readSize#0
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Terminal.readSize#0
   stackSites=0 stackLocals=0
-  callee -5:5 Terminal.readSize -> @nish.Terminal.readSize
-  callee -1:5 Screen.resize -> @nish.Screen.resize
-  callee +0:19 new Canvas -> @nish.Canvas.constructor
-  callee +1:5 Screen.invalidate -> @nish.Screen.invalidate
+  callee -4:5 Terminal.readSize -> @nish.Terminal.readSize
+  callee +2:5 Screen.resize -> @nish.Screen.resize
+  callee +3:19 new Canvas -> @nish.Canvas.constructor
+  callee +4:5 Screen.invalidate -> @nish.Screen.invalidate
+function Terminal.dropLost(this: Terminal): void -> @nish.Terminal.dropLost [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.RateController.unacked nish_panic_overflow
+  pointer this: size=208 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee -1:28 RateController.unacked -> @nish.RateController.unacked
 function Terminal.ackPush(this: Terminal, nowMs: f64): void -> @nish.Terminal.ackPush [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=168 writesThrough=true captured=false
+  pointer this: size=208 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Terminal.acked(this: Terminal, count: i32, nowMs: f64): void -> @nish.Terminal.acked [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: nowMs
-  calls: nish.KeyState.delivered nish.RateController.ackReceived nish_panic_index nish_panic_overflow
-  pointer this: size=168 writesThrough=true captured=false
+  calls: nish.KeyState.delivered nish.RateController.ackReceived nish.Terminal.dropLost nish_panic_index nish_panic_overflow
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Terminal.dropLost#0
   stackSites=0 stackLocals=0
-  local -3:14 k: i32 (let)
+  local -4:14 k: i32 (let)
+  callee -3:7 Terminal.dropLost -> @nish.Terminal.dropLost
   callee -1:9 KeyState.delivered -> @nish.KeyState.delivered
-  callee +3:7 RateController.ackReceived -> @nish.RateController.ackReceived
+  callee +4:7 RateController.ackReceived -> @nish.RateController.ackReceived
+function Terminal.lateReply(this: Terminal, e: TermEvent): void -> @nish.Terminal.lateReply [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.termIoCellPx nish.termIoParam nish_panic_div
+  pointer this: size=208 writesThrough=true captured=false
+  pointer e: size=80 writesThrough=false captured=false passedTo=nish.termIoParam#0 nish.termIoParam#0 nish.termIoParam#0 nish.termIoParam#0 nish.termIoParam#0 nish.termIoParam#0
+  stackSites=0 stackLocals=0
+  local -10:9 w: i32 (let)
+  local -9:9 h: i32 (let)
+  callee -8:9 termIoParam -> @nish.termIoParam
+  callee -7:11 termIoParam -> @nish.termIoParam
+  callee -6:11 termIoParam -> @nish.termIoParam
+  callee -5:16 termIoParam -> @nish.termIoParam
+  callee -4:12 termIoParam -> @nish.termIoParam
+  callee -3:12 termIoParam -> @nish.termIoParam
+  callee -1:9 termIoCellPx -> @nish.termIoCellPx
+  callee -1:32 termIoCellPx -> @nish.termIoCellPx
+  callee +0:26 termIoCellPx -> @nish.termIoCellPx
+  callee +1:27 termIoCellPx -> @nish.termIoCellPx
 function Terminal.take(this: Terminal, events: TermEvent[], nowMs: f64, out: TermEvent[]): void -> @nish.Terminal.take [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: events nowMs
-  calls: nish.KeyState.apply nish.Terminal.acked nish.termIoIsAck nish_array_grow nish_panic_overflow
-  pointer this: size=168 writesThrough=true captured=false passedTo=nish.Terminal.acked#0
+  calls: nish.KeyState.apply nish.Terminal.acked nish.Terminal.lateReply nish.termIoIsAck nish_array_grow nish_panic_overflow
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Terminal.lateReply#0 nish.Terminal.acked#0
   pointer events: size=0 writesThrough=true captured=true
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local -11:9 acks: i32 (let)
-  local -10:16 e: TermEvent (const)
-  callee -9:11 termIoIsAck -> @nish.termIoIsAck
-  local -5:9 program: TermEvent[] (let)
+  local -12:9 replies: i32 (let)
+  local -11:16 e: TermEvent (const)
+  local -6:9 program: TermEvent[] (let)
+  local -5:9 acks: i32 (let)
   local -2:18 e: TermEvent (const)
-  callee -1:14 termIoIsAck -> @nish.termIoIsAck
-  local +4:16 e: TermEvent (const)
-  callee +4:21 KeyState.apply -> @nish.KeyState.apply
-  callee +7:5 Terminal.acked -> @nish.Terminal.acked
+  callee +1:20 termIoIsAck -> @nish.termIoIsAck
+  callee +4:11 Terminal.lateReply -> @nish.Terminal.lateReply
+  local +8:16 e: TermEvent (const)
+  callee +8:21 KeyState.apply -> @nish.KeyState.apply
+  callee +11:5 Terminal.acked -> @nish.Terminal.acked
 function Terminal.readEvents(this: Terminal, waitMs: i32, out: TermEvent[]): boolean -> @nish.Terminal.readEvents [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.KeyDecoder.feedEvents nish.KeyDecoder.pollEvents nish.KeyDecoder.waiting nish.KeyState.deliveredAgoMs nish.KeyState.tick nish.Terminal.acked nish.Terminal.take nish.termIoNowMs nish.termIoOnlyAcks nish_array_grow nish_panic_slice nish_read_stdin nish_wait_stdin
-  pointer this: size=168 writesThrough=true captured=false passedTo=nish.Terminal.take#0 nish.Terminal.acked#0 nish.Terminal.take#0 nish.Terminal.take#0
+  calls: nish.KeyDecoder.feedEvents nish.KeyDecoder.pollEvents nish.KeyDecoder.waiting nish.KeyState.tick nish.Terminal.acked nish.Terminal.take nish.termIoNowMs nish.termIoOnlyAcks nish_array_grow nish_panic_slice nish_read_stdin nish_wait_stdin
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Terminal.take#0 nish.Terminal.acked#0 nish.Terminal.take#0 nish.Terminal.take#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.Terminal.take#3 nish.Terminal.take#3 nish.Terminal.take#3
   stackSites=0 stackLocals=0
   local -1:13 held: TermEvent[] (const)
@@ -1892,21 +1947,33 @@ function Terminal.readEvents(this: Terminal, waitMs: i32, out: TermEvent[]): boo
   callee +22:9 Terminal.take -> @nish.Terminal.take
   local +27:18 e: TermEvent (const)
   callee +27:23 KeyState.tick -> @nish.KeyState.tick
-  callee +31:9 KeyState.deliveredAgoMs -> @nish.KeyState.deliveredAgoMs
 function Terminal.fit(this: Terminal, backend: i32): void -> @nish.Terminal.fit [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: backend
   calls: nish.fitFramebuffer
-  pointer this: size=168 writesThrough=true captured=false
+  pointer this: size=208 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +3:11 fb: Framebuffer (const)
   callee +4:17 fitFramebuffer -> @nish.fitFramebuffer
+function Terminal.send(this: Terminal, withPixels: boolean): i32 -> @nish.Terminal.send [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.PixelBytes.text nish.Screen.flush nish.beginSync nish.endSync nish_arena_mark nish_arena_release nish_monotonic_nanos nish_str_concat nish_write
+  pointer this: size=208 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -5:11 body: string (const)
+  callee -5:26 Screen.flush -> @nish.Screen.flush
+  local -4:11 image: string (const)
+  callee -4:40 PixelBytes.text -> @nish.PixelBytes.text
+  local -3:11 frame: string (const)
+  callee -2:12 beginSync -> @nish.beginSync
+  callee -2:41 endSync -> @nish.endSync
 function Terminal.present(this: Terminal): void -> @nish.Terminal.present [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: llvm.smin.i32 nish.PixelBytes.reset nish.RateController.decision nish.RateController.frameSent nish.Screen.invalidate nish.Terminal.ackPush nish.Terminal.fit nish.Terminal.stats nish.drawAscii nish.drawHalfBlocks nish.drawStatsOverlay nish.kittyDelete nish.kittyFrame nish.scaleFramebuffer nish.sixelFrame nish.termIoNowMs nish.termIoSend nish_monotonic_nanos nish_panic_overflow nish_write
-  pointer this: size=168 writesThrough=true captured=false passedTo=nish.Terminal.fit#0 nish.Terminal.stats#0 nish.Terminal.ackPush#0
+  calls: llvm.smin.i32 nish.PixelBytes.reset nish.RateController.decision nish.RateController.frameSent nish.Screen.invalidate nish.Terminal.ackPush nish.Terminal.dropLost nish.Terminal.fit nish.Terminal.send nish.Terminal.stats nish.drawAscii nish.drawHalfBlocks nish.drawStatsOverlay nish.kittyDelete nish.kittyFrame nish.scaleFramebuffer nish.sixelFrame nish_monotonic_nanos nish_panic_overflow nish_write
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Terminal.fit#0 nish.Terminal.stats#0 nish.Terminal.send#0 nish.Terminal.dropLost#0 nish.Terminal.ackPush#0
   stackSites=0 stackLocals=0
   local -4:11 start: i64 (const)
   local -3:11 d: RateDecision (const)
@@ -1930,11 +1997,11 @@ function Terminal.present(this: Terminal): void -> @nish.Terminal.present [expor
   callee +36:7 drawStatsOverlay -> @nish.drawStatsOverlay
   callee +36:37 Terminal.stats -> @nish.Terminal.stats
   local +38:11 bytes: i32 (const)
-  callee +38:24 termIoSend -> @nish.termIoSend
-  local +39:11 nowMs: f64 (const)
-  callee +39:24 termIoNowMs -> @nish.termIoNowMs
-  callee +40:5 RateController.frameSent -> @nish.RateController.frameSent
-  callee +41:5 Terminal.ackPush -> @nish.Terminal.ackPush
+  callee +38:24 Terminal.send -> @nish.Terminal.send
+  local +39:11 sentAtMs: f64 (const)
+  callee +40:5 Terminal.dropLost -> @nish.Terminal.dropLost
+  callee +41:5 RateController.frameSent -> @nish.RateController.frameSent
+  callee +43:5 Terminal.ackPush -> @nish.Terminal.ackPush
 function termIoRefusal(): string -> @nish.termIoRefusal
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_is_terminal
@@ -2000,7 +2067,7 @@ function Frame.constructor(this: Frame, term: Terminal): void -> @nish.Frame.con
   sharedWrite: via nish.Terminal.stats
   calls: nish.Terminal.stats
   pointer this: size=40 writesThrough=true captured=false
-  pointer term: size=168 writesThrough=false captured=false passedTo=nish.Terminal.stats#0
+  pointer term: size=208 writesThrough=false captured=false passedTo=nish.Terminal.stats#0
   stackSites=0 stackLocals=0
   callee +0:18 Terminal.stats -> @nish.Terminal.stats
 function termIoClear(events: TermEvent[]): void -> @nish.termIoClear
@@ -2020,7 +2087,7 @@ function termIoDue(step: FixedStep): f64 -> @nish.termIoDue
 function termIoWait(term: Terminal, step: FixedStep, nowMs: f64): i32 -> @nish.termIoWait
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64 nish.KeyDecoder.waiting nish.termIoDue
-  pointer term: size=168 writesThrough=false captured=false
+  pointer term: size=208 writesThrough=false captured=false
   pointer step: size=32 writesThrough=false captured=false passedTo=nish.termIoDue#0
   stackSites=0 stackLocals=0
   local +0:7 due: f64 (let)
@@ -2032,46 +2099,47 @@ function termIoWait(term: Terminal, step: FixedStep, nowMs: f64): i32 -> @nish.t
   callee +7:7 KeyDecoder.waiting -> @nish.KeyDecoder.waiting
 function runTerminal<Probe, update, render>(options: TerminalOptions, state: Probe, update: void, render: void): Result<i32, string> -> @nish.runTerminal$$Probe$fn.6.update$fn.6.render [exported instance]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
-  sharedWrite: via nish.openTerminal
-  calls: nish.FixedStep.advance nish.FixedStep.alpha nish.FixedStep.constructor nish.Frame.constructor nish.RateController.mayDraw nish.RateController.tick nish.TermEvent.constructor nish.TermInput.constructor nish.Terminal.checkResize nish.Terminal.close nish.Terminal.present nish.Terminal.readEvents nish.Terminal.stats nish.openTerminal nish.termIoClear nish.termIoNowMs nish.termIoQuits nish.termIoWait nish_alloc_struct nish_array_grow render$ update$
+  sharedWrite: +0:5
+  calls: nish.FixedStep.advance nish.FixedStep.alpha nish.FixedStep.constructor nish.Frame.constructor nish.RateController.mayDraw nish.RateController.tick nish.TermEvent.constructor nish.TermInput.constructor nish.Terminal.checkResize nish.Terminal.close nish.Terminal.present nish.Terminal.readEvents nish.Terminal.stats nish.openTerminal nish.termIoClear nish.termIoNowMs nish.termIoQuits nish.termIoWait nish_alloc_struct nish_array_grow nish_monotonic_nanos nish_panic_overflow render$ update$
   pointer options: size=56 writesThrough=true captured=true passedTo=nish.openTerminal#0
   pointer state: size=32 writesThrough=true captured=false passedTo=update$#0 render$#0
   stackSites=3 stackLocals=3
-  local +0:9 opened: Result<Terminal, string> (const)
-  callee +0:44 openTerminal -> @nish.openTerminal
-  local +4:9 term: Terminal (const)
-  local +5:9 input: TermInput (const)
-  callee +5:28 new TermInput -> @nish.TermInput.constructor
-  local +6:9 frame: Frame (const)
-  callee +6:24 new Frame -> @nish.Frame.constructor
-  local +7:9 step: FixedStep (const)
-  callee +7:27 new FixedStep -> @nish.FixedStep.constructor
-  callee +8:3 FixedStep.advance -> @nish.FixedStep.advance
-  callee +8:16 termIoNowMs -> @nish.termIoNowMs
-  local +9:7 ended: boolean (let)
-  local +10:7 quit: boolean (let)
-  callee +12:14 Terminal.readEvents -> @nish.Terminal.readEvents
-  callee +12:30 termIoWait -> @nish.termIoWait
-  callee +12:53 termIoNowMs -> @nish.termIoNowMs
-  callee +13:9 termIoQuits -> @nish.termIoQuits
-  local +17:11 nowMs: f64 (const)
-  callee +17:24 termIoNowMs -> @nish.termIoNowMs
-  callee +18:5 RateController.tick -> @nish.RateController.tick
-  local +19:11 draw: boolean (const)
-  callee +19:27 RateController.mayDraw -> @nish.RateController.mayDraw
-  callee +20:17 Terminal.checkResize -> @nish.Terminal.checkResize
-  local +21:13 e: TermEvent (const)
-  callee +21:28 new TermEvent -> @nish.TermEvent.constructor
-  local +26:11 steps: i32 (const)
-  callee +26:24 FixedStep.advance -> @nish.FixedStep.advance
-  local +27:14 k: i32 (let)
-  callee +28:15 update -> @update$
-  callee +29:7 termIoClear -> @nish.termIoClear
-  callee +32:21 FixedStep.alpha -> @nish.FixedStep.alpha
-  callee +33:21 Terminal.stats -> @nish.Terminal.stats
-  callee +35:7 render -> @render$
-  callee +36:7 Terminal.present -> @nish.Terminal.present
-  callee +39:3 Terminal.close -> @nish.Terminal.close
+  local -38:9 opened: Result<Terminal, string> (const)
+  callee -38:44 openTerminal -> @nish.openTerminal
+  local -34:9 term: Terminal (const)
+  local -33:9 input: TermInput (const)
+  callee -33:28 new TermInput -> @nish.TermInput.constructor
+  local -32:9 frame: Frame (const)
+  callee -32:24 new Frame -> @nish.Frame.constructor
+  local -31:9 step: FixedStep (const)
+  callee -31:27 new FixedStep -> @nish.FixedStep.constructor
+  callee -30:3 FixedStep.advance -> @nish.FixedStep.advance
+  callee -30:16 termIoNowMs -> @nish.termIoNowMs
+  local -29:7 ended: boolean (let)
+  local -28:7 quit: boolean (let)
+  callee -26:14 Terminal.readEvents -> @nish.Terminal.readEvents
+  callee -26:30 termIoWait -> @nish.termIoWait
+  callee -26:53 termIoNowMs -> @nish.termIoNowMs
+  callee -25:9 termIoQuits -> @nish.termIoQuits
+  local -21:11 nowMs: f64 (const)
+  callee -21:24 termIoNowMs -> @nish.termIoNowMs
+  callee -20:5 RateController.tick -> @nish.RateController.tick
+  local -19:11 draw: boolean (const)
+  callee -19:27 RateController.mayDraw -> @nish.RateController.mayDraw
+  callee -18:17 Terminal.checkResize -> @nish.Terminal.checkResize
+  local -17:13 e: TermEvent (const)
+  callee -17:28 new TermEvent -> @nish.TermEvent.constructor
+  local -12:11 steps: i32 (const)
+  callee -12:24 FixedStep.advance -> @nish.FixedStep.advance
+  local -11:11 work: i64 (const)
+  local -10:14 k: i32 (let)
+  callee -9:15 update -> @update$
+  callee -8:7 termIoClear -> @nish.termIoClear
+  callee -5:21 FixedStep.alpha -> @nish.FixedStep.alpha
+  callee -4:21 Terminal.stats -> @nish.Terminal.stats
+  callee -2:7 render -> @render$
+  callee +2:7 Terminal.present -> @nish.Terminal.present
+  callee +5:3 Terminal.close -> @nish.Terminal.close
 module std/term-rate.ts [package nish]
 import ATTR_INVERSE from "nish/term" -> const ATTR_INVERSE
 import COLOR_DEFAULT from "nish/term" -> const COLOR_DEFAULT

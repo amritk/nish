@@ -56,6 +56,8 @@ if (built.status !== 0) {
 }
 
 const BACKENDS = ["kitty", "sixel", "halfblock", "ascii"]
+// The `GRAPHICS_*` each name forces, which the program prints as `backend N`.
+const GRAPHICS = { ascii: 0, halfblock: 1, sixel: 2, kitty: 3 }
 const rows = new Map([...BACKENDS.map((b) => [b, []]), ["controller", []]])
 for (let round = 0; round < runs; round++) {
   for (const backend of BACKENDS) {
@@ -67,6 +69,11 @@ for (let round = 0; round < runs; round++) {
     const m = /present (\S+) (\S+) backend (\d+) bytes (\S+)/.exec(r.out)
     if (r.status !== 0 || m === null) {
       fail(`${backend}: exit ${r.status}\n${r.err}${r.scriptErr}`)
+    }
+    if (Number(m[3]) !== GRAPHICS[backend]) {
+      fail(
+        `${backend}: drew with backend ${m[3]}, not ${GRAPHICS[backend]}, so its row would time another backend`
+      )
     }
     rows.get(backend).push({ median: Number(m[1]), p90: Number(m[2]), bytes: Number(m[4]) })
   }

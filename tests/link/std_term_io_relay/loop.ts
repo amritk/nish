@@ -4,8 +4,10 @@
 // `term-io` section of tests/run.js builds it. The mode is the first argument:
 //   throttle   `runTerminal` over a 480×270 framebuffer until `q`; prints the
 //              tier of the first and the last frame, the most frames the
-//              controller left unacknowledged, and the monotonic time `update`
-//              first saw `k`
+//              controller left unacknowledged, the monotonic time `update`
+//              first saw `k`, the replies `update` was handed (none should
+//              be), the cell width the terminal learned, and the last frame's
+//              measured bandwidth and cost
 //   panic      `runTerminal` that writes `<panic>` and fails a bounds check
 //              in its tenth `render`, so the bytes after the mark are the
 //              runtime's restore string
@@ -16,7 +18,7 @@
 //              waits for `q`
 //   rss-leak   the same keeping 0.27 MB more each frame, the leak the RSS
 //              bound must catch
-import { ACTION_PRESS, EVENT_KEY, KEY_CHAR, TermEvent } from "nish/term";
+import { ACTION_PRESS, EVENT_KEY, EVENT_REPLY, KEY_CHAR, TermEvent } from "nish/term";
 import { monotonicNanos } from "nish:process";
 import { Frame, TermInput, Terminal, defaultTerminalOptions, openTerminal, runTerminal } from "nish/term-io";
 
@@ -28,6 +30,10 @@ class Run {
   lastTier: i32 = 0;
   maxUnacked: i32 = 0;
   keyNs: i64 = 0;
+  replies: i32 = 0;
+  cellWidthPx: i32 = 0;
+  bytesPerSec: f64 = 0.0;
+  frameCostMs: f64 = 0.0;
 }
 
 /** Whether `events` holds a press of the character `code`. */
@@ -41,6 +47,11 @@ const pressed = (events: TermEvent[], code: i32): boolean => {
 };
 
 const update = (run: Run, input: TermInput): boolean => {
+  for (const e of input.events) {
+    if (e.type === EVENT_REPLY) {
+      run.replies = run.replies + 1;
+    }
+  }
   if (run.keyNs === 0 && pressed(input.events, 107)) {
     run.keyNs = monotonicNanos();
   }
@@ -58,6 +69,9 @@ const render = (run: Run, frame: Frame): void => {
     run.firstTier = frame.stats.tier;
   }
   run.lastTier = frame.stats.tier;
+  run.cellWidthPx = frame.caps.cellWidthPx;
+  run.bytesPerSec = frame.stats.bytesPerSec;
+  run.frameCostMs = frame.stats.frameCostMs;
   if (frame.stats.unacked > run.maxUnacked) {
     run.maxUnacked = frame.stats.unacked;
   }
@@ -105,6 +119,9 @@ const runLoop = (panics: boolean): number => {
   console.log(`tier ${run.firstTier} ${run.lastTier}`);
   console.log(`unacked ${run.maxUnacked}`);
   console.log(`key ${run.keyNs}`);
+  console.log(`replies ${run.replies}`);
+  console.log(`cell ${run.cellWidthPx}`);
+  console.log(`link ${Math.round(run.bytesPerSec)} B/s cost ${run.frameCostMs} ms`);
   return 0;
 };
 

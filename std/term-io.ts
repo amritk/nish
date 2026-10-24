@@ -37,11 +37,18 @@
  * divisor and palette, wrapped in synchronized output when the terminal has
  * it, as one write. It follows the frame with a DSR 5 query (`CSI 5 n`),
  * whose answer (`CSI 0 n`) acknowledges the frame to the controller and marks
- * the input before it as delivered to `KeyState`; those answers never reach
- * the program.
+ * the input before it as delivered to `KeyState`. No answer from the terminal
+ * reaches the program: one that arrives after the probe gave up (a slow link)
+ * is taken, and a cell size among them is learned. `close` reads the
+ * acknowledgements still in flight before it leaves raw mode, so none is
+ * echoed onto the shell's line.
+ *
+ * A frame's cost to the controller is the program's `update` and `render`
+ * since the last frame plus encoding it, not the write: a write that blocks
+ * on a slow link is the link's time, which the acknowledgements measure.
  *
  * Steady state allocates nothing per frame that outlives it: the frame's
- * strings live in `termIoSend`'s scope, the pixel encoders write into one
+ * strings live in `Terminal.send`'s scope, the pixel encoders write into one
  * `PixelBytes`, and a read that holds only frame acknowledgements is counted
  * without being decoded.
  *
@@ -93,11 +100,15 @@ const TERM_IO_IMAGE_ID: i32 = 1
 /** How long the session decoder holds an unfinished escape sequence, in milliseconds. */
 const TERM_IO_ESCAPE_MS: f64 = 40.0
 
-/** How long after the last answered query `KeyState` stops measuring silence against it, in milliseconds. */
+/** How long after the last acknowledgement arrived `KeyState` stops measuring silence against it, in milliseconds. */
 const TERM_IO_WATERMARK_MS: f64 = 1000.0
 
 /** The frame acknowledgements a `Terminal` remembers the send times of. */
 const TERM_IO_ACKS: i32 = 64
+
+/** The least and most `close` waits for the acknowledgements still in flight, in milliseconds. */
+const TERM_IO_DRAIN_MIN_MS: f64 = 50.0
+const TERM_IO_DRAIN_MAX_MS: f64 = 500.0
 
 /** The bytes one read takes. */
 const TERM_IO_READ: i32 = 4096
@@ -229,19 +240,8 @@ const termIoOnlyAcks = (buf: u8[], n: i32): i32 => {
   return (n / 4) | 0
 }
 
-/**
- * Write one frame as a single write: `screen`'s changes, then `pixels`' bytes
- * when `withPixels`, wrapped in synchronized output when `sync`, then the
- * DSR 5 query that acknowledges it. Answers the bytes written. Its strings die
- * here, so a frame loop does not keep them.
- */
-const termIoSend = (screen: Screen, pixels: PixelBytes, withPixels: boolean, sync: boolean): i32 => {
-  const body: string = screen.flush()
-  const image: string = withPixels ? pixels.text() : ""
-  const frame: string = sync ? `${beginSync()}${body}${image}${endSync()}\x1b[5n` : `${body}${image}\x1b[5n`
-  write(frame)
-  return toI32(frame.length)
-}
+/** Parameter `i` of a reply, or -1 when it has fewer. */
+const termIoParam = (e: TermEvent, i: i32): i32 => (i < toI32(e.params.length) ? e.params[i] : -1)
 
 /**
  * An open terminal: what it can do, the `Screen` and `Framebuffer` a program
@@ -271,6 +271,15 @@ export class Terminal {
   readBuf: u8[]
   /** Where the framebuffer is drawn, for `rectCols × rectRows` cells and `rectBackend`. */
   rect: PixelRect
+  /** When the last frame acknowledgement arrived, or -1. */
+  lastAckMs: f64
+  /** The last acknowledged frame's own round trip, in milliseconds, which the controller's smoothed one trails. */
+  lastRttMs: f64
+  /** The program's work toward the next frame (its `update` and `render`), in nanoseconds, which `present` adds to the frame's cost. */
+  workNs: f64
+  /** When the last frame's write began, on the monotonic clock. */
+  sendStartNs: i64
+  /** The cells `rect` was fitted to. */
   rectCols: i32
   rectRows: i32
   rectBackend: i32
@@ -280,9 +289,12 @@ export class Terminal {
   backend: i32
   cellWidthPx: i32
   cellHeightPx: i32
-  /** The size `terminalSize` last answered, which `checkResize` compares. */
+  /** The size `terminalSize` last answered. */
   sizeCols: i32
   sizeRows: i32
+  /** The size last given to the `Screen`, before it clamped it, which `checkResize` compares. */
+  shownCols: i32
+  shownRows: i32
   /** The mouse mode turned on, or 0. */
   mouseMode: i32
   open: boolean
@@ -339,6 +351,12 @@ export class Terminal {
     this.cellHeightPx = termIoCellPx(caps.cellHeightPx)
     this.sizeCols = cols
     this.sizeRows = rows
+    this.shownCols = cols
+    this.shownRows = rows
+    this.lastAckMs = -1.0
+    this.lastRttMs = 0.0
+    this.workNs = 0.0
+    this.sendStartNs = 0
     this.mouseMode = 0
     this.open = true
     this.kittyKeyboardOn = false
@@ -406,15 +424,54 @@ export class Terminal {
     }
   }
 
-  /** Undo everything `openTerminal` did, in reverse, and leave raw mode. A second call does nothing. */
+  /**
+   * Undo everything `openTerminal` did, in reverse, and leave raw mode. The
+   * acknowledgements still in flight are read first, for twice the round trip
+   * (the controller's or the last frame's, whichever is longer; 50 to
+   * 500 ms), so the terminal's answers are not echoed after the program. A
+   * second call does nothing.
+   */
   close(): void {
     if (!this.open) {
       return
     }
     this.open = false
     write(this.restoreString())
+    this.drainAcks()
     setTerminalRestore("")
     setRawMode(false)
+  }
+
+  /** Read and drop input until every frame sent is answered, stdin ends or the round trip's bound passes. */
+  drainAcks(): void {
+    let owed: i32 = this.rate.unacked() + this.rate.stale
+    const rtt: f64 = this.rate.rttMs > this.lastRttMs ? this.rate.rttMs : this.lastRttMs
+    let bound: f64 = 2.0 * rtt
+    bound = bound > TERM_IO_DRAIN_MIN_MS ? bound : TERM_IO_DRAIN_MIN_MS
+    bound = bound < TERM_IO_DRAIN_MAX_MS ? bound : TERM_IO_DRAIN_MAX_MS
+    const deadline: f64 = termIoNowMs() + bound
+    let ended: boolean = false
+    while (owed > 0 && !ended) {
+      const left: i32 = toI32(Math.ceil(deadline - termIoNowMs()))
+      if (left <= 0 || !waitStdin(left)) {
+        return
+      }
+      const n: i32 = readStdin(this.readBuf, 0, TERM_IO_READ)
+      if (n > 0) {
+        const only: i32 = this.decoder.waiting() ? -1 : termIoOnlyAcks(this.readBuf, n)
+        if (only > 0) {
+          owed = owed - only
+        } else {
+          for (const e of this.decoder.feedEvents(this.readBuf, n, termIoNowMs())) {
+            if (termIoIsAck(e)) {
+              owed = owed - 1
+            }
+          }
+        }
+      } else if (n !== -11) {
+        ended = true
+      }
+    }
   }
 
   /** What the controller measured, with the backend the last frame actually used. */
@@ -433,17 +490,32 @@ export class Terminal {
     }
   }
 
-  /** Whether the terminal changed size since the last call; if it did, the `Screen` takes the new size and the framebuffer is fitted again. */
+  /**
+   * Whether the terminal changed size since the last call; if it did, the
+   * `Screen` takes the new size and the framebuffer is fitted again. It
+   * compares the size the terminal answers, not the `Screen`'s, which clamps
+   * a huge one, so a huge terminal is not resized every frame.
+   */
   checkResize(): boolean {
     this.readSize()
-    if (this.sizeCols === this.screen.width && this.sizeRows === this.screen.height) {
+    if (this.sizeCols === this.shownCols && this.sizeRows === this.shownRows) {
       return false
     }
+    this.shownCols = this.sizeCols
+    this.shownRows = this.sizeRows
     this.screen.resize(this.sizeCols, this.sizeRows)
     this.canvas = new Canvas(this.screen)
     this.screen.invalidate()
     this.rectCols = -1
     return true
+  }
+
+  /** Forget the send times of the frames the controller gave up on, oldest first, so the ring holds only frames it still waits for. */
+  dropLost(): void {
+    while (this.ackCount > this.rate.unacked()) {
+      this.ackHead = (this.ackHead + 1) % TERM_IO_ACKS
+      this.ackCount = this.ackCount - 1
+    }
   }
 
   /** Remember that a frame acknowledgement was asked for at `nowMs`. */
@@ -456,32 +528,79 @@ export class Terminal {
     this.ackCount = this.ackCount + 1
   }
 
-  /** `count` acknowledgements arrived at `nowMs`: each marks its frame's send time delivered and answers the controller. */
+  /**
+   * `count` acknowledgements arrived at `nowMs`: each answers the controller
+   * and, unless it is the late answer of a frame the controller gave up on,
+   * marks its frame's send time delivered.
+   */
   acked(count: i32, nowMs: f64): void {
     for (let k: i32 = 0; k < count; k++) {
-      if (this.ackCount > 0) {
+      this.dropLost()
+      if (this.rate.stale === 0 && this.ackCount > 0) {
         this.keys.delivered(this.ackSent[this.ackHead])
+        this.lastRttMs = nowMs - this.ackSent[this.ackHead]
         this.ackHead = (this.ackHead + 1) % TERM_IO_ACKS
         this.ackCount = this.ackCount - 1
       }
       this.rate.ackReceived(nowMs)
     }
+    if (count > 0) {
+      this.lastAckMs = nowMs
+    }
   }
 
-  /** Take decoded `events`, read at `nowMs`: the program's go through `KeyState` into `out`, then the acknowledgements count. */
+  /** A reply other than an acknowledgement, which came after the probe: learn the cell size from it if the probe did not. */
+  lateReply(e: TermEvent): void {
+    if (
+      this.cellWidthPx > 0 ||
+      e.introducer !== 91 ||
+      e.prefix !== 0 ||
+      e.intermediate !== 0 ||
+      e.reply !== 116
+    ) {
+      return
+    }
+    let w: i32 = 0
+    let h: i32 = 0
+    if (termIoParam(e, 0) === 6) {
+      h = termIoParam(e, 1)
+      w = termIoParam(e, 2)
+    } else if (termIoParam(e, 0) === 4 && this.screen.width > 0 && this.screen.height > 0) {
+      h = (termIoParam(e, 1) / this.screen.height) | 0
+      w = (termIoParam(e, 2) / this.screen.width) | 0
+    }
+    if (termIoCellPx(w) > 0 && termIoCellPx(h) > 0) {
+      this.cellWidthPx = termIoCellPx(w)
+      this.cellHeightPx = termIoCellPx(h)
+      this.caps.cellWidthPx = this.cellWidthPx
+      this.caps.cellHeightPx = this.cellHeightPx
+      this.rectCols = -1
+    }
+  }
+
+  /**
+   * Take decoded `events`, read at `nowMs`: the program's go through
+   * `KeyState` into `out`, then the acknowledgements count. Every reply is
+   * the terminal's and is taken here, a late cell size learned.
+   */
   take(events: TermEvent[], nowMs: f64, out: TermEvent[]): void {
-    let acks: i32 = 0
+    let replies: i32 = 0
     for (const e of events) {
-      if (termIoIsAck(e)) {
-        acks = acks + 1
+      if (e.type === EVENT_REPLY) {
+        replies = replies + 1
       }
     }
     let program: TermEvent[] = events
-    if (acks > 0) {
+    let acks: i32 = 0
+    if (replies > 0) {
       program = []
       for (const e of events) {
-        if (!termIoIsAck(e)) {
+        if (e.type !== EVENT_REPLY) {
           program.push(e)
+        } else if (termIoIsAck(e)) {
+          acks = acks + 1
+        } else {
+          this.lateReply(e)
         }
       }
     }
@@ -532,7 +651,7 @@ export class Terminal {
         out.push(e)
       }
     }
-    if (this.keys.deliveredAgoMs(nowMs) > TERM_IO_WATERMARK_MS) {
+    if (this.keys.watermarked && nowMs - this.lastAckMs > TERM_IO_WATERMARK_MS) {
       // Answers stopped (no frames lately): measure silence against the clock again.
       this.keys.watermarked = false
     }
@@ -564,10 +683,30 @@ export class Terminal {
   }
 
   /**
+   * Write one frame as a single write: the screen's changes, then the pixels'
+   * bytes when `withPixels`, wrapped in synchronized output when the terminal
+   * has it, then the DSR 5 query that acknowledges it. Records when the write
+   * began in `sendStartNs` and answers the bytes written. Its strings die
+   * here, so a frame loop does not keep them.
+   */
+  send(withPixels: boolean): i32 {
+    const body: string = this.screen.flush()
+    const image: string = withPixels ? this.pixels.text() : ""
+    const frame: string = this.caps.sync
+      ? `${beginSync()}${body}${image}${endSync()}\x1b[5n`
+      : `${body}${image}\x1b[5n`
+    this.sendStartNs = monotonicNanos()
+    write(frame)
+    return toI32(frame.length)
+  }
+
+  /**
    * Send a frame: the framebuffer, if any, drawn with the backend the
    * terminal and the controller allow, the stats overlay if the options ask
    * for it, and the screen's changes, as one write followed by the query that
-   * acknowledges it. A closed terminal is not written to.
+   * acknowledges it. Its cost to the controller is `workNs` and the encoding,
+   * and its send time is when the write began. A closed terminal is not
+   * written to.
    */
   present(): void {
     if (!this.open) {
@@ -615,10 +754,12 @@ export class Terminal {
     if (this.options.overlay >= 0) {
       drawStatsOverlay(this.screen, this.stats(), this.options.overlay)
     }
-    const bytes: i32 = termIoSend(this.screen, this.pixels, withPixels, this.caps.sync)
-    const nowMs: f64 = termIoNowMs()
-    this.rate.frameSent(bytes, toF64(monotonicNanos() - start), nowMs)
-    this.ackPush(nowMs)
+    const bytes: i32 = this.send(withPixels)
+    const sentAtMs: f64 = toF64(this.sendStartNs) / 1000000.0
+    this.dropLost()
+    this.rate.frameSent(bytes, this.workNs + toF64(this.sendStartNs - start), sentAtMs)
+    this.workNs = 0.0
+    this.ackPush(sentAtMs)
   }
 }
 
@@ -795,6 +936,7 @@ export const runTerminal = <G>(
       input.events.push(e)
     }
     const steps: i32 = step.advance(nowMs)
+    const work: i64 = monotonicNanos()
     for (let k: i32 = 0; k < steps && !quit; k++) {
       quit = !update(state, input)
       termIoClear(input.events)
@@ -804,6 +946,9 @@ export const runTerminal = <G>(
       frame.stats = term.stats()
       frame.framebuffer = term.framebuffer
       render(state, frame)
+    }
+    term.workNs = term.workNs + toF64(monotonicNanos() - work)
+    if (draw && !quit) {
       term.present()
     }
   }

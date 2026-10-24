@@ -49,6 +49,8 @@ const rssKb = (pid) => {
  *   rssAt        frame counts to sample the program's memory at, before keys
  *   stdoutPipe   pipe the program's stdout through cat inside the terminal
  *   stdinNull    give the program /dev/null for stdin
+ *   lingerMs     how long the terminal stays open after the program exits,
+ *                in cooked mode, so an answer that comes late is echoed (0)
  *   timeoutMs    when to kill the run (20 s)
  * Answers `{ out, err, status, frames, maxUnacked, keySentNs, rss, sameStty, timedOut }`:
  * `out` the last megabyte or more of the program's stdout with `\r` removed, `err` its stderr, `status`
@@ -56,7 +58,7 @@ const rssKb = (pid) => {
  * `rss` `[{ frames, kb }]`, `sameStty` whether `stty -g` read the same after.
  */
 export const relay = (exe, mode, options) => {
-  const o = { env: {}, reply: KITTY_REPLY, link: null, keys: [], rssAt: [], timeoutMs: 20000, ...options }
+  const o = { env: {}, reply: KITTY_REPLY, link: null, keys: [], rssAt: [], lingerMs: 0, timeoutMs: 20000, ...options }
   fs.rmSync(o.dir, { recursive: true, force: true })
   fs.mkdirSync(o.dir, { recursive: true })
   const sh = path.join(o.dir, "run.sh")
@@ -67,9 +69,10 @@ export const relay = (exe, mode, options) => {
       'E="$NISH_RELAY_EXE"; M="$NISH_RELAY_MODE"; D="$NISH_RELAY_DIR"',
       "stty cols 200 rows 60",
       'stty -g > "$D/before"',
-      o.stdoutPipe
-        ? `{ ${run} 2> "$D/err"; echo $? > "$D/status"; } | cat`
-        : `${run} 2> "$D/err" & echo $! > "$D/pid"; wait $!; echo $? > "$D/status"`,
+      // The program's pid either way, so a run that times out kills it and not only `script`.
+      `${o.stdoutPipe ? "{ " : ""}${run} 2> "$D/err" & echo $! > "$D/pid"; wait $!; echo $? > "$D/status"` +
+        (o.stdoutPipe ? "; } | cat" : ""),
+      o.lingerMs > 0 ? `sleep ${o.lingerMs / 1000}` : "",
       'stty -g > "$D/after"',
       "",
     ].join("\n")

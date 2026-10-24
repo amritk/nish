@@ -1867,12 +1867,15 @@ if (!only || "term".includes(only)) {
 // docs/guide/using-nish/terminal.md) quits on `q` and on kitty's Ctrl-C and
 // refuses a pipe on either side; a panic mid-frame leaves the restore string
 // as the last bytes and the termios as it was; over a slow modelled link the
-// tier falls, the frames in flight stay at the limit, and a key still reaches
-// `update` within a frame of the lowest rate; the key state's watermark holds
-// while an answer is in and lapses after a second without one; and a present
-// loop of each backend keeps its memory while one that leaks 0.27 MB a frame
-// does not; and examples/term-probe.ts reports what it found. Linux only:
-// the relay finds the program through /proc.
+// tier falls, no more than one frame is ever in flight, a key still reaches
+// `update` within a frame of the lowest rate, no terminal reply reaches
+// `update`, and a cell size answered late is learned; closing waits out the
+// acknowledgements still on the link, so none is echoed after exit; the key
+// state's watermark holds while an answer is in and lapses after a second
+// without one; a present loop of each backend draws with that backend and
+// keeps its memory while one that leaks 0.27 MB a frame does not; and
+// examples/term-probe.ts reports what it found. Linux only: the relay finds
+// the program through /proc.
 if (!only || "term".includes(only) || "term-io".includes(only)) {
   const ioDir = path.join(buildDir, "term-io")
   if (process.platform !== "linux" || !has("script")) {
@@ -1966,26 +1969,67 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
           { afterFrames: 30, bytes: "k" },
           { afterFrames: 45, bytes: "q" },
         ],
-        timeoutMs: 30000,
+        timeoutMs: 60000,
       })
       const tier = /tier (\d+) (\d+)/.exec(throttle.out)
       const unacked = /unacked (\d+)/.exec(throttle.out)
       const keyNs = /key (\d+)/.exec(throttle.out)
+      const link = /link (\S+ B\/s cost \S+ ms)/.exec(throttle.out)
       const latencyMs =
         keyNs === null || throttle.keySentNs.length === 0
           ? -1
           : Number(BigInt(keyNs[1]) - throttle.keySentNs[0]) / 1e6
+      // The limit is `RateOptions.maxUnacked`, 1 unless a program asks for 2.
       check(
-        "term-io: over a 60 ms, 300 kB/s link the tier falls, at most two frames go unacknowledged, and a key reaches update within 100 ms",
+        "term-io: over a 60 ms, 300 kB/s link the tier falls, no more frames go unacknowledged than the limit of one, and a key reaches update within 250 ms",
         throttle.status === 0 &&
           tier !== null &&
           Number(tier[2]) < Number(tier[1]) &&
           unacked !== null &&
-          Number(unacked[1]) <= 2 &&
-          throttle.maxUnacked <= 2 &&
+          Number(unacked[1]) <= 1 &&
+          throttle.maxUnacked <= 1 &&
           latencyMs >= 0 &&
-          latencyMs < 100,
-        `${said(throttle)}\ntier ${tier?.slice(1)}, unacked ${unacked?.[1]} (relay saw ${throttle.maxUnacked}), key latency ${latencyMs} ms`
+          latencyMs < 250,
+        `${said(throttle)}\ntier ${tier?.slice(1)}, unacked ${unacked?.[1]} (relay saw ${throttle.maxUnacked}), key latency ${latencyMs} ms, ${link?.[1]}`
+      )
+
+      // Answers the program did not wait for: the probe's, after its timeout,
+      // and a second DA1 and cell size mid-run. None reaches `update`; a cell
+      // size the probe missed is learned.
+      const { KITTY_REPLY } = await import("./term-io/relay.mjs")
+      for (const [name, silent, extra] of [
+        ["after the probe timed out", true, KITTY_REPLY],
+        ["after DA1", false, "\x1b[?62;52;c\x1b[6;20;10t\x1bP>|kitty(0.49.2)\x1b\\\x1b[?2026;2$y"],
+      ]) {
+        const r = await relay(loopExe, "throttle", {
+          dir: at(`replies-${silent ? "late" : "again"}`),
+          ...(silent ? { reply: null } : {}),
+          keys: [
+            { afterFrames: 3, bytes: extra },
+            { afterFrames: 8, bytes: "q" },
+          ],
+        })
+        check(
+          `term-io: a terminal's answers that arrive ${name} never reach update` +
+            (silent ? ", and the cell size among them is learned" : ""),
+          r.status === 0 && r.out.includes("replies 0\n") && (!silent || r.out.includes("cell 10\n")) && r.sameStty,
+          said(r)
+        )
+      }
+
+      // The frame drawn as `q` arrives is answered 150 ms later: closing waits
+      // for that answer in raw mode, so it is not echoed into the shell.
+      const late = await relay(loopExe, "throttle", {
+        dir: at("late-ack"),
+        link: { rttMs: 150, bytesPerSec: 10000000 },
+        keys: [{ afterFrames: 5, bytes: "q" }],
+        lingerMs: 500,
+      })
+      const afterExit = late.out.slice(late.out.lastIndexOf("\x1b[?1049l"))
+      check(
+        "term-io: an acknowledgement still in flight when the program quits is read before raw mode ends, not echoed after it",
+        late.status === 0 && late.out.includes("\x1b[?1049l") && !afterExit.includes("[0n") && late.sameStty,
+        `${said(late)}\nafter leaving the alternate screen: ${JSON.stringify(afterExit)}`
       )
 
       const watermark = await relay(loopExe, "watermark", { dir: at("watermark") })
@@ -2016,15 +2060,22 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
           })
         )
       )
+      // The `GRAPHICS_*` each name forces, which the program prints as `backend N`.
+      const graphics = { ascii: 0, halfblock: 1, sixel: 2, kitty: 3 }
       runs.forEach(([backend, mode], i) => {
         const r = rssRuns[i]
+        const used = /backend (\d+)/.exec(r.out)
         const grew = r.rss.length === 2 && r.rss.every((s) => s.kb > 0) ? r.rss[1].kb - r.rss[0].kb : NaN
         const leaks = mode === "rss-leak"
         check(
           leaks
             ? `term-io: a ${backend} present loop that keeps 0.27 MB a frame grows past the 8 MB bound`
-            : `term-io: a ${backend} present loop of 250 frames grows less than 8 MB`,
-          r.status === 0 && r.out.includes("frames 250") && (leaks ? grew > boundKb : grew < boundKb),
+            : `term-io: a ${backend} present loop of 250 frames draws with ${backend} and grows less than 8 MB`,
+          r.status === 0 &&
+            r.out.includes("frames 250") &&
+            used !== null &&
+            Number(used[1]) === graphics[backend] &&
+            (leaks ? grew > boundKb : grew < boundKb),
           `${said(r)}\nrss ${JSON.stringify(r.rss)}`
         )
       })
