@@ -143,8 +143,10 @@ case "$profile" in
           fi
           # `--sandbox` IR compiled for the host confines through Linux system
           # calls a wasm module has none of; the compiler emits no call for a
-          # wasm target, so only IR that never told it reaches this.
-          if grep -q '@nish_sandbox(' "$i"; then
+          # wasm target, so only IR that never told it reaches this. The match
+          # is the call instruction, not the name: the compiler's own IR holds
+          # the name as string data.
+          if grep -Eq '^[[:space:]]+call void @nish_sandbox\(' "$i"; then
             echo "error: $i was compiled with --sandbox, and a $profile module has no sandbox; compile it with --target wasm32 and without --sandbox" >&2
             exit 2
           fi ;;
