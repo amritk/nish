@@ -3,6 +3,8 @@
 // wrong. It opens the terminal, presents a moving picture for five seconds,
 // closes it, and prints every `TermCaps` field and one stats line per second.
 //   nish run examples/term-probe.ts
+// Off a terminal it refuses, as the smoke run's /dev/null stdin is:
+// smoke: exit 1
 import { monotonicNanos } from "nish:process"
 import { TermCaps } from "nish/term-probe"
 import { Frame, TermInput, defaultTerminalOptions, runTerminal } from "nish/term-io"
