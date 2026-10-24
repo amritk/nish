@@ -72,8 +72,8 @@
  *
  * **Constant time.** A private key is the one secret that passes through here:
  * it is base64-decoded from PEM, lifted out of its DER, and handed to
- * `nish/crypto/p256`. Base64 maps a character to its sextet and back by
- * arithmetic on range masks, as `nish/crypto/base64url` does, and folds a bad
+ * `nish/crypto/p256`. Base64 is `nish/crypto/base64url`'s `base64Decode`, which
+ * maps a character to its sextet by arithmetic on range masks and folds a bad
  * character into one word read after the whole text, so neither a branch nor a
  * table index depends on the key's bytes. PEM's framing is found by comparing
  * the start of each line with the fixed `-----BEGIN ` and `-----END `, which no
@@ -96,6 +96,7 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { Secret, secret, wipe } from "nish:secret"
+import { base64Decode, base64Encode } from "nish/crypto/base64url"
 import { p256PublicKey, p256SignSha256, p256VerifySha256 } from "nish/crypto/p256"
 import { sha256 } from "nish/crypto/sha256"
 
@@ -704,123 +705,8 @@ const x509Bytes = (text: string): u8[] => {
 }
 
 // ---------------------------------------------------------------------------
-// PEM (RFC 7468) and standard base64 (RFC 4648 §4)
+// PEM (RFC 7468), over `nish/crypto/base64url`'s padded base64
 // ---------------------------------------------------------------------------
-
-/**
- * All ones when `lo <= c <= hi`, else zero, without a branch; `c` is a byte or
- * a sextet. The subtractions are `u32`'s, which wrap by definition, rather
- * than checked `i32` ones, whose check would be a branch on a byte of what may
- * be a private key's PEM; the sign bit `>> 31` reads is the same.
- * `x509Base64CharOf` and `x509Base64SextetOf` sum in `u32` for the same reason.
- */
-const x509RangeMask = (c: i32, lo: i32, hi: i32): i32 =>
-  toI32((toU32(lo) - 1 - toU32(c)) & (toU32(c) - toU32(hi) - 1)) >> 31
-
-/**
- * The base64 character for the sextet `v`: `'A' + v`, stepped by the gap to
- * each later range it has reached — 26 lands on `a`, 52 on `0`, 62 on `+` and
- * 63 on `/`.
- */
-const x509Base64CharOf = (v: i32): i32 =>
-  toI32(
-    65 +
-      toU32(v) +
-      toU32(x509RangeMask(v, 26, 63) & 6) -
-      toU32(x509RangeMask(v, 52, 63) & 75) -
-      toU32(x509RangeMask(v, 62, 63) & 15) +
-      toU32(x509RangeMask(v, 63, 63) & 3)
-  )
-
-/** The sextet the byte `c` stands for in base64, or `-1` when it is not in the alphabet. */
-const x509Base64SextetOf = (c: i32): i32 => {
-  const upper: i32 = x509RangeMask(c, 65, 90)
-  const lower: i32 = x509RangeMask(c, 97, 122)
-  const digit: i32 = x509RangeMask(c, 48, 57)
-  const plus: i32 = x509RangeMask(c, 43, 43)
-  const slash: i32 = x509RangeMask(c, 47, 47)
-  const value: i32 =
-    (upper & toI32(toU32(c) - 65)) |
-    (lower & toI32(toU32(c) - 71)) |
-    (digit & toI32(toU32(c) + 4)) |
-    (plus & 62) |
-    (slash & 63)
-  return value | ~(upper | lower | digit | plus | slash)
-}
-
-/** `data` in padded base64, as one line. */
-const x509Base64Encode = (data: u8[]): string => {
-  const parts: string[] = []
-  let acc: i32 = 0
-  let bits: i32 = 0
-  for (let k: i32 = 0; k < toI32(data.length); k++) {
-    acc = ((acc << 8) | toI32(data[k])) & 0xfff
-    bits = bits + 8
-    while (bits >= 6) {
-      bits = bits - 6
-      parts.push(String.fromCharCode(x509Base64CharOf((acc >> bits) & 63)))
-    }
-  }
-  if (bits > 0) {
-    parts.push(String.fromCharCode(x509Base64CharOf((acc << (6 - bits)) & 63)))
-  }
-  // One `=` for a final group of two bytes, two for one byte.
-  const tail: i32 = toI32(data.length) % 3
-  if (tail > 0) {
-    parts.push(tail === 1 ? "==" : "=")
-  }
-  return parts.join("")
-}
-
-/**
- * The bytes of padded base64 `text`, or `null` unless it is the one canonical
- * spelling of them: a whole number of four-character groups, `=` only as the
- * last one or two characters, every other character in the alphabet, and the
- * bits the padding leaves over all zero (RFC 4648 §3.5). Where the padding is
- * depends on the length alone; the characters themselves are read by masks and
- * judged once, after the last.
- */
-const x509Base64Decode = (text: string): u8[] | null => {
-  const n: i32 = toI32(text.length)
-  if (n === 0 || (n & 3) !== 0) {
-    return null
-  }
-  let pad: i32 = 0
-  if (toI32(text.charCodeAt(n - 1)) === 61) {
-    pad = toI32(text.charCodeAt(n - 2)) === 61 ? 2 : 1
-  }
-  const chars: i32 = n - pad
-  const out: u8[] = new Array<u8>((n >> 2) * 3 - pad)
-  const outLen: i32 = toI32(out.length)
-  let bad: i32 = 0
-  let acc: i32 = 0
-  let bits: i32 = 0
-  let j: i32 = 0
-  for (let k: i32 = 0; k < toI32(text.length); k++) {
-    // The padding is past `chars`, and is not data; which positions those are
-    // is a fact about the length.
-    if (k < chars) {
-      const v: i32 = x509Base64SextetOf(toI32(text.charCodeAt(k)))
-      bad = bad | (v >> 31)
-      acc = ((acc << 6) | (v & 63)) & 0xfff
-      bits = bits + 6
-      if (bits >= 8) {
-        bits = bits - 8
-        // Always true — `out` was sized from the same length — and written so
-        // the store keeps no bounds check.
-        if (j >= 0 && j < outLen) {
-          out[j] = toU8((acc >> bits) & 0xff)
-        }
-        j = j + 1
-      }
-    }
-  }
-  bad = bad | (acc & ((1 << bits) - 1))
-  if (bad !== 0) {
-    return null
-  }
-  return out
-}
 
 /** Whether `text` starts with `prefix`. */
 const x509StartsWith = (text: string, prefix: string): boolean => {
@@ -841,7 +727,7 @@ const x509EndsWith = (text: string, suffix: string): boolean => {
  * ending in a line feed.
  */
 export const derToPem = (der: u8[], label: string): string => {
-  const body: string = x509Base64Encode(der)
+  const body: string = base64Encode(der)
   const n: i32 = toI32(body.length)
   const lines: string[] = [`-----BEGIN ${label}-----`]
   for (let at: i32 = 0; at < n; at = at + 64) {
@@ -894,7 +780,10 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
       }
       // Every block is decoded, whatever its label: a malformed block beside the
       // one asked for is refused, not skipped (docs/security/crypto-x509.md, X509-1).
-      const der: u8[] | null = x509Base64Decode(body.join(""))
+      // An empty body is refused: a block with no DER is malformed, though
+      // the empty text is base64 for no bytes.
+      const text: string = body.join("")
+      const der: u8[] | null = text.length === 0 ? null : base64Decode(text)
       if (der === null) {
         return null
       }

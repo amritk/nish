@@ -1,0 +1,54 @@
+PASS  encode RFC 4648 §10: empty
+PASS  decode RFC 4648 §10: empty
+PASS  encode RFC 4648 §10: f
+PASS  decode RFC 4648 §10: f
+PASS  encode RFC 4648 §10: fo
+PASS  decode RFC 4648 §10: fo
+PASS  encode RFC 4648 §10: foo
+PASS  decode RFC 4648 §10: foo
+PASS  encode RFC 4648 §10: foob
+PASS  decode RFC 4648 §10: foob
+PASS  encode RFC 4648 §10: fooba
+PASS  decode RFC 4648 §10: fooba
+PASS  encode RFC 4648 §10: foobar
+PASS  decode RFC 4648 §10: foobar
+PASS  encode RFC 4648 §4: fb ff uses + and /
+PASS  decode RFC 4648 §4: fb ff uses + and /
+PASS  encode RFC 4648 §4: ff fe uses /
+PASS  decode RFC 4648 §4: ff fe uses /
+PASS  RFC 4648 §4 Table 1: the alphabet decodes to sextets 0..63
+PASS  RFC 4648 §4 Table 1: and encodes back to the alphabet
+PASS  every byte value: the 64 alphabet characters and = are accepted
+PASS  every byte value: each accepted one decodes to its Table 1 value
+PASS  round trip: 0 bytes
+PASS  round trip: 1 bytes
+PASS  round trip: 2 bytes
+PASS  round trip: 3 bytes
+PASS  round trip: 4 bytes
+PASS  round trip: 5 bytes
+PASS  round trip: 6 bytes
+PASS  round trip: 7 bytes
+PASS  round trip: 8 bytes
+PASS  round trip: 9 bytes
+PASS  round trip: 10 bytes
+PASS  refuse missing padding after one byte
+PASS  refuse missing padding after two bytes
+PASS  refuse one = where two are due
+PASS  refuse three =
+PASS  refuse = alone
+PASS  refuse = inside the text
+PASS  refuse = in the middle of a group
+PASS  refuse - from the URL alphabet
+PASS  refuse _ from the URL alphabet
+PASS  refuse a space
+PASS  refuse a trailing newline
+PASS  refuse a multi-byte UTF-8 character
+PASS  refuse length 1
+PASS  refuse length 5
+PASS  refuse trailing bits after one byte (Zh==, not Zg==)
+PASS  refuse trailing bits after one byte (AB==, not AA==)
+PASS  refuse trailing bits after two bytes (Zm9=, not Zm8=)
+PASS  refuse trailing bits after two bytes (AAB=, not AAA=)
+PASS  AA== is the one spelling of a zero byte
+PASS  AAA= is the one spelling of two zero bytes
+base64: 53 passed, 0 failed, 0 skipped

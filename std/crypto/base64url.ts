@@ -6,6 +6,12 @@
  * text already says how many bytes the last group holds (RFC 4648 §3.2 lets a
  * specification that knows its lengths drop the padding, and RFC 7515 §2 does).
  *
+ * The module also holds RFC 4648 §4 standard base64 — `+` and `/`, padded with
+ * `=` — as `base64Encode` and `base64Decode`, for PEM (`nish/crypto/x509`) and
+ * SCRAM (`nish/net/postgres`). It is as strict and as constant-time as the URL
+ * alphabet, by the same masks, and it refuses a `=` anywhere but the last one
+ * or two characters of a text whose length is a multiple of four.
+ *
  * **Decoding is strict, so that each byte string has exactly one spelling.**
  * `base64urlDecode` answers `null` for a `=` anywhere, for any character outside
  * the alphabet (whitespace included), for a length of 1 mod 4 — six bits, not a
@@ -163,6 +169,122 @@ export const base64urlDecode = (text: string): u8[] | null => {
   }
   // The two or four bits left over belong to no byte, and must be zero so that
   // `AA` is the only spelling of a zero byte and `AB` is refused (RFC 4648 §3.5).
+  bad = bad | (acc & ((1 << bits) - 1))
+  if (bad !== 0) {
+    return null
+  }
+  return out
+}
+
+// ---------------------------------------------------------------------------
+// Standard base64 (RFC 4648 §4): `+` and `/`, padded with `=`
+// ---------------------------------------------------------------------------
+
+/**
+ * The standard-alphabet character for the sextet `v`: the same steps as
+ * `base64urlCharOf` until 62, which lands on `+` and 63 on `/`.
+ */
+const base64CharOf = (v: i32): i32 =>
+  toI32(
+    65 +
+      toU32(v) +
+      toU32(base64urlRangeMask(v, 26, 63) & 6) -
+      toU32(base64urlRangeMask(v, 52, 63) & 75) -
+      toU32(base64urlRangeMask(v, 62, 63) & 15) +
+      toU32(base64urlRangeMask(v, 63, 63) & 3)
+  )
+
+/** The sextet the byte `c` stands for in standard base64, or `-1` when it is not in the alphabet. */
+const base64SextetOf = (c: i32): i32 => {
+  const upper: i32 = base64urlRangeMask(c, 65, 90)
+  const lower: i32 = base64urlRangeMask(c, 97, 122)
+  const digit: i32 = base64urlRangeMask(c, 48, 57)
+  const plus: i32 = base64urlRangeMask(c, 43, 43)
+  const slash: i32 = base64urlRangeMask(c, 47, 47)
+  const value: i32 =
+    (upper & toI32(toU32(c) - 65)) |
+    (lower & toI32(toU32(c) - 71)) |
+    (digit & toI32(toU32(c) + 4)) |
+    (plus & 62) |
+    (slash & 63)
+  return value | ~(upper | lower | digit | plus | slash)
+}
+
+/**
+ * `data` in padded standard base64, as one line: PEM's body, and SCRAM's
+ * nonces, salts and proofs (RFC 5802 §5.1). One `=` closes a final group of
+ * two bytes, two a group of one. An array longer than 2^31 - 1 bytes panics.
+ */
+export const base64Encode = (data: u8[]): string => {
+  if (data.length > 2147483647) {
+    panic("base64Encode: more than 2^31 - 1 bytes")
+  }
+  const parts: string[] = []
+  let acc: i32 = 0
+  let bits: u32 = 0
+  for (let k: i32 = 0; k < toI32(data.length); k++) {
+    acc = ((acc << 8) | toI32(data[k])) & 0xfff
+    bits += 8
+    while (bits >= 6) {
+      bits -= 6
+      parts.push(String.fromCharCode(base64CharOf((acc >> toI32(bits)) & 63)))
+    }
+  }
+  if (bits > 0) {
+    parts.push(String.fromCharCode(base64CharOf((acc << toI32(6 - bits)) & 63)))
+  }
+  const tail: i32 = toI32(data.length) % 3
+  if (tail > 0) {
+    parts.push(tail === 1 ? "==" : "=")
+  }
+  return parts.join("")
+}
+
+/**
+ * The bytes of padded standard base64 `text`, or `null` unless it is the one
+ * canonical spelling of them: a whole number of four-character groups, `=`
+ * only as the last one or two characters, every other character in the
+ * alphabet, and the bits the padding leaves over all zero (RFC 4648 §3.5).
+ * The empty text is the spelling of no bytes (RFC 4648 §10). Where the padding
+ * is depends on the length alone; the characters themselves are read by masks
+ * and judged once, after the last.
+ */
+export const base64Decode = (text: string): u8[] | null => {
+  if (text.length > 2147483647) {
+    return null
+  }
+  const n: i32 = toI32(text.length)
+  if ((n & 3) !== 0) {
+    return null
+  }
+  let pad: i32 = 0
+  if (n > 0 && toI32(text.charCodeAt(n - 1)) === 61) {
+    pad = toI32(text.charCodeAt(n - 2)) === 61 ? 2 : 1
+  }
+  const chars: i32 = n - pad
+  const out: u8[] = new Array<u8>((n >> 2) * 3 - pad)
+  const outLen: i32 = toI32(out.length)
+  let bad: i32 = 0
+  let acc: i32 = 0
+  let bits: i32 = 0
+  let j: i32 = 0
+  // The padding is past `chars` and is not data; which positions those are is
+  // a fact about the length. A `=` before them is outside the alphabet.
+  for (let k: i32 = 0; k < chars; k++) {
+    const v: i32 = base64SextetOf(toI32(text.charCodeAt(k)))
+    bad = bad | (v >> 31)
+    acc = ((acc << 6) | (v & 63)) & 0xfff
+    bits += 6
+    if (bits >= 8) {
+      bits -= 8
+      // Always true — `out` was sized from the same length — and written so
+      // the store keeps no bounds check.
+      if (j >= 0 && j < outLen) {
+        out[j] = toU8((acc >> bits) & 255)
+      }
+      j++
+    }
+  }
   bad = bad | (acc & ((1 << bits) - 1))
   if (bad !== 0) {
     return null
