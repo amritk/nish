@@ -1,5 +1,5 @@
-// WP40 H1.3, §4c: a `for` body's `using` closes at the end of each iteration,
-// just before the update clause runs; the update cannot read the handle.
+// WP40 H1.3: a `for` body's `using` binding is not in scope in the update
+// clause, which is outside the body; it pins source order, not a close point.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

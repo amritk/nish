@@ -1,7 +1,7 @@
 // WP40 H1.3, #566: `this` cannot be aliased in the handle class's own
-// constructor: `const me = this` would give the half-built object a second
-// name. The value rule refuses it at `this`; as in a method
-// (`reject_ffi_handle_this_escapes`), not only by the constructor branch.
+// constructor. This is refused by the ordinary value rule, as a method's
+// `const me = this` is; it does not test the constructor branch, which only
+// `_ctor_this_lend` and `_ctor_this_receiver` reach.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

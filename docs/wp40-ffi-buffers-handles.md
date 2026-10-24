@@ -21,8 +21,9 @@ close at every exit of its block (§4b), each declarator opening before the next
 initialiser runs (Q12(a), §4e), with the `ffi` capability named at the
 `using`; NL2573, which refused every such `using` under H1.1, is retired.
 H1.3 is built: use after close is refused, by the scope rule for a handle
-named after its block and by §4d's rules for a lent handle its callee tries to
-keep, with one case per sibling shape (§9), so H1's bar is met. It widens
+named after its block and, for a lent handle its callee tries to keep, by
+§4d's rules or by a module rule first, with one case per sibling shape (§9),
+so H1's bar is met. It widens
 [WP27](wp27-ffi.md) in two places.
 The first is B, a `u8[]` parameter on a `declare function`: plan stage 5 of
 the ffi-reach run, built as B1. The second is H, a class that owns one `CPtr`
@@ -1337,21 +1338,30 @@ B1's bar is that `read` and `write` on a `u8[]` are callable with no shim.
 
 H1's bar is a class that owns an `fopen` handle and is closed by `using`, with
 use after close refused and one negative case per sibling. `ffi_handle_file`,
-the §6 cases and H1.3's are that bar, and it is met. H1.3's siblings are the
-loop's next iteration (`reject_ffi_handle_use_after_close_loop`), a `do` loop's
-condition and a `for` loop's update (`_use_after_close_do_while`,
-`_use_after_close_for_update`), a later `case` (`_use_after_close_switch`, and
-`_use_after_close_switch_clause` for a `using` written straight into a clause),
-the `else` (`_use_after_close_else`), a constructor reached by `new`
-(`_use_after_close_ctor`), and the keeps: a module binding
-(`_use_after_close_keep_module`, `_keep_module_expr`), a field of another class
-(`_use_after_close_keep_field`, `_walk_ctor_param` for `new Keeper(f)`), `h.l =
-this` (`_use_after_close_keep_this`), `this` leaving the handle class's own
-constructor, lent, called, stored or aliased
-(`reject_ffi_handle_ctor_this_lend`, `_receiver`, `_store`, `_alias`), a `Map`
-and a `Channel` (`_use_after_close_keep_map`, `_keep_channel`), and the shapes
-§6 already pins (`_alias`, `_array`, `_closure_capture`, `_return`,
-`_scope_task`, `_type_argument`, `_walk_function_type`).
+the §6 cases and H1.3's are that bar, and it is met. Each case below is
+`reject_ffi_handle` followed by the name shown. A handle named after its block
+is a scope error, not a handle rule: after the block (`_use_after_close`), the
+loop's next iteration (`_use_after_close_loop`), a `do` loop's condition
+(`_use_after_close_do_while`), a `for` loop's update
+(`_use_after_close_for_update`), a later `case` (`_use_after_close_switch`),
+the `else` (`_use_after_close_else`) and a constructor reached by `new`
+(`_use_after_close_ctor`); a `using` written straight into a clause is refused
+by the clause rule (`_use_after_close_switch_clause`). A callee that keeps a
+lent handle is refused by §4d's rules: a local (`_use_after_close_keep`, the
+value rule), a field of another class (`_use_after_close_keep_field`, and
+`_walk_ctor_param` for `new Keeper(f)`, both rules), `h.l = this`
+(`_use_after_close_keep_this`, the value rule at the `h.l` member and the type
+rule at its field), a `Map` and a `Channel` (`_use_after_close_keep_map`,
+`_use_after_close_keep_channel`, the type-argument rule at the instantiation),
+and the shapes §6 already pins (`_alias`, `_array`, `_return`, `_scope_task`,
+`_type_argument`, `_walk_function_type`). A module binding is refused before
+any handle rule, by the top-level `let` rule (`_use_after_close_keep_module`)
+and the module-constant assignment rule (`_use_after_close_keep_module_expr`),
+and a closure by the arrow-capture rule (`_closure_capture`). In the handle
+class's own constructor `this` is neither lent nor called (`_ctor_this_lend`,
+`_ctor_this_receiver`, refused only by the value rule's constructor branch),
+stored nor aliased (`_ctor_this_store`, `_ctor_this_alias`, refused by the
+value rule as in a method).
 
 ## 10. Decisions
 

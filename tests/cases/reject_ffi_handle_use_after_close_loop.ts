@@ -1,6 +1,6 @@
-// WP40 H1.3, §4c: a loop body's `using` closes at the end of each iteration;
-// the next iteration cannot read the previous one's handle, before its own
-// `using` or after a nested block's.
+// WP40 H1.3: a loop body's `using` binding is not in scope before it is
+// declared or after the block that holds it; this pins source order, not the
+// point where the handle closes.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32

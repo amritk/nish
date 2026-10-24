@@ -1,7 +1,7 @@
 // WP40 H1.3, #566: `this` cannot be stored from the handle class's own
-// constructor. An array literal names no type, so the type rule never sees
-// `File` and the value rule refuses `this` itself. No store can reach only
-// the constructor branch: a method's `this` stored is refused the same way.
+// constructor. This is refused by the ordinary value rule, as a method's
+// `this` stored is; it does not test the constructor branch, which only
+// `_ctor_this_lend` and `_ctor_this_receiver` reach.
 declare function fopen(path: string, mode: string): CPtr | null
 declare function fclose(p: CPtr): i32
 declare function fgetc(p: CPtr): i32
