@@ -100,13 +100,13 @@ ssh 2: start 15fps /1 full, 305 frames, 2 unacked at most, longest wait 116ms
   1000ms 10fps /1 full
 PASS  ssh 2: the decisions
 PASS  ssh 2: two frames in flight at most
-palette: start 30fps /1 full, 14 frames, 2 unacked at most, longest wait 59976ms
+palette: start 30fps /1 full, 9 frames, 2 unacked at most, longest wait 59976ms
   10510ms 10fps /1 full
   11510ms 10fps /2 full
   12510ms 10fps /4 full
   13510ms 10fps /4 half
-  15342ms 10fps /4 half 256
-  16342ms 5fps /4 half 256
+  14510ms 10fps /4 half 256
+  15510ms 5fps /4 half 256
 PASS  palette: the decisions
 PASS  burst: the bandwidth reads near the link's 100 kB/s
 PASS  late: the first frame
@@ -147,4 +147,31 @@ PASS  thin: the decisions
 PASS  thin: the bandwidth within a factor of two of 30 kB/s
 PASS  thin: the latency within a quarter of 20 ms
 PASS  thin: no answer reads more than twice the link
-term-rate: 95 passed, 0 failed, 0 skipped
+far: start 30fps /1 full, 53 frames, 1 unacked at most, longest wait 220ms
+  1000ms 10fps /1 full
+  2000ms 5fps /1 full
+PASS  far: the decisions
+PASS  far: the bandwidth is not known
+PASS  far: the bandwidth reported is no more than the link
+far, probed: start 30fps /1 full, 98 frames, 1 unacked at most, longest wait 220ms
+  1000ms 10fps /1 full
+  2000ms 10fps /2 full
+  3000ms 5fps /2 full
+PASS  far, probed: the decisions
+PASS  far, probed: the bandwidth reads within a quarter of 200 kB/s
+PASS  narrow: the wide link reads within a quarter of 1 MB/s
+narrow: start 30fps /1 full, 196 frames, 1 unacked at most, longest wait 420ms
+  1000ms 15fps /1 full
+  3581ms 10fps /1 full
+  4581ms 10fps /2 full
+  5581ms 10fps /4 full
+PASS  narrow: the decisions
+PASS  narrow: the bandwidth follows to within a factor of two of 50 kB/s
+PASS  small frames, later: the bandwidth is not known
+PASS  small frames, later: the bandwidth read is no more than the link
+PASS  infinite probe: no round trip
+PASS  infinite probe: no trip kept
+PASS  same millisecond: answered
+PASS  same millisecond: no trip kept
+PASS  same millisecond: no round trip
+term-rate: 110 passed, 0 failed, 0 skipped

@@ -313,14 +313,14 @@ const sshLink = (jitterMs: f64): Link => {
   return link
 }
 
-// A few big frames over `link`, halving from 520 kB, then 1.5 kB frames for half a minute, one in flight. The small
+// A few big frames over `link`, halving from 520 kB, then 1.5 kB frames up to `untilMs`, one in flight. The small
 // frames' trips are nearly all latency: the latency must not slide to nothing and leave the bandwidth to carry the
 // round trip, which over ssh would read 1.5 kB a trip, a twelfth of the link.
-const smallFrames = (opts: RateOptions, link: Link): RateController => {
+const smallFrames = (opts: RateOptions, link: Link, untilMs: i32): RateController => {
   const c = new RateController(opts)
   let big: i32 = 520000
   let now: i32 = 0
-  while (now < 30000) {
+  while (now < untilMs) {
     const at: f64 = ms(now)
     while (link.answered(at)) {
       c.ackReceived(at)
@@ -646,8 +646,8 @@ export const main = (): i32 => {
     "11510ms 10fps /2 full",
     "12510ms 10fps /4 full",
     "13510ms 10fps /4 half",
-    "15342ms 10fps /4 half 256",
-    "16342ms 5fps /4 half 256",
+    "14510ms 10fps /4 half 256",
+    "15510ms 5fps /4 half 256",
   ])
 
   const costNs: f64 = toF64(1000000)
@@ -760,13 +760,13 @@ export const main = (): i32 => {
   const smallOpts = new RateOptions()
   smallOpts.remoteHint = true
   const smallLink = sshLink(0.0)
-  const small = smallFrames(smallOpts, smallLink)
+  const small = smallFrames(smallOpts, smallLink, 8000)
   const smallRate: f64 = small.stats().bytesPerSec
   t.ok("small frames: the bandwidth reads within a factor of two of 300 kB/s", smallRate > ms(150000) && smallRate < ms(600000))
   t.ok("small frames: the latency reads within a quarter of 60 ms", small.baseRttMs > ms(45) && small.baseRttMs < ms(75))
   smallOpts.probeRttMs = 60.0
   const probedLink = sshLink(0.0)
-  const probed = smallFrames(smallOpts, probedLink)
+  const probed = smallFrames(smallOpts, probedLink, 8000)
   const probedRate: f64 = probed.stats().bytesPerSec
   t.ok("small frames, probed: the bandwidth within a factor of two", probedRate > ms(150000) && probedRate < ms(600000))
   t.ok("small frames, probed: the latency within a quarter", probed.baseRttMs > ms(45) && probed.baseRttMs < ms(75))
@@ -774,22 +774,25 @@ export const main = (): i32 => {
   t.ok("small frames, probed: no answer reads more than twice the link", probedLink.readPeak < ms(600000))
   // The same with answers held up by as much as 20 ms, so that a smaller frame's can come back with no time between.
   const jitterLink = sshLink(20.0)
-  const jittered = smallFrames(smallOpts, jitterLink)
+  const jittered = smallFrames(smallOpts, jitterLink, 8000)
   const jitteredRate: f64 = jittered.stats().bytesPerSec
   t.ok("small frames, jittered: no answer reads more than twice the link", jitterLink.readPeak < ms(600000))
   t.ok("small frames, jittered: the bandwidth within a factor of two", jitteredRate > ms(150000) && jitteredRate < ms(600000))
   t.ok("small frames, jittered: the latency within a quarter", jittered.baseRttMs > ms(45) && jittered.baseRttMs < ms(75))
-  // The same frames on a local terminal, 2 ms away at 50 MB/s.
+  // The same frames on a local terminal, 2 ms away at 50 MB/s, read at 4 s: the big frames are answered within
+  // 100 ms, and their samples count for 5 s.
   const nearLink = new Link(2.0, 50000000.0)
-  const near2 = smallFrames(new RateOptions(), nearLink)
+  const near2 = smallFrames(new RateOptions(), nearLink, 4000)
   const near2Rate: f64 = near2.stats().bytesPerSec
   t.ok("small frames, local: the bandwidth within a factor of two of 50 MB/s", near2Rate > ms(25000000) && near2Rate < ms(100000000))
   t.ok("small frames, local: the latency under 5 ms", near2.baseRttMs < ms(5))
   t.eqI32("small frames, local: 60 a second", near2.decision().fps, 60)
   t.ok("small frames, local: no answer reads more than twice the link", nearLink.readPeak < ms(100000000))
-  // A bandwidth-bound link, 20 ms away at 30 kB/s, under 20 kB frames: the rate falls to the floor, then the detail
-  // goes, before any rate below it.
-  const thin = new RateController(new RateOptions())
+  // A bandwidth-bound link, 20 ms away at 30 kB/s, under 20 kB frames, probed so the frames' trips are told from the
+  // latency: the rate falls to the floor, then the detail goes, before any rate below it.
+  const thinOpts = new RateOptions()
+  thinOpts.probeRttMs = 20.0
+  const thin = new RateController(thinOpts)
   const thinRecord = new Record(thin.decision())
   const thinLink = new Link(20.0, 30000.0)
   run(thin, thinLink, new Scene(20000, 2000000.0), 0, 30000, thinRecord)
@@ -799,6 +802,78 @@ export const main = (): i32 => {
   t.ok("thin: the bandwidth within a factor of two of 30 kB/s", thinRate > ms(15000) && thinRate < ms(60000))
   t.ok("thin: the latency within a quarter of 20 ms", thin.baseRttMs > ms(15) && thin.baseRttMs < ms(25))
   t.ok("thin: no answer reads more than twice the link", thinLink.readPeak < ms(60000))
+  // A far link, 120 ms away at 200 kB/s, under 20 kB frames of one size sent one at a time with no probe: each trip
+  // is 120 ms of latency and 100 ms of bytes, which no answer tells apart. The bandwidth stays unknown and the whole
+  // trip counts as latency, so the rate falls and the detail stays.
+  const far = new RateController(new RateOptions())
+  const farRecord = new Record(far.decision())
+  const farLink = new Link(120.0, 200000.0)
+  run(far, farLink, new Scene(20000, 2000000.0), 0, 20000, farRecord)
+  show("far", farRecord)
+  t.eqLines("far: the decisions", farRecord.lines, ["1000ms 10fps /1 full", "2000ms 5fps /1 full"])
+  t.eqBool("far: the bandwidth is not known", far.haveRate, false)
+  t.ok("far: the bandwidth reported is no more than the link", farLink.readPeak <= ms(200000))
+  // The same with the probe's 120 ms: its empty trip against a frame's measures the bytes alone, so the split is
+  // known, and half the detail takes the trip from 220 ms to 145 ms: one step is worth its gain.
+  const farOpts = new RateOptions()
+  farOpts.probeRttMs = 120.0
+  const farProbed = new RateController(farOpts)
+  const farProbedRecord = new Record(farProbed.decision())
+  const farProbedLink = new Link(120.0, 200000.0)
+  run(farProbed, farProbedLink, new Scene(20000, 2000000.0), 0, 20000, farProbedRecord)
+  show("far, probed", farProbedRecord)
+  t.eqLines("far, probed: the decisions", farProbedRecord.lines, [
+    "1000ms 10fps /1 full",
+    "2000ms 10fps /2 full",
+    "3000ms 5fps /2 full",
+  ])
+  const farPeak: f64 = farProbedLink.readPeak
+  t.ok("far, probed: the bandwidth reads within a quarter of 200 kB/s", farPeak > ms(150000) && farPeak < ms(250000))
+
+  // A link that narrows: 20 ms away at 1 MB/s, probed, so 20 kB frames measure it; then 50 kB/s from 3 s on, under
+  // frames of the same size, which measure nothing new. The old rate is forgotten 5 s after its last sample, and the
+  // round trip's load, grown fourfold, cuts the rate to the floor and then the detail, with none restored.
+  const narrowOpts = new RateOptions()
+  narrowOpts.probeRttMs = 20.0
+  const narrow = new RateController(narrowOpts)
+  const narrowRecord = new Record(narrow.decision())
+  const narrowLink = new Link(20.0, 1000000.0)
+  const narrowScene = new Scene(20000, 2000000.0)
+  run(narrow, narrowLink, narrowScene, 0, 3000, narrowRecord)
+  const wideRate: f64 = narrow.stats().bytesPerSec
+  t.ok("narrow: the wide link reads within a quarter of 1 MB/s", wideRate > ms(750000) && wideRate < ms(1250000))
+  narrowLink.bytesPerSec = 50000.0
+  run(narrow, narrowLink, narrowScene, 3000, 20000, narrowRecord)
+  show("narrow", narrowRecord)
+  t.eqLines("narrow: the decisions", narrowRecord.lines, [
+    "1000ms 15fps /1 full",
+    "3581ms 10fps /1 full",
+    "4581ms 10fps /2 full",
+    "5581ms 10fps /4 full",
+  ])
+  const narrowRate: f64 = narrow.stats().bytesPerSec
+  t.ok("narrow: the bandwidth follows to within a factor of two of 50 kB/s", narrowRate > ms(25000) && narrowRate < ms(100000))
+
+  // The small frames run on past their last sample: the bandwidth is forgotten for decisions, and the reading falls
+  // to what the answers prove, which is no more than the link.
+  const agedLink = sshLink(0.0)
+  const aged = smallFrames(smallOpts, agedLink, 30000)
+  t.eqBool("small frames, later: the bandwidth is not known", aged.haveRate, false)
+  t.ok("small frames, later: the bandwidth read is no more than the link", aged.stats().bytesPerSec <= ms(300000))
+
+  // A probe time that is not a finite number gives no round trip; nor does an answer read in its frame's millisecond.
+  const infProbeOpts = new RateOptions()
+  infProbeOpts.probeRttMs = inf
+  const infProbe = new RateController(infProbeOpts)
+  t.eqF64("infinite probe: no round trip", infProbe.stats().rttMs, zero)
+  t.eqI32("infinite probe: no trip kept", toI32(infProbe.tripMs.length), 0)
+  const sameMs = new RateController(new RateOptions())
+  sameMs.frameSent(1000, costNs, ms(10))
+  sameMs.ackReceived(ms(10))
+  sameMs.tick(ms(10))
+  t.eqI32("same millisecond: answered", sameMs.unacked(), 0)
+  t.eqI32("same millisecond: no trip kept", toI32(sameMs.tripMs.length), 0)
+  t.eqBool("same millisecond: no round trip", sameMs.haveRtt, false)
 
   return t.done()
 }
