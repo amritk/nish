@@ -1,6 +1,6 @@
-// WP33 NL8010: `Math.min` and `Math.max` of doubles are `minnum` and `maxnum`
-// here, which drop a NaN operand where JavaScript answers NaN, and
-// `Math.round(-0.4)` is +0 here and -0 in JavaScript, which `1 / r` shows.
+// WP33 NL8010, retired: `Math.min` and `Math.max` of doubles answer NaN for a
+// NaN operand, and `Math.round(-0.4)` is -0, which `1 / r` shows, here as in
+// JavaScript (`llvm.minimum`, `llvm.maximum`, a copysign). Nothing may warn.
 export const main = (): number => {
   const one = toF64(1);
   const nan = toF64(0) / toF64(0);

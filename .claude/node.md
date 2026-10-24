@@ -58,6 +58,7 @@ node scripts/arrowify.mjs --check <file.ts>   # WP22: what is still spelled `fun
 node scripts/arrow-verify.mjs [--debug]       # rewrite the corpus and diff every .ll byte for byte
 node scripts/arrow-verify.mjs --applied src/  # the same, for a rewrite the tree already carries
 node scripts/gen-diagnostic-codes.mjs --check  # src/codes.ts well formed, every code unique (CI + npm test)
+node scripts/security-scope.mjs                # every std/net, std/crypto, runtime C file in a docs/security/ scope (CI + npm test)
 node scripts/ci-profile.mjs                  # which check a CI job's wall clock went to
 node scripts/ci-profile.mjs -- npm run test:nish   # ...for any suite command
 ```

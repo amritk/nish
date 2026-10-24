@@ -123,6 +123,7 @@ cases/ffi_string_return ffi  # refused: NL4010 under --emit-ts
 cases/io_nish_import numbers  # differ: stdout line 2 differs
 cases/io_nish_rename numbers  # differ: stdout line 1 differs
 cases/map_fingerprint_miss ffi  # refused: NL4010 under --emit-ts
+cases/math_ulp_samples numbers  # differ: stdout line 2 differs
 cases/mem_arena_builtins numbers  # differ: stdout line 2 differs
 cases/mem_join_parts_same_pass numbers  # differ: stdout line 1 differs
 cases/mem_join_parts_scope numbers  # differ: stdout line 1 differs
@@ -196,6 +197,7 @@ cases/str_surrogate_pair numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALI
 cases/term_calls numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_import numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_pty numbers  # differ: exit 0 vs 1: throw new Error(
+cases/term_restore numbers  # differ: exit 0 vs 1: throw new Error(
 cases/unsafe_get_set records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 corpus/argv_words numbers  # differ: exit 29 vs 106
 corpus/arr_oob_exit records  # differ: exit 1 vs 0
