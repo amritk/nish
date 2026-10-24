@@ -70,6 +70,7 @@ import { N_CONSTRUCTOR, Node } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
+import { forgetProofs } from "./bounds"
 import { reportUncheckedIndexSites } from "./unsafe-migrate"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import { arenaJson } from "./arena-report"
@@ -1234,8 +1235,16 @@ export class Compilation {
     // Which array fields live inside their objects (`src/inline-arrays.ts`).
     // Every body has to be checked to know, and everything after this reads
     // the layout it settles: the ranges, the attribute facts, the emitter.
-    layoutInlineArrays(contexts, mode)
-    proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
+    // `--no-elision` lays nothing inline, proves no call site and takes back
+    // what the check proved, before anything reads it (`Options.noElision`).
+    if (this.opts.noElision) {
+      for (const program of programs) {
+        forgetProofs(program)
+      }
+    } else {
+      layoutInlineArrays(contexts, mode)
+      proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
+    }
     this.reportArenaLoops()
     this.denyRetention()
     this.reportDeprecatedFlags()

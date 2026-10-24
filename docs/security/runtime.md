@@ -188,7 +188,11 @@ are placement: their hot loops are the same instructions at a new address.
 Instructions retired (`bench/run.mjs --instructions`, cachegrind, `speed`):
 `strbuild` runs 53,754,318 against 53,229,282 for the same build without
 `-fstack-protector-strong` (+0.99%), the guard on the runtime's string
-builders; its baseline in `bench/instructions.json` moves with this change.
+builders. The same guard on `str_from_digits` (a 21-byte digit buffer, run
+once per integer formatted) adds about 166,000 instructions to the map
+benchmarks that format each key: `map-wordcount` +0.11%, `map-presize`
++0.24%. Those three baselines in `bench/instructions.json` move with this
+change.
 The landing pads also end the `speed` link's LTO partitions on x86-64 and
 arm64 (`scripts/build.sh`): a partition boundary turns the internal functions
 called across it into external ones, each opening with `endbr64`, and `fib`
