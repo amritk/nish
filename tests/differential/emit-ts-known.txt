@@ -102,7 +102,6 @@ cases/term_calls numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_import numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_pty numbers  # differ: exit 0 vs 1: throw new Error(
 corpus/argv_words numbers  # differ: exit 29 vs 106
-corpus/arr_bounds_edge numbers  # differ: exit 0 vs 1: ReferenceError: Cannot access 'idx' before initialization
 corpus/bit_compound_target refused  # refused: NL4012 under --emit-ts
 corpus/f64_libm libm  # differ: stdout line 33 differs
 corpus/parse_argv_sum numbers  # differ: stdout line 1 differs

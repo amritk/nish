@@ -132,6 +132,10 @@ const WIDTH_TYPES: string = " i32 i64 u8 u16 u32 u64 f32 f64 "
 export const SIGNAL_REFUSAL: string =
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)"
 
+/** The message NL4013 carries; `src/codes.ts` keys the code on it. */
+const INSTANCES_REFUSAL: string =
+  "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type"
+
 /** The message NL4010 carries; `src/codes.ts` keys the code on it. */
 const FOREIGN_REFUSAL: string =
   "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)"
@@ -163,6 +167,8 @@ export class Walk {
   helpers: StringSet
   /** Every width type the module spells, in first-use order. */
   widths: StringSet
+  /** Every identifier the module spells, which a helper must not be imported as. */
+  names: StringSet
   /**
    * The local names this module imports that name only a type: an interface
    * or a type alias. Node's type stripping erases an `import` element only
@@ -206,6 +212,7 @@ export class Walk {
     this.repeat = false
     this.helpers = new StringSet()
     this.widths = new StringSet()
+    this.names = new StringSet()
     this.typeNames = new StringSet()
     for (const imp of program.imports) {
       const struct = imp.struct
@@ -252,6 +259,21 @@ export class Walk {
    */
   useHelper(name: string): void {
     this.helpers.add(name)
+  }
+
+  /**
+   * `useHelper`, answering the name to call the export by: its own, or
+   * `__nish_<name>` where the module spells that name too, so that a local
+   * `idx` neither shadows the helper nor clashes with its import.
+   */
+  helperName(name: string): string {
+    if (!this.names.has(name)) {
+      this.helpers.add(name)
+      return name
+    }
+    const alias = `__nish_${name}`
+    this.helpers.add(`${name} as ${alias}`)
+    return alias
   }
 
   /** Whether the node a hook is asked about may put statements before its statement. */
@@ -656,7 +678,8 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
 
 /**
  * A template node, walked once per instance. The first instance's answer is
- * the one written; every later one has to agree with it.
+ * the one written; every later one has to agree with it, or the generic is
+ * refused (NL4013).
  */
 const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32): void => {
   const program = walk.program
@@ -691,10 +714,11 @@ const changedAcrossInstances = (walk: Walk, node: Node, out: Operands, slot: i32
       firstText = out.texts[slot]
       first = false
     } else if (!sameAnswer(firstChanged, firstText, out.changed[slot], out.texts[slot])) {
-      const at = node.start
-      walk.fail(
-        `--emit-ts: two instances of the generic at ${walk.source.path}:${walk.source.lineOf(at)}:${walk.source.columnOf(at)} would be written as different TypeScript`
-      )
+      // One body is written for every instance, so instances that need
+      // different text cannot all be served by it.
+      walk.refuse(node, INSTANCES_REFUSAL)
+      k = -1
+      continue
     }
     k = walk.instanceNext[k]
   }
@@ -759,6 +783,16 @@ const lastOf = (text: string, needle: string): i32 => {
   return found
 }
 
+/** Add every identifier spelled under `node` to `walk.names`. */
+const collectNames = (walk: Walk, node: Node): void => {
+  if (node.kind === N_IDENT || node.kind === N_IMPORT_SPEC) {
+    walk.names.add(node.text)
+  }
+  for (const child of node.children) {
+    collectNames(walk, child)
+  }
+}
+
 /**
  * Walk the module's top-level statements and collect their edits, front to
  * back: `type` before an imported name that is only a type (`typeNames`), a
@@ -767,6 +801,7 @@ const lastOf = (text: string, needle: string): i32 => {
  * a `declare function`, are recorded here too.
  */
 export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
+  collectNames(walk, file)
   for (const stmt of file.children) {
     if (stmt.kind === N_IMPORT) {
       if (

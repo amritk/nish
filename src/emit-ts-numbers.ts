@@ -11,7 +11,9 @@
 // - Answer the node's whole text otherwise. `operands.at(i)` is child `i` as
 //   it will be written, so a rewrite composes with the rows below it.
 // - A rewrite that calls a `nish/runtime` export asks for it with
-//   `walk.useHelper(name)`; the driver writes the import line.
+//   `walk.helperName(name)` and writes the name it answers, which is
+//   `__nish_<name>` where the module spells `name` itself; the driver writes
+//   the import line.
 // - Read types through `walk.program`: inside a generic body the composer has
 //   installed one instance's tables, and it holds every instance to the same
 //   answer.
@@ -174,10 +176,7 @@ const wrapTo = (type: i32, expr: string): string => {
 }
 
 /** A helper call, importing the helper. */
-const helper = (walk: Walk, name: string, args: string): string => {
-  walk.useHelper(name)
-  return `${name}(${args})`
-}
+const helper = (walk: Walk, name: string, args: string): string => `${walk.helperName(name)}(${args})`
 
 /** An integer literal at i64 or u64 is a `bigint`. */
 const wideLiteral = (walk: Walk, node: Node): string | null => {
@@ -377,8 +376,7 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
       const args =
         operands.changed[0] && idxArguments(name) !== "" ? idxArguments(name) : elementArguments(name)
       if (args !== "") {
-        walk.useHelper("setIdx")
-        return `setIdx(${args}, ${value})`
+        return `${walk.helperName("setIdx")}(${args}, ${value})`
       }
     }
     return `${name} = ${value}`
@@ -622,8 +620,7 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   if (replacement.length === 0) {
     return null
   }
-  walk.useHelper(replacement)
-  return `${replacement}${between(walk, callee.end, args.start)}${operands.at(1)}${between(walk, args.end, node.end)}`
+  return `${walk.helperName(replacement)}${between(walk, callee.end, args.start)}${operands.at(1)}${between(walk, args.end, node.end)}`
 }
 
 /**
@@ -654,8 +651,7 @@ const indexArguments = (walk: Walk, node: Node, operands: Operands, first: i32):
     return
   }
   if (operands.changed[1]) {
-    walk.useHelper("offsets")
-    operands.texts[1] = `...offsets(${first}, [${operands.at(1)}])`
+    operands.texts[1] = `...${walk.helperName("offsets")}(${first}, [${operands.at(1)}])`
   } else {
     operands.texts[1] = wrappedFrom(walk, args, first, args.start, args.end)
   }

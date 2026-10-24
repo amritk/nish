@@ -10179,7 +10179,7 @@ by the caller.
   byte (`tests/emit-ts/identity/`; the layout is `tests/emit-ts/layout/`).
 - **The flag turns `--warn-portability` on**: those warnings name the sites
   where the TypeScript reading answers differently.
-- **Three kinds of module are refused, and then nothing is written** (exit 1):
+- **Four kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
   or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
@@ -10190,6 +10190,11 @@ by the caller.
   holds a call, a step or an element read, which would then run twice
   (NL4012, `reject_emit_ts_compound`). An index of names, their fields
   (`seen.length`), literals and their arithmetic is repeated, and `pts[i + 1].n += 10` is translated.
+  The fourth is a generic whose instances would be written as different
+  TypeScript, which is written once for them all: an element held inline in
+  one instance and by reference in another (`P` and `P | null`), or element
+  types with different zeros in `new Array<T>(n)` (`i32` and `i64`) (NL4013,
+  `reject_emit_ts_instances`). Write a function per element type.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/

@@ -11,7 +11,9 @@
 // - Answer the node's whole text otherwise. `operands.at(i)` is child `i` as
 //   it will be written, so a rewrite composes with the rows below it.
 // - A rewrite that calls a `nish/runtime` export asks for it with
-//   `walk.useHelper(name)`; the driver writes the import line.
+//   `walk.helperName(name)` and writes the name it answers, which is
+//   `__nish_<name>` where the module spells `name` itself; the driver writes
+//   the import line.
 // - Read types through `walk.program`: inside a generic body the composer has
 //   installed one instance's tables, and it holds every instance to the same
 //   answer.
@@ -32,7 +34,9 @@
 // The hook sees no type table, so "a record held inline" is read off the
 // program's struct list: an interface no class implements. A generic body is
 // written once for all its instances, so there the runtime's `copyIn` and
-// `storeIdx` decide by looking at the value: any plain object is a record.
+// `storeIdx` decide by looking at the value: any plain object is a record. A
+// generic whose instances would need different TypeScript (an element inline
+// in one and by reference in another) is refused with NL4013 by the composer.
 
 import { Operands, Walk } from "./emit-ts-edits"
 import {
@@ -129,8 +133,7 @@ const copied = (walk: Walk, slot: i32, value: Node, written: string): string => 
     return `{ ...${written} }`
   }
   if (kind === COPY_AT_RUN) {
-    walk.useHelper("copyIn")
-    return `copyIn(${written})`
+    return `${walk.helperName("copyIn")}(${written})`
   }
   return written
 }
@@ -143,10 +146,19 @@ const copied = (walk: Walk, slot: i32, value: Node, written: string): string => 
 const checkedAt = (walk: Walk, node: Node): boolean =>
   !walk.program.uncheckedIndexing && (walk.inInstance || !walk.program.nodeProvenIndex[node.id])
 
-/** The `a, i` of a written `idx(a, i)`, or the empty string when `text` is no such call. */
+/**
+ * The `a, i` of a written `idx(a, i)`, or of `__nish_idx(a, i)` where the
+ * module binds `idx`, or the empty string when `text` is no such call.
+ */
 export const idxArguments = (text: string): string => {
-  if (text.startsWith("idx(") && text.endsWith(")")) {
+  if (!text.endsWith(")")) {
+    return ""
+  }
+  if (text.startsWith("idx(")) {
     return text.substring(4, text.length - 1)
+  }
+  if (text.startsWith("__nish_idx(")) {
+    return text.substring(11, text.length - 1)
   }
   return ""
 }
@@ -224,8 +236,7 @@ const compoundStore = (walk: Walk, node: Node, operands: Operands, args: string)
   const written = operands.at(1)
   const value = atomic(node.children[1]) ? written : `(${written})`
   const old = updateParam(written)
-  walk.useHelper("updIdx")
-  return `updIdx(${args}, (${old}) => ${old} ${op} ${value})`
+  return `${walk.helperName("updIdx")}(${args}, (${old}) => ${old} ${op} ${value})`
 }
 
 /** The rewrite of an assignment `a[i] = v` or `a[i] OP= v`, or `null`. */
@@ -238,9 +249,13 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
   let args = idxArguments(left)
   if (node.text === "=") {
     const record = slotCopy(walk, walk.program.nodeTypes[target.id]) !== COPY_NONE
+    // An instance under unchecked indexing writes a plain `a[i]`, but its
+    // slot can hold a record inline, which `storeIdx` writes field by field.
+    if (record && args === "" && walk.inInstance) {
+      args = elementArguments(left)
+    }
     if (record && args !== "") {
-      walk.useHelper("storeIdx")
-      return `storeIdx(${args}, ${operands.at(1)})`
+      return `${walk.helperName("storeIdx")}(${args}, ${operands.at(1)})`
     }
     if (record && !walk.inInstance) {
       return `Object.assign(${left}, ${operands.at(1)})`
@@ -248,8 +263,7 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
     if (args === "") {
       return null
     }
-    walk.useHelper("setIdx")
-    return `setIdx(${args}, ${operands.at(1)})`
+    return `${walk.helperName("setIdx")}(${args}, ${operands.at(1)})`
   }
   if (!node.text.endsWith("=") || node.text === "==" || node.text === "===") {
     return null
@@ -279,8 +293,7 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
   }
   const receiver = writtenReceiver(written, method)
   if (method === "pop" && args.length === 0 && checkedAt(walk, node)) {
-    walk.useHelper("pop")
-    return `pop(${receiver})`
+    return `${walk.helperName("pop")}(${receiver})`
   }
   if (method === "push" && args.length === 1) {
     const arg = operands.at(1)
@@ -294,8 +307,7 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
     walk.program.nodeTypes[args[0].id] > T_CPTR &&
     walk.program.nodeTypes[args[0].id] === walk.program.nodeTypes[callee.children[0].id]
   ) {
-    walk.useHelper("arraySet")
-    return `arraySet(${receiver}, ${operands.at(1)})`
+    return `${walk.helperName("arraySet")}(${receiver}, ${operands.at(1)})`
   }
   return null
 }
@@ -414,8 +426,7 @@ const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   if (zero === "") {
     return null
   }
-  walk.useHelper("newArray")
-  return `newArray(${operands.at(2)}, ${zero})`
+  return `${walk.helperName("newArray")}(${operands.at(2)}, ${zero})`
 }
 
 /** The records row's rewrite of `node`, or `null` to leave it to the next row. */
@@ -425,8 +436,7 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
       if ((node.flags & FLAG_OPTIONAL) !== 0 || !checkedAt(walk, node)) {
         return null
       }
-      walk.useHelper("idx")
-      return `idx(${operands.at(0)}, ${operands.at(1)})`
+      return `${walk.helperName("idx")}(${operands.at(0)}, ${operands.at(1)})`
     case N_BINARY:
       return storeRow(walk, node, operands)
     case N_CALL:

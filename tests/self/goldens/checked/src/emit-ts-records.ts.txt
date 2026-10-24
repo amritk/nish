@@ -44,7 +44,7 @@ function recordReference(walk: Walk, type: i32): boolean -> @recordReference
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isNullable TypeTable.refOf inlineRecord
-  pointer walk: size=136 writesThrough=false captured=false
+  pointer walk: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:16 TypeTable.isNullable -> @TypeTable.isNullable
   callee +0:47 inlineRecord -> @inlineRecord
@@ -53,7 +53,7 @@ function slotCopy(walk: Walk, slot: i32): i32 -> @slotCopy
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: hasInlineRecords inlineRecord recordReference
-  pointer walk: size=136 writesThrough=false captured=false passedTo=recordReference#0
+  pointer walk: size=144 writesThrough=false captured=false passedTo=recordReference#0
   stackSites=0 stackLocals=0
   callee +0:12 hasInlineRecords -> @hasInlineRecords
   callee +0:47 recordReference -> @recordReference
@@ -62,7 +62,7 @@ function copyKind(walk: Walk, slot: i32, value: Node): i32 -> @copyKind
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: slot
   calls: slotCopy
-  pointer walk: size=136 writesThrough=false captured=false passedTo=slotCopy#0
+  pointer walk: size=144 writesThrough=false captured=false passedTo=slotCopy#0
   pointer value: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:10 slotCopy -> @slotCopy
@@ -70,25 +70,25 @@ function elementOf(walk: Walk, type: i32): i32 -> @elementOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isArray TypeTable.refOf
-  pointer walk: size=136 writesThrough=false captured=false
+  pointer walk: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:16 TypeTable.isArray -> @TypeTable.isArray
   callee +0:43 TypeTable.refOf -> @TypeTable.refOf
 function copied(walk: Walk, slot: i32, value: Node, written: string): string -> @copied
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.useHelper
+  sharedWrite: via Walk.helperName
   escaping: slot written
-  calls: Walk.useHelper copyKind nish_str_concat
-  pointer walk: size=136 writesThrough=false captured=false passedTo=copyKind#0 Walk.useHelper#0
+  calls: Walk.helperName copyKind nish_str_concat
+  pointer walk: size=144 writesThrough=false captured=false passedTo=copyKind#0 Walk.helperName#0
   pointer value: size=40 writesThrough=false captured=false passedTo=copyKind#2
   stackSites=0 stackLocals=0
   local +0:9 kind: i32 (const)
   callee +0:16 copyKind -> @copyKind
-  callee +5:5 Walk.useHelper -> @Walk.useHelper
+  callee +5:15 Walk.helperName -> @Walk.helperName
 function checkedAt(walk: Walk, node: Node): boolean -> @checkedAt
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer walk: size=136 writesThrough=false captured=false
+  pointer walk: size=144 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function idxArguments(text: string): string -> @idxArguments [exported]
@@ -120,9 +120,9 @@ function updateParam(text: string): string -> @updateParam
   local +0:7 n: i32 (let)
 function compoundStore(walk: Walk, node: Node, operands: Operands, args: string): string -> @compoundStore
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.useHelper
-  calls: Operands.at Walk.useHelper atomic nish_panic_index nish_str_concat nish_str_new updateParam
-  pointer walk: size=136 writesThrough=false captured=false passedTo=Walk.useHelper#0
+  sharedWrite: via Walk.helperName
+  calls: Operands.at Walk.helperName atomic nish_panic_index nish_str_concat nish_str_new updateParam
+  pointer walk: size=144 writesThrough=false captured=false passedTo=Walk.helperName#0
   pointer node: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
@@ -133,12 +133,12 @@ function compoundStore(walk: Walk, node: Node, operands: Operands, args: string)
   callee +2:17 atomic -> @atomic
   local +3:9 old: string (const)
   callee +3:15 updateParam -> @updateParam
-  callee +4:3 Walk.useHelper -> @Walk.useHelper
+  callee +4:13 Walk.helperName -> @Walk.helperName
 function storeRow(walk: Walk, node: Node, operands: Operands): string | null -> @storeRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.useHelper
-  calls: Operands.at Walk.useHelper compoundStore elementArguments idxArguments nish_panic_index nish_str_at nish_str_concat nish_str_eq slotCopy
-  pointer walk: size=136 writesThrough=false captured=false passedTo=slotCopy#0 Walk.useHelper#0 Walk.useHelper#0 compoundStore#0
+  sharedWrite: via Walk.helperName
+  calls: Operands.at Walk.helperName compoundStore elementArguments idxArguments nish_panic_index nish_str_at nish_str_concat nish_str_eq slotCopy
+  pointer walk: size=144 writesThrough=false captured=false passedTo=slotCopy#0 Walk.helperName#0 Walk.helperName#0 compoundStore#0
   pointer node: size=40 writesThrough=false captured=false passedTo=compoundStore#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 Operands.at#0 Operands.at#0 compoundStore#2
   stackSites=0 stackLocals=0
@@ -149,18 +149,19 @@ function storeRow(walk: Walk, node: Node, operands: Operands): string | null -> 
   callee +5:14 idxArguments -> @idxArguments
   local +7:11 record: boolean (const)
   callee +7:20 slotCopy -> @slotCopy
-  callee +9:7 Walk.useHelper -> @Walk.useHelper
-  callee +10:35 Operands.at -> @Operands.at
-  callee +13:40 Operands.at -> @Operands.at
-  callee +18:5 Walk.useHelper -> @Walk.useHelper
-  callee +19:31 Operands.at -> @Operands.at
-  callee +30:12 elementArguments -> @elementArguments
-  callee +32:31 compoundStore -> @compoundStore
+  callee +11:14 elementArguments -> @elementArguments
+  callee +14:17 Walk.helperName -> @Walk.helperName
+  callee +14:57 Operands.at -> @Operands.at
+  callee +17:40 Operands.at -> @Operands.at
+  callee +22:15 Walk.helperName -> @Walk.helperName
+  callee +22:53 Operands.at -> @Operands.at
+  callee +33:12 elementArguments -> @elementArguments
+  callee +35:31 compoundStore -> @compoundStore
 function recordCallRow(walk: Walk, node: Node, operands: Operands): string | null -> @recordCallRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.useHelper
-  calls: Operands.at Walk.useHelper checkedAt copied elementOf nish_panic_index nish_str_at nish_str_concat nish_str_eq writtenReceiver
-  pointer walk: size=136 writesThrough=false captured=false passedTo=checkedAt#0 Walk.useHelper#0 copied#0 elementOf#0 Walk.useHelper#0
+  sharedWrite: via Walk.helperName
+  calls: Operands.at Walk.helperName checkedAt copied elementOf nish_panic_index nish_str_at nish_str_concat nish_str_eq writtenReceiver
+  pointer walk: size=144 writesThrough=false captured=false passedTo=checkedAt#0 Walk.helperName#0 copied#0 elementOf#0 Walk.helperName#0
   pointer node: size=40 writesThrough=false captured=false passedTo=checkedAt#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 Operands.at#0
   stackSites=0 stackLocals=0
@@ -172,19 +173,19 @@ function recordCallRow(walk: Walk, node: Node, operands: Operands): string | nul
   local +10:9 receiver: string (const)
   callee +10:20 writtenReceiver -> @writtenReceiver
   callee +11:48 checkedAt -> @checkedAt
-  callee +12:5 Walk.useHelper -> @Walk.useHelper
-  local +16:11 arg: string (const)
-  callee +16:17 Operands.at -> @Operands.at
-  local +17:11 copy: string (const)
-  callee +17:18 copied -> @copied
-  callee +17:31 elementOf -> @elementOf
-  callee +27:5 Walk.useHelper -> @Walk.useHelper
-  callee +28:37 Operands.at -> @Operands.at
+  callee +12:15 Walk.helperName -> @Walk.helperName
+  local +15:11 arg: string (const)
+  callee +15:17 Operands.at -> @Operands.at
+  local +16:11 copy: string (const)
+  callee +16:18 copied -> @copied
+  callee +16:31 elementOf -> @elementOf
+  callee +26:15 Walk.helperName -> @Walk.helperName
+  callee +26:59 Operands.at -> @Operands.at
 function literalRow(walk: Walk, node: Node, operands: Operands): string | null -> @literalRow
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via copied
   calls: Operands.at copied elementOf nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq
-  pointer walk: size=136 writesThrough=false captured=false passedTo=elementOf#0 copied#0
+  pointer walk: size=144 writesThrough=false captured=false passedTo=elementOf#0 copied#0
   pointer node: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=1 stackLocals=1
@@ -201,13 +202,13 @@ function primitiveZero(walk: Walk, type: i32): string -> @primitiveZero
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isNullable
-  pointer walk: size=136 writesThrough=false captured=false
+  pointer walk: size=144 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:20 TypeTable.isNullable -> @TypeTable.isNullable
 function fillZero(walk: Walk, type: Node): string -> @fillZero
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.alias StringMap.get fillZero nish_panic_index nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new primitiveZero
-  pointer walk: size=136 writesThrough=false captured=false passedTo=fillZero#0 fillZero#0 primitiveZero#0
+  pointer walk: size=144 writesThrough=false captured=false passedTo=fillZero#0 fillZero#0 primitiveZero#0
   pointer type: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 fillZero -> @fillZero
@@ -229,9 +230,9 @@ function typedArrayZero(name: string): string -> @typedArrayZero
   stackSites=0 stackLocals=0
 function newRow(walk: Walk, node: Node, operands: Operands): string | null -> @newRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.useHelper
-  calls: Operands.at Walk.useHelper fillZero nish_panic_index nish_str_concat nish_str_eq typedArrayZero
-  pointer walk: size=136 writesThrough=false captured=false passedTo=fillZero#0 Walk.useHelper#0
+  sharedWrite: via Walk.helperName
+  calls: Operands.at Walk.helperName fillZero nish_panic_index nish_str_concat nish_str_eq typedArrayZero
+  pointer walk: size=144 writesThrough=false captured=false passedTo=fillZero#0 Walk.helperName#0
   pointer node: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
@@ -240,21 +241,21 @@ function newRow(walk: Walk, node: Node, operands: Operands): string | null -> @n
   local +5:7 zero: string (let)
   callee +7:12 fillZero -> @fillZero
   callee +9:12 typedArrayZero -> @typedArrayZero
-  callee +14:3 Walk.useHelper -> @Walk.useHelper
-  callee +15:22 Operands.at -> @Operands.at
+  callee +14:13 Walk.helperName -> @Walk.helperName
+  callee +14:44 Operands.at -> @Operands.at
 function recordsRow(walk: Walk, node: Node, operands: Operands): string | null -> @recordsRow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.useHelper
-  calls: Operands.at Walk.useHelper checkedAt literalRow newRow nish_str_concat recordCallRow storeRow
-  pointer walk: size=136 writesThrough=false captured=false passedTo=checkedAt#0 Walk.useHelper#0 storeRow#0 recordCallRow#0 literalRow#0 newRow#0
+  sharedWrite: via Walk.helperName
+  calls: Operands.at Walk.helperName checkedAt literalRow newRow nish_str_concat recordCallRow storeRow
+  pointer walk: size=144 writesThrough=false captured=false passedTo=checkedAt#0 Walk.helperName#0 storeRow#0 recordCallRow#0 literalRow#0 newRow#0
   pointer node: size=40 writesThrough=false captured=false passedTo=checkedAt#1 storeRow#1 recordCallRow#1 literalRow#1 newRow#1
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0 storeRow#2 recordCallRow#2 literalRow#2 newRow#2
   stackSites=0 stackLocals=0
   callee +0:50 checkedAt -> @checkedAt
-  callee +3:7 Walk.useHelper -> @Walk.useHelper
-  callee +4:21 Operands.at -> @Operands.at
-  callee +4:40 Operands.at -> @Operands.at
-  callee +6:14 storeRow -> @storeRow
-  callee +8:14 recordCallRow -> @recordCallRow
-  callee +10:14 literalRow -> @literalRow
-  callee +12:14 newRow -> @newRow
+  callee +3:17 Walk.helperName -> @Walk.helperName
+  callee +3:43 Operands.at -> @Operands.at
+  callee +3:62 Operands.at -> @Operands.at
+  callee +5:14 storeRow -> @storeRow
+  callee +7:14 recordCallRow -> @recordCallRow
+  callee +9:14 literalRow -> @literalRow
+  callee +11:14 newRow -> @newRow

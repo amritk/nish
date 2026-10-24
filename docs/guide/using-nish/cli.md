@@ -163,13 +163,14 @@ Some constructs JavaScript spells differently are rewritten too:
 The flag also turns on `--warn-portability`. Those warnings name the places
 where your program can answer differently under Node.
 
-Three kinds of module cannot be written. In each case `nish` exits 1 and
+Four kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
 ```text
 app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
 app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
+app.ts:9:1: error: --emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type
 ```
 
 The second is reported at each `nish:net` import and at each call to a
@@ -179,6 +180,12 @@ The third is reported at an `x op= e` that Node needs written as
 `x = x op e`, such as `+=` on a `u8` that has to wrap, when the index in `x`
 holds a call, a `++`, or another array read: `hist[data[0]] += 10`. Read the
 index into a `const` first, `const at = data[0]`, then `hist[at] += 10`.
+
+The fourth is reported at a generic function that TypeScript writes once
+for all the types it is called at, when those types need different code: a
+record held inline in one call and a `P | null` reference in another, or an
+`i32` and an `i64` element in `new Array<T>(n)`, whose zeros differ. Write a
+function per element type.
 
 Not every builtin has a runtime export yet. The `nish:unsafe` functions
 (`uncheckedGet`, `wrappingAdd`, `readCString` and the rest) are written as

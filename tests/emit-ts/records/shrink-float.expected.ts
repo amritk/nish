@@ -1,6 +1,7 @@
-// An f64 compound store whose right side shrinks the array: JavaScript's `+=`
-// already answers the f64 sum, but the store is still checked again after
-// the right side ran, at a proven index and at an unproven one.
+// An f64 compound store at an index no caller proves, whose right side
+// shrinks the array: JavaScript's `+=` already answers the f64 sum, but the
+// store is still checked again after the right side ran. A proven compound
+// store that leaves the array alone keeps its sum.
 import { pop, idx, updIdx } from "nish/runtime"
 import type { f64, i32 } from "nish/runtime"
 const shrink = (xs: f64[]): f64 => {
