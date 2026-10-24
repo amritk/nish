@@ -16,6 +16,7 @@ import {
   drawAscii,
   drawHalfBlocks,
   fitFramebuffer,
+  kittyDelete,
   kittyFrame,
   scaleFramebuffer,
   sixelFrame,
@@ -150,18 +151,18 @@ export const main = (): number => {
   t.eqI32("resize to empty", toI32(fb.pixels.length), 0)
 
   // --- scaleFramebuffer -------------------------------------------------------------
-  const big = new Framebuffer(5, 3)
+  const wide = new Framebuffer(5, 3)
   for (let i: i32 = 0; i < 15; i++) {
-    big.pixels[i] = i + 1
+    wide.pixels[i] = i + 1
   }
   const small = new Framebuffer(0, 0)
-  scaleFramebuffer(big, 2, small)
+  scaleFramebuffer(wide, 2, small)
   t.eqStr("halved: rounded up, top-left of each block", `${small.width}x${small.height}:${listed(small.pixels)}`, "3x2:1,3,5,11,13,15")
-  scaleFramebuffer(big, 4, small)
+  scaleFramebuffer(wide, 4, small)
   t.eqStr("quartered", `${small.width}x${small.height}:${listed(small.pixels)}`, "2x1:1,5")
-  scaleFramebuffer(big, 1, small)
-  t.eqStr("divisor 1 copies", listed(small.pixels), listed(big.pixels))
-  scaleFramebuffer(big, 2147483647, small)
+  scaleFramebuffer(wide, 1, small)
+  t.eqStr("divisor 1 copies", listed(small.pixels), listed(wide.pixels))
+  scaleFramebuffer(wide, 2147483647, small)
   t.eqStr("the largest divisor keeps one pixel", `${small.width}x${small.height}:${listed(small.pixels)}`, "1x1:1")
   scaleFramebuffer(new Framebuffer(0, 4), 2, small)
   t.eqStr("an empty source scales to empty", `${small.width}x${small.height}`, "0x2")
@@ -209,16 +210,39 @@ export const main = (): number => {
   // Red then green is ff 00 00 00 ff 00, which RFC 4648 encodes as /wAAAP8A.
   const pair = frameOf(2, 1, [RED, GREEN])
   const pairRect = new PixelRect(3, 4, 5, 1, 40, 8, 20.0)
+  // Transmit first, with `i` and `p=1`, and no delete: the next frame under the
+  // same id replaces this one atomically once its last chunk arrives.
   const first: string = kitty(pair, pairRect, 7)
   t.eqStr(
     "kitty: one frame",
     first,
-    "\x1b[5;4H\x1b_Ga=d,d=I,i=7,q=2\x1b\\\x1b_Ga=T,f=24,t=d,i=7,s=2,v=1,c=5,r=1,C=1,q=2,m=0;/wAAAP8A\x1b\\"
+    "\x1b[5;4H\x1b_Ga=T,f=24,t=d,i=7,p=1,s=2,v=1,c=5,r=1,C=1,q=2,m=0;/wAAAP8A\x1b\\"
   )
-  t.eqStr("kitty: the next frame reuses the id and deletes the last", kitty(pair, pairRect, 7), first)
-  t.eqStr("kitty: an empty framebuffer only deletes", kitty(new Framebuffer(0, 3), pairRect, 1), "\x1b[5;4H\x1b_Ga=d,d=I,i=1,q=2\x1b\\")
-  t.eqStr("kitty: no columns only deletes", kitty(pair, new PixelRect(0, 0, 0, 1, 0, 8, 0.0), 2), "\x1b[1;1H\x1b_Ga=d,d=I,i=2,q=2\x1b\\")
-  t.eqStr("kitty: no rows only deletes", kitty(pair, new PixelRect(0, 0, 1, 0, 8, 0, 0.0), 2), "\x1b[1;1H\x1b_Ga=d,d=I,i=2,q=2\x1b\\")
+  // Green then red is 00 ff 00 ff 00 00, which encodes as AP8A/wAA.
+  const swapped = frameOf(2, 1, [GREEN, RED])
+  const reused = new PixelBytes(0)
+  kittyFrame(pair, pairRect, 7, reused)
+  reused.reset()
+  kittyFrame(swapped, pairRect, 7, reused)
+  t.eqStr(
+    "kitty: the next frame, new pixels under the same id, deletes nothing",
+    reused.text(),
+    "\x1b[5;4H\x1b_Ga=T,f=24,t=d,i=7,p=1,s=2,v=1,c=5,r=1,C=1,q=2,m=0;AP8A/wAA\x1b\\"
+  )
+  t.eqStr("kitty: the delete for close", kittyDelete(7), "\x1b_Ga=d,d=I,i=7,q=2\x1b\\")
+  t.eqStr("kitty: the largest id", kittyDelete(2147483647), "\x1b_Ga=d,d=I,i=2147483647,q=2\x1b\\")
+  t.eqStr("kitty: an empty framebuffer writes nothing", kitty(new Framebuffer(0, 3), pairRect, 1), "")
+  t.eqStr("kitty: no columns writes nothing", kitty(pair, new PixelRect(0, 0, 0, 1, 0, 8, 0.0), 2), "")
+  t.eqStr("kitty: no rows writes nothing", kitty(pair, new PixelRect(0, 0, 1, 0, 8, 0, 0.0), 2), "")
+  // A framebuffer larger than the rect's pixels is sent whole; `c` and `r` scale it.
+  const oversize = frameOf(4, 2, [RED, RED, GREEN, GREEN, GREEN, GREEN, RED, RED])
+  t.eqStr(
+    "kitty: a framebuffer larger than the target",
+    kitty(oversize, new PixelRect(1, 0, 1, 1, 2, 1, 0.5), 3),
+    "\x1b[1;2H\x1b_Ga=T,f=24,t=d,i=3,p=1,s=4,v=2,c=1,r=1,C=1,q=2,m=0;" +
+      base64Encode(rgbBytes(oversize, 0, 8)) +
+      "\x1b\\"
+  )
   // 1024 pixels are 3072 bytes, exactly one chunk.
   const exact = card()
   exact.resize(32, 32)
@@ -228,7 +252,7 @@ export const main = (): number => {
   t.eqStr(
     "kitty: 3072 bytes are one chunk",
     kitty(exact, pairRect, 1),
-    "\x1b[5;4H\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b_Ga=T,f=24,t=d,i=1,s=32,v=32,c=5,r=1,C=1,q=2,m=0;" +
+    "\x1b[5;4H\x1b_Ga=T,f=24,t=d,i=1,p=1,s=32,v=32,c=5,r=1,C=1,q=2,m=0;" +
       base64Encode(rgbBytes(exact, 0, 1024)) +
       "\x1b\\"
   )
@@ -240,7 +264,7 @@ export const main = (): number => {
   t.eqStr(
     "kitty: three chunks",
     kitty(long, pairRect, 12),
-    "\x1b[5;4H\x1b_Ga=d,d=I,i=12,q=2\x1b\\\x1b_Ga=T,f=24,t=d,i=12,s=70,v=30,c=5,r=1,C=1,q=2,m=1;" +
+    "\x1b[5;4H\x1b_Ga=T,f=24,t=d,i=12,p=1,s=70,v=30,c=5,r=1,C=1,q=2,m=1;" +
       base64Encode(rgbBytes(long, 0, 1024)) +
       "\x1b\\\x1b_Gm=1;" +
       base64Encode(rgbBytes(long, 1024, 2048)) +
@@ -281,10 +305,49 @@ export const main = (): number => {
   mid.fill(0x800000)
   t.eqI32("sixel: a red between levels dithers to two", count(sixel(mid, true), ";2;"), 2)
   t.eqI32("sixel: and undithered is one", count(sixel(mid, false), ";2;"), 1)
+  // Sampled down at pixel centres: columns 1 and 3 of row 1, green then red.
+  t.eqStr(
+    "sixel: a framebuffer larger than the target",
+    sixelIn(oversize, new PixelRect(0, 0, 1, 1, 2, 1, 0.5)),
+    "\x1b[1;1H\x1bPq\"1;1;2;1#36;2;0;100;0#210;2;100;0;0#36@$#210?@\x1b\\"
+  )
+  // One `PixelBytes` across frames of different sizes gives each frame's own bytes.
+  const shared = new PixelBytes(0)
+  sixelFrame(card(), ownSize(card()), true, shared)
+  shared.reset()
+  sixelFrame(pair, ownSize(pair), false, shared)
+  t.eqStr("sixel: a smaller frame after a larger one", shared.text(), sixel(pair, false))
+  shared.reset()
+  sixelFrame(card(), ownSize(card()), false, shared)
+  t.eqStr("sixel: and the larger one again", shared.text(), sixel(card(), false))
   t.eqStr("sixel: an empty rect writes nothing", sixelIn(pair, new PixelRect(0, 0, 0, 0, 0, 0, 0.0)), "")
   t.eqStr("sixel: an empty framebuffer writes nothing", sixel(new Framebuffer(0, 0), false), "")
   console.log(`sixel card: ${shown(sixel(card(), false))}`)
   console.log(`sixel card dithered: ${shown(sixel(card(), true))}`)
+
+  // --- memory ------------------------------------------------------------------------
+  // The encoders keep their working arrays on the `PixelBytes`: after one frame
+  // has grown it, a thousand more allocate nothing. (Under Node the arena reads
+  // 0, which is flat too.)
+  const movie = new Framebuffer(160, 90)
+  for (let i: i32 = 0; i < 14400; i++) {
+    movie.pixels[i] = (i * 2654) & 0xffffff
+  }
+  const sixelRect: PixelRect = fitFramebuffer(160, 90, 40, 12, 8, 16, GRAPHICS_SIXEL)
+  const kittyRect: PixelRect = fitFramebuffer(160, 90, 40, 12, 8, 16, GRAPHICS_KITTY)
+  const frames = new PixelBytes(0)
+  sixelFrame(movie, sixelRect, true, frames)
+  frames.reset()
+  kittyFrame(movie, kittyRect, 1, frames)
+  frames.reset()
+  const before: i64 = Arena.used()
+  for (let i: i32 = 0; i < 1000; i++) {
+    sixelFrame(movie, sixelRect, true, frames)
+    frames.reset()
+    kittyFrame(movie, kittyRect, 1, frames)
+    frames.reset()
+  }
+  t.eqI32("a thousand Sixel and kitty frames allocate nothing", Arena.used() === before ? 1 : 0, 1)
 
   // --- half blocks --------------------------------------------------------------------
   const screen = new Screen(4, 2, false)

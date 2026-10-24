@@ -13,6 +13,7 @@ import {
   drawAscii,
   drawHalfBlocks,
   fitFramebuffer,
+  kittyDelete,
   kittyFrame,
   scaleFramebuffer,
   sixelFrame,
@@ -52,6 +53,7 @@ export const main = (): i32 => {
   const out = new PixelBytes(ZERO);
   kittyFrame(fb, kr, ID, out);
   console.log(shown(out.text()));
+  console.log(shown(kittyDelete(ID)));
 
   const sr = fitFramebuffer(W, H, COLS, ROWS, CELL_W, CELL_H, GRAPHICS_SIXEL);
   out.reset();

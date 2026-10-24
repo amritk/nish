@@ -22,6 +22,9 @@
  *   keeping the framebuffer's aspect ratio.
  * - `kittyFrame(fb, rect, imageId, out)` writes the kitty graphics commands for
  *   one frame into a `PixelBytes`; `KITTY_TRANSFER_DIRECT` is its transfer.
+ *   Every frame retransmits the same `imageId`, which the terminal swaps in
+ *   atomically, so there is no per-frame delete; `kittyDelete(imageId)` is the
+ *   command that frees the image when the program closes.
  * - `sixelFrame(fb, rect, dither, out)` writes one Sixel image, in the fixed
  *   palette `SIXEL_REGISTERS` counts, optionally ordered-dithered.
  * - `drawHalfBlocks(fb, canvas, rect)` and `drawAscii(fb, screen, rect, colors)`
@@ -32,11 +35,15 @@
  * pixels; none of them clears the letterbox around the rect, which is the
  * caller's.
  *
+ * `PixelBytes` holds the kitty and Sixel encoders' working arrays as well as
+ * their output, grown once to the largest frame, so a program that keeps one
+ * `PixelBytes` encodes frame after frame without allocating.
+ *
  * Private helpers share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
 import { base64EncodeInto } from "nish/base64"
-import { COLOR_DEFAULT, ATTR_NONE, Canvas, Screen, moveCursor } from "nish/term"
+import { COLOR_DEFAULT, ATTR_NONE, Canvas, Screen } from "nish/term"
 
 /** Text cells, one luminance character each: the Linux console's backend. */
 export const GRAPHICS_ASCII: i32 = 0
@@ -84,6 +91,12 @@ const PIXELS_ONE: i32 = 1
 
 /** `\`, which follows ESC to end an APC or a DCS (ECMA-48 ST). */
 const PIXELS_BACKSLASH: i32 = 92
+
+/** `[`, which follows ESC to open a control sequence (ECMA-48 CSI). */
+const PIXELS_BRACKET: i32 = 91
+
+/** `H`, the final byte of cursor position (ECMA-48 CUP). */
+const PIXELS_CUP: i32 = 72
 
 /** `0`, the first decimal digit. */
 const PIXELS_DIGIT_0: i32 = 48
@@ -316,18 +329,51 @@ export const fitFramebuffer = (
  * A growable buffer of the bytes an encoder writes. `text()` is them as a
  * string, ready for one write; `reset()` empties it and keeps its capacity, so
  * one buffer serves every frame.
+ *
+ * It also holds the working arrays of `kittyFrame` and `sixelFrame`, grown to
+ * the largest frame and then reused, so that encoding a frame allocates
+ * nothing once the buffer has seen one as large: a frame loop calling an
+ * encoder 60 times a second runs in flat memory. An encoder's arrays could
+ * not be its own locals, because the arena cannot take a call's allocations
+ * back while that call grows a buffer it was handed (`bytes` above).
  */
 export class PixelBytes {
   /** The bytes, of which the first `length` are written. */
   bytes: u8[]
   /** How many bytes are written. */
   length: i32
+  /** One kitty chunk's RGB bytes. */
+  kittyRaw: u8[]
+  /** The framebuffer column and row each destination pixel samples. */
+  sampleXs: i32[]
+  sampleYs: i32[]
+  /** Every destination pixel's Sixel register, row by row. */
+  sixelReg: i32[]
+  /** Which registers a Sixel frame uses, 1 or 0. */
+  sixelUsed: u8[]
+  /** The first and last column of a band each register covers, -1 for none. */
+  sixelFirst: i32[]
+  sixelLast: i32[]
+  /** Each register's sixels across a band, all zero between bands. */
+  sixelBits: i32[]
 
   /** An empty buffer with room for `capacity` bytes before it grows. */
   constructor(capacity: i32) {
     this.bytes = new Array<u8>(Math.max(capacity, 16))
     this.bytes.fill(0)
     this.length = 0
+    this.kittyRaw = new Array<u8>(PIXELS_KITTY_RAW)
+    this.kittyRaw.fill(0)
+    this.sampleXs = []
+    this.sampleYs = []
+    this.sixelReg = []
+    this.sixelUsed = new Array<u8>(SIXEL_REGISTERS)
+    this.sixelUsed.fill(0)
+    this.sixelFirst = new Array<i32>(SIXEL_REGISTERS)
+    this.sixelFirst.fill(-1)
+    this.sixelLast = new Array<i32>(SIXEL_REGISTERS)
+    this.sixelLast.fill(-1)
+    this.sixelBits = []
   }
 
   /** Forget what was written. */
@@ -390,11 +436,36 @@ export class PixelBytes {
  */
 const pixelsSampleMap = (n: i32, source: i32): i32[] => {
   const map: i32[] = new Array<i32>(n)
-  for (let i: i32 = 0; i < toI32(map.length); i++) {
+  pixelsSampleMapInto(map, n, source)
+  return map
+}
+
+/** `pixelsSampleMap` written into the first `n` entries of `map`, which is at least `n` long. */
+const pixelsSampleMapInto = (map: i32[], n: i32, source: i32): void => {
+  for (let i: i32 = 0; i < n && i < toI32(map.length); i++) {
     const s: i32 = toI32(Math.floor(((toF64(i) + 0.5) * toF64(source)) / toF64(n)))
     map[i] = s >= source ? source - 1 : s
   }
-  return map
+}
+
+/** `a` when it is at least `n` long, else a new zeroed array of `n`, for a `PixelBytes` working array. */
+const pixelsAtLeast = (a: i32[], n: i32): i32[] => {
+  if (toI32(a.length) >= n) {
+    return a
+  }
+  const grown: i32[] = new Array<i32>(n)
+  grown.fill(0)
+  return grown
+}
+
+/** Append `CSI row ; col H`, the cursor to the 0-based cell (`col`, `row`), as `moveCursor` writes it. */
+const pixelsMoveTo = (out: PixelBytes, col: i32, row: i32): void => {
+  out.put(PIXELS_ESC)
+  out.put(PIXELS_BRACKET)
+  out.putDecimal(row + 1)
+  out.put(PIXELS_SEMICOLON)
+  out.putDecimal(col + 1)
+  out.put(PIXELS_CUP)
 }
 
 /** Append `ESC _ G`, which opens a kitty graphics command (an APC). */
@@ -414,34 +485,36 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  * (https://sw.kovidgoyal.net/kitty/graphics-protocol/), placed over `rect`.
  *
  * 1. The cursor moves to the rect's first cell, where kitty places an image.
- * 2. `a=d,d=I,i=<id>` deletes the image `imageId` and every placement of it,
- *    data included, so that sending a frame each tick does not grow the
- *    terminal's memory. The same id is reused for every frame; on the first
- *    there is nothing to delete, and `q=2` keeps the terminal from answering
- *    either way, so the encoder needs no memory of what it sent.
- * 3. `a=T` transmits and displays at once: `f=24` is packed RGB, `t=d` direct
- *    transfer (`KITTY_TRANSFER_DIRECT`), `s` and `v` the framebuffer's own
- *    size, `c` and `r` the rect's cells, which kitty scales the image to —
- *    so a downgraded framebuffer costs fewer bytes and still fills the rect —
- *    `C=1` leaves the cursor where it was, and `q=2` suppresses every reply.
- * 4. The RGB bytes go as base64 (RFC 4648 §4) in chunks of 4096 characters,
+ * 2. `a=T` transmits and displays at once: `f=24` is packed RGB, `t=d` direct
+ *    transfer (`KITTY_TRANSFER_DIRECT`), `i` the image and `p=1` its one
+ *    placement, `s` and `v` the framebuffer's own size, `c` and `r` the rect's
+ *    cells, which kitty scales the image to — so a downgraded framebuffer
+ *    costs fewer bytes and still fills the rect — `C=1` leaves the cursor
+ *    where it was, and `q=2` suppresses every reply.
+ * 3. The RGB bytes go as base64 (RFC 4648 §4) in chunks of 4096 characters,
  *    the protocol's limit: each but the last carries `m=1`, the last `m=0`.
  *    Only the first chunk carries the keys; the rest carry `m` alone.
  *
- * An empty framebuffer or rect writes the delete and nothing else.
+ * Every frame reuses `imageId` and nothing is deleted first. Transmitting an
+ * id that exists replaces that image and frees the old one's data, and the
+ * same image and placement id replace the placement, so the terminal holds
+ * one frame however many are sent. The new frame takes over only when its
+ * last chunk (`m=0`) has arrived, so the old one stays on screen while a
+ * frame of hundreds of chunks streams in. Deleting first would blank the
+ * image for that whole time. `kittyDelete` removes the image when the program
+ * is done with it.
+ *
+ * `imageId` is 1 to 2^31 - 1, since 0 is the protocol's "no id"; anything
+ * else panics. An empty framebuffer or rect writes nothing.
  */
 export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: PixelBytes): void => {
-  out.putText(moveCursor(rect.col, rect.row))
-  pixelsKittyOpen(out)
-  out.putText("a=d,d=I,i=")
-  out.putDecimal(imageId)
-  out.putText(",q=2")
-  pixelsStringEnd(out)
+  pixelsCheckImageId("kittyFrame", imageId)
   const count: i32 = fb.width * fb.height
   if (count === 0 || rect.cols <= 0 || rect.rows <= 0) {
     return
   }
-  const raw: u8[] = new Array<u8>(PIXELS_KITTY_RAW)
+  pixelsMoveTo(out, rect.col, rect.row)
+  const raw: u8[] = out.kittyRaw
   const total: i32 = count * 3
   let sent: i32 = 0
   let pixel: i32 = 0
@@ -460,7 +533,7 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
     if (sent === 0) {
       out.putText("a=T,f=24,t=d,i=")
       out.putDecimal(imageId)
-      out.putText(",s=")
+      out.putText(",p=1,s=")
       out.putDecimal(fb.width)
       out.putText(",v=")
       out.putDecimal(fb.height)
@@ -476,6 +549,25 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
     out.length = base64EncodeInto(raw, 0, n, out.bytes, out.length)
     pixelsStringEnd(out)
   }
+}
+
+/** Panic, as `who`, unless `imageId` is a kitty image id: 1 or more, 0 being "no id". */
+const pixelsCheckImageId = (who: string, imageId: i32): void => {
+  if (imageId < 1) {
+    panic(`${who}: an image id below 1`)
+  }
+}
+
+/**
+ * The kitty command that deletes the image `imageId`, every placement of it
+ * and its data (`a=d,d=I`, the uppercase freeing the data), with `q=2` so the
+ * terminal does not answer. A program writes it when it stops drawing, and
+ * puts it in its terminal restore string, so the last frame does not stay
+ * behind. Panics, like `kittyFrame`, on an id below 1.
+ */
+export const kittyDelete = (imageId: i32): string => {
+  pixelsCheckImageId("kittyDelete", imageId)
+  return `\x1b_Ga=d,d=I,i=${imageId},q=2\x1b\\`
 }
 
 /** The Sixel register of the palette colour with red level `r` (0–5), green `g` (0–6) and blue `b` (0–5). */
@@ -545,17 +637,24 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   }
   pixelsCheckSize("sixelFrame", w, h)
   pixelsCheckSize("sixelFrame", w, SIXEL_REGISTERS)
-  const xs: i32[] = pixelsSampleMap(w, fb.width)
-  const ys: i32[] = pixelsSampleMap(h, fb.height)
+  // The working arrays live on `out`, grown once to the largest frame.
+  out.sampleXs = pixelsAtLeast(out.sampleXs, w)
+  out.sampleYs = pixelsAtLeast(out.sampleYs, h)
+  out.sixelReg = pixelsAtLeast(out.sixelReg, w * h)
+  out.sixelBits = pixelsAtLeast(out.sixelBits, SIXEL_REGISTERS * w)
+  const xs: i32[] = out.sampleXs
+  const ys: i32[] = out.sampleYs
+  pixelsSampleMapInto(xs, w, fb.width)
+  pixelsSampleMapInto(ys, h, fb.height)
   // Every destination pixel's register, and which registers the frame uses.
-  const reg: i32[] = new Array<i32>(w * h)
-  const used: u8[] = new Array<u8>(SIXEL_REGISTERS)
+  const reg: i32[] = out.sixelReg
+  const used: u8[] = out.sixelUsed
   used.fill(0)
-  // `ys` is `h` long and `xs` `w`: bounding the loops by their lengths is what
-  // proves the reads in range.
-  for (let y: i32 = 0; y < toI32(ys.length); y++) {
+  // `ys` is at least `h` long and `xs` `w`: bounding the loops by their lengths
+  // too is what proves the reads in range.
+  for (let y: i32 = 0; y < h && y < toI32(ys.length); y++) {
     const from: i32 = ys[y] * fb.width
-    for (let x: i32 = 0; x < toI32(xs.length); x++) {
+    for (let x: i32 = 0; x < w && x < toI32(xs.length); x++) {
       const c: i32 = fb.pixels[from + xs[x]]
       let br: i32 = 0
       let bg: i32 = 0
@@ -578,7 +677,7 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
       }
     }
   }
-  out.putText(moveCursor(rect.col, rect.row))
+  pixelsMoveTo(out, rect.col, rect.row)
   out.put(PIXELS_ESC)
   out.putText('Pq"1;1;')
   out.putDecimal(w)
@@ -602,11 +701,11 @@ export const sixelFrame = (fb: Framebuffer, rect: PixelRect, dither: boolean, ou
   // Per band: the first and last column each register appears in, so a colour
   // is only walked over the span it covers, and each register's sixels across
   // the band, `n * w + x`, built in one pass over its pixels. Emitting a span
-  // zeroes it, which leaves `bits` all zero for the next band.
-  const first: i32[] = new Array<i32>(SIXEL_REGISTERS)
-  const last: i32[] = new Array<i32>(SIXEL_REGISTERS)
-  const bits: i32[] = new Array<i32>(SIXEL_REGISTERS * w)
-  bits.fill(0)
+  // zeroes it, which leaves `bits` all zero for the next band and the next
+  // frame.
+  const first: i32[] = out.sixelFirst
+  const last: i32[] = out.sixelLast
+  const bits: i32[] = out.sixelBits
   for (let top: i32 = 0; top < h; top = top + 6) {
     const bottom: i32 = top + 6 < h ? top + 6 : h
     first.fill(-1)
