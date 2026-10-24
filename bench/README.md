@@ -1177,13 +1177,14 @@ not in this suite's tables.
 ```bash
 npm run build
 node bench/sqlite/run.mjs --validate     # small counts: both sides must read the same rows and checksums
-node bench/sqlite/run.mjs --rounds 10    # timed; the first run also builds the seed
+node bench/sqlite/run.mjs --rounds 12    # timed; the first run also builds the seed
 ```
 
 **The database.** `sqlite/schema.sql` is the challenge's schema. `twin seed`
 fills it from one fixed generator with 50,000 users, 500,000 posts and
 2,000,000 likes, in WAL mode. It is made once in `build/bench/sqlite/` and made
-again only when `schema.sql` or `twin.c` changes. Nothing is downloaded.
+again only when `schema.sql`, `twin.c`, `sqlite3.c`, the compiler or its flags
+change. Nothing is downloaded.
 
 **The workloads.** Each call binds, steps, reads every column and resets, on a
 statement prepared once. Text is copied into one reused buffer, with
@@ -1198,7 +1199,8 @@ statement prepared once. Text is copied into one reused buffer, with
 
 The inserts run with `synchronous=NORMAL`. Every value read is folded into a
 checksum inside the timed loop on both sides, so the optimiser cannot drop a
-read. Each side's fold keeps its sum in a local variable.
+read. Each side's fold keeps its sum in a local variable across a column's
+bytes.
 
 **The builds.**
 
@@ -1209,50 +1211,69 @@ read. Each side's fold keeps its sum in a local variable.
   that link:
   - `-O3 -DNDEBUG` with `-fno-plt` and the section and unwind flags;
   - the same `SQLITE_*` options, `SQLITE_THREADSAFE=0` among them;
-  - `sqlite3.c` as a native object of its own, as the link builds it.
+  - `sqlite3.c` as a native object of its own, as the link builds it;
+  - on Linux, the link's flags: `--gc-sections`, `--as-needed`, `-O2`, no
+    build id, stripped, and `lld` when there is one.
 
-Both sides open the database with the same flags and PRAGMAs.
+`NISH_SQLITE_CFLAGS` changes how the build compiles SQLite and the twin would
+not have it, so `run.mjs` refuses to run while it is set. Both sides open the
+database with the same flags and PRAGMAs.
 
 **The protocol.**
 
 - A warm-up round runs first and is not counted. Then come `--rounds` rounds,
-  rounded up to an even number.
+  rounded up to a multiple of 3.
 - Each round runs every workload on the build, its copy and the C twin. The
-  order rotates by round, so each binary goes first equally often.
+  order rotates by round, so over a multiple of 3 rounds each binary goes
+  first, second and third equally often.
 - A run times its own loop. Every run of a workload must print the same row
   count and checksum.
-- The report is ns per call, min and median over the rounds.
-- The module's cost is the build less the twin. The noise band is the build
-  against its byte-identical copy: a difference inside the band is one this
-  machine cannot see.
+- The report is ns per call: min, median and interquartile range over the
+  rounds.
+- Nish − C is the build less the twin, so it includes the adapter's checks as
+  well as the module's calls. The noise band is the build against its
+  byte-identical copy: a difference inside the band is one this machine cannot
+  see. Min and median each have their own band, and each is judged against
+  its own.
 
-**The figures, at `23b1469`.** Ten rounds on a four-core Intel Xeon virtual
-machine at 2.10 GHz, with Ubuntu clang 18.1.3 and SQLite 3.54.1. All figures
-are ns per call.
+**The figures.** Twelve rounds on a four-core Intel Xeon virtual machine at
+2.10 GHz, with Ubuntu clang 18.1.3 and SQLite 3.54.1. All figures are ns per
+call.
 
-| Workload | Nish min / median | C min / median | Nish − C, min / median | Noise band, min / median |
-| --- | --- | --- | --- | --- |
-| `lookup` | 4,684 / 4,982 | 4,661 / 4,925 | +23 / +56 (1.1 %) | 96 / 139 |
-| `feed` | 15,114 / 15,276 | 14,264 / 14,399 | +850 / +877 (6.1 %) | 75 / 92 |
-| `insert` | 14,058 / 14,301 | 13,972 / 14,280 | +86 / +22 (0.2 %) | 8 / 69 |
-| `insert-txn` | 4,120 / 4,240 | 4,127 / 4,325 | −7 / −85 (−2.0 %) | 59 / 11 |
+| Workload | Nish min / median (IQR) | Copy min / median (IQR) | C min / median (IQR) | Nish − C, min / median | Noise band, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `lookup` | 4,707 / 5,039 (157) | 4,890 / 5,000 (60) | 4,831 / 5,056 (205) | −124 / −17 (−0.3 %) | 183 / 40 |
+| `feed` | 15,121 / 15,224 (253) | 15,037 / 15,774 (1,367) | 14,547 / 14,957 (427) | +574 / +266 (1.8 %) | 85 / 550 |
+| `insert` | 13,829 / 14,490 (1,329) | 13,864 / 14,261 (382) | 13,713 / 14,224 (362) | +116 / +266 (1.9 %) | 36 / 229 |
+| `insert-txn` | 4,020 / 4,167 (175) | 4,119 / 4,357 (319) | 4,072 / 4,223 (183) | −53 / −56 (−1.3 %) | 99 / 190 |
 
 **What the figures say.**
 
-- **Only `feed` shows a cost outside the noise band.** `lookup`, `insert` and
-  `insert-txn` differ from C by less than their bands.
-- **`feed`'s cost is per column read, about 9 ns.** One call reads 100 columns,
-  and each read checks its handle and asks SQLite whether a row is current,
-  which is what lets a read with no current row answer 0, as the module
-  documents. `columnInto` also asks the column's type, because it
-  copies a blob as bytes and anything else as text.
-- **Under callgrind, over 300 `feed` calls,** the build runs 58.8M
-  instructions against C's 56.4M. All of the difference is in the adapter
-  calls.
+- **`lookup` and `insert-txn`:** both statistics are inside their bands. This
+  machine cannot see the module on them, in either direction.
+- **`feed`:** the min, +574 ns against a band of 85, is a cost. The median,
+  +266 ns, is inside its band of 550, which is wide because the copy's median
+  was noisy (IQR 1,367). The min is the figure to trust here: about 5.7 ns per
+  column read if all of it were the reads. One call reads 100 columns, and
+  each read checks its handle and asks SQLite whether a row is current, which
+  is what lets a read with no current row answer 0, as the module documents.
+  `columnInto` also asks the column's type, because it copies a blob as bytes
+  and anything else as text. The call also makes 20 steps and 20 resets, each
+  through a checked adapter call, so the per-read figure is an upper bound.
+- **`insert`:** both statistics are outside their bands, +116 and +266 ns, but
+  the build's IQR is 1,329 ns. Each call commits through the WAL, and that
+  cost, and how it moves as the WAL file grows and is checkpointed, swamps a
+  module cost of tens of ns. `insert-txn`, which takes the commit out, is the
+  figure for the module's cost on an insert.
+- **Under callgrind,** run from `build/bench/sqlite/` as
+  `valgrind --tool=callgrind ./nish feed feed.db 300` and the same for
+  `./twin`, the build runs 58.6M instructions against C's 56.3M: about 7,800
+  more per call, all of it in the adapter's calls. That covers the 100 column
+  reads and the 20 steps and 20 resets.
 
-**Before this measurement's fixes.** The same protocol at `2214032` put `feed`
-at +1,319 ns median (9.0 %), against a noise band of 244 ns. Two causes made up
-the difference:
+**Before the adapter fix.** The same protocol, before this measurement's fixes,
+put `feed` at +1,319 ns median (9.0 %), against a noise band of 244 ns. Two
+causes made up the difference:
 
 - **The benchmark's text fold.** It stored `this.sum` on every byte, so the
   optimiser reloaded the buffer on every byte too. About 7.1M of the 9.7M
@@ -1260,9 +1281,10 @@ the difference:
 - **The adapter.** `columnInto` asked SQLite for the column count and the data
   count separately. It now asks once when a row is current.
 
-`insert-txn` ran 193 ns under C then as well, and runs under C in both
-measurements. Nish adds calls to that loop rather than removing any, so the
-lead is most likely the layout of the two binaries, not the module.
+Where Nish ran faster than C before (`insert-txn` by 85 ns median in the first
+measurement after the fix, outside a band of 11), the cause was never found; the layout of the two
+binaries is a hypothesis, not a finding. With the rotation made equal and the
+link flags matched, no Nish-faster result is outside its band.
 
 ## YAML against @amritk/yaml
 
