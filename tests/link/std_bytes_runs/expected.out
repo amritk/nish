@@ -8,6 +8,11 @@ text control: 17
 text del: 20
 text utf8: 30
 text malformed: 18 18 18 18 18 21
+plain quote: 45
+plain backslash: 33
+plain control: 17 40
+plain high: 129 20 19
+plain clamps: 50 10 33 51 51
 copy window: 0 5 6 7
 copy up: 1 2 1 2 3 4 5 6
 copy down: 3 4 5 6 7 8 7 8

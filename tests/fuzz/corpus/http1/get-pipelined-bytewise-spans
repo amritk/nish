@@ -1,0 +1,7 @@
+GET /index.html HTTP/1.1
+Host: example.com
+Accept: */*
+
+GET /next?q=1 HTTP/1.1
+Host: example.com
+

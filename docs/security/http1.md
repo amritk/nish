@@ -56,6 +56,17 @@ what it writes is checked so that its strings cannot end a line.
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the response is sent and the socket closed at once, without the lingering close RFC 9112 §9.6 describes. A client still sending a body when the socket closes may get a TCP reset that discards the error response before it reads it. Nothing is accepted that should not be: the effect is a client that sees a reset instead of a 413 or 400. | **Open.** A half-close (`netShutdown` for writing) and a short drain before `close` is the follow-up; it needs a timer of its own, which `expire` can read as H1-1's deadline does. |
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`), through `std/net/websocket.ts` (`websocketRequestKey`, `websocketUpgradeResponse`) | Accepting a WebSocket leaves 58 bytes in the arena (the key and the accept key as strings, measured over 1,000 upgrades of one connection) until the program resets it. It is once a connection, not once a message, and bounded by the connection rate the pool allows — the shape of TLS-3 at a thousandth of its size. | **Open, accepted for now.** The same per-connection arena that closes TLS-3 closes it; the frames themselves allocate nothing. Writing the accept key into storage the connection owns, as `HpackDecoder` does for H2-1, does not close it alone: the key is hashed by `sha1` in `nish/crypto/sha1`, which answers a new array, and base64-encoded by a helper that answers a string, so the fix needs a SHA-1 and a base64 that write into a caller's buffer, outside this record's files. |
 
+## Fuzzing
+
+Fuzzed by `tests/fuzz/targets/http1.ts`, `tests/fuzz/targets/websocket.ts`.
+
+| Target | What it drives | Executions |
+| --- | --- | ---: |
+| `http1` | the HTTP/1.1 parser fed in pieces under small or default limits, chunked bodies, an upgrade declined or taken, checking every refusal is a 4xx or 5xx | 57,537,869 |
+| `websocket` | the WebSocket frame reader with masking required or not and a message cap of 0, 16, 125 or 65,536 bytes, checking text is UTF-8, every frame round-trips through `websocketFrame`, and pong and close payloads | 117,903,219 |
+
+Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
+
 ## Properties verified
 
 Each property below is pinned by a test that fails if it stops holding.

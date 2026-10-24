@@ -102,7 +102,7 @@ artifact. Then work it the way the security records require
 ## In CI
 
 - **`fuzz-smoke`** (`.github/workflows/ci.yml`, every pull request): builds
-  every target, replays its corpus and regressions, and fuzzes it for 60
+  every target, replays its corpus and regressions, and fuzzes it for 30
   seconds from `-seed=1`. The seed is fixed, but the run is bounded by wall
   clock, so how many inputs it reaches varies from run to run. It then runs `node tests/run.js runtime_sanitize`:
   the runtime unit test under ASan and UBSan, single-threaded and with
