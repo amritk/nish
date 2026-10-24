@@ -83,6 +83,7 @@ itself.
 | where each allocation's memory goes | `nish --emit-arena <file.json> <files>` | one JSON object in the file, every function with its allocation sites, each with its kind, its placement (`stack`, `pass`, `block`, `function`, `returned`, `caller`, `kept`, `unscoped`) and whether it accumulates pass after pass; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#arena-placement)) |
 | what the program can reach | `nish <files> --emit-capabilities <file.json>` | the capabilities every function, module and package can reach (files, processes, the network, the environment, the clock, entropy, signals, `exit`, C calls), each with a witness call chain, and each function's panic sites, as byte-stable JSON; `nish run --capabilities` prints the one-line summary on stderr before the program runs ([LANGUAGE.md](./docs/LANGUAGE.md#capabilities)) |
 | that the program reaches only what it may | `nish <files> --allow <cap>[,<cap>...]` and `--deny <cap>[,<cap>...]`, or `"nish": { "capabilities": { "allow": [...], "deny": [...] } }` in the root `package.json` | a program is refused (NL2459) when a function outside code can call — `main` in a closed `--link` build, every host-visible function in an open one — reaches a capability the policy does not grant: one error per capability, spanned at the first call of the witness chain and naming every hop; an unknown name, `--allow unsafe`, a capability both allowed and denied or a `=<dir>` scope is a usage error (exit 2), and a malformed manifest policy is NL3032–NL3035, and a `"nish"` field that is not one object of `noPanic` and `capabilities`, each written once, is NL3036; the IR is unchanged ([LANGUAGE.md](./docs/LANGUAGE.md#the-capability-policy)) |
+| that the binary can reach no more than that, at run time | `nish <files> --sandbox --link <exe>` (or `nish run --sandbox`), `--sandbox=best-effort` on an older kernel | the Linux binary confines itself before any constructor runs to the capabilities `main` reaches: no_new_privs, no capabilities, Landlock for files and a seccomp filter; a call outside them ends the process with SIGSYS (exit 159 through `nish run`) or fails with `EACCES`/`EPERM`, and a kernel that cannot confine it exits 126 with one `nish: --sandbox:` line. A darwin build is NL3041; `--emit-napi`, `--emit-ts`, `--emit-ast`, `--emit-checked` and an entry with no `main` are usage errors (exit 2); a wasm build emits no call ([LANGUAGE.md](./docs/LANGUAGE.md#the-sandbox)) |
 
 Every `--json` object is flat:
 `{"file","line","column","endLine","endColumn","severity","code","message"}`,
@@ -319,14 +320,14 @@ what is blocking and what you need — and keep watching.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
   the reason in `src/attributes.ts` beside the code.
 - **A struct layout change touches `src/runtime.ts` and `runtime.c` in the same
-  commit** and extends a layout test. The C runtime is ten translation units
+  commit** and extends a layout test. The C runtime is eleven translation units
   with a budget each — `runtime.c` for the core, `runtime-os.c` for the
   syscall wrappers, `runtime-parallel.c` for threads, `runtime-cross.c` for
   the copies between their arenas, `runtime-host.c` for the clock, entropy,
   file times and signals, `runtime-net.c` for the sockets of `nish:net`,
   `runtime-simd.c` for the vector text search, `runtime-aes.c` for
-  AES-GCM, `runtime-term.c` for stdin and the terminal and `runtime-bytes.c` for
-  the byte-class runs of `nish/bytes` — so keep each inside its own
+  AES-GCM, `runtime-term.c` for stdin and the terminal, `runtime-bytes.c` for
+  the byte-class runs of `nish/bytes` and `runtime-sandbox.c` for `--sandbox` — so keep each inside its own
   (`node tests/run.js budget`) and report the size of whichever you changed in
   the PR. An addition that does not fit goes in a new unit with its own
   ceiling rather than a raised one, and a new unit is named in the five places

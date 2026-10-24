@@ -284,7 +284,7 @@ function EscapeAnalysis.constructor(this: EscapeAnalysis, unit: AnalysisUnit, ta
   pointer unit: size=16 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   pointer facts: size=16 writesThrough=true captured=true
-  pointer opts: size=160 writesThrough=true captured=true
+  pointer opts: size=168 writesThrough=true captured=true
   pointer sig: size=136 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:19 new EscapeResult -> @EscapeResult.constructor
@@ -992,7 +992,7 @@ function analyzeEscapes(unit: AnalysisUnit, table: TypeTable, sig: FunctionSig, 
   pointer table: size=96 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#2 TypeTable.resultByValue#0
   pointer sig: size=136 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#6 FunctionSig.body#0
   pointer facts: size=16 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#3
-  pointer opts: size=160 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#4
+  pointer opts: size=168 writesThrough=true captured=true passedTo=EscapeAnalysis.constructor#4
   stackSites=1 stackLocals=1
   local +0:9 analysis: EscapeAnalysis (const)
   callee +0:20 new EscapeAnalysis -> @EscapeAnalysis.constructor

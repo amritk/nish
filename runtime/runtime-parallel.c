@@ -79,6 +79,9 @@
  * decides how many threads a loop is divided into. */
 static int64_t nish_cpu_cached = 0;
 
+/* What `nish_cpu_prime` read before `--sandbox` confined the process, or 0. */
+static int64_t nish_cpu_ceiling = 0;
+
 /* The CPUs a region may use: `nish_cpu_online` (runtime-os.c), which
  * `availableParallelism` reads in every build, and 1 in the sequential one,
  * which divides nothing. */
@@ -86,12 +89,28 @@ int64_t nish_cpu_count(void) {
   int64_t n = __atomic_load_n(&nish_cpu_cached, __ATOMIC_RELAXED);
   if (n != 0) return n;
 #ifdef NISH_PAR_REAL
+  /* Under `--sandbox` the count is read again for `NISH_NUM_THREADS`, and
+   * the primed ceiling bounds it where the cgroup read is now refused. */
   n = nish_cpu_online();
+  if (nish_cpu_ceiling != 0 && nish_cpu_ceiling < n) n = nish_cpu_ceiling;
 #else
   n = 1;
 #endif
   __atomic_store_n(&nish_cpu_cached, n, __ATOMIC_RELAXED);
   return n;
+}
+
+/* `--sandbox` calls this from `.preinit_array`, before it confines the
+ * process: `nish_cpu_online` reads the cgroup quota from /sys/fs/cgroup, which
+ * Landlock refuses a program without `fs.read`, and a pool divided without it
+ * would oversubscribe a container. It keeps the count as a ceiling rather
+ * than the answer, because a dynamically linked glibc has not yet set
+ * `environ` there, so `NISH_NUM_THREADS` reads as unset; `nish_cpu_count`
+ * reads the count again when the first region asks and keeps the smaller. */
+void nish_cpu_prime(void) {
+#ifdef NISH_PAR_REAL
+  nish_cpu_ceiling = nish_cpu_online();
+#endif
 }
 
 #ifdef NISH_PAR_REAL

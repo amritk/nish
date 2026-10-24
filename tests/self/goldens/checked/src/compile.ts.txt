@@ -255,7 +255,7 @@ function capabilityListMask(flag: string, list: string): i32 -> @capabilityListM
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
-  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.panicsText Options.constructor PackageSearch.wasRefused PackageSearch.where acceptsSidecars astText basenameWithout cDeclared capabilityListMask capabilityNames capabilitySummary checkedText emitTypeScript externalFunctions findPackage fixProgram helpHint internalErrorFor isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_realpath nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file planOutputs report reportDeprecations reportLoadFailure reportPerformance reportPortability reportToolchainFailure resolveTarget runProgram simulatedInternalError simulatedUnlabelledBuiltin supportedTargets usageText writeCapabilityReport writeSidecars
+  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.panicsText Options.constructor PackageSearch.wasRefused PackageSearch.where acceptsSidecars astText basenameWithout cDeclared capabilityListMask capabilityNames capabilitySummary checkedText emitTypeScript externalFunctions findPackage fixProgram helpHint internalErrorFor isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_slice nish_print nish_realpath nish_str_at nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new nish_write nish_write_file planOutputs report reportDeprecations reportLoadFailure reportPerformance reportPortability reportRootFailure reportToolchainFailure resolveTarget runProgram simulatedInternalError simulatedUnlabelledBuiltin supportedTargets usageText writeCapabilityReport writeSidecars
   stackSites=6 stackLocals=4
   callee +0:19 usageText -> @usageText
   local +3:9 opts: Options (const)
@@ -293,90 +293,98 @@ function main(): i32 -> @nish_main [exported entry]
   callee +207:20 capabilityListMask -> @capabilityListMask
   callee +236:224 helpHint -> @helpHint
   callee +273:19 usageText -> @usageText
-  callee +282:60 helpHint -> @helpHint
-  callee +299:19 usageText -> @usageText
-  local +311:9 triple: string (let)
-  local +313:13 host: Target | null (const)
-  callee +313:20 resolveTarget -> @resolveTarget
-  local +317:13 what: string (const)
-  local +330:9 clash: string (let)
-  local +356:13 refused: string (const)
-  local +377:11 refused: string (const)
-  local +400:9 both: i32 (const)
-  callee +403:21 capabilityNames -> @capabilityNames
-  local +411:9 refused: string (let)
-  local +469:11 problem: string (const)
-  callee +469:21 missingToolchain -> @missingToolchain
-  callee +471:7 reportToolchainFailure -> @reportToolchainFailure
-  local +488:9 pkg: PackageSearch (const)
-  callee +488:15 findPackage -> @findPackage
-  callee +489:7 PackageSearch.wasRefused -> @PackageSearch.wasRefused
-  callee +490:5 reportToolchainFailure -> @reportToolchainFailure
-  callee +491:79 PackageSearch.where -> @PackageSearch.where
-  callee +502:7 simulatedInternalError -> @simulatedInternalError
-  callee +503:12 internalErrorFor -> @internalErrorFor
-  local +510:11 outcome: FixOutcome (const)
-  callee +510:21 fixProgram -> @fixProgram
-  callee +512:7 reportLoadFailure -> @reportLoadFailure
-  callee +516:7 report -> @report
-  callee +519:5 reportDeprecations -> @reportDeprecations
-  callee +520:5 reportPerformance -> @reportPerformance
-  callee +521:5 reportPortability -> @reportPortability
-  local +525:9 compilation: Compilation (const)
-  callee +525:23 new Compilation -> @Compilation.constructor
-  callee +529:8 loadRoots -> @loadRoots
-  callee +530:5 reportLoadFailure -> @reportLoadFailure
-  local +546:16 unit: ModuleUnit (const)
-  callee +547:13 astText -> @astText
-  callee +551:8 Compilation.check -> @Compilation.check
-  callee +552:5 report -> @report
-  callee +555:3 reportDeprecations -> @reportDeprecations
-  callee +556:3 reportPerformance -> @reportPerformance
-  callee +557:3 reportPortability -> @reportPortability
-  callee +567:5 Compilation.entry -> @Compilation.entry
-  local +569:9 asker: string (let)
-  callee +576:37 Compilation.entry -> @Compilation.entry
-  callee +584:19 capabilitySummary -> @capabilitySummary
-  callee +587:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +590:5 writeCapabilityReport -> @writeCapabilityReport
-  callee +599:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +602:36 Compilation.panicsText -> @Compilation.panicsText
-  callee +608:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +611:35 Compilation.arenaText -> @Compilation.arenaText
-  callee +617:11 checkedText -> @checkedText
-  local +625:11 ts: EmittedProgram (const)
-  callee +625:16 emitTypeScript -> @emitTypeScript
-  callee +627:14 internalErrorFor -> @internalErrorFor
-  callee +634:7 report -> @report
-  local +648:16 file: EmittedFile (const)
-  local +649:13 target: string | null (const)
-  callee +649:35 joinPath -> @joinPath
-  local +653:18 unit: ModuleUnit (const)
-  local +654:15 source: string | null (const)
-  local +663:16 file: EmittedFile (const)
-  local +664:13 path: string (const)
-  callee +664:20 joinPath -> @joinPath
-  callee +665:12 makeDirectoryFor -> @makeDirectoryFor
-  local +676:9 anySidecar: boolean (const)
-  local +681:9 fns: ExternalFunction[] (const)
-  callee +681:48 externalFunctions -> @externalFunctions
-  callee +682:22 acceptsSidecars -> @acceptsSidecars
-  callee +682:56 cDeclared -> @cDeclared
-  callee +683:5 report -> @report
-  local +686:9 emitted: EmittedModule[] (const)
-  callee +686:19 Compilation.emit -> @Compilation.emit
-  callee +688:12 runProgram -> @runProgram
-  callee +691:7 basenameWithout -> @basenameWithout
-  local +700:9 stems: string[] (const)
-  local +701:9 paths: string[] (const)
-  local +704:14 module: EmittedModule (const)
-  local +708:9 outputs: string[] (const)
-  callee +708:19 planOutputs -> @planOutputs
-  local +713:7 i: i32 (let)
-  local +715:11 file: string (const)
-  callee +716:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +725:22 writeSidecars -> @writeSidecars
-  callee +731:10 linkProgram -> @linkProgram
+  callee +296:60 helpHint -> @helpHint
+  callee +313:19 usageText -> @usageText
+  local +325:9 triple: string (let)
+  local +327:13 host: Target | null (const)
+  callee +327:20 resolveTarget -> @resolveTarget
+  local +331:13 what: string (const)
+  local +344:9 clash: string (let)
+  local +370:13 refused: string (const)
+  local +391:11 refused: string (const)
+  local +401:9 refused: string (let)
+  local +416:13 napi: string (const)
+  local +427:11 triple: string (let)
+  local +429:15 host: Target | null (const)
+  callee +429:22 resolveTarget -> @resolveTarget
+  callee +433:9 reportRootFailure -> @reportRootFailure
+  local +458:9 both: i32 (const)
+  callee +461:21 capabilityNames -> @capabilityNames
+  local +469:9 refused: string (let)
+  local +527:11 problem: string (const)
+  callee +527:21 missingToolchain -> @missingToolchain
+  callee +529:7 reportToolchainFailure -> @reportToolchainFailure
+  local +546:9 pkg: PackageSearch (const)
+  callee +546:15 findPackage -> @findPackage
+  callee +547:7 PackageSearch.wasRefused -> @PackageSearch.wasRefused
+  callee +548:5 reportToolchainFailure -> @reportToolchainFailure
+  callee +549:79 PackageSearch.where -> @PackageSearch.where
+  callee +560:7 simulatedInternalError -> @simulatedInternalError
+  callee +561:12 internalErrorFor -> @internalErrorFor
+  local +568:11 outcome: FixOutcome (const)
+  callee +568:21 fixProgram -> @fixProgram
+  callee +570:7 reportLoadFailure -> @reportLoadFailure
+  callee +574:7 report -> @report
+  callee +577:5 reportDeprecations -> @reportDeprecations
+  callee +578:5 reportPerformance -> @reportPerformance
+  callee +579:5 reportPortability -> @reportPortability
+  local +583:9 compilation: Compilation (const)
+  callee +583:23 new Compilation -> @Compilation.constructor
+  callee +587:8 loadRoots -> @loadRoots
+  callee +588:5 reportLoadFailure -> @reportLoadFailure
+  local +604:16 unit: ModuleUnit (const)
+  callee +605:13 astText -> @astText
+  callee +609:8 Compilation.check -> @Compilation.check
+  callee +610:5 report -> @report
+  callee +613:3 reportDeprecations -> @reportDeprecations
+  callee +614:3 reportPerformance -> @reportPerformance
+  callee +615:3 reportPortability -> @reportPortability
+  callee +625:5 Compilation.entry -> @Compilation.entry
+  local +627:9 asker: string (let)
+  callee +634:37 Compilation.entry -> @Compilation.entry
+  callee +641:29 Compilation.entry -> @Compilation.entry
+  callee +643:92 Compilation.entry -> @Compilation.entry
+  callee +651:19 capabilitySummary -> @capabilitySummary
+  callee +654:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +657:5 writeCapabilityReport -> @writeCapabilityReport
+  callee +666:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +669:36 Compilation.panicsText -> @Compilation.panicsText
+  callee +675:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +678:35 Compilation.arenaText -> @Compilation.arenaText
+  callee +684:11 checkedText -> @checkedText
+  local +692:11 ts: EmittedProgram (const)
+  callee +692:16 emitTypeScript -> @emitTypeScript
+  callee +694:14 internalErrorFor -> @internalErrorFor
+  callee +701:7 report -> @report
+  local +715:16 file: EmittedFile (const)
+  local +716:13 target: string | null (const)
+  callee +716:35 joinPath -> @joinPath
+  local +720:18 unit: ModuleUnit (const)
+  local +721:15 source: string | null (const)
+  local +730:16 file: EmittedFile (const)
+  local +731:13 path: string (const)
+  callee +731:20 joinPath -> @joinPath
+  callee +732:12 makeDirectoryFor -> @makeDirectoryFor
+  local +743:9 anySidecar: boolean (const)
+  local +748:9 fns: ExternalFunction[] (const)
+  callee +748:48 externalFunctions -> @externalFunctions
+  callee +749:22 acceptsSidecars -> @acceptsSidecars
+  callee +749:56 cDeclared -> @cDeclared
+  callee +750:5 report -> @report
+  local +753:9 emitted: EmittedModule[] (const)
+  callee +753:19 Compilation.emit -> @Compilation.emit
+  callee +755:12 runProgram -> @runProgram
+  callee +758:7 basenameWithout -> @basenameWithout
+  local +767:9 stems: string[] (const)
+  local +768:9 paths: string[] (const)
+  local +771:14 module: EmittedModule (const)
+  local +775:9 outputs: string[] (const)
+  callee +775:19 planOutputs -> @planOutputs
+  local +780:7 i: i32 (let)
+  local +782:11 file: string (const)
+  callee +783:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +792:22 writeSidecars -> @writeSidecars
+  callee +798:10 linkProgram -> @linkProgram
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv

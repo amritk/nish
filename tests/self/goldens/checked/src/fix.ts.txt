@@ -40,7 +40,7 @@ function compileRoots(opts: Options, roots: string[], keepGoing: boolean): FixOu
   sharedWrite: via Compilation.constructor
   escaping: keepGoing
   calls: Compilation.check Compilation.constructor FixOutcome.constructor loadRoots nish_alloc_struct
-  pointer opts: size=160 writesThrough=true captured=true passedTo=Compilation.constructor#1
+  pointer opts: size=168 writesThrough=true captured=true passedTo=Compilation.constructor#1
   pointer roots: size=0 writesThrough=false captured=false passedTo=loadRoots#1
   stackSites=0 stackLocals=0
   local +0:9 compilation: Compilation (const)
@@ -54,7 +54,7 @@ function fixProgram(opts: Options, roots: string[], warnPerformance: boolean): F
   sharedWrite: via compileRoots
   escaping: warnPerformance
   calls: applyFixes compileRoots
-  pointer opts: size=160 writesThrough=true captured=true passedTo=compileRoots#0 compileRoots#0 compileRoots#0
+  pointer opts: size=168 writesThrough=true captured=true passedTo=compileRoots#0 compileRoots#0 compileRoots#0
   pointer roots: size=0 writesThrough=false captured=false passedTo=compileRoots#1 applyFixes#1 compileRoots#1 compileRoots#1
   stackSites=0 stackLocals=0
   local +0:7 outcome: FixOutcome (let)

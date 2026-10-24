@@ -732,6 +732,20 @@ export const main = (): number => {
       // `tests/run.js` fails if the two ever disagree.
       console.log(`${CLI} ${VERSION}`)
       return 0
+    } else if (value === "--sandbox" || value.startsWith("--sandbox=")) {
+      // WP37 §2: a mode the note does not name is refused rather than read
+      // as strict, so a misspelt `best-effort` never builds the wrong binary.
+      if (value === "--sandbox") {
+        opts.sandbox = 1
+      } else if (value === "--sandbox=best-effort") {
+        opts.sandbox = 2
+      } else {
+        console.error(
+          `compile: unknown sandbox mode \`${value.slice(10)}\`; write \`--sandbox\` or \`--sandbox=best-effort\``
+        )
+        return 2
+      }
+      irFlag = irFlag.length === 0 ? "--sandbox" : irFlag
     } else if (value.startsWith("-")) {
       console.error(`compile: unknown flag \`${value}\`; ${helpHint()}`)
       return 2
@@ -833,6 +847,50 @@ export const main = (): number => {
       `compile: \`${refused}\` cannot be used with --fix, which rewrites the sources and writes no IR; fix first, then compile`
     )
     return 2
+  }
+  // WP37 §2: the sandbox is installed by the entry wrapper, so a line that
+  // writes no wrapper, or a module whose `main` is not the one that runs,
+  // would drop it without a word.
+  if (opts.sandbox !== 0) {
+    let refused = ""
+    if (emitAst) {
+      refused = "--emit-ast"
+    } else if (emitChecked) {
+      refused = "--emit-checked"
+    } else if (opts.emitTs.length > 0) {
+      refused = "--emit-ts"
+    }
+    if (refused.length > 0) {
+      console.error(
+        `compile: \`--sandbox\` cannot be used with ${refused}, which writes no program to confine`
+      )
+      return 2
+    }
+    if (opts.emitNapi.length > 0 || opts.emitNapiAsync.length > 0) {
+      const napi = opts.emitNapi.length > 0 ? "--emit-napi" : "--emit-napi-async"
+      console.error(
+        `compile: \`--sandbox\` cannot be used with ${napi}: an addon has no \`main\`, and the process that loads it is not the compiler's to confine`
+      )
+      return 2
+    }
+    // A wasm module is confined by its host, so a wasm build takes the flag
+    // and emits no call. A darwin build has no Landlock and no seccomp to
+    // install, and a binary that claims a sandbox it lacks is worse than a
+    // refusal; the host counts when no `--target` names another machine.
+    if (profile !== "wasi" && !opts.target.startsWith("wasm")) {
+      let triple = opts.target
+      if (triple.length === 0) {
+        const host = resolveTarget("host")
+        triple = host === null ? "" : host.triple
+      }
+      if (triple.indexOf("-apple-darwin") >= 0) {
+        reportRootFailure(
+          `--sandbox confines a Linux process; ${triple} has no Landlock and no seccomp, so build without --sandbox`,
+          json
+        )
+        return 2
+      }
+    }
   }
   // `--capabilities` is no product, so `run` takes it, but `--fix` answers
   // before the checker the line is read from: refused rather than dropped.
@@ -1030,6 +1088,15 @@ export const main = (): number => {
       `${asker}: the entry module ${compilation.entry().name} must declare \`export const main = (): number => ...\` (or \`(): void\`)`
     )
     return 1
+  }
+  // WP37 §2: IR alone is confined from its `main` too, and a module with none
+  // would be written with no wrapper to install the sandbox. `--link` and
+  // `run` were answered just above.
+  if (opts.sandbox !== 0 && compilation.entry().checker.program.entryMain === null) {
+    console.error(
+      `compile: \`--sandbox\` confines a program from its \`main\`, and the entry module ${compilation.entry().name} declares none`
+    )
+    return 2
   }
   // WP35: read off the checked program, so answered here, before the dump
   // returns and before `run` starts the program -- the line is the last
@@ -1842,9 +1909,9 @@ const pushRecipeFlags = (
  *
  * A hit is the stored key equal to this one, byte for byte (CLI-8). A miss
  * compiles into a scratch directory of the entry's own, empties the entry's
- * key, moves the ten objects in with one `mv` -- a `rename` each, inside one
+ * key, moves the eleven objects in with one `mv` -- a `rename` each, inside one
  * directory -- and writes the key last, so a key on disk always stands beside
- * ten whole objects of its own recipe (CLI-5). Two misses at once each compile
+ * eleven whole objects of its own recipe (CLI-5). Two misses at once each compile
  * their own and move them over the other's; both sets are the same recipe's,
  * and an object is only ever replaced whole, so a link that reads one while
  * another lands reads a whole object either way.

@@ -647,6 +647,14 @@ int64_t nish_cpu_count(void);
  * rounded up, and `NISH_NUM_THREADS` when it is set to a positive number. At
  * least 1; 1 under WASI. Read each call (runtime-os.c). */
 int64_t nish_cpu_online(void);
+/* WP37 `--sandbox` (runtime-sandbox.c): `nish_sandbox` confines the process to
+   the capability mask `caps` from `.preinit_array`, `mode` 1 strict and 2
+   best-effort, and `nish_sandbox_check` refuses to run at the top of `main`
+   when it never ran. The directory lists are a later stage's and are null.
+   `nish_cpu_prime` caches the pool's CPU count while /sys is still readable. */
+void nish_sandbox(int32_t caps, int32_t mode, const char *read_dirs, const char *write_dirs);
+void nish_sandbox_check(void);
+void nish_cpu_prime(void);
 void nish_parallel_range(nish_par_body body, void *ctx, int64_t len, int64_t grain);
 /* Keeps every later region and join on threads created and joined per call,
  * as before the pool existed, so no parked worker outlives the code it would

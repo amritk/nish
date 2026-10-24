@@ -2705,6 +2705,16 @@ const settings = (): string => readFileSync("settings.txt");
 export const main = (): i32 => settings().length;
 ```
 
+The policy judges the source; `--sandbox` (Linux, `--link` and `nish run`)
+makes the kernel hold the running binary to the same set. Before any C
+constructor runs, it withholds every file, process and socket operation `main`
+does not reach, C code it links included. A file operation it refuses fails
+like a missing permission; a refused process or socket call ends the program
+with `SIGSYS` (status 159); a kernel that cannot apply it exits 126 before
+`main` unless built with `--sandbox=best-effort`. A darwin target, a library
+with no `main` and `--emit-napi` refuse the flag
+([LANGUAGE.md](LANGUAGE.md#the-sandbox)).
+
 ## Before you say it compiles
 
 Run it. `nish file.ts --json` is one command and it is the only proof.

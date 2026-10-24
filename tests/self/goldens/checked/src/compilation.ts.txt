@@ -273,7 +273,7 @@ function Compilation.constructor(this: Compilation, opts: Options): void -> @Com
   escaping: opts
   calls: DiagnosticSink.constructor RuntimeTable.constructor StringMap.constructor TypeTable.constructor nish_alloc_struct nish_realpath
   pointer this: size=128 writesThrough=true captured=false
-  pointer opts: size=160 writesThrough=true captured=true
+  pointer opts: size=168 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:18 new TypeTable -> @TypeTable.constructor
   callee +2:17 new DiagnosticSink -> @DiagnosticSink.constructor
@@ -1253,25 +1253,29 @@ function Compilation.writesOutput(this: Compilation, unit: ModuleUnit): boolean 
   callee +0:13 CheckedProgram.writesNoOutput -> @CheckedProgram.writesNoOutput
 function Compilation.emit(this: Compilation): EmittedModule[] -> @Compilation.emit [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Compilation.analyze
-  calls: Compilation.analyze Compilation.libraryUnits Compilation.outputStems Compilation.writesOutput EmittedModule.constructor emitProgram nish_alloc_struct nish_array_grow
-  pointer this: size=128 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.outputStems#0 Compilation.libraryUnits#0 Compilation.writesOutput#0
+  sharedWrite: +0:7
+  calls: Compilation.analyze Compilation.entry Compilation.libraryUnits Compilation.outputStems Compilation.writesOutput EmittedModule.constructor FactsTable.get emitProgram nish_alloc_struct nish_array_grow
+  pointer this: size=128 writesThrough=true captured=false passedTo=Compilation.analyze#0 Compilation.entry#0 Compilation.outputStems#0 Compilation.libraryUnits#0 Compilation.writesOutput#0
   stackSites=0 stackLocals=0
-  local +0:11 facts: FactsTable (const)
-  callee +0:19 Compilation.analyze -> @Compilation.analyze
-  local +1:11 units: AnalysisUnit[] (const)
-  local +2:11 stems: string[] (const)
-  callee +2:19 Compilation.outputStems -> @Compilation.outputStems
-  local +3:11 copies: AnalysisUnit[] (const)
-  callee +3:36 Compilation.libraryUnits -> @Compilation.libraryUnits
-  local +4:11 out: EmittedModule[] (const)
-  local +5:9 i: i32 (let)
-  local +8:13 unit: ModuleUnit (const)
-  local +9:13 analysed: AnalysisUnit (const)
-  local +10:13 stem: string (const)
-  callee +11:11 Compilation.writesOutput -> @Compilation.writesOutput
-  callee +13:11 new EmittedModule -> @EmittedModule.constructor
-  callee +15:13 emitProgram -> @emitProgram
+  local -7:11 facts: FactsTable (const)
+  callee -7:19 Compilation.analyze -> @Compilation.analyze
+  local -3:11 main: FunctionSig | null (const)
+  callee -3:18 Compilation.entry -> @Compilation.entry
+  local -1:13 fact: FunctionFacts | null (const)
+  callee -1:20 FactsTable.get -> @FactsTable.get
+  local +2:11 units: AnalysisUnit[] (const)
+  local +3:11 stems: string[] (const)
+  callee +3:19 Compilation.outputStems -> @Compilation.outputStems
+  local +4:11 copies: AnalysisUnit[] (const)
+  callee +4:36 Compilation.libraryUnits -> @Compilation.libraryUnits
+  local +5:11 out: EmittedModule[] (const)
+  local +6:9 i: i32 (let)
+  local +9:13 unit: ModuleUnit (const)
+  local +10:13 analysed: AnalysisUnit (const)
+  local +11:13 stem: string (const)
+  callee +12:11 Compilation.writesOutput -> @Compilation.writesOutput
+  callee +14:11 new EmittedModule -> @EmittedModule.constructor
+  callee +16:13 emitProgram -> @emitProgram
 function Compilation.outputStems(this: Compilation): string[] -> @Compilation.outputStems [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringMap.set

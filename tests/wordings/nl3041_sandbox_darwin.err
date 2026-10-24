@@ -1,0 +1,1 @@
+--sandbox confines a Linux process; aarch64-apple-darwin has no Landlock and no seccomp, so build without --sandbox

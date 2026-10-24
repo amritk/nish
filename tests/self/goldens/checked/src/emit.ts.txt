@@ -239,6 +239,8 @@ struct Emitter (class) size=272 align=8 exported
   method emitScopeExit -> @Emitter.emitScopeExit
   method outermostArenaBlock -> @Emitter.outermostArenaBlock
   method emitEntryWrapper -> @Emitter.emitEntryWrapper
+  method sandboxed -> @Emitter.sandboxed
+  method emitSandboxApply -> @Emitter.emitSandboxApply
   method emitImportDeclarations -> @Emitter.emitImportDeclarations
   method isLibraryCopy -> @Emitter.isLibraryCopy
   method declareAll -> @Emitter.declareAll
@@ -311,7 +313,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   pointer this: size=272 writesThrough=true captured=false
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=96 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
-  pointer opts: size=160 writesThrough=true captured=true
+  pointer opts: size=168 writesThrough=true captured=true
   pointer runtime: size=16 writesThrough=true captured=true
   pointer facts: size=16 writesThrough=true captured=true
   pointer libraries: size=0 writesThrough=false captured=false
@@ -526,8 +528,8 @@ function Emitter.outermostArenaBlock(this: Emitter): i32 -> @Emitter.outermostAr
 function Emitter.emitEntryWrapper(this: Emitter, userMain: FunctionSig): IRFunction -> @Emitter.emitEntryWrapper [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=160
   sharedWrite: +0:7
-  calls: DebugInfo.beginFunction Emitter.useRuntime IRFunction.constructor IRFunction.emit IRFunction.emitValue IRModule.attrGroupFor IRParam.constructor nish_alloc_struct nish_array_grow nish_str_concat
-  pointer this: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
+  calls: DebugInfo.beginFunction Emitter.emitSandboxApply Emitter.sandboxed Emitter.useRuntime IRFunction.constructor IRFunction.emit IRFunction.emitValue IRModule.attrGroupFor IRParam.constructor nish_alloc_struct nish_array_grow nish_str_concat
+  pointer this: size=272 writesThrough=false captured=false passedTo=Emitter.sandboxed#0 Emitter.emitSandboxApply#0 Emitter.useRuntime#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer userMain: size=136 writesThrough=false captured=false passedTo=DebugInfo.beginFunction#2
   stackSites=1 stackLocals=1
   local -3:11 optimize: boolean (const)
@@ -542,15 +544,40 @@ function Emitter.emitEntryWrapper(this: Emitter, userMain: FunctionSig): IRFunct
   callee +12:22 IRModule.attrGroupFor -> @IRModule.attrGroupFor
   local +15:11 debug: DebugInfo | null (const)
   callee +17:7 DebugInfo.beginFunction -> @DebugInfo.beginFunction
-  local +19:11 freeArena: string (const)
-  callee +19:23 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +21:7 IRFunction.emit -> @IRFunction.emit
-  callee +21:28 Emitter.useRuntime -> @Emitter.useRuntime
-  local +23:9 code: string (let)
-  callee +25:7 IRFunction.emit -> @IRFunction.emit
-  callee +27:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +29:5 IRFunction.emit -> @IRFunction.emit
-  callee +30:5 IRFunction.emit -> @IRFunction.emit
+  callee +21:9 Emitter.sandboxed -> @Emitter.sandboxed
+  callee +22:7 Emitter.emitSandboxApply -> @Emitter.emitSandboxApply
+  callee +23:7 IRFunction.emit -> @IRFunction.emit
+  callee +23:28 Emitter.useRuntime -> @Emitter.useRuntime
+  local +25:11 freeArena: string (const)
+  callee +25:23 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +27:7 IRFunction.emit -> @IRFunction.emit
+  callee +27:28 Emitter.useRuntime -> @Emitter.useRuntime
+  local +29:9 code: string (let)
+  callee +31:7 IRFunction.emit -> @IRFunction.emit
+  callee +33:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +35:5 IRFunction.emit -> @IRFunction.emit
+  callee +36:5 IRFunction.emit -> @IRFunction.emit
+function Emitter.sandboxed(this: Emitter): boolean -> @Emitter.sandboxed [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: isWasmBuild
+  pointer this: size=272 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:40 isWasmBuild -> @isWasmBuild
+function Emitter.emitSandboxApply(this: Emitter): void -> @Emitter.emitSandboxApply [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Emitter.useRuntime
+  calls: Emitter.useRuntime IRFunction.constructor IRFunction.emit IRModule.addFunction IRModule.addGlobal nish_alloc_struct nish_str_concat nish_str_from_i32
+  pointer this: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  stackSites=0 stackLocals=0
+  local +0:11 sandbox: string (const)
+  callee +0:21 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +1:5 IRModule.addGlobal -> @IRModule.addGlobal
+  callee +4:5 IRModule.addGlobal -> @IRModule.addGlobal
+  local +7:11 apply: IRFunction (const)
+  callee +7:19 new IRFunction -> @IRFunction.constructor
+  callee +9:5 IRFunction.emit -> @IRFunction.emit
+  callee +12:5 IRFunction.emit -> @IRFunction.emit
+  callee +13:5 IRModule.addFunction -> @IRModule.addFunction
 function Emitter.emitImportDeclarations(this: Emitter): void -> @Emitter.emitImportDeclarations [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareAll
@@ -1333,7 +1360,7 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   calls: Emitter.constructor Emitter.emitModule
   pointer unit: size=16 writesThrough=false captured=false passedTo=Emitter.constructor#1
   pointer table: size=96 writesThrough=true captured=true passedTo=Emitter.constructor#2
-  pointer opts: size=160 writesThrough=true captured=true passedTo=Emitter.constructor#3
+  pointer opts: size=168 writesThrough=true captured=true passedTo=Emitter.constructor#3
   pointer runtime: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#4
   pointer facts: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#5
   pointer libraries: size=0 writesThrough=false captured=false passedTo=Emitter.constructor#6

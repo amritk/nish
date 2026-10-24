@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 707
+export const RULE_COUNT: i32 = 708
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -725,6 +725,8 @@ const diagnosticRules = (): string[] => [
   "NL2164",
   " (an override keeps the signature; there is no overloading)",
   "NL2001",
+  " has no Landlock and no seccomp, so build without --sandbox",
+  "NL3041",
   ", and a declared C function returns a scalar or `CPtr` only",
   "NL2321",
   "A union needs two different variants: this one names only `",

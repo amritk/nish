@@ -259,6 +259,13 @@ const RUNTIME_PARALLEL_TEXT_BUDGET = 768
  * `availableParallelism` calls in every build, and `nish_cpu_count` here keeps only its
  * cache and the call. The ceiling comes down with it, to the next 256-byte boundary
  * above the measurement, so the room the move freed is not left for something else.
+ *
+ * WP37's `nish_cpu_prime` measured **2,558 bytes** on 2026-10-24 with clang 18.1.3 on
+ * linux-x64, 39 more than the 2,519 the file measured before it: the call `--sandbox`
+ * makes to read the CPU count before Landlock closes /sys/fs/cgroup, kept as a ceiling
+ * that the first region's fresh read (which sees `NISH_NUM_THREADS`, unset while
+ * `.preinit_array` runs) may lower. The fallback above measured 608, 1 more, inside its
+ * ceiling.
  */
 const RUNTIME_PARALLEL_THREADS_TEXT_BUDGET = 2560
 /**
@@ -447,6 +454,20 @@ const RUNTIME_TERM_TEXT_BUDGET = 1536
  * 256-byte boundary above the measurement, as every ceiling here was set.
  */
 const RUNTIME_BYTES_TEXT_BUDGET = 1536
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-sandbox.c`
+ * -- the confinement `--sandbox` applies (WP37, docs/security/sandbox.md):
+ * `nish_sandbox`, which a sandboxed program's `.preinit_array` calls, and
+ * `nish_sandbox_check`, which its `main` calls first, with the capability drop, the
+ * Landlock ruleset and the seccomp filter they build.
+ *
+ * Measured **2,253 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64. An eleventh
+ * translation unit rather than more of `runtime-os.c`, so a program built without
+ * `--sandbox` links none of it: the linker drops the object nothing references. The
+ * budget is the next 256-byte boundary above the measurement, as every ceiling here was
+ * set.
+ */
+const RUNTIME_SANDBOX_TEXT_BUDGET = 2304
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
@@ -580,6 +601,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
   ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],
+  ["runtime/runtime-sandbox.c", RUNTIME_SANDBOX_TEXT_BUDGET, "RUNTIME_SANDBOX_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
 /**

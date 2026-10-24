@@ -258,6 +258,7 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(helpRow(style, "--capabilities", "", "print what the program can reach, on stderr"))
   lines.push(helpRow(style, "--allow", "<cap>[,<cap>...]", "refuse a program that reaches more"))
   lines.push(helpRow(style, "--deny", "<cap>[,<cap>...]", "refuse a program that reaches these"))
+  lines.push(helpRow(style, "--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches"))
   lines.push(helpRow(style, "--emit-capabilities", "<file.json>", "write the capability report"))
 
   lines.push("")

@@ -2465,6 +2465,14 @@ export class Compilation {
   /** Program-wide attribute analysis, then one IR module per source module. */
   emit(): EmittedModule[] {
     const facts = this.analyze()
+    // `--sandbox` confines the program to what `main` reaches, the set the
+    // capability report prints, so the filter the wrapper installs is the
+    // one the report promised (docs/wp37-os-sandbox.md §3).
+    const main = this.entry().checker.program.entryMain
+    if (this.opts.sandbox !== 0 && main !== null) {
+      const fact = facts.get(main.name)
+      this.opts.sandboxCapabilities = fact === null ? 0 : fact.caps
+    }
     const units = this.analysisUnits
     const stems = this.outputStems()
     const copies: AnalysisUnit[] = this.libraryUnits(units)

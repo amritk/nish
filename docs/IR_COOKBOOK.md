@@ -21927,6 +21927,81 @@ docs/cookbook/builtin-capabilities.ts:15:15: error: `main` reaches `fs.read`, wh
 `tests/run.js` compiles the snippet both ways and holds the block above to
 what the compiler prints and the granted IR to the ungranted one.
 
+### `--sandbox`: a call before `main`, and one in it
+
+`--sandbox` is the one capability flag that lowers (`docs/LANGUAGE.md` ->
+Capabilities -> The sandbox). The wrapper gains an internal `@.sandbox.apply`
+that passes `main`'s capability set and the mode to `@nish_sandbox`, a pointer
+to it in `.preinit_array` (kept by `@llvm.used`, so neither the optimizer nor
+the linker drops it), and a call of `@nish_sandbox_check` as `@main`'s first
+instruction. The first operand is the capability bitmask — bit 5 is `fs.read`,
+so `32` here — and the second is `1` for `--sandbox`, `2` for
+`--sandbox=best-effort`; the last two are `null`. The loader runs
+`.preinit_array` before any constructor, so the sandbox holds C code linked
+beside the program as much as Nish code; the check exits 126 when a C library
+skipped it. Without the flag the listing is this one less those lines, byte for
+byte, which `tests/run.js` holds for a program of its own.
+
+<!-- cookbook:begin sandbox -->
+Compiled with `--sandbox`.
+
+```ts
+import { readFileSync } from "nish:fs"
+
+export const main = (): number => {
+  console.log(readFileSync("/etc/hostname").length > 0)
+  return 0
+}
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [14 x i8] } { i64 13, [14 x i8] c"/etc/hostname\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
+@.sandbox.preinit = internal constant void ()* @.sandbox.apply, section ".preinit_array", align 8
+@llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"
+
+declare void @nish_free_arena() #1
+declare void @nish_sandbox(i32, i32, i8*, i8*) #1
+declare void @nish_sandbox_check() #1
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
+declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull readonly align 8 nocapture) #0
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_read_file(i8* bitcast ({ i64, [14 x i8] }* @.str.0 to i8*))
+  %1 = bitcast i8* %0 to i64*
+  %2 = load i64, i64* %1, align 8
+  %3 = trunc i64 %2 to i32
+  %4 = icmp sgt i32 %3, 0
+  %5 = select i1 %4, i8* bitcast ({ i64, [5 x i8] }* @.str.1 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*)
+  call void @nish_print(i8* %5)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 0
+}
+
+define internal void @.sandbox.apply() {
+entry:
+  call void @nish_sandbox(i32 32, i32 1, i8* null, i8* null)
+  ret void
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  call void @nish_sandbox_check()
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
+```
+<!-- cookbook:end sandbox -->
+
 ### Builtin modules (`nish:`)
 
 An import from `nish:fs` / `nish:process` / `nish:io` renames a builtin rather
@@ -22255,6 +22330,8 @@ const identity = (s: string): string => s
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
 declare void @nish_reset_arena() #2
 declare void @nish_free_arena() #2
+declare void @nish_sandbox(i32, i32, i8*, i8*) #2
+declare void @nish_sandbox_check() #2
 declare noundef i64 @nish_arena_mark() #2
 declare void @nish_arena_release(i64 noundef) #2
 declare noundef i64 @nish_arena_used() #2

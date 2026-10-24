@@ -127,11 +127,11 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
  * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
  * CPU's AES instructions, `runtime-term.c` stdin and the terminal of
- * `nish:term` and `runtime-bytes.c` the byte-class runs of `nish/bytes`,
- * split apart so that each carries its own `.text*`
+ * `nish:term`, `runtime-bytes.c` the byte-class runs of `nish/bytes` and
+ * `runtime-sandbox.c` the `--sandbox` confinement, split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same ten:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eleven:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -152,6 +152,7 @@ const RUNTIME_C = [
   "runtime/runtime-aes.c",
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
+  "runtime/runtime-sandbox.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -7742,6 +7743,442 @@ if (!only || "unsafe_flag_scope".includes(only)) {
   )
 }
 
+// WP37 stage 1: `--sandbox` confines a native program to main's capability set
+// (docs/security/sandbox.md). The fixtures in tests/link/sandbox_fixtures are
+// Nish programs whose main reaches a chosen set of capabilities and hands its
+// first argument to `sb_probe` (probe.c), which tries one thing the sandbox
+// decides and prints what the kernel answered. A program the seccomp filter
+// kills ends by SIGSYS, which a shell reports as status 159; `spawnSync` reports
+// it as the signal.
+if (!only || "sandbox".includes(only)) {
+  const fixtures = path.join(linkDir, "sandbox_fixtures")
+  const probeC = path.join(fixtures, "probe.c")
+  const dir = path.join(buildDir, "sandbox")
+  const W = path.join(dir, "work")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(W, { recursive: true })
+  const compile = (fixture, flags, out) =>
+    spawnSync(NISH, [path.join(fixtures, `${fixture}.ts`), ...flags, "-o", out], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  /** Compiles a fixture with `flags` and links it with probe.c (or alone): the binary, or null and a FAIL. */
+  const built = new Map()
+  const build = (name, fixture, flags, { driver = probeC, defines = [] } = {}) => {
+    if (built.has(name)) return built.get(name)
+    const ll = path.join(dir, `${name}.ll`)
+    const exe = path.join(dir, name)
+    const c = compile(fixture, flags, ll)
+    const l = c.status === 0 ? linkNative(exe, ll, { driver, defines }) : c
+    const ok = l.status === 0
+    if (!ok) check(`sandbox: ${fixture}.ts ${flags.join(" ")} compiles and links`, false, shown(l))
+    built.set(name, ok ? exe : null)
+    return ok ? exe : null
+  }
+  const run = (exe, args, options = {}) =>
+    exe === null
+      ? null
+      : spawnSync(exe, args, {
+          cwd: W,
+          encoding: "utf8",
+          timeout: 60000,
+          ...options,
+        })
+  const said = (r) => (r === null ? "not built" : shown(r))
+  const killed = (r) => r !== null && r.signal === "SIGSYS"
+
+  if (process.platform !== "linux" || !HAS_CLANG) {
+    skip("sandbox: --sandbox confines through Linux system calls, and this host is not Linux with clang")
+  } else {
+    const abiProbe = path.join(dir, "abi")
+    fs.writeFileSync(
+      `${abiProbe}.c`,
+      "#include <stdio.h>\n#include <unistd.h>\n#include <sys/syscall.h>\n" +
+        'int main(void) { long r = syscall(444, NULL, 0, 1); printf("%ld\\n", r < 0 ? 0 : r); return 0; }\n'
+    )
+    const a = spawnSync("clang", ["-O2", `${abiProbe}.c`, "-o", abiProbe], {
+      cwd: root,
+    })
+    const abi = a.status === 0 ? Number(spawnSync(abiProbe, { encoding: "utf8" }).stdout.trim()) : 0
+
+    // The filter kills each of these in every mode, whatever main reaches.
+    const kills = [
+      ["fork", "fork from ffi without process.spawn dies of SIGSYS"],
+      ["execve", "execve from ffi without process.spawn dies of SIGSYS"],
+      ["socket", "socket from ffi without net dies of SIGSYS"],
+      ["io_uring_setup", "io_uring_setup from ffi without net dies of SIGSYS"],
+      ["process_vm_writev", "process_vm_writev into the parent dies of SIGSYS"],
+      ["ptrace", "ptrace(PTRACE_ATTACH) on the parent dies of SIGSYS"],
+    ]
+    if (process.arch === "x64") {
+      kills.push(["x32-socket", "an x32 socket from ffi dies of SIGSYS"])
+    } else {
+      skip("sandbox: x32 is an x86-64 ABI; the bit-30 check did not run")
+    }
+    for (const [mode, flag] of [
+      ["strict", "--sandbox"],
+      ["best-effort", "--sandbox=best-effort"],
+    ]) {
+      const none = build(`none-${mode}`, "none", [flag])
+      for (const [op, why] of kills) {
+        const r = run(none, [op])
+        check(`sandbox: ${why} (${mode})`, killed(r) && r.stdout === `${op}: start\n`, said(r))
+      }
+    }
+
+    // The control: the same program without the flag forks, so the kill above
+    // is the sandbox's and not the probe's.
+    const plain = build("none-plain", "none", [])
+    const forked = run(plain, ["fork"])
+    check(
+      "sandbox: without --sandbox the same probe forks (the control)",
+      forked !== null && forked.status === 0 && forked.stdout === "fork: start\nfork: ok\n",
+      said(forked)
+    )
+    const spawn = build("spawn-strict", "spawn", ["--sandbox"])
+    const child = run(spawn, ["fork"])
+    check(
+      "sandbox: a process.spawn-granted program runs a child",
+      child !== null && child.status === 0 && child.stdout === "fork: start\nfork: ok\n",
+      said(child)
+    )
+
+    // seccomp answers EPERM to the metadata calls Landlock does not decide, so
+    // a program without fs.write cannot chmod, touch or tag a file.
+    const target = path.join(W, "meta.txt")
+    fs.writeFileSync(target, "x")
+    fs.chmodSync(target, 0o600)
+    fs.utimesSync(target, 1000000, 1000000)
+    const before = fs.statSync(target)
+    const meta = run(built.get("none-strict"), ["meta", target])
+    const after = fs.statSync(target)
+    check(
+      "sandbox: chmod, utimensat and setxattr without fs.write fail EPERM",
+      meta !== null &&
+        meta.status === 0 &&
+        meta.stdout === "chmod: EPERM\nutimensat: EPERM\nsetxattr: EPERM\n" &&
+        after.mode === before.mode &&
+        after.mtimeMs === before.mtimeMs,
+      said(meta)
+    )
+
+    if (abi < 1) {
+      skip(`sandbox: this kernel has no Landlock (ABI ${abi}); the fs checks did not run`)
+    } else {
+      const none = built.get("none-strict")
+      const open = run(none, ["open", "/etc/passwd"])
+      check(
+        "sandbox: open from ffi without fs.read is refused",
+        open !== null && open.status === 0 && open.stdout === "open: EACCES\n",
+        said(open)
+      )
+      const read = build("read-strict", "read", ["--sandbox"])
+      const opened = run(read, ["open", "/etc/passwd"])
+      check(
+        "sandbox: a program whose main reaches fs.read opens /etc/passwd",
+        opened !== null && opened.status === 0 && opened.stdout === "open: ok\n",
+        said(opened)
+      )
+
+      // The constructor and the probe's own `.preinit_array` entry both run
+      // after the wrapper's entry, which is linked first, so both are refused.
+      const ctor = run(none, ["ctor"])
+      const ctorPlain = run(plain, ["ctor"])
+      check(
+        "sandbox: a constructor in an ffi object runs confined, and the sandbox's preinit entry runs first",
+        ctor !== null &&
+          ctor.stdout === "ctor: EACCES, preinit: EACCES\n" &&
+          ctorPlain !== null &&
+          ctorPlain.stdout === "ctor: ok, preinit: ok\n",
+        `${said(ctor)}\n--- without --sandbox\n${said(ctorPlain)}`
+      )
+
+      // IOCTL_DEV is handled from ABI 5: a device opened for reading answers
+      // EACCES to an ioctl where the unconfined program hears ENOTTY.
+      if (abi < 5) {
+        skip("sandbox: this kernel has no IOCTL_DEV (ABI <5); the ioctl check did not run")
+      } else {
+        const readPlain = build("read-plain", "read", [])
+        const io = run(read, ["ioctl"])
+        const ioPlain = run(readPlain, ["ioctl"])
+        check(
+          "sandbox: a device ioctl without process.spawn is refused",
+          io !== null &&
+            io.stdout === "open: ok\nioctl: EACCES\n" &&
+            ioPlain !== null &&
+            ioPlain.stdout === "open: ok\nioctl: ENOTTY\n",
+          `${said(io)}\n--- without --sandbox\n${said(ioPlain)}`
+        )
+      }
+
+      // The child inherits the Landlock domain, so the redirect it opens is
+      // refused there and nothing is created.
+      const spawnto = build("spawnto", "spawnto", ["--sandbox"], {
+        driver: null,
+      })
+      const redirect = path.join(W, "redirect.txt")
+      const to = run(spawnto, ["true", redirect])
+      check(
+        "sandbox: a spawn redirect without fs.write fails in the child",
+        to !== null && to.status === 0 && to.stdout !== "status 0\n" && !fs.existsSync(redirect),
+        said(to)
+      )
+
+      // What main is granted runs the same: a file written and read back, a
+      // child and the CPU count, with and without the sandbox and the pool.
+      const grantedDir = (name) => {
+        const d = path.join(W, name)
+        fs.mkdirSync(d, { recursive: true })
+        return d
+      }
+      const gPlain = run(build("granted-plain", "granted", [], { driver: null }), [grantedDir("plain")])
+      const gSandbox = run(build("granted-sandbox", "granted", ["--sandbox"], { driver: null }), [
+        grantedDir("sandbox"),
+      ])
+      check(
+        "sandbox: a granted program runs as it does unsandboxed",
+        gPlain !== null &&
+          gPlain.status === 0 &&
+          gPlain.stdout === "written and read back\nchild 0\ncpus true\n" &&
+          gSandbox !== null &&
+          gSandbox.status === 0 &&
+          gSandbox.stdout === gPlain.stdout &&
+          gSandbox.stderr === "",
+        `${said(gSandbox)}\n--- without --sandbox\n${said(gPlain)}`
+      )
+
+      // The simulated ABI: the runtime built with -DNISH_SANDBOX_SIMULATE_ABI
+      // answers the probe with that ABI, so the refusals and the best-effort
+      // line are read on a kernel that has every right.
+      const prefix = "nish: --sandbox: "
+      const noLandlock = `${prefix}this kernel has no Landlock; build with --sandbox=best-effort to run with seccomp alone\n`
+      const noTruncate = `${prefix}this kernel's Landlock cannot withhold TRUNCATE; build with --sandbox=best-effort to run without it\n`
+      for (const sim of [0, 1, 2]) {
+        const defines = [`-DNISH_SANDBOX_SIMULATE_ABI=${sim}`]
+        const strict = run(build(`none-abi${sim}`, "none", ["--sandbox"], { defines }), [
+          "open",
+          "/etc/passwd",
+        ])
+        check(
+          `sandbox: ${sim === 0 ? "strict refuses without Landlock" : "strict refuses below ABI 3 without fs.write"} (ABI ${sim})`,
+          strict !== null &&
+            strict.status === 126 &&
+            strict.stdout === "" &&
+            strict.stderr === (sim === 0 ? noLandlock : noTruncate),
+          said(strict)
+        )
+        const lenient = run(
+          build(`none-be-abi${sim}`, "none", ["--sandbox=best-effort"], {
+            defines,
+          }),
+          ["open", "/etc/passwd"]
+        )
+        const warning =
+          sim === 0
+            ? `${prefix}no Landlock, files are not confined\n`
+            : `${prefix}this kernel's Landlock cannot withhold TRUNCATE, IOCTL_DEV, the signal and abstract socket scopes, so they are not confined\n`
+        check(
+          `sandbox: ${sim === 0 ? "best-effort warns without Landlock" : "best-effort names TRUNCATE below ABI 3, and still confines the open"} (ABI ${sim})`,
+          lenient !== null &&
+            lenient.status === 0 &&
+            lenient.stderr === warning &&
+            lenient.stdout === (sim === 0 ? "open: ok\n" : "open: EACCES\n"),
+          said(lenient)
+        )
+      }
+      const writeAbi2 = run(
+        build("write-abi2", "write", ["--sandbox"], {
+          defines: ["-DNISH_SANDBOX_SIMULATE_ABI=2"],
+        }),
+        ["ctor"]
+      )
+      check(
+        "sandbox: strict runs below ABI 3 with fs.write, which grants TRUNCATE anyway (ABI 2)",
+        writeAbi2 !== null && writeAbi2.status === 0 && writeAbi2.stderr === "",
+        said(writeAbi2)
+      )
+    }
+
+    // The wrapper checks in main that `.preinit_array` ran: IR with the entry
+    // taken out links, and refuses to run.
+    const helloLl = fs.readFileSync(path.join(casesDir, "sandbox_hello.ll"), "utf8")
+    const strippedLl = path.join(dir, "no-preinit.ll")
+    fs.writeFileSync(
+      strippedLl,
+      helloLl
+        .split("\n")
+        .filter((l) => !l.startsWith("@.sandbox.preinit") && !l.startsWith("@llvm.used"))
+        .join("\n")
+    )
+    const noPreinit = path.join(dir, "no-preinit")
+    const np = linkNative(noPreinit, strippedLl)
+    const npRun = np.status === 0 ? run(noPreinit, []) : np
+    check(
+      "sandbox: a libc that skips .preinit_array fails closed",
+      npRun.status === 126 &&
+        npRun.stdout === "" &&
+        npRun.stderr ===
+          "nish: --sandbox: the C library did not run .preinit_array, so the program was not confined\n",
+      said(npRun)
+    )
+
+    // The capability drop: in a user namespace the process holds every
+    // capability, and the sandbox gives them all up.
+    const userns = has("unshare") ? spawnSync("unshare", ["-r", "true"]) : null
+    if (userns === null || userns.status !== 0) {
+      skip("sandbox: no unprivileged user namespace; the capability drop did not run")
+    } else {
+      const caps = (r) =>
+        r === null
+          ? []
+          : r.stdout
+              .split("\n")
+              .filter((l) => /^Cap(Inh|Prm|Eff|Bnd|Amb):/.test(l))
+              .map((l) => l.split(/\s+/)[1])
+      const inNs = (exe) =>
+        exe === null
+          ? null
+          : spawnSync("unshare", ["-r", exe, "status"], {
+              cwd: W,
+              encoding: "utf8",
+            })
+      const confined = inNs(build("read-strict", "read", ["--sandbox"]))
+      const control = inNs(build("read-plain", "read", []))
+      check(
+        "sandbox: a process holding capabilities drops them",
+        caps(confined).length === 5 &&
+          caps(confined).every((c) => /^0+$/.test(c)) &&
+          caps(control).some((c) => !/^0+$/.test(c)) &&
+          /NoNewPrivs:\s+1/.test(confined.stdout) &&
+          /Seccomp:\s+2/.test(confined.stdout),
+        `${said(confined)}\n--- without --sandbox\n${said(control)}`
+      )
+    }
+
+    // The pool under the sandbox: the CPU count is primed before the filter
+    // refuses the cgroup read, and NISH_NUM_THREADS still lowers it.
+    const threadsBuild = (name, flags) => {
+      const out = path.join(dir, name) + path.sep
+      const exe = path.join(dir, `${name}-app`)
+      const c = spawnSync(NISH, [path.join(fixtures, "threads.ts"), "--threads", ...flags, "-o", out], {
+        cwd: root,
+        encoding: "utf8",
+      })
+      const lls =
+        c.status === 0
+          ? fs
+              .readdirSync(out)
+              .filter((f) => f.endsWith(".ll"))
+              .map((f) => path.join(out, f))
+          : []
+      const l =
+        c.status === 0
+          ? spawnSync(
+              "bash",
+              ["scripts/build.sh", ...lls, "runtime/runtime.c", probeC, "-o", exe, "--threads"],
+              {
+                cwd: root,
+                encoding: "utf8",
+              }
+            )
+          : c
+      if (l.status !== 0)
+        check(`sandbox: threads.ts ${flags.join(" ")} --threads compiles and links`, false, shown(l))
+      return l.status === 0 ? exe : null
+    }
+    const tSandbox = threadsBuild("threads-sandbox", ["--sandbox"])
+    const tPlain = threadsBuild("threads-plain", [])
+    const threadsLine = (r) => (r === null ? null : (/Threads:\s+(\d+)/.exec(r.stdout) ?? [])[1])
+    const pooled = run(tSandbox, ["status"])
+    check(
+      "sandbox: a threaded program without process.spawn still runs its pool",
+      pooled !== null && pooled.status === 0 && pooled.stdout.startsWith("1999998\n"),
+      said(pooled)
+    )
+    for (const n of ["1", "3"]) {
+      const env = { ...process.env, NISH_NUM_THREADS: n }
+      const s = run(tSandbox, ["status"], { env })
+      const p = run(tPlain, ["status"], { env })
+      check(
+        `sandbox: NISH_NUM_THREADS still lowers the pool (${n})`,
+        threadsLine(s) !== undefined && threadsLine(s) === threadsLine(p),
+        `${said(s)}\n--- without --sandbox\n${said(p)}`
+      )
+    }
+
+    // `nish run --sandbox` builds and runs the confined program.
+    const viaRun = spawnSync(NISH, ["run", "--sandbox", path.join(fixtures, "status.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 120000,
+    })
+    check(
+      "sandbox: nish run --sandbox runs the program, and the child it starts, with no_new_privs and a seccomp filter",
+      viaRun.status === 0 && /NoNewPrivs:\s+1/.test(viaRun.stdout) && /Seccomp:\s+2/.test(viaRun.stdout),
+      shown(viaRun)
+    )
+  }
+
+  // What holds on every host: wasm emits no call, a wasm profile refuses
+  // sandboxed IR, and no golden moves without the flag.
+  const hello = path.join(casesDir, "sandbox_hello.ts")
+  for (const target of ["wasm32", "wasm32-wasi"]) {
+    const out = path.join(dir, `hello-${target}.ll`)
+    const r = spawnSync(NISH, [hello, "--sandbox", "--target", target, "-o", out], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      `sandbox: the wasm targets emit no call (${target})`,
+      r.status === 0 && !fs.readFileSync(out, "utf8").includes("nish_sandbox"),
+      shown(r)
+    )
+  }
+  const refused = spawnSync(
+    "bash",
+    [
+      "scripts/build.sh",
+      path.join(casesDir, "sandbox_hello.ll"),
+      "-o",
+      path.join(dir, "hello.wasm"),
+      "--profile",
+      "wasm",
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "sandbox: the wasm profile refuses sandboxed IR",
+    refused.status === 2 &&
+      refused.stderr.includes("was compiled with --sandbox, and a wasm module has no sandbox"),
+    shown(refused)
+  )
+  const plainHello = path.join(dir, "hello-plain.ll")
+  const ph = spawnSync(NISH, [hello, "-o", plainHello], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const sandboxedLines = fs.readFileSync(path.join(casesDir, "sandbox_hello.ll"), "utf8").split("\n")
+  const added = []
+  let at = 0
+  if (ph.status === 0) {
+    // The header names the source path, which the case golden leaves out.
+    const lines = fs.readFileSync(plainHello, "utf8").split("\n")
+    const body = lines.slice(lines.findIndex((l) => l.startsWith("@") || l.startsWith("declare")))
+    for (const line of body) {
+      while (at < sandboxedLines.length && sandboxedLines[at] !== line) added.push(sandboxedLines[at++])
+      at++
+    }
+  }
+  added.push(...sandboxedLines.slice(at))
+  check(
+    "sandbox: without the flag the IR is the sandboxed IR less the sandbox's lines",
+    ph.status === 0 &&
+      at <= sandboxedLines.length &&
+      added.every((l) => l === "" || /sandbox|llvm\.used|^entry:$|^ {2}ret void$|^\}$/.test(l)),
+    ph.status === 0 ? added.join("\n") : shown(ph)
+  )
+}
+
 // `nish:unsafe` under Node: `runtime/nish.mjs` answers the import and installs the
 // five functions, so `unsafe_get_set` and `unsafe_wrapping` run unmodified and must
 // print the `.out` the native round trip in section A is held to -- the wraps at
@@ -12856,7 +13293,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-term.c and runtime-bytes.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-term.c, runtime-bytes.c and runtime-sandbox.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -18883,7 +19320,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's ten translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's eleven translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -18940,6 +19377,7 @@ if (!only || "runtime-cache".includes(only)) {
       "runtime-aes.c",
       "runtime-term.c",
       "runtime-bytes.c",
+      "runtime-sandbox.c",
     ]
     const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
 
@@ -19504,9 +19942,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all ten runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eleven runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 10 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 11 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
