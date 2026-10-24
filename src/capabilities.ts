@@ -291,7 +291,8 @@ export const builtinCapability = (name: string): i32 => {
     return CAP_SIGNAL
   }
   // `setRawMode` changes the terminal's state for every process sharing it,
-  // and the four reads ask it; one label for the module, as `net` is.
+  // `setTerminalRestore` writes to it on the way out, and the four reads ask
+  // it; one label for the module, as `net` is.
   if (isTermExport(name)) {
     return CAP_TTY
   }

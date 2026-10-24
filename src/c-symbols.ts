@@ -670,6 +670,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "sigaddset" ||
   name === "sigaltstack" ||
   name === "sigemptyset" ||
+  name === "sigfillset" ||
   name === "signal" ||
   name === "sigprocmask" ||
   name === "sin" ||

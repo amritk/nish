@@ -20711,7 +20711,9 @@ read and `@nish_set_raw_mode` are not
 // and a buffer that is `nocapture` but not `readonly`. It and `waitStdin` are
 // not `willreturn`, since a wait can last for ever; `isTerminal` and
 // `terminalSize` are, and the size is a fresh `i32[]` from the arena.
-import { isTerminal, readStdin, setRawMode, terminalSize, waitStdin } from "nish:term"
+// `setTerminalRestore` hands its string to the runtime as a borrowed
+// `readonly nocapture` pointer, which the runtime copies.
+import { isTerminal, readStdin, setRawMode, setTerminalRestore, terminalSize, waitStdin } from "nish:term"
 
 export const nextKeys = (buf: u8[], frameMs: i32): i32 =>
   waitStdin(frameMs) ? readStdin(buf, 0, buf.length) : -11
@@ -20719,10 +20721,14 @@ export const nextKeys = (buf: u8[], frameMs: i32): i32 =>
 export const columns = (): i32 => (isTerminal(1) ? terminalSize()[0] : 80)
 
 export const enterRaw = (): i32 => setRawMode(true)
+
+export const leaveAltScreen = (): i32 => setTerminalRestore("\u001b[?1049l\u001b[?25h")
 ```
 
 ```llvm
 %struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"\1B[?1049l\1B[?25h\00" }, align 8
 
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
@@ -20731,6 +20737,7 @@ declare zeroext i1 @nish_wait_stdin(i32 noundef) #0
 declare zeroext i1 @nish_is_terminal(i32 noundef) #1
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size() #1
 declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #0
+declare noundef i32 @nish_set_terminal_restore(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 
@@ -20805,6 +20812,12 @@ cond.end:
 define noundef i32 @enterRaw() #0 {
 entry:
   %0 = call i32 @nish_set_raw_mode(i1 zeroext true)
+  ret i32 %0
+}
+
+define noundef i32 @leaveAltScreen() #0 {
+entry:
+  %0 = call i32 @nish_set_terminal_restore(i8* bitcast ({ i64, [15 x i8] }* @.str.0 to i8*))
   ret i32 %0
 }
 
@@ -22351,6 +22364,7 @@ declare zeroext i1 @nish_wait_stdin(i32 noundef) #3
 declare zeroext i1 @nish_is_terminal(i32 noundef) #2
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size() #2
 declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #3
+declare noundef i32 @nish_set_terminal_restore(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare noundef i32 @nish_net_local_port(i32 noundef) #2
 declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2

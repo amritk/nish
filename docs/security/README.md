@@ -171,6 +171,25 @@ the record that found it. The notes below the table name each such finding.
     refused, are accepted, with the reason in their record, and are not
     counted. PG-12 (Low) is open.
 
+## Not yet audited
+
+Files of the attacker-facing surface (`std/net/**/*.ts`, `std/crypto/*.ts`,
+`runtime/*.c`) that no record's `## Scope` table names yet.
+`node scripts/security-scope.mjs` (run by `npm test` and CI) fails on a file
+of that surface that is in no scope and not listed here, and on a row here
+whose file is now in a scope or gone, so this list only shrinks: a new module
+ships with its record (CLAUDE.md, "Definition of done"), and an audit that
+takes a file in deletes its row.
+
+| File | Why it is not in a record yet |
+| --- | --- |
+| `std/crypto/sha1.ts` | Reached only from WebSocket's `Sec-WebSocket-Accept`, where SHA-1 is a fixed RFC 6455 transform of a public key, not a security primitive; `http1.md` names it but no Scope table does. |
+| `std/crypto/x509-random.ts` | The private key and serial `x509MintSelfSigned` needs, drawn from the OS CSPRNG; `crypto-x509.md` (X509-6) and `secret.md` cover it in their bodies, not in a Scope table. |
+| `std/net/buffer-pool.ts` | Holds no parser: it lends fixed-size buffers and zeroes what a borrower used on give-back. No record has reviewed that zeroing yet. |
+| `std/net/prefork.ts` | A supervisor over `spawn` and signals that reads no network input; its descriptor hygiene is RT-17 and RT-19 in `runtime.md`. |
+| `std/net/qpack.ts` | HTTP/3's field decoder, which `http3.md` audits through its callers (the refusals of a field section) but does not list in its Scope table. |
+| `std/net/tls/ticket.ts` | The session-ticket seal, open and strike register; `tls.md`'s Resumption section and its ticket-seal stage record the design and tests, but its Scope table does not list the file. |
+
 ## Open findings
 
 Every finding still open across the records, most severe first. Where a

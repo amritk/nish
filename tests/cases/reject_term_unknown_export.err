@@ -1,1 +1,1 @@
-Module `nish:term` has no export `readLine` (it exports readStdin, waitStdin, isTerminal, terminalSize, setRawMode)
+Module `nish:term` has no export `readLine` (it exports readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore)
