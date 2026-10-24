@@ -32,58 +32,67 @@ const CSI: string = "\u001b["
 const DESCRIPTION_COLUMN: i32 = 35
 
 /**
- * How one output stream is painted. `on` says whether to colour at all, and
- * `rich` whether the terminal has the 256-colour palette, which every modern
- * one does and which the softer tones below need; without it each tone falls
- * back to the nearest of the sixteen basic colours.
+ * How one output stream is painted. `on` says whether to mark the text up at
+ * all, and `colour` whether the terminal has colours to mark it up with.
+ *
+ * The colours are the terminal's own: the eight basic SGR colours, bold and
+ * faint, never a fixed RGB or 256-palette tone. Every theme redefines those
+ * eight, so the help comes out in whatever palette the reader chose, and a
+ * terminal with no theme set paints them in its built-in defaults. A terminal
+ * with no colours at all (`tput colors` says fewer than eight) gets the
+ * failsafe: the same structure in bold and underline, which a monochrome
+ * terminal still shows.
  */
 export class Style {
   on: boolean
-  rich: boolean
+  colour: boolean
 
-  constructor(on: boolean, rich: boolean) {
+  constructor(on: boolean, colour: boolean) {
     this.on = on
-    this.rich = rich
+    this.colour = colour
   }
 
   /**
-   * `text` wrapped in the escape for `code256` (a 256-colour SGR parameter
-   * list) or `code16` (an eight-colour one, or faint), and a reset after it; `text` unchanged
-   * when colour is off, so a caller never has to ask.
+   * `text` wrapped in the escape for `themed` (an SGR parameter list in the
+   * theme's basic colours) or `mono` (attributes only), and a reset after it;
+   * `text` unchanged when marking up is off or the chosen list is empty, so a
+   * caller never has to ask.
    */
-  paint(text: string, code256: string, code16: string): string {
-    if (!this.on || text.length === 0) {
+  paint(text: string, themed: string, mono: string): string {
+    const code = this.colour ? themed : mono
+    if (!this.on || text.length === 0 || code.length === 0) {
       return text
     }
-    return `${CSI}${this.rich ? code256 : code16}m${text}${CSI}0m`
+    return `${CSI}${code}m${text}${CSI}0m`
   }
 
-  /** A section heading: bold, in the accent. */
+  /** A section heading: bold, in the theme's magenta. */
   heading(text: string): string {
-    return this.paint(text, "1;38;5;213", "1;35")
+    return this.paint(text, "1;35", "1")
   }
 
   /** The tool's own name where it opens a line. */
   name(text: string): string {
-    return this.paint(text, "1;38;5;141", "1;35")
+    return this.paint(text, "1;35", "1")
   }
 
   /** A flag, or a command a person would type. */
   flag(text: string): string {
-    return this.paint(text, "38;5;117", "36")
+    return this.paint(text, "36", "1")
   }
 
   /** A placeholder the person fills in: `<file.ts>`, `speed|size`. */
   meta(text: string): string {
-    return this.paint(text, "38;5;222", "33")
+    return this.paint(text, "33", "4")
   }
 
   /**
    * Text that explains rather than names: descriptions, notes. Faint rather
-   * than bright black on the basic palette, which Solarized makes the background.
+   * than bright black, which Solarized makes the background; plain without
+   * colour, where the bold flags already stand apart from it.
    */
   dim(text: string): string {
-    return this.paint(text, "38;5;245", "2")
+    return this.paint(text, "2", "")
   }
 }
 
@@ -128,15 +137,38 @@ const envSaysNo = (name: string): boolean => saysNo(getenv(name))
 /** Whether the variable `name` says yes (`saysYes`). */
 const envSaysYes = (name: string): boolean => saysYes(getenv(name))
 
+/** `paletteOf`'s answer: marked up in the theme's colours. */
+const PALETTE_THEME: i32 = 0
+
+/** `paletteOf`'s answer: marked up in attributes only, the failsafe. */
+const PALETTE_MONO: i32 = 2
+
 /**
- * Whether file descriptor `fd` is a terminal. The language has no `isatty`,
- * and `src/` may only use what the seed compiler already has, so the shell
- * answers: a child inherits the descriptors, and `[ -t 1 ]` is POSIX. It costs
- * one fork, and only on the paths that print the help or the no-inputs usage.
- * Where nothing can be spawned (the WebAssembly build) the answer is "no",
- * which is plain text, the safe side.
+ * What descriptor `fd` can show: `PALETTE_THEME`, `PALETTE_MONO`, or anything
+ * else for plain text. The language has no `isatty`, and `src/` may only use
+ * what the seed compiler already has, so the shell answers: a child inherits
+ * the descriptors and the environment, `[ -t 1 ]` is POSIX, and `tput colors`
+ * reads the count `TERM`'s terminfo entry declares (`-1` for none). With
+ * `terminal` unset (colour was forced) only the count is asked. When `tput` is
+ * missing or does not know `TERM`, the answer is the theme: almost every
+ * terminal has colours, and an escape a monochrome one does not know it drops.
+ * It costs one fork, and only on the paths that print the help or the
+ * no-inputs usage. Where nothing can be spawned (the WebAssembly build) the
+ * answer is `-1`, which is plain text, the safe side.
  */
-const isTerminal = (fd: i32): boolean => spawnSync(["/bin/sh", "-c", `[ -t ${fd} ]`]) === 0
+const paletteOf = (fd: i32, terminal: boolean): i32 => {
+  const tty = terminal ? `[ -t ${fd} ] || exit 1; ` : ""
+  const count = "c=$(tput colors 2>/dev/null) || exit 0; case $c in ''|*[!0-9-]*) exit 0;; esac; "
+  return spawnSync(["/bin/sh", "-c", `${tty}${count}[ "$c" -ge 8 ] || exit ${PALETTE_MONO}`])
+}
+
+/** The style for a `paletteOf` answer: the theme, the failsafe, or plain. */
+const styleOfPalette = (palette: i32): Style => {
+  if (palette === PALETTE_THEME) {
+    return new Style(true, true)
+  }
+  return new Style(palette === PALETTE_MONO, false)
+}
 
 /**
  * Whether an agent, rather than a person, is running the compiler.
@@ -156,27 +188,23 @@ export const agentDriven = (): boolean => {
  * agent or not (`agentDriven`, asked once by the caller). `NO_COLOR` wins,
  * then an agent, then `FORCE_COLOR` saying no (`isNo`; Node reads `0` and
  * `false` so), then a forcing variable, then `CLICOLOR` saying no or
- * `TERM=dumb`, and only then the terminal check. 256 colours when `TERM`
- * names them, `COLORTERM` is set, as truecolour terminals set it, or
- * `FORCE_COLOR` asks for level 2 or 3.
+ * `TERM=dumb`, and only then the terminal check. Whichever way it is on, the
+ * colours `TERM` declares choose between the theme and the failsafe
+ * (`paletteOf`).
  */
 export const styleFor = (fd: i32, agent: boolean): Style => {
   const level = getenv("FORCE_COLOR")
   if (envIsSet("NO_COLOR") || agent || saysNo(level)) {
     return new Style(false, false)
   }
-  const term = getenv("TERM")
-  const rich =
-    (term !== null && term.indexOf("256") >= 0) ||
-    envIsSet("COLORTERM") ||
-    (level !== null && (level === "2" || level === "3"))
   if (saysYes(level) || envSaysYes("CLICOLOR_FORCE")) {
-    return new Style(true, rich)
+    return styleOfPalette(paletteOf(fd, false))
   }
+  const term = getenv("TERM")
   if (envSaysNo("CLICOLOR") || (term !== null && term === "dumb")) {
     return new Style(false, false)
   }
-  return new Style(isTerminal(fd), rich)
+  return styleOfPalette(paletteOf(fd, true))
 }
 
 /**

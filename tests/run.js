@@ -17788,22 +17788,43 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
   const wide = help.stdout.split("\n").filter((line) => line.length > 80)
   check("--help: every line fits in 80 columns", wide.length === 0, wide.join("\n"))
+  // The colours are the theme's: the eight basic SGR colours every theme
+  // redefines, never a fixed 256-palette or RGB tone that ignores it.
+  const fixedTone = /\u001b\[(?:[0-9;]*;)?(?:38|48|9[0-7]|10[0-7])[;m]/
   const forced = run(["--help"], { ...plainEnv, FORCE_COLOR: "1", TERM: "xterm-256color" })
   check(
     "--help with FORCE_COLOR=1: coloured, and the same text under the escapes",
     forced.status === 0 &&
-      forced.stdout.includes(`${ESC}38;5;`) &&
+      forced.stdout.includes(`${ESC}1;35m`) &&
       forced.stdout.replace(/\u001b\[[0-9;]*m/g, "") === help.stdout,
     JSON.stringify(forced.stdout.slice(0, 200))
   )
-  const basic = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "xterm", COLORTERM: "" })
   check(
-    "--help with CLICOLOR_FORCE=1 on an 8-colour TERM: the basic palette only",
-    basic.stdout.includes(`${ESC}36m`) &&
-      !basic.stdout.includes("38;5;") &&
-      !/\u001b\[(?:[0-9;]*;)?(?:9[0-7]|10[0-7])[;m]/.test(basic.stdout),
-    JSON.stringify(basic.stdout.slice(0, 200))
+    "--help on a 256-colour TERM: the theme's basic colours, no fixed tone",
+    forced.stdout.includes(`${ESC}36m`) && !fixedTone.test(forced.stdout),
+    JSON.stringify(forced.stdout.slice(0, 200))
   )
+  const truecolour = run(["--help"], { ...plainEnv, FORCE_COLOR: "3", TERM: "xterm", COLORTERM: "truecolor" })
+  check(
+    "--help with FORCE_COLOR=3 and COLORTERM=truecolor: still the theme's colours",
+    truecolour.stdout.includes(`${ESC}36m`) && !fixedTone.test(truecolour.stdout),
+    JSON.stringify(truecolour.stdout.slice(0, 200))
+  )
+  // The failsafe: a TERM whose terminfo declares no colours gets the structure
+  // in bold and underline, which a monochrome terminal still shows.
+  if (!has("tput")) {
+    skip("--help on a monochrome TERM: no `tput` on this host to read terminfo's colour count")
+  } else {
+    const mono = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "vt100" })
+    check(
+      "--help on a monochrome TERM (vt100): bold and underline, no colour",
+      mono.stdout.includes(`${ESC}1m`) &&
+        mono.stdout.includes(`${ESC}4m`) &&
+        !/\u001b\[(?:[0-9;]*;)?(?:3[0-9]|4[0-9]|9[0-7]|10[0-7]|2)[;m]/.test(mono.stdout) &&
+        mono.stdout.replace(/\u001b\[[0-9;]*m/g, "") === help.stdout,
+      JSON.stringify(mono.stdout.slice(0, 200))
+    )
+  }
   const noColor = run(["--help"], { ...plainEnv, NO_COLOR: "1", FORCE_COLOR: "1" })
   check(
     "--help: NO_COLOR wins over FORCE_COLOR",
@@ -17821,12 +17842,6 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--help: FORCE_COLOR=0 turns colour off, over CLICOLOR_FORCE",
     zeroWins.stdout === help.stdout,
     JSON.stringify(zeroWins.stdout.slice(0, 200))
-  )
-  const level2 = run(["--help"], { ...plainEnv, FORCE_COLOR: "2", TERM: "xterm", COLORTERM: "" })
-  check(
-    "--help with FORCE_COLOR=2 on an 8-colour TERM: 256 colours",
-    level2.stdout.includes(`${ESC}38;5;`),
-    JSON.stringify(level2.stdout.slice(0, 200))
   )
   const dumbForced = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "dumb" })
   check(

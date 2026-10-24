@@ -6,10 +6,12 @@ import VERSION from "./branding" -> const VERSION
 import repeatString from "./strings" -> function @repeatString
 const CSI: string = "\u001b["
 const DESCRIPTION_COLUMN: i32 = 35
+const PALETTE_THEME: i32 = 0
+const PALETTE_MONO: i32 = 2
 const USAGE_COLUMN: i32 = 46
 struct Style (class) size=2 align=1 exported
   field on: boolean index=0 offset=0
-  field rich: boolean index=1 offset=1
+  field colour: boolean index=1 offset=1
   constructor -> @Style.constructor
   method paint -> @Style.paint
   method heading -> @Style.heading
@@ -17,17 +19,18 @@ struct Style (class) size=2 align=1 exported
   method flag -> @Style.flag
   method meta -> @Style.meta
   method dim -> @Style.dim
-function Style.constructor(this: Style, on: boolean, rich: boolean): void -> @Style.constructor [exported constructor]
+function Style.constructor(this: Style, on: boolean, colour: boolean): void -> @Style.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  escaping: on rich
+  escaping: colour on
   pointer this: size=2 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function Style.paint(this: Style, text: string, code256: string, code16: string): string -> @Style.paint [exported method]
+function Style.paint(this: Style, text: string, themed: string, mono: string): string -> @Style.paint [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: text
+  escaping: mono text themed
   calls: nish_str_concat
   pointer this: size=2 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:11 code: string (const)
 function Style.heading(this: Style, text: string): string -> @Style.heading [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: text
@@ -106,11 +109,19 @@ function envSaysYes(name: string): boolean -> @envSaysYes
   calls: nish_getenv saysYes
   stackSites=0 stackLocals=0
   callee +0:47 saysYes -> @saysYes
-function isTerminal(fd: i32): boolean -> @isTerminal
+function paletteOf(fd: i32, terminal: boolean): i32 -> @paletteOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_spawn
   calls: nish_spawn nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
+  local +0:9 tty: string (const)
+  local +1:9 count: string (const)
+function styleOfPalette(palette: i32): Style -> @styleOfPalette
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=2
+  calls: Style.constructor nish_alloc_struct
+  stackSites=0 stackLocals=0
+  callee +0:12 new Style -> @Style.constructor
+  callee +2:10 new Style -> @Style.constructor
 function agentDriven(): boolean -> @agentDriven [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via envIsSet
@@ -121,25 +132,24 @@ function agentDriven(): boolean -> @agentDriven [exported]
   callee +3:10 envSaysYes -> @envSaysYes
   callee +3:38 envSaysYes -> @envSaysYes
 function styleFor(fd: i32, agent: boolean): Style -> @styleFor [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=2
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=2
   sharedWrite: via nish_getenv
   escaping: fd
-  calls: Style.constructor envIsSet envSaysNo envSaysYes isTerminal nish_alloc_struct nish_getenv nish_str_eq nish_str_index_of nish_str_index_of_from saysNo saysYes
+  calls: Style.constructor envIsSet envSaysNo envSaysYes nish_alloc_struct nish_getenv nish_str_eq paletteOf saysNo saysYes styleOfPalette
   stackSites=0 stackLocals=0
   local +0:9 level: string | null (const)
   callee +1:7 envIsSet -> @envIsSet
   callee +1:40 saysNo -> @saysNo
   callee +2:12 new Style -> @Style.constructor
-  local +4:9 term: string | null (const)
-  local +5:9 rich: boolean (const)
-  callee +7:5 envIsSet -> @envIsSet
-  callee +9:7 saysYes -> @saysYes
-  callee +9:25 envSaysYes -> @envSaysYes
-  callee +10:12 new Style -> @Style.constructor
-  callee +12:7 envSaysNo -> @envSaysNo
-  callee +13:12 new Style -> @Style.constructor
-  callee +15:10 new Style -> @Style.constructor
-  callee +15:20 isTerminal -> @isTerminal
+  callee +4:7 saysYes -> @saysYes
+  callee +4:25 envSaysYes -> @envSaysYes
+  callee +5:12 styleOfPalette -> @styleOfPalette
+  callee +5:27 paletteOf -> @paletteOf
+  local +7:9 term: string | null (const)
+  callee +8:7 envSaysNo -> @envSaysNo
+  callee +9:12 new Style -> @Style.constructor
+  callee +11:10 styleOfPalette -> @styleOfPalette
+  callee +11:25 paletteOf -> @paletteOf
 function padTo(width: i32, column: i32): string -> @padTo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow repeatString
