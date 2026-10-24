@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 705
+export const RULE_COUNT: i32 = 709
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -407,6 +407,8 @@ const diagnosticRules = (): string[] => [
   "NL2300",
   "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
   "NL2155",
+  "; C has one namespace, so every `declare function` of one name must agree on its parameter and return types",
+  "NL3039",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
   "NL2055",
   "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)",
@@ -427,6 +429,8 @@ const diagnosticRules = (): string[] => [
   "NL2278",
   "A `case` clause cannot declare a variable directly; wrap the clause body in a block (`case 1: { ... }`)",
   "NL2165",
+  "; a `declare function` binds the C symbol of its name in every package, so rename the defined function",
+  "NL3040",
   "`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear",
   "NL2359",
   "; a function name must be unique across the program, and an instantiation is named after its template",
@@ -927,6 +931,8 @@ const diagnosticRules = (): string[] => [
   "NL2069",
   "` is a builtin value and cannot be called",
   "NL2314",
+  "`Math.imul` expects an i32 or a u32, got ",
+  "NL2574",
   "An enum member name must be an identifier",
   "NL2287",
   "Computed property names are forbidden in ",
@@ -1069,6 +1075,8 @@ const diagnosticRules = (): string[] => [
   "NL2127",
   "`for...of` requires an array, got ",
   "NL2136",
+  "`Math.sign` expects a number, got ",
+  "NL2575",
   "Abstract classes are not supported",
   "NL2168",
   "Array index must be a number, got ",
@@ -1418,10 +1426,10 @@ const diagnosticRules = (): string[] => [
 /**
  * The WP33 portability rules (docs/wp33-round-trip.md section 5.2), matched by
  * substring against a `portability` message and against nothing else. A
- * retired row keeps its entry, as every retired rule does: NL8011's fragment
- * matches nothing now that no pass prints it, and its number stays reserved so
- * the band has no gap. `tests/wordings/unreachable.txt` names the retired rows
- * and why each went.
+ * retired row keeps its entry, as every retired rule does: NL8010's and
+ * NL8011's fragments match nothing now that no pass prints them, and their
+ * numbers stay reserved so the band has no gap. `tests/wordings/unreachable.txt`
+ * names the retired rows and why each went.
  */
 const portabilityRules = (): string[] => [
   "overwrites the element a reference still reads, and TypeScript replaces the object instead",
