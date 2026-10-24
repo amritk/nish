@@ -464,8 +464,8 @@ export class PgText {
     out[at + 10] = toU8(84)
     out[at + 19] = toU8(46)
     out[at + 20] = toU8(millis / 100 + 48)
-    out[at + 21] = toU8((millis / 10) % 10 + 48)
-    out[at + 22] = toU8(millis % 10 + 48)
+    out[at + 21] = toU8(((millis / 10) % 10) + 48)
+    out[at + 22] = toU8((millis % 10) + 48)
     out[at + 23] = toU8(90)
     if (pgBytesAre(out, at, 4, "0000")) {
       this.failed = true
