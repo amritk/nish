@@ -93,8 +93,10 @@
  * nondeterministic -- a clock, a pid, a socket, or freed memory read -- and is
  * reported as that rather than as a difference.
  *
- * A failure saves its source, both IR directories and both runs under
- * `build/test/differential/soundness/<name>/` and prints that path.
+ * A failure saves its source, both IR directories, both runs and its ASan
+ * build under `build/test/differential/soundness/<name>/` and prints that
+ * path; a program that agrees leaves nothing behind, so a long run's disk
+ * and its uploaded artifact hold only the failures.
  *
  * A program whose two builds fail to build alike is `broken`, which fails the
  * run: a corpus program that builds nowhere is the runner's mistake or the
@@ -589,11 +591,13 @@ const ASAN_JS = path.join(root, "tests", "differential", "asan.js")
 /**
  * asan.js on `prog`, a child process so the other lanes keep running: `{ kind,
  * detail }`, `kind` one of asan.js's (asan, ubsan, panic, signal, timeout,
- * error, clean), or `rejected` when the compiler refuses the program.
+ * error, clean), or `rejected` when the compiler refuses the program. It
+ * builds into `dir`, the program's reproducer directory.
  */
-const underAsan = async (compiler, prog) => {
+const underAsan = async (compiler, prog, dir) => {
   const threads = prog.args.includes("--threads") ? ["--threads"] : []
-  const r = await run(process.execPath, [ASAN_JS, prog.entry, "--compiler", compiler, ...threads], {
+  const exe = ["--exe", path.join(dir, "asan", "prog")]
+  const r = await run(process.execPath, [ASAN_JS, prog.entry, "--compiler", compiler, ...threads, ...exe], {
     timeout: 2 * BUILD_TIMEOUT_MS,
   })
   if (r.timedOut) {
@@ -630,7 +634,7 @@ const judge = async (compiler, prog, asan) => {
     if (!asan || past === null) {
       return ""
     }
-    const a = await underAsan(compiler, prog)
+    const a = await underAsan(compiler, prog, r.dir)
     if (ASAN_BLIND.includes(past) && a.kind === "clean") {
       return `\nasan: clean, which proves nothing: ${past} reads inside its block (ASAN_BLIND)`
     }
@@ -654,7 +658,7 @@ const judge = async (compiler, prog, asan) => {
     return r
   }
   if (asan) {
-    const a = await underAsan(compiler, prog)
+    const a = await underAsan(compiler, prog, r.dir)
     if (a.kind !== (prog.expectPanic ? "panic" : "clean")) {
       r.verdict = "asan"
       r.key = `asan:${a.kind}`
@@ -905,7 +909,9 @@ const main = async () => {
       }
       const r = await judge(o.compiler, prog, o.asan)
       results.push(r)
-      if (r.verdict !== "agree") {
+      if (r.verdict === "agree") {
+        fs.rmSync(r.dir, { recursive: true, force: true })
+      } else {
         console.log(`${r.verdict.toUpperCase()}  ${r.name}  ${r.detail.replace(/\n/g, "\n    ")}`)
       }
     }

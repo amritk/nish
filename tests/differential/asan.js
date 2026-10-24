@@ -32,7 +32,7 @@
  * Only `clean` exits 0; every other kind, and a program the compiler
  * refuses, exits 1. A file with no `export const main` is skipped (exit 0).
  *
- * Usage: node tests/differential/asan.js <file.ts> [--compiler <nish>] [--unchecked] [--threads]
+ * Usage: node tests/differential/asan.js <file.ts> [--compiler <nish>] [--unchecked] [--threads] [--exe <path>]
  *        node tests/differential/asan.js --self-test [--compiler <nish>]
  *
  * The self-test reads one past the end of arrays built every way the compiler
@@ -432,9 +432,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let self = false
   let unchecked = false
   let threads = false
+  let exe
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--compiler") {
       compilerSpec = argv[++i]
+    } else if (argv[i] === "--exe") {
+      exe = path.resolve(argv[++i])
     } else if (argv[i] === "--self-test") {
       self = true
     } else if (argv[i] === "--unchecked") {
@@ -469,7 +472,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     console.log("skipped: no `export const main`")
     process.exit(0)
   }
-  const res = runUnderAsan(path.resolve(file), { compiler, unchecked, threads })
+  if (exe !== undefined) {
+    fs.mkdirSync(path.dirname(exe), { recursive: true })
+  }
+  const res = runUnderAsan(path.resolve(file), { compiler, unchecked, threads, exe })
   if (res.rejected) {
     console.log(`rejected: ${String(res.stderr).trim().split("\n")[0]}`)
     process.exit(1)
