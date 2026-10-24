@@ -270,7 +270,10 @@ Four pairings CI checks and a local run on one machine does not:
   `--profile wasm` route.** `scripts/build.sh --profile wasm` links IR that was
   compiled for the host, so a wasm32 guard in the compiler never sees it. On
   #598's first head, such a link of AES IR referenced `nish_aes_*` without
-  `runtime-aes.c`.
+  `runtime-aes.c`. A lowering that is not skipped there needs its unit in
+  that link: `build.sh`'s `wasm)` arm adds `runtime-aes.c` and
+  `runtime-bytes.c` to IR that names their symbols, and the `simd` section
+  links both IR kinds that way.
 - **A positive check gated on `/proc/cpuinfo` has a CI step that greps its
   PASS line.** A runner that masks the instructions takes the check's other arm
   and stays green, so the line that says the path ran is required in
@@ -279,6 +282,11 @@ Four pairings CI checks and a local run on one machine does not:
   review.
 
 ## How `src/` is tested
+
+Before pushing a `src/` change, run locally the sections it touches,
+`node tests/run.js wasi` (with `WASI_SYSROOT=/usr`; read its skip line) and
+`node tests/run.js performance`, and regenerate the goldens; the whole suite
+is CI's `test` shards ([`CLAUDE.md`](../CLAUDE.md#definition-of-done)).
 
 Every tool below builds its compiler from `src/` with the seed
 (`tests/self/seed.js`: `--seed`, then `NISH_BOOTSTRAP`, then `build/nish`, then

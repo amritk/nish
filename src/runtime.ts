@@ -301,6 +301,19 @@ export class RuntimeTable {
         EFFECT_READ
       )
     )
+    // WP38 S6a: `nish/bytes`'s byte-class runs, in runtime-bytes.c, with
+    // `indexOfAny`'s effect, for its reason. The data is an array's, which is
+    // null while the array is empty, so it is not `nonnull`.
+    for (const name of ["nish_bytes_skip_blank", "nish_bytes_skip_digits", "nish_bytes_skip_json_text"]) {
+      this.add(
+        new RuntimeFunction(
+          name,
+          `declare i64 @${name}(i8* noundef readonly nocapture, i64 noundef, i64 noundef)`,
+          attrs3("nounwind", "willreturn", "memory(argmem: read, inaccessiblemem: readwrite)"),
+          EFFECT_READ
+        )
+      )
+    }
     // `nish/regex`'s scan, beside it in runtime-simd.c: the same path store,
     // but the masks are an array, whose elements sit behind a pointer the
     // kernel loads, so `argmem` would understate its reads.
@@ -1161,7 +1174,7 @@ export class RuntimeTable {
     for (const f of unary) {
       this.addIntrinsic(`llvm.${f}.f64`, "double", "double")
     }
-    const binary: string[] = ["pow", "minnum", "maxnum"]
+    const binary: string[] = ["pow", "minimum", "maximum", "copysign"]
     for (const f of binary) {
       this.addIntrinsic(`llvm.${f}.f64`, "double", "double, double")
     }
@@ -1194,8 +1207,9 @@ export class RuntimeTable {
     // WP15: `Math.abs`/`min`/`max` on an `f32`. The f64-only Math functions
     // (sqrt, pow, ...) stay f64-only, so there is no `llvm.sqrt.f32` here.
     this.addIntrinsic("llvm.fabs.f32", "float", "float")
-    this.addIntrinsic("llvm.minnum.f32", "float", "float, float")
-    this.addIntrinsic("llvm.maxnum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.minimum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.maximum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.copysign.f32", "float", "float, float")
     // `Math.clz32`, with `i1 false` so that a zero answers 32 as JavaScript's
     // does, rather than poison.
     this.addIntrinsic("llvm.ctlz.i32", "i32", "i32, i1")

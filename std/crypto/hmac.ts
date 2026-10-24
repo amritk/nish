@@ -46,12 +46,17 @@
  * stores nothing of its own and an arena scope around it releases all it
  * allocated (see "Caller-owned scratch" below).
  *
- * Written from RFC 2104, not ported from another implementation.
+ * `pbkdf2HmacSha256` is PBKDF2 with HMAC-SHA-256 (RFC 8018 §5.2), the key
+ * derivation SCRAM-SHA-256 runs over a password: the password goes in as a
+ * `Secret<u8[]>` and the derived key comes out as one, and every U_j and T_i
+ * is wiped before it answers (see "PBKDF2" below).
+ *
+ * Written from RFC 2104 and RFC 8018, not ported from another implementation.
  */
 import { SHA256_BLOCK, SHA256_SIZE, Sha256 } from "nish/crypto/sha256"
 import { SHA384_SIZE, SHA512_BLOCK, SHA512_SIZE, Sha384, Sha512 } from "nish/crypto/sha512"
 import { timingSafeEqual } from "nish/crypto/ct"
-import { Secret, exposeWith, wipe } from "nish:secret"
+import { Secret, exposeWith, secret, wipe } from "nish:secret"
 
 /** RFC 2104 §2's `ipad`, the byte XORed into the key for the inner hash. */
 const HMAC_IPAD: i32 = 0x36
@@ -660,4 +665,135 @@ export class HmacSha384Scratch {
     hmacWipeSha384(this.inner)
     hmacWipeSha384(this.outer)
   }
+}
+
+// ---- PBKDF2 ----------------------------------------------------------------
+//
+// PBKDF2 with HMAC-SHA-256 as its PRF (RFC 8018 §5.2), the key derivation
+// SCRAM-SHA-256 (RFC 7677, RFC 5802 §3 "Hi") runs over a password. The
+// password keys an inner and an outer hasher once; every U_j after that is
+// two compressions in a working hasher copied from them, so a count of 4096
+// costs 4096 HMACs and never keys one again.
+
+/** What `pbkdf2HmacSha256` passes through `exposeWith`, which carries one argument. */
+interface Pbkdf2Request {
+  /** The salt, public: SCRAM's server sends it. */
+  salt: u8[]
+  /** The iteration count `c`, at least 1. */
+  iterations: i32
+  /** The derived key's length `dkLen` in bytes, at least 1. */
+  length: i32
+}
+
+/** The length of INT(i), the big-endian block index after the salt; typed, as `HMAC_FROM` is. */
+const PBKDF2_INDEX: i32 = 4
+
+/**
+ * Ends the HMAC `work` holds, keyed as `keyedOuter` is on the outer side, and
+ * writes its 32-byte tag into `out`. Both digests `work` answers are wiped
+ * here, so they die with this call and its arena scope.
+ */
+const pbkdf2Finish = (keyedOuter: Sha256, work: Sha256, out: u8[]): void => {
+  const innerDigest: u8[] = work.digest()
+  hmacCopySha256(keyedOuter, work)
+  work.update(innerDigest, HMAC_FROM, SHA256_SIZE)
+  wipe(innerDigest)
+  const tag: u8[] = work.digest()
+  for (let i: i32 = 0; i < SHA256_SIZE && i < toI32(tag.length) && i < toI32(out.length); i += 1) {
+    out[i] = tag[i]
+  }
+  wipe(tag)
+}
+
+/** `pbkdf2HmacSha256` on the exposed password. */
+const pbkdf2HmacSha256Exposed = (password: u8[], request: Pbkdf2Request): u8[] | null => {
+  const salt: u8[] = request.salt
+  const iterations: i32 = request.iterations
+  const length: i32 = request.length
+  // Before any `toI32`, which would saturate under `--number-mode f64`.
+  if (password.length > 2147483647 || salt.length > 2147483647) {
+    return null
+  }
+  if (iterations < 1 || length < 1) {
+    return null
+  }
+  const keyedInner = new Sha256()
+  const keyedOuter = new Sha256()
+  hmacKeySha256(keyedInner, keyedOuter, password)
+  const work = new Sha256()
+  const u: u8[] = new Array<u8>(SHA256_SIZE)
+  const t: u8[] = new Array<u8>(SHA256_SIZE)
+  const index: u8[] = new Array<u8>(PBKDF2_INDEX)
+  const dk: u8[] = new Array<u8>(length)
+  // dkLen is an i32, so it never reaches RFC 8018's (2^32 - 1) * hLen bound,
+  // and the block index below never passes 2^26.
+  let block: i32 = 1
+  let done: i32 = 0
+  while (done < length) {
+    // U_1 = PRF(P, S || INT(i)), INT(i) four bytes, most significant first.
+    index[0] = toU8((block >> 24) & 0xff)
+    index[1] = toU8((block >> 16) & 0xff)
+    index[2] = toU8((block >> 8) & 0xff)
+    index[3] = toU8(block & 0xff)
+    hmacCopySha256(keyedInner, work)
+    work.update(salt, HMAC_FROM, toI32(salt.length))
+    work.update(index, HMAC_FROM, PBKDF2_INDEX)
+    pbkdf2Finish(keyedOuter, work, u)
+    for (let j: i32 = 0; j < SHA256_SIZE && j < toI32(t.length) && j < toI32(u.length); j += 1) {
+      t[j] = u[j]
+    }
+    // U_c = PRF(P, U_{c-1}); T_i = U_1 XOR ... XOR U_c.
+    for (let c: i32 = 1; c < iterations; c += 1) {
+      hmacCopySha256(keyedInner, work)
+      work.update(u, HMAC_FROM, SHA256_SIZE)
+      pbkdf2Finish(keyedOuter, work, u)
+      for (let j: i32 = 0; j < SHA256_SIZE && j < toI32(t.length) && j < toI32(u.length); j += 1) {
+        t[j] = t[j] ^ u[j]
+      }
+    }
+    const take: i32 = length - done < SHA256_SIZE ? length - done : SHA256_SIZE
+    for (let j: i32 = 0; j < take && j < toI32(t.length) && done + j < toI32(dk.length); j += 1) {
+      dk[done + j] = t[j]
+    }
+    done += take
+    block += 1
+  }
+  wipe(u)
+  wipe(t)
+  hmacWipeSha256(work)
+  hmacWipeSha256(keyedInner)
+  hmacWipeSha256(keyedOuter)
+  return dk
+}
+
+/**
+ * PBKDF2-HMAC-SHA256(P, S, c, dkLen) as RFC 8018 §5.2 defines it: the
+ * `dkLen`-byte key derived from the password `password` and the salt `salt`
+ * over `iterations` rounds, as a `Secret`.
+ *
+ *     const salted: Secret<u8[]> | null = pbkdf2HmacSha256(password, salt, 4096, 32);
+ *
+ * Bad input answers `null` and never panics: an iteration count or a length
+ * below 1, or a password or salt longer than 2^31 - 1 bytes. The password is
+ * read only inside `exposeWith`, and every U_j, every T_i, both keyed hashers
+ * and the working one are wiped before the key is answered; the digests on
+ * the way are wiped in the call that made them. The time taken depends on
+ * `iterations`, `dkLen` and the password's length past a block, all of which
+ * RFC 8018 treats as public, and on nothing of the password's bytes. The time
+ * is linear in `iterations` and nothing here bounds it, so a caller that takes
+ * the count from an untrusted peer (a SCRAM server's `i=`) must cap it first:
+ * 2^31 - 1 rounds is about 2^32 compressions.
+ */
+export const pbkdf2HmacSha256 = (
+  password: Secret<u8[]>,
+  salt: u8[],
+  iterations: i32,
+  length: i32
+): Secret<u8[]> | null => {
+  const request: Pbkdf2Request = { salt: salt, iterations: iterations, length: length }
+  const dk: u8[] | null = exposeWith(password, request, pbkdf2HmacSha256Exposed)
+  if (dk === null) {
+    return null
+  }
+  return secret(dk)
 }

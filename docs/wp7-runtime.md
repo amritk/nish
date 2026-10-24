@@ -7,7 +7,7 @@ strings, and the `wasi` build profile. Later work superseded several parts:
 
 - signed overflow, `i64` included, is a checked panic by default (#426);
 - the shortest-digits search was replaced by a port of Ryu;
-- the runtime grew from one translation unit to nine, each with its own
+- the runtime grew from one translation unit to ten, each with its own
   measured budget (below).
 
 The living reference for every builtin is [LANGUAGE.md](LANGUAGE.md) ("Math",
@@ -36,16 +36,16 @@ native profile links `-lm`.
 - **`Math.round`** is `floor`, then `x - floor(x) >= 0.5`, then `select`. This
   matches JavaScript's round-half-up, which `llvm.round` (half away from zero)
   does not, and is exact where `floor(x + 0.5)` is not:
-  `0.49999999999999994` rounds to `0`. The one difference from JavaScript is
-  that `Math.round(-0.3)` is `+0` here and `-0` there; both print `0`.
+  `0.49999999999999994` rounds to `0`. A `llvm.copysign.f64` then gives the
+  result the operand's sign, so `Math.round(-0.3)` is `-0`, as in JavaScript.
 - **`Math.abs` / `min` / `max`** accept any numeric type. Integers lower to
   `llvm.abs` (with `i1 false`, so the minimum value wraps to itself rather
-  than becoming poison) and `smin` / `smax`. Floats lower to `fabs` and
-  `minnum` / `maxnum`. `minnum` returns the non-NaN operand where JavaScript
-  returns NaN, and may return either zero for `min(0, -0)`. That is
-  documented rather than patched, because the intrinsic is a single
-  instruction on every target. The differential corpus keeps it as a known
-  failure (`f64_minmax_nan`, and `f64_round_negzero` for the rounding case).
+  than becoming poison) and `smin` / `smax`. Floats lower to `fabs`, and
+  `min` / `max` answer as JavaScript's do: a NaN operand gives NaN and `-0`
+  orders below `+0`. Natively that is a NaN test, a compare and select, and a
+  sign-bit pick on equal operands; wasm32 keeps `llvm.minimum` /
+  `llvm.maximum`, its `f64.min` / `f64.max` (`tests/cases/math_minmax_float`,
+  and `f64_minmax_nan` and `f64_round_negzero` in the differential corpus).
 - **`Math.random`** is xorshift64\* over one state word, seeded lazily from
   the time and the pid (the monotonic clock under WASI, which has no
   `getpid`). Its effect is `write`, so two calls are never merged.
@@ -183,6 +183,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-net.c` | `nish:net` sockets, `SO_REUSEPORT` listeners, UDP, the readiness loop | 2,560 (`NET_TEXT_BUDGET`) | 2,335 (2026-10-20) |
 | `runtime/runtime-simd.c` | byte searches a vector at a time: `nish_str_index_of_any`'s and `nish_regex_scan`'s scalar, base and AVX2 paths and their resolvers ([wp38](wp38-simd.md) S1) | 2,560 (`RUNTIME_SIMD_TEXT_BUDGET`) | 2,337 (2026-10-23) |
 | `runtime/runtime-aes.c` | AES-GCM on AES-NI and PCLMULQDQ: the key schedule with H's powers, one block, GCTR, GHASH and `nish_aes_hw` ([wp38](wp38-simd.md) S5) | 2,560 (`RUNTIME_AES_TEXT_BUDGET`) | 2,532 (2026-10-11) |
+| `runtime/runtime-bytes.c` | the byte-class runs of `nish/bytes`: JSON's blanks, the digits and a JSON string's plain bytes, their scalar, SSE2 and AVX2 paths, the UTF-8 step and their resolver ([wp38](wp38-simd.md) S6a) | 1,536 (`RUNTIME_BYTES_TEXT_BUDGET`) | 1,303 (2026-10-23) |
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
 | `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore | 1,536 (`RUNTIME_TERM_TEXT_BUDGET`) | 1,419 (2026-10-23) |
@@ -220,6 +221,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-23 | `nish_fatal_exit`: the panics' `_exit(1)` behind one noreturn call that runs `nish_fatal_hook` first, so raw mode is restored after a failed check: core 3,684 → 3,698, threads 3,885 → 3,899. Calling the hook from `nish_panic_claim` instead measured 3,752 / 3,900, because every call site kept more registers live across it. It stays in the core rather than a unit of its own because `runtime.c` links alone and its panics call it; defined in `runtime-term.c` the core measured 3,675, but a lone `runtime.c` no longer linked | core 3,698, threads 3,899 |
 | 2026-10-23 | `runtime-term.c` (1,319), `nish:term` | term 1,536 |
 | 2026-10-23 | `waitStdin` after a caught Ctrl-Z asks again for what is left of a deadline on the monotonic clock, rather than for what `select` left in its timeout, which no system promises after an error: `runtime-term.c` 1,319 → 1,419, all of it `nish_stdin_ready` (161 → 261). The clock is read only for a positive timeout, once before the first `select` and again only after a stop, so `readStdin`'s zero-timeout question and a wait for ever never ask it. A program that waits also links `runtime-os.c`'s `nish_monotonic_nanos` (36 bytes), which this file's ceiling does not count | term 1,536 |
+| 2026-10-23 | `runtime-bytes.c` (1,303), wp38 S6a; folded into `runtime-simd.c` the two measured 1,960 | bytes 1,536 |
 | 2026-10-23 | `nish/regex`'s match-start scan, `nish_regex_scan`: `runtime-simd.c` 675 → 2,337. The scan is the 1,631: the AVX2 path 1,323 (one copy each for a window of 1, 2 and 3 positions, so the tables stay in registers; a width of 4 shares the third), the scalar path 202, its resolver 97 and the entry point 9. `indexOfAny`'s resolver now calls `nish_simd_choose` (158) rather than inlining it (203 → 76), so the two share one CPU question. Out of line, the candidate check would save 76 bytes (2,261) but took `/example/` over the bench prose from 0.195 to 0.215 ms, against 0.199 for Rust's `regex` crate, so it stays inlined | simd 2,560 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
@@ -351,6 +353,30 @@ include `nish.h`, so the arena chunk's layout, which both files walk, is pinned
 by the same `_Static_assert`s in each. `scripts/build.sh` pairs the unit and
 `src/run-cache.ts` lists it in one commit, as the AES unit's were. A program
 that answers, sends or guards no string keeps none of it, by section GC.
+
+### The byte-class unit
+
+`runtime/runtime-bytes.c` (wp38 S6a, [wp38-simd.md](wp38-simd.md) §3.1) holds
+the three runs `nish/bytes` steps over — JSON's blanks, the digits, and the
+bytes a JSON string holds as themselves, UTF-8 checked — sixteen or thirty-two
+bytes at a time. The compiler calls its kernels in place of three private
+walkers of `std/bytes.ts`, as it calls `runtime-simd.c`'s in place of
+`indexOfAny`'s, and each has a scalar path of its own, so there is no branch
+back to the Nish walker. Its 1,303 bytes are the scalar path 137, the SSE2
+path 265, the AVX2 path 368, the UTF-8 step 238 and its resume 29, the
+resolver 204 and the three entry points 62.
+
+It is a tenth unit rather than more of `runtime-simd.c` by the same rule as
+the AES unit: folded in, the two measured 1,960 bytes against that file's
+ceiling of 768. Apart, a program that searches text links no JSON run and one
+that tokenizes JSON no byte-set search. The paths and their choice are
+`runtime-simd.c`'s, `NISH_SIMD` included; the one difference is freestanding
+wasm32, which has no libc to read `NISH_SIMD` with, where the kernels call the
+base path directly. `scripts/build.sh --profile wasm` adds the file to a
+freestanding link whose IR calls a kernel, as it adds `runtime-aes.c`, so a
+module compiled for the host links there too. `scripts/build.sh` pairs it,
+`src/run-cache.ts` lists it and the compiler first calls it in one commit. A
+program that never reaches a run keeps none of it, by section GC.
 
 ### Checked arithmetic
 

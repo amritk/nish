@@ -79,7 +79,9 @@ const nishc = compilerFrom(process.argv)
  * `integer` marks the benchmarks whose hot loop is integer arithmetic, where
  * `--wrapping` gets a column: what the overflow checks the default build keeps
  * cost. `extraC` lists further C sources that print the same checksum (the
- * naive malloc/free string builder).
+ * naive malloc/free string builder). `kernels` names the arguments a program
+ * takes to run one of its loops alone: each is timed as its own row,
+ * `<name>/<kernel>`, from the binaries built once.
  *
  * The compiler flags a benchmark needs are not listed here: they live in
  * `bench/<name>.args`, the sidecar `tests/cases` uses, so that the stage1
@@ -101,6 +103,23 @@ const BENCHMARKS = [
     name: "result",
     what: "Result<number, number> returned and passed, 2e8 calls (WP17 packing)",
     integer: true,
+  },
+  {
+    name: "math",
+    what: "Math builtins, one kernel per argument, folded through f32 bits (f64)",
+    integer: false,
+    kernels: [
+      "atan2",
+      "tan",
+      "hypot",
+      "sign-int",
+      "sign-float",
+      "imul",
+      "round",
+      "min",
+      "max",
+      "f32-to-bits",
+    ],
   },
 ]
 
@@ -1431,22 +1450,27 @@ const results = [] // { bench, variants: [{ ...variant, min, median, bytes, rss,
 let mismatches = 0
 for (const bench of selected) {
   process.stderr.write(`${bench.name}: building`)
-  const variants = build(bench)
+  const built = build(bench)
   process.stderr.write(" ok; running")
-  const reference = timeOnce(variants.find((v) => v.id === "c").exe).stdout
-  for (const v of variants) {
-    const timed = timeRuns(v.exe)
-    const agrees = sameOutput(timed.stdout, reference)
-    if (!agrees) {
-      mismatches++
-      console.error(
-        `\nCHECKSUM MISMATCH ${bench.name}/${v.id}:\n--- C\n${reference}--- ${v.id}\n${timed.stdout}`
-      )
+  for (const kernel of bench.kernels ?? [null]) {
+    const row = kernel === null ? bench : { ...bench, name: `${bench.name}/${kernel}` }
+    const args = kernel === null ? [] : [kernel]
+    const variants = built.map((v) => ({ ...v }))
+    const reference = timeOnce(variants.find((v) => v.id === "c").exe, args).stdout
+    for (const v of variants) {
+      const timed = timeRuns(v.exe, args)
+      const agrees = sameOutput(timed.stdout, reference)
+      if (!agrees) {
+        mismatches++
+        console.error(
+          `\nCHECKSUM MISMATCH ${row.name}/${v.id}:\n--- C\n${reference}--- ${v.id}\n${timed.stdout}`
+        )
+      }
+      Object.assign(v, { ...timed, bytes: fs.statSync(v.exe).size, agrees })
+      process.stderr.write(".")
     }
-    Object.assign(v, { ...timed, bytes: fs.statSync(v.exe).size, agrees })
-    process.stderr.write(".")
+    results.push({ bench: row, variants, reference })
   }
-  results.push({ bench, variants, reference })
   process.stderr.write("\n")
 }
 

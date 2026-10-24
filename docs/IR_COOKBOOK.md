@@ -2545,6 +2545,52 @@ The whole of `text.ll` is `tests/link/std_text_index_of_any`'s golden; the same
 `std/text.ts` compiled as a root keeps `call i32 @indexOfAnyFrom(` and declares
 no kernel (`tests/run.js`, "kernels:").
 
+### `nish/bytes`: the runs on their kernels, the copy as one move
+
+`skipBlank`, `skipDigits` and `skipJsonText` are lowered as `indexOfAny` is:
+each clamps its range in Nish and makes one call to a private walker, and in
+the module that is `nish/bytes` that call becomes a kernel of
+`runtime/runtime-bytes.c` (`src/kernels.ts`, `bytesWalkOf`). The kernel is
+handed the array's data pointer rather than the array, and both ends of the
+range widened to `i64`:
+
+```llvm
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = sext i32 %2 to i64
+  %7 = sext i32 %3 to i64
+  %8 = call i64 @nish_bytes_skip_blank(i8* %5, i64 %6, i64 %7)
+  %9 = trunc i64 %8 to i32
+  ret i32 %9
+}
+```
+
+declared as `indexOfAny`'s kernel is, reading only through its pointer and
+writing only its own choice of path:
+
+```llvm
+declare i64 @nish_bytes_skip_blank(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #4
+
+attributes #4 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
+```
+
+`copyBytes` checks both windows and panics before its call, so the walker's
+call becomes one `llvm.memmove` of the two data pointers offset by `at` and
+`from`. It is a move rather than a copy because `dst` and `src` may be one
+array, and its stores and loads are in the data domain, so nothing about the
+headers is reloaded after it:
+
+```llvm
+  %25 = sext i32 %count to i64
+  call void @llvm.memmove.p0i8.p0i8.i64(i8* %20, i8* %24, i64 %25, i1 false), !alias.scope !4, !noalias !3
+  ret void
+}
+```
+
+The walkers stay defined, `internal` and uncalled, and `opt` deletes them.
+The whole of `bytes.ll` is `tests/link/std_bytes`'s golden;
+`tests/link/std_bytes_runs` runs every class and clamp against the kernels.
+
 ### `nish/regex`: a match's first byte on the runtime kernel
 
 A pattern whose first few positions each take a small set of bytes, such as
@@ -19385,9 +19431,17 @@ attributes #2 = { nounwind willreturn readonly }
 ### `Math.*` on `f64`
 
 `Math.sqrt` is `llvm.sqrt.f64`; `Math.round` is the floor/compare/select
-sequence that matches JavaScript's round-half-up; `Math.min`/`max` are
-`llvm.minnum`/`maxnum`. All intrinsics are `readnone willreturn`, so the
-callers stay pure.
+sequence that matches JavaScript's round-half-up, then `llvm.copysign.f64`
+so that `Math.round(-0.3)` is `-0`; `Math.min`/`max` answer NaN for a NaN
+operand and order `-0` below `+0`, as JavaScript does, through the branches
+clang gives the same C: an unordered compare to a quiet NaN, an ordered
+compare and `select`, and on equal operands the one whose sign bit says `-0`.
+A wasm build calls `llvm.minimum`/`maximum` instead, which are `f64.min`/`max`
+there. All of these are `readnone willreturn`, so the callers stay pure.
+`Math.tan`, `Math.atan2` and `Math.hypot` are not builtins in the IR at all:
+each is a call to `std/math.ts`'s Nish port of fdlibm, copied into the module
+as `internal @nish.tanF64`, `@nish.atan2F64` and `@nish.hypotF64`, so no target calls
+libm and the optimiser sees the whole body.
 
 <!-- cookbook:begin builtin-math-f64 -->
 Compiled with `--number-mode f64`.
@@ -19403,8 +19457,7 @@ const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1)
 ```llvm
 declare double @llvm.sqrt.f64(double) #0
 declare double @llvm.floor.f64(double) #0
-declare double @llvm.minnum.f64(double, double) #0
-declare double @llvm.maxnum.f64(double, double) #0
+declare double @llvm.copysign.f64(double, double) #0
 
 define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
 entry:
@@ -19422,14 +19475,47 @@ entry:
   %2 = fcmp oge double %1, 0x3FE0000000000000
   %3 = fadd double %0, 0x3FF0000000000000
   %4 = select i1 %2, double %3, double %0
-  ret double %4
+  %5 = call double @llvm.copysign.f64(double %4, double %x)
+  ret double %5
 }
 
 define internal noundef double @clamp01(double noundef %x) #0 {
 entry:
-  %0 = call double @llvm.maxnum.f64(double %x, double 0x0000000000000000)
-  %1 = call double @llvm.minnum.f64(double %0, double 0x3FF0000000000000)
-  ret double %1
+  %0 = fcmp uno double %x, 0x0000000000000000
+  br i1 %0, label %max.end, label %max.num
+
+max.num:
+  %1 = fcmp ogt double %x, 0x0000000000000000
+  %2 = select i1 %1, double %x, double 0x0000000000000000
+  %3 = fcmp oeq double %x, 0x0000000000000000
+  br i1 %3, label %max.same, label %max.end
+
+max.same:
+  %4 = bitcast double %x to i64
+  %5 = icmp slt i64 %4, 0
+  %6 = select i1 %5, double 0x0000000000000000, double %x
+  br label %max.end
+
+max.end:
+  %7 = phi double [ 0x7FF8000000000000, %entry ], [ %2, %max.num ], [ %6, %max.same ]
+  %8 = fcmp uno double %7, 0x3FF0000000000000
+  br i1 %8, label %min.end, label %min.num
+
+min.num:
+  %9 = fcmp olt double %7, 0x3FF0000000000000
+  %10 = select i1 %9, double %7, double 0x3FF0000000000000
+  %11 = fcmp oeq double %7, 0x3FF0000000000000
+  br i1 %11, label %min.same, label %min.end
+
+min.same:
+  %12 = bitcast double %7 to i64
+  %13 = icmp slt i64 %12, 0
+  %14 = select i1 %13, double %7, double 0x3FF0000000000000
+  br label %min.end
+
+min.end:
+  %15 = phi double [ 0x7FF8000000000000, %max.end ], [ %10, %min.num ], [ %14, %min.same ]
+  ret double %15
 }
 
 attributes #0 = { nounwind willreturn readnone }
@@ -22219,6 +22305,9 @@ declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, 
 declare zeroext i1 @nish_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #4
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
 declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #5
+declare i64 @nish_bytes_skip_blank(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
+declare i64 @nish_bytes_skip_digits(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
+declare i64 @nish_bytes_skip_json_text(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #6
 declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #4
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4

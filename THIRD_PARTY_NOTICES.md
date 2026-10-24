@@ -10,7 +10,7 @@ the tree.
 
 ## What the npm package ships
 
-Three of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
+Six of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
 formatter is adapted from Ryu. The package carries `runtime/LICENSE-ryu` beside
 it, because `package.json`'s `files` names the whole `runtime/` directory, and
 the release tarball and the platform packages copy that directory too. Ryu is
@@ -38,6 +38,22 @@ licence makes no exception for object code: a program built with
 same file's inversion of the signing nonce is ported from libsecp256k1, under
 MIT too, so the package carries `std/crypto/LICENSE-libsecp256k1` beside it as
 well, and such a program carries libsecp256k1's notice beside fiat-crypto's.
+
+The fourth is `std/json-tokenizer.ts`, whose decimal-to-double conversion
+(`jsonTokEiselLemire`) and table of powers of five are adapted from fast_float,
+and the fifth is `scripts/gen-json-pow5.mjs`, which regenerates that table and
+ships because `package.json`'s `files` names `scripts/`. The package carries
+`std/LICENSE-fast-float` beside them. fast_float is offered under Apache-2.0,
+MIT or the Boost Software License 1.0, and this repository takes the Boost
+licence, as it does Ryu's, so as with Ryu a program built with `nish/json` needs
+no notice of its own.
+
+The sixth is `std/math.ts`, whose `Math.tan`, `Math.atan2` and `Math.hypot`
+are ported from fdlibm, as FreeBSD's msun carries it. The package carries
+`std/LICENSE-fdlibm` beside it, for the same reason. fdlibm's licence grants
+use, copying and distribution "provided that this notice is preserved", which
+the file's header does; it asks nothing of object code, so a program calling
+those functions needs no notice of its own.
 
 Nothing else here ships. `package.json`'s `files` names neither `bench/`,
 `tests/`, `examples/` nor `docs/cookbook/`.
@@ -149,6 +165,30 @@ under the MIT licence. The port reads `src/modinv32_impl.h` and
 Ported from libsecp256k1 (https://github.com/bitcoin-core/secp256k1), src/modinv32_impl.h. Copyright (c) 2020 Peter Dettman. Used under the MIT licence; see std/crypto/LICENSE-libsecp256k1.
 ```
 
+### `std/LICENSE-fast-float`
+
+[fast_float](https://github.com/fastfloat/fast_float), Copyright (c) 2021 The
+fast_float authors, under the Boost Software License, Version 1.0 (upstream
+also offers Apache-2.0 and MIT). The adaptation reads
+`include/fast_float/decimal_to_binary.h` and `script/table_generation.py` at
+commit `0de7a21da582b6c84b0546772a96549882905d2b`; the licence text is that
+commit's `LICENSE-BOOST`, verbatim.
+
+```notice
+Adapted from fast_float (https://github.com/fastfloat/fast_float), include/fast_float/decimal_to_binary.h and script/table_generation.py. Copyright 2021 The fast_float authors. Used under the Boost Software License, Version 1.0; see std/LICENSE-fast-float.
+```
+
+### `std/LICENSE-fdlibm`
+
+[fdlibm](https://www.netlib.org/fdlibm/), Copyright (C) 1993 Sun Microsystems,
+Inc., under its own permissive notice. The port reads FreeBSD msun's
+`lib/msun/src` copies; the licence text is the notice those files carry,
+verbatim.
+
+```notice
+Ported from fdlibm (https://www.netlib.org/fdlibm/), as FreeBSD msun carries it, lib/msun/src/k_tan.c, s_tan.c, e_rem_pio2.c, k_rem_pio2.c, e_atan2.c, s_atan.c and e_hypot.c. Copyright (C) 1993 by Sun Microsystems, Inc. Used under the fdlibm licence; see std/LICENSE-fdlibm.
+```
+
 ### `tests/json-suite/LICENSE-jsontestsuite`
 
 [JSONTestSuite](https://github.com/nst/JSONTestSuite)'s parsing corpus,
@@ -231,12 +271,15 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 | `bench/simd-s3a/mat-vec-scalar.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-checked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-unchecked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `std/math.ts` | fdlibm (FreeBSD msun) `k_tan.c` `__kernel_tan`, `s_tan.c` `tan`, `e_rem_pio2.c`'s Cody-Waite reduction (its refinement thresholds widened to 2^-15 and 2^-48 of the argument), `e_atan2.c` `__ieee754_atan2`, `s_atan.c` `atan`, `e_hypot.c` `__ieee754_hypot` and `k_rem_pio2.c`'s `ipio2` table; the integer Payne-Hanek reduction `tanLarge`, the double-double quotient in `atan2` and the rescale in `hypot` are not derived from it | fdlibm | `std/LICENSE-fdlibm` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |
 | `std/crypto/p256.ts` | fiat-crypto, `fiat-c/src/p256_32.c` (`mul`, `square`, `add`, `sub`, `nonzero`, `selectznz`, `set_one` and the `addcarryx`, `subborrowx`, `mulx` and `cmovznz` helpers) and `fiat-c/src/p256_scalar_32.c` (`mul`, `add`, `set_one`), as the `p256Fiat*` functions | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256FiatMul`, `p256FiatSquare`, `p256FiatScalarMul`, `p256FiatCmovznzU32` and helpers, for the assembly check | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `std/crypto/p256.ts` | libsecp256k1 v0.6.0, `src/modinv32_impl.h` (`secp256k1_modinv32_divsteps_30`, `_update_de_30`, `_update_fg_30`, `_normalize_30` and `secp256k1_modinv32`) and the signed-30 conversions of `src/scalar_8x32_impl.h`, as `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`, `p256Normalize30`, `p256ScalarInverse`, `p256ToSigned30` and `p256FromSigned30` | MIT | `std/crypto/LICENSE-libsecp256k1` |
 | `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256Divsteps30`, `p256UpdateDe30` and `p256UpdateFg30`, for the assembly check | MIT | `std/crypto/LICENSE-libsecp256k1` |
+| `std/json-tokenizer.ts` | fast_float `include/fast_float/decimal_to_binary.h` (`compute_float` and `compute_product_approximation` for binary64), as `jsonTokEiselLemire`, and `power_of_five_128`, as `jsonTokPowerOfFive`; the table is regenerated by `scripts/gen-json-pow5.mjs` | BSL-1.0 | `std/LICENSE-fast-float` |
+| `scripts/gen-json-pow5.mjs` | fast_float `script/table_generation.py`, written again with BigInt | BSL-1.0 | `std/LICENSE-fast-float` |
 | `tests/link/crypto_wycheproof/aes_gcm.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 213 cases with a 128- or 256-bit key and a 128-bit tag, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/ecdh_secp256r1.ts` | Wycheproof `testvectors_v1/ecdh_secp256r1_ecpoint_test.json` at `3fa63dd`: all 355 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all 484 cases and the 113 group keys of `ecdsa_secp256r1_sha256_test.json`, all 262 cases of `ecdsa_secp256r1_sha256_p1363_test.json`, all 554 cases and the 111 group keys of `ecdsa_secp256r1_sha512_test.json` and all 332 cases of `ecdsa_secp256r1_sha512_p1363_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
