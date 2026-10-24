@@ -63,6 +63,8 @@ change to the compiler is a change to `src/`.
 src/               the compiler, in Nish — see .claude/selfhost.md
   compile.ts        CLI: flags, output planning, exit codes, `nish run`
   cli-style.ts      `--help`: its text, colour and the agent's section
+                    `nish break` is undocumented on purpose: keep it out of
+                    docs/guide, llms.txt and docs/AI.md (compile.ts, `main`)
   run-cache.ts      `nish run`'s cache: entry location, key, hash
   compilation.ts    one program: load, check, emit, sidecars
   lexer.ts parser.ts nodes.ts validator.ts types.ts diagnostics.ts codes.ts
@@ -71,11 +73,6 @@ src/               the compiler, in Nish — see .claude/selfhost.md
   interop-*.ts      C header, wasm .d.ts, N-API shim
 std/                the standard library, in Nish — testing.ts, text.ts, json.ts,
                     std/README.md
-games/break/        the brick breaker `nish break` plays (compiled at play time,
-                    so src/ never imports nish:term). Undocumented on purpose:
-                    keep it out of docs/guide, llms.txt and docs/AI.md; the
-                    clues are the wall in cli-style.ts and the riddle in
-                    compile.ts. It ships in the npm, platform and tarball packages
 runtime/            runtime.c, runtime-os.c, runtime-parallel.c, runtime-host.c,
                     nish.h, nish.d.ts, runtime-wasm.c, shim.mjs
 bin/                the npm command: hands over to the prebuilt native compiler

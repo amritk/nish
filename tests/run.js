@@ -17742,14 +17742,14 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     agentForced.stdout === agentHelp.stdout,
     JSON.stringify(agentForced.stdout.slice(0, 200))
   )
-  // `nish break` is in no list of the help, on purpose: the help's last line,
-  // a wall with a brick knocked out, is the clue, and the near-miss words get
+  // `nish break` is in no list of the help, on purpose: the rule of bricks
+  // under the title, one knocked out, is its mark, and the near-miss words get
   // a riddle. Both run from a directory with no file of those names, since a
   // file named `break` there is compiled like any other.
-  const wall = help.stdout.trimEnd().split("\n").pop()
+  const wall = help.stdout.split("\n")[1]
   check(
-    "--help ends on the wall, whose caption names the hidden command",
-    wall.includes("▀▀▀▀") && wall.includes("break") && !help.stdout.includes("nish break"),
+    "--help: the rule under the title is a wall with one brick out, and names nothing",
+    /^▀▀▀▀( ▀▀▀▀)* {6}▀▀▀▀( ▀▀▀▀)*$/.test(wall) && !help.stdout.includes("break"),
     wall
   )
   const secretDir = path.join(wp12Dir, "secret")
@@ -17762,85 +17762,19 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     riddle.status === 1 && riddle.stderr.trim() === "no file named brick. every loop needs one, though.",
     riddle.stderr
   )
-  // The game itself needs a terminal, so this proves the command found the
-  // game in the package and compiled it, as far as its first check.
   const secret = inSecret(["break"])
   check(
-    "nish break, not on a terminal: compiles the game, which asks for one, exit 1",
-    secret.status === 1 && secret.stderr.includes("this one needs a real terminal"),
-    secret.stderr
+    "nish break, with no such file: the placeholder, exit 0",
+    secret.status === 0 && secret.stdout.startsWith("you found the wall.") && secret.stderr === "",
+    secret.stdout + secret.stderr
   )
-  // The game's rules have no terminal in them: a scripted player pauses,
-  // clears the wall without dropping a ball, and a still one loses all three.
-  const coreDir = path.join(wp12Dir, "break-core")
-  fs.mkdirSync(coreDir, { recursive: true })
-  const gameModule = path.relative(coreDir, path.join(root, "games", "break", "game"))
-  fs.writeFileSync(
-    path.join(coreDir, "main.ts"),
-    `import { Game, LOST, PAUSED, PLAYING, READY, WON } from "${gameModule}"
-
-export const main = (): i32 => {
-  const game = new Game(80, 40)
-  console.log(\`ready \${game.state === READY} standing \${game.standing} lives \${game.lives}\`)
-  game.launch()
-  game.pause()
-  const x: f64 = game.ballX
-  for (let i: i32 = 0; i < 100; i++) {
-    game.step()
-  }
-  console.log(\`paused \${game.state === PAUSED} still \${game.ballX === x}\`)
-  game.launch()
-  // Meet the ball off the paddle's centre, further each rally, so it goes everywhere.
-  let steps: i32 = 0
-  let rally: i32 = 0
-  let lastVy: f64 = game.vy
-  while (game.state === PLAYING && steps < 400000) {
-    if (lastVy > 0.0 && game.vy < 0.0) {
-      rally++
-    }
-    lastVy = game.vy
-    const offset: f64 = toF64((rally % 7) - 3) / 8.0 * toF64(game.paddleWidth)
-    game.paddleTarget = game.clampPaddle(game.ballX - toF64(game.paddleWidth) / 2.0 - offset)
-    game.step()
-    steps++
-  }
-  console.log(\`won \${game.state === WON} score \${game.score} standing \${game.standing} lives \${game.lives}\`)
-
-  const still = new Game(80, 40)
-  let serves: i32 = 0
-  while (still.state !== LOST && serves < 10) {
-    still.paddleTarget = 0.0
-    still.launch()
-    serves++
-    for (let i: i32 = 0; i < 20000 && still.state === PLAYING; i++) {
-      still.step()
-    }
-  }
-  console.log(\`lost \${still.state === LOST} lives \${still.lives} serves \${serves}\`)
-  still.launch()
-  console.log(\`again \${still.state === READY} standing \${still.standing} lives \${still.lives} score \${still.score}\`)
-  return 0
-}
-`
-  )
-  const core = spawnSync(NISH, ["run", path.join(coreDir, "main.ts")], {
-    cwd: coreDir,
-    encoding: "utf8",
-    env: { ...process.env, ...plainEnv },
-  })
+  fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")
+  const realFile = inSecret(["break", "-o", path.join(secretDir, "break.ll")])
+  const ownFile = inSecret(["break"])
   check(
-    "games/break: the rules pause, are won with every ball kept, are lost, and start again",
-    core.status === 0 &&
-      core.stdout ===
-        [
-          "ready true standing 60 lives 3",
-          "paused true still true",
-          "won true score 2100 standing 0 lives 3",
-          "lost true lives 0 serves 3",
-          "again true standing 60 lives 3 score 0",
-          "",
-        ].join("\n"),
-    core.stdout + core.stderr
+    "nish break, with a file named break: that file is compiled like any other",
+    realFile.status === 0 && fs.existsSync(path.join(secretDir, "break.ll")) && !ownFile.stdout.includes("wall"),
+    realFile.stderr + ownFile.stdout + ownFile.stderr
   )
   // An unknown flag is refused in one line that points at the help, and that
   // line is a diagnostic, so it is plain even when colour is forced.
@@ -20079,7 +20013,6 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       /^runtime\//,
       /^scripts\//,
       /^std\//,
-      /^games\//,
       /^README\.md$/,
       /^LICENSE$/,
       /^llms\.txt$/,

@@ -175,13 +175,15 @@ function usageRow(style: Style, first: boolean, shape: string, description: stri
 function helpText(style: Style, guide: string): string -> @helpText [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: guide
-  calls: Style.dim Style.heading Style.meta Style.name helpRow nish_alloc_struct nish_array_grow nish_str_concat usageRow wall
-  pointer style: size=2 writesThrough=false captured=false passedTo=Style.name#0 Style.dim#0 Style.dim#0 usageRow#0 usageRow#0 usageRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 Style.dim#0 Style.meta#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 Style.dim#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 wall#0
+  calls: Style.dim Style.heading Style.meta Style.name helpRow nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat usageRow wall
+  pointer style: size=2 writesThrough=false captured=false passedTo=Style.name#0 Style.dim#0 Style.dim#0 wall#0 usageRow#0 usageRow#0 usageRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 Style.dim#0 Style.meta#0 helpRow#0 helpRow#0 helpRow#0 Style.heading#0 Style.dim#0 Style.heading#0 helpRow#0 helpRow#0 helpRow#0 helpRow#0
   stackSites=1 stackLocals=1
   local +0:9 lines: string[] (const)
-  callee +2:8 Style.name -> @Style.name
-  callee +2:27 Style.dim -> @Style.dim
-  callee +2:50 Style.dim -> @Style.dim
+  local +1:9 tagline: string (const)
+  callee +2:17 Style.name -> @Style.name
+  callee +2:36 Style.dim -> @Style.dim
+  callee +2:59 Style.dim -> @Style.dim
+  callee +3:14 wall -> @wall
   callee +5:14 usageRow -> @usageRow
   callee +6:14 usageRow -> @usageRow
   callee +7:14 usageRow -> @usageRow
@@ -237,18 +239,15 @@ function helpText(style: Style, guide: string): string -> @helpText [exported]
   callee +79:14 helpRow -> @helpRow
   callee +80:14 helpRow -> @helpRow
   callee +81:14 helpRow -> @helpRow
-  callee +83:14 wall -> @wall
-function wall(style: Style): string -> @wall
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: Style.dim Style.paint nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat
-  pointer style: size=2 writesThrough=false captured=false passedTo=Style.paint#0 Style.dim#0
-  stackSites=3 stackLocals=3
-  local +0:9 rich: string[] (const)
-  local +10:9 basic: string[] (const)
-  local +11:9 bricks: string[] (const)
-  local +12:12 i: i32 (let)
-  callee +13:36 Style.paint -> @Style.paint
-  callee +15:37 Style.dim -> @Style.dim
+function wall(style: Style, width: i32): string -> @wall
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: Style.dim nish_alloc_struct nish_array_grow nish_panic_overflow
+  pointer style: size=2 writesThrough=false captured=false passedTo=Style.dim#0
+  stackSites=1 stackLocals=1
+  local +0:9 count: i32 (const)
+  local +1:9 bricks: string[] (const)
+  local +2:12 i: i32 (let)
+  callee +5:10 Style.dim -> @Style.dim
 function helpHint(): string -> @helpHint [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

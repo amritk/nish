@@ -27,7 +27,6 @@
     "!scripts/changelog-gen.test.mjs",
     "!scripts/sync-main.mjs",
     "std",
-    "games",
     "README.md",
     "LICENSE",
     "llms.txt",

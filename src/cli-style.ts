@@ -224,9 +224,9 @@ const usageRow = (style: Style, first: boolean, shape: string, description: stri
  */
 export const helpText = (style: Style, guide: string): string => {
   const lines: string[] = []
-  lines.push(
-    `${style.name(CLI)} ${style.dim(VERSION)}  ${style.dim("a static subset of TypeScript, compiled ahead of time")}`
-  )
+  const tagline = "a static subset of TypeScript, compiled ahead of time"
+  lines.push(`${style.name(CLI)} ${style.dim(VERSION)}  ${style.dim(tagline)}`)
+  lines.push(wall(style, CLI.length + VERSION.length + tagline.length + 3))
   lines.push("")
   lines.push(usageRow(style, true, "<file.ts> [more.ts ...] [flags]", "compile to LLVM IR"))
   lines.push(usageRow(style, false, "run [flags] <file.ts> [args ...]", "build, cache and run it"))
@@ -305,33 +305,22 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(helpRow(style, `${CLI} app.ts --link app`, "", "write app.ll and a binary, app"))
   lines.push(helpRow(style, `${CLI} --fix src/*.ts`, "", "rewrite what the compiler can fix"))
   lines.push(helpRow(style, `NO_COLOR=1 ${CLI} --help`, "", "this text, without colour"))
-  lines.push("")
-  lines.push(wall(style))
   return lines.join("\n")
 }
 
 /**
- * The help's last line: a row of bricks with one knocked out, and a caption
- * that names the command it hides. `nish break` is in no list above and in
- * no guide page (`src/compile.ts`, `main`), so this line is the way in.
+ * The rule under the help's title, as wide as the title: a course of bricks,
+ * dim like the other quiet text, with one knocked out. It is the only mark of
+ * `nish break` in the help (`src/compile.ts`, `main`), and it is meant to pass
+ * for decoration.
  */
-const wall = (style: Style): string => {
-  const rich: string[] = [
-    "38;5;204",
-    "38;5;209",
-    "38;5;221",
-    "38;5;113",
-    "38;5;81",
-    "38;5;141",
-    "38;5;204",
-    "38;5;209",
-  ]
-  const basic: string[] = ["31", "33", "33", "32", "36", "34", "35", "31"]
+const wall = (style: Style, width: i32): string => {
+  const count: i32 = ((width + 1) / 5) | 0
   const bricks: string[] = []
-  for (let i = 0; i < rich.length; i++) {
-    bricks.push(i === 5 ? "    " : style.paint("▀▀▀▀", rich[i], basic[i]))
+  for (let i: i32 = 0; i < count; i++) {
+    bricks.push(i === count - 4 ? "    " : "▀▀▀▀")
   }
-  return `  ${bricks.join(" ")}   ${style.dim("some walls are built to break")}`
+  return style.dim(bricks.join(" "))
 }
 
 /**

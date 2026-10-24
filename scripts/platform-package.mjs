@@ -82,8 +82,7 @@ const manifest = {
   // not. See docs/wp12-release.md and wp19 §5a.
   // `docs` carries `AI.md`, which `nish --help` names to a coding agent by its
   // absolute path, found under this package rather than the main one.
-  // `games` holds what `nish break` compiles, found under this root like `std`.
-  files: ["bin", "runtime", "scripts", "std", "games", "docs", "LICENSE", "INSTALL.md"],
+  files: ["bin", "runtime", "scripts", "std", "docs", "LICENSE", "INSTALL.md"],
   repository: main.repository,
   bugs: main.bugs,
   homepage: main.homepage,
