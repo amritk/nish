@@ -1158,7 +1158,7 @@ const bcryptMagic4 = (st: u32[], lr: u32[], dst: u8[], at: i32, l: u32, r: u32):
   for (let k: i32 = 0; k < 4; k++) {
     const to: i32 = 24 * k + at
     if (to < 0 || to + 7 >= toI32(dst.length)) {
-      return
+      continue
     }
     const l2: u32 = lr[2 * k]
     const r2: u32 = lr[2 * k + 1]
@@ -1342,7 +1342,8 @@ export const bcryptVerify4 = (
     if ((mask & (1 << k)) !== 0) {
       const parsed: Result<BcryptParsed, string> = bcryptParseHash(hashes[k])
       if (parsed.isErr()) {
-        return Err(`bcrypt: lane ${k}: ${parsed.error.substring(8)}`)
+        const why: string = parsed.error.startsWith("bcrypt: ") ? parsed.error.substring(8) : parsed.error
+        return Err(`bcrypt: lane ${k}: ${why}`)
       }
       lanes.push(parsed.value)
     } else {
