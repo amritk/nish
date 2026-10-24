@@ -38,6 +38,27 @@ stages:
       - id: core-goldens
         content: Regenerate tests/self/goldens/checked and register any new positive case with tests/differential/goldens.js — see Verification
         status: pending
+  - id: threads-wipe
+    title: fix(checker) — a std/threads task may call a function that wipes memory the task allocated
+    goal: Let a std/threads task call a function whose only write outside its own frame is a wipe of memory that call allocated, so bcrypt can run on a worker thread, while a wipe of shared or captured memory stays a shared write
+    verification: npm run check, npm run lint, node tests/run.js thread, node tests/run.js secret, node tests/run.js wasi, node tests/run.js performance, bash scripts/bootstrap.sh --verify and an undegraded npm test green; the new positive and negative cases pass natively and under Node
+    status: pending
+    todos:
+      - id: tw-diagnose
+        content: Reproduce the refusal with a minimal task that calls a function wiping a buffer it allocated, and find every reader of sharedWrite that refuses it — see Threads and wipes
+        status: pending
+      - id: tw-facts
+        content: Change markWipe in src/attributes.ts so a wipe whose target the function itself allocated is a local write, and a wipe through a parameter, field or capture keeps today's facts — see Threads and wipes
+        status: pending
+      - id: tw-tests
+        content: Add a positive case (a task calls a wiping function and the wipe still survives -O2) and negative cases (a task wiping a captured or shared buffer, a parameter, a holder field) — see Threads and wipes
+        status: pending
+      - id: tw-docs
+        content: Update the docs/LANGUAGE.md rule, docs/guide/using-nish/threads.md and docs/security/secret.md — see Threads and wipes
+        status: pending
+      - id: tw-goldens
+        content: Regenerate tests/self/goldens/checked and register the new positive case — see Verification
+        status: pending
   - id: bcrypt-batch
     title: perf(crypto) — hash and verify up to four bcrypt passwords at once, interleaved
     goal: Compute up to four independent bcrypt hashes in one call with their Blowfish encryptions interleaved, equal to the single path byte for byte, at parity with tigokraft's 4-way C
@@ -57,7 +78,7 @@ stages:
         content: Read tigokraft's licence; if it allows building it, add its src/bcrypt.c as a measured baseline (built from a fetched copy, nothing copied in), and measure the 4-way path against it — see Speed
         status: pending
       - id: batch-docs
-        content: Extend the security record, the std/README.md row and the guide page with the batch API and a 4-lane thread worker — see Docs
+        content: Extend the security record, the std/README.md row and the guide page with the batch API, and replace the guide's prefork workaround with the std/threads offload example (single and 4-lane) now that threads-wipe has landed — see Docs
         status: pending
       - id: batch-goldens
         content: Regenerate tests/self/goldens/checked and register any new positive case — see Verification
@@ -237,24 +258,53 @@ with `node tests/self/goldens.js --update` (`--seed build/seed/bin/nish`
 without `build/nish`) and register new positive `tests/cases/*` with
 `node tests/differential/goldens.js --update`, in the same commit.
 
+## Threads and wipes
+
+Added after sign-off (user decision, 2026-10-24, on PR #884's blocker 1).
+`markWipe` in `src/attributes.ts` sets `sharedWrite` for every `wipe`, so a
+`std/threads` task cannot call any function that wipes — bcrypt included,
+though everything it wipes is memory the call itself allocated. Change the
+facts so a wipe of a fresh allocation the function made (a `new Array`, a
+`secret(...)` of a fresh value, the state a hash builds) is a local write,
+and a wipe reached through a parameter, a field, a capture or a borrowed
+`Secret` keeps today's facts. The `wipe` itself stays one volatile
+`llvm.memset` no optimiser may remove, and the `-O2` wipe pin keeps passing.
+If the facts cannot tell the two apart soundly, stop (draft PR, blocker in
+the body) and say what the analysis needs. Do not weaken the shared-write
+rule for anything but this case.
+
 ## Stages
 
-The two stages share files, so they run **in sequence**: `bcrypt-batch` is
-spawned once `bcrypt-core` has merged, on the `main` that holds it.
+- `bcrypt-core` and `threads-wipe` run in parallel; their Owns are
+  disjoint apart from the generated goldens, which the second to merge
+  regenerates.
+- `bcrypt-batch` is spawned once both have merged, on the `main` that holds
+  them.
 
 ### bcrypt-core
 
 **Owns:** `std/crypto/bcrypt.ts`, `std/crypto/LICENSE-*` (new files only),
 `tests/link/crypto_bcrypt*/**`, `tests/cases/*bcrypt*`, `tests/wipes/**`,
 `tests/run.js`, `tests/differential/**`, `tests/self/goldens/checked/**`,
-`bench/crypto/bcrypt/**`, `bench/README.md`, `docs/security/**`,
-`std/README.md`, `docs/guide/using-nish/password-hashing.md`,
+`bench/crypto/bcrypt/**`, `bench/README.md`, `docs/security/**` except
+`docs/security/secret.md`, `std/README.md`,
+`docs/guide/using-nish/password-hashing.md`,
 `docs/guide/using-nish/standard-library.md`, `scalar.config.json`,
 `THIRD_PARTY_NOTICES.md`, `.github/workflows/ci.yml` (only to install a
-differential or bench dependency CI lacks)
+differential or bench dependency CI lacks); and, for the module's list
+entries only (user decision, 2026-10-24), `src/std-modules.ts` and
+`.github/workflows/release.yml`
+
+### threads-wipe
+
+**Owns:** `src/attributes.ts`, `src/parallel.ts`, `tests/cases/*wipe*thread*`,
+`tests/cases/*thread*wipe*`, `tests/link/thread_*wipe*/**`, `docs/LANGUAGE.md`,
+`docs/guide/using-nish/threads.md`, `docs/security/secret.md`, and the
+generated `tests/self/goldens/checked/**` and `tests/differential/**`
+registrations
 
 ### bcrypt-batch
 
-**Depends on:** `bcrypt-core` merged.
+**Depends on:** `bcrypt-core` and `threads-wipe` merged.
 
-**Owns:** the same globs as `bcrypt-core`.
+**Owns:** `bcrypt-core`'s globs, plus `docs/guide/using-nish/threads.md`.
