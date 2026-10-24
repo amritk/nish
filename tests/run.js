@@ -11579,11 +11579,20 @@ if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
     `exit ${differs.status}\n${differs.stdout}\n${differs.stderr}`
   )
   // And a hang on one side only is a difference, not the runner's limit: the
-  // reference never ends, and the default prints and exits.
+  // reference never ends, and the default prints and exits. The reference
+  // keeps printing, so where the kill cuts its output differs between its two
+  // runs, and still it is a difference rather than nondeterministic.
   fs.writeFileSync(path.join(pair, "default", "hangs.ts"), 'export const main = (): void => { console.log("a") }\n')
   fs.writeFileSync(
     path.join(pair, "reference", "hangs.ts"),
-    'export const main = (): void => { console.log("a"); while (true) {} }\n'
+    [
+      "export const main = (): void => {",
+      "  let i = 0",
+      "  let n = 0",
+      "  while (true) { i = i + 1; if (i === 20000000) { i = 0; n = n + 1; console.log(`${n}`) } }",
+      "}",
+      "",
+    ].join("\n")
   )
   const hangs = soundness(["--corpus", path.join(pair, "default"), "--only", "hangs", "--run-timeout", "2", "--compiler", swap])
   check(
