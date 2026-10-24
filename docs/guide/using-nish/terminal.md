@@ -128,8 +128,7 @@ hides the cursor and asks the terminal what it can do (below). Then it turns
 on what the options ask for and the terminal has: the kitty keyboard protocol,
 mouse reports, bracketed paste and focus reports. Before each of those reaches
 the terminal, the bytes that undo everything so far are handed to the runtime
-([`setTerminalRestore`](#leaving-the-screen-as-you-found-it)), in reverse
-order. So a panic in `render`, a Ctrl-C, or a `kill` leaves the terminal as it
+([`setTerminalRestore`](#leaving-the-screen-as-you-found-it)). So a panic in `render`, a Ctrl-C, or a `kill` leaves the terminal as it
 was, with the cursor back and the screen you started from.
 
 ## What it detects, and what it falls back to

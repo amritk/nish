@@ -1941,10 +1941,11 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
       // A terminal that answers nothing: the probe gives up after 250 ms and
       // the first frame follows, with CI's slack; a missing timeout hangs.
       const silent = await relay(probeExe, "", { dir: at("probe-silent"), reply: null, timeoutMs: 20000 })
-      const [r, noColor, fps] = await Promise.all([
+      const [r, noColor, fps, fpsCapped] = await Promise.all([
         relay(probeExe, "", { dir: at("probe"), timeoutMs: 20000 }),
         relay(probeExe, "", { dir: at("probe-no-color"), env: { NO_COLOR: "1" }, timeoutMs: 20000 }),
         relay(probeExe, "", { dir: at("probe-fps"), env: { NISH_TERM_FPS: "20" }, timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-fps-capped"), env: { NISH_TERM_FPS: "500" }, timeoutMs: 20000 }),
       ])
       const stats = (run, backend = "\\w+") =>
         run.out.split("\n").filter((l) => new RegExp(`^\\ds frames \\d+ tier \\d+ backend ${backend} `).test(l))
@@ -1986,6 +1987,15 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
           fpsLines.every((l) => / tier 20 /.test(l)),
         `${said(fps)}\nstats lines ${JSON.stringify(fpsLines)}`
       )
+      const cappedLines = stats(fpsCapped)
+      check(
+        "term-io: examples/term-probe.ts under NISH_TERM_FPS=500 holds the 240 cap and reports it in the override",
+        fpsCapped.status === 0 &&
+          /^overrides .*NISH_TERM_FPS=500: 240 frames a second/m.test(fpsCapped.out) &&
+          cappedLines.length === 5 &&
+          cappedLines.every((l) => / tier 240 /.test(l)),
+        `${said(fpsCapped)}\nstats lines ${JSON.stringify(cappedLines)}`
+      )
     }
     if (loopExe !== null) {
       const panic = await relay(loopExe, "panic", { dir: at("panic") })
@@ -1993,7 +2003,7 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
         "\x18\x1b[?2026l\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b[<u\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l"
       const afterPanic = panic.out.slice(panic.out.lastIndexOf("<panic>") + "<panic>".length)
       check(
-        "term-io: a panic in the tenth render leaves the restore string as the last bytes, in reverse of turning on, and the termios as it was",
+        "term-io: a panic in the tenth render leaves the restore string as the last bytes and the termios as it was",
         panic.status === 1 &&
           panic.err.includes("index out of range: 10 >= 3") &&
           panic.out.includes("<panic>") &&
@@ -2015,7 +2025,7 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
         const r = await relay(loopExe, "panic-mouse", { dir: at(`panic-mouse-${when.replaceAll(" ", "-")}`), ...options })
         const after = r.out.slice(r.out.lastIndexOf("<panic>") + "<panic>".length)
         check(
-          `term-io: a panic with mouse and focus reports on, the cell size answered ${when}, restores them off in reverse`,
+          `term-io: a panic with mouse and focus reports on, the cell size answered ${when}, turns them off`,
           r.status === 1 && r.out.includes("<panic>") && after === mouseRestore && r.sameStty,
           `${said(r)}\nafter <panic>: ${JSON.stringify(after)}\nwant: ${JSON.stringify(mouseRestore)}`
         )
