@@ -72,7 +72,7 @@ stages:
       - id: px-framebuffer
         content: Add Framebuffer, fitFramebuffer (letterboxed rect in cells and pixels) and nearest-neighbour scaling at a downgrade factor to std/term-pixels.ts — see Pixels and base64
       - id: px-kitty
-        content: Encode kitty graphics with one reused image id, 4096-byte base64 chunks, deletion of the previous frame and a transfer seam for shm and zlib — see Pixels and base64
+        content: Encode kitty graphics with one reused image id retransmitted in place (no per-frame delete), 4096-byte base64 chunks and a transfer seam for shm and zlib — see Pixels and base64 and Decided during the run
       - id: px-sixel
         content: Encode Sixel with the fixed 6x7x6 palette and optional ordered dithering — see Pixels and base64
       - id: px-cells
@@ -85,7 +85,7 @@ stages:
     verification: npm run check && npm run lint && npm run lint:dead && node docs/check-links.mjs && node tests/run.js term && node tests/run.js std_term && npm test
     todos:
       - id: io-open-close
-        content: Implement openTerminal and close in std/term-io.ts, refusing a non-terminal, keeping setTerminalRestore current and undoing in reverse — see Terminal I/O
+        content: Implement openTerminal and close in std/term-io.ts, refusing a non-terminal, keeping setTerminalRestore current and undoing every mode on close — see Terminal I/O
       - id: io-present
         content: Implement present choosing the backend from TermCaps and the controller, with synchronized output and the ack query after each frame — see Terminal I/O
       - id: io-run
@@ -279,6 +279,47 @@ export class RateController {
   - `term-probe` for bug reports.
 
   Also update `std/README.md` rows for all six modules and the standard-library guide's `nish/term` section.
+
+## Decided during the run
+
+The stages shipped as #876, #877, #903, #906, #911 and #920, with two follow-ups: #925, the term-rate estimator, and #928, which closed the acceptance gaps. Review changed these interfaces and behaviours from the sketches above, and the merged code is authoritative:
+
+- **KeyState**:
+  - `isDown(key, code)` takes the code as well as the key.
+  - Synthetic releases follow an acknowledgement watermark. `delivered(sentAtMs)` records the send time of the last answered frame, and `watermarked` and `deliveredAgoMs(nowMs)` expose it.
+  - A key is released when the watermark passes its press by the release gap, with a wall-clock fallback. term-io clears `watermarked` 1000 ms after the last acknowledgement *arrived*.
+- **Probe**:
+  - The probe takes its environment explicitly: `probeQueries(env)` and `new TermProbe(env, cols, rows, sentAtMs)`.
+  - `TermProbe.finish(nowMs)` releases keys held during the probe; `timedOut` calls it as well.
+  - Under tmux or screen the probe ends on the multiplexer's own DA1. Replies forwarded through passthrough after it arrive late, are swallowed, and still teach the cell size. This is a design limit, documented in the guide.
+- **kitty graphics**:
+  - Each frame is retransmitted in place under the same image id (`p=1`), with no delete before it.
+  - Deleting first blanked the image between frames (#911 review), so criterion 9's "deletes the previous frame" is replaced by "replaces it atomically".
+  - `kittyDelete(imageId)` runs only on close and in the restore string. Image ids must be at least 1.
+- **Pixels**: encoder scratch lives on the caller's `PixelBytes` and grows by doubling. Nothing is allocated per frame, and the term-pixels memory tests pin this where `Arena.used()` can see it.
+- **Refresh controller**:
+  - The measurement is end to end. The send time is taken before the blocking write, so the round trip covers the whole transmission. A frame's cost is update, render and encode, without the write.
+  - Bandwidth and latency are measured apart (#925):
+    - Two idle-link trips of different sizes, or an answer that waited, measure bandwidth.
+    - Latency is the least of the round trip less the bytes' time over the last 16 trips, seeded by the probe.
+    - With equal frames and no probe, bandwidth is unknown and the round-trip load decides alone.
+    - Samples stop counting for decisions 5 s after the last one.
+  - The trace-2 SSH case settling at 5 fps under `RATE_FIRST` is correct: the link is latency-bound.
+- **term-io**:
+  - Every terminal reply stays inside term-io, for `runTerminal` and `readEvents` alike. Only frame acknowledgements reach the controller.
+  - A program that needs an answer to its own query asks before open or after close.
+  - `close()` drains the acknowledgements still in flight, in raw mode, for at most 500 ms, so none echoes into the shell.
+  - Restore order is the enable order (kitty keyboard, mouse, paste, focus), not its reverse.
+  - Without true colour, cells use the 256-colour palette, even under `NO_COLOR` or `TERM=linux`. Only the ASCII backend's shading drops to 16 colours.
+  - `NISH_TERM_FPS` is recorded in `TermCaps.overrides` when it takes effect.
+- **Tests that could not fail** were the recurring review finding:
+  - `Arena.used()` sees only the newest chunk;
+  - a throttle relay never let `write()` block;
+  - an unacknowledged-frame bound sat above the real limit;
+  - a forced backend was never checked;
+  - a peak bandwidth was asserted instead of the final estimate.
+  
+  Each was re-pinned and shown red against a deliberate break.
 
 ## Out of scope
 
