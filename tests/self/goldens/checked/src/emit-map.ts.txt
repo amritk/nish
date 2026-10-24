@@ -283,7 +283,7 @@ function compress(emitter: Emitter, slots: string[], m: string, rounds: i32): vo
   callee +5:3 IRFunction.emit -> @IRFunction.emit
   callee +5:24 IRFunction.emitValue -> @IRFunction.emitValue
 function sipRounds(emitter: Emitter, slots: string[], rounds: i32): string[] -> @sipRounds
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.alignSuffix IRFunction.emit IRFunction.emitValue nish_panic_index nish_str_concat rotl
   pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.alignSuffix#0 rotl#0 rotl#0 rotl#0 rotl#0 rotl#0 rotl#0

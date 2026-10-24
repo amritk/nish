@@ -123,6 +123,7 @@ cases/ffi_string_return ffi  # refused: NL4010 under --emit-ts
 cases/io_nish_import numbers  # differ: stdout line 2 differs
 cases/io_nish_rename numbers  # differ: stdout line 1 differs
 cases/map_fingerprint_miss ffi  # refused: NL4010 under --emit-ts
+cases/map_hash_collide ffi  # refused: NL4010 under --emit-ts
 cases/mem_arena_builtins numbers  # differ: stdout line 2 differs
 cases/mem_join_parts_same_pass numbers  # differ: stdout line 1 differs
 cases/mem_join_parts_scope numbers  # differ: stdout line 1 differs
