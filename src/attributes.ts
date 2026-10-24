@@ -5225,8 +5225,8 @@ const PAST_ELSEWHERE: i32 = 2
 
 /**
  * The past write the call along `edge` makes its caller when the callee
- * writes below its parameters (`writesElsewhere` clear): none when not below
- * the one it is handed (its `writesDeep`), none for an object
+ * writes below its parameters (`writesElsewhere` clear): none when it writes
+ * nothing through the one it is handed, none for an object
  * of the caller's own whose memory below it no parameter reaches, below the
  * caller's parameter for memory rooted at one, and anywhere otherwise. A
  * private array is taken as anywhere, as it was before the distinction.
@@ -5235,10 +5235,14 @@ const pastBelow = (facts: FactsTable, f: FunctionFacts, edge: ArgEdge): i32 => {
   const g = facts.get(edge.callee)
   // A table's receiver, taken whole (`wholeReaches`), is its `this`.
   const index = edge.index < 0 ? 0 : edge.index
-  // Every write below a parameter marks it `writesDeep`, so a callee writes
-  // below the one it is handed only when that one is.
+  // Every write to or below a parameter marks it `writesReach` (an escape,
+  // `writesThrough`), so a callee writes below the one it is handed only when
+  // that one is marked.
   const target: PointerParamFacts | null = g === null ? null : g.pointerParamAt(index)
-  if (g === null || !g.writesPastParams || g.writesElsewhere || target === null || !target.writesDeep) {
+  if (g === null || !g.writesPastParams || g.writesElsewhere || target === null) {
+    return PAST_NONE
+  }
+  if (!target.writesReach && !target.writesThrough) {
     return PAST_NONE
   }
   if (edge.owner !== null) {
@@ -5362,11 +5366,6 @@ const composeArguments = (facts: FactsTable, f: FunctionFacts): boolean => {
     }
     const past = pastBelow(facts, f, edge)
     if (past !== PAST_NONE && markPastWrite(f, past === PAST_ELSEWHERE)) {
-      changed = true
-    }
-    // Below the receiver is below the caller's parameter: `pastBelow` reads
-    // that parameter's `writesDeep`.
-    if (past === PAST_BELOW && callWrites(f, edge, true)) {
       changed = true
     }
   }

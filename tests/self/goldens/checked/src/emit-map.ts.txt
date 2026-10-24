@@ -431,7 +431,8 @@ function sameKeyOf(emitter: Emitter, key: i32, a: string, b: string): string -> 
   callee +12:10 IRFunction.emitValue -> @IRFunction.emitValue
   callee +12:34 Emitter.llvm -> @Emitter.llvm
 function libraryReach(emitter: Emitter, library: CheckedProgram): FunctionSig[] -> @libraryReach [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via noteCallees
   calls: FunctionSig.definedIn StringSet.add StringSet.constructor StringSet.has mapIntrinsicOf nish_array_grow noteCallees
   pointer emitter: size=272 writesThrough=false captured=false
   pointer library: size=656 writesThrough=false captured=false

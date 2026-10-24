@@ -159,7 +159,7 @@ function perLookup(total: i64): string -> @perLookup
   local +0:9 tenths: i64 (const)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via nish_monotonic_nanos
+  sharedWrite: via nish.Router.match
   calls: LinearTable.add LinearTable.constructor TARGETS fold linearMatch linearRun linearRunCopy median nish.Router.add nish.Router.constructor nish.Router.match nish.Router.nodeCount nish.httpFieldBytes nish_arena_mark nish_arena_release nish_array_grow nish_monotonic_nanos nish_panic nish_panic_div nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_index_of nish_str_index_of_from nish_str_new perLookup routeTable routerRun
   stackSites=9 stackLocals=8
   local +0:9 rows: string[] (const)

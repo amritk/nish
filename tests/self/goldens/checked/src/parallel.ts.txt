@@ -3209,7 +3209,8 @@ function channelUseMessage(what: string): string -> @channelUseMessage
   calls: nish_str_concat
   stackSites=0 stackLocals=0
 function channelArrowMessage(program: CheckedProgram, table: TypeTable, sig: FunctionSig, arrow: Node, parents: Node[], channel: i32): string -> @channelArrowMessage
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via hoistedArrow
   escaping: channel
   calls: freshName hoistedArrow hoistedName nish_str_concat
   pointer program: size=656 writesThrough=false captured=false passedTo=hoistedName#0 hoistedArrow#0

@@ -2910,9 +2910,9 @@ function pastBelow(facts: FactsTable, f: FunctionFacts, edge: ArgEdge): i32 -> @
   local +0:9 g: FunctionFacts | null (const)
   callee +0:13 FactsTable.get -> @FactsTable.get
   local +2:9 index: i32 (const)
-  local +5:9 target: PointerParamFacts | null (const)
-  callee +5:64 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
-  callee +13:12 reachesForeign -> @reachesForeign
+  local +6:9 target: PointerParamFacts | null (const)
+  callee +6:64 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
+  callee +17:12 reachesForeign -> @reachesForeign
 function edgeWrites(facts: FactsTable, edge: ArgEdge): boolean -> @edgeWrites
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: ArgEdge.isPrivate FactsTable.get writesArgument
@@ -2964,7 +2964,7 @@ function composeArguments(facts: FactsTable, f: FunctionFacts): boolean -> @comp
   sharedWrite: +0:9
   calls: FactsTable.get FunctionFacts.pointerParam FunctionFacts.pointerParamAt callWrites edgeWrites keepsArgument keepsOwn markPastWrite markPath nish_panic_index pastBelow polluteName pollutePath reachesForeign settleDirt valueClean
   pointer facts: size=24 writesThrough=false captured=false passedTo=settleDirt#0 FactsTable.get#0 pastBelow#0 valueClean#0 keepsOwn#0 pastBelow#0 FactsTable.get#0 FactsTable.get#0 edgeWrites#0
-  pointer f: size=408 writesThrough=true captured=false passedTo=settleDirt#1 markPath#0 reachesForeign#0 markPastWrite#0 callWrites#0 pastBelow#1 markPastWrite#0 callWrites#0 valueClean#1 polluteName#0 keepsOwn#1 pastBelow#1 markPastWrite#0 callWrites#0 pollutePath#0 markPastWrite#0 reachesForeign#0 markPastWrite#0 FunctionFacts.pointerParam#0 markPastWrite#0
+  pointer f: size=408 writesThrough=true captured=false passedTo=settleDirt#1 markPath#0 reachesForeign#0 markPastWrite#0 callWrites#0 pastBelow#1 markPastWrite#0 valueClean#1 polluteName#0 keepsOwn#1 pastBelow#1 markPastWrite#0 callWrites#0 pollutePath#0 markPastWrite#0 reachesForeign#0 markPastWrite#0 FunctionFacts.pointerParam#0 markPastWrite#0
   stackSites=0 stackLocals=0
   local -16:7 changed: boolean (let)
   local -15:14 d: DirtMark (const)
@@ -2985,34 +2985,33 @@ function composeArguments(facts: FactsTable, f: FunctionFacts): boolean -> @comp
   local +15:11 past: i32 (const)
   callee +15:18 pastBelow -> @pastBelow
   callee +16:31 markPastWrite -> @markPastWrite
-  callee +21:32 callWrites -> @callWrites
-  local +25:14 store: ParamStore (const)
-  callee +26:10 valueClean -> @valueClean
-  callee +26:47 polluteName -> @polluteName
-  local +30:14 edge: ArgEdge (const)
-  callee +31:9 keepsOwn -> @keepsOwn
-  local +34:11 past: i32 (const)
-  callee +34:18 pastBelow -> @pastBelow
-  callee +35:31 markPastWrite -> @markPastWrite
-  local +39:14 edge: ArgEdge (const)
-  local +41:11 g: FunctionFacts | null (const)
-  callee +41:15 FactsTable.get -> @FactsTable.get
-  local +42:11 target: PointerParamFacts | null (const)
-  callee +42:66 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
-  local +43:11 reached: boolean (const)
-  callee +44:20 callWrites -> @callWrites
-  callee +50:7 pollutePath -> @pollutePath
-  local +54:11 owner: PrivateArray | null (const)
-  callee +55:42 keepsArgument -> @keepsArgument
-  callee +55:56 FactsTable.get -> @FactsTable.get
-  callee +58:34 markPastWrite -> @markPastWrite
-  callee +62:10 edgeWrites -> @edgeWrites
-  local +74:13 deep: boolean (const)
-  callee +75:11 reachesForeign -> @reachesForeign
-  callee +75:71 markPastWrite -> @markPastWrite
-  local +80:11 pointer: PointerParamFacts | null (const)
-  callee +80:71 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
-  callee +82:11 markPastWrite -> @markPastWrite
+  local +20:14 store: ParamStore (const)
+  callee +21:10 valueClean -> @valueClean
+  callee +21:47 polluteName -> @polluteName
+  local +25:14 edge: ArgEdge (const)
+  callee +26:9 keepsOwn -> @keepsOwn
+  local +29:11 past: i32 (const)
+  callee +29:18 pastBelow -> @pastBelow
+  callee +30:31 markPastWrite -> @markPastWrite
+  local +34:14 edge: ArgEdge (const)
+  local +36:11 g: FunctionFacts | null (const)
+  callee +36:15 FactsTable.get -> @FactsTable.get
+  local +37:11 target: PointerParamFacts | null (const)
+  callee +37:66 FunctionFacts.pointerParamAt -> @FunctionFacts.pointerParamAt
+  local +38:11 reached: boolean (const)
+  callee +39:20 callWrites -> @callWrites
+  callee +45:7 pollutePath -> @pollutePath
+  local +49:11 owner: PrivateArray | null (const)
+  callee +50:42 keepsArgument -> @keepsArgument
+  callee +50:56 FactsTable.get -> @FactsTable.get
+  callee +53:34 markPastWrite -> @markPastWrite
+  callee +57:10 edgeWrites -> @edgeWrites
+  local +69:13 deep: boolean (const)
+  callee +70:11 reachesForeign -> @reachesForeign
+  callee +70:71 markPastWrite -> @markPastWrite
+  local +75:11 pointer: PointerParamFacts | null (const)
+  callee +75:71 FunctionFacts.pointerParam -> @FunctionFacts.pointerParam
+  callee +77:11 markPastWrite -> @markPastWrite
 function writesAnArgument(facts: FactsTable, f: FunctionFacts, callee: string): boolean -> @writesAnArgument
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: callee
