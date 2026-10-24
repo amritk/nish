@@ -143,6 +143,68 @@ A finding is any of these, reachable through a runtime entry point:
 | `waitpid` is not interrupted into leaving a child behind | the only handler the runtime installs is `SA_RESTART` | by reading; nothing automated |
 | Every runtime unit stays inside its `.text*` ceiling | measured after #387: `runtime.c` 3,583 / 3,584 (3,708 / 3,840 threaded), `runtime-os.c` 1,530 / 1,536, `runtime-host.c` 764 / 768, `runtime-net.c` 2,087 / 2,304, `runtime-parallel.c` 286 / 320 (905 / 1,024 threaded); after WP34 N12 (RT-19), `runtime-os.c` 2,383 / 2,560 and `runtime-parallel.c` threaded 2,522 / 2,560 | the budget checks in `tests/run.js` |
 
+## Static analysis
+
+`.github/workflows/codeql.yml` runs CodeQL's `security-and-quality` suite over
+`runtime/*.c` on every change to `runtime/`, and weekly so a new query pack is
+picked up without one. Each translation unit is compiled by itself, the way
+`scripts/build.sh` compiles it beside a program; `runtime-wasm.c` is compiled
+for `wasm32`, freestanding. Its actions are pinned to commits. The first run,
+on `804120e` with CodeQL 2.23.3, raised four alerts and no defect:
+
+| Rule | Where (`804120e`) | Triage |
+| --- | --- | --- |
+| `cpp/overflow-buffer` (9.3) | `runtime.c:194`, `nish_free_arena` | False positive. `memset(&nish_arena, 0, sizeof nish_arena)` clears the object by its own size. `struct nish_arena` is defined twice, in `runtime.c` (64-bit pointers) and `runtime-wasm.c` (32-bit), and the one database holds both; the alert pairs this unit's 32-byte `sizeof` with the other unit's layout. The two never link together. |
+| `cpp/path-injection` (7.5) | `runtime-os.c:396`, `nish_cgroup_cpus` | Not a defect. The path is the `0::` line of `/proc/self/cgroup`, which the kernel writes, under `/sys/fs/cgroup`. Whoever can rename this process's cgroup already controls the process. The copy is bounded (`len > sizeof path - 24` returns early), the file is opened read-only, and only a leading number is parsed from it. |
+| `cpp/implicit-function-declaration` ×2 | `runtime-wasm.c:55`, `:61` | False positive. `__builtin_wasm_memory_size` and `__builtin_wasm_memory_grow` are clang builtins for `wasm32`, which CodeQL's extractor does not know. |
+
+A new alert is triaged the same way: fixed with a before/after test and given
+an RT id, or added here with the reason it is not a defect.
+
+## Design: a debug arena that traps a stale reference
+
+*Not built. Recorded so the work can be picked up as one change; it touches
+`scripts/build.sh`, which the binary-hardening work also changes.*
+
+**The hazard.** `nish_arena_release` and `nish_reset_arena` (`runtime/runtime.c`)
+free every chunk newer than the mark with `free`, and rewind `off` inside the
+chunk the mark is in. A value bumped after the mark and still referenced after
+the release (the checker's escape rules are meant to make that impossible, and
+`nish_arena_keep` is the one sanctioned way out) reads memory that the next
+allocation reuses: freed chunks go back to `malloc`, the rewound part of the
+kept chunk to the next bump. Nothing traps; the program reads whatever was
+written there next. That is the use-after-free a compiler bug in the escape
+analysis would turn into, and today only review and the arena tests stand
+against it.
+
+**The mode.** A `--debug-arena` flag (on `nish build`, `nish run` and `--link`)
+links a runtime compiled with `-DNISH_ARENA_DEBUG`, and changes nothing in the
+IR. Under it:
+
+- `nish_arena_grow` maps each chunk with `mmap`, page-aligned, its header on a
+  page of its own, instead of `malloc`.
+- A release or reset never returns memory for reuse. The whole pages past the
+  mark, in the mark's chunk and in every newer chunk, are `mprotect`ed to
+  `PROT_NONE` and kept mapped; the partial page holding the mark is filled
+  with a poison byte (`0xDB`) from the mark to its end. `cap` is cut to the
+  mark, so the next allocation grows a fresh chunk rather than bumping into the
+  poisoned page.
+- A stale read of a whole freed page traps with SIGSEGV at the read; a read of
+  the poisoned tail reads `0xDB` bytes, which the arena tests can assert.
+- The runtime's SIGSEGV path names the arena when the fault address lies in a
+  protected chunk, so a failure reads as a stale arena reference, not a crash.
+
+Memory only grows under the mode, which is the cost of never reusing an
+address; it is for tests and fuzzing, never for a release build.
+
+**What it needs.** The flag in `src/compile.ts` and its `--help` line; a
+`debug-arena` runtime variant in `scripts/build.sh` and in the runtime cache's
+key, so a cached normal runtime is never linked under it; a `docs/LANGUAGE.md`
+rule and a guide page for the flag; the arena tests (`tests/cases/arena_*` and the
+runtime's arena checks in `tests/run.js`) run once more under it; and a negative test, a C
+harness that keeps a pointer across `nish_arena_release` and must die with
+SIGSEGV. The fuzzers would then run under it.
+
 ## Doc corrections for the security-policy stage
 
 - `docs/LANGUAGE.md`, the file builtins:
