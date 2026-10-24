@@ -186,7 +186,8 @@ void nish_panic_claim(void);
 #endif
 /* How a panic that skips atexit ends: `_exit(1)`, after `nish_fatal_hook`
    when it is set (runtime.c). The hook is the terminal's restore while
-   `setRawMode(true)` holds (runtime-term.c), and null otherwise. */
+   `setRawMode(true)` holds (runtime-term.c), and null otherwise. Under
+   `-DNISH_FUZZ_ABORT` (scripts/fuzz.sh) it and `nish_panic` call `abort()`. */
 __attribute__((noreturn)) void nish_fatal_exit(void);
 extern void (*nish_fatal_hook)(void);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */

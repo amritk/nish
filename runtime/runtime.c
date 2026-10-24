@@ -121,12 +121,18 @@ static inline void nish_panic_claim(void) {}
    and without it a failed bounds check would leave the shell in raw mode. Each
    panic path calls this where it called `_exit(1)`, so a call site costs no
    more than it did; `exit(1)` paths need nothing, since the restore is also an
-   atexit handler. */
+   atexit handler. Built with `-DNISH_FUZZ_ABORT` (scripts/fuzz.sh), this and
+   `nish_panic` end in `abort()` instead, so libFuzzer records a panic, a failed
+   bounds or division check and an out-of-memory as a crash; the default build
+   compiles neither. */
 __attribute__((noreturn)) void nish_fatal_exit(void);
 void (*nish_fatal_hook)(void);
 void nish_fatal_exit(void) {
   void (*hook)(void) = __atomic_load_n(&nish_fatal_hook, __ATOMIC_ACQUIRE);
   if (hook) hook();
+#ifdef NISH_FUZZ_ABORT
+  abort();
+#endif
   _exit(1);
 }
 
@@ -363,6 +369,9 @@ void nish_print(const nish_str *s) { nish_write(s, 1, 1); }
 __attribute__((noreturn)) void nish_panic(const nish_str *s) {
   nish_panic_claim();
   nish_write(s, 2, 1);
+#ifdef NISH_FUZZ_ABORT
+  abort();
+#endif
   exit(1);
 }
 
