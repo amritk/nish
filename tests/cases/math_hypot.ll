@@ -77,6 +77,39 @@ entry:
   %46 = call i8* @nish_str_from_f64(double %45)
   %47 = call i8* @nish_str_concat(i8* %43, i8* %46)
   call void @nish_print(i8* %47)
+  %48 = load double, double* %zero.addr, align 8
+  %49 = call double @hyp(double 0x3FF0000000000001, double %48)
+  %50 = call i8* @nish_str_from_f64(double %49)
+  %51 = call i8* @nish_str_concat(i8* %50, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %52 = load double, double* %zero.addr, align 8
+  %53 = fneg double %52
+  %54 = call double @hyp(double %53, double 0x400921FB54442D18)
+  %55 = call i8* @nish_str_from_f64(double %54)
+  %56 = call i8* @nish_str_concat(i8* %51, i8* %55)
+  %57 = call i8* @nish_str_concat(i8* %56, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %58 = fneg double 0x54B249AD2594C37E
+  %59 = load double, double* %zero.addr, align 8
+  %60 = call double @hyp(double %58, double %59)
+  %61 = call i8* @nish_str_from_f64(double %60)
+  %62 = call i8* @nish_str_concat(i8* %57, i8* %61)
+  %63 = call i8* @nish_str_concat(i8* %62, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %64 = load double, double* %zero.addr, align 8
+  %65 = fneg double %64
+  %66 = call double @hyp(double 0x3FF2F3C576878C85, double %65)
+  %67 = call i8* @nish_str_from_f64(double %66)
+  %68 = call i8* @nish_str_concat(i8* %63, i8* %67)
+  %69 = call i8* @nish_str_concat(i8* %68, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %70 = load double, double* %zero.addr, align 8
+  %71 = fneg double 0x3FF88BF79AB3E260
+  %72 = call double @hyp(double %70, double %71)
+  %73 = call i8* @nish_str_from_f64(double %72)
+  %74 = call i8* @nish_str_concat(i8* %69, i8* %73)
+  %75 = call i8* @nish_str_concat(i8* %74, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %76 = load double, double* %zero.addr, align 8
+  %77 = call double @hyp(double 0x22E6F24809282838, double %76)
+  %78 = call i8* @nish_str_from_f64(double %77)
+  %79 = call i8* @nish_str_concat(i8* %75, i8* %78)
+  call void @nish_print(i8* %79)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }
