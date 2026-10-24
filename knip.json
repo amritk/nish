@@ -6,6 +6,7 @@
     "std/*.ts",
     "tests/nish/*.ts",
     "tests/self/*.ts",
+    "tests/fuzz/targets/*.ts",
     "tests/**/*.{js,mjs}",
     "scripts/**/*.{js,mjs}",
     "bin/*.js",

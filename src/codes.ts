@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 709
+export const RULE_COUNT: i32 = 713
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -119,6 +119,8 @@ const diagnosticRules = (): string[] => [
   "NL2472",
   "`, which is no module of this program: an entry is the path of a module the program compiles, relative to the `package.json` that lists it, and one that names nothing would leave the module it meant outside the scope without a word",
   "NL3031",
+  "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type",
+  "NL4013",
   "` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, would outlive the block that holds the lock",
   "NL2467",
   "`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination",
@@ -275,6 +277,8 @@ const diagnosticRules = (): string[] => [
   "NL2449",
   "` that can reach the end of its block neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2441",
+  "` is not a gated capability: a dependency is granted only `ffi`, `net`, `process.spawn` and `unsafe`, and reaches every other capability without a grant",
+  "NL3042",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
   "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",
@@ -369,6 +373,8 @@ const diagnosticRules = (): string[] => [
   "NL2446",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
   "NL2010",
+  ".capabilities.dependencies` is an object that names each dependency once, with an array of the capabilities granted it",
+  "NL3041",
   ", which can only initialise a `const`, be the left operand of `??`, or be compared with `undefined` by `===` or `!==`",
   "NL2369",
   "` cannot declare `static readonly json`: a handle is never serialised, and its options would name the pointer it owns",
@@ -727,6 +733,8 @@ const diagnosticRules = (): string[] => [
   "NL2001",
   ", and a declared C function returns a scalar or `CPtr` only",
   "NL2321",
+  "`, which the root package does not grant it; grant it with ",
+  "NL2576",
   "A union needs two different variants: this one names only `",
   "NL2527",
   "` cannot declare methods (interfaces describe layout only)",

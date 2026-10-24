@@ -23,13 +23,13 @@ function FixOutcome.constructor(this: FixOutcome, compilation: Compilation, load
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: checked compilation loaded
   pointer this: size=16 writesThrough=true captured=false
-  pointer compilation: size=128 writesThrough=true captured=true
+  pointer compilation: size=144 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function loadRoots(compilation: Compilation, roots: string[], keepGoing: boolean): boolean -> @loadRoots [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.load
   calls: Compilation.load
-  pointer compilation: size=128 writesThrough=true captured=false passedTo=Compilation.load#0
+  pointer compilation: size=144 writesThrough=true captured=false passedTo=Compilation.load#0
   pointer roots: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 loaded: boolean (let)

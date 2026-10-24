@@ -8440,6 +8440,17 @@ export const main = (): i32 => {
   copied into the table rather than shared:
   `` `Point` cannot be the value type of `Map<string, Point>` ``
   (`reject_map_value_interface`, `reject_map_value_void`).
+- **A string key is hashed under a per-process random key**: SipHash-1-3 of
+  its UTF-8 bytes, keyed with 128 bits drawn from the system's entropy source
+  before `main`, so a program's input cannot choose keys that share a bucket.
+  4096 keys that collide under an unkeyed FNV-1a insert with no key compare
+  (`tests/cases/map_hash_collide`, counted the same way as below), and two runs
+  of one program hash under two keys. Iteration is still insertion order, so
+  nothing a program prints depends on the key. When the entropy source fails
+  the program panics before `main`: `` Map: the system's entropy source
+  failed ``. On wasm32 the key comes from WASI's `random_get`, and a reactor
+  module is keyed only once its host calls `_initialize`
+  (docs/security/json.md, JSON-13).
 - **Every `set`, `add`, `has` and `delete` is one probe.** A bucket holds eight
   bits of the key's hash beside the entry's index, and each entry keeps its
   full hash, so a probe reads a key only when both match: 10000 lookups of
@@ -9020,9 +9031,9 @@ export const main = (): i32 => {
   it is read ("map limit: one key past it: code", "map limit: 820 small maps,
   4,100 keys, are refused"); `d.reset` starts the count again. At `0` or below
   no map may take a key, and `{}` is the one map value accepted. The global
-  `Map` hashes a string with no seed, so a body can choose keys that all
-  collide, and this limit is what bounds the probes all the maps of one
-  decoding cost together (docs/security/json.md, JSON-13).
+  `Map` hashes a string under a per-process random key, so a body cannot
+  choose keys that collide, and this limit bounds what all the maps of one
+  decoding hold together (docs/security/json.md, JSON-13).
 - **Decoding reuses what `out` holds.** A nested object is decoded into the
   object its field holds, an array's elements into the elements it has, with
   new ones made past its end and the rest dropped, and a string field keeps
@@ -9138,7 +9149,9 @@ and `"nish": { "capabilities": { "allow": [...], "deny": [...] } }` in the
 root `package.json` (the one nearest above the entry, where `noPanic` is read)
 are a **capability policy**, and a program whose entry reaches a capability
 the policy does not grant is refused
-([wp36-capability-policy.md](wp36-capability-policy.md)):
+([wp36-capability-policy.md](wp36-capability-policy.md)). The same object's
+`dependencies` key grants a dependency its gated capabilities, as [a
+dependency's capabilities](#a-dependencys-capabilities) says (NL3041, NL3042):
 
 ```text
 main.ts:6:36: error: `main` reaches `net`, which the capability policy does not grant (the root package's `deny`); the chain that reaches it: main.ts:6:36 calls dial, client.ts:5:10 calls netAddress
@@ -9200,6 +9213,55 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   it does with none (`tests/link/caps_policy_granted`,
   `caps_policy_manifest_granted`). `nish run` takes both flags and refuses
   before it links; `--fix` and `--emit-ast` refuse them.
+
+##### A dependency's capabilities
+
+A dependency — a package loaded from `node_modules` — may reach `ffi`, `net`,
+`process.spawn` and `unsafe`, the **gated** capabilities, only when the root
+`package.json` grants them to it by name; it reaches every other capability
+without one ([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)):
+
+```json
+{ "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } }
+```
+
+A dependency that reaches one it is not granted is refused (NL2576), in the
+dependency, naming the package, the capability and the function:
+
+```text
+node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+```
+
+- A dependency's capabilities are the union over **every** function its
+  modules define, exported or not, called or not
+  (`tests/link/caps_dep_unexported`), and what it reaches through another
+  dependency is its own: granting the package that dials refuses the one that
+  calls it (`caps_dep_transitive`). One error per package and capability,
+  spanned at the first call of the witness chain from the package's first
+  function, in source order, that reaches it (`caps_dep_order`; one refused and
+  one granted program per capability, `caps_dep_net_refused` …
+  `caps_dep_unsafe_granted`).
+- The standard library is never refused, and what decides is where a module
+  was resolved, not its package's name: a dependency that calls itself `nish`
+  is judged like any other (`caps_dep_std_not_refused`, `caps_dep_named_nish`).
+  The ungated capabilities need no grant (`caps_dep_ungated`).
+- A function argument counts where it is instantiated: the root's function
+  passed to a dependency's template makes the instantiation, which is the
+  dependency's, reach what that function reaches, so the dependency is
+  refused for it (`caps_dep_fnarg_callback`).
+- Only the root manifest grants: no flag does (`--allow net` leaves the
+  dependency refused, `caps_dep_cli_cannot_grant`), nor the dependency's own
+  manifest (`caps_dep_self_grant`), and a grant never widens the root's own
+  policy — a capability the root denies is refused by NL2459 whoever is
+  granted it (`caps_dep_root_deny_wins`).
+- `dependencies` is read as strictly as the rest of the field: a value that is
+  not an object, a package named twice, a grant that is not an array and an
+  entry that is not a string are NL3041 (`caps_dep_manifest_not_object`,
+  `_repeated`, `_not_array`, `_non_string`), a name that is no capability is
+  NL3033 (`caps_dep_manifest_unknown`) and one that is not gated NL3042
+  (`caps_dep_manifest_ungated`). `unsafe` may be granted, keys are decoded as
+  JSON, and a grant to a package the program does not load is no error
+  (`caps_dep_manifest_unsafe`, `_escaped_name`, `_unloaded`).
 
 ## Semantics decisions
 
@@ -10253,7 +10315,7 @@ by the caller.
   byte (`tests/emit-ts/identity/`; the layout is `tests/emit-ts/layout/`).
 - **The flag turns `--warn-portability` on**: those warnings name the sites
   where the TypeScript reading answers differently.
-- **Three kinds of module are refused, and then nothing is written** (exit 1):
+- **Four kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
   or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
@@ -10264,6 +10326,11 @@ by the caller.
   holds a call, a step or an element read, which would then run twice
   (NL4012, `reject_emit_ts_compound`). An index of names, their fields
   (`seen.length`), literals and their arithmetic is repeated, and `pts[i + 1].n += 10` is translated.
+  The fourth is a generic whose instances would be written as different
+  TypeScript, which is written once for them all: an element held inline in
+  one instance and by reference in another (`P` and `P | null`), or element
+  types with different zeros in `new Array<T>(n)` (`i32` and `i64`) (NL4013,
+  `reject_emit_ts_instances`). Write a function per element type.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/

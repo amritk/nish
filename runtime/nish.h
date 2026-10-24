@@ -187,7 +187,8 @@ void nish_panic_claim(void);
 /* How a panic that skips atexit ends: `_exit(1)`, after `nish_fatal_hook`
    when it is set (runtime.c). The hook is the terminal's restore while
    `setRawMode(true)` holds or `setTerminalRestore` bytes wait
-   (runtime-term.c), and null otherwise. */
+   (runtime-term.c), and null otherwise. Under `-DNISH_FUZZ_ABORT`
+   (scripts/fuzz.sh) it and `nish_panic` call `abort()`. */
 __attribute__((noreturn)) void nish_fatal_exit(void);
 extern void (*nish_fatal_hook)(void);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
@@ -351,6 +352,13 @@ void nish_panic_slice(int64_t start, int64_t end, int64_t len);
  * without an entry point cannot read `process.argv` (compile error). */
 extern nish_array *nish_argv;
 void nish_argv_init(int32_t argc, char **argv);
+
+/* The 128-bit SipHash-1-3 key of every `Map` and `Set` string hash
+ * (docs/security/json.md, JSON-13). A constructor the compiled module
+ * registers fills it from `getentropy` before `main`, once per process, and
+ * sets bit 0 of word 0 so a filled key is never all zero; nothing writes it
+ * afterwards. A host must not change it while any table exists. */
+extern uint64_t nish_hash_key[2];
 
 /* ---- Directories and subprocesses (WP14 D4) -----------------------------
  * The calls a self-hosted driver needs to find its inputs and link its own

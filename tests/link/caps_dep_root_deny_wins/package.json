@@ -1,0 +1,16 @@
+{
+  "name": "caps-dep-root-deny-wins",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "deny": [
+        "net"
+      ],
+      "dependencies": {
+        "pkg_http": [
+          "net"
+        ]
+      }
+    }
+  }
+}
