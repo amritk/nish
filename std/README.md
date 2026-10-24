@@ -307,7 +307,7 @@ attribute pass sees through it exactly as it sees through the program's own
 functions. A `std/` function is inlined, specialised or dropped on the same
 terms as a local one — and a module you import but never call is dropped
 whole. Measured at the `speed` and `size` profiles, both of which link with
-LTO (ThinLTO for `speed`, full `-flto` for `size`) and `-Wl,--gc-sections`: a program importing three `std/text` functions and
+`-flto -Wl,--gc-sections`: a program importing three `std/text` functions and
 calling none is **byte-identical** to the same program without the import.
 (`debug` keeps them, which is what `debug` is for.)
 

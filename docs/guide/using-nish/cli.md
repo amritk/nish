@@ -74,7 +74,8 @@ Without `run`, `nish` compiles the entry file and every module it imports.
 likely to add to it:
 
 - **`--profile speed|size|debug|wasi`** — `speed` (the default) is `-O3` with
-  link-time optimisation (ThinLTO, run on every core) and a stripped binary; `size` optimises for bytes;
+  link-time optimisation (its code generation spread over every core on
+  Linux) and a stripped binary; `size` optimises for bytes;
   `debug` links fastest and keeps symbols; `wasi` builds a `wasm32-wasi`
   module instead of a native binary.
 - **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64

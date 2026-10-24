@@ -18,8 +18,8 @@
 #
 # Profiles:
 #   debug  clang defaults: no optimisation, symbols kept. The "before" number.
-#   speed  -O3 + ThinLTO on every core + section GC + strip. Rust `--release`
-#          equivalent.
+#   speed  -O3 + LTO + section GC + strip. Rust `--release` equivalent. With
+#          lld, LTO code generation runs on every core.
 #   size   -Oz + LTO + section GC + strip + no unwind tables. Rust
 #          `opt-level="z"`, `panic="abort"`, `strip=true` equivalent.
 #   wasm   wasm32 freestanding module exporting every non-internal function;
@@ -192,6 +192,7 @@ done
 CC=${CC:-clang}
 common=(-Wno-override-module)          # our IR is target-neutral; clang fills the triple in
 elf=()                                 # flags that only make sense for ELF targets
+lld=0                                  # 1 when the link goes through ld.lld
 
 # Platform-specific dead-stripping, symbol stripping and LTO linker selection.
 case "$(uname -s)" in
@@ -223,7 +224,7 @@ case "$(uname -s)" in
     gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none); strip_flag=(-s)
     elf=(-fno-plt)
     # GNU ld needs the gold plugin for LTO; prefer lld when clang can find it.
-    if command -v ld.lld >/dev/null 2>&1; then common+=(-fuse-ld=lld); fi ;;
+    if command -v ld.lld >/dev/null 2>&1; then common+=(-fuse-ld=lld); lld=1; fi ;;
 esac
 
 # -g: compile everything with debug info and never strip, whatever the profile,
@@ -272,7 +273,7 @@ fi
 optimise=()
 case "$profile" in
   speed)
-    optimise=(-O3 -flto=thin -DNDEBUG ${pgo[@]+"${pgo[@]}"}
+    optimise=(-O3 -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"}
       -ffunction-sections -fdata-sections -fomit-frame-pointer
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}) ;;
   size)
@@ -282,22 +283,28 @@ case "$profile" in
       -fno-stack-protector -fvisibility=hidden) ;;
 esac
 
-# The speed link runs ThinLTO's backends on every core; its output does not
-# depend on how many. size and napi keep full LTO. Every
-# count source is tried in turn: nproc (Linux), getconf (both), sysctl (macOS).
-lto_jobs=()
-if [ "$profile" = speed ]; then
+# The speed link splits full LTO's code generation into one partition per core,
+# run in parallel: lld's --lto-partitions, after the whole program is optimised
+# as one module, so inlining and the instructions a program runs do not change
+# (bench/instructions.json agrees to a few instructions in hundreds of
+# millions). The bytes depend on the count, so one machine links one input to
+# one output, as scripts/bootstrap.sh needs. ld64 and GNU ld have no such flag
+# and link as before, and so does every other profile. The count comes
+# from nproc (Linux), else getconf (both), else sysctl (macOS).
+lto_parts=()
+if [ "$profile" = speed ] && [ "$lld" = 1 ]; then
   cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null ||
     sysctl -n hw.ncpu 2>/dev/null || echo 1)
-  lto_jobs=(-flto-jobs="$cores")
+  # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
+  lto_parts=(-Wl,--lto-partitions="$cores")
 fi
 
 # --runtime-objects and --runtime-from: the one-command link split in two, with
 # every compile it held run at once. A `$CC -c` takes `common` and `optimise`,
 # which is what the one command compiles each input with -- less
 # -fuse-ld=lld, which only names the linker -- so a runtime unit compiles to the
-# same object either way: native code for debug, LTO bitcode for speed (ThinLTO)
-# and size, which the link still optimises together with the program. The link
+# same object either way: native code for debug, -flto bitcode for speed and
+# size, which the link still optimises together with the program. The link
 # takes the same line the profile always uses, with objects for sources.
 if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
   compile=()
@@ -397,7 +404,7 @@ case "$profile" in
   debug)
     "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
   speed|size)
-    "$CC" "${common[@]}" "${optimise[@]}" ${lto_jobs[@]+"${lto_jobs[@]}"} \
+    "$CC" "${common[@]}" "${optimise[@]}" ${lto_parts[@]+"${lto_parts[@]}"} \
       "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   wasm)
     # clang resolves wasm-ld next to its own binary first, then on PATH; ask it

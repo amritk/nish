@@ -667,23 +667,24 @@ intrinsics become libm calls for non-constant arguments).
 | Profile | Flags | Equivalent |
 | --- | --- | --- |
 | `debug` | clang defaults, `-lm` | the "before" number; symbols kept |
-| `speed` | `-O3 -flto=thin -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, linked with `-flto-jobs=<cores>` | Rust `--release` |
-| `size` | `speed` with full `-Oz -flto` for `-O3 -flto=thin`, plus `-fno-stack-protector -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
+| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, plus `-Wl,--lto-partitions=<cores>` under lld | Rust `--release` |
+| `size` | `speed` (one LTO partition) plus `-Oz -fno-stack-protector -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
 | `wasm` | `--target=wasm32-unknown-unknown -Oz -nostdlib -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections` | freestanding module for modules that do not use the C runtime |
-| `napi` | `speed` with full `-O3 -flto` for `-flto=thin`, plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
+| `napi` | `speed` (one LTO partition) plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
 | `wasi` | `--target=wasm32-wasi --sysroot=<WASI sysroot> -Oz -DNDEBUG -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all`, plus `-nodefaultlibs -lc <libclang_rt.builtins-wasm32.a>` when clang has no wasm32 compiler-rt of its own | a WASI command module (`_start` runs `main`; `node examples/wasi-host.mjs`, `wasmtime`); see [wp7-runtime.md](wp7-runtime.md#wasi-target) |
 
 Platform notes: on macOS the script uses ld64's `-dead_strip` / `-x` instead
 of `--gc-sections` / `-s`, skips `-fuse-ld=lld` and `-fno-plt`; on Linux it
-prefers `lld` because GNU `ld` needs the gold plugin for LTO. LTO
+prefers `lld` because GNU `ld` needs the gold plugin for LTO. `-flto`
 matters more here than for C: LLVM sees the Nish module and the runtime
 as one unit, so `nish_str_len` inlines into a load and unreferenced runtime
-functions vanish. `speed` uses ThinLTO, whose backends run in parallel
-(`-flto-jobs` takes the core count from `nproc`, `getconf
-_NPROCESSORS_ONLN` or `sysctl -n hw.ncpu`, and the output does not depend
-on it): it links `tests/link/net_relay_f64` in half the
-time full LTO takes, and the benchmarks run as fast. `size` and `napi`
-keep full LTO. `CC` overrides the compiler; `NODE_INCLUDE` overrides the
+functions vanish. Under lld the `speed` link splits LTO code generation
+into one partition per core (`nproc`, else `getconf _NPROCESSORS_ONLN`,
+else `sysctl -n hw.ncpu`) and runs them in parallel; the program is still
+optimised as one module, so the instructions it runs are unchanged, and the
+link of `tests/link/net_relay_f64` takes about 0.7x the time. The bytes
+depend on the partition count, so they are the same for every link on one
+machine. ld64 has no such flag. `CC` overrides the compiler; `NODE_INCLUDE` overrides the
 Node header directory for `napi`.
 
 Profile-guided optimisation (WP9): `--pgo-generate` adds
