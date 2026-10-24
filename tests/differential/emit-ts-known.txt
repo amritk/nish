@@ -196,6 +196,7 @@ cases/str_surrogate_pair numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALI
 cases/term_calls numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_import numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_pty numbers  # differ: exit 0 vs 1: throw new Error(
+cases/term_restore numbers  # differ: exit 0 vs 1: throw new Error(
 cases/unsafe_get_set records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 corpus/argv_words numbers  # differ: exit 29 vs 106
 corpus/arr_oob_exit records  # differ: exit 1 vs 0

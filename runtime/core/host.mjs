@@ -281,8 +281,9 @@ export function noNetReading(name) {
  * `readStdin`, `waitStdin` and `setRawMode` (`nish:term`) throw too, naming
  * themselves, for `noNetReading`'s reason: Node reads stdin only to its event
  * loop, and its own raw mode turns Ctrl-C into a byte, which is not the native
- * answer. `setTerminalRestore` throws as well: the bytes go out from the
- * native runtime's exit and signal paths, which a Node process does not run. The core exports one per name, for `--emit-ts` output to import, and
+ * answer. `setTerminalRestore` throws as well: its bytes go out from the
+ * native runtime's exit and signal paths, which Node does not run. The core
+ * exports one per name, for `--emit-ts` output to import, and
  * `nish.mjs` installs one per name as a global.
  */
 export function noTermReading(name) {
@@ -305,6 +306,6 @@ export function setRawMode() {
 
 export function setTerminalRestore() {
   throw new Error(
-    "`setTerminalRestore` has no reading under Node: its bytes go out from the native runtime's exit, panic and signal paths, which a Node process does not run (docs/RUN_UNDER_NODE.md)"
+    "`setTerminalRestore` has no reading under Node: its bytes go out from the native runtime's exit, panic and signal paths, which Node does not run (docs/RUN_UNDER_NODE.md)"
   );
 }
