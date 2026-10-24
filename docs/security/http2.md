@@ -67,7 +67,7 @@ Fuzzed by `tests/fuzz/targets/hpack.ts`.
 | --- | --- | ---: |
 | `hpack` | the HPACK decoder (Huffman, the dynamic table, its size updates) over header blocks | 14,161,352 |
 
-Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM, (a target's own contract check fails by panicking, so it counts too). A new finding adds a row to Findings above, its input to `tests/fuzz/regressions/<target>/` and a `tests/link/fuzz_<area>_<name>/` check.
+Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
 
 ## Properties verified
 

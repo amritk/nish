@@ -157,9 +157,9 @@ Fuzzed by `tests/fuzz/targets/tls-client-hello.ts`, `tests/fuzz/targets/tls-reco
 | Target | What it drives | Executions |
 | --- | --- | ---: |
 | `tls-client-hello` | `tlsReadClientHello` and `tlsParseClientHello` (the two must agree on the alert), `tlsWindowHasU16`, `tlsWindowString` and `tlsSelectPskIdentity` over the body at offsets and trims the first two bytes choose, checking every window lies inside the input | 266,879,554 |
-| `tls-record` | `TlsRecordServer`'s record path under the clear state and each of the three suites with RFC 8448's or a synthetic secret: raw bytes in chunks, or a script the writer seals (KeyUpdate included), checking `next()` against `tlsRecordLength` and what `open` answers | 395,065 (16 KiB buffers and a key install per input make it the slowest target) |
+| `tls-record` | `TlsRecordReader` and `TlsRecordProtection` under the clear state and each of the three suites with RFC 8448's or a synthetic secret: raw bytes in chunks, or a script the writer seals (KeyUpdate included), checking `next()` against `tlsRecordLength` and what `open` answers | 395,065 (16 KiB buffers and a key install per input make it the slowest target) |
 
-Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM, (a target's own contract check fails by panicking, so it counts too). A new finding adds a row to Findings above, its input to `tests/fuzz/regressions/<target>/` and a `tests/link/fuzz_<area>_<name>/` check.
+Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
 
 ## Properties verified
 

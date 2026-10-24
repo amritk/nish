@@ -4,8 +4,9 @@
 //
 // The input is the file, bytes as they are on disk, made into one string with
 // `String.fromBytes` as a program that reads a PEM file does. That text goes to
-// `pemToDer` under the three labels this module reads, to `x509ParseChain`,
-// and to `x509ParseP256PrivateKey`. A chain that parses is used as a server
+// `pemToDer` for a certificate, to `x509ParseChain`, and to
+// `x509ParseP256PrivateKey`, which reads both key labels itself and wipes the
+// DER it decodes; the target does not decode a key's DER outside it. A chain that parses is used as a server
 // would: each certificate is checked against the next (the last against
 // itself) when both are P-256. A key that parses gives its public key and is
 // wiped, as its `Secret` must be.
@@ -34,8 +35,6 @@ const useChain = (chain: X509Certificate[]): void => {
 export const fuzzOne = (data: u8[]): void => {
   const text: string = String.fromBytes(data, 0, toI32(data.length))
   pemToDer(text, "CERTIFICATE")
-  pemToDer(text, "EC PRIVATE KEY")
-  pemToDer(text, "PRIVATE KEY")
   const chain: X509Certificate[] | null = x509ParseChain(text)
   if (chain !== null) {
     useChain(chain)
