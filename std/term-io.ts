@@ -221,7 +221,7 @@ const termIoOnlyAcks = (buf: u8[], n: i32): i32 => {
   if (n > toI32(buf.length)) {
     return -1
   }
-  for (let i: i32 = 0; i >= 0 && i + 3 < buf.length && i < n; i = i + 4) {
+  for (let i: i32 = 0; i >= 0 && i + 3 < toI32(buf.length) && i < n; i = i + 4) {
     if (buf[i] !== 27 || buf[i + 1] !== 91 || buf[i + 2] !== 48 || buf[i + 3] !== 110) {
       return -1
     }
@@ -811,5 +811,5 @@ export const runTerminal = <G>(
   if (ended && !quit) {
     return Err("stdin ended")
   }
-  return Ok(0)
+  return Ok(toI32(0))
 }

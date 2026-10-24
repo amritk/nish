@@ -7,6 +7,10 @@ import { monotonicNanos } from "nish:process"
 import { TermCaps } from "nish/term-probe"
 import { Frame, TermInput, defaultTerminalOptions, runTerminal } from "nish/term-io"
 
+/** The background and the band's colour, typed so `--number-mode f64` passes them as i32. */
+const BACKGROUND: i32 = 0x203040
+const BAND: i32 = 0xffcc00
+
 /** The name of a `GRAPHICS_*` backend. */
 const backendName = (backend: i32): string => ["ascii", "halfblock", "sixel", "kitty"][backend]
 
@@ -34,11 +38,11 @@ const render = (p: Probe, frame: Frame): void => {
   p.caps = frame.caps
   p.frames = p.frames + 1
   const fb = frame.framebuffer
-  fb.fill(0x203040)
+  fb.fill(BACKGROUND)
   const x0: i32 = (p.frames * 3) % (fb.width - 20)
   for (let y: i32 = fb.height / 3; y < (fb.height * 2) / 3; y++) {
     for (let x: i32 = x0; x < x0 + 20; x++) {
-      fb.set(x, y, 0xffcc00)
+      fb.set(x, y, BAND)
     }
   }
   if (monotonicNanos() - p.start >= toI64(p.second) * 1000000000) {

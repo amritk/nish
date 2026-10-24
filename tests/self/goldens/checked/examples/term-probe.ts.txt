@@ -7,6 +7,8 @@ import Frame from "nish/term-io" -> struct Frame
 import TermInput from "nish/term-io" -> struct TermInput
 import defaultTerminalOptions from "nish/term-io" -> function @nish.defaultTerminalOptions
 import runTerminal from "nish/term-io" -> generic function runTerminal
+const BACKGROUND: i32 = 2109504
+const BAND: i32 = 16763904
 struct Probe (class) size=32 align=8
   field start: i64 index=0 offset=0 initialized
   field second: i32 index=1 offset=8 initialized
