@@ -1,6 +1,6 @@
 // WP40: a function argument is over-approximated. The root's own `dial`,
 // passed to the dependency's template, makes `apply<dial>` reach `net`, and
-// the instantiation is the dependency's: it is refused (NL2574) until the
+// the instantiation is the dependency's: it is refused (NL2576) until the
 // root grants `pkg_each` `net`, though only the root's code dials.
 import { apply } from "pkg_each";
 import { netAddress, tcpConnect } from "nish:net";

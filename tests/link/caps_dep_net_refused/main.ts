@@ -1,5 +1,5 @@
 // WP40: a dependency that reaches `net` the root package does not grant
-// it is refused (NL2574), spanned in the dependency and naming the chain.
+// it is refused (NL2576), spanned in the dependency and naming the chain.
 import { fetchText } from "pkg_http";
 
 // Never dials: the program has no arguments, so the exit code is 0.

@@ -41,6 +41,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` for the runs a parser skips and the bytes it copies |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
+| [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and the keys it reads decoded |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
@@ -903,6 +904,77 @@ A generator is an ordinary object you step, so a task or a parallel body that
 makes its own may use it freely; one shared between tasks would be a write
 they all see, and is refused. See [Random numbers](../../LANGUAGE.md#random-numbers-rng-in-nishrandom)
 in the reference.
+
+## `nish/cli`
+
+`nish/cli` builds a command-line tool's `--help`: a header, usage lines,
+sections of flags with their placeholders and descriptions lined up in
+columns, and notes. It is what `nish --help` itself is built with.
+
+```ts nish:ok
+import { HelpMenu, agentDriven, styleFor } from "nish/cli";
+
+export const main = (): i32 => {
+  const menu = new HelpMenu(styleFor(1, agentDriven()), "greet", 24, 30);
+  menu.header("1.2.0", "say hello");
+  menu.usage("<name> [flags]", "greet someone");
+  menu.section("Flags");
+  menu.row("--shout", "", "in capitals");
+  menu.row("--times", "<n>", "say it n times");
+  console.log(menu.text());
+  return 0;
+};
+```
+
+Piped or redirected, that prints:
+
+```text
+greet 1.2.0  say hello
+
+usage: greet <name> [flags]   greet someone
+
+Flags
+  --shout               in capitals
+  --times <n>           say it n times
+```
+
+**A `HelpMenu`** is made with a `Style`, the program's name, the column a
+row's description starts at and the column a usage line's starts at. Add
+lines in order: `header(version, summary)`, `usage(shape, description)` (the
+first one says `usage:`, the rest line up under it), `section(title)`,
+`row(flag, placeholder, description)`, `note(text)` for a line of prose and
+`value(text)` for a path or value to copy. An empty placeholder or
+description is left out. A flag too long for its column keeps two spaces
+before its description. `text()` answers the whole menu. Columns are counted
+in bytes, so they line up for ASCII text.
+
+**The colours are your terminal's own.** A `Style` paints headings in bold
+magenta, flags in cyan, placeholders in yellow and descriptions faint, using
+the basic ANSI colours your terminal theme defines, never a fixed shade, so
+the menu takes on whatever palette the reader chose. A terminal that declares
+no colours (`tput colors` below 8, as for `TERM=vt100`) gets the same
+structure in bold and underline instead; forced colour is always the
+theme's.
+
+**`styleFor(fd, agent)`** decides for descriptor `fd` (1 for stdout, 2 for
+stderr) whether to paint at all, the same way `nish --help` does: colour on a
+terminal, plain text in a pipe or a file, `NO_COLOR` always off,
+`FORCE_COLOR` or `CLICOLOR_FORCE` on even when piped, and `TERM=dumb` or
+`CLICOLOR=0` off ([the CLI page](cli.md#colour-and-when-an-agent-runs-nish)
+has the full table). `agentDriven()` says whether a coding agent is running
+the program: `NISH_AGENT` decides when it is set, a no (`0`, `false`, `no`,
+`off`) for no and anything else for yes, and otherwise `CLAUDECODE` or
+`GEMINI_CLI` set to anything but empty or a no means yes. With `agent` true
+`styleFor` is always plain: the escapes would only cost the agent tokens.
+
+`HelpMenu` and `Style` reach no
+[capability](../../LANGUAGE.md#capabilities). `styleFor` and `agentDriven`
+reach `env`, and `styleFor` reaches `process.spawn` too: unless colour is
+forced or refused first, it asks a shell whether the descriptor is a terminal
+and how many colours it has. To keep a
+program free of both, make the style yourself: `new Style(on, colour)`, where
+`on` turns painting on and `colour` picks the theme's colours over the
+monochrome failsafe.
 
 ## `nish/term`
 

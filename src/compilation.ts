@@ -2578,7 +2578,8 @@ export class Compilation {
   /**
    * WP32: the modules that write no `.ll` and are copied into each module that
    * uses them instead: `std/collections.ts`, once a module names `Map` or
-   * `Set`, and `std/secret.ts`, once one imports `nish:secret`. Each is
+   * `Set`, `std/secret.ts`, once one imports `nish:secret`, and `std/math.ts`,
+   * once one calls `Math.atan2`, `Math.tan` or `Math.hypot`. Each is
    * checked like any module; what a module uses of it is emitted into that
    * module (docs/wp32-map.md §4.1).
    */
@@ -2587,7 +2588,7 @@ export class Compilation {
     let i = 0
     while (i < this.modules.length && i < units.length) {
       const program = this.modules[i].checker.program
-      if (program.isCollections() || program.isSecretLibrary()) {
+      if (program.isCollections() || program.isSecretLibrary() || program.isMathLibrary()) {
         out.push(units[i])
       }
       i = i + 1
@@ -2595,7 +2596,7 @@ export class Compilation {
     return out
   }
 
-  /** Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts`, `std/map.ts` and `std/secret.ts`. */
+  /** Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts`, `std/map.ts`, `std/math.ts` and `std/secret.ts`. */
   writesOutput(unit: ModuleUnit): boolean {
     return !unit.checker.program.writesNoOutput()
   }

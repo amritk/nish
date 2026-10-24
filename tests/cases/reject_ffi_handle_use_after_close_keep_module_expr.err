@@ -1,0 +1,1 @@
+reject_ffi_handle_use_after_close_keep_module_expr.ts:30:11: error: Cannot assign to `kept` because it is a module constant

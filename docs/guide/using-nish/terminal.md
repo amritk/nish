@@ -2,13 +2,14 @@
 
 `nish:term` lets a program read keys the moment they are pressed. That is what
 a full-screen terminal program needs: an editor, a menu, or a game that has to
-redraw many times a second. It has five functions:
+redraw many times a second. It has six functions:
 
 - `readStdin` reads the bytes that are waiting on stdin;
 - `waitStdin` waits for some to arrive, or for a timeout to pass;
 - `isTerminal` asks whether a descriptor is a terminal;
 - `terminalSize` asks how big the terminal is;
-- `setRawMode` turns off echo and line editing, and turns them back on.
+- `setRawMode` turns off echo and line editing, and turns them back on;
+- `setTerminalRestore` sets the bytes the program leaves the terminal with.
 
 The rules are in the reference, under
 [`nish:term`](../../LANGUAGE.md#nishterm-terminal-input). It reads the
@@ -25,13 +26,14 @@ them says where they come from. A program that calls any of them carries the
 
 The functions that can fail answer a number, in the same shape as
 [`nish:net`](networking.md#errors-are-numbers): zero or more is success, and
-a negative number is a failure. Two of the failures are the same number on
+a negative number is a failure. Three of the failures are the same number on
 every platform, so a program can branch on them:
 
 | Answer | Meaning |
 | --- | --- |
+| `-7` | `setTerminalRestore`: more than 4,096 bytes, checked before the terminal is |
 | `-11` | `readStdin`: nothing is waiting yet |
-| `-25` | not a terminal: a pipe or a file — stdin for `setRawMode`, stdout and stderr both for `terminalSize` |
+| `-25` | not a terminal: a pipe or a file — stdin for `setRawMode`, stdout for `setTerminalRestore`, stdout and stderr both for `terminalSize` |
 
 `terminalSize()` answers a pair, `[columns, rows]`. When there is no terminal
 the first number is the error and the second is `0`, so `[-25, 0]` means "not
@@ -133,6 +135,36 @@ export const main = (): i32 => {
 It also works with a pipe, `printf 'hiq' | ./echo`. `setRawMode(true)` answers
 `-25` there and changes nothing, and the loop reads the piped bytes as keys.
 
+## Leaving the screen as you found it
+
+A full-screen program changes more than the mode: it switches to the
+alternate screen, hides the cursor, maybe turns on mouse reporting. Those are
+escapes it writes itself, and the escapes that undo them have to go out
+however the program ends. `setTerminalRestore(bytes)` hands them to the
+runtime, which writes them once, on the same paths that put raw mode back:
+returning from `main`, `process.exit`, a panic or a crash, Ctrl-C or `kill`.
+It writes them first, then restores the terminal settings.
+
+```ts nish:ok
+import { write } from "nish:io";
+import { setRawMode, setTerminalRestore } from "nish:term";
+
+export const main = (): i32 => {
+  setRawMode(true);
+  // The alternate screen, with the cursor hidden; then the bytes that undo both.
+  write("\u001b[?1049h\u001b[?25l");
+  setTerminalRestore("\u001b[?25h\u001b[?1049l");
+  console.log("drawn on the alternate screen");
+  return 0;
+};
+```
+
+Each call replaces the bytes from the last one, so set them again whenever
+the program turns another mode on, and `setTerminalRestore("")` once it has
+undone them all itself. It answers `0`, `-25` when stdout is not a terminal
+(nothing is kept then), and `-7` for more than 4096 bytes. Ctrl-Z and
+`setRawMode(false)` do not end the program, so they leave the bytes unwritten.
+
 ## The size of the terminal
 
 `terminalSize()` answers a new pair each time you call it. Call it again on
@@ -157,7 +189,7 @@ export const main = (): i32 => {
 `nish:term` works on Linux and macOS. Under WebAssembly (`--profile wasi`)
 there is no terminal: `readStdin` waits for its bytes instead of answering
 `-11`, so call `waitStdin` first, as the loop above does; there it waits at
-least 10 ms, even for `waitStdin(0)`. The other three answer "not a terminal". A freestanding `--target wasm32` build has no stdin
-at all, so the compiler refuses all five there. When a program is run under
-Node, `isTerminal` and `terminalSize` work, and the other three throw; in a
+least 10 ms, even for `waitStdin(0)`. The other four answer "not a terminal". A freestanding `--target wasm32` build has no stdin
+at all, so the compiler refuses all six there. When a program is run under
+Node, `isTerminal` and `terminalSize` work, and the other four throw; in a
 browser the two answer "not a terminal".

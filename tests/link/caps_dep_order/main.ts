@@ -1,4 +1,4 @@
-// WP40: one NL2574 per package and capability it is refused, each at its own
+// WP40: one NL2576 per package and capability it is refused, each at its own
 // witness and printed by position like every diagnostic: `pkg_a`'s `ffi`, then
 // `pkg_b`'s `unsafe` in `mix` and its `net` in `both`, below it.
 import { both } from "pkg_b";

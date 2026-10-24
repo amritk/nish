@@ -1,5 +1,5 @@
 // WP40: a dependency that reaches `ffi` the root package does not grant
-// it is refused (NL2574), spanned in the dependency and naming the chain.
+// it is refused (NL2576), spanned in the dependency and naming the chain.
 import { magnitude } from "pkg_c";
 
 export const main = (): i32 => {

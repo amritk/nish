@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 710
+export const RULE_COUNT: i32 = 712
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -732,7 +732,7 @@ const diagnosticRules = (): string[] => [
   ", and a declared C function returns a scalar or `CPtr` only",
   "NL2321",
   "`, which the root package does not grant it; grant it with ",
-  "NL2574",
+  "NL2576",
   "A union needs two different variants: this one names only `",
   "NL2527",
   "` cannot declare methods (interfaces describe layout only)",
@@ -937,6 +937,8 @@ const diagnosticRules = (): string[] => [
   "NL2069",
   "` is a builtin value and cannot be called",
   "NL2314",
+  "`Math.imul` expects an i32 or a u32, got ",
+  "NL2574",
   "An enum member name must be an identifier",
   "NL2287",
   "Computed property names are forbidden in ",
@@ -1079,6 +1081,8 @@ const diagnosticRules = (): string[] => [
   "NL2127",
   "`for...of` requires an array, got ",
   "NL2136",
+  "`Math.sign` expects a number, got ",
+  "NL2575",
   "Abstract classes are not supported",
   "NL2168",
   "Array index must be a number, got ",
@@ -1428,10 +1432,10 @@ const diagnosticRules = (): string[] => [
 /**
  * The WP33 portability rules (docs/wp33-round-trip.md section 5.2), matched by
  * substring against a `portability` message and against nothing else. A
- * retired row keeps its entry, as every retired rule does: NL8011's fragment
- * matches nothing now that no pass prints it, and its number stays reserved so
- * the band has no gap. `tests/wordings/unreachable.txt` names the retired rows
- * and why each went.
+ * retired row keeps its entry, as every retired rule does: NL8010's and
+ * NL8011's fragments match nothing now that no pass prints them, and their
+ * numbers stay reserved so the band has no gap. `tests/wordings/unreachable.txt`
+ * names the retired rows and why each went.
  */
 const portabilityRules = (): string[] => [
   "overwrites the element a reference still reads, and TypeScript replaces the object instead",

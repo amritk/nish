@@ -12,6 +12,7 @@
     "strbuild": { "n": 131072, "instructions": 53423544 },
     "vec3": { "n": 6000000, "instructions": 300137071 },
     "result": { "n": 40000000, "instructions": 340132277 },
+    "math": { "n": 200000, "instructions": 284344433 },
     "map-proto-ordered": { "n": 16384, "instructions": 253369606, "commit": "3d7917e2", "valgrind": "valgrind-3.22.0" },
     "map-proto-ordered-fp": { "n": 16384, "instructions": 234118312, "commit": "3d7917e2", "valgrind": "valgrind-3.22.0" },
     "map-proto-ordered-fp32": { "n": 16384, "instructions": 241754014, "commit": "3d7917e2", "valgrind": "valgrind-3.22.0" },

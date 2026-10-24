@@ -3,7 +3,7 @@
 The record of the dependency policy
 ([wp40-dependency-capabilities.md](../wp40-dependency-capabilities.md)): a
 dependency that reaches `unsafe`, `ffi`, `net` or `process.spawn` the root
-package does not grant it is refused at compile time with NL2574, naming the
+package does not grant it is refused at compile time with NL2576, naming the
 dependency, the capability and the function. It says what the check covers,
 what it cannot reach, and the test that pins each property. It is written
 with the code rather than after an audit.

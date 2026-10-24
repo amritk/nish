@@ -7,7 +7,7 @@ every function can reach; WP36
 whose exposed functions reach what its policy does not grant. This work
 package does the same for each dependency on its own: a package loaded from
 `node_modules` that reaches `unsafe`, `ffi`, `net` or `process.spawn` is
-refused (NL2574) unless the root `package.json` grants it that capability by
+refused (NL2576) unless the root `package.json` grants it that capability by
 name. A program the check accepts compiles to the IR it compiled to before.
 
 **The living reference is [LANGUAGE.md](LANGUAGE.md#a-dependencys-capabilities)**;
