@@ -4,12 +4,15 @@ The record of the dependency policy
 ([wp40-dependency-capabilities.md](../wp40-dependency-capabilities.md)): a
 dependency that reaches `unsafe`, `ffi`, `net` or `process.spawn` the root
 package does not grant it is refused at compile time with NL2576, naming the
-dependency, the capability and the function. It says what the check covers,
+dependency, the capability and the function; and of the capability lockfile
+after it, which refuses a dependency that reaches a capability
+`nish-capabilities.lock.json` does not record for it with NL2577. It says what the check covers,
 what it cannot reach, and the test that pins each property. It is written
 with the code rather than after an audit.
 
 Anchors are function names in the files below at the commit that adds the
-check, the squash merge of #905.
+check, the squash merge of #905, and, for the lockfile, at the squash merge
+of #923 (reviewed at its head `6fd3b6f`).
 
 **Result.** Every function a dependency's modules define counts toward that
 dependency, so a capability it reaches through the standard library, another
@@ -18,11 +21,16 @@ dependency or a private helper is its own, and is refused unless the root's
 no flag and no dependency's own manifest adds one, and a grant
 never widens the root's own policy. The standard library is told apart by
 where a module was resolved, not by its package name, so a package named
-`nish` is a dependency like any other. Nothing was found to fix or left open.
+`nish` is a dependency like any other. The lockfile refuses any capability a
+dependency's row does not record, whether the root grants it or not, and a
+file it cannot read whole stops the build rather than reading as a wider one.
+Nothing was found to fix or left open.
 Four limits are inherent to a compile-time check of the call graph and are
 recorded as accepted: install scripts (CAPS-5), the C behind a granted `ffi`
 (CAPS-6), function arguments blamed on the template that calls them (CAPS-7),
-and nothing confined at run time (CAPS-8).
+and nothing confined at run time (CAPS-8). Two more are the lockfile's and
+are accepted too: a row is never tightened (CAPS-12), and the check holds only
+while a readable lockfile does (CAPS-13).
 
 ## Scope
 
@@ -31,6 +39,8 @@ and nothing confined at run time (CAPS-8).
 | `src/compilation.ts` | `readCapabilityPolicy` (the `dependencies` grants, NL3041 and NL3042), `grantMask`, `refuseDependencyCapabilities`, `reportDependencyRefusal` |
 | `src/capability-report.ts` | `DependencyReach`, `dependencyPackages`, `dependencyMasks`, `dependencyWitness` |
 | `src/manifest.ts` | `manifestReadGrants` |
+| `src/capability-lock.ts` | `readCapabilityLock` (NL3043), `capabilityLockText` |
+| `src/compilation.ts` | `checkCapabilityLock`, `reportLockGrowth` (NL2577) |
 
 Out of scope: the capability analysis itself, the sets and witness chains
 `src/capabilities.ts` computes (WP35), and the root's own policy (WP36), which
@@ -46,12 +56,17 @@ the standard library. A win is a dependency that reaches one of the four gated
 capabilities while the build succeeds without a grant naming it, or a
 refusal that names something other than the dependency, the capability and
 a function of that dependency, so the author grants or audits the wrong
-thing.
+thing. For the lockfile, the attacker publishes an upgrade of a dependency
+the author already locked, and the lockfile in the root is the author's: a
+win is the upgrade reaching a capability its row does not record while the
+build succeeds.
 
 ## Findings
 
 Rows CAPS-1 to CAPS-4 are the ways a dependency could try to hide a
-capability, each checked and found to hold; CAPS-5 to CAPS-8 are accepted.
+capability, each checked and found to hold; CAPS-5 to CAPS-8 are accepted;
+CAPS-9 to CAPS-11 are the lockfile's, each found to hold, and CAPS-12 and
+CAPS-13 its accepted limits.
 None is counted as fixed or open in the index.
 
 | Id | Severity | Where | Description | Disposition |
@@ -64,6 +79,11 @@ None is counted as fixed or open in the index.
 | CAPS-6 | Low | `ffi` | A granted `ffi` is all of C: a dependency may then do anything its C does, `net` and `process.spawn` included, and none of it is seen. | **Accepted.** The analysis stops at a `declare function`. Grant `ffi` only to a dependency whose C has been read. |
 | CAPS-7 | Low | `dependencyMasks` | A function argument is over-approximated: the root's function passed to a dependency's template makes that template's instantiation, which is the dependency's, reach what the root's function reaches, and the dependency is refused for it. | **Accepted.** The error is a refusal, never a miss: it errs towards asking for a grant. The root can grant it, or call its own function itself. |
 | CAPS-8 | Low | — | Nothing is confined at run time: the check is of the source the compiler was given. | **Accepted.** Confining the process to the computed set is WP37's ([wp37-os-sandbox.md](../wp37-os-sandbox.md)), proposed, not built. |
+| CAPS-9 | High if it failed | `checkCapabilityLock` | Every capability a dependency reaches beyond its row must be refused: gated or not, granted or not, and for a dependency with no row at all. | **Holds.** The comparison is of the same masks the policy reads, after it, and a dependency with no row is held to an empty one. Each refused capability is spanned at the first call of its witness chain, as NL2576 is. |
+| CAPS-10 | Medium if it failed | `readCapabilityLock` | A malformed lockfile must not be read as a wider one. | **Holds.** Text that is not JSON, a `version` other than 1, an unknown key, an unknown capability, and a key or capability written twice are NL3043, spanned in the lockfile, and stop the build. |
+| CAPS-11 | Medium if it failed | `checkCapabilityLock`, the driver | `--update-capability-lock` must not record a reach the policy refuses, and must not be skipped by the run cache. | **Holds.** The driver writes the file only after the check, so a refused build writes none; `nish run` checks before its cache lookup, so a cache hit is held to the lockfile. |
+| CAPS-12 | Low | `checkCapabilityLock` | A row is never tightened: a dependency that drops a capability in one release and regains it in a later one builds without a word, since the row still records it. | **Accepted.** Only growth is refused, by design, so that a lockfile written once does not fail every build a dependency shrinks in. Rerun `--update-capability-lock` after an upgrade that shrinks a dependency, and review the diff. |
+| CAPS-13 | Low | `checkCapabilityLock` | The check exists only while the lockfile does: an absent lockfile turns it off with no warning, and so does a path that cannot be read (a directory of that name), which `readFileSyncOrNull` reports as absent. A refusal is also reported only where a witness chain is found to span it; none was found to be missing, but there is no spanless fallback. | **Accepted.** Deleting the file has the same effect as making it unreadable, so the extra exposure is small; the lockfile is committed, so its removal shows in review. Telling an unreadable path from an absent one would fail closed, and is left for a later change. |
 
 ## Properties verified
 
@@ -132,6 +152,37 @@ A well-formed grant the program has no use for is taken:
 whose `expected.json` holds one error per dependency and capability, in the
 order the sink prints them.
 
-**The documented error is the printed one**: "capability policy: the
+**The lockfile refuses growth** (CAPS-9):
+`link/caps_lock_growth: rejected with "the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it"`
+(the root grants the `net` its row leaves out) and
+`link/caps_lock_no_row: rejected with "the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it"`.
+A capability the policy does not gate is held to the row as well:
+`link/caps_lock_ungated: rejected with "the dependency `pkg_mix` reaches `fs.read` through `config`, which `nish-capabilities.lock.json` does not record for it"`
+(its row records `net`), and the writer records it: "capability lock:
+--update-capability-lock records a capability the dependency policy does not
+gate", "capability lock: the build after recording an ungated capability
+passes".
+Only growth: `link/caps_lock_matches: exits with 0 and stdout matches expected.out`,
+`link/caps_lock_shrink: exits with 0 and stdout matches expected.out`,
+`link/caps_lock_stale: exits with 0 and stdout matches expected.out`,
+`link/caps_lock_no_row_pure: exits with 3 and stdout matches expected.out`.
+
+**A malformed lockfile stops the build** (CAPS-10):
+`link/caps_lock_bad_json: rejected with "the file stops being JSON here: the capability lockfile is one object"`,
+``link/caps_lock_bad_version: rejected with "`version` is not 1: the capability lockfile is one object"``,
+``link/caps_lock_bad_key: rejected with "`comment` is no key of the file: the capability lockfile is one object"``,
+``link/caps_lock_bad_capability: rejected with "`network` in the row of `pkg_http` is no capability: the capability lockfile is one object"``,
+``link/caps_lock_bad_repeated: rejected with "`pkg_http` is named twice: the capability lockfile is one object"``.
+
+**The update writes only what the policy passed** (CAPS-11):
+"capability lock: a build the dependency policy refuses writes no lockfile under --update-capability-lock",
+"capability lock: --update-capability-lock rewrites the lockfile it would refuse, sorted, two-space, one trailing newline",
+"capability lock: a second --update-capability-lock writes the same bytes",
+"capability lock: --update-capability-lock replaces a malformed lockfile instead of reading it", and
+"capability lock: `nish run` takes --update-capability-lock, and a run cache hit is still held to the lockfile".
+
+**The documented error is the printed one**: "capability lock: the refusal
+docs/IR_COOKBOOK.md shows is the one tests/link/caps_lock_growth prints";
+"capability policy: the
 dependency refusal docs/IR_COOKBOOK.md shows is the one
 tests/link/caps_dep_net_refused prints".

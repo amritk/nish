@@ -1865,6 +1865,243 @@ if (!only || "term".includes(only)) {
   )
 }
 
+// `nish/term-io` against the fake terminal `tests/term-io/relay.mjs` plays
+// under script(1): the guide's program (the `runTerminal` block of
+// docs/guide/using-nish/terminal.md) quits on `q` and on kitty's Ctrl-C and
+// refuses a pipe on either side; a panic mid-frame leaves the restore string
+// as the last bytes and the termios as it was; over a slow modelled link the
+// tier falls, no more than one frame is ever in flight, a key still reaches
+// `update` within a frame of the lowest rate, no terminal reply reaches
+// `update`, and a cell size answered late is learned; closing waits out the
+// acknowledgements still on the link, so none is echoed after exit; the key
+// state's watermark holds while an answer is in and lapses after a second
+// without one; a present loop of each backend draws with that backend and
+// keeps its memory while one that leaks 0.27 MB a frame does not; and
+// examples/term-probe.ts reports what it found. Linux only: the relay finds
+// the program through /proc.
+if (!only || "term".includes(only) || "term-io".includes(only)) {
+  const ioDir = path.join(buildDir, "term-io")
+  if (process.platform !== "linux" || !has("script")) {
+    skip("term-io: needs Linux and `script` for the pseudo-terminal the relay plays the terminal on")
+  } else {
+    fs.rmSync(ioDir, { recursive: true, force: true })
+    fs.mkdirSync(ioDir, { recursive: true })
+    const { relay } = await import("./term-io/relay.mjs")
+    const guidePage = path.join(root, "docs", "guide", "using-nish", "terminal.md")
+    const guideSrc = [...fs.readFileSync(guidePage, "utf8").matchAll(/```ts nish:ok\n([\s\S]*?)```/g)]
+      .map((m) => m[1])
+      .find((block) => block.includes("runTerminal"))
+    const build = (name, src) => {
+      const dir = path.join(ioDir, name)
+      fs.mkdirSync(dir, { recursive: true })
+      const exe = path.join(dir, "app")
+      const r = spawnSync(NISH, [src, "-o", dir + path.sep, "--link", exe], { cwd: root, encoding: "utf8" })
+      return check(`term-io: ${name} links`, r.status === 0, shown(r)) ? exe : null
+    }
+    const guideTs = path.join(ioDir, "guide.ts")
+    if (guideSrc === undefined) {
+      check("term-io: docs/guide/using-nish/terminal.md has a nish:ok block that calls runTerminal", false)
+    } else {
+      fs.writeFileSync(guideTs, guideSrc)
+    }
+    const guideExe = guideSrc === undefined ? null : build("guide", guideTs)
+    const loopExe = build("loop", path.join(root, "tests", "link", "std_term_io_relay", "loop.ts"))
+    const probeExe = build("term-probe", path.join(root, "examples", "term-probe.ts"))
+    const at = (name) => path.join(ioDir, "runs", name)
+    const said = (r) =>
+      `exit ${r.status}${r.timedOut ? " (timed out)" : ""}, frames ${r.frames}, same stty ${r.sameStty}\n` +
+      `stderr: ${r.err}${r.scriptErr}\nstdout tail: ${JSON.stringify(r.out.slice(-400))}`
+    if (guideExe !== null) {
+      for (const [how, bytes] of [
+        ["q", "q"],
+        ["kitty's Ctrl-C", "\x1b[99;5u"],
+      ]) {
+        const r = await relay(guideExe, "", { dir: at(`guide-${how.length}`), keys: [{ afterFrames: 5, bytes }] })
+        check(
+          `term-io: the guide's program quits on ${how} with 0, and the terminal is as it was`,
+          r.status === 0 && r.sameStty && !r.timedOut && r.frames >= 5,
+          said(r)
+        )
+      }
+      for (const [side, options, needle] of [
+        ["stdin", { stdinNull: true }, "stdin is not a terminal"],
+        ["stdout", { stdoutPipe: true }, "stdout is not a terminal"],
+      ]) {
+        const r = await relay(guideExe, "", { dir: at(`refuse-${side}`), ...options })
+        check(
+          `term-io: the guide's program refuses ${side} off a terminal with one sentence on stderr and 1`,
+          r.status === 1 && r.err.trim().split("\n").length === 1 && r.err.includes(needle) && r.sameStty,
+          said(r)
+        )
+      }
+    }
+    if (probeExe !== null) {
+      const r = await relay(probeExe, "", { dir: at("probe"), timeoutMs: 20000 })
+      const lines = r.out.split("\n")
+      const statsLines = lines.filter((l) => /^\ds frames \d+ tier \d+ backend kitty /.test(l))
+      check(
+        "term-io: examples/term-probe.ts prints the caps it found under kitty field by field and a stats line a second for 5 s",
+        r.status === 0 &&
+          r.sameStty &&
+          ["name kitty(0.49.2)", "answered true", "graphics kitty", "cellWidthPx 10", "multiplexer none"].every((l) =>
+            r.out.includes(`${l}\n`)
+          ) &&
+          statsLines.length === 5,
+        `${said(r)}\nstats lines ${JSON.stringify(statsLines)}`
+      )
+    }
+    if (loopExe !== null) {
+      const panic = await relay(loopExe, "panic", { dir: at("panic") })
+      const restore =
+        "\x18\x1b[?2026l\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b[<u\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l"
+      const afterPanic = panic.out.slice(panic.out.lastIndexOf("<panic>") + "<panic>".length)
+      check(
+        "term-io: a panic in the tenth render leaves the restore string as the last bytes, in reverse of turning on, and the termios as it was",
+        panic.status === 1 &&
+          panic.err.includes("index out of range: 10 >= 3") &&
+          panic.out.includes("<panic>") &&
+          afterPanic === restore &&
+          panic.sameStty,
+        `${said(panic)}\nafter <panic>: ${JSON.stringify(afterPanic)}\nwant: ${JSON.stringify(restore)}`
+      )
+
+      const throttle = await relay(loopExe, "throttle", {
+        dir: at("throttle"),
+        link: { rttMs: 60, bytesPerSec: 300000 },
+        keys: [
+          { afterFrames: 30, bytes: "k" },
+          { afterFrames: 45, bytes: "q" },
+        ],
+        timeoutMs: 60000,
+      })
+      const tier = /tier (\d+) (\d+)/.exec(throttle.out)
+      const keyNs = /key (\d+)/.exec(throttle.out)
+      const peak = /peak (\d+) B\/s cost (\S+) ms/.exec(throttle.out)
+      const latencyMs =
+        keyNs === null || throttle.keySentNs.length === 0
+          ? -1
+          : Number(BigInt(keyNs[1]) - throttle.keySentNs[0]) / 1e6
+      const linkMs = (throttle.maxFrameBytes * 1000) / 300000
+      const measured = `peak ${peak?.[1]} B/s, peak cost ${peak?.[2]} ms, largest frame ${throttle.maxFrameBytes} bytes (${Math.round(linkMs)} ms on the link)`
+      // The limit is `RateOptions.maxUnacked`, 1 unless a program asks for 2;
+      // the relay counts it, as the program cannot see past its own gate.
+      check(
+        "term-io: over a 60 ms, 300 kB/s link the tier falls, no more frames go unacknowledged than the limit of one, and a key reaches update within 250 ms",
+        throttle.status === 0 &&
+          tier !== null &&
+          Number(tier[2]) < Number(tier[1]) &&
+          throttle.maxUnacked <= 1 &&
+          latencyMs >= 0 &&
+          latencyMs < 250,
+        `${said(throttle)}\ntier ${tier?.slice(1)}, relay saw ${throttle.maxUnacked} unacknowledged, key latency ${latencyMs} ms, ${measured}`
+      )
+      // The peak is the first, half-megabyte frames' estimate: once the tier
+      // falls the frames are 1.5 kB, the round trip is most of each answer's
+      // wait, and term-rate's estimate drifts down towards bytes over the round
+      // trip. A send time taken after the write, which blocks while the link
+      // drains, leaves the transmission out and reads several times the rate.
+      check(
+        "term-io: over a 300 kB/s link the bandwidth measured on its large frames is within 0.5×–2× of the link's",
+        peak !== null && Number(peak[1]) >= 150000 && Number(peak[1]) <= 600000,
+        `${said(throttle)}\n${measured}`
+      )
+      // A write the link holds back for over a second is not the frame's cost.
+      check(
+        "term-io: a frame's cost excludes its write: under 25 ms while the link needs over 250 ms for the largest frame",
+        peak !== null && Number(peak[2]) < 25 && linkMs > 250,
+        `${said(throttle)}\n${measured}`
+      )
+
+      // Answers the program did not wait for: the probe's, after its timeout,
+      // and a second DA1 and cell size mid-run. None reaches `update`; a cell
+      // size the probe missed is learned.
+      const { KITTY_REPLY } = await import("./term-io/relay.mjs")
+      for (const [name, silent, extra] of [
+        ["after the probe timed out", true, KITTY_REPLY],
+        ["after DA1", false, "\x1b[?62;52;c\x1b[6;20;10t\x1bP>|kitty(0.49.2)\x1b\\\x1b[?2026;2$y"],
+      ]) {
+        const r = await relay(loopExe, "throttle", {
+          dir: at(`replies-${silent ? "late" : "again"}`),
+          ...(silent ? { reply: null } : {}),
+          keys: [
+            { afterFrames: 3, bytes: extra },
+            { afterFrames: 8, bytes: "q" },
+          ],
+        })
+        check(
+          `term-io: a terminal's answers that arrive ${name} never reach update` +
+            (silent ? ", and the cell size among them is learned" : ""),
+          r.status === 0 && r.out.includes("replies 0\n") && (!silent || r.out.includes("cell 10\n")) && r.sameStty,
+          said(r)
+        )
+      }
+
+      // The frame drawn as `q` arrives is answered 150 ms later: closing waits
+      // for that answer in raw mode, so it is not echoed into the shell.
+      const late = await relay(loopExe, "throttle", {
+        dir: at("late-ack"),
+        link: { rttMs: 150, bytesPerSec: 10000000 },
+        keys: [{ afterFrames: 5, bytes: "q" }],
+        lingerMs: 500,
+      })
+      const afterExit = late.out.slice(late.out.lastIndexOf("\x1b[?1049l"))
+      check(
+        "term-io: an acknowledgement still in flight when the program quits is read before raw mode ends, not echoed after it",
+        late.status === 0 && late.out.includes("\x1b[?1049l") && !afterExit.includes("[0n") && late.sameStty,
+        `${said(late)}\nafter leaving the alternate screen: ${JSON.stringify(afterExit)}`
+      )
+
+      const watermark = await relay(loopExe, "watermark", { dir: at("watermark") })
+      check(
+        "term-io: the key state is watermarked once a frame's answer is in, and not after a second without one",
+        watermark.status === 0 && watermark.out.includes("answered true watermarked true then false") && watermark.sameStty,
+        said(watermark)
+      )
+
+      // Each backend's resident memory at frame 50 and at frame 250; 0.27 MB a
+      // frame over the 200 between is 54 MB, and the bound is 8.
+      const boundKb = 8 * 1024
+      const runs = [
+        ["kitty", "rss"],
+        ["sixel", "rss"],
+        ["halfblock", "rss"],
+        ["ascii", "rss"],
+        ["kitty", "rss-leak"],
+      ]
+      const rssRuns = await Promise.all(
+        runs.map(([backend, mode]) =>
+          relay(loopExe, mode, {
+            dir: at(`${mode}-${backend}`),
+            env: { NISH_TERM_GRAPHICS: backend },
+            rssAt: [50, 250],
+            keys: [{ afterFrames: 250, bytes: "q" }],
+            timeoutMs: 60000,
+          })
+        )
+      )
+      // The `GRAPHICS_*` each name forces, which the program prints as `backend N`.
+      const graphics = { ascii: 0, halfblock: 1, sixel: 2, kitty: 3 }
+      runs.forEach(([backend, mode], i) => {
+        const r = rssRuns[i]
+        const used = /backend (\d+)/.exec(r.out)
+        const grew = r.rss.length === 2 && r.rss.every((s) => s.kb > 0) ? r.rss[1].kb - r.rss[0].kb : NaN
+        const leaks = mode === "rss-leak"
+        check(
+          leaks
+            ? `term-io: a ${backend} present loop that keeps 0.27 MB a frame grows past the 8 MB bound`
+            : `term-io: a ${backend} present loop of 250 frames draws with ${backend} and grows less than 8 MB`,
+          r.status === 0 &&
+            r.out.includes("frames 250") &&
+            used !== null &&
+            Number(used[1]) === graphics[backend] &&
+            (leaks ? grew > boundKb : grew < boundKb),
+          `${said(r)}\nrss ${JSON.stringify(r.rss)}`
+        )
+      })
+    }
+  }
+}
+
 // The same two reading programs as `--profile wasi` builds under Node's WASI,
 // where `readStdin` reads without asking whether stdin is ready (runtime-term.c) and the terminal
 // questions answer "not a terminal", so the native expected lines hold; and a
@@ -8352,6 +8589,18 @@ if (!only || "par_alloc".includes(only)) {
   )
 }
 
+/**
+ * A resolve hook that answers a relative specifier written without an
+ * extension (`./fixtures`, as the compiler takes it) with its `.ts` file.
+ * runtime/nish.mjs answers only `nish/` and `nish:`, and Node resolves no
+ * extension itself, so a fixture split across files needs this to run there.
+ */
+const tsExtensionHook = `data:text/javascript,${encodeURIComponent(
+  'import { registerHooks } from "node:module";' +
+    "registerHooks({ resolve: (s, c, next) => " +
+    '/^\\.\\.?\\//.test(s) && !/\\.[cm]?[jt]s$/.test(s) ? next(s + ".ts", c) : next(s, c) });'
+)}`
+
 /** Run a link fixture's `main` under runtime/nish.mjs, its output read as `encoding`. */
 const runFixtureUnderNode = (entry, encoding) =>
   spawnSync(
@@ -8362,6 +8611,8 @@ const runFixtureUnderNode = (entry, encoding) =>
       "--no-warnings",
       "--import",
       path.join(root, "runtime", "nish.mjs"),
+      "--import",
+      tsExtensionHook,
       "-e",
       `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
     ],
@@ -8580,16 +8831,37 @@ for (const name of [
 // text: the canvas lines carry raw half blocks, and Node builds them from
 // UTF-16 code units where the native screen builds UTF-8, so a wrong lead or
 // continuation byte would decode to U+FFFD on both sides of a string compare.
-for (const name of ["std_term", "std_term_f64"]) {
+// The pure modules nish/term-io drives (an event stream, the probe, the rate
+// controller, the pixel encoders and the base64 they send) are held to the same
+// bytes. Trailing newlines are not compared, as the link loop trims them too.
+for (const name of [
+  "std_term",
+  "std_term_f64",
+  "std_term_events",
+  "std_term_probe",
+  "std_term_rate",
+  "std_term_rate_f64",
+  "std_term_pixels",
+  "std_term_pixels_f64",
+  "std_base64",
+  "std_base64_f64",
+]) {
   if (only && !name.includes(only) && !"term-under-node".includes(only)) {
     continue
   }
   const entry = path.join(linkDir, name, "main.ts")
   const run = runFixtureUnderNode(entry, "buffer")
   const want = fs.readFileSync(path.join(linkDir, name, "expected.out"))
+  const untrailed = (bytes) => {
+    let end = bytes.length
+    while (end > 0 && bytes[end - 1] === 0x0a) {
+      end--
+    }
+    return bytes.subarray(0, end)
+  }
   check(
-    `link/${name}: nish/term prints the same bytes under runtime/nish.mjs as natively`,
-    run.status === 0 && Buffer.compare(run.stdout, want) === 0,
+    `link/${name}: prints the same bytes under runtime/nish.mjs as natively`,
+    run.status === 0 && Buffer.compare(untrailed(run.stdout), untrailed(want)) === 0,
     `exit ${run.status}\n--- native (expected.out)\n${want.toString("utf8")}--- node\n${run.stdout.toString("utf8")}${run.stderr.toString("utf8")}`
   )
 }
@@ -19789,6 +20061,20 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       dependencyRun.stderr.startsWith(shownDependency[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
     shownDependency === null ? "no caps_dep_net_refused capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(dependencyRun)
   )
+  // WP40: and the lockfile refusal after it, from its link program.
+  const shownLock = /<!-- capabilities-refusal caps_lock_growth -->\n```text\n([\s\S]*?)```\n/.exec(cookbookText)
+  const lockRefusedRun = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "caps_lock_growth", "main.ts"), "-o", path.join(capsDir, "lock-cookbook") + path.sep],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capability lock: the refusal docs/IR_COOKBOOK.md shows is the one tests/link/caps_lock_growth prints",
+    shownLock !== null &&
+      lockRefusedRun.status === 1 &&
+      lockRefusedRun.stderr.startsWith(shownLock[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
+    shownLock === null ? "no caps_lock_growth capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(lockRefusedRun)
+  )
   const grantedDir = path.join(capsDir, "granted") + path.sep
   const grantedRun = spawnSync(
     NISH,
@@ -19807,6 +20093,136 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       fs.existsSync(ungrantedLl) &&
       fs.readFileSync(grantedLl, "utf8") === fs.readFileSync(ungrantedLl, "utf8"),
     shown(grantedRun)
+  )
+
+  // WP40: the capability lockfile. `--update-capability-lock` writes it beside
+  // the root package.json, byte-stable, and a rebuild holds the build to it.
+  // The fixtures are copied out first, so the run writes no tracked file.
+  const lockName = "nish-capabilities.lock.json"
+  const lockCopy = (name) => {
+    const dir = path.join(capsDir, "lock", name)
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.cpSync(path.join(linkDir, name), dir, { recursive: true })
+    return dir
+  }
+  const lockBuild = (dir, extra) =>
+    spawnSync(NISH, [path.join(dir, "main.ts"), "-o", path.join(dir, "out") + path.sep, ...extra], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  const updated = lockCopy("caps_lock_growth")
+  const updateRun = lockBuild(updated, ["--update-capability-lock"])
+  const writtenLock = fs.existsSync(path.join(updated, lockName))
+    ? fs.readFileSync(path.join(updated, lockName), "utf8")
+    : ""
+  check(
+    "capability lock: --update-capability-lock rewrites the lockfile it would refuse, sorted, two-space, one trailing newline",
+    updateRun.status === 0 &&
+      updateRun.stderr.includes(`wrote ${path.join(updated, lockName)}`) &&
+      writtenLock === '{\n  "version": 1,\n  "packages": {\n    "pkg_http": ["net"]\n  }\n}\n',
+    `${shown(updateRun)}\n--- written\n${writtenLock}`
+  )
+  const rebuilt = lockBuild(updated, [])
+  check(
+    "capability lock: the build after --update-capability-lock passes the lockfile it wrote",
+    rebuilt.status === 0,
+    shown(rebuilt)
+  )
+  const rewritten = lockBuild(updated, ["--update-capability-lock"])
+  check(
+    "capability lock: a second --update-capability-lock writes the same bytes",
+    rewritten.status === 0 && fs.readFileSync(path.join(updated, lockName), "utf8") === writtenLock,
+    shown(rewritten)
+  )
+  // A row is every capability the dependency reaches, not only the four the
+  // dependency policy gates: `fs.read` is written beside the granted `net`.
+  const ungatedLock = lockCopy("caps_lock_ungated")
+  const ungatedRun = lockBuild(ungatedLock, ["--update-capability-lock"])
+  const ungatedWritten = fs.existsSync(path.join(ungatedLock, lockName))
+    ? fs.readFileSync(path.join(ungatedLock, lockName), "utf8")
+    : ""
+  check(
+    "capability lock: --update-capability-lock records a capability the dependency policy does not gate",
+    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"fs\.read"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
+    `${shown(ungatedRun)}\n--- written\n${ungatedWritten}`
+  )
+  check(
+    "capability lock: the build after recording an ungated capability passes",
+    lockBuild(ungatedLock, []).status === 0,
+    ungatedWritten
+  )
+  // Every dependency has a row, `[]` for one that reaches nothing; std and the
+  // root package have none.
+  const pureLock = lockCopy("caps_lock_no_row_pure")
+  const pureRun = lockBuild(pureLock, ["--update-capability-lock"])
+  check(
+    "capability lock: a dependency that reaches nothing is written with an empty row",
+    pureRun.status === 0 &&
+      fs.readFileSync(path.join(pureLock, lockName), "utf8") ===
+        '{\n  "version": 1,\n  "packages": {\n    "pkg_pure": []\n  }\n}\n',
+    shown(pureRun)
+  )
+  const refusedLock = lockCopy("caps_lock_refused")
+  const refusedUpdate = lockBuild(refusedLock, ["--update-capability-lock"])
+  check(
+    "capability lock: a build the dependency policy refuses writes no lockfile under --update-capability-lock",
+    refusedUpdate.status === 1 &&
+      refusedUpdate.stderr.includes("which the root package does not grant it") &&
+      !fs.existsSync(path.join(refusedLock, lockName)),
+    shown(refusedUpdate)
+  )
+  // The flag skips the comparison: a lockfile it would refuse, even a
+  // malformed one, is replaced rather than read.
+  const malformedLock = lockCopy("caps_lock_bad_json")
+  const malformedUpdate = lockBuild(malformedLock, ["--update-capability-lock"])
+  check(
+    "capability lock: --update-capability-lock replaces a malformed lockfile instead of reading it",
+    malformedUpdate.status === 0 && fs.readFileSync(path.join(malformedLock, lockName), "utf8") === writtenLock,
+    shown(malformedUpdate)
+  )
+  for (const [other, refusal] of [
+    ["--fix", "`--update-capability-lock` cannot be used with --fix"],
+    ["--emit-ast", "`--update-capability-lock` reports on a checked program, and --emit-ast stops before the check"],
+  ]) {
+    const refusedFlag = spawnSync(
+      NISH,
+      [path.join(lockCopy("caps_lock_matches"), "main.ts"), "--update-capability-lock", other],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `capability lock: --update-capability-lock with ${other} is a usage error, exit 2`,
+      refusedFlag.status === 2 && refusedFlag.stderr.includes(refusal),
+      shown(refusedFlag)
+    )
+  }
+  // `nish run` checks the program, lockfile included, before it looks in its
+  // cache, so the lockfile is not part of the key and a cache hit is still
+  // held to it: the third run below emits the IR the first two cached.
+  const runLock = lockCopy("caps_lock_matches")
+  const lockCache = path.join(capsDir, "lock", "run-cache")
+  fs.rmSync(lockCache, { recursive: true, force: true })
+  const lockRun = (extra) =>
+    spawnSync(NISH, ["run", ...extra, path.join(runLock, "main.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: lockCache },
+    })
+  const firstRun = lockRun(["--update-capability-lock"])
+  const secondRun = lockRun([])
+  const cached = fs.existsSync(path.join(lockCache, "nish", "run"))
+    ? fs.readdirSync(path.join(lockCache, "nish", "run")).length
+    : 0
+  fs.writeFileSync(path.join(runLock, lockName), '{\n  "version": 1,\n  "packages": {\n    "pkg_http": []\n  }\n}\n')
+  const hitRun = lockRun([])
+  check(
+    "capability lock: `nish run` takes --update-capability-lock, and a run cache hit is still held to the lockfile",
+    firstRun.status === 0 &&
+      firstRun.stderr.includes(`wrote ${path.join(runLock, lockName)}`) &&
+      secondRun.status === 0 &&
+      cached === 1 &&
+      hitRun.status === 1 &&
+      hitRun.stderr.includes(`which \`${lockName}\` does not record for it`),
+    `cache entries: ${cached}\n${shown(firstRun)}\n${shown(secondRun)}\n${shown(hitRun)}`
   )
 
   // A program that will not run gets the refusal alone: the line is promised

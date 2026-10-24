@@ -412,6 +412,20 @@ unchanged.
   Only your own `package.json` grants: `--allow` does not, and neither does
   the dependency's. The standard library needs no grant. See
   [A dependency's capabilities](../../LANGUAGE.md#a-dependencys-capabilities).
+- **`--update-capability-lock`** writes `nish-capabilities.lock.json` beside
+  your `package.json`: every capability each dependency reaches, granted or
+  not. Commit it. While it exists, an upgrade that makes a dependency reach
+  something new stops the build with exit code 1, naming the dependency, the
+  capability and the calls, until you read the chain and run the flag again:
+
+  ```text
+  node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it; review the chain, then record it with `--update-capability-lock` — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+  ```
+
+  A dependency that reaches less than its row records is fine. A build the
+  grants refuse writes no lockfile. `nish run` takes the flag; `--fix` and
+  `--emit-ast` do not. See
+  [The capability lockfile](../../LANGUAGE.md#the-capability-lockfile).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](../../LANGUAGE.md#the-no-panic-scope)).

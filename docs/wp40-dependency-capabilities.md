@@ -75,17 +75,39 @@ This is a breaking change: a program whose dependency reaches a gated
 capability stopped building. Add the grant each error names to the root
 `package.json`; nothing else changes.
 
-## 6. Out of scope
+## 6. The capability lockfile
+
+A grant says what a dependency may reach; it does not say what it reached
+when someone last looked. `--update-capability-lock` writes
+`nish-capabilities.lock.json` beside the root `package.json` (beside the entry
+when there is none): one row per loaded dependency, every capability it
+reaches, gated or not, packages sorted and capabilities in the report's order,
+so the bytes depend on the program alone (`src/capability-lock.ts`).
+
+While the file exists, `Compilation.check` compares each dependency's reach
+with its row after both policies have passed, and a capability the row does not
+record is NL2577, in the dependency, in NL2576's order and with its witness
+chain. Only growth is an error: a row that records more, a row for a package
+no longer loaded, and a dependency with no row that reaches nothing are
+accepted. The file is read strictly (NL3043, spanned in the lockfile): the
+point of it is a review, and a file the compiler half-reads is one nobody can
+trust.
+
+The flag skips the comparison, and the driver writes the file only once the
+check has passed, so a build the grants refuse writes nothing. It changes no
+byte of the IR. `nish run` runs the check before its cache lookup, so the file
+is not in the cache key and a cache hit is held to it too. `--fix` and
+`--emit-ast` refuse the flag, as they refuse `--allow`.
+
+## 7. Out of scope
 
 - **Enforcement at run time**: WP37's `--sandbox`
   ([wp37-os-sandbox.md](wp37-os-sandbox.md)).
 - **Install scripts**, which the package manager runs before the compiler
   sees a package (CAPS-5).
 - What C behind a granted `ffi` does (CAPS-6).
-- A lockfile of the granted sets, refusing a dependency whose set grows on
-  an upgrade: a later stage.
 
-## 7. Tests
+## 8. Tests
 
 `tests/link/caps_dep_*`: one refused and one granted program per gated
 capability, and the transitive and scoped (each refused and granted),
@@ -94,3 +116,10 @@ self-grant, partial-grant, root-deny, function-argument, ordering and manifest
 cases.
 Each negative fixture holds its whole `--json` output. `tests/run.js` holds
 the refusal `docs/IR_COOKBOOK.md` shows to what the compiler prints.
+
+`tests/link/caps_lock_*`: a lockfile that matches, records more, has a stale
+row, has no row (for a dependency that reaches `net` and one that reaches
+nothing), records less (refused), and five malformed files (each refused),
+and the dependency policy's refusal, which `--update-capability-lock` writes no file for.
+`tests/run.js` copies a fixture out to rewrite its lockfile, holds the bytes
+and the rebuild, and pins the cache-hit behaviour of `nish run`.
