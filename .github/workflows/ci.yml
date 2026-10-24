@@ -793,7 +793,7 @@ jobs:
     # than a job with no rows, which is why the `if` is on the job.
     if: needs.seeds.outputs.cmp != '[]'
     runs-on: ${{ matrix.seed.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       # x86_64 and aarch64 have different registers and different calling
       # conventions, so one row failing must not cancel the row that would say
@@ -813,11 +813,12 @@ jobs:
       # (`buildCandidate` in tests/nish-cmp.js, the arrangement G3 puts in
       # scripts/bootstrap.sh), so this job wants the toolchain for the same
       # reason `bootstrap` does rather than only to read IR.
-      - name: Install LLVM 18 + lld
+      # The sanitizer runtimes are for the soundness step's ASan builds.
+      - name: Install LLVM 18 + lld + the sanitizer runtimes
         timeout-minutes: 5
         run: |
           sudo apt-get $APT_OPTS update
-          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 libclang-rt-18-dev
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
@@ -865,19 +866,24 @@ jobs:
             --candidate build/self/compile
 
       # The soundness differential: the same candidate compiles every runnable
-      # case, the fuzz corpus and 200 fixed-seed programs a second time with
-      # `--no-elision`, every proof-backed elision off, and both builds must
-      # print and exit the same at -O2. A difference is a proof that does not
-      # hold, and the run prints the path of its reproducer. About 40 s on 4
-      # threads (941 programs, both sides built); the generated programs run
-      # first, so a budget that runs out on a slow runner drops corpus cases,
-      # which the suite links anyway. It runs on every row on purpose: the rows
-      # are one per architecture, and an elision can be sound on one target's
-      # code and not on the other's.
+      # case, the fuzz corpus and 600 fixed-seed programs from proofgen.js (built
+      # around the accesses the elision reasons about, each in an in-bounds and
+      # a one-past variant) a second time with `--no-elision`, every
+      # proof-backed elision off, and both builds must print and exit the same
+      # at -O2. A generated program must also panic exactly when its one-past
+      # variant says, and with `--asan` its default build runs again under
+      # AddressSanitizer (tests/differential/asan.js) and must end the same
+      # way. A failure prints its reproducer's path, the command that reruns
+      # it, and a minimised `min.ts`. About 3 minutes on 4 threads; the
+      # generated programs run first, so a budget that runs out on a slow
+      # runner drops corpus cases, which the suite links anyway. It runs on
+      # every row on purpose: the rows are one per architecture, and an elision
+      # can be sound on one target's code and not on the other's. The weekly
+      # randomised pass is .github/workflows/soundness-fuzz.yml.
       - name: Every proof-backed elision changes nothing a program prints
         run: |
           node tests/differential/soundness.js --compiler build/self/compile --corpus tests/cases \
-            --corpus tests/differential/corpus --seed 20261001 --count 200 --budget 300
+            --corpus tests/differential/corpus --gen --seed 20261024 --count 600 --asan --budget 360
 
       # Reached only when the comparison agreed, which is the point: this line
       # is a claim about a run that happened. The summary line carries its own

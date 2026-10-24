@@ -423,7 +423,7 @@ const selfTest = (compiler) => {
   return failed
 }
 
-export { build, classify, hasAsanRuntime, instrument, runExe, runUnderAsan }
+export { build, classify, hasAsanRuntime, instrument, runExe, runtimeObjects, runUnderAsan }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const argv = process.argv.slice(2)
