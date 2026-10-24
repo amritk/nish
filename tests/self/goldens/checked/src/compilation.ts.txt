@@ -861,32 +861,32 @@ function Compilation.checkCapabilityLock(this: Compilation): void -> @Compilatio
   callee +0:31 joinPath -> @joinPath
   callee +0:46 capabilityLockName -> @capabilityLockName
   local +1:11 text: string | null (const)
-  local +5:11 reach: DependencyReach (const)
-  callee +5:19 dependencyPackages -> @dependencyPackages
-  local +6:11 facts: FactsTable (const)
-  callee +6:19 Compilation.analyze -> @Compilation.analyze
-  local +7:11 index: FunctionIndex (const)
-  callee +7:19 functionIndex -> @functionIndex
-  callee +8:5 dependencyMasks -> @dependencyMasks
-  callee +10:33 capabilityLockText -> @capabilityLockText
-  local +13:11 source: SourceFile (const)
-  callee +13:20 new SourceFile -> @SourceFile.constructor
-  local +14:11 lock: CapabilityLock (const)
-  callee +14:18 readCapabilityLock -> @readCapabilityLock
-  callee +16:7 DiagnosticSink.report -> @DiagnosticSink.report
-  local +24:9 p: i32 (let)
-  local +26:13 name: string (const)
-  local +27:13 row: i32 (const)
-  local +28:13 recorded: i32 (const)
-  local +29:13 grown: i32 (const)
-  local +30:11 c: i32 (let)
-  local +33:17 chain: WitnessHop[] (const)
-  callee +33:25 dependencyWitness -> @dependencyWitness
-  local +34:17 at: SourceFile | null (const)
-  local +35:17 site: Node | null (const)
-  local +37:19 hops: string[] (const)
-  local +38:24 hop: WitnessHop (const)
-  callee +41:13 Compilation.reportLockGrowth -> @Compilation.reportLockGrowth
+  local +7:11 reach: DependencyReach (const)
+  callee +7:19 dependencyPackages -> @dependencyPackages
+  local +8:11 facts: FactsTable (const)
+  callee +8:19 Compilation.analyze -> @Compilation.analyze
+  local +9:11 index: FunctionIndex (const)
+  callee +9:19 functionIndex -> @functionIndex
+  callee +10:5 dependencyMasks -> @dependencyMasks
+  callee +12:33 capabilityLockText -> @capabilityLockText
+  local +15:11 source: SourceFile (const)
+  callee +15:20 new SourceFile -> @SourceFile.constructor
+  local +16:11 lock: CapabilityLock (const)
+  callee +16:18 readCapabilityLock -> @readCapabilityLock
+  callee +18:7 DiagnosticSink.report -> @DiagnosticSink.report
+  local +26:9 p: i32 (let)
+  local +28:13 name: string (const)
+  local +29:13 row: i32 (const)
+  local +30:13 recorded: i32 (const)
+  local +31:13 grown: i32 (const)
+  local +32:11 c: i32 (let)
+  local +35:17 chain: WitnessHop[] (const)
+  callee +35:25 dependencyWitness -> @dependencyWitness
+  local +36:17 at: SourceFile | null (const)
+  local +37:17 site: Node | null (const)
+  local +39:19 hops: string[] (const)
+  local +40:24 hop: WitnessHop (const)
+  callee +43:13 Compilation.reportLockGrowth -> @Compilation.reportLockGrowth
 function Compilation.reportLockGrowth(this: Compilation, source: SourceFile, site: Node, name: string, caller: string, c: i32, hops: string[]): void -> @Compilation.reportLockGrowth [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
