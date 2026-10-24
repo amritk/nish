@@ -1298,9 +1298,8 @@ const bcryptBatchSalt = (batch: BcryptBatch, salts: u8[], k: i32, cost: i32): u8
 }
 
 /** Lane `k`'s 60-character hash: its setting, then its digest characters from the batch's 124. */
-const bcryptLaneHash = (prefix: u8[], digests: u8[], k: i32): string => {
-  return String.fromBytes(bcryptJoin(prefix, digests, k), 0, BCRYPT_HASH_LENGTH)
-}
+const bcryptLaneHash = (prefix: u8[], digests: u8[], k: i32): string =>
+  String.fromBytes(bcryptJoin(prefix, digests, k), 0, BCRYPT_HASH_LENGTH)
 
 /** The 16 salt bytes of lane `k` from the 64 of a batch. */
 const bcryptSaltOf = (salts: u8[], k: i32): u8[] => {
@@ -1395,14 +1394,11 @@ const bcryptLaneOk = (
   k: i32,
   lane: BcryptParsed,
   hash: string
-): boolean => {
-  return timingSafeEqual(bcryptRunLane(p0, p1, p2, p3, k, lane), bcryptBytesOf(hash))
-}
+): boolean => timingSafeEqual(bcryptRunLane(p0, p1, p2, p3, k, lane), bcryptBytesOf(hash))
 
 /** Whether lane `k`'s hash joined from `prefix` and the batch's digests is `hash`. */
-const bcryptJoinedOk = (prefix: u8[], digests: u8[], k: i32, hash: string): boolean => {
-  return timingSafeEqual(bcryptJoin(prefix, digests, k), bcryptBytesOf(hash))
-}
+const bcryptJoinedOk = (prefix: u8[], digests: u8[], k: i32, hash: string): boolean =>
+  timingSafeEqual(bcryptJoin(prefix, digests, k), bcryptBytesOf(hash))
 
 /** One interleaved run for the lanes in `group`, all of one cost, each lane's answer into `ok`. */
 const bcryptVerifyGroup = (
