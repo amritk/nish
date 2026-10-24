@@ -53,8 +53,7 @@ function grantRotr(x: u32, n: u32): u32 -> @grantRotr
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function grantSha256(data: u8[]): u8[] -> @grantSha256
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.wipe$arr.u8
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: grantRotr nish.quicPacketCopy nish.wipe$arr.u32 nish.wipe$arr.u8 nish_panic nish_panic_index nish_panic_overflow
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2
   stackSites=3 stackLocals=3
@@ -103,8 +102,7 @@ function grantSha256(data: u8[]): u8[] -> @grantSha256
   callee +80:3 wipe<u32[]> -> @nish.wipe$arr.u32
   callee +81:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function grantPadHash(key: u8[], pad: i32, data: u8[]): u8[] -> @grantPadHash
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via grantSha256
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: grantSha256 nish.quicPacketCopy nish.wipe$arr.u8 nish_panic nish_panic_overflow
   pointer key: size=0 writesThrough=false captured=false
   pointer data: size=0 writesThrough=false captured=false passedTo=nish.quicPacketCopy#2
@@ -117,7 +115,7 @@ function grantPadHash(key: u8[], pad: i32, data: u8[]): u8[] -> @grantPadHash
   callee +6:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function grantHmac(key: u8[], message: u8[]): u8[] -> @grantHmac [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via grantSha256
+  sharedWrite: via grantHmac
   calls: grantHmac grantPadHash grantSha256 nish.wipe$arr.u8
   pointer key: size=0 writesThrough=false captured=false passedTo=grantSha256#0 grantPadHash#0 grantPadHash#0
   pointer message: size=0 writesThrough=false captured=false passedTo=grantHmac#1 grantPadHash#2

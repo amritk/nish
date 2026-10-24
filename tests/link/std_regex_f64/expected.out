@@ -244,4 +244,11 @@ PASS  (x+x+)+y on x's
 PASS  (a*)*b counts no matches
 PASS  a{1000} counts 20 matches
 PASS  (a+)+ matches everything
-regex: 246 passed, 0 failed, 0 skipped
+PASS  an empty body repeated 1000^4 times compiles
+PASS  a{0} repeated 1000^3 times compiles
+PASS  a class of 10001 ranges
+PASS  a class of 10000 ranges compiles
+PASS  1025 groups
+PASS  500 groups compile
+PASS  a backtrack stack past the slot table
+regex: 253 passed, 0 failed, 0 skipped

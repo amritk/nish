@@ -276,3 +276,77 @@ each row names functions rather than base lines.
 - `${rel}:${s.line} is rejected with ${s.code}` and `${rel}:${s.line} compiles`,
   for `docs/AI.md` and `docs/guide/using-nish/standard-library.md`: a holder
   accepted, and a field copied into a local refused with NL2544.
+
+## A wipe inside a `std/threads` task
+
+A task, or a parallel body, may make no write another thread can see
+(NL2471). Until #873's threads stage every `wipe` counted as one, whatever it
+zeroed, because its body is a call to `llvm.memset` and `writesShared`
+(`src/attributes.ts`) counts a call to any function it has no body for. So a
+task could not zero the scratch it allocated itself, and bcrypt could not run
+on a worker. Anchors are at `main` `5d80b08`.
+
+### Scope
+
+| File | What |
+| --- | --- |
+| `src/attributes.ts` | `writesShared`, which no longer counts `WIPE_MEMSET`, and `markWipe`, which still records the wipe as a write through its argument |
+| `src/parallel.ts` | `sharedWriteMessage`, which reports the refusal at the `spawn` |
+
+### Threat model
+
+A program that compiles while two threads race on a key: a task wipes memory
+the parent or another task still reads, or the parent wipes what a task
+reads. The wipe itself is out of scope here: it is the same volatile
+`llvm.memset` as before, and nothing in its IR changes.
+
+### Method
+
+- Followed every path into `WIPE_MEMSET`: it is added to a function's callees
+  only by `markWipe`, the body of a `wipe` instance, so `writesShared` can
+  skip it without skipping any other foreign call.
+- `markWipe` still marks the write through parameter 0 (`writesThrough`,
+  `writesReach`, `writesDeep`) and keeps the instance's `sharedWrite`, so a
+  caller's `wipe(x)` is a write through its argument, judged by where `x`
+  came from as any other write through a call is (`composeArguments`).
+- Wrote a task for each road a wiped array can come from: an array the task
+  allocates, one a helper it calls allocates and wipes while filling an array
+  it is handed, a copy made inside `expose`, the task's argument, a captured
+  local, a field, the argument wiped by a helper the task calls, and an array
+  a call answered.
+
+### Findings
+
+None. The fresh allocations compile and run on threads; every other road is
+still NL2471, naming the `wipe` instance as the write.
+
+What the rule does not admit, by design: a `Secret` a task makes with
+`secret(...)` and then wipes, because `secret` keeps its value, so its
+storage is not the task's own allocation by the facts the rule reads; and an
+array a call answered (`const st = initState()`), whose freshness the rule
+does not track across a return. The supported pattern for a shared key is
+that the parent makes the `Secret`, each task `expose`s it read-only, and the
+parent wipes it after the scope joins, which the region rule above already
+orders.
+
+### Properties verified
+
+- A `wipe` of an array the task, or a function it calls, allocated is not a
+  shared write, and the program prints the same at 1, 2 and 8 threads and
+  under Node.
+- A `wipe` of the task's argument, a capture, a field, the argument a helper
+  wipes for it, or a call's answer is still NL2471.
+- The emitted IR is unchanged: `sharedWrite` feeds no LLVM attribute, and
+  every wipe under `opt -O2` is still a volatile `llvm.memset`.
+
+### Tests
+
+- `link/${name}: exits with ${wantCode} and stdout matches expected.out`,
+  `link/${name}: the same exit and stdout under NISH_NUM_THREADS=${threads}`,
+  `link/${name}: emitted IR contains every expected.ir line` and
+  `link/${name}: ${m.file} matches golden`, for `thread_task_wipe`: the
+  volatile `llvm.memset` of each `wipe` instance is in the IR.
+- `${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`, for
+  `reject_thread_wipe_param`, `_capture`, `_field`, `_helper` and
+  `_call_result`.
+- `nish:secret: the wipe survives opt -O2 (a volatile zero for each of the 8 bytes nothing reads again), where the twin's fill(0) is deleted`.
