@@ -288,6 +288,11 @@ Every tool below builds its compiler from `src/` with the seed
 the fetched release in `build/seed/`), and all of them are wired into `tests/run.js`, skipped without
 clang.
 
+Before pushing a `src/` change, run locally the sections it touches,
+`node tests/run.js wasi` (with `WASI_SYSROOT=/usr`; read its skip line) and
+`node tests/run.js performance`, and regenerate the goldens; the whole suite
+is CI's `test` shards ([`CLAUDE.md`](../CLAUDE.md#definition-of-done)).
+
 | Tool | Compares |
 | --- | --- |
 | the golden cases | every `tests/cases/` and `tests/link/` program against its `.ll`, `.out`, `.err` and `.stdout` — the specification of every lowering and every refusal |

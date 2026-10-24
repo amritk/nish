@@ -687,8 +687,8 @@ A row stage also runs `node tests/differential/emit-ts.js --update` and commits 
 ### Run notes for /feature
 
 - **Targeted test command:** `node tests/run.js <section>`.
-- **Full suite:** `npm test`, 40–70 minutes. Run it twice per PR, per [CLAUDE.md](../../CLAUDE.md#spending-tokens).
-- **No coverage command.** The repository's gate is an undegraded `npm test` plus the golden checks, so Phase 0's coverage precondition needs the owner's waiver to read "the gate is `npm test`".
+- **Full suite:** CI's four `test` shards on the current head, per [CLAUDE.md](../../CLAUDE.md#definition-of-done); a local `npm test` only for the exceptions it names.
+- **No coverage command.** The repository's gate is an undegraded full suite (CI's `test` shards) plus the golden checks, so Phase 0's coverage precondition needs the owner's waiver to read "the gate is the full suite".
 - **Generated globs** are listed under Stages, ownership and merge order above.
 
 ### Acceptance criteria

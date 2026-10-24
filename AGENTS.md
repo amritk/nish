@@ -45,7 +45,7 @@ npm install                 # install (npm ci in CI)
 bash scripts/fetch-seed.sh  # the last release into build/seed/, once (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
-npm test                    # the full suite (goldens, llvm-as, native, runtime, differential)
+npm test                    # the full suite, which CI runs in four shards (goldens, llvm-as, native, runtime, differential)
 node tests/run.js <sub>     # only cases whose name contains <sub>
 npm run test:update         # write missing .ll goldens for new cases
 npm run lint                # file names + biome, formatting included; any finding fails CI
@@ -169,11 +169,16 @@ find. A run that skipped anything has not proved what it looks like it proved.
 `.claude/hooks/session-start.sh` installs the toolchain in a fresh container so
 this does not happen silently.
 
-In CI the `test` job's summary also ends `…, 1 delegated.` That is the
+**CI's four `test (…, shard N/4)` rows are the full-suite run a pull request
+is judged by** ([definition of done](./CLAUDE.md#definition-of-done)). Read
+each shard's summary as you would a local one — no `DEGRADED:` banner, no skip
+outside the environmental ones below — because four green rows with skips in
+them have proved no more than one degraded local run. A shard's summary also
+ends `…, K delegated.`: the checks dealt to the other shards, and the
 bootstrap's fixed point, which the job hands to the `bootstrap (x86_64-linux)`
-row of the same run rather than proving it twice; it is not a skip, and it is
-named with the job that proves it. A local `npm test` delegates nothing
-(`.claude/testing.md`).
+row of the same run rather than proving it twice. A delegation is not a skip;
+it is named with the job that proves it, and the shard is only as green as
+that job. A local `npm test` delegates nothing (`.claude/testing.md`).
 
 ## Shipping a change: what a pull request must be, and who merges it
 
@@ -185,14 +190,18 @@ read.
 *Fully tested* means the [definition of done](#house-rules) was **run**, not
 assumed:
 
-- `npm run check` green.
-- `npm test` green **and not degraded**. Read the skip count, per *Trusting a
-  test run* above: a `DEGRADED:` banner, or a skip that is not one of the three
-  environmental ones (no WASI sysroot on a local machine, though never in CI,
-  whose `test` job installs one; `NISH_BOOTSTRAP` unset; no `jq` for the WP19
-  seed-matrix states), means the run did not prove what a green summary
-  looks like it proved, and the change is therefore untested whatever the exit
-  code said.
+- `npm run check` green, and `node tests/run.js <filter>` green for every
+  section or program the change touches (a `src/` change adds the `wasi` and
+  `performance` sections and regenerated goldens; [`CLAUDE.md`](./CLAUDE.md)).
+- Every CI `test` shard green **and not degraded** on the current head. Read
+  each shard's skip count, per *Trusting a test run* above: a `DEGRADED:`
+  banner, or a skip that is not one of the three environmental ones (no WASI
+  sysroot on a local machine, though never in CI, whose `test` job installs
+  one; `NISH_BOOTSTRAP` unset; no `jq` for the WP19 seed-matrix states), means
+  the run did not prove what a green summary looks like it proved, and the
+  change is therefore untested whatever the exit code said. A change to the
+  suite itself, or a fork PR whose CI does not run, runs the whole `npm test`
+  locally instead and says so in the PR body.
 - `npm run lint` and `npm run lint:dead` clean: every rule is an error.
 - `node docs/check-links.mjs` when the change touches Markdown.
 - The title is a conventional commit subject, because a squash merge lands it
@@ -219,7 +228,9 @@ is now:
 1. **Every required check is green on the *current head*.** A run from three
    pushes ago proves nothing about this commit.
 2. **No conflict with `main`** (`mergeable_state` is clean).
-3. **The suite was actually run** on this change, undegraded, per above.
+3. **The suite was actually run** on this change, undegraded: every `test`
+   shard on the current head, its summary read per above (or the local full
+   run in the two exception cases, stated in the PR body).
 4. **No human is objecting**: no changes-requested review, no unresolved review
    thread. Answer or implement first, then merge.
 5. **It is not the Release PR.** `chore(release): <version>` on `release/next`
@@ -291,7 +302,7 @@ what is blocking and what you need — and keep watching.
 
 ## House rules
 
-- **`npm test` must be green**, and every new construct ships with a golden
+- **CI's `test` shards must be green and undegraded**, and every new construct ships with a golden
   `.ll`, an `llvm-as` pass, a native round trip with expected stdout, at least
   one negative test, its `docs/LANGUAGE.md` rule, cookbook entry and
   user-guide page, and a conventional commit message. There is no changesets
