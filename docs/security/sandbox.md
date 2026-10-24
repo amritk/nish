@@ -248,3 +248,13 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
 - `tests/wordings/nl3041_sandbox_darwin` (the darwin refusal, word for word)
 - `tests/runtime-budgets.js`: `RUNTIME_SANDBOX_TEXT_BUDGET`, the ceiling on
   the unit's `.text`
+
+### Checks CI does not run
+
+- `sandbox: a process holding capabilities drops them` needs an unprivileged
+  user namespace (`unshare -r`). GitHub's Ubuntu 24.04 runners set
+  `kernel.apparmor_restrict_unprivileged_userns=1`, so `unshare -r` fails
+  there and the section prints `SKIP sandbox: no unprivileged user namespace;
+  the capability drop did not run` instead. It runs, and passes, on a machine
+  that allows unprivileged user namespaces; on CI the drop is proved only by
+  its read-back, which fails closed.
