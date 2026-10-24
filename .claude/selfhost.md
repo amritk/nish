@@ -248,7 +248,7 @@ predates #423's capabilities audit, so its `CAP_NONE` row came later.
   `tests/differential/goldens/unfrozen.txt` for a case with no frozen rewrite.
 
 `src/` may not call the builtin until the seed declares it (the rolling
-freeze), which is why CLI-7 and CLI-9 wait a release after #425.
+freeze), which is why CLI-7 and CLI-9 waited a release after #425 (fixed by #486).
 
 ## Changing the runtime
 
