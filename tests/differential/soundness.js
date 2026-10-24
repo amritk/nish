@@ -660,6 +660,14 @@ const pastShape = (prog) => {
 const judge = async (compiler, prog, asan) => {
   const r = await compare(compiler, prog)
   r.key = r.verdict
+  // A generated program promises an ending, and a hang is never it: both
+  // sides timing out is a miss whatever they printed on the way.
+  if (prog.expectPanic !== undefined && r.verdict === "timeout") {
+    r.verdict = "unexpected"
+    r.key = "unexpected:timeout"
+    r.detail = `expected ${prog.expectPanic ? "a bounds panic in the last block" : "a clean exit"}, ${r.detail}`
+    return r
+  }
   if (prog.expectPanic === undefined || !["agree", "differ"].includes(r.verdict)) {
     return r
   }
@@ -991,7 +999,7 @@ const main = async () => {
       )
     } else if (prog.expectPanic !== undefined) {
       console.log(
-        `        reproduce: node tests/differential/soundness.js --gen --seed ${o.seed} --index ${prog.index}${o.asan ? " --asan" : ""} --compiler ${path.relative(root, o.compiler)}`
+        `        reproduce: node tests/differential/soundness.js --gen --seed ${o.seed} --index ${prog.index}${o.asan ? " --asan" : ""}${runTimeoutMs === RUN_TIMEOUT_MS ? "" : ` --run-timeout ${runTimeoutMs / 1000}`} --compiler ${path.relative(root, o.compiler)}`
       )
       console.log(`        shapes: ${prog.shapes.join(" ")}`)
       if (why === undefined) {
