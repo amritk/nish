@@ -259,17 +259,20 @@ export function maxU64(a, b) {
  * what `sext`/`zext`/`trunc` do natively.
  */
 export function convert(x, from, to) {
+  // A zext of an unsigned 32-bit-or-narrower value to u64 keeps the value as it
+  // is, and skips the BigInt wrap below: a hot path in u64 arithmetic.
+  if (to === "u64" && (from === "u32" || from === "u16" || from === "u8")) return BigInt(x);
   const num = typeof x === "bigint" ? Number(x) : x;
   if (to === "f64") return num; // sitofp / uitofp / fpext
   if (to === "f32") return Math.fround(num); // ... / fptrunc, then rounded to a float
   const target = INT_KINDS[to];
-  const lo = target.signed ? -(1n << BigInt(target.bits - 1)) : 0n;
-  const hi = target.signed ? (1n << BigInt(target.bits - 1)) - 1n : (1n << BigInt(target.bits)) - 1n;
   let exact;
   if (INT_KINDS[from] === undefined) {
     // A float source (f32 or f64) goes through the saturating intrinsics: NaN
     // is 0 and out-of-range values clamp. The bounds are BigInt because
-    // 2^64 - 1 has no exact `number`.
+    // 2^64 - 1 has no exact `number`, and are built only here, where they are read.
+    const lo = target.signed ? -(1n << BigInt(target.bits - 1)) : 0n;
+    const hi = target.signed ? (1n << BigInt(target.bits - 1)) - 1n : (1n << BigInt(target.bits)) - 1n;
     if (Number.isNaN(x)) exact = 0n;
     else if (x <= Number(lo)) exact = lo;
     else if (x >= Number(hi)) exact = hi;
