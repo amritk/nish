@@ -334,6 +334,11 @@ export class Terminal {
     rateOptions.remoteHint = caps.remoteHint
     rateOptions.envFps = parseInt(termIoGetenv("NISH_TERM_FPS"))
     this.rate = new RateController(rateOptions)
+    // The probe carries `NISH_TERM_FPS` without reading it; the controller applies it, so say so here.
+    if (rateOptions.envFps > 0) {
+      const forced: string = `NISH_TERM_FPS=${termIoGetenv("NISH_TERM_FPS")}: ${this.rate.fixedFps} frames a second`
+      caps.overrides = caps.overrides === "" ? forced : `${caps.overrides}; ${forced}`
+    }
     this.held = held
     this.ackSent = new Array<f64>(TERM_IO_ACKS)
     this.ackSent.fill(0.0)

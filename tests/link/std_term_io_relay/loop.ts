@@ -11,6 +11,8 @@
 //   panic      `runTerminal` that writes `<panic>` and fails a bounds check
 //              in its tenth `render`, so the bytes after the mark are the
 //              runtime's restore string
+//   panic-mouse  the same with all-motion mouse reports (1003) and
+//                focus reports on, so the restore string turns them off too
 //   watermark  one frame, then `KeyState.watermarked` once its answer is in
 //              and again after 1.2 s without frames
 //   rss        `openTerminal` and 250 frames of a 480×270 framebuffer, each
@@ -105,10 +107,14 @@ const waitForQ = (term: Terminal, events: TermEvent[]): void => {
   }
 };
 
-const runLoop = (panics: boolean): number => {
+const runLoop = (panics: boolean, mouse: boolean): number => {
   const options = defaultTerminalOptions();
   options.framebufferWidth = 480;
   options.framebufferHeight = 270;
+  if (mouse) {
+    options.mouse = 1003;
+    options.focus = true;
+  }
   const run = new Run();
   run.panics = panics;
   const ran = runTerminal(options, run, update, render);
@@ -186,8 +192,8 @@ const rss = (leaks: boolean): number => {
 
 export const main = (): number => {
   const mode = process.argv.length > 1 ? process.argv[1] : "";
-  if (mode === "throttle" || mode === "panic") {
-    return runLoop(mode === "panic");
+  if (mode === "throttle" || mode === "panic" || mode === "panic-mouse") {
+    return runLoop(mode !== "throttle", mode === "panic-mouse");
   }
   if (mode === "watermark") {
     return watermark();
