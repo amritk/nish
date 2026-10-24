@@ -298,6 +298,29 @@ file="$FIXTURES/\${url#https://github.com/amritk/nish/releases/download/}"
 cp "$file" "$out"
 `
 
+// A stand-in `gh` too, because the real one is on PATH here and in CI and its
+// answer would depend on who is signed in. What it does is read from `gh-mode`
+// in the sandbox: `signed-out` (the default, so no other test checks an
+// attestation), `old` (signed in, but its `attestation verify` lacks a flag
+// install.sh needs), `pass` and `fail`. Every call is logged to `gh.log`.
+const fakeGh = `#!/bin/sh
+printf '%s\\n' "$*" >> "$GH_LOG"
+mode="$(cat "$GH_MODE")"
+case "$1 $2" in
+  "auth status") [ "$mode" = signed-out ] && exit 1; exit 0 ;;
+  "attestation verify")
+    case " $* " in
+      *" --help "*)
+        if [ "$mode" = old ]; then echo "--repo --signer-workflow --source-ref"; else
+          echo "--repo --signer-workflow --source-ref --deny-self-hosted-runners"; fi
+        exit 0 ;;
+    esac
+    [ "$mode" = pass ] && exit 0
+    echo "stand-in gh: no matching attestation" >&2; exit 1 ;;
+esac
+exit 1
+`
+
 /** The asset install.sh derives for this machine, from install.sh itself. */
 const hostAsset = spawnSync(
   "sh",
@@ -320,6 +343,9 @@ const installSandbox = (version) => {
   fs.mkdirSync(path.join(dir, "bin"))
   fs.writeFileSync(path.join(dir, "bin", "curl"), fakeCurl)
   fs.chmodSync(path.join(dir, "bin", "curl"), 0o755)
+  fs.writeFileSync(path.join(dir, "bin", "gh"), fakeGh)
+  fs.chmodSync(path.join(dir, "bin", "gh"), 0o755)
+  fs.writeFileSync(path.join(dir, "gh-mode"), "signed-out")
   const name = `nish-${version}-${hostAsset}`
   const stage = path.join(dir, "stage", name)
   for (const sub of ["bin", "runtime", "scripts"]) {
@@ -348,6 +374,8 @@ const install = (box, args) =>
       PATH: `${path.join(box.dir, "bin")}:${process.env.PATH}`,
       FIXTURES: path.join(box.dir, "release"),
       CURL_LOG: path.join(box.dir, "curl.log"),
+      GH_MODE: path.join(box.dir, "gh-mode"),
+      GH_LOG: path.join(box.dir, "gh.log"),
       NISH_VERSION: "",
     },
   })
@@ -405,6 +433,88 @@ check(`install.sh derives an asset for this machine (${hostAsset || "none"})`, h
     "install.sh installs a tarball whose SHA-256 matches its SHA256SUMS line",
     r.status === 0 && v.stdout.trim() === "nish 9.9.9",
     `${told(box, r)}\ninstalled --version: ${v.stdout}${v.stderr}`
+  )
+}
+
+// ---- install.sh: the build provenance attestation (SC-16) ---------------------------
+//
+// A release after 0.20.0 is checked with `gh attestation verify` when a usable
+// gh is there, and skipped with a note when it is not. Each case below has a
+// SHA256SUMS that matches, so the attestation is the only thing deciding.
+
+const ghMode = (box, mode) => fs.writeFileSync(path.join(box.dir, "gh-mode"), mode)
+const ghCalls = (box) => readOr(path.join(box.dir, "gh.log"), "")
+const withSums = (box) =>
+  fs.writeFileSync(path.join(box.release, "SHA256SUMS"), `${sha256(box.tarball)}  ${box.name}.tar.gz\n`)
+
+// gh accepts it: installed, and the check pinned the repository, the workflow
+// that signed it and the tag it ran on.
+{
+  const box = installSandbox("9.9.9")
+  withSums(box)
+  ghMode(box, "pass")
+  const r = install(box, ["9.9.9", "--dir", box.home])
+  const want =
+    "--repo amritk/nish --signer-workflow amritk/nish/.github/workflows/release.yml " +
+    "--source-ref refs/tags/v9.9.9 --deny-self-hosted-runners"
+  check(
+    "install.sh checks a release's attestation with gh, pinned to release.yml at its tag, and installs it",
+    r.status === 0 && ran(box) && r.stdout.includes("verified:") && ghCalls(box).includes(want),
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+
+// gh refuses it: so does install.sh, without running the compiler, though the
+// SHA-256 matched.
+{
+  const box = installSandbox("9.9.9")
+  withSums(box)
+  ghMode(box, "fail")
+  const r = install(box, ["9.9.9", "--dir", box.home])
+  check(
+    "install.sh refuses a release whose attestation gh rejects, without running it",
+    refused(box, r) &&
+      r.stderr.includes("no build provenance attestation") &&
+      r.stderr.includes("stand-in gh"),
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+
+// No usable gh -- signed out, or too old to pin what signed the attestation:
+// installed on the SHA-256 alone, with a note that says which, and gh is never
+// asked to verify.
+for (const [mode, reason] of [
+  ["signed-out", "not signed in"],
+  ["old", "too old"],
+]) {
+  const box = installSandbox("9.9.9")
+  withSums(box)
+  ghMode(box, mode)
+  const r = install(box, ["9.9.9", "--dir", box.home])
+  check(
+    `install.sh skips the attestation with a note when gh is ${mode}, and installs on the SHA-256`,
+    r.status === 0 &&
+      ran(box) &&
+      r.stdout.includes("attestation was not checked") &&
+      r.stdout.includes(reason) &&
+      !ghCalls(box)
+        .split("\n")
+        .some((call) => call.startsWith("attestation verify ") && call !== "attestation verify --help"),
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
+  )
+}
+
+// 0.20.0 and earlier carry no attestation, so none is asked for, even from a gh
+// that would reject everything.
+{
+  const box = installSandbox("0.20.0")
+  withSums(box)
+  ghMode(box, "fail")
+  const r = install(box, ["0.20.0", "--dir", box.home])
+  check(
+    "install.sh asks for no attestation from 0.20.0, which predates them",
+    r.status === 0 && ran(box) && ghCalls(box) === "",
+    `${told(box, r)}\ngh:\n${ghCalls(box)}`
   )
 }
 
@@ -808,11 +918,294 @@ const runScripts = (text) => {
   const verify = npmJob.indexOf("needs.release.outputs.sums")
   check(
     "release.yml's npm job checks every package against the release job's SHA256SUMS before publishing",
-    /sums: \$\{\{ steps\.create\.outputs\.sums \}\}/.test(releaseJob) &&
+    /sums: \$\{\{ steps\.sums\.outputs\.sums \}\}/.test(releaseJob) &&
       /echo "sums<<SHA256SUMS_END"/.test(releaseJob) &&
       verify > 0 &&
       verify < npmJob.indexOf("npm publish"),
     npmJob
+  )
+}
+
+// release.yml attests every file it attaches (SC-16), and the two permissions
+// that takes are the release job's alone: no other job can mint an OIDC token
+// for Sigstore or write an attestation, and the top-level token grants neither.
+// The attestation covers SHA256SUMS, so it is written after the sums and before
+// the release exists, and the SBOM is among the files the sums name.
+{
+  const release = workflows.find((w) => w.file === "release.yml").text
+  const releaseJob = jobOf(release, "release")
+  const top = release.slice(release.search(/^permissions:/m), release.search(/^jobs:/m))
+  const writers = (scope) =>
+    [...release.matchAll(/\n {2}([a-z][\w-]*):\n/g)]
+      .map((m) => m[1])
+      .filter((name) => new RegExp(`\\n {6}${scope}: write\\n`).test(jobOf(release, name)))
+  const attest = releaseJob.indexOf("uses: actions/attest-build-provenance@")
+  const sums = releaseJob.indexOf("> build/release/SHA256SUMS")
+  const create = releaseJob.indexOf('gh release create "$GITHUB_REF_NAME"')
+  check(
+    "release.yml grants attestations: write and id-token: write at the job level only, to release (and id-token to npm)",
+    !/id-token|attestations/.test(top.replace(/^#.*$/gm, "")) &&
+      writers("attestations").join() === "release" &&
+      writers("id-token").sort().join() === "npm,release",
+    `top-level: ${top}\nattestations: write in ${writers("attestations")}\nid-token: write in ${writers("id-token")}`
+  )
+  check(
+    "release.yml attests the build provenance of every file in SHA256SUMS before it creates the release",
+    sums > 0 &&
+      attest > sums &&
+      create > attest &&
+      /attest-build-provenance@[0-9a-f]{40} # v\d[^\n]*\n\s+with:\n\s+subject-checksums: build\/release\/SHA256SUMS\n/.test(
+        releaseJob
+      ),
+    releaseJob
+  )
+  check(
+    "release.yml writes the SBOM before SHA256SUMS and lists it there, and every binaries row records its toolchain",
+    /node scripts\/sbom\.mjs spdx /.test(releaseJob) &&
+      releaseJob.indexOf('assets+=("$SBOM")') > 0 &&
+      releaseJob.indexOf('assets+=("$SBOM")') < sums &&
+      /node scripts\/sbom\.mjs toolchain /.test(jobOf(release, "binaries")) &&
+      jobOf(release, "binaries").includes("steps.toolchain.outputs.record"),
+    releaseJob
+  )
+}
+
+// scripts/sbom.mjs over a release directory laid out as the release job's is:
+// an SPDX 2.3 document naming each file with the digest it really has, each
+// tarball's build tools from its row's record, and each shipped component of
+// THIRD_PARTY_NOTICES.md. A tarball whose row recorded nothing is refused.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nish-sbom-"))
+  const version = "9.9.9"
+  const write = (name, text) => fs.writeFileSync(path.join(dir, name), text)
+  write(`nish-${version}.tgz`, "the npm package")
+  write(`nish-${version}-x86_64-linux.tar.gz`, "a linux compiler")
+  write(`amritk-nish-x86_64-linux-${version}.tgz`, "its platform package")
+  const sbom = (out) =>
+    spawnSync(
+      "node",
+      [
+        path.join(root, "scripts", "sbom.mjs"),
+        "spdx",
+        "--dir",
+        dir,
+        "--version",
+        version,
+        "--created",
+        "2026-01-02T03:04:05+01:00",
+        "--out",
+        path.join(dir, out),
+      ],
+      { encoding: "utf8" }
+    )
+  const noToolchain = sbom("noToolchain.spdx.json")
+  check(
+    "sbom.mjs refuses a tarball with no record of the toolchain that built it",
+    noToolchain.status === 1 && noToolchain.stderr.includes("toolchain-x86_64-linux.json"),
+    `${noToolchain.status}\n${noToolchain.stderr}`
+  )
+  write(
+    "toolchain-x86_64-linux.json",
+    JSON.stringify({
+      asset: "x86_64-linux",
+      runner: "ubuntu-latest",
+      os: "Linux 6.8.0",
+      arch: "x64",
+      image: "ubuntu24 20260101.1",
+      clang: "Ubuntu clang version 18.1.3 (1ubuntu1)",
+      linker: "Ubuntu LLD 18.1.3 (compatible with GNU linkers)",
+      node: "v22.22.0",
+      seed: "nish 0.20.0",
+    })
+  )
+  const made = sbom("nish.spdx.json")
+  const doc = made.status === 0 ? JSON.parse(fs.readFileSync(path.join(dir, "nish.spdx.json"), "utf8")) : {}
+  const byName = new Map((doc.packages ?? []).map((p) => [p.name, p]))
+  const digestOf = (name) => byName.get(name)?.checksums?.[0]?.checksumValue
+  const shippedTexts = [
+    ...fs
+      .readFileSync(path.join(root, "THIRD_PARTY_NOTICES.md"), "utf8")
+      .matchAll(/^\| `(?:runtime|std)\/[^`]+` \|.*\| `([^`]+)` \|$/gm),
+  ].map((m) => m[1])
+  const vendored = (doc.packages ?? []).filter((p) => p.SPDXID.startsWith("SPDXRef-Vendored-"))
+  const built = (tool) =>
+    (doc.relationships ?? []).some(
+      (r) =>
+        r.relationshipType === "BUILD_TOOL_OF" &&
+        r.relatedSpdxElement === byName.get("nish-x86_64-linux")?.SPDXID &&
+        r.spdxElementId === byName.get(tool)?.SPDXID
+    )
+  check(
+    "sbom.mjs describes the release: each file with its own SHA-256, each shipped vendored component, and the toolchain that built each tarball",
+    made.status === 0 &&
+      doc.spdxVersion === "SPDX-2.3" &&
+      doc.creationInfo.created === "2026-01-02T02:04:05Z" &&
+      digestOf("nish") === sha256(path.join(dir, `nish-${version}.tgz`)) &&
+      digestOf("nish-x86_64-linux") === sha256(path.join(dir, `nish-${version}-x86_64-linux.tar.gz`)) &&
+      digestOf("@amritk/nish-x86_64-linux") ===
+        sha256(path.join(dir, `amritk-nish-x86_64-linux-${version}.tgz`)) &&
+      shippedTexts.length > 0 &&
+      new Set(shippedTexts).size === vendored.length &&
+      shippedTexts.every((text) => vendored.some((p) => p.comment.includes(text))) &&
+      byName.get("fiat-crypto")?.versionInfo === "abe078c5149bc15bc368c27cc364fdef56470136" &&
+      byName.get("clang (LLVM)")?.versionInfo === "18.1.3" &&
+      ["clang (LLVM)", "LLD", "Node.js", "nish (the seed)"].every(built),
+    `${made.status}\n${made.stderr}\n${[...byName.keys()].join(", ")}`
+  )
+  fs.rmSync(dir, { recursive: true, force: true })
+}
+
+// The comparison the scheduled rebuild gates on (rebuild.yml,
+// docs/security/supply-chain.md SC-28), on a tarball and a tree made here. The
+// compilers are small ELF programs from clang: one stands for the published
+// compiler, one is the same file with another `.comment`, which is what a later
+// runner image's GCC objects change, and one is a different program.
+{
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rebuild-compare-"))
+  const compare = path.join(root, "scripts", "rebuild-compare.sh")
+  const cc = (program, status) => {
+    fs.writeFileSync(path.join(dir, `${program}.c`), `int main(void) { return ${status}; }\n`)
+    return spawnSync("clang", ["-O1", "-o", path.join(dir, program), path.join(dir, `${program}.c`)], {
+      encoding: "utf8",
+    })
+  }
+  const built = [cc("published", 0), cc("other", 7)]
+  fs.writeFileSync(path.join(dir, "comment.txt"), "a later linker\0")
+  const objcopy = spawnSync(
+    "sh",
+    [
+      "-c",
+      'objcopy --remove-section=.comment "$1/published" "$1/stripped" && objcopy --add-section .comment="$1/comment.txt" "$1/stripped" "$1/recommented"',
+      "sh",
+      dir,
+    ],
+    { encoding: "utf8" }
+  )
+  const tree = path.join(dir, "tree")
+  for (const [file, text] of [
+    ["runtime/rt.c", "int rt;\n"],
+    ["std/m.ts", "export const m = 1\n"],
+    ["docs/INSTALL.md", "# Install\n"],
+  ]) {
+    fs.mkdirSync(path.dirname(path.join(tree, file)), { recursive: true })
+    fs.writeFileSync(path.join(tree, file), text)
+  }
+  const name = "nish-9.9.9-x86_64-linux"
+  const tarball = (withExtra) => {
+    const stage = path.join(dir, "stage")
+    fs.rmSync(stage, { recursive: true, force: true })
+    const top = path.join(stage, name)
+    fs.mkdirSync(path.join(top, "bin"), { recursive: true })
+    fs.cpSync(path.join(tree, "runtime"), path.join(top, "runtime"), { recursive: true })
+    fs.cpSync(path.join(tree, "std"), path.join(top, "std"), { recursive: true })
+    fs.copyFileSync(path.join(tree, "docs", "INSTALL.md"), path.join(top, "INSTALL.md"))
+    fs.copyFileSync(path.join(dir, "published"), path.join(top, "bin", "nish"))
+    if (withExtra) {
+      fs.writeFileSync(path.join(top, "extra.txt"), "no source for this\n")
+    }
+    const file = path.join(dir, withExtra ? "extra.tar.gz" : "plain.tar.gz")
+    spawnSync("tar", ["-czf", file, "-C", stage, name])
+    return file
+  }
+  const plain = tarball(false)
+  const extra = tarball(true)
+  const env = { ...process.env, GITHUB_STEP_SUMMARY: "" }
+  const rc = (published, binary, ...flags) =>
+    spawnSync(
+      "bash",
+      [compare, "--published", published, "--tree", tree, "--binary", path.join(dir, binary), ...flags],
+      { encoding: "utf8", env }
+    )
+  const ready = built.every((b) => b.status === 0) && objcopy.status === 0
+  const say = (r) => `${r.status}\n${r.stdout}${r.stderr}`
+
+  const same = rc(plain, "published")
+  check(
+    "rebuild-compare.sh passes an identical rebuild",
+    ready &&
+      same.status === 0 &&
+      same.stdout.includes("tree (3 files besides bin/nish): identical") &&
+      same.stdout.includes("every byte: byte-identical") &&
+      same.stdout.includes("without .comment: identical"),
+    say(same)
+  )
+  const comment = rc(plain, "recommented")
+  check(
+    "rebuild-compare.sh passes a compiler that differs only in .comment",
+    ready &&
+      comment.status === 0 &&
+      comment.stdout.includes("every byte: differs") &&
+      comment.stdout.includes("without .comment: identical"),
+    say(comment)
+  )
+  const code = rc(plain, "other")
+  check(
+    "rebuild-compare.sh fails a compiler that differs in code",
+    ready &&
+      code.status === 1 &&
+      code.stdout.includes("without .comment: differs") &&
+      code.stderr.includes("NOT what its tagged source builds"),
+    say(code)
+  )
+  const unsourced = rc(extra, "published")
+  check(
+    "rebuild-compare.sh fails a published file the tag has no source for",
+    ready &&
+      unsourced.status === 1 &&
+      unsourced.stderr.includes("extra.txt is published and the tag has no extra.txt"),
+    say(unsourced)
+  )
+  const reported = rc(plain, "other", "--report-only")
+  check(
+    "rebuild-compare.sh --report-only reports a difference and exits 0",
+    ready &&
+      reported.status === 0 &&
+      reported.stdout.includes("NOT what this rebuild produced (reported, not gated)"),
+    say(reported)
+  )
+  fs.rmSync(dir, { recursive: true, force: true })
+}
+
+// rebuild.yml checks; it never publishes, so its token reads and nothing more.
+// Linux rows gate and macOS rows report, and the monthly job takes the road
+// from the ddc root to the same comparison.
+{
+  const text = fs.readFileSync(path.join(root, ".github", "workflows", "rebuild.yml"), "utf8")
+  const top = text.slice(0, text.indexOf("\njobs:"))
+  const compare = jobOf(text, "rebuild")
+  const ddc = jobOf(text, "ddc")
+  const reportOnly = text.split("\n").filter((line) => line.includes("--report-only"))
+  check(
+    "rebuild.yml reads only, gates Linux and reports macOS",
+    /\npermissions:\n {2}contents: read\n/.test(top) &&
+      !/:\s*write\b/.test(text) &&
+      reportOnly.length === 1 &&
+      /if \[ "\$RUNNER_OS" = "macOS" \]; then flags\+=\(--report-only\); fi/.test(reportOnly[0]) &&
+      /bash scripts\/rebuild-compare\.sh[\s\S]*"\$\{flags\[@\]\}"/.test(compare) &&
+      /NISH_BOOTSTRAP="\$GITHUB_WORKSPACE\/build\/seed\/bin\/nish" bash scripts\/bootstrap\.sh/.test(compare),
+    compare
+  )
+  const monthly = text.match(/- cron: "([^"]+)"/g)?.map((line) => line.match(/"([^"]+)"/)[1]) ?? []
+  check(
+    "rebuild.yml runs ddc-chain.sh monthly and on request, and compares through rebuild-compare.sh",
+    monthly.length === 2 &&
+      ddc.includes(`github.event.schedule == '${monthly[1]}'`) &&
+      /^\d+ \d+ \d+ \* \*$/.test(monthly[1]) &&
+      ddc.includes("github.event_name == 'workflow_dispatch' && inputs.ddc") &&
+      /bash scripts\/ddc-chain\.sh --work "\$RUNNER_TEMP\/ddc" --to "\$TAG"/.test(ddc) &&
+      ddc.indexOf("ddc-chain.sh") < ddc.indexOf("bash scripts/rebuild-compare.sh") &&
+      !ddc.includes("--report-only"),
+    ddc
+  )
+  // From v0.17.0 on a seed links with the scripts/build.sh beside its bin/, so
+  // a step whose output were a bare bin/nish would stop the chain there.
+  const chain = fs.readFileSync(path.join(root, "scripts/ddc-chain.sh"), "utf8")
+  check(
+    "ddc-chain.sh lays each step out as a release, runtime/, std/ and scripts/build.sh beside bin/",
+    chain.includes('cp -R "$wt/runtime" "$wt/std" "$out/"') &&
+      chain.includes('cp "$wt/scripts/build.sh" "$out/scripts/build.sh"') &&
+      chain.indexOf('cp "$wt/scripts/build.sh"') < chain.indexOf('git -C "$repo" worktree remove'),
+    "scripts/ddc-chain.sh"
   )
 }
 

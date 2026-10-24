@@ -50,7 +50,7 @@ the record that found it. The notes below the table name each such finding.
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `src/cli-style.ts` (the terminal probe) | 0 / 1 / 2 / 5 ⁵ | 0 / 0 / 0 / 2 |
 | TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 3 ⁹ | 0 / 0 / 0 / 1 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 8 ¹¹ | 0 / 0 / 0 / 1 |
-| Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 2 / 19 | 0 / 0 / 0 / 1 ⁶ |
+| Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 2 ⁷ |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 1 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
@@ -59,7 +59,7 @@ the record that found it. The notes below the table name each such finding.
 | Percent-decoding and query strings | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
-| **Total** ⁸ | | | **3 / 10 / 17 / 94** | **0 / 0 / 3 / 13** |
+| **Total** ⁸ | | | **3 / 10 / 19 / 96** | **0 / 0 / 3 / 12** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -92,6 +92,10 @@ the record that found it. The notes below the table name each such finding.
    entry is named by a SHA-256.
 6. SC-17 (Low) is accepted rather than open, and is not counted: `curl … | sh`
    runs `install.sh` unverified, and the record says why that stands.
+   SC-16 (Low), left open by the supply-chain stage, was fixed by #389's
+   build provenance attestation and is counted as a fixed Low. SC-28
+   (Medium) is counted as fixed: its Linux rows gate, and its macOS rows
+   report rather than gate, for the reason its record gives.
 7. H2-2, H3-4, WT-3, WT-4 and WT-5 (Low) are accepted, with the reason in
    their records, and are not counted, as SC-17 is not. H2-3, H3-5 and WT-2
    are open: the program owns the loop and the clock. WT-1 repeats H3-1 and
@@ -208,7 +212,6 @@ only.
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | JSON-13 | Medium | `src/emit-json.ts` (`emitJsonDecodeMapBody`), `std/json-typed.ts` (`mapRoom`), `std/collections.ts` and `src/emit-map.ts` (the string hash) | The global `Map` hashes a string with no seed, so a body can give a `Map<string, V>` field keys that all collide. `maxMapKeys` (4,096 by default) bounds the keys of one decoding, and with them its probes; the fix is a seeded hash | — |
 | JSON-2 | Low | `std/json-tokenizer.ts` (`reset`, `JSON_TOK_END_CEILING`) | A window ending within 64 bytes of 2^31 − 1 is refused so that no offset can overflow; no test reaches it, since it takes a 2 GiB array | — |
-| SC-16 | Low | `.github/workflows/release.yml` | Immutable releases are on from v0.16.0 (`immutable: true`), so its assets and `SHA256SUMS` are fixed once published. Build provenance attestations, the stronger answer, are not: they need `id-token` and `attestations: write` on `release.yml` | #389 |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in

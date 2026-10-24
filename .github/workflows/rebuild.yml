@@ -1,0 +1,269 @@
+# Is the latest release what its tagged source builds?
+#
+# A release's compilers are built by release.yml on GitHub's runners, and the
+# attestation that release attaches (docs/security/supply-chain.md, SC-16)
+# says which workflow run built them. It cannot say that the run built them
+# from nothing but the tag. This workflow checks that, from the outside: it
+# builds the latest release again, from its tag, on a clean runner, seeded by
+# the release before it, and compares what comes out with what the release
+# really attached (scripts/rebuild-compare.sh). The comparison is the one
+# `bootstrap.sh --verify` ends on, scripts/verify-binaries.sh, after both
+# copies of an ELF compiler lose `.comment`: that section is the linker's and
+# the C runtime's version strings, nothing a CPU runs, and it moves with the
+# runner image's GCC rather than with anything this repository pins.
+#
+# Two jobs do the building, on two roads:
+#
+#   rebuild  every row the release attached, each on the runner label
+#            release.yml built it on, seeded by the previous release's
+#            compiler for that row. A Linux row that differs fails the run.
+#            A macOS row reports and does not fail: its LLVM is Homebrew's
+#            llvm@18, whose patch release moves under it between the release
+#            and this run (SC-28).
+#   ddc      diverse double-compiling, on x86_64 Linux. It builds the line of
+#            releases again from the `ddc-0.6.0` tag, whose compiler
+#            TypeScript builds, so no published binary is on its road at all
+#            (scripts/ddc-chain.sh), and compares the end of it with the
+#            latest release's x86_64-linux compiler (SC-29).
+#
+# `rebuild` runs every Monday and `ddc`, which takes longer, on the ninth of
+# each month; a dispatch runs `rebuild`, and `ddc` as well when its input is
+# set. A pull request that edits this file or a script it runs runs both,
+# against the latest release, so a change to the check is seen working before
+# it lands. Nothing here publishes, writes to the repository or cuts a
+# release: the token is `contents: read` throughout. A scheduled run that
+# fails is red in the Actions tab, and GitHub mails the failure to whoever
+# last set the schedule.
+name: Rebuild
+
+on:
+  schedule:
+    # Mondays, 05:23 UTC, and the ninth of each month, 06:41 UTC: off the
+    # hour, where most scheduled jobs queue. The `ddc` job's `if:` names the
+    # second string, so the two are edited together.
+    - cron: "23 5 * * 1"
+    - cron: "41 6 9 * *"
+  workflow_dispatch:
+    inputs:
+      ddc:
+        description: Also rebuild from the ddc-0.6.0 root (about half an hour)
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/rebuild.yml
+      - scripts/rebuild-compare.sh
+      - scripts/ddc-chain.sh
+      - scripts/verify-binaries.sh
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rebuild-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  latest:
+    name: which release to rebuild
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.latest.outputs.tag }}
+      previous: ${{ steps.latest.outputs.previous }}
+      rows: ${{ steps.latest.outputs.rows }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # The newest release that is neither a draft nor a prerelease, and the
+      # one before it, which is what release.yml seeded it from. The rows are
+      # the ones that release was due to attach, asked of the same
+      # .github/seed-due.sh release.yml asks.
+      - name: The latest release and the one before it
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          read -r tag previous < <(gh api "repos/$GITHUB_REPOSITORY/releases" |
+            jq -r '[.[] | select((.draft or .prerelease) | not) | .tag_name][0:2] | join(" ")')
+          if [ -z "$tag" ] || [ -z "$previous" ]; then
+            echo "::error::there is no pair of published releases to rebuild and seed from"
+            exit 1
+          fi
+          rows="$(bash .github/seed-due.sh "${tag#v}")"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "previous=$previous" >> "$GITHUB_OUTPUT"
+          echo "rows=$rows" >> "$GITHUB_OUTPUT"
+          echo "rebuilding $tag, seeded by $previous, on: $(printf '%s' "$rows" | jq -r '[.[].asset] | join(", ")')"
+
+  rebuild:
+    name: rebuild (${{ matrix.target.asset }})
+    needs: latest
+    runs-on: ${{ matrix.target.runner }}
+    permissions:
+      contents: read
+      attestations: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.latest.outputs.rows) }}
+    steps:
+      # This checkout is for the scripts that do the checking, which are the
+      # current ones; the release is built from a second checkout of its tag.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.latest.outputs.tag }}
+          path: release
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # The same two installs release.yml's `binaries` job makes, so that a
+      # difference is the release's and not this workflow's.
+      - name: Install LLVM 18 + lld (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install LLVM 18 + lld (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install llvm@18
+          prefix="$(brew --prefix llvm@18)"
+          echo "$prefix/bin" >> "$GITHUB_PATH"
+
+      # A runner label can change what it provides, which is what
+      # `macos-latest` did when it moved from Intel to Apple Silicon; a rebuild
+      # on the wrong architecture would differ for that reason alone.
+      - name: The runner is the row's host
+        env:
+          ASSET: ${{ matrix.target.asset }}
+          HOST: ${{ matrix.target.host }}
+          RUNNER_LABEL: ${{ matrix.target.runner }}
+        run: |
+          host="$(uname -s)-$(uname -m)"
+          if [ "$host" != "$HOST" ]; then
+            echo "::error::$RUNNER_LABEL provides $host, but .github/seed-targets.json says the $ASSET row is built on $HOST"
+            exit 1
+          fi
+
+      - name: Fetch the seed (the release before)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET: ${{ matrix.target.asset }}
+          PREVIOUS: ${{ needs.latest.outputs.previous }}
+        run: |
+          version="${PREVIOUS#v}"
+          bash scripts/fetch-seed.sh "$version" --expect-tarball "nish-$version-$ASSET.tar.gz"
+
+      - name: Build the release again from its tag
+        run: |
+          cd release
+          NISH_BOOTSTRAP="$GITHUB_WORKSPACE/build/seed/bin/nish" bash scripts/bootstrap.sh -o "$RUNNER_TEMP/rebuilt/bin/nish" --profile speed --verify
+
+      # The published tarball is checked against the release's own SHA256SUMS
+      # before it is compared, so that the comparison is with what a user
+      # downloads. `shasum` rather than `sha256sum`, which macOS lacks.
+      - name: Download what the release attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASSET: ${{ matrix.target.asset }}
+          TAG: ${{ needs.latest.outputs.tag }}
+        run: |
+          file="nish-${TAG#v}-$ASSET.tar.gz"
+          dir="$RUNNER_TEMP/published"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$file" --pattern SHA256SUMS --dir "$dir"
+          want="$(awk -v f="$file" '$2 == f || $2 == "*" f { print $1 }' "$dir/SHA256SUMS")"
+          got="$(shasum -a 256 "$dir/$file" | cut -d' ' -f1)"
+          if [ -z "$want" ] || [ "$want" != "$got" ]; then
+            echo "::error::$file does not match the release's SHA256SUMS (${want:-no line}, got $got)"
+            exit 1
+          fi
+
+      - name: Compare
+        env:
+          ASSET: ${{ matrix.target.asset }}
+          TAG: ${{ needs.latest.outputs.tag }}
+        run: |
+          {
+            echo "### $TAG rebuilt from its tag ($RUNNER_OS)"
+            echo
+            echo "| Asset | Tree | Every byte | Gate |"
+            echo "| --- | --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          flags=()
+          if [ "$RUNNER_OS" = "macOS" ]; then flags+=(--report-only); fi
+          bash scripts/rebuild-compare.sh --published "$RUNNER_TEMP/published/nish-${TAG#v}-$ASSET.tar.gz" \
+            --tree release --binary "$RUNNER_TEMP/rebuilt/bin/nish" "${flags[@]}"
+
+  ddc:
+    name: diverse double-compiling (x86_64-linux)
+    needs: latest
+    if: github.event_name == 'pull_request' || github.event.schedule == '41 6 9 * *' || (github.event_name == 'workflow_dispatch' && inputs.ddc)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      # Every tag, because the chain is every release from the root on.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install LLVM 18 + lld
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Build every release from the ddc-0.6.0 root
+        id: chain
+        env:
+          TAG: ${{ needs.latest.outputs.tag }}
+        run: |
+          bash scripts/ddc-chain.sh --work "$RUNNER_TEMP/ddc" --to "$TAG" | tee "$RUNNER_TEMP/chain.txt"
+          echo "nish=$(tail -n 1 "$RUNNER_TEMP/chain.txt")" >> "$GITHUB_OUTPUT"
+
+      - name: Download what the release attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.latest.outputs.tag }}
+        run: |
+          file="nish-${TAG#v}-x86_64-linux.tar.gz"
+          dir="$RUNNER_TEMP/published"
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$file" --pattern SHA256SUMS --dir "$dir"
+          (cd "$dir" && sha256sum --check --ignore-missing --strict SHA256SUMS)
+
+      - name: Compare
+        env:
+          TAG: ${{ needs.latest.outputs.tag }}
+          NISH: ${{ steps.chain.outputs.nish }}
+        run: |
+          git worktree add -q --detach "$RUNNER_TEMP/tag" "$TAG"
+          {
+            echo "### $TAG built from the ddc-0.6.0 root"
+            echo
+            echo "| Asset | Tree | Every byte | Gate |"
+            echo "| --- | --- | --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          bash scripts/rebuild-compare.sh --published "$RUNNER_TEMP/published/nish-${TAG#v}-x86_64-linux.tar.gz" \
+            --tree "$RUNNER_TEMP/tag" --binary "$NISH"
