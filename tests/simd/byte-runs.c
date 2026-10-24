@@ -1,7 +1,8 @@
 /* The agreement test for runtime/runtime-bytes.c's byte-class runs (WP38 S6a):
  * `nish_bytes_skip_blank`, `nish_bytes_skip_digits`, `nish_bytes_skip_json_text`
  * and `nish_bytes_skip_json_plain`. Every path the file has for this machine --
- * scalar, base and, when the CPU has it, AVX2 -- answers every class boundary
+ * scalar, base and, when the CPU has it, AVX2 for the first three classes; the
+ * plain class has a scalar and a base path only -- answers every class boundary
  * at every block offset, every UTF-8 lead cut short at every byte by `to`, and
  * a seeded, fuzzed corpus exactly as a plain reference loop does, and the
  * resolver picks the path `NISH_SIMD` and the CPU say it should.
@@ -324,6 +325,6 @@ int main(int argc, char **argv) {
 
   printf("byte-runs: %ld cases agree across", cases);
   for (int k = 0; k < npaths; k++) printf(" %s", paths[k].name);
-  printf("%s%s; the resolver picks every pin\n", avx2_note ? "; " : "", avx2_note ? avx2_note : "");
+  printf(" (plain: scalar base)%s%s; the resolver picks every pin\n", avx2_note ? "; " : "", avx2_note ? avx2_note : "");
   return 0;
 }

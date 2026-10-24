@@ -258,7 +258,7 @@ export const skipJsonText = (b: u8[], from: i32, to: i32): i32 => {
  * run, `0x7f` and the bytes from `0x80` up included, and no UTF-8 is checked:
  * where `skipJsonText` is the reader's run, this is the writer's, which passes
  * the bytes of a string through as they are. Natively the scan is
- * `nish_bytes_skip_json_plain`, 16 or 32 bytes at a time. Variable-time, as
+ * `nish_bytes_skip_json_plain`, 16 bytes at a time. Variable-time, as
  * `skipBlank` is.
  */
 export const skipJsonPlain = (b: u8[], from: i32, to: i32): i32 => {

@@ -1,10 +1,10 @@
 ---
 name: WP38 S6a follow-up — JsonWriter's escape scan on a byte-class kernel
-overview: S6a (#862) put JsonTokenizer on nish/bytes' byte-class run kernels but left JsonWriter unchanged, so S6a's serialize condition is unmet (docs/wp38-simd.md §7, the S6a row and "S6a, the byte-class kernels: what was built" → "Not done"). This adds the fourth class the writer needs — every byte the writer copies unescaped, including bytes of 0x80 and above, which it passes through without validating — as a runtime-bytes.c kernel and a nish/bytes walker, and puts JsonWriter's u8[] writers (keyBytes, stringBytes) on it, with copyBytes for the plain runs and no call for a short window. By the owner's decision, the `string` writer (jsonWriterPutString, jsonEncode's path) stays as it is, and the serialize bar is replaced by a recorded finding: the escape scan cannot reach it on citm.
+overview: S6a (#862) put JsonTokenizer on nish/bytes' byte-class run kernels but left JsonWriter unchanged, so S6a's serialize condition is unmet (docs/wp38-simd.md §7, the S6a row and "S6a, the byte-class kernels: what was built" → "Not done"). This adds the fourth class the writer needs — every byte the writer copies unescaped, including bytes of 0x80 and above, which it passes through without validating — as a runtime-bytes.c kernel and a nish/bytes walker, and puts JsonWriter's u8[] writers (keyBytes, stringBytes) on it, with copyBytes for the plain runs and no call for a short window. By the owner's decision, the `string` writer (jsonWriterPutString, jsonEncode's path) stays as it is, and the serialize bar is replaced by a recorded finding: the escape scan does not reach it on citm (its ceiling is inside the band by 0.01 points).
 stages:
   - id: writer-escape-kernel
     title: "perf(runtime): JsonWriter's escape scan on a byte-class kernel"
-    goal: JsonWriter's keyBytes and stringBytes copy plain runs through the new kernel, with the writer's output byte for byte unchanged, the three existing classes' paths instruction-identical to main's, no bench/json-compare workload or bench/json-tokenizer slower outside its band, and the finding (why the escape scan cannot make serialize on citm faster outside its band, and the next lead) recorded in docs/BENCHMARKS.md and docs/wp38-simd.md
+    goal: JsonWriter's keyBytes and stringBytes copy plain runs through the new kernel, with the writer's output byte for byte unchanged, the three existing classes' paths instruction-identical to main's, bench/json-tokenizer and serialize inside their bands, any other bench/json-compare row past its band recorded with its figures and the evidence that it runs code identical to main's, and the finding (why the escape scan cannot make serialize on citm faster outside its band, and the next lead) recorded in docs/BENCHMARKS.md and docs/wp38-simd.md
     verification: npm run check, npm run lint, an undegraded npm test, node tests/run.js wasi (WASI_SYSROOT=/usr) and node tests/run.js performance green; tests/simd/byte-runs.c passes under its tests/run.js section; the bench/json-compare A/B against main is recorded
     status: completed
     todos:
@@ -21,7 +21,7 @@ stages:
         content: "Done, narrowed by the owner to JsonWriter's u8[] writers: keyBytes and stringBytes (jsonWriterPutBytes) hand a window of 16 bytes or more to jsonWriterPutRuns, which copies each skipJsonPlain run with copyBytes and escapes only where the walker stops; a shorter window keeps the byte loop. The guard was measured at lengths 4 to 64 (the kernel loses below 16 bytes and wins from 16, where its first SIMD block starts). jsonWriterPutString (string keys and values, jsonEncode's path) and src/emit*.ts are unchanged; tests/link/std_json_writer sweeps every length from 1 to 80 with escapes and high bytes at the guard and the run boundaries against the rule — see The writer"
         status: done
       - id: ab-record
-        content: "Done: interleaved A/B against main on every bench/json-compare workload, bench/json-tokenizer and a JsonDocument.write bench (stringBytes' one in-tree caller), recorded in docs/wp38-simd.md (*JsonWriter's byte writers*, with the serialize profile and its Amdahl ceilings) and a note after docs/BENCHMARKS.md's JSON section. The S6a row's serialize verdict now says the condition is not reachable by the escape scan on citm (whole-scan ceiling 1.137x, 16-byte-guard ceiling 1.0139x, inside the 1.4% band) and names number writing as the next lead — see The record"
+        content: "Done: interleaved A/B against main on every bench/json-compare workload, bench/json-tokenizer and a JsonDocument.write bench (stringBytes' one in-tree caller), recorded in docs/wp38-simd.md (*JsonWriter's byte writers*, with the serialize profile and its Amdahl ceilings) and a note after docs/BENCHMARKS.md's JSON section. The S6a row's serialize verdict now says the condition is not reached by the escape scan on citm (whole-scan ceiling 1.137x, 16-byte-guard ceiling 1.0139x, inside the 1.4% band) and names number writing as the next lead — see The record"
         status: done
       - id: docs-surface
         content: Document the walker in docs/LANGUAGE.md's byte-runs rule, std/README.md, docs/guide/using-nish/standard-library.md and docs/IR_COOKBOOK.md where the other runs are; regenerate tests/self/goldens with node tests/self/goldens.js --update and read the diff — see The surface
@@ -38,7 +38,7 @@ cannot be written before the walker exists.
 
 **Owns:** `runtime/runtime-bytes.c`, `tests/simd/byte-runs.c`, `src/kernels.ts`,
 `src/std-modules.ts`, `std/bytes.ts`, `std/json.ts`, `std/README.md`,
-`tests/link/std_bytes*/**`, `tests/link/std_json_writer/**`, `tests/run.js`, `tests/runtime-budgets.js` (its
+`tests/link/std_bytes*/**`, `tests/link/std_json_writer/**`, `tests/run.js`, `docs/wp7-runtime.md` and `docs/MASTER_PLAN.md` (the unit's size), `tests/runtime-budgets.js` (its
 recorded size only, never the budget), `tests/self/goldens/checked/**`,
 `tests/differential/**` (regenerated only), `docs/BENCHMARKS.md`,
 `docs/wp38-simd.md`, `docs/LANGUAGE.md`, `docs/IR_COOKBOOK.md`,
@@ -89,7 +89,7 @@ finds the next byte that needs an escape with the walker, copies the run before
 it with `copyBytes`, writes the escape, and continues. `jsonWriterPutString`,
 the path of `string` keys and values and of `jsonEncode`, is unchanged, so
 serialize on citm is not expected to move. The stage does not try to beat the
-serialize record. It records why the escape scan cannot reach it (citm's
+serialize record. It records why the escape scan does not reach it (citm's
 strings are mostly under the kernel's 16-byte block; the profile and Amdahl
 ceilings are in `docs/wp38-simd.md`) and names the next lead. The writer's
 output for every input stays byte for byte as it is now:

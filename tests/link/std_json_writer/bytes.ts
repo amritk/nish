@@ -233,11 +233,11 @@ export const writerBytesChecks = (t: Suite): void => {
   // Both paths of the writer, held to the rule: a window shorter than 16 bytes
   // takes the byte loop, a longer one plain runs copied whole with escapes
   // between them. Every length from 1 to 80, from an offset inside a wider
-  // array, with an escape — `"`, `\`, newline, 0x01, 0x1f — or a high byte
-  // (0x80, 0xff, passed through unvalidated) at the start, either side of the
-  // 16-byte guard and of the run kernel's 16- and 32-byte blocks, and at the
-  // end; alone, and next to a second escape.
-  const marks: i32[] = [34, 92, 10, 1, 31, 128, 255];
+  // array, with an escape — `"`, `\`, newline, 0x01, 0x1f — a byte at the
+  // run's edges (0x20, 0x7f) or a high byte (0x80, 0xff, passed through
+  // unvalidated) at the start, either side of the 16-byte guard and of the run
+  // kernel's 16-byte blocks, and at the end; alone, and next to a second one.
+  const marks: i32[] = [34, 92, 10, 1, 31, 32, 127, 128, 255];
   const places: i32[] = [0, 1, 14, 15, 16, 17, 31, 32, 33, 47, 48, 63, 64, 79];
   const field = new Array<u8>(96);
   const sweepOut = new Array<u8>(1024);
@@ -281,7 +281,7 @@ export const writerBytesChecks = (t: Suite): void => {
   t.eqI32("bytes: stringBytes and keyBytes at every length from 1 to 80, escapes and high bytes either side of the 16-byte guard and at the run boundaries, are the rule", sweepOff, 0);
   t.ok("bytes: and the sweep wrote thousands of windows", sweeps > 5000);
 
-  // A full buffer on the run path: windows of 41 to 70 bytes with escapes and
+  // A full buffer on the run path: windows of 37 to 67 bytes with escapes and
   // a high byte at the run boundaries, at every room up to ten past their
   // quoted length, stop where `string` and `key` stop.
   const longTexts: string[] = [
@@ -322,7 +322,7 @@ export const writerBytesChecks = (t: Suite): void => {
       longRooms += 1;
     }
   }
-  t.eqI32("bytes: a full buffer at every room on four windows of 41 to 70 bytes stops where string and key stop", longOff, 0);
+  t.eqI32("bytes: a full buffer at every room on four windows of 37 to 67 bytes stops where string and key stop", longOff, 0);
   t.ok("bytes: and the full-buffer sweep tried hundreds of rooms", longRooms > 400);
 
   // No allocation: 10,000 writes from a reused buffer of bytes.

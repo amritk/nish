@@ -224,6 +224,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-23 | `runtime-bytes.c` (1,303), wp38 S6a; folded into `runtime-simd.c` the two measured 1,960 | bytes 1,536 |
 | 2026-10-23 | `nish/regex`'s match-start scan, `nish_regex_scan`: `runtime-simd.c` 675 → 2,337. The scan is the 1,631: the AVX2 path 1,323 (one copy each for a window of 1, 2 and 3 positions, so the tables stay in registers; a width of 4 shares the third), the scalar path 202, its resolver 97 and the entry point 9. `indexOfAny`'s resolver now calls `nish_simd_choose` (158) rather than inlining it (203 → 76), so the two share one CPU question. Out of line, the candidate check would save 76 bytes (2,261) but took `/example/` over the bench prose from 0.195 to 0.215 ms, against 0.199 for Rust's `regex` crate, so it stays inlined | simd 2,560 |
 | 2026-10-24 | `setTerminalRestore`, bytes written to stdout on the way out: `runtime-term.c` 1,419 → 1,825. `nish_set_terminal_restore` 238 and `nish_term_finish` 94 (the `write` loop, inlined), the handlers' setup split out of `setRawMode` as `nish_term_arm` (+16 net), the restore keeping the panic hook while bytes wait (+10), and every signal blocked while the bytes go out (+48). Raised in place, not split off, because the bytes go out from this file's static handlers under its lock | term 2,048 |
+| 2026-10-24 | the writer's plain bytes, `nish_bytes_skip_json_plain` (wp38 S6a follow-up): `runtime-bytes.c` 1,303 → 1,525. Its own scalar path 49 and SSE2 path 110, its entry point 21 and the resolver's second pointer 45 (204 → 249), less 3 from the UTF-8 resume (29 → 26, layout). No AVX2 path: putting the class in the shared paths changed the three classes' loops and slowed `bench/json-tokenizer`, so those stay instruction for instruction as they were | bytes 1,536 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same
@@ -358,14 +359,16 @@ that answers, sends or guards no string keeps none of it, by section GC.
 ### The byte-class unit
 
 `runtime/runtime-bytes.c` (wp38 S6a, [wp38-simd.md](wp38-simd.md) §3.1) holds
-the three runs `nish/bytes` steps over — JSON's blanks, the digits, and the
-bytes a JSON string holds as themselves, UTF-8 checked — sixteen or thirty-two
-bytes at a time. The compiler calls its kernels in place of three private
-walkers of `std/bytes.ts`, as it calls `runtime-simd.c`'s in place of
-`indexOfAny`'s, and each has a scalar path of its own, so there is no branch
-back to the Nish walker. Its 1,303 bytes are the scalar path 137, the SSE2
-path 265, the AVX2 path 368, the UTF-8 step 238 and its resume 29, the
-resolver 204 and the three entry points 62.
+the four runs `nish/bytes` steps over — JSON's blanks, the digits and the bytes
+a JSON string holds as themselves, UTF-8 checked, sixteen or thirty-two bytes
+at a time, and the bytes a JSON writer copies without an escape, sixteen at a
+time. The compiler calls its kernels in place of four private walkers of
+`std/bytes.ts`, as it calls `runtime-simd.c`'s in place of `indexOfAny`'s, and
+each has a scalar path of its own, so there is no branch back to the Nish
+walker. Its 1,525 bytes are the first three classes' scalar path 137, SSE2 path
+265 and AVX2 path 368, the UTF-8 step 238 and its resume 26, the writer class's
+own scalar path 49 and SSE2 path 110, the resolver 249 and the four entry
+points 83.
 
 It is a tenth unit rather than more of `runtime-simd.c` by the same rule as
 the AES unit: folded in, the two measured 1,960 bytes against that file's
