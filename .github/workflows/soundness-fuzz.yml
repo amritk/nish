@@ -1,0 +1,122 @@
+# The weekly soundness fuzzing pass: tests/differential/soundness.js run over
+# thousands of proofgen.js programs from a fresh seed, each compiled with and
+# without `--no-elision` and its default build run again under AddressSanitizer
+# (tests/differential/asan.js). ci.yml's `nish-cmp` job runs 600 programs from
+# one fixed seed on every pull request; this is the run that sees new ones.
+#
+# A program whose two builds differ, that panics when its one-past variant says
+# it should not (or does not when it should), or whose ASan run ends otherwise
+# fails the job. Its reproducer, the command that reruns it and a minimised
+# `min.ts` are uploaded as `soundness-fuzz-<seed>`; the seed is printed as a
+# notice and in the summary, so `--gen --seed <seed> --index <i> --asan` reruns
+# one program anywhere. A finding is recorded in docs/security/codegen.md.
+#
+# This is not the libFuzzer campaign in fuzz.yml: that one fuzzes the runtime's
+# and the standard library's parsers on bytes; this one fuzzes the compiler's
+# bounds-check elision on programs.
+name: Soundness fuzz
+
+on:
+  schedule:
+    # Sundays, 04:41 UTC: off the hour, and not fuzz.yml's slot.
+    - cron: "41 4 * * 0"
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Generator seed (empty: a random one, printed)"
+        type: string
+        default: ""
+      count:
+        description: "Programs to generate"
+        type: number
+        default: 20000
+      budget:
+        description: "Stop starting programs after this many seconds"
+        type: number
+        default: 3000
+
+permissions:
+  contents: read
+
+# ci.yml says why this cache is set for every job, and why it is outside the checkout.
+env:
+  NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
+  APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
+
+concurrency:
+  group: soundness-fuzz
+  cancel-in-progress: false
+
+jobs:
+  soundness:
+    name: soundness (proofgen + ASan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld + the sanitizer runtimes
+        timeout-minutes: 5
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 libclang-rt-18-dev
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        run: bash scripts/fetch-seed.sh
+
+      - name: Build the compiler
+        timeout-minutes: 10
+        run: npm run build
+
+      # The schedule has no inputs, so its runs take a random seed and the
+      # defaults. The seed is printed before the run, so a run that times out
+      # still names it.
+      - name: Pick the seed
+        id: seed
+        env:
+          SEED: ${{ inputs.seed }}
+        run: |
+          seed="${SEED:-$(od -An -N4 -tu4 /dev/urandom | tr -d ' ')}"
+          echo "seed=$seed" >> "$GITHUB_OUTPUT"
+          echo "::notice title=soundness seed::$seed"
+          echo "Soundness fuzz seed: \`$seed\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Every proof-backed elision changes nothing a program prints
+        timeout-minutes: 55
+        env:
+          SEED: ${{ steps.seed.outputs.seed }}
+          COUNT: ${{ inputs.count || 20000 }}
+          BUDGET: ${{ inputs.budget || 3000 }}
+        run: |
+          node tests/differential/soundness.js --gen --seed "$SEED" --count "$COUNT" \
+            --asan --budget "$BUDGET"
+
+      - name: Upload the reproducers
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: soundness-fuzz-${{ steps.seed.outputs.seed }}
+          # The failures' directories only: generated/ holds every program and
+          # runtime-obj/ the runtime, both there on every run.
+          path: |
+            build/test/differential/soundness/
+            !build/test/differential/soundness/generated/
+            !build/test/differential/soundness/runtime-obj/
+            !build/test/differential/soundness/**/cwd-*/
+          if-no-files-found: ignore
