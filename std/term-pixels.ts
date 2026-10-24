@@ -448,12 +448,18 @@ const pixelsSampleMapInto = (map: i32[], n: i32, source: i32): void => {
   }
 }
 
-/** `a` when it is at least `n` long, else a new zeroed array of `n`, for a `PixelBytes` working array. */
+/**
+ * `a` when it is at least `n` long, else a new zeroed array for a `PixelBytes`
+ * working array: twice `a`'s length, or `n` if that is more, so frames that
+ * grow a little at a time reallocate a logarithmic number of times.
+ */
 const pixelsAtLeast = (a: i32[], n: i32): i32[] => {
-  if (toI32(a.length) >= n) {
+  const had: i32 = toI32(a.length)
+  if (had >= n) {
     return a
   }
-  const grown: i32[] = new Array<i32>(n)
+  const twice: f64 = Math.min(toF64(had) * 2.0, 2147483647.0)
+  const grown: i32[] = new Array<i32>(twice > toF64(n) ? toI32(twice) : n)
   grown.fill(0)
   return grown
 }
@@ -493,7 +499,8 @@ const pixelsStringEnd = (out: PixelBytes): void => {
  *    where it was, and `q=2` suppresses every reply.
  * 3. The RGB bytes go as base64 (RFC 4648 §4) in chunks of 4096 characters,
  *    the protocol's limit: each but the last carries `m=1`, the last `m=0`.
- *    Only the first chunk carries the keys; the rest carry `m` alone.
+ *    Only the first chunk carries the keys; the rest carry `q=2` and `m`,
+ *    since a terminal may answer a chunk that does not repeat `q`.
  *
  * Every frame reuses `imageId` and nothing is deleted first. Transmitting an
  * id that exists replaces that image and frees the old one's data, and the
@@ -541,8 +548,9 @@ export const kittyFrame = (fb: Framebuffer, rect: PixelRect, imageId: i32, out: 
       out.putDecimal(rect.cols)
       out.putText(",r=")
       out.putDecimal(rect.rows)
-      out.putText(",C=1,q=2,")
+      out.putText(",C=1,")
     }
+    out.putText("q=2,")
     sent = sent + n
     out.putText(sent < total ? "m=1;" : "m=0;")
     out.reserve(PIXELS_KITTY_CHUNK)

@@ -266,9 +266,9 @@ export const main = (): number => {
     kitty(long, pairRect, 12),
     "\x1b[5;4H\x1b_Ga=T,f=24,t=d,i=12,p=1,s=70,v=30,c=5,r=1,C=1,q=2,m=1;" +
       base64Encode(rgbBytes(long, 0, 1024)) +
-      "\x1b\\\x1b_Gm=1;" +
+      "\x1b\\\x1b_Gq=2,m=1;" +
       base64Encode(rgbBytes(long, 1024, 2048)) +
-      "\x1b\\\x1b_Gm=0;" +
+      "\x1b\\\x1b_Gq=2,m=0;" +
       base64Encode(rgbBytes(long, 2048, 2100)) +
       "\x1b\\"
   )
@@ -327,27 +327,35 @@ export const main = (): number => {
 
   // --- memory ------------------------------------------------------------------------
   // The encoders keep their working arrays on the `PixelBytes`: after one frame
-  // has grown it, a thousand more allocate nothing. (Under Node the arena reads
-  // 0, which is flat too.)
-  const movie = new Framebuffer(160, 90)
-  for (let i: i32 = 0; i < 14400; i++) {
+  // has grown it, a thousand more allocate nothing. `Arena.used()` reads only
+  // the newest chunk and an array over 64 KB gets a chunk of its own, so the
+  // frame is small enough that every array an encoder could allocate per call
+  // (the largest, Sixel's 252 x 32 band bits, is 32 KB) would land in the
+  // newest chunk and move the reading. (Under Node the arena reads 0, which is
+  // flat too.)
+  const movie = new Framebuffer(32, 18)
+  for (let i: i32 = 0; i < 576; i++) {
     movie.pixels[i] = (i * 2654) & 0xffffff
   }
-  const sixelRect: PixelRect = fitFramebuffer(160, 90, 40, 12, 8, 16, GRAPHICS_SIXEL)
-  const kittyRect: PixelRect = fitFramebuffer(160, 90, 40, 12, 8, 16, GRAPHICS_KITTY)
-  const frames = new PixelBytes(0)
-  sixelFrame(movie, sixelRect, true, frames)
-  frames.reset()
-  kittyFrame(movie, kittyRect, 1, frames)
-  frames.reset()
-  const before: i64 = Arena.used()
+  const movieRect = new PixelRect(0, 0, 4, 1, 32, 18, 1.0)
+  const sixelFrames = new PixelBytes(0)
+  sixelFrame(movie, movieRect, true, sixelFrames)
+  sixelFrames.reset()
+  const sixelBefore: i64 = Arena.used()
   for (let i: i32 = 0; i < 1000; i++) {
-    sixelFrame(movie, sixelRect, true, frames)
-    frames.reset()
-    kittyFrame(movie, kittyRect, 1, frames)
-    frames.reset()
+    sixelFrame(movie, movieRect, true, sixelFrames)
+    sixelFrames.reset()
   }
-  t.eqI32("a thousand Sixel and kitty frames allocate nothing", Arena.used() === before ? 1 : 0, 1)
+  t.eqI32("a thousand Sixel frames allocate nothing", Arena.used() === sixelBefore ? 1 : 0, 1)
+  const kittyFrames = new PixelBytes(0)
+  kittyFrame(movie, movieRect, 1, kittyFrames)
+  kittyFrames.reset()
+  const kittyBefore: i64 = Arena.used()
+  for (let i: i32 = 0; i < 1000; i++) {
+    kittyFrame(movie, movieRect, 1, kittyFrames)
+    kittyFrames.reset()
+  }
+  t.eqI32("a thousand kitty frames allocate nothing", Arena.used() === kittyBefore ? 1 : 0, 1)
 
   // --- half blocks --------------------------------------------------------------------
   const screen = new Screen(4, 2, false)
