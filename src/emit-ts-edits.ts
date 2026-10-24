@@ -344,7 +344,10 @@ export class Walk {
     }
     // A class template no type argument list reached: every method of it, its
     // constructor, whose stub throws before any field could be read, and every
-    // field initializer, whose stub throws in its place.
+    // field initializer, whose stub throws in its place. Stubbing an
+    // initializer is safe because no instance of the class is ever built, so
+    // it never runs. A static member is not a template member: it is typed
+    // once, outside any instance, and reaches the composer with its types.
     for (const template of program.structTemplateList) {
       if (template.origin === source && template.count === 0 && template.decl.kind === N_CLASS) {
         for (const member of template.decl.children[3].children) {

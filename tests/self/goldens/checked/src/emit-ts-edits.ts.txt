@@ -154,11 +154,11 @@ function Walk.constructor(this: Walk, program: CheckedProgram, table: TypeTable,
   local +74:16 template: TemplateInfo (const)
   callee +75:42 StringSet.has -> @StringSet.has
   callee +76:9 Walk.stub -> @Walk.stub
-  local +82:16 template: StructTemplateInfo (const)
-  local +84:20 member: Node (const)
-  callee +86:13 Walk.stub -> @Walk.stub
-  callee +88:13 Walk.stub -> @Walk.stub
-  callee +90:13 Walk.stub -> @Walk.stub
+  local +85:16 template: StructTemplateInfo (const)
+  local +87:20 member: Node (const)
+  callee +89:13 Walk.stub -> @Walk.stub
+  callee +91:13 Walk.stub -> @Walk.stub
+  callee +93:13 Walk.stub -> @Walk.stub
 function Walk.stub(this: Walk, decl: Node, nodeCount: i32, name: string): void -> @Walk.stub [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
