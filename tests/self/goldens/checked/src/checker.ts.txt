@@ -103,6 +103,7 @@ import N_WITH from "./nodes" -> const N_WITH
 import Node from "./nodes" -> struct Node
 import StringSet from "./map" -> struct StringSet
 import COLLECTIONS_SPECIFIER from "./std-modules" -> const COLLECTIONS_SPECIFIER
+import MATH_SPECIFIER from "./std-modules" -> const MATH_SPECIFIER
 import AliasInfo from "./program" -> struct AliasInfo
 import CheckedProgram from "./program" -> struct CheckedProgram
 import ConstInfo from "./program" -> struct ConstInfo
@@ -165,6 +166,7 @@ struct Checker (class) size=24 align=8 exported
   method collectSignatures -> @Checker.collectSignatures
   method importCollections -> @Checker.importCollections
   method importCollection -> @Checker.importCollection
+  method importMath -> @Checker.importMath
   method qualifySymbols -> @Checker.qualifySymbols
   method declareAlias -> @Checker.declareAlias
   method nameTaken -> @Checker.nameTaken
@@ -234,8 +236,8 @@ function Checker.constructor(this: Checker, table: TypeTable, source: SourceFile
 function Checker.declareNames(this: Checker): void -> @Checker.declareNames [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: Checker.declareAlias Checker.declareEnum Checker.importCollections Checker.registerStructTemplate collectImports declareStruct isGenericStruct nish_array_grow nish_panic_index rejectDollarInSymbolName rejectRangedIntegerName
-  pointer this: size=24 writesThrough=false captured=false passedTo=Checker.registerStructTemplate#0 Checker.declareAlias#0 Checker.declareEnum#0 Checker.importCollections#0
+  calls: Checker.declareAlias Checker.declareEnum Checker.importCollections Checker.importMath Checker.registerStructTemplate collectImports declareStruct isGenericStruct nish_array_grow nish_panic_index rejectDollarInSymbolName rejectRangedIntegerName
+  pointer this: size=24 writesThrough=false captured=false passedTo=Checker.registerStructTemplate#0 Checker.declareAlias#0 Checker.declareEnum#0 Checker.importCollections#0 Checker.importMath#0
   stackSites=0 stackLocals=0
   local -4:16 stmt: Node (const)
   callee +1:9 collectImports -> @collectImports
@@ -250,6 +252,7 @@ function Checker.declareNames(this: Checker): void -> @Checker.declareNames [exp
   callee +35:9 Checker.declareAlias -> @Checker.declareAlias
   callee +41:9 Checker.declareEnum -> @Checker.declareEnum
   callee +47:5 Checker.importCollections -> @Checker.importCollections
+  callee +48:5 Checker.importMath -> @Checker.importMath
 function Checker.collectSignatures(this: Checker): void -> @Checker.collectSignatures [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -301,6 +304,21 @@ function Checker.importCollection(this: Checker, name: string, at: Node | null):
   local -5:16 imp: ImportBinding (const)
   callee +0:31 new ImportBinding -> @ImportBinding.constructor
   callee +1:5 StringSet.add -> @StringSet.add
+function Checker.importMath(this: Checker): void -> @Checker.importMath [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  calls: CheckedProgram.isMathLibrary ImportBinding.constructor nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq scanMathCalls
+  pointer this: size=24 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  callee -15:9 CheckedProgram.isMathLibrary -> @CheckedProgram.isMathLibrary
+  local -12:11 calls: Node[] (const)
+  callee -11:5 scanMathCalls -> @scanMathCalls
+  local -10:16 call: Node (const)
+  local -9:13 name: string (const)
+  local -8:13 local: string (const)
+  local -7:11 bound: boolean (let)
+  local -6:18 imp: ImportBinding (const)
+  callee +0:35 new ImportBinding -> @ImportBinding.constructor
 function Checker.qualifySymbols(this: Checker): void -> @Checker.qualifySymbols [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -1555,6 +1573,18 @@ function CollectionNames.note(this: CollectionNames, name: string, at: Node): vo
   pointer this: size=16 writesThrough=true captured=false
   pointer at: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
+function scanMathCalls(node: Node, calls: Node[]): void -> @scanMathCalls
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: node
+  calls: nish_array_grow nish_panic_index nish_str_eq scanMathCalls
+  pointer node: size=40 writesThrough=true captured=true
+  pointer calls: size=0 writesThrough=true captured=false passedTo=scanMathCalls#1
+  stackSites=0 stackLocals=0
+  local -7:11 callee: Node (const)
+  local -6:11 name: string (const)
+  local +3:14 child: Node (const)
+  callee +4:5 scanMathCalls -> @scanMathCalls
 function scanCollectionNames(node: Node, names: CollectionNames, program: CheckedProgram, hideMap: boolean, hideSet: boolean): void -> @scanCollectionNames
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CollectionNames.note

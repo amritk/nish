@@ -643,9 +643,11 @@ export class RuntimeTable {
     // `waitStdin` may wait forever, `setRawMode(true)` waits for the
     // terminal's output to drain (`TCSAFLUSH`), and `readStdin`'s `read`
     // follows a readiness check that a second reader of the same terminal can
-    // race, so those three get `nounwind` alone. `isTerminal` is one `isatty`
-    // and `terminalSize` at most two `ioctl`s and a fresh two-element `i32[]`
-    // (the shape `waitPid` answers), so both return.
+    // race, so those three get `nounwind` alone, and so does
+    // `setTerminalRestore`, which spins on the lock a Ctrl-Z handler holds
+    // through the stop. `isTerminal` is one `isatty` and `terminalSize` at
+    // most two `ioctl`s and a fresh two-element `i32[]` (the shape `waitPid`
+    // answers), so both return.
     this.add(
       mayNotReturn(
         "nish_read_stdin",
@@ -668,6 +670,13 @@ export class RuntimeTable {
       mayNotReturn(
         "nish_set_raw_mode",
         "declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext)",
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_set_terminal_restore",
+        `declare noundef i32 @nish_set_terminal_restore(${STR_NOCAP})`,
         EFFECT_WRITE
       )
     )
@@ -1180,7 +1189,7 @@ export class RuntimeTable {
     for (const f of unary) {
       this.addIntrinsic(`llvm.${f}.f64`, "double", "double")
     }
-    const binary: string[] = ["pow", "minnum", "maxnum"]
+    const binary: string[] = ["pow", "minimum", "maximum", "copysign"]
     for (const f of binary) {
       this.addIntrinsic(`llvm.${f}.f64`, "double", "double, double")
     }
@@ -1213,8 +1222,9 @@ export class RuntimeTable {
     // WP15: `Math.abs`/`min`/`max` on an `f32`. The f64-only Math functions
     // (sqrt, pow, ...) stay f64-only, so there is no `llvm.sqrt.f32` here.
     this.addIntrinsic("llvm.fabs.f32", "float", "float")
-    this.addIntrinsic("llvm.minnum.f32", "float", "float, float")
-    this.addIntrinsic("llvm.maxnum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.minimum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.maximum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.copysign.f32", "float", "float, float")
     // `Math.clz32`, with `i1 false` so that a zero answers 32 as JavaScript's
     // does, rather than poison.
     this.addIntrinsic("llvm.ctlz.i32", "i32", "i32, i1")

@@ -20137,9 +20137,17 @@ attributes #2 = { nounwind willreturn readonly }
 ### `Math.*` on `f64`
 
 `Math.sqrt` is `llvm.sqrt.f64`; `Math.round` is the floor/compare/select
-sequence that matches JavaScript's round-half-up; `Math.min`/`max` are
-`llvm.minnum`/`maxnum`. All intrinsics are `readnone willreturn`, so the
-callers stay pure.
+sequence that matches JavaScript's round-half-up, then `llvm.copysign.f64`
+so that `Math.round(-0.3)` is `-0`; `Math.min`/`max` answer NaN for a NaN
+operand and order `-0` below `+0`, as JavaScript does, through the branches
+clang gives the same C: an unordered compare to a quiet NaN, an ordered
+compare and `select`, and on equal operands the one whose sign bit says `-0`.
+A wasm build calls `llvm.minimum`/`maximum` instead, which are `f64.min`/`max`
+there. All of these are `readnone willreturn`, so the callers stay pure.
+`Math.tan`, `Math.atan2` and `Math.hypot` are not builtins in the IR at all:
+each is a call to `std/math.ts`'s Nish port of fdlibm, copied into the module
+as `internal @nish.tanF64`, `@nish.atan2F64` and `@nish.hypotF64`, so no target calls
+libm and the optimiser sees the whole body.
 
 <!-- cookbook:begin builtin-math-f64 -->
 Compiled with `--number-mode f64`.
@@ -20155,8 +20163,7 @@ const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1)
 ```llvm
 declare double @llvm.sqrt.f64(double) #0
 declare double @llvm.floor.f64(double) #0
-declare double @llvm.minnum.f64(double, double) #0
-declare double @llvm.maxnum.f64(double, double) #0
+declare double @llvm.copysign.f64(double, double) #0
 
 define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
 entry:
@@ -20174,14 +20181,47 @@ entry:
   %2 = fcmp oge double %1, 0x3FE0000000000000
   %3 = fadd double %0, 0x3FF0000000000000
   %4 = select i1 %2, double %3, double %0
-  ret double %4
+  %5 = call double @llvm.copysign.f64(double %4, double %x)
+  ret double %5
 }
 
 define internal noundef double @clamp01(double noundef %x) #0 {
 entry:
-  %0 = call double @llvm.maxnum.f64(double %x, double 0x0000000000000000)
-  %1 = call double @llvm.minnum.f64(double %0, double 0x3FF0000000000000)
-  ret double %1
+  %0 = fcmp uno double %x, 0x0000000000000000
+  br i1 %0, label %max.end, label %max.num
+
+max.num:
+  %1 = fcmp ogt double %x, 0x0000000000000000
+  %2 = select i1 %1, double %x, double 0x0000000000000000
+  %3 = fcmp oeq double %x, 0x0000000000000000
+  br i1 %3, label %max.same, label %max.end
+
+max.same:
+  %4 = bitcast double %x to i64
+  %5 = icmp slt i64 %4, 0
+  %6 = select i1 %5, double 0x0000000000000000, double %x
+  br label %max.end
+
+max.end:
+  %7 = phi double [ 0x7FF8000000000000, %entry ], [ %2, %max.num ], [ %6, %max.same ]
+  %8 = fcmp uno double %7, 0x3FF0000000000000
+  br i1 %8, label %min.end, label %min.num
+
+min.num:
+  %9 = fcmp olt double %7, 0x3FF0000000000000
+  %10 = select i1 %9, double %7, double 0x3FF0000000000000
+  %11 = fcmp oeq double %7, 0x3FF0000000000000
+  br i1 %11, label %min.same, label %min.end
+
+min.same:
+  %12 = bitcast double %7 to i64
+  %13 = icmp slt i64 %12, 0
+  %14 = select i1 %13, double %7, double 0x3FF0000000000000
+  br label %min.end
+
+min.end:
+  %15 = phi double [ 0x7FF8000000000000, %max.end ], [ %10, %min.num ], [ %14, %min.same ]
+  ret double %15
 }
 
 attributes #0 = { nounwind willreturn readnone }
@@ -21377,7 +21417,9 @@ read and `@nish_set_raw_mode` are not
 // and a buffer that is `nocapture` but not `readonly`. It and `waitStdin` are
 // not `willreturn`, since a wait can last for ever; `isTerminal` and
 // `terminalSize` are, and the size is a fresh `i32[]` from the arena.
-import { isTerminal, readStdin, setRawMode, terminalSize, waitStdin } from "nish:term"
+// `setTerminalRestore` hands its string to the runtime as a borrowed
+// `readonly nocapture` pointer, which the runtime copies.
+import { isTerminal, readStdin, setRawMode, setTerminalRestore, terminalSize, waitStdin } from "nish:term"
 
 export const nextKeys = (buf: u8[], frameMs: i32): i32 =>
   waitStdin(frameMs) ? readStdin(buf, 0, buf.length) : -11
@@ -21385,10 +21427,14 @@ export const nextKeys = (buf: u8[], frameMs: i32): i32 =>
 export const columns = (): i32 => (isTerminal(1) ? terminalSize()[0] : 80)
 
 export const enterRaw = (): i32 => setRawMode(true)
+
+export const leaveAltScreen = (): i32 => setTerminalRestore("\u001b[?1049l\u001b[?25h")
 ```
 
 ```llvm
 %struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"\1B[?1049l\1B[?25h\00" }, align 8
 
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
@@ -21397,6 +21443,7 @@ declare zeroext i1 @nish_wait_stdin(i32 noundef) #0
 declare zeroext i1 @nish_is_terminal(i32 noundef) #1
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size() #1
 declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #0
+declare noundef i32 @nish_set_terminal_restore(i8* noundef nonnull readonly align 8 nocapture) #0
 declare void @nish_panic_index(i64 noundef, i64 noundef) #2
 declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
 
@@ -21471,6 +21518,12 @@ cond.end:
 define noundef i32 @enterRaw() #0 {
 entry:
   %0 = call i32 @nish_set_raw_mode(i1 zeroext true)
+  ret i32 %0
+}
+
+define noundef i32 @leaveAltScreen() #0 {
+entry:
+  %0 = call i32 @nish_set_terminal_restore(i8* bitcast ({ i64, [15 x i8] }* @.str.0 to i8*))
   ret i32 %0
 }
 
@@ -23017,6 +23070,7 @@ declare zeroext i1 @nish_wait_stdin(i32 noundef) #3
 declare zeroext i1 @nish_is_terminal(i32 noundef) #2
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size() #2
 declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #3
+declare noundef i32 @nish_set_terminal_restore(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare noundef i32 @nish_net_local_port(i32 noundef) #2
 declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2

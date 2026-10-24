@@ -5,7 +5,6 @@ import isFractional from "./constants" -> function @isFractional
 import parseIntegerLiteral from "./constants" -> function @parseIntegerLiteral
 import FLAG_PREFIX from "./nodes" -> const FLAG_PREFIX
 import N_BINARY from "./nodes" -> const N_BINARY
-import N_CALL from "./nodes" -> const N_CALL
 import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
 import N_EMPTY from "./nodes" -> const N_EMPTY
 import N_NUMBER from "./nodes" -> const N_NUMBER
@@ -13,30 +12,26 @@ import N_PAREN from "./nodes" -> const N_PAREN
 import N_UNARY from "./nodes" -> const N_UNARY
 import N_VAR_DECL from "./nodes" -> const N_VAR_DECL
 import Node from "./nodes" -> struct Node
-import dottedName from "./emit-util" -> function @dottedName
-import receiverIsValue from "./emit-util" -> function @receiverIsValue
 import PortabilityFinding from "./portability" -> struct PortabilityFinding
 import PortabilityWalk from "./portability" -> struct PortabilityWalk
 import intBits from "./types" -> function @intBits
-import isFloat from "./types" -> function @isFloat
 import isInteger from "./types" -> function @isInteger
 import isUnsigned from "./types" -> function @isUnsigned
 import T_I32 from "./types" -> const T_I32
 function numberFindings(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @numberFindings [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via signatureFindings
-  calls: binaryFindings builtinCallFinding isFirstBody localFinding moduleFindings signatureFindings stepFinding
-  pointer walk: size=48 writesThrough=false captured=false passedTo=signatureFindings#0 isFirstBody#0 moduleFindings#0 binaryFindings#0 stepFinding#0 builtinCallFinding#0 localFinding#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=binaryFindings#1 stepFinding#1 builtinCallFinding#1 localFinding#1
-  pointer out: size=0 writesThrough=true captured=false passedTo=signatureFindings#1 moduleFindings#1 binaryFindings#2 stepFinding#2 builtinCallFinding#2 localFinding#2
+  calls: binaryFindings isFirstBody localFinding moduleFindings signatureFindings stepFinding
+  pointer walk: size=48 writesThrough=false captured=false passedTo=signatureFindings#0 isFirstBody#0 moduleFindings#0 binaryFindings#0 stepFinding#0 localFinding#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=binaryFindings#1 stepFinding#1 localFinding#1
+  pointer out: size=0 writesThrough=true captured=false passedTo=signatureFindings#1 moduleFindings#1 binaryFindings#2 stepFinding#2 localFinding#2
   stackSites=0 stackLocals=0
   callee +0:5 signatureFindings -> @signatureFindings
   callee +1:9 isFirstBody -> @isFirstBody
   callee +2:7 moduleFindings -> @moduleFindings
   callee +7:7 binaryFindings -> @binaryFindings
   callee +10:7 stepFinding -> @stepFinding
-  callee +13:7 builtinCallFinding -> @builtinCallFinding
-  callee +16:7 localFinding -> @localFinding
+  callee +13:7 localFinding -> @localFinding
 function binaryFindings(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @binaryFindings
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -103,22 +98,6 @@ function operatorFinding(walk: PortabilityWalk, node: Node, type: i32, fragment:
   stackSites=0 stackLocals=0
   callee +0:3 new PortabilityFinding -> @PortabilityFinding.constructor
   callee +0:60 TypeTable.typeName -> @TypeTable.typeName
-function builtinCallFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void -> @builtinCallFinding
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:5
-  calls: PortabilityFinding.constructor TypeTable.baseOf dottedName isFloat nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq receiverIsValue
-  pointer walk: size=48 writesThrough=false captured=false
-  pointer node: size=40 writesThrough=true captured=true passedTo=PortabilityFinding.constructor#1
-  pointer out: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-  local -10:9 callee: Node (const)
-  local -9:9 name: string (const)
-  callee -9:16 dottedName -> @dottedName
-  local -8:9 args: Node[] (const)
-  callee -7:43 receiverIsValue -> @receiverIsValue
-  callee -4:8 isFloat -> @isFloat
-  callee -4:16 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +1:7 new PortabilityFinding -> @PortabilityFinding.constructor
 function isWide(type: i32): boolean -> @isWide
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type

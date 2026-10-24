@@ -186,7 +186,8 @@ void nish_panic_claim(void);
 #endif
 /* How a panic that skips atexit ends: `_exit(1)`, after `nish_fatal_hook`
    when it is set (runtime.c). The hook is the terminal's restore while
-   `setRawMode(true)` holds (runtime-term.c), and null otherwise. */
+   `setRawMode(true)` holds or `setTerminalRestore` bytes wait
+   (runtime-term.c), and null otherwise. */
 __attribute__((noreturn)) void nish_fatal_exit(void);
 extern void (*nish_fatal_hook)(void);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
@@ -593,12 +594,18 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
  * the saved termios comes back on `false`, at exit, on a panic and on every
  * signal left at its default that ends the program, SIGKILL aside (the list is
  * runtime-term.c's). -11 and -25 are those
- * numbers on WASI too, where the three TTY calls answer "not a terminal". */
+ * numbers on WASI too, where the three TTY calls answer "not a terminal".
+ * `nish_set_terminal_restore(bytes)`: keeps up to `NISH_TERM_RESTORE_MAX`
+ * bytes to write to stdout, once, at exit, on a panic and on each of those
+ * signals, before the termios comes back; "" keeps none. 0, -7 past the cap,
+ * -25 when stdout is not a terminal (always, for bytes, on WASI). */
+#define NISH_TERM_RESTORE_MAX 4096
 int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len);
 bool nish_wait_stdin(int32_t timeout_ms);
 bool nish_is_terminal(int32_t fd);
 nish_array *nish_terminal_size(void);
 int32_t nish_set_raw_mode(bool on);
+int32_t nish_set_terminal_restore(const nish_str *bytes);
 
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`

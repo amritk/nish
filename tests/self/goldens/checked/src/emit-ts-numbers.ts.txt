@@ -353,7 +353,7 @@ function between(walk: Walk, from: i32, to: i32): string -> @between
 function callRow(walk: Walk, node: Node, operands: Operands): string | null -> @callRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via conversion
-  calls: Operands.at Walk.useHelper arrayOffsets between conversion indexArguments nish_panic_index nish_str_concat nish_str_eq printed typeOf
+  calls: Operands.at Walk.useHelper arrayOffsets between conversion indexArguments isBig nish_panic_index nish_str_concat nish_str_eq printed typeOf
   pointer walk: size=136 writesThrough=false captured=false passedTo=conversion#0 typeOf#0 indexArguments#0 arrayOffsets#0 indexArguments#0 printed#0 typeOf#0 between#0 between#0 Walk.useHelper#0 between#0 between#0
   pointer node: size=40 writesThrough=false captured=false passedTo=indexArguments#1 arrayOffsets#1 indexArguments#1 printed#1 typeOf#1
   pointer operands: size=40 writesThrough=true captured=false passedTo=conversion#3 indexArguments#2 indexArguments#2 printed#2 Operands.at#0 Operands.at#0 Operands.at#0
@@ -371,14 +371,15 @@ function callRow(walk: Walk, node: Node, operands: Operands): string | null -> @
   callee +28:16 typeOf -> @typeOf
   local +29:9 method: string (const)
   local +30:7 replacement: string (let)
-  callee +46:18 Operands.at -> @Operands.at
-  callee +46:35 between -> @between
-  callee +46:75 Operands.at -> @Operands.at
-  callee +46:92 between -> @between
-  callee +52:3 Walk.useHelper -> @Walk.useHelper
-  callee +53:27 between -> @between
-  callee +53:67 Operands.at -> @Operands.at
-  callee +53:84 between -> @between
+  callee +37:35 isBig -> @isBig
+  callee +44:18 Operands.at -> @Operands.at
+  callee +44:35 between -> @between
+  callee +44:75 Operands.at -> @Operands.at
+  callee +44:92 between -> @between
+  callee +50:3 Walk.useHelper -> @Walk.useHelper
+  callee +51:27 between -> @between
+  callee +51:67 Operands.at -> @Operands.at
+  callee +51:84 between -> @between
 function arrayOffsets(walk: Walk, node: Node): boolean -> @arrayOffsets
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
