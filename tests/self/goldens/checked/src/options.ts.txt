@@ -23,16 +23,17 @@ struct Options (class) size=160 align=8 exported
   field packageRoot: string index=17 offset=88
   field json: boolean index=18 offset=96
   field rangeReference: boolean index=19 offset=97
-  field unlabelledBuiltin: string index=20 offset=104
-  field warnPortability: boolean index=21 offset=112
-  field emitPanics: string index=22 offset=120
-  field denyPanics: boolean index=23 offset=128
-  field denyRetention: boolean index=24 offset=129
-  field emitArena: string index=25 offset=136
-  field noPanicListed: boolean index=26 offset=144
-  field capabilityReport: boolean index=27 offset=145
-  field allowCapabilities: i32 index=28 offset=148
-  field denyCapabilities: i32 index=29 offset=152
+  field noElision: boolean index=20 offset=98
+  field unlabelledBuiltin: string index=21 offset=104
+  field warnPortability: boolean index=22 offset=112
+  field emitPanics: string index=23 offset=120
+  field denyPanics: boolean index=24 offset=128
+  field denyRetention: boolean index=25 offset=129
+  field emitArena: string index=26 offset=136
+  field noPanicListed: boolean index=27 offset=144
+  field capabilityReport: boolean index=28 offset=145
+  field allowCapabilities: i32 index=29 offset=148
+  field denyCapabilities: i32 index=30 offset=152
   constructor -> @Options.constructor
   method recordsPanics -> @Options.recordsPanics
 function Options.constructor(this: Options): void -> @Options.constructor [exported constructor]
