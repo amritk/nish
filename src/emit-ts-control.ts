@@ -12,7 +12,9 @@
 // - Answer the node's whole text otherwise. `operands.at(i)` is child `i` as
 //   it will be written, so a rewrite composes with the rows below it.
 // - A rewrite that calls a `nish/runtime` export asks for it with
-//   `walk.useHelper(name)`; the driver writes the import line.
+//   `walk.helperName(name)` and writes the name it answers, which is
+//   `__nish_<name>` where the module spells `name` itself; the driver writes
+//   the import line.
 // - Read types through `walk.program`: inside a generic body the composer has
 //   installed one instance's tables, and it holds every instance to the same
 //   answer.
@@ -66,7 +68,7 @@ export const controlRow = (walk: Walk, node: Node, operands: Operands): string |
     return enumText(walk, node)
   }
   if (kind === N_TYPE_REF) {
-    return typeRef(walk, node)
+    return typeRef(walk, node, operands)
   }
   if (kind === N_MEMBER) {
     return arenaMember(walk, node)
@@ -105,8 +107,7 @@ const hoistOrReturn = (walk: Walk, call: Node, operands: Operands): string | nul
   }
   const t = walk.temporary()
   walk.hoist(`const ${t} = ${callee.substring(0, callee.length - suffix.length)};`)
-  walk.hoist(`if (${t}.isErr()) return Err(${t}.error);`)
-  walk.useHelper("Err")
+  walk.hoist(`if (${t}.isErr()) return ${walk.helperName("Err")}(${t}.error);`)
   return `${t}.value`
 }
 
@@ -122,8 +123,7 @@ const wrapBody = (walk: Walk, node: Node, operands: Operands): string | null => 
     return null
   }
   const e = walk.temporary()
-  const handler = ` catch (${e}) { return caught(${e}) } }`
-  walk.useHelper("caught")
+  const handler = ` catch (${e}) { return ${walk.helperName("caught")}(${e}) } }`
   const wrapped =
     node.children[3].kind === N_BLOCK ? `{ try ${body}${handler}` : `{ try { return ${body} }${handler}`
   operands.texts[3] = wrapped
@@ -183,11 +183,11 @@ const enumText = (walk: Walk, node: Node): string | null => {
 }
 
 /** `E.A` as a type, which is a value of the `const` object now: `(typeof E.A)`. A `Result` asks for its import. */
-const typeRef = (walk: Walk, node: Node): string | null => {
+const typeRef = (walk: Walk, node: Node, operands: Operands): string | null => {
   const name = node.text
   if (name === "Result") {
-    walk.useHelper("Result")
-    return null
+    const local = walk.helperName("Result")
+    return local === name ? null : `${local}${splice(walk, node, operands).substring(name.length)}`
   }
   const dot = name.indexOf(".")
   if (dot < 0 || walk.program.enumNamed(name.substring(0, dot)) === null) {
@@ -207,10 +207,7 @@ const arenaMember = (walk: Walk, node: Node): string | null => {
     return null
   }
   const helper = arenaHelper(node.text)
-  if (helper !== null) {
-    walk.useHelper(helper)
-  }
-  return helper
+  return helper === null ? null : walk.helperName(helper)
 }
 
 /** The runtime's free function for the `Arena` static `member`, or `null`. */

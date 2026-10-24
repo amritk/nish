@@ -11,7 +11,9 @@
 // - Answer the node's whole text otherwise. `operands.at(i)` is child `i` as
 //   it will be written, so a rewrite composes with the rows below it.
 // - A rewrite that calls a `nish/runtime` export asks for it with
-//   `walk.useHelper(name)`; the driver writes the import line.
+//   `walk.helperName(name)` and writes the name it answers, which is
+//   `__nish_<name>` where the module spells `name` itself; the driver writes
+//   the import line.
 // - Read types through `walk.program`: inside a generic body the composer has
 //   installed one instance's tables, and it holds every instance to the same
 //   answer.
@@ -44,9 +46,6 @@
 // - Decoding is lossy: `String.fromBytes` of bytes that are not UTF-8, or a
 //   `slice` or `substring` through a character, gives U+FFFD where native
 //   keeps the bytes, and the length changes with it.
-// - A helper is imported under its own name (`useHelper` cannot alias it), so
-//   a program that binds `slice`, `number`, `indexOf`, ... itself would shadow
-//   or clash with it. No program of the corpus does.
 
 import { Operands, Walk } from "./emit-ts-edits"
 import { isOptionalChain } from "./emit-util"
@@ -71,10 +70,8 @@ const stringStaticHelper = (member: string): string => {
 const typedString = (walk: Walk, node: Node): boolean => walk.program.nodeTypes[node.id] === T_STRING
 
 /** `helper(args)` with its import asked for: `args` is the call's argument list as it will be written. */
-const stringHelperCall = (walk: Walk, helper: string, args: string): string => {
-  walk.useHelper(helper)
-  return `${helper}(${args})`
-}
+const stringHelperCall = (walk: Walk, helper: string, args: string): string =>
+  `${walk.helperName(helper)}(${args})`
 
 /**
  * The receiver of `member`, a method callee written as `memberText`, as it
