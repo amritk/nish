@@ -80,7 +80,7 @@ rewritten. The rules, as the frozen store embodies them and as the helpers in
 | `s.length`, `charCodeAt`, `substring`, `slice`, `indexOf`, `startsWith`, `endsWith` | `__nish.strLen` and the same-named helpers, over the UTF-8 bytes |
 | `new Array<T>(n)` | `__nish.newArray(n, zero)`: zero-filled, no holes |
 | `console.log`, `process.exit`, `process.argv`, `throw` | `__nish.log` (synchronous), `__nish.exit`, `__nish.argv`, `__nish.trap` |
-| `Math.abs/min/max` on integers | `\| 0`, `absI64`, `minI64` / `maxI64`, `minU64` / `maxU64` |
+| `Math.abs/min/max/sign` on integers | `\| 0`, `absI64`, `minI64` / `maxI64`, `minU64` / `maxU64`, `signI64` |
 | `toI32`, `toI64`, `toF64`, any conversion with an unsigned or `f32` side | `__nish.toI32` / `toI64` / `toF64` / `convert` (saturating from floats, wrapping between integers) |
 | `parseInt`, `parseFloat`, `Number` | `__nish.parseInt` / `parseFloat` / `number`, with `strtoll` / `strtod` semantics |
 | file I/O | `__nish.*` over `node:fs` |
@@ -112,9 +112,10 @@ says otherwise:
   declared type (WP2b) where Node dispatches on the runtime object, and
   `cls_extends_override` was a known failure. With no `extends`, every call
   names one method, and the difference is gone.
-- Known failures by design: `Math.min`/`max` with NaN (`llvm.minnum`),
-  `Math.round(-0.3)` is `+0`, and glibc's libm differs from V8's fdlibm by one
-  ulp on some `sin`/`cos`/`log`/`pow` arguments (`f64_libm`: 5 of 127 values).
+- Known failures by design: glibc's libm differs from V8's fdlibm by one ulp
+  on some `sin`/`cos`/`log`/`pow` arguments (`f64_libm`: 5 of 127 values).
+  `Math.min`/`max` with NaN and `Math.round(-0.3)` were known failures until
+  they took JavaScript's NaN and `-0` (`f64_minmax_nan`, `f64_round_negzero`).
   Checked integer division panics where JavaScript gives `0` or `INT_MIN`.
   `integer<Lo, Hi>` range checks panic where Node has a plain `number`.
 - A program that calls C through `declare function` (`ffi_scalar`,

@@ -11,10 +11,16 @@ function signI32(x: i32): i32 -> @signI32 [exported]
 function signU32(x: u32): u32 -> @signU32 [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function signWide(x: i64): i64 -> @signWide [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function signUWide(x: u64): u64 -> @signUWide [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 signF64 signI32 signU32
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_i64 nish_str_from_u64 signF64 signI32 signU32 signUWide signWide
   stackSites=0 stackLocals=0
   local +0:9 zero: f64 (const)
   local +1:9 one: f64 (const)
@@ -31,3 +37,10 @@ function main(): i32 -> @nish_main [exported entry]
   local +5:9 top: u32 (const)
   callee +6:18 signU32 -> @signU32
   callee +6:34 signU32 -> @signU32
+  local +7:9 low: i64 (const)
+  local +8:9 high: u64 (const)
+  callee +9:18 signWide -> @signWide
+  callee +9:35 signWide -> @signWide
+  callee +9:57 signWide -> @signWide
+  callee +9:75 signUWide -> @signUWide
+  callee +9:94 signUWide -> @signUWide

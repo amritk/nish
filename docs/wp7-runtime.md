@@ -36,16 +36,16 @@ native profile links `-lm`.
 - **`Math.round`** is `floor`, then `x - floor(x) >= 0.5`, then `select`. This
   matches JavaScript's round-half-up, which `llvm.round` (half away from zero)
   does not, and is exact where `floor(x + 0.5)` is not:
-  `0.49999999999999994` rounds to `0`. The one difference from JavaScript is
-  that `Math.round(-0.3)` is `+0` here and `-0` there; both print `0`.
+  `0.49999999999999994` rounds to `0`. A `llvm.copysign.f64` then gives the
+  result the operand's sign, so `Math.round(-0.3)` is `-0`, as in JavaScript.
 - **`Math.abs` / `min` / `max`** accept any numeric type. Integers lower to
   `llvm.abs` (with `i1 false`, so the minimum value wraps to itself rather
-  than becoming poison) and `smin` / `smax`. Floats lower to `fabs` and
-  `minnum` / `maxnum`. `minnum` returns the non-NaN operand where JavaScript
-  returns NaN, and may return either zero for `min(0, -0)`. That is
-  documented rather than patched, because the intrinsic is a single
-  instruction on every target. The differential corpus keeps it as a known
-  failure (`f64_minmax_nan`, and `f64_round_negzero` for the rounding case).
+  than becoming poison) and `smin` / `smax`. Floats lower to `fabs`, and
+  `min` / `max` answer as JavaScript's do: a NaN operand gives NaN and `-0`
+  orders below `+0`. Natively that is a NaN test, a compare and select, and a
+  sign-bit pick on equal operands; wasm32 keeps `llvm.minimum` /
+  `llvm.maximum`, its `f64.min` / `f64.max` (`tests/cases/math_minmax_float`,
+  and `f64_minmax_nan` and `f64_round_negzero` in the differential corpus).
 - **`Math.random`** is xorshift64\* over one state word, seeded lazily from
   the time and the pid (the monotonic clock under WASI, which has no
   `getpid`). Its effect is `write`, so two calls are never merged.

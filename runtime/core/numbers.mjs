@@ -153,28 +153,6 @@ function divCheck(a, b) {
   if ((a === I32_MIN && b === -1) || (a === I64_MIN && b === -1n)) panic("attempt to divide with overflow");
 }
 
-/**
- * `Math.min`/`Math.max` on a float: `llvm.minnum`/`maxnum`, where a NaN
- * operand gives the other one; Math's answer NaN is only for two NaNs.
- */
-export function minF64(a, b) {
-  return Number.isNaN(a) ? b : Number.isNaN(b) ? a : Math.min(a, b);
-}
-export function maxF64(a, b) {
-  return Number.isNaN(a) ? b : Number.isNaN(b) ? a : Math.max(a, b);
-}
-
-/**
- * `Math.round` as the compiler lowers it: `floor(x)`, plus one when the
- * fraction is at least a half. `-0.3` floors to `-1` and rounds to `+0`,
- * where Math's answer is `-0`; NaN, the infinities and `-0` come back as they
- * went in.
- */
-export function roundF64(x) {
-  const f = Math.floor(x);
-  return x - f >= 0.5 ? f + 1 : f;
-}
-
 /** Wrap a BigInt to the i64 range: every i64 `+ - * /` and unary minus goes through here. */
 export function wrapI64(x) {
   return BigInt.asIntN(64, x);
@@ -199,6 +177,11 @@ export function lshrI64(a, b) {
 /** `llvm.abs.i64(x, false)`: the minimum value wraps to itself. */
 export function absI64(x) {
   return BigInt.asIntN(64, x < 0n ? -x : x);
+}
+
+/** `Math.sign` on an i64 or u64, which Math rejects as a BigInt. */
+export function signI64(x) {
+  return x > 0n ? 1n : x < 0n ? -1n : 0n;
 }
 
 /** `llvm.smin.i64` / `llvm.smax.i64` (Math.min/max reject BigInt). */

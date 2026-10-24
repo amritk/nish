@@ -7,8 +7,11 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i64(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_u64(i64 noundef) #2
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare double @llvm.copysign.f64(double, double) #0
+declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #0
 
 define noundef double @signF64(double noundef %x) #0 {
 entry:
@@ -35,11 +38,30 @@ entry:
   ret i32 %1
 }
 
+define noundef i64 @signWide(i64 noundef %x) #0 {
+entry:
+  %0 = icmp sgt i64 %x, 0
+  %1 = icmp slt i64 %x, 0
+  %2 = zext i1 %0 to i64
+  %3 = zext i1 %1 to i64
+  %4 = sub i64 %2, %3
+  ret i64 %4
+}
+
+define noundef i64 @signUWide(i64 noundef %x) #0 {
+entry:
+  %0 = icmp ne i64 %x, 0
+  %1 = zext i1 %0 to i64
+  ret i64 %1
+}
+
 define noundef i32 @nish_main() #1 {
 entry:
   %zero.addr = alloca double, align 8
   %one.addr = alloca double, align 8
   %top.addr = alloca i32, align 4
+  %low.addr = alloca i64, align 8
+  %high.addr = alloca i64, align 8
   %arena.mark = call i64 @nish_arena_mark()
   store double 0x0000000000000000, double* %zero.addr, align 8
   store double 0x3FF0000000000000, double* %one.addr, align 8
@@ -104,8 +126,45 @@ entry:
   %54 = call i8* @nish_str_from_u64(i64 %53)
   %55 = call i8* @nish_str_concat(i8* %51, i8* %54)
   call void @nish_print(i8* %55)
+  store i64 -9000000000, i64* %low.addr, align 8
+  %56 = sext i32 -1 to i64
+  store i64 %56, i64* %high.addr, align 8
+  %57 = load i64, i64* %low.addr, align 8
+  %58 = call i64 @signWide(i64 %57)
+  %59 = call i8* @nish_str_from_i64(i64 %58)
+  %60 = call i8* @nish_str_concat(i8* %59, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %61 = sext i32 0 to i64
+  %62 = call i64 @signWide(i64 %61)
+  %63 = call i8* @nish_str_from_i64(i64 %62)
+  %64 = call i8* @nish_str_concat(i8* %60, i8* %63)
+  %65 = call i8* @nish_str_concat(i8* %64, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %66 = load i64, i64* %low.addr, align 8
+  %67 = call { i64, i1 } @llvm.ssub.with.overflow.i64(i64 0, i64 %66)
+  %68 = extractvalue { i64, i1 } %67, 0
+  %69 = extractvalue { i64, i1 } %67, 1
+  br i1 %69, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  %70 = call i64 @signWide(i64 %68)
+  %71 = call i8* @nish_str_from_i64(i64 %70)
+  %72 = call i8* @nish_str_concat(i8* %65, i8* %71)
+  %73 = call i8* @nish_str_concat(i8* %72, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %74 = load i64, i64* %high.addr, align 8
+  %75 = call i64 @signUWide(i64 %74)
+  %76 = call i8* @nish_str_from_u64(i64 %75)
+  %77 = call i8* @nish_str_concat(i8* %73, i8* %76)
+  %78 = call i8* @nish_str_concat(i8* %77, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %79 = sext i32 0 to i64
+  %80 = call i64 @signUWide(i64 %79)
+  %81 = call i8* @nish_str_from_u64(i64 %80)
+  %82 = call i8* @nish_str_concat(i8* %78, i8* %81)
+  call void @nish_print(i8* %82)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
+
+ovf.fail:
+  call void @nish_panic_overflow(i32 3)
+  unreachable
 }
 
 define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #1 {
@@ -118,3 +177,4 @@ entry:
 attributes #0 = { nounwind willreturn readnone }
 attributes #1 = { nounwind }
 attributes #2 = { nounwind willreturn }
+attributes #3 = { nounwind noreturn cold }
