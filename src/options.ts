@@ -221,6 +221,11 @@ export class Options {
   allowCapabilities: i32
   /** WP36: the capabilities `--deny` refuses, as a mask; 0 when none was given. */
   denyCapabilities: i32
+  /**
+   * WP40: `--update-capability-lock` computes the capability lockfile instead
+   * of holding the build to it (`Compilation.checkCapabilityLock`).
+   */
+  updateCapabilityLock: boolean
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32
@@ -254,6 +259,7 @@ export class Options {
     this.capabilityReport = false
     this.allowCapabilities = -1
     this.denyCapabilities = 0
+    this.updateCapabilityLock = false
   }
 
   /**
