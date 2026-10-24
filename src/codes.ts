@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 707
+export const RULE_COUNT: i32 = 709
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
