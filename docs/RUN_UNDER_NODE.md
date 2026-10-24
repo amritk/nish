@@ -106,7 +106,10 @@ clocks. The command lines above stay as they are.
 - `readStdin`, `waitStdin`, `setRawMode` — installed only to **throw**, each
   naming itself: Node reads stdin only to its event loop, as it does a socket,
   and its own raw mode turns Ctrl-C into a byte where the native one keeps it a
-  signal. All five are globals, and the `nish:term` import resolves to them
+  signal
+- `setTerminalRestore` — installed only to **throw** too: its bytes go out
+  from the native runtime's exit, panic and signal paths, which a Node process
+  does not run. All six are globals, and the `nish:term` import resolves to them
 - `getenv` — `process.env[name] ?? null`, because Node answers `undefined`
   where the language has only `null`
 - `realpathSync` — `fs.realpathSync` in a `try`, because Node throws where the

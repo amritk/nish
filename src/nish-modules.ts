@@ -125,7 +125,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
-    return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode"
+    return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
   }
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString"
@@ -263,8 +263,8 @@ export const isNetExport = (name: string): boolean => netSignature(name).length 
 
 /**
  * `nish:term`: the terminal a program runs in (docs/LANGUAGE.md, "Terminal
- * input"). Reading stdin, waiting on it with a timeout, and the TTY questions
- * a full-screen program asks, without the `net` capability a `pollAdd(0)`
+ * input"). Reading stdin, waiting on it with a timeout, the TTY questions a
+ * full-screen program asks, and the bytes it leaves the terminal with, without the `net` capability a `pollAdd(0)`
  * would carry. Each name is a global too, as every `nish:` export is.
  */
 export const isTermExport = (name: string): boolean =>
@@ -272,7 +272,8 @@ export const isTermExport = (name: string): boolean =>
   name === "waitStdin" ||
   name === "isTerminal" ||
   name === "terminalSize" ||
-  name === "setRawMode"
+  name === "setRawMode" ||
+  name === "setTerminalRestore"
 
 /** The builtin `specifier` exports under `name`, or null when it exports no such name. */
 export const nishExport = (specifier: string, name: string): BuiltinExport | null => {

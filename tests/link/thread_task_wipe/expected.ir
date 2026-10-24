@@ -1,0 +1,6 @@
+define internal void @nish.wipe$arr.u8(
+call void @llvm.memset.p0i8.i64(i8* %3, i8 0, i64 %1, i1 true)
+define internal void @nish.wipe$arr.u32(
+call void @llvm.memset.p0i8.i64(i8* %3, i8 0, i64 %4, i1 true)
+define internal void @nish.wipe$$Secret$arr.u8(
+call void @llvm.memset.p0i8.i64(i8* %5, i8 0, i64 %3, i1 true)

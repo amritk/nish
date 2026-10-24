@@ -3803,6 +3803,14 @@ element's arena, which a task does not share, and each rule is reported at the
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`; hand a value the parent needs back as the task's answer, or run it on the thread that called it, `out[0] = bump(c)` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
+  A `wipe` is a write through its argument like any other, so it is shared
+  exactly when its target is: an array the task, or a function it calls,
+  allocated itself is private, and wiping it is allowed
+  (`tests/link/thread_task_wipe`); wiping the task's argument, a captured
+  local, a field, an array a call answered, or a `Secret` made with
+  `secret(...)`, which keeps its value, is NL2471
+  (`reject_thread_wipe_param`, `_capture`, `_field`, `_helper`,
+  `_call_result`). The wipe itself is unchanged, one volatile `llvm.memset`.
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
   tasks of one scope may look keys up in the same table
   (`tests/link/thread_scope_task_map_reads`). A mutator — `set`, `add`,
@@ -6315,7 +6323,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
-| `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
+| `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
 ```ts
@@ -7732,7 +7740,7 @@ What a program needs to run a full-screen terminal interface: read a key the
 moment it is pressed, wait for one with a timeout that doubles as a frame
 clock, and ask the terminal whether it is one, how big it is, and to stop
 echoing and line-editing. None of it needs the `net` capability that a
-`pollAdd(0)` and `netRead(0, …)` would carry; the five functions carry
+`pollAdd(0)` and `netRead(0, …)` would carry; the six functions carry
 [`tty`](#capabilities) instead. They are C in `runtime/runtime-term.c`, a
 translation unit of its own with its own `.text*` ceiling, which section GC
 leaves out of a program that calls none of them. Each is exported by
@@ -7746,6 +7754,7 @@ only, and WASI as below.
 | `isTerminal(fd: i32): boolean` | whether the descriptor is a terminal (`isatty`) | write | `term_calls`, `term_pty`; `reject_term_is_terminal_arity` |
 | `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stderr when stdout is not one; `[-errno, 0]` when neither is, **`[-25, 0]` for "not a terminal"**, and `[0, 0]` for a terminal no one set a size for. Read it again on each frame to follow a resize | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
 | `setRawMode(on: boolean): i32` | puts stdin's terminal in raw mode (`true`) or back as it was (`false`): `0`, `-25` when stdin is not a terminal, or the host's `-errno` when the terminal refuses. Asking for the mode it is already in changes nothing and answers `0`, so `setRawMode(false)` is always safe | write | `term_calls`, `term_pty`; `reject_term_raw_number`, `reject_term_unknown_export` |
+| `setTerminalRestore(bytes: string): i32` | keeps a copy of `bytes` for the runtime to write to the terminal on stdout as the program ends — the escapes that leave an alternate screen, show the cursor or turn mouse reporting off — **replacing** what it kept before; `""` keeps nothing. `0`, `-25` when stdout is not a terminal and `-7` (E2BIG) past `NISH_TERM_RESTORE_MAX`, 4096 bytes, both keeping what was there. When they go out is under [Raw mode](#raw-mode) | write | `term_restore`; `reject_term_restore_arity`, `reject_term_restore_number`, `reject_term_restore_wasm` |
 
 **Errors are numbers**, in `nish:net`'s shape: `>= 0` is success and a negative
 number the failure's errno, negated. The two a program branches on are the
@@ -7845,6 +7854,21 @@ Job control also stops a program started in the background
 that sets the terminal, and the program enters raw mode on `fg`. Two threads that call `setRawMode` at
 once take turns, so the termios saved is the one from before either.
 
+**Restore bytes go out on the same paths.** The bytes `setTerminalRestore`
+kept are written to stdout once, with `write` alone, before the termios comes
+back, when `main` returns or `process.exit` is called, on every panic and on
+each signal above whose default ends the program, raw mode or not: setting
+them installs the same handlers. Ctrl-Z and `setRawMode(false)` do not end the
+program, so they write nothing. A program sets them once it has switched the
+terminal (`"\u001b[?1049h"` written, say) and again with each change, last
+the set that undoes them all; a signal that lands while it does writes the
+old string or the new one, whole. They are written at most once, however
+many of those paths race. Output is not buffered, so all the program printed
+reaches the terminal before them. `term_restore` under `script(1)` checks that
+what follows its last line is exactly its bytes, once, after it returns,
+panics and is killed by SIGTERM and by SIGSEGV, nothing after it cleared them,
+and that `stty -g` reads as before.
+
 The `term` block of `tests/run.js` runs `term_pty` under `script(1)`, which
 gives it a pseudo-terminal: it is a terminal on both descriptors with a size,
 enters raw mode twice and leaves twice, each `0`, and after it returns in raw
@@ -7854,14 +7878,14 @@ missing or makes no terminal, that check is a counted skip that says which.
 
 #### Where there is no terminal
 
-| Host | `readStdin` | `waitStdin` | `isTerminal` | `terminalSize` | `setRawMode` |
-| --- | --- | --- | --- | --- | --- |
-| Linux, Darwin | as above | as above | `isatty` | the ioctl | as above |
-| A pipe or a file | as above | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
-| `--profile wasi` | **waits** for its bytes | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
-| `--target wasm32`, freestanding | refused | refused | refused | refused | refused |
-| Node ([prelude](RUN_UNDER_NODE.md)) | throws | throws | `tty.isatty` | Node's `columns` and `rows` | throws |
-| A browser (`nish/runtime/browser`) | throws | throws | `false` | `[-25, 0]` | throws |
+| Host | `readStdin` | `waitStdin` | `isTerminal` | `terminalSize` | `setRawMode` | `setTerminalRestore` |
+| --- | --- | --- | --- | --- | --- | --- |
+| Linux, Darwin | as above | as above | `isatty` | the ioctl | as above | as above |
+| A pipe or a file | as above | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` | `-25`, `0` for `""`, `-7` past the cap |
+| `--profile wasi` | **waits** for its bytes | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` | `-25`, keeping nothing; `0` for `""`, `-7` past the cap |
+| `--target wasm32`, freestanding | refused | refused | refused | refused | refused | refused |
+| Node ([prelude](RUN_UNDER_NODE.md)) | throws | throws | `tty.isatty` | Node's `columns` and `rows` | throws | throws |
+| A browser (`nish/runtime/browser`) | throws | throws | `false` | `[-25, 0]` | throws | throws |
 
 WASI has `read` and `poll` on stdin and no terminal interface. There
 `readStdin` reads without asking `poll` first, because Node's WASI answers a
@@ -7870,11 +7894,11 @@ for its bytes: call `waitStdin` first, as the loop above does. For the same
 reason a `waitStdin` there waits at least 10 ms: Node's WASI counts a shorter
 wait from before it looks at stdin, and on a busy machine answers "nothing
 waiting" before it has looked. The checker
-accepts the five there, unlike `nish:net`'s, and refuses them on a
+accepts the six there, unlike `nish:net`'s, and refuses them on a
 freestanding `--target wasm32` build, whose runtime has no stdin
 (`reject_term_wasm`). Under Node,
 stdin is read only by the event loop, which a program that owns its loop never
-returns to, and Node's own raw mode turns Ctrl-C into a byte, so the three
+returns to, and Node's own raw mode turns Ctrl-C into a byte, so the four
 that would need either throw, each naming itself. The `term` and `term_wasi`
 blocks of `tests/run.js` feed `term_calls` and `term_import` over a pipe —
 four bytes after a delay, a pipe held open and never written, and a thousand

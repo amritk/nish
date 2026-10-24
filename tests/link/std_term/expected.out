@@ -74,3 +74,6 @@ past U+10FFFF lead: [char(65533) char(65533) char(97)]
 C1 control, then U+00A0: [char(65533) char(160)]
 overlong, surrogate, too high: [char(65533) char(65533) char(65533)]
 four bytes: [char(128512)]
+ESC [ 32 parameters A: [up(65)]
+ESC [ and 4000 parameters: 4002 keys, the first escape
+a 65535 x 65535 screen is 4096 x 256, its canvas 4096 x 512, and flushes true
