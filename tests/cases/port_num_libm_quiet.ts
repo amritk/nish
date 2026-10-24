@@ -1,4 +1,4 @@
-// WP33 NL8010, quiet: `Math.min` and `Math.max` of integers have no NaN and no
+// WP33 NL8010 (retired), quiet: `Math.min` and `Math.max` of integers have no NaN and no
 // signed zero to disagree about, and `Math.floor` and `Math.abs` of a double
 // answer the same in both readings.
 export const main = (): i32 => {

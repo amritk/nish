@@ -13211,11 +13211,11 @@ if (!only) {
       String(w.stderr) + (host ? String(host.stderr) : "")
     )
 
-    // Math.min and Math.max of a float are llvm.minnum / maxnum, which wasm32 lowers to
-    // libm's fmin, fmax, fminf and fmaxf. The freestanding profile has no libm, so until
-    // runtime-wasm.c supplied them a module using them did not link. Compiled here, with
-    // the wasm target, rather than read from section A's native build; the exports must
-    // answer what minnum answers natively, which the case's own `test()` counts.
+    // Math.min and Math.max of a float are llvm.minimum / maximum, which wasm32 has as
+    // instructions (`f64.min`, `f32.max`), so the module imports nothing and needs no libm.
+    // Compiled here, with the wasm target, rather than read from section A's native build;
+    // the exports must answer what JavaScript's Math.min and Math.max answer, NaN and -0
+    // included, which the case's own `test()` counts.
     const minmaxLl = path.join(buildDir, "math_minmax_float_wasm.ll")
     const minmaxWasm = path.join(buildDir, "math_minmax_float.wasm")
     const mc = spawnSync(
@@ -13236,12 +13236,13 @@ if (!only) {
       "const e = new WebAssembly.Instance(m, {}).exports",
       "console.log([WebAssembly.Module.imports(m).length, e.test(), e.minF64(NaN, 1), e.minF64(1, NaN),",
       "  e.maxF64(NaN, 2), e.minF64(NaN, NaN), e.minF64(2.5, -1), e.maxF64(-3, -7),",
+      "  1 / e.minF64(0, -0), 1 / e.maxF64(-0, 0),",
       "  e.minF32(NaN, 1.5), e.maxF32(0.25, NaN), e.minF32(3, 2)].join(' '))",
     ].join("\n")
     const mr = ml.status === 0 ? spawnSync("node", ["-e", probe, minmaxWasm], { cwd: root }) : null
     check(
-      "wasm profile links Math.min/Math.max of f64 and f32, and they drop a NaN as minnum does natively",
-      mr !== null && String(mr.stdout).trim() === "0 9 1 1 2 NaN -1 -3 1.5 0.25 2",
+      "wasm profile links Math.min/Math.max of f64 and f32, and they answer NaN and -0 as JavaScript does",
+      mr !== null && String(mr.stdout).trim() === "0 11 NaN NaN NaN NaN -1 -3 -Infinity Infinity NaN NaN 2",
       String(mc.stderr) + String(ml.stderr) + (mr ? String(mr.stdout) + String(mr.stderr) : "")
     )
   }
@@ -17773,7 +17774,7 @@ if (!only || "instructions".includes(only)) {
     )
     check(
       "instructions: no benchmark executes more instructions than bench/instructions.json allows",
-      counted.status === 0 && /^instructions: all 21 within /m.test(counted.stdout),
+      counted.status === 0 && /^instructions: all 22 within /m.test(counted.stdout),
       `${counted.stdout}${counted.stderr}`
     )
   }
@@ -23697,8 +23698,8 @@ if (fs.existsSync(threadsLl)) {
 //     leaves undefined and what it defines (`fmin`, `fmaxf`, ...);
 //   - the N-API shim `--emit-napi` writes for `tests/c-symbols/napi.ts`: what
 //     it leaves undefined, apart from the program's own exports it calls;
-//   - `tests/c-symbols/math.ts`, which calls every `Math` builtin and `%` on
-//     `f64` and `f32`, linked with the runtime at `-O0`, and at `-Oz` and `-O3`
+//   - `tests/c-symbols/math.ts`, which calls every `Math` builtin LLVM can
+//     lower to libm and `%` on `f64` and `f32`, linked with the runtime at `-O0`, and at `-Oz` and `-O3`
 //     with LTO and `--save-temps`: what its LTO object and its executable
 //     leave undefined, so the libm calls LLVM lowers the program's arithmetic
 //     to are read rather than guessed.

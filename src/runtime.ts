@@ -1174,7 +1174,7 @@ export class RuntimeTable {
     for (const f of unary) {
       this.addIntrinsic(`llvm.${f}.f64`, "double", "double")
     }
-    const binary: string[] = ["pow", "minnum", "maxnum"]
+    const binary: string[] = ["pow", "minimum", "maximum", "copysign"]
     for (const f of binary) {
       this.addIntrinsic(`llvm.${f}.f64`, "double", "double, double")
     }
@@ -1207,8 +1207,9 @@ export class RuntimeTable {
     // WP15: `Math.abs`/`min`/`max` on an `f32`. The f64-only Math functions
     // (sqrt, pow, ...) stay f64-only, so there is no `llvm.sqrt.f32` here.
     this.addIntrinsic("llvm.fabs.f32", "float", "float")
-    this.addIntrinsic("llvm.minnum.f32", "float", "float, float")
-    this.addIntrinsic("llvm.maxnum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.minimum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.maximum.f32", "float", "float, float")
+    this.addIntrinsic("llvm.copysign.f32", "float", "float, float")
     // `Math.clz32`, with `i1 false` so that a zero answers 32 as JavaScript's
     // does, rather than poison.
     this.addIntrinsic("llvm.ctlz.i32", "i32", "i32, i1")
