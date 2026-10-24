@@ -241,25 +241,26 @@ A call through `nish/sqlite` costs about what the same call to SQLite's C API
 costs. `bench/sqlite/` measures the challenge schema's queries both ways,
 against the same SQLite with the same options:
 
-| Workload | Through `nish/sqlite` | Through C | Difference, fastest run | Difference, median run |
-| --- | --- | --- | --- | --- |
-| Look up one post by id | 5,039 ns | 5,056 ns | not measurable | not measurable |
-| Read the 20 newest posts | 15,224 ns | 14,957 ns | +574 ns (4 %) | not measurable |
-| Insert a post, autocommit | 14,490 ns | 14,224 ns | +116 ns (1 %) | +266 ns (2 %) |
-| Insert a post, in a transaction | 4,167 ns | 4,223 ns | not measurable | not measurable |
+| Workload | Through `nish/sqlite` | Through C | Difference |
+| --- | --- | --- | --- |
+| Look up one post by id | 5,117 ns | 4,957 ns | not measurable |
+| Read the 20 newest posts | 15,391 ns | 14,800 ns | +591 ns (4 %); +266 to +877 ns across three measurements |
+| Insert a post, autocommit | 14,213 ns | 14,078 ns | not measurable (commit cost dominates) |
+| Insert a post, in a transaction | 4,196 ns | 4,294 ns | not measurable |
 
-The first two columns are medians per call, on a four-core Xeon virtual
-machine. "Not measurable" means the difference is smaller than the gap between
-two byte-identical copies of the same Nish binary on that machine. The
-difference includes the module's own checks.
+The figures are medians per call, on a four-core Xeon virtual machine. "Not
+measurable" means the difference is smaller than the gap between two
+byte-identical copies of the same Nish binary, or than the spread of either
+side's own runs. The difference includes the module's own checks.
 
-- **A column read costs at most about 6 ns more than in C.** The module checks
-  the statement's handle and asks whether a row is current, and `columnInto`
-  asks the column's type. That difference shows only when a call reads many
-  columns: reading the 20 newest posts reads 100.
-- **An autocommit insert's cost is mostly the commit.** Its run-to-run spread
-  is over a microsecond, so its tens of ns of difference are noise next to the
-  write itself; in a transaction the difference is not measurable.
+- **Reading many columns is where the module shows.** Reading the 20 newest
+  posts reads 100 columns, steps 21 times and resets once, and costs under
+  1 µs more than in C, about 2 to 6 % of the call. Each read checks the
+  statement's handle and asks whether a row is current, and `columnInto` asks
+  the column's type.
+- **An autocommit insert's cost is mostly the commit.** Its runs vary by more
+  than the module could add; in a transaction the difference is not
+  measurable.
 - **SQLite's own work dominates everything else**: the B-tree search, the
   join and the commit.
 - **The protocol and the full figures are in

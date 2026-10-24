@@ -1232,44 +1232,60 @@ database with the same flags and PRAGMAs.
   rounds.
 - Nish − C is the build less the twin, so it includes the adapter's checks as
   well as the module's calls. The noise band is the build against its
-  byte-identical copy: a difference inside the band is one this machine cannot
-  see. Min and median each have their own band, and each is judged against
-  its own.
+  byte-identical copy.
+- **The verdict statistic is the median, for every workload.** A median
+  difference is claimed only when it is larger than the median's noise band
+  and than the IQR of both the build and the twin; anything smaller is one
+  this machine cannot see. The min is reported but is not judged.
 
-**The figures.** Twelve rounds on a four-core Intel Xeon virtual machine at
-2.10 GHz, with Ubuntu clang 18.1.3 and SQLite 3.54.1. All figures are ns per
-call.
+**The figures.** Twelve rounds on a four-core Intel Xeon virtual machine that
+reports 2.10 GHz, with Ubuntu clang 18.1.3 and SQLite 3.54.1. All figures are
+ns per call.
 
 | Workload | Nish min / median (IQR) | Copy min / median (IQR) | C min / median (IQR) | Nish − C, min / median | Noise band, min / median |
 | --- | --- | --- | --- | --- | --- |
-| `lookup` | 4,707 / 5,039 (157) | 4,890 / 5,000 (60) | 4,831 / 5,056 (205) | −124 / −17 (−0.3 %) | 183 / 40 |
-| `feed` | 15,121 / 15,224 (253) | 15,037 / 15,774 (1,367) | 14,547 / 14,957 (427) | +574 / +266 (1.8 %) | 85 / 550 |
-| `insert` | 13,829 / 14,490 (1,329) | 13,864 / 14,261 (382) | 13,713 / 14,224 (362) | +116 / +266 (1.9 %) | 36 / 229 |
-| `insert-txn` | 4,020 / 4,167 (175) | 4,119 / 4,357 (319) | 4,072 / 4,223 (183) | −53 / −56 (−1.3 %) | 99 / 190 |
+| `lookup` | 4,783 / 5,117 (148) | 4,798 / 5,002 (174) | 4,739 / 4,957 (242) | +44 / +160 (3.2 %) | 16 / 115 |
+| `feed` | 15,002 / 15,391 (283) | 15,088 / 15,247 (388) | 14,520 / 14,800 (232) | +481 / +591 (4.0 %) | 87 / 144 |
+| `insert` | 13,866 / 14,213 (831) | 13,863 / 14,172 (583) | 13,588 / 14,078 (588) | +278 / +136 (1.0 %) | 4 / 41 |
+| `insert-txn` | 4,134 / 4,196 (66) | 4,204 / 4,350 (383) | 4,027 / 4,294 (284) | +107 / −98 (−2.3 %) | 69 / 154 |
 
 **What the figures say.**
 
-- **`lookup` and `insert-txn`:** both statistics are inside their bands. This
-  machine cannot see the module on them, in either direction.
-- **`feed`:** the min, +574 ns against a band of 85, is a cost. The median,
-  +266 ns, is inside its band of 550, which is wide because the copy's median
-  was noisy (IQR 1,367). The min is the figure to trust here: about 5.7 ns per
-  column read if all of it were the reads. One call reads 100 columns, and
-  each read checks its handle and asks SQLite whether a row is current, which
-  is what lets a read with no current row answer 0, as the module documents.
-  `columnInto` also asks the column's type, because it copies a blob as bytes
-  and anything else as text. The call also makes 20 steps and 20 resets, each
-  through a checked adapter call, so the per-read figure is an upper bound.
-- **`insert`:** both statistics are outside their bands, +116 and +266 ns, but
-  the build's IQR is 1,329 ns. Each call commits through the WAL, and that
-  cost, and how it moves as the WAL file grows and is checkpointed, swamps a
-  module cost of tens of ns. `insert-txn`, which takes the commit out, is the
-  figure for the module's cost on an insert.
-- **Under callgrind,** run from `build/bench/sqlite/` as
-  `valgrind --tool=callgrind ./nish feed feed.db 300` and the same for
-  `./twin`, the build runs 58.6M instructions against C's 56.3M: about 7,800
-  more per call, all of it in the adapter's calls. That covers the 100 column
-  reads and the 20 steps and 20 resets.
+- **`lookup`:** +160 ns is outside its band of 115 but inside C's IQR of 242,
+  so it is not measurable. Another session put it at −17 ns.
+- **`feed`:** a cost. +591 ns is outside the band (144) and both IQRs (283
+  and 232). The figure moves between sessions more than the band does: three
+  sessions on the same adapter code measured +877, +266 and +591 ns, and the
+  +266 session could not see it at all (band 550). So the cost is under 1 µs
+  per call, about 2 to 6 % of it. One call makes 21 steps, reads 100 columns
+  and resets once, each through a checked adapter call. Each read checks its
+  handle and asks SQLite whether a row is current, which is what lets a read
+  with no current row answer 0, as the module documents. `columnInto` also
+  asks the column's type, because it copies a blob as bytes and anything else
+  as text. Which of these the cost is in is not measured here.
+- **`insert`:** not measurable, because the commit's cost dominates. +136 ns is
+  outside the band (41) but well inside both IQRs (831 and 588). Each call
+  commits through the WAL, and that cost, and how it moves as the WAL file
+  grows and is checkpointed, varies by more than the difference.
+  `insert-txn`, which takes the commit out, is the figure for the module's
+  cost on an insert.
+- **`insert-txn`:** not measurable. −98 ns is inside its band (154).
+- **Under callgrind,** the build runs 4.2 % more instructions per `feed` call
+  than C: about 194,100 against 186,300, so 7,800 more. The per-call figure is
+  the difference of two runs, so start-up cancels. From `build/bench/sqlite/`:
+
+  ```bash
+  for n in 100 600; do
+    valgrind --tool=callgrind ./nish feed feed.db $n   # and the same for ./twin
+  done
+  # per call = (instructions at 600 − instructions at 100) / 500
+  ```
+
+  4.2 % agrees with the 2 to 6 % the clock measures. The 2.10 GHz the machine
+  reports does not: about 186,000 instructions in about 15 µs would need some
+  6 instructions a cycle on both sides, so the core runs faster than that.
+  Compare the fractions, not cycles. Both binaries are stripped, so callgrind
+  cannot say which functions the extra instructions are in.
 
 **Before the adapter fix.** The same protocol, before this measurement's fixes,
 put `feed` at +1,319 ns median (9.0 %), against a noise band of 244 ns. Two
@@ -1282,9 +1298,10 @@ causes made up the difference:
   count separately. It now asks once when a row is current.
 
 Where Nish ran faster than C before (`insert-txn` by 85 ns median in the first
-measurement after the fix, outside a band of 11), the cause was never found; the layout of the two
-binaries is a hypothesis, not a finding. With the rotation made equal and the
-link flags matched, no Nish-faster result is outside its band.
+measurement after the fix, outside a band of 11), the cause was never found;
+the layout of the two binaries is a hypothesis, not a finding. With the
+rotation made equal and the link flags matched, no Nish-faster result has been
+measurable.
 
 ## YAML against @amritk/yaml
 
