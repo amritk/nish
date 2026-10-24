@@ -66,6 +66,7 @@ import { ctAtLevel, ctTargetName, runtimeChecks } from "./ct-asm-runtime.js"
 import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
+import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
 import {
   packageRootOf,
@@ -2624,7 +2625,7 @@ for (const name of [
 for (const [name, count] of [
   ["reject_ffi_handle_arrow_using", 2],
   ["reject_ffi_handle_dispose_forms", 15],
-  ["reject_ffi_handle_walk_forms", 9],
+  ["reject_ffi_handle_walk_forms", 8],
   ["reject_ffi_handle_walk_ctor_param", 6],
   ["reject_ffi_handle_walk_function_type", 2],
 ]) {
@@ -4101,7 +4102,8 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
 // The program written back out as TypeScript (src/emit-ts.ts). Each fixture in
 // tests/emit-ts/<group>/ with a `.out` is an entry: it is written out, the
 // `entry.ts` run under Node and the program run natively, and both must print
-// the `.out`. Beside it, `<name>.files` lists every path the output holds, and
+// the `.out` and exit 0 — or, where a `<name>.err` sits beside it, write that
+// to stderr and exit 1. Beside it, `<name>.files` lists every path the output holds, and
 // `<name>.expected.ts` (and `<name>.entry.expected.ts`, where there is one) is
 // the module as written; in `identity/` there is no `.expected.ts`, because a
 // class-A module's golden is its own source, byte for byte. `UPDATE_GOLDENS=1`
@@ -4168,10 +4170,15 @@ if (!only || "emit-ts".includes(only)) {
         )
       }
       const want = fs.readFileSync(path.join(dir, `${name}.out`), "utf8")
+      // A fixture with a `.err` panics: that stderr, exit 1, on both sides.
+      const errFile = path.join(dir, `${name}.err`)
+      const wantErr = fs.existsSync(errFile) ? fs.readFileSync(errFile, "utf8") : null
+      const wantStatus = wantErr === null ? 0 : 1
+      const ends = (r) => r.status === wantStatus && r.stdout === want && (wantErr === null || r.stderr === wantErr)
       const node = spawnSync("node", [...emitTsNodeFlags, path.join(out, "entry.ts")], { cwd: root, encoding: "utf8" })
       check(
-        `emit-ts: ${label} under Node prints ${name}.out and exits 0`,
-        node.status === 0 && node.stdout === want,
+        `emit-ts: ${label} under Node prints ${name}.out and exits ${wantStatus}`,
+        ends(node),
         `exit ${node.status}\n${node.stdout}${node.stderr}`
       )
       const exe = path.join(work, group.name, `${name}.exe`)
@@ -4181,8 +4188,8 @@ if (!only || "emit-ts".includes(only)) {
       })
       const native = linked.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8" }) : linked
       check(
-        `emit-ts: ${label} natively prints ${name}.out and exits 0`,
-        native.status === 0 && native.stdout === want,
+        `emit-ts: ${label} natively prints ${name}.out and exits ${wantStatus}`,
+        linked.status === 0 && ends(native),
         `exit ${native.status}\n${native.stdout}${native.stderr}`
       )
     }
@@ -4299,6 +4306,7 @@ if (!only || "emit-ts".includes(only)) {
     ["NL4011", "reject_emit_ts_net"],
     ["NL4011", "reject_emit_ts_net_global"],
     ["NL4011", "reject_emit_ts_signal"],
+    ["NL4012", "reject_emit_ts_compound"],
   ]) {
     const dir = path.join(work, name)
     const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
@@ -8212,6 +8220,8 @@ if (!only || "c_symbol_private_libm".includes(only)) {
 runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
 
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
+
+runFfiHandleChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir, wasiSysroot: WASI_SYSROOT })
 
 // #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
 // length in its loop condition as well as after the call to `f`, so once `f`

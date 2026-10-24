@@ -907,6 +907,17 @@ export class StructInfo {
   handle: boolean
   /** The handle's `CPtr` field, or `""` for any other struct. */
   handleField: string
+  /**
+   * WP40 H1.2: the C function the handle's `[Symbol.dispose]` calls, once
+   * `src/handles.ts` has found it sound; what every exit of a `using` block
+   * calls on the field. `null` for any other struct.
+   */
+  handleClose: FunctionSig | null
+  /**
+   * Whether that dispose calls the close behind its own `!== null` test (§4b
+   * shape 2); shape 1 calls it on the field as it is, `null` included.
+   */
+  handleTested: boolean
 
   constructor(name: string, kind: i32, type: i32, decl: Node, origin: SourceFile) {
     this.name = name
@@ -934,6 +945,8 @@ export class StructInfo {
     this.atomic = false
     this.handle = false
     this.handleField = ""
+    this.handleClose = null
+    this.handleTested = false
   }
 
   /** The field called `name` on this struct, or `null`. */

@@ -16,8 +16,11 @@ narrow proof (§3a): a later argument that is itself a foreign call no longer
 keeps the `ffi-length` check, and one that calls C and pops still does
 (`tests/cases/panics_ffi_length_foreign_arg`). H1.1 is built: the handle-class
 rules of §4a, the positions of §4d and the type-argument clause at a generic
-class's instantiation; `using` of a handle class is refused (NL2573, "not
-lowered yet") until H1.2 emits the close. H1.2 and H1.3 are unbuilt. It widens
+class's instantiation. H1.2 is built: `using` of a handle class emits the
+close at every exit of its block (§4b), each declarator opening before the next
+initialiser runs (Q12(a), §4e), with the `ffi` capability named at the
+`using`; NL2573, which refused every such `using` under H1.1, is retired.
+H1.3 is unbuilt. It widens
 [WP27](wp27-ffi.md) in two places.
 The first is B, a `u8[]` parameter on a `declare function`: plan stage 5 of
 the ffi-reach run, built as B1. The second is H, a class that owns one `CPtr`
@@ -605,8 +608,11 @@ source. It is not a Nish function pointer, which the language does not have
 The emitter does not call the method. Like a lock's release, the close is
 emitted by the construct: `using` pushes a fourth kind onto the stack that
 `openOneScope` (src/emit-parallel.ts:797) keeps beside scope, arena and lock.
-`closeScope` (:843) then emits the null test and the call in LIFO order on
-every exit, the same exits a lock is released on (§2).
+`closeScope` (:843) then emits the call on every exit, the same exits a lock
+is released on (§2), exactly as the dispose spells it: behind the `!== null`
+test for shape 2, and on the field as it is for shape 1, so shape 1 on a
+`CPtr | null` field whose close takes `CPtr | null` calls the close with
+`null` (`ffi_handle_shapes`).
 
 "Every exit" is a list of emitter paths, and each one is wired for the fourth
 kind, as each was for locks:
@@ -622,8 +628,13 @@ kind, as each was for locks:
   handle as it meets each one. Two passes, one per kind, would get the order
   wrong: under `using l = m.lock(); using f = new File(p)`, `f` closes before
   `l` is released, the reverse of their order of opening, as on the
-  fall-through path. `ffi_handle_file` has a lock and a handle in one block
-  and shows that order on an early `return`;
+  fall-through path. `tests/link/ffi_handle_mutex` has a lock and a handle
+  in one block and shows that order on an early `return`. As built, the pass
+  is `emitHeldReleases`, after the value; a `return` still joins its scopes
+  before the value (`emitScopeJoins` with `arenas` false) and releases its
+  arenas after the pass, so on a `return` the order is scopes, then handles
+  and locks innermost first, then arenas, while `break`, `continue` and the
+  fall-through close every kind strictly innermost first;
 - the tail-call suppression. `holdsLock` (src/emit-parallel.ts:913) stops
   src/emit.ts:676 from marking a call in return position `tail` while a lock
   is held, because the release runs after it. An open handle needs the same:
@@ -890,7 +901,9 @@ design, decided on a program that needs them.
 - **The return value.** As with an arena, the return value is computed before
   the close (src/emit.ts:1163), so `return f.readByte()` reads from an open
   file.
-- **Multiple declarators.** `using a = new File(p), b = new File(q)` closes
+- **Multiple declarators.** Built under (a) in H1.2, for every kind `using`
+  opens; the text below is the analysis that chose it, and its line numbers
+  are `8790ea3`'s. `using a = new File(p), b = new File(q)` closes
   `b`, then `a`, as `openScope` already orders declarators. That holds once
   both are open. It does not hold while the second initialiser runs:
   src/emit.ts:1114-1118 runs `emitVariableDeclarations` for every
@@ -930,9 +943,10 @@ design, decided on a program that needs them.
   `using a = new File(p), b = new File(q.orReturn())` with `q` an `Err`, and
   the sidecar's close count shows `a` closed once. Under (b), the refusal is
   the negative case and `ffi_handle_file` keeps two plain declarators.
-- **The object's memory.** The object is allocated in the arena that is live
-  at the `new`. It is popped from the stack before any arena opened earlier
-  releases, so the close never reads freed memory.
+- **The object's memory.** As built, the object a `using` binds is a stack
+  `alloca` in the function's entry block (`%File.obj` in `ffi_handle_file`'s
+  golden), not an arena allocation, so no arena release can free it before
+  the close loads its field.
 
 ## 5. Interactions
 
@@ -1038,7 +1052,9 @@ design, decided on a program that needs them.
   emitted, not written, so the `using` statement offers `ffi` itself, naming
   the close function, and the report points to the `using` line. Otherwise
   `--deny ffi` would let a program that only closes slip through. That is
-  pinned by `caps_ffi_handle` (a `.caps.json` naming both sites) and
+  pinned by `caps_ffi_handle`, whose `.caps.json` has one `ffi` witness: the
+  `using` line, naming `fclose` (the constructor's `fopen` is on the same
+  line, through the `new`, and adds no second witness), and by
   `reject_ffi_handle_deny`.
 
 **`--emit-header`, `--emit-dts` and `--emit-napi`.**
@@ -1314,7 +1330,7 @@ B1's bar is that `read` and `write` on a `u8[]` are callable with no shim.
 | Step | What | Tests |
 | --- | --- | --- |
 | H1.1 | The handle rule as the allow-lists of §4a (D1–D5, F, R1, R2, L1, L2) and §4d (H1–H3, U1, U2, the type rule), each enforced as one positive check with one general refusal (`reject_ffi_handle_position`, `reject_ffi_handle_type_position`, `reject_ffi_handle_field_position`) rather than one check per way in; the dispose shape; the class-template check (§6 row 5); and `reject_ffi_handle_close_call` if Q9 is option A | Every new `reject_ffi_handle_*` case in §6, one file per shape, named here so that none is left implicit (row 1: `reject_ffi_handle_new_outside_using`; row 2: `reject_ffi_handle_using_initialiser`, `reject_ffi_handle_using_second_declarator`; row 3: `reject_ffi_handle_this_escapes`; row 4: `reject_ffi_handle_closure_capture`, `reject_ffi_handle_field_capture`; row 5: `reject_ffi_handle_type_argument`, `reject_ffi_handle_generic_class`; row 6: `reject_ffi_handle_array`; row 7: `reject_ffi_handle_result`; row 8: `reject_ffi_handle_return`; row 10: `reject_ffi_handle_scope_task`; row 12: `reject_ffi_handle_field`; row 13: `reject_ffi_handle_implements`; row 14: `reject_ffi_handle_nullable`; row 15: `reject_ffi_handle_alias`, `reject_ffi_handle_module_binding`; row 16: `reject_ffi_handle_field_read_outside`; row 16a: `reject_ffi_handle_field_other_instance`; row 16b: `reject_ffi_handle_field_alias_copy`, `reject_ffi_handle_field_alias_let`, `reject_ffi_handle_field_alias_logical`, `reject_ffi_handle_field_alias_ternary`; row 17: `reject_ffi_handle_field_copy_method`; row 18: `reject_ffi_handle_dispose_call`; row 19: `reject_ffi_handle_export`, `reject_ffi_handle_exported_param`; row 28: `reject_ffi_handle_interface_field`; row 29: `reject_ffi_handle_builtin_arg`, `reject_ffi_handle_object_literal`; row 30: `reject_ffi_handle_no_dispose`; row 31: `reject_ffi_handle_field_position_ctor`, `reject_ffi_handle_field_position_closure`; row 32: `reject_ffi_handle_two_fields`; row 33: `reject_ffi_handle_field_mutable`; row 34: `reject_ffi_handle_field_initialiser`; row 35: `reject_ffi_handle_dispose_arg_type`, `reject_ffi_handle_dispose_arity`, `reject_ffi_handle_dispose_body`, `reject_ffi_handle_dispose_unknown`; row 22: `reject_ffi_handle_close_call`, under Q9's option A only; rows 9 and 11 are existing refusals and add none, and row 2's `reject_ffi_handle_using_exit_in_initialiser` is H1.2's under Q12(b)); `reject_ffi_handle_field_copy` (F, §4a); `reject_ffi_handle_json` (D4); the five H2 exclusions (`reject_ffi_handle_walk_ctor_param`, `_closure_param`, `_nested_param`, `_rest_param`, `_optional_param`); and one negative case per row of §4d's walk that no §6 row already covers (`reject_ffi_handle_walk_*`), so that each form the walk names is pinned |
-| H1.2 | The emitted close as a fourth kind on `openScope`'s stack, wired into every exit path §4b lists (fall-through, `emitScopeJoins` and its `later` test, `emitScopeExit` including `orReturn()` propagation, and the tail-call suppression); per-declarator opening under Q12(a), or `reject_ffi_handle_using_exit_in_initialiser` under Q12(b) (§4e); the `ffi` offer at the `using`; the wasm32 checks (§5) | `ffi_handle_file` (golden `.ll` + native round trip: a class owning an `fopen` handle, closed by `using`, reading a file the sidecar `ffi_handle_file.c` writes first, with an early `return`, a `break` and a `continue` in a loop, an `orReturn()` that propagates out of the block, `return twice(n)` in return position inside the `using` block, a scalar call that `marksTailCall` accepts (no `tail` marker in the golden, the close after the call, and the same call outside the block marked `tail`), and two declarators (under Q12(a), the second initialiser's `orReturn()` propagating with the first open), and the sidecar counting the closes through an `fclose` wrapper it exports, so that the output shows exactly one close per open); `ffi_handle_arena` (§5); `caps_ffi_handle` and `reject_ffi_handle_deny` (§5, `--deny ffi` naming the `using`); in the `wasi` section, the `--target wasm32` IR check and the `--profile wasm` link of `ffi_handle_file` |
+| H1.2 | The emitted close as a fourth kind on `openScope`'s stack, wired into every exit path §4b lists (fall-through, `emitScopeJoins` and its `later` test, `emitScopeExit` including `orReturn()` propagation, and the tail-call suppression); per-declarator opening under Q12(a), or `reject_ffi_handle_using_exit_in_initialiser` under Q12(b) (§4e); the `ffi` offer at the `using`; the wasm32 checks (§5) | `ffi_handle_file` (golden `.ll` + native round trip: a class owning an `fopen` handle, closed by `using`, reading a file the sidecar `ffi_handle_file.c` writes first, with an early `return`, a `break` and a `continue` in a loop, an `orReturn()` that propagates out of the block, `return twice(n)` in return position inside the `using` block, a scalar call that `marksTailCall` accepts (no `tail` marker in the golden, the close after the call, and the same call outside the block marked `tail`), and two declarators (under Q12(a), the second initialiser's `orReturn()` propagating with the first open), and the sidecar counting the closes through an `fclose` wrapper it exports, so that the output shows exactly one close per open); `ffi_handle_arena` (§5); `caps_ffi_handle` and `reject_ffi_handle_deny` (§5, `--deny ffi` naming the `using`); in the `wasi` section, the `--target wasm32` IR check and the `--profile wasm` link of `ffi_handle_file`. As built, that link is a `--profile wasi` one (`tests/ffi-handle.js`): the freestanding profile's `runtime-wasm.c` has no strings, and `File`'s constructor hands C a path, whose NUL check calls `nish_str_index_of` |
 | H1.3 | Use after close, refused | `reject_ffi_handle_use_after_close`: the binding named after its block (`let x = 0; { using f = new File(p) } f.read()`) is already a scope error; the case pins its message, and a second case file, `reject_ffi_handle_use_after_close_keep`, reaches the object through a callee that tries to keep it (`let saved` assigned from an H2 parameter), refused by row 15 |
 
 H1's bar is a class that owns an `fopen` handle and is closed by `using`, with

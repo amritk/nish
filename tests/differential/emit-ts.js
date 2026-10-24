@@ -116,7 +116,7 @@ const scratchRoot = (work, side) => {
  * their stages land: R4b's numbers, R4c's strings, R4d's records, R4e's
  * control flow; `libm` is the 1-ulp row that stays; `ffi` a program whose C
  * functions cannot be written (NL4010); `refused` one `--emit-ts` refuses for
- * now (NL4011).
+ * now (NL4011, NL4012).
  */
 const ROWS = ["numbers", "strings", "records", "control", "libm", "ffi", "refused"]
 
@@ -211,7 +211,7 @@ const compare = async (prog, compiler) => {
   // refuses it as a usage error.
   const emitArgs = prog.args.filter((arg) => !DUMPS.includes(arg))
   const emitted = await run(compiler, [prog.entry, "--json", "--emit-ts", out, ...emitArgs])
-  const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL40(10|11))"/)
+  const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL40(10|11|12))"/)
   // The native build is read first, so a program that is both refused and
   // broken natively is an error rather than a listed refusal. The exception is
   // an NL4010 refusal: a module that declares C functions may need C this

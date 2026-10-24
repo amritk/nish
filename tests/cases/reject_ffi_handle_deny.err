@@ -1,0 +1,1 @@
+`main` reaches `ffi`, which the capability policy does not grant (`--deny ffi`); the chain that reaches it: reject_ffi_handle_deny.ts:20:13 calls fclose

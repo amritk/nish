@@ -365,6 +365,15 @@ const CALLS = {
   terminalSize,
 };
 
+// A rewritten program prints most values with Node's own `console.log`, which
+// queues a write to a pipe the reader has not drained, and `process.exit`
+// drops what is queued: under load the tail of the output was lost with exit 0
+// (`corpus/bit_fnv1a` under the emit-ts differential). Blocking writes make it
+// as synchronous as `writeOut`.
+for (const stream of [process.stdout, process.stderr]) {
+  stream._handle?.setBlocking?.(true);
+}
+
 installHost({
   writeOut: (s) => fs.writeSync(1, s),
   writeErr: (s) => fs.writeSync(2, s),

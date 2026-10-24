@@ -245,7 +245,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     if (out.length === 0) {
       continue
     }
-    const walk = new Walk(unit.checker.program, unit.source, unit.nodeCount)
+    const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
     for (const stmt of unit.file.children) {
       if (stmt.kind !== N_IMPORT) {
         continue
