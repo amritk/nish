@@ -739,7 +739,7 @@ const pbkdf2HmacSha256Exposed = (password: u8[], request: Pbkdf2Request): u8[] |
     work.update(salt, HMAC_FROM, toI32(salt.length))
     work.update(index, HMAC_FROM, PBKDF2_INDEX)
     pbkdf2Finish(keyedOuter, work, u)
-    for (let j: i32 = 0; j < SHA256_SIZE; j += 1) {
+    for (let j: i32 = 0; j < SHA256_SIZE && j < toI32(t.length) && j < toI32(u.length); j += 1) {
       t[j] = u[j]
     }
     // U_c = PRF(P, U_{c-1}); T_i = U_1 XOR ... XOR U_c.
@@ -747,12 +747,12 @@ const pbkdf2HmacSha256Exposed = (password: u8[], request: Pbkdf2Request): u8[] |
       hmacCopySha256(keyedInner, work)
       work.update(u, HMAC_FROM, SHA256_SIZE)
       pbkdf2Finish(keyedOuter, work, u)
-      for (let j: i32 = 0; j < SHA256_SIZE; j += 1) {
+      for (let j: i32 = 0; j < SHA256_SIZE && j < toI32(t.length) && j < toI32(u.length); j += 1) {
         t[j] = t[j] ^ u[j]
       }
     }
     const take: i32 = length - done < SHA256_SIZE ? length - done : SHA256_SIZE
-    for (let j: i32 = 0; j < take && done + j < toI32(dk.length); j += 1) {
+    for (let j: i32 = 0; j < take && j < toI32(t.length) && done + j < toI32(dk.length); j += 1) {
       dk[done + j] = t[j]
     }
     done += take
