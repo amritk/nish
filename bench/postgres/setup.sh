@@ -69,19 +69,20 @@ mkdir -p "$DIR/data" "$DIR/sock"
 if [ ${#AS[@]} -gt 0 ]; then
   chown "$(id -u postgres):$(id -g postgres)" "$DIR/data" "$DIR/sock"
 fi
-"${AS[@]}" "$PG_BIN/initdb" -D "$DIR/data" -U postgres --auth=trust -E UTF8 --no-locale > /dev/null
+${AS[@]+"${AS[@]}"} "$PG_BIN/initdb" -D "$DIR/data" -U postgres --auth=trust -E UTF8 --no-locale > /dev/null
 {
   bash "$DIR/challenge/box/pg-conf.sh" --print
   echo "listen_addresses = '127.0.0.1'"
   echo "unix_socket_directories = '$DIR/sock'"
   echo "password_encryption = 'scram-sha-256'"
-} | "${AS[@]}" tee -a "$DIR/data/postgresql.conf" > /dev/null
-printf 'local all postgres trust\nhost all all 127.0.0.1/32 scram-sha-256\n' | "${AS[@]}" tee "$DIR/data/pg_hba.conf" > /dev/null
+} | ${AS[@]+"${AS[@]}"} tee -a "$DIR/data/postgresql.conf" > /dev/null
+printf 'local all postgres trust\nhost all all 127.0.0.1/32 scram-sha-256\n' | ${AS[@]+"${AS[@]}"} tee "$DIR/data/pg_hba.conf" > /dev/null
 
 # The seed loads through the socket, so the setup's port is any free one.
 PORT="$(node -e 'const s = require("net").createServer().listen(0, "127.0.0.1", () => { console.log(s.address().port); s.close() })')"
-"${AS[@]}" "$PG_BIN/pg_ctl" -D "$DIR/data" -l "$DIR/data/setup.log" -o "-c port=$PORT" -w start > /dev/null
-trap '"${AS[@]}" "$PG_BIN/pg_ctl" -D "$DIR/data" -m fast -w stop > /dev/null' EXIT
+# The stop is armed before the start, so a start that fails half way is stopped too.
+trap '${AS[@]+"${AS[@]}"} "$PG_BIN/pg_ctl" -D "$DIR/data" -m fast -w stop > /dev/null 2>&1 || true' EXIT
+${AS[@]+"${AS[@]}"} "$PG_BIN/pg_ctl" -D "$DIR/data" -l "$DIR/data/setup.log" -o "-c port=$PORT" -w start > /dev/null
 
 say "the --dev seed (make-seed.sh)"
 PATH="$PG_BIN:$PATH" PGHOST="$DIR/sock" PGPORT="$PORT" PGUSER=postgres GOTOOLCHAIN=auto \

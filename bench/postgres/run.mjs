@@ -20,18 +20,21 @@
 // twin.c is compiled with the speed profile's optimisation flags and linked
 // with the link's flags on Linux, against the system's libpq (pg_config), 17
 // or later. Both prepare the same statement with int8 parameters, send each
-// query as its own Bind, Execute and Sync group, keep the same number in
-// flight (16; 1 for insert) on one connection, and read every column of every
-// row as text, decoding the timestamps and walking the tag array.
+// query as its own group ending in Sync (Bind, Execute for the module; Bind,
+// Describe Portal, Execute for libpq, whose PQsendQueryPrepared always
+// describes), keep the same number in flight (16; 1 for insert) on one
+// connection, and read every column of every row as text, decoding the
+// timestamps and walking the tag array. Every run must read its workload's
+// rows per query times its count.
 //
 // Each round runs every workload on the build, its copy and the C twin, in an
 // order that rotates by round, so over a multiple of 3 rounds each goes first
 // equally often. A run times its own loop and prints a checksum of every value
 // it read; every run of a workload must print the same rows and checksum. The
 // report is the client's CPU time per query (user and system, getrusage of the
-// client process only) and queries per second, min, median and interquartile
-// range over the rounds. The module's cost is the build less the twin; the
-// noise band is the build against its byte-identical copy. The verdict is the
+// client process only; the system part's median beside it) and queries per second, min, median and interquartile
+// range over the rounds. The module's cost is the build less the twin, and the
+// copy less the twin beside it; the noise band is the build against its byte-identical copy. The verdict is the
 // medians: a difference is one this machine can see only when it exceeds the
 // noise band and both sides' IQRs.
 import { spawnSync } from "node:child_process"
@@ -72,10 +75,12 @@ if (!(rounds >= 2)) {
 
 // Queries a run: each timed run is one to a few seconds, most of the list's
 // spent waiting on the server.
+// `rows` is what one query answers, checked on every run, so a short seed
+// cannot time empty results.
 const WORKLOADS = [
-  { name: "pk", count: validate ? 2000 : 50000 },
-  { name: "list", count: validate ? 200 : 3000 },
-  { name: "insert", count: validate ? 500 : 5000 },
+  { name: "pk", count: validate ? 2000 : 50000, rows: 1 },
+  { name: "list", count: validate ? 200 : 3000, rows: 20 },
+  { name: "insert", count: validate ? 500 : 5000, rows: 1 },
 ]
 
 // scripts/build.sh: the speed profile's `optimise` less -flto (twin.c calls
@@ -180,9 +185,12 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => process.exit(130))
 }
 
-const LINE = /^rows (\d+) checksum (\d+) failed (-?\d+) count (\d+) ns (\d+) cpu (\d+)$/
+const LINE = /^rows (\d+) checksum (\d+) failed (-?\d+) count (\d+) ns (\d+) user (\d+) sys (\d+)$/
 
-/** One run of `bin` on workload `w`: what it read, its client CPU µs per query and its queries per second. */
+/**
+ * One run of `bin` on workload `w`: what it read, its client CPU µs per query
+ * (user and system, and the system part alone) and its queries per second.
+ */
 const runOnce = (bin, w) => {
   const out = run(
     bin,
@@ -190,12 +198,13 @@ const runOnce = (bin, w) => {
     `${path.basename(bin)} ${w.name}`
   )
   const m = LINE.exec(out.trim())
-  if (m === null || m[3] !== "0" || Number(m[1]) === 0) {
-    fail(`${bin} ${w.name} printed ${JSON.stringify(out)}`)
+  if (m === null || m[3] !== "0" || Number(m[1]) !== w.rows * w.count) {
+    fail(`${bin} ${w.name} printed ${JSON.stringify(out)}, not ${w.rows * w.count} rows`)
   }
   return {
     answer: `rows ${m[1]} checksum ${m[2]} count ${m[4]}`,
-    cpu: Number(m[6]) / w.count,
+    cpu: (Number(m[6]) + Number(m[7])) / w.count,
+    sys: Number(m[7]) / w.count,
     qps: (w.count * 1e9) / Number(m[5]),
   }
 }
@@ -234,6 +243,7 @@ const iqr = (xs) => {
 }
 
 const cpus = WORKLOADS.map(() => bins.map(() => []))
+const syss = WORKLOADS.map(() => bins.map(() => []))
 const qpss = WORKLOADS.map(() => bins.map(() => []))
 const answers = WORKLOADS.map(() => null)
 // Round 0 warms the binaries, libpq and the server's caches and is not counted.
@@ -249,6 +259,7 @@ for (let round = 0; round <= timed; round++) {
       answers[w] = r.answer
       if (round > 0) {
         cpus[w][k].push(r.cpu)
+        syss[w][k].push(r.sys)
         qpss[w][k].push(r.qps)
       }
     }
@@ -275,7 +286,8 @@ for (let w = 0; w < WORKLOADS.length; w++) {
     const x = cpus[w][k]
     const y = qpss[w][k]
     console.log(
-      `  ${labels[k].padEnd(10)} cpu min ${us(min(x))}/query, median ${us(median(x))}/query, IQR ${us(iqr(x))};` +
+      `  ${labels[k].padEnd(10)} cpu min ${us(min(x))}/query, median ${us(median(x))}/query, IQR ${us(iqr(x))}` +
+        ` (median system ${us(median(syss[w][k]))});` +
         ` qps max ${whole(max(y))}, median ${whole(median(y))}, IQR ${whole(iqr(y))}`
     )
   }
@@ -284,7 +296,8 @@ for (let w = 0; w < WORKLOADS.length; w++) {
   const seen = Math.abs(diff) > band && Math.abs(diff) > iqr(n) && Math.abs(diff) > iqr(t)
   console.log(
     `  nish - C   cpu min ${signed(min(n) - min(t))}, median ${signed(diff)}` +
-      ` (${((diff / median(t)) * 100).toFixed(1)}% of C's median); qps median` +
+      ` (${((diff / median(t)) * 100).toFixed(1)}% of C's median; the copy's` +
+      ` ${signed(median(c) - median(t))}, ${(((median(c) - median(t)) / median(t)) * 100).toFixed(1)}%); qps median` +
       ` ${(((median(qpss[w][0]) - median(qpss[w][2])) / median(qpss[w][2])) * 100).toFixed(1)}% of C's`
   )
   console.log(

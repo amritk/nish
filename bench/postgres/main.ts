@@ -21,9 +21,10 @@
 //
 // Each mode runs `depth` queries untimed first (the connect, SCRAM and the
 // prepares fall in them), then `count` timed. It prints
-// `rows R checksum S failed F count N ns T cpu U`, the line `twin.c` prints
-// for the same arguments: T the timed loop's wall time in nanoseconds, U the
-// process's user and system CPU time over it, in microseconds (getrusage).
+// `rows R checksum S failed F count N ns T user U sys K`, the line `twin.c`
+// prints for the same arguments: T the timed loop's wall time in nanoseconds,
+// U and K the process's user and system CPU time over it, in microseconds
+// (getrusage).
 //
 // PK_SQL, LIST_SQL and INSERT_SQL are the queries of the challenge's SPEC.md
 // (https://github.com/arjaythedev/multicore-server-challenge).
@@ -106,8 +107,8 @@ const bytesOf = (s: string): u8[] => {
   return out
 }
 
-/** The process's user and system CPU time so far, in microseconds. */
-const cpuMicros = (): i64 => {
+/** The process's CPU time so far in microseconds: user at `at` 0, system at 16. */
+const cpuMicros = (at: i32): i64 => {
   const p: CPtr | null = calloc(toU64(1), toU64(144))
   if (p === null) {
     return 0
@@ -116,7 +117,7 @@ const cpuMicros = (): i64 => {
   const usage: u8[] = new Array<u8>(32)
   bcopy(p, usage, toU64(usage.length))
   free(p)
-  return word(usage, 0) * 1000000 + word(usage, 8) + word(usage, 16) * 1000000 + word(usage, 24)
+  return word(usage, at) * 1000000 + word(usage, at + 8)
 }
 
 /** The little-endian i64 at `b[at, at + 8)`. */
@@ -475,17 +476,19 @@ export const main = (): i32 => {
   if (!bench.run(mode, depth, depth, false) || (mode === INSERT && !bench.run(RESET, 1, 1, false))) {
     return 1
   }
-  const cpu0: i64 = cpuMicros()
+  const user0: i64 = cpuMicros(0)
+  const sys0: i64 = cpuMicros(16)
   const t0: i64 = monotonicNanos()
   const ok: boolean = bench.run(mode, count, depth, true)
   const ns: i64 = monotonicNanos() - t0
-  const cpu: i64 = cpuMicros() - cpu0
+  const user: i64 = cpuMicros(0) - user0
+  const sys: i64 = cpuMicros(16) - sys0
   if (!ok || (mode === INSERT && !bench.run(RESET, 1, 1, false))) {
     return 1
   }
   const fold = bench.fold
   console.log(
-    `rows ${fold.rows} checksum ${fold.sum} failed ${fold.failed} count ${count} ns ${ns} cpu ${cpu}`
+    `rows ${fold.rows} checksum ${fold.sum} failed ${fold.failed} count ${count} ns ${ns} user ${user} sys ${sys}`
   )
   const conn = pool.connection(0)
   conn.terminate()

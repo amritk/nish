@@ -5,9 +5,9 @@
  *   twin <pk|list|insert> <port> <user> <password> <database> <count>
  *
  * It prints the line main.ts prints for the same arguments:
- * `rows R checksum S failed F count N ns T cpu U`, T the timed loop's wall
- * time in nanoseconds and U the process's user and system CPU time over it
- * (getrusage), in microseconds.
+ * `rows R checksum S failed F count N ns T user U sys K`, T the timed loop's
+ * wall time in nanoseconds, U and K the process's user and system CPU time
+ * over it (getrusage), in microseconds.
  *
  * The connection is non-blocking and in pipeline mode. Each query is
  * PQsendQueryPrepared then PQsendPipelineSync, its own group as main.ts's
@@ -265,10 +265,11 @@ static int run(PGconn *conn, int mode, int n, int depth, int folding) {
   return 1;
 }
 
-static long long cpu_micros(void) {
+static void cpu_micros(long long *user, long long *sys) {
   struct rusage u;
   getrusage(RUSAGE_SELF, &u);
-  return (long long)(u.ru_utime.tv_sec + u.ru_stime.tv_sec) * 1000000 + u.ru_utime.tv_usec + u.ru_stime.tv_usec;
+  *user = (long long)u.ru_utime.tv_sec * 1000000 + u.ru_utime.tv_usec;
+  *sys = (long long)u.ru_stime.tv_sec * 1000000 + u.ru_stime.tv_usec;
 }
 
 static long long now_ns(void) {
@@ -297,8 +298,9 @@ int main(int argc, char **argv) {
   }
   int count = atoi(argv[6]);
   int depth = mode == INSERT ? 1 : 16;
-  const char *keys[] = {"host", "port", "user", "password", "dbname", NULL};
-  const char *values[] = {"127.0.0.1", argv[2], argv[3], argv[4], argv[5], NULL};
+  /* Plain TCP whatever PGSSLMODE, PGGSSENCMODE or the cluster's ssl say, as main.ts's. */
+  const char *keys[] = {"host", "port", "user", "password", "dbname", "sslmode", "gssencmode", NULL};
+  const char *values[] = {"127.0.0.1", argv[2], argv[3], argv[4], argv[5], "disable", "disable", NULL};
   PGconn *conn = PQconnectdbParams(keys, values, 0);
   if (PQstatus(conn) != CONNECTION_OK) {
     fprintf(stderr, "connect: %s", PQerrorMessage(conn));
@@ -326,18 +328,20 @@ int main(int argc, char **argv) {
     PQsetnonblocking(conn, 1);
     PQenterPipelineMode(conn);
   }
-  long long cpu0 = cpu_micros();
+  long long user0, sys0, user, sys;
+  cpu_micros(&user0, &sys0);
   long long t0 = now_ns();
   int ok = run(conn, mode, count, depth, 1);
   long long ns = now_ns() - t0;
-  long long cpu = cpu_micros() - cpu0;
+  cpu_micros(&user, &sys);
   if (!ok) return 1;
   if (mode == INSERT) {
     PQexitPipelineMode(conn);
     PQsetnonblocking(conn, 0);
     if (!reset(conn)) return 1;
   }
-  printf("rows %lld checksum %u failed %d count %d ns %lld cpu %lld\n", rows, sum, failed, count, ns, cpu);
+  printf("rows %lld checksum %u failed %d count %d ns %lld user %lld sys %lld\n", rows, sum, failed, count, ns,
+         user - user0, sys - sys0);
   PQfinish(conn);
   return 0;
 }
