@@ -535,6 +535,12 @@ Checksum `serialize 18100868296888812225 452530`, the same from every implementa
 Noise band, Nish against its byte-identical copy: 1.4% on the minimums (14.1% on the medians). A ratio within it is no difference.
 <!-- json-compare:end -->
 
+<!-- json-writer-bytes:begin -->
+### JsonWriter's byte writers
+
+`JsonWriter.keyBytes` and `stringBytes` copy runs of plain bytes with the `skipJsonPlain` kernel (`nish/bytes`) from 16 bytes up. `jsonEncode` writes `string`s through `jsonWriterPutString`, which did not change, so the serialize table above does not measure this: in an A/B against the base, `804120e`, serialize on citm ran 0.988x at the minimum, inside its band. `JsonDocument.write`, the in-tree caller of the byte writers, ran **1.49x** faster on twitter.json and 1.03x to 1.07x on citm_catalog.json at the minimum (12 and 10 interleaved rounds; bands against a byte-identical copy 0.4% and 2.7%). canada.json also ran faster, but a build with the kernel switched off did as well, so that gain is code shape, not the kernel. On citm, the escape scan cannot make serialize faster outside its band: most strings are shorter than 16 bytes. The profile, the guard and the full A/B are in [wp38-simd.md](wp38-simd.md), *JsonWriter's byte writers*.
+<!-- json-writer-bytes:end -->
+
 <!-- techempower:begin -->
 ## TechEmpower json and plaintext
 

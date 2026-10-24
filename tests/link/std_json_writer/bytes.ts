@@ -66,6 +66,41 @@ const bothWays = (s: string, indent: i32): string => {
 const ALL_BYTES_QUOTED: string =
   "225c75303030305c75303030315c75303030325c75303030335c75303030345c75303030355c75303030365c75303030375c625c745c6e5c75303030625c665c725c75303030655c75303030665c75303031305c75303031315c75303031325c75303031335c75303031345c75303031355c75303031365c75303031375c75303031385c75303031395c75303031615c75303031625c75303031635c75303031645c75303031655c753030316620215c22232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff22";
 
+/**
+ * `src[off, off + len)` quoted by the rule, as hex: `"` and `\` and the five
+ * letters escaped short, the rest below 0x20 as `\u00xx`, every other byte —
+ * 0x80 to 0xFF too, unvalidated — as itself. Written from the rule, not from
+ * the writer, for the sweep below to hold both of the writer's paths to.
+ */
+const quotedByRule = (src: u8[], off: i32, len: i32): string => {
+  const out = new Array<u8>(len * 6 + 2);
+  let at: i32 = 0;
+  out[at] = toU8(34);
+  at += 1;
+  for (let i: i32 = off; i >= 0 && i < off + len && i < toI32(src.length); i += 1) {
+    const c: i32 = toI32(src[i]);
+    const short: i32 = c === 34 || c === 92 ? c : c === 8 ? 98 : c === 12 ? 102 : c === 10 ? 110 : c === 13 ? 114 : c === 9 ? 116 : 0;
+    if (c >= 32 && c !== 34 && c !== 92) {
+      out[at] = toU8(c);
+      at += 1;
+    } else if (short !== 0) {
+      out[at] = toU8(92);
+      out[at + 1] = toU8(short);
+      at += 2;
+    } else {
+      out[at] = toU8(92);
+      out[at + 1] = toU8(117);
+      out[at + 2] = toU8(48);
+      out[at + 3] = toU8(48);
+      out[at + 4] = toU8((c >> 4) < 10 ? 48 + (c >> 4) : 87 + (c >> 4));
+      out[at + 5] = toU8((c & 15) < 10 ? 48 + (c & 15) : 87 + (c & 15));
+      at += 6;
+    }
+  }
+  out[at] = toU8(34);
+  return jvHex(out, at + 1);
+};
+
 export const writerBytesChecks = (t: Suite): void => {
   // Every byte value once, 0x00 to 0xFF: the short escapes, \u00xx, `/`, 0x7f and the raw high bytes.
   const every: string[] = [];
@@ -194,6 +229,67 @@ export const writerBytesChecks = (t: Suite): void => {
   }
   t.eqI32("bytes: after an earlier member, a full buffer at every length from 0 to 39 stops where string and key stop, with JSON_WRITE_FULL", mismatches, 0);
   t.ok("bytes: and the lengths that are too short are JSON_WRITE_FULL", fulls > 20);
+
+  // Both paths of the writer, held to the rule: a window shorter than 16 bytes
+  // takes the byte loop, a longer one plain runs copied whole with escapes
+  // between them. Every length from 1 to 80, from an offset inside a wider
+  // array, with an escape — `"`, `\`, newline, 0x01, 0x1f — or a high byte
+  // (0x80, 0xff, passed through unvalidated) at the start, either side of the
+  // 16-byte guard and of the run kernel's 16- and 32-byte blocks, and at the
+  // end; alone, and next to a second escape.
+  const marks: i32[] = [34, 92, 10, 1, 31, 128, 255];
+  const places: i32[] = [0, 1, 14, 15, 16, 17, 31, 32, 33, 47, 48, 63, 64, 79];
+  const field = new Array<u8>(96);
+  const sweepOut = new Array<u8>(1024);
+  const sw0 = new JsonWriter(sweepOut, 0);
+  let sweepOff: i32 = 0;
+  let sweeps: i32 = 0;
+  for (let len: i32 = 1; len <= 80; len += 1) {
+    for (let m: i32 = 0; m < toI32(marks.length); m += 1) {
+      for (let p: i32 = 0; p <= toI32(places.length); p += 1) {
+        const at: i32 = p < toI32(places.length) ? places[p] : len - 1;
+        if (at >= len) {
+          continue;
+        }
+        for (let pair: i32 = 0; pair < 2; pair += 1) {
+          for (let k: i32 = 0; k < toI32(field.length); k += 1) {
+            field[k] = toU8(97 + ((k * 5) % 26));
+          }
+          field[3 + at] = toU8(marks[m]);
+          if (pair === 1 && at + 1 < len) {
+            field[4 + at] = toU8(marks[(m + 1) % toI32(marks.length)]);
+          }
+          sw0.reset(sweepOut, 0);
+          sw0.stringBytes(field, 3, len);
+          if (sw0.failed !== JSON_WRITE_OK || jvHex(sweepOut, sw0.end) !== quotedByRule(field, 3, len)) {
+            sweepOff += 1;
+          }
+          sweeps += 1;
+        }
+      }
+    }
+  }
+  t.eqI32("bytes: stringBytes at every length from 1 to 80, escapes and high bytes either side of the 16-byte guard and at the run boundaries, is the rule", sweepOff, 0);
+  t.ok("bytes: and the sweep wrote thousands of windows", sweeps > 5000);
+
+  // A full buffer on the run path: a 40-byte plain window with one escape,
+  // at every room from 0 to 49, stops where `string` stops.
+  const longText = "abcdefghijklmnopqrst\nuvwxyzABCDEFGHIJKLMN";
+  const lb = jvBytes(longText);
+  let longOff: i32 = 0;
+  for (let room: i32 = 0; room < 50; room += 1) {
+    const small = new Array<u8>(room);
+    const lw = new JsonWriter(small, 0);
+    lw.string(longText);
+    const viaString = `${lw.failed} ${lw.written()} ${lw.text()}`;
+    lw.reset(small, 0);
+    lw.stringBytes(lb, 0, toI32(lb.length));
+    const viaBytes = `${lw.failed} ${lw.written()} ${lw.text()}`;
+    if (viaString !== viaBytes) {
+      longOff += 1;
+    }
+  }
+  t.eqI32("bytes: a full buffer at every room from 0 to 49 on a 42-byte window stops where string stops", longOff, 0);
 
   // No allocation: 10,000 writes from a reused buffer of bytes.
   const body = jvBytes("message\tHello, World! é");
