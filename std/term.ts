@@ -361,6 +361,15 @@ const TERM_STYLE_UNKNOWN: i32 = -2
  */
 const TERM_CELL_BYTES: i32 = 64
 
+/** The most cells a side of a `Screen` has; a terminal reports up to 65,535. */
+const TERM_MAX_SIDE: i32 = 4096
+
+/** The most cells a `Screen` has, so its `flush` buffer stays at 64 MiB. */
+const TERM_MAX_CELLS: i32 = 1048576
+
+/** The most parameter bytes an `ESC [` holds before it is given up as `KEY_ESCAPE`. */
+const TERM_MAX_CSI_PARAMS: i32 = 32
+
 /** The most unchanged cells `flush` rewrites to bridge a gap rather than move the cursor over it. */
 const TERM_BRIDGE: i32 = 3
 
@@ -632,10 +641,18 @@ export class Screen {
     this.resize(this.width, this.height)
   }
 
-  /** Make the screen `width × height`, blank and unsent: a terminal that changed size is redrawn in full. */
+  /**
+   * Make the screen `width × height`, blank and unsent: a terminal that changed
+   * size is redrawn in full. Each side is at most 4,096 cells and the screen at
+   * most 1,048,576, rows dropped to fit, so no size a terminal reports makes it
+   * overflow or run out of memory.
+   */
   resize(width: i32, height: i32): void {
-    this.width = width < 0 ? 0 : width
-    this.height = height < 0 ? 0 : height
+    this.width = termClamp(width, 0, TERM_MAX_SIDE)
+    this.height = termClamp(height, 0, TERM_MAX_SIDE)
+    if (this.width * this.height > TERM_MAX_CELLS) {
+      this.height = (TERM_MAX_CELLS / this.width) | 0
+    }
     const cells: i32 = this.width * this.height
     this.glyphs = new Array<i32>(cells)
     this.fgs = new Array<i32>(cells)
@@ -1717,8 +1734,16 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
       const next: i32 = toI32(bytes[i + 1])
       if (next === 91) {
         let j: i32 = i + 2
-        while (j < toI32(bytes.length) && toI32(bytes[j]) >= 32 && toI32(bytes[j]) < 64) {
+        const stop: i32 = j + TERM_MAX_CSI_PARAMS + 1
+        while (j < toI32(bytes.length) && j < stop && toI32(bytes[j]) >= 32 && toI32(bytes[j]) < 64) {
           j = j + 1
+        }
+        // A run past the cap is no key a terminal sends: give the ESC up now
+        // rather than hold, and copy on every `feed`, what follows.
+        if (j === stop) {
+          events.push(new KeyEvent(KEY_ESCAPE, b))
+          i = i + 1
+          continue
         }
         if (j >= toI32(bytes.length)) {
           if (!last) {
