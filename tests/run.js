@@ -19249,6 +19249,306 @@ if (!only || "runtime-cache".includes(only)) {
   }
 }
 
+// ---- SQLite: the vendored amalgamation, linked when the IR calls it --------------------
+// scripts/build.sh compiles runtime/sqlite/*.c for a link whose IR declares an
+// `sqlite3_*` or `nish_sqlite_*` function, and `--link` and `nish run` cache
+// those objects in an entry of their own beside the runtime's (src/compile.ts
+// `cachedRuntime`). The `CC` wrapper logs every `.c` the compiler is handed, so
+// "compiled" and "reused" are read off what reached it.
+if (!only || "sqlite-link".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("sqlite-link: clang not on PATH, so nothing can be linked")
+  } else {
+    const sqDir = path.join(buildDir, "sqlite-link")
+    fs.rmSync(sqDir, { recursive: true, force: true })
+    const tools = path.join(sqDir, "tools")
+    fs.mkdirSync(tools, { recursive: true })
+    const ccLog = path.join(sqDir, "cc.log")
+    fs.writeFileSync(
+      path.join(tools, "cc-log"),
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in *.c) echo "$a" >> '${ccLog}' ;; esac; done\nexec clang "$@"\n`,
+      { mode: 0o755 }
+    )
+    const compiledC = () => {
+      const seen = fs.existsSync(ccLog)
+        ? fs
+            .readFileSync(ccLog, "utf8")
+            .split("\n")
+            .filter((l) => l.length > 0)
+            .map((l) => path.basename(l))
+            .sort()
+        : []
+      fs.rmSync(ccLog, { force: true })
+      return seen
+    }
+    const cacheRoot = path.join(sqDir, "cache", "nish", "runtime")
+    const entries = () => (fs.existsSync(cacheRoot) ? fs.readdirSync(cacheRoot).sort() : [])
+    // The entries that hold SQLite's objects rather than the runtime's.
+    const sqliteEntries = () => entries().filter((e) => fs.existsSync(path.join(cacheRoot, e, "sqlite3.o")))
+    const env = (extra = {}) => ({
+      ...process.env,
+      XDG_CACHE_HOME: path.join(sqDir, "cache"),
+      CC: "cc-log",
+      PATH: `${tools}:${process.env.PATH}`,
+      ...extra,
+    })
+    const link = (source, out, flags = [], extra = {}) =>
+      spawnSync(NISH, [source, "--link", path.join(sqDir, out), "--profile", "debug", ...flags], {
+        cwd: root,
+        encoding: "utf8",
+        env: env(extra),
+      })
+    const runOut = (out) => spawnSync(path.join(sqDir, out), [], { encoding: "utf8" })
+    const runtimeUnits = 9
+    const program = "tests/link/sqlite_link/main.ts"
+
+    const first = link(program, "first")
+    const firstC = compiledC()
+    const sq = sqliteEntries()
+    const sqEntry = sq.length === 1 ? path.join(cacheRoot, sq[0]) : ""
+    check(
+      "sqlite-link: the first link of a program that calls SQLite compiles the runtime and sqlite3.c once each",
+      first.status === 0 &&
+        runOut("first").stdout === "3.54.1 3054001 0\n" &&
+        firstC.length === runtimeUnits + 1 &&
+        firstC.filter((c) => c === "sqlite3.c").length === 1,
+      first.stderr + firstC.join(", ")
+    )
+    check(
+      "sqlite-link: SQLite's objects are an entry of their own, named by 64 hex digits, holding sqlite3.o and the key alone",
+      entries().length === 2 &&
+        sqEntry.length > 0 &&
+        /^[0-9a-f]{64}$/.test(sq[0]) &&
+        fs.readdirSync(sqEntry).sort().join(",") === "key,sqlite3.o",
+      entries().join(", ") + (sqEntry.length > 0 ? ` / ${fs.readdirSync(sqEntry).join(", ")}` : "")
+    )
+    // The cache holds what runtime/sqlite/ holds: a unit added there and not
+    // to `sqliteUnits` (src/run-cache.ts) would compile and never be linked.
+    const vendored = fs
+      .readdirSync(path.join(root, "runtime", "sqlite"))
+      .filter((f) => f.endsWith(".c"))
+      .map((f) => f.replace(/\.c$/, ".o"))
+      .sort()
+    check(
+      "sqlite-link: the SQLite entry holds one object for every runtime/sqlite/*.c",
+      sqEntry.length > 0 &&
+        fs
+          .readdirSync(sqEntry)
+          .filter((f) => f !== "key")
+          .sort()
+          .join(",") === vendored.join(","),
+      vendored.join(", ")
+    )
+
+    const second = link(program, "second")
+    check(
+      "sqlite-link: a second link of it compiles no C and adds no entry",
+      second.status === 0 &&
+        runOut("second").stdout === "3.54.1 3054001 0\n" &&
+        compiledC().length === 0 &&
+        entries().length === 2,
+      second.stderr
+    )
+
+    // A program that does not call SQLite compiles none of it and links none
+    // of it: its debug binary, which keeps its symbol table, names no
+    // `sqlite3_` function.
+    const hello = link("examples/hello.ts", "hello")
+    const helloBytes = fs.existsSync(path.join(sqDir, "hello")) ? fs.readFileSync(path.join(sqDir, "hello")) : null
+    check(
+      "sqlite-link: a program that does not call SQLite compiles no C, adds no entry and links no SQLite symbol",
+      hello.status === 0 &&
+        runOut("hello").stdout === "hello from Nish\n" &&
+        compiledC().length === 0 &&
+        entries().length === 2 &&
+        helloBytes !== null &&
+        !helloBytes.includes("sqlite3_"),
+      hello.stderr
+    )
+    // A string that names a SQLite function is not a call to one.
+    const named = path.join(sqDir, "named.ts")
+    fs.writeFileSync(
+      named,
+      'declare function puts(s: string): i32;\n\nexport const main = (): i32 => {\n  puts("@sqlite3_open");\n  return 0;\n};\n'
+    )
+    const namedLink = link(named, "named")
+    check(
+      "sqlite-link: a string constant that names `@sqlite3_open` does not link SQLite",
+      namedLink.status === 0 && runOut("named").stdout === "@sqlite3_open\n" && compiledC().length === 0,
+      namedLink.stderr
+    )
+
+    // NISH_SQLITE_CFLAGS is in the key, and a -D in it for a default replaces it.
+    const flagged = link(program, "flagged", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_THREADSAFE=1" })
+    check(
+      "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles sqlite3.c alone again, into a new entry, and replaces the default",
+      flagged.status === 0 &&
+        runOut("flagged").stdout === "3.54.1 3054001 1\n" &&
+        compiledC().join(",") === "sqlite3.c" &&
+        sqliteEntries().length === 2 &&
+        entries().length === 3,
+      flagged.stderr
+    )
+
+    // `nish run` caches the linked program by a key that holds SQLite's
+    // sources and flags when the program calls SQLite.
+    const run = (extra = {}) =>
+      spawnSync(NISH, ["run", program], { cwd: root, encoding: "utf8", env: env(extra) })
+    const ran = run()
+    const ranC = compiledC()
+    const again = run()
+    check(
+      "sqlite-link: `nish run` of it prints what the link prints and reuses the cached SQLite objects",
+      ran.status === 0 && ran.stdout === "3.54.1 3054001 0\n" && ranC.length === 0,
+      ran.stderr + ranC.join(", ")
+    )
+    check(
+      "sqlite-link: a second `nish run` of it compiles no C",
+      again.status === 0 && again.stdout === "3.54.1 3054001 0\n" && compiledC().length === 0,
+      again.stderr
+    )
+    const ranFlagged = run({ NISH_SQLITE_CFLAGS: "-DSQLITE_THREADSAFE=1" })
+    check(
+      "sqlite-link: `nish run` under a different NISH_SQLITE_CFLAGS links again rather than run the program cached for the default",
+      ranFlagged.status === 0 && ranFlagged.stdout === "3.54.1 3054001 1\n",
+      ranFlagged.stderr
+    )
+
+    // build.sh by itself: the IR of the program, linked without the cache.
+    const irDir = path.join(sqDir, "ir")
+    const emitted = spawnSync(NISH, ["-o", `${irDir}/`, program], { cwd: root, encoding: "utf8" })
+    const lls = emitted.status === 0 ? fs.readdirSync(irDir).map((f) => path.join(irDir, f)) : []
+    const buildSh = (args, extra = {}) =>
+      spawnSync("bash", [path.join(root, "scripts", "build.sh"), ...args], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, ...extra },
+      })
+    const runtimeC = path.join(root, "runtime", "runtime.c")
+    const wasm = buildSh([...lls, "-o", path.join(sqDir, "refused.wasm"), "--profile", "wasm"])
+    check(
+      "sqlite-link: the wasm profile refuses a module that calls SQLite with exit 2, naming wasi",
+      lls.length === 2 && wasm.status === 2 && wasm.stderr.includes("calls SQLite") && wasm.stderr.includes("wasi"),
+      emitted.stderr + wasm.stderr
+    )
+    // A tree with the script and the runtime but no runtime/sqlite/: a program
+    // that does not call SQLite links as before, and one that does is refused.
+    const bare = path.join(sqDir, "bare")
+    fs.mkdirSync(path.join(bare, "scripts"), { recursive: true })
+    fs.mkdirSync(path.join(bare, "runtime"), { recursive: true })
+    fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(bare, "scripts", "build.sh"))
+    for (const file of fs.readdirSync(path.join(root, "runtime"))) {
+      if (/\.(c|h)$/.test(file)) {
+        fs.copyFileSync(path.join(root, "runtime", file), path.join(bare, "runtime", file))
+      }
+    }
+    const helloIr = path.join(sqDir, "hello-ir")
+    const helloEmitted = spawnSync(NISH, ["-o", `${helloIr}/`, "examples/hello.ts"], { cwd: root, encoding: "utf8" })
+    const helloLls = helloEmitted.status === 0 ? fs.readdirSync(helloIr).map((f) => path.join(helloIr, f)) : []
+    const bareSh = (args) =>
+      spawnSync("bash", [path.join(bare, "scripts", "build.sh"), ...args, path.join(bare, "runtime", "runtime.c")], {
+        cwd: root,
+        encoding: "utf8",
+      })
+    const bareHello = bareSh([...helloLls, "-o", path.join(sqDir, "bare-hello")])
+    const bareHelloRan = bareHello.status === 0 ? spawnSync(path.join(sqDir, "bare-hello"), [], { encoding: "utf8" }) : null
+    check(
+      "sqlite-link: without runtime/sqlite/, build.sh still links a program that does not call SQLite",
+      helloLls.length > 0 && bareHelloRan !== null && bareHelloRan.stdout === "hello from Nish\n",
+      helloEmitted.stderr + bareHello.stderr
+    )
+    const bareSqlite = bareSh([...lls, "-o", path.join(sqDir, "bare-sqlite")])
+    check(
+      "sqlite-link: without runtime/sqlite/, build.sh refuses a program that calls SQLite with exit 2",
+      lls.length === 2 && bareSqlite.status === 2 && bareSqlite.stderr.includes("runtime/sqlite/ is not there"),
+      bareSqlite.stderr
+    )
+    const missing = buildSh([
+      ...lls,
+      runtimeC,
+      "--sqlite-from",
+      path.join(sqDir, "empty"),
+      "-o",
+      path.join(sqDir, "missing"),
+    ])
+    check(
+      "sqlite-link: build.sh --sqlite-from a directory without sqlite3.o fails with exit 2, naming the object",
+      missing.status === 2 && missing.stderr.includes("sqlite3.o is missing"),
+      missing.stderr
+    )
+    const objects = path.join(sqDir, "objects")
+    const compiled = buildSh(["--sqlite-objects", objects])
+    const fromObjects = buildSh([...lls, runtimeC, "--sqlite-from", objects, "-o", path.join(sqDir, "from")])
+    check(
+      "sqlite-link: build.sh --sqlite-objects compiles sqlite3.o alone, printing nothing, and --sqlite-from links it",
+      compiled.status === 0 &&
+        compiled.stdout === "" &&
+        fs.readdirSync(objects).join(",") === "sqlite3.o" &&
+        fromObjects.status === 0 &&
+        runOut("from").stdout === "3.54.1 3054001 0\n",
+      compiled.stderr + fromObjects.stderr
+    )
+    for (const [what, args, says] of [
+      ["an input", [runtimeC, "--sqlite-objects", objects], "alone"],
+      ["--runtime-objects", ["--sqlite-objects", objects, "--runtime-objects", objects], "alone"],
+      ["--sqlite-from", ["--sqlite-objects", objects, "--sqlite-from", objects], "two different builds"],
+      ["--profile wasm", ["--sqlite-objects", objects, "--profile", "wasm"], "debug, speed and size"],
+      ["--profile wasi", ["--sqlite-objects", objects, "--profile", "wasi"], "debug, speed and size"],
+      ["--profile napi", ["--sqlite-objects", objects, "--profile", "napi"], "debug, speed and size"],
+      ["--pgo-generate", ["--sqlite-objects", objects, "--profile", "speed", "--pgo-generate"], "--pgo-*"],
+    ]) {
+      const r = buildSh(args)
+      check(
+        `sqlite-link: build.sh --sqlite-objects refuses ${what} with exit 2`,
+        r.status === 2 && r.stderr.includes(says),
+        r.stderr
+      )
+    }
+
+    // A Node addon links SQLite too, and keeps its API to itself: a Node that
+    // links a system libsqlite3 exports the same names.
+    const nodeInclude =
+      process.env.NODE_INCLUDE || path.join(path.dirname(process.execPath), "..", "include", "node")
+    if (!fs.existsSync(path.join(nodeInclude, "node_api.h"))) {
+      skip(`sqlite-link: Node headers not found (${path.join(nodeInclude, "node_api.h")}): the addon is not built`)
+    } else {
+      const addonTs = path.join(sqDir, "addon.ts")
+      fs.writeFileSync(
+        addonTs,
+        "declare function sqlite3_libversion_number(): i32;\n\nexport const sqliteVersion = (): i32 => sqlite3_libversion_number();\n"
+      )
+      const addonLl = path.join(sqDir, "addon.ll")
+      const shim = path.join(sqDir, "addon.napi.c")
+      const addon = path.join(sqDir, "addon.node")
+      const e = spawnSync(NISH, [addonTs, "-o", addonLl, "--emit-napi", shim], { cwd: root, encoding: "utf8" })
+      const b =
+        e.status === 0
+          ? buildSh([addonLl, runtimeC, shim, "-o", addon, "--profile", "napi"])
+          : { status: -1, stderr: e.stderr }
+      const loaded =
+        b.status === 0
+          ? spawnSync(
+              "node",
+              [
+                "-e",
+                `const a = require(${JSON.stringify(addon)}); console.log(a.sqliteVersion(), Object.keys(a).join(","))`,
+              ],
+              { encoding: "utf8" }
+            )
+          : null
+      const dynamic = b.status === 0 && has("llvm-nm") ? spawnSync("llvm-nm", ["-D", addon], { encoding: "utf8" }) : null
+      check(
+        "sqlite-link: a napi addon whose module calls SQLite links it, answers from Node and exports no `sqlite3_` symbol",
+        loaded !== null &&
+          loaded.status === 0 &&
+          loaded.stdout.startsWith("3054001 ") &&
+          (dynamic === null || (dynamic.status === 0 && !dynamic.stdout.includes("sqlite3_"))),
+        b.stderr + (loaded ? loaded.stdout + loaded.stderr : "") + (dynamic ? dynamic.stdout.slice(0, 2000) : "")
+      )
+    }
+  }
+}
+
 // ---- WP38 S2: the CPU level ---------------------------------------------------------
 // `--cpu x86-64-v3` (docs/LANGUAGE.md, "The CPU level") compiles the module and
 // the runtime for one level above the baseline, and nothing else: every other
@@ -20028,6 +20328,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-cross.c",
       // And the ninth: stdin and the terminal of `nish:term`.
       "runtime/runtime-term.c",
+      // The vendored SQLite, which build.sh compiles for a program that calls
+      // it, and the notice that names its dedication to the public domain.
+      "runtime/sqlite/sqlite3.c",
+      "runtime/sqlite/sqlite3.h",
+      "runtime/sqlite/LICENSE.md",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

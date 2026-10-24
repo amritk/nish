@@ -301,6 +301,13 @@ that list changed in one commit, the one in which the compiler first called the
 unit (WP38 S5's lowering). A program that never reaches a seam of
 `std/crypto/aes.ts` keeps none of it, by section GC.
 
+`runtime/sqlite/` is not one of these units and has no ceiling here: it is
+SQLite's amalgamation, vendored unedited, and `scripts/build.sh` compiles it
+only for a link whose IR declares an `sqlite3_*` or `nish_sqlite_*` function.
+The runtime cache keeps its objects in an entry of their own, keyed by the
+SQLite options as well as the recipe, so a program that never calls SQLite
+neither compiles nor hashes it (`runtime/sqlite/README.md`).
+
 ### The copy-at-join unit
 
 `runtime/runtime-cross.c` (threads-complete's copy-at-join) holds the copies
