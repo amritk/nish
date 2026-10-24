@@ -63,19 +63,24 @@
  *   `text`. A reply never reaches the program as a key. `ESC [ row ; col R` is
  *   both a cursor position report and F3 with modifiers, so a caller that asks
  *   for one (`ESC [ 6 n`) adds 1 to `cprOutstanding`, and while it is above 0
- *   the next `R` is the reply, taking 1 off;
+ *   the next `R` is the reply, taking 1 off. Nothing expires it: a caller
+ *   that gives up waiting for a report sets it back to 0;
  * - `EVENT_RESIZE` and `EVENT_QUIT`, which the caller and `KeyState` make.
  *
  * An unfinished sequence is held for `escapeTimeoutMs` after the last byte arrived,
  * then given up by `pollEvents` as `feed` would; a control string cut off by
- * the timeout is dropped whole. A paste is never timed out.
+ * the timeout is dropped whole. A paste is never timed out. A CSI reply cut
+ * off by the timeout (a terminal that stalls inside `ESC [ ? 6 2 c`) cannot
+ * be told from keys, so its bytes come out as the keys they spell.
  *
  * **A `KeyState`** turns those events into which keys are down. `apply(events,
  * nowMs)` answers the events to act on and `tick(nowMs)` the releases due
  * meanwhile; `isDown(key, code)` asks. A terminal without the kitty protocol
  * sends no releases, so while `releasesAreSynthetic` is set (until the first
  * real release) a key counts as let go when its repeats stop: `firstRepeatMs`
- * after its press, then `releaseGapMs` after its last repeat. Losing focus lets
+ * after its press, then `releaseGapMs` after its last repeat — counted to the
+ * read, so a key the batch `apply` takes names stays down. A made-up release
+ * carries the code and modifiers the key last came with. Losing focus lets
  * every key go, and Ctrl-C becomes `EVENT_QUIT` while `quitOnCtrlC` is set.
  *
  * **The same bytes under Node.** Natively a string is UTF-8 bytes, and `flush`
@@ -85,6 +90,9 @@
  * way, which `tests/run.js` checks ("nish/term prints the same bytes under
  * runtime/nish.mjs"). `text` reads a string's code points as UTF-8 natively and
  * as UTF-16 under Node, so a string literal draws the same cells both ways.
+ * A `TermEvent`'s `text` is made from bytes the terminal sent: natively it
+ * holds them as they came, and under Node they are decoded as UTF-8 without
+ * checking, so malformed UTF-8 in a paste or reply can differ between the two.
  * Integer division is spelled `(a / b) | 0`, which truncates in both.
  */
 
@@ -1352,6 +1360,10 @@ export class KeyState {
   downSince: f64[]
   /** Whether each key down has repeated. */
   downRepeated: boolean[]
+  /** The code each key down last came with, which its synthesized release carries. */
+  downCodes: i32[]
+  /** The `MOD_` bits each key down last came with, which its synthesized release carries. */
+  downMods: i32[]
   /** Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on. */
   releasesAreSynthetic: boolean
   /** Whether Ctrl-C (byte 3, or kitty `ESC [ 99 ; 5 u`) becomes `EVENT_QUIT` (true by default). */
@@ -1366,6 +1378,8 @@ export class KeyState {
     this.downKeys = []
     this.downSince = []
     this.downRepeated = []
+    this.downCodes = []
+    this.downMods = []
   }
 
   /**
@@ -1380,13 +1394,15 @@ export class KeyState {
 
   /**
    * Take `events`, which arrived at `nowMs`, and answer what the program
-   * should see: first the releases `tick` makes, then each event, with
+   * should see: first the releases `tick` makes for the keys `events` does
+   * not mention (a held key's repeats can wait in a read longer than the
+   * gap), then each event, with
    * Ctrl-C as `EVENT_QUIT` (its repeats and release dropped) and a press of a
    * key already down marked `ACTION_REPEAT` while releases are synthetic.
    * Losing focus lets every key go, since its release goes elsewhere.
    */
   apply(events: TermEvent[], nowMs: f64): TermEvent[] {
-    const out: TermEvent[] = this.tick(nowMs)
+    const out: TermEvent[] = this.releaseDue(nowMs, events)
     for (let k: i32 = 0; k < toI32(events.length); k++) {
       const e: TermEvent = events[k]
       if (e.type === EVENT_FOCUS && !e.gained) {
@@ -1409,6 +1425,12 @@ export class KeyState {
 
   /** The releases due by `nowMs` while releases are synthetic: each key whose gap has passed, let go. */
   tick(nowMs: f64): TermEvent[] {
+    const none: TermEvent[] = []
+    return this.releaseDue(nowMs, none)
+  }
+
+  /** The releases due by `nowMs`, as `tick` makes them, for the keys no key event in `batch` names. */
+  releaseDue(nowMs: f64, batch: TermEvent[]): TermEvent[] {
     const out: TermEvent[] = []
     if (!this.releasesAreSynthetic) {
       return out
@@ -1416,7 +1438,7 @@ export class KeyState {
     let k: i32 = 0
     while (k < toI32(this.downKeys.length)) {
       const gap: f64 = this.downRepeated[k] ? this.releaseGapMs : this.firstRepeatMs
-      if (nowMs - this.downSince[k] >= gap) {
+      if (nowMs - this.downSince[k] >= gap && !termNamesKey(batch, this.downKeys[k])) {
         this.release(k, out)
       } else {
         k = k + 1
@@ -1439,10 +1461,14 @@ export class KeyState {
       this.downKeys.push(termKeyId(e.key, e.code))
       this.downSince.push(nowMs)
       this.downRepeated.push(false)
+      this.downCodes.push(e.code)
+      this.downMods.push(e.modifiers)
       return
     }
     this.downSince[at] = nowMs
     this.downRepeated[at] = true
+    this.downCodes[at] = e.code
+    this.downMods[at] = e.modifiers
     if (this.releasesAreSynthetic) {
       e.action = ACTION_REPEAT
     }
@@ -1453,7 +1479,8 @@ export class KeyState {
     const id: i32 = this.downKeys[at]
     const e: TermEvent = new TermEvent(EVENT_KEY)
     e.key = id >> 21
-    e.code = id & 2097151
+    e.code = this.downCodes[at]
+    e.modifiers = this.downMods[at]
     e.action = ACTION_RELEASE
     out.push(e)
     this.remove(at)
@@ -1476,10 +1503,14 @@ export class KeyState {
       this.downKeys[k] = this.downKeys[k + 1]
       this.downSince[k] = this.downSince[k + 1]
       this.downRepeated[k] = this.downRepeated[k + 1]
+      this.downCodes[k] = this.downCodes[k + 1]
+      this.downMods[k] = this.downMods[k + 1]
     }
     this.downKeys.pop()
     this.downSince.pop()
     this.downRepeated.pop()
+    this.downCodes.pop()
+    this.downMods.pop()
   }
 }
 
@@ -1897,6 +1928,17 @@ const termLetterKind = (f: i32): i32 => {
 /** Whether key event `e` is Ctrl-C: byte 3, or kitty's `c` with Ctrl alone. */
 const termIsCtrlC = (e: TermEvent): boolean =>
   e.key === KEY_CTRL_C || (e.key === KEY_CHAR && e.code === 99 && e.modifiers === MOD_CTRL)
+
+/** Whether a key event in `batch` is of key `id`, as `termKeyId` names it. */
+const termNamesKey = (batch: TermEvent[], id: i32): boolean => {
+  for (let k: i32 = 0; k < toI32(batch.length); k++) {
+    const e: TermEvent = batch[k]
+    if (e.type === EVENT_KEY && termKeyId(e.key, e.code) === id) {
+      return true
+    }
+  }
+  return false
+}
 
 /** One number for a key `KeyState` tracks: its kind above bit 21, and the code below for the kinds a code tells apart, a capital folded to its small letter. */
 const termKeyId = (key: i32, code: i32): i32 => {

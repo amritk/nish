@@ -162,8 +162,13 @@ export const main = (): i32 => {
   check(s, "Shift-F5", plain, ascii("\x1b[15;2~"), "key 18:126 m1");
   check(s, "Home, Insert, Page Up, Page Down, End, F12", plain, ascii("\x1b[1~\x1b[2~\x1b[5~\x1b[6~\x1b[8~\x1b[24~"), "key 26:126 | key 30:126 | key 28:126 | key 29:126 | key 27:126 | key 25:126");
   check(s, "F6 and F11", plain, ascii("\x1b[17~\x1b[23~"), "key 19:126 | key 24:126");
+  check(s, "Home and End as 7~ and 4~", plain, ascii("\x1b[7~\x1b[4~"), "key 26:126 | key 27:126");
+  check(s, "F4 as 14~, F7 to F10", plain, ascii("\x1b[14~\x1b[18~\x1b[19~\x1b[20~\x1b[21~"), "key 17:126 | key 20:126 | key 21:126 | key 22:126 | key 23:126");
+  check(s, "Ctrl-Home, Ctrl-End, Shift-F2, Shift-F4", plain, ascii("\x1b[1;5H\x1b[1;5F\x1b[1;2Q\x1b[1;2S"), "key 26:72 m4 | key 27:70 m4 | key 15:81 m1 | key 17:83 m1");
+  check(s, "SS3 Home, End, F2, F4", plain, ascii("\x1bOH\x1bOF\x1bOQ\x1bOS"), "key 26:72 | key 27:70 | key 15:81 | key 17:83");
   check(s, "Shift-Tab", plain, ascii("\x1b[Z"), "key 10:9 m1");
   check(s, "the Linux console's F1", plain, ascii("\x1b[[A"), "key 14:65");
+  check(s, "the Linux console's F2 to F5", plain, ascii("\x1b[[B\x1b[[C\x1b[[D\x1b[[E"), "key 15:66 | key 16:67 | key 17:68 | key 18:69");
   check(s, "an unknown Linux console key", plain, ascii("\x1b[[Z"), "key 13:91 | key 1:90");
   check(s, "Alt-x", plain, ascii("\x1bx"), "key 1:120 m2");
   check(s, "Alt-Backspace", plain, ascii("\x1b\x7f"), "key 11:127 m2");
@@ -184,7 +189,7 @@ export const main = (): i32 => {
   check(s, "kitty text past ASCII", plain, ascii("\x1b[233;;233u"), "key 1:233 \"é\"");
   check(s, "kitty text that is no scalar value", plain, ascii("\x1b[97;;55296u"), "key 1:97 \"�\"");
   check(s, "kitty Enter, Tab, Backspace, Escape, Space", plain, ascii("\x1b[13u\x1b[9u\x1b[127u\x1b[27u\x1b[32u"), "key 6:13 | key 10:9 | key 11:127 | key 8:27 | key 7:32");
-  check(s, "kitty Ctrl-[ as a control", plain, ascii("\x1b[1;5u"), "key 12:1 m4");
+  check(s, "kitty code 1 with Ctrl, a control", plain, ascii("\x1b[1;5u"), "key 12:1 m4");
   check(s, "kitty left Shift", plain, ascii("\x1b[57441;2u"), "key 13:57441 m1");
   check(s, "kitty Up released", plain, ascii("\x1b[1;1:3A"), "key 2:65 a3");
   check(s, "kitty F3 as 13~", plain, ascii("\x1b[13~"), "key 16:126");
@@ -220,6 +225,8 @@ export const main = (): i32 => {
     ascii("a\x1b[?62;22cb\x1b[0n\x1b[?1u\x1b[?2026;2$y\x1b[4;600;800t\x1bP>|kitty(0.35)\x1b\\\x1b]11;rgb:0000/0000/0000\x07\x1b_Gi=1;OK\x1b\\\x1bP1$r0m\x1b\\\x1b^pm\x1b\\c"),
     "key 1:97 | reply 91/63/0/99 p[62,22] | key 1:98 | reply 91/0/0/110 p[0] | reply 91/63/0/117 p[1] | reply 91/63/36/121 p[2026,2] | reply 91/0/0/116 p[4,600,800] | reply 80/62/0/124 \"kitty(0.35)\" | reply 93/0/0/0 p[11] \"rgb:0000/0000/0000\" | reply 95/0/0/71 \"i=1;OK\" | reply 80/0/36/114 p[1] \"0m\" | reply 94/0/0/0 \"pm\" | key 1:99",
   );
+  check(s, "a DA2 reply", plain, ascii("\x1b[>1;4000;29c"), "reply 91/62/0/99 p[1,4000,29]");
+  check(s, "an XTSMGRAPHICS reply", plain, ascii("\x1b[?1;0;256S"), "reply 91/63/0/83 p[1,0,256]");
   check(s, "an R with no CPR awaited is F3", plain, ascii("\x1b[1;2R"), "key 16:82 m1");
   const cpr: KeyDecoder = new KeyDecoder(toF64(50));
   cpr.cprOutstanding = 1;
@@ -245,6 +252,12 @@ export const main = (): i32 => {
   s.eqBool("nothing is held after it", cut.waiting(), false);
   s.eqStr("the next key comes through", lines(cut.feedEvents(ascii("z"), 1, toF64(200))), "key 1:122");
 
+  // An ESC whose next bytes come after the timeout is an ESC, and they are keys.
+  const late: KeyDecoder = new KeyDecoder(toF64(50));
+  const parted: TermEvent[] = late.feedEvents(ascii("\x1b"), 1, toF64(0));
+  append(parted, late.feedEvents(ascii("[A"), 2, toF64(100)));
+  s.eqStr("ESC, then [A 100 ms later", lines(parted), "key 8:27 | key 1:91 | key 1:65");
+
   // A paste waits for its end however long it takes.
   const paste: KeyDecoder = new KeyDecoder(toF64(50));
   const pasted: TermEvent[] = paste.feedEvents(ascii("\x1b[200~ab"), 8, toF64(0));
@@ -263,10 +276,21 @@ export const main = (): i32 => {
   s.eqBool("a is up", keys.isDown(KEY_CHAR, 97), false);
   keys.apply(decode("B"), toF64(1000));
   s.eqStr("under firstRepeatMs, nothing", lines(keys.tick(toF64(1599))), "");
-  s.eqStr("firstRepeatMs after a press, a release, the letter small", lines(keys.tick(toF64(1600))), "key 1:98 a3");
+  s.eqStr("firstRepeatMs after a press, a release with the press's code", lines(keys.tick(toF64(1600))), "key 1:66 a3");
   keys.apply(decode("a"), toF64(2000));
   s.eqStr("releases due come before the events", lines(keys.apply(decode("\x1b[A"), toF64(2700))), "key 1:97 a3 | key 2:65");
   s.eqBool("up is down, whatever the code", keys.isDown(KEY_UP, 0), true);
+
+  // Repeats that wait in a read longer than releaseGapMs keep the key down.
+  const held: KeyState = new KeyState();
+  held.apply(decode("a"), toF64(0));
+  held.apply(decode("a"), toF64(50));
+  s.eqStr("repeats read 200 ms after the last are repeats", lines(held.apply(decode("aa"), toF64(250))), "key 1:97 a2 | key 1:97 a2");
+  s.eqBool("a is still down", held.isDown(KEY_CHAR, 97), true);
+  s.eqStr("under releaseGapMs after them, nothing", lines(held.tick(toF64(349))), "");
+  s.eqStr("with no repeat for releaseGapMs, a release", lines(held.tick(toF64(350))), "key 1:97 a3");
+  held.apply(decode("\x1b[97;3u"), toF64(1000));
+  s.eqStr("a release carries the press's modifiers", lines(held.tick(toF64(1600))), "key 1:97 m2 a3");
 
   const real: KeyState = new KeyState();
   real.apply(decode("\x1b[97u\x1b[99u"), toF64(0));

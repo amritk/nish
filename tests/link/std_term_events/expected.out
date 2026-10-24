@@ -25,12 +25,27 @@ PASS  Home, Insert, Page Up, Page Down, End, F12: a byte a read
 PASS  F6 and F11: whole
 PASS  F6 and F11: split at every byte
 PASS  F6 and F11: a byte a read
+PASS  Home and End as 7~ and 4~: whole
+PASS  Home and End as 7~ and 4~: split at every byte
+PASS  Home and End as 7~ and 4~: a byte a read
+PASS  F4 as 14~, F7 to F10: whole
+PASS  F4 as 14~, F7 to F10: split at every byte
+PASS  F4 as 14~, F7 to F10: a byte a read
+PASS  Ctrl-Home, Ctrl-End, Shift-F2, Shift-F4: whole
+PASS  Ctrl-Home, Ctrl-End, Shift-F2, Shift-F4: split at every byte
+PASS  Ctrl-Home, Ctrl-End, Shift-F2, Shift-F4: a byte a read
+PASS  SS3 Home, End, F2, F4: whole
+PASS  SS3 Home, End, F2, F4: split at every byte
+PASS  SS3 Home, End, F2, F4: a byte a read
 PASS  Shift-Tab: whole
 PASS  Shift-Tab: split at every byte
 PASS  Shift-Tab: a byte a read
 PASS  the Linux console's F1: whole
 PASS  the Linux console's F1: split at every byte
 PASS  the Linux console's F1: a byte a read
+PASS  the Linux console's F2 to F5: whole
+PASS  the Linux console's F2 to F5: split at every byte
+PASS  the Linux console's F2 to F5: a byte a read
 PASS  an unknown Linux console key: whole
 PASS  an unknown Linux console key: split at every byte
 PASS  an unknown Linux console key: a byte a read
@@ -85,9 +100,9 @@ PASS  kitty text that is no scalar value: a byte a read
 PASS  kitty Enter, Tab, Backspace, Escape, Space: whole
 PASS  kitty Enter, Tab, Backspace, Escape, Space: split at every byte
 PASS  kitty Enter, Tab, Backspace, Escape, Space: a byte a read
-PASS  kitty Ctrl-[ as a control: whole
-PASS  kitty Ctrl-[ as a control: split at every byte
-PASS  kitty Ctrl-[ as a control: a byte a read
+PASS  kitty code 1 with Ctrl, a control: whole
+PASS  kitty code 1 with Ctrl, a control: split at every byte
+PASS  kitty code 1 with Ctrl, a control: a byte a read
 PASS  kitty left Shift: whole
 PASS  kitty left Shift: split at every byte
 PASS  kitty left Shift: a byte a read
@@ -145,6 +160,12 @@ PASS  focus: a byte a read
 PASS  replies among keys: whole
 PASS  replies among keys: split at every byte
 PASS  replies among keys: a byte a read
+PASS  a DA2 reply: whole
+PASS  a DA2 reply: split at every byte
+PASS  a DA2 reply: a byte a read
+PASS  an XTSMGRAPHICS reply: whole
+PASS  an XTSMGRAPHICS reply: split at every byte
+PASS  an XTSMGRAPHICS reply: a byte a read
 PASS  an R with no CPR awaited is F3: whole
 PASS  an R with no CPR awaited is F3: split at every byte
 PASS  an R with no CPR awaited is F3: a byte a read
@@ -159,6 +180,7 @@ PASS  a DCS over three reads 40 ms apart
 PASS  an unterminated OSC is dropped at the timeout
 PASS  nothing is held after it
 PASS  the next key comes through
+PASS  ESC, then [A 100 ms later
 PASS  a paste is never timed out
 PASS  a press passes through
 PASS  a is down
@@ -168,9 +190,14 @@ PASS  under releaseGapMs after the repeat, nothing
 PASS  releaseGapMs after the repeat, a release
 PASS  a is up
 PASS  under firstRepeatMs, nothing
-PASS  firstRepeatMs after a press, a release, the letter small
+PASS  firstRepeatMs after a press, a release with the press's code
 PASS  releases due come before the events
 PASS  up is down, whatever the code
+PASS  repeats read 200 ms after the last are repeats
+PASS  a is still down
+PASS  under releaseGapMs after them, nothing
+PASS  with no repeat for releaseGapMs, a release
+PASS  a release carries the press's modifiers
 PASS  a real release
 PASS  releases are real from then on
 PASS  and none are made up
@@ -182,5 +209,5 @@ PASS  Ctrl-C is a quit
 PASS  kitty Ctrl-c is a quit
 PASS  its repeat and release are dropped
 PASS  without quitOnCtrlC, Ctrl-C is a key
-term events: 184 passed, 0 failed, 0 skipped
+term events: 211 passed, 0 failed, 0 skipped
 
