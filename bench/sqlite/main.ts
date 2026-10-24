@@ -45,10 +45,15 @@ class Fold {
       return false
     }
     const n: i32 = r.value
-    this.add(toU32(n))
-    for (let k: i32 = 0; k < n && k < toI32(this.buf.length); k += 1) {
-      this.add(toU32(this.buf[k]))
+    // The sum is kept in a local across the loop, as twin.c's stays in a
+    // register: a store to `this.sum` each byte would make the optimiser
+    // reload `this.buf` each byte too, and time the fold, not the module.
+    const buf: u8[] = this.buf
+    let sum: u32 = this.sum * 31 + toU32(n)
+    for (let k: i32 = 0; k < n && k < toI32(buf.length); k += 1) {
+      sum = sum * 31 + toU32(buf[k])
     }
+    this.sum = sum
     return true
   }
 
