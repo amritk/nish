@@ -80,7 +80,8 @@ export const main = (): number => {
   // ASCII only, so that bytes and UTF-16 code units agree, with an escaped
   // surrogate pair (U+1F600) that decodes to four UTF-8 bytes; `keyEquals` is
   // asked of an escaped key that matches and one that does not. 1e23 and the
-  // 17-digit number take the parseFloat path.
+  // 17-digit number take the Eisel-Lemire path, and the numbers of 20 digits
+  // below take parseFloat.
   console.log(nodeTokens('{"a\\u0062":[1,-2.5e1,"x\\n\\u0041\\ud83d\\ude00",true,false,null,{}],"ac":1e23,"long":0.12345678901234567}'));
   console.log(nodeTokens("[-9223372036854775808,9223372036854775808,-0]"));
   console.log(nodeTokens("[1,]"));

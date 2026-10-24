@@ -45,6 +45,7 @@ import { isChannelReader, isGuardedAccess } from "./parallel"
 import { emitSliceCheck, guardKeep } from "./emit-strings"
 import { NUMBER_MODE_I32 } from "./context"
 import { internalErrorFor } from "./ice"
+import { BYTES_WALK_COPY, bytesKernelOf } from "./kernels"
 import {
   N_ARRAY,
   N_ARROW,
@@ -1769,4 +1770,41 @@ export const emitForOf = (emitter: Emitter, stmt: Node): void => {
   fn.emit(`br label %${condBlock.label}`)
 
   fn.placeBlock(endBlock)
+}
+
+/**
+ * A walk of `nish/bytes` lowered to its kernel (`src/kernels.ts`). For
+ * `copyBytesWalk`, `values` are `dst`, `at`, `src`, `from` and `count`, every
+ * range already checked by `copyBytes`, and the copy is one `llvm.memmove`,
+ * because `dst` and `src` may be one array. For a byte-class walk they are the
+ * array, `from` and `to`, clamped by the public function to
+ * `0 <= from <= to <= length`, and the kernel's `i64` answer lies in that
+ * range, so truncating it to the walker's `i32` loses nothing.
+ */
+export const emitBytesKernel = (emitter: Emitter, walk: i32, values: string[]): string => {
+  const fn = emitter.fn
+  if (walk === BYTES_WALK_COPY) {
+    const to = bytePointer(emitter, values[0], values[1])
+    const from = bytePointer(emitter, values[2], values[3])
+    const count = fn.emitValue(`sext i32 ${values[4]} to i64`)
+    emitter.declare(
+      `declare void @${MEMMOVE}(i8* nocapture writeonly, i8* nocapture readonly, i64, i1 immarg)`
+    )
+    fn.emit(`call void @${MEMMOVE}(i8* ${to}, i8* ${from}, i64 ${count}, i1 false)${elementAccess(emitter)}`)
+    return "void"
+  }
+  const data = loadData(emitter, values[0])
+  const from = fn.emitValue(`sext i32 ${values[1]} to i64`)
+  const to = fn.emitValue(`sext i32 ${values[2]} to i64`)
+  const stop = fn.emitValue(
+    `call i64 ${emitter.useRuntime(bytesKernelOf(walk))}(i8* ${data}, i64 ${from}, i64 ${to})`
+  )
+  return fn.emitValue(`trunc i64 ${stop} to i32`)
+}
+
+/** The address of byte `at`, an `i32` already checked to lie in `arr`, of a `u8[]`. */
+const bytePointer = (emitter: Emitter, arr: string, at: string): string => {
+  const data = loadData(emitter, arr)
+  const offset = emitter.fn.emitValue(`sext i32 ${at} to i64`)
+  return emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${offset}`)
 }

@@ -39,7 +39,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column` |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
-| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order |
+| [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` for the runs a parser skips and the bytes it copies |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and the keys it reads decoded |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
@@ -912,7 +912,9 @@ second: a game, a dashboard. It does no input or output of its own. A
 you print it with `write`. A `KeyDecoder` turns the bytes you read into key
 events. The terminal's size and the clock are numbers you pass in. Because
 the module reaches no capability, a program that uses it builds under
-`--deny` of all of them and prints the same bytes under Node.
+`--deny` of all of them and prints the same bytes under Node. Reading the
+keys, raw mode and the terminal's size come from
+[`nish:term`](terminal.md).
 
 ```ts nish:ok
 import { ATTR_BOLD, COLOR_DEFAULT, Canvas, Screen, hideCursor, rgb, showCursor } from "nish/term";
@@ -1092,6 +1094,49 @@ itself.
 Natively every function answers for every value. Under Node the `u16` and
 `u32` functions are expected to answer the same, but the 64-bit ones, the
 `i32` ones and `f64` do not yet: the Node prelude's conversions saturate where native ones wrap.
+
+### Runs and copies
+
+A parser spends its time skipping: the blanks between tokens, the digits of a
+number, the plain text inside a string. Three functions answer where such a
+run ends — the first index in `[from, to)` whose byte is not in the class, or
+`to` if every byte is:
+
+| Function | Skips |
+| --- | --- |
+| `skipBlank(b, from, to)` | JSON's blanks: space, tab, newline, carriage return |
+| `skipDigits(b, from, to)` | the ASCII digits `0` to `9` |
+| `skipJsonText(b, from, to)` | what a JSON string holds as itself: printable ASCII other than `"` and `\`, and well-formed UTF-8 |
+
+`copyBytes(dst, at, src, from, count)` copies `count` bytes of `src` from
+`from` into `dst` at `at`. The two arrays may be the same one, and the ranges
+may overlap.
+
+```ts nish:ok
+import { copyBytes, skipBlank, skipDigits } from "nish/bytes";
+
+export const main = (): i32 => {
+  const text: u8[] = [32, 10, 52, 50, 44]; // " \n42,"
+  const start = skipBlank(text, 0, 5);
+  const end = skipDigits(text, start, 5);
+  console.log(`${start} ${end}`); // 2 4
+  const digits: u8[] = [0, 0];
+  copyBytes(digits, 0, text, start, end - start);
+  console.log(`${digits[0]} ${digits[1]}`); // 52 50
+  return 0;
+};
+```
+
+The runs never panic: `to` is clamped to the array and `from` to `to`, so a
+range past the end answers the end. `copyBytes` panics with
+`copyBytes: the range lies outside an array` if either window does not fit,
+before it writes anything. `skipJsonText` stops at a quote, a backslash, a
+control byte or the first byte of a malformed UTF-8 sequence — the byte your
+decoder has to look at next.
+
+Natively each run reads 16 or 32 bytes at a time and the copy is one block
+move; under Node they are plain loops with the same answers. The runs take
+longer the longer the run is, so they are for text, never for secret data.
 
 ## `nish/threads`
 
@@ -1279,7 +1324,7 @@ test vectors. A byte string is a `u8[]`.
 | --- | --- |
 | `nish/crypto/sha256` | `sha256(data)`, and `Sha256`, a streaming hasher (`update`, `copy`, `digest`) |
 | `nish/crypto/sha512` | `sha512`, `sha384`, and the streaming `Sha512` and `Sha384` |
-| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time |
+| `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
 | `nish/crypto/base64url` | `base64urlEncode` and a strict `base64urlDecode`, unpadded |
@@ -1314,6 +1359,28 @@ export const main = (): i32 => {
 ```console
 $ nish run digest.ts
 ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0
+```
+
+A password-derived key is a `Secret` on both sides of `pbkdf2HmacSha256`, and
+the program wipes both:
+
+```ts nish:ok
+import { pbkdf2HmacSha256 } from "nish/crypto/hmac";
+import { Secret, secret, wipe } from "nish:secret";
+
+export const main = (): i32 => {
+  const passwordBytes: u8[] = [112, 97, 115, 115, 119, 100]; // "passwd"
+  const password: Secret<u8[]> = secret(passwordBytes);
+  const salt: u8[] = [115, 97, 108, 116]; // "salt"
+  const key: Secret<u8[]> | null = pbkdf2HmacSha256(password, salt, 4096, 32);
+  wipe(password);
+  if (key === null) {
+    return 1;
+  }
+  console.log("derived 32 bytes");
+  wipe(key);
+  return 0;
+};
 ```
 
 A function that returns `u8[] | null` answers `null` for an input it refuses —

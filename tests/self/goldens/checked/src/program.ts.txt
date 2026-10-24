@@ -188,7 +188,7 @@ struct FieldInfo (class) size=64 align=8 exported
   field wireName: string index=11 offset=56
   constructor -> @FieldInfo.constructor
   method inline -> @FieldInfo.inline
-struct StructInfo (class) size=152 align=8 exported
+struct StructInfo (class) size=168 align=8 exported
   field name: string index=0 offset=0
   field kind: i32 index=1 offset=8
   field type: i32 index=2 offset=12
@@ -214,6 +214,8 @@ struct StructInfo (class) size=152 align=8 exported
   field jsonOptions: Node | null index=22 offset=128
   field handle: boolean index=23 offset=136
   field handleField: string index=24 offset=144
+  field handleClose: FunctionSig | null index=25 offset=152
+  field handleTested: boolean index=26 offset=160
   constructor -> @StructInfo.constructor
   method field -> @StructInfo.field
   method method -> @StructInfo.method
@@ -562,7 +564,7 @@ function TemplateInfo.constructor(this: TemplateInfo, sourceName: string, decl: 
   pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
-  pointer home: size=280 writesThrough=true captured=true
+  pointer home: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:24 new ConstraintList -> @ConstraintList.constructor
 function StructTemplateInfo.constructor(this: StructTemplateInfo, sourceName: string, kind: i32, decl: Node, origin: SourceFile, home: CheckContext): void -> @StructTemplateInfo.constructor [exported constructor]
@@ -572,7 +574,7 @@ function StructTemplateInfo.constructor(this: StructTemplateInfo, sourceName: st
   pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
-  pointer home: size=280 writesThrough=true captured=true
+  pointer home: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:24 new ConstraintList -> @ConstraintList.constructor
 function StructInstantiation.constructor(this: StructInstantiation, template: StructTemplateInfo, typeArgs: i32[], info: StructInfo, bindings: StringMap): void -> @StructInstantiation.constructor [exported constructor]
@@ -581,7 +583,7 @@ function StructInstantiation.constructor(this: StructInstantiation, template: St
   pointer this: size=40 writesThrough=true captured=false
   pointer template: size=64 writesThrough=true captured=true
   pointer typeArgs: size=0 writesThrough=true captured=true
-  pointer info: size=152 writesThrough=true captured=true
+  pointer info: size=168 writesThrough=true captured=true
   pointer bindings: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function Instantiation.constructor(this: Instantiation, template: TemplateInfo | null, typeArgs: i32[], sig: FunctionSig, bindings: StringMap, nodeCount: i32): void -> @Instantiation.constructor [exported constructor]
@@ -617,7 +619,7 @@ function StructInfo.constructor(this: StructInfo, name: string, kind: i32, type:
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: decl kind name origin type
   calls: StringMap.constructor nish_alloc_struct
-  pointer this: size=152 writesThrough=true captured=false
+  pointer this: size=168 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -628,7 +630,7 @@ function StructInfo.field(this: StructInfo, name: string): FieldInfo | null -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: StringMap.get nish_panic_index
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:16 StringMap.get -> @StringMap.get
@@ -636,7 +638,7 @@ function StructInfo.method(this: StructInfo, name: string): FunctionSig | null -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: StringMap.get nish_panic_index
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:16 StringMap.get -> @StringMap.get
@@ -644,7 +646,7 @@ function StructInfo.hasMember(this: StructInfo, name: string): boolean -> @Struc
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: StringMap.has
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 StringMap.has -> @StringMap.has
   callee +0:41 StringMap.has -> @StringMap.has
@@ -653,7 +655,7 @@ function StructInfo.methodTemplate(this: StructInfo, name: string): TemplateInfo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: StringMap.get nish_panic_index
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 at: i32 (const)
   callee +0:16 StringMap.get -> @StringMap.get
@@ -670,7 +672,7 @@ function AliasInfo.constructor(this: AliasInfo, name: string, decl: Node, origin
   pointer this: size=40 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
-  pointer home: size=280 writesThrough=true captured=true
+  pointer home: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function EnumInfo.constructor(this: EnumInfo, name: string, decl: Node, origin: SourceFile, type: i32, symbol: string, exported: boolean): void -> @EnumInfo.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
@@ -749,7 +751,7 @@ function StructRegistry.add(this: StructRegistry, info: StructInfo): void -> @St
   escaping: info
   calls: StringMap.has StringMap.set nish_array_grow
   pointer this: size=16 writesThrough=false captured=false
-  pointer info: size=152 writesThrough=true captured=true
+  pointer info: size=168 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -2:10 StringMap.has -> @StringMap.has
   callee -1:7 StringMap.set -> @StringMap.set
@@ -853,7 +855,7 @@ function CheckedProgram.addStruct(this: CheckedProgram, name: string, info: Stru
   escaping: info name
   calls: StringMap.set nish_array_grow
   pointer this: size=656 writesThrough=false captured=false
-  pointer info: size=152 writesThrough=true captured=true
+  pointer info: size=168 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -1:5 StringMap.set -> @StringMap.set
 function CheckedProgram.constant(this: CheckedProgram, name: string): ConstInfo | null -> @CheckedProgram.constant [exported method]

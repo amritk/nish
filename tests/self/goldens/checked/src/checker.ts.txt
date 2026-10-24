@@ -725,7 +725,7 @@ function Checker.bindStructImport(this: Checker, index: i32, struct: StructInfo)
   escaping: index struct
   calls: CheckContext.error CheckedProgram.addStruct StringMap.has StringSet.add nish_panic_index nish_str_concat nish_str_eq
   pointer this: size=24 writesThrough=false captured=false
-  pointer struct: size=152 writesThrough=true captured=true passedTo=CheckedProgram.addStruct#2
+  pointer struct: size=168 writesThrough=true captured=true passedTo=CheckedProgram.addStruct#2
   stackSites=0 stackLocals=0
   local -18:11 imp: ImportBinding (const)
   callee -16:7 CheckContext.error -> @CheckContext.error
@@ -832,7 +832,7 @@ function parameterSpelling(ctx: CheckContext, sig: FunctionSig, name: string): s
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via annotationSpelling
   calls: FunctionSig.definedIn annotationSpelling nish_panic_index nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=annotationSpelling#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=annotationSpelling#0
   pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   local +0:9 at: i32 (const)
@@ -848,7 +848,7 @@ function PerfWalk.constructor(this: PerfWalk, ctx: CheckContext, sig: FunctionSi
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: body ctx sig unprovenIndices unprovenRanges
   pointer this: size=80 writesThrough=true captured=false
-  pointer ctx: size=280 writesThrough=true captured=true
+  pointer ctx: size=288 writesThrough=true captured=true
   pointer sig: size=136 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   pointer unprovenIndices: size=0 writesThrough=true captured=true
@@ -878,7 +878,7 @@ function checkSignatureBody(ctx: CheckContext, sig: FunctionSig, scope: Scope, i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: CheckContext.error DiagnosticSink.count FunctionSig.body TypeTable.typeName analyzeBounds checkElementReferences checkExpression checkPerformance checkResultLocalsHandled checkReturnValue checkSecretFlow checkStatements nameOf nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkStatements#0 checkExpression#0 checkReturnValue#0 checkResultLocalsHandled#0 checkSecretFlow#0 analyzeBounds#0 checkPerformance#0 checkElementReferences#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkStatements#0 checkExpression#0 checkReturnValue#0 checkResultLocalsHandled#0 checkSecretFlow#0 analyzeBounds#0 checkPerformance#0 checkElementReferences#0 CheckContext.error#0
   pointer sig: size=136 writesThrough=true captured=true passedTo=FunctionSig.body#0 checkPerformance#1 nameOf#0
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkStatements#2 checkExpression#2 checkReturnValue#2
   stackSites=0 stackLocals=0
@@ -909,7 +909,7 @@ function checkPerformance(ctx: CheckContext, sig: FunctionSig, body: Node, bound
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via walkPerformance
   calls: PerfWalk.constructor walkPerformance
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=PerfWalk.constructor#1
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=PerfWalk.constructor#1
   pointer sig: size=136 writesThrough=true captured=true passedTo=PerfWalk.constructor#2
   pointer body: size=40 writesThrough=true captured=true passedTo=PerfWalk.constructor#3 walkPerformance#1
   pointer bounds: size=152 writesThrough=false captured=false
@@ -1130,7 +1130,7 @@ function checkUnfoldedClamp(walk: PerfWalk, call: Node): void -> @checkUnfoldedC
 function perfLocalName(ctx: CheckContext, expr: Node): string -> @perfLocalName
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index unwrapPerfParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -1230,7 +1230,7 @@ function unwrapPerfParens(expr: Node): Node -> @unwrapPerfParens
 function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean -> @accumulates
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: accumulates nish_panic_index nish_str_eq unwrapPerfParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=accumulates#0 accumulates#0 accumulates#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=accumulates#0 accumulates#0 accumulates#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   pointer target: size=64 writesThrough=false captured=false passedTo=accumulates#2 accumulates#2 accumulates#2
   stackSites=0 stackLocals=0
@@ -1244,7 +1244,7 @@ function accumulates(ctx: CheckContext, expr: Node, target: Local): boolean -> @
 function isDynamicArrayAllocation(ctx: CheckContext, expr: Node): boolean -> @isDynamicArrayAllocation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray isNonNegativeInteger nish_panic_index unwrapPerfParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -1262,7 +1262,7 @@ function isNonNegativeInteger(text: string): boolean -> @isNonNegativeInteger
 function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, own: Node): boolean -> @usedOnlyWithinIteration
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isLocalRef nish_panic_index nish_str_eq sourceLocal usedOnlyWithinIteration
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#0 isLocalRef#0 usedOnlyWithinIteration#0 isLocalRef#0 isLocalRef#0 usedOnlyWithinIteration#0 usedOnlyWithinIteration#0 usedOnlyWithinIteration#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#0 isLocalRef#0 usedOnlyWithinIteration#0 isLocalRef#0 isLocalRef#0 usedOnlyWithinIteration#0 usedOnlyWithinIteration#0 usedOnlyWithinIteration#0
   pointer root: size=40 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#2 isLocalRef#2 usedOnlyWithinIteration#2 isLocalRef#2 isLocalRef#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2 usedOnlyWithinIteration#2
   pointer own: size=40 writesThrough=false captured=false passedTo=usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3 usedOnlyWithinIteration#3
@@ -1281,7 +1281,7 @@ function usedOnlyWithinIteration(ctx: CheckContext, root: Node, local: Local, ow
 function isLocalRef(ctx: CheckContext, expr: Node, local: Local): boolean -> @isLocalRef
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index unwrapPerfParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1295,7 +1295,7 @@ function perfIsReadBuiltin(name: string): boolean -> @perfIsReadBuiltin
 function perfAllocatesVisibly(ctx: CheckContext, expr: Node): boolean -> @perfAllocatesVisibly
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringMap.has nish_panic_index nish_str_eq perfIsReadBuiltin unwrapPerfParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -1309,7 +1309,7 @@ function perfIsPointerType(ctx: CheckContext, type: i32): boolean -> @perfIsPoin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isNullable TypeTable.isPointer TypeTable.isResult
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 TypeTable.isPointer -> @TypeTable.isPointer
   callee +0:32 TypeTable.isNullable -> @TypeTable.isNullable
@@ -1317,7 +1317,7 @@ function perfIsPointerType(ctx: CheckContext, type: i32): boolean -> @perfIsPoin
 function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean -> @perfCapturesLocal
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq perfMayYieldLocal perfReceiverMayBeKept
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=perfMayYieldLocal#0 perfReceiverMayBeKept#0 perfMayYieldLocal#0 perfMayYieldLocal#0 perfMayYieldLocal#0 perfMayYieldLocal#0 perfMayYieldLocal#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=perfMayYieldLocal#0 perfReceiverMayBeKept#0 perfMayYieldLocal#0 perfMayYieldLocal#0 perfMayYieldLocal#0 perfMayYieldLocal#0 perfMayYieldLocal#0
   pointer node: size=40 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false passedTo=perfMayYieldLocal#2 perfReceiverMayBeKept#2 perfMayYieldLocal#2 perfMayYieldLocal#2 perfMayYieldLocal#2 perfMayYieldLocal#2 perfMayYieldLocal#2
   stackSites=0 stackLocals=0
@@ -1334,7 +1334,7 @@ function perfCapturesLocal(ctx: CheckContext, node: Node, local: Local): boolean
 function perfMayYieldLocal(ctx: CheckContext, expr: Node, local: Local): boolean -> @perfMayYieldLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isLocalRef nish_panic_index perfMayYieldLocal unwrapPerfParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=perfMayYieldLocal#0 perfMayYieldLocal#0 isLocalRef#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=perfMayYieldLocal#0 perfMayYieldLocal#0 isLocalRef#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   pointer local: size=64 writesThrough=false captured=false passedTo=perfMayYieldLocal#2 perfMayYieldLocal#2 isLocalRef#2
   stackSites=0 stackLocals=0
@@ -1346,7 +1346,7 @@ function perfMayYieldLocal(ctx: CheckContext, expr: Node, local: Local): boolean
 function perfReceiverMayBeKept(ctx: CheckContext, callee: Node, local: Local): boolean -> @perfReceiverMayBeKept
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isArray isLocalRef nish_panic_index unwrapPerfParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=isLocalRef#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=isLocalRef#0
   pointer callee: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   pointer local: size=64 writesThrough=false captured=false passedTo=isLocalRef#2
   stackSites=0 stackLocals=0
@@ -1369,7 +1369,7 @@ function perfScanForCapture(ctx: CheckContext, node: Node, local: Local, inLoop:
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: before inLoop
   calls: perfCapturesLocal perfScanForCapture
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=perfCapturesLocal#0 perfScanForCapture#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=perfCapturesLocal#0 perfScanForCapture#0
   pointer node: size=40 writesThrough=false captured=false passedTo=perfCapturesLocal#1
   pointer local: size=64 writesThrough=false captured=false passedTo=perfCapturesLocal#2 perfScanForCapture#2
   stackSites=0 stackLocals=0
@@ -1493,7 +1493,7 @@ function perfConstantInt(expr: Node): PerfConst -> @perfConstantInt
 function perfOverflowsItsType(ctx: CheckContext, expr: Node): boolean -> @perfOverflowsItsType
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index perfConstantInt unwrapPerfParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=true captured=true passedTo=unwrapPerfParens#0
   stackSites=0 stackLocals=0
   local +0:9 e: Node (const)
@@ -1596,7 +1596,7 @@ function refuseTopLevelForm(ctx: CheckContext, stmt: Node): void -> @refuseTopLe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorFix
   calls: CheckContext.error CheckContext.errorFix exportDefaultFix exportListFix isExported nish_str_concat syntaxKindName
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorFix#0 exportListFix#0 CheckContext.errorFix#0 exportDefaultFix#0 CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorFix#0 exportListFix#0 CheckContext.errorFix#0 exportDefaultFix#0 CheckContext.error#0 CheckContext.error#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=CheckContext.errorFix#1 exportListFix#1 CheckContext.errorFix#1 exportDefaultFix#1 isExported#0 CheckContext.error#1 CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:5 CheckContext.errorFix -> @CheckContext.errorFix
@@ -1611,7 +1611,7 @@ function refuseTopLevelForm(ctx: CheckContext, stmt: Node): void -> @refuseTopLe
 function exportDefaultFix(ctx: CheckContext, stmt: Node): Edit[] -> @exportDefaultFix
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit exportableDeclaration nish_array_grow nish_panic_index nish_str_eq statementDeletion
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=exportableDeclaration#0 statementDeletion#0 CheckContext.edit#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=exportableDeclaration#0 statementDeletion#0 CheckContext.edit#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=statementDeletion#1
   stackSites=0 stackLocals=0
   local +0:9 edits: Edit[] (const)
@@ -1623,7 +1623,7 @@ function exportDefaultFix(ctx: CheckContext, stmt: Node): Edit[] -> @exportDefau
 function exportListFix(ctx: CheckContext, stmt: Node): Edit[] -> @exportListFix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit exportableDeclaration nish_array_grow nish_panic_index nish_str_eq statementDeletion
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=exportableDeclaration#0 CheckContext.edit#0 statementDeletion#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=exportableDeclaration#0 CheckContext.edit#0 statementDeletion#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=statementDeletion#1
   stackSites=0 stackLocals=0
   local +0:9 none: Edit[] (const)
@@ -1638,7 +1638,7 @@ function exportListFix(ctx: CheckContext, stmt: Node): Edit[] -> @exportListFix
 function exportableDeclaration(ctx: CheckContext, name: string): Node | null -> @exportableDeclaration
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: declaredName isExported nish_panic_overflow nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 found: Node | null (let)
   local +1:7 count: i32 (let)
@@ -1654,7 +1654,7 @@ function declaredName(stmt: Node): string -> @declaredName
 function statementDeletion(ctx: CheckContext, stmt: Node): Edit -> @statementDeletion
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   calls: CheckContext.edit isBlank nish_panic_index nish_panic_overflow skipBlanks
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=CheckContext.edit#0 CheckContext.edit#0 CheckContext.edit#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=CheckContext.edit#0 CheckContext.edit#0 CheckContext.edit#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 text: string (const)

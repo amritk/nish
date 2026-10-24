@@ -301,6 +301,19 @@ export class RuntimeTable {
         EFFECT_READ
       )
     )
+    // WP38 S6a: `nish/bytes`'s byte-class runs, in runtime-bytes.c, with
+    // `indexOfAny`'s effect, for its reason. The data is an array's, which is
+    // null while the array is empty, so it is not `nonnull`.
+    for (const name of ["nish_bytes_skip_blank", "nish_bytes_skip_digits", "nish_bytes_skip_json_text"]) {
+      this.add(
+        new RuntimeFunction(
+          name,
+          `declare i64 @${name}(i8* noundef readonly nocapture, i64 noundef, i64 noundef)`,
+          attrs3("nounwind", "willreturn", "memory(argmem: read, inaccessiblemem: readwrite)"),
+          EFFECT_READ
+        )
+      )
+    }
     // `nish/regex`'s scan, beside it in runtime-simd.c: the same path store,
     // but the masks are an array, whose elements sit behind a pointer the
     // kernel loads, so `argmem` would understate its reads.
@@ -616,6 +629,39 @@ export class RuntimeTable {
         "nish_read_signal",
         "declare noundef i32 @nish_read_signal(i32 noundef)",
         attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
+    // `nish:term`, runtime/runtime-term.c. Each is a write: stdin's queue and
+    // the terminal's mode are kernel state, so no two calls fold into one.
+    // `waitStdin` may wait forever, `setRawMode(true)` waits for the
+    // terminal's output to drain (`TCSAFLUSH`), and `readStdin`'s `read`
+    // follows a readiness check that a second reader of the same terminal can
+    // race, so those three get `nounwind` alone. `isTerminal` is one `isatty`
+    // and `terminalSize` at most two `ioctl`s and a fresh two-element `i32[]`
+    // (the shape `waitPid` answers), so both return.
+    this.add(
+      mayNotReturn(
+        "nish_read_stdin",
+        `declare noundef i32 @nish_read_stdin(${NET_BUFFER}, i64 noundef, i64 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn("nish_wait_stdin", "declare zeroext i1 @nish_wait_stdin(i32 noundef)", EFFECT_WRITE)
+    )
+    this.add(plain("nish_is_terminal", "declare zeroext i1 @nish_is_terminal(i32 noundef)", EFFECT_WRITE))
+    this.add(
+      plain(
+        "nish_terminal_size",
+        "declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size()",
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_set_raw_mode",
+        "declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext)",
         EFFECT_WRITE
       )
     )

@@ -920,6 +920,9 @@ function jsonStringifyString(s: string): string -> @nish.jsonStringifyString [ex
   callee +9:3 JsonWriter.string -> @nish.JsonWriter.string
   callee +10:10 JsonWriter.text -> @nish.JsonWriter.text
 module std/json-tokenizer.ts [package nish]
+import copyBytes from "nish/bytes" -> function @nish.copyBytes
+import skipBlank from "nish/bytes" -> function @nish.skipBlank
+import skipJsonText from "nish/bytes" -> function @nish.skipJsonText
 const JSON_TOK_END: i32 = 0 [exported]
 const JSON_TOK_OBJECT_BEGIN: i32 = 1 [exported]
 const JSON_TOK_OBJECT_END: i32 = 2 [exported]
@@ -1015,8 +1018,10 @@ const JSON_TOK_LOW_SURROGATE: i32 = 56320
 const JSON_TOK_SURROGATE_END: i32 = 57344
 const JSON_TOK_HEX_BASE: i32 = 16
 const JSON_TOK_TEN: i32 = 10
-const JSON_TOK_FAST_DIGITS: i32 = 15
+const JSON_TOK_FAST_DIGITS: i32 = 19
 const JSON_TOK_FAST_EXPONENT: i32 = 22
+const JSON_TOK_SMALLEST_POWER: i32 = -342
+const JSON_TOK_LARGEST_POWER: i32 = 308
 const JSON_TOK_EXPONENT_CAP: i32 = 100000
 const JSON_TOK_I32_TENS: i32 = 214748364
 const JSON_TOK_I32_LAST_DIGIT: i32 = 7
@@ -1101,18 +1106,17 @@ function jsonTokIsBlank(b: i32): boolean -> @nish.jsonTokIsBlank
 function jsonTokIsDigit(b: i32): boolean -> @nish.jsonTokIsDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function jsonTokIsPlain(b: i32): boolean -> @nish.jsonTokIsPlain
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
 function jsonTokSkipBlank(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSkipBlank
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: i
-  calls: nish.jsonTokIsBlank
-  pointer src: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end i
+  calls: nish.jsonTokIsBlank nish.skipBlank nish_panic_index nish_panic_overflow
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.skipBlank#0
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +1:7 j: i32 (let)
-  callee +2:30 jsonTokIsBlank -> @nish.jsonTokIsBlank
+  local +1:9 to: i32 (const)
+  callee +8:8 jsonTokIsBlank -> @nish.jsonTokIsBlank
+  callee +11:23 jsonTokIsBlank -> @nish.jsonTokIsBlank
+  callee +14:10 skipBlank -> @nish.skipBlank
 function jsonTokSkipDigits(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSkipDigits
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i
@@ -1123,14 +1127,14 @@ function jsonTokSkipDigits(src: u8[], i: i32, end: i32): i32 -> @nish.jsonTokSki
   local +1:7 j: i32 (let)
   callee +2:30 jsonTokIsDigit -> @nish.jsonTokIsDigit
 function jsonTokSkipPlain(src: u8[], i: i32, limit: i32): i32 -> @nish.jsonTokSkipPlain
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: i
-  calls: nish.jsonTokIsPlain
-  pointer src: size=0 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i limit
+  calls: nish.skipJsonText
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.skipJsonText#0
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
-  local +1:7 j: i32 (let)
-  callee +2:32 jsonTokIsPlain -> @nish.jsonTokIsPlain
+  local +1:9 to: i32 (const)
+  callee +5:10 skipJsonText -> @nish.skipJsonText
 function jsonTokHexDigit(b: i32): i32 -> @nish.jsonTokHexDigit
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: b
@@ -1373,12 +1377,12 @@ function JsonTokenizer.string(this: JsonTokenizer, at: i32, k: i32): i32 -> @nis
   calls: nish.JsonTokenizer.emit nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.fail nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokSkipPlain nish.jsonTokUtf8Length nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.escapeCodePoint#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.fail#0 nish.JsonTokenizer.emit#0
   stackSites=0 stackLocals=0
-  local -51:11 src: u8[] (const)
-  local -50:11 end: i32 (const)
-  local -47:11 room: i32 (const)
-  local -46:11 limit: i32 (const)
-  local -45:9 i: i32 (let)
-  local -44:9 decoded: i32 (let)
+  local -52:11 src: u8[] (const)
+  local -51:11 end: i32 (const)
+  local -48:11 room: i32 (const)
+  local -47:11 limit: i32 (const)
+  local -46:9 i: i32 (let)
+  local -45:9 decoded: i32 (let)
   local -38:13 run: i32 (const)
   callee -37:11 jsonTokSkipPlain -> @nish.jsonTokSkipPlain
   local -35:13 b: i32 (const)
@@ -1432,27 +1436,29 @@ function JsonTokenizer.stringInto(this: JsonTokenizer, out: u8[], at: i32): i32 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
   escaping: at
-  calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
+  calls: nish.JsonTokenizer.escapeCodePoint nish.JsonTokenizer.isText nish.copyBytes nish.jsonTokByteAt nish.jsonTokEscapeLength nish.jsonTokUtf8Byte nish.jsonTokUtf8Width nish_panic_overflow
   pointer this: size=96 writesThrough=true captured=false passedTo=nish.JsonTokenizer.isText#0 nish.JsonTokenizer.escapeCodePoint#0
-  pointer out: size=0 writesThrough=true captured=false
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0
   stackSites=0 stackLocals=0
-  local -15:11 n: i32 (const)
-  callee -14:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
-  local -11:11 src: u8[] (const)
-  local -10:11 end: i32 (const)
-  local -9:9 i: i32 (let)
-  local -8:9 o: i32 (let)
-  local -3:15 srcLength: i32 (const)
-  local -2:15 outLength: i32 (const)
-  local +8:13 b: i32 (const)
-  callee +8:22 jsonTokByteAt -> @nish.jsonTokByteAt
-  local +17:13 cp: i32 (const)
-  callee +17:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
-  local +18:13 width: i32 (const)
-  callee +18:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
-  local +19:11 k: i32 (let)
-  callee +22:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
-  callee +27:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
+  local -33:11 n: i32 (const)
+  callee -32:10 JsonTokenizer.isText -> @nish.JsonTokenizer.isText
+  local -29:11 src: u8[] (const)
+  local -28:11 end: i32 (const)
+  local -27:9 i: i32 (let)
+  local -26:9 o: i32 (let)
+  local -20:15 srcLength: i32 (const)
+  local -19:15 outLength: i32 (const)
+  local -18:13 count: i32 (let)
+  callee -10:11 copyBytes -> @nish.copyBytes
+  local -3:13 b: i32 (const)
+  callee -3:22 jsonTokByteAt -> @nish.jsonTokByteAt
+  local +6:13 cp: i32 (const)
+  callee +6:23 JsonTokenizer.escapeCodePoint -> @nish.JsonTokenizer.escapeCodePoint
+  local +7:13 width: i32 (const)
+  callee +7:26 jsonTokUtf8Width -> @nish.jsonTokUtf8Width
+  local +8:11 k: i32 (let)
+  callee +11:25 jsonTokUtf8Byte -> @nish.jsonTokUtf8Byte
+  callee +16:12 jsonTokEscapeLength -> @nish.jsonTokEscapeLength
 function JsonTokenizer.stringLength(this: JsonTokenizer): i32 -> @nish.JsonTokenizer.stringLength [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonTokenizer.isText
@@ -1570,33 +1576,34 @@ function JsonTokenizer.isIntegral(this: JsonTokenizer): boolean -> @nish.JsonTok
   callee +51:25 jsonTokDigitsExceed -> @nish.jsonTokDigitsExceed
 function JsonTokenizer.numberF64(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberF64 [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow
-  pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0
+  calls: nish.JsonTokenizer.numberSlow nish.jsonTokByteAt nish.jsonTokEiselLemire nish.jsonTokIsDigit nish.jsonTokPowerOfTen nish_panic_overflow
+  pointer this: size=96 writesThrough=false captured=false passedTo=nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0 nish.JsonTokenizer.numberSlow#0
   stackSites=0 stackLocals=0
   local +0:11 src: u8[] (const)
   local +1:11 start: i32 (const)
   local +2:11 end: i32 (const)
   local +3:11 negative: boolean (const)
   callee +3:31 jsonTokByteAt -> @nish.jsonTokByteAt
-  local +5:11 ten: f64 (const)
-  local +6:9 mantissa: f64 (let)
-  local +7:9 digits: i32 (let)
-  local +8:9 scale: i32 (let)
-  local +9:9 afterDot: boolean (let)
-  local +10:9 i: i32 (let)
-  callee +12:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local +17:13 b: i32 (const)
-  callee +20:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
-  callee +31:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local +41:13 sign: i32 (const)
-  callee +41:25 jsonTokByteAt -> @nish.jsonTokByteAt
-  local +42:13 minus: boolean (const)
-  local +46:11 exponent: i32 (let)
-  callee +52:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local +56:9 value: f64 (let)
-  callee +59:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
-  local +61:13 power: f64 (const)
-  callee +61:26 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  local +7:11 ten: u64 (const)
+  local +8:9 mantissa: u64 (let)
+  local +9:9 digits: i32 (let)
+  local +10:9 scale: i32 (let)
+  local +11:9 afterDot: boolean (let)
+  local +12:9 i: i32 (let)
+  callee +14:14 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local +19:13 b: i32 (const)
+  callee +22:18 jsonTokIsDigit -> @nish.jsonTokIsDigit
+  callee +33:18 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local +43:13 sign: i32 (const)
+  callee +43:25 jsonTokByteAt -> @nish.jsonTokByteAt
+  local +44:13 minus: boolean (const)
+  local +48:11 exponent: i32 (let)
+  callee +54:16 JsonTokenizer.numberSlow -> @nish.JsonTokenizer.numberSlow
+  local +58:9 value: f64 (let)
+  local +60:13 exact: boolean (const)
+  local +63:15 power: f64 (const)
+  callee +63:28 jsonTokPowerOfTen -> @nish.jsonTokPowerOfTen
+  callee +66:17 jsonTokEiselLemire -> @nish.jsonTokEiselLemire
 function JsonTokenizer.numberSlow(this: JsonTokenizer): f64 -> @nish.JsonTokenizer.numberSlow [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic_slice nish_parse_number nish_str_new
@@ -1616,11 +1623,1646 @@ function JsonTokenizer.skipValue(this: JsonTokenizer): i32 -> @nish.JsonTokenize
   local +7:11 target: i32 (const)
   callee +9:11 JsonTokenizer.next -> @nish.JsonTokenizer.next
 function jsonTokPowerOfTen(n: i32): f64 -> @nish.jsonTokPowerOfTen
-  facts: effect=none willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: n
   stackSites=0 stackLocals=0
-  local +0:9 ten: f64 (const)
-  local +1:7 p: f64 (let)
-  local +2:7 k: i32 (let)
+function jsonTokW64(hi: u32, lo: u32): u64 -> @nish.jsonTokW64
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonTokMulHigh(a: u64, b: u64): u64 -> @nish.jsonTokMulHigh
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.jsonTokW64
+  stackSites=0 stackLocals=0
+  local +0:9 k32: u64 (const)
+  local +1:9 mask: u64 (const)
+  callee +1:21 jsonTokW64 -> @nish.jsonTokW64
+  local +2:9 aHi: u64 (const)
+  local +3:9 aLo: u64 (const)
+  local +4:9 bHi: u64 (const)
+  local +5:9 bLo: u64 (const)
+  local +6:9 ll: u64 (const)
+  local +7:9 hl: u64 (const)
+  local +8:9 lh: u64 (const)
+  local +9:9 cross: u64 (const)
+function jsonTokLeadingZeros(w: u64): i32 -> @nish.jsonTokLeadingZeros
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32
+  stackSites=0 stackLocals=0
+  local +0:9 hi: i32 (const)
+function jsonTokEiselLemire(w0: u64, q: i32): f64 -> @nish.jsonTokEiselLemire
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: w0
+  calls: nish.jsonTokLeadingZeros nish.jsonTokMulHigh nish.jsonTokPowerOfFive nish.jsonTokW64 nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 one: u64 (const)
+  local +1:9 infinity: u64 (const)
+  local +9:9 lz: i32 (const)
+  callee +9:19 jsonTokLeadingZeros -> @nish.jsonTokLeadingZeros
+  local +10:9 w: u64 (const)
+  local +14:9 index: i32 (const)
+  local +15:9 five: u64 (const)
+  callee +15:21 jsonTokPowerOfFive -> @nish.jsonTokPowerOfFive
+  local +16:7 high: u64 (let)
+  callee +16:19 jsonTokMulHigh -> @nish.jsonTokMulHigh
+  local +19:9 allOnes: u64 (const)
+  callee +19:24 jsonTokW64 -> @nish.jsonTokW64
+  local +20:7 low: u64 (let)
+  local +21:9 precisionMask: u64 (const)
+  local +23:11 second: u64 (const)
+  callee +23:25 jsonTokMulHigh -> @nish.jsonTokMulHigh
+  callee +23:43 jsonTokPowerOfFive -> @nish.jsonTokPowerOfFive
+  local +26:11 room: u64 (const)
+  local +34:9 upperbit: i32 (const)
+  local +35:9 shift: i32 (const)
+  local +36:7 mantissa: u64 (let)
+  local +41:9 power: i32 (const)
+  local +42:7 power2: i32 (let)
+  local +46:11 subnormalShift: i32 (const)
+  local +57:9 three: u64 (const)
+  local +62:9 hidden: u64 (const)
+function jsonTokPowerOfFive(index: i32): u64 -> @nish.jsonTokPowerOfFive
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: index
+  calls: nish.jsonTokW64
+  stackSites=0 stackLocals=0
+  callee +0:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +4:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +6:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +8:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +10:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +12:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +14:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +16:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +18:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +20:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +22:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +24:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +26:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +28:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +30:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +32:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +34:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +36:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +38:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +40:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +42:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +44:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +46:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +48:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +50:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +52:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +54:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +56:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +58:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +60:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +62:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +64:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +66:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +68:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +70:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +72:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +74:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +76:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +78:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +80:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +82:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +84:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +86:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +88:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +90:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +92:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +94:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +96:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +98:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +100:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +102:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +104:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +106:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +108:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +110:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +112:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +114:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +116:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +118:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +120:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +122:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +124:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +126:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +128:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +130:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +132:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +134:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +136:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +138:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +140:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +142:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +144:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +146:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +148:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +150:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +152:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +154:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +156:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +158:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +160:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +162:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +164:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +166:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +168:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +170:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +172:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +174:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +176:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +178:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +180:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +182:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +184:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +186:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +188:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +190:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +192:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +194:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +196:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +198:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +200:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +202:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +204:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +206:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +208:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +210:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +212:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +214:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +216:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +218:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +220:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +222:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +224:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +226:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +228:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +230:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +232:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +234:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +236:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +238:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +240:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +242:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +244:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +246:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +248:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +250:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +252:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +254:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +256:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +258:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +260:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +262:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +264:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +266:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +268:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +270:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +272:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +274:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +276:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +278:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +280:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +282:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +284:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +286:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +288:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +290:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +292:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +294:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +296:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +298:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +300:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +302:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +304:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +306:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +308:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +310:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +312:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +314:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +316:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +318:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +320:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +322:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +324:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +326:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +328:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +330:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +332:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +334:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +336:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +338:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +340:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +342:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +344:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +346:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +348:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +350:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +352:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +354:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +356:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +358:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +360:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +362:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +364:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +366:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +368:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +370:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +372:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +374:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +376:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +378:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +380:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +382:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +384:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +386:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +388:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +390:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +392:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +394:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +396:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +398:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +400:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +402:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +404:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +406:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +408:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +410:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +412:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +414:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +416:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +418:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +420:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +422:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +424:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +426:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +428:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +430:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +432:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +434:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +436:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +438:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +440:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +442:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +444:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +446:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +448:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +450:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +452:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +454:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +456:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +458:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +460:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +462:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +464:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +466:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +468:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +470:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +472:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +474:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +476:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +478:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +480:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +482:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +484:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +486:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +488:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +490:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +492:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +494:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +496:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +498:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +500:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +502:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +504:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +506:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +508:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +510:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +512:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +514:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +516:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +518:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +520:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +522:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +524:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +526:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +528:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +530:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +532:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +534:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +536:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +538:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +540:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +542:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +544:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +546:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +548:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +550:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +552:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +554:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +556:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +558:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +560:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +562:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +564:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +566:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +568:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +570:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +572:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +574:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +576:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +578:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +580:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +582:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +584:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +586:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +588:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +590:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +592:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +594:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +596:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +598:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +600:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +602:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +604:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +606:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +608:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +610:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +612:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +614:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +616:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +618:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +620:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +622:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +624:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +626:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +628:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +630:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +632:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +634:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +636:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +638:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +640:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +642:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +644:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +646:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +648:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +650:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +652:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +654:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +656:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +658:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +660:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +662:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +664:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +666:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +668:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +670:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +672:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +674:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +676:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +678:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +680:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +682:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +684:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +686:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +688:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +690:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +692:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +694:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +696:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +698:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +700:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +702:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +704:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +706:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +708:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +710:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +712:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +714:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +716:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +718:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +720:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +722:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +724:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +726:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +728:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +730:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +732:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +734:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +736:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +738:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +740:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +742:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +744:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +746:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +748:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +750:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +752:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +754:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +756:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +758:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +760:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +762:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +764:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +766:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +768:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +770:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +772:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +774:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +776:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +778:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +780:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +782:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +784:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +786:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +788:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +790:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +792:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +794:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +796:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +798:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +800:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +802:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +804:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +806:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +808:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +810:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +812:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +814:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +816:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +818:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +820:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +822:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +824:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +826:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +828:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +830:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +832:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +834:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +836:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +838:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +840:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +842:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +844:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +846:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +848:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +850:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +852:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +854:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +856:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +858:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +860:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +862:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +864:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +866:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +868:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +870:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +872:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +874:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +876:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +878:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +880:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +882:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +884:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +886:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +888:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +890:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +892:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +894:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +896:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +898:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +900:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +902:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +904:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +906:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +908:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +910:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +912:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +914:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +916:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +918:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +920:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +922:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +924:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +926:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +928:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +930:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +932:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +934:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +936:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +938:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +940:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +942:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +944:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +946:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +948:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +950:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +952:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +954:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +956:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +958:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +960:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +962:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +964:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +966:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +968:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +970:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +972:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +974:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +976:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +978:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +980:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +982:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +984:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +986:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +988:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +990:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +992:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +994:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +996:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +998:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1000:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1002:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1004:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1006:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1008:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1010:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1012:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1014:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1016:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1018:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1020:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1022:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1024:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1026:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1028:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1030:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1032:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1034:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1036:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1038:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1040:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1042:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1044:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1046:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1048:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1050:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1052:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1054:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1056:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1058:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1060:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1062:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1064:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1066:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1068:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1070:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1072:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1074:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1076:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1078:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1080:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1082:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1084:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1086:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1088:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1090:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1092:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1094:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1096:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1098:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1100:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1102:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1104:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1106:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1108:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1110:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1112:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1114:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1116:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1118:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1120:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1122:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1124:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1126:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1128:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1130:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1132:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1134:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1136:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1138:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1140:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1142:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1144:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1146:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1148:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1150:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1152:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1154:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1156:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1158:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1160:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1162:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1164:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1166:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1168:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1170:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1172:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1174:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1176:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1178:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1180:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1182:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1184:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1186:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1188:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1190:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1192:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1194:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1196:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1198:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1200:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1202:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1204:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1206:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1208:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1210:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1212:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1214:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1216:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1218:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1220:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1222:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1224:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1226:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1228:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1230:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1232:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1234:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1236:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1238:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1240:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1242:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1244:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1246:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1248:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1250:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1252:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1254:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1256:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1258:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1260:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1262:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1264:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1266:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1268:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1270:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1272:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1274:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1276:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1278:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1280:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1282:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1284:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1286:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1288:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1290:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1292:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1294:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1296:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1298:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1300:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1302:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1304:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1306:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1308:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1310:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1312:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1314:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1316:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1318:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1320:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1322:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1324:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1326:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1328:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1330:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1332:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1334:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1336:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1338:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1340:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1342:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1344:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1346:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1348:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1350:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1352:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1354:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1356:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1358:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1360:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1362:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1364:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1366:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1368:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1370:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1372:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1374:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1376:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1378:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1380:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1382:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1384:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1386:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1388:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1390:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1392:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1394:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1396:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1398:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1400:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1402:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1404:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1406:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1408:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1410:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1412:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1414:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1416:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1418:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1420:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1422:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1424:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1426:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1428:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1430:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1432:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1434:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1436:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1438:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1440:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1442:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1444:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1446:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1448:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1450:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1452:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1454:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1456:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1458:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1460:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1462:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1464:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1466:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1468:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1470:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1472:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1474:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1476:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1478:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1480:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1482:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1484:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1486:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1488:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1490:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1492:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1494:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1496:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1498:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1500:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1502:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1504:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1506:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1508:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1510:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1512:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1514:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1516:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1518:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1520:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1522:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1524:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1526:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1528:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1530:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1532:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1534:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1536:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1538:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1540:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1542:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1544:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1546:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1548:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1550:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1552:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1554:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1556:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1558:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1560:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1562:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1564:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1566:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1568:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1570:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1572:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1574:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1576:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1578:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1580:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1582:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1584:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1586:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1588:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1590:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1592:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1594:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1596:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1598:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1600:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1602:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1604:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1606:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1608:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1610:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1612:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1614:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1616:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1618:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1620:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1622:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1624:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1626:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1628:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1630:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1632:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1634:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1636:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1638:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1640:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1642:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1644:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1646:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1648:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1650:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1652:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1654:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1656:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1658:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1660:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1662:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1664:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1666:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1668:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1670:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1672:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1674:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1676:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1678:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1680:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1682:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1684:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1686:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1688:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1690:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1692:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1694:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1696:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1698:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1700:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1702:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1704:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1706:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1708:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1710:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1712:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1714:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1716:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1718:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1720:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1722:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1724:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1726:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1728:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1730:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1732:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1734:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1736:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1738:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1740:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1742:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1744:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1746:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1748:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1750:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1752:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1754:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1756:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1758:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1760:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1762:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1764:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1766:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1768:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1770:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1772:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1774:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1776:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1778:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1780:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1782:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1784:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1786:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1788:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1790:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1792:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1794:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1796:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1798:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1800:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1802:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1804:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1806:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1808:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1810:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1812:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1814:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1816:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1818:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1820:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1822:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1824:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1826:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1828:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1830:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1832:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1834:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1836:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1838:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1840:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1842:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1844:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1846:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1848:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1850:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1852:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1854:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1856:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1858:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1860:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1862:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1864:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1866:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1868:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1870:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1872:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1874:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1876:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1878:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1880:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1882:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1884:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1886:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1888:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1890:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1892:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1894:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1896:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1898:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1900:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1902:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1904:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1906:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1908:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1910:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1912:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1914:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1916:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1918:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1920:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1922:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1924:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1926:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1928:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1930:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1932:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1934:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1936:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1938:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1940:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1942:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1944:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1946:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1948:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1950:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1952:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1954:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1956:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1958:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1960:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1962:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1964:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1966:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1968:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1970:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1972:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1974:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1976:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1978:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1980:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1982:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1984:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1986:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1988:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1990:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1992:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1994:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1996:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +1998:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2000:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2002:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2004:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2006:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2008:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2010:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2012:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2014:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2016:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2018:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2020:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2022:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2024:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2026:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2028:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2030:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2032:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2034:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2036:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2038:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2040:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2042:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2044:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2046:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2048:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2050:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2052:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2054:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2056:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2058:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2060:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2062:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2064:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2066:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2068:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2070:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2072:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2074:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2076:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2078:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2080:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2082:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2084:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2086:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2088:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2090:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2092:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2094:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2096:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2098:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2100:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2102:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2104:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2106:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2108:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2110:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2112:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2114:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2116:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2118:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2120:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2122:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2124:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2126:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2128:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2130:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2132:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2134:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2136:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2138:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2140:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2142:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2144:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2146:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2148:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2150:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2152:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2154:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2156:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2158:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2160:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2162:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2164:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2166:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2168:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2170:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2172:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2174:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2176:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2178:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2180:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2182:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2184:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2186:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2188:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2190:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2192:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2194:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2196:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2198:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2200:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2202:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2204:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2206:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2208:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2210:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2212:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2214:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2216:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2218:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2220:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2222:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2224:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2226:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2228:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2230:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2232:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2234:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2236:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2238:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2240:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2242:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2244:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2246:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2248:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2250:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2252:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2254:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2256:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2258:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2260:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2262:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2264:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2266:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2268:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2270:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2272:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2274:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2276:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2278:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2280:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2282:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2284:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2286:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2288:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2290:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2292:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2294:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2296:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2298:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2300:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2302:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2304:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2306:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2308:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2310:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2312:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2314:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2316:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2318:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2320:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2322:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2324:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2326:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2328:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2330:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2332:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2334:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2336:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2338:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2340:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2342:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2344:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2346:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2348:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2350:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2352:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2354:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2356:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2358:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2360:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2362:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2364:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2366:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2368:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2370:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2372:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2374:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2376:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2378:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2380:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2382:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2384:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2386:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2388:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2390:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2392:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2394:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2396:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2398:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2400:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2402:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2404:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2406:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2408:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2410:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2412:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2414:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2416:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2418:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2420:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2422:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2424:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2426:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2428:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2430:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2432:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2434:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2436:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2438:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2440:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2442:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2444:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2446:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2448:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2450:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2452:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2454:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2456:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2458:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2460:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2462:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2464:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2466:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2468:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2470:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2472:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2474:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2476:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2478:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2480:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2482:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2484:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2486:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2488:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2490:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2492:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2494:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2496:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2498:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2500:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2502:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2504:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2506:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2508:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2510:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2512:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2514:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2516:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2518:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2520:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2522:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2524:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2526:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2528:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2530:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2532:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2534:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2536:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2538:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2540:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2542:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2544:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2546:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2548:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2550:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2552:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2554:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2556:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2558:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2560:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2562:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2564:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2566:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2568:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2570:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2572:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2574:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2576:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2578:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2580:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2582:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2584:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2586:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2588:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2590:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2592:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2594:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2596:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2598:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2600:14 jsonTokW64 -> @nish.jsonTokW64
+  callee +2602:14 jsonTokW64 -> @nish.jsonTokW64
+module std/bytes.ts [package nish]
+const BYTES_SPACE: i32 = 32
+const BYTES_TAB: i32 = 9
+const BYTES_NEWLINE: i32 = 10
+const BYTES_CARRIAGE_RETURN: i32 = 13
+const BYTES_DIGIT_ZERO: i32 = 48
+const BYTES_DIGIT_NINE: i32 = 57
+const BYTES_QUOTE: i32 = 34
+const BYTES_BACKSLASH: i32 = 92
+const BYTES_NON_ASCII: i32 = 128
+const BYTES_CONTINUATION_TOP: i32 = 191
+function getU16LE(b: u8[], off: i32): u16 -> @nish.getU16LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU16BE(b: u8[], off: i32): u16 -> @nish.getU16BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU32LE(b: u8[], off: i32): u32 -> @nish.getU32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU32BE(b: u8[], off: i32): u32 -> @nish.getU32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU64LE(b: u8[], off: i32): u64 -> @nish.getU64LE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 v: u64 (let)
+  local +1:12 i: i32 (let)
+function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 v: u64 (let)
+  local +1:12 i: i32 (let)
+function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU32LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32LE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU32LE -> @nish.getU32LE
+function getI32BE(b: u8[], off: i32): i32 -> @nish.getI32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU32BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32BE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU32BE -> @nish.getU32BE
+function getI64LE(b: u8[], off: i32): i64 -> @nish.getI64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU64LE -> @nish.getU64LE
+function getI64BE(b: u8[], off: i32): i64 -> @nish.getI64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU64BE -> @nish.getU64BE
+function getF64LE(b: u8[], off: i32): f64 -> @nish.getF64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:69 getU64LE -> @nish.getU64LE
+function getF64BE(b: u8[], off: i32): f64 -> @nish.getF64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:69 getU64BE -> @nish.getU64BE
+function setU16LE(b: u8[], off: i32, v: u16): void -> @nish.setU16LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU16BE(b: u8[], off: i32, v: u16): void -> @nish.setU16BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU32LE(b: u8[], off: i32, v: u32): void -> @nish.setU32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU32BE(b: u8[], off: i32, v: u32): void -> @nish.setU32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU64LE(b: u8[], off: i32, v: u64): void -> @nish.setU64LE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:12 i: i32 (let)
+function setU64BE(b: u8[], off: i32, v: u64): void -> @nish.setU64BE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:12 i: i32 (let)
+function setI32LE(b: u8[], off: i32, v: i32): void -> @nish.setI32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU32LE
+  escaping: off
+  calls: nish.setU32LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32LE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU32LE -> @nish.setU32LE
+function setI32BE(b: u8[], off: i32, v: i32): void -> @nish.setI32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU32BE
+  escaping: off
+  calls: nish.setU32BE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32BE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU32BE -> @nish.setU32BE
+function setI64LE(b: u8[], off: i32, v: i64): void -> @nish.setI64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64LE
+  escaping: off
+  calls: nish.setU64LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64LE -> @nish.setU64LE
+function setI64BE(b: u8[], off: i32, v: i64): void -> @nish.setI64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64BE
+  escaping: off
+  calls: nish.setU64BE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64BE -> @nish.setU64BE
+function setF64LE(b: u8[], off: i32, v: f64): void -> @nish.setF64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64LE
+  escaping: off
+  calls: nish.setU64LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64LE -> @nish.setU64LE
+function setF64BE(b: u8[], off: i32, v: f64): void -> @nish.setF64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64BE
+  escaping: off
+  calls: nish.setU64BE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64BE -> @nish.setU64BE
+function bytesRunEnd(b: u8[], to: i32): i32 -> @nish.bytesRunEnd
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: to
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+function bytesRunStart(from: i32, end: i32): i32 -> @nish.bytesRunStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end from
+  stackSites=0 stackLocals=0
+function skipBlank(b: u8[], from: i32, to: i32): i32 -> @nish.skipBlank [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipBlankWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipBlankWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipBlankWalk -> @nish.skipBlankWalk
+  callee +1:27 bytesRunStart -> @nish.bytesRunStart
+function skipDigits(b: u8[], from: i32, to: i32): i32 -> @nish.skipDigits [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipDigitsWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipDigitsWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipDigitsWalk -> @nish.skipDigitsWalk
+  callee +1:28 bytesRunStart -> @nish.bytesRunStart
+function skipJsonText(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonText [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipJsonTextWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipJsonTextWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipJsonTextWalk -> @nish.skipJsonTextWalk
+  callee +1:30 bytesRunStart -> @nish.bytesRunStart
+function copyBytes(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytes [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.copyBytesWalk
+  escaping: at count from
+  calls: nish.copyBytesWalk nish_panic
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.copyBytesWalk#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.copyBytesWalk#2
+  stackSites=0 stackLocals=0
+  callee +0:3 copyBytesWalk -> @nish.copyBytesWalk
+function skipBlankWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipBlankWalk
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+function skipDigitsWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipDigitsWalk
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+function bytesUtf8Length(b: u8[], i: i32, to: i32): i32 -> @nish.bytesUtf8Length
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 lead: i32 (const)
+  local +1:7 low: i32 (let)
+  local +2:7 high: i32 (let)
+  local +3:7 n: i32 (let)
+  local +28:9 second: i32 (const)
+  local +32:7 k: i32 (let)
+  local +34:11 c: i32 (const)
+function skipJsonTextWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonTextWalk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesUtf8Length nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesUtf8Length#0
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+  local +4:13 n: i32 (const)
+  callee +4:22 bytesUtf8Length -> @nish.bytesUtf8Length
+function copyBytesWalk(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytesWalk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish_panic_index nish_panic_overflow
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -2:9 k: i32 (let)
+  local +5:7 k: i32 (let)
 module std/json-typed.ts [package nish]
 import JsonWriter from "nish/json" -> struct JsonWriter
 import JSON_TOK_ARRAY_BEGIN from "nish/json-tokenizer" -> const JSON_TOK_ARRAY_BEGIN

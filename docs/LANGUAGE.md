@@ -3978,7 +3978,9 @@ breaks one is refused with that rule's own code:
   third disposable beside `scope()` and `arena()`, and one `using` takes one
   lock (a second declarator's `lock()` is R5's, below). A lock may share a
   `using` with a scope opened before it or with an arena on either side, and
-  the declarators close in the reverse of the order they opened, so in
+  the declarators close in the reverse of the order they opened, each opening
+  before the next declarator's initialiser runs (an `orReturn()` there closes
+  the ones before it), so in
   `using a = arena(), g = m.lock()` the lock is given back before the arena
   releases (`tests/link/thread_mutex_using_mixed`); a scope opened after the
   lock, `using g = m.lock(), s = scope()`, is R5's
@@ -4679,6 +4681,60 @@ On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
 with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
 
+### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` in `nish/bytes`
+
+The three runs answer the first index in `[from, to)` of a `u8[]` whose byte
+is not in their class, or `to` when every byte there is; `copyBytes` copies a
+window of one array into another, or into itself
+([wp38-simd.md](wp38-simd.md), S6a). They are the scans and the copy a parser
+spends its time in, and `std/json` is written over them.
+
+```typescript
+import { copyBytes, skipBlank, skipDigits, skipJsonText } from "nish/bytes";
+
+export const main = (): i32 => {
+  const text: u8[] = [32, 10, 52, 50, 44, 34, 104, 105, 34]; // " \n42,\"hi\""
+  const start = skipBlank(text, 0, 9);
+  console.log(`${start} ${skipDigits(text, start, 9)}`);   // 2 4
+  console.log(`${skipJsonText(text, 6, 9)}`);              // 8, the closing quote
+  const word: u8[] = [0, 0];
+  copyBytes(word, 0, text, 6, 2);
+  console.log(`${word[0]} ${word[1]}`);                    // 104 105
+  return 0;
+};
+```
+
+- **The classes.** `skipBlank` skips JSON's four blanks (space, tab, newline,
+  carriage return) and `skipDigits` the ASCII digits. `skipJsonText` skips
+  what a JSON string holds as itself: printable ASCII other than `"` and `\`
+  (DEL included, which JSON does not escape), and every well-formed UTF-8
+  sequence (RFC 3629 §4) that ends before `to`. It stops at a quote, a
+  backslash or a control byte, and at the lead byte of a sequence that is
+  overlong, a surrogate, past U+10FFFF, a stray continuation byte or cut short
+  by `to`, so where it stops is the byte a decoder has to look at.
+- **The runs never panic.** `to` is clamped into `[0, b.length]` and `from`
+  into `[0, to]`, as `indexOfAny` clamps: a negative `from` scans from the
+  start, and a `from` at or past `to` answers it
+  (`tests/link/std_bytes_runs`).
+- **`copyBytes` panics on a range outside its array.** A negative `count`, or
+  a window that does not lie inside `src` or `dst`, panics
+  `copyBytes: the range lies outside an array` before any byte is written
+  (`tests/link/std_bytes_copy_outside`). Overlapping ranges of one array copy
+  as if every byte were read before any was written, as `copyWithin` does.
+- **The walkers are the meaning.** Each public function clamps or checks its
+  range, then makes one call to a private walker, a plain loop over the bytes,
+  which is what runs under Node. Natively the compiler recognises that call by
+  module and name (`src/kernels.ts`), as it does `indexOfAny`'s, and emits the
+  runtime's `nish_bytes_skip_blank`, `nish_bytes_skip_digits` or
+  `nish_bytes_skip_json_text` (`runtime/runtime-bytes.c`) in its place, or one
+  `llvm.memmove` for the copy. The kernels pick a scalar, a 16-byte (SSE2,
+  NEON or wasm SIMD) or a 32-byte (AVX2) path on their first call, and
+  `NISH_SIMD=scalar|base|avx2` pins it, except in a freestanding wasm32 build,
+  which has no environment to read it from.
+- **The runs are variable-time.** How long one takes says how long the run is,
+  so they are for text, never for secret data: `std/crypto` does not call
+  them.
+
 ### Interfaces and object literals
 
 ```ts
@@ -5172,14 +5228,36 @@ class File {
 const first = (f: File): i32 => f.read();
 ```
 
-**`using` of a handle class is not lowered yet.** The class, its methods and
-every function that borrows one are checked, and `using f = new File(p)` is
-`` `using` of handle class `File` is not lowered yet: until a release emits its
-close, hold the `CPtr` in a local and close it yourself `` (NL2573,
-`reject_ffi_handle_using`) until the compiler emits the close at every exit of
-the block. Until then, a program holds the `CPtr` in a local and calls the
-close itself, as the declared-function examples above do; what the rules
-below fix is the shape a program will open a `File` with.
+**`using` of a handle class closes it at every exit of its block, once.**
+`using f = new File(p)` opens `f` as soon as its initialiser returns, before a
+later declarator's initialiser runs, and calls the close its
+`[Symbol.dispose]` names on every way control leaves the block: falling off
+its end, `return`, `break`, `continue`, and an `orReturn()` that propagates,
+including one in a later declarator's initialiser. A `return` computes its
+value first and closes after it, so `return twice(n)` inside the block is not
+a tail call. Each declarator opens before the next one's initialiser runs.
+Falling off the end, `break` and `continue` close the declarators in the
+reverse of the order they opened, beside an arena, a scope or a lock in the
+same `using`. A `return` or a propagating `orReturn()` joins every `scope()`
+before its value is computed (the value may read what the tasks stored), then
+closes the handles and gives back the locks, innermost first, then releases
+the arenas (`ffi_handle_file`, `ffi_handle_exits`, `ffi_handle_arena`,
+`ffi_handle_shapes`, `tests/link/ffi_handle_mutex`,
+`tests/link/using_declarator_exit`). The close is inlined as the dispose spells
+it: the field is loaded and the C function called with it, behind a `null`
+test only when the dispose writes one (`const p = this.f; if (p !== null)`);
+a dispose that is the single call `close(this.f)` calls it with the field as
+it is, `null` included (`ffi_handle_shapes`). The `using` is where the program reaches `ffi`, so
+`--deny ffi` refuses it and names the close (`caps_ffi_handle`,
+`reject_ffi_handle_deny`).
+
+A panic and `process.exit` do not close: the process ends, and the operating
+system takes back the descriptor. What it does not take back is what a C
+library still buffers. `panic`, `expect` and a failed range entry end through
+`exit(1)`, which flushes stdio, but a failed check and out of memory end
+through `_exit(1)`, which does not, so bytes written to a `FILE *` with
+`fwrite` and not yet flushed are lost on a bounds panic. Flush (`fflush`)
+before code that may panic when those bytes matter.
 
 - **The class.** Exactly one `CPtr` or `CPtr | null` field, `readonly` and with
   no initialiser (`reject_ffi_handle_two_fields`, `_field_mutable`,
@@ -6187,6 +6265,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
 ```ts
@@ -7592,6 +7671,160 @@ A loop has no reading either: the one a Node program has is Node's own, which
 it returns to between callbacks, and `pollWait` is a program that never
 returns to it.
 
+### `nish:term`: terminal input
+
+What a program needs to run a full-screen terminal interface: read a key the
+moment it is pressed, wait for one with a timeout that doubles as a frame
+clock, and ask the terminal whether it is one, how big it is, and to stop
+echoing and line-editing. None of it needs the `net` capability that a
+`pollAdd(0)` and `netRead(0, …)` would carry; the five functions carry
+[`tty`](#capabilities) instead. They are C in `runtime/runtime-term.c`, a
+translation unit of its own with its own `.text*` ceiling, which section GC
+leaves out of a program that calls none of them. Each is exported by
+`nish:term` and is a global too, as every `nish:` export is. Linux and Darwin
+only, and WASI as below.
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `readStdin(buf: u8[], off: i32, len: i32): i32` | at most `len` bytes of stdin into `buf[off, off + len)`, **without waiting**: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds), and the buffer is a writable `u8[]` | write | `term_calls`, `term_import`; `reject_term_read_arity`, `reject_term_read_i32_buffer`, `reject_term_read_readonly` |
+| `waitStdin(timeoutMs: i32): boolean` | wait until stdin is readable, or `timeoutMs` milliseconds pass: `true` when it is readable — its end and an error included, so the read after it answers at once, with `0` or a negative errno that is not `-11`, which a loop treats as the end — and `false` when the time ran out first or a signal ended the wait early — not a Ctrl-Z and `fg` once `setRawMode(true)` has caught SIGTSTP, after which the wait goes on for what is left of the timeout. Before raw mode the system's default stop decides: Linux goes on with what is left, Darwin ends the wait. A negative timeout waits for ever. Not `willreturn` | write | `term_calls`, `term_import`, `term_pty`; `reject_term_wait_string` |
+| `isTerminal(fd: i32): boolean` | whether the descriptor is a terminal (`isatty`) | write | `term_calls`, `term_pty`; `reject_term_is_terminal_arity` |
+| `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stderr when stdout is not one; `[-errno, 0]` when neither is, **`[-25, 0]` for "not a terminal"**, and `[0, 0]` for a terminal no one set a size for. Read it again on each frame to follow a resize | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
+| `setRawMode(on: boolean): i32` | puts stdin's terminal in raw mode (`true`) or back as it was (`false`): `0`, `-25` when stdin is not a terminal, or the host's `-errno` when the terminal refuses. Asking for the mode it is already in changes nothing and answers `0`, so `setRawMode(false)` is always safe | write | `term_calls`, `term_pty`; `reject_term_raw_number`, `reject_term_unknown_export` |
+
+**Errors are numbers**, in `nish:net`'s shape: `>= 0` is success and a negative
+number the failure's errno, negated. The two a program branches on are the
+same number on every platform: `-11`, nothing is waiting, and `-25`, not a
+terminal. Any other is the host's own.
+
+**stdin is never made non-blocking.** `O_NONBLOCK` belongs to the open file
+description, which a shell shares with every program it starts, so a program
+that set it and then crashed would leave the shell's own stdin non-blocking.
+`readStdin` asks `select` with a timeout of `0` before it reads instead, and so
+does `waitStdin`: Darwin's `poll` does not support devices, and answers a
+terminal at once whether a key is waiting or not.
+
+**The loop.** `waitStdin` is the frame clock: a game waits up to one frame for a
+key, reads what came, advances the world and draws, so the wait costs nothing
+when a key arrives early and the frame rate holds when none does.
+
+```ts
+import { readStdin, setRawMode, waitStdin } from "nish:term";
+
+export const main = (): number => {
+  setRawMode(true);
+  const keys: u8[] = new Array<u8>(16);
+  let running = true;
+  while (running) {
+    if (waitStdin(16)) {
+      const n = readStdin(keys, 0, keys.length);
+      if (n === 0 || (n < 0 && n !== -11)) {
+        running = false; // stdin ended, or reading it failed
+      }
+      for (let i = 0; i < n && i < keys.length; i++) {
+        if (keys[i] === 113) {
+          running = false; // q
+        }
+      }
+    }
+    // advance and draw one frame
+  }
+  setRawMode(false);
+  return 0;
+};
+```
+
+#### Raw mode
+
+Raw mode is `cfmakeraw`'s input side without its output side. Echo, line
+editing, CR-to-NL translation, flow control (Ctrl-S, Ctrl-Q) and parity
+stripping are off, bytes are 8 bits wide, and a read answers as soon as one byte
+is there, so a key arrives as its bytes — an arrow as the three of `ESC [ A`.
+Two things stay as they were:
+
+- **`ISIG` stays on.** Ctrl-C is still SIGINT and ends the program, Ctrl-\ is
+  still SIGQUIT and Ctrl-Z still stops it; none of them arrives as a byte (3,
+  28, 26). A program that wants Ctrl-C as a key asks for SIGINT through
+  [`signalFd`](#the-host-the-wall-clock-entropy-file-times-and-signals) and
+  handles it in its loop. Keeping it means a program that is stuck in a loop
+  can always be ended from the keyboard.
+- **`OPOST` stays on**, so `"\n"` still moves to the start of the next line and
+  output needs no `"\r\n"`.
+
+**The terminal is always put back.** Each `setRawMode(true)` that enters raw
+mode saves the termios that was there, and it comes back on
+`setRawMode(false)`; when `main` returns or `process.exit` is called (an
+`atexit` handler); on every panic, a failed check included, whose path ends in
+`_exit` and so is given its own hook; and on every signal whose default action
+ends the program, SIGKILL aside: SIGINT, SIGTERM, SIGQUIT and SIGHUP, SIGPIPE
+from a reader that went away, SIGALRM, SIGUSR1, SIGUSR2, SIGPROF, SIGVTALRM,
+SIGXCPU, SIGXFSZ and SIGSYS, and the faults a program dies of, SIGILL, SIGTRAP,
+SIGABRT, SIGFPE, SIGBUS and SIGSEGV (a stack overflow, or a fault in C code a
+program links). For each a handler is installed only when the program left it
+at its default action: it restores the terminal, puts the default back and
+raises the signal again, so the program still dies of it and its parent sees
+that (exit status 143 for SIGTERM in `term_pty`). The handlers run on a 64 KiB
+alternate stack of the thread that entered raw mode, or on the one that thread
+already had, so a stack overflow there restores the terminal too. The mode is
+marked raw once the switch is made, so a signal that ends the program while
+`TCSAFLUSH` drains the output, or while SIGTTOU holds it stopped in the
+background, leaves the terminal as it was. A program that
+took SIGTERM or SIGINT through `signalFd` keeps it, and puts the terminal back
+itself, or by returning. SIGKILL leaves raw mode behind, and so does a stack
+overflow on a thread other than the one that called `setRawMode(true)`; `stty
+sane` undoes either. SIGTSTP, Ctrl-Z, is caught the same way when it is at its
+default, because no shell can be counted on to: bash puts its own termios back
+while a job is stopped but does not give the job its raw mode back on `fg`, and
+a shell without that bookkeeping puts back nothing. The handler restores the
+terminal, stops the program, and once `fg` or `bg` continues it puts the handler
+back and enters raw mode again, so the terminal is as it was while the program
+is stopped and raw after `fg`; no `setRawMode` on another thread runs between
+the two. A program continued in the background stops again, by SIGTTOU, until
+`fg`. A `waitStdin` the stop interrupts goes on waiting until its timeout,
+measured from when it began. Any other blocking call goes on where the system
+restarts it after a handler (`SA_RESTART`), and ends early where it never
+does, as a `pollWait` does after any signal. A stop by SIGSTOP, which no program can catch,
+leaves the terminal raw at a shell that puts nothing back.
+Job control also stops a program started in the background
+(`app &`) when it calls `setRawMode(true)`, by SIGTTOU, as it stops any program
+that sets the terminal, and the program enters raw mode on `fg`. Two threads that call `setRawMode` at
+once take turns, so the termios saved is the one from before either.
+
+The `term` block of `tests/run.js` runs `term_pty` under `script(1)`, which
+gives it a pseudo-terminal: it is a terminal on both descriptors with a size,
+enters raw mode twice and leaves twice, each `0`, and after it returns in raw
+mode, panics in raw mode, and is killed by SIGTERM, and then by SIGSEGV, while
+it waits in raw mode, `stty -g` reads what it read before. Where `script` is
+missing or makes no terminal, that check is a counted skip that says which.
+
+#### Where there is no terminal
+
+| Host | `readStdin` | `waitStdin` | `isTerminal` | `terminalSize` | `setRawMode` |
+| --- | --- | --- | --- | --- | --- |
+| Linux, Darwin | as above | as above | `isatty` | the ioctl | as above |
+| A pipe or a file | as above | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
+| `--profile wasi` | **waits** for its bytes | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
+| `--target wasm32`, freestanding | refused | refused | refused | refused | refused |
+| Node ([prelude](RUN_UNDER_NODE.md)) | throws | throws | `tty.isatty` | Node's `columns` and `rows` | throws |
+| A browser (`nish/runtime/browser`) | throws | throws | `false` | `[-25, 0]` | throws |
+
+WASI has `read` and `poll` on stdin and no terminal interface. There
+`readStdin` reads without asking `poll` first, because Node's WASI answers a
+zero-timeout poll of stdin with "nothing waiting" while bytes are, so it waits
+for its bytes: call `waitStdin` first, as the loop above does. For the same
+reason a `waitStdin` there waits at least 10 ms: Node's WASI counts a shorter
+wait from before it looks at stdin, and on a busy machine answers "nothing
+waiting" before it has looked. The checker
+accepts the five there, unlike `nish:net`'s, and refuses them on a
+freestanding `--target wasm32` build, whose runtime has no stdin
+(`reject_term_wasm`). Under Node,
+stdin is read only by the event loop, which a program that owns its loop never
+returns to, and Node's own raw mode turns Ctrl-C into a byte, so the three
+that would need either throw, each naming itself. The `term` and `term_wasi`
+blocks of `tests/run.js` feed `term_calls` and `term_import` over a pipe —
+four bytes after a delay, a pipe held open and never written, and a thousand
+bytes — natively and under WASI, and expect the same lines from both.
+
 ### Arrays and strings as receivers
 
 | Member | Semantics | Test |
@@ -7971,7 +8204,7 @@ const tally = (rows: string[]): i32 => {
   | stored into an element, `xs[i] = v` | likewise | NL2420 | `reject_using_arena_element` |
   | stored into memory any other way: handed to a callee that keeps it, held by an object or array literal | always: the escape analysis stops following a stored value | NL2421 | `reject_using_arena_stored` |
   | `push` onto an array | the array is not a `const` the block binds to a fresh array, whatever is pushed: a `push` moves the array's storage into the arena | NL2422 | `reject_using_arena_push` |
-  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return` |
+  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return`, `reject_using_arena_declarator_or_return` |
   | a call to a function that stores an allocation into memory | always | NL2424 | `reject_using_arena_callee_stores` |
   | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
   | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
@@ -8726,6 +8959,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
+| `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
@@ -8743,8 +8977,11 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
   writes memory the runtime shares (`tests/link/caps_parallel`,
   `reject_caps_parallel_clock`).
 - A program is **deterministic** when it reaches none of `clock`, `entropy`,
-  `env`, `ffi`, `fs.read`, `fs.write`, `net` and `process.spawn`: the same argv
-  and stdin then give the same output. `exit` and `signal` keep a program
+  `env`, `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` and `tty`: the
+  same argv and stdin then give the same output. `tty` is among them although
+  stdin is an input a deterministic program may read, because `nish:term` reads
+  it against the clock (`waitStdin`'s timeout, `readStdin`'s "nothing yet")
+  and asks the terminal itself. `exit` and `signal` keep a program
   deterministic (`caps_exit`, `caps_signal`).
 - `--emit-capabilities <file.json>` writes the report: version, entry,
   `deterministic`, the program's set, then each package, module and exported
@@ -9887,12 +10124,17 @@ by the caller.
   byte (`tests/emit-ts/identity/`; the layout is `tests/emit-ts/layout/`).
 - **The flag turns `--warn-portability` on**: those warnings name the sites
   where the TypeScript reading answers differently.
-- **Two kinds of module are refused, and then nothing is written** (exit 1):
+- **Three kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
   or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
   its global name, whose translation is not local to its statement (NL4011,
-  `reject_emit_ts_net`, `reject_emit_ts_net_global`, `reject_emit_ts_signal`).
+  `reject_emit_ts_net`, `reject_emit_ts_net_global`, `reject_emit_ts_signal`),
+  and one with an `x op= e` the TypeScript writes as `x = x op e` (a width
+  that wraps, a checked i32 operation, an integer `/`) whose target's index
+  holds a call, a step or an element read, which would then run twice
+  (NL4012, `reject_emit_ts_compound`). An index of names, their fields
+  (`seen.length`), literals and their arithmetic is repeated, and `pts[i + 1].n += 10` is translated.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/

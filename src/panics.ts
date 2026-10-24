@@ -38,7 +38,7 @@ import { unwrapBoundsParens } from "./bounds"
 import { indexGuardAdvice } from "./checker"
 import { DiagnosticSink, SourceFile } from "./diagnostics"
 import { StringSet } from "./map"
-import { isNetExport, netRangeBuffer } from "./nish-modules"
+import { isNetExport, isTermExport, netRangeBuffer } from "./nish-modules"
 import { N_BINARY, N_CALL, N_IDENT, N_INDEX, N_MEMBER, Node } from "./nodes"
 import { CheckedProgram, FunctionSig } from "./program"
 import { addJsonQuoted, StringBuilder } from "./strings"
@@ -210,9 +210,9 @@ export const builtinPanicKind = (name: string): i32 => {
   if (name === "uncheckedGet" || name === "uncheckedSet" || name === "readCString") {
     return PANIC_UNCHECKED
   }
-  // `netRead` and its siblings check the range of their buffer the way
-  // `dst.set(src, at)` does, through the slice panic (`emitNetCall`).
-  if (isNetExport(name) && netRangeBuffer(name) >= 0) {
+  // `netRead` and its siblings, and `readStdin`, check the range of their
+  // buffer the way `dst.set(src, at)` does, through the slice panic (`emitNetCall`).
+  if ((isNetExport(name) || isTermExport(name)) && netRangeBuffer(name) >= 0) {
     return PANIC_SLICE
   }
   // `String.fromBytes` checks the range it copies with the same panic.

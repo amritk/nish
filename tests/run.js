@@ -66,6 +66,7 @@ import { ctAtLevel, ctTargetName, runtimeChecks } from "./ct-asm-runtime.js"
 import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
+import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
 import {
   packageRootOf,
@@ -124,11 +125,13 @@ process.env.XDG_CACHE_HOME = suiteCache
  * `runtime-cross.c` copies the strings and arrays that cross between them,
  * `runtime-host.c` holds the wall clock, entropy, file times and signals,
  * `runtime-net.c` the sockets of `nish:net`, `runtime-simd.c` the byte
- * searches that read a vector at a time and `runtime-aes.c` AES-GCM on the
- * CPU's AES instructions, split apart so that each carries its own `.text*`
+ * searches that read a vector at a time, `runtime-aes.c` AES-GCM on the
+ * CPU's AES instructions, `runtime-term.c` stdin and the terminal of
+ * `nish:term` and `runtime-bytes.c` the byte-class runs of `nish/bytes`,
+ * split apart so that each carries its own `.text*`
  * budget (the `*_TEXT_BUDGET` constants in tests/runtime-budgets.js). `scripts/build.sh` pairs every one
  * of them with `runtime.c`, and its `--runtime-from` link needs an object for each,
- * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same eight:
+ * which is why `nish run`'s runtime cache (src/run-cache.ts) lists the same ten:
  * the two lists move together, as `runtime-aes.c` joined both with the compiler's
  * first call into it (WP38 S5).
  *
@@ -147,6 +150,8 @@ const RUNTIME_C = [
   "runtime/runtime-net.c",
   "runtime/runtime-simd.c",
   "runtime/runtime-aes.c",
+  "runtime/runtime-term.c",
+  "runtime/runtime-bytes.c",
 ]
 
 /** The driver every case without its own `.c` and without an `export main` is linked with. */
@@ -1500,6 +1505,265 @@ const runWithPort = async (exe, args, onPort) => {
   return { ...r, results: await (talks ?? Promise.resolve([])) }
 }
 
+// ---- `nish:term`, over a pipe and a pseudo-terminal -------------------------------
+//
+// What a golden cannot say about stdin and the terminal, because the case runner
+// gives every program `/dev/null` for stdin and a pipe for stdout: end of stream
+// and no terminal, always. Here a pipe carries bytes in, a pipe held open with
+// nothing in it times `waitStdin` out, and `script` puts a pseudo-terminal under
+// `tests/cases/term_pty`, where raw mode takes and each way out (returning, a
+// panic, SIGTERM) leaves `stty -g` as it found it.
+if (!only || "term".includes(only)) {
+  const termDir = path.join(buildDir, "term")
+  fs.rmSync(termDir, { recursive: true, force: true })
+  fs.mkdirSync(termDir, { recursive: true })
+
+  // The bytes are in the pipe before the program starts, so `readStdin`'s `select`,
+  // which does not wait, finds them; `waitStdin(50)` then sees the writer's end.
+  const callsExe = buildCaseIn(termDir, "term_calls")
+  if (callsExe !== null) {
+    const r = spawnSync("sh", ["-c", 'printf abcd | { sleep 0.2; exec "$0"; }', callsExe], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    check(
+      "term_calls: over a pipe readStdin reads the four bytes waiting, waitStdin sees the end, and the terminal questions answer false and -25",
+      r.status === 0 && r.stdout === "4\ntrue\nfalse\nfalse\n2 -25 0\n-25\n0\n",
+      shown(r)
+    )
+
+    // Open with nothing written: `readStdin` answers -11 at once and `waitStdin(50)`
+    // gives up after its 50 ms rather than at once or never.
+    const held = await new Promise((resolve) => {
+      const start = process.hrtime.bigint()
+      const child = spawn(callsExe, [], { cwd: root, stdio: ["pipe", "pipe", "pipe"] })
+      let out = ""
+      let err = ""
+      const timer = setTimeout(() => child.kill("SIGKILL"), 10000)
+      child.stdout.on("data", (chunk) => {
+        out += chunk
+      })
+      child.stderr.on("data", (chunk) => {
+        err += chunk
+      })
+      child.on("close", (code, signal) => {
+        clearTimeout(timer)
+        child.stdin.destroy()
+        resolve({ code, signal, out, err, ms: Number(process.hrtime.bigint() - start) / 1e6 })
+      })
+    })
+    check(
+      "term_calls: over a pipe held open with nothing in it readStdin answers -11 and waitStdin(50) times out after at least 50 ms",
+      held.code === 0 && held.out === "-11\nfalse\nfalse\nfalse\n2 -25 0\n-25\n0\n" && held.ms >= 50,
+      `exit ${held.code} signal ${held.signal} after ${held.ms.toFixed(1)} ms\nstdout: ${JSON.stringify(held.out)}\nstderr: ${held.err}`
+    )
+  }
+
+  // A thousand bytes in sixteen-byte reads, the key loop of the guide page.
+  const importExe = buildCaseIn(termDir, "term_import")
+  if (importExe !== null) {
+    const r = spawnSync(importExe, [], { cwd: root, encoding: "utf8", input: "k".repeat(1000) })
+    check(
+      "term_import: waitStdin and readStdin drain a thousand piped bytes and stop at the end of the stream",
+      r.status === 0 && r.stdout === "-25\n1000\n",
+      shown(r)
+    )
+  }
+
+  // Under a pseudo-terminal. The script saves `stty -g`, runs each mode of
+  // term_pty, and compares after each; `hold` is asked about `icanon` while it
+  // waits in raw mode, then sent SIGTERM; a second `hold` is sent SIGSEGV, the
+  // fault handlers' path. Its stdin is `/dev/tty` because a
+  // background job of a non-interactive shell otherwise reads `/dev/null`. A
+  // third runs in the foreground under job control (`set -m`) and is stopped
+  // by SIGTSTP, Ctrl-Z's signal, from a background helper: the terminal is as
+  // it was while it is stopped, because the shell puts back nothing, still so
+  // once `bg` continues it, because it stops again by SIGTTOU entering raw
+  // mode from the background, and raw again once `fg` continues it, its wait
+  // going on rather than ending early. Where `jobs` names the signal (dash:
+  // "Stopped (tty output)"), a SIGTTIN stop, a background read that never
+  // re-entered raw mode, does not count. A fourth, `deadline`, is stopped for
+  // three seconds inside a two-second wait and must end within a second of
+  // `fg`, before a helper's SIGTERM: a retry that asked for the whole
+  // timeout again, or for ever, would die of it. The stop comes half a
+  // second after `ready`, so the wait has read its clock, and only while the
+  // program has said `ready` but not `timed`, so it reaches a pid that has
+  // gone only if the program ends between that look and the signal. The
+  // line gives the status the stop left, then `fg`'s; only SIGTSTP's status
+  // (`NISH_PTY_TSTP`) starts the SIGTERM helper and `fg`, and the helper's
+  // process group is killed once `fg` returns, so a wait never stopped fails
+  // with `-`.
+  const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
+  const tstpStatus = 128 + os.constants.signals.SIGTSTP
+  if (!has("script")) {
+    skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
+  } else if (ptyExe !== null) {
+    const sh = path.join(termDir, "pty.sh")
+    fs.writeFileSync(
+      sh,
+      [
+        'E="$1"; D="$2"',
+        'if [ -t 0 ]; then echo pty; else echo "no pty"; exit 0; fi',
+        'same() { stty -g | cmp -s - "$D/before" && echo same || echo changed; }',
+        'stty -g > "$D/before"',
+        '"$E" probe',
+        'echo "probe stty $(same)"',
+        '"$E" exit',
+        'echo "exit $? stty $(same)"',
+        '"$E" panic 2>/dev/null',
+        'echo "panic $? stty $(same)"',
+        ': > "$D/hold.out"',
+        '"$E" hold </dev/tty > "$D/hold.out" & pid=$!',
+        "i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        'echo "held $(stty -a | tr \' ;\' \'\\n\\n\' | grep -x -- \'-\\{0,1\\}icanon\')"',
+        'kill -TERM $pid; wait $pid',
+        'echo "hold $? stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
+        ': > "$D/hold.out"',
+        '"$E" hold </dev/tty > "$D/hold.out" & pid=$!',
+        "i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        'kill -SEGV $pid; wait $pid',
+        'echo "fault $? stty $(same)"',
+        "icanon() { stty -a | tr ' ;' '\\n\\n' | grep -x -- '-\\{0,1\\}icanon'; }",
+        "set -m",
+        ': > "$D/hold.out"',
+        "( i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        '  echo "$(icanon)" > "$D/stop.out"; kill -TSTP "$(cat "$D/hold.pid")" ) &',
+        'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" hold > "$2/hold.out"\' sh "$E" "$D"',
+        'echo "stopped $? stty $(same) was $(cat "$D/stop.out")"',
+        "bg > /dev/null",
+        'i=0; while [ $i -lt 50 ]; do jobs > "$D/jobs"; grep -q Stopped "$D/jobs" && break; sleep 0.1; i=$((i + 1)); done',
+        'echo "background $(grep Stopped "$D/jobs" | grep -vc "tty input") stty $(same) $(icanon)"',
+        '( i=0; while [ $i -lt 50 ] && [ "$(icanon)" != -icanon ]; do sleep 0.1; i=$((i + 1)); done',
+        '  echo "$(icanon)" > "$D/cont.out"; kill -TERM "$(cat "$D/hold.pid")" ) &',
+        "fg > /dev/null",
+        'echo "continued $? stty $(same) was $(cat "$D/cont.out") said $(tr \'\\n\' \' \' < "$D/hold.out")"',
+        ': > "$D/hold.out"',
+        "( i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        '  sleep 0.5; grep -q ready "$D/hold.out" && ! grep -q timed "$D/hold.out" && kill -TSTP "$(cat "$D/hold.pid")" ) &',
+        'sh -c \'echo $$ > "$2/hold.pid"; exec "$1" deadline > "$2/hold.out"\' sh "$E" "$D"; t=$?',
+        's=-; if [ "$t" -eq "$NISH_PTY_TSTP" ]; then sleep 3',
+        '  ( sleep 1; kill -TERM "$(cat "$D/hold.pid")" 2>/dev/null ) & k=$!',
+        '  fg %?deadline > /dev/null; s=$?; kill -TERM -$k 2>/dev/null; fi',
+        'echo "deadline $t $s stty $(same) said $(tr \'\\n\' \' \' < "$D/hold.out")"',
+        "",
+      ].join("\n")
+    )
+    const argv =
+      process.platform === "darwin"
+        ? ["-q", "/dev/null", "sh", sh, ptyExe, termDir]
+        : ["-qec", 'sh "$NISH_PTY_SH" "$NISH_PTY_EXE" "$NISH_PTY_DIR"', "/dev/null"]
+    // The util-linux command is a shell string, so the paths go in by the
+    // environment and a space in the checkout's path stays one argument.
+    const r = spawnSync("script", argv, {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        NISH_PTY_SH: sh,
+        NISH_PTY_EXE: ptyExe,
+        NISH_PTY_DIR: termDir,
+        NISH_PTY_TSTP: String(tstpStatus),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30000,
+    })
+    const lines = String(r.stdout).replaceAll("\r", "").split("\n")
+    if (!lines.includes("pty")) {
+      skip(`term_pty: \`script\` gave no pseudo-terminal here (${shown(r).replaceAll("\n", " ")})`)
+    } else {
+      const want = [
+        "true true true true",
+        "0 0 0 0",
+        "probe stty same",
+        "exit 0 stty same",
+        "panic 1 stty same",
+        "held -icanon",
+        "hold 143 stty same said raw 0 ready ",
+        "fault 139 stty same",
+        `stopped ${tstpStatus} stty same was -icanon`,
+        "background 1 stty same icanon",
+        "continued 143 stty same was -icanon said raw 0 ready ",
+        `deadline ${tstpStatus} 0 stty same said raw 0 ready timed false `,
+      ]
+      check(
+        "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early, and once stopped mid-wait only until its deadline",
+        want.every((line) => lines.includes(line)),
+        `want every line of ${JSON.stringify(want)}\n${shown(r)}`
+      )
+    }
+  }
+
+  // Under Node the two questions answer and the three readers fail loudly.
+  const answered = runCaseUnderPrelude("caps_tty", [])
+  check(
+    "caps_tty: under the prelude terminalSize answers -25 off a terminal, as natively",
+    answered.status === 0 && answered.stdout === "-25\n",
+    shown(answered)
+  )
+  const loud = runCaseUnderPrelude("term_calls", [])
+  check(
+    "term_calls: under the prelude readStdin fails loudly rather than answering",
+    loud.status !== 0 && loud.stderr.includes("`readStdin` has no synchronous reading under Node"),
+    shown(loud)
+  )
+}
+
+// The same two reading programs as `--profile wasi` builds under Node's WASI,
+// where `readStdin` reads without asking whether stdin is ready (runtime-term.c) and the terminal
+// questions answer "not a terminal", so the native expected lines hold; and a
+// `waitStdin(0)`, which there polls for 10 ms rather than not at all.
+if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const wasiDir = path.join(buildDir, "term_wasi")
+    fs.rmSync(wasiDir, { recursive: true, force: true })
+    fs.mkdirSync(wasiDir, { recursive: true })
+    // `waitStdin(0)` with bytes already waiting, which a poll with no wait
+    // under Node's WASI would answer false.
+    fs.writeFileSync(
+      path.join(wasiDir, "term_wait0.ts"),
+      "export const main = (): number => {\n  console.log(waitStdin(0));\n  return 0;\n};\n"
+    )
+    for (const [name, feed, want] of [
+      ["term_calls", "printf abcd", "4\ntrue\nfalse\nfalse\n2 -25 0\n-25\n0\n"],
+      ["term_import", "head -c 1000 /dev/zero", "-25\n1000\n"],
+      ["term_wait0", "printf abcd", "true\n"],
+    ]) {
+      const wasm = path.join(wasiDir, `${name}.wasm`)
+      const built = spawnSync(
+        NISH,
+        [
+          path.join(name === "term_wait0" ? wasiDir : casesDir, `${name}.ts`),
+          "-o",
+          wasiDir + path.sep,
+          "--link",
+          wasm,
+          "--profile",
+          "wasi",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const ran =
+        built.status === 0
+          ? spawnSync("sh", ["-c", `${feed} | { sleep 0.2; exec node --no-warnings examples/wasi-host.mjs "$0"; }`, wasm], {
+              cwd: root,
+              encoding: "utf8",
+            })
+          : built
+      check(
+        name === "term_wait0"
+          ? `${name}: under the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) waitStdin(0) sees bytes already piped`
+          : `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) reads piped stdin and answers -25 for the terminal, as natively`,
+        built.status === 0 && ran.status === 0 && ran.stdout === want,
+        shown(ran)
+      )
+    }
+  } else {
+    skip(
+      `skipped: term_calls, term_import, term_wait0: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the stdin readers are not run`
+    )
+  }
+}
+
 // ---- `nish:net`, against Node's sockets (WP34 N5) ---------------------------------
 //
 // What a golden cannot say about the sockets, because the other end is the
@@ -2363,7 +2627,7 @@ for (const name of [
 for (const [name, count] of [
   ["reject_ffi_handle_arrow_using", 2],
   ["reject_ffi_handle_dispose_forms", 15],
-  ["reject_ffi_handle_walk_forms", 9],
+  ["reject_ffi_handle_walk_forms", 8],
   ["reject_ffi_handle_walk_ctor_param", 6],
   ["reject_ffi_handle_walk_function_type", 2],
 ]) {
@@ -3840,7 +4104,8 @@ if (!only || "portability".includes(only) || only.startsWith("port_")) {
 // The program written back out as TypeScript (src/emit-ts.ts). Each fixture in
 // tests/emit-ts/<group>/ with a `.out` is an entry: it is written out, the
 // `entry.ts` run under Node and the program run natively, and both must print
-// the `.out`. Beside it, `<name>.files` lists every path the output holds, and
+// the `.out` and exit 0 — or, where a `<name>.err` sits beside it, write that
+// to stderr and exit 1. Beside it, `<name>.files` lists every path the output holds, and
 // `<name>.expected.ts` (and `<name>.entry.expected.ts`, where there is one) is
 // the module as written; in `identity/` there is no `.expected.ts`, because a
 // class-A module's golden is its own source, byte for byte. `UPDATE_GOLDENS=1`
@@ -3907,10 +4172,15 @@ if (!only || "emit-ts".includes(only)) {
         )
       }
       const want = fs.readFileSync(path.join(dir, `${name}.out`), "utf8")
+      // A fixture with a `.err` panics: that stderr, exit 1, on both sides.
+      const errFile = path.join(dir, `${name}.err`)
+      const wantErr = fs.existsSync(errFile) ? fs.readFileSync(errFile, "utf8") : null
+      const wantStatus = wantErr === null ? 0 : 1
+      const ends = (r) => r.status === wantStatus && r.stdout === want && (wantErr === null || r.stderr === wantErr)
       const node = spawnSync("node", [...emitTsNodeFlags, path.join(out, "entry.ts")], { cwd: root, encoding: "utf8" })
       check(
-        `emit-ts: ${label} under Node prints ${name}.out and exits 0`,
-        node.status === 0 && node.stdout === want,
+        `emit-ts: ${label} under Node prints ${name}.out and exits ${wantStatus}`,
+        ends(node),
         `exit ${node.status}\n${node.stdout}${node.stderr}`
       )
       const exe = path.join(work, group.name, `${name}.exe`)
@@ -3920,8 +4190,8 @@ if (!only || "emit-ts".includes(only)) {
       })
       const native = linked.status === 0 ? spawnSync(exe, [], { cwd: root, encoding: "utf8" }) : linked
       check(
-        `emit-ts: ${label} natively prints ${name}.out and exits 0`,
-        native.status === 0 && native.stdout === want,
+        `emit-ts: ${label} natively prints ${name}.out and exits ${wantStatus}`,
+        linked.status === 0 && ends(native),
         `exit ${native.status}\n${native.stdout}${native.stderr}`
       )
     }
@@ -4038,6 +4308,7 @@ if (!only || "emit-ts".includes(only)) {
     ["NL4011", "reject_emit_ts_net"],
     ["NL4011", "reject_emit_ts_net_global"],
     ["NL4011", "reject_emit_ts_signal"],
+    ["NL4012", "reject_emit_ts_compound"],
   ]) {
     const dir = path.join(work, name)
     const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
@@ -7013,6 +7284,19 @@ if (!only || "p256 gen-p256-table".includes(only)) {
   )
 }
 
+// The power-of-five table in std/json-tokenizer.ts is what
+// scripts/gen-json-pow5.mjs computes with exact integer arithmetic, word for
+// word: a hand edit to one entry would round every number whose exponent reads
+// it to the wrong double, and only a number with that exponent would show it.
+if (!only || "json gen-json-pow5".includes(only)) {
+  const r = spawnSync("node", ["scripts/gen-json-pow5.mjs", "--check"], { cwd: root, encoding: "utf8" })
+  check(
+    "json: the power-of-five table in std/json-tokenizer.ts is what scripts/gen-json-pow5.mjs generates",
+    r.status === 0 && r.stdout === "gen-json-pow5: 1302 words, as generated\n",
+    shown(r)
+  )
+}
+
 // WP29 P1: `dst` shorter than `src` panics before any element is written, with
 // `std/threads.ts`'s own message. The link loop above compares stdout and the
 // exit code only, so the wording is pinned here, on stderr, the way
@@ -7951,6 +8235,8 @@ if (!only || "c_symbol_private_libm".includes(only)) {
 runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
 
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
+
+runFfiHandleChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir, wasiSysroot: WASI_SYSROOT })
 
 // #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
 // length in its loop condition as well as after the call to `f`, so once `f`
@@ -11771,11 +12057,18 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
   const namesTestedIn = (text) => [...(text ?? "").matchAll(/name === "([^"]+)"/g)].map((m) => m[1])
 
   const builtinsDecl = declarationOf(selfSource("builtins.ts"), "isBuiltinFunction")
-  // `nish:unsafe`'s exports are builtins through `isUnsafeExport`, and
-  // `readCString` among them allocates, so they are read from there too.
+  // An arrow with no braces, so it ends at the blank line after it.
+  const modulesSource = selfSource("nish-modules.ts")
+  const termExportsAt = modulesSource.search(/^export const isTermExport\b/m)
+  const termExportsDecl =
+    termExportsAt < 0 ? "" : modulesSource.slice(termExportsAt, modulesSource.indexOf("\n\n", termExportsAt))
+  // `nish:unsafe`'s and `nish:term`'s exports are builtins through
+  // `isUnsafeExport` and `isTermExport`, and `readCString` and `terminalSize`
+  // among them allocate, so they are read from there too.
   const builtins = [
     ...namesTestedIn(builtinsDecl),
     ...namesTestedIn(declarationOf(selfSource("nish-modules.ts"), "isUnsafeExport")),
+    ...namesTestedIn(termExportsDecl),
   ]
   const emitBuiltins = selfSource("emit-builtins.ts")
   const calleesDecl = declarationOf(emitBuiltins, "identifierBuiltinCalleesNamed")
@@ -11954,6 +12247,34 @@ if (!only || "allocating builtins".includes(only) || only.startsWith("mem")) {
         "readCString: a function returning its result keeps the arena (no nish_arena_release before the ret)",
         r.status === 0 &&
           body.includes("@nish.ffi.str(") &&
+          body.includes("@nish_str_concat(") &&
+          !body.includes("nish_arena_release"),
+        `${probeSrc}\n${ir}`
+      )
+      continue
+    }
+    // `terminalSize` takes nothing and answers an `i32[]`, a shape the generator
+    // below does not write, so its probe is written out too.
+    if (builtin === "terminalSize") {
+      const probeSrc = [
+        "export const probe = (arg0: string): i32[] => {",
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: Nish source text; the template is the program's
+        "  const label = `probe ${arg0}`;",
+        "  console.log(label);",
+        "  return terminalSize();",
+        "};",
+        "",
+      ].join("\n")
+      const probeTs = path.join(buildDir, "alloc_probe_terminalSize.ts")
+      const probeLl = path.join(buildDir, "alloc_probe_terminalSize.ll")
+      fs.writeFileSync(probeTs, probeSrc)
+      const r = spawnSync(NISH, [probeTs, "-o", probeLl], { cwd: root, encoding: "utf8" })
+      const ir = r.status === 0 ? fs.readFileSync(probeLl, "utf8") : r.stderr
+      const body = ir.match(/^define [^\n]*@probe\([^\n]*\{\n([\s\S]*?)^\}/m)?.[1] ?? ""
+      check(
+        "terminalSize: a function returning its result keeps the arena (no nish_arena_release before the ret)",
+        r.status === 0 &&
+          body.includes("@nish_terminal_size(") &&
           body.includes("@nish_str_concat(") &&
           !body.includes("nish_arena_release"),
         `${probeSrc}\n${ir}`
@@ -12535,7 +12856,7 @@ if (!only || "runtime_test".includes(only)) {
   )
   const rtRun = rt.status === 0 ? spawnSync(path.join(buildDir, "runtime_test")) : null
   check(
-    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c and runtime-aes.c compile warning-free together and pass the runtime unit test",
+    "runtime.c, runtime-os.c, runtime-parallel.c, runtime-cross.c, runtime-host.c, runtime-net.c, runtime-simd.c, runtime-aes.c, runtime-term.c and runtime-bytes.c compile warning-free together and pass the runtime unit test",
     rtRun !== null && rtRun.status === 0,
     String(rt.stderr) +
       (rtRun ? `exit ${rtRun.status} ${rtRun.signal ?? ""}\n${rtRun.stdout}${rtRun.stderr}` : "")
@@ -13386,7 +13707,7 @@ if (!only || "simd".includes(only)) {
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
     check(
-      `simd: ${label}: ${said.replace(/^(index-of-any|regex-scan|aes-gcm): /, "") || "the agreement driver"}`,
+      `simd: ${label}: ${said.replace(/^(index-of-any|byte-runs|regex-scan|aes-gcm): /, "") || "the agreement driver"}`,
       r !== null && r.status === 0 && /cases agree/.test(said),
       cc.status !== 0 ? cc.stderr : `${r.stdout}${r.stderr}${r.error ?? ""}`
     )
@@ -13401,6 +13722,16 @@ if (!only || "simd".includes(only)) {
   agree(`native ${process.arch}`, [], path.join(simdDir, "index-of-any"), native)
   const scanDriver = "tests/simd/regex-scan.c"
   agree(`regex-scan native ${process.arch}`, [], path.join(simdDir, "regex-scan"), native, scanDriver)
+
+  // WP38 S6a: the byte-class runs of runtime-bytes.c, which `nish/bytes`'s skips
+  // lower to, are held to the same standard by tests/simd/byte-runs.c: every class
+  // edge planted at every offset of every length 0..160, every UTF-8 sequence at each
+  // narrowed second-byte edge cut by `to` at every byte, and 150,000 fuzzed runs,
+  // each read up to a guard page so a path that loads past `to` faults, against a
+  // reference that decodes the code point; then the resolver under each `NISH_SIMD`.
+  // It runs everywhere the byte search's driver does.
+  const runs = "tests/simd/byte-runs.c"
+  agree(`byte-runs native ${process.arch}`, [], path.join(simdDir, "byte-runs"), native, runs)
 
   // WP38 S5: runtime/runtime-aes.c runs AES-GCM on AES-NI and PCLMULQDQ, or on the
   // ARMv8 AES and PMULL instructions, and a program takes that path or the bitsliced
@@ -13441,26 +13772,25 @@ if (!only || "simd".includes(only)) {
   }
 
   if (WASI_SYSROOT && has("wasm-ld")) {
-    for (const [label, flags] of [
-      ["wasm32-wasi, the scalar base path", []],
-      ["wasm32-wasi -msimd128", ["-msimd128"]],
+    for (const [label, flags, source, name] of [
+      ["wasm32-wasi, the scalar base path", [], driver, "index-of-any"],
+      ["wasm32-wasi -msimd128", ["-msimd128"], driver, "index-of-any"],
+      ["byte-runs wasm32-wasi, the scalar base path", [], runs, "byte-runs"],
+      ["byte-runs wasm32-wasi -msimd128", ["-msimd128"], runs, "byte-runs"],
+      ["regex-scan wasm32-wasi, the scalar base path", [], scanDriver, "regex-scan"],
+      ["regex-scan wasm32-wasi -msimd128", ["-msimd128"], scanDriver, "regex-scan"],
     ]) {
-      for (const [name, source] of [
-        ["index-of-any", driver],
-        ["regex-scan", scanDriver],
-      ]) {
-        agree(
-          name === "index-of-any" ? label : `${name} ${label}`,
-          ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, ...flags],
-          path.join(simdDir, `${name}${flags.join("")}.wasm`),
-          (wasm) =>
-            spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
-              cwd: root,
-              encoding: "utf8",
-            }),
-          source
-        )
-      }
+      agree(
+        label,
+        ["--target=wasm32-wasi", `--sysroot=${WASI_SYSROOT}`, ...flags],
+        path.join(simdDir, `${name}${flags.join("")}.wasm`),
+        (wasm) =>
+          spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], {
+            cwd: root,
+            encoding: "utf8",
+          }),
+        source
+      )
     }
   } else {
     skip("simd: no WASI sysroot (set WASI_SYSROOT): the wasm32 scalar and simd128 paths are not run")
@@ -13494,6 +13824,13 @@ if (!only || "simd".includes(only)) {
       for (const [label, source, out, what, wantLine] of [
         ["aarch64 through binfmt, the NEON path", driver, a64, "the NEON path", null],
         [
+          "byte-runs aarch64 through binfmt, the NEON path",
+          runs,
+          path.join(simdDir, "byte-runs.aarch64"),
+          "the NEON path of the byte-class runs",
+          /cases agree across scalar base;/,
+        ],
+        [
           "regex-scan aarch64 through binfmt, the NEON path",
           scanDriver,
           path.join(simdDir, "regex-scan.aarch64"),
@@ -13517,11 +13854,11 @@ if (!only || "simd".includes(only)) {
         // file to /bin/sh, which fails on it. So the driver ran when it printed its own
         // line (a summary or a FAIL) or died of a signal, and not otherwise.
         const ran =
-          r !== null && (r.signal !== null || /^(index-of-any:|regex-scan:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
+          r !== null && (r.signal !== null || /^(index-of-any:|byte-runs:|regex-scan:|aes-gcm:|FAIL )/m.test(String(r.stdout)))
         if (linked.status !== 0 || ran) {
           const said = judge(label, linked, r)
           if (wantLine !== null) {
-            check(`simd: ${label} names armv8-aes-pmull as the path it ran`, wantLine.test(said), said)
+            check(`simd: ${label} names ${wantLine.source.split("across ")[1].replace(";", "")} as the paths it ran`, wantLine.test(said), said)
           }
         } else {
           skip(
@@ -13567,7 +13904,7 @@ if (!only || "simd".includes(only)) {
         .split("\n")
         .map((line) => line.trim().split(/\s+/).pop())
         .filter((name) =>
-          /^(nish_any\w*|nish_str_index_of_any|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
+          /^(nish_any\w*|nish_str_index_of_any|nish_run\w*|nish_bytes_\w*|nish_scan\w*|nish_regex_scan|nish_cpu_has_avx2|nish_aes\w*|__cpu_model|__cpu_indicator_init)$/.test(
             name
           )
         )
@@ -13591,9 +13928,9 @@ if (!only || "simd".includes(only)) {
       const ctrlExe = path.join(simdDir, `calls-kernel.${profile}`)
       const ctrl = kept(["tests/simd/calls-kernel.c"], ctrlExe, profile)
       const ran = ctrl.ok ? spawnSync(ctrlExe, [], { encoding: "utf8" }) : null
-      const paths = ["nish_any_scalar", "nish_any_base", "nish_any_resolve"]
+      const paths = ["nish_any_scalar", "nish_any_base", "nish_any_resolve", "nish_run_scalar", "nish_run_base", "nish_run_resolve"]
       if (process.arch === "x64") {
-        paths.push("nish_any_avx2")
+        paths.push("nish_any_avx2", "nish_run_avx2")
       }
       check(
         `simd: --profile ${profile} drops all of runtime-simd.c from hello, and keeps every path in a program that calls it`,
@@ -13603,7 +13940,7 @@ if (!only || "simd".includes(only)) {
           paths.every((f) => ctrl.names.includes(f)) &&
           !ctrl.names.includes("__cpu_model") &&
           ran !== null &&
-          String(ran.stdout) === "2\n",
+          String(ran.stdout) === "2\n4\n",
         `hello keeps: ${quiet.names.join(" ") || "(none)"} ${quiet.why}\n` +
           `the control keeps: ${ctrl.names.join(" ")} ${ctrl.why}\nthe control printed: ${ran ? ran.stdout : "(not run)"}`
       )
@@ -13661,6 +13998,112 @@ if (!only || "simd".includes(only)) {
     )
   } else {
     skip("simd: no WASI sysroot (set WASI_SYSROOT): runtime-aes.c's wasm32 build is not linked")
+  }
+
+  // The freestanding `wasm` profile links runtime-wasm.c, not runtime.c, so nothing
+  // pairs runtime-bytes.c with it: build.sh adds the unit for IR that calls one of its
+  // kernels, compiled for the host or with `--target wasm32`, as it adds runtime-aes.c.
+  // Each kind of IR links and answers the four calls as Node runs the source; a module
+  // that calls none links no runtime-bytes.c, and an input list that names it is not
+  // given a second copy. `--trace-symbol` says which objects define the blank kernel.
+  if (has("wasm-ld")) {
+    const freeDir = path.join(simdDir, "bytes-freestanding")
+    fs.rmSync(freeDir, { recursive: true, force: true })
+    fs.mkdirSync(freeDir, { recursive: true })
+    const source = path.join(freeDir, "runs.ts")
+    fs.writeFileSync(
+      source,
+      [
+        'import { copyBytes, skipBlank, skipDigits, skipJsonText } from "nish/bytes"',
+        "",
+        "export const probe = (k: i32): i32 => {",
+        "  const b: u8[] = [32, 32, 9, 49, 50, 51, 97, 98, 34, 120]",
+        "  if (k === 0) {",
+        "    return skipBlank(b, 0, 10)",
+        "  }",
+        "  if (k === 1) {",
+        "    return skipDigits(b, 3, 10)",
+        "  }",
+        "  if (k === 2) {",
+        "    return skipJsonText(b, 6, 10)",
+        "  }",
+        "  const d: u8[] = [0, 0, 0, 0]",
+        "  copyBytes(d, 1, b, 3, 3)",
+        "  return toI32(d[1]) + toI32(d[3])",
+        "}",
+        "",
+      ].join("\n")
+    )
+    /** `file` compiled into `dir` with `flags`, and its `.ll` files. */
+    const irOf = (file, dir, flags) => {
+      const r = spawnSync(NISH, [file, ...flags, "-o", `${dir}${path.sep}`], { cwd: root, encoding: "utf8" })
+      const lls =
+        r.status === 0
+          ? fs
+              .readdirSync(dir)
+              .filter((f) => f.endsWith(".ll"))
+              .map((f) => path.join(dir, f))
+          : []
+      return { lls, why: r.status === 0 ? "" : r.stderr }
+    }
+    /** `ir` linked freestanding beside `extra`: the exit, its output, how many objects define the kernel, and what `probe` answers. */
+    const linkFree = (ir, extra, name) => {
+      if (ir.lls.length === 0) {
+        return { ok: false, definitions: -1, got: "", why: ir.why }
+      }
+      const out = path.join(freeDir, `${name}.wasm`)
+      const r = spawnSync(
+        "bash",
+        [
+          "scripts/build.sh",
+          ...ir.lls,
+          "runtime/runtime-wasm.c",
+          ...extra,
+          "-Wl,--trace-symbol=nish_bytes_skip_blank",
+          "-o",
+          out,
+          "--profile",
+          "wasm",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const definitions = `${r.stdout}${r.stderr}`
+        .split("\n")
+        .filter((l) => /definition of nish_bytes_skip_blank/.test(l)).length
+      let got = ""
+      if (r.status === 0 && ir.lls.some((f) => f.endsWith("runs.ll"))) {
+        try {
+          const instance = new WebAssembly.Instance(new WebAssembly.Module(fs.readFileSync(out)), { env: {} })
+          got = [0, 1, 2, 3].map((k) => instance.exports.probe(k)).join(",")
+        } catch (e) {
+          got = `the module trapped: ${e}`
+        }
+      }
+      return { ok: r.status === 0, definitions, got, why: r.stderr }
+    }
+    const hostRuns = irOf(source, path.join(freeDir, "host"), [])
+    const wasmRuns = irOf(source, path.join(freeDir, "wasm32"), ["--target", "wasm32"])
+    const kinds = [
+      ["for the host", linkFree(hostRuns, [], "host")],
+      ["with --target wasm32", linkFree(wasmRuns, [], "wasm32")],
+    ]
+    for (const [kind, linked] of kinds) {
+      check(
+        `simd: the freestanding --profile wasm link of nish/bytes's runs compiled ${kind} adds runtime-bytes.c once, and answers as Node does`,
+        linked.ok && linked.definitions === 1 && linked.got === "3,6,8,100",
+        `${linked.why}objects defining nish_bytes_skip_blank: ${linked.definitions}\ngot  ${linked.got}\nwant 3,6,8,100`
+      )
+    }
+    const plain = linkFree(irOf(path.join(root, "examples", "add.ts"), path.join(freeDir, "plain"), []), [], "plain")
+    const named = linkFree(hostRuns, ["runtime/runtime-bytes.c"], "named")
+    check(
+      "simd: the freestanding --profile wasm link adds runtime-bytes.c to no module that calls no run, and not again when the inputs name it",
+      plain.ok && plain.definitions === 0 && named.ok && named.definitions === 1 && named.got === "3,6,8,100",
+      `a module with no run: ${plain.ok ? "linked" : "failed"}, ${plain.definitions} object(s) define nish_bytes_skip_blank\n${plain.why}\n` +
+        `runtime-bytes.c named: ${named.ok ? "linked" : "failed"}, ${named.definitions} object(s)\n${named.why}`
+    )
+  } else {
+    skip("simd: no wasm-ld: runtime-bytes.c's freestanding wasm32 link is not tried")
   }
 }
 
@@ -18440,7 +18883,7 @@ if (!only || "run-command".includes(only) || "nish-run".includes(only)) {
 }
 
 // ---- the runtime cache: the C runtime compiled once per recipe -----------------------
-// `--link` and `nish run` (debug, speed, size) compile the runtime's eight translation
+// `--link` and `nish run` (debug, speed, size) compile the runtime's ten translation
 // units once into `$XDG_CACHE_HOME/nish/runtime/<sha256 of the key>/` and link every
 // later program against those objects (src/compile.ts `cachedRuntime`,
 // docs/security/cli.md CLI-11). What a link compiled is read off a `CC` wrapper on
@@ -18495,6 +18938,8 @@ if (!only || "runtime-cache".includes(only)) {
       "runtime-net.c",
       "runtime-simd.c",
       "runtime-aes.c",
+      "runtime-term.c",
+      "runtime-bytes.c",
     ]
     const entryFiles = ["key", ...units.map((u) => u.replace(/\.c$/, ".o"))].sort().join(",")
 
@@ -18502,7 +18947,7 @@ if (!only || "runtime-cache".includes(only)) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eight objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the ten objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -18511,7 +18956,7 @@ if (!only || "runtime-cache".includes(only)) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the eight runtime units once",
+      "runtime cache: the miss compiled each of the ten runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
@@ -19059,9 +19504,9 @@ if (!only || "cpu-level".includes(only)) {
         base.stderr + baseLines.join("\n")
       )
       check(
-        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all eight runtime units, the module and the link",
+        "cpu level: --cpu x86-64-v3 puts -march=x86-64-v3 -ffp-contract=off on all ten runtime units, the module and the link",
         level.status === 0 &&
-          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 8 &&
+          levelLines.filter((l) => / -c /.test(l) && /runtime[a-z-]*\.c( |$)/.test(l)).length === 10 &&
           levelLines.some((l) => !/ -c /.test(l)) &&
           levelLines.every(marched),
         level.stderr + levelLines.join("\n")
@@ -19719,9 +20164,14 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-simd.c",
       // And the seventh (WP38 S5): AES-GCM on the CPU's AES instructions.
       "runtime/runtime-aes.c",
+      // And the tenth (WP38 S6a): the byte-class runs of `nish/bytes`, which
+      // std/json's tokenizer calls.
+      "runtime/runtime-bytes.c",
       // And the eighth: the copy-at-join crossings of strings and arrays between
       // threads, which every parallel construct that answers one calls.
       "runtime/runtime-cross.c",
+      // And the ninth: stdin and the terminal of `nish:term`.
+      "runtime/runtime-term.c",
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

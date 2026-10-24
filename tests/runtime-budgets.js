@@ -47,8 +47,21 @@
  * well, and `nish_die`, the arithmetic and out-of-memory panics, writes its message through
  * the same retrying loop (`nish_write_all`) instead of `fputs`, which gives up on `EINTR`.
  * Measured 3,684 on 2026-10-16 with clang 18 on linux-x64.
+ *
+ * Raised by 14, to 3,698, for `nish_fatal_exit` (`nish:term`): a panic that ends in
+ * `_exit` runs no atexit handler, so it calls this where it called `_exit(1)`, and it
+ * runs `nish_fatal_hook` first, which `setRawMode(true)` sets to its restore. Without it
+ * a failed bounds check in a terminal UI left the shell in raw mode. Each call site is a
+ * call where a call was, so the raise is the function alone (a load, a test, the
+ * hook's call and the `_exit`); the hook's pointer is `.bss`. Measured 3,698 against
+ * 3,684 on 2026-10-23 with clang 18 on linux-x64; calling the hook from the inlined
+ * `nish_panic_claim` instead measured 3,752, because every site grew its own test.
+ * It is not a unit of its own, as the rule for an addition asks, because `runtime.c`
+ * links alone (a C host's one file, and the direct `clang` lines in `tests/run.js`) and
+ * its own panics call it: defined in `runtime-term.c` the core measured 3,675, and a
+ * lone `runtime.c` no longer linked.
  */
-const RUNTIME_TEXT_BUDGET = 3684
+const RUNTIME_TEXT_BUDGET = 3698
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-os.c`.
  *
@@ -116,8 +129,11 @@ const RUNTIME_OS_TEXT_BUDGET = 2560
  * 3,860 on 2026-10-16 with clang 18 on linux-x64, and then 3,885 with the newline's retry
  * and `nish_die` writing through the same loop (as above). The raise is what was measured
  * and no more, as `nish_wipe`'s was.
+ *
+ * Raised by 14, to 3,899, for `nish_fatal_exit` (as above), measured 3,899 against 3,885
+ * on 2026-10-23 with clang 18 on linux-x64.
  */
-const RUNTIME_THREADS_TEXT_BUDGET = 3885
+const RUNTIME_THREADS_TEXT_BUDGET = 3899
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c
  * runtime/runtime-parallel.c` -- the half that divides a range of work across
@@ -394,6 +410,43 @@ const RUNTIME_SIMD_TEXT_BUDGET = 2560
  * as every ceiling here was set.
  */
 const RUNTIME_AES_TEXT_BUDGET = 2560
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
+ * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
+ * `terminalSize` and `setRawMode`, with the restore that the exit, a panic and
+ * every signal whose default ends the program run while raw mode holds, and the
+ * SIGTSTP handler that gives the terminal back on Ctrl-Z and raw mode on `fg`.
+ *
+ * Measured **1,419 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
+ * `.text`, 333 of them the SIGTSTP handler and the lock it shares with
+ * `setRawMode` (`nish_term_on_signal`, `_mask`, `_hold`, `_drop` and `_leave`),
+ * and 261 `nish_stdin_ready`, whose `select` a caught Ctrl-Z interrupts and
+ * which then asks again for what is left of a monotonic deadline (100 of them).
+ * The clock is `runtime-os.c`'s `nish_monotonic_nanos` (36 bytes), which a
+ * program that waits links from there and this ceiling does not count.
+ * A ninth translation unit rather than more of `runtime-os.c`, which had 177
+ * bytes of its ceiling left, because the rule is a new file with its own
+ * measured ceiling, never a raised one. The budget is the next 256-byte boundary
+ * above the measurement, as every ceiling here was set.
+ */
+const RUNTIME_TERM_TEXT_BUDGET = 1536
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-bytes.c`
+ * -- the byte-class runs of `nish/bytes` (WP38 S6a): `nish_bytes_skip_blank`,
+ * `nish_bytes_skip_digits` and `nish_bytes_skip_json_text`, their scalar, SSE2 and AVX2
+ * paths, the UTF-8 step the JSON text class takes, and the resolver with its CPUID
+ * question and `NISH_SIMD` pin.
+ *
+ * Measured **1,303 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the scalar path 137, the SSE2 path 265, the AVX2 path 368, the UTF-8 step
+ * 238 and its resume 29, the resolver 204 and the three entry points 62. A tenth
+ * translation unit rather than more of `runtime-simd.c`: folded in, the two measured
+ * 1,960 bytes against that file's ceiling of 768, and the rule is a new file with its
+ * own measured ceiling, never a raised one. Apart, a program that searches text carries
+ * no JSON run and one that tokenizes JSON no byte-set search. The budget is the next
+ * 256-byte boundary above the measurement, as every ceiling here was set.
+ */
+const RUNTIME_BYTES_TEXT_BUDGET = 1536
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
@@ -525,6 +578,8 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-net.c", NET_TEXT_BUDGET, "NET_TEXT_BUDGET", []],
   ["runtime/runtime-simd.c", RUNTIME_SIMD_TEXT_BUDGET, "RUNTIME_SIMD_TEXT_BUDGET", []],
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
+  ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
+  ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
 /**

@@ -127,24 +127,51 @@ import becomes a relative path ending in `.ts`. An imported interface or type
 alias is marked `import { type Pair }`. A module that needs none of this is
 written unchanged, byte for byte.
 
+Some constructs JavaScript spells differently are rewritten too:
+
+- **`x.orReturn()`** becomes a local, `const __t0 = x;`, and
+  `if (__t0.isErr()) return Err(__t0.error);` before its statement, with
+  `__t0.value` in its place. Where that would change when the call runs —
+  the right of `&&`, a branch of `?:`, a loop's condition, after a call in
+  the same statement — it stays a call, and the function around it gets a
+  `try` that turns the call's throw into the `Err` it returns.
+- **An `enum`** becomes a `const` object of its members' values and a type of
+  the same name: `enum Shape { Circle, Square = 4 }` is written as
+  `const Shape = { Circle: 0, Square: 4 } as const;` and
+  `type Shape = (typeof Shape)[keyof typeof Shape];`.
+- **`Arena.used()`** and its siblings become `nish/runtime`'s `arenaUsed`,
+  `arenaMark`, `arenaRelease` and `arenaReset`, and a `Result` annotation
+  imports `Result` from it.
+
 The flag also turns on `--warn-portability`. Those warnings name the places
 where your program can answer differently under Node.
 
-Two kinds of module cannot be written. In either case `nish` exits 1 and
+Three kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
 ```text
 app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
+app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
 ```
 
 The second is reported at each `nish:net` import and at each call to a
 `nish:net` function, `signalFd` or `readSignal`, imported or not.
 
+The third is reported at an `x op= e` that Node needs written as
+`x = x op e`, such as `+=` on a `u8` that has to wrap, when the index in `x`
+holds a call, a `++`, or another array read: `hist[data[0]] += 10`. Read the
+index into a `const` first, `const at = data[0]`, then `hist[at] += 10`.
+
 Not every builtin has a runtime export yet. The `nish:unsafe` functions
 (`uncheckedGet`, `wrappingAdd`, `readCString` and the rest) are written as
 imports from `nish/runtime` that Node cannot resolve, so a program that uses
 them does not run under Node yet.
+
+The `nish:term` functions are written as imports from `nish/runtime` too, and
+they resolve. Under Node, `isTerminal` and `terminalSize` answer, and
+`readStdin`, `waitStdin` and `setRawMode` throw, naming themselves, as they do
+when a program is [run under Node](terminal.md#where-it-runs).
 
 `--emit-ts` writes a directory instead of IR, so it exits 2 if you also
 pass `-o`, `--link`, `--emit-ast`, `--emit-checked`, `--emit-header`,

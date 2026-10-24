@@ -79,7 +79,7 @@ const STRING_METHODS: string = "charCodeAt, substring, slice, indexOf, startsWit
 function isValueReceiver(ctx: CheckContext, receiver: Node, scope: Scope): boolean -> @isValueReceiver [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.capturesOuter CheckedProgram.builtinImport CheckedProgram.constant Scope.lookup
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=CheckContext.capturesOuter#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=CheckContext.capturesOuter#0
   pointer receiver: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0
   stackSites=0 stackLocals=0
@@ -91,7 +91,7 @@ function nullableHint(ctx: CheckContext, receiver: i32, receiverExpr: Node, name
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: receiver
   calls: CheckContext.textOf TypeTable.stripNull TypeTable.typeName isOptionalChain nish_str_concat
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=CheckContext.textOf#0 CheckContext.textOf#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=CheckContext.textOf#0 CheckContext.textOf#0
   pointer receiverExpr: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0 CheckContext.textOf#1 CheckContext.textOf#1
   stackSites=0 stackLocals=0
   callee +0:7 isOptionalChain -> @isOptionalChain
@@ -107,7 +107,7 @@ function nullableHint(ctx: CheckContext, receiver: i32, receiverExpr: Node, name
 function neverNullMessage(ctx: CheckContext, receiverExpr: Node): string -> @neverNullMessage [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_str_concat
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=CheckContext.textOf#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=CheckContext.textOf#0
   pointer receiverExpr: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1
   stackSites=0 stackLocals=0
   callee +0:8 CheckContext.textOf -> @CheckContext.textOf
@@ -116,7 +116,7 @@ function linkReceiver(ctx: CheckContext, access: Node, receiverExpr: Node, recei
   sharedWrite: +0:3
   escaping: receiver
   calls: CheckContext.errorAtProperty TypeTable.isNullable TypeTable.stripNull neverNullMessage nish_panic_index
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 neverNullMessage#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 neverNullMessage#0
   pointer access: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   pointer receiverExpr: size=40 writesThrough=false captured=false passedTo=neverNullMessage#1
   stackSites=0 stackLocals=0
@@ -129,7 +129,7 @@ function checkMember(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @check
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorAtProperty
   calls: CheckContext.errorAtProperty CheckedProgram.enumNamed TypeTable.isArray TypeTable.isNullable TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.typeName checkArrayProperty checkEnumMember checkExpression checkNamespaceProperty checkResultProperty checkStringProperty checkStructProperty checkUnionTag isValueReceiver linkReceiver neverNullMessage nish_panic_index nish_str_concat nullableHint refuseParameterMember refuseSecretMember
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=isValueReceiver#0 CheckContext.errorAtProperty#0 neverNullMessage#0 checkEnumMember#0 checkNamespaceProperty#0 linkReceiver#0 checkExpression#0 refuseSecretMember#0 CheckContext.errorAtProperty#0 nullableHint#0 refuseParameterMember#0 checkStringProperty#0 checkResultProperty#0 checkArrayProperty#0 checkStructProperty#0 checkUnionTag#0 CheckContext.errorAtProperty#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=isValueReceiver#0 CheckContext.errorAtProperty#0 neverNullMessage#0 checkEnumMember#0 checkNamespaceProperty#0 linkReceiver#0 checkExpression#0 refuseSecretMember#0 CheckContext.errorAtProperty#0 nullableHint#0 refuseParameterMember#0 checkStringProperty#0 checkResultProperty#0 checkArrayProperty#0 checkStructProperty#0 checkUnionTag#0 CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1 checkEnumMember#1 checkNamespaceProperty#1 linkReceiver#1 refuseSecretMember#2 CheckContext.errorAtProperty#1 refuseParameterMember#3 checkStringProperty#1 checkResultProperty#1 checkArrayProperty#1 checkStructProperty#1 checkUnionTag#1 CheckContext.errorAtProperty#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=isValueReceiver#2 checkExpression#2 refuseParameterMember#6
   stackSites=0 stackLocals=0
@@ -166,7 +166,7 @@ function checkUnionTag(ctx: CheckContext, expr: Node, receiver: i32): i32 -> @ch
   sharedWrite: +0:3
   escaping: receiver
   calls: CheckContext.errorAtProperty TypeTable.tagEnumOf TypeTable.tagNameOf nish_panic_index nish_str_eq unionMemberMessage
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 unionMemberMessage#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 unionMemberMessage#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
   local -5:9 tag: string (const)
@@ -178,7 +178,7 @@ function unionMemberMessage(ctx: CheckContext, receiverExpr: Node, union: i32, n
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: union
   calls: TypeTable.tagNameOf TypeTable.typeName nish_str_concat unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer receiverExpr: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 receiver: Node (const)
@@ -190,7 +190,7 @@ function checkEnumMember(ctx: CheckContext, expr: Node, info: EnumInfo): i32 -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.errorAtProperty EnumInfo.hasMember EnumInfo.memberValue nish_panic_index nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   pointer info: size=64 writesThrough=false captured=false passedTo=EnumInfo.hasMember#0 EnumInfo.memberValue#0
   stackSites=0 stackLocals=0
@@ -202,7 +202,7 @@ function checkStructProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 
   sharedWrite: via refuseCollectionMember
   escaping: receiver
   calls: CheckContext.errorAtProperty StructInfo.field StructInfo.method StructInfo.methodTemplate TypeTable.typeName nish_str_concat refuseCollectionMember structOf
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=structOf#0 refuseCollectionMember#0 CheckContext.errorAtProperty#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=structOf#0 refuseCollectionMember#0 CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=refuseCollectionMember#2 CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
@@ -222,7 +222,7 @@ function refuseSecretMember(ctx: CheckContext, receiver: i32, member: Node): boo
   sharedWrite: via CheckContext.errorAtProperty
   escaping: receiver
   calls: CheckContext.errorAtProperty TypeTable.isSecret isSecretSource memberMessage
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0
   pointer member: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
   callee +0:8 TypeTable.isSecret -> @TypeTable.isSecret
@@ -233,7 +233,7 @@ function structOf(ctx: CheckContext, type: i32): StructInfo | null -> @structOf 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: CheckedProgram.struct TypeTable.nameOf
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 CheckedProgram.struct -> @CheckedProgram.struct
   callee +0:22 TypeTable.nameOf -> @TypeTable.nameOf
@@ -241,7 +241,7 @@ function isGlobalMapType(ctx: CheckContext, type: i32): boolean -> @isGlobalMapT
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.stripNull isCollectionStruct isMapOwner structOf
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=structOf#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=structOf#0
   stackSites=0 stackLocals=0
   local +0:9 info: StructInfo | null (const)
   callee +0:16 structOf -> @structOf
@@ -252,7 +252,7 @@ function toStringFix(ctx: CheckContext, call: Node, receiver: i32): Edit[] -> @t
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: receiver
   calls: isNumeric nish_panic_index nish_str_eq templateFix
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=templateFix#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=templateFix#0
   pointer call: size=40 writesThrough=false captured=false passedTo=templateFix#1
   stackSites=0 stackLocals=0
   local +0:9 access: Node (const)
@@ -264,7 +264,7 @@ function exposeMethod(ctx: CheckContext, method: FunctionSig): void -> @exposeMe
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: FunctionSig.definedIn
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer method: size=136 writesThrough=true captured=false passedTo=FunctionSig.definedIn#0
   stackSites=0 stackLocals=0
   callee -1:28 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -272,7 +272,7 @@ function checkMethodCall(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @c
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: CheckContext.errorAtProperty CheckContext.errorFix CheckedProgram.isCollections Node.constructor StructInfo.field StructInfo.method StructInfo.methodTemplate TypeTable.isArray TypeTable.isNullable TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.typeName checkArrayMethod checkExpression checkGenericCall checkMapGet checkMethodArguments checkResultMethod checkStringMethod checkWalkIterable exposeMethod isCollectionStruct isWalkIterable linkReceiver nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nullableHint recordUpdateFusion refuseCollectionMember refuseParameterMember refuseSecretMember spawnFormFor structOf toStringFix unionMemberMessage
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=linkReceiver#0 checkExpression#0 refuseSecretMember#0 CheckContext.errorAtProperty#0 nullableHint#0 refuseParameterMember#0 CheckContext.errorAtProperty#0 unionMemberMessage#0 checkStringMethod#0 checkResultMethod#0 checkArrayMethod#0 CheckContext.errorFix#0 toStringFix#0 structOf#0 isWalkIterable#0 checkWalkIterable#0 refuseCollectionMember#0 checkMapGet#0 checkGenericCall#0 exposeMethod#0 CheckContext.errorAtProperty#0 checkMethodArguments#0 exposeMethod#0 recordUpdateFusion#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=linkReceiver#0 checkExpression#0 refuseSecretMember#0 CheckContext.errorAtProperty#0 nullableHint#0 refuseParameterMember#0 CheckContext.errorAtProperty#0 unionMemberMessage#0 checkStringMethod#0 checkResultMethod#0 checkArrayMethod#0 CheckContext.errorFix#0 toStringFix#0 structOf#0 isWalkIterable#0 checkWalkIterable#0 refuseCollectionMember#0 checkMapGet#0 checkGenericCall#0 exposeMethod#0 CheckContext.errorAtProperty#0 checkMethodArguments#0 exposeMethod#0 recordUpdateFusion#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=checkStringMethod#1 checkResultMethod#1 checkArrayMethod#1 toStringFix#1 isWalkIterable#2 checkWalkIterable#1 checkMapGet#1 checkGenericCall#1 checkMethodArguments#1 recordUpdateFusion#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2 refuseParameterMember#6 checkStringMethod#4 checkResultMethod#5 checkArrayMethod#5 checkWalkIterable#5 checkMapGet#4 checkGenericCall#3 checkMethodArguments#5
   stackSites=1 stackLocals=1
@@ -336,9 +336,9 @@ function checkMapGet(ctx: CheckContext, expr: Node, info: StructInfo, args: Node
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: StructInfo.method TypeTable.maybeOf TypeTable.typeName checkMethodArguments internalErrorFor nish_exit nish_panic_index nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkMethodArguments#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkMethodArguments#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#1
-  pointer info: size=152 writesThrough=false captured=false passedTo=StructInfo.method#0 StructInfo.method#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.method#0 StructInfo.method#0
   pointer args: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkMethodArguments#5
   stackSites=0 stackLocals=0
@@ -354,7 +354,7 @@ function mapReadSpelling(ctx: CheckContext, call: Node, scope: Scope): string ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via typedArraySpelling
   calls: isGlobalMapType nish_panic_index nish_str_concat nish_str_eq peelSpelling typedArraySpelling unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=isGlobalMapType#0 typedArraySpelling#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=isGlobalMapType#0 typedArraySpelling#0
   pointer call: size=40 writesThrough=false captured=false
   pointer scope: size=56 writesThrough=false captured=false passedTo=typedArraySpelling#2
   stackSites=0 stackLocals=0
@@ -367,8 +367,8 @@ function mapReadSpelling(ctx: CheckContext, call: Node, scope: Scope): string ->
 function isWalkIterable(ctx: CheckContext, info: StructInfo, call: Node, access: Node): boolean -> @isWalkIterable
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.isCollections isCollectionStruct nish_panic_index nish_str_eq unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false
-  pointer info: size=152 writesThrough=false captured=false passedTo=isCollectionStruct#0
+  pointer ctx: size=288 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false passedTo=isCollectionStruct#0
   pointer call: size=40 writesThrough=false captured=false
   pointer access: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -380,8 +380,8 @@ function walkReaderOf(ctx: CheckContext, info: StructInfo, name: string): Functi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=136
   sharedWrite: via nish_exit
   calls: StructInfo.method internalErrorFor isMapOwner nish_exit nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false
-  pointer info: size=152 writesThrough=false captured=false passedTo=StructInfo.method#0 isMapOwner#0 StructInfo.method#0
+  pointer ctx: size=288 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.method#0 isMapOwner#0 StructInfo.method#0
   stackSites=0 stackLocals=0
   local +0:9 read: FunctionSig | null (const)
   callee +0:16 StructInfo.method -> @StructInfo.method
@@ -392,9 +392,9 @@ function checkWalkIterable(ctx: CheckContext, call: Node, info: StructInfo, acce
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: StructInfo.method TypeTable.typeName checkMethodArguments internalErrorFor nish_exit nish_panic_index nish_str_concat walkReaderOf
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkMethodArguments#0 walkReaderOf#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkMethodArguments#0 walkReaderOf#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#1
-  pointer info: size=152 writesThrough=false captured=false passedTo=StructInfo.method#0 walkReaderOf#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.method#0 walkReaderOf#1
   pointer access: size=40 writesThrough=false captured=false
   pointer args: size=40 writesThrough=false captured=false passedTo=checkMethodArguments#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkMethodArguments#5
@@ -410,7 +410,7 @@ function checkMethodArguments(ctx: CheckContext, call: Node, callee: FunctionSig
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error TypeTable.assignable TypeTable.typeName checkExpression nish_panic_index nish_str_concat nish_str_from_i32 takesDeclaredContext
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.error#0 checkExpression#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.error#0 checkExpression#0 CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   pointer callee: size=136 writesThrough=false captured=false
   pointer args: size=40 writesThrough=false captured=false
@@ -434,7 +434,7 @@ function checkNew(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkNew
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: CheckContext.error CheckContext.errorType CheckedProgram.newTypeArgumentsOf CheckedProgram.struct CheckedProgram.structTemplate TypeTable.typeName channelCapacityMessage checkMethodArguments checkNewArray dateRefusal instantiateWritten isChannelClass isCollectionTemplate isSecretSource isSecretTemplate newMessage nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkNewArray#0 instantiateWritten#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 checkMethodArguments#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkNewArray#0 instantiateWritten#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 checkMethodArguments#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=checkNewArray#1 CheckedProgram.newTypeArgumentsOf#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 checkMethodArguments#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkNewArray#3 checkMethodArguments#5
   stackSites=0 stackLocals=0
@@ -483,7 +483,7 @@ function takesDeclaredContext(value: Node): boolean -> @takesDeclaredContext
   callee +6:12 takesDeclaredContext -> @takesDeclaredContext
 function hasMethods(info: StructInfo): boolean -> @hasMethods
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function classLiteralMessage(name: string): string -> @classLiteralMessage
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -494,7 +494,7 @@ function checkObjectLiteral(ctx: CheckContext, expr: Node, scope: Scope, want: i
   sharedWrite: via CheckContext.errorType
   escaping: want
   calls: CheckContext.error CheckContext.errorType StructInfo.field TypeTable.assignable TypeTable.isEntered TypeTable.isStruct TypeTable.stripNull TypeTable.typeName checkExpression classLiteralMessage hasMethods holderLiteralMessage isThreadsStruct nish_array_grow nish_panic_index nish_str_concat nish_str_eq secretFieldOf structOf takesDeclaredContext
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.error#0 CheckContext.error#0 checkExpression#0 CheckContext.error#0 CheckContext.error#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=1 stackLocals=1
@@ -543,7 +543,7 @@ function checkMemberAssignment(ctx: CheckContext, expr: Node, scope: Scope): i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.errorType
   calls: CheckContext.errorAtProperty CheckContext.errorType CheckContext.textOf CheckedProgram.isCollections StructInfo.field TypeTable.isArray TypeTable.isResult TypeTable.isStruct TypeTable.isUnion TypeTable.typeName assignInto assignableReadonly checkExpression isCollectionStruct isValueReceiver nish_panic_index nish_str_concat nish_str_eq refuseCollectionMember refuseParameterMember refuseSecretMember structOf
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=isValueReceiver#0 CheckContext.errorType#0 CheckContext.textOf#0 checkExpression#0 refuseParameterMember#0 refuseSecretMember#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 refuseCollectionMember#0 CheckContext.errorAtProperty#0 assignableReadonly#0 CheckContext.errorType#0 assignInto#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=isValueReceiver#0 CheckContext.errorType#0 CheckContext.textOf#0 checkExpression#0 refuseParameterMember#0 refuseSecretMember#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 CheckContext.errorType#0 structOf#0 CheckContext.errorType#0 refuseCollectionMember#0 CheckContext.errorAtProperty#0 assignableReadonly#0 CheckContext.errorType#0 assignInto#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=assignInto#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=isValueReceiver#2 checkExpression#2 refuseParameterMember#6 assignInto#2
   stackSites=0 stackLocals=0
@@ -590,8 +590,8 @@ function refuseCollectionMember(ctx: CheckContext, info: StructInfo, at: Node, c
   sharedWrite: via CheckContext.errorAtProperty
   escaping: call
   calls: CheckContext.errorAtProperty CheckedProgram.isCollections TypeTable.typeName isCollectionStruct isMapOwner iteratorPlaceReason nish_str_concat nish_str_eq
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 iteratorPlaceReason#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0
-  pointer info: size=152 writesThrough=false captured=false passedTo=isCollectionStruct#0 isMapOwner#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 iteratorPlaceReason#0 CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=isCollectionStruct#0 isMapOwner#0
   pointer at: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 iteratorPlaceReason#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
   callee +0:8 isCollectionStruct -> @isCollectionStruct
@@ -611,7 +611,7 @@ function iteratorPlaceReason(ctx: CheckContext, access: Node, call: boolean): st
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via ParentTable.constructor
   calls: ParentTable.constructor linkedParent nish_panic_index nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer access: size=40 writesThrough=false captured=false passedTo=linkedParent#1
   stackSites=1 stackLocals=1
   local +0:9 parents: ParentTable (const)
@@ -628,8 +628,8 @@ function iteratorPlaceReason(ctx: CheckContext, access: Node, call: boolean): st
 function assignableReadonly(ctx: CheckContext, info: StructInfo, target: Node, receiverExpr: Node, op: string): boolean -> @assignableReadonly
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StructInfo.field nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false
-  pointer info: size=152 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer ctx: size=288 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.field#0
   pointer target: size=40 writesThrough=false captured=false
   pointer receiverExpr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -641,7 +641,7 @@ function checkStringProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 
   sharedWrite: via CheckContext.errorAtProperty
   escaping: receiver
   calls: CheckContext.errorAtProperty CheckContext.numberType TypeTable.typeName nish_str_concat nish_str_eq
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.numberType#0 CheckContext.errorAtProperty#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.numberType#0 CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
   callee +0:12 CheckContext.numberType -> @CheckContext.numberType
@@ -651,7 +651,7 @@ function checkIndexArgument(ctx: CheckContext, arg: Node, scope: Scope, name: st
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
   calls: CheckContext.error CheckContext.numberType TypeTable.typeName checkExpression isNumeric nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.numberType#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.numberType#0 CheckContext.error#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -665,7 +665,7 @@ function checkStringArgument(ctx: CheckContext, arg: Node, scope: Scope, name: s
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkExpression
   calls: CheckContext.error TypeTable.typeName checkExpression nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkExpression#0 CheckContext.error#0
   pointer arg: size=40 writesThrough=true captured=true passedTo=checkExpression#1 CheckContext.error#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -677,7 +677,7 @@ function checkStringMethod(ctx: CheckContext, call: Node, access: Node, args: No
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via checkBuiltinArity
   calls: CheckContext.errorAtProperty CheckContext.errorType CheckContext.numberType checkBuiltinArity checkIndexArgument checkStringArgument nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkIndexArgument#0 CheckContext.numberType#0 CheckContext.errorType#0 checkIndexArgument#0 CheckContext.errorType#0 checkIndexArgument#0 CheckContext.errorType#0 checkStringArgument#0 checkIndexArgument#0 CheckContext.numberType#0 checkBuiltinArity#0 checkStringArgument#0 CheckContext.errorAtProperty#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkIndexArgument#0 CheckContext.numberType#0 CheckContext.errorType#0 checkIndexArgument#0 CheckContext.errorType#0 checkIndexArgument#0 CheckContext.errorType#0 checkStringArgument#0 checkIndexArgument#0 CheckContext.numberType#0 checkBuiltinArity#0 checkStringArgument#0 CheckContext.errorAtProperty#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 CheckContext.errorType#1 CheckContext.errorType#1 CheckContext.errorType#1 checkBuiltinArity#1
   pointer access: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3

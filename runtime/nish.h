@@ -9,7 +9,8 @@
  * functions, the directory and subprocess calls, `nish_getenv`, the monotonic
  * clock, `nish_platform` / `nish_arch` — and runtime-parallel.c, runtime-host.c,
  * runtime-net.c, runtime-simd.c (the byte searches that read a vector at a
- * time) and runtime-aes.c (AES-GCM on the CPU's AES instructions) split off
+ * time), runtime-aes.c (AES-GCM on the CPU's AES instructions) and
+ * runtime-term.c (stdin and the terminal, `nish:term`) split off
  * the same way since. They are separate so that each carries its own measured
  * code-size ceiling (docs/wp7-runtime.md, "Runtime additions and budget"); a
  * host links all of them, which `scripts/build.sh` does for you when handed
@@ -154,6 +155,19 @@ int64_t nish_str_index_of_from(const nish_str *s, const nish_str *sub, int64_t f
    set outside 1..16 bytes is answered by the scalar path rather than refused,
    but only 1..16 is the contract. Variable-time: never call it on a secret. */
 int64_t nish_str_index_of_any(const nish_str *s, const nish_str *set, int64_t from);
+/* WP38 S6a, the byte-class runs of `nish/bytes`: the first index i in
+   [from, to) whose byte p[i] is outside the class, or `to`. `p` is an array's
+   data and the caller has clamped 0 <= from <= to <= its length, so no byte at
+   or past `to` is read. `skip_blank` steps over JSON's four blanks (space, tab,
+   newline, carriage return) and `skip_digits` over 0-9. `skip_json_text` steps
+   over printable ASCII other than `"` and `\`, and over every well-formed
+   UTF-8 sequence (RFC 3629) that ends at or before `to`; a malformed or cut-off
+   sequence stops the run at its lead byte. They live in runtime/runtime-bytes.c
+   and choose their path as `nish_str_index_of_any` does. Variable-time: never
+   call them on a secret. */
+int64_t nish_bytes_skip_blank(const uint8_t *p, int64_t from, int64_t to);
+int64_t nish_bytes_skip_digits(const uint8_t *p, int64_t from, int64_t to);
+int64_t nish_bytes_skip_json_text(const uint8_t *p, int64_t from, int64_t to);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
 void nish_print(const nish_str *s);
 /* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */
@@ -170,6 +184,11 @@ void nish_panic_claim(void);
 #else
 #define nish_panic_claim() ((void)0)
 #endif
+/* How a panic that skips atexit ends: `_exit(1)`, after `nish_fatal_hook`
+   when it is set (runtime.c). The hook is the terminal's restore while
+   `setRawMode(true)` holds (runtime-term.c), and null otherwise. */
+__attribute__((noreturn)) void nish_fatal_exit(void);
+extern void (*nish_fatal_hook)(void);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
 nish_str *nish_str_from_i32(int32_t v);
 nish_str *nish_str_from_f64(double v);
@@ -554,6 +573,25 @@ int32_t nish_poll_add(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_modify(int32_t loop, int32_t fd, int32_t events, int32_t token);
 int32_t nish_poll_remove(int32_t loop, int32_t fd);
 int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
+
+/* ---- The terminal, runtime/runtime-term.c, `nish:term` -------------------
+ *
+ * `nish_read_stdin(buf, off, len)`: at most `len` bytes of stdin into `buf`
+ * from `off`, without blocking: the count, 0 at the end of the stream, -11
+ * when nothing is waiting, or another `-errno`. `nish_wait_stdin(timeout_ms)`:
+ * whether stdin became readable before `timeout_ms` passed (negative waits
+ * for ever). `nish_is_terminal(fd)`: `isatty`. `nish_terminal_size()`: a fresh
+ * `i32[]` of `[columns, rows]`, or `[-errno, 0]`, -25 for "not a terminal".
+ * `nish_set_raw_mode(on)`: 0, -25 when stdin is not a terminal, or `-errno`;
+ * the saved termios comes back on `false`, at exit, on a panic and on every
+ * signal left at its default that ends the program, SIGKILL aside (the list is
+ * runtime-term.c's). -11 and -25 are those
+ * numbers on WASI too, where the three TTY calls answer "not a terminal". */
+int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len);
+bool nish_wait_stdin(int32_t timeout_ms);
+bool nish_is_terminal(int32_t fd);
+nish_array *nish_terminal_size(void);
+int32_t nish_set_raw_mode(bool on);
 
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`
