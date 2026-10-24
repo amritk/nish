@@ -130,14 +130,15 @@ to the table. On x86-64 at `3313da3`, with `--asan`:
 | Seed | Programs | Ending one-past | Agree | Differ / unexpected / ASan | Time (4 lanes) |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | 20261024 | 6 000 | 2 980 | 6 000 | 0 / 0 / 0 | 734 s |
+| 3141592653 | 6 000 | 2 996 | 6 000 | 0 / 0 / 0 | 749 s |
 
 Each family was in 1 444 to 1 554 of seed 20261024's programs and ended
-346 to 398 of them one-past. The
-wiring was checked against a compiler that drops every bounds check unless
-`--no-elision` is passed: over six programs it reported the two that end
-one-past in an elided access (`derived:addlit!`, `derived:u16!`) as DIFFER,
-with an ASan `heap-buffer-overflow` as the witness, and reduced them to 21 of
-32 and 20 of 23 lines.
+346 to 398 of them one-past; seed 3141592653's were in 1 458 to 1 594
+and 353 to 403. The wiring was checked against a compiler that drops every
+bounds check unless `--no-elision` is passed: over six programs it reported
+the two that end one-past in an elided access (`derived:addlit!`,
+`derived:u16!`) as DIFFER, with an ASan `heap-buffer-overflow` as the
+witness, and reduced them to 21 of 32 and 20 of 23 lines.
 
 What this does not cover: the shapes are proofgen's, so a rule the generator
 never exercises (an elision added after it, or a combination its blocks do
