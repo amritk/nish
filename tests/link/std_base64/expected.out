@@ -1,0 +1,37 @@
+PASS  §10: empty
+PASS  §10: f
+PASS  §10: fo
+PASS  §10: foo
+PASS  §10: foob
+PASS  §10: fooba
+PASS  §10: foobar
+PASS  + and /
+PASS  every byte value, positions 0 to 4
+PASS  length 3069
+PASS  bytes 3069
+PASS  length 3070
+PASS  bytes 3070
+PASS  length 3071
+PASS  bytes 3071
+PASS  length 3072
+PASS  bytes 3072
+PASS  length 3073
+PASS  bytes 3073
+PASS  length 3074
+PASS  bytes 3074
+PASS  length 3075
+PASS  bytes 3075
+PASS  length 3076
+PASS  bytes 3076
+PASS  3072 bytes are one 4096-character chunk
+PASS  length of 0
+PASS  length of 1
+PASS  length of 2
+PASS  length of 3
+PASS  length of 4
+PASS  the longest length
+PASS  into: the end it answers
+PASS  into: what it wrote, and nothing around it
+PASS  into: an empty range writes nothing
+PASS  into: chunked equals whole
+base64: 36 passed, 0 failed, 0 skipped
