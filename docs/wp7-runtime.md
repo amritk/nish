@@ -187,6 +187,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | `runtime/runtime-cross.c` | the copies at a join: a task's or a chunk's `string` or scalar array out of its arena and into the taker's, every string a `Channel<string>` sends, a map element kept as its chunk rewinds, and the copies a `Mutex` owns | 1,536 (`RUNTIME_CROSS_TEXT_BUDGET`) | 1,427 (2026-10-17) |
 | `runtime-cross.c -DNISH_THREADS=1` | the same, with the lock over the set of a `Mutex`'s copies | 1,536 (`RUNTIME_CROSS_THREADS_TEXT_BUDGET`) | 1,508 (2026-10-17) |
 | `runtime/runtime-term.c` | `nish:term`: stdin's non-blocking read and wait, `isatty`, the window size, raw mode and its restore, and the restore bytes | 2,048 (`RUNTIME_TERM_TEXT_BUDGET`) | 1,825 (2026-10-24) |
+| `runtime/runtime-sandbox.c` | `--sandbox`: the capability drop, the Landlock ruleset and the seccomp filter `nish_sandbox` applies from `.preinit_array`, and `nish_sandbox_check` ([wp37](wp37-os-sandbox.md) stage 1, [security/sandbox.md](security/sandbox.md)) | 2,304 (`RUNTIME_SANDBOX_TEXT_BUDGET`) | 2,253 (2026-10-24) |
 
 **How the ceilings moved.**
 
@@ -224,6 +225,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-23 | `runtime-bytes.c` (1,303), wp38 S6a; folded into `runtime-simd.c` the two measured 1,960 | bytes 1,536 |
 | 2026-10-23 | `nish/regex`'s match-start scan, `nish_regex_scan`: `runtime-simd.c` 675 → 2,337. The scan is the 1,631: the AVX2 path 1,323 (one copy each for a window of 1, 2 and 3 positions, so the tables stay in registers; a width of 4 shares the third), the scalar path 202, its resolver 97 and the entry point 9. `indexOfAny`'s resolver now calls `nish_simd_choose` (158) rather than inlining it (203 → 76), so the two share one CPU question. Out of line, the candidate check would save 76 bytes (2,261) but took `/example/` over the bench prose from 0.195 to 0.215 ms, against 0.199 for Rust's `regex` crate, so it stays inlined | simd 2,560 |
 | 2026-10-24 | `setTerminalRestore`, bytes written to stdout on the way out: `runtime-term.c` 1,419 → 1,825. `nish_set_terminal_restore` 238 and `nish_term_finish` 94 (the `write` loop, inlined), the handlers' setup split out of `setRawMode` as `nish_term_arm` (+16 net), the restore keeping the panic hook while bytes wait (+10), and every signal blocked while the bytes go out (+48). Raised in place, not split off, because the bytes go out from this file's static handlers under its lock | term 2,048 |
+| 2026-10-24 | `runtime-sandbox.c` (2,253), wp37 stage 1; its own unit so a program built without `--sandbox` links none of it | sandbox 2,304 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same

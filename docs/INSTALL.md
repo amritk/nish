@@ -360,7 +360,7 @@ it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
 skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
-`runtime/` (the C runtime — ten translation units, the wasm subset and their header),
+`runtime/` (the C runtime — eleven translation units, the wasm subset and their header),
 `scripts/build.sh` (the link pipeline), `std/` (the standard library) and
 `docs/AI.md` (the rules card). The
 compiler itself is not in it: it arrives as one prebuilt

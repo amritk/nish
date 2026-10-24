@@ -19706,7 +19706,7 @@ if (!only || "runtime-cache".includes(only)) {
     const afterFirst = runtimeEntries()
     const entry = afterFirst.length === 1 ? path.join(runtimeRoot, afterFirst[0]) : ""
     check(
-      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the ten objects and the key and nothing else",
+      "runtime cache: a miss creates one entry, named by 64 hex digits, holding the eleven objects and the key and nothing else",
       first.status === 0 &&
         runOut("hello").stdout === "hello from Nish\n" &&
         afterFirst.length === 1 &&
@@ -19715,7 +19715,7 @@ if (!only || "runtime-cache".includes(only)) {
       first.stderr + afterFirst.join(", ") + (entry.length > 0 ? fs.readdirSync(entry).join(", ") : "")
     )
     check(
-      "runtime cache: the miss compiled each of the ten runtime units once",
+      "runtime cache: the miss compiled each of the eleven runtime units once",
       compiledC().join(",") === [...units].sort().join(","),
       compiledC().join(", ")
     )
