@@ -142,6 +142,8 @@ module std/crypto/x509.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
+import base64Decode from "nish/crypto/base64url" -> function @nish.base64Decode
+import base64Encode from "nish/crypto/base64url" -> function @nish.base64Encode
 import p256PublicKey from "nish/crypto/p256" -> function @nish.p256PublicKey
 import p256SignSha256 from "nish/crypto/p256" -> function @nish.p256SignSha256
 import p256VerifySha256 from "nish/crypto/p256" -> function @nish.p256VerifySha256
@@ -493,62 +495,6 @@ function x509Bytes(text: string): u8[] -> @nish.x509Bytes
   local +0:9 out: u8[] (const)
   local +1:9 n: i32 (const)
   local +2:12 k: i32 (let)
-function x509RangeMask(c: i32, lo: i32, hi: i32): i32 -> @nish.x509RangeMask
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-function x509Base64CharOf(v: i32): i32 -> @nish.x509Base64CharOf
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: v
-  calls: nish.x509RangeMask
-  stackSites=0 stackLocals=0
-  callee +0:13 x509RangeMask -> @nish.x509RangeMask
-  callee +1:13 x509RangeMask -> @nish.x509RangeMask
-  callee +2:13 x509RangeMask -> @nish.x509RangeMask
-  callee +3:13 x509RangeMask -> @nish.x509RangeMask
-function x509Base64SextetOf(c: i32): i32 -> @nish.x509Base64SextetOf
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: c
-  calls: nish.x509RangeMask
-  stackSites=0 stackLocals=0
-  local +0:9 upper: i32 (const)
-  callee +0:22 x509RangeMask -> @nish.x509RangeMask
-  local +1:9 lower: i32 (const)
-  callee +1:22 x509RangeMask -> @nish.x509RangeMask
-  local +2:9 digit: i32 (const)
-  callee +2:22 x509RangeMask -> @nish.x509RangeMask
-  local +3:9 plus: i32 (const)
-  callee +3:21 x509RangeMask -> @nish.x509RangeMask
-  local +4:9 slash: i32 (const)
-  callee +4:22 x509RangeMask -> @nish.x509RangeMask
-  local +5:9 value: i32 (const)
-function x509Base64Encode(data: u8[]): string -> @nish.x509Base64Encode
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.x509Base64CharOf nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_new
-  pointer data: size=0 writesThrough=false captured=false
-  stackSites=1 stackLocals=1
-  local +0:9 parts: string[] (const)
-  local +1:7 acc: i32 (let)
-  local +2:7 bits: i32 (let)
-  local +3:12 k: i32 (let)
-  callee +8:38 x509Base64CharOf -> @nish.x509Base64CharOf
-  callee +12:36 x509Base64CharOf -> @nish.x509Base64CharOf
-  local +15:9 tail: i32 (const)
-function x509Base64Decode(text: string): u8[] | null -> @nish.x509Base64Decode
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.x509Base64SextetOf nish_panic nish_panic_index nish_panic_overflow
-  stackSites=0 stackLocals=0
-  local +0:9 n: i32 (const)
-  local +4:7 pad: i32 (let)
-  local +8:9 chars: i32 (const)
-  local +9:9 out: u8[] (const)
-  local +10:9 outLen: i32 (const)
-  local +11:7 bad: i32 (let)
-  local +12:7 acc: i32 (let)
-  local +13:7 bits: i32 (let)
-  local +14:7 j: i32 (let)
-  local +15:12 k: i32 (let)
-  local +19:13 v: i32 (const)
-  callee +19:22 x509Base64SextetOf -> @nish.x509Base64SextetOf
 function x509StartsWith(text: string, prefix: string): boolean -> @nish.x509StartsWith
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_str_eq nish_str_new
@@ -562,35 +508,36 @@ function x509EndsWith(text: string, suffix: string): boolean -> @nish.x509EndsWi
   local +1:9 m: i32 (const)
 function derToPem(der: u8[], label: string): string -> @nish.derToPem [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.x509Base64Encode nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_new
-  pointer der: size=0 writesThrough=false captured=false passedTo=nish.x509Base64Encode#0
+  calls: nish.base64Encode nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_new
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.base64Encode#0
   stackSites=1 stackLocals=1
   local +0:9 body: string (const)
-  callee +0:24 x509Base64Encode -> @nish.x509Base64Encode
+  callee +0:24 base64Encode -> @nish.base64Encode
   local +1:9 n: i32 (const)
   local +2:9 lines: string[] (const)
   local +3:12 at: i32 (let)
 function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.x509Base64Decode nish.x509EndsWith nish.x509StartsWith nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_str_concat nish_str_eq nish_str_new
+  calls: nish.base64Decode nish.x509EndsWith nish.x509StartsWith nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_str_concat nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
-  local -46:9 out: u8[][] (const)
-  local -45:9 n: i32 (const)
-  local -43:7 inside: string (let)
-  local -42:7 body: string[] (let)
-  local -41:7 shortSeen: boolean (let)
-  local -40:7 lineStart: i32 (let)
-  local -38:9 lineEnd: i32 (let)
-  local -34:11 next: i32 (const)
-  local -30:11 line: string (const)
-  local -28:11 length: i32 (const)
-  callee -26:11 x509StartsWith -> @nish.x509StartsWith
-  callee -26:50 x509EndsWith -> @nish.x509EndsWith
-  callee -22:18 x509StartsWith -> @nish.x509StartsWith
-  callee -19:16 x509StartsWith -> @nish.x509StartsWith
+  local -49:9 out: u8[][] (const)
+  local -48:9 n: i32 (const)
+  local -46:7 inside: string (let)
+  local -45:7 body: string[] (let)
+  local -44:7 shortSeen: boolean (let)
+  local -43:7 lineStart: i32 (let)
+  local -41:9 lineEnd: i32 (let)
+  local -37:11 next: i32 (const)
+  local -33:11 line: string (const)
+  local -31:11 length: i32 (const)
+  callee -29:11 x509StartsWith -> @nish.x509StartsWith
+  callee -29:50 x509EndsWith -> @nish.x509EndsWith
+  callee -25:18 x509StartsWith -> @nish.x509StartsWith
+  callee -22:16 x509StartsWith -> @nish.x509StartsWith
+  local -14:13 text: string (const)
   local -13:13 der: u8[] | null (const)
-  callee -13:32 x509Base64Decode -> @nish.x509Base64Decode
+  callee -13:59 base64Decode -> @nish.base64Decode
 function x509Sec1Key(der: u8[], start: i32, end: i32, needCurve: boolean): Secret<u8[]> | null -> @nish.x509Sec1Key
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256PublicKey

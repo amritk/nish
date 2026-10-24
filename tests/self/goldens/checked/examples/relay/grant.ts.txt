@@ -257,6 +257,59 @@ function base64urlDecode(text: string): u8[] | null -> @nish.base64urlDecode [ex
   local +18:12 k: i32 (let)
   local +19:11 v: i32 (const)
   callee +19:20 base64urlSextetOf -> @nish.base64urlSextetOf
+function base64CharOf(v: i32): i32 -> @nish.base64CharOf
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: v
+  calls: nish.base64urlRangeMask
+  stackSites=0 stackLocals=0
+  callee +0:13 base64urlRangeMask -> @nish.base64urlRangeMask
+  callee +1:13 base64urlRangeMask -> @nish.base64urlRangeMask
+  callee +2:13 base64urlRangeMask -> @nish.base64urlRangeMask
+  callee +3:13 base64urlRangeMask -> @nish.base64urlRangeMask
+function base64SextetOf(c: i32): i32 -> @nish.base64SextetOf
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: c
+  calls: nish.base64urlRangeMask
+  stackSites=0 stackLocals=0
+  local +0:9 upper: i32 (const)
+  callee +0:22 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +1:9 lower: i32 (const)
+  callee +1:22 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +2:9 digit: i32 (const)
+  callee +2:22 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +3:9 plus: i32 (const)
+  callee +3:21 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +4:9 slash: i32 (const)
+  callee +4:22 base64urlRangeMask -> @nish.base64urlRangeMask
+  local +5:9 value: i32 (const)
+function base64Encode(data: u8[]): string -> @nish.base64Encode [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.base64CharOf nish_alloc_struct nish_array_grow nish_panic nish_str_new
+  pointer data: size=0 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 parts: string[] (const)
+  local +1:7 acc: i32 (let)
+  local +2:7 bits: u32 (let)
+  local +3:12 k: i32 (let)
+  callee +8:38 base64CharOf -> @nish.base64CharOf
+  callee +12:36 base64CharOf -> @nish.base64CharOf
+  local +14:9 tail: i32 (const)
+function base64Decode(text: string): u8[] | null -> @nish.base64Decode [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.base64SextetOf nish_panic nish_panic_index nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  local +4:7 pad: i32 (let)
+  local +8:9 chars: i32 (const)
+  local +9:9 out: u8[] (const)
+  local +10:9 outLen: i32 (const)
+  local +11:7 bad: i32 (let)
+  local +12:7 acc: i32 (let)
+  local +13:7 bits: i32 (let)
+  local +14:7 j: i32 (let)
+  local +17:12 k: i32 (let)
+  local +18:11 v: i32 (const)
+  callee +18:20 base64SextetOf -> @nish.base64SextetOf
 module std/net/http3-frame.ts [package nish]
 import QPACK_DECODER_STREAM from "nish/net/qpack" -> const QPACK_DECODER_STREAM
 import QPACK_ENCODER_STREAM from "nish/net/qpack" -> const QPACK_ENCODER_STREAM

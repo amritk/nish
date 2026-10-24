@@ -152,6 +152,17 @@ export const isTextModule = (packageName: string, name: string): boolean =>
   packageName === CLI && name === stdModuleName(TEXT_SPECIFIER)
 
 /**
+ * `nish/bytes`: ordinary Nish but for four calls, the walks of `skipBlank`,
+ * `skipDigits`, `skipJsonText` and `copyBytes`, which the emitter replaces with
+ * runtime kernels and a `memmove` (`src/kernels.ts`).
+ */
+const BYTES_SPECIFIER: string = "nish/bytes"
+
+/** Whether a module is the standard library's `std/bytes.ts`: the package is part of the test, as for `isTextModule`. */
+export const isBytesModule = (packageName: string, name: string): boolean =>
+  packageName === CLI && name === stdModuleName(BYTES_SPECIFIER)
+
+/**
  * `nish/crypto/aes`: ordinary Nish but for four calls, the seams the emitter
  * puts behind a branch to the runtime's AES kernels (`src/kernels.ts`).
  */
