@@ -537,8 +537,11 @@ const napiReaderLines = (r: Reader, c: string, i: i32, what: string, mode: i32, 
         process.exit(internalErrorFor("napi: view reader without a view", json))
       }
       lines.push(`nish_array ${c}_hdr; /* borrowed: the ${view.ctor}'s own bytes, for this call only */`)
-      lines.push(`if (!nish_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr))`)
+      lines.push(`int ${c}_took = nish_napi_array_arg(env, argv[${i}], ${view.napiType}, &${c}_hdr);`)
+      lines.push(`if (${c}_took == 0)`)
       lines.push(`  return ${napiFailCall(mode, `${what} must be ${withArticle(view.ctor)}`)};`)
+      lines.push(`if (${c}_took < 0)`)
+      lines.push(`  return ${napiFailCall(mode, `${what} has more than 2147483647 elements`)};`)
       lines.push(`${r.cDecl}${c} = &${c}_hdr;`)
       return lines
     }
@@ -1296,23 +1299,27 @@ export const generateNapiShim = (
     lines.push("")
   }
   if (needsArrayArg) {
-    lines.push("/* A typed array of the expected kind as a borrowed nish_array header over its own bytes. */")
+    lines.push("/*")
+    lines.push(" * A typed array of the expected kind as a borrowed nish_array header over its")
+    lines.push(" * own bytes: 1, or 0 for another value, or -1 for one longer than an array")
+    lines.push(" * may be, whose `.length` the program would read as negative")
+    lines.push(" * (docs/security/bytes.md, BYTES-1).")
+    lines.push(" */")
     lines.push(
-      "static bool nish_napi_array_arg(napi_env env, napi_value value, napi_typedarray_type want, nish_array *out) {"
+      "static int nish_napi_array_arg(napi_env env, napi_value value, napi_typedarray_type want, nish_array *out) {"
     )
     lines.push("  bool is_typedarray;")
     lines.push("  napi_typedarray_type type;")
     lines.push("  size_t len;")
     lines.push("  void *data;")
+    lines.push("  if (napi_is_typedarray(env, value, &is_typedarray) != napi_ok || !is_typedarray) return 0;")
     lines.push(
-      "  if (napi_is_typedarray(env, value, &is_typedarray) != napi_ok || !is_typedarray) return false;"
+      "  if (napi_get_typedarray_info(env, value, &type, &len, &data, NULL, NULL) != napi_ok || type != want) return 0;"
     )
-    lines.push(
-      "  if (napi_get_typedarray_info(env, value, &type, &len, &data, NULL, NULL) != napi_ok || type != want) return false;"
-    )
+    lines.push("  if (len > INT32_MAX) return -1;")
     lines.push("  out->len = out->cap = len;")
     lines.push("  out->data = (char *)data;")
-    lines.push("  return true;")
+    lines.push("  return 1;")
     lines.push("}")
     lines.push("")
   }
