@@ -455,13 +455,13 @@ const bcryptKeySchedule = (expanded: u32[], password: u8[], safety: u32): void =
 
 /** `BF_set_key`: `bcryptKeySchedule` into `expanded`, and P XORed with it. */
 const bcryptSetKey = (st: u32[], expanded: u32[], password: u8[], safety: u32): void => {
+  bcryptKeySchedule(expanded, password, safety)
   if (st.length < 1042) {
     return
   }
   if (expanded.length < 19) {
     return
   }
-  bcryptKeySchedule(expanded, password, safety)
   for (let i: i32 = 0; i < 18; i++) {
     st[i] ^= expanded[i]
   }
@@ -794,8 +794,10 @@ const bcryptParseHash = (hash: string): Result<BcryptParsed, string> => {
     return Err(parsed.error)
   }
   let alphabet: i32 = 0
-  for (let i: i32 = BCRYPT_SETTING_LENGTH; i < toI32(hash.length); i++) {
-    alphabet |= bcryptSextetOf(toI32(hash.charCodeAt(i)))
+  for (let i: i32 = 0; i < toI32(hash.length); i++) {
+    if (i >= BCRYPT_SETTING_LENGTH) {
+      alphabet |= bcryptSextetOf(toI32(hash.charCodeAt(i)))
+    }
   }
   if (alphabet < 0) {
     return Err("bcrypt: the digest is not bcrypt base64")
@@ -1271,20 +1273,33 @@ export const bcryptHash4 = (
       prefixes.push([])
       continue
     }
-    const salt: u8[] = bcryptSaltOf(salts, k)
-    const words: u32[] = bcryptSaltWords(salt)
-    for (let j: i32 = 0; j < 4; j++) {
-      batch.salts[4 * k + j] = words[j]
-    }
-    prefixes.push(bcryptSettingOf(salt, cost))
+    prefixes.push(bcryptBatchSalt(batch, salts, k, cost))
   }
   const digests: u8[] = bcryptRun4(p0, p1, p2, p3, mask, batch)
-  for (let k: i32 = 0; k < 4; k++) {
+  for (let k: i32 = 0; k < 4 && k < toI32(hashes.length) && k < toI32(prefixes.length); k++) {
     if ((mask & (1 << k)) !== 0) {
-      hashes[k] = String.fromBytes(bcryptJoin(prefixes[k], digests, k), 0, BCRYPT_HASH_LENGTH)
+      const hash: string = bcryptLaneHash(prefixes[k], digests, k)
+      if (k < toI32(hashes.length)) {
+        hashes[k] = hash
+      }
     }
   }
   return Ok(hashes)
+}
+
+/** Lane `k`'s salt from the 64 bytes of `salts` into `batch` as four words, and its 29-byte setting. */
+const bcryptBatchSalt = (batch: BcryptBatch, salts: u8[], k: i32, cost: i32): u8[] => {
+  const salt: u8[] = bcryptSaltOf(salts, k)
+  const words: u32[] = bcryptSaltWords(salt)
+  for (let j: i32 = 0; j < 4 && j < toI32(words.length) && 4 * k + j < toI32(batch.salts.length); j++) {
+    batch.salts[4 * k + j] = words[j]
+  }
+  return bcryptSettingOf(salt, cost)
+}
+
+/** Lane `k`'s 60-character hash: its setting, then its digest characters from the batch's 124. */
+const bcryptLaneHash = (prefix: u8[], digests: u8[], k: i32): string => {
+  return String.fromBytes(bcryptJoin(prefix, digests, k), 0, BCRYPT_HASH_LENGTH)
 }
 
 /** The 16 salt bytes of lane `k` from the 64 of a batch. */
@@ -1327,7 +1342,7 @@ export const bcryptVerify4 = (
   }
   const mask: i32 = bcryptMaskOf(p1, p2, p3)
   const lanes: BcryptParsed[] = []
-  for (let k: i32 = 0; k < 4; k++) {
+  for (let k: i32 = 0; k < 4 && k < toI32(hashes.length); k++) {
     if ((mask & (1 << k)) !== 0) {
       const parsed: Result<BcryptParsed, string> = bcryptParseHash(hashes[k])
       if (parsed.isErr()) {
@@ -1344,24 +1359,49 @@ export const bcryptVerify4 = (
   }
   const ok: boolean[] = [false, false, false, false]
   let done: i32 = ~mask & 15
-  for (let k: i32 = 0; k < 4; k++) {
+  for (
+    let k: i32 = 0;
+    k < 4 && k < toI32(lanes.length) && k < toI32(hashes.length) && k < toI32(ok.length);
+    k++
+  ) {
     if ((done & (1 << k)) === 0) {
       const cost: i32 = lanes[k].setting.cost
       let group: i32 = 0
-      for (let j: i32 = k; j < 4; j++) {
+      for (let j: i32 = k; j < 4 && j < toI32(lanes.length); j++) {
         if ((done & (1 << j)) === 0 && lanes[j].setting.cost === cost) {
           group |= 1 << j
         }
       }
       done |= group
       if (group === 1 << k) {
-        ok[k] = timingSafeEqual(bcryptRunLane(p0, p1, p2, p3, k, lanes[k]), bcryptBytesOf(hashes[k]))
+        const one: boolean = bcryptLaneOk(p0, p1, p2, p3, k, lanes[k], hashes[k])
+        if (k < toI32(ok.length)) {
+          ok[k] = one
+        }
       } else {
         bcryptVerifyGroup(p0, p1, p2, p3, group, lanes, hashes, ok)
       }
     }
   }
   return Ok(ok)
+}
+
+/** Whether lane `k`'s password, hashed alone with `lane`'s setting, gives `hash`. */
+const bcryptLaneOk = (
+  p0: Secret<u8[]>,
+  p1: Secret<u8[]> | null,
+  p2: Secret<u8[]> | null,
+  p3: Secret<u8[]> | null,
+  k: i32,
+  lane: BcryptParsed,
+  hash: string
+): boolean => {
+  return timingSafeEqual(bcryptRunLane(p0, p1, p2, p3, k, lane), bcryptBytesOf(hash))
+}
+
+/** Whether lane `k`'s hash joined from `prefix` and the batch's digests is `hash`. */
+const bcryptJoinedOk = (prefix: u8[], digests: u8[], k: i32, hash: string): boolean => {
+  return timingSafeEqual(bcryptJoin(prefix, digests, k), bcryptBytesOf(hash))
 }
 
 /** One interleaved run for the lanes in `group`, all of one cost, each lane's answer into `ok`. */
@@ -1393,7 +1433,7 @@ const bcryptVerifyGroup = (
     k++
   ) {
     if ((group & (1 << k)) !== 0) {
-      ok[k] = timingSafeEqual(bcryptJoin(lanes[k].prefix, digests, k), bcryptBytesOf(hashes[k]))
+      ok[k] = bcryptJoinedOk(lanes[k].prefix, digests, k, hashes[k])
     }
   }
 }

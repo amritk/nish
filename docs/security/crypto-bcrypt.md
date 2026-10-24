@@ -38,7 +38,7 @@ batch](#the-four-lane-batch).
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/bcrypt.ts` | `bcryptHash`, `bcryptVerify`; `bcryptRun`, `bcryptExposed`, `bcryptSetKey`, `bcryptInitState`, `bcryptEncrypt`, `bcryptBody`, `bcryptXorKey`, `bcryptXorSalt`, `bcryptStore`, `bcryptMagic`, `bcryptPutBlock`; `bcryptParse`, `bcryptDecodeSalt`, `bcryptSaltWords`, `bcryptSettingOf`, `bcryptEncode`, `bcryptPut`, `bcryptCharOf`, `bcryptSextetOf`; the batch: `bcryptHash4`, `bcryptVerify4`, `bcryptVerifyGroup`, `bcryptRun4`, `bcryptRunLane`, `bcryptMaskOf`, `bcryptInit4`, `bcryptKeyWord`, `bcryptLoadLane` (and its four `bcryptLoadLane0`–`3`), `bcryptEks4`, `bcryptBody4`, `bcryptEncrypt4`, `bcryptXorKey4`, `bcryptXorSalt4`, `bcryptMagic4`, `bcryptSaltOf`, `bcryptJoin`, `bcryptBytesOf` |
+| `std/crypto/bcrypt.ts` | `bcryptHash`, `bcryptVerify`; `bcryptRun`, `bcryptExposed`, `bcryptSetKey`, `bcryptInitState`, `bcryptEncrypt`, `bcryptBody`, `bcryptXorKey`, `bcryptXorSalt`, `bcryptStore`, `bcryptMagic`, `bcryptPutBlock`; `bcryptParse`, `bcryptDecodeSalt`, `bcryptSaltWords`, `bcryptSettingOf`, `bcryptEncode`, `bcryptPut`, `bcryptCharOf`, `bcryptSextetOf`, `bcryptParseHash`; the batch: `bcryptHash4`, `bcryptVerify4`, `bcryptVerifyGroup`, `bcryptRun4`, `bcryptRunLane`, `bcryptMaskOf`, `bcryptInit4`, `bcryptKeyWord`, `bcryptLoadLane` (and its four `bcryptLoadLane0`–`3`), `bcryptEks4`, `bcryptBody4`, `bcryptEncrypt4`, `bcryptXorKey4`, `bcryptXorSalt4`, `bcryptMagic4`, `bcryptSaltOf`, `bcryptBatchSalt`, `bcryptJoin`, `bcryptLaneHash`, `bcryptLaneOk`, `bcryptJoinedOk`, `bcryptBytesOf` |
 
 Out of scope: `timingSafeEqual` (`std/crypto/ct.ts`, in
 [crypto-k1.md](crypto-k1.md)), the `Secret` rules the checker enforces
@@ -146,8 +146,9 @@ cannot also expose the password, so it takes the key one word at a time:
 `exposeWith(password, …, bcryptKeyWord)` builds the lane's whole key schedule
 in a fresh array, keeps one word, wipes the array and returns the word. The
 schedule is built 18 times per lane (each in microseconds against a hash of
-milliseconds), and only a `u32` leaves each call, into a register and then the
-state (BCRYPT-7 covers the register).
+milliseconds), and only a `u32` leaves each call, into `bcryptLoadLane`'s
+unwiped local `word` and then the state. That local is a register or a spill
+slot, which no wipe reaches (BCRYPT-7).
 
 **Null lanes.** A null lane's key is not loaded: its state is π with no key
 in it, the kernel runs it with the others, and its digest is dropped. `bcryptHash4`
@@ -192,9 +193,9 @@ counted as fixed or open in the index.
 | BCRYPT-4 | Low | `bcryptDecodeSalt` | A hash whose last salt character has the dropped bits set verifies false for its own password. | **Accepted.** It is `crypt_r`'s answer: it rebuilds the string with the bits cleared and compares the whole of it. Accepting it would make a hash string that verifies here and not there. OpenBSD answers the same; Go verifies such a string true, since it keeps the salt characters as given ([Interoperability](#interoperability)). |
 | BCRYPT-5 | Low if it failed | `bcryptVerify`, `bcryptParse` | A hash string of any length or bytes must not panic or read past itself. | **Holds.** The length is checked to be 60 first; every character after that is read at an index below 60 and checked against the alphabet, each refusal an `Err`. |
 | BCRYPT-6 | Low | `bcryptEncrypt` | Each Blowfish round loads four S-box words at indexes taken from the secret state, so the cache lines touched follow the password. | **Accepted.** It is the algorithm: every bcrypt does it, and the expensive key setup that is bcrypt's point is made of these loads. A local attacker sharing a cache with the hashing core could in principle learn about the state; a remote one times a cost-10 hash of ~50 ms, against which the loads' variance is noise. The key schedule (`bcryptSetKey`) does not branch on a password byte's value, but the copy's trip count follows the password's length (up to 72), and the cycle position `p` of the `key[p & 0x7f]` loads restarts at its first NUL (or at 72), so which of the 128-byte key array's two cache lines each load touches follows the length up to that NUL. A local attacker who can watch those lines learns the length (to within the line split), not a byte; C implementations walk a C string the same way. The base64 that encodes the digest (`bcryptCharOf`, `bcryptSextetOf`) is branchless, since the digest is the stored hash when the password is right, and the verify's compare is constant-time. |
-| BCRYPT-7 | Low | `bcryptExposed`, `bcryptKeyWord` | Values the generated code holds in registers, and any it spills to the stack, are not wiped; nor is the caller's own copy of the password before it became a `Secret`. | **Accepted.** No store from the language reaches a register or a spill slot (as AEAD-4 for the AES kernels). Every array holding key material is wiped; the `Secret` the caller passes is the caller's to wipe, and the checker makes it do so. The batch's key words each pass through a register on their way from `bcryptKeyWord`'s wiped array into the state, the same reach as a round's working values. |
+| BCRYPT-7 | Low | `bcryptExposed`, `bcryptKeyWord`, `bcryptLoadLane` | Values the generated code holds in registers, and any it spills to the stack, are not wiped; nor is the caller's own copy of the password before it became a `Secret`. | **Accepted.** No store from the language reaches a register or a spill slot (as AEAD-4 for the AES kernels). Every array holding key material is wiped; the `Secret` the caller passes is the caller's to wipe, and the checker makes it do so. The batch's 19 key words per lane each pass through `bcryptLoadLane`'s `word`, an unwiped `u32` local, on their way from `bcryptKeyWord`'s wiped array into the state: a register, or a spill slot if the code generator spills it, which no wipe reaches; the same reach as a round's working values. |
 | BCRYPT-8 | Low | `bcryptRun4` | A null lane, or a lane of another cost in a `bcryptVerify4` group, runs through the kernel with π and no key, and its digest is computed and dropped. | **Accepted.** Nothing secret is in it, its digest is wiped with the rest of the state's block and digests, and running it costs nothing a lane-count branch inside the kernel would save: the four chains run side by side either way. |
-| BCRYPT-9 | Low | `bcryptRun4` | The batch cannot run in a `std/threads` task: `tests/link/thread_bcrypt_batch_refused` is refused, "`hashFour` writes memory its caller can see through `bcryptHash4`". | **Open limitation, not a flaw.** `bcryptRun4` makes its state with `secret(new Array…)` and wipes it; the task rule counts a write through a `Secret` as a write to memory the caller can see, since it does not follow a fresh array through `secret(…)`. Making the state a plain array would take key material out of a `Secret`, which CLAUDE.md forbids, and a zeroing loop in place of the wipe would let `opt -O2` drop it. The language change it needs: a `Secret` made by `secret(e)` from a fresh allocation `e` that the function neither returns nor stores is the function's own scratch, as the fresh array is, so its `wipe` and its `exposeWith` writes are local writes. Until then, a server runs single hashes on tasks and batches on its own thread ([the guide](../guide/using-nish/password-hashing.md)). |
+| BCRYPT-9 | Low | `bcryptRun4` | The batch cannot run in a `std/threads` task: `tests/link/thread_bcrypt_batch_refused` is refused, "`hashFour` writes memory its caller can see through `bcryptHash4`". | **Open limitation, not a flaw.** `bcryptRun4` makes its state with `secret(new Array…)` and wipes it; the task rule counts that wipe as a shared write: [`threads.md`](../guide/using-nish/threads.md) and [`LANGUAGE.md`](../LANGUAGE.md) (NL2471) say a `wipe` of a `Secret` made with `secret(...)` is a write to memory the caller can see, since the rule does not follow a fresh array through `secret(…)`. The way round it costs more than it buys: a plain `u32[]` state would hold every lane's key schedule and S-boxes outside a `Secret` and outside `expose`, where the checker no longer makes each use go through `exposeWith` nor makes the function wipe it, and a zeroing loop in place of the wipe is a store `opt -O2` may drop. The language change it needs: a `Secret` made by `secret(e)` from a fresh allocation `e` that the function neither returns nor stores is the function's own scratch, as the fresh array is, so its `wipe` and its `exposeWith` writes are local writes. Until then, a server runs single hashes on tasks and batches on its own thread ([the guide](../guide/using-nish/password-hashing.md)). |
 
 ## Properties verified
 
@@ -299,8 +300,9 @@ expected.out` hashes two passwords and verifies one on three tasks, natively
 and under `NISH_NUM_THREADS` of 1, 2 and 8; `link/thread_bcrypt_batch_refused`
 pins BCRYPT-9.
 
-**wasm32**: the module has no I/O and no C; `crypto_bcrypt` builds and runs
-under WASI with the rest of `std/crypto` (`node tests/run.js wasi`).
+**wasm32**: the module has no I/O and no C; `crypto_bcrypt` and
+`crypto_bcrypt_batch` build and run under WASI with the rest of `std/crypto`
+(`node tests/run.js wasi`), each printing its `expected.out`.
 
 ## Speed
 
@@ -321,11 +323,15 @@ row prints the same hash):
 | tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 51.6 (51.4–52.0) |
 | tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 16.4 (16.2–16.9) |
 
-The single path is 8% behind gcc's builds and level with clang's: no bounds
+The single path is 8% behind gcc's builds, 2% ahead of OpenBSD's clang build
+and 2.5% behind tigokraft's one-lane clang build, each outside the noise: no bounds
 check is left in the round (every S-box index is masked to 0–255 and the
 state's length is checked once), and the gap is LLVM's scheduling of the round
 against gcc's, which the clang build of the same C shows. Four lanes run in
 the time of 1.2 single hashes, 3.3 times the single path's throughput on one
 core: level with the four-lane C of the tigokraft submission
 (commit `c3012257f2ee`, MIT; fetched by the bench, not copied) built by clang,
-inside its noise, and 1.44 times its gcc build.
+inside its noise, and 1.44 times its gcc build. The C rows of tigokraft are
+built with `-march=native`, as its build does, so they may use any instruction
+this CPU has; the Nish rows (no `--cpu x86-64-v3`) and the other C rows are
+built for baseline x86-64.
