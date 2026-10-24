@@ -8,7 +8,7 @@ dependency, the capability and the function. It says what the check covers,
 what it cannot reach, and the test that pins each property. It is written
 with the code rather than after an audit.
 
-Anchors are function names in the files below at `ANCHOR_COMMIT`, the commit
+Anchors are function names in the files below at `70f503e`, the commit
 that adds the check.
 
 **Result.** Every function a dependency's modules define counts toward that
