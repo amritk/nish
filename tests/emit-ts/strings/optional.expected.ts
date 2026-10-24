@@ -3,7 +3,7 @@
 // `.length` is `strLen`; an array's `.length` stays as written. A byte-offset
 // method in a `?.` chain stays as written too, right for ASCII text only. The
 // chain's receiver is evaluated once, so `counted` bumps its counter once.
-import { strLenOpt, strLen } from "nish/runtime"
+import { checkedAdd, strLenOpt, strLen } from "nish/runtime"
 
 class Box {
   name: string
@@ -23,7 +23,7 @@ class Counter {
 }
 
 const counted = (c: Counter, on: boolean): Box | null => {
-  c.hits = c.hits + 1
+  c.hits = checkedAdd(c.hits, 1)
   return box(on)
 }
 
