@@ -45,7 +45,10 @@
  * (`QuicFlight.ecn`, RFC 9000 §13.4), so the peer's ACK_ECN counts are
  * validated and a CE mark shrinks the window. Where the platform sends no
  * ECN (Darwin, whose `udpSendTo` answers -95 to a marked send), the first
- * marked send goes again unmarked and no slot marks after it.
+ * marked send goes again unmarked and no slot marks after it. A -95 is also
+ * what a platform without segmentation offload answers, so a refused GSO
+ * send goes again one datagram at a time, still marked, and only a -95 to
+ * one of those turns marking off.
  * The pacer counts the microseconds `clock` gives it, so on a path whose
  * round trip is under a millisecond it neither waits for the next
  * millisecond to earn credit nor holds a slot back for a whole one; without
@@ -917,27 +920,35 @@ export class Http3Server {
    * into `segment`-byte datagrams when it is above 0; answers whether it went.
    */
   send(buf: u8[], at: i32, len: i32, to: u8[], segment: i32, ecn: i32): boolean {
-    let mark: i32 = ecn
-    let sent: i32 = udpSendTo(this.fd, buf, at, len, to, segment, mark)
-    if (sent === H3_SERVER_UNSUPPORTED && mark !== 0) {
-      // No ECN here: this send goes unmarked and no slot marks again. The
-      // packets just counted as marked fail their connection's validation.
-      this.unmark()
-      mark = H3_SERVER_ZERO
-      sent = udpSendTo(this.fd, buf, at, len, to, segment, mark)
-    }
+    const sent: i32 = udpSendTo(this.fd, buf, at, len, to, segment, ecn)
     if (sent >= 0) {
       return true
     }
-    if (sent !== H3_SERVER_UNSUPPORTED || segment <= 0) {
+    if (sent !== H3_SERVER_UNSUPPORTED || (segment <= 0 && ecn === 0)) {
       this.sendErrors = h3Count(this.sendErrors)
       return false
     }
-    // No segmentation offload here: one datagram at a time.
+    // -95: no segmentation offload, or no ECN, or both. One datagram at a
+    // time, still marked: a -95 to a datagram with no segment is the mark's.
+    let mark: i32 = ecn
+    if (segment <= 0) {
+      this.unmark()
+      mark = H3_SERVER_ZERO
+    }
+    const step: i32 = segment > 0 ? segment : len
     let p: i32 = at
     while (p < at + len) {
-      const n: i32 = at + len - p < segment ? at + len - p : segment
-      if (udpSendTo(this.fd, buf, p, n, to, H3_SERVER_ZERO, mark) < 0) {
+      const n: i32 = at + len - p < step ? at + len - p : step
+      let one: i32 = udpSendTo(this.fd, buf, p, n, to, H3_SERVER_ZERO, mark)
+      if (one === H3_SERVER_UNSUPPORTED && mark !== 0) {
+        // No ECN here: this datagram and the rest go unmarked and no slot
+        // marks again. The packets just counted as marked fail their
+        // connection's validation.
+        this.unmark()
+        mark = H3_SERVER_ZERO
+        one = udpSendTo(this.fd, buf, p, n, to, H3_SERVER_ZERO, mark)
+      }
+      if (one < 0) {
         this.sendErrors = h3Count(this.sendErrors)
         return false
       }

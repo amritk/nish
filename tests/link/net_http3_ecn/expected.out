@@ -10,4 +10,7 @@ PASS  which shrinks its window
 PASS  another handshake, acknowledging nothing
 PASS  the response's first window, unacknowledged: marked until the ten testing packets are spent, then unmarked to the end
 PASS  the datagrams that arrived ECT(0) are the packets the server counted as marked
-http3 ecn: 12 passed, 0 failed, 0 skipped
+PASS  unmark turns marking off for the server and every slot
+PASS  a handshake after it
+PASS  and its connection sends every datagram unmarked, counting none as marked
+http3 ecn: 15 passed, 0 failed, 0 skipped

@@ -281,10 +281,39 @@ const testing = (t: Suite, ecn: boolean): void => {
   );
 };
 
+/**
+ * What a marked send answered -95 turns off, on any platform: `unmark` stops
+ * every slot marking, and a connection the server builds after it marks
+ * nothing. (The -95 that calls it is Darwin's; see `docs/security/quic.md`,
+ * QUIC-10.)
+ */
+const unmarked = (t: Suite): void => {
+  const limits = new H3Limits();
+  const loop = new LoopServer(h3QuicConfig(limits), n32(2), n32(0));
+  const server: Http3Server = loop.server;
+  server.unmark();
+  t.ok(
+    "unmark turns marking off for the server and every slot",
+    !server.ecn && !server.quic(n32(0)).ecnMarking && !server.quic(n32(1)).ecnMarking
+  );
+  const r: Rig = connect(loop, limits);
+  const quic: QuicConnection = r.p.conn;
+  if (!t.ok("a handshake after it", quic.handshakeComplete && r.wire.slot >= 0)) {
+    return;
+  }
+  get(r, "/big/40000");
+  const app: QuicSentPackets = quic.recovery.spaces[QUIC_RECOVERY_APPLICATION];
+  t.ok(
+    "and its connection sends every datagram unmarked, counting none as marked",
+    !quic.ecnMarking && all(r.seen.bits, n32(0)) && app.ectSent === n64(0)
+  );
+};
+
 export const ecnChecks = (): i32 => {
   const t = new Suite("http3 ecn");
   const ecn: boolean = platformEcn();
   validated(t, ecn);
   testing(t, ecn);
+  unmarked(t);
   return t.done();
 };
