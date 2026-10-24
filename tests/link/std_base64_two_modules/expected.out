@@ -1,0 +1,16 @@
+PASS  nish/base64 empty
+PASS  base64StdPadEncode empty
+PASS  base64StdPadDecode reads nish/base64 empty
+PASS  nish/base64 f
+PASS  base64StdPadEncode f
+PASS  base64StdPadDecode reads nish/base64 f
+PASS  nish/base64 fo
+PASS  base64StdPadEncode fo
+PASS  base64StdPadDecode reads nish/base64 fo
+PASS  nish/base64 foobar
+PASS  base64StdPadEncode foobar
+PASS  base64StdPadDecode reads nish/base64 foobar
+PASS  nish/base64 fb ff
+PASS  base64StdPadEncode fb ff
+PASS  base64StdPadDecode reads nish/base64 fb ff
+two base64 modules: 15 passed, 0 failed, 0 skipped

@@ -142,8 +142,8 @@ module std/crypto/x509.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
-import base64Decode from "nish/crypto/base64url" -> function @nish.base64Decode
-import base64Encode from "nish/crypto/base64url" -> function @nish.base64Encode
+import base64StdPadDecode from "nish/crypto/base64url" -> function @nish.base64StdPadDecode
+import base64StdPadEncode from "nish/crypto/base64url" -> function @nish.base64StdPadEncode
 import p256PublicKey from "nish/crypto/p256" -> function @nish.p256PublicKey
 import p256SignSha256 from "nish/crypto/p256" -> function @nish.p256SignSha256
 import p256VerifySha256 from "nish/crypto/p256" -> function @nish.p256VerifySha256
@@ -508,18 +508,18 @@ function x509EndsWith(text: string, suffix: string): boolean -> @nish.x509EndsWi
   local +1:9 m: i32 (const)
 function derToPem(der: u8[], label: string): string -> @nish.derToPem [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.base64Encode nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_new
-  pointer der: size=0 writesThrough=false captured=false passedTo=nish.base64Encode#0
+  calls: nish.base64StdPadEncode nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_new
+  pointer der: size=0 writesThrough=false captured=false passedTo=nish.base64StdPadEncode#0
   stackSites=1 stackLocals=1
   local +0:9 body: string (const)
-  callee +0:24 base64Encode -> @nish.base64Encode
+  callee +0:24 base64StdPadEncode -> @nish.base64StdPadEncode
   local +1:9 n: i32 (const)
   local +2:9 lines: string[] (const)
   local +3:12 at: i32 (let)
 function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.base64Decode nish.x509EndsWith nish.x509StartsWith nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_str_concat nish_str_eq nish_str_new
+  calls: nish.base64StdPadDecode nish.x509EndsWith nish.x509StartsWith nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_str_concat nish_str_eq nish_str_new
   stackSites=0 stackLocals=0
   local -49:9 out: u8[][] (const)
   local -48:9 n: i32 (const)
@@ -537,7 +537,7 @@ function pemToDer(pem: string, label: string): u8[][] | null -> @nish.pemToDer [
   callee -22:16 x509StartsWith -> @nish.x509StartsWith
   local -14:13 text: string (const)
   local -13:13 der: u8[] | null (const)
-  callee -13:59 base64Decode -> @nish.base64Decode
+  callee -13:59 base64StdPadDecode -> @nish.base64StdPadDecode
 function x509Sec1Key(der: u8[], start: i32, end: i32, needCurve: boolean): Secret<u8[]> | null -> @nish.x509Sec1Key
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.p256PublicKey

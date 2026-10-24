@@ -72,10 +72,10 @@
  *
  * **Constant time.** A private key is the one secret that passes through here:
  * it is base64-decoded from PEM, lifted out of its DER, and handed to
- * `nish/crypto/p256`. Base64 is `nish/crypto/base64url`'s `base64Decode`, which
- * maps a character to its sextet by arithmetic on range masks and folds a bad
- * character into one word read after the whole text, so neither a branch nor a
- * table index depends on the key's bytes. PEM's framing is found by comparing
+ * `nish/crypto/p256`. Base64 is `nish/crypto/base64url`'s `base64StdPadDecode`,
+ * which maps a character to its sextet by arithmetic on range masks and folds a
+ * bad character into one word read after the whole text, so neither a branch
+ * nor a table index depends on the key's bytes. PEM's framing is found by comparing
  * the start of each line with the fixed `-----BEGIN ` and `-----END `, which no
  * base64 character matches, so those comparisons end on a line's first byte
  * whatever the key is. The DER reader branches on tags and
@@ -96,7 +96,7 @@
  * (`docs/wp26-stdlib.md` §3e).
  */
 import { Secret, secret, wipe } from "nish:secret"
-import { base64Decode, base64Encode } from "nish/crypto/base64url"
+import { base64StdPadDecode, base64StdPadEncode } from "nish/crypto/base64url"
 import { p256PublicKey, p256SignSha256, p256VerifySha256 } from "nish/crypto/p256"
 import { sha256 } from "nish/crypto/sha256"
 
@@ -727,7 +727,7 @@ const x509EndsWith = (text: string, suffix: string): boolean => {
  * ending in a line feed.
  */
 export const derToPem = (der: u8[], label: string): string => {
-  const body: string = base64Encode(der)
+  const body: string = base64StdPadEncode(der)
   const n: i32 = toI32(body.length)
   const lines: string[] = [`-----BEGIN ${label}-----`]
   for (let at: i32 = 0; at < n; at = at + 64) {
@@ -783,7 +783,7 @@ export const pemToDer = (pem: string, label: string): u8[][] | null => {
       // An empty body is refused: a block with no DER is malformed, though
       // the empty text is base64 for no bytes.
       const text: string = body.join("")
-      const der: u8[] | null = text.length === 0 ? null : base64Decode(text)
+      const der: u8[] | null = text.length === 0 ? null : base64StdPadDecode(text)
       if (der === null) {
         return null
       }

@@ -1,9 +1,9 @@
-// `nish/crypto/base64url`'s standard base64 (`base64Encode`, `base64Decode`)
+// `nish/crypto/base64url`'s standard base64 (`base64StdPadEncode`, `base64StdPadDecode`)
 // against RFC 4648: the §10 test vectors with their `=` padding, the two §4
 // letters (`+` and `/`), every byte value as a final character, round trips
 // over every group shape, and each refusal — misplaced or missing padding, a
 // non-canonical final sextet, and a character outside the alphabet.
-import { base64Decode, base64Encode } from "nish/crypto/base64url";
+import { base64StdPadDecode, base64StdPadEncode } from "nish/crypto/base64url";
 import { Suite } from "nish/testing";
 
 const HEX_DIGITS: string = "0123456789abcdef";
@@ -30,7 +30,7 @@ const bytesOfAscii = (text: string): u8[] => {
 
 /** The hex of what `text` decodes to, or `null` spelled out when it is refused. */
 const decodedHex = (text: string): string => {
-  const bytes: u8[] | null = base64Decode(text);
+  const bytes: u8[] | null = base64StdPadDecode(text);
   if (bytes === null) {
     return "null";
   }
@@ -39,7 +39,7 @@ const decodedHex = (text: string): string => {
 
 /** One encoding vector, checked in both directions. */
 const checkVector = (t: Suite, name: string, bytes: u8[], text: string): void => {
-  t.eqStr(`encode ${name}`, base64Encode(bytes), text);
+  t.eqStr(`encode ${name}`, base64StdPadEncode(bytes), text);
   t.eqStr(`decode ${name}`, decodedHex(text), hexOfBytes(bytes));
 };
 
@@ -69,9 +69,9 @@ export const main = (): number => {
   const tableHex: string =
     "00108310518720928b30d38f41149351559761969b71d79f8218a39259a7a29aabb2dbafc31cb3d35db7e39ebbf3dfbf";
   t.eqStr("RFC 4648 §4 Table 1: the alphabet decodes to sextets 0..63", decodedHex(alphabet), tableHex);
-  const table: u8[] | null = base64Decode(alphabet);
+  const table: u8[] | null = base64StdPadDecode(alphabet);
   if (table !== null) {
-    t.eqStr("RFC 4648 §4 Table 1: and encodes back to the alphabet", base64Encode(table), alphabet);
+    t.eqStr("RFC 4648 §4 Table 1: and encodes back to the alphabet", base64StdPadEncode(table), alphabet);
   }
 
   // Every byte value as the final character of a group: exactly the 64 alphabet
@@ -79,7 +79,7 @@ export const main = (): number => {
   let accepted: i32 = 0;
   let misread: i32 = 0;
   for (let c: i32 = 0; c < 256; c++) {
-    const bytes: u8[] | null = base64Decode(`AAA${String.fromCharCode(c)}`);
+    const bytes: u8[] | null = base64StdPadDecode(`AAA${String.fromCharCode(c)}`);
     const index: i32 = toI32(alphabet.indexOf(String.fromCharCode(c)));
     if (bytes !== null) {
       accepted++;
@@ -100,7 +100,7 @@ export const main = (): number => {
     for (let i: i32 = 0; i < n; i++) {
       bytes.push(toU8((i * 97 + 13) & 255));
     }
-    t.eqStr(`round trip: ${n} bytes`, decodedHex(base64Encode(bytes)), hexOfBytes(bytes));
+    t.eqStr(`round trip: ${n} bytes`, decodedHex(base64StdPadEncode(bytes)), hexOfBytes(bytes));
   }
 
   // --- The refusals -------------------------------------------------------------

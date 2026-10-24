@@ -7,10 +7,13 @@
  * specification that knows its lengths drop the padding, and RFC 7515 §2 does).
  *
  * The module also holds RFC 4648 §4 standard base64 — `+` and `/`, padded with
- * `=` — as `base64Encode` and `base64Decode`, for PEM (`nish/crypto/x509`) and
- * SCRAM (`nish/net/postgres`). It is as strict and as constant-time as the URL
- * alphabet, by the same masks, and it refuses a `=` anywhere but the last one
- * or two characters of a text whose length is a multiple of four.
+ * `=` — as `base64StdPadEncode` and `base64StdPadDecode`, for PEM
+ * (`nish/crypto/x509`) and SCRAM (`nish/net/postgres`). It is as strict and as
+ * constant-time as the URL alphabet, by the same masks, and it refuses a `=`
+ * anywhere but the last one or two characters of a text whose length is a
+ * multiple of four. They are not `nish/base64`'s `base64Encode`, which encodes
+ * only, indexes its alphabet and is for pixels; the `StdPad` names keep the two
+ * apart in the program's one namespace.
  *
  * **Decoding is strict, so that each byte string has exactly one spelling.**
  * `base64urlDecode` answers `null` for a `=` anywhere, for any character outside
@@ -184,7 +187,7 @@ export const base64urlDecode = (text: string): u8[] | null => {
  * The standard-alphabet character for the sextet `v`: the same steps as
  * `base64urlCharOf` until 62, which lands on `+` and 63 on `/`.
  */
-const base64CharOf = (v: i32): i32 =>
+const base64StdPadCharOf = (v: i32): i32 =>
   toI32(
     65 +
       toU32(v) +
@@ -195,7 +198,7 @@ const base64CharOf = (v: i32): i32 =>
   )
 
 /** The sextet the byte `c` stands for in standard base64, or `-1` when it is not in the alphabet. */
-const base64SextetOf = (c: i32): i32 => {
+const base64StdPadSextetOf = (c: i32): i32 => {
   const upper: i32 = base64urlRangeMask(c, 65, 90)
   const lower: i32 = base64urlRangeMask(c, 97, 122)
   const digit: i32 = base64urlRangeMask(c, 48, 57)
@@ -215,9 +218,9 @@ const base64SextetOf = (c: i32): i32 => {
  * nonces, salts and proofs (RFC 5802 §5.1). One `=` closes a final group of
  * two bytes, two a group of one. An array longer than 2^31 - 1 bytes panics.
  */
-export const base64Encode = (data: u8[]): string => {
+export const base64StdPadEncode = (data: u8[]): string => {
   if (data.length > 2147483647) {
-    panic("base64Encode: more than 2^31 - 1 bytes")
+    panic("base64StdPadEncode: more than 2^31 - 1 bytes")
   }
   const parts: string[] = []
   let acc: i32 = 0
@@ -227,11 +230,11 @@ export const base64Encode = (data: u8[]): string => {
     bits += 8
     while (bits >= 6) {
       bits -= 6
-      parts.push(String.fromCharCode(base64CharOf((acc >> toI32(bits)) & 63)))
+      parts.push(String.fromCharCode(base64StdPadCharOf((acc >> toI32(bits)) & 63)))
     }
   }
   if (bits > 0) {
-    parts.push(String.fromCharCode(base64CharOf((acc << toI32(6 - bits)) & 63)))
+    parts.push(String.fromCharCode(base64StdPadCharOf((acc << toI32(6 - bits)) & 63)))
   }
   const tail: i32 = toI32(data.length) % 3
   if (tail > 0) {
@@ -249,7 +252,7 @@ export const base64Encode = (data: u8[]): string => {
  * is depends on the length alone; the characters themselves are read by masks
  * and judged once, after the last.
  */
-export const base64Decode = (text: string): u8[] | null => {
+export const base64StdPadDecode = (text: string): u8[] | null => {
   if (text.length > 2147483647) {
     return null
   }
@@ -271,7 +274,7 @@ export const base64Decode = (text: string): u8[] | null => {
   // The padding is past `chars` and is not data; which positions those are is
   // a fact about the length. A `=` before them is outside the alphabet.
   for (let k: i32 = 0; k < chars && k < toI32(text.length); k++) {
-    const v: i32 = base64SextetOf(toI32(text.charCodeAt(k)))
+    const v: i32 = base64StdPadSextetOf(toI32(text.charCodeAt(k)))
     bad = bad | (v >> 31)
     acc = ((acc << 6) | (v & 63)) & 0xfff
     bits += 6

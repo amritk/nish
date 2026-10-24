@@ -13,7 +13,7 @@ bytes an attacker supplies:
 | Surface | Functions |
 | --- | --- |
 | DER reading | `x509DerRead`, `x509DerExpect`, `x509DerPeek`, `x509DerIntegerMinimal`, `x509DerSmallInteger`, `x509DerBitStringOctets`, `x509DerTime`, `x509DerIsAlgorithm`, `x509DerUnsignedInto`, `x509DerSignatureRS` (exported since #361), `x509DerBitStringSound` and `x509DerExtensionsSound` (new) |
-| PEM and base64 | `pemToDer`, `derToPem`; the base64 is `base64Decode` and `base64Encode` in `std/crypto/base64url.ts` |
+| PEM and base64 | `pemToDer`, `derToPem`; the base64 is `base64StdPadDecode` and `base64StdPadEncode` in `std/crypto/base64url.ts` |
 | Private keys | `x509ParseP256PrivateKey`, `x509Sec1Key`, `x509Pkcs8Key` |
 | Certificates | `x509ParseCertificate`, `x509ParseChain`, `x509VerifySignature`, `x509CertificateHash` |
 | Minting | `x509MintSelfSigned`, `x509DerTimeAt`, `x509DerUnsignedInteger`, `x509IsUtf8Name` (new), `x509MintExtensions` (X509-9) |

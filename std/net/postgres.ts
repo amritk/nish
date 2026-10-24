@@ -94,7 +94,7 @@
  * and RFC 5802 and RFC 7677; not ported from another implementation.
  */
 import { copyBytes, getI32BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
-import { base64Decode, base64Encode } from "nish/crypto/base64url"
+import { base64StdPadDecode, base64StdPadEncode } from "nish/crypto/base64url"
 import { timingSafeEqual } from "nish/crypto/ct"
 import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac"
 import { Sha256 } from "nish/crypto/sha256"
@@ -782,7 +782,7 @@ export class PgConnection {
     for (let i: i32 = 0; i < PG_NONCE_BYTES && i < toI32(nonce.length); i++) {
       head.push(nonce[i])
     }
-    this.clientNonce = base64Encode(head)
+    this.clientNonce = base64StdPadEncode(head)
 
     const at: i32 = this.outEnd
     this.putI32(PG_ZERO)
@@ -1378,7 +1378,7 @@ export class PgConnection {
     if (iterations < this.config.minIterations || iterations > this.config.maxIterations) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const salt: u8[] | null = base64Decode(String.fromBytes(b, nonceEnd + 3, saltEnd))
+    const salt: u8[] | null = base64StdPadDecode(String.fromBytes(b, nonceEnd + 3, saltEnd))
     if (salt === null || salt.length === 0) {
       return this.fail(PG_ERR_SCRAM)
     }
@@ -1409,7 +1409,7 @@ export class PgConnection {
     wipe(keys)
     this.serverSignature = signature
     // The proof goes on the wire as it is, so its base64 string is no secret.
-    const encoded: string = base64Encode(proof)
+    const encoded: string = base64StdPadEncode(proof)
     wipe(proof)
     const at: i32 = this.startMessage(PG_FE_PASSWORD)
     this.putString(`${withoutProof},p=${encoded}`)
@@ -1424,7 +1424,7 @@ export class PgConnection {
     if (end - body < 2 || !pgBytesAre(b, body, 2, "v=")) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const signature: u8[] | null = base64Decode(String.fromBytes(b, body + 2, end))
+    const signature: u8[] | null = base64StdPadDecode(String.fromBytes(b, body + 2, end))
     if (signature === null || signature.length !== 32) {
       return this.fail(PG_ERR_SCRAM)
     }
