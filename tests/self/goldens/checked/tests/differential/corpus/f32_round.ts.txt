@@ -7,7 +7,7 @@ function scale(x: f32, k: f32): f32 -> @scale
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: llvm.fabs.f32 llvm.fptosi.sat.i32.f32 llvm.fptoui.sat.i32.f32 llvm.maxnum.f32 llvm.minnum.f32 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 scale
+  calls: llvm.fabs.f32 llvm.fptosi.sat.i32.f32 llvm.fptoui.sat.i32.f32 llvm.maximum.f32 llvm.minimum.f32 nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_from_f64 nish_str_from_i32 nish_str_from_u64 scale
   stackSites=1 stackLocals=1
   local +0:9 tenth: f32 (const)
   local +1:9 third: f32 (const)

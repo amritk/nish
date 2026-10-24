@@ -25,6 +25,13 @@ pass, a native round trip with expected stdout, at least one negative test, its
 every TypeScript snippet a PR adds to the tests. Copied code keeps its upstream
 notice and is listed in `THIRD_PARTY_NOTICES.md`.
 
+**Attacker-facing code ships with its security record.** A new `std/net` or
+`std/crypto` module, `runtime/*.c` file, or builtin or `nish:` module that reads
+the network, the terminal or another process lands with its `docs/security/`
+record (scope, findings fixed with a before/after test or recorded open) and
+its index row, in the same PR. `node scripts/security-scope.mjs` refuses a file
+no record's scope names; its "Not yet audited" list only shrinks.
+
 **The user guide moves with the language.** A change a user of Nish sees — a
 construct, a builtin or `nish:` module, a `std/` module, a CLI flag or exit
 code, an install step, a diagnostic a guide page shows — updates its
