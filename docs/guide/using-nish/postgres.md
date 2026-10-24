@@ -141,7 +141,10 @@ shape stays the same.
 
 A row's columns are not copied: `colStart(c)` is an offset into
 `inputBuffer()` and `colLength(c)` its length, `-1` for NULL, and they stay
-valid until the next `next()`. `int`, `bool` and `isNull` read a column where
+valid until the next `next()`, which may move the unread input to the start
+of the buffer or replace the buffer with a larger one: fetch `inputBuffer()`
+again after every `next()` rather than keep it, and `outputBuffer()` after
+every builder call. `int`, `bool` and `isNull` read a column where
 it lies; `columnText` makes a string. `conn.text` decodes the rest in place:
 `timestamp(b, start, length, out, at)` writes a `timestamptz` as
 `2024-01-02T03:04:05.123Z` into `out`, and a `PgArrayWalker` walks a `text[]`
@@ -165,7 +168,15 @@ group. Up to `PgConfig.maxInFlight` groups may wait for their answers at once:
 send the next before the last is answered, and the round trips overlap.
 `canSend()` says whether another group may start. A builder call that may not
 run now — before `PG_READY`, past the cap, a `prepare` inside an open bind, a
-name or SQL holding a NUL byte — answers `false` and writes nothing.
+`param...` call or `bindEnd()` with no bind open, a `paramBytes` window
+outside its array, a name or SQL holding a NUL byte, or a message that would
+put more than `PgConfig.maxOutput` bytes (1 MiB) waiting to be sent — answers
+`false` and writes nothing. `sync()` and `terminate()` are never refused for
+room. Send what is queued and call `sent(n)`, and the room comes back.
+
+In a group that fails, `PG_DESCRIBED` still comes once for each `prepare` the
+server parsed before the error: count them to know which statements exist (a
+named one outlives its group) and which to prepare again.
 
 ## Authentication
 
@@ -182,6 +193,11 @@ fails with `PG_ERR_AUTH_UNSUPPORTED`: there is no TLS here, so the first would
 send the password as it is, and the second sends a hash anyone who sees it can
 replay. Set the role's password with `password_encryption = scram-sha-256`.
 
+The password's bytes are used as they are, without SASLprep (RFC 4013), the
+normalisation PostgreSQL applies to a non-ASCII password. An ASCII password
+works; a non-ASCII one works only if it is already in SASLprep's form, and
+otherwise the server refuses it.
+
 ## Failures and caps
 
 `failure` says why a connection ended:
@@ -197,10 +213,19 @@ replay. Set the role's password with `password_encryption = scram-sha-256`.
 | `7` | `PG_ERR_SERVER` | a `FATAL` error, or any error before `PG_READY`; `lastError` has it |
 | `8` | `PG_ERR_ENCODING` | a `client_encoding` other than `UTF8` |
 | `9` | `PG_ERR_CLOSED` | you called `closed()`: the stream ended |
+| `10` | `PG_ERR_SETTING` | a `DateStyle` that does not begin `ISO`, or a `TimeZone` other than `UTC`, at startup or after a `SET` |
+
+The connection asks for `DateStyle=ISO` and `TimeZone=UTC` at startup, so that
+`conn.text.timestamp` reads the time the server means; a session that changes
+either fails rather than be misread.
 
 The caps in `PgConfig` bound what a server can make the client hold or
 compute: `maxMessage` (1 MiB), `maxColumns` (1664), `maxInFlight` (16), and
-the SCRAM iteration count, 4096 to 100000.
+the SCRAM iteration count, 4096 to 100000; `maxOutput` (1 MiB) bounds what
+the program can queue unsent. A cap out of range — `maxMessage` or
+`maxOutput` under 1024, `maxInFlight` or `minIterations` under 1, and so on —
+an empty `user`, a startup parameter holding a NUL, or a nonce shorter than 18
+bytes is a mistake in the program, and the constructor panics.
 
 ## What it does not do
 
