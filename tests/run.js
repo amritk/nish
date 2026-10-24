@@ -9839,6 +9839,29 @@ if (!only || "secret wipe survives -O2".includes(only)) {
   }
 }
 
+// `nish/crypto/bcrypt` against libxcrypt's `crypt_r` on random passwords (NULs,
+// 8-bit bytes and keys past 72 bytes among them) and salts at cost 4 to 6, both
+// ways: Nish makes crypt_r's `$2b$` hash, crypt_r accepts Nish's, and Nish
+// answers crypt_r's `$2a$`, `$2b$` and `$2y$` hashes and a wrong password as
+// crypt_r does (tests/differential/bcrypt.js). Without a C compiler or
+// libxcrypt it skips and says which.
+if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includes(only))) {
+  const r = spawnSync("node", [path.join(root, "tests", "differential", "bcrypt.js"), "--compiler", NISH], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const summary = r.stdout.trimEnd().split("\n").at(-1) ?? ""
+  if (r.status === 2) {
+    skip(summary.replace(/^SKIP {2}/, ""))
+  } else {
+    check(
+      "bcrypt differential: Nish and libxcrypt crypt_r agree on random passwords and salts, both ways",
+      r.status === 0,
+      r.status === 0 ? summary : `${r.stdout}${r.stderr}`,
+    )
+  }
+}
+
 // The wipes of key material in `std/` survive `-O2`: one check per group of
 // roots in the area files of `tests/wipes/` (`tests/wipes/index.js` says what a
 // group is and how a root's wipes are counted).
