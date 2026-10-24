@@ -91,6 +91,8 @@ export const testConfig = (): Http1Config => {
   config.outputSize = 8192;
   config.maxMessage = 131072;
   config.idleTimeout = 1000;
+  // Shorter than idleTimeout, so a check can tell the head deadline from it.
+  config.headTimeout = 500;
   return config;
 };
 
@@ -766,6 +768,25 @@ export const serverChecks = (): i32 => {
   t.eqI32("past idleTimeout it is closed", lb.plain.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
   t.ok("and its client sees the end", lb.awaitEnd(idle) && lb.plain.busy() === 0);
 
+  // A slowloris client keeps its slot moving, so it is never idle, but its
+  // head never ends; a keep-alive client whose exchange is over has no head
+  // to wait for, so the deadline leaves it alone.
+  const kept: i32 = lb.connect(false);
+  lb.send(kept, ascii("GET /hello HTTP/1.1\r\nHost: a\r\n\r\n"));
+  lb.response(kept, false);
+  const slow: i32 = lb.connect(false);
+  lb.send(slow, ascii("GET /hello HTTP/1.1\r\nHost: a\r\n"));
+  lb.settle();
+  t.eqI32("a head that has just begun is not past headTimeout", lb.plain.expire(monotonicNanos()), ZERO);
+  t.eqI32(
+    "a head still unfinished past headTimeout closes its slot, though the slot is not idle",
+    lb.plain.expire(monotonicNanos() + toI64(750000000)),
+    toI32(1)
+  );
+  t.ok("and its client sees the end, while the kept-alive client's slot stays open", lb.awaitEnd(slow) && lb.plain.busy() === 1);
+  lb.plain.expire(monotonicNanos() + toI64(2000000000));
+  lb.awaitEnd(kept);
+
   const pool: i32[] = [];
   for (let k: i32 = 0; k < 4; k++) {
     pool.push(lb.connect(false));
@@ -874,6 +895,19 @@ export const serverChecks = (): i32 => {
   lb.settle();
   t.eqI32("an idle TLS slot is closed past idleTimeout", lb.secure.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
   t.ok("and its client sees the end", lb.awaitEnd(n.index) && lb.secure.busy() === 0);
+
+  const sl = new TlsClient(lb);
+  sl.handshake(noAlpn);
+  sl.send("GET /hello HTTP/1.1\r\nHost: a\r\n");
+  // The record can land after `settle` has seen a quiet millisecond, so wait
+  // on the loop until the slot holding it has the head's first bytes.
+  const slowConn: Http1Connection = lb.secure.connection(ZERO);
+  for (let k: i32 = 0; k < 10 && !slowConn.headTimed; k++) {
+    lb.step(toI32(-1));
+  }
+  t.eqI32("a TLS head that has just begun is not past headTimeout", lb.secure.expire(monotonicNanos()), ZERO);
+  t.eqI32("a TLS head still unfinished past headTimeout closes its slot", lb.secure.expire(monotonicNanos() + toI64(750000000)), toI32(1));
+  t.ok("and its client sees the end", lb.awaitEnd(sl.index) && lb.secure.busy() === 0);
 
   const h = new TlsClient(lb);
   t.ok("a client offering only h2 completes the handshake", h.handshake(["h2"]));

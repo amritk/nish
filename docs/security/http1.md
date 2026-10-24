@@ -16,9 +16,10 @@ panic. A panic is only ever the program's own mistake (a window outside its
 buffer, a cap out of range). Every cap is a number the program fixes at
 start-up. A warmed slot serves request after request — heads, bodies either
 way, responses with a length or chunked — with `Arena.used()` flat, over plain
-TCP and over TLS. Three findings are open: H1-1 (Medium), a client that
-trickles bytes keeps its slot; H1-2 (Low), no lingering close after a refusal;
-and H1-3 (Low), the memory each WebSocket upgrade leaves behind.
+TCP and over TLS. H1-1 (Medium), a client that trickles the bytes of its head
+to keep its slot, is fixed by a deadline for the whole head. Two findings are
+open: H1-2 (Low), no lingering close after a refusal; and H1-3 (Low), the
+memory each WebSocket upgrade leaves behind.
 
 ## Scope
 
@@ -51,9 +52,9 @@ what it writes is checked so that its strings cannot end a line.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| H1-1 | Medium | `std/net/http1-server.ts` (`Http1Server.expire`, `Http1TlsServer.expire`, `Http1Connection.idle`) | The idle timeout counts from the last byte moved, so a client that sends one byte of its head every `idleTimeout` (slowloris) keeps its slot for as long as it likes, and with every slot held new connections are shed (`H1_POOL_FULL`). Memory stays bounded: the head is capped by `maxHeaderBytes`, the slots by the pool. | **Open.** The fix is a deadline for a whole head (and for a body's progress), which needs the clock the idle timeout already reads passed into the connection; until then the program can close slots by its own rule, and the pool's size is the bound. |
-| H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the response is sent and the socket closed at once, without the lingering close RFC 9112 §9.6 describes. A client still sending a body when the socket closes may get a TCP reset that discards the error response before it reads it. Nothing is accepted that should not be: the effect is a client that sees a reset instead of a 413 or 400. | **Open.** A half-close (`netShutdown` for writing) and a short drain before `close` is the follow-up; it needs a timer of its own, as H1-1 does. |
-| H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`), through `std/net/websocket.ts` (`websocketRequestKey`, `websocketUpgradeResponse`) | Accepting a WebSocket leaves 58 bytes in the arena (the key and the accept key as strings, measured over 1,000 upgrades of one connection) until the program resets it. It is once a connection, not once a message, and bounded by the connection rate the pool allows — the shape of TLS-3 at a thousandth of its size. | **Open, accepted for now.** The same per-connection arena that closes TLS-3 closes it; the frames themselves allocate nothing. |
+| H1-1 | Medium | `std/net/http1-server.ts` (`Http1Server.expire`, `Http1TlsServer.expire`, `Http1Connection.idle`; the fix in `Http1Connection.headArrived`, `headLate`, `expired`, `nextRequest`, `Http1Server.readable` and `Http1TlsServer.next`, written against `main` at `804120e`) | The idle timeout counts from the last byte moved, so a client that sends one byte of its head every `idleTimeout` (slowloris) keeps its slot for as long as it likes, and with every slot held new connections are shed (`H1_POOL_FULL`). Memory stays bounded: the head is capped by `maxHeaderBytes`, the slots by the pool. | **Fixed.** `Http1Config.headTimeout` (30 s by default, checked at start-up beside `idleTimeout`) is a deadline for a whole head, counted from the clock the carrier reads when the head's first bytes are fed (`headArrived`) and cleared only when the head is read whole (`nextRequest`) or the slot is restarted, so neither a trickle nor bare CRLFs restart it. `expire(now)` closes a slot that is idle or whose head is past its deadline (`expired`), on both carriers; the TLS carrier starts the clock where it hands plaintext over (`next`), not where it reads a record. Tests: `a head still unfinished past headTimeout closes its slot, though the slot is not idle`, `and its client sees the end, while the kept-alive client's slot stays open`, `a TLS head still unfinished past headTimeout closes its slot` in `tests/link/net_http1_server` and `_f64` (run as `link/net_http1_server: exits with 0 and stdout matches expected.out` and its `_f64` twin); the first two fail on the base. What it does not bound: a body sent slowly (the idle timeout still restarts on each of its bytes; a deadline for a body's progress is the follow-up), a head whose bytes wait behind an open exchange (pipelined) until that exchange ends, and the TLS handshake before the first plaintext byte (TLS-4). |
+| H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the response is sent and the socket closed at once, without the lingering close RFC 9112 §9.6 describes. A client still sending a body when the socket closes may get a TCP reset that discards the error response before it reads it. Nothing is accepted that should not be: the effect is a client that sees a reset instead of a 413 or 400. | **Open.** A half-close (`netShutdown` for writing) and a short drain before `close` is the follow-up; it needs a timer of its own, which `expire` can read as H1-1's deadline does. |
+| H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`), through `std/net/websocket.ts` (`websocketRequestKey`, `websocketUpgradeResponse`) | Accepting a WebSocket leaves 58 bytes in the arena (the key and the accept key as strings, measured over 1,000 upgrades of one connection) until the program resets it. It is once a connection, not once a message, and bounded by the connection rate the pool allows — the shape of TLS-3 at a thousandth of its size. | **Open, accepted for now.** The same per-connection arena that closes TLS-3 closes it; the frames themselves allocate nothing. Writing the accept key into storage the connection owns, as `HpackDecoder` does for H2-1, does not close it alone: the key is hashed by `sha1` in `nish/crypto/sha1`, which answers a new array, and base64-encoded by a helper that answers a string, so the fix needs a SHA-1 and a base64 that write into a caller's buffer, outside this record's files. |
 
 ## Properties verified
 
@@ -162,8 +163,9 @@ not be sent are refused.
 (`chunkSize`, 16,384), the output (`outputSize`, 64 KiB, of which 256 bytes are
 kept for what the connection writes itself; a pool's slots borrow it from one
 `Http1OutputPool` while they write, below), a WebSocket message
-(`maxMessage`, 1 MiB) and the idle timeout (`idleTimeout`, 60 s, read by
-`expire`). The slots are the pool's size. An `Http1Server` builds a slot's
+(`maxMessage`, 1 MiB), the idle timeout (`idleTimeout`, 60 s, read by
+`expire`) and the deadline for a whole head (`headTimeout`, 30 s, read by
+`expire`; H1-1). The slots are the pool's size. An `Http1Server` builds a slot's
 connection on the first accept into it and keeps it, so it never holds more
 than `size` connections, each within the caps above, and holds none it has
 not needed: a pool of 16,384 takes 16,688 bytes before its first connection
@@ -217,7 +219,9 @@ HTTP/1.1 byte.
 
 **Idle slots** (`net_http1_server`): `expire(now)` closes a slot idle past
 `idleTimeout` on either carrier and leaves one that has just moved; the client
-sees the end. The pool sheds a connection past its size.
+sees the end. It closes a slot whose head is past `headTimeout`, on either
+carrier, though bytes keep the slot from being idle, and leaves a kept-alive
+slot whose exchange is over (H1-1). The pool sheds a connection past its size.
 
 **The program's mistakes panic** (one program each): a window outside its
 buffer in `Http1Connection.feed` (`net_http1_server_feed_window`), `write`

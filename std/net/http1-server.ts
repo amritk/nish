@@ -88,7 +88,8 @@
  *
  * **Caps are start-up numbers**, all in `Http1Config`: the request target,
  * the header section and its field count, a request body, the chunk handed
- * over, the output buffer, a WebSocket message and the idle timeout; the
+ * over, the output buffer, a WebSocket message, the idle timeout and the
+ * deadline for a whole request head (`headTimeout`, against slowloris); the
  * slots are the pool's size. `Http1Server` builds a slot's connection on the
  * first accept into it and keeps it, so a pool sized for its peak costs at
  * start-up only what does not depend on the size, and holds at most `size`
@@ -344,6 +345,13 @@ export class Http1Config {
   maxMessage: i32 = 1048576
   /** Milliseconds without a byte read or written after which `expire` closes a slot. */
   idleTimeout: i32 = 60000
+  /**
+   * Milliseconds a request head may take, from its first byte to its blank
+   * line, before `expire` closes the slot however steadily its bytes come. The
+   * idle timeout alone restarts on every byte, so a client that sends one byte
+   * of its head each `idleTimeout` would hold its slot for good (slowloris).
+   */
+  headTimeout: i32 = 30000
 }
 
 /** The reason phrase a status is sent with; RFC 9112 §4 lets a client ignore it. */
@@ -482,6 +490,8 @@ export class Http1Connection {
   noFields: u8[][]
   /** When the carrier last moved a byte for the connection, in `monotonicNanos`. */
   lastActive: i64 = 0
+  /** When the head being read began to arrive, in `monotonicNanos`; meaningful while `headTimed`. */
+  headSince: i64 = 0
   outputStart: i32 = 0
   outputEnd: i32 = 0
   dataStart: i32 = 0
@@ -517,6 +527,8 @@ export class Http1Connection {
   pongPending: boolean = false
   /** The peer's byte stream has ended. */
   inputEnded: boolean = false
+  /** A head has begun to arrive and is not read whole yet: `headSince` is its deadline's start. */
+  headTimed: boolean = false
 
   /** A connection under `config`. A cap outside what the connection can work with panics. */
   constructor(config: Http1Config) {
@@ -532,6 +544,7 @@ export class Http1Connection {
     http1ServerCheckCap("outputSize", config.outputSize, output, big)
     http1ServerCheckCap("maxMessage", config.maxMessage, H1_ZERO, big - H1_FRAME_HEADER)
     http1ServerCheckCap("idleTimeout", config.idleTimeout, one, big)
+    http1ServerCheckCap("headTimeout", config.headTimeout, one, big)
     // The buffers the peer's bytes fill grow by doubling and stop at 2^30
     // (`Http1Parser`'s input and head, `WsDecoder`'s input), so a cap whose
     // buffer could need more is refused here rather than reached by a peer:
@@ -592,6 +605,8 @@ export class Http1Connection {
     this.writeHeld = false
     this.pongPending = false
     this.inputEnded = false
+    this.headTimed = false
+    this.headSince = 0
     this.release()
   }
 
@@ -781,6 +796,9 @@ export class Http1Connection {
       }
       const event: i32 = this.parser.next()
       if (event === HTTP1_HEAD) {
+        // The head is whole, so its deadline is met; the next head's starts
+        // when its first byte is fed (`headArrived`).
+        this.headTimed = false
         this.requestOpen = true
         this.response = H1_R_NONE
         this.closeAfter = !this.parser.keepAlive
@@ -1185,6 +1203,30 @@ export class Http1Connection {
   idle(now: i64): boolean {
     return now - this.lastActive > toI64(this.config.idleTimeout) * toI64(1000000)
   }
+
+  /**
+   * Starts the head deadline at `now` (`monotonicNanos`) when bytes of a
+   * request head wait to be read and its clock has not started. The carriers
+   * call it after each `feed`; a program that feeds a connection itself calls
+   * it the same way. Bytes that wait while the previous exchange is still
+   * open start no clock: they count from the first feed once it is over.
+   */
+  headArrived(now: i64): void {
+    if (!this.headTimed && this.state === H1_S_HTTP && !this.requestOpen && this.parser.buffered() > 0) {
+      this.headTimed = true
+      this.headSince = now
+    }
+  }
+
+  /** Whether a head has been arriving for longer than `headTimeout` at `now` (`monotonicNanos`). */
+  headLate(now: i64): boolean {
+    return this.headTimed && now - this.headSince > toI64(this.config.headTimeout) * toI64(1000000)
+  }
+
+  /** Whether `expire` closes the slot at `now`: idle, or a head past its deadline. */
+  expired(now: i64): boolean {
+    return this.idle(now) || this.headLate(now)
+  }
 }
 
 // ---- Carriers -------------------------------------------------------------------
@@ -1369,7 +1411,9 @@ export class Http1Server {
       }
     }
     if (moved) {
-      conn.lastActive = monotonicNanos()
+      const now: i64 = monotonicNanos()
+      conn.lastActive = now
+      conn.headArrived(now)
     }
     return this.flush(slot)
   }
@@ -1471,11 +1515,14 @@ export class Http1Server {
     }
   }
 
-  /** Closes every slot that has been idle past `idleTimeout` at `now` (`monotonicNanos`); answers how many. */
+  /**
+   * Closes every slot that has been idle past `idleTimeout`, or reading one
+   * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
+   */
   expire(now: i64): i32 {
     let n: i32 = 0
     for (let k: i32 = 0; k < toI32(this.fds.length) && k < toI32(this.connections.length); k++) {
-      if (this.fds[k] >= 0 && this.connections[k].idle(now)) {
+      if (this.fds[k] >= 0 && this.connections[k].expired(now)) {
         this.close(k)
         n = n + 1
       }
@@ -1662,6 +1709,7 @@ export class Http1TlsServer {
       return H1_ERROR
     }
     const conn: Http1Connection = this.connections[slot]
+    let fed: boolean = false
     while (true) {
       const room: i32 = conn.inputRoom()
       const want: i32 = room < toI32(this.scratch.length) ? room : toI32(this.scratch.length)
@@ -1676,6 +1724,13 @@ export class Http1TlsServer {
         break
       }
       conn.feed(this.scratch, H1_ZERO, n)
+      fed = true
+    }
+    // TLS hands the plaintext over here rather than in `readable`, so the
+    // head's clock starts here; `readable` stamped `lastActive` before the
+    // record was read, which would start it early.
+    if (fed) {
+      conn.headArrived(monotonicNanos())
     }
     // A held-back write finds its room here, as in `Http1Server.next`.
     if (conn.writeHeld) {
@@ -1737,11 +1792,14 @@ export class Http1TlsServer {
     }
   }
 
-  /** Closes every slot that has been idle past `idleTimeout` at `now` (`monotonicNanos`); answers how many. */
+  /**
+   * Closes every slot that has been idle past `idleTimeout`, or reading one
+   * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
+   */
   expire(now: i64): i32 {
     let n: i32 = 0
     for (let k: i32 = 0; k < this.tls.size() && k < toI32(this.connections.length); k++) {
-      if (this.tls.holds(k) && this.connections[k].idle(now)) {
+      if (this.tls.holds(k) && this.connections[k].expired(now)) {
         this.tls.close(k)
         n = n + 1
       }
