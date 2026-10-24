@@ -107,7 +107,19 @@ Three jobs took longer than 15 minutes unsplit, so each is split:
   after the suite). Runners differ in speed by nearly a factor of two (one built
   stage1 in 34 s where its siblings took 57-61 s), so read a span only from a
   shard whose stage1 build and pre-link sections took as long as the other
-  shards': a shard on a fast runner finishes early on any table. The shard-1
+  shards': a shard on a fast runner finishes early on any table. The link
+  programs run `defaultJobs()` at a time and print in order, each once it and
+  every program before it are done, so a gap is a program's share of its
+  shard's pooled wall clock rather than its own run time: one that finished
+  behind a slower predecessor reads near 0. A shard's gaps still add up to its
+  link wall clock, which is what the deal balances. The table was last
+  regenerated from [run 40084480854](https://github.com/amritk/nish/actions/runs/40084480854)
+  (`6483ea9`, the first with the pool), whose shards built stage1 in 34-49 s
+  and ran the pre-link sections in 125-145 s. On the previous table its shards
+  spent 430, 398, 331 and 285 s after the pre-link sections (jobs of 614, 635,
+  546 and 489 s); dealt from the new table, the same costs come to 430 s for
+  shard 1 and 338 s for each of the others, so shard 1's own sections now set
+  the job's length. The shard-1
   steps after the suite that require a `PASS` line (`simd`, the AES kernels,
   `cpu-level`) grep the Test step's log for it rather than running their
   section again.
@@ -300,6 +312,16 @@ WP13 differential and 56 s building stage1. Every other section took under
 same commit. The shard split follows from those numbers: the link programs are
 the part worth dealing out, and WP14 is the one section large enough to deal
 with them.
+
+Since the link programs run through a worker pool (`defaultJobs()`, four on a
+hosted runner), they are no longer most of a shard. In
+[run 40084480854](https://github.com/amritk/nish/actions/runs/40084480854)
+the 669 programs took 636 s of wall clock across the four `test` shards, 16 to
+285 s per shard, against 125-145 s per shard for the sections before them and
+34-49 s for stage1. The largest single spans were crypto-bench (259 s, shard
+2), shard 1's sections after the link programs (396 s, with 18 s of steps
+after the suite) and WP14 self-hosting (135 s, shard 3). The longest `test`
+job took 10 min 35 s.
 
 ## Running the same steps locally
 
