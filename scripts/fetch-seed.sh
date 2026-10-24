@@ -21,7 +21,10 @@
 # latest-version redirect, the check that what arrived runs and says the
 # version asked for, and the swap that leaves a working seed in place when a
 # download fails are all there already, and a second copy of them would be a
-# second place for a release's asset name to be spelled.
+# second place for a release's asset name to be spelled. So are the checks on
+# what it downloads: the SHA-256 against SHA256SUMS or a pinned digest, and,
+# for a seed after 0.20.0 on a machine with a signed-in GitHub CLI, the
+# release's build provenance attestation (docs/security/supply-chain.md, SC-16).
 #
 # With no version this is a no-op whenever build/seed/bin/nish already runs,
 # without touching the network, which is what lets the session hook call it on

@@ -24,7 +24,7 @@ hold the rules for the one compiler that is left.
 | --- | --- |
 | The seed that builds `src/` | The last released `nish`, which `scripts/fetch-seed.sh` puts in `build/seed/`. `NISH_BOOTSTRAP=<path>` names another binary (G3). The policy is that 0.N is built by the last patch release of 0.(N−1) (G4) |
 | The permanent Nish-0 freeze | The rolling freeze: a construct added in 0.N reaches `src/` in 0.(N+1). CI's `seeds` and `bootstrap` jobs check it (G3) |
-| `IR(stage0, src/) == IR(stage1, src/)` in `tests/self/bootstrap.js` | `IR(stage1) == IR(stage2)` and stage3 == stage2, built from the seed. Diverse double-compiling has no successor (§6 item 1). The `ddc-*` tags record where it last held (G6) |
+| `IR(stage0, src/) == IR(stage1, src/)` in `tests/self/bootstrap.js` | `IR(stage1) == IR(stage2)` and stage3 == stage2, built from the seed. Diverse double-compiling continues from the `ddc-0.6.0` root: `rebuild.yml` builds every release since with `scripts/ddc-chain.sh` each month and compares the end with the latest published compiler ([supply-chain.md](security/supply-chain.md), SC-29). The `ddc-*` tags record where stage0 last held (G6) |
 | `ir_oracle.js`, `interop_oracle.js` | `tests/nish-cmp.js`, the last release against HEAD over the corpus, byte for byte (G2.1). It is `ci.yml`'s `nish-cmp` job, gated by `cmpSince` in `.github/seed-targets.json`. The `tests/cases/*.ll` goldens also cover this |
 | `types_oracle.js`, `diagnostics_oracle.js`, `symbols_oracle.js`, `checked_oracle.js` | Checked-in goldens in `tests/self/goldens/`, written while both compilers agreed and compared by `tests/self/goldens.js` (G2.4) |
 | The stage0 half of `support-oracle.js` | `tests/self/goldens/support.txt` |
@@ -35,7 +35,7 @@ hold the rules for the one compiler that is left.
 | Diagnostic wordings proved by agreement | `tests/wordings/` and `tests/diagnostic-coverage.js --require-coverage`. `stage0_only.txt` was folded into `unreachable.txt` |
 | `--parity` and its workflows, and the stage1-only register (§1a) | Nothing: both need two compilers |
 | The `dist/` fallback in the npm package | The launcher refuses on a platform with no binary and exits 3 (§6 item 5) |
-| The provenance property | The `ddc-0.4.0`, `ddc-0.5.0` and `ddc-0.6.0` tags and the procedure in G6. `.github/ddc-tag.sh` and the `ddc` job were deleted with stage0 |
+| The provenance property | The `ddc-0.4.0`, `ddc-0.5.0` and `ddc-0.6.0` tags and the procedure in G6. `.github/ddc-tag.sh` and `release.yml`'s `ddc` job were deleted with stage0; `rebuild.yml`'s `ddc` job builds forward from the last tag (SC-29) |
 | Ported guards (runtime declarations against `nish.h`, the allocating builtins, the seed targets, the exit-70 path through `NISH_SIMULATE_ICE`) | The same checks, run against stage1 |
 | `typescript` as a runtime dependency | It is a devDependency now, used by `npm run check` and by the lexer and parser oracles |
 
@@ -333,7 +333,9 @@ are never moved or deleted.
    script exits 0 with one summary line, or prints `FAIL` naming the first
    module and line that differ and exits 1.
 
-A pass demonstrates diverse double-compiling again at that commit. On a
+A pass demonstrates diverse double-compiling again at that commit.
+`scripts/ddc-chain.sh` runs these steps at `ddc-0.6.0` and then builds every
+release after it with the compiler of the one before (SC-29). On a
 failure, check the environment first, because only the tree is fixed.
 
 ---
@@ -422,8 +424,11 @@ releases.
 
 ## 6. What retirement costs, stated plainly
 
-1. **Diverse double-compiling ends.** A wrong lowering the compiler depends
-   on can survive a release. G6 archives the last point where it could not.
+1. **Diverse double-compiling ends at release time.** A wrong lowering the
+   compiler depends on can survive a release. G6 archives the last point where
+   it could not, and since SC-29 ([supply-chain.md](security/supply-chain.md))
+   `rebuild.yml` builds every release again from that point each month, so a
+   compiler that passed something down the line unseen would differ there.
 2. **The diagnostics lose their oracle.** Goldens are weaker than agreement.
 3. **The bug-finding direction reverses.** stage0 found six wrong-attribute
    bugs in S3 and S4, the class a golden `.ll` catches worst.

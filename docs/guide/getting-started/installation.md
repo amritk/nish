@@ -85,6 +85,33 @@ an exact version: end the install script's command with `| sh -s 0.20.0`,
 or run `npm install -g nish@0.20.0`. Read the
 [changelog](../../../CHANGELOG.md) before you upgrade.
 
+### Checking where the download came from
+
+Every release lists a SHA-256 for each of its files in `SHA256SUMS`, and the
+install script refuses a download that does not match. Releases after 0.20.0
+also carry a signed *build provenance attestation*: a record, signed through
+GitHub, that the files were built by Nish's release workflow from the tagged
+source on GitHub's own runners. A matching checksum shows that the file is the
+one the release lists; the attestation shows where that release came from.
+
+When the [GitHub CLI](https://cli.github.com) (`gh`) is installed and signed
+in, the install script checks the attestation too, and refuses to install if
+it does not verify. Without `gh` it skips that check and says so. To check a
+tarball you downloaded yourself, with its version and platform filled in
+(for example `nish-0.21.0-x86_64-linux.tar.gz` and `refs/tags/v0.21.0`):
+
+```bash
+gh attestation verify nish-<version>-<platform>.tar.gz \
+  --repo amritk/nish \
+  --signer-workflow amritk/nish/.github/workflows/release.yml \
+  --source-ref refs/tags/v<version>
+```
+
+Each release also attaches a software bill of materials,
+`nish-<version>.spdx.json`, in the SPDX format. It lists every file of the
+release with its checksum, the LLVM, linker and Node.js versions that built
+each compiler, and the third-party code compiled into it.
+
 ## 3. Check that it worked
 
 ```bash
