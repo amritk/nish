@@ -1,0 +1,13 @@
+{
+  "name": "caps-lock-ungated",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "pkg_mix": [
+          "net"
+        ]
+      }
+    }
+  }
+}

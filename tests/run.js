@@ -20008,6 +20008,20 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       dependencyRun.stderr.startsWith(shownDependency[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
     shownDependency === null ? "no caps_dep_net_refused capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(dependencyRun)
   )
+  // WP40: and the lockfile refusal after it, from its link program.
+  const shownLock = /<!-- capabilities-refusal caps_lock_growth -->\n```text\n([\s\S]*?)```\n/.exec(cookbookText)
+  const lockRefusedRun = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "caps_lock_growth", "main.ts"), "-o", path.join(capsDir, "lock-cookbook") + path.sep],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capability lock: the refusal docs/IR_COOKBOOK.md shows is the one tests/link/caps_lock_growth prints",
+    shownLock !== null &&
+      lockRefusedRun.status === 1 &&
+      lockRefusedRun.stderr.startsWith(shownLock[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
+    shownLock === null ? "no caps_lock_growth capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(lockRefusedRun)
+  )
   const grantedDir = path.join(capsDir, "granted") + path.sep
   const grantedRun = spawnSync(
     NISH,
@@ -20026,6 +20040,136 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       fs.existsSync(ungrantedLl) &&
       fs.readFileSync(grantedLl, "utf8") === fs.readFileSync(ungrantedLl, "utf8"),
     shown(grantedRun)
+  )
+
+  // WP40: the capability lockfile. `--update-capability-lock` writes it beside
+  // the root package.json, byte-stable, and a rebuild holds the build to it.
+  // The fixtures are copied out first, so the run writes no tracked file.
+  const lockName = "nish-capabilities.lock.json"
+  const lockCopy = (name) => {
+    const dir = path.join(capsDir, "lock", name)
+    fs.rmSync(dir, { recursive: true, force: true })
+    fs.cpSync(path.join(linkDir, name), dir, { recursive: true })
+    return dir
+  }
+  const lockBuild = (dir, extra) =>
+    spawnSync(NISH, [path.join(dir, "main.ts"), "-o", path.join(dir, "out") + path.sep, ...extra], {
+      cwd: root,
+      encoding: "utf8",
+    })
+  const updated = lockCopy("caps_lock_growth")
+  const updateRun = lockBuild(updated, ["--update-capability-lock"])
+  const writtenLock = fs.existsSync(path.join(updated, lockName))
+    ? fs.readFileSync(path.join(updated, lockName), "utf8")
+    : ""
+  check(
+    "capability lock: --update-capability-lock rewrites the lockfile it would refuse, sorted, two-space, one trailing newline",
+    updateRun.status === 0 &&
+      updateRun.stderr.includes(`wrote ${path.join(updated, lockName)}`) &&
+      writtenLock === '{\n  "version": 1,\n  "packages": {\n    "pkg_http": ["net"]\n  }\n}\n',
+    `${shown(updateRun)}\n--- written\n${writtenLock}`
+  )
+  const rebuilt = lockBuild(updated, [])
+  check(
+    "capability lock: the build after --update-capability-lock passes the lockfile it wrote",
+    rebuilt.status === 0,
+    shown(rebuilt)
+  )
+  const rewritten = lockBuild(updated, ["--update-capability-lock"])
+  check(
+    "capability lock: a second --update-capability-lock writes the same bytes",
+    rewritten.status === 0 && fs.readFileSync(path.join(updated, lockName), "utf8") === writtenLock,
+    shown(rewritten)
+  )
+  // A row is every capability the dependency reaches, not only the four the
+  // dependency policy gates: `fs.read` is written beside the granted `net`.
+  const ungatedLock = lockCopy("caps_lock_ungated")
+  const ungatedRun = lockBuild(ungatedLock, ["--update-capability-lock"])
+  const ungatedWritten = fs.existsSync(path.join(ungatedLock, lockName))
+    ? fs.readFileSync(path.join(ungatedLock, lockName), "utf8")
+    : ""
+  check(
+    "capability lock: --update-capability-lock records a capability the dependency policy does not gate",
+    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"fs\.read"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
+    `${shown(ungatedRun)}\n--- written\n${ungatedWritten}`
+  )
+  check(
+    "capability lock: the build after recording an ungated capability passes",
+    lockBuild(ungatedLock, []).status === 0,
+    ungatedWritten
+  )
+  // Every dependency has a row, `[]` for one that reaches nothing; std and the
+  // root package have none.
+  const pureLock = lockCopy("caps_lock_no_row_pure")
+  const pureRun = lockBuild(pureLock, ["--update-capability-lock"])
+  check(
+    "capability lock: a dependency that reaches nothing is written with an empty row",
+    pureRun.status === 0 &&
+      fs.readFileSync(path.join(pureLock, lockName), "utf8") ===
+        '{\n  "version": 1,\n  "packages": {\n    "pkg_pure": []\n  }\n}\n',
+    shown(pureRun)
+  )
+  const refusedLock = lockCopy("caps_lock_refused")
+  const refusedUpdate = lockBuild(refusedLock, ["--update-capability-lock"])
+  check(
+    "capability lock: a build the dependency policy refuses writes no lockfile under --update-capability-lock",
+    refusedUpdate.status === 1 &&
+      refusedUpdate.stderr.includes("which the root package does not grant it") &&
+      !fs.existsSync(path.join(refusedLock, lockName)),
+    shown(refusedUpdate)
+  )
+  // The flag skips the comparison: a lockfile it would refuse, even a
+  // malformed one, is replaced rather than read.
+  const malformedLock = lockCopy("caps_lock_bad_json")
+  const malformedUpdate = lockBuild(malformedLock, ["--update-capability-lock"])
+  check(
+    "capability lock: --update-capability-lock replaces a malformed lockfile instead of reading it",
+    malformedUpdate.status === 0 && fs.readFileSync(path.join(malformedLock, lockName), "utf8") === writtenLock,
+    shown(malformedUpdate)
+  )
+  for (const [other, refusal] of [
+    ["--fix", "`--update-capability-lock` cannot be used with --fix"],
+    ["--emit-ast", "`--update-capability-lock` reports on a checked program, and --emit-ast stops before the check"],
+  ]) {
+    const refusedFlag = spawnSync(
+      NISH,
+      [path.join(lockCopy("caps_lock_matches"), "main.ts"), "--update-capability-lock", other],
+      { cwd: root, encoding: "utf8" }
+    )
+    check(
+      `capability lock: --update-capability-lock with ${other} is a usage error, exit 2`,
+      refusedFlag.status === 2 && refusedFlag.stderr.includes(refusal),
+      shown(refusedFlag)
+    )
+  }
+  // `nish run` checks the program, lockfile included, before it looks in its
+  // cache, so the lockfile is not part of the key and a cache hit is still
+  // held to it: the third run below emits the IR the first two cached.
+  const runLock = lockCopy("caps_lock_matches")
+  const lockCache = path.join(capsDir, "lock", "run-cache")
+  fs.rmSync(lockCache, { recursive: true, force: true })
+  const lockRun = (extra) =>
+    spawnSync(NISH, ["run", ...extra, path.join(runLock, "main.ts")], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, XDG_CACHE_HOME: lockCache },
+    })
+  const firstRun = lockRun(["--update-capability-lock"])
+  const secondRun = lockRun([])
+  const cached = fs.existsSync(path.join(lockCache, "nish", "run"))
+    ? fs.readdirSync(path.join(lockCache, "nish", "run")).length
+    : 0
+  fs.writeFileSync(path.join(runLock, lockName), '{\n  "version": 1,\n  "packages": {\n    "pkg_http": []\n  }\n}\n')
+  const hitRun = lockRun([])
+  check(
+    "capability lock: `nish run` takes --update-capability-lock, and a run cache hit is still held to the lockfile",
+    firstRun.status === 0 &&
+      firstRun.stderr.includes(`wrote ${path.join(runLock, lockName)}`) &&
+      secondRun.status === 0 &&
+      cached === 1 &&
+      hitRun.status === 1 &&
+      hitRun.stderr.includes(`which \`${lockName}\` does not record for it`),
+    `cache entries: ${cached}\n${shown(firstRun)}\n${shown(secondRun)}\n${shown(hitRun)}`
   )
 
   // A program that will not run gets the refusal alone: the line is promised
