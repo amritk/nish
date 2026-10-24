@@ -2843,6 +2843,7 @@ const SPEED_LINK = new Map([
   // compile these, so the binary the link loop runs is the optimised one too.
   ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
   ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
+  ["crypto_bcrypt", "tests/wipes counts its wipes after -O2"],
   ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
   ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
   ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
@@ -10701,6 +10702,58 @@ if (!only || "secret wipe survives -O2".includes(only)) {
       "nish:secret: an inferred `Secret`'s wipe survives opt -O2 (a volatile memset of its key), where the twin's fill(0) is deleted",
       inferred.ok && inferredPlain.ok && volatileSet.test(inferred.text) && inferredPlainStores === 0,
       `inferred:\n${inferred.text}\n--- plain: ${inferredPlainStores} stores\n${inferredPlain.text}`
+    )
+  }
+}
+
+// `nish/crypto/bcrypt` against libxcrypt's `crypt_r` on random passwords (NULs,
+// 8-bit bytes and keys past 72 bytes among them) and salts at cost 4 to 6, both
+// ways: Nish makes crypt_r's `$2b$` hash, crypt_r accepts Nish's, and Nish
+// answers crypt_r's `$2a$`, `$2b$` and `$2y$` hashes and a wrong password as
+// crypt_r does (tests/differential/bcrypt.js). Without a C compiler or
+// libxcrypt it skips and says which.
+if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includes(only))) {
+  const r = spawnSync("node", [path.join(root, "tests", "differential", "bcrypt.js"), "--compiler", NISH], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const summary = r.stdout.trimEnd().split("\n").at(-1) ?? ""
+  if (r.status === 2) {
+    skip(summary.replace(/^SKIP {2}/, ""))
+  } else {
+    check(
+      "bcrypt differential: Nish and libxcrypt crypt_r agree on random passwords and salts, both ways",
+      r.status === 0,
+      r.status === 0 ? summary : `${r.stdout}${r.stderr}`,
+    )
+  }
+}
+
+// The bcrypt vectors of tests/link/crypto_bcrypt as a `--profile wasi` module
+// under Node's WASI: the module is pure, so it builds for wasm32 and answers
+// every vector there as natively.
+if (!only || ["crypto_bcrypt", "bcrypt", "wasi"].some((name) => name.includes(only))) {
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const dir = path.join(buildDir, "wasi_crypto_bcrypt")
+    const wasm = path.join(dir, "app.wasm")
+    const built = spawnSync(
+      NISH,
+      [path.join(linkDir, "crypto_bcrypt", "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, "crypto_bcrypt", "expected.out"), "utf8")
+    check(
+      `link/crypto_bcrypt: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: link/crypto_bcrypt: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the bcrypt vectors is not run`
     )
   }
 }
