@@ -5242,6 +5242,23 @@ before code that may panic when those bytes matter.
   class, and its name may be written only as the type of a parameter that
   borrows one `` (`_type_position`, `_field`, `_return`, `_result`,
   `_nullable`, `_type_argument`, `_exported_param`).
+- **Not after its close, and not kept past a lend.** A `using` binding's scope
+  is its block, which ends where the close is emitted, so a handle named after
+  its block — after it, in the loop's next iteration, in a later `case`, in the
+  `else`, later in a constructor — names nothing: `` Unknown builtin `f.read` ``
+  or `` Unknown identifier `f` `` (`_use_after_close`, `_use_after_close_loop`,
+  `_use_after_close_switch`, `_use_after_close_else`, `_use_after_close_ctor`).
+  A `using` written straight into a `case` clause is refused by the clause rule
+  (`_use_after_close_switch_clause`). A lent handle cannot be kept by its
+  callee: a local (`let saved = f`), a field of another class, set in a method
+  or through `new`, `h.l = this`, a `Map`, a `Channel`, an alias, an array, a
+  closure, a return, a `scope()` task and a type argument are each refused by
+  one of the two rules above (`_use_after_close_keep`,
+  `_use_after_close_keep_field`, `_walk_ctor_param`, `_use_after_close_keep_this`,
+  `_use_after_close_keep_map`, `_use_after_close_keep_channel`, and the cases
+  named above), and a module binding cannot hold one, since a module has no
+  top-level `let` and its constants are never assigned
+  (`_use_after_close_keep_module`, `_use_after_close_keep_module_expr`).
 
 **Two things stay C contracts, as a buffer's count does.** The class's methods
 pass the field only to functions that use it and return, and that neither close
