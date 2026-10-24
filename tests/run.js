@@ -1693,7 +1693,115 @@ if (!only || "term".includes(only)) {
     }
   }
 
-  // Under Node the two questions answer and the three readers fail loudly.
+  // `setTerminalRestore` under a pseudo-terminal: each mode of term_restore
+  // keeps `<old>`, is refused past the cap, enters raw mode and swaps in
+  // `BYTES`, prints `last <mode>` and leaves by returning, a panic, SIGTERM
+  // or SIGSEGV; `cleared` clears its bytes first. The line the script
+  // echoes next follows the program's output directly, so what lies between
+  // `last <mode>` and it is exactly what the runtime wrote on the way out:
+  // `BYTES`, once, nothing for `cleared` and all 4,096 bytes for `full`.
+  // `<old>` never appears, and `<bye>` once per run that keeps it, so nothing
+  // went out early or twice. On Linux one more `exit` runs with a preloaded
+  // `tcsetattr` that writes `<tcsetattr>` before it sets the termios, so
+  // the bytes before the mark are the ones written before the restore.
+  const restoreExe = has("script") ? buildCaseIn(termDir, "term_restore") : null
+  if (restoreExe !== null) {
+    const sh = path.join(termDir, "restore.sh")
+    let shim = ""
+    if (process.platform === "linux") {
+      const c = path.join(termDir, "order.c")
+      fs.writeFileSync(
+        c,
+        [
+          "#define _GNU_SOURCE",
+          "#include <dlfcn.h>",
+          "#include <termios.h>",
+          "#include <unistd.h>",
+          "int tcsetattr(int fd, int when, const struct termios *t) {",
+          "  static int (*real)(int, int, const struct termios *);",
+          '  if (!real) real = (int (*)(int, int, const struct termios *))dlsym(RTLD_NEXT, "tcsetattr");',
+          '  write(1, "<tcsetattr>", 11);',
+          "  return real(fd, when, t);",
+          "}",
+          "",
+        ].join("\n")
+      )
+      shim = path.join(termDir, "order.so")
+      const cc = spawnSync("clang", ["-shared", "-fPIC", "-o", shim, c, "-ldl"], { encoding: "utf8" })
+      if (!check("term_restore: the preloaded tcsetattr builds", cc.status === 0, shown(cc))) shim = ""
+    }
+    fs.writeFileSync(
+      sh,
+      [
+        'E="$1"; D="$2"; S="$3"',
+        'if [ -t 0 ]; then echo pty; else echo "no pty"; exit 0; fi',
+        'same() { stty -g | cmp -s - "$D/before" && echo same || echo changed; }',
+        'stty -g > "$D/before"',
+        '"$E" exit',
+        'echo "end exit $? stty $(same)"',
+        '"$E" cleared',
+        'echo "end cleared $? stty $(same)"',
+        '"$E" panic 2>/dev/null',
+        'echo "end panic $? stty $(same)"',
+        '"$E" full',
+        'echo "end full $? stty $(same)"',
+        'if [ -n "$S" ]; then LD_PRELOAD="$S" "$E" exit; echo "end order $? stty $(same)"; fi',
+        // The shell's own "Terminated" goes to its stderr, which is the pty.
+        "exec 2>/dev/null",
+        "for sig in TERM SEGV; do",
+        '  : > "$D/ready"',
+        '  "$E" hold </dev/tty 2> "$D/ready" & pid=$!',
+        "  i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/ready\"; do sleep 0.1; i=$((i + 1)); done",
+        '  kill -$sig $pid; wait $pid',
+        '  echo "end $sig $? stty $(same)"',
+        "done",
+        "",
+      ].join("\n")
+    )
+    const argv =
+      process.platform === "darwin"
+        ? ["-q", "/dev/null", "sh", sh, restoreExe, termDir, shim]
+        : ["-qec", 'sh "$NISH_PTY_SH" "$NISH_PTY_EXE" "$NISH_PTY_DIR" "$NISH_PTY_SO"', "/dev/null"]
+    const r = spawnSync("script", argv, {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        NISH_PTY_SH: sh,
+        NISH_PTY_EXE: restoreExe,
+        NISH_PTY_DIR: termDir,
+        NISH_PTY_SO: shim,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30000,
+    })
+    const out = String(r.stdout).replaceAll("\r", "")
+    if (!out.split("\n").includes("pty")) {
+      skip(`term_restore: \`script\` gave no pseudo-terminal here (${shown(r).replaceAll("\n", " ")})`)
+    } else {
+      const bytes = "\u001b[?25h<bye>"
+      const want = [
+        `last exit\n${bytes}end exit 0 stty same\n`,
+        "last cleared\nend cleared 0 stty same\n",
+        `last panic\n${bytes}end panic 1 stty same\n`,
+        `full 0\nlast full\n${"a".repeat(4096)}end full 0 stty same\n`,
+        `last hold\n${bytes}end TERM 143 stty same\n`,
+        `last hold\n${bytes}end SEGV 139 stty same\n`,
+      ]
+      if (shim !== "") want.push(`last exit\n${bytes}<tcsetattr>end order 0 stty same\n`)
+      const runs = shim === "" ? 6 : 7
+      check(
+        "term_restore: under a pseudo-terminal the restore bytes are what follows the last output, once, on returning, a panic, SIGTERM and SIGSEGV, before the termios on Linux, all 4,096 at the cap, none once cleared, and the terminal is as it was",
+        want.every((part) => out.includes(part)) &&
+          out.split("set 0 -7 0 0\n").length === runs + 1 &&
+          out.split("<bye>").length === runs - 1 &&
+          !out.includes("<old>"),
+        `want every part of ${JSON.stringify(want)}\n${shown(r)}`
+      )
+    }
+  }
+
+  // Under Node the two questions answer and the four others fail loudly.
   const answered = runCaseUnderPrelude("caps_tty", [])
   check(
     "caps_tty: under the prelude terminalSize answers -25 off a terminal, as natively",
@@ -1705,6 +1813,14 @@ if (!only || "term".includes(only)) {
     "term_calls: under the prelude readStdin fails loudly rather than answering",
     loud.status !== 0 && loud.stderr.includes("`readStdin` has no synchronous reading under Node"),
     shown(loud)
+  )
+  const restoreLoud = runCaseUnderPrelude("term_restore", [])
+  check(
+    "term_restore: under the prelude setTerminalRestore fails loudly rather than answering",
+    restoreLoud.status !== 0 &&
+      restoreLoud.stdout === "" &&
+      restoreLoud.stderr.includes("`setTerminalRestore` has no reading under Node"),
+    shown(restoreLoud)
   )
 }
 
@@ -1727,6 +1843,7 @@ if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
       ["term_calls", "printf abcd", "4\ntrue\nfalse\nfalse\n2 -25 0\n-25\n0\n"],
       ["term_import", "head -c 1000 /dev/zero", "-25\n1000\n"],
       ["term_wait0", "printf abcd", "true\n"],
+      ["term_restore", "true", "-25 0 -25 -7\n"],
     ]) {
       const wasm = path.join(wasiDir, `${name}.wasm`)
       const built = spawnSync(
@@ -1752,6 +1869,8 @@ if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
       check(
         name === "term_wait0"
           ? `${name}: under the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) waitStdin(0) sees bytes already piped`
+          : name === "term_restore"
+          ? `${name}: under the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) setTerminalRestore answers -25, 0 for "" and -7 past the cap, as natively off a terminal`
           : `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) reads piped stdin and answers -25 for the terminal, as natively`,
         built.status === 0 && ran.status === 0 && ran.stdout === want,
         shown(ran)
@@ -1759,7 +1878,7 @@ if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
     }
   } else {
     skip(
-      `skipped: term_calls, term_import, term_wait0: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the stdin readers are not run`
+      `skipped: term_calls, term_import, term_wait0, term_restore: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the stdin readers are not run`
     )
   }
 }
@@ -2799,6 +2918,43 @@ if (!only || "diagnostics".includes(only)) {
     codesGen.status === 0,
     codesGen.stdout + codesGen.stderr
   )
+
+  // ---- the security records' scope ---------------------------------------
+  // Every file of the attacker-facing surface is in a record's scope or on the
+  // index's "Not yet audited" list (CLAUDE.md, "Definition of done").
+  const scopeScript = path.join(root, "scripts", "security-scope.mjs")
+  const scopeLive = spawnSync("node", [scopeScript], { cwd: root, encoding: "utf8" })
+  check(
+    "security-scope: every std/net, std/crypto and runtime C file is in a record or listed as not yet audited",
+    scopeLive.status === 0,
+    scopeLive.stdout + scopeLive.stderr
+  )
+  {
+    // A new file in no scope is refused, and so is a listed file now covered.
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), "nish-scope-"))
+    const put = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true })
+      fs.writeFileSync(path.join(tree, rel), text)
+    }
+    put("std/net/new.ts", "")
+    put("std/crypto/listed.ts", "")
+    put("runtime/runtime.c", "")
+    put("docs/security/r.md", "## Scope\n\n| File | Functions |\n| --- | --- |\n| `runtime/*.c` | all |\n| `std/crypto/listed.ts` | all |\n")
+    put(
+      "docs/security/README.md",
+      "## Areas\n\n| Area | Record | Scope |\n| --- | --- | --- |\n\n## Not yet audited\n\n| File | Why |\n| --- | --- |\n| `std/crypto/listed.ts` | later |\n"
+    )
+    const scopeBad = spawnSync("node", [scopeScript, "--root", tree], { encoding: "utf8" })
+    fs.rmSync(tree, { recursive: true, force: true })
+    check(
+      "security-scope: refuses a file in no record's scope and a listed file a record now covers",
+      scopeBad.status === 1 &&
+        scopeBad.stderr.includes("std/net/new.ts: in no record's scope") &&
+        scopeBad.stderr.includes("std/crypto/listed.ts: in a record's scope") &&
+        !scopeBad.stderr.includes("runtime/runtime.c"),
+      scopeBad.stdout + scopeBad.stderr
+    )
+  }
 
   // ...and that it refuses what `codeFor` would misread (issue #107). The live
   // registry is copied with one line broken, and `--check` has to reject each
@@ -8136,6 +8292,18 @@ for (const name of ["std_term", "std_term_f64"]) {
   )
 }
 
+// `nish/cli`'s menu, under styles the program makes by hand, is a pure function
+// of its rows: the same bytes under runtime/nish.mjs as compiled.
+if (!only || "std_cli".includes(only) || "cli-under-node".includes(only)) {
+  const run = runFixtureUnderNode(path.join(linkDir, "std_cli", "main.ts"), "utf8")
+  const want = fs.readFileSync(path.join(linkDir, "std_cli", "expected.out"), "utf8")
+  check(
+    "link/std_cli: nish/cli prints the same menu under runtime/nish.mjs as natively",
+    run.status === 0 && run.stdout === want,
+    `exit ${run.status}\n--- native (expected.out)\n${want}--- node\n${run.stdout}${run.stderr}`
+  )
+}
+
 // A game calls `flush` on a screen made before its frame loop. Were the call to
 // store into the screen (growing its byte buffer, say), the loop could not take
 // a pass's string back, and a 200×60 frame would keep its ~100 KB to the end of
@@ -13217,11 +13385,11 @@ if (!only) {
       String(w.stderr) + (host ? String(host.stderr) : "")
     )
 
-    // Math.min and Math.max of a float are llvm.minnum / maxnum, which wasm32 lowers to
-    // libm's fmin, fmax, fminf and fmaxf. The freestanding profile has no libm, so until
-    // runtime-wasm.c supplied them a module using them did not link. Compiled here, with
-    // the wasm target, rather than read from section A's native build; the exports must
-    // answer what minnum answers natively, which the case's own `test()` counts.
+    // Math.min and Math.max of a float are llvm.minimum / maximum, which wasm32 has as
+    // instructions (`f64.min`, `f32.max`), so the module imports nothing and needs no libm.
+    // Compiled here, with the wasm target, rather than read from section A's native build;
+    // the exports must answer what JavaScript's Math.min and Math.max answer, NaN and -0
+    // included, which the case's own `test()` counts.
     const minmaxLl = path.join(buildDir, "math_minmax_float_wasm.ll")
     const minmaxWasm = path.join(buildDir, "math_minmax_float.wasm")
     const mc = spawnSync(
@@ -13242,12 +13410,13 @@ if (!only) {
       "const e = new WebAssembly.Instance(m, {}).exports",
       "console.log([WebAssembly.Module.imports(m).length, e.test(), e.minF64(NaN, 1), e.minF64(1, NaN),",
       "  e.maxF64(NaN, 2), e.minF64(NaN, NaN), e.minF64(2.5, -1), e.maxF64(-3, -7),",
+      "  1 / e.minF64(0, -0), 1 / e.maxF64(-0, 0),",
       "  e.minF32(NaN, 1.5), e.maxF32(0.25, NaN), e.minF32(3, 2)].join(' '))",
     ].join("\n")
     const mr = ml.status === 0 ? spawnSync("node", ["-e", probe, minmaxWasm], { cwd: root }) : null
     check(
-      "wasm profile links Math.min/Math.max of f64 and f32, and they drop a NaN as minnum does natively",
-      mr !== null && String(mr.stdout).trim() === "0 9 1 1 2 NaN -1 -3 1.5 0.25 2",
+      "wasm profile links Math.min/Math.max of f64 and f32, and they answer NaN and -0 as JavaScript does",
+      mr !== null && String(mr.stdout).trim() === "0 11 NaN NaN NaN NaN -1 -3 -Infinity Infinity NaN NaN 2",
       String(mc.stderr) + String(ml.stderr) + (mr ? String(mr.stdout) + String(mr.stderr) : "")
     )
   }
@@ -17779,7 +17948,7 @@ if (!only || "instructions".includes(only)) {
     )
     check(
       "instructions: no benchmark executes more instructions than bench/instructions.json allows",
-      counted.status === 0 && /^instructions: all 21 within /m.test(counted.stdout),
+      counted.status === 0 && /^instructions: all 22 within /m.test(counted.stdout),
       `${counted.stdout}${counted.stderr}`
     )
   }
@@ -17807,7 +17976,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     v.stdout + v.stderr
   )
 
-  // The help is painted only for a person at a terminal (src/cli-style.ts).
+  // The help is painted only for a person at a terminal (std/cli.ts's `styleFor`).
   // Every help run sets the variables the policy reads first -- `NO_COLOR`,
   // the forcing ones and `NISH_AGENT` -- so the runner's own environment, an
   // agent's or a CI's, cannot decide the answer; a run that unsets `NO_COLOR`
@@ -17899,22 +18068,99 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
   const wide = help.stdout.split("\n").filter((line) => line.length > 80)
   check("--help: every line fits in 80 columns", wide.length === 0, wide.join("\n"))
+  // The colours are the theme's: the eight basic SGR colours every theme
+  // redefines, never a fixed 256-palette or RGB tone that ignores it.
+  const fixedTone = /\u001b\[(?:[0-9;]*;)?(?:38|48|9[0-7]|10[0-7])[;m]/
   const forced = run(["--help"], { ...plainEnv, FORCE_COLOR: "1", TERM: "xterm-256color" })
   check(
     "--help with FORCE_COLOR=1: coloured, and the same text under the escapes",
     forced.status === 0 &&
-      forced.stdout.includes(`${ESC}38;5;`) &&
+      forced.stdout.includes(`${ESC}1;35m`) &&
       forced.stdout.replace(/\u001b\[[0-9;]*m/g, "") === help.stdout,
     JSON.stringify(forced.stdout.slice(0, 200))
   )
-  const basic = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "xterm", COLORTERM: "" })
   check(
-    "--help with CLICOLOR_FORCE=1 on an 8-colour TERM: the basic palette only",
-    basic.stdout.includes(`${ESC}36m`) &&
-      !basic.stdout.includes("38;5;") &&
-      !/\u001b\[(?:[0-9;]*;)?(?:9[0-7]|10[0-7])[;m]/.test(basic.stdout),
-    JSON.stringify(basic.stdout.slice(0, 200))
+    "--help on a 256-colour TERM: the theme's basic colours, no fixed tone",
+    forced.stdout.includes(`${ESC}36m`) && !fixedTone.test(forced.stdout),
+    JSON.stringify(forced.stdout.slice(0, 200))
   )
+  const truecolour = run(["--help"], { ...plainEnv, FORCE_COLOR: "3", TERM: "xterm", COLORTERM: "truecolor" })
+  check(
+    "--help with FORCE_COLOR=3 and COLORTERM=truecolor: still the theme's colours",
+    truecolour.stdout.includes(`${ESC}36m`) && !fixedTone.test(truecolour.stdout),
+    JSON.stringify(truecolour.stdout.slice(0, 200))
+  )
+  // Forced colour is the theme's whatever `TERM` says: the reader is a pager or
+  // an editor that paints the escapes itself (Emacs's shell sets TERM=dumb).
+  for (const term of ["dumb", "vt100"]) {
+    const forcedOn = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: term })
+    check(
+      `--help with CLICOLOR_FORCE=1 on TERM=${term}: the theme's colours`,
+      forcedOn.stdout.includes(`${ESC}36m`) && !fixedTone.test(forcedOn.stdout),
+      JSON.stringify(forcedOn.stdout.slice(0, 200))
+    )
+  }
+  // The terminal path, under a pseudo-terminal: `script` gives `nish` one, so
+  // `[ -t 1 ]` holds and the colour count `tput` reads decides. The run's
+  // output is the terminal's, with CR LF line ends.
+  const helpOnTerminal = (env) => {
+    const argv =
+      process.platform === "darwin"
+        ? ["-q", "/dev/null", NISH, "--help"]
+        : ["-qec", '"$NISH_HELP_EXE" --help', "/dev/null"]
+    const r = spawnSync("script", argv, {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, ...plainEnv, NISH_HELP_EXE: NISH, ...env },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30000,
+    })
+    return { status: r.status, stdout: (r.stdout ?? "").replace(/\r\n/g, "\n").replace(/\n$/, "") }
+  }
+  const absoluteTput = ["/usr/bin/tput", "/bin/tput"].some((t) => fs.existsSync(t))
+  if (!has("script") || !absoluteTput) {
+    skip(
+      "--help on a terminal: the colour probe was not run under a pseudo-terminal " +
+        (has("script") ? "(no tput at /usr/bin or /bin)" : "(no `script`)")
+    )
+  } else {
+    const themed = helpOnTerminal({ TERM: "xterm-256color" })
+    check(
+      "--help on a terminal (xterm-256color): the theme's colours, and the same text under the escapes",
+      themed.status === 0 &&
+        themed.stdout.includes(`${ESC}36m`) &&
+        !fixedTone.test(themed.stdout) &&
+        themed.stdout.replace(/\u001b\[[0-9;]*m/g, "").trimEnd() === help.stdout.trimEnd(),
+      JSON.stringify(themed.stdout.slice(0, 200))
+    )
+    // The failsafe: a TERM whose terminfo declares no colours gets the
+    // structure in bold and underline, which a monochrome terminal still shows.
+    const mono = helpOnTerminal({ TERM: "vt100" })
+    check(
+      "--help on a monochrome terminal (vt100): bold and underline, no colour",
+      mono.status === 0 &&
+        mono.stdout.includes(`${ESC}1m`) &&
+        mono.stdout.includes(`${ESC}4m`) &&
+        !/\u001b\[(?:[0-9;]*;)?(?:3[0-9]|4[0-9]|9[0-7]|10[0-7]|2)[;m]/.test(mono.stdout) &&
+        mono.stdout.replace(/\u001b\[[0-9;]*m/g, "").trimEnd() === help.stdout.trimEnd(),
+      JSON.stringify(mono.stdout.slice(0, 200))
+    )
+    // The probe runs `tput` by absolute path: one first on `PATH`, as a
+    // checkout's own is under a `PATH` holding `.`, is never run.
+    const planted = fs.mkdtempSync(path.join(os.tmpdir(), "nish-tput-"))
+    const marker = path.join(planted, "ran")
+    fs.writeFileSync(path.join(planted, "tput"), `#!/bin/sh\n: > '${marker}'\necho 256\n`, { mode: 0o755 })
+    const plantedRun = helpOnTerminal({
+      TERM: "xterm",
+      PATH: `${planted}${path.delimiter}${process.env.PATH ?? ""}`,
+    })
+    check(
+      "--help: the colour probe never runs a `tput` found on PATH",
+      plantedRun.status === 0 && plantedRun.stdout.includes(ESC) && !fs.existsSync(marker),
+      fs.existsSync(marker) ? `ran ${path.join(planted, "tput")}` : JSON.stringify(plantedRun.stdout.slice(0, 200))
+    )
+    fs.rmSync(planted, { recursive: true, force: true })
+  }
   const noColor = run(["--help"], { ...plainEnv, NO_COLOR: "1", FORCE_COLOR: "1" })
   check(
     "--help: NO_COLOR wins over FORCE_COLOR",
@@ -17932,12 +18178,6 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--help: FORCE_COLOR=0 turns colour off, over CLICOLOR_FORCE",
     zeroWins.stdout === help.stdout,
     JSON.stringify(zeroWins.stdout.slice(0, 200))
-  )
-  const level2 = run(["--help"], { ...plainEnv, FORCE_COLOR: "2", TERM: "xterm", COLORTERM: "" })
-  check(
-    "--help with FORCE_COLOR=2 on an 8-colour TERM: 256 colours",
-    level2.stdout.includes(`${ESC}38;5;`),
-    JSON.stringify(level2.stdout.slice(0, 200))
   )
   const dumbForced = run(["--help"], { ...plainEnv, CLICOLOR_FORCE: "1", TERM: "dumb" })
   check(
@@ -18146,6 +18386,8 @@ if (!only || "secret alias mutation".includes(only) || only.startsWith("reject_s
   const mutDir = path.join(buildDir, "secret-alias-mutation")
   fs.rmSync(mutDir, { recursive: true, force: true })
   fs.cpSync(path.join(root, "src"), path.join(mutDir, "src"), { recursive: true })
+  // The compiler imports from `../std/` (its help's colour policy is `std/cli.ts`).
+  fs.cpSync(path.join(root, "std"), path.join(mutDir, "std"), { recursive: true })
   const secretTs = path.join(mutDir, "src", "secret.ts")
   const live = fs.readFileSync(secretTs, "utf8")
   const edits = [
@@ -23698,8 +23940,8 @@ if (fs.existsSync(threadsLl)) {
 //     leaves undefined and what it defines (`fmin`, `fmaxf`, ...);
 //   - the N-API shim `--emit-napi` writes for `tests/c-symbols/napi.ts`: what
 //     it leaves undefined, apart from the program's own exports it calls;
-//   - `tests/c-symbols/math.ts`, which calls every `Math` builtin and `%` on
-//     `f64` and `f32`, linked with the runtime at `-O0`, and at `-Oz` and `-O3`
+//   - `tests/c-symbols/math.ts`, which calls every `Math` builtin LLVM can
+//     lower to libm and `%` on `f64` and `f32`, linked with the runtime at `-O0`, and at `-Oz` and `-O3`
 //     with LTO and `--save-temps`: what its LTO object and its executable
 //     leave undefined, so the libm calls LLVM lowers the program's arithmetic
 //     to are read rather than guessed.
