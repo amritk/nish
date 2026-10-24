@@ -317,7 +317,7 @@ function noteCallees(facts: FactsTable, caller: string, bySymbol: StringSet, rea
   sharedWrite: +0:7
   escaping: caller
   calls: FactsTable.get StringSet.add StringSet.at StringSet.has StringSet.size nish_array_grow
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer bySymbol: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   pointer reached: size=8 writesThrough=false captured=false passedTo=StringSet.add#0
   pointer pending: size=0 writesThrough=true captured=false

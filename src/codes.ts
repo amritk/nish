@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 709
+export const RULE_COUNT: i32 = 710
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -119,6 +119,8 @@ const diagnosticRules = (): string[] => [
   "NL2472",
   "`, which is no module of this program: an entry is the path of a module the program compiles, relative to the `package.json` that lists it, and one that names nothing would leave the module it meant outside the scope without a word",
   "NL3031",
+  "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type",
+  "NL4013",
   "` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, would outlive the block that holds the lock",
   "NL2467",
   "`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination",

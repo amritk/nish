@@ -1045,10 +1045,17 @@ export class FunctionFacts {
 export class FactsTable {
   index: StringMap
   list: FunctionFacts[]
+  /**
+   * `--no-elision` (`Options.noElision`): no inferred arena scope, so no call
+   * site reclaims what its callee left (`reclaimsReturnedString`), which the
+   * tail-call proof and the arena report read as well as the emitter.
+   */
+  noElision: boolean
 
   constructor() {
     this.index = new StringMap()
     this.list = []
+    this.noElision = false
   }
 
   set(name: string, facts: FunctionFacts): void {
@@ -4139,6 +4146,29 @@ export const analyzeFunctions = (
       }
     }
   }
+  // `--no-elision`: every scope above is a proof that what it releases is
+  // dead, so none is taken; a `using` arena the program writes is not inferred
+  // and stays. `netAllocates` was settled with those scopes in place, so it is
+  // settled again without them.
+  if (opts.noElision) {
+    for (const f of facts.list) {
+      f.arenaScope = false
+      f.netAllocates = f.allocatesItself
+      for (const scope of f.loopScopes) {
+        scope.scoped = false
+      }
+    }
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const f of facts.list) {
+        if (!f.netAllocates && someCalleeNetAllocates(facts, f)) {
+          f.netAllocates = true
+          changed = true
+        }
+      }
+    }
+  }
   for (const f of facts.list) {
     // Both are `willreturn` and the function already writes (it allocates),
     // so nothing else moves. A scoped pass reads its mark inline and calls
@@ -4325,6 +4355,7 @@ const collectRound = (
   known: FactsTable | null
 ): FactsTable => {
   const facts = new FactsTable()
+  facts.noElision = opts.noElision
   for (const unit of units) {
     for (const sig of unit.program.functions) {
       if (!sig.definedIn(unit.program.source)) {
@@ -5538,6 +5569,7 @@ export const foreignBufferCount = (table: TypeTable, sig: FunctionSig, index: i3
  *
  * `known` is the fixpoint the callees' `resizesArray` is read from, and
  * `null` -- round 1 -- proves nothing, as an unanalysed callee may resize.
+ * Under `--no-elision` (`known.noElision`) nothing is proven.
  */
 export const foreignBufferCountProven = (
   program: CheckedProgram,
@@ -5547,6 +5579,9 @@ export const foreignBufferCountProven = (
   count: i32,
   known: FactsTable | null
 ): boolean => {
+  if (known !== null && known.noElision) {
+    return false
+  }
   const args = call.children[1].children
   const buffer = args[index]
   const local: Local | null = buffer.kind === N_IDENT ? program.nodeLocals[buffer.id] : null

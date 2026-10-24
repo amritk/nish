@@ -2366,19 +2366,22 @@ function Http3Server.refile(this: Http3Server, slot: i32): void -> @nish.Http3Se
 function Http3Server.send(this: Http3Server, buf: u8[], at: i32, len: i32, to: u8[], segment: i32, ecn: i32): boolean -> @nish.Http3Server.send [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: at ecn segment
+  escaping: at ecn len segment
   calls: nish.Http3Server.unmark nish.h3Count nish_panic_overflow nish_panic_slice nish_udp_send_to
-  pointer this: size=280 writesThrough=true captured=false passedTo=nish.Http3Server.unmark#0
+  pointer this: size=280 writesThrough=true captured=false passedTo=nish.Http3Server.unmark#0 nish.Http3Server.unmark#0
   pointer buf: size=0 writesThrough=false captured=false
   pointer to: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -13:9 mark: i32 (let)
-  local -12:9 sent: i32 (let)
-  callee -8:7 Http3Server.unmark -> @nish.Http3Server.unmark
+  local -5:11 sent: i32 (const)
   callee +0:25 h3Count -> @nish.h3Count
-  local +4:9 p: i32 (let)
-  local +6:13 n: i32 (const)
-  callee +8:27 h3Count -> @nish.h3Count
+  local +5:9 mark: i32 (let)
+  callee +7:7 Http3Server.unmark -> @nish.Http3Server.unmark
+  local +10:11 step: i32 (const)
+  local +11:9 p: i32 (let)
+  local +13:13 n: i32 (const)
+  local +14:11 one: i32 (let)
+  callee +19:9 Http3Server.unmark -> @nish.Http3Server.unmark
+  callee +24:27 h3Count -> @nish.h3Count
 function Http3Server.unmark(this: Http3Server): void -> @nish.Http3Server.unmark [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
