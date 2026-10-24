@@ -107,6 +107,12 @@ the key up once, not twice: the compiler recognises a `set` whose new value
 reads the same key with `get` or `has`, and reuses that first lookup. So does
 `if (!s.has(x)) { s.add(x); … }`.
 
+A string key is hashed under a key the program draws at random when it starts,
+so input from outside — the keys of a JSON body, the words of a file — cannot
+be chosen to land in one bucket and slow every lookup down. Nothing you can
+observe depends on that key: a map still walks in insertion order, run after
+run.
+
 ## Walking one
 
 `for...of` walks a map's `keys()` or `values()`, or a set directly, in

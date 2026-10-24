@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 712
+export const RULE_COUNT: i32 = 717
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -279,6 +279,8 @@ const diagnosticRules = (): string[] => [
   "NL2449",
   "` that can reach the end of its block neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2441",
+  "` is not a gated capability: a dependency is granted only `ffi`, `net`, `process.spawn` and `unsafe`, and reaches every other capability without a grant",
+  "NL3042",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
   "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",
@@ -367,12 +369,16 @@ const diagnosticRules = (): string[] => [
   "NL2565",
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
   "NL4011",
+  "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",
+  "NL3043",
   "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)",
   "NL4010",
   "` was moved into another `Secret` local and cannot be read again: one key has one owner, which is the one that wipes it",
   "NL2446",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
   "NL2010",
+  ".capabilities.dependencies` is an object that names each dependency once, with an array of the capabilities granted it",
+  "NL3041",
   ", which can only initialise a `const`, be the left operand of `??`, or be compared with `undefined` by `===` or `!==`",
   "NL2369",
   "` cannot declare `static readonly json`: a handle is never serialised, and its options would name the pointer it owns",
@@ -509,6 +515,8 @@ const diagnosticRules = (): string[] => [
   "NL3009",
   "` cannot take a union as a type argument: in this version a union is the type of a local, ",
   "NL2533",
+  "` does not record for it; review the chain, then record it with `--update-capability-lock`",
+  "NL2577",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ",
   "NL2054",
   "` is rebuilt from its own value on every iteration of this loop, so every pass copies all ",
@@ -731,6 +739,8 @@ const diagnosticRules = (): string[] => [
   "NL2001",
   ", and a declared C function returns a scalar or `CPtr` only",
   "NL2321",
+  "`, which the root package does not grant it; grant it with ",
+  "NL2576",
   "A union needs two different variants: this one names only `",
   "NL2527",
   "` cannot declare methods (interfaces describe layout only)",

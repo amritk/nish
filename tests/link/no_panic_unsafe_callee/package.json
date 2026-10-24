@@ -2,6 +2,9 @@
   "name": "no-panic-unsafe-callee",
   "private": true,
   "nish": {
-    "noPanic": ["main.ts"]
+    "noPanic": ["main.ts"],
+    "capabilities": {
+      "dependencies": { "pkg_raw": ["unsafe"] }
+    }
   }
 }

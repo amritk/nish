@@ -89,8 +89,8 @@
  * that reads in bursts more than `releaseGapMs` apart can mistake for a key let
  * go. While acks stop, nothing is released: there is no wall-clock backstop,
  * and a caller that stops getting answers clears `watermarked` to fall back to
- * the wall clock. term-io does so once `deliveredAgoMs(nowMs)` passes 1000 ms,
- * a second of frames with no query answered, which no working link reaches.
+ * the wall clock. term-io does so once 1000 ms pass with no query answered,
+ * frames sent or not, which no working link reaches while it draws.
  * Within one read the caller `apply`s its events before calling `delivered` for
  * the answer it carries: a `tick` between the two would judge keys against a
  * watermark that already covers repeats not yet applied, and report a release

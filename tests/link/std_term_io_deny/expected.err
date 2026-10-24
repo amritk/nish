@@ -1,0 +1,1 @@
+main.ts:7:18: error: `main` reaches `tty`, which the capability policy does not grant (`--deny tty`); the chain that reaches it: main.ts:7:18 calls openTerminal, std/term-io.ts:

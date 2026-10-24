@@ -1,0 +1,1 @@
+{"file":"tests/link/caps_dep_manifest_repeated/package.json","line":6,"column":46,"endLine":6,"endColumn":56,"severity":"error","code":"NL3041","message":"`pkg_http` is named twice: the root package's `nish.capabilities.dependencies` is an object that names each dependency once, with an array of the capabilities granted it"}
