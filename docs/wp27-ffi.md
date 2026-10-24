@@ -9,7 +9,10 @@ debug-info type in 0.4.0 ([#90](https://github.com/amritk/nish/pull/90), §7e).
 Since then a call to a `declare function` is the `ffi` capability in
 `--emit-capabilities` (`tests/cases/caps_ffi`), so `--deny ffi` refuses a
 program that reaches C
-([wp36-capability-policy.md](wp36-capability-policy.md)). Whether S4 and S5
+([wp36-capability-policy.md](wp36-capability-policy.md)), and a declaration in
+a package or a `std/` module binds the bare C name rather than the package's
+prefixed one, with duplicate declarations required to agree
+(`tests/link/ffi_package_declare`). Whether S4 and S5
 should happen at all is a language question (§3); §8 answers it for S3. The rules are normative in
 [LANGUAGE.md](LANGUAGE.md#calling-c) and the lowering is in
 [IR_COOKBOOK.md](IR_COOKBOOK.md#declare-function-calling-c).

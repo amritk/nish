@@ -56,7 +56,8 @@ export class FunctionSig {
    * with the module's package prefix (WP21 S1, `src/packages.ts`), which is
    * empty for the root package and so for every module of a single-package
    * program. `Owner.method` for a member, and `main` in the entry module is
-   * `@nish_main`.
+   * `@nish_main`. A `declare function` is the exception: it is the C name as
+   * written, in whichever package declares it (`docs/LANGUAGE.md` "Calling C").
    */
   name: string
   /** The identifier as written; for a method it reads `Owner.method`. */

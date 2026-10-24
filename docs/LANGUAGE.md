@@ -5331,6 +5331,31 @@ Each of these is refused, and each refusal is pinned by a case:
 `export`ed** (`reject_ffi_export`), because `export` offers other modules a
 function *this* module defines.
 
+**A declared function's symbol is its name as written, in whatever package
+declares it.** A function a package defines carries the package's prefix
+(`@probe.probeAbs`), but a `declare function` names the C function, and C has
+one namespace, so a package or a `std/` module that declares `abs` calls `@abs`
+exactly as the program's own modules do (`tests/link/ffi_package_declare`).
+**Two declarations of one name must agree**: the same parameter and return
+types, which is what a C prototype is, so parameter names and the aliases a
+type is spelled through do not count (`tests/link/ffi_package_declare_same`).
+Agreeing declarations are one C function, whether they are in two packages or
+in two modules of the same package, which was refused as a duplicate symbol
+before. Declarations that disagree are refused, naming both:
+`` C has one namespace, so every `declare function` of one name must agree on
+its parameter and return types ``. A buffer's `readonly`, a `| null` and the
+number of parameters each count (`tests/link/ffi_package_declare_clash`,
+`tests/link/ffi_package_declare_mismatch`). So is a function whose emitted
+symbol is a declared name: an exported function of the program's own package,
+or a private one whose name is not reserved to C:
+`` a `declare function` binds the C symbol of its name in every package, so
+rename the defined function `` (`tests/link/ffi_package_declare_root_clash`).
+A private function named like a C library function is emitted as `abs$`, and a
+generic one's instantiations as `labs$i32`, so neither takes the C symbol and
+both are accepted (`tests/link/ffi_package_declare_apart`). The two refusals
+are refused rather than linked because the whole-program analysis keeps one
+set of facts per symbol, and the two would share it.
+
 **The declaration carries no LLVM attributes, and its callers pay for it.**
 Nothing about a body the compiler cannot see is provable, so a function that
 calls C loses `readnone` and `willreturn`, and so does everything above it in the
