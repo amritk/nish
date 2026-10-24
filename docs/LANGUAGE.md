@@ -4735,6 +4735,57 @@ export const main = (): i32 => {
   so they are for text, never for secret data: `std/crypto` does not call
   them.
 
+### SQLite: `nish/sqlite`
+
+`nish/sqlite` is the SQLite C library, linked into a program that imports the
+module, with a `Database` and a `Statement` to drive it. A statement is
+prepared once and bound, stepped and reset as often as wanted:
+
+```typescript
+import { openDatabase, OPEN_READWRITE, OPEN_CREATE } from "nish/sqlite";
+
+export const main = (): i32 => {
+  const db = openDatabase(":memory:", OPEN_READWRITE | OPEN_CREATE).expect("open");
+  db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)").expect("create");
+  const insert = db.prepare("INSERT INTO t (name) VALUES (?1)").expect("prepare");
+  insert.bindText(1, "ada").expect("bind");
+  insert.step().expect("insert");
+  insert.reset().expect("reset");
+  console.log(`${db.lastInsertRowid()}`);
+  db.close().expect("close");
+  return 0;
+};
+```
+
+- **Every failure is a `Result`.** `openDatabase` and `prepare` answer a
+  `SqliteError`, with SQLite's extended code (`extendedCode`, such as 2067 for
+  `SQLITE_CONSTRAINT_UNIQUE`), its primary code (`code`, the low byte) and
+  SQLite's message. Every other call answers the bare extended code, and
+  `error(code)` on the `Database` or `Statement` that answered it builds the
+  `SqliteError`, so a failure allocates only for the caller who asks.
+  `step()` answers `true` with a row to read and `false` when the statement
+  has finished.
+- **A row allocates nothing.** Binding, `step`, `reset`, `columnI64`,
+  `columnF64` and `columnInto` answer scalars; `columnInto(c, buf, at)` copies
+  a text or blob column into the caller's `u8[]`, and answers its length,
+  copying only when all of it fits. `columnText(c)` is the call that makes a
+  string. Parameters count from 1 and columns from 0, as in SQLite.
+- **`exec(sql)`** runs every statement of `sql` and discards any rows, and
+  `begin()`, `commit()` and `rollback()` are `exec` of `BEGIN`, `COMMIT` and
+  `ROLLBACK`; pragmas, such as `journal_mode=WAL`, are SQL too. A binding is
+  copied by SQLite, and `reset` keeps the bindings.
+- **A handle is an `i32`** into tables the C adapter keeps per thread. `close`
+  finalizes every statement the connection still has, and a handle used after
+  `close` or `finalize` answers `SQLITE_MISUSE` rather than reaching freed
+  memory. A connection and its statements belong to the thread that opened
+  them.
+- **It reaches `ffi`.** The module calls C through `declare function`, so a
+  program that imports it is reported with [`ffi`](#capabilities) and
+  `--deny ffi` refuses it, naming the call. The files SQLite opens are opened
+  by C, which the `fs.read` and `fs.write` capabilities do not see. It links
+  wherever SQLite does: natively and under `--profile wasi`, not under the
+  `wasm` profile or Node (`tests/link/std_sqlite*`).
+
 ### Interfaces and object literals
 
 ```ts

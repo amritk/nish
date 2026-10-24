@@ -447,6 +447,21 @@ const RUNTIME_TERM_TEXT_BUDGET = 1536
  * 256-byte boundary above the measurement, as every ceiling here was set.
  */
 const RUNTIME_BYTES_TEXT_BUDGET = 1536
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
+ * -- the adapter `nish/sqlite` calls: the thread-local connection and statement tables
+ * that turn SQLite's pointers into `i32` handles, and the `nishsqlite_*` entry points
+ * over them (open, close, exec, prepare, step, reset, bind, column reads and the copy of
+ * a column into a caller's buffer). SQLite itself, `sqlite3.c`, is not counted: it is
+ * vendored, linked only into a program that imports `nish/sqlite`, and its size is
+ * upstream's.
+ *
+ * Measured **1,831 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64, all of it
+ * `.text`. Its own translation unit, linked only with SQLite, so a program that does not
+ * import the module carries none of it. The budget is the next 256-byte boundary above
+ * the measurement, as every ceiling here was set.
+ */
+const RUNTIME_SQLITE_TEXT_BUDGET = 2048
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
@@ -580,6 +595,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
   ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],
+  ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
 /**
