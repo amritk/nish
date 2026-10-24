@@ -1,0 +1,116 @@
+PASS  queries: every query in one write, DA1 last
+PASS  queries: under tmux, kitty graphics and the sizes go through its passthrough with ESC doubled
+PASS  queries: under screen, the sizes go through its passthrough and the queries holding an ST are left out
+PASS  kitty: whole
+PASS  kitty: split at every byte
+PASS  kitty: one byte per read
+PASS  Ghostty: whole
+PASS  Ghostty: split at every byte
+PASS  Ghostty: one byte per read
+PASS  WezTerm: whole
+PASS  WezTerm: split at every byte
+PASS  WezTerm: one byte per read
+PASS  foot: whole
+PASS  foot: split at every byte
+PASS  foot: one byte per read
+PASS  Alacritty: whole
+PASS  Alacritty: split at every byte
+PASS  Alacritty: one byte per read
+PASS  xterm: whole
+PASS  xterm: split at every byte
+PASS  xterm: one byte per read
+PASS  iTerm2: whole
+PASS  iTerm2: split at every byte
+PASS  iTerm2: one byte per read
+PASS  Apple Terminal: whole
+PASS  Apple Terminal: split at every byte
+PASS  Apple Terminal: one byte per read
+PASS  Windows Terminal: whole
+PASS  Windows Terminal: split at every byte
+PASS  Windows Terminal: one byte per read
+PASS  tmux, passthrough off: whole
+PASS  tmux, passthrough off: split at every byte
+PASS  tmux, passthrough off: one byte per read
+PASS  tmux, passthrough on: whole
+PASS  tmux, passthrough on: split at every byte
+PASS  tmux, passthrough on: one byte per read
+PASS  screen: whole
+PASS  screen: split at every byte
+PASS  screen: one byte per read
+PASS  mosh: whole
+PASS  mosh: split at every byte
+PASS  mosh: one byte per read
+PASS  Linux console: whole
+PASS  Linux console: split at every byte
+PASS  Linux console: one byte per read
+PASS  silent terminal: whole
+PASS  silent terminal: split at every byte
+PASS  silent terminal: one byte per read
+PASS  env: TERM with 256color, no answer for true colour: 256 colours
+PASS  env: a plain TERM: 16 colours
+PASS  env: COLORTERM=truecolor with no answer for it: true colour, recorded
+PASS  env: COLORTERM=24bit, and the terminal read the background back: true colour, nothing forced
+PASS  env: COLORTERM set to something else decides nothing
+PASS  env: DECRQSS read back with semicolons: true colour
+PASS  env: DECRQSS read back as a 256-colour index: not true colour
+PASS  env: DECRQSS refused (0 $ r) even holding 48:2: not true colour
+PASS  env: NO_COLOR: 16 colours, and graphics untouched
+PASS  env: TERM=dumb: ascii
+PASS  env: TERM=linux wins over whatever answered: 16 colours, ascii, no kitty keyboard, no sync
+PASS  env: SSH_CONNECTION alone: a remote hint
+PASS  env: SSH_CLIENT alone: a remote hint
+PASS  env: SSH_TTY alone: a remote hint
+PASS  env: no XTVERSION: the name is TERM_PROGRAM
+PASS  env: XTVERSION wins over TERM_PROGRAM
+PASS  answers: DECRPM 0 for 2026 and 1016
+PASS  answers: DECRPM 1 for 2026 and 1016
+PASS  answers: DECRPM 2 for 2026 and 1016
+PASS  answers: DECRPM 3 for 2026 and 1016
+PASS  answers: DECRPM 4 for 2026 and 1016
+PASS  answers: DECRPM for another mode decides neither
+PASS  answers: kitty graphics refused with an error: no kitty graphics
+PASS  answers: an OK for another image id: no kitty graphics
+PASS  answers: sixel with 256 registers: sixel
+PASS  answers: sixel with 16 registers: halfblock
+PASS  answers: XTSMGRAPHICS failed (status 3): no registers
+PASS  answers: registers but no 4 in DA1: no sixel
+PASS  answers: kitty graphics wins over sixel
+PASS  answers: the cell from the text area over the window, rounded down
+PASS  answers: the text area with a window of 0 rows: unknown
+PASS  answers: a text area smaller than the window: unknown, not 0 by something
+PASS  answers: CSI 16 t wins over CSI 14 t
+PASS  answers: a cell size of 0 falls back to CSI 14 t
+PASS  answers: DA2 is not DA1: the probe is not done
+PASS  overrides: halfblock over kitty
+PASS  overrides: ascii over kitty
+PASS  overrides: halfblock on the Linux console
+PASS  overrides: sixel the terminal answered for
+PASS  overrides: kitty where the terminal answered DA1 directly but not the query: kept
+PASS  overrides: kitty under tmux with the passthrough query unanswered: refused
+PASS  overrides: kitty under tmux with the passthrough query answered: kept
+PASS  overrides: sixel on the Linux console: refused
+PASS  overrides: sixel from a terminal that answered nothing: refused
+PASS  overrides: a backend that is not one: ignored, recorded
+PASS  machine: not done before any answer
+PASS  machine: no round trip before DA1
+PASS  machine: not timed out 249 ms after the send
+PASS  machine: not done on an answer before DA1
+PASS  machine: done at DA1
+PASS  machine: the round trip is the send to DA1
+PASS  machine: the caps carry the round trip
+PASS  machine: never timed out once done
+PASS  machine: keys typed before, during and after the answers are held, in order
+PASS  machine: the held keys did not change the answers
+PASS  machine: an answer after DA1 still counts
+PASS  machine: timeoutMs is the caller's to set
+PASS  machine: timed out at timeoutMs
+PASS  machine: no round trip on a timeout
+PASS  machine: an ESC held at the end is not given up early
+PASS  machine: timed out with an ESC held
+PASS  machine: the held ESC is given up as a key on the timeout
+PASS  machine: the answers before it still count
+PASS  machine: a DA1 cut off is not an answer
+PASS  machine: timed out on a DA1 cut off
+PASS  machine: nothing of an unterminated DCS reaches the result
+PASS  machine: answered is false on a timeout
+term probe: 115 passed, 0 failed, 0 skipped
