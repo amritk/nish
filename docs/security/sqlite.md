@@ -66,9 +66,13 @@ builder chose, and this record covers only the defaults.
 `SQLITE_MAX_EXPR_DEPTH=0` removes the limit, so a deeply enough nested
 expression recurses until the stack overflows and the process dies. Only SQL
 text reaches the parser, and it is trusted, so this is recorded here rather
-than as a finding; a program that runs SQL it did not write sets
-`NISH_SQLITE_CFLAGS=-DSQLITE_MAX_EXPR_DEPTH=1000` (SQLite's default) or
-lowers it per connection with `sqlite3_limit(db, SQLITE_LIMIT_EXPR_DEPTH, n)`.
+than as a finding. A program that runs SQL it did not write rebuilds with
+`NISH_SQLITE_CFLAGS=-DSQLITE_MAX_EXPR_DEPTH=1000` (SQLite's default); that is
+the only mitigation. `sqlite3_limit(db, SQLITE_LIMIT_EXPR_DEPTH, n)` has no
+effect in the default build: the height check and every `nHeight` update sit
+under `#if SQLITE_MAX_EXPR_DEPTH>0` (`sqlite3ExprCheckHeight` at
+`sqlite3.c:23070` is an empty macro otherwise), so the runtime limit is never
+read.
 
 ## Bumping for a CVE
 
