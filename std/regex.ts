@@ -1,5 +1,5 @@
 /**
- * `nish/regex` — regular expressions whose matching time is linear in the
+ * `nish/regex` — regular expressions whose search time is linear in the
  * input, whatever the pattern.
  *
  *     import { Regex, RegexMatch, regexCompile } from "nish/regex";
@@ -26,8 +26,9 @@
  * (ASCII letters only), `m` (`^` and `$` at line terminators) and `s` (`.`
  * matches them too). **Backreferences and
  * lookaround are refused at compile time**: they are what makes a matcher
- * backtrack, and this one never does. A repeat count is at most 1,000 and a
- * pattern at most 100,000 instructions once its repeats are written out.
+ * backtrack, and this one never does. A repeat count is at most 1,000, a
+ * pattern at most 100,000 instructions once its repeats are written out,
+ * 1,024 capturing groups and 10,000 ranges in one class.
  *
  * **Matching never backtracks.** A search runs a lazy DFA first: it builds
  * its states from the compiled program as the text needs them, so it reads a
@@ -38,7 +39,11 @@
  * literal no match can avoid, such as `\w+@example`, is searched for by that
  * literal and the match grown both ways from it. Every engine follows every
  * alternative at once, so a match costs O(pattern × input) at worst and
- * `(a+)+$` against a thousand `a`s and a `b` is as quick as `a+$`. Which match
+ * `(a+)+$` against a thousand `a`s and a `b` is as quick as `a+$`. Finding
+ * every match (`findAll`, `count`, `replaceAll`, `split`) is one search per
+ * match, so it is quadratic when a preferred branch reads far ahead before a
+ * short one wins: `<[^>]*>|<` over a text of `<`s rereads the rest of the text
+ * for each, as it does in RE2 and Rust's `regex`. Which match
  * is found is the one JavaScript finds — the leftmost, and of those the one
  * the first alternative and the greediest quantifier prefer — and a group
  * inside a quantifier keeps only its last iteration's capture, as in
@@ -86,6 +91,10 @@ export const REGEX_MAX_REPEAT: i32 = 1000
 export const REGEX_MAX_DEPTH: i32 = 250
 /** The most entries one thread list's capture table may have: instructions × slots per thread. */
 const REGEX_MAX_SLOT_TABLE: i32 = 4194304
+/** The most capturing groups a pattern may have, past group 0; a name is checked against each. */
+export const REGEX_MAX_GROUPS: i32 = 1024
+/** The most ranges one class may list; the class sorts them by insertion. */
+export const REGEX_MAX_CLASS_RANGES: i32 = 10000
 /**
  * How many levels of nested marked iterations the VM keeps apart; a mark
  * nested deeper leaves the closure's stamps as they are.
@@ -666,6 +675,9 @@ class RegexParser {
     }
     let index: i32 = 0
     if (capture) {
+      if (this.groups > REGEX_MAX_GROUPS) {
+        return this.fail("too many groups", open)
+      }
       index = this.groups
       this.groups += 1
       this.names.push(name)
@@ -1018,6 +1030,9 @@ class RegexParser {
         return this.fail("class range out of order", atAtom)
       }
       this.addRange(lo, hi)
+    }
+    if (this.tmpCount > REGEX_MAX_CLASS_RANGES) {
+      return this.fail("a class has more than 10000 ranges", open)
     }
     // A class of one code point, unnegated, is that code point.
     if (!negated && this.tmpCount === 1 && this.tmpLo[0] === this.tmpHi[0]) {
@@ -1864,8 +1879,14 @@ export class Regex {
     // body × min; then (SPLIT next, exit; body) × (max - min)
     let i: i32 = 0
     while (i < min && !this.tooBig) {
+      // A body that emits nothing emits nothing on every copy: stop at one,
+      // or (?:){1000} nested four deep compiles 1000^4 empty copies.
+      const before: i32 = this.pc()
       this.compileIteration(p, n, rev)
       i += 1
+      if (this.pc() === before) {
+        break
+      }
     }
     const splits: i32[] = []
     i = min
@@ -1904,8 +1925,14 @@ export class Regex {
     const k: i32 = this.markOf[n]
     let i: i32 = 0
     while (i < min && !this.tooBig) {
+      // A body that emits nothing emits nothing on every copy: stop at one,
+      // or (?:){1000} nested four deep compiles 1000^4 empty copies.
+      const before: i32 = this.pc()
       this.compileIteration(p, n, rev)
       i += 1
+      if (this.pc() === before) {
+        break
+      }
     }
     const splits: i32[] = []
     if (max === -1) {
@@ -2000,6 +2027,9 @@ export class Regex {
         frames += this.ib[pc] - this.ia[pc]
       }
       pc += 1
+    }
+    if (frames > REGEX_MAX_SLOT_TABLE / states) {
+      return "too many groups for the pattern's size"
     }
     frames *= states
     this.stkKind = new Array<i32>(frames)
