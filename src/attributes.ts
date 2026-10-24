@@ -37,7 +37,7 @@
 //     tree has none. The walks are otherwise the same walks.
 
 import { WIPE_MEMSET } from "./emit-secret"
-import { isPureRuntime, SECRET_WIPE, secretRoleOf } from "./secret"
+import { isPureRuntime, isSecretSource, SECRET_WIPE, secretRoleOf } from "./secret"
 import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
 import { openedHandle } from "./handles"
 import {
@@ -2208,13 +2208,71 @@ class FactCollector {
     const decl: Node | null =
       local.mutable || body === null ? null : declarationIn(this.unit.program, body, local)
     const init: Node | null = decl === null ? null : unwrapParens(decl.children[2])
-    if (init === null || (init.kind !== N_NEW && init.kind !== N_ARRAY && init.kind !== N_OBJECT)) {
+    if (init === null) {
+      return ""
+    }
+    const fresh = init.kind === N_NEW || init.kind === N_ARRAY || init.kind === N_OBJECT
+    if (!fresh && !this.isWipedFreshSecret(local, init)) {
       return ""
     }
     const key = `o${this.facts.ownLocals.length}`
     this.facts.ownLocals.push(local)
-    this.noteFreshInit(key, init)
+    if (fresh) {
+      this.noteFreshInit(key, init)
+    } else {
+      // `new Secret(v)` stores `v` in `value`: one more object of this call's own.
+      this.noteStore(key, ".value", init.children[1].children[0])
+    }
     return key
+  }
+
+  /**
+   * #873: whether `init`, the initialiser of the `const` `local`, is
+   * `nish:secret`'s `secret(v)` of a fresh `v` (a `new`, an array literal or
+   * an object literal written in the call) and the body wipes `local` itself.
+   * `secret` answers `new Secret(v)`, so `ownKeyOf` makes the `Secret` an
+   * object of this call's own and records `v` as stored in its `value`: what
+   * `v` holds of anyone else's is a `DirtMark` like any field's. A `secret`
+   * of a parameter, a field, a call's answer or a moved local, and a `Secret`
+   * the body does not wipe, stay what `pathOf` makes of a call: anything
+   * (`tests/link/thread_task_wipe_secret`, `tests/cases/reject_thread_wipe_secret_*`).
+   */
+  isWipedFreshSecret(local: Local, init: Node): boolean {
+    const program = this.unit.program
+    if (init.kind !== N_CALL || !isSecretMake(program.nodeCallees[init.id])) {
+      return false
+    }
+    const args = init.children[1].children
+    if (args.length !== 1) {
+      return false
+    }
+    const value = unwrapParens(args[0])
+    if (value.kind !== N_NEW && value.kind !== N_ARRAY && value.kind !== N_OBJECT) {
+      return false
+    }
+    const body = this.sig.body()
+    if (body === null) {
+      return false
+    }
+    const refs: Node[] = []
+    collectRefs(program, body, local, refs)
+    for (const ref of refs) {
+      let at = ref
+      let list = this.unit.parents.parentOf(at)
+      while (list !== null && list.kind === N_PAREN) {
+        at = list
+        list = this.unit.parents.parentOf(at)
+      }
+      if (list !== null && list.kind === N_LIST) {
+        const call = this.unit.parents.parentOf(list)
+        if (call !== null && call.kind === N_CALL && call.children[1] === list) {
+          if (secretRoleOf(program.nodeCallees[call.id]) === SECRET_WIPE) {
+            return true
+          }
+        }
+      }
+    }
+    return false
   }
 
   /** What `init`, the fresh allocation an object of this call's own was made by, put in it. */
@@ -3833,6 +3891,28 @@ const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
       receiver.passedToIndices.push(0)
     }
   }
+}
+
+/**
+ * Whether `sig` is an instance of `nish:secret`'s `secret`, as `secretRole`
+ * (`src/secret.ts`) judges it: the free template of that name in the module
+ * `isSecretSource` knows.
+ */
+const isSecretMake = (sig: FunctionSig | null): boolean => {
+  if (sig === null) {
+    return false
+  }
+  const instance = sig.instance
+  if (instance === null) {
+    return false
+  }
+  const template = instance.template
+  return (
+    template !== null &&
+    template.owner === null &&
+    template.sourceName === "secret" &&
+    isSecretSource(template.home.program)
+  )
 }
 
 /**

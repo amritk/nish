@@ -290,7 +290,7 @@ on a worker. Anchors are at `main` `5d80b08`.
 
 | File | What |
 | --- | --- |
-| `src/attributes.ts` | `writesShared`, which no longer counts `WIPE_MEMSET`, and `markWipe`, which still records the wipe as a write through its argument |
+| `src/attributes.ts` | `writesShared`, which no longer counts `WIPE_MEMSET`, and `markWipe`, which still records the wipe as a write through its argument; `ownKeyOf`, `isWipedFreshSecret` and `isSecretMake`, which admit a `Secret` made from a fresh value as the call's own object |
 | `src/parallel.ts` | `sharedWriteMessage`, which reports the refusal at the `spawn` |
 
 ### Threat model
@@ -314,16 +314,33 @@ reads. The wipe itself is out of scope here: it is the same volatile
   it is handed, a copy made inside `expose`, the task's argument, a captured
   local, a field, the argument wiped by a helper the task calls, and an array
   a call answered.
+- For the `secret(v)` admission (#873, a later stage): `isSecretMake` matches
+  only the std `secret` template, by name, no owner and home program
+  (`isSecretSource`), not a user function of the same name. `ownKeyOf`
+  registers the `Secret` as an own object only when it is held by a `const`,
+  `v` is syntactically `new`, an array literal or an object literal, and the
+  body passes the local straight to a `wipe`. What `v` holds is recorded as
+  dirt on `.value` with `noteStore`, as a field store into an own object
+  would be, so a constructor or literal that takes in a parameter or a
+  captured array still makes the wipe a shared write. A moved local
+  (`secret(buf)`) or a call's answer (`secret(make(n))`) is not syntactically
+  fresh, so it stays foreign; a parameter or field is refused earlier by the
+  sole-reference rule; a `Secret` parameter cannot be wiped by its callee; and
+  a holder's `wipe()` writes its own field, which stays shared.
 
 ### Findings
 
 None. The fresh allocations compile and run on threads; every other road is
 still NL2471, naming the `wipe` instance as the write.
 
-What the rule does not admit, by design: a `Secret` a task makes with
-`secret(...)` and then wipes, because `secret` keeps its value, so its
-storage is not the task's own allocation by the facts the rule reads; and an
-array a call answered (`const st = initState()`), whose freshness the rule
+A `Secret` a task makes with `secret(v)` and wipes was refused at first,
+because `secret` keeps its value and the rule did not read through it. It is
+now admitted when `v` is allocated in the call (see Method); the IR is
+unchanged, and the program prints the same at 1, 2 and 8 threads
+(`tests/link/thread_task_wipe_secret`).
+
+What the rule does not admit, by design: a `Secret` made from a moved local
+or a call's answer, or kept in a holder's field; and an array a call answered (`const st = initState()`), whose freshness the rule
 does not track across a return. The supported pattern for a shared key is
 that the parent makes the `Secret`, each task `expose`s it read-only, and the
 parent wipes it after the scope joins, which the region rule above already
@@ -336,6 +353,13 @@ orders.
   under Node.
 - A `wipe` of the task's argument, a capture, a field, the argument a helper
   wipes for it, or a call's answer is still NL2471.
+- A `wipe` of a `const k = secret(<new, array or object literal>)` the task
+  makes is not a shared write; `secret` of a parameter, a field, a call's
+  answer or a moved local, a borrowed `Secret` parameter and a holder's
+  `wipe()` are still refused (`tests/cases/reject_thread_wipe_secret_param`,
+  `_field`, `_call_result`, `_moved`, `_borrowed`, `_holder`). Under
+  `opt -O2` the three wipes in `tests/link/thread_task_wipe_secret` survive
+  as volatile `llvm.memset`s, one inlined into each task.
 - The emitted IR is unchanged: `sharedWrite` feeds no LLVM attribute, and
   every wipe under `opt -O2` is still a volatile `llvm.memset`.
 

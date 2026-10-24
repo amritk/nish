@@ -3,6 +3,7 @@
 entry: src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/types.ts src/ice.ts src/emit-util.ts src/symbols.ts src/options.ts src/checker.ts src/expressions.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/declarations.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/visibility.ts src/parents.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts src/loop-flow.ts src/emit-json.ts src/debug.ts src/target.ts src/capabilities.ts
 import WIPE_MEMSET from "./emit-secret" -> const WIPE_MEMSET
 import isPureRuntime from "./secret" -> function @isPureRuntime
+import isSecretSource from "./secret" -> function @isSecretSource
 import SECRET_WIPE from "./secret" -> const SECRET_WIPE
 import secretRoleOf from "./secret" -> function @secretRoleOf
 import jsonRouteCallees from "./json-typed" -> function @jsonRouteCallees
@@ -398,6 +399,7 @@ struct FactCollector (class) size=56 align=8
   method readBackPath -> @FactCollector.readBackPath
   method returnedPath -> @FactCollector.returnedPath
   method ownKeyOf -> @FactCollector.ownKeyOf
+  method isWipedFreshSecret -> @FactCollector.isWipedFreshSecret
   method noteFreshInit -> @FactCollector.noteFreshInit
   method noteSlotStore -> @FactCollector.noteSlotStore
   method noteStore -> @FactCollector.noteStore
@@ -1310,19 +1312,47 @@ function FactCollector.ownKeyOf(this: FactCollector, local: Local): string -> @F
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: local
-  calls: FactCollector.noteFreshInit FunctionSig.body declarationIn nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 unwrapParens
-  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteFreshInit#0
-  pointer local: size=64 writesThrough=true captured=true passedTo=declarationIn#2
+  calls: FactCollector.isWipedFreshSecret FactCollector.noteFreshInit FactCollector.noteStore FunctionSig.body declarationIn nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 unwrapParens
+  pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.isWipedFreshSecret#0 FactCollector.noteFreshInit#0 FactCollector.noteStore#0
+  pointer local: size=64 writesThrough=true captured=true passedTo=declarationIn#2 FactCollector.isWipedFreshSecret#1
   stackSites=0 stackLocals=0
-  local -12:11 at: i32 (const)
-  local -8:11 body: Node | null (const)
-  callee -8:18 FunctionSig.body -> @FunctionSig.body
-  local -7:11 decl: Node | null (const)
-  callee -6:47 declarationIn -> @declarationIn
-  local -5:11 init: Node | null (const)
-  callee -5:54 unwrapParens -> @unwrapParens
+  local -16:11 at: i32 (const)
+  local -12:11 body: Node | null (const)
+  callee -12:18 FunctionSig.body -> @FunctionSig.body
+  local -11:11 decl: Node | null (const)
+  callee -10:47 declarationIn -> @declarationIn
+  local -9:11 init: Node | null (const)
+  callee -9:54 unwrapParens -> @unwrapParens
+  local -5:11 fresh: boolean (const)
+  callee -4:20 FactCollector.isWipedFreshSecret -> @FactCollector.isWipedFreshSecret
   local -1:11 key: string (const)
-  callee +1:5 FactCollector.noteFreshInit -> @FactCollector.noteFreshInit
+  callee +2:7 FactCollector.noteFreshInit -> @FactCollector.noteFreshInit
+  callee +5:7 FactCollector.noteStore -> @FactCollector.noteStore
+function FactCollector.isWipedFreshSecret(this: FactCollector, local: Local, init: Node): boolean -> @FactCollector.isWipedFreshSecret [method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via collectRefs
+  calls: FunctionSig.body ParentTable.parentOf collectRefs isSecretMake nish_panic_index secretRoleOf unwrapParens
+  pointer this: size=56 writesThrough=false captured=false
+  pointer local: size=64 writesThrough=false captured=false passedTo=collectRefs#2
+  pointer init: size=40 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:11 program: CheckedProgram (const)
+  callee +1:34 isSecretMake -> @isSecretMake
+  local +4:11 args: Node[] (const)
+  local +8:11 value: Node (const)
+  callee +8:19 unwrapParens -> @unwrapParens
+  local +12:11 body: Node | null (const)
+  callee +12:18 FunctionSig.body -> @FunctionSig.body
+  local +16:11 refs: Node[] (const)
+  callee +17:5 collectRefs -> @collectRefs
+  local +18:16 ref: Node (const)
+  local +19:11 at: Node (let)
+  local +20:11 list: Node | null (let)
+  callee +20:18 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +23:16 ParentTable.parentOf -> @ParentTable.parentOf
+  local +26:15 call: Node | null (const)
+  callee +26:22 ParentTable.parentOf -> @ParentTable.parentOf
+  callee +28:15 secretRoleOf -> @secretRoleOf
 function FactCollector.noteFreshInit(this: FactCollector, key: string, init: Node): void -> @FactCollector.noteFreshInit [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -2236,6 +2266,14 @@ function markMapRoute(table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
   local -5:14 callee: FunctionSig (const)
   callee -4:5 StringSet.add -> @StringSet.add
   callee -2:5 StringSet.add -> @StringSet.add
+function isSecretMake(sig: FunctionSig | null): boolean -> @isSecretMake
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isSecretSource nish_str_eq
+  pointer sig: size=136 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 instance: Instantiation | null (const)
+  local +4:9 template: TemplateInfo | null (const)
+  callee +9:5 isSecretSource -> @isSecretSource
 function markWipe(facts: FunctionFacts): void -> @markWipe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
