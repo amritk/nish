@@ -14,6 +14,14 @@
  *     // "$2b$12$" + 22 salt characters + 31 digest characters
  *     const ok: Result<boolean, string> = bcryptVerify(pw, storedHash)
  *
+ * **Four at once.** `bcryptHash4` and `bcryptVerify4` take up to four
+ * passwords (lane 0 always, a null lane skipped) and run their Blowfish
+ * encryptions interleaved in one loop, so one core does the work of four
+ * hashes in well under the time of four; each result is the single path's,
+ * byte for byte. `bcryptVerify4` groups lanes by the cost their hash names,
+ * and a malformed hash in any lane is an `Err` for the whole call, naming the
+ * lane, before anything is hashed.
+ *
  * **The password is a `Secret<u8[]>`** (`nish:secret`). The key schedule and
  * the 2^cost rounds run inside `exposeWith`; the Blowfish state (the P-array
  * and the four S-boxes, 1042 words), the expanded key and the key-stream copy
@@ -45,9 +53,12 @@
  * rounds, hours of one core. Verify only hashes you stored.
  *
  * **Pure.** No I/O and no C, so it builds for wasm32. A `std/threads` task
- * cannot call it yet, because it wipes (docs/security/crypto-bcrypt.md). A
- * cost-12 hash takes a few hundred milliseconds of one core; a server runs it
- * off its event loop (docs/guide/using-nish/password-hashing.md).
+ * may call `bcryptHash` and `bcryptVerify`: everything they wipe is scratch
+ * they made. It may not call the batch, which makes its state with `secret`
+ * and wipes it, a write the task rule does not yet see as the task's own
+ * (docs/security/crypto-bcrypt.md). A cost-12 hash takes a few hundred
+ * milliseconds of one core; a server runs it off its event loop, on a task
+ * (docs/guide/using-nish/password-hashing.md).
  *
  * The algorithm is Provos and Mazières's ("A Future-Adaptable Password
  * Scheme", USENIX 1999). The code is adapted from Solar Designer's
@@ -811,7 +822,7 @@ const bcryptBytesOf = (hash: string): u8[] => {
 /** Words in the batch state: four Blowfish states, four expanded keys of 18 and four safety words. */
 const BCRYPT_BATCH_WORDS: i32 = 4244
 
-/** What the batch kernel reads besides the state: each lane's four salt words (lane k at 4k) and the shared cost. */
+/** What the batch kernel reads besides the state: each lane's four salt words (lane k at 4k), each lane's `$2a$` safety word and the shared cost. */
 interface BcryptBatch {
   salts: u32[]
   safety: u32[]
@@ -1239,7 +1250,7 @@ const bcryptMaskOf = (p1: Secret<u8[]> | null, p2: Secret<u8[]> | null, p3: Secr
  * makes it: lane k with the 16 bytes of `salts` at 16k and 2^`cost` rounds.
  * Lane 0 is always hashed; a null lane gives "" and its salt bytes are not
  * read. Two to four lanes run as one interleaved computation, which on one
- * core takes about the time of two single hashes (bench/crypto/bcrypt); one
+ * core takes about the time of 1.2 single hashes (bench/crypto/bcrypt); one
  * lane runs as `bcryptHash`. An `Err` for `salts` of another length than 64
  * or a cost outside 4–31.
  */

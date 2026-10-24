@@ -1,10 +1,15 @@
 /**
  * CPU milliseconds per cost-10 bcrypt hash, single-threaded: `nish/crypto/bcrypt`
  * against libxcrypt's `crypt_r` (`$2b$`) and OpenBSD's `bcrypt.c`, built with
- * `gcc -O2` and `clang -O2` from a copy fetched from the OpenBSD source tree.
+ * `gcc -O2` and `clang -O2` from a copy fetched from the OpenBSD source tree;
+ * and four hashes at once, `bcryptHash4` against tigokraft's interleaved
+ * `bc_hash_n` (`src/bcrypt.c` of the multicore-server-challenge submission,
+ * MIT), built with `gcc` and `clang -O2 -march=native` from a copy fetched at a
+ * pinned commit, run with one lane and with four.
  *
- * Each program hashes "U*U" under an all-zero salt `--hashes` times and prints
- * the last hash, which must be the same for all of them. The programs run in
+ * Each program hashes "U*U" under an all-zero salt `--hashes` times (a
+ * four-lane program `--hashes` batches of four) and prints the last hash, which
+ * must be the same for all of them. The programs run in
  * interleaved rounds; a round's figure is the child's user CPU time (bash's
  * `time`) over the hashes, so the report is CPU, not wall, time. Each row is
  * the median of `--rounds` rounds and their spread, which is the noise band;
@@ -12,7 +17,8 @@
  *
  * Usage: node bench/crypto/bcrypt/run.mjs [--compiler <nish>] [--hashes N] [--rounds N] [--cost N]
  * A missing C compiler, libxcrypt or network leaves its rows out with a note.
- * Build products and the fetched OpenBSD files go to build/bench/bcrypt/.
+ * Build products and the fetched C files go to build/bench/bcrypt/; nothing
+ * fetched is copied into the repository.
  */
 import { spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -82,6 +88,37 @@ int main(void) {
 }
 `
 
+/** The arjaythedev/multicore-server-challenge commit tigokraft's files are fetched at. */
+const TIGOKRAFT_COMMIT = "c3012257f2ee3dd2ccc72ada2eeba2b0d1278e8e"
+
+/** tigokraft's files, at `TIGOKRAFT_COMMIT`. */
+const TIGOKRAFT = {
+  "bcrypt.c": "submissions/c-iouring-tigokraft/src/bcrypt.c",
+  "bf_pi.h": "submissions/c-iouring-tigokraft/src/bf_pi.h",
+}
+
+/** What the submission's own `conduit.h` gives `bcrypt.c`. */
+const TIGOKRAFT_SHIM = `#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <sys/random.h>
+#define BC_LANES 4
+`
+
+/** A loop over \`bc_hash_n\` with \`lanes\` lanes of "U*U", printing lane 0's last hash. */
+const TIGOKRAFT_LOOP = (lanes) => `#include <stdio.h>
+void bc_hash_n(int n, const char *const *pw, const char *const *setting, char (*out)[64]);
+int main(void) {
+  const char *pw[4] = {"U*U", "U*U", "U*U", "U*U"};
+  const char *setting[4] = {"${setting}", "${setting}", "${setting}", "${setting}"};
+  char out[4][64] = {{0}};
+  for (int i = 0; i < ${hashes}; i++) bc_hash_n(${lanes}, pw, setting, out);
+  puts(out[0]);
+  return 0;
+}
+`
+
 const NISH_LOOP = `import { bcryptHash } from "nish/crypto/bcrypt"
 import { Secret, secret, wipe } from "nish:secret"
 
@@ -102,6 +139,35 @@ export const main = (): i32 => {
 }
 `
 
+const NISH_LOOP4 = `import { bcryptHash4 } from "nish/crypto/bcrypt"
+import { Secret, secret, wipe } from "nish:secret"
+
+export const main = (): i32 => {
+  const r0: u8[] = [85, 42, 85]
+  const r1: u8[] = [85, 42, 85]
+  const r2: u8[] = [85, 42, 85]
+  const r3: u8[] = [85, 42, 85]
+  const p0: Secret<u8[]> = secret(r0)
+  const p1: Secret<u8[]> = secret(r1)
+  const p2: Secret<u8[]> = secret(r2)
+  const p3: Secret<u8[]> = secret(r3)
+  const salts: u8[] = new Array<u8>(64)
+  let last: string = "*"
+  for (let i: i32 = 0; i < ${hashes}; i++) {
+    const h: Result<string[], string> = bcryptHash4(p0, p1, p2, p3, salts, ${cost})
+    if (h.isOk()) {
+      last = h.value[0]
+    }
+  }
+  wipe(p0)
+  wipe(p1)
+  wipe(p2)
+  wipe(p3)
+  console.log(last)
+  return 0
+}
+`
+
 const notes = []
 const run = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: "utf8", ...opts })
 const have = (cmd) => run(cmd, ["--version"]).status === 0
@@ -109,19 +175,24 @@ const have = (cmd) => run(cmd, ["--version"]).status === 0
 fs.mkdirSync(dir, { recursive: true })
 const programs = []
 
-fs.writeFileSync(path.join(dir, "main.ts"), NISH_LOOP)
-const nish = run(
-  compiler,
-  [path.join(dir, "main.ts"), "-o", `${dir}/nish-out/`, "--link", path.join(dir, "nish")],
-  {
-    cwd: root,
+for (const [name, source, exe, per] of [
+  ["Nish (`nish/crypto/bcrypt`)", NISH_LOOP, "nish", 1],
+  ["Nish `bcryptHash4`, four lanes", NISH_LOOP4, "nish4", 4],
+]) {
+  fs.writeFileSync(path.join(dir, `${exe}.ts`), source)
+  const nish = run(
+    compiler,
+    [path.join(dir, `${exe}.ts`), "-o", `${dir}/${exe}-out/`, "--link", path.join(dir, exe)],
+    {
+      cwd: root,
+    }
+  )
+  if (nish.status !== 0) {
+    console.error(`the Nish program ${exe}.ts did not build:\n${nish.stderr}`)
+    process.exit(1)
   }
-)
-if (nish.status !== 0) {
-  console.error(`the Nish program did not build:\n${nish.stderr}`)
-  process.exit(1)
+  programs.push({ name, exe: path.join(dir, exe), per })
 }
-programs.push({ name: "Nish (`nish/crypto/bcrypt`)", exe: path.join(dir, "nish") })
 
 const cc = process.env.CC || "cc"
 if (have(cc)) {
@@ -203,6 +274,58 @@ if (fetched) {
   notes.push("OpenBSD left out: the files could not be fetched from raw.githubusercontent.com")
 }
 
+const tigokraft = path.join(dir, `tigokraft-${TIGOKRAFT_COMMIT.slice(0, 12)}`)
+fs.mkdirSync(tigokraft, { recursive: true })
+for (const [file, from] of Object.entries(TIGOKRAFT)) {
+  const to = path.join(tigokraft, file)
+  if (!fs.existsSync(to)) {
+    const got = run("curl", [
+      "-fsSL",
+      "-o",
+      to,
+      `https://raw.githubusercontent.com/arjaythedev/multicore-server-challenge/${TIGOKRAFT_COMMIT}/${from}`,
+    ])
+    if (got.status !== 0) {
+      fs.rmSync(to, { force: true })
+    }
+  }
+}
+if (!Object.keys(TIGOKRAFT).every((file) => fs.existsSync(path.join(tigokraft, file)))) {
+  notes.push("tigokraft left out: the files could not be fetched from raw.githubusercontent.com")
+} else if (!have("gcc") && !have("clang")) {
+  notes.push("tigokraft left out: no gcc or clang")
+} else {
+  fs.writeFileSync(path.join(tigokraft, "conduit.h"), TIGOKRAFT_SHIM)
+  for (const lanes of [1, 4]) {
+    fs.writeFileSync(path.join(tigokraft, `main${lanes}.c`), TIGOKRAFT_LOOP(lanes))
+  }
+  for (const cCompiler of ["gcc", "clang"].filter(have)) {
+    for (const lanes of [1, 4]) {
+      const exe = path.join(dir, `tigokraft-${cCompiler}-${lanes}`)
+      const built = run(cCompiler, [
+        "-std=gnu11",
+        "-O2",
+        "-march=native",
+        "-w",
+        `-I${tigokraft}`,
+        path.join(tigokraft, "bcrypt.c"),
+        path.join(tigokraft, `main${lanes}.c`),
+        "-o",
+        exe,
+      ])
+      if (built.status === 0) {
+        const name = lanes === 1 ? "tigokraft `bc_hash_n`, one lane" : "tigokraft `bc_hash_n`, four lanes"
+        programs.push({ name: `${name}, \`${cCompiler} -O2 -march=native\``, exe, per: lanes })
+      } else {
+        notes.push(
+          `tigokraft (${cCompiler}) left out: ${built.stderr.split("\n").find((l) => l.includes("error")) ?? built.stderr}`
+        )
+      }
+    }
+  }
+  notes.push(`tigokraft: arjaythedev/multicore-server-challenge at ${TIGOKRAFT_COMMIT}, MIT`)
+}
+
 const outputs = new Set()
 const samples = programs.map(() => [])
 // Round 0 warms the page cache and the CPU's clocks and is not counted.
@@ -220,7 +343,7 @@ for (let round = 0; round <= rounds; round++) {
       process.exit(1)
     }
     if (round > 0) {
-      samples[i].push((seconds * 1000) / hashes)
+      samples[i].push((seconds * 1000) / (hashes * (p.per ?? 1)))
     }
   })
 }
@@ -233,7 +356,9 @@ const median = (xs) => {
   const s = [...xs].sort((a, b) => a - b)
   return s[Math.floor(s.length / 2)]
 }
-console.log(`CPU ms per cost-${cost} hash (${hashes} hashes a round, median and spread of ${rounds} rounds)`)
+console.log(
+  `CPU ms per cost-${cost} hash (${hashes} hashes or batches of four a round, median and spread of ${rounds} rounds)`
+)
 console.log(`hash: ${[...outputs][0]}\n`)
 console.log("| Implementation | ms per hash |")
 console.log("| --- | ---: |")
