@@ -874,7 +874,8 @@ jobs:
       # variant says, and with `--asan` its default build runs again under
       # AddressSanitizer (tests/differential/asan.js) and must end the same
       # way. A failure prints its reproducer's path, the command that reruns
-      # it, and a minimised `min.ts`. About 3 minutes on 4 threads; the
+      # it, and a minimised `min.ts`. About 2 minutes on 4 threads (1342
+      # programs, both sides built, the 600 generated ones under ASan too); the
       # generated programs run first, so a budget that runs out on a slow
       # runner drops corpus cases, which the suite links anyway. It runs on
       # every row on purpose: the rows are one per architecture, and an elision
