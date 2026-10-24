@@ -123,6 +123,31 @@ export class Options {
    */
   rangeReference: boolean
   /**
+   * `--no-elision`: the reference build `tests/differential/soundness.js`
+   * runs every program against. Every transformation that rests on a proof is
+   * off, so a program that answers differently with and without it has a proof
+   * that does not hold. A test hook, not a mode: it is not in the usage. The
+   * switches, one per proof, and the one place a new proof is added:
+   *
+   * - index proofs, pass 2 and call-site (`nodeProvenIndex`, `nodeProvenClamp`,
+   *   `nodeProvenRange`: `forgetProofs` in `src/bounds.ts`, and
+   *   `proveCallSiteRanges` is not run), so every index keeps its check;
+   * - proven no-overflow (`nodeProvenNoOverflow`), and with it every `nsw`;
+   * - disjoint copies (`nodeDisjointCopy`) and fused map lookups (`fusion`);
+   * - inline fixed-length array fields (`layoutInlineArrays` is not run);
+   * - every proof-backed attribute — `noalias`, `nocapture`, `willreturn`,
+   *   `readonly`, `dereferenceable`, `align`, TBAA — and loop header hoisting,
+   *   by `optimizeAttributes` off, as `--plain` does;
+   * - stack allocation, by `stackAlloc` off, as `--no-stack-alloc` does;
+   * - the inferred arena scopes: a function's mark and release, a loop's, and
+   *   the call-site reclaim (`analyzeFunctions` in `src/attributes.ts`,
+   *   `reclaimsReturnedString` in `src/escape.ts`). A `using` arena the
+   *   program writes is its meaning and stays.
+   *
+   * `-O2` still runs on both sides.
+   */
+  noElision: boolean
+  /**
    * WP35: a builtin the capability audit is to treat as having no row, so the
    * suite can reach the exit-70 path an unlabelled builtin takes
    * (`noteBuiltin` in `src/attributes.ts`). A test hook read from
@@ -209,6 +234,7 @@ export class Options {
     this.packageRoot = ""
     this.json = false
     this.rangeReference = false
+    this.noElision = false
     this.unlabelledBuiltin = ""
     this.warnPortability = false
     this.emitPanics = ""

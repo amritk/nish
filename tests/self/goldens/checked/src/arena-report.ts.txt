@@ -65,7 +65,7 @@ function ArenaWalk.constructor(this: ArenaWalk, program: CheckedProgram, facts: 
   calls: nish_panic nish_panic_index reclaimsReturnedString
   pointer this: size=72 writesThrough=true captured=false
   pointer program: size=656 writesThrough=true captured=true
-  pointer facts: size=16 writesThrough=true captured=true passedTo=reclaimsReturnedString#1
+  pointer facts: size=24 writesThrough=true captured=true passedTo=reclaimsReturnedString#1
   pointer sig: size=136 writesThrough=true captured=true passedTo=reclaimsReturnedString#0
   pointer f: size=408 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -166,7 +166,7 @@ function arenaJson(units: AnalysisUnit[], facts: FactsTable): string -> @arenaJs
   sharedWrite: via StringBuilder.add
   calls: ArenaWalk.constructor FactsTable.get FunctionSig.body FunctionSig.definedIn FunctionSig.foreign SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText addJsonQuoted nish_str_concat nish_str_from_i32 walkNode
   pointer units: size=0 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=true captured=true passedTo=FactsTable.get#0 ArenaWalk.constructor#2
+  pointer facts: size=24 writesThrough=true captured=true passedTo=FactsTable.get#0 ArenaWalk.constructor#2
   stackSites=2 stackLocals=2
   local +0:9 out: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor

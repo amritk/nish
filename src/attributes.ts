@@ -1045,10 +1045,17 @@ export class FunctionFacts {
 export class FactsTable {
   index: StringMap
   list: FunctionFacts[]
+  /**
+   * `--no-elision` (`Options.noElision`): no inferred arena scope, so no call
+   * site reclaims what its callee left (`reclaimsReturnedString`), which the
+   * tail-call proof and the arena report read as well as the emitter.
+   */
+  noElision: boolean
 
   constructor() {
     this.index = new StringMap()
     this.list = []
+    this.noElision = false
   }
 
   set(name: string, facts: FunctionFacts): void {
@@ -4130,6 +4137,18 @@ export const analyzeFunctions = (
       decideLoopScopes(unit, table, sig, f, facts)
       if (instance !== null) {
         unit.program.leaveInstance()
+      }
+    }
+  }
+  // `--no-elision`: every scope above is a proof that what it releases is
+  // dead, so none is taken; a `using` arena the program writes is not inferred
+  // and stays.
+  if (opts.noElision) {
+    facts.noElision = true
+    for (const f of facts.list) {
+      f.arenaScope = false
+      for (const scope of f.loopScopes) {
+        scope.scoped = false
       }
     }
   }

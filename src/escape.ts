@@ -1575,7 +1575,7 @@ class EscapeAnalysis {
 export const reclaimsReturnedString = (callee: FunctionSig, facts: FactsTable): boolean => {
   // WP27 S3.2: a `declare function`'s copy is the caller's own allocation, the
   // last one the call makes, so there is nothing under it to reclaim.
-  if (callee.returnType !== T_STRING || callee.foreign()) {
+  if (callee.returnType !== T_STRING || callee.foreign() || facts.noElision) {
     return false
   }
   const g = facts.get(callee.name)

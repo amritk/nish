@@ -30,6 +30,7 @@ import Node from "./nodes" -> struct Node
 import Options from "./options" -> struct Options
 import layoutInlineArrays from "./inline-arrays" -> function @layoutInlineArrays
 import proveCallSiteRanges from "./ranges" -> function @proveCallSiteRanges
+import forgetProofs from "./bounds" -> function @forgetProofs
 import reportUncheckedIndexSites from "./unsafe-migrate" -> function @reportUncheckedIndexSites
 import PanicSite from "./panics" -> struct PanicSite
 import panicsJson from "./panics" -> function @panicsJson
@@ -541,7 +542,7 @@ function Compilation.findPackageDir(this: Compilation, from: string, name: strin
 function Compilation.check(this: Compilation): boolean -> @Compilation.check [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: Checker.bindImports Checker.checkBodies Checker.closeReachableStructs Checker.drainInstantiations Checker.foldConstants Checker.makeDeferredInstantiations Compilation.analyze Compilation.checkParallel Compilation.declaredStructs Compilation.denyPanicSites Compilation.denyRetention Compilation.entry Compilation.keyEnumsBySymbol Compilation.readCapabilityPolicy Compilation.readNoPanic Compilation.readRootNish Compilation.refuseCapabilities Compilation.rejectCLibrarySymbols Compilation.rejectCollectionsClash Compilation.rejectForeignShadows Compilation.rejectInstantiatedStructClashes Compilation.rejectSymbolClashes Compilation.reportArenaLoops Compilation.reportDeprecatedFlags Compilation.reportPortability Compilation.reportUncheckedIndexSites Compilation.rootManifest DiagnosticSink.hasErrors DiagnosticSink.report Options.recordsPanics StringMap.get StringSet.constructor buildModeOf handleFindings isBuiltinSpecifier layoutInlineArrays nish_array_grow nish_panic_index proveCallSiteRanges resolvePanicSites spellCSymbolsApart
+  calls: Checker.bindImports Checker.checkBodies Checker.closeReachableStructs Checker.drainInstantiations Checker.foldConstants Checker.makeDeferredInstantiations Compilation.analyze Compilation.checkParallel Compilation.declaredStructs Compilation.denyPanicSites Compilation.denyRetention Compilation.entry Compilation.keyEnumsBySymbol Compilation.readCapabilityPolicy Compilation.readNoPanic Compilation.readRootNish Compilation.refuseCapabilities Compilation.rejectCLibrarySymbols Compilation.rejectCollectionsClash Compilation.rejectForeignShadows Compilation.rejectInstantiatedStructClashes Compilation.rejectSymbolClashes Compilation.reportArenaLoops Compilation.reportDeprecatedFlags Compilation.reportPortability Compilation.reportUncheckedIndexSites Compilation.rootManifest DiagnosticSink.hasErrors DiagnosticSink.report Options.recordsPanics StringMap.get StringSet.constructor buildModeOf forgetProofs handleFindings isBuiltinSpecifier layoutInlineArrays nish_array_grow nish_panic_index proveCallSiteRanges resolvePanicSites spellCSymbolsApart
   pointer this: size=128 writesThrough=true captured=false passedTo=Compilation.rootManifest#0 Compilation.readRootNish#0 Compilation.readNoPanic#0 Compilation.readCapabilityPolicy#0 Compilation.rejectCollectionsClash#0 Compilation.declaredStructs#0 Compilation.rejectSymbolClashes#0 Compilation.entry#0 Compilation.rejectInstantiatedStructClashes#0 Compilation.rejectForeignShadows#0 Compilation.rejectCLibrarySymbols#0 Compilation.reportArenaLoops#0 Compilation.denyRetention#0 Compilation.reportDeprecatedFlags#0 Compilation.reportUncheckedIndexSites#0 Compilation.checkParallel#0 Compilation.keyEnumsBySymbol#0 Compilation.analyze#0 Compilation.denyPanicSites#0 Compilation.refuseCapabilities#0 Compilation.reportPortability#0
   stackSites=4 stackLocals=4
   callee -46:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
@@ -601,24 +602,26 @@ function Compilation.check(this: Compilation): boolean -> @Compilation.check [ex
   local +69:16 unit: ModuleUnit (const)
   local +73:11 mode: BuildMode (const)
   callee +73:18 buildModeOf -> @buildModeOf
-  callee +77:5 layoutInlineArrays -> @layoutInlineArrays
-  callee +78:5 proveCallSiteRanges -> @proveCallSiteRanges
-  callee +79:5 Compilation.reportArenaLoops -> @Compilation.reportArenaLoops
-  callee +80:5 Compilation.denyRetention -> @Compilation.denyRetention
-  callee +81:5 Compilation.reportDeprecatedFlags -> @Compilation.reportDeprecatedFlags
-  callee +82:5 Compilation.reportUncheckedIndexSites -> @Compilation.reportUncheckedIndexSites
-  callee +83:5 Compilation.checkParallel -> @Compilation.checkParallel
-  callee +84:5 Compilation.keyEnumsBySymbol -> @Compilation.keyEnumsBySymbol
-  callee +85:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +90:9 Options.recordsPanics -> @Options.recordsPanics
-  local +91:13 facts: FactsTable (const)
-  callee +91:21 Compilation.analyze -> @Compilation.analyze
-  callee +92:7 resolvePanicSites -> @resolvePanicSites
-  callee +93:7 Compilation.denyPanicSites -> @Compilation.denyPanicSites
-  callee +94:11 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +98:5 Compilation.refuseCapabilities -> @Compilation.refuseCapabilities
-  callee +99:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
-  callee +103:7 Compilation.reportPortability -> @Compilation.reportPortability
+  local +80:18 program: CheckedProgram (const)
+  callee +81:9 forgetProofs -> @forgetProofs
+  callee +84:7 layoutInlineArrays -> @layoutInlineArrays
+  callee +85:7 proveCallSiteRanges -> @proveCallSiteRanges
+  callee +87:5 Compilation.reportArenaLoops -> @Compilation.reportArenaLoops
+  callee +88:5 Compilation.denyRetention -> @Compilation.denyRetention
+  callee +89:5 Compilation.reportDeprecatedFlags -> @Compilation.reportDeprecatedFlags
+  callee +90:5 Compilation.reportUncheckedIndexSites -> @Compilation.reportUncheckedIndexSites
+  callee +91:5 Compilation.checkParallel -> @Compilation.checkParallel
+  callee +92:5 Compilation.keyEnumsBySymbol -> @Compilation.keyEnumsBySymbol
+  callee +93:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +98:9 Options.recordsPanics -> @Options.recordsPanics
+  local +99:13 facts: FactsTable (const)
+  callee +99:21 Compilation.analyze -> @Compilation.analyze
+  callee +100:7 resolvePanicSites -> @resolvePanicSites
+  callee +101:7 Compilation.denyPanicSites -> @Compilation.denyPanicSites
+  callee +102:11 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +106:5 Compilation.refuseCapabilities -> @Compilation.refuseCapabilities
+  callee +107:9 DiagnosticSink.hasErrors -> @DiagnosticSink.hasErrors
+  callee +111:7 Compilation.reportPortability -> @Compilation.reportPortability
 function Compilation.readNoPanic(this: Compilation, source: SourceFile | null, nish: NishManifest | null): void -> @Compilation.readNoPanic [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -786,7 +789,7 @@ function Compilation.denyPanicSites(this: Compilation, facts: FactsTable): void 
   sharedWrite: +0:5
   calls: nish_array_grow reportDeniedPanics restatedBy
   pointer this: size=128 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=reportDeniedPanics#2
+  pointer facts: size=24 writesThrough=false captured=false passedTo=reportDeniedPanics#2
   stackSites=0 stackLocals=0
   local -17:9 any: boolean (let)
   local -16:16 scoped: boolean (const)
@@ -890,7 +893,7 @@ function Compilation.checkSecrets(this: Compilation, facts: FactsTable): void ->
   sharedWrite: +0:7
   calls: DiagnosticSink.report FreshResults.constructor exposeMessages nish_array_grow secretNeedMessage
   pointer this: size=128 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=true captured=true passedTo=FreshResults.constructor#3 exposeMessages#1
+  pointer facts: size=24 writesThrough=true captured=true passedTo=FreshResults.constructor#3 exposeMessages#1
   stackSites=2 stackLocals=2
   local -2:11 programs: CheckedProgram[] (const)
   local -1:16 unit: ModuleUnit (const)
@@ -912,7 +915,7 @@ function Compilation.checkScopes(this: Compilation, facts: FactsTable): void -> 
   sharedWrite: via arenaBlockFindings
   calls: DiagnosticSink.report DiagnosticSink.reportFix arenaBlockFindings arenaMessage channelSummaries destinationEdits isVoidSpawn nish_array_grow parallelBodyOf scopeFindings sharedWriteMessage taskArgumentMessage taskMutexMessageFor taskResultMessage voidTaskResultMessage
   pointer this: size=128 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=true captured=true passedTo=arenaBlockFindings#2 scopeFindings#3 sharedWriteMessage#4 arenaMessage#2
+  pointer facts: size=24 writesThrough=true captured=true passedTo=arenaBlockFindings#2 scopeFindings#3 sharedWriteMessage#4 arenaMessage#2
   stackSites=2 stackLocals=2
   local +0:16 unit: AnalysisUnit (const)
   local +1:18 finding: ArenaFinding (const)
@@ -1198,7 +1201,7 @@ function Compilation.rejectCLibrarySymbols(this: Compilation): void -> @Compilat
   callee +33:13 reservedPrefixText -> @reservedPrefixText
   callee +34:9 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.analyze(this: Compilation): FactsTable -> @Compilation.analyze [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:9
   calls: AnalysisUnit.constructor Compilation.entry analyzeFunctions nish_alloc_struct nish_array_grow
   pointer this: size=128 writesThrough=true captured=false passedTo=Compilation.entry#0

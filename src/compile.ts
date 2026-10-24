@@ -707,6 +707,13 @@ export const main = (): number => {
     } else if (value === "--range-reference") {
       // Not in the usage: the test hook `Options.rangeReference` describes.
       opts.rangeReference = true
+    } else if (value === "--no-elision") {
+      // Not in the usage: the test hook `Options.noElision` describes, which
+      // takes the attributes and the stack allocations with it.
+      irFlag = irFlag.length === 0 ? value : irFlag
+      opts.noElision = true
+      opts.optimizeAttributes = false
+      opts.stackAlloc = false
     } else if (value === "-g") {
       irFlag = irFlag.length === 0 ? value : irFlag
       opts.debugInfo = true

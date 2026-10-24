@@ -213,8 +213,8 @@ const usageRow = (style: Style, first: boolean, shape: string, description: stri
 
 /**
  * The help: every flag a user passes -- not `--strict-exports`, which only
- * restates the default, `--nsw`, which is refused, or the test hook
- * `--range-reference` -- grouped by what a person reaches for it to do, one per line, inside 80
+ * restates the default, `--nsw`, which is refused, or the test hooks
+ * `--range-reference` and `--no-elision` -- grouped by what a person reaches for it to do, one per line, inside 80
  * columns but for an agent's path to the card, as long as the install made
  * it. `--help` prints it on stdout and a bare `nish` on stderr, each styled
  * for its own stream; with colour off the two are the same bytes. `guide`,

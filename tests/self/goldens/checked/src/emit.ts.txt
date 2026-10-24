@@ -313,7 +313,7 @@ function Emitter.constructor(this: Emitter, unit: AnalysisUnit, table: TypeTable
   pointer table: size=96 writesThrough=true captured=true passedTo=DebugInfo.constructor#3
   pointer opts: size=160 writesThrough=true captured=true
   pointer runtime: size=16 writesThrough=true captured=true
-  pointer facts: size=16 writesThrough=true captured=true
+  pointer facts: size=24 writesThrough=true captured=true
   pointer libraries: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:19 new IRModule -> @IRModule.constructor
@@ -1335,7 +1335,7 @@ function emitProgram(unit: AnalysisUnit, table: TypeTable, opts: Options, runtim
   pointer table: size=96 writesThrough=true captured=true passedTo=Emitter.constructor#2
   pointer opts: size=160 writesThrough=true captured=true passedTo=Emitter.constructor#3
   pointer runtime: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#4
-  pointer facts: size=16 writesThrough=true captured=true passedTo=Emitter.constructor#5
+  pointer facts: size=24 writesThrough=true captured=true passedTo=Emitter.constructor#5
   pointer libraries: size=0 writesThrough=false captured=false passedTo=Emitter.constructor#6
   stackSites=1 stackLocals=1
   local +0:9 emitter: Emitter (const)

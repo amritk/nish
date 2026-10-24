@@ -111,7 +111,7 @@ function resolvePanicSites(units: AnalysisUnit[], facts: FactsTable): void -> @r
   sharedWrite: +0:5
   calls: firstPanic inEvaluationOrder keepSites listedFacts mayPanicSet nish_array_grow sortByPosition
   pointer units: size=0 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=mayPanicSet#0 firstPanic#0 firstPanic#0 listedFacts#1 keepSites#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=mayPanicSet#0 firstPanic#0 firstPanic#0 listedFacts#1 keepSites#1
   stackSites=2 stackLocals=2
   local -46:9 ordered: PanicSite[][] (const)
   local -45:9 reach: PanicSite | null[] (const)
@@ -136,7 +136,7 @@ function resolvePanicSites(units: AnalysisUnit[], facts: FactsTable): void -> @r
 function mayPanicSet(facts: FactsTable, ordered: PanicSite[][]): boolean[] -> @mayPanicSet
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: callsMayPanic nish_array_grow panicsHere
-  pointer facts: size=16 writesThrough=false captured=false passedTo=callsMayPanic#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=callsMayPanic#0
   pointer ordered: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local +0:9 may: boolean[] (const)
@@ -150,7 +150,7 @@ function mayPanicSet(facts: FactsTable, ordered: PanicSite[][]): boolean[] -> @m
 function callsMayPanic(facts: FactsTable, may: boolean[], sites: PanicSite[], f: FunctionFacts): boolean -> @callsMayPanic
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.at StringSet.size isCallSite mayPanicAt
-  pointer facts: size=16 writesThrough=false captured=false passedTo=mayPanicAt#0 mayPanicAt#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=mayPanicAt#0 mayPanicAt#0
   pointer may: size=0 writesThrough=false captured=false passedTo=mayPanicAt#1 mayPanicAt#1
   pointer sites: size=0 writesThrough=false captured=false
   pointer f: size=408 writesThrough=false captured=false
@@ -166,7 +166,7 @@ function mayPanicAt(facts: FactsTable, may: boolean[], name: string): boolean ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: FactsTable.indexOf
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
   pointer may: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 at: i32 (const)
@@ -174,7 +174,7 @@ function mayPanicAt(facts: FactsTable, may: boolean[], name: string): boolean ->
 function firstPanic(facts: FactsTable, may: boolean[], reach: PanicSite | null[], sites: PanicSite[], f: FunctionFacts, passOver: boolean): PanicSite | null -> @firstPanic
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: StringSet.at StringSet.size isCallSite mayPanicAt panicsHere reachOf
-  pointer facts: size=16 writesThrough=false captured=false passedTo=mayPanicAt#0 reachOf#0 mayPanicAt#0 reachOf#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=mayPanicAt#0 reachOf#0 mayPanicAt#0 reachOf#0
   pointer may: size=0 writesThrough=false captured=false passedTo=mayPanicAt#1 mayPanicAt#1
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
   pointer sites: size=0 writesThrough=false captured=false
@@ -197,7 +197,7 @@ function reachOf(facts: FactsTable, reach: PanicSite | null[], name: string): Pa
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: name
   calls: FactsTable.indexOf
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.indexOf#0
   pointer reach: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 at: i32 (const)
@@ -206,7 +206,7 @@ function listedFacts(program: CheckedProgram, facts: FactsTable, sig: FunctionSi
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FactsTable.get FunctionSig.definedIn FunctionSig.foreign
   pointer program: size=656 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.definedIn#0 FunctionSig.foreign#0
   stackSites=0 stackLocals=0
   callee +0:3 FunctionSig.definedIn -> @FunctionSig.definedIn
@@ -217,7 +217,7 @@ function keepSites(program: CheckedProgram, facts: FactsTable, reach: PanicSite 
   sharedWrite: +0:7
   calls: PanicSite.constructor StringSet.add StringSet.at StringSet.constructor StringSet.has StringSet.size isCallSite nish_alloc_struct nish_array_grow reachOf sortByPosition
   pointer program: size=656 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=reachOf#0 reachOf#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=reachOf#0 reachOf#0
   pointer reach: size=0 writesThrough=false captured=false passedTo=reachOf#1 reachOf#1
   pointer sig: size=136 writesThrough=false captured=false
   pointer f: size=408 writesThrough=false captured=false
@@ -249,7 +249,7 @@ function panicsJson(units: AnalysisUnit[], facts: FactsTable): string -> @panics
   sharedWrite: via StringBuilder.add
   calls: SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText addJsonQuoted listedFacts nish_panic_index nish_str_concat nish_str_eq nish_str_from_i32 siteJson
   pointer units: size=0 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=listedFacts#1 siteJson#2
+  pointer facts: size=24 writesThrough=false captured=false passedTo=listedFacts#1 siteJson#2
   stackSites=1 stackLocals=1
   local +0:9 out: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
@@ -281,7 +281,7 @@ function siteJson(out: StringBuilder, program: CheckedProgram, facts: FactsTable
   calls: FactsTable.get SourceFile.columnOf SourceFile.lineOf StringBuilder.add addJsonQuoted isAllowed isCallSite nish_str_concat nish_str_from_i32 panicKindName
   pointer out: size=8 writesThrough=false captured=false passedTo=StringBuilder.add#0 StringBuilder.add#0 StringBuilder.add#0 StringBuilder.add#0 StringBuilder.add#0 addJsonQuoted#0 StringBuilder.add#0 StringBuilder.add#0
   pointer program: size=656 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer site: size=56 writesThrough=false captured=false passedTo=isAllowed#0 isCallSite#0
   stackSites=0 stackLocals=0
   local +0:9 source: SourceFile (const)
@@ -314,7 +314,7 @@ function siteReportEntry(site: PanicSite, path: string, facts: FactsTable): stri
   sharedWrite: via StringBuilder.add
   calls: FactsTable.get SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText addJsonQuoted isAllowed isCallSite nish_str_concat nish_str_from_i32 panicKindName
   pointer site: size=56 writesThrough=false captured=false passedTo=isAllowed#0 isCallSite#0
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=1 stackLocals=1
   local +0:9 out: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
@@ -344,7 +344,7 @@ function reportDeniedPanics(units: AnalysisUnit[], inScope: boolean[], facts: Fa
   calls: StringSet.add StringSet.constructor listedFacts nish_array_grow nish_panic_overflow refuseSite
   pointer units: size=0 writesThrough=false captured=false
   pointer inScope: size=0 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=listedFacts#1 refuseSite#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=listedFacts#1 refuseSite#1
   pointer table: size=96 writesThrough=false captured=false passedTo=refuseSite#2
   pointer sink: size=48 writesThrough=false captured=false passedTo=refuseSite#5
   stackSites=2 stackLocals=2
@@ -366,7 +366,7 @@ function refuseSite(program: CheckedProgram, facts: FactsTable, table: TypeTable
   sharedWrite: via DiagnosticSink.report
   calls: DiagnosticSink.report FactsTable.get SourceFile.columnOf SourceFile.lineOf StringSet.has isAllowed nish_str_concat nish_str_from_i32 panicKindName siteAdvice
   pointer program: size=656 writesThrough=false captured=false passedTo=siteAdvice#0
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer table: size=96 writesThrough=false captured=false passedTo=siteAdvice#1
   pointer scoped: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
   pointer site: size=56 writesThrough=false captured=false passedTo=isAllowed#0 siteAdvice#2

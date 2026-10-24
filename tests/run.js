@@ -11286,6 +11286,111 @@ if (!only || "range_reference".includes(only) || only.startsWith("range_referenc
   }
 }
 
+// The reference build of the soundness differential (`--no-elision`,
+// `noElision` in `src/options.ts`; `tests/differential/soundness.js`). One
+// program reaches every proof the flag turns off: `sum` indexes by a loop
+// counter proven in bounds whose increment is proven to fit, `norm` builds a
+// `Point` that never escapes, `width` makes a string per iteration that the
+// inferred loop arena reclaims. The default build must show each elision and
+// the reference none of them, so a switch that stops working cannot leave the
+// differential comparing a build with itself. Then a sample of `tests/cases`
+// runs both ways and must print the same.
+if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
+  const dir = path.join(buildDir, "no_elision")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const src = path.join(dir, "elide.ts")
+  fs.writeFileSync(
+    src,
+    [
+      "class Point { x: i32; y: i32; constructor(x: i32, y: i32) { this.x = x; this.y = y } }",
+      "const sum = (xs: i32[]): i32 => { let total = 0; for (let i = 0; i < xs.length; i++) { total += xs[i] } return total }",
+      "const norm = (x: i32, y: i32): i32 => { const p = new Point(x, y); return p.x * p.x + p.y * p.y }",
+      "const width = (n: i32): i32 => { let w = 0; for (let i = 0; i < n; i++) { const s = `${i}`; w = w + s.length } return w }",
+      "export const main = (): void => { console.log(`${sum([1, 2, 3])} ${norm(3, 4)} ${width(12)}`) }",
+      "",
+    ].join("\n")
+  )
+  const irOf = (extra) => {
+    const out = path.join(dir, `${extra.length ? "reference" : "default"}.ll`)
+    const r = spawnSync(NISH, [src, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
+    return { status: r.status, stderr: r.stderr, ir: fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "" }
+  }
+  // One function's body, from its `define` to the closing brace.
+  const bodies = (ir) => {
+    const body = (name) => {
+      const at = ir.search(new RegExp(`^define [^\\n]*@[\\w.$]*${name}\\(`, "m"))
+      return at < 0 ? "" : ir.slice(at, ir.indexOf("\n}\n", at) + 2)
+    }
+    return { sum: body("sum"), norm: body("norm"), width: body("width") }
+  }
+  const elided = irOf([])
+  const reference = irOf(["--no-elision"])
+  check(
+    "no_elision: the program compiles both ways",
+    elided.status === 0 && reference.status === 0,
+    `${elided.stderr}\n${reference.stderr}`
+  )
+  const a = bodies(elided.ir)
+  const b = bodies(reference.ir)
+  const arena = /nish_arena_(mark|release)|@nish_arena\b/
+  // The runtime prelude's declarations keep their attributes: they state the
+  // runtime's contract, not a proof about this program.
+  const attributes = /\b(noalias|nocapture|willreturn|dereferenceable)\b|!tbaa/
+  const own = (fns) => Object.values(fns).join("")
+  for (const [what, ok, detail] of [
+    ["a proven index has no `nish_panic_index`", !a.sum.includes("nish_panic_index"), a.sum],
+    ["the reference keeps `nish_panic_index`", b.sum.includes("nish_panic_index"), b.sum],
+    ["a proven add carries `nsw`", / add nsw /.test(a.sum), a.sum],
+    [
+      "the reference has no `nsw` and checks the add",
+      !/ nsw /.test(reference.ir) && b.sum.includes("llvm.sadd.with.overflow") && b.sum.includes("nish_panic_overflow"),
+      b.sum,
+    ],
+    ["the default has proof-backed attributes and TBAA", attributes.test(own(a)) && own(a).includes("!tbaa"), own(a)],
+    [
+      "the reference has none",
+      !attributes.test(own(b)),
+      own(b)
+        .split("\n")
+        .filter((line) => attributes.test(line))
+        .slice(0, 5)
+        .join("\n"),
+    ],
+    ["a `Point` that never escapes is an `alloca`", /alloca %struct\.Point\b(?!\*)/.test(a.norm), a.norm],
+    [
+      "the reference allocates it",
+      !/alloca %struct\.Point\b(?!\*)/.test(b.norm) && b.norm.includes("@nish_alloc_struct("),
+      b.norm,
+    ],
+    ["the loop's strings are reclaimed by an inferred arena", arena.test(a.width), a.width],
+    ["the reference reclaims nothing", !arena.test(b.width), b.width],
+  ]) {
+    check(`no_elision: ${what}`, ok, detail)
+  }
+  const runs = [[], ["--no-elision"]].map((extra) => {
+    const exe = path.join(dir, extra.length ? "reference" : "default")
+    const link = spawnSync(NISH, [src, "--link", exe, ...extra], { cwd: root, encoding: "utf8" })
+    return link.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }).stdout : `link: ${link.stderr}`
+  })
+  check("no_elision: both builds print `6 25 14`", runs[0] === "6 25 14\n" && runs[1] === runs[0], runs.join("\n---\n"))
+  // The flag changes the IR and must change nothing a program prints: a
+  // sample spread across the corpus, through the differential itself.
+  const sample = spawnSync(
+    process.execPath,
+    [
+      path.join(root, "tests", "differential", "soundness.js"),
+      ...["--corpus", path.join(root, "tests", "cases"), "--sample", "40", "--compiler", NISH],
+    ],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  )
+  check(
+    "no_elision: a sample of tests/cases prints the same with and without --no-elision",
+    sample.status === 0,
+    `exit ${sample.status}\n${sample.stdout.slice(-4000)}\n${sample.stderr.slice(-2000)}`
+  )
+}
+
 // #183: a function that can reach `nish_panic_index` through an unproven
 // `charCodeAt` is not `willreturn`. With the attribute on `main`, the speed
 // profile's optimiser deleted the loop that panics and the program exited 0.
@@ -17732,9 +17837,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     `stdout:\n${help.stdout}\nstderr:\n${noInputs.stderr}`
   )
   // Every flag the driver accepts is listed, by one of its spellings, bar
-  // --help itself, the test hook `--range-reference`, the refused `--nsw` and
-  // the default `--strict-exports`: a wrapper that reads --help to learn the
-  // surface must not be missing one.
+  // --help itself, the test hooks `--range-reference` and `--no-elision`, the
+  // refused `--nsw` and the default `--strict-exports`: a wrapper that reads
+  // --help to learn the surface must not be missing one.
   const documented = [
     "--output",
     "-g",
@@ -17780,6 +17885,11 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     `--help lists every advertised flag (${documented.length} checked)`,
     undocumented.length === 0,
     `missing from --help: ${undocumented.join(", ")}`
+  )
+  check(
+    "--help leaves the test hooks out",
+    !listed("--range-reference") && !listed("--no-elision"),
+    help.stdout
   )
   check(
     "--help into a pipe: no escape codes",

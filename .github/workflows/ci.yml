@@ -854,6 +854,17 @@ jobs:
           NISH_BOOTSTRAP="$SEED" node tests/differential/fuzz.js --stage1 --seed 20261001 --count 200 \
             --candidate build/self/compile
 
+      # The soundness differential: the same candidate compiles every runnable
+      # case, the fuzz corpus and 200 fixed-seed programs a second time with
+      # `--no-elision`, every proof-backed elision off, and both builds must
+      # print and exit the same at -O2. A difference is a proof that does not
+      # hold, and the run prints the path of its reproducer. About 35 s on 4
+      # threads; the budget bounds it if a runner is slow.
+      - name: Every proof-backed elision changes nothing a program prints
+        run: |
+          node tests/differential/soundness.js --compiler build/self/compile --corpus tests/cases \
+            --corpus tests/differential/corpus --seed 20261001 --count 200 --budget 300
+
       # Reached only when the comparison agreed, which is the point: this line
       # is a claim about a run that happened. The summary line carries its own
       # counts -- programs compared, files, IR lines, and what was refused by
