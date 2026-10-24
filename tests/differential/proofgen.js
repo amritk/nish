@@ -36,14 +36,17 @@
  *
  * `ASAN_BLIND` names the shapes whose one-past read stays inside the array's
  * block, which AddressSanitizer cannot see; `LIBRARY_CHECKED` the ones the
- * library, not the program, checks.
+ * library, not the program, checks; `PROOF_MISSES` the ones the prover proves
+ * nothing in.
  *
- * `--self-test` takes the compiler `lib.compilerFor` resolves (`--compiler`,
- * then `build/nish`, then `NISH_BOOTSTRAP`) and needs clang. It first builds
+ * `--self-test` takes `--compiler`, else `build/nish` when it is there (the
+ * compiler built from `src/`), else the seed `lib.compilerFor` resolves
+ * (`NISH_BOOTSTRAP`, then the fetched release), and needs clang. It first builds
  * the catalogue: every `family:kind` in both variants as a program of its own,
- * where the in-bounds variant must prove at least one access and the one-past
- * variant must keep a check site, and each must panic exactly when it is one
- * past. Then it builds and runs the corpus: the checker must accept every
+ * without the loop that pads it, where the in-bounds variant must prove one
+ * of its own accesses (none, for a `PROOF_MISSES` shape), the one-past variant
+ * must keep the site for the access it moved, and each must panic exactly when
+ * it is one past. Then it builds and runs the corpus: the checker must accept every
  * program, each must panic exactly when `expectPanic` says so, every family
  * must occur in both variants, and a second process must generate the same
  * programs. It reports the check sites (`nish_panic_index`, `nish_panic_slice`)
@@ -120,14 +123,15 @@ const KINDS = {
 }
 
 /**
- * Each family answers `{ lines, helpers, threads }` for one kind in an
+ * Each family answers `{ lines, pad, helpers, threads }` for one kind in an
  * in-bounds (`past` false) or a one-past (`past` true) variant: the statements
  * of one block that adds what it reads to the outer `s`. A one-past variant
  * reaches index `length` (or a range ending at `length + 1`) and no further,
  * so the first out-of-range access is the one the checked build panics on.
+ * `pad`, when there is one, reads the block's result after `lines`.
  *
- * Every in-bounds variant holds at least one access the elision proves, which
- * the self-test's catalogue checks shape by shape. The prover knows an
+ * Every in-bounds variant bar the `PROOF_MISSES` holds an access of its own
+ * the elision proves, which the self-test's catalogue checks shape by shape. The prover knows an
  * array's length only from a test on it (`docs/LANGUAGE.md`, bounds checks), so
  * a shape whose index is not bounded by `a.length` itself reads under
  * `if (a.length >= L)`, `L` the length the array was filled to; the one-past
@@ -254,8 +258,8 @@ const FAMILIES = {
           `  a.push(i * ${r.int(1, 9)});`,
           `  s += a[${past ? "i + 1" : "i"}];`,
           "}",
-          ...sumLoop("a"),
         ],
+        pad: sumLoop("a"),
       }
     }
     const k = r.int(1, n)
@@ -285,23 +289,20 @@ const FAMILIES = {
           `const src = fill(${k}, 7);`,
           `const dst = fill(${m}, 0);`,
           `dst.set(src, dst.length - src.length${extra});`,
-          ...sumLoop("dst"),
         ],
+        pad: sumLoop("dst"),
       }
     }
     const from = r.int(0, k)
     const codes = ["for (let i = 0; i < u.length; i++) {", "  s += u.charCodeAt(i);", "}"]
     if (kind === "str") {
       const text = Array.from({ length: k }, () => r.pick([...LETTERS])).join("")
-      return { lines: [`const t = "${text}";`, `const u = t.slice(${from}, t.length${extra});`, ...codes] }
+      return { lines: [`const t = "${text}";`, `const u = t.slice(${from}, t.length${extra});`], pad: codes }
     }
     const bytes = Array.from({ length: k }, () => 97 + r.int(0, 25)).join(", ")
     return {
-      lines: [
-        `const b: u8[] = [${bytes}];`,
-        `const u = String.fromBytes(b, ${from}, b.length${extra});`,
-        ...codes,
-      ],
+      lines: [`const b: u8[] = [${bytes}];`, `const u = String.fromBytes(b, ${from}, b.length${extra});`],
+      pad: codes,
     }
   },
 
@@ -380,8 +381,8 @@ const FAMILIES = {
         lines: [
           `const src = fill(${n}, ${c});`,
           `const got = parallelFrom(src.length${past ? " + 1" : ""}, (i: number): i32 => src[i] + ${c});`,
-          ...sumLoop("got"),
         ],
+        pad: sumLoop("got"),
       }
     }
     return {
@@ -390,8 +391,8 @@ const FAMILIES = {
       lines: [
         `const src = fill(${n + c}, ${c});`,
         `const got = parallelFrom(src.length - ${past ? c - 1 : c}, (i: number): i32 => src[i + ${c}]);`,
-        ...sumLoop("got"),
       ],
+      pad: sumLoop("got"),
     }
   },
 
@@ -435,8 +436,8 @@ const FAMILIES = {
         `const dst = fill(${past ? n - 1 : n}, 0);`,
         `parallelMapInto(src, dst, (x: i32): i32 => x * ${r.int(2, 5)});`,
         "s += parallelReduce(dst, (p: i32, q: i32): i32 => p + q, 0);",
-        ...sumLoop("dst"),
       ],
+      pad: sumLoop("dst"),
     }
   },
 }
@@ -448,7 +449,12 @@ const guarded = (n, lines, name = "a") => [
   "}",
 ]
 
-/** A loop adding every element of `name` to `s`: an access the elision proves. */
+/**
+ * A loop adding every element of `name` to `s`, so the shape's result is read.
+ * A builder returns it as `pad`, apart from `lines`: its access is one the
+ * elision proves, and the catalogue leaves it out so it cannot stand in for a
+ * proof of the shape's own accesses.
+ */
 const sumLoop = (name) => [`for (let i = 0; i < ${name}.length; i++) {`, `  s += ${name}[i];`, "}"]
 
 /**
@@ -466,6 +472,25 @@ const ASAN_BLIND = ["pushpop:pop", "alias:names", "alias:shrink", "alias:shrinkl
  * itself, so the program's own IR keeps no site for it.
  */
 const LIBRARY_CHECKED = ["threads:mapinto"]
+
+/**
+ * The shapes whose in-bounds variant the prover leaves fully checked in 0.20.0:
+ * missed proofs, recorded so the catalogue fails both when another shape stops
+ * proving and when one of these starts to (and should leave the list). It
+ * learns nothing from a `push` about the index just written, proves no range
+ * operation (`set`, `slice`, `String.fromBytes`) against the lengths it is
+ * given, and nothing inside a `parallelFrom` arrow about its index;
+ * `parallelMapInto` makes no access of the program's own.
+ */
+const PROOF_MISSES = [
+  "pushpop:push",
+  "slice:set",
+  "slice:str",
+  "slice:bytes",
+  "closure:from",
+  "closure:offset",
+  "threads:mapinto",
+]
 
 const FAMILY_NAMES = Object.keys(FAMILIES)
 
@@ -495,17 +520,27 @@ const generate = (seed, index) => {
       threads.add(t)
     }
     shapes.push(`${family}:${kind}${past ? "!" : ""}`)
-    blocks.push(`  // ${shapes.at(-1)}`, "  {", ...shape.lines.map((l) => `    ${l}`), "  }", PRINT_SUM)
+    const lines = [...shape.lines, ...(shape.pad ?? [])]
+    blocks.push(`  // ${shapes.at(-1)}`, "  {", ...lines.map((l) => `    ${l}`), "  }", PRINT_SUM)
   }
   return { source: assemble(blocks, helpers, threads), shapes, expectPanic }
 }
 
-/** One shape's block, from the family's builder. */
-const shapeOf = (family, kind, past, r) => FAMILIES[family](r, past, kind)
+/**
+ * One shape's block, from the family's builder. A kind `KINDS` does not list
+ * throws rather than falling through to whichever builder ends the family.
+ */
+const shapeOf = (family, kind, past, r) => {
+  if (!KINDS[family]?.includes(kind)) {
+    throw new Error(`proofgen: no shape ${family}:${kind}`)
+  }
+  return FAMILIES[family](r, past, kind)
+}
 
 /**
  * The program holding exactly one shape, for the self-test's catalogue: every
  * `family:kind` in both variants, whatever the random corpus happened to draw.
+ * It leaves out the shape's `pad`, so every access it makes is the shape's own.
  */
 const single = (family, kind, past, seed) => {
   const shape = shapeOf(family, kind, past, rng(seed))
@@ -570,11 +605,12 @@ const verdictOf = (exe) => {
 }
 
 /**
- * Builds every `family:kind` in both variants as a program of its own. Each
- * in-bounds variant must prove at least one access, so a shape the prover never
- * reaches fails here rather than padding the corpus; each one-past variant must
- * keep a check site (bar the `LIBRARY_CHECKED` ones) and, with clang, panic
- * exactly when it is one past.
+ * Builds every `family:kind` in both variants as a program of its own, without
+ * its `pad`. Each in-bounds variant must prove one of its own accesses, bar the
+ * `PROOF_MISSES`, which must prove none; each one-past variant must keep more
+ * check sites than the in-bounds one (at least one for a `PROOF_MISSES` shape,
+ * none asked of a `LIBRARY_CHECKED` one), so the site kept is the one-past
+ * access's; and, with clang, each must panic exactly when it is one past.
  */
 const catalogue = (compiler, dir, seed, run, failures) => {
   const rows = []
@@ -590,13 +626,19 @@ const catalogue = (compiler, dir, seed, run, failures) => {
           continue
         }
         row[past ? "past" : "in"] = built
-        if (!past && built.accesses - built.sites < 1) {
+        const miss = PROOF_MISSES.includes(shape)
+        if (!past && miss !== built.accesses - built.sites < 1) {
           failures.push(
-            `${shape} in bounds proves none of its ${built.accesses} accesses (${built.sites} sites)`
+            miss
+              ? `${shape} in bounds now proves ${built.accesses - built.sites} of its ${built.accesses} accesses: take it out of PROOF_MISSES`
+              : `${shape} in bounds proves none of its ${built.accesses} accesses (${built.sites} sites)`
           )
         }
-        if (past && built.sites < 1 && !LIBRARY_CHECKED.includes(shape)) {
-          failures.push(`${shape}! keeps no check site: an unsound proof elided the one-past access`)
+        const floor = miss || !row.in ? 1 : row.in.sites + 1
+        if (past && built.sites < floor && !LIBRARY_CHECKED.includes(shape)) {
+          failures.push(
+            `${shape}! keeps ${built.sites} check sites, fewer than ${floor}: an unsound proof elided the one-past access`
+          )
         }
         if (run) {
           const { kind: got, detail } = verdictOf(built.exe)
@@ -613,6 +655,9 @@ const catalogue = (compiler, dir, seed, run, failures) => {
   return rows
 }
 
+/** The compiler `npm run bootstrap` builds from `src/`, which `--self-test` prefers to the seed. */
+const BUILT = path.resolve(import.meta.dirname, "..", "..", "build", "nish")
+
 /** `--print`'s output for one program, which the self-test also asks a child process for. */
 const printed = (program) =>
   `// shapes: ${program.shapes.join(" ")}; expectPanic: ${program.expectPanic}\n${program.source}`
@@ -623,7 +668,7 @@ const printed = (program) =>
  * Answers the exit status: 1 on a failure, 2 when the toolchain is missing.
  */
 const selfTest = (seed, count, spec) => {
-  const compiler = lib.compilerFor(spec)
+  const compiler = lib.compilerFor(spec ?? (fs.existsSync(BUILT) ? BUILT : null))
   if (compiler.error) {
     console.error(`proofgen: ${compiler.error}`)
     return 2
@@ -635,6 +680,15 @@ const selfTest = (seed, count, spec) => {
   const dir = path.join(lib.buildDir, `proofgen-${process.pid}`)
   fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(dir, { recursive: true })
+  try {
+    return report(compiler, dir, seed, count)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/** The self-test's body, in the work directory `dir`, which `selfTest` removes. */
+const report = (compiler, dir, seed, count) => {
   const failures = []
   const rows = catalogue(compiler, dir, seed, true, failures)
   for (const i of [0, Math.min(count - 1, 7)]) {
@@ -650,6 +704,7 @@ const selfTest = (seed, count, spec) => {
   const seen = new Map()
   let accesses = 0
   let sites = 0
+  let rejected = 0
   for (let i = 0; i < count; i++) {
     const program = generate(seed, i)
     if (generate(seed, i).source !== program.source) {
@@ -660,6 +715,7 @@ const selfTest = (seed, count, spec) => {
     }
     const built = build(compiler, dir, `p${i}`, program.source, true)
     if (built.error) {
+      rejected++
       failures.push(`#${i} [${program.shapes.join(" ")}]: ${built.error}`)
       continue
     }
@@ -679,7 +735,6 @@ const selfTest = (seed, count, spec) => {
       }
     }
   }
-  fs.rmSync(dir, { recursive: true, force: true })
   const proven = accesses - sites
   console.log("proofgen: catalogue, each shape alone (accesses/sites in bounds, then one past):")
   for (const { shape, in: inb, past } of rows) {
@@ -687,7 +742,7 @@ const selfTest = (seed, count, spec) => {
     console.log(`proofgen:   ${shape.padEnd(18)} ${cell(inb).padStart(7)} ${cell(past).padStart(7)}`)
   }
   console.log(
-    `proofgen: ${count} programs from --seed ${seed}, all accepted by ${compiler.label}${failures.length > 0 ? " (but see below)" : ""}`
+    `proofgen: ${count} programs from --seed ${seed}, ${count - rejected} built and linked by ${compiler.label}`
   )
   console.log(
     `proofgen: shapes ${[...seen]
@@ -698,14 +753,14 @@ const selfTest = (seed, count, spec) => {
   console.log(
     `proofgen: ${sites} check sites for ${accesses} accesses: ${proven} proven (${((100 * proven) / Math.max(accesses, 1)).toFixed(1)}%)`
   )
-  console.log("proofgen: linked and ran every program against its expectPanic")
+  console.log(`proofgen: ran the ${count - rejected} built programs against their expectPanic`)
   for (const f of failures) {
     console.error(`proofgen: FAIL ${f}`)
   }
   return failures.length > 0 ? 1 : 0
 }
 
-export { generate, KINDS, ASAN_BLIND, LIBRARY_CHECKED }
+export { generate, KINDS, ASAN_BLIND, LIBRARY_CHECKED, PROOF_MISSES }
 
 const USAGE =
   "usage: proofgen.js --self-test [--seed S] [--count N] [--compiler PATH] | --print [--seed S] [--index I]"
@@ -721,7 +776,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const index = option("--index", 0)
   const at = args.indexOf("--compiler")
   const spec = at === -1 ? null : args[at + 1]
-  if (![seed, count, index].every(Number.isInteger) || count < 1 || spec === undefined) {
+  // A seed is taken mod 2^32, so only 0 to 2^32 - 1 name distinct corpora.
+  const valid =
+    [seed, count, index].every(Number.isInteger) &&
+    seed >= 0 &&
+    seed <= 0xffffffff &&
+    count >= 1 &&
+    index >= 0
+  if (!valid || spec === undefined) {
     console.error(USAGE)
     process.exit(2)
   }

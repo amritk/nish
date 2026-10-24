@@ -216,14 +216,18 @@ void *nish_alloc_struct(uint64_t size) {
 }
 
 #ifdef NISH_ASAN
-/* The blocks `nish_array_grow` allocated with more room than it reports: `cap`
-   stays `len + 1`, since the push writes `data[len]` inline and spare capacity
-   would be addressable, but growing one slot at a time copies the whole array
-   on every push. So a block is allocated twice as large, its tail poisoned,
-   and the next grow of the same array unpoisons one more slot in place. A few
-   entries per thread, overwritten round robin; a miss only costs a copy. */
-#define NISH_GROW_SLOTS 16
-static NISH_TLS struct { const void *owner; char *data; uint64_t bytes; } nish_grown[NISH_GROW_SLOTS];
+/* The capacity a normal build would give each array `nish_array_grow` grew.
+   `cap` stays `len + 1`, since the push writes `data[len]` inline and spare
+   capacity would be addressable, but growing one slot at a time copies the
+   whole array on every push. So a block is allocated at the capacity a normal
+   build would choose, its tail poisoned, and each later grow of the same array
+   unpoisons one more slot in place until that capacity is used up. The block
+   then moves at exactly the push where a normal build reallocates, so a
+   pointer kept across that push reads poison. A few entries per thread,
+   overwritten round robin; a miss takes the array's `cap` as the normal one,
+   which moves it early, never late, at that push. */
+#define NISH_GROW_SLOTS 64
+static NISH_TLS struct { const void *owner; char *data; uint64_t native; } nish_grown[NISH_GROW_SLOTS];
 static NISH_TLS unsigned nish_grown_next;
 #endif
 #ifdef NISH_ASAN
@@ -1351,17 +1355,19 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
  * the call costs nothing on a path that runs once per doubling. */
 __attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size) {
 #ifdef NISH_ASAN
-  /* One more slot, not double (see `nish_grown`): in place when this array's
-     block was allocated with room to spare. */
-  uint64_t cap = a->len + 1;
+  /* One more slot, not double (see `nish_grown`): in place while a normal build
+     would still have room, moved where it would reallocate. */
+  uint64_t native = a->cap, cap = a->len + 1;
+  int slot = -1;
   for (unsigned i = 0; i < NISH_GROW_SLOTS; i++) {
-    if (nish_grown[i].owner == a && nish_grown[i].data == a->data && cap * elem_size <= nish_grown[i].bytes) {
-      __asan_unpoison_memory_region(a->data + a->len * elem_size, elem_size);
-      a->cap = cap;
-      return;
-    }
+    if (nish_grown[i].owner == a && nish_grown[i].data == a->data) { slot = (int)i; native = nish_grown[i].native; break; }
   }
-  uint64_t room = cap < 2 ? 4 : cap * 2;
+  if (slot >= 0 && cap <= native) {
+    __asan_unpoison_memory_region(a->data + a->len * elem_size, elem_size);
+    a->cap = cap;
+    return;
+  }
+  uint64_t room = native ? native * 2 : 4;
   if (room > NISH_ARRAY_MAX) room = NISH_ARRAY_MAX;
 #else
   uint64_t cap = a->cap ? a->cap * 2 : 4;
@@ -1382,9 +1388,9 @@ __attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size
   /* The old block is dead: a pointer kept across the push now reads poison.
      Only a heap block, as a literal's may be on the stack or a constant. */
   const char *kind = a->cap ? __asan_locate_address(a->data, 0, 0, 0, 0) : 0;
-  if (kind && !strcmp(kind, "heap")) NISH_POISON(a->data, a->cap * elem_size);
-  nish_grown[nish_grown_next] = (__typeof__(nish_grown[0])){ a, data, room * elem_size };
-  nish_grown_next = (nish_grown_next + 1) % NISH_GROW_SLOTS;
+  if (kind && !strcmp(kind, "heap")) NISH_POISON(a->data, (slot >= 0 ? native : a->cap) * elem_size);
+  if (slot < 0) slot = (int)nish_grown_next, nish_grown_next = (nish_grown_next + 1) % NISH_GROW_SLOTS;
+  nish_grown[slot] = (__typeof__(nish_grown[0])){ a, data, room };
 #endif
   a->data = data;
   a->cap = cap;

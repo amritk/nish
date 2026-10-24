@@ -98,7 +98,9 @@ const hasAsanRuntime = () => {
  * `ir` with every defined function opted into ASan. A function may name more
  * than one attribute group, so the extra group goes onto each `define` line
  * whatever it already carries, and the declarations (the runtime's functions,
- * compiled with ASan on their own) are left alone.
+ * compiled with ASan on their own) are left alone. Each module's inline-bump
+ * `nish_alloc_struct` becomes a call to the runtime's `nish_asan_alloc`; a
+ * module whose definition no longer has the form matched here gives `null`.
  */
 const instrument = (ir) => {
   let out = ir.replace(/^(define [^\n]*?)\s*\{$/gm, `$1 ${ASAN_GROUP} {`)
@@ -106,6 +108,9 @@ const instrument = (ir) => {
   if (bump.test(out)) {
     out = out.replace(bump, "$1\n  %p = call i8* @nish_asan_alloc(i64 %size)\n  ret i8* %p\n}")
     out += "declare i8* @nish_asan_alloc(i64)\n"
+  } else if (/^define [^\n]*@nish_alloc_struct\(/m.test(out)) {
+    // Left alone, the inline bump would hide every literal's overflow again.
+    return null
   }
   return `${out}\nattributes ${ASAN_GROUP} = { sanitize_address }\n`
 }
@@ -169,14 +174,18 @@ const build = (file, exe, { compiler, unchecked = false, threads = false }) => {
   if (compiled.status !== 0) {
     return { rejected: true, stderr: compiled.stderr }
   }
-  const asanLls = fs
-    .readdirSync(modules)
-    .filter((name) => name.endsWith(".ll"))
-    .map((name) => {
-      const asanLl = path.join(modules, name.replace(/\.ll$/, ".asan.ll"))
-      fs.writeFileSync(asanLl, instrument(fs.readFileSync(path.join(modules, name), "utf8")))
-      return asanLl
-    })
+  const asanLls = []
+  for (const name of fs.readdirSync(modules).filter((n) => n.endsWith(".ll"))) {
+    const ir = instrument(fs.readFileSync(path.join(modules, name), "utf8"))
+    if (ir === null) {
+      return {
+        error: `${name} defines @nish_alloc_struct in a form asan.js cannot rewrite; update instrument()`,
+      }
+    }
+    const asanLl = path.join(modules, name.replace(/\.ll$/, ".asan.ll"))
+    fs.writeFileSync(asanLl, ir)
+    asanLls.push(asanLl)
+  }
   const rt = runtimeObjects(threads)
   if (rt.error !== undefined) {
     return { error: rt.error }
@@ -204,23 +213,24 @@ const build = (file, exe, { compiler, unchecked = false, threads = false }) => {
 /**
  * Which outcome a finished run is. ASan wins over everything, since a memory
  * error can go on to cause a panic; UBSan's reports do not stop the program,
- * so a run that also panics is still `ubsan`. A UBSan report is matched by its
- * `file:line:col: runtime error:` prefix, so a program that prints the words
- * is not one.
+ * so a run that also panics is still `ubsan`. A UBSan report is matched by the
+ * `SUMMARY: UndefinedBehaviorSanitizer` line it ends with, or by its
+ * `:line:col: runtime error:` anywhere in a line, so a path with a space or a
+ * report after a partial line from another thread still counts.
  */
 const classify = ({ status, signal, stdout = "", stderr = "" }) => {
   const firstLine = (pattern) => stderr.split("\n").find((line) => pattern.test(line)) ?? ""
   if (/ERROR: AddressSanitizer/.test(stderr)) {
     return { kind: "asan", status, detail: firstLine(/ERROR: AddressSanitizer/) }
   }
-  const ubsan = /^\S+:\d+:\d+: runtime error:/m
+  const ubsan = /SUMMARY: UndefinedBehaviorSanitizer|:\d+:\d+: runtime error:/
   if (ubsan.test(stderr)) {
     return { kind: "ubsan", status, detail: firstLine(ubsan) }
   }
   // The compiler's and the runtime's own checks; a program's `panic(...)` has
   // a message of its own and comes out as `error`.
   const panic =
-    /^(index out of range|slice out of range|attempt to |value out of range: |parallelMapInto: |crypto\.getRandomValues: |nish: out of memory)/m
+    /^(index out of range|slice out of range|array length out of range|attempt to |value out of range: |parallelMapInto: |spawn: destination index |crypto\.getRandomValues: |nish: out of memory|`[^`\n]+`(: argument \d+ \(| returned NULL for a `string` result))/m
   if (status === 1 && panic.test(stderr)) {
     return { kind: "panic", status, detail: firstLine(panic), stdout }
   }
