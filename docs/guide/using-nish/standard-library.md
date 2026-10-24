@@ -44,7 +44,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
-| [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and `nish/term-pixels` are its pure parts |
+| [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
@@ -1195,6 +1195,60 @@ milliseconds (10 by default) before it paints; `repaint_delay 2` and
 `sync_to_monitor yes` in `kitty.conf` let it keep up. foot paints on the
 compositor's frame callback, so it follows the monitor's refresh rate by
 itself.
+
+## `nish/term-pixels`
+
+`nish/term-pixels` is the part of [`nish/term-io`](terminal.md) that turns
+pixels into terminal output. It is pure, with no capability and no I/O, so a
+program that wants to write its own loop, or test what it draws, can use it
+alone.
+
+- **`Framebuffer(width, height)`** is a grid of `0xRRGGBB` pixels, black when
+  made, with `set`, `get`, `fill`, `clear` and `resize`. A pixel set off the
+  edge is not drawn. `scaleFramebuffer(src, divisor, dst)` shrinks one by a
+  whole divisor.
+- **`GRAPHICS_ASCII`, `GRAPHICS_HALFBLOCK`, `GRAPHICS_SIXEL` and
+  `GRAPHICS_KITTY`** (0 to 3) name the backends, from worst to best, so a
+  terminal's backend and a cap combine with `Math.min`.
+- **`fitFramebuffer(fbW, fbH, cols, rows, cellW, cellH, backend)`** answers
+  the `PixelRect` to draw in: the cells the picture covers, centred in a
+  `cols × rows` area with the aspect ratio kept, and its size in the backend's
+  pixels. A cell size of 0 means "unknown" and takes a usual one.
+- **The four encoders** draw a framebuffer into a rect, sampling it
+  nearest-neighbour; none of them clears the letterbox around it:
+  - `kittyFrame(fb, rect, imageId, out)` writes kitty graphics commands into a
+    `PixelBytes`. Each frame resends the same image id, which the terminal
+    swaps in whole; `kittyDelete(imageId)` frees it at the end.
+  - `sixelFrame(fb, rect, dither, out)` writes one Sixel image in a fixed
+    palette of `SIXEL_REGISTERS` colours, ordered-dithered when `dither` is
+    true.
+  - `drawHalfBlocks(fb, canvas, rect)` draws onto a [`Canvas`](#nishterm), two
+    pixels to a cell.
+  - `drawAscii(fb, screen, rect, colors)` draws onto a `Screen`, one
+    luminance character to a cell.
+
+A `PixelBytes` keeps the kitty and Sixel encoders' output and working arrays,
+grown once to the largest frame, so a program that keeps one encodes frame
+after frame without allocating. `out.text()` is the bytes to write and
+`out.reset()` empties it for the next frame.
+
+```ts nish:ok
+import { GRAPHICS_KITTY, Framebuffer, PixelBytes, fitFramebuffer, kittyFrame } from "nish/term-pixels";
+
+export const main = (): i32 => {
+  const fb = new Framebuffer(64, 32);
+  fb.fill(0x203040);
+  fb.set(10, 5, 0xffcc00);
+  // A 64×32 picture in 40×20 cells of 10×20 pixels.
+  const rect = fitFramebuffer(fb.width, fb.height, 40, 20, 10, 20, GRAPHICS_KITTY);
+  console.log(`cells ${rect.col},${rect.row} ${rect.cols}x${rect.rows}, ${rect.width}x${rect.height} px`);
+  // cells 0,5 40x10, 400x200 px: letterboxed top and bottom
+  const out = new PixelBytes(0);
+  kittyFrame(fb, rect, 1, out);
+  console.log(`${out.length > 0}`); // true: out.text() is ready to write
+  return 0;
+};
+```
 
 ## `nish/base64`
 
