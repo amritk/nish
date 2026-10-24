@@ -3,7 +3,7 @@
 entry: src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/branding.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/program.ts src/nish-modules.ts src/packages.ts src/panics.ts src/bounds.ts src/constants.ts src/types.ts src/ice.ts src/emit-util.ts src/symbols.ts src/options.ts src/checker.ts src/expressions.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/kernels.ts src/std-modules.ts src/paths.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/declarations.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/validator.ts src/visibility.ts src/parents.ts src/members.ts src/fusion.ts src/assignment.ts src/statements.ts src/loop-flow.ts src/emit-json.ts src/debug.ts src/target.ts src/capabilities.ts
 import WIPE_MEMSET from "./emit-secret" -> const WIPE_MEMSET
 import isPureRuntime from "./secret" -> function @isPureRuntime
-import isSecretSource from "./secret" -> function @isSecretSource
+import SECRET_MAKE from "./secret" -> const SECRET_MAKE
 import SECRET_WIPE from "./secret" -> const SECRET_WIPE
 import secretRoleOf from "./secret" -> function @secretRoleOf
 import jsonRouteCallees from "./json-typed" -> function @jsonRouteCallees
@@ -1116,6 +1116,7 @@ function FactCollector.handsStringElement(this: FactCollector, ref: Node): boole
   callee +0:20 ParentTable.parentOf -> @ParentTable.parentOf
   local +4:11 list: Node | null (const)
   callee +4:18 ParentTable.parentOf -> @ParentTable.parentOf
+  local +5:11 type: i32 (const)
 function FactCollector.pushedOntoJoinedParts(this: FactCollector, ref: Node): boolean -> @FactCollector.pushedOntoJoinedParts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectRefs
@@ -1344,13 +1345,13 @@ function FactCollector.ownKeyOf(this: FactCollector, local: Local): string -> @F
 function FactCollector.isWipedFreshSecret(this: FactCollector, local: Local, init: Node): boolean -> @FactCollector.isWipedFreshSecret [method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectRefs
-  calls: FunctionSig.body ParentTable.parentOf collectRefs isSecretMake nish_panic_index secretRoleOf unwrapParens
+  calls: FunctionSig.body ParentTable.parentOf collectRefs nish_panic_index secretRoleOf unwrapParens
   pointer this: size=56 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false passedTo=collectRefs#2
   pointer init: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 program: CheckedProgram (const)
-  callee +1:34 isSecretMake -> @isSecretMake
+  callee +1:33 secretRoleOf -> @secretRoleOf
   local +4:11 args: Node[] (const)
   local +8:11 value: Node (const)
   callee +8:19 unwrapParens -> @unwrapParens
@@ -1693,7 +1694,7 @@ function FactCollector.noteArgument(this: FactCollector, callee: FunctionSig, ar
   local -5:11 type: i32 (const)
   local -4:11 path: MemPath (const)
   callee -3:7 FunctionSig.isCompileTime -> @FunctionSig.isCompileTime
-  callee -3:59 isScalarArgument -> @isScalarArgument
+  callee -3:73 isScalarArgument -> @isScalarArgument
   callee -2:11 new MemPath -> @MemPath.constructor
   callee -1:11 FactCollector.pathOf -> @FactCollector.pathOf
   callee +0:30 FactCollector.ownEdge -> @FactCollector.ownEdge
@@ -2284,14 +2285,6 @@ function markMapRoute(table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
   local -5:14 callee: FunctionSig (const)
   callee -4:5 StringSet.add -> @StringSet.add
   callee -2:5 StringSet.add -> @StringSet.add
-function isSecretMake(sig: FunctionSig | null): boolean -> @isSecretMake
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: isSecretSource nish_str_eq
-  pointer sig: size=136 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:9 instance: Instantiation | null (const)
-  local +4:9 template: TemplateInfo | null (const)
-  callee +9:5 isSecretSource -> @isSecretSource
 function markWipe(facts: FunctionFacts): void -> @markWipe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3

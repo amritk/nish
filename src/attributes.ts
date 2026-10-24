@@ -37,7 +37,7 @@
 //     tree has none. The walks are otherwise the same walks.
 
 import { WIPE_MEMSET } from "./emit-secret"
-import { isPureRuntime, isSecretSource, SECRET_WIPE, secretRoleOf } from "./secret"
+import { isPureRuntime, SECRET_MAKE, SECRET_WIPE, secretRoleOf } from "./secret"
 import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
 import { openedHandle } from "./handles"
 import {
@@ -661,8 +661,9 @@ export class FunctionFacts {
   ownSlotWrites: MemPath[]
   ownSlotSites: Node[]
   /**
-   * The objects this call made, by key (`FactCollector.ownKeyOf`), and the
-   * names it has resolved (`LocalPath`).
+   * The `const`s naming objects this call made, the one at `i` keyed `o<i>`
+   * (`FactCollector.ownKeyOf`): a fresh allocation, or a fresh `Secret` the
+   * body wipes. And the names it has resolved (`LocalPath`).
    */
   ownLocals: Local[]
   localPaths: LocalPath[]
@@ -1943,14 +1944,18 @@ class FactCollector {
     }
   }
 
-  /** `ref` is indexed for a `string` handed straight to a call: `f(p[i])` (`PointerParamFacts.writesShared`). */
+  /**
+   * `ref` is indexed for a `string` handed straight to a call: `f(p[i])`
+   * (`PointerParamFacts.writesShared`).
+   */
   handsStringElement(ref: Node): boolean {
     const access = this.unit.parents.parentOf(ref)
     if (access === null || access.kind !== N_INDEX || access.children[0] !== ref) {
       return false
     }
     const list = this.unit.parents.parentOf(access)
-    return list !== null && list.kind === N_LIST && this.unit.program.nodeTypes[access.id] === T_STRING
+    const type = this.unit.program.nodeTypes[access.id]
+    return list !== null && list.kind === N_LIST && type === T_STRING
   }
 
   /**
@@ -2123,9 +2128,9 @@ class FactCollector {
   }
 
   /**
-   * A `const` bound to a fresh object or array is an object of this call's
-   * own (`ownKeyOf`); a `const` bound to anything else is what it is bound
-   * to; a `let`, a loop variable or a name with no initialiser may be
+   * A `const` bound to a fresh object or array, or to a fresh `Secret` the
+   * body wipes, is an object of this call's own (`ownKeyOf`); a `const` bound
+   * to anything else is what it is bound to; a `let`, a loop variable or a name with no initialiser may be
    * anything.
    */
   resolveLocal(local: Local, depth: i32): MemPath {
@@ -2220,8 +2225,9 @@ class FactCollector {
 
   /**
    * The key of the object `local` names when it is a `const` bound to a fresh
-   * allocation (`new`, an array or an object literal), registering it and
-   * what its initialiser stores (`DIRT_INIT`, `DIRT_STORE`); "" otherwise.
+   * allocation (`new`, an array or an object literal) or to a fresh `Secret`
+   * the body wipes (`isWipedFreshSecret`), registering it and what its
+   * initialiser stores (`DIRT_INIT`, `DIRT_STORE`); "" otherwise.
    */
   ownKeyOf(local: Local): string {
     const at = this.facts.ownLocals.indexOf(local)
@@ -2263,7 +2269,7 @@ class FactCollector {
    */
   isWipedFreshSecret(local: Local, init: Node): boolean {
     const program = this.unit.program
-    if (init.kind !== N_CALL || !isSecretMake(program.nodeCallees[init.id])) {
+    if (init.kind !== N_CALL || secretRoleOf(program.nodeCallees[init.id]) !== SECRET_MAKE) {
       return false
     }
     const args = init.children[1].children
@@ -2801,7 +2807,7 @@ class FactCollector {
     // into it, so it pollutes none of the caller's.
     const type = this.unit.program.nodeTypes[e.id]
     const path =
-      callee.isCompileTime(index) || type === T_STRING || isScalarArgument(this.table, type)
+      callee.isCompileTime(index) || type === T_STRING || (type >= 0 && isScalarArgument(this.table, type))
         ? new MemPath(ROOT_NONE, "", "")
         : this.pathOf(e)
     this.facts.argEdges.push(this.ownEdge(new ArgEdge(callee.name, index, name, null, path)))
@@ -3927,28 +3933,6 @@ const markMapRoute = (table: TypeTable, sig: FunctionSig, facts: FunctionFacts):
       receiver.passedToIndices.push(0)
     }
   }
-}
-
-/**
- * Whether `sig` is an instance of `nish:secret`'s `secret`, as `secretRole`
- * (`src/secret.ts`) judges it: the free template of that name in the module
- * `isSecretSource` knows.
- */
-const isSecretMake = (sig: FunctionSig | null): boolean => {
-  if (sig === null) {
-    return false
-  }
-  const instance = sig.instance
-  if (instance === null) {
-    return false
-  }
-  const template = instance.template
-  return (
-    template !== null &&
-    template.owner === null &&
-    template.sourceName === "secret" &&
-    isSecretSource(template.home.program)
-  )
 }
 
 /**

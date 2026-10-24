@@ -53,9 +53,8 @@
  * rounds, hours of one core. Verify only hashes you stored.
  *
  * **Pure.** No I/O and no C, so it builds for wasm32. A `std/threads` task
- * may call `bcryptHash` and `bcryptVerify`: everything they wipe is scratch
- * they made. It may not call the batch, which makes its state with `secret`
- * and wipes it, a write the task rule does not yet see as the task's own
+ * may call `bcryptHash`, `bcryptVerify` and the batch: everything they wipe
+ * is scratch they made, the batch's state a `Secret` of a fresh array
  * (docs/security/crypto-bcrypt.md). A cost-12 hash takes a few hundred
  * milliseconds of one core; a server runs it off its event loop, on a task
  * (docs/guide/using-nish/password-hashing.md).

@@ -3813,12 +3813,16 @@ element's arena, which a task does not share, and each rule is reported at the
   `secret(v)` and wipes, when `v` is allocated in the call — `new`, an array
   literal or an object literal — and the `Secret` is held by a `const`
   (`tests/link/thread_task_wipe_secret`). Wiping the task's argument, a
-  captured local, a field, an array a call answered, a `Secret` made from a
-  call's answer or from a local moved into it, or a `Secret` a holder keeps
-  in a field, is NL2471 (`reject_thread_wipe_param`, `_capture`, `_field`,
-  `_helper`, `_call_result`, `reject_thread_wipe_secret_call_result`,
-  `_moved`, `_holder`). The wipe itself is unchanged, one volatile
-  `llvm.memset`.
+  captured local, a field, an element, an array a call answered, a `Secret`
+  held by a `let`, made from a call's answer, from a local moved into it or
+  from a record whose constructor is handed an object, a `Secret` a helper
+  returns or writes, or one a holder keeps in a field, is NL2471
+  (`reject_thread_wipe_param`, `_capture`, `_field`, `_element`, `_helper`,
+  `_call_result`, `reject_thread_wipe_secret_call_result`, `_moved`,
+  `_holder`, `_let`, `_returned`, `_through_helper`, `_ctor_param`). A
+  borrowed `Secret` parameter is refused before it
+  (`reject_thread_wipe_secret_borrowed`). The wipe itself is unchanged, one
+  volatile `llvm.memset`.
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
   tasks of one scope may look keys up in the same table
   (`tests/link/thread_scope_task_map_reads`). A mutator — `set`, `add`,
