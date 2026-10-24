@@ -11724,6 +11724,322 @@ if (!only || "range_reference".includes(only) || only.startsWith("range_referenc
   }
 }
 
+// The reference build of the soundness differential (`--no-elision`,
+// `noElision` in `src/options.ts`; `tests/differential/soundness.js`). One
+// program reaches every proof the flag turns off: `sum` indexes by a loop
+// counter proven in bounds whose increment is proven to fit, `norm` builds a
+// `Point` that never escapes, `width` makes a string per iteration that the
+// inferred loop arena reclaims. The default build must show each elision and
+// the reference none of them, so a switch that stops working cannot leave the
+// differential comparing a build with itself. Then a sample of `tests/cases`
+// runs both ways and must print the same.
+if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
+  const dir = path.join(buildDir, "no_elision")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const src = path.join(dir, "elide.ts")
+  fs.writeFileSync(
+    src,
+    [
+      "class Point { x: i32; y: i32; constructor(x: i32, y: i32) { this.x = x; this.y = y } }",
+      "const sum = (xs: i32[]): i32 => { let total = 0; for (let i = 0; i < xs.length; i++) { total += xs[i] } return total }",
+      "const norm = (x: i32, y: i32): i32 => { const p = new Point(x, y); return p.x * p.x + p.y * p.y }",
+      "const width = (n: i32): i32 => { let w = 0; for (let i = 0; i < n; i++) { const s = `${i}`; w = w + s.length } return w }",
+      "export const main = (): void => { console.log(`${sum([1, 2, 3])} ${norm(3, 4)} ${width(12)}`) }",
+      "",
+    ].join("\n")
+  )
+  const irOf = (extra) => {
+    const out = path.join(dir, `${extra.length ? "reference" : "default"}.ll`)
+    const r = spawnSync(NISH, [src, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
+    return { status: r.status, stderr: r.stderr, ir: fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "" }
+  }
+  // One function's body, from its `define` to the closing brace.
+  const bodies = (ir) => {
+    const body = (name) => {
+      const at = ir.search(new RegExp(`^define [^\\n]*@${name}\\(`, "m"))
+      return at < 0 ? "" : ir.slice(at, ir.indexOf("\n}\n", at) + 2)
+    }
+    return { sum: body("sum"), norm: body("norm"), width: body("width") }
+  }
+  const elided = irOf([])
+  const reference = irOf(["--no-elision"])
+  check(
+    "no_elision: the program compiles both ways",
+    elided.status === 0 && reference.status === 0,
+    `${elided.stderr}\n${reference.stderr}`
+  )
+  const a = bodies(elided.ir)
+  const b = bodies(reference.ir)
+  const arena = /nish_arena_(mark|release)|@nish_arena\b/
+  // The runtime prelude's declarations keep their attributes: they state the
+  // runtime's contract, not a proof about this program.
+  const attributes = /\b(noalias|nocapture|willreturn|readonly|dereferenceable)\b|!tbaa/
+  const own = (fns) => Object.values(fns).join("")
+  for (const [what, ok, detail] of [
+    ["a proven index has no `nish_panic_index`", !a.sum.includes("nish_panic_index"), a.sum],
+    ["the reference keeps `nish_panic_index`", b.sum.includes("nish_panic_index"), b.sum],
+    ["a proven add carries `nsw`", / add nsw /.test(a.sum), a.sum],
+    [
+      "the reference has no `nsw` and checks the add",
+      !/ nsw /.test(reference.ir) && b.sum.includes("llvm.sadd.with.overflow") && b.sum.includes("nish_panic_overflow"),
+      b.sum,
+    ],
+    ["the default has proof-backed attributes and TBAA", attributes.test(own(a)) && own(a).includes("!tbaa"), own(a)],
+    [
+      "the reference has none",
+      !attributes.test(own(b)),
+      own(b)
+        .split("\n")
+        .filter((line) => attributes.test(line))
+        .slice(0, 5)
+        .join("\n"),
+    ],
+    ["a `Point` that never escapes is an `alloca`", /alloca %struct\.Point\b(?!\*)/.test(a.norm), a.norm],
+    [
+      "the reference allocates it",
+      !/alloca %struct\.Point\b(?!\*)/.test(b.norm) && b.norm.includes("@nish_alloc_struct("),
+      b.norm,
+    ],
+    ["the loop's strings are reclaimed by an inferred arena", arena.test(a.width), a.width],
+    ["the reference reclaims nothing", !arena.test(b.width), b.width],
+  ]) {
+    check(`no_elision: ${what}`, ok, detail)
+  }
+  const runs = [[], ["--no-elision"]].map((extra) => {
+    const exe = path.join(dir, extra.length ? "reference" : "default")
+    const link = spawnSync(NISH, [src, "--link", exe, ...extra], { cwd: root, encoding: "utf8" })
+    return link.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }).stdout : `link: ${link.stderr}`
+  })
+  check("no_elision: both builds print `6 25 14`", runs[0] === "6 25 14\n" && runs[1] === runs[0], runs.join("\n---\n"))
+  // The `ffi-length` check a `toU64(buf.length)` count proves is written
+  // only by the reference.
+  const ffi = path.join(dir, "ffi.ts")
+  fs.writeFileSync(
+    ffi,
+    [
+      "declare function strnlen(s: readonly u8[], n: u64): u64",
+      "export const find = (xs: readonly u8[]): u64 => strnlen(xs, toU64(xs.length))",
+      "",
+    ].join("\n")
+  )
+  const ffiIr = [[], ["--no-elision"]].map((extra) => {
+    const out = path.join(dir, `ffi${extra.length ? "-reference" : ""}.ll`)
+    const r = spawnSync(NISH, [ffi, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
+    return r.status === 0 ? fs.readFileSync(out, "utf8") : `compile: ${r.stderr}`
+  })
+  check(
+    "no_elision: a proven FFI count has no `ffi.length` check",
+    ffiIr[0].includes("@strnlen(") && !ffiIr[0].includes("ffi.length"),
+    ffiIr[0]
+  )
+  check("no_elision: the reference checks the count", ffiIr[1].includes("ffi.length"), ffiIr[1])
+  // One function per switch of `Options.noElision` the first program does not
+  // reach, each with the mark its proof leaves in the default IR and the
+  // reference must not have. The flag changes every function's attributes, so
+  // only a pin per switch shows that one is wired.
+  const switches = path.join(dir, "switches.ts")
+  fs.writeFileSync(
+    switches,
+    [
+      'import { parallelFrom } from "nish/threads"',
+      "class Board { cells: i32[]; constructor() { this.cells = [0, 0, 0, 0] } }",
+      "const clampHead = (s: string): string => { const n = s.length; return s.substring(0, n) }",
+      "const entry = (b: u8): integer<0, 255> => { const r: integer<0, 255> = toI32(b); return r }",
+      "const disjoint = (): u8[] => { const dst: u8[] = [0, 0, 0, 0]; const src: u8[] = [1, 2]; dst.set(src, 1); return dst }",
+      "const raise = (m: Map<string, number>, k: string): boolean => { if (m.has(k)) { m.set(k, 10); return true } return false }",
+      "const piece = (i: i32): string => `${i},`",
+      "const joined = (n: i32): string => { let s = \"\"; for (let i = 0; i < n; i++) { s = s + piece(i) } return s }",
+      "const pick = (xs: i32[], i: i32): i32 => xs[i]",
+      "const picks = (xs: i32[]): i32 => { let t = 0; for (let i = 0; i < xs.length; i++) { t = t + pick(xs, i) } return t }",
+      "const last = <T>(xs: T[], x: T): T => { let r = x; for (let i = 0; i < xs.length; i++) { r = xs[i] } return r }",
+      "const widths = (n: i32): i32[] => parallelFrom(n, (i) => `${i}`.length)",
+      "const headOf = <T>(s: string, x: T): string => { const n = s.length; return s.substring(0, n) }",
+      "const entryOf = <T>(b: u8, x: T): integer<0, 255> => { const r: integer<0, 255> = toI32(b); return r }",
+      "const spliceOf = <T>(x: T): u8[] => { const dst: u8[] = [0, 0, 0, 0]; const src: u8[] = [1, 2]; dst.set(src, 1); return dst }",
+      "const raiseOf = <T>(m: Map<string, T>, k: string, v: T): boolean => { if (m.has(k)) { m.set(k, v); return true } return false }",
+      "export const main = (): void => {",
+      "  const m = new Map<string, number>()",
+      "  m.set(\"a\", 1)",
+      "  const w = widths(12)",
+      "  console.log(`${new Board().cells.length} ${clampHead(\"abc\")} ${entry(7)} ${disjoint().length} ${raise(m, \"a\")}`)",
+      "  console.log(`${joined(3)} ${picks([1, 2])} ${last([1, 2], 0)} ${last([\"x\"], \"y\")} ${w[11]}`)",
+      "  console.log(`${headOf(\"abc\", 1)} ${entryOf(7, 1)} ${spliceOf(1).length} ${raiseOf(m, \"a\", 20)}`)",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const [sw, swRef] = [[], ["--no-elision"]].map((extra) => {
+    const out = path.join(dir, `switches${extra.length ? "-reference" : ""}${path.sep}`)
+    const r = spawnSync(NISH, [switches, "-o", out, "--no-warn-performance", ...extra], { cwd: root, encoding: "utf8" })
+    const ll = path.join(out, "switches.ll")
+    return r.status === 0 && fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : `compile: ${r.stderr}`
+  })
+  const fn = (ir, name) => {
+    const at = ir.search(new RegExp(`^define [^\\n]*@${name.replace(/\$/g, "\\$")}\\(`, "m"))
+    return at < 0 ? `no @${name}` : ir.slice(at, ir.indexOf("\n}\n", at) + 2)
+  }
+  const count = (text, re) => (text.match(re) ?? []).length
+  const clamps = /@llvm\.smin\.i64\(/g
+  for (const [what, ok, detail] of [
+    [
+      "a proven `substring` bound is not clamped",
+      count(fn(sw, "clampHead"), clamps) < count(fn(swRef, "clampHead"), clamps),
+      `${fn(sw, "clampHead")}\n---\n${fn(swRef, "clampHead")}`,
+    ],
+    [
+      "a proven range entry has no check",
+      !fn(sw, "entry").includes("rng.fail") && fn(swRef, "entry").includes("rng.fail"),
+      `${fn(sw, "entry")}\n---\n${fn(swRef, "entry")}`,
+    ],
+    [
+      "a disjoint `set` is a memcpy",
+      fn(sw, "disjoint").includes("@llvm.memcpy") && fn(swRef, "disjoint").includes("@llvm.memmove"),
+      `${fn(sw, "disjoint")}\n---\n${fn(swRef, "disjoint")}`,
+    ],
+    [
+      "a fused `has`/`set` shares one probe",
+      fn(sw, "raise$").includes(".setValueAt(") && !fn(swRef, "raise$").includes(".setValueAt("),
+      `${fn(sw, "raise$")}\n---\n${fn(swRef, "raise$")}`,
+    ],
+    [
+      "a call site reclaims what its callee left",
+      fn(sw, "joined").includes("@nish_arena_keep(") && !fn(swRef, "joined").includes("@nish_arena_keep("),
+      `${fn(sw, "joined")}\n---\n${fn(swRef, "joined")}`,
+    ],
+    [
+      "a fixed-length array field is laid inline",
+      /^%struct\.Board = type \{ \{ %struct\.nish_array, \[4 x i32\] \} \}$/m.test(sw) &&
+        /^%struct\.Board = type \{ %struct\.nish_array\* \}$/m.test(swRef),
+      `${sw.match(/^%struct\.Board = .*$/m)}\n---\n${swRef.match(/^%struct\.Board = .*$/m)}`,
+    ],
+    [
+      "an index every call site proves has no check",
+      !fn(sw, "pick").includes("nish_panic_index") && fn(swRef, "pick").includes("nish_panic_index"),
+      `${fn(sw, "pick")}\n---\n${fn(swRef, "pick")}`,
+    ],
+    [
+      "an instantiation's proven index has no check",
+      ["last$i32", "last$str"].every((f) => !fn(sw, f).includes("nish_panic_index") && fn(swRef, f).includes("nish_panic_index")),
+      `${fn(sw, "last$i32")}\n---\n${fn(swRef, "last$i32")}`,
+    ],
+    // The instantiation tables, one switch at a time: `forgetProofs` clears
+    // each table of each instance apart from the program's own.
+    [
+      "an instantiation's proven no-overflow is `nsw`",
+      fn(sw, "last$i32").includes("add nsw") && !fn(swRef, "last$i32").includes("add nsw"),
+      `${fn(sw, "last$i32")}\n---\n${fn(swRef, "last$i32")}`,
+    ],
+    [
+      "an instantiation's proven `substring` bound is not clamped",
+      count(fn(sw, "headOf$i32"), clamps) < count(fn(swRef, "headOf$i32"), clamps),
+      `${fn(sw, "headOf$i32")}\n---\n${fn(swRef, "headOf$i32")}`,
+    ],
+    [
+      "an instantiation's proven range entry has no check",
+      !fn(sw, "entryOf$i32").includes("rng.fail") && fn(swRef, "entryOf$i32").includes("rng.fail"),
+      `${fn(sw, "entryOf$i32")}\n---\n${fn(swRef, "entryOf$i32")}`,
+    ],
+    [
+      "an instantiation's disjoint `set` is a memcpy",
+      fn(sw, "spliceOf$i32").includes("@llvm.memcpy") && fn(swRef, "spliceOf$i32").includes("@llvm.memmove"),
+      `${fn(sw, "spliceOf$i32")}\n---\n${fn(swRef, "spliceOf$i32")}`,
+    ],
+    [
+      "an instantiation's fused `has`/`set` shares one probe",
+      fn(sw, "raiseOf$i32").includes(".setValueAt(") && !fn(swRef, "raiseOf$i32").includes(".setValueAt("),
+      `${fn(sw, "raiseOf$i32")}\n---\n${fn(swRef, "raiseOf$i32")}`,
+    ],
+    [
+      "a parallel body gets an arena scope",
+      fn(sw, "widths$arrow0").includes("@nish_arena_mark(") && !fn(swRef, "widths$arrow0").includes("nish_arena_"),
+      `${fn(sw, "widths$arrow0")}\n---\n${fn(swRef, "widths$arrow0")}`,
+    ],
+  ]) {
+    check(`no_elision: ${what}; the reference keeps it`, ok, detail)
+  }
+  // The runner, as CI runs it, through the differential itself.
+  const soundness = (args) =>
+    spawnSync(process.execPath, [path.join(root, "tests", "differential", "soundness.js"), ...args], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    })
+  const summary = (r) => {
+    const counts = {}
+    for (const [, k, v] of String(r.stdout).matchAll(/\b(\w+)=(\d+)\b/g)) {
+      counts[k] = Number(v)
+    }
+    return counts
+  }
+  // The flag changes the IR and must change nothing a program prints: a
+  // sample spread across the corpus. Every one of the sample is to be
+  // compared, and every one built two different programs: a runner that
+  // handed the flag to both sides, or to neither, compares nothing.
+  const sample = soundness(["--corpus", path.join(root, "tests", "cases"), "--sample", "40", "--compiler", NISH])
+  const counts = summary(sample)
+  check(
+    "no_elision: a sample of tests/cases prints the same with and without --no-elision",
+    sample.status === 0 && counts.agree === 40 && counts.elided === 40,
+    `exit ${sample.status}\n${sample.stdout.slice(-4000)}\n${sample.stderr.slice(-2000)}`
+  )
+  // And it sees a difference that is only in stderr: a compiler that builds
+  // the reference from a program whose panic says something else. Both exit 1
+  // and print the same stdout.
+  const pair = path.join(dir, "pair")
+  for (const [side, word] of [
+    ["default", "one"],
+    ["reference", "two"],
+  ]) {
+    fs.mkdirSync(path.join(pair, side), { recursive: true })
+    fs.writeFileSync(
+      path.join(pair, side, "panics.ts"),
+      `export const main = (): void => { console.log("a"); panic("${word}") }\n`
+    )
+  }
+  const swap = path.join(dir, "swap.mjs")
+  fs.writeFileSync(
+    swap,
+    [
+      "#!/usr/bin/env node",
+      'import { spawnSync } from "node:child_process"',
+      "const args = process.argv.slice(2)",
+      `const swapped = args.includes("--no-elision") ? args.map((a) => a.replace(${JSON.stringify(`${path.sep}default${path.sep}`)}, ${JSON.stringify(`${path.sep}reference${path.sep}`)})) : args`,
+      `process.exitCode = spawnSync(${JSON.stringify(NISH)}, swapped, { stdio: "inherit" }).status ?? 1`,
+      "",
+    ].join("\n")
+  )
+  fs.chmodSync(swap, 0o755)
+  const differs = soundness(["--corpus", path.join(pair, "default"), "--only", "panics", "--compiler", swap])
+  check(
+    "no_elision: a panic only stderr tells apart is a difference",
+    differs.status === 1 && differs.stdout.includes("panic: default one, --no-elision two"),
+    `exit ${differs.status}\n${differs.stdout}\n${differs.stderr}`
+  )
+  // And a hang on one side only is a difference, not the runner's limit: the
+  // reference never ends, and the default prints and exits. The reference
+  // keeps printing, so where the kill cuts its output differs between its two
+  // runs, and still it is a difference rather than nondeterministic.
+  fs.writeFileSync(path.join(pair, "default", "hangs.ts"), 'export const main = (): void => { console.log("a") }\n')
+  fs.writeFileSync(
+    path.join(pair, "reference", "hangs.ts"),
+    [
+      "export const main = (): void => {",
+      "  let i = 0",
+      "  let n = 0",
+      "  while (true) { i = i + 1; if (i === 20000000) { i = 0; n = n + 1; console.log(`${n}`) } }",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const hangs = soundness(["--corpus", path.join(pair, "default"), "--only", "hangs", "--run-timeout", "2", "--compiler", swap])
+  check(
+    "no_elision: a run that hangs on one side only is a difference",
+    hangs.status === 1 && hangs.stdout.includes("ending: default exit 0, --no-elision timeout") && summary(hangs).differ === 1,
+    `exit ${hangs.status}\n${hangs.stdout}\n${hangs.stderr}`
+  )
+}
+
 // #183: a function that can reach `nish_panic_index` through an unproven
 // `charCodeAt` is not `willreturn`. With the attribute on `main`, the speed
 // profile's optimiser deleted the loop that panics and the program exited 0.
@@ -18292,9 +18608,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     `stdout:\n${help.stdout}\nstderr:\n${noInputs.stderr}`
   )
   // Every flag the driver accepts is listed, by one of its spellings, bar
-  // --help itself, the test hook `--range-reference`, the refused `--nsw` and
-  // the default `--strict-exports`: a wrapper that reads --help to learn the
-  // surface must not be missing one.
+  // --help itself, the test hooks `--range-reference` and `--no-elision`, the
+  // refused `--nsw` and the default `--strict-exports`: a wrapper that reads
+  // --help to learn the surface must not be missing one.
   const documented = [
     "--output",
     "-g",
@@ -18340,6 +18656,11 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     `--help lists every advertised flag (${documented.length} checked)`,
     undocumented.length === 0,
     `missing from --help: ${undocumented.join(", ")}`
+  )
+  check(
+    "--help leaves the test hooks out",
+    !listed("--range-reference") && !listed("--no-elision"),
+    help.stdout
   )
   check(
     "--help into a pipe: no escape codes",
