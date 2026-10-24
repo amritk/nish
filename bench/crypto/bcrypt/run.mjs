@@ -8,8 +8,9 @@
  * pinned commit, run with one lane and with four.
  *
  * Each program hashes "U*U" under an all-zero salt `--hashes` times (a
- * four-lane program `--hashes` batches of four) and prints the last hash, which
- * must be the same for all of them. The programs run in
+ * four-lane program `--hashes` batches of four) and prints the last hash, a
+ * four-lane program each lane's, one a line; every line of every program must
+ * be the same hash. The programs run in
  * interleaved rounds; a round's figure is the child's user CPU time (bash's
  * `time`) over the hashes, so the report is CPU, not wall, time. Each row is
  * the median of `--rounds` rounds and their spread, which is the noise band;
@@ -106,7 +107,7 @@ const TIGOKRAFT_SHIM = `#include <stdbool.h>
 #define BC_LANES 4
 `
 
-/** A loop over \`bc_hash_n\` with \`lanes\` lanes of "U*U", printing lane 0's last hash. */
+/** A loop over \`bc_hash_n\` with \`lanes\` lanes of "U*U", printing each lane's last hash. */
 const TIGOKRAFT_LOOP = (lanes) => `#include <stdio.h>
 void bc_hash_n(int n, const char *const *pw, const char *const *setting, char (*out)[64]);
 int main(void) {
@@ -114,7 +115,7 @@ int main(void) {
   const char *setting[4] = {"${setting}", "${setting}", "${setting}", "${setting}"};
   char out[4][64] = {{0}};
   for (int i = 0; i < ${hashes}; i++) bc_hash_n(${lanes}, pw, setting, out);
-  puts(out[0]);
+  for (int k = 0; k < ${lanes}; k++) puts(out[k]);
   return 0;
 }
 `
@@ -152,18 +153,20 @@ export const main = (): i32 => {
   const p2: Secret<u8[]> = secret(r2)
   const p3: Secret<u8[]> = secret(r3)
   const salts: u8[] = new Array<u8>(64)
-  let last: string = "*"
+  let last: string[] = ["*", "*", "*", "*"]
   for (let i: i32 = 0; i < ${hashes}; i++) {
     const h: Result<string[], string> = bcryptHash4(p0, p1, p2, p3, salts, ${cost})
     if (h.isOk()) {
-      last = h.value[0]
+      last = h.value
     }
   }
   wipe(p0)
   wipe(p1)
   wipe(p2)
   wipe(p3)
-  console.log(last)
+  for (const hash of last) {
+    console.log(hash)
+  }
   return 0
 }
 `
@@ -336,7 +339,14 @@ for (let round = 0; round <= rounds; round++) {
       console.error(`${p.name} failed:\n${r.stderr}`)
       process.exit(1)
     }
-    outputs.add(fs.readFileSync(`${p.exe}.out`, "utf8").trim())
+    const lines = fs.readFileSync(`${p.exe}.out`, "utf8").trim().split("\n")
+    if (lines.length !== (p.per ?? 1)) {
+      console.error(`${p.name} printed ${lines.length} hashes, not one a lane`)
+      process.exit(1)
+    }
+    for (const line of lines) {
+      outputs.add(line)
+    }
     const seconds = Number(r.stderr.trim())
     if (r.stderr.trim() === "" || !Number.isFinite(seconds)) {
       console.error(`${p.name}: no CPU time in bash's output: ${JSON.stringify(r.stderr)}`)

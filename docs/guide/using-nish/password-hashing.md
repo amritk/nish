@@ -105,9 +105,9 @@ A cost-10 hash holds one core for about 50 ms, so a server that hashes on the
 thread running its event loop stops answering everyone else while it does,
 and a burst of sign-ups queues behind one another. Hand the hashing to
 [`std/threads`](threads.md) tasks instead: each runs on a core of its own, and
-the event loop waits for the slowest hash rather than for all of them in turn.
-Here three sign-ups that arrived together take about 55 ms of wall time on a
-four-core machine, against 160 ms on one thread:
+the thread that opened the scope waits for the slowest hash rather than for
+all of them in turn. Here three sign-ups that arrived together are hashed side
+by side, given a free core for each:
 
 ```ts nish:ok
 import { bcryptHash } from "nish/crypto/bcrypt";
@@ -167,7 +167,12 @@ Draw the salts before the scope, on the calling thread: a task may not call
 call `bcryptHash` and `bcryptVerify`, and each arrow task reads the salts as a
 `const` and takes its password as the task's argument. The passwords stay
 `Secret`s throughout, and the server wipes them once the scope has joined,
-when no task can still read them. The module does no I/O and calls no C, so
+when no task can still read them.
+
+The scope still joins on the thread that opened it, and runs one of the tasks
+there, so that thread is busy for about one hash, not three. On a server, open
+the scope on a thread other than the one running the event loop, or accept
+that pause of one hash for each burst. The module does no I/O and calls no C, so
 it builds for WebAssembly too, where the tasks run one after another.
 
 ## Four at once on one thread

@@ -947,7 +947,9 @@ the OpenBSD tree into `build/bench/bcrypt/` and builds with `gcc -O2` and
 `bcryptHash4` with four lanes against the four-lane C of the tigokraft
 submission (`bc_hash_n`, pinned to one commit, MIT), fetched the same way and
 built with `gcc` and `clang` at `-O2 -march=native`, one lane and four; a
-four-lane row is per hash, a batch's time over four. It is not a
+four-lane row is per hash, a batch's time over four. Every lane of a
+four-lane program must print the single hash's output, not lane 0 alone. The
+Nish programs are built for baseline x86-64, without `-march=native`. It is not a
 `crypto/` family (it has no `family.json`) and is not in this suite's tables;
 [docs/security/crypto-bcrypt.md](../docs/security/crypto-bcrypt.md#speed)
 carries its figures.
