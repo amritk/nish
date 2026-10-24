@@ -13,7 +13,7 @@ export const main = (): number => {
   const big: i64 = 5n
   console.log(`${checkedAdd(z, big)}`)
   const n: i64 = 2n
-  const made = newArray(Number(BigInt.asIntN(64, n * 2n)), 0)
+  const made = newArray<i32>(Number(BigInt.asIntN(64, n * 2n)), 0)
   console.log(`${made.length}`)
   let x: f32 = Math.fround(16777216)
   x = Math.fround(x + 1)

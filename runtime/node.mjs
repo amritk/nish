@@ -378,6 +378,9 @@ installHost({
   writeOut: (s) => fs.writeSync(1, s),
   writeErr: (s) => fs.writeSync(2, s),
   exit: (code) => process.exit(code),
+  // Index 0 is the program on both sides: the executable natively, the entry
+  // script here, which is one index later than Node's own `argv`. The global
+  // is left as Node set it; the output reads `argv()` (`src/emit-ts-records.ts`).
   argv: () => process.argv.slice(1),
   call: (name, args) => CALLS[name](...args),
 });

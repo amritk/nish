@@ -10149,6 +10149,7 @@ by the caller.
   | NL8009 | 64-bit integers (3.1) | a binding, parameter, field or return type declared `i64` or `u64` | holds a double, which rounds past 2^53 |
   | NL8010 | *retired* | nothing: the row was `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32`, when `min` and `max` dropped a NaN operand and `round` answered `0` for a negative number that rounds to zero. They lower to a NaN test and a sign-bit pick (`llvm.minimum`/`llvm.maximum` on wasm) and a `llvm.copysign.f64` now, which answer NaN and `-0` as JavaScript does, so no site diverges (`tests/cases/port_num_libm` is quiet). The code stays reserved and is never reused | — |
   | NL8011 | *retired* | nothing: the row was `console.log` or `console.error` of a float printing `-0`, and it marks no divergence in the reading the class is defined against. `runtime/nish.mjs` replaces both with shims that print `String(x)`, and `String(-0)` is `0`, which is what the native build prints. The code stays reserved and is never reused | — |
+  | NL8012 | a stubbed generic (`--emit-ts` only) | a generic function or method of the program's own modules that no instance reaches, whose body needs the checker's types to translate (a 64-bit integer or a builtin call) | throws when called, where the native build has no body to call at all |
 
   **NL8001, exactly.** A *source* is `s.length`, `s.indexOf(t)`,
   `s.indexOf(t, i)` or `s.lastIndexOf(t)` (an offset) or `s.charCodeAt(i)` (a code unit) on a
@@ -10276,7 +10277,11 @@ by the caller.
 
   Every row but the retired NL8010 and NL8011 is live, each with a warning case and a
   quiet counterpart among `tests/cases/port_*` and a wording pin in
-  `tests/wordings/`.
+  `tests/wordings/`, but NL8012, which only `--emit-ts` reports: its cases are
+  `tests/emit-ts/records/generic-uncalled.ts` (warned) and
+  `tests/emit-ts/identity/maps.ts` (a standard-library stub, quiet), checked
+  by `tests/run.js`'s emit-ts section, and its pin is
+  `tests/wordings/nl8012_generic_stub`.
 - **Deprecation warnings are the third diagnostic that is not an error.** One
   marks a call the language still compiles, to exactly the IR it always did,
   and is going to take away in a later breaking release, naming what replaces
@@ -10361,15 +10366,18 @@ by the caller.
   written. Last comes `entry.ts`, which imports `nish/runtime/node`, calls
   `main` and exits with what it answered. Imports are rewritten to match: a
   `nish:` specifier becomes `nish/runtime`, the one package the output names,
-  except `nish:secret`, which has source and becomes `./nish/secret.ts`;
-  a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
+  `nish:secret` included (its `std/secret.ts` is not written: the runtime's
+  `wipe` answers it, a zero-fill that cannot reach a copy the engine made, so
+  erasure is the native build's alone: `docs/security/secret.md`, SECRET-6); a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
   imported name that is only a type (an interface, a generic interface, an
   alias) is written `type X`, because Node's type stripping does not know
-  which names are types. A module that needs none of that is written byte for
-  byte (`tests/emit-ts/identity/`; the layout is `tests/emit-ts/layout/`).
+  which names are types. A module that needs none of that and none of the rows
+  below is written byte for byte (`tests/emit-ts/identity/`; the layout is
+  `tests/emit-ts/layout/`); one row that touches an otherwise untouched module
+  is the `: string` on an unannotated `const` bound to a string literal.
 - **The flag turns `--warn-portability` on**: those warnings name the sites
   where the TypeScript reading answers differently.
-- **Four kinds of module are refused, and then nothing is written** (exit 1):
+- **Five kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
   or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
@@ -10385,6 +10393,24 @@ by the caller.
   one instance and by reference in another (`P` and `P | null`), or element
   types with different zeros in `new Array<T>(n)` (`i32` and `i64`) (NL4013,
   `reject_emit_ts_instances`). Write a function per element type.
+  A generic no instance reaches (a function, a method, or the methods and
+  constructor of a class no type argument list names) has no types and no
+  native body. Where no type would change its text it is written as it is,
+  through the rewrites that need no type (`a[i]` is still checked); where a
+  type would (a 64-bit integer, which is a `bigint` there, `f32`, a builtin
+  call, arithmetic whose width wraps, a string's `.length` or methods, a
+  `Result`'s), it is written with a body that throws. Such a stub in the
+  program's own modules is a portability warning naming it at its
+  declaration (NL8012, `tests/emit-ts/records/generic-uncalled.ts`); the
+  standard library's (`insertAt` of `nish/collections`) are written without
+  one. The fifth refusal is such a generic in the program's own modules whose
+  body copies an element into an array slot, in a module that holds records
+  inline, or fills `new Array<T>(n)` with `T`'s zero, which only an instance
+  would decide, whatever else in it needs a type, a 64-bit integer or a
+  builtin call included (NL4014, `tests/emit-ts/refused/uncalled-zero.ts`,
+  `uncalled-copy.ts`, `uncalled-ctor-zero.ts`, `uncalled-field-zero.ts`,
+  `uncalled-wide-zero.ts`); in the standard library the same body is a stub,
+  without a warning, and the program is written.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/

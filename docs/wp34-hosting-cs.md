@@ -1106,7 +1106,7 @@ N11's writer, N12 and N13 where its stages need them.
 
 The in-place port of the TypeScript half rides [WP33](wp33-round-trip.md): the
 `portability` class (its R1) maps the sites where a rewritten module's two
-readings differ, and `--emit ts` (its R4) is the way back. The old N4, a
+readings differ, and `--emit-ts` (its R4, built) is the way back. The old N4, a
 separate overlap flag, is withdrawn in its favour.
 
 ## 9. Not in the list, on purpose

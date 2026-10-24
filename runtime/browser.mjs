@@ -16,20 +16,9 @@
  *   - Every file-system, process and machine call panics, naming itself and
  *     the browser.
  */
-import { installHost, panic } from "./core/host.mjs";
+import { installHost, NishExit, panic } from "./core/host.mjs";
 
-/**
- * What `exit(code)` throws: `code` is the 8-bit status a native exit would
- * leave. Exported so a caller tells it apart with `instanceof`, which a thrown
- * object that only carries the name does not pass.
- */
-export class NishExit extends Error {
-  constructor(code) {
-    super(`the program exited with ${code}`);
-    this.name = "NishExit";
-    this.code = code & 0xff;
-  }
-}
+export { NishExit };
 
 /**
  * One console stream, buffered to the next newline. The `"%s"` keeps a `%d`
