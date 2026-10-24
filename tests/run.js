@@ -18079,6 +18079,9 @@ if (!only || "secret alias mutation".includes(only) || only.startsWith("reject_s
   const mutDir = path.join(buildDir, "secret-alias-mutation")
   fs.rmSync(mutDir, { recursive: true, force: true })
   fs.cpSync(path.join(root, "src"), path.join(mutDir, "src"), { recursive: true })
+  // The compiler imports its help's colour policy from `../std/cli`.
+  fs.mkdirSync(path.join(mutDir, "std"), { recursive: true })
+  fs.copyFileSync(path.join(root, "std", "cli.ts"), path.join(mutDir, "std", "cli.ts"))
   const secretTs = path.join(mutDir, "src", "secret.ts")
   const live = fs.readFileSync(secretTs, "utf8")
   const edits = [
