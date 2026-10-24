@@ -446,10 +446,12 @@ const RUNTIME_TERM_TEXT_BUDGET = 2048
  * their scalar, SSE2 and AVX2 paths, the UTF-8 step the JSON text class takes, and the
  * resolver with its CPUID question and `NISH_SIMD` pin.
  *
- * Measured **1,407 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64, all of it
- * `.text`: the scalar path 157, the SSE2 path 290, the AVX2 path 406, the UTF-8 step
- * 238 and its resume 29, the resolver 204 and the four entry points 83. It was 1,303
- * with three classes; the fourth, the writer's plain bytes, added 104. A tenth
+ * Measured **1,525 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the scalar path 137, the SSE2 path 265, the AVX2 path 368, the UTF-8 step
+ * 238 and its resume 26, the plain class's scalar path 49 and SSE2 path 110, the
+ * resolver 249 and the four entry points 83. It was 1,303 with three classes; the
+ * fourth, the writer's plain bytes, added 222, all in its own paths, its pointer and
+ * the resolver -- the three class paths are the same bytes they were. A tenth
  * translation unit rather than more of `runtime-simd.c`: folded in, the two measured
  * 1,960 bytes against that file's ceiling of 768, and the rule is a new file with its
  * own measured ceiling, never a raised one. Apart, a program that searches text carries

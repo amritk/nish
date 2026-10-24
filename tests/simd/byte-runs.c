@@ -111,7 +111,7 @@ static const uint8_t *place(const uint8_t *bytes, int64_t to) {
 
 typedef struct {
   const char *name;
-  nish_run_path fn;
+  nish_run_path fn, plain; /* the class path, and the plain kernel's beside it */
 } path_t;
 
 static path_t paths[3];
@@ -123,7 +123,7 @@ static int check(int cls, const uint8_t *bytes, int64_t from, int64_t to, uint64
   const uint8_t *p = place(bytes, to);
   int64_t want = reference(cls, p, from, to);
   for (int k = 0; k < npaths; k++) {
-    int64_t got = paths[k].fn(cls, p, from, to);
+    int64_t got = (cls == NISH_RUN_PLAIN ? paths[k].plain : paths[k].fn)(cls, p, from, to);
     if (got != want) {
       printf("FAIL seed %llu: %s path %s answered %lld, the reference %lld (from %lld, to %lld)\n  bytes:",
              (unsigned long long)seed, class_name[cls], paths[k].name, (long long)got, (long long)want,
@@ -169,18 +169,22 @@ static const struct {
     {4, {0xf4, 0x90, 0x80, 0x80}}, {4, {0xf1, 0x80, 0x80, 0xc0}}, {4, {0xf3, 0xbf, 0xbf, 0xbf}},
 };
 
-/* The resolver, once per pin, as index-of-any.c checks `nish_any`'s. */
-static int resolves(const char *pin, nish_run_path want, const char *want_name) {
+/* The resolver, once per pin, as index-of-any.c checks `nish_any`'s: the first
+   call, made through the plain kernel, sets both pointers. */
+static int resolves(const char *pin, nish_run_path want, nish_run_path want_plain, const char *want_name) {
   if (pin == NULL) {
     unsetenv("NISH_SIMD");
   } else {
     setenv("NISH_SIMD", pin, 1);
   }
   __atomic_store_n(&nish_run, nish_run_resolve, __ATOMIC_RELAXED);
+  __atomic_store_n(&nish_plain, nish_run_resolve, __ATOMIC_RELAXED);
   static const uint8_t text[] = "  \t 1234567890123456789012345678901234567890x";
-  int64_t blank = nish_bytes_skip_blank(text, 0, 44);
+  int64_t plain = nish_bytes_skip_json_plain(text, 0, 44);
   nish_run_path got = __atomic_load_n(&nish_run, __ATOMIC_RELAXED);
-  if (got != want || blank != 4 || nish_bytes_skip_digits(text, 4, 44) != 44 ||
+  nish_run_path got_plain = __atomic_load_n(&nish_plain, __ATOMIC_RELAXED);
+  int64_t blank = nish_bytes_skip_blank(text, 0, 44);
+  if (got != want || got_plain != want_plain || plain != 2 || blank != 4 || nish_bytes_skip_digits(text, 4, 44) != 44 ||
       nish_bytes_skip_json_text(text, 0, 44) != 2 || nish_bytes_skip_json_text(text, 3, 44) != 44 ||
       nish_bytes_skip_json_plain(text, 0, 44) != 2 || nish_bytes_skip_json_plain(text, 3, 44) != 44) {
     printf("FAIL resolver: NISH_SIMD=%s did not pick %s\n", pin ? pin : "<unset>", want_name);
@@ -203,9 +207,9 @@ int main(int argc, char **argv) {
   page_end = map + page;
 #endif
 
-  paths[npaths++] = (path_t){"scalar", nish_run_scalar};
+  paths[npaths++] = (path_t){"scalar", nish_run_scalar, nish_plain_scalar};
 #if defined(NISH_SIMD_SSE2) || defined(NISH_SIMD_NEON) || defined(NISH_SIMD_WASM)
-  paths[npaths++] = (path_t){"base", nish_run_base};
+  paths[npaths++] = (path_t){"base", nish_run_base, nish_plain_base};
   const char *base_name = "base";
 #else
   const char *base_name = "base (the scalar path on this target)";
@@ -214,7 +218,7 @@ int main(int argc, char **argv) {
   nish_run_path best = nish_run_base;
 #if defined(NISH_SIMD_SSE2)
   if (nish_cpu_has_avx2()) {
-    paths[npaths++] = (path_t){"avx2", nish_run_avx2};
+    paths[npaths++] = (path_t){"avx2", nish_run_avx2, nish_plain_base};
     best = nish_run_avx2;
     avx2_note = NULL;
   } else {
@@ -311,9 +315,11 @@ int main(int argc, char **argv) {
 
   /* The resolver: each pin, and the best path for no pin, `avx2` and a value
      it does not know. */
-  if (!resolves("scalar", nish_run_scalar, "scalar") || !resolves("base", nish_run_base, base_name) ||
-      !resolves(NULL, best, "the best path") || !resolves("avx2", best, "the best path") ||
-      !resolves("sse9", best, "the best path"))
+  if (!resolves("scalar", nish_run_scalar, nish_plain_scalar, "scalar") ||
+      !resolves("base", nish_run_base, nish_plain_base, base_name) ||
+      !resolves(NULL, best, nish_plain_base, "the best path") ||
+      !resolves("avx2", best, nish_plain_base, "the best path") ||
+      !resolves("sse9", best, nish_plain_base, "the best path"))
     return 1;
 
   printf("byte-runs: %ld cases agree across", cases);

@@ -259,9 +259,18 @@ export const writerBytesChecks = (t: Suite): void => {
           if (pair === 1 && at + 1 < len) {
             field[4 + at] = toU8(marks[(m + 1) % toI32(marks.length)]);
           }
+          const rule = quotedByRule(field, 3, len);
           sw0.reset(sweepOut, 0);
           sw0.stringBytes(field, 3, len);
-          if (sw0.failed !== JSON_WRITE_OK || jvHex(sweepOut, sw0.end) !== quotedByRule(field, 3, len)) {
+          if (sw0.failed !== JSON_WRITE_OK || jvHex(sweepOut, sw0.end) !== rule) {
+            sweepOff += 1;
+          }
+          sw0.reset(sweepOut, 0);
+          sw0.beginObject();
+          sw0.keyBytes(field, 3, len);
+          sw0.i32(0);
+          sw0.endObject();
+          if (sw0.failed !== JSON_WRITE_OK || jvHex(sweepOut, sw0.end) !== `7b${rule}3a307d`) {
             sweepOff += 1;
           }
           sweeps += 1;
@@ -269,27 +278,52 @@ export const writerBytesChecks = (t: Suite): void => {
       }
     }
   }
-  t.eqI32("bytes: stringBytes at every length from 1 to 80, escapes and high bytes either side of the 16-byte guard and at the run boundaries, is the rule", sweepOff, 0);
+  t.eqI32("bytes: stringBytes and keyBytes at every length from 1 to 80, escapes and high bytes either side of the 16-byte guard and at the run boundaries, are the rule", sweepOff, 0);
   t.ok("bytes: and the sweep wrote thousands of windows", sweeps > 5000);
 
-  // A full buffer on the run path: a 40-byte plain window with one escape,
-  // at every room from 0 to 49, stops where `string` stops.
-  const longText = "abcdefghijklmnopqrst\nuvwxyzABCDEFGHIJKLMN";
-  const lb = jvBytes(longText);
+  // A full buffer on the run path: windows of 41 to 70 bytes with escapes and
+  // a high byte at the run boundaries, at every room up to ten past their
+  // quoted length, stop where `string` and `key` stop.
+  const longTexts: string[] = [
+    "abcdefghijklmnopqrst\nuvwxyzABCDEFGHIJKLMN",
+    'abcdefghijklmno"pqrstuvwxyzABCDE\\FGHIJKLMNOPQRSTUVWXYZ0123456789-é',
+    "0123456789abcdefghijklmnopqrstu\u0001vwxyz",
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\t",
+  ];
   let longOff: i32 = 0;
-  for (let room: i32 = 0; room < 50; room += 1) {
-    const small = new Array<u8>(room);
-    const lw = new JsonWriter(small, 0);
-    lw.string(longText);
-    const viaString = `${lw.failed} ${lw.written()} ${lw.text()}`;
-    lw.reset(small, 0);
-    lw.stringBytes(lb, 0, toI32(lb.length));
-    const viaBytes = `${lw.failed} ${lw.written()} ${lw.text()}`;
-    if (viaString !== viaBytes) {
-      longOff += 1;
+  let longRooms: i32 = 0;
+  for (let k: i32 = 0; k < toI32(longTexts.length); k += 1) {
+    const longText = longTexts[k];
+    const lb = jvBytes(longText);
+    const n: i32 = toI32(lb.length);
+    for (let room: i32 = 0; room < n * 2 + 12; room += 1) {
+      const small = new Array<u8>(room);
+      const lw = new JsonWriter(small, 0);
+      lw.string(longText);
+      const viaString = `${lw.failed} ${lw.written()} ${lw.text()}`;
+      lw.reset(small, 0);
+      lw.stringBytes(lb, 0, n);
+      const viaBytes = `${lw.failed} ${lw.written()} ${lw.text()}`;
+      lw.reset(small, 0);
+      lw.beginObject();
+      lw.key(longText);
+      lw.i32(0);
+      lw.endObject();
+      const viaKey = `${lw.failed} ${lw.written()} ${lw.text()}`;
+      lw.reset(small, 0);
+      lw.beginObject();
+      lw.keyBytes(lb, 0, n);
+      lw.i32(0);
+      lw.endObject();
+      const viaKeyBytes = `${lw.failed} ${lw.written()} ${lw.text()}`;
+      if (viaString !== viaBytes || viaKey !== viaKeyBytes) {
+        longOff += 1;
+      }
+      longRooms += 1;
     }
   }
-  t.eqI32("bytes: a full buffer at every room from 0 to 49 on a 42-byte window stops where string stops", longOff, 0);
+  t.eqI32("bytes: a full buffer at every room on four windows of 41 to 70 bytes stops where string and key stop", longOff, 0);
+  t.ok("bytes: and the full-buffer sweep tried hundreds of rooms", longRooms > 400);
 
   // No allocation: 10,000 writes from a reused buffer of bytes.
   const body = jvBytes("message\tHello, World! é");
