@@ -3815,12 +3815,14 @@ element's arena, which a task does not share, and each rule is reported at the
   (`tests/link/thread_task_wipe_secret`). Wiping the task's argument, a
   captured local, a field, an element, an array a call answered, a `Secret`
   held by a `let`, made from a call's answer, from a local moved into it or
-  from a record whose constructor is handed an object, a `Secret` a helper
-  returns or writes, or one a holder keeps in a field, is NL2471
-  (`reject_thread_wipe_param`, `_capture`, `_field`, `_element`, `_helper`,
-  `_call_result`, `reject_thread_wipe_secret_call_result`, `_moved`,
-  `_holder`, `_let`, `_returned`, `_through_helper`, `_ctor_param`). A
-  borrowed `Secret` parameter is refused before it
+  from a record whose constructor is handed an object, a `Secret` a call
+  answers (wiped, or written by a helper first), or one a holder keeps in a
+  field, is NL2471 (`reject_thread_wipe_param`, `_capture`, `_field`,
+  `_element`, `_helper`, `_call_result`,
+  `reject_thread_wipe_secret_call_result`, `_moved`, `_holder`, `_let`,
+  `_call_secret`, `_call_secret_helper`, `_ctor_param`). A helper may write
+  the task's own `Secret` before the wipe. A borrowed `Secret` parameter is
+  refused before it
   (`reject_thread_wipe_secret_borrowed`). The wipe itself is unchanged, one
   volatile `llvm.memset`.
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so

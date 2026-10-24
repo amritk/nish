@@ -340,15 +340,19 @@ now admitted when `v` is allocated in the call (see Method); the IR is
 unchanged, and the program prints the same at 1, 2 and 8 threads
 (`tests/link/thread_task_wipe_secret`).
 
-What the rule does not admit, by design: a `Secret` held by a `let`, made
-from a moved local, a call's answer or a record whose constructor is handed
-an object, returned by a helper, written by a helper it is handed to, or
-kept in a holder's field; and an array a call answered
-(`const st = initState()`), whose freshness the rule does not track across a
-return. The supported pattern for a shared key is
-that the parent makes the `Secret`, each task `expose`s it read-only, and the
-parent wipes it after the scope joins, which the region rule above already
-orders.
+What the rule does not admit, by design: a `Secret` held by a `let`; one
+made from a moved local, a call's answer or a record whose constructor is
+handed an object; one a call answers, whether the task wipes it or first
+hands it to a helper that writes it; one kept in a holder's field; and an
+array a call answered (`const st = initState()`), whose freshness the rule
+does not track across a return. A helper may write the task's own `Secret`
+before the wipe (`cleared` in `tests/link/thread_task_wipe_secret`). A
+`Secret` of a literal holding a captured array, `secret([buf])`, cannot be
+written at all: `isSecretPayload` takes only an array of integers or a record
+of integer fields, so no negative test exists for it. The supported pattern
+for a shared key is that the parent makes the `Secret`, each task `expose`s
+it read-only, and the parent wipes it after the scope joins, which the region
+rule above already orders.
 
 ### Properties verified
 
@@ -358,18 +362,20 @@ orders.
 - A `wipe` of the task's argument, a capture, a field, the argument a helper
   wipes for it, or a call's answer is still NL2471.
 - A `wipe` of a `const k = secret(<new, array or object literal>)` the task
-  makes is not a shared write; a `let`, `secret` of a parameter, a field, a
-  call's answer, a moved local or a record whose constructor is handed an
-  object, a `Secret` a helper returns or writes, a borrowed `Secret`
-  parameter and a holder's `wipe()` are still refused
+  makes is not a shared write, nor is a helper's write through it before the
+  wipe; a `let`, `secret` of a parameter, a field, a call's answer, a moved
+  local or a record whose constructor is handed an object, a `Secret` a call
+  answers (wiped, or written by a helper), a borrowed `Secret` parameter and
+  a holder's `wipe()` are still refused
   (`tests/cases/reject_thread_wipe_secret_param`, `_field`, `_call_result`,
-  `_moved`, `_borrowed`, `_holder`, `_let`, `_returned`, `_through_helper`,
-  `_ctor_param`). A helper that hands an inner record of shared memory to
-  another that writes it stays refused (`reject_thread_wipe_region_past`).
-  A manual `opt -O2` of `tests/link/thread_task_wipe_secret` keeps its three
-  wipes as volatile `llvm.memset`s, one inlined into each task; no test runs
-  that program under `opt -O2`; the volatile store itself is pinned by the
-  `nish:secret` check below.
+  `_moved`, `_borrowed`, `_holder`, `_let`, `_call_secret`,
+  `_call_secret_helper`, `_ctor_param`). A helper that hands an inner record
+  of shared memory to another that writes it stays refused
+  (`reject_thread_wipe_region_past`). A manual `opt -O2` of
+  `tests/link/thread_task_wipe_secret` keeps its four wipes as volatile
+  `llvm.memset`s, one inlined into each task; no test runs that program under
+  `opt -O2`; the volatile store itself is pinned by the `nish:secret` check
+  below.
 - The emitted IR is unchanged: `sharedWrite` feeds no LLVM attribute, and
   every wipe under `opt -O2` is still a volatile `llvm.memset`.
 
@@ -385,6 +391,7 @@ orders.
 - `${name}: rejected with ${needles.map((n) => `"${n}"`).join(", ")}`, for
   `reject_thread_wipe_param`, `_capture`, `_field`, `_helper`, `_element`
   and `_call_result`; `reject_thread_wipe_secret_param`, `_field`,
-  `_call_result`, `_moved`, `_borrowed`, `_holder`, `_let`, `_returned`,
-  `_through_helper` and `_ctor_param`; and `reject_thread_wipe_region_past`.
+  `_call_result`, `_moved`, `_borrowed`, `_holder`, `_let`, `_call_secret`,
+  `_call_secret_helper` and `_ctor_param`; and
+  `reject_thread_wipe_region_past`.
 - `nish:secret: the wipe survives opt -O2 (a volatile zero for each of the 8 bytes nothing reads again), where the twin's fill(0) is deleted`.

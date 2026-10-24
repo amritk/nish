@@ -1,6 +1,8 @@
-// A task may wipe a `Secret` it makes from a fresh value, but not one a
-// helper returns: what a call answers may be anyone's memory, even a
-// `Secret` the helper made. Make the `Secret` in the task.
+// A task may wipe a `Secret` it makes from a fresh value, but not a `Secret`
+// a call answers (`const k = make(n)`), even one the callee made from a fresh
+// array: the rule does not follow freshness across a return, so the `Secret`
+// may be anyone's memory. This pins the `Secret`-valued call result;
+// `reject_thread_wipe_secret_call_result` pins `secret(<call result>)`.
 import { Secret, secret, wipe } from "nish:secret";
 import { scope } from "nish/threads";
 const make = (n: i32): Secret<u8[]> => {

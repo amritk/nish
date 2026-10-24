@@ -2130,8 +2130,8 @@ class FactCollector {
   /**
    * A `const` bound to a fresh object or array, or to a fresh `Secret` the
    * body wipes, is an object of this call's own (`ownKeyOf`); a `const` bound
-   * to anything else is what it is bound to; a `let`, a loop variable or a name with no initialiser may be
-   * anything.
+   * to anything else is what it is bound to; a `let`, a loop variable or a
+   * name with no initialiser may be anything.
    */
   resolveLocal(local: Local, depth: i32): MemPath {
     const key = this.ownKeyOf(local)

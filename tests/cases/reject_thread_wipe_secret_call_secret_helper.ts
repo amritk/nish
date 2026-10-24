@@ -1,6 +1,8 @@
-// A task may write a `Secret` it makes, but a helper that writes the
-// `Secret` it is handed writes whatever its caller passes: handed a `Secret`
-// a call answered, the write is to memory the task's caller can see.
+// A helper's write through a `Secret` it is handed is judged by what the task
+// hands it: handed a `Secret` a call answered (`const k = make(n)`), the write
+// is to memory the task's caller may see, and NL2471 names the helper, before
+// the `wipe`. Handed one the task made, the same helper is admitted
+// (`tests/link/thread_task_wipe_secret`, `cleared`).
 import { Secret, exposeWith, secret, wipe } from "nish:secret";
 import { scope } from "nish/threads";
 const zero = (k: u8[], v: i32): i32 => {

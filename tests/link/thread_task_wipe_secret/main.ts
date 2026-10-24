@@ -2,10 +2,12 @@
 // held by a `const` and wiped in the same body, is the task's own storage, so
 // its wipe writes nothing another task can see. One task wraps a literal,
 // another a `new Array` it fills inside `exposeWith`, a third a record of
-// integers; each hands the parent a sum it computed before the wipe. Nothing
-// is read after a wipe, so the native threads and Node's one-after-another
-// agree, and every byte is written before it is read, as Node needs.
-import { expose, exposeWith, secret, wipe } from "nish:secret";
+// integers, a fourth a `new Array` a helper fills through the `Secret` it is
+// handed (the task's own memory, so the helper's write is too); each hands the
+// parent a sum it computed before the wipe. Nothing is read after a wipe, so
+// the native threads and Node's one-after-another agree, and every byte is
+// written before it is read, as Node needs.
+import { Secret, expose, exposeWith, secret, wipe } from "nish:secret";
 import { scope } from "nish/threads";
 
 class Pair {
@@ -34,6 +36,13 @@ const fillFrom = (k: u8[], seed: i32): i32 => {
 
 const both = (p: Pair): i32 => toI32(p.a) * 1000 + toI32(p.b);
 
+const zero = (k: u8[], v: i32): i32 => {
+  k.fill(toU8(v));
+  return sum(k);
+};
+
+const clearSecret = (k: Secret<u8[]>, v: i32): i32 => exposeWith(k, v, zero);
+
 const literal = (n: i32): i32 => {
   const k = secret([toU8(n), toU8(n + 1), toU8(n + 2)]);
   const t = expose(k, sum);
@@ -55,8 +64,15 @@ const record = (n: i32): i32 => {
   return t;
 };
 
+const cleared = (n: i32): i32 => {
+  const k = secret(new Array<u8>(n));
+  const t = clearSecret(k, 5);
+  wipe(k);
+  return t;
+};
+
 export const main = (): i32 => {
-  const out: i32[] = [0, 0, 0, 0, 0, 0];
+  const out: i32[] = [0, 0, 0, 0, 0, 0, 0, 0];
   {
     using s = scope();
     s.spawn(literal, 4, out, 0);
@@ -65,8 +81,11 @@ export const main = (): i32 => {
     s.spawn(scratch, 64, out, 3);
     s.spawn(record, 3, out, 4);
     s.spawn(record, 7, out, 5);
+    s.spawn(cleared, 3, out, 6);
+    s.spawn(cleared, 10, out, 7);
   }
   console.log(`${out[0]} ${out[1]} ${out[2]} ${out[3]}`);
   console.log(`${out[4]} ${out[5]}`);
+  console.log(`${out[6]} ${out[7]}`);
   return 0;
 };
