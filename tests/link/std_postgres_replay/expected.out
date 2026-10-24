@@ -1,0 +1,16 @@
+PASS  trust-query, in 1-byte pieces
+PASS  scram-ok, in 1-byte pieces
+PASS  scram-wrong-password, in 1-byte pieces
+PASS  no-database, in 1-byte pieces
+PASS  cleartext, in 1-byte pieces
+PASS  trust-query, in 7-byte pieces
+PASS  scram-ok, in 7-byte pieces
+PASS  scram-wrong-password, in 7-byte pieces
+PASS  no-database, in 7-byte pieces
+PASS  cleartext, in 7-byte pieces
+PASS  trust-query, whole
+PASS  scram-ok, whole
+PASS  scram-wrong-password, whole
+PASS  no-database, whole
+PASS  cleartext, whole
+postgres replay: 15 passed, 0 failed, 0 skipped
