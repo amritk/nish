@@ -172,7 +172,10 @@ const discover = (dir) => {
         })
         continue
       }
-      const driver = hasMain(full) ? null : fs.existsSync(side("c")) ? side("c") : DRIVER_C
+      let driver = null
+      if (!hasMain(full)) {
+        driver = fs.existsSync(side("c")) ? side("c") : DRIVER_C
+      }
       programs.push({
         name,
         entry: full,
@@ -332,7 +335,12 @@ const execute = (prog, dir, tag) =>
   })
 
 /** How a run ended, in a word: `exit 0`, `SIGSEGV`, `timeout`. */
-const ending = (r) => (r.timedOut ? "timeout" : r.signal !== null ? r.signal : `exit ${r.status}`)
+const ending = (r) => {
+  if (r.timedOut) {
+    return "timeout"
+  }
+  return r.signal ?? `exit ${r.status}`
+}
 
 /** The panic line a run printed, or null: the runtime's panics all say `panicked`. */
 const panicOf = (r) => {
