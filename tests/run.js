@@ -4801,7 +4801,14 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
 // changes the link, never a byte of the IR (src/compile.ts), so the goldens, expected.ir
 // and the wipe checks read what they always read. Measured on main at 804120e, every
 // positive program built under each profile on one 4-core machine, speed twice:
-//   MEASURED_FIGURES
+//   541 positive programs   build    run   total
+//   speed, first          738.5 s  83.6 s  822.1 s
+//   speed, second         735.1 s  64.0 s  799.1 s
+//   debug                 173.1 s 171.7 s  344.8 s
+// The two speed passes differ by 0.5% in build and 23 s in run (the first run of each
+// binary pays a cold start), so the band is about 3%; debug saves 454-477 s, far
+// outside it, and the default is debug. No program's exit code or stdout differed
+// between the profiles; only stderr's timings and addresses did.
 // The programs below keep the speed profile, each for the reason beside it.
 const SPEED_LINK = new Map([
   // expected.ir pins alias metadata, which only an optimised link acts on.
@@ -4849,6 +4856,13 @@ const SPEED_LINK = new Map([
   ["thread_channel_string_many", "a wall-clock bound"],
   ["thread_scope_reclaim", "an RSS bound"],
   ["thread_task_release", "an RSS bound"],
+  ["net_relay_soak", "an RSS bound, and 4.9 s of run becomes 37.8 s"],
+  // Run so much slower unoptimised that the debug build costs more in all
+  // (speed build + run, then debug build + run).
+  ["crypto_x25519", "1.7 + 0.2 s, against 0.2 + 2.3 s"],
+  ["crypto_x509_malformed", "2.2 + 2.0 s, against 0.5 + 11.7 s"],
+  ["net_tls_memory", "4.8 + 1.3 s, against 0.8 + 14.4 s"],
+  ["net_tls_memory_f64", "4.7 + 1.5 s, against 0.8 + 15.2 s"],
 ])
 /**
  * The `--profile` flags a link of `tests/link/<name>` adds: none when its `args` name a
