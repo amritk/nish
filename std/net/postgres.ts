@@ -34,14 +34,23 @@
  * `PG_GROUP_DONE` when a group has been answered to its end (`groupFailed`,
  * `txStatus`); and `PG_FAILED`, final: the connection broke a rule or the
  * server ended it, `failure` says which and `lastError` holds the server's
- * reason when it gave one. `PG_NEED_MORE` asks for more input. A window stays
- * valid until the next `next()`.
+ * reason when it gave one. `PG_NEED_MORE` asks for more input.
+ *
+ * **Windows and buffers.** A column's window, the tag `tagIs` and `tagRows`
+ * read are valid until the next `next()`,
+ * which may move the unread input to the start of the buffer or replace the
+ * buffer with a larger one. Fetch `inputBuffer()` again after every `next()`
+ * rather than keep it; the same holds for `outputBuffer()` after a builder
+ * call.
  *
  * **Groups and pipelining.** Every statement is sent with the extended query
  * protocol: `prepare` (Parse and Describe), `bindStart`, the `param...` calls
  * and `bindEnd` (Bind and Execute), `closeStatement` (Close), then `sync()`,
  * which ends the group. The server answers groups in order and skips the rest
  * of a group after an error, so one failed statement costs only its own group.
+ * In a failed group, `PG_DESCRIBED` comes once for each `prepare` the server
+ * parsed before the error: a program that counts them knows which statements
+ * exist (named ones last past the group) and which must be prepared again.
  * Up to `maxInFlight` groups may wait for their answers at once; `canSend()`
  * says whether another may start, and the builder calls refuse (and write
  * nothing) when it may not. Nothing waits for a round trip that the protocol
@@ -64,24 +73,31 @@
  * `AuthenticationOk` that skips the end of an exchange SCRAM began is refused.
  * Cleartext and MD5 passwords, and SASL mechanisms other than SCRAM-SHA-256,
  * are refused: with no TLS here the first sends the password as it is, and the
- * second is a hash any eavesdropper can replay. `docs/security/postgres.md` is
- * the record.
+ * second is a hash any eavesdropper can replay. The password's bytes are used
+ * as they are, without SASLprep (RFC 4013): an ASCII password works, and a
+ * non-ASCII one works only when it is already in the form SASLprep would give
+ * (PostgreSQL itself falls back to the raw bytes when it cannot prepare one).
+ * `docs/security/postgres.md` is the record.
  *
  * **Caps.** `PgConfig` bounds what a server can make the client hold: the
  * longest message (`maxMessage`), the widest row (`maxColumns`) and the SCRAM
- * iteration count (`minIterations`, `maxIterations`). A message longer than
- * the cap, a length below 4, a layout that does not add up, a message the
- * protocol does not allow at that point (COPY among them), and an encoding
- * other than UTF-8 each fail the connection with their own `failure` code.
+ * iteration count (`minIterations`, `maxIterations`); and what a program can
+ * queue unsent (`maxOutput`), past which a builder call answers false. A
+ * message longer than the cap, a length below 4, a layout that does not add
+ * up, a message the protocol does not allow at that point (COPY among them),
+ * an encoding other than UTF-8, and a `DateStyle` other than ISO or a
+ * `TimeZone` other than UTC (at startup or after a `SET`), each fail the
+ * connection with their own `failure` code. The constructor panics on a cap
+ * out of range, as on a missing user or a short nonce.
  *
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
  * and RFC 5802 and RFC 7677; not ported from another implementation.
  */
-import { getI32BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
+import { copyBytes, getI32BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
 import { base64Decode, base64Encode } from "nish/crypto/base64url"
 import { timingSafeEqual } from "nish/crypto/ct"
 import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac"
-import { sha256 } from "nish/crypto/sha256"
+import { Sha256 } from "nish/crypto/sha256"
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 
 /** `next()` needs more input before it can say anything. */
@@ -123,6 +139,8 @@ export const PG_ERR_SERVER: i32 = 7
 export const PG_ERR_ENCODING: i32 = 8
 /** The program reported the end of the stream (`closed()`). */
 export const PG_ERR_CLOSED: i32 = 9
+/** The server's `DateStyle` is not ISO or its `TimeZone` is not UTC, the two the decoders read: at startup, or after a `SET`. */
+export const PG_ERR_SETTING: i32 = 10
 
 /** `PgArrayWalker.next()`: an element, at `start` for `length` bytes. */
 export const PG_ARRAY_ELEMENT: i32 = 0
@@ -162,6 +180,14 @@ const PG_RBRACE: i32 = 125
 const PG_PROTOCOL: i32 = 196608
 // The bytes of the client nonce, which base64 spells in 24 characters.
 const PG_NONCE_BYTES: i32 = 18
+// What a bind's end (Bind's result formats, then Execute: 2 + 10) and a Sync (5)
+// take: kept free under `maxOutput` by every other builder call, so that
+// `bindEnd()` and `sync()` are never refused for room.
+const PG_TAIL: i32 = 17
+// The largest `maxMessage` and `maxOutput`: a buffer doubles up to one past them.
+const PG_MAX_CAP: i32 = 1073741823
+// The largest `maxIterations`: the count is read digit by digit, times ten, in an i32.
+const PG_MAX_ITERATIONS: i32 = 214748363
 
 /** The caps a connection enforces, and the startup parameters it sends. */
 export class PgConfig {
@@ -185,6 +211,12 @@ export class PgConfig {
   minIterations: i32 = 4096
   /** The most SCRAM iterations computed, so a server cannot make the client spin. */
   maxIterations: i32 = 100000
+  /**
+   * The most bytes the builder calls may queue unsent; a call that would pass
+   * it answers false and writes nothing, so a program that never drains its
+   * output cannot grow the buffer without bound.
+   */
+  maxOutput: i32 = 1048576
 }
 
 /** A server's ErrorResponse or NoticeResponse: the fields a program acts on. */
@@ -230,9 +262,24 @@ const pgCopyBytes = (bytes: u8[]): u8[] => {
   return copy
 }
 
-/** The connection's copy of the password, wiped once the proof is computed. */
+/** Whether every byte of `bytes` is zero. */
+const pgAllZero = (bytes: u8[]): boolean => {
+  for (const b of bytes) {
+    if (toI32(b) !== 0) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * The connection's copy of the password, wiped once the proof is computed.
+ * The holder outlives the wipe, so that `wiped()` reads the very bytes.
+ */
 class PgPassword {
   readonly bytes: Secret<u8[]>
+  /** Whether `wipe()` has run; the bytes are no longer a password. */
+  gone: boolean = false
 
   constructor(password: Secret<u8[]>) {
     this.bytes = secret(expose(password, pgCopyBytes))
@@ -240,6 +287,11 @@ class PgPassword {
 
   wipe(): void {
     wipe(this.bytes)
+    this.gone = true
+  }
+
+  wiped(): boolean {
+    return expose(this.bytes, pgAllZero)
   }
 }
 
@@ -302,13 +354,32 @@ const pgSaltedPassword = (password: Secret<u8[]>, salt: u8[], iterations: i32): 
   pbkdf2HmacSha256(password, salt, iterations, 32)
 
 /**
+ * SHA-256 of `data` through a hasher of its own, whose state, block and
+ * schedule are wiped before it returns: the one-shot `sha256` leaves the last
+ * block of its input in a hasher nothing wipes, and here the input is
+ * ClientKey.
+ */
+const pgSha256Wiped = (data: u8[]): u8[] => {
+  const h = new Sha256()
+  h.update(data, 0, toI32(data.length))
+  const digest: u8[] = h.digest()
+  wipe(h.state)
+  wipe(h.block)
+  wipe(h.schedule)
+  h.fill = 0
+  h.total = 0
+  h.finished = true
+  return digest
+}
+
+/**
  * RFC 5802 §3 from the salted password and the AuthMessage: the ClientProof
  * (32 bytes) followed by the ServerSignature (32 bytes). Every key in between
  * is wiped before it returns.
  */
 const pgScramKeys = (salted: u8[], authMessage: u8[]): u8[] => {
   const clientKey: u8[] = hmacSha256(salted, pgBytesOf("Client Key"))
-  const storedKey: u8[] = sha256(clientKey)
+  const storedKey: u8[] = pgSha256Wiped(clientKey)
   const clientSignature: u8[] = hmacSha256(storedKey, authMessage)
   const serverKey: u8[] = hmacSha256(salted, pgBytesOf("Server Key"))
   const serverSignature: u8[] = hmacSha256(serverKey, authMessage)
@@ -626,7 +697,7 @@ export class PgConnection {
   inFlight: i32 = 0
   /** The server's process id, from BackendKeyData. */
   backendPid: i32 = 0
-  /** The number of notices received. */
+  /** The number of notices received, stopping at 2^31 - 1. */
   notices: i32 = 0
   /** The server's `server_version` parameter. */
   serverVersion: string = ""
@@ -638,7 +709,7 @@ export class PgConnection {
   readonly text: PgText
 
   private readonly config: PgConfig
-  private password: PgPassword | null = null
+  private readonly password: PgPassword
   private state: i32 = 0
   private input: u8[]
   private inStart: i32 = 0
@@ -673,6 +744,20 @@ export class PgConnection {
     }
     if (config.user.length === 0) {
       panic("nish/net/postgres: PgConfig.user is required")
+    }
+    if (
+      config.maxMessage < 1024 ||
+      config.maxMessage > PG_MAX_CAP ||
+      config.maxOutput < 1024 ||
+      config.maxOutput > PG_MAX_CAP ||
+      config.maxInFlight < 1 ||
+      config.maxColumns < 1 ||
+      config.maxColumns > 65535 ||
+      config.minIterations < 1 ||
+      config.maxIterations < config.minIterations ||
+      config.maxIterations > PG_MAX_ITERATIONS
+    ) {
+      panic("nish/net/postgres: a PgConfig cap out of range")
     }
     if (
       pgHasNul(config.user) ||
@@ -750,9 +835,7 @@ export class PgConnection {
     }
     const room: i32 = this.inputRoom()
     const n: i32 = length < room ? length : room
-    for (let i: i32 = 0; i < n; i++) {
-      this.input[this.inEnd + i] = src[start + i]
-    }
+    copyBytes(this.input, this.inEnd, src, start, n)
     this.inEnd += n
     return n
   }
@@ -767,20 +850,22 @@ export class PgConnection {
     return this.outStart
   }
 
-  /** One past the last byte queued. */
+  /** One past the last byte that may be sent: a Bind still open is held back until `bindEnd()` has written its lengths. */
   outputEnd(): i32 {
-    return this.outEnd
+    return this.bindAt >= 0 ? this.bindAt : this.outEnd
   }
 
   /** Records that `n` bytes from `outputStart()` were written to the socket. */
   sent(n: i32): void {
-    if (n < 0 || n > this.outEnd - this.outStart) {
+    if (n < 0 || n > this.outputEnd() - this.outStart) {
       panic("nish/net/postgres: sent more than was queued")
     }
     this.outStart += n
     if (this.outStart === this.outEnd) {
       this.outStart = 0
       this.outEnd = 0
+    } else if (this.outStart >= toI32(this.out.length) / 2) {
+      this.compactOutput()
     }
   }
 
@@ -792,12 +877,20 @@ export class PgConnection {
     return PG_FAILED
   }
 
+  /**
+   * Whether every byte of the connection's copy of the password is zero: true
+   * once the proof is computed, the connection has failed or `dispose()` has
+   * run (and for an empty password). It reads the copy itself, so a test can
+   * see the wipe happen; a program has no use for it.
+   */
+  passwordWiped(): boolean {
+    return this.password.wiped()
+  }
+
   /** Wipes the password if the connection still holds it. A program that drops a connection before it is ready calls this. */
   dispose(): void {
-    const password: PgPassword | null = this.password
-    if (password !== null) {
-      password.wipe()
-      this.password = null
+    if (!this.password.gone) {
+      this.password.wipe()
     }
   }
 
@@ -851,9 +944,7 @@ export class PgConnection {
       return
     }
     const n: i32 = this.inEnd - start
-    for (let i: i32 = 0; i < n; i++) {
-      this.input[i] = this.input[start + i]
-    }
+    copyBytes(this.input, 0, this.input, start, n)
     this.inStart = 0
     this.inEnd = n
   }
@@ -863,6 +954,8 @@ export class PgConnection {
     this.state = PG_STATE_FAILED
     this.failure = code
     this.dispose()
+    wipe(this.serverSignature)
+    this.serverSignature = []
     return PG_FAILED
   }
 
@@ -883,7 +976,9 @@ export class PgConnection {
         return this.fail(PG_ERR_FRAME)
       }
       if (type === 78) {
-        this.notices += 1
+        if (this.notices < 2147483647) {
+          this.notices += 1
+        }
         this.lastNotice = error
         return PG_NOTICE
       }
@@ -906,6 +1001,17 @@ export class PgConnection {
       if (pgBytesAre(this.input, body, nameEnd - body, "client_encoding")) {
         if (!pgBytesAre(this.input, nameEnd + 1, end - 2 - nameEnd, "UTF8")) {
           return this.fail(PG_ERR_ENCODING)
+        }
+      } else if (pgBytesAre(this.input, body, nameEnd - body, "DateStyle")) {
+        // "ISO, MDY": the output style comes first, the input order after the comma.
+        const valueLength: i32 = end - 2 - nameEnd
+        const iso: boolean = valueLength >= 3 && pgBytesAre(this.input, nameEnd + 1, 3, "ISO")
+        if (!iso || (valueLength > 3 && toI32(this.input[nameEnd + 4]) !== PG_COMMA)) {
+          return this.fail(PG_ERR_SETTING)
+        }
+      } else if (pgBytesAre(this.input, body, nameEnd - body, "TimeZone")) {
+        if (!pgBytesAre(this.input, nameEnd + 1, end - 2 - nameEnd, "UTC")) {
+          return this.fail(PG_ERR_SETTING)
         }
       } else if (pgBytesAre(this.input, body, nameEnd - body, "server_version")) {
         this.serverVersion = String.fromBytes(this.input, nameEnd + 1, end - 1)
@@ -1275,8 +1381,8 @@ export class PgConnection {
     if (salt === null || salt.length === 0) {
       return this.fail(PG_ERR_SCRAM)
     }
-    const password: PgPassword | null = this.password
-    if (password === null) {
+    const password: PgPassword = this.password
+    if (password.gone) {
       return this.fail(PG_ERR_SCRAM)
     }
     const salted: Secret<u8[]> | null = pgSaltedPassword(password.bytes, salt, iterations)
@@ -1299,9 +1405,13 @@ export class PgConnection {
       proof[i] = keys[i]
       signature[i] = keys[32 + i]
     }
+    wipe(keys)
     this.serverSignature = signature
+    // The proof goes on the wire as it is, so its base64 string is no secret.
+    const encoded: string = base64Encode(proof)
+    wipe(proof)
     const at: i32 = this.startMessage(PG_FE_PASSWORD)
-    this.putString(`${withoutProof},p=${base64Encode(proof)}`)
+    this.putString(`${withoutProof},p=${encoded}`)
     this.endMessage(at)
     this.state = PG_STATE_SCRAM_FINAL
     return PG_NEED_MORE
@@ -1320,11 +1430,44 @@ export class PgConnection {
     if (!timingSafeEqual(signature, this.serverSignature)) {
       return this.fail(PG_ERR_SERVER_SIGNATURE)
     }
+    wipe(this.serverSignature)
     this.serverSignature = []
     return PG_NEED_MORE
   }
 
   // --- Writing -----------------------------------------------------------------
+
+  /**
+   * Whether a builder call may queue `size` more bytes and still leave
+   * `PG_TAIL` under `maxOutput`. When they would not fit after the end of the
+   * buffer, the unsent bytes move to its start first: a builder call asks
+   * before it takes any offset into the buffer, so nothing it holds moves.
+   */
+  private room(size: i32): boolean {
+    const queued: i32 = this.outEnd - this.outStart
+    if (size < 0 || size > this.config.maxOutput - PG_TAIL - queued) {
+      return false
+    }
+    if (this.outStart > 0 && this.outEnd + size > toI32(this.out.length)) {
+      this.compactOutput()
+    }
+    return true
+  }
+
+  /** Moves the unsent output to the start of the buffer, the open bind's offsets with it. */
+  private compactOutput(): void {
+    const shift: i32 = this.outStart
+    if (shift === 0) {
+      return
+    }
+    copyBytes(this.out, 0, this.out, shift, this.outEnd - shift)
+    this.outEnd -= shift
+    this.outStart = 0
+    if (this.bindAt >= 0) {
+      this.bindAt -= shift
+      this.paramCountAt -= shift
+    }
+  }
 
   /** Makes the output buffer at least `want` bytes long. */
   private reserve(want: i32): void {
@@ -1392,9 +1535,9 @@ export class PgConnection {
     return this.state === PG_STATE_READY && (this.groupOpen || this.inFlight < this.config.maxInFlight)
   }
 
-  /** Opens a group if none is; false when none may be. */
-  private openGroup(): boolean {
-    if (!this.canSend() || this.bindAt >= 0) {
+  /** Opens a group if none is, for a message of `size` bytes; false, and no group opened, when none may be or there is no room. */
+  private canOpen(size: i32): boolean {
+    if (!this.canSend() || this.bindAt >= 0 || !this.room(size)) {
       return false
     }
     if (!this.groupOpen) {
@@ -1409,10 +1552,17 @@ export class PgConnection {
    * unnamed one), its parameters' types given by `paramTypes` (OIDs, 0 to let
    * the server infer one, and parameters past the array are inferred too).
    * The server answers `PG_DESCRIBED`. False, and nothing written, when
-   * `canSend()` is false, a bind is open, or `name` or `sql` holds a NUL.
+   * `canSend()` is false, a bind is open, `name` or `sql` holds a NUL, or the
+   * message would pass `maxOutput`.
    */
   prepare(name: string, sql: string, paramTypes: i32[]): boolean {
-    if (pgHasNul(name) || pgHasNul(sql) || toI32(paramTypes.length) > 65535 || !this.openGroup()) {
+    const nameLength: i32 = toI32(name.length)
+    const types: i32 = toI32(paramTypes.length)
+    if (pgHasNul(name) || pgHasNul(sql) || types > 65535 || nameLength > PG_MAX_CAP / 4) {
+      return false
+    }
+    const sqlLength: i32 = toI32(sql.length)
+    if (sqlLength > PG_MAX_CAP || !this.canOpen(16 + 2 * nameLength + sqlLength + 4 * types)) {
       return false
     }
     const at: i32 = this.startMessage(PG_FE_PARSE)
@@ -1432,7 +1582,7 @@ export class PgConnection {
 
   /** Close: forgets the prepared statement `name`. False as `prepare` is. */
   closeStatement(name: string): boolean {
-    if (pgHasNul(name) || !this.openGroup()) {
+    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(7 + toI32(name.length))) {
       return false
     }
     const at: i32 = this.startMessage(PG_FE_CLOSE)
@@ -1447,7 +1597,7 @@ export class PgConnection {
    * order, then `bindEnd()`. False as `prepare` is.
    */
   bindStart(name: string): boolean {
-    if (pgHasNul(name) || !this.openGroup()) {
+    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(11 + toI32(name.length))) {
       return false
     }
     this.bindAt = this.startMessage(PG_FE_BIND)
@@ -1460,10 +1610,14 @@ export class PgConnection {
     return true
   }
 
-  /** Opens a parameter: its length is written by `endParam`. */
-  private startParam(): i32 {
-    if (this.bindAt < 0 || this.paramCount === 65535) {
-      panic("nish/net/postgres: a parameter outside bindStart()/bindEnd(), or more than 65535")
+  /**
+   * Opens a parameter of `size` bytes, its length word aside, and answers
+   * where its length goes; -1, and nothing written, when no bind is open, the
+   * bind has 65535 parameters already, or there is no room under `maxOutput`.
+   */
+  private startParam(size: i32): i32 {
+    if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size)) {
+      return -1
     }
     this.paramCount += 1
     const at: i32 = this.outEnd
@@ -1475,33 +1629,52 @@ export class PgConnection {
     setI32BE(this.out, at, this.outEnd - at - 4)
   }
 
+  // Every `param...` call answers false, and writes nothing, when no bind is
+  // open, the bind has 65535 parameters already, or the parameter would pass
+  // `maxOutput`; a program that checked `bindStart()` meets only the last.
+
   /** A text parameter. */
-  paramText(value: string): void {
-    const at: i32 = this.startParam()
+  paramText(value: string): boolean {
+    const at: i32 = this.startParam(toI32(value.length))
+    if (at < 0) {
+      return false
+    }
     this.putString(value)
     this.endParam(at)
+    return true
   }
 
-  /** A text parameter from `bytes[start, start + length)`, UTF-8. */
-  paramBytes(bytes: u8[], start: i32, length: i32): void {
-    const at: i32 = this.startParam()
-    this.reserve(this.outEnd + length)
-    for (let i: i32 = 0; i < length; i++) {
-      this.out[this.outEnd + i] = bytes[start + i]
+  /** A text parameter from `bytes[start, start + length)`, UTF-8; false too when the window is not inside `bytes`. */
+  paramBytes(bytes: u8[], start: i32, length: i32): boolean {
+    if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
+      return false
     }
+    const at: i32 = this.startParam(length)
+    if (at < 0) {
+      return false
+    }
+    this.reserve(this.outEnd + length)
+    copyBytes(this.out, this.outEnd, bytes, start, length)
     this.outEnd += length
     this.endParam(at)
+    return true
   }
 
   /** A NULL parameter. */
-  paramNull(): void {
-    this.startParam()
+  paramNull(): boolean {
+    if (this.startParam(0) < 0) {
+      return false
+    }
     setI32BE(this.out, this.outEnd - 4, -1)
+    return true
   }
 
   /** An integer parameter, in decimal. */
-  paramInt(value: i64): void {
-    const at: i32 = this.startParam()
+  paramInt(value: i64): boolean {
+    const at: i32 = this.startParam(20)
+    if (at < 0) {
+      return false
+    }
     this.reserve(this.outEnd + 20)
     // The digits are written from the least significant, then reversed; the
     // value is made negative first so that the most negative i64 has its digits.
@@ -1529,11 +1702,27 @@ export class PgConnection {
       hi--
     }
     this.endParam(at)
+    return true
   }
 
   /** A `text[]` parameter: every element quoted, `"` and `\` escaped. */
-  paramTextArray(items: string[]): void {
-    const at: i32 = this.startParam()
+  paramTextArray(items: string[]): boolean {
+    // Its exact size first, so that room is asked for once and a refusal writes nothing.
+    let size: i64 = 2
+    for (const item of items) {
+      size += toI64(item.length) + 3
+      const n: i32 = toI32(item.length)
+      for (let i: i32 = 0; i < n; i++) {
+        const c: i32 = toI32(item.charCodeAt(i))
+        if (c === 34 || c === 92) {
+          size += 1
+        }
+      }
+    }
+    const at: i32 = this.startParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
+    if (at < 0) {
+      return false
+    }
     this.putByte(PG_LBRACE)
     let first: boolean = true
     for (const item of items) {
@@ -1554,13 +1743,18 @@ export class PgConnection {
     }
     this.putByte(PG_RBRACE)
     this.endParam(at)
+    return true
   }
 
-  /** Ends the Bind (every result column in text) and queues its Execute, for every row. */
-  bindEnd(): void {
+  /**
+   * Ends the Bind (every result column in text) and queues its Execute, for
+   * every row. False, and nothing written, when no bind is open; never for
+   * room, which the calls before it kept.
+   */
+  bindEnd(): boolean {
     const at: i32 = this.bindAt
     if (at < 0) {
-      panic("nish/net/postgres: bindEnd() without bindStart()")
+      return false
     }
     setU16BE(this.out, this.paramCountAt, toU16(this.paramCount))
     this.putI16(PG_ZERO)
@@ -1570,9 +1764,10 @@ export class PgConnection {
     this.putByte(PG_ZERO)
     this.putI32(PG_ZERO)
     this.endMessage(execute)
+    return true
   }
 
-  /** Sync: ends the open group, which the server answers with `PG_GROUP_DONE`. False when no group is open or a bind is. */
+  /** Sync: ends the open group, which the server answers with `PG_GROUP_DONE`. False when no group is open or a bind is; never for room. */
   sync(): boolean {
     if (!this.groupOpen || this.bindAt >= 0) {
       return false

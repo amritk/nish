@@ -1,7 +1,11 @@
 // Records the PostgreSQL exchanges `tests/link/std_postgres_replay` replays
 // through nish/net/postgres, into `tests/postgres/recordings/`.
 //
-//   node tests/postgres/record.mjs [/usr/lib/postgresql/18/bin]
+//   node tests/postgres/record.mjs [/usr/lib/postgresql/18/bin] [scenario...]
+//
+// Naming scenarios records only those, and leaves the other recordings as
+// they are (a SCRAM recording changes with every run: the server's nonce and
+// salt are random).
 //
 // The script starts a throwaway cluster from the given binaries, listening on
 // 127.0.0.1 only, with `scram-sha-256` for every role but `trusty` (trust)
@@ -27,6 +31,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const BIN = process.argv[2] ?? "/usr/lib/postgresql/18/bin"
+const ONLY = process.argv.slice(3)
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "recordings")
 const NONCE = Buffer.from("nish-postgres-test", "latin1")
 const PASSWORD = "correct horse battery staple"
@@ -263,6 +268,80 @@ const scenarios = {
     await r.exchange(f.take(), null)
   },
 
+  // Five groups in one write, the third breaking a unique constraint: the
+  // server answers 23505 for group 3 alone, and groups 4 and 5 run.
+  async "pipeline-unique"(r) {
+    const f = new Frames()
+    f.startup("trusty", "nish")
+    await r.exchange(f.take(), ready(1))
+    f.prepare("ddl", "create temp table u (id int4 primary key)", [])
+    f.bind("ddl", [])
+    f.sync()
+    await r.exchange(f.take(), ready(1))
+
+    f.prepare("ins", "insert into u values ($1::int4)", [])
+    f.bind("ins", [1n])
+    f.sync()
+    f.bind("ins", [2n])
+    f.sync()
+    f.bind("ins", [1n])
+    f.sync()
+    f.bind("ins", [3n])
+    f.sync()
+    f.prepare("cnt", "select count(*)::int4 from u", [])
+    f.bind("cnt", [])
+    f.sync()
+    await r.exchange(f.take(), ready(5))
+
+    f.terminate()
+    await r.exchange(f.take(), null)
+  },
+
+  // UPDATE n and DELETE n command tags, and an UPDATE that touches nothing.
+  async "row-counts"(r) {
+    const f = new Frames()
+    f.startup("trusty", "nish")
+    await r.exchange(f.take(), ready(1))
+    f.prepare("ddl", "create temp table c (id int4, n int4)", [])
+    f.bind("ddl", [])
+    f.sync()
+    f.prepare("ins", "insert into c select g, 0 from generate_series(1, 5) g", [])
+    f.bind("ins", [])
+    f.sync()
+    f.prepare("upd", "update c set n = n + 1 where id <= $1::int4", [])
+    f.bind("upd", [3n])
+    f.sync()
+    f.prepare("del", "delete from c where id > $1::int4", [])
+    f.bind("del", [3n])
+    f.sync()
+    f.bind("upd", [0n])
+    f.sync()
+    await r.exchange(f.take(), ready(5))
+
+    f.terminate()
+    await r.exchange(f.take(), null)
+  },
+
+  // A row shaped like a Conduit article: an int8 id past 2^53, an int4, text
+  // with a multi-byte character, a timestamptz, a bool, a text[] and a NULL.
+  async "typed-row"(r) {
+    const f = new Frames()
+    f.startup("trusty", "nish")
+    await r.exchange(f.take(), ready(1))
+    f.prepare(
+      "art",
+      "select $1::int8, 42::int4, 'How to train your dragon \u2014 2'::text, " +
+        "'2024-02-29 23:59:59.5+00'::timestamptz, false, array['dragons', 'training']::text[], null::text",
+      []
+    )
+    f.bind("art", [9007199254740993n])
+    f.sync()
+    await r.exchange(f.take(), ready(1))
+
+    f.terminate()
+    await r.exchange(f.take(), null)
+  },
+
   // SCRAM-SHA-256 with the right password, then a query and Terminate.
   async "scram-ok"(r) {
     await scram(r, "scrammy", PASSWORD)
@@ -364,6 +443,7 @@ const main = async () => {
     const version = run(join(BIN, "postgres"), ["--version"], false).trim()
 
     for (const [name, play] of Object.entries(scenarios)) {
+      if (ONLY.length > 0 && !ONLY.includes(name)) continue
       const r = new Recorder(port)
       await r.connect()
       await play(r)

@@ -3,14 +3,28 @@ PASS  scram-ok, in 1-byte pieces
 PASS  scram-wrong-password, in 1-byte pieces
 PASS  no-database, in 1-byte pieces
 PASS  cleartext, in 1-byte pieces
+PASS  pipeline-unique, in 1-byte pieces
+PASS  row-counts, in 1-byte pieces
+PASS  typed-row, in 1-byte pieces
 PASS  trust-query, in 7-byte pieces
 PASS  scram-ok, in 7-byte pieces
 PASS  scram-wrong-password, in 7-byte pieces
 PASS  no-database, in 7-byte pieces
 PASS  cleartext, in 7-byte pieces
+PASS  pipeline-unique, in 7-byte pieces
+PASS  row-counts, in 7-byte pieces
+PASS  typed-row, in 7-byte pieces
 PASS  trust-query, whole
 PASS  scram-ok, whole
 PASS  scram-wrong-password, whole
 PASS  no-database, whole
 PASS  cleartext, whole
-postgres replay: 15 passed, 0 failed, 0 skipped
+PASS  pipeline-unique, whole
+PASS  row-counts, whole
+PASS  typed-row, whole
+PASS  every recording cut at every offset
+PASS  fuzz: 4,000 mutants were played, none panicked
+PASS  fuzz: every mutant ended failed with a defined code
+PASS  fuzz: the seed's mutants, by the code they ended with
+PASS  fuzz: the checksum of every code and log length
+postgres replay: 29 passed, 0 failed, 0 skipped

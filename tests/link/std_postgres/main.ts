@@ -22,6 +22,7 @@ import {
   PG_ERR_SCRAM,
   PG_ERR_SERVER,
   PG_ERR_SERVER_SIGNATURE,
+  PG_ERR_SETTING,
   PG_ERR_TOO_BIG,
   PG_ERR_UNEXPECTED,
   PG_FAILED,
@@ -239,9 +240,9 @@ const framing = (t: Suite): void => {
   t.eqI32("a failed connection stays failed", conn.next(), PG_FAILED);
 
   const c = config();
-  c.maxMessage = 100;
+  c.maxMessage = 1024;
   const big: u8[] = [toU8(83)];
-  pushI32(big, 101);
+  pushI32(big, 1025);
   t.eqStr("a message over maxMessage is refused before it is read", feed(open(c), big), `failed:${PG_ERR_TOO_BIG}`);
 
   const small = config();
@@ -396,8 +397,48 @@ const auths = (t: Suite): void => {
 
   const skipped = open(config());
   feed(skipped, auth(10, z("SCRAM-SHA-256||")));
+  t.ok("the password is held while SCRAM runs", !skipped.passwordWiped());
   t.eqStr("AuthenticationOk before the server proved the password", feed(skipped, auth(0, [])), scram);
-  t.ok("a failed connection holds no password", skipped.failure === PG_ERR_SCRAM);
+  t.ok("a failed connection holds no password: its copy is zeros", skipped.passwordWiped());
+};
+
+const wipes = (t: Suite): void => {
+  const held = open(config());
+  t.ok("a new connection holds its copy of the password", !held.passwordWiped());
+  feed(held, auth(10, z("SCRAM-SHA-256||")));
+  t.ok("still after SASL starts", !held.passwordWiped());
+  feed(held, auth(11, z(`r=${CLIENT_NONCE}xyz,s=c2FsdA==,i=4096`)));
+  t.ok("zeros once the proof is computed", held.passwordWiped());
+  const failing = open(config());
+  t.eqStr("a framing failure", feed(failing, msg("R", z("ab"))), `failed:${PG_ERR_FRAME}`);
+  t.ok("zeros after fail()", failing.passwordWiped());
+  const dropped = open(config());
+  dropped.dispose();
+  t.ok("zeros after dispose()", dropped.passwordWiped());
+  const trusted = open(config());
+  feed(trusted, auth(0, []));
+  t.ok("trust computes no proof: zeros once AuthenticationOk arrives", trusted.passwordWiped());
+};
+
+/** A connection fed AuthenticationOk, then a ParameterStatus `name` = `value`. */
+const setting = (name: string, value: string): string => {
+  const conn = open(config());
+  feed(conn, auth(0, []));
+  return feed(conn, msg("S", z(`${name}|${value}|`)));
+};
+
+const settings = (t: Suite): void => {
+  const bad: string = `failed:${PG_ERR_SETTING}`;
+  t.eqStr("DateStyle ISO", setting("DateStyle", "ISO"), "");
+  t.eqStr("DateStyle ISO, MDY", setting("DateStyle", "ISO, MDY"), "");
+  t.eqStr("DateStyle German, DMY", setting("DateStyle", "German, DMY"), bad);
+  t.eqStr("DateStyle ISOX", setting("DateStyle", "ISOX"), bad);
+  t.eqStr("DateStyle empty", setting("DateStyle", ""), bad);
+  t.eqStr("TimeZone UTC", setting("TimeZone", "UTC"), "");
+  t.eqStr("TimeZone Europe/Paris", setting("TimeZone", "Europe/Paris"), bad);
+  t.eqStr("TimeZone UTC0", setting("TimeZone", "UTC0"), bad);
+  const set = inGroup();
+  t.eqStr("a SET TimeZone once ready fails the connection", feed(set, msg("S", z("TimeZone|Asia/Tokyo|"))), bad);
 };
 
 const serverErrors = (t: Suite): void => {
@@ -581,6 +622,167 @@ const results = (t: Suite): void => {
   t.eqI32("counted", conn.notices, 1);
 };
 
+/** `n` copies of `x`. */
+const repeat = (x: string, n: i32): string => {
+  const parts: string[] = [];
+  for (let i: i32 = 0; i < n; i++) {
+    parts.push(x);
+  }
+  return parts.join("");
+};
+
+/** Whether `b` holds `want` from `at`. */
+const same = (b: u8[], at: i32, want: u8[]): boolean => {
+  for (let i: i32 = 0; i < toI32(want.length); i++) {
+    if (at + i >= toI32(b.length) || b[at + i] !== want[i]) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const output = (t: Suite): void => {
+  const c = config();
+  c.maxOutput = 1024;
+  const conn = ready(c);
+  // Parse and Describe of `sql` are 16 bytes more than it, and 17 stay free for bindEnd and Sync.
+  t.ok("a prepare that would pass maxOutput is refused", !conn.prepare("", repeat("x", 992), none()));
+  t.eqI32("and opens no group", conn.inFlight, 0);
+  t.eqI32("and writes nothing", conn.outputEnd(), 0);
+  t.ok("one byte less fits", conn.prepare("", repeat("x", 991), none()));
+  t.eqI32("exactly maxOutput less the tail", conn.outputEnd(), 1024 - 17);
+  t.ok("no Bind after it", !conn.bindStart(""));
+  t.ok("Sync still fits", conn.sync());
+  drain(conn);
+
+  conn.prepare("", repeat("y", 500), none());
+  conn.sync();
+  t.eqI32("516 and 5 bytes queued", conn.outputEnd(), 521);
+  const unsent: u8[] = slice(conn.outputBuffer(), 300, 521);
+  conn.sent(300);
+  t.eqI32("a partial send under half the buffer keeps its place", conn.outputStart(), 300);
+  t.ok("a message that fits under maxOutput but not after the end", conn.prepare("", repeat("z", 600), none()));
+  t.eqI32("moves the unsent bytes to the start", conn.outputStart(), 0);
+  t.eqI32("instead of growing the buffer", toI32(conn.outputBuffer().length), 1024);
+  t.ok("the unsent bytes as they were", same(conn.outputBuffer(), 0, unsent));
+  t.eqI32("the new message after them", conn.outputEnd(), 221 + 616);
+  t.ok("unsent bytes count against maxOutput", !conn.prepare("", repeat("w", 200), none()));
+  conn.sent(600);
+  t.eqI32("a send past half the buffer moves the rest to its start", conn.outputStart(), 0);
+  t.eqI32("all of it", conn.outputEnd(), 237);
+  t.ok("whose last bytes are the Describe", same(conn.outputBuffer(), 230, [toU8(68), toU8(0), toU8(0), toU8(0), toU8(6), toU8(83), toU8(0)]));
+
+  const binding = ready(c);
+  binding.prepare("q", "select $1", none());
+  binding.sync();
+  drain(binding);
+  binding.bindStart("q");
+  t.eqI32("an open Bind is not yet sendable", binding.outputEnd(), 0);
+  t.ok("a parameter that would pass maxOutput is refused", !binding.paramText(repeat("p", 1000)));
+  t.ok("a smaller one fits", binding.paramText("ok"));
+  t.ok("bindEnd is never refused for room", binding.bindEnd());
+  t.ok("nor is Sync", binding.sync());
+  t.eqStr("the refused parameter left nothing behind", drain(binding), "B|||<19>|q||||<1>|||<2>ok||E|||<9>|||||S|||<4>");
+};
+
+const params = (t: Suite): void => {
+  const conn = ready(config());
+  t.ok("paramText without a bind is refused", !conn.paramText("x"));
+  t.ok("paramBytes too", !conn.paramBytes(z("x"), 0, 1));
+  t.ok("paramNull too", !conn.paramNull());
+  t.ok("paramInt too", !conn.paramInt(toI64(1)));
+  t.ok("paramTextArray too", !conn.paramTextArray(["x"]));
+  t.ok("bindEnd too", !conn.bindEnd());
+  t.eqStr("and nothing is written", drain(conn), "");
+  conn.prepare("q", "select $1", none());
+  conn.sync();
+  drain(conn);
+  conn.bindStart("q");
+  const b: u8[] = z("abc");
+  t.ok("paramBytes: a negative start", !conn.paramBytes(b, -1, 1));
+  t.ok("paramBytes: a negative length", !conn.paramBytes(b, 0, -1));
+  t.ok("paramBytes: a window past the end", !conn.paramBytes(b, 2, 2));
+  t.ok("paramBytes: a window that would overflow", !conn.paramBytes(b, 2, 2147483647));
+  t.ok("paramBytes: the whole array", conn.paramBytes(b, 0, 3));
+  t.ok("paramBytes: an empty window at the end", conn.paramBytes(b, 3, 0));
+  conn.bindEnd();
+  conn.sync();
+  t.eqStr("only the two good windows were bound", drain(conn), "B|||<24>|q||||<2>|||<3>abc||||||E|||<9>|||||S|||<4>");
+};
+
+/** A RowDescription of one int4 column. */
+const oneInt = (): u8[] => {
+  const desc: u8[] = [];
+  pushI16(desc, 1);
+  field(desc, "n", 23, 4);
+  return msg("T", desc);
+};
+
+/** The server's answer to group `i`: Parse, Describe, Bind, one row holding `i`, its tag, ReadyForQuery. */
+const answer = (i: i32): u8[] => {
+  const head: u8[] = cat(cat(msg("1", []), msg("t", z("||"))), oneInt());
+  return cat(cat(cat(cat(head, msg("2", [])), row([`${i}`], [])), msg("C", z("SELECT 1|"))), msg("Z", z("I")));
+};
+
+/** Feeds `bytes`; answers each row's int, `done` for each group, `failed:<code>` for a failure. */
+const values = (conn: PgConnection, bytes: u8[]): string => {
+  const out: string[] = [];
+  let fed: i32 = 0;
+  while (true) {
+    fed += conn.receive(bytes, fed, toI32(bytes.length) - fed);
+    const event: i32 = conn.next();
+    if (event === PG_FAILED) {
+      out.push(`failed:${conn.failure}`);
+      break;
+    }
+    if (event === PG_NEED_MORE) {
+      if (fed === toI32(bytes.length)) {
+        break;
+      }
+    } else if (event === PG_ROW) {
+      out.push(`${conn.int(0)}`);
+    } else if (event === PG_GROUP_DONE) {
+      out.push("done");
+    }
+  }
+  return out.join(",");
+};
+
+/** Queues group `i`: prepare `s<i>`, bind it to `i`, sync. */
+const group = (conn: PgConnection, i: i32): boolean => {
+  const name: string = `s${i}`;
+  return conn.prepare(name, "select $1::int4", [23]) && conn.bindStart(name) && conn.paramInt(toI64(i)) && conn.bindEnd() && conn.sync();
+};
+
+const pipeline = (t: Suite): void => {
+  const conn = ready(config());
+  let queued: i32 = 0;
+  for (let i: i32 = 1; i <= 16; i++) {
+    if (group(conn, i)) {
+      queued += 1;
+    }
+  }
+  t.eqI32("sixteen groups, the default maxInFlight, go out unanswered", queued, 16);
+  t.eqI32("all in flight", conn.inFlight, 16);
+  t.ok("a seventeenth may not start", !conn.canSend() && !conn.prepare("s17", "select 1", none()));
+  drain(conn);
+  t.eqStr("the first answer frees one place", values(conn, answer(1)), "1,done");
+  t.ok("so the seventeenth goes out", group(conn, 17));
+  t.eqI32("sixteen in flight again", conn.inFlight, 16);
+  drain(conn);
+  let rest: u8[] = [];
+  for (let i: i32 = 2; i <= 17; i++) {
+    rest = cat(rest, answer(i));
+  }
+  const want: string[] = [];
+  for (let i: i32 = 2; i <= 17; i++) {
+    want.push(`${i},done`);
+  }
+  t.eqStr("the answers come back in the order the groups were sent", values(conn, rest), want.join(","));
+  t.eqI32("nothing in flight", conn.inFlight, 0);
+  t.eqStr("one answer more than was asked for", values(conn, answer(18)), `failed:${PG_ERR_UNEXPECTED}`);
+};
+
 const intOf = (p: PgText, text: string): string => {
   p.reset();
   const v: i64 = p.int(z(text), 0, toI32(text.length));
@@ -685,10 +887,15 @@ export const main = (): number => {
   unexpected(t);
   malformed(t);
   auths(t);
+  wipes(t);
   serverErrors(t);
+  settings(t);
   lifecycle(t);
   builders(t);
   results(t);
+  output(t);
+  params(t);
+  pipeline(t);
   ints(t);
   timestamps(t);
   arrays(t);
