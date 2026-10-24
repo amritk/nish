@@ -323,7 +323,9 @@ const malformed = (t: Suite): void => {
   const top: u8[] = [];
   pushI16(top, 1);
   pushI32(top, -2147483647 - 1);
-  t.eqStr("a column length with its top bit set", feed(inGroup(), msg("D", cat(top, z("abc")))), frame);
+  // Past the row whether the length is read signed or unsigned; "a row with a
+  // NULL" below pins the signed read, as -1 read unsigned is a frame error.
+  t.eqStr("a column length of -2^31, past the row either way", feed(inGroup(), msg("D", cat(top, z("abc")))), frame);
   const high: u8[] = [];
   pushI16(high, 1);
   pushI32(high, 16777216 + 3);

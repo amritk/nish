@@ -43,7 +43,7 @@ PASS  ParameterDescription short of its count
 PASS  a column longer than its row
 PASS  a row with bytes after its columns
 PASS  a column length of -2
-PASS  a column length with its top bit set
+PASS  a column length of -2^31, past the row either way
 PASS  a column length whose high byte is set
 PASS  a message length with its top bit set
 PASS  a RowDescription field cut short

@@ -338,8 +338,8 @@ Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see 
 | `bench/sqlite/schema.sql` | the twelve-dollar server challenge's `schema.sql`, unchanged | MIT | `bench/sqlite/LICENSE.md` |
 | `bench/sqlite/twin.c` | the seed: a port of the challenge's `seed/generate.mjs` (mulberry32 and seed 42, the table sizes, the author skew, the `ADJECTIVES` and `NOUNS` lists, part of the word list), and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
 | `bench/sqlite/main.ts` | the challenge's table sizes, `USERS` and `POSTS`, and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
-| `bench/postgres/main.ts` | the multicore server challenge's `SPEC.md` user by id, article list (`ARTICLE_LIST_SELECT ORDER_PAGE`) and follow insert | MIT | `bench/postgres/LICENSE.md` |
-| `bench/postgres/twin.c` | the same three `SPEC.md` queries | MIT | `bench/postgres/LICENSE.md` |
+| `bench/postgres/main.ts` | the multicore server challenge's `SPEC.md` user by id, article list (`ARTICLE_LIST_SELECT ORDER_PAGE`) and follow insert, and its --dev seed's size, `USERS` | MIT | `bench/postgres/LICENSE.md` |
+| `bench/postgres/twin.c` | the same three `SPEC.md` queries and `USERS` | MIT | `bench/postgres/LICENSE.md` |
 | `tests/postgres/live/schema.sql` | the multicore server challenge's `schema.sql`, unchanged | MIT | `tests/postgres/live/LICENSE.md` |
 | `tests/postgres/live/live.ts` | the `SPEC.md` article list, `ARTICLE_LIST_SELECT ORDER_PAGE` | MIT | `tests/postgres/live/LICENSE.md` |
 | `bench/spectral.ts` | Benchmarks Game spectral-norm, Node.js #1 (Ian Osgood, modified by Isaac Gouy) | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |

@@ -1349,8 +1349,10 @@ free port on 127.0.0.1, stops it on exit, and refuses one `setup.sh` did not
 finish. Both sides connect over TCP as the seed's role with SCRAM, on one
 connection, and prepare the same statements with `int8` parameters.
 
-**The workloads.** Each query is its own group, Bind, Execute and Sync, on a
-statement prepared once. Every column of every row is read as text and folded
+**The workloads.** Each query is its own group ending in Sync, on a statement
+prepared once, but the two sides do not send the same group (below). Every
+run checks that it read its workload's rows per query times its count, so a
+short seed cannot time empty answers. Every column of every row is read as text and folded
 into a checksum in place, from the receive buffer on the Nish side and from
 `PQgetvalue` on the C side, so no string is made on either.
 
@@ -1359,6 +1361,22 @@ into a checksum in place, from the receive buffer on the Nish side and from
 | `pk` | 50,000 | 16 | A user by primary key: one row of five columns. |
 | `list` | 3,000 | 16 | The article list, 20 a page: 20 rows of 13 columns. The two timestamps are decoded to ISO 8601 and the tag array is walked to its elements. |
 | `insert` | 5,000 | 1 | An `INSERT … ON CONFLICT DO NOTHING` of a follow; each waits for the one before to finish. The rows its tag counts are folded. |
+
+The messages of one query, on each side:
+
+| Side | Sends | Receives |
+| --- | --- | --- |
+| Nish | Bind, Execute, Sync | BindComplete, DataRow × rows, CommandComplete, ReadyForQuery |
+| libpq | Bind, **Describe Portal**, Execute, Sync | BindComplete, **RowDescription** (NoData for `insert`), DataRow × rows, CommandComplete, ReadyForQuery |
+
+`PQsendQueryPrepared` always describes the portal, so every libpq query also
+receives a RowDescription, which libpq parses into a new `PGresult`: the
+column names copied, and each column's attributes. The module described the
+statement once, at the prepare, and sends none. Measured with `strace` over
+the bytes each side moves, libpq sends 9 more bytes a query (the 7 of the
+Describe, and 2 in a Bind that names one result format where the module's
+names none) and receives 125 more for `pk`, 358 more for `list` and 5 more,
+the NoData, for `insert`.
 
 The calls one query makes, on each side:
 
@@ -1369,13 +1387,13 @@ The calls one query makes, on each side:
   column the fold calls `colLength` and `colStart`; `list` also calls `bool`
   twice, `text.timestamp` twice and `PgArrayWalker.begin` and `next` per tag.
   A refill is written with one `netWrite`, and each wakeup reads with one
-  `netRead`.
+  `netRead` into the module's input buffer (8 KiB, its default).
 - **C:** `PQsendQueryPrepared` and `PQsendPipelineSync`; then `PQisBusy` and
   `PQgetResult` three times (the result, the null that ends the query, then
   the sync), with `PQresultStatus` and `PQclear` on the two results, and
   `PQgetisnull`, `PQgetlength` and `PQgetvalue` per column. A refill is
   sent with one `PQflush`, and each wakeup reads with one `PQconsumeInput`
-  after `poll`.
+  after `poll`, into libpq's input buffer (16 KiB to start).
 
 **Two deviations from the plain libpq loop.**
 
@@ -1383,13 +1401,18 @@ The calls one query makes, on each side:
   connection on every call, so a refill of 16 queries would be 16 `send`s
   where the Nish side makes one `netWrite`. The twin queues the sync with
   `PQsendPipelineSync` (libpq 17) and flushes once per refill, so both sides
-  make the same system calls.
+  send once per refill. What each side's system calls then are is measured
+  below, not assumed.
 - **Nagle is off on both sockets.** libpq sets `TCP_NODELAY` on every TCP
   connection, and `nish:net`'s `tcpConnect` does not. `main.ts` sets it with
   `setsockopt` after the connect, so the kernel does the same work for both.
-  With Nagle on, the Nish side's CPU per `pk` query measured about 40 % under
-  the twin's (below): a difference in the socket, not in the module.
-  `tcpConnect`'s default is outside this benchmark.
+  With Nagle on, the Nish side's CPU per `pk` query measured 41.6 % under the
+  twin's (below): a difference in the socket, not in the module.
+  `tcpConnect`'s default is outside this benchmark; it is
+  [#942](https://github.com/amritk/nish/issues/942).
+- **Plain TCP on both.** The twin sets `sslmode=disable` and
+  `gssencmode=disable`, so neither `PGSSLMODE`, `PGGSSENCMODE` nor the
+  cluster's own settings can put it on another transport than the module's.
 
 **The builds.**
 
@@ -1413,18 +1436,21 @@ The calls one query makes, on each side:
   fall in it), then times its own loop. Every run of a workload must print the
   same row count and checksum.
 - The report is the client's CPU time per query, user and system, from
-  `getrusage` of the client process only, and queries per second: min, median
-  and interquartile range over the rounds. The server's time is in qps, not in
-  the CPU figure.
-- Nish − C is the build less the twin. The noise band is the build against its
-  byte-identical copy.
+  `getrusage` of the client process only, with the system part's median
+  beside it, and queries per second: min, median and interquartile range over
+  the rounds. The server's time is in qps, not in the CPU figure.
+- Nish − C is the build less the twin, given beside the copy less the twin:
+  the two Nish binaries are the same bytes, so the module's difference is the
+  range between them. The noise band is the build against its copy.
 - **The verdict statistic is the median, for every workload.** A median
   difference is claimed only when it is larger than the median's noise band
   and than the IQR of both the build and the twin; anything smaller is one
   this machine cannot see. A result where Nish is faster is unexplained until a
   measurement says why. The min is reported but is not judged.
 
-**The figures.** Twelve rounds on a four-core Intel Xeon virtual machine, with
+**The figures.** Twelve rounds on a four-core virtual machine whose CPU
+reports itself as an Intel Xeon of family 6, model 173 (Granite Rapids), at
+2.7 GHz, with
 Ubuntu clang 18.1.3 and PostgreSQL and libpq 18.6, the server on the same
 machine. CPU is µs per query of the client; qps is the median.
 
@@ -1484,7 +1510,7 @@ tried: the module reads results as text only, and a binary format would change
 its API.
 
 **Nagle.** Before `main.ts` turned Nagle off, its `pk` CPU was 4.97 µs median
-against the twin's 8.50 µs (−41.6 %). Nearly all of that difference was the
+against the twin's 8.50 µs (−41.6 %, from the run's own medians). Nearly all of that difference was the
 kernel's work on fewer, larger segments, not the module.
 
 ## YAML against @amritk/yaml

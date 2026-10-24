@@ -379,7 +379,7 @@ class Bench {
         crypto.getRandomValues(nonce)
         pool.connect(0, nonce)
         this.fd = tcpConnect(this.address)
-        // libpq turns Nagle off on every TCP connection, and tcpConnect leaves it on;
+        // libpq turns Nagle off on every TCP connection, and tcpConnect leaves it on (#942);
         // the twin's socket and this one must match, or the kernel's work differs.
         const one: u8[] = [toU8(1), toU8(0), toU8(0), toU8(0)]
         if (this.fd >= 0 && setsockopt(this.fd, IPPROTO_TCP, TCP_NODELAY, one, toU64(4)) < 0) {
