@@ -21748,9 +21748,9 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
