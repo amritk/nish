@@ -442,10 +442,15 @@ export class Terminal {
     setRawMode(false)
   }
 
-  /** Read and drop input until every frame sent is answered, stdin ends or the round trip's bound passes. */
+  /**
+   * Read and drop input until every frame sent is answered, stdin ends or the
+   * round trip's bound passes. Before any answer the probe's round trip is
+   * the one known.
+   */
   drainAcks(): void {
     let owed: i32 = this.rate.unacked() + this.rate.stale
-    const rtt: f64 = this.rate.rttMs > this.lastRttMs ? this.rate.rttMs : this.lastRttMs
+    let rtt: f64 = this.rate.rttMs > this.lastRttMs ? this.rate.rttMs : this.lastRttMs
+    rtt = rtt > this.caps.probeRttMs ? rtt : this.caps.probeRttMs
     let bound: f64 = 2.0 * rtt
     bound = bound > TERM_IO_DRAIN_MIN_MS ? bound : TERM_IO_DRAIN_MIN_MS
     bound = bound < TERM_IO_DRAIN_MAX_MS ? bound : TERM_IO_DRAIN_MAX_MS
@@ -565,16 +570,24 @@ export class Terminal {
     if (termIoParam(e, 0) === 6) {
       h = termIoParam(e, 1)
       w = termIoParam(e, 2)
-    } else if (termIoParam(e, 0) === 4 && this.screen.width > 0 && this.screen.height > 0) {
-      h = (termIoParam(e, 1) / this.screen.height) | 0
-      w = (termIoParam(e, 2) / this.screen.width) | 0
+    } else if (termIoParam(e, 0) === 4 && this.sizeCols > 0 && this.sizeRows > 0) {
+      h = (termIoParam(e, 1) / this.sizeRows) | 0
+      w = (termIoParam(e, 2) / this.sizeCols) | 0
     }
     if (termIoCellPx(w) > 0 && termIoCellPx(h) > 0) {
       this.cellWidthPx = termIoCellPx(w)
       this.cellHeightPx = termIoCellPx(h)
       this.caps.cellWidthPx = this.cellWidthPx
       this.caps.cellHeightPx = this.cellHeightPx
+      this.decoder.cellWidthPx = this.cellWidthPx
+      this.decoder.cellHeightPx = this.cellHeightPx
       this.rectCols = -1
+      // Pixel mouse waited on the cell size; the mouse is on, so add it.
+      if (this.mouseMode > 0 && this.caps.pixelMouse && !this.pixelMouseOn) {
+        this.pixelMouseOn = true
+        this.decoder.pixelMouse = true
+        this.turnOn("\x1b[?1016h")
+      }
     }
   }
 

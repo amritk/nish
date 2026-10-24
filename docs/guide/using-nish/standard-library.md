@@ -1133,7 +1133,7 @@ export const main = (): i32 => {
   const keys = new KeyDecoder(toF64(30));
   // `a`, then a DA1 answer: ESC [ ? 6 2 c
   const bytes: u8[] = [toU8(97), toU8(27), toU8(91), toU8(63), toU8(54), toU8(50), toU8(99)];
-  const events = keys.feedEvents(bytes, bytes.length, toF64(0));
+  const events = keys.feedEvents(bytes, toI32(bytes.length), toF64(0));
   const key = events[0];
   const reply = events[1];
   console.log(`${key.type === EVENT_KEY} ${key.code} ${reply.type === EVENT_REPLY} ${reply.params[0]}`); // true 97 true 62

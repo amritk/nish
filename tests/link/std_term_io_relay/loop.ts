@@ -3,11 +3,11 @@
 // link it models. It has no `main.ts`, so the link fixtures pass it by; the
 // `term-io` section of tests/run.js builds it. The mode is the first argument:
 //   throttle   `runTerminal` over a 480×270 framebuffer until `q`; prints the
-//              tier of the first and the last frame, the most frames the
-//              controller left unacknowledged, the monotonic time `update`
-//              first saw `k`, the replies `update` was handed (none should
-//              be), the cell width the terminal learned, and the last frame's
-//              measured bandwidth and cost
+//              tier of the first and the last frame, the monotonic time
+//              `update` first saw `k`, the replies `update` was handed (none
+//              should be), the cell width the terminal learned, the highest
+//              bandwidth the controller measured and the highest frame cost
+//              it was handed
 //   panic      `runTerminal` that writes `<panic>` and fails a bounds check
 //              in its tenth `render`, so the bytes after the mark are the
 //              runtime's restore string
@@ -28,12 +28,11 @@ class Run {
   frames: i32 = 0;
   firstTier: i32 = 0;
   lastTier: i32 = 0;
-  maxUnacked: i32 = 0;
   keyNs: i64 = 0;
   replies: i32 = 0;
   cellWidthPx: i32 = 0;
-  bytesPerSec: f64 = 0.0;
-  frameCostMs: f64 = 0.0;
+  peakBytesPerSec: f64 = 0.0;
+  peakCostMs: f64 = 0.0;
 }
 
 /** Whether `events` holds a press of the character `code`. */
@@ -70,10 +69,11 @@ const render = (run: Run, frame: Frame): void => {
   }
   run.lastTier = frame.stats.tier;
   run.cellWidthPx = frame.caps.cellWidthPx;
-  run.bytesPerSec = frame.stats.bytesPerSec;
-  run.frameCostMs = frame.stats.frameCostMs;
-  if (frame.stats.unacked > run.maxUnacked) {
-    run.maxUnacked = frame.stats.unacked;
+  if (frame.stats.bytesPerSec > run.peakBytesPerSec) {
+    run.peakBytesPerSec = frame.stats.bytesPerSec;
+  }
+  if (frame.stats.frameCostMs > run.peakCostMs) {
+    run.peakCostMs = frame.stats.frameCostMs;
   }
   // A band that moves every frame, so no frame is empty.
   const fb = frame.framebuffer;
@@ -117,11 +117,10 @@ const runLoop = (panics: boolean): number => {
     return 1;
   }
   console.log(`tier ${run.firstTier} ${run.lastTier}`);
-  console.log(`unacked ${run.maxUnacked}`);
   console.log(`key ${run.keyNs}`);
   console.log(`replies ${run.replies}`);
   console.log(`cell ${run.cellWidthPx}`);
-  console.log(`link ${Math.round(run.bytesPerSec)} B/s cost ${run.frameCostMs} ms`);
+  console.log(`peak ${Math.round(run.peakBytesPerSec)} B/s cost ${run.peakCostMs} ms`);
   return 0;
 };
 

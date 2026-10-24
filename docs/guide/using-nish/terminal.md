@@ -78,7 +78,9 @@ past the last step, to draw between two positions.
 The framebuffer is drawn as large as the screen allows with its shape kept,
 centred, and over the text cells it covers: text under the image is hidden.
 So the example's framebuffer is square, and its label goes at the left edge,
-in the columns a terminal wider than it is tall leaves free.
+in the columns the image leaves free. A cell is about twice as tall as it is
+wide, so those columns exist only when the screen has more than twice as many
+columns as rows: a 100×60 terminal has none, and the label is under the image.
 
 `input.events` holds `nish/term`'s `TermEvent`s: keys (with releases, on a
 terminal that has the kitty keyboard protocol), mouse reports when
@@ -110,6 +112,15 @@ decodes it, `present()` sends the screen and framebuffer, `stats()` says how
 the link is doing, and `close()` puts the terminal back (a second `close` does
 nothing).
 
+Under `runTerminal` every reply the terminal sends is taken before `update`
+sees the input, including the answers to a query your program writes itself,
+such as a cursor position report (`CSI 6 n`) or the background colour (OSC
+11): `update` never receives an `EVENT_REPLY`. `readEvents` takes them the
+same way, so under `openTerminal` too the answer is not yours to read. A
+program that needs one asks before it opens the terminal or after it closes
+it, in [raw mode](#raw-mode), and decodes the answer with `nish/term`'s
+`KeyDecoder`.
+
 ## Opening and closing
 
 Opening the terminal turns raw mode on, switches to the alternate screen,
@@ -140,7 +151,8 @@ first. What it finds:
 
 `frame.caps` holds what was found, and `frame.stats.backend` the pixel
 backend in force: `GRAPHICS_ASCII` (0), `GRAPHICS_HALFBLOCK` (1),
-`GRAPHICS_SIXEL` (2) or `GRAPHICS_KITTY` (3), the same numbers as
+`GRAPHICS_SIXEL` (2) or `GRAPHICS_KITTY` (3), imported from
+`nish/term-pixels`, the same numbers as
 `nish/term-rate`'s `BACKEND_CAP_*`. The Linux console (`TERM=linux`) gets no
 true colour and ASCII, whatever it answers.
 

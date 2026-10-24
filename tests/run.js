@@ -1972,25 +1972,41 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
         timeoutMs: 60000,
       })
       const tier = /tier (\d+) (\d+)/.exec(throttle.out)
-      const unacked = /unacked (\d+)/.exec(throttle.out)
       const keyNs = /key (\d+)/.exec(throttle.out)
-      const link = /link (\S+ B\/s cost \S+ ms)/.exec(throttle.out)
+      const peak = /peak (\d+) B\/s cost (\S+) ms/.exec(throttle.out)
       const latencyMs =
         keyNs === null || throttle.keySentNs.length === 0
           ? -1
           : Number(BigInt(keyNs[1]) - throttle.keySentNs[0]) / 1e6
-      // The limit is `RateOptions.maxUnacked`, 1 unless a program asks for 2.
+      const linkMs = (throttle.maxFrameBytes * 1000) / 300000
+      const measured = `peak ${peak?.[1]} B/s, peak cost ${peak?.[2]} ms, largest frame ${throttle.maxFrameBytes} bytes (${Math.round(linkMs)} ms on the link)`
+      // The limit is `RateOptions.maxUnacked`, 1 unless a program asks for 2;
+      // the relay counts it, as the program cannot see past its own gate.
       check(
         "term-io: over a 60 ms, 300 kB/s link the tier falls, no more frames go unacknowledged than the limit of one, and a key reaches update within 250 ms",
         throttle.status === 0 &&
           tier !== null &&
           Number(tier[2]) < Number(tier[1]) &&
-          unacked !== null &&
-          Number(unacked[1]) <= 1 &&
           throttle.maxUnacked <= 1 &&
           latencyMs >= 0 &&
           latencyMs < 250,
-        `${said(throttle)}\ntier ${tier?.slice(1)}, unacked ${unacked?.[1]} (relay saw ${throttle.maxUnacked}), key latency ${latencyMs} ms, ${link?.[1]}`
+        `${said(throttle)}\ntier ${tier?.slice(1)}, relay saw ${throttle.maxUnacked} unacknowledged, key latency ${latencyMs} ms, ${measured}`
+      )
+      // The peak is the first, half-megabyte frames' estimate: once the tier
+      // falls the frames are 1.5 kB, the round trip is most of each answer's
+      // wait, and term-rate's estimate drifts down towards bytes over the round
+      // trip. A send time taken after the write, which blocks while the link
+      // drains, leaves the transmission out and reads several times the rate.
+      check(
+        "term-io: over a 300 kB/s link the bandwidth measured on its large frames is within 0.5×–2× of the link's",
+        peak !== null && Number(peak[1]) >= 150000 && Number(peak[1]) <= 600000,
+        `${said(throttle)}\n${measured}`
+      )
+      // A write the link holds back for over a second is not the frame's cost.
+      check(
+        "term-io: a frame's cost excludes its write: under 25 ms while the link needs over 250 ms for the largest frame",
+        peak !== null && Number(peak[2]) < 25 && linkMs > 250,
+        `${said(throttle)}\n${measured}`
       )
 
       // Answers the program did not wait for: the probe's, after its timeout,

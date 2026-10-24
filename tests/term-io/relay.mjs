@@ -42,9 +42,11 @@ const rssKb = (pid) => {
  *   dir          scratch directory for the shell script and its files
  *   env          extra environment for the program
  *   reply        what to answer DA1 with (KITTY_REPLY), or null for silence
- *   link         `{ rttMs, bytesPerSec }`: an answer leaves once the frame's
- *                bytes have crossed the link after the one before it, plus
- *                the round trip; null answers at once
+ *   link         `{ rttMs, bytesPerSec }`: the output is read no faster than
+ *                the rate, so the program's write blocks as on a slow link,
+ *                and an answer leaves once the frame's bytes have crossed it,
+ *                plus the round trip, the probe's after the round trip; null
+ *                reads at once and answers at once
  *   keys         `[{ afterFrames, bytes }]`, sent once that many frames are seen
  *   rssAt        frame counts to sample the program's memory at, before keys
  *   stdoutPipe   pipe the program's stdout through cat inside the terminal
@@ -52,7 +54,7 @@ const rssKb = (pid) => {
  *   lingerMs     how long the terminal stays open after the program exits,
  *                in cooked mode, so an answer that comes late is echoed (0)
  *   timeoutMs    when to kill the run (20 s)
- * Answers `{ out, err, status, frames, maxUnacked, keySentNs, rss, sameStty, timedOut }`:
+ * Answers `{ out, err, status, frames, maxUnacked, maxFrameBytes, keySentNs, rss, sameStty, timedOut }`:
  * `out` the last megabyte or more of the program's stdout with `\r` removed, `err` its stderr, `status`
  * its exit status, `keySentNs` the monotonic time each key was written,
  * `rss` `[{ frames, kb }]`, `sameStty` whether `stty -g` read the same after.
@@ -89,6 +91,7 @@ export const relay = (exe, mode, options) => {
   let acks = 0
   let maxUnacked = 0
   let frameBytes = 0
+  let maxFrameBytes = 0
   let linkFree = 0
   let pid = 0
   const keySentNs = []
@@ -109,6 +112,7 @@ export const relay = (exe, mode, options) => {
   }
   const onFrame = (bytes) => {
     frames++
+    maxFrameBytes = Math.max(maxFrameBytes, bytes)
     maxUnacked = Math.max(maxUnacked, frames - acks)
     while (rssAt.length > 0 && frames >= rssAt[0]) {
       rss.push({ frames: rssAt.shift(), kb: rssKb(programPid()) })
@@ -125,11 +129,17 @@ export const relay = (exe, mode, options) => {
       ack()
       return
     }
-    const now = performance.now() - start
-    linkFree = Math.max(linkFree, now) + (bytes * 1000) / o.link.bytesPerSec
-    setTimeout(ack, linkFree + o.link.rttMs - now)
+    // The chunk holding the query has crossed the link once `linkFree` passes.
+    setTimeout(ack, linkFree + o.link.rttMs - (performance.now() - start))
   }
   child.stdout.on("data", (chunk) => {
+    if (o.link !== null) {
+      // The link takes the chunk at its rate; until it has, nothing more is read.
+      const now = performance.now() - start
+      linkFree = Math.max(linkFree, now) + (chunk.length * 1000) / o.link.bytesPerSec
+      child.stdout.pause()
+      setTimeout(() => child.stdout.resume(), linkFree - now)
+    }
     // Only the end of the output is kept: a sixel run writes hundreds of megabytes.
     chunks.push(chunk)
     kept += chunk.length
@@ -141,7 +151,10 @@ export const relay = (exe, mode, options) => {
       const at = text.indexOf(DA1)
       if (at >= 0) {
         replied = true
-        send(o.reply)
+        // Over a modelled link the probe's answer pays the round trip too, as the frames' do.
+        const reply = o.reply
+        if (o.link === null) send(reply)
+        else setTimeout(() => send(reply), o.link.rttMs)
       }
     }
     for (let at = text.indexOf(DSR5, from); at >= 0; at = text.indexOf(DSR5, from)) {
@@ -183,6 +196,7 @@ export const relay = (exe, mode, options) => {
         status: read("status").trim() === "" ? -1 : Number(read("status").trim()),
         frames,
         maxUnacked,
+        maxFrameBytes,
         keySentNs,
         rss,
         sameStty: read("before") !== "" && read("before") === read("after"),

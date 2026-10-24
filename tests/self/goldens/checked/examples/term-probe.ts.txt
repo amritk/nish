@@ -1813,9 +1813,9 @@ function Terminal.drainAcks(this: Terminal): void -> @nish.Terminal.drainAcks [e
   calls: llvm.ceil.f64 llvm.fptosi.sat.i32.f64 nish.KeyDecoder.feedEvents nish.KeyDecoder.waiting nish.RateController.unacked nish.termIoIsAck nish.termIoNowMs nish.termIoOnlyAcks nish_panic_overflow nish_panic_slice nish_read_stdin nish_wait_stdin
   pointer this: size=208 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local -12:9 owed: i32 (let)
-  callee -12:21 RateController.unacked -> @nish.RateController.unacked
-  local -11:11 rtt: f64 (const)
+  local -13:9 owed: i32 (let)
+  callee -13:21 RateController.unacked -> @nish.RateController.unacked
+  local -12:9 rtt: f64 (let)
   local -10:9 bound: f64 (let)
   local -7:11 deadline: f64 (const)
   callee -7:27 termIoNowMs -> @nish.termIoNowMs
@@ -1881,10 +1881,10 @@ function Terminal.acked(this: Terminal, count: i32, nowMs: f64): void -> @nish.T
   callee -1:9 KeyState.delivered -> @nish.KeyState.delivered
   callee +4:7 RateController.ackReceived -> @nish.RateController.ackReceived
 function Terminal.lateReply(this: Terminal, e: TermEvent): void -> @nish.Terminal.lateReply [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.termIoCellPx nish.termIoParam nish_panic_div
-  pointer this: size=208 writesThrough=true captured=false
+  calls: nish.Terminal.turnOn nish.termIoCellPx nish.termIoParam nish_panic_div
+  pointer this: size=208 writesThrough=true captured=false passedTo=nish.Terminal.turnOn#0
   pointer e: size=80 writesThrough=false captured=false passedTo=nish.termIoParam#0 nish.termIoParam#0 nish.termIoParam#0 nish.termIoParam#0 nish.termIoParam#0 nish.termIoParam#0
   stackSites=0 stackLocals=0
   local -10:9 w: i32 (let)
@@ -1899,6 +1899,7 @@ function Terminal.lateReply(this: Terminal, e: TermEvent): void -> @nish.Termina
   callee -1:32 termIoCellPx -> @nish.termIoCellPx
   callee +0:26 termIoCellPx -> @nish.termIoCellPx
   callee +1:27 termIoCellPx -> @nish.termIoCellPx
+  callee +11:9 Terminal.turnOn -> @nish.Terminal.turnOn
 function Terminal.take(this: Terminal, events: TermEvent[], nowMs: f64, out: TermEvent[]): void -> @nish.Terminal.take [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
