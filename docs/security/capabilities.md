@@ -11,8 +11,8 @@ what it cannot reach, and the test that pins each property. It is written
 with the code rather than after an audit.
 
 Anchors are function names in the files below at the commit that adds the
-check, the squash merge of #905, and, for the lockfile, at the commit that
-adds it.
+check, the squash merge of #905, and, for the lockfile, at the squash merge
+of #923 (reviewed at its head `6fd3b6f`).
 
 **Result.** Every function a dependency's modules define counts toward that
 dependency, so a capability it reaches through the standard library, another
@@ -28,7 +28,9 @@ Nothing was found to fix or left open.
 Four limits are inherent to a compile-time check of the call graph and are
 recorded as accepted: install scripts (CAPS-5), the C behind a granted `ffi`
 (CAPS-6), function arguments blamed on the template that calls them (CAPS-7),
-and nothing confined at run time (CAPS-8).
+and nothing confined at run time (CAPS-8). Two more are the lockfile's and
+are accepted too: a row is never tightened (CAPS-12), and the check holds only
+while a readable lockfile does (CAPS-13).
 
 ## Scope
 
@@ -63,7 +65,8 @@ build succeeds.
 
 Rows CAPS-1 to CAPS-4 are the ways a dependency could try to hide a
 capability, each checked and found to hold; CAPS-5 to CAPS-8 are accepted;
-CAPS-9 to CAPS-11 are the lockfile's, each found to hold.
+CAPS-9 to CAPS-11 are the lockfile's, each found to hold, and CAPS-12 and
+CAPS-13 its accepted limits.
 None is counted as fixed or open in the index.
 
 | Id | Severity | Where | Description | Disposition |
@@ -79,6 +82,8 @@ None is counted as fixed or open in the index.
 | CAPS-9 | High if it failed | `checkCapabilityLock` | Every capability a dependency reaches beyond its row must be refused: gated or not, granted or not, and for a dependency with no row at all. | **Holds.** The comparison is of the same masks the policy reads, after it, and a dependency with no row is held to an empty one. Each refused capability is spanned at the first call of its witness chain, as NL2576 is. |
 | CAPS-10 | Medium if it failed | `readCapabilityLock` | A malformed lockfile must not be read as a wider one. | **Holds.** Text that is not JSON, a `version` other than 1, an unknown key, an unknown capability, and a key or capability written twice are NL3043, spanned in the lockfile, and stop the build. |
 | CAPS-11 | Medium if it failed | `checkCapabilityLock`, the driver | `--update-capability-lock` must not record a reach the policy refuses, and must not be skipped by the run cache. | **Holds.** The driver writes the file only after the check, so a refused build writes none; `nish run` checks before its cache lookup, so a cache hit is held to the lockfile. |
+| CAPS-12 | Low | `checkCapabilityLock` | A row is never tightened: a dependency that drops a capability in one release and regains it in a later one builds without a word, since the row still records it. | **Accepted.** Only growth is refused, by design, so that a lockfile written once does not fail every build a dependency shrinks in. Rerun `--update-capability-lock` after an upgrade that shrinks a dependency, and review the diff. |
+| CAPS-13 | Low | `checkCapabilityLock` | The check exists only while the lockfile does: an absent lockfile turns it off with no warning, and so does a path that cannot be read (a directory of that name), which `readFileSyncOrNull` reports as absent. A refusal is also reported only where a witness chain is found to span it; none was found to be missing, but there is no spanless fallback. | **Accepted.** Deleting the file has the same effect as making it unreadable, so the extra exposure is small; the lockfile is committed, so its removal shows in review. Telling an unreadable path from an absent one would fail closed, and is left for a later change. |
 
 ## Properties verified
 
@@ -151,6 +156,12 @@ order the sink prints them.
 `link/caps_lock_growth: rejected with "the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it"`
 (the root grants the `net` its row leaves out) and
 `link/caps_lock_no_row: rejected with "the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it"`.
+A capability the policy does not gate is held to the row as well:
+`link/caps_lock_ungated: rejected with "the dependency `pkg_mix` reaches `fs.read` through `config`, which `nish-capabilities.lock.json` does not record for it"`
+(its row records `net`), and the writer records it: "capability lock:
+--update-capability-lock records a capability the dependency policy does not
+gate", "capability lock: the build after recording an ungated capability
+passes".
 Only growth: `link/caps_lock_matches: exits with 0 and stdout matches expected.out`,
 `link/caps_lock_shrink: exits with 0 and stdout matches expected.out`,
 `link/caps_lock_stale: exits with 0 and stdout matches expected.out`,

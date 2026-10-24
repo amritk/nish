@@ -19707,6 +19707,23 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     rewritten.status === 0 && fs.readFileSync(path.join(updated, lockName), "utf8") === writtenLock,
     shown(rewritten)
   )
+  // A row is every capability the dependency reaches, not only the four the
+  // dependency policy gates: `fs.read` is written beside the granted `net`.
+  const ungatedLock = lockCopy("caps_lock_ungated")
+  const ungatedRun = lockBuild(ungatedLock, ["--update-capability-lock"])
+  const ungatedWritten = fs.existsSync(path.join(ungatedLock, lockName))
+    ? fs.readFileSync(path.join(ungatedLock, lockName), "utf8")
+    : ""
+  check(
+    "capability lock: --update-capability-lock records a capability the dependency policy does not gate",
+    ungatedRun.status === 0 && /"pkg_mix": \[[^\]]*"fs\.read"[^\]]*\]/.test(ungatedWritten) && ungatedWritten.includes('"net"'),
+    `${shown(ungatedRun)}\n--- written\n${ungatedWritten}`
+  )
+  check(
+    "capability lock: the build after recording an ungated capability passes",
+    lockBuild(ungatedLock, []).status === 0,
+    ungatedWritten
+  )
   // Every dependency has a row, `[]` for one that reaches nothing; std and the
   // root package have none.
   const pureLock = lockCopy("caps_lock_no_row_pure")
