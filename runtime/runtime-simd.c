@@ -1,5 +1,6 @@
 /* Nish runtime, the vector half: byte searches that read sixteen or thirty-two
- * bytes at a time (WP38 S1, docs/wp38-simd.md §3.1).
+ * bytes at a time (WP38 S1, docs/wp38-simd.md §3.1), and the SSE4.1 rounding
+ * behind `Math.floor`, `Math.ceil` and `Math.trunc` (#943, at the end).
  *
  * A translation unit of its own for the reason runtime-host.c is one: each file
  * carries its own measured `.text*` ceiling in tests/runtime-budgets.js, and
@@ -425,3 +426,48 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
                         int64_t from) {
   return __atomic_load_n(&nish_scan, __ATOMIC_RELAXED)(s, masks, depth, off, width, from);
 }
+
+/* `Math.floor`, `Math.ceil` and `Math.trunc`, and the floor `Math.round` takes
+   (#943), the contract in nish.h. SSE4.1's `roundsd` answers each in one
+   instruction, but the x86-64 baseline is SSE2, where LLVM lowers
+   `llvm.floor.f64` to a call of libm's `floor` through the GOT. So a module
+   for x86-64 calls these instead (`roundingCallee`, src/emit-builtins.ts) and
+   registers `nish_round_init` as a constructor, which asks the CPU once
+   before `main`; the flag is never written after it, so every call reads a
+   constant and LTO keeps it in a register across a loop. The flag starts at
+   0, which is libm's path, so a call that ran before the constructor would
+   still be exact. `NISH_SIMD=scalar` or `base` pins libm, as it pins the
+   baseline paths above: the instruction gate's counts and the forced
+   fallback a test runs. Built for a machine that has SSE4.1 already
+   (`--cpu x86-64-v2` and up), or for any other, each is the builtin, which
+   is the one instruction there, and the constructor does nothing. The
+   immediate is the rounding mode, 1 down, 2 up, 3 toward zero, plus 8, which
+   keeps the precision exception quiet as libm's `floor` does. */
+#if defined(NISH_SIMD_SSE2) && !defined(__SSE4_1__)
+#include <math.h>
+
+static _Bool nish_round_hw;
+
+void nish_round_init(void) {
+  const char *pin = getenv("NISH_SIMD");
+  if (pin != NULL && (strcmp(pin, "scalar") == 0 || strcmp(pin, "base") == 0)) return;
+  unsigned a, b, c, d;
+  nish_round_hw = __get_cpuid(1, &a, &b, &c, &d) && (c & bit_SSE4_1);
+}
+
+#define NISH_ROUNDING(name, libm, mode)                                                                      \
+  double name(double x) {                                                                                    \
+    if (!nish_round_hw) return libm(x);                                                                      \
+    __asm__("roundsd $" #mode ", %0, %0" : "+x"(x));                                                         \
+    return x;                                                                                                \
+  }
+#else
+void nish_round_init(void) {}
+
+#define NISH_ROUNDING(name, libm, mode)                                                                      \
+  double name(double x) { return __builtin_##libm(x); }
+#endif
+
+NISH_ROUNDING(nish_floor, floor, 9)
+NISH_ROUNDING(nish_ceil, ceil, 10)
+NISH_ROUNDING(nish_trunc, trunc, 11)

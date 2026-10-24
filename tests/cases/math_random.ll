@@ -1,20 +1,22 @@
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish_round_init, i8* null }]
 @.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c"true\00" }, align 8
 @.str.1 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 
 declare noundef i64 @nish_arena_mark() #0
 declare void @nish_arena_release(i64 noundef) #0
+declare double @nish_floor(double) #2
+declare void @nish_round_init() #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare noundef double @nish_random() #0
-declare extern_weak void @nish_panic_overflow(i32 noundef) #2
-declare double @llvm.floor.f64(double) #3
-declare i32 @llvm.fptosi.sat.i32.f64(double) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare i32 @llvm.fptosi.sat.i32.f64(double) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
 
 define internal noundef i32 @bad() #0 {
 entry:
   %0 = call double @nish_random()
-  %1 = call double @llvm.floor.f64(double %0)
+  %1 = call double @nish_floor(double %0)
   %2 = call i32 @llvm.fptosi.sat.i32.f64(double %1)
   ret i32 %2
 }
@@ -255,8 +257,8 @@ entry:
 
 attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #1 = { nounwind "probe-stack"="inline-asm" }
-attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
-attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}

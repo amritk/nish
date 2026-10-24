@@ -12,6 +12,9 @@
  *       <name>.argv  command-line arguments for that run, whitespace separated (WP7)
  *       <name>.env   environment for that run, `NAME=value` per line, layered over
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
+ *       <name>.rerun.env  a second run of the same program, under this environment
+ *                    in place of `.env`, held to the same `.out` (#943: the runtime
+ *                    path `NISH_SIMD=base` pins prints what the fast one does)
  *       <name>.portability  the `--warn-portability --json` portability objects, one
  *                    per line (WP33: the case is compiled a second time with the flag)
  *       <name>.caps.json  the `--emit-capabilities` report, byte for byte (WP35: the
@@ -1045,6 +1048,14 @@ const runCase = async (name) => {
       run.status === 0 && String(run.stdout).trim() === want,
       `--- expected\n${want}\n--- actual (exit ${run.status})\n${run.stdout}${run.stderr}`
     )
+    if (fs.existsSync(side("rerun.env"))) {
+      const again = await inNativeLane(() => runNative(name, exe, argv, { env: caseEnv(side("rerun.env")) }))
+      expect(
+        `${name}: native output under .rerun.env matches .out`,
+        again.death === null && again.status === 0 && String(again.stdout).trim() === want,
+        `${again.death ?? ""}\n--- expected\n${want}\n--- actual (exit ${again.status})\n${again.stdout}${again.stderr}`
+      )
+    }
   }
   return done
 }

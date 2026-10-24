@@ -20989,7 +20989,18 @@ attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
 
 `Math.sqrt` is `llvm.sqrt.f64`; `Math.round` is the floor/compare/select
 sequence that matches JavaScript's round-half-up, then `llvm.copysign.f64`
-so that `Math.round(-0.3)` is `-0`; `Math.min`/`max` answer NaN for a NaN
+so that `Math.round(-0.3)` is `-0`. The floor it takes, and `Math.floor`,
+`Math.ceil` and `Math.trunc`, are calls to the runtime's `@nish_floor`,
+`@nish_ceil` and `@nish_trunc` in a module for x86-64 (the default, with no
+triple, is one) other than a wasm build (#943): the baseline is SSE2, where
+`llvm.floor.f64` is a call of libm's `floor`, and the runtime answers with
+SSE4.1's `roundsd` on a CPU that has it. Which one is a flag
+`@nish_round_init` sets once, from `cpuid`, as a constructor at priority 101
+(`NISH_SIMD=scalar` or `base` pins libm), so the binary stays a baseline
+binary. Built with `--cpu x86-64-v2` and up, each is the one instruction. An
+aarch64 or wasm module keeps `llvm.floor.f64` and its kin. The calls are
+`readnone`, like the intrinsics, but LLVM no longer folds a constant
+argument through them; `Math.min`/`max` answer NaN for a NaN
 operand and order `-0` below `+0`, as JavaScript does, through the branches
 clang gives the same C: an unordered compare to a quiet NaN, an ordered
 compare and `select`, and on equal operands the one whose sign bit says `-0`.
@@ -21012,8 +21023,11 @@ const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1)
 ```
 
 ```llvm
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish_round_init, i8* null }]
+
+declare double @nish_floor(double) #0
+declare void @nish_round_init() #1
 declare double @llvm.sqrt.f64(double) #0
-declare double @llvm.floor.f64(double) #0
 declare double @llvm.copysign.f64(double, double) #0
 
 define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
@@ -21027,7 +21041,7 @@ entry:
 
 define internal noundef double @roundHalfUp(double noundef %x) #0 {
 entry:
-  %0 = call double @llvm.floor.f64(double %x)
+  %0 = call double @nish_floor(double %x)
   %1 = fsub double %x, %0
   %2 = fcmp oge double %1, 0x3FE0000000000000
   %3 = fadd double %0, 0x3FF0000000000000
@@ -21076,6 +21090,7 @@ min.end:
 }
 
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}
@@ -24118,6 +24133,10 @@ declare i64 @nish_bytes_skip_digits(i8* noundef readonly nocapture, i64 noundef,
 declare i64 @nish_bytes_skip_json_text(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_bytes_skip_json_plain(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #6
+declare double @nish_floor(double) #0
+declare double @nish_ceil(double) #0
+declare double @nish_trunc(double) #0
+declare void @nish_round_init() #2
 declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #4
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2

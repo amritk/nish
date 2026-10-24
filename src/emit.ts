@@ -339,6 +339,13 @@ export class Emitter {
   /** Typed JSON: the functions this module's calls of `jsonDecode` and `jsonEncode` asked for, and their symbols (`src/emit-json.ts`). */
   jsonParts: JsonPart[]
   jsonPartNames: StringSet
+  /**
+   * The functions `@llvm.global_ctors` runs before `main`, in the order the
+   * module first asked for them, and the index of that global in the module's
+   * globals, or `-1` before the first (`addConstructor`).
+   */
+  constructors: string[]
+  constructorsGlobal: i32
 
   constructor(
     unit: AnalysisUnit,
@@ -385,6 +392,8 @@ export class Emitter {
     this.libraries = []
     this.jsonParts = []
     this.jsonPartNames = new StringSet()
+    this.constructors = []
+    this.constructorsGlobal = -1
     for (const library of libraries) {
       this.libraries.push(library.program)
     }
@@ -1001,6 +1010,30 @@ export class Emitter {
 
   declareGlobal(text: string): void {
     this.module.addGlobal(text)
+  }
+
+  /**
+   * Run `fn` (an `@`-name of type `void ()`) before `main`, at priority 101,
+   * the first an ordinary constructor may take. A module has one
+   * `@llvm.global_ctors`, which `appending` linkage merges across the modules
+   * of a program, so a second constructor rewrites the global in place.
+   */
+  addConstructor(fn: string): void {
+    if (this.constructors.indexOf(fn) >= 0) {
+      return
+    }
+    this.constructors.push(fn)
+    const entries: string[] = []
+    for (const ctor of this.constructors) {
+      entries.push(`{ i32, void ()*, i8* } { i32 101, void ()* ${ctor}, i8* null }`)
+    }
+    const text = `@llvm.global_ctors = appending global [${this.constructors.length} x { i32, void ()*, i8* }] [${entries.join(", ")}]`
+    if (this.constructorsGlobal < 0) {
+      this.constructorsGlobal = this.module.globals.length
+      this.module.globals.push(text)
+    } else {
+      this.module.globals[this.constructorsGlobal] = text
+    }
   }
 
   /** Intern a module metadata node and return its `!N` reference; identical texts share a node. */

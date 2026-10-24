@@ -1,5 +1,6 @@
 // --number-mode f64: `number` is a double, so every Math.* function applies to it directly.
-// Every Math.* call lowers to an LLVM intrinsic (readnone), so `hypot` and `trig` stay pure.
+// Every Math.* call lowers to an LLVM intrinsic or, for floor/ceil/trunc on x86-64, a readnone
+// runtime call (#943), so `hypot` and `trig` stay pure.
 function hypot(a: number, b: number): number {
   return Math.sqrt(a * a + b * b);
 }

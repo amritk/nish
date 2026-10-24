@@ -45,7 +45,8 @@ import {
 import { N_IDENT, Node } from "./nodes"
 import { Options } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
-import { isWasmBuild } from "./visibility"
+import { resolveTarget } from "./target"
+import { buildsWasmModule, isWasmBuild } from "./visibility"
 import { rangedStoreOf } from "./emit-util"
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime"
 import { f64Hex } from "./strings"
@@ -186,6 +187,53 @@ const f64UnaryIntrinsic = (name: string): string => {
 }
 
 /**
+ * Whether `Math.floor`, `ceil`, `trunc` and `round` call the runtime's
+ * `nish_floor` and kin (#943), which run SSE4.1's `roundsd` on a CPU that has
+ * it: x86-64 IR, which is the target-neutral IR on an x86-64 host. On the
+ * SSE2 baseline LLVM lowers `llvm.floor.f64` to a call of libm's `floor`
+ * through the GOT; `runtime/runtime-simd.c` asks the CPU once, in the
+ * constructor this registers, and branches on its answer. A wasm module
+ * keeps the intrinsic, which is one `f64.floor`, and so does aarch64, which
+ * has `frintm`. The IR is the same whatever `--cpu` says: there the runtime's
+ * body is the instruction alone.
+ */
+export const dispatchesRounding = (opts: Options): boolean => {
+  if (buildsWasmModule(opts)) {
+    return false
+  }
+  if (opts.target.length === 0) {
+    return true
+  }
+  const target = resolveTarget(opts.target)
+  return target !== null && target.triple.startsWith("x86_64")
+}
+
+/** The callee behind `Math.<name>` for a rounding `name`, after `dispatchesRounding`; the intrinsic for the rest. */
+const roundingCallee = (opts: Options, intrinsic: string): string => {
+  if (!dispatchesRounding(opts)) {
+    return intrinsic
+  }
+  if (intrinsic === "llvm.floor.f64") {
+    return "nish_floor"
+  }
+  if (intrinsic === "llvm.ceil.f64") {
+    return "nish_ceil"
+  }
+  if (intrinsic === "llvm.trunc.f64") {
+    return "nish_trunc"
+  }
+  return intrinsic
+}
+
+/** Call `callee`, a rounding one `roundingCallee` chose, on `x`; a runtime one also registers its constructor. */
+const emitRounding = (emitter: Emitter, callee: string, x: string): string => {
+  if (callee.startsWith("nish_")) {
+    emitter.addConstructor(emitter.useRuntime("nish_round_init"))
+  }
+  return callIntrinsic(emitter, callee, "double", `double ${x}`)
+}
+
+/**
  * `Math.abs` on an unsigned value is the identity, so it lowers to no
  * instruction; the empty string says "there is no intrinsic to call".
  */
@@ -242,7 +290,7 @@ const emitMathPow = (emitter: Emitter, expr: Node): string => {
  */
 const emitMathRound = (emitter: Emitter, expr: Node): string => {
   const x = emitter.emitExpression(firstArgument(expr))
-  const floor = callIntrinsic(emitter, "llvm.floor.f64", "double", `double ${x}`)
+  const floor = emitRounding(emitter, roundingCallee(emitter.opts, "llvm.floor.f64"), x)
   const frac = emitter.fn.emitValue(`fsub double ${x}, ${floor}`)
   const up = emitter.fn.emitValue(`fcmp oge double ${frac}, ${f64Hex(0.5)}`)
   const next = emitter.fn.emitValue(`fadd double ${floor}, ${f64Hex(1.0)}`)
@@ -589,14 +637,9 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
     return emitter.fn.emitValue(`call double ${emitter.useRuntime("nish_random")}()`)
   }
   if (name.startsWith("Math.")) {
-    const intrinsic = f64UnaryIntrinsic(name.substring(5, name.length))
+    const intrinsic = roundingCallee(emitter.opts, f64UnaryIntrinsic(name.substring(5, name.length)))
     if (intrinsic.length > 0) {
-      return callIntrinsic(
-        emitter,
-        intrinsic,
-        "double",
-        `double ${emitter.emitExpression(firstArgument(expr))}`
-      )
+      return emitRounding(emitter, intrinsic, emitter.emitExpression(firstArgument(expr)))
     }
   }
   if (name === "process.exit") {
@@ -646,6 +689,7 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
 export const builtinCalleesNamed = (
   program: CheckedProgram,
   table: TypeTable,
+  opts: Options,
   call: Node,
   name: string
 ): string[] => {
@@ -677,7 +721,7 @@ export const builtinCalleesNamed = (
     return out
   }
   if (name === "Math.round") {
-    out.push("llvm.floor.f64")
+    out.push(roundingCallee(opts, "llvm.floor.f64"))
     out.push("llvm.copysign.f64")
     return out
   }
@@ -712,7 +756,7 @@ export const builtinCalleesNamed = (
     return out
   }
   if (name.startsWith("Math.")) {
-    const intrinsic = f64UnaryIntrinsic(name.substring(5, name.length))
+    const intrinsic = roundingCallee(opts, f64UnaryIntrinsic(name.substring(5, name.length)))
     if (intrinsic.length > 0) {
       out.push(intrinsic)
     }
