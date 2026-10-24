@@ -145,7 +145,7 @@ const FOREIGN_REFUSAL: string =
  * One module's walk: the tables the hooks read, and what the walk learns on
  * the way that the driver needs once it is over (the helpers to import, the
  * width types spelled, the refusals). A hook receives it as its first argument
- * and may call `useHelper`; everything else on it is the composer's.
+ * and may call `helperName`; everything else on it is the composer's.
  */
 export class Walk {
   program: CheckedProgram
@@ -174,7 +174,7 @@ export class Walk {
   helpers: StringSet
   /** Every width type the module spells, in first-use order. */
   widths: StringSet
-  /** Every identifier the module spells, which a helper must not be imported as. */
+  /** Every identifier the module spells but an ambient call's callee: the names a helper must not be imported as. */
   names: StringSet
   /**
    * The local names this module imports that name only a type: an interface
@@ -263,23 +263,23 @@ export class Walk {
 
   /**
    * Ask for a `nish/runtime` export by name, for a row hook whose rewrite calls
-   * it. The driver puts every name asked for on the module's import line, once.
-   */
-  useHelper(name: string): void {
-    this.helpers.add(name)
-  }
-
-  /**
-   * `useHelper`, answering the name to call the export by: its own, or
-   * `__nish_<name>` where the module spells that name too, so that a local
-   * `idx` neither shadows the helper nor clashes with its import.
+   * it, and answer the name to call it by: its own, or an alias
+   * (`__nish_<name>`, numbered past any the module spells too) where the
+   * module binds that name itself, so that a local `idx` or `slice` neither
+   * shadows the helper nor clashes with its import. The driver puts every name
+   * asked for on the module's import line, once.
    */
   helperName(name: string): string {
     if (!this.names.has(name)) {
       this.helpers.add(name)
       return name
     }
-    const alias = `__nish_${name}`
+    let alias = `__nish_${name}`
+    let n = 2
+    while (this.names.has(alias)) {
+      alias = `__nish${n}_${name}`
+      n = n + 1
+    }
     this.helpers.add(`${name} as ${alias}`)
     return alias
   }
@@ -372,22 +372,39 @@ export class Operands {
 const listedWord = (names: string, name: string): boolean => names.indexOf(` ${name} `) >= 0
 
 /**
+ * The ambient builtin `node` calls, or the empty string: a plain identifier
+ * call that the checker bound to no function of the program and to no `nish:`
+ * import, of a name `nish/runtime` exports.
+ */
+const ambientCallee = (walk: Walk, node: Node): string => {
+  if (node.kind !== N_CALL || node.children.length === 0 || node.children[0].kind !== N_IDENT) {
+    return ""
+  }
+  const program = walk.program
+  const name = node.children[0].text
+  if (program.nodeCallees[node.id] !== null || program.nodeBuiltins[node.id].length > 0) {
+    return ""
+  }
+  return listedWord(AMBIENT_NAMES, name) ? name : ""
+}
+
+/**
  * What one node tells the driver whatever it is rewritten to: an ambient
  * builtin call needs an import, a width type an `import type`, and two
- * builtins are refused. An ambient call is a plain identifier call that the
- * checker bound to no function of the program and to no `nish:` import.
+ * builtins are refused. Answers the name an ambient call's callee is written
+ * as where `helperName` aliased it, else the empty string.
  */
-const observe = (walk: Walk, node: Node): void => {
+const observe = (walk: Walk, node: Node): string => {
   if (node.kind === N_TYPE_REF && listedWord(WIDTH_TYPES, node.text)) {
     walk.widths.add(node.text)
-    return
+    return ""
   }
   if (node.kind !== N_CALL || node.children.length === 0 || node.children[0].kind !== N_IDENT) {
-    return
+    return ""
   }
   const program = walk.program
   if (program.nodeCallees[node.id] !== null) {
-    return
+    return ""
   }
   const imported = program.nodeBuiltins[node.id]
   const name = imported.length > 0 ? imported : node.children[0].text
@@ -395,11 +412,14 @@ const observe = (walk: Walk, node: Node): void => {
   // the import is refused here, by the same table the checker binds it by.
   if (name === "signalFd" || name === "readSignal" || isNetExport(name)) {
     walk.refuse(node, SIGNAL_REFUSAL)
-    return
+    return ""
   }
-  if (imported.length === 0 && listedWord(AMBIENT_NAMES, name)) {
-    walk.helpers.add(name)
+  const ambient = ambientCallee(walk, node)
+  if (ambient.length === 0) {
+    return ""
   }
+  const local = walk.helperName(ambient)
+  return local === ambient ? "" : local
 }
 
 /**
@@ -621,7 +641,7 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     changedAcrossInstances(walk, node, out, slot)
     return
   }
-  observe(walk, node)
+  const callee = observe(walk, node)
   const here = walk.hoistHere
   const effectsBefore = walk.effects
   const localsBefore = walk.localsRead
@@ -646,6 +666,11 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
       operands.any = true
     }
     i = i + 1
+  }
+  if (callee.length > 0) {
+    operands.texts[0] = callee
+    operands.changed[0] = true
+    operands.any = true
   }
   walk.hoistHere = here
   walk.hoistable = here && !effectsBefore && !inOptionalChain(node) && !(localsBefore && writes(node))
@@ -804,13 +829,22 @@ const lastOf = (text: string, needle: string): i32 => {
   return found
 }
 
-/** Add every identifier spelled under `node` to `walk.names`. */
+/**
+ * Add every identifier spelled under `node` to `walk.names`, but for the
+ * callee of an ambient call, which names the helper itself rather than a
+ * binding of the module.
+ */
 const collectNames = (walk: Walk, node: Node): void => {
   if (node.kind === N_IDENT || node.kind === N_IMPORT_SPEC) {
     walk.names.add(node.text)
   }
-  for (const child of node.children) {
-    collectNames(walk, child)
+  const ambient = ambientCallee(walk, node).length > 0
+  let i = 0
+  while (i < node.children.length) {
+    if (!(ambient && i === 0)) {
+      collectNames(walk, node.children[i])
+    }
+    i = i + 1
   }
 }
 
