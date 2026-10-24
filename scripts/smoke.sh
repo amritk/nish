@@ -13,7 +13,8 @@
 # A program is any examples/**/*.ts that declares `export const main`. It
 # is expected to exit 0 unless it carries a `// smoke: exit <n>` comment; a
 # `// smoke: argv <args>` comment passes those arguments on its command line
-# (process.argv). The script exits non-zero if any program fails to compile,
+# (process.argv). Every program reads /dev/null for stdin, so a run is the
+# same from a terminal as in CI. The script exits non-zero if any program fails to compile,
 # link, or run with the expected status. Binaries and IR go to build/smoke/.
 # Needs clang on PATH.
 set -uo pipefail
@@ -73,7 +74,7 @@ for src in "${programs[@]}"; do
   # `// smoke: argv <args>` is the program's command line (WP7 process.argv).
   argv=$(sed -n 's#^// smoke: argv \(.*\)#\1#p' "$src" | head -n 1)
   # shellcheck disable=SC2086
-  "$exe" $argv >"$out/$name.out" 2>"$out/$name.err"
+  "$exe" $argv </dev/null >"$out/$name.out" 2>"$out/$name.err"
   got=$?
   if [ "$got" -eq "$want" ]; then
     status="ok (exit $got)"

@@ -245,10 +245,13 @@ const discover = (dir) => {
 /** Spawn without blocking: `{ status, signal, stdout, stderr, timedOut }`, the output as Buffers. */
 const run = (cmd, args, opts = {}) =>
   new Promise((resolve) => {
+    // The bound is this timer's alone: handed to spawn too, Node's own SIGTERM
+    // races the SIGKILL below and a hang reads as `SIGTERM`, not `timeout`.
+    const { timeout, ...spawnOpts } = opts
     const child = spawn(cmd, args, {
       cwd: root,
       stdio: ["ignore", "pipe", "pipe"],
-      ...opts,
+      ...spawnOpts,
     })
     const out = []
     const err = []
@@ -258,7 +261,7 @@ const run = (cmd, args, opts = {}) =>
     const timer = setTimeout(() => {
       timedOut = true
       child.kill("SIGKILL")
-    }, opts.timeout ?? RUN_TIMEOUT_MS)
+    }, timeout ?? RUN_TIMEOUT_MS)
     const finish = (status, signal, extra = []) => {
       clearTimeout(timer)
       resolve({
