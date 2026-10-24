@@ -135,6 +135,7 @@ import { StringMap, StringSet } from "./map"
 import { StringBuilder } from "./strings"
 import { ParentTable } from "./parents"
 import { Local, STORAGE_PARAM, sourceLocal } from "./symbols"
+import { openedHandle } from "./handles"
 import { K_ARRAY, K_NULLABLE, K_RESULT, K_STRUCT, T_BOOL, T_I32, T_STRING, T_VOID, TypeTable } from "./types"
 
 /** The class `scope()` answers, as `nish/threads` declares it (WP29 P2). */
@@ -2670,6 +2671,7 @@ const walkScopes = (
   program: CheckedProgram,
   node: Node,
   parents: Node[],
+  table: TypeTable,
   scopeType: i32,
   arenas: Local[],
   out: ScopeFinding[]
@@ -2688,7 +2690,11 @@ const walkScopes = (
         if (local !== null) {
           arenas.push(local)
         }
-      } else if (!isScopeCall(program, init, scopeType) && !isLockCall(program, init)) {
+      } else if (
+        !isScopeCall(program, init, scopeType) &&
+        !isLockCall(program, init) &&
+        openedHandle(program, table, init) === null // WP40 H1.2: its block closes it
+      ) {
         out.push(new ScopeFinding(decl, usingNotScopeMessage()))
       }
     }
@@ -2727,7 +2733,7 @@ const walkScopes = (
   }
   parents.push(node)
   for (const child of node.children) {
-    walkScopes(program, child, parents, scopeType, arenas, out)
+    walkScopes(program, child, parents, table, scopeType, arenas, out)
   }
   parents.pop()
 }
@@ -2770,7 +2776,7 @@ export const scopeFindings = (
     }
     const parents: Node[] = []
     const arenas: Local[] = []
-    walkScopes(program, body, parents, scopeType, arenas, out)
+    walkScopes(program, body, parents, table, scopeType, arenas, out)
     if (loaded) {
       checkBody(program, table, facts, body, scopeType, out)
       walkMutexes(program, table, body, parents, out)

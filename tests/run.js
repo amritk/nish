@@ -66,6 +66,7 @@ import { ctAtLevel, ctTargetName, runtimeChecks } from "./ct-asm-runtime.js"
 import { panicOracle } from "./panics-oracle.js"
 import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
+import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
 import {
   packageRootOf,
@@ -2626,7 +2627,7 @@ for (const name of [
 for (const [name, count] of [
   ["reject_ffi_handle_arrow_using", 2],
   ["reject_ffi_handle_dispose_forms", 15],
-  ["reject_ffi_handle_walk_forms", 9],
+  ["reject_ffi_handle_walk_forms", 8],
   ["reject_ffi_handle_walk_ctor_param", 6],
   ["reject_ffi_handle_walk_function_type", 2],
 ]) {
@@ -8234,6 +8235,8 @@ if (!only || "c_symbol_private_libm".includes(only)) {
 runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
 
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })
+
+runFfiHandleChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir, wasiSysroot: WASI_SYSROOT })
 
 // #619: `parallelMapInto`'s element loop vectorises. `mapRange` tests `dst`'s
 // length in its loop condition as well as after the call to `f`, so once `f`

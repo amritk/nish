@@ -54,3 +54,5 @@ cases/ffi_buffer_count_proved # declare function write: counts the checker prove
 cases/ffi_buffer_late_load    # declare function write: the length read after every argument (WP40 B1.2)
 cases/ffi_buffer_memcpy       # declare function memcpy: two buffers, one count (WP40 B1.2)
 cases/ffi_buffer_write        # declare function write: libc, with no JS equivalent (WP40 B1.2)
+cases/caps_ffi_handle         # declare function fopen/fgetc/fclose: a handle a `using` closes (WP40 H1.2)
+cases/ffi_handle_arena        # declare function fopen/fgetc/fclose: a handle beside an arena (WP40 H1.2)

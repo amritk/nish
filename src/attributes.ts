@@ -39,6 +39,7 @@
 import { WIPE_MEMSET } from "./emit-secret"
 import { isPureRuntime, SECRET_WIPE, secretRoleOf } from "./secret"
 import { jsonRouteCallees, jsonRouteOf } from "./json-typed"
+import { openedHandle } from "./handles"
 import {
   builtinCalleesNamed,
   checksRangesInPrologue,
@@ -2854,6 +2855,28 @@ class FactCollector {
   }
 
   /**
+   * WP40 H1.2: a `new` of a handle class is a `using`'s initialiser, and every
+   * exit of its block calls the close the class's dispose names, which is C's:
+   * `ffi` is exercised there, named at the `using`, as a call written there
+   * would be (`addCallee`).
+   */
+  noteHandleClose(node: Node): void {
+    const info = openedHandle(this.unit.program, this.table, node)
+    if (info === null) {
+      return
+    }
+    const close = info.handleClose
+    if (close === null) {
+      return
+    }
+    this.facts.callees.add(close.name)
+    this.facts.wholeCallees.add(close.name)
+    if (this.known !== null) {
+      this.facts.offerCapability(CAP_FFI, close.sourceName, node, 0)
+    }
+  }
+
+  /**
    * A call whose callee has a signature. A `declare function`'s body is C, so
    * the call is where `ffi` is exercised and the chain ends there, named by the
    * declaration as written (WP35); any other callee is a user one.
@@ -3104,6 +3127,7 @@ class FactCollector {
         this.noteArguments(node, ctor)
         this.noteCall(node, ctor)
       }
+      this.noteHandleClose(node)
       return
     }
     if (node.kind === N_OBJECT && !this.facts.isStackSite(node)) {
