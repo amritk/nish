@@ -40,6 +40,73 @@
  * instead, for a terminal without true colour; deciding which a terminal has
  * (`COLORTERM` is the usual sign) is the caller's.
  *
+ * **Events.** `KeyDecoder.feed` and `poll` answer `KeyEvent`s, as they always
+ * have. `KeyDecoder.feedEvents(bytes, count, nowMs)` and `pollEvents(nowMs)`
+ * read the same bytes as one stream of `TermEvent`s, whose `type` is an
+ * `EVENT_` constant:
+ *
+ * - `EVENT_KEY`, a key with its `KEY_` kind and `code`, its `MOD_` bits
+ *   (`MOD_SHIFT`, `MOD_ALT`, `MOD_CTRL`, `MOD_SUPER`, `MOD_HYPER`, `MOD_META`)
+ *   and its `ACTION_` (`ACTION_PRESS`, `ACTION_REPEAT`, `ACTION_RELEASE`):
+ *   legacy keys, xterm's modified keys and modifyOtherKeys
+ *   (`ESC [ 27 ; m ; c ~`), and the kitty keyboard protocol's
+ *   `ESC [ code ; mods:event ; text u` (sw.kovidgoyal.net/kitty/keyboard-protocol);
+ * - `EVENT_MOUSE`, an SGR report `ESC [ < b ; x ; y M|m` (xterm ctlseqs, mode
+ *   1006, or 1016 in pixels with `pixelMouse` set) with its `MOUSE_` button,
+ *   `ACTION_PRESS`, `ACTION_RELEASE` or `ACTION_MOVE`, and cell `x`, `y`;
+ * - `EVENT_PASTE`, everything between `ESC [ 200 ~` and `ESC [ 201 ~` (xterm
+ *   ctlseqs, "Bracketed Paste Mode") as one `text`, never as keys;
+ * - `EVENT_FOCUS`, `ESC [ I` or `ESC [ O` (mode 1004), `gained` or not;
+ * - `EVENT_REPLY`, every answer a terminal sends to a query — DA, DSR, CPR,
+ *   DECRPM, the kitty flags, XTVERSION and DECRQSS (DCS), OSC, APC — with its
+ *   `introducer`, `prefix`, `params`, `intermediate`, final byte `reply` and
+ *   `text`. A reply never reaches the program as a key. `ESC [ row ; col R` is
+ *   both a cursor position report and F3 with modifiers, so a caller that asks
+ *   for one (`ESC [ 6 n`) adds 1 to `cprOutstanding`, and while it is above 0
+ *   the next `R` is the reply, taking 1 off. Nothing expires it: a caller
+ *   that gives up waiting for a report sets it back to 0;
+ * - `EVENT_RESIZE` and `EVENT_QUIT`, which the caller and `KeyState` make.
+ *
+ * An unfinished sequence is held for `escapeTimeoutMs` after the last byte arrived,
+ * then given up by `pollEvents` as `feed` would; a control string cut off by
+ * the timeout is dropped whole. A paste is never timed out. A CSI reply cut
+ * off by the timeout (a terminal that stalls inside `ESC [ ? 6 2 c`) cannot
+ * be told from keys, so its bytes come out as the keys they spell.
+ *
+ * **A `KeyState`** turns those events into which keys are down. `apply(events,
+ * nowMs)` answers the events to act on and `tick(nowMs)` the releases due
+ * meanwhile; `isDown(key, code)` asks. A terminal without the kitty protocol
+ * sends no releases, so while `releasesAreSynthetic` is set (until the first
+ * real release) a key counts as let go when its repeats stop: `firstRepeatMs`
+ * (700 ms) after a press that has not repeated and `releaseGapMs` (100 ms)
+ * after its last repeat. Silence is measured in stream time when the caller has
+ * one: term-io sends an in-order query after each frame and calls `delivered`
+ * with the send time of each one answered, since by then everything the
+ * terminal generated before it has arrived. Measured that way a stall, a burst
+ * or jittery reads delay the watermark as much as the keys, so a held key never
+ * flickers and a tap comes up 700 ms plus one round trip after its press. With
+ * no watermark yet, silence is wall-clock time between `apply`s, which a link
+ * that reads in bursts more than `releaseGapMs` apart can mistake for a key let
+ * go. While acks stop, nothing is released: there is no wall-clock backstop,
+ * and a caller that stops getting answers clears `watermarked` to fall back to
+ * the wall clock. term-io does so once `deliveredAgoMs(nowMs)` passes 1000 ms,
+ * a second of frames with no query answered, which no working link reaches.
+ * Within one read the caller `apply`s its events before calling `delivered` for
+ * the answer it carries: a `tick` between the two would judge keys against a
+ * watermark that already covers repeats not yet applied, and report a release
+ * and then a press. A non-finite time is ignored. Under X11 and Windows only
+ * the last key pressed auto-repeats, so holding W and then pressing D lets W go
+ * `releaseGapMs` after its last repeat. A real release of a key not down is
+ * dropped, so one arriving after its key was made up as released is not
+ * reported twice. Under kitty a real release that is lost leaves its key down
+ * until focus is lost, and for good without focus reporting. A key the batch
+ * `apply` takes names stays down. A made-up release carries the code and
+ * modifiers the key last came with. Losing focus lets every key go, and Ctrl-C
+ * becomes `EVENT_QUIT` while `quitOnCtrlC` is set. Under the kitty protocol a
+ * non-Latin layout sends Ctrl-C as its own letter (`ESC [ 1089 ; 5 u` for
+ * Russian С), which is not read as a quit: the base-layout key that flag 4
+ * (report alternate keys) adds is not read yet.
+ *
  * **The same bytes under Node.** Natively a string is UTF-8 bytes, and `flush`
  * builds its answer as bytes and makes one string of them. Under Node a string
  * is UTF-16 units and `write` encodes it as UTF-8, so there `flush` decodes the
@@ -47,6 +114,9 @@
  * way, which `tests/run.js` checks ("nish/term prints the same bytes under
  * runtime/nish.mjs"). `text` reads a string's code points as UTF-8 natively and
  * as UTF-16 under Node, so a string literal draws the same cells both ways.
+ * A `TermEvent`'s `text` is made from bytes the terminal sent: natively it
+ * holds them as they came, and under Node they are decoded as UTF-8 without
+ * checking, so malformed UTF-8 in a paste or reply can differ between the two.
  * Integer division is spelled `(a / b) | 0`, which truncates in both.
  */
 
@@ -100,6 +170,138 @@ export const KEY_CONTROL: i32 = 12
 
 /** An escape sequence this decoder does not name; the event's `code` is its final byte. */
 export const KEY_UNKNOWN: i32 = 13
+
+/** F1: `ESC O P`, `ESC [ 1 ; m P`, `ESC [ 11 ~` or the Linux console's `ESC [ [ A`. F1–F12 are consecutive, so Fn is `KEY_F1 + n - 1`. */
+export const KEY_F1: i32 = 14
+
+/** F2: `ESC O Q`, `ESC [ 1 ; m Q`, `ESC [ 12 ~` or `ESC [ [ B`. */
+export const KEY_F2: i32 = 15
+
+/** F3: `ESC O R`, `ESC [ 1 ; m R` (when no cursor report is awaited), `ESC [ 13 ~` or `ESC [ [ C`. */
+export const KEY_F3: i32 = 16
+
+/** F4: `ESC O S`, `ESC [ 1 ; m S`, `ESC [ 14 ~` or `ESC [ [ D`. */
+export const KEY_F4: i32 = 17
+
+/** F5: `ESC [ 15 ~` or `ESC [ [ E`. */
+export const KEY_F5: i32 = 18
+
+/** F6: `ESC [ 17 ~`. */
+export const KEY_F6: i32 = 19
+
+/** F7: `ESC [ 18 ~`. */
+export const KEY_F7: i32 = 20
+
+/** F8: `ESC [ 19 ~`. */
+export const KEY_F8: i32 = 21
+
+/** F9: `ESC [ 20 ~`. */
+export const KEY_F9: i32 = 22
+
+/** F10: `ESC [ 21 ~`. */
+export const KEY_F10: i32 = 23
+
+/** F11: `ESC [ 23 ~`. */
+export const KEY_F11: i32 = 24
+
+/** F12: `ESC [ 24 ~`. */
+export const KEY_F12: i32 = 25
+
+/** Home: `ESC [ H`, `ESC O H`, `ESC [ 1 ~` or `ESC [ 7 ~`. */
+export const KEY_HOME: i32 = 26
+
+/** End: `ESC [ F`, `ESC O F`, `ESC [ 4 ~` or `ESC [ 8 ~`. */
+export const KEY_END: i32 = 27
+
+/** Page Up: `ESC [ 5 ~`. */
+export const KEY_PAGE_UP: i32 = 28
+
+/** Page Down: `ESC [ 6 ~`. */
+export const KEY_PAGE_DOWN: i32 = 29
+
+/** Insert: `ESC [ 2 ~`. */
+export const KEY_INSERT: i32 = 30
+
+/** Delete (the key, not DEL the byte): `ESC [ 3 ~`. */
+export const KEY_DELETE: i32 = 31
+
+/** A `TermEvent` that is a key: `key`, `code`, `modifiers` and `action`. */
+export const EVENT_KEY: i32 = 1
+
+/** A `TermEvent` that is the mouse: `button`, `action`, `modifiers`, the cell `x`, `y` and, under mode 1016, the pixel `px`, `py`. */
+export const EVENT_MOUSE: i32 = 2
+
+/** A `TermEvent` that is a bracketed paste: `text` is everything between `ESC [ 200 ~` and `ESC [ 201 ~`. */
+export const EVENT_PASTE: i32 = 3
+
+/** A `TermEvent` that is a focus change, `ESC [ I` or `ESC [ O`: `gained` says which. */
+export const EVENT_FOCUS: i32 = 4
+
+/** A `TermEvent` that is a new terminal size. The decoder never makes one: it is for the code that watches the size. */
+export const EVENT_RESIZE: i32 = 5
+
+/** A `TermEvent` that is the terminal answering a query: `introducer`, `prefix`, `params`, `intermediate`, `reply` and `text`. Never a key. */
+export const EVENT_REPLY: i32 = 6
+
+/** A `TermEvent` that asks the program to quit: what `KeyState` makes of Ctrl-C. */
+export const EVENT_QUIT: i32 = 7
+
+/** A key or button went down. */
+export const ACTION_PRESS: i32 = 1
+
+/** A held key repeated. */
+export const ACTION_REPEAT: i32 = 2
+
+/** A key or button came up. */
+export const ACTION_RELEASE: i32 = 3
+
+/** The mouse moved, with `button` held or `MOUSE_NONE`. */
+export const ACTION_MOVE: i32 = 4
+
+/** The Shift bit of `modifiers`. The bits are the kitty keyboard protocol's modifier value minus one, which the xterm `; m` forms share. */
+export const MOD_SHIFT: i32 = 1
+
+/** The Alt bit of `modifiers`; also set for an ESC followed by an ASCII key. */
+export const MOD_ALT: i32 = 2
+
+/** The Ctrl bit of `modifiers`. */
+export const MOD_CTRL: i32 = 4
+
+/** The Super bit of `modifiers` (the Windows or Command key). */
+export const MOD_SUPER: i32 = 8
+
+/** The Hyper bit of `modifiers` (kitty only). */
+export const MOD_HYPER: i32 = 16
+
+/** The Meta bit of `modifiers` (kitty only). */
+export const MOD_META: i32 = 32
+
+/** No button: a move with nothing held, or a release a terminal does not name. */
+export const MOUSE_NONE: i32 = 0
+
+/** The left button. */
+export const MOUSE_LEFT: i32 = 1
+
+/** The middle button. */
+export const MOUSE_MIDDLE: i32 = 2
+
+/** The right button. */
+export const MOUSE_RIGHT: i32 = 3
+
+/** The wheel turned up; `MOUSE_WHEEL_DOWN`, `_LEFT` and `_RIGHT` follow it. A wheel only ever presses. */
+export const MOUSE_WHEEL_UP: i32 = 4
+
+/** The wheel turned down. */
+export const MOUSE_WHEEL_DOWN: i32 = 5
+
+/** The wheel tilted left. */
+export const MOUSE_WHEEL_LEFT: i32 = 6
+
+/** The wheel tilted right. */
+export const MOUSE_WHEEL_RIGHT: i32 = 7
+
+/** Button 8 (back on most mice); 9, 10 and 11 follow it. */
+export const MOUSE_BUTTON_8: i32 = 8
 
 /** The escape byte that starts every control sequence. */
 const TERM_ESC: i32 = 27
@@ -962,6 +1164,70 @@ export class KeyEvent {
 }
 
 /**
+ * One thing a terminal sent: a key, the mouse, a paste, a focus change or an
+ * answer to a query, told apart by `type` (an `EVENT_` constant). Each type
+ * fills its own fields and leaves the rest at their defaults: 0, -1 for the
+ * pixel position, "" and no params.
+ */
+export class TermEvent {
+  /** One of the `EVENT_` constants. */
+  type: i32
+  /** A key's `KEY_` kind. */
+  key: i32
+  /** A key's code: the code point for `KEY_CHAR`, the byte for a control, the kitty key number or the final byte for `KEY_UNKNOWN`. */
+  code: i32
+  /** The `MOD_` bits held with a key or a mouse event. */
+  modifiers: i32
+  /** An `ACTION_` constant: whether a key or button went down, repeated, came up or (the mouse) moved. */
+  action: i32
+  /** The mouse's `MOUSE_` button. */
+  button: i32
+  /** The mouse's column, from 0; -1 under mode 1016 while the cell size is unknown. */
+  x: i32
+  /** The mouse's row, from 0; -1 under mode 1016 while the cell size is unknown. */
+  y: i32
+  /** The mouse's pixel column, from 0, under mode 1016; -1 otherwise. */
+  px: i32
+  /** The mouse's pixel row, from 0, under mode 1016; -1 otherwise. */
+  py: i32
+  /** A paste's text, a kitty key's associated text, or the payload of a reply after its header. */
+  text: string
+  /** A reply's final byte (`c`, `R`, `y`, …); for an APC, its first payload byte (`G` for kitty graphics); for an OSC, 0. */
+  reply: i32
+  /** What opened a reply: `[` for a CSI, `P` for a DCS, `_` for an APC, `]` for an OSC, `^` for a PM, `X` for an SOS. */
+  introducer: i32
+  /** A reply's private marker, `?`, `>`, `=` or `<`, or 0. */
+  prefix: i32
+  /** A reply's intermediate byte, such as the `$` of DECRPM, or 0. */
+  intermediate: i32
+  /** A reply's numeric parameters, an omitted one as 0; for an OSC, its number; for `KEY_UNKNOWN`, the sequence's. */
+  params: i32[]
+  /** For `EVENT_FOCUS`, whether the terminal gained focus. */
+  gained: boolean
+
+  /** An event of type `type` with every other field at its default. */
+  constructor(type: i32) {
+    this.type = type
+    this.key = 0
+    this.code = 0
+    this.modifiers = 0
+    this.action = 0
+    this.button = 0
+    this.x = 0
+    this.y = 0
+    this.px = -1
+    this.py = -1
+    this.text = ""
+    this.reply = 0
+    this.introducer = 0
+    this.prefix = 0
+    this.intermediate = 0
+    this.params = []
+    this.gained = false
+  }
+}
+
+/**
  * Bytes from a terminal in raw mode, turned into key events. A read can end
  * in the middle of an escape sequence or a UTF-8 character; the decoder keeps
  * the start and finishes it with the next `feed`. An ESC on its own is both the
@@ -972,20 +1238,48 @@ export class KeyEvent {
  * unfinished UTF-8 character as U+FFFD. The clock is the caller's: each call
  * takes the time now in milliseconds, from any origin, so long as it does not
  * go backwards.
+ *
+ * `feedEvents` and `pollEvents` decode the same bytes into `TermEvent`s
+ * instead: keys with their modifiers and press, repeat or release, the mouse,
+ * pastes, focus and the terminal's replies, none of which reaches the program
+ * as a key. A decoder is fed one way or the other, not both. The module
+ * header lists every sequence they read.
  */
 export class KeyDecoder {
   /** How long a held ESC waits for the rest of a sequence, in milliseconds. */
   escapeTimeoutMs: f64
   /** The bytes of an unfinished sequence, carried to the next call. */
   pending: u8[]
-  /** When the first held byte arrived. */
+  /** When the first held byte arrived (`feed`), or the last (`feedEvents`). */
   pendingSince: f64
+  /** The bytes of the paste so far. */
+  pasteBytes: u8[]
+  /**
+   * How many cursor position reports (`ESC [ 6 n`) are awaited. `ESC [ r ; c R`
+   * is both the report and F3 with modifiers; while this is above 0 it is the
+   * report, and takes one off. Whoever writes the request adds one.
+   */
+  cprOutstanding: i32
+  /** A cell's width in pixels, to turn a 1016 report into a column; 0 while unknown. */
+  cellWidthPx: i32
+  /** A cell's height in pixels, to turn a 1016 report into a row; 0 while unknown. */
+  cellHeightPx: i32
+  /** Whether SGR mouse reports are in pixels (mode 1016), so `px` and `py` are set and `x`, `y` derived. */
+  pixelMouse: boolean
+  /** Whether a bracketed paste has begun and not ended. */
+  pasting: boolean
 
   /** A decoder that gives up on an unfinished sequence after `escapeTimeoutMs` (25–50 is usual). */
   constructor(escapeTimeoutMs: f64) {
     this.escapeTimeoutMs = escapeTimeoutMs
     this.pending = []
     this.pendingSince = 0.0
+    this.cprOutstanding = 0
+    this.pixelMouse = false
+    this.cellWidthPx = 0
+    this.cellHeightPx = 0
+    this.pasting = false
+    this.pasteBytes = []
   }
 
   /** Whether bytes are held, so the caller should `poll` once the timeout has passed. */
@@ -1001,31 +1295,13 @@ export class KeyDecoder {
   feed(bytes: u8[], count: i32, nowMs: f64): KeyEvent[] {
     const events: KeyEvent[] = this.poll(nowMs)
     const held: i32 = toI32(this.pending.length)
-    const n: i32 = termClamp(count, 0, toI32(bytes.length))
-    if (held + n === 0) {
+    const work: u8[] = this.merged(bytes, count)
+    if (toI32(work.length) === 0) {
       return events
     }
-    const work: u8[] = new Array<u8>(held + n)
-    const pending: u8[] = this.pending
-    for (let k: i32 = 0; k < toI32(pending.length) && k < toI32(work.length); k++) {
-      work[k] = pending[k]
-    }
-    for (let k: i32 = 0; k < n && k < toI32(bytes.length); k++) {
-      work[held + k] = bytes[k]
-    }
     const used: i32 = termDecodeKeys(work, false, events)
-    const rest: u8[] = []
-    for (let k: i32 = used; k < held + n; k++) {
-      if (!(k >= 0 && k < toI32(work.length))) {
-        panic("nish/term: the key decoder used more bytes than it was given")
-      }
-      rest.push(work[k])
-    }
     // What is held now started in these bytes unless all of it was held before.
-    if (toI32(rest.length) > 0 && used >= held) {
-      this.pendingSince = nowMs
-    }
-    this.pending = rest
+    this.keep(work, used, used >= held, nowMs)
     return events
   }
 
@@ -1039,6 +1315,297 @@ export class KeyDecoder {
     termDecodeKeys(this.pending, true, events)
     this.pending = []
     return events
+  }
+
+  /**
+   * The events in `bytes[0, count)`, read at time `nowMs`, after whatever was
+   * held, as `feed` takes them. The timeout counts from the last byte that
+   * arrived, so a reply split across reads is not given up halfway.
+   */
+  feedEvents(bytes: u8[], count: i32, nowMs: f64): TermEvent[] {
+    const events: TermEvent[] = this.pollEvents(nowMs)
+    const held: i32 = toI32(this.pending.length)
+    const work: u8[] = this.merged(bytes, count)
+    if (toI32(work.length) === 0) {
+      return events
+    }
+    const used: i32 = termDecodeEvents(this, work, false, events)
+    this.keep(work, used, toI32(work.length) > held, nowMs)
+    return events
+  }
+
+  /**
+   * The events held bytes become once `escapeTimeoutMs` has passed: an ESC as
+   * `KEY_ESCAPE`, an unterminated DCS, APC or OSC as nothing. A paste waits
+   * for its end however long it takes.
+   */
+  pollEvents(nowMs: f64): TermEvent[] {
+    const events: TermEvent[] = []
+    const held: i32 = toI32(this.pending.length)
+    if (this.pasting || held === 0 || nowMs - this.pendingSince < this.escapeTimeoutMs) {
+      return events
+    }
+    termDecodeEvents(this, this.pending, true, events)
+    this.pending = []
+    return events
+  }
+
+  /** The held bytes followed by `bytes[0, count)`. */
+  merged(bytes: u8[], count: i32): u8[] {
+    const held: i32 = toI32(this.pending.length)
+    const n: i32 = termClamp(count, 0, toI32(bytes.length))
+    const work: u8[] = new Array<u8>(held + n)
+    const pending: u8[] = this.pending
+    for (let k: i32 = 0; k < toI32(pending.length) && k < toI32(work.length); k++) {
+      work[k] = pending[k]
+    }
+    for (let k: i32 = 0; k < n && k < toI32(bytes.length); k++) {
+      work[held + k] = bytes[k]
+    }
+    return work
+  }
+
+  /** Hold `work` from `used` on; when `restart` is set, the held bytes count as arriving at `nowMs`. */
+  keep(work: u8[], used: i32, restart: boolean, nowMs: f64): void {
+    const rest: u8[] = []
+    for (let k: i32 = used; k < toI32(work.length); k++) {
+      if (!(k >= 0)) {
+        panic("nish/term: the key decoder used more bytes than it was given")
+      }
+      rest.push(work[k])
+    }
+    if (toI32(rest.length) > 0 && restart) {
+      this.pendingSince = nowMs
+    }
+    this.pending = rest
+  }
+}
+
+/**
+ * Which keys are down, from the events a `KeyDecoder` made — what a game asks
+ * each frame. Under the kitty protocol with event types (flag 2) a terminal
+ * sends real releases. Without it a terminal sends nothing when a key comes
+ * up, only the press again as it auto-repeats, so a key is let go once its
+ * repeats stop: `releaseGapMs` after its last repeat, and `firstRepeatMs` after
+ * a press that has not repeated. The system waits before its first repeat —
+ * 660 ms under X11 by default, 500 under Windows, shorter under macOS — and
+ * repeats every 30–40 ms; a longer delay needs `firstRepeatMs` raised, and a
+ * slower rate `releaseGapMs`. Input arrives late and in bursts (over SSH, reads
+ * 150–250 ms apart are usual), so when the reads alone are known the silence
+ * is not: a caller that sends in-order queries calls `delivered(sentAtMs)` as
+ * each is answered, and silence is then measured against that watermark rather
+ * than the clock. A key last seen in a read at `A` is let go once the watermark
+ * reaches `A + gap`: had it still been down, the terminal would have generated
+ * a repeat before then, and it would have arrived ahead of the answer. Until
+ * the first `delivered`, and after the caller clears `watermarked`, the gap is
+ * measured against `nowMs`. Pure, with the caller's clock, as `KeyDecoder` is.
+ */
+export class KeyState {
+  /** How long after its last repeat a key is let go, in milliseconds (100 by default). */
+  releaseGapMs: f64
+  /** How long the system waits before a held key's first repeat, at most, in milliseconds (700 by default, above X11's 660). */
+  firstRepeatMs: f64
+  /** The latest send time of an answered query that `delivered` was given: everything the terminal generated before it has arrived. */
+  watermarkMs: f64
+  /** The keys down, each as `termKeyId` names it. */
+  downKeys: i32[]
+  /** When each key down last pressed or repeated. */
+  downSince: f64[]
+  /** Whether each key down has repeated. */
+  downRepeated: boolean[]
+  /** The code each key down last came with, which its synthesized release carries. */
+  downCodes: i32[]
+  /** The `MOD_` bits each key down last came with, which its synthesized release carries. */
+  downMods: i32[]
+  /** Whether releases are made up from silence; false from the first real release, or when the caller knows kitty flag 2 is on. */
+  releasesAreSynthetic: boolean
+  /** Whether silence is measured against `watermarkMs` rather than the clock; set by `delivered`, which the caller may clear when answers stop. */
+  watermarked: boolean
+  /** Whether Ctrl-C (byte 3, or kitty `ESC [ 99 ; 5 u`) becomes `EVENT_QUIT` (true by default). */
+  quitOnCtrlC: boolean
+
+  /** No key down, releases synthesized, Ctrl-C a quit. */
+  constructor() {
+    this.releasesAreSynthetic = true
+    this.releaseGapMs = 100.0
+    this.firstRepeatMs = 700.0
+    this.watermarkMs = 0.0
+    this.watermarked = false
+    this.quitOnCtrlC = true
+    this.downKeys = []
+    this.downSince = []
+    this.downRepeated = []
+    this.downCodes = []
+    this.downMods = []
+  }
+
+  /**
+   * Whether the key of kind `key` is down. `code` tells a `KEY_CHAR`,
+   * `KEY_CONTROL` or `KEY_UNKNOWN` apart and is ignored for the rest; a
+   * letter is the same key in either case, since Shift changes the code a
+   * terminal sends.
+   */
+  isDown(key: i32, code: i32): boolean {
+    return this.find(termKeyId(key, code)) >= 0
+  }
+
+  /**
+   * Take `events`, which arrived at `nowMs`, and answer what the program
+   * should see: first the releases `tick` makes for the keys `events` does
+   * not mention (a held key's repeats can wait in a read longer than the
+   * gap), then each event, with
+   * Ctrl-C as `EVENT_QUIT` (its repeats and release dropped) and a press of a
+   * key already down marked `ACTION_REPEAT` while releases are synthetic.
+   * A real release of a key not down is dropped: it was let go already, made
+   * up from silence or by losing focus. Losing focus lets every key go, since
+   * its release goes elsewhere. A non-finite `nowMs` releases nothing; a key
+   * it presses keeps its last time, and a new one is timed from the watermark
+   * (0 without one).
+   */
+  apply(events: TermEvent[], nowMs: f64): TermEvent[] {
+    const out: TermEvent[] = this.releaseDue(nowMs, events)
+    for (let k: i32 = 0; k < toI32(events.length); k++) {
+      const e: TermEvent = events[k]
+      if (e.type === EVENT_FOCUS && !e.gained) {
+        const first: i32 = 0
+        while (toI32(this.downKeys.length) > 0) {
+          this.release(first, out)
+        }
+      } else if (e.type === EVENT_KEY && this.quitOnCtrlC && termIsCtrlC(e)) {
+        if (e.action === ACTION_PRESS) {
+          out.push(new TermEvent(EVENT_QUIT))
+        }
+        continue
+      } else if (e.type === EVENT_KEY && !this.press(e, nowMs)) {
+        continue
+      }
+      out.push(e)
+    }
+    return out
+  }
+
+  /**
+   * Everything the terminal generated before `sentAtMs`, on the caller's
+   * clock, has arrived: the answer to an in-order query sent then has come
+   * back. From now on silence is measured against the latest such time. A
+   * non-finite `sentAtMs` is ignored.
+   */
+  delivered(sentAtMs: f64): void {
+    if (!termFinite(sentAtMs)) {
+      return
+    }
+    if (!this.watermarked || sentAtMs > this.watermarkMs) {
+      this.watermarkMs = sentAtMs
+    }
+    this.watermarked = true
+  }
+
+  /**
+   * How long before `nowMs` the latest answered query was sent, or -1 with no
+   * watermark: the caller clears `watermarked` once this passes its bound.
+   */
+  deliveredAgoMs(nowMs: f64): f64 {
+    return this.watermarked ? nowMs - this.watermarkMs : toF64(-1)
+  }
+
+  /** The releases due by `nowMs` while releases are synthetic: each key whose gap has passed, let go. */
+  tick(nowMs: f64): TermEvent[] {
+    const none: TermEvent[] = []
+    return this.releaseDue(nowMs, none)
+  }
+
+  /** The releases due by `nowMs`, as `tick` makes them, for the keys no key event in `batch` names. */
+  releaseDue(nowMs: f64, batch: TermEvent[]): TermEvent[] {
+    const out: TermEvent[] = []
+    if (!this.releasesAreSynthetic || !termFinite(nowMs)) {
+      return out
+    }
+    const clock: f64 = this.watermarked ? this.watermarkMs : nowMs
+    let k: i32 = 0
+    while (k < toI32(this.downKeys.length)) {
+      const gap: f64 = this.downRepeated[k] ? this.releaseGapMs : this.firstRepeatMs
+      if (clock - this.downSince[k] >= gap && !termNamesKey(batch, this.downKeys[k])) {
+        this.release(k, out)
+      } else {
+        k = k + 1
+      }
+    }
+    return out
+  }
+
+  /** Record key event `e` at `nowMs`; false for a release of a key not down, which `apply` drops. */
+  press(e: TermEvent, nowMs: f64): boolean {
+    const at: i32 = this.find(termKeyId(e.key, e.code))
+    if (e.action === ACTION_RELEASE) {
+      this.releasesAreSynthetic = false
+      if (at < 0) {
+        return false
+      }
+      this.remove(at)
+      return true
+    }
+    const known: boolean = termFinite(nowMs)
+    if (at < 0) {
+      let since: f64 = known ? nowMs : toF64(0)
+      if (!known && this.watermarked) {
+        since = this.watermarkMs
+      }
+      this.downKeys.push(termKeyId(e.key, e.code))
+      this.downSince.push(since)
+      this.downRepeated.push(false)
+      this.downCodes.push(e.code)
+      this.downMods.push(e.modifiers)
+      return true
+    }
+    if (known) {
+      this.downSince[at] = nowMs
+    }
+    this.downRepeated[at] = true
+    this.downCodes[at] = e.code
+    this.downMods[at] = e.modifiers
+    if (this.releasesAreSynthetic) {
+      e.action = ACTION_REPEAT
+    }
+    return true
+  }
+
+  /** Let key `at` go, appending its release to `out`. */
+  release(at: i32, out: TermEvent[]): void {
+    const id: i32 = this.downKeys[at]
+    const e: TermEvent = new TermEvent(EVENT_KEY)
+    e.key = id >> 21
+    e.code = this.downCodes[at]
+    e.modifiers = this.downMods[at]
+    e.action = ACTION_RELEASE
+    out.push(e)
+    this.remove(at)
+  }
+
+  /** Where key `id` is in `downKeys`, or -1. */
+  find(id: i32): i32 {
+    for (let k: i32 = 0; k < toI32(this.downKeys.length); k++) {
+      if (this.downKeys[k] === id) {
+        return k
+      }
+    }
+    return -1
+  }
+
+  /** Drop key `at`, keeping the others in order. */
+  remove(at: i32): void {
+    const last: i32 = toI32(this.downKeys.length) - 1
+    for (let k: i32 = at; k < last; k++) {
+      this.downKeys[k] = this.downKeys[k + 1]
+      this.downSince[k] = this.downSince[k + 1]
+      this.downRepeated[k] = this.downRepeated[k + 1]
+      this.downCodes[k] = this.downCodes[k + 1]
+      this.downMods[k] = this.downMods[k + 1]
+    }
+    this.downKeys.pop()
+    this.downSince.pop()
+    this.downRepeated.pop()
+    this.downCodes.pop()
+    this.downMods.pop()
   }
 }
 
@@ -1224,49 +1791,663 @@ const termDecodeKeys = (bytes: u8[], last: boolean, events: KeyEvent[]): i32 => 
       i = i + 1
       continue
     }
-    // 0xC0 and 0xC1 only ever start an overlong form, and 0xF5 up a code
-    // point past U+10FFFF or nothing.
-    const width: i32 = b < 194 || b >= 245 ? 1 : termLeadWidth(b)
-    if (width === 1) {
-      events.push(new KeyEvent(KEY_CHAR, TERM_REPLACEMENT))
-      i = i + 1
-      continue
+    const char: i32 = termUtf8At(bytes, i, last)
+    if (char < 0) {
+      return i
     }
-    let cp: i32 = termLeadBits(b, width)
-    let good: i32 = 0
-    let stopped: boolean = false
-    for (let k: i32 = 1; k < width && !stopped; k++) {
-      if (i + k >= toI32(bytes.length)) {
-        stopped = true
-      } else {
-        const c: i32 = toI32(bytes[i + k])
-        if (c < 128 || c >= 192) {
-          stopped = true
-        } else {
-          cp = (cp << 6) | (c & 63)
-          good = good + 1
-        }
-      }
-    }
-    if (good < width - 1) {
-      if (!last && i + 1 + good >= toI32(bytes.length)) {
-        return i
-      }
-      events.push(new KeyEvent(KEY_CHAR, TERM_REPLACEMENT))
-      i = i + 1 + good
-      continue
-    }
-    // A C1 control, an overlong three- or four-byte form, a surrogate or a
-    // code point past U+10FFFF is no character.
-    let least: i32 = 65536
-    if (width === 2) {
-      least = 160
-    } else if (width === 3) {
-      least = 2048
-    }
-    const scalar: boolean = cp >= least && cp < 1114112 && !(cp >= 55296 && cp < 57344)
-    events.push(new KeyEvent(KEY_CHAR, scalar ? cp : TERM_REPLACEMENT))
-    i = i + width
+    events.push(new KeyEvent(KEY_CHAR, char >> 3))
+    i = i + (char & 7)
   }
   return toI32(bytes.length)
+}
+
+/**
+ * The UTF-8 character at `bytes[i]` (a byte of 128 or more), as its code
+ * point shifted left 3 with the bytes it used in the low 3 bits; -1 when it
+ * is unfinished at the end and `last` is not set, so the caller holds it. A
+ * byte that starts no character, a broken sequence, a C1 control, an overlong
+ * form, a surrogate or a code point past U+10FFFF is U+FFFD.
+ */
+const termUtf8At = (bytes: u8[], i: i32, last: boolean): i32 => {
+  const b: i32 = toI32(bytes[i])
+  // 0xC0 and 0xC1 only ever start an overlong form, and 0xF5 up a code
+  // point past U+10FFFF or nothing.
+  const width: i32 = b < 194 || b >= 245 ? 1 : termLeadWidth(b)
+  if (width === 1) {
+    return (TERM_REPLACEMENT << 3) | 1
+  }
+  let cp: i32 = termLeadBits(b, width)
+  let good: i32 = 0
+  let stopped: boolean = false
+  for (let k: i32 = 1; k < width && !stopped; k++) {
+    if (i + k >= toI32(bytes.length)) {
+      stopped = true
+    } else {
+      const c: i32 = toI32(bytes[i + k])
+      if (c < 128 || c >= 192) {
+        stopped = true
+      } else {
+        cp = (cp << 6) | (c & 63)
+        good = good + 1
+      }
+    }
+  }
+  if (good < width - 1) {
+    if (!last && i + 1 + good >= toI32(bytes.length)) {
+      return -1
+    }
+    return (TERM_REPLACEMENT << 3) | (1 + good)
+  }
+  let least: i32 = 65536
+  if (width === 2) {
+    least = 160
+  } else if (width === 3) {
+    least = 2048
+  }
+  const scalar: boolean = cp >= least && cp < 1114112 && !(cp >= 55296 && cp < 57344)
+  return ((scalar ? cp : TERM_REPLACEMENT) << 3) | width
+}
+
+/** The key event of kind `key` with code `code`, modifiers `mods` and action `action`. */
+const termKeyEvent = (key: i32, code: i32, mods: i32, action: i32): TermEvent => {
+  const e: TermEvent = new TermEvent(EVENT_KEY)
+  e.key = key
+  e.code = code
+  e.modifiers = mods
+  e.action = action
+  return e
+}
+
+/** The `MOD_` bits of a kitty or xterm modifier parameter `raw` (1 + the bits; caps and num lock dropped), 0 when omitted. */
+const termModifiers = (raw: i32): i32 => (raw < 1 ? 0 : (raw - 1) & 63)
+
+/** The `ACTION_` of a kitty event type `raw`: 2 a repeat, 3 a release, anything else a press. */
+const termAction = (raw: i32): i32 => {
+  if (raw === 2) {
+    return ACTION_REPEAT
+  }
+  return raw === 3 ? ACTION_RELEASE : ACTION_PRESS
+}
+
+/**
+ * Field `field`, sub-field `sub` of the parameters `bytes[from, to)`, where
+ * `;` separates fields and `:` sub-fields (ECMA-48 § 5.4.2; the kitty
+ * protocol's `code:shifted ; mods:event ; text`); -1 when it is omitted.
+ */
+const termCsiField = (bytes: u8[], from: i32, to: i32, field: i32, sub: i32): i32 => {
+  let f: i32 = 0
+  let s: i32 = 0
+  let value: i32 = -1
+  for (let k: i32 = from; k < to && k < toI32(bytes.length); k++) {
+    const c: i32 = toI32(bytes[k])
+    if (c === TERM_SEMICOLON) {
+      f = f + 1
+      s = 0
+    } else if (c === 58) {
+      s = s + 1
+    } else if (c >= TERM_DIGIT_0 && c < TERM_DIGIT_0 + 10 && f === field && s === sub) {
+      // Past eight digits a number is no parameter a terminal sends; it stops growing.
+      if (value < 0) {
+        value = c - TERM_DIGIT_0
+      } else if (value < 10000000) {
+        value = value * 10 + (c - TERM_DIGIT_0)
+      }
+    }
+  }
+  return value
+}
+
+/** The first sub-field of each field of the parameters `bytes[from, to)`, an omitted one as 0. */
+const termCsiParams = (bytes: u8[], from: i32, to: i32): i32[] => {
+  const params: i32[] = []
+  if (from >= to) {
+    return params
+  }
+  let fields: i32 = 1
+  for (let k: i32 = from; k < to && k < toI32(bytes.length); k++) {
+    if (toI32(bytes[k]) === TERM_SEMICOLON) {
+      fields = fields + 1
+    }
+  }
+  for (let f: i32 = 0; f < fields; f++) {
+    const v: i32 = termCsiField(bytes, from, to, f, 0)
+    params.push(v < 0 ? 0 : v)
+  }
+  return params
+}
+
+/** The string of UTF-8 `bytes[from, to)`, as `termBytesText` makes one. */
+const termBytesRange = (bytes: u8[], from: i32, to: i32): string => {
+  const part: u8[] = []
+  for (let k: i32 = from; k < to && k < toI32(bytes.length); k++) {
+    part.push(bytes[k])
+  }
+  return termBytesText(part, toI32(part.length))
+}
+
+/** Append code point `cp` to `out` as UTF-8; one that is no scalar value goes as U+FFFD. */
+const termPushUtf8 = (out: u8[], cp: i32): void => {
+  const c: i32 = cp >= 0 && cp < 1114112 && !(cp >= 55296 && cp < 57344) ? cp : TERM_REPLACEMENT
+  if (c < 128) {
+    out.push(toU8(c))
+  } else if (c < 2048) {
+    out.push(toU8((c >> 6) | 192))
+    out.push(toU8((c & 63) | 128))
+  } else if (c < 65536) {
+    out.push(toU8((c >> 12) | 224))
+    out.push(toU8(((c >> 6) & 63) | 128))
+    out.push(toU8((c & 63) | 128))
+  } else {
+    out.push(toU8((c >> 18) | 240))
+    out.push(toU8(((c >> 12) & 63) | 128))
+    out.push(toU8(((c >> 6) & 63) | 128))
+    out.push(toU8((c & 63) | 128))
+  }
+}
+
+/**
+ * The key a kitty `ESC [ code u` names (kitty keyboard protocol, "An
+ * overview"): Enter, Tab, Backspace, Escape and Space by their codes, another
+ * control below 32 as itself, a key in the Private Use Area (57344–63743,
+ * kitty's functional keys: keypad, media, modifiers, F13 up) as `KEY_UNKNOWN`,
+ * and any other code point as the character.
+ */
+const termKittyKind = (code: i32): i32 => {
+  if (code === 13) {
+    return KEY_ENTER
+  }
+  if (code === 9) {
+    return KEY_TAB
+  }
+  if (code === 127 || code === 8) {
+    return KEY_BACKSPACE
+  }
+  if (code === TERM_ESC) {
+    return KEY_ESCAPE
+  }
+  if (code === TERM_SPACE) {
+    return KEY_SPACE
+  }
+  if (code < 0 || (code >= 57344 && code < 63744) || code >= 1114112) {
+    return KEY_UNKNOWN
+  }
+  return code < TERM_SPACE ? KEY_CONTROL : KEY_CHAR
+}
+
+/**
+ * The key `ESC [ n ~` names (xterm ctlseqs, "PC-Style Function Keys"; the
+ * kitty protocol keeps them): 1 and 7 Home, 2 Insert, 3 Delete, 4 and 8 End,
+ * 5 Page Up, 6 Page Down, 11–15 F1–F5, 17–21 F6–F10, 23 F11, 24 F12.
+ */
+const termTildeKind = (n: i32): i32 => {
+  if (n === 1 || n === 7) {
+    return KEY_HOME
+  }
+  if (n === 4 || n === 8) {
+    return KEY_END
+  }
+  if (n === 2) {
+    return KEY_INSERT
+  }
+  if (n === 3) {
+    return KEY_DELETE
+  }
+  if (n === 5) {
+    return KEY_PAGE_UP
+  }
+  if (n === 6) {
+    return KEY_PAGE_DOWN
+  }
+  if (n >= 11 && n <= 15) {
+    return KEY_F1 + (n - 11)
+  }
+  if (n >= 17 && n <= 21) {
+    return KEY_F6 + (n - 17)
+  }
+  if (n === 23 || n === 24) {
+    return KEY_F11 + (n - 23)
+  }
+  return KEY_UNKNOWN
+}
+
+/**
+ * The key a letter final byte names, `ESC [ 1 ; m X` or `ESC O X` (xterm
+ * ctlseqs, "PC-Style Function Keys"): A–D the arrows, H Home, F End, P–S
+ * F1–F4.
+ */
+const termLetterKind = (f: i32): i32 => {
+  if (f === 72) {
+    return KEY_HOME
+  }
+  if (f === 70) {
+    return KEY_END
+  }
+  if (f >= 80 && f <= 83) {
+    return KEY_F1 + (f - 80)
+  }
+  return termArrowKind(f)
+}
+
+/** Whether key event `e` is Ctrl-C: byte 3, or kitty's `c` with Ctrl alone. */
+/** Whether `x` is a number other than NaN and the infinities, for which `x - x` is NaN. */
+const termFinite = (x: f64): boolean => x - x === 0.0
+
+const termIsCtrlC = (e: TermEvent): boolean =>
+  e.key === KEY_CTRL_C || (e.key === KEY_CHAR && e.code === 99 && e.modifiers === MOD_CTRL)
+
+/** Whether a key event in `batch` is of key `id`, as `termKeyId` names it. */
+const termNamesKey = (batch: TermEvent[], id: i32): boolean => {
+  for (let k: i32 = 0; k < toI32(batch.length); k++) {
+    const e: TermEvent = batch[k]
+    if (e.type === EVENT_KEY && termKeyId(e.key, e.code) === id) {
+      return true
+    }
+  }
+  return false
+}
+
+/** One number for a key `KeyState` tracks: its kind above bit 21, and the code below for the kinds a code tells apart, a capital folded to its small letter. */
+const termKeyId = (key: i32, code: i32): i32 => {
+  let c: i32 = key === KEY_CHAR || key === KEY_CONTROL || key === KEY_UNKNOWN ? code : 0
+  if (key === KEY_CHAR && c >= 65 && c <= 90) {
+    c = c + 32
+  }
+  return (key << 21) | (c & 2097151)
+}
+
+/** The byte at `k` of the paste terminator `ESC [ 2 0 1 ~` (xterm ctlseqs, "Bracketed Paste Mode"). */
+const termPasteEndByte = (k: i32): i32 => {
+  if (k === 0) {
+    return TERM_ESC
+  }
+  if (k === 1) {
+    return TERM_BRACKET
+  }
+  if (k === 5) {
+    return 126
+  }
+  if (k === 3) {
+    return TERM_DIGIT_0
+  }
+  return k === 2 ? 50 : 49
+}
+
+/**
+ * Carry a bracketed paste on from `bytes[i]`: append to the paste up to its
+ * terminator and answer where decoding resumes after it, with the paste as
+ * one `EVENT_PASTE`. A terminator cut off at the end is held unless `last`;
+ * without one, every byte joins the paste. ESC, newlines and anything else
+ * inside are text, never keys.
+ */
+const termDecodePaste = (d: KeyDecoder, bytes: u8[], i: i32, last: boolean, events: TermEvent[]): i32 => {
+  const n: i32 = toI32(bytes.length)
+  let k: i32 = i
+  while (k >= 0 && k < toI32(bytes.length)) {
+    let m: i32 = 0
+    while (m < 6 && k + m < n && toI32(bytes[k + m]) === termPasteEndByte(m)) {
+      m = m + 1
+    }
+    if (m === 6 || (m > 0 && k + m === n && !last)) {
+      break
+    }
+    d.pasteBytes.push(bytes[k])
+    k = k + 1
+  }
+  if (k >= n || k + 6 > n) {
+    return k
+  }
+  const e: TermEvent = new TermEvent(EVENT_PASTE)
+  e.text = termBytesText(d.pasteBytes, toI32(d.pasteBytes.length))
+  events.push(e)
+  d.pasting = false
+  d.pasteBytes = []
+  return k + 6
+}
+
+/**
+ * The mouse report `ESC [ < b ; x ; y M` (press) or `m` (release), SGR mode
+ * 1006 or, in pixels, 1016 (xterm ctlseqs, "Mouse Tracking", "Extended
+ * coordinates"). In `b` the low two bits are the button (3 is none), +4
+ * Shift, +8 Alt, +16 Ctrl, +32 a move, +64 the wheel and +128 buttons 8–11;
+ * `x` and `y` count from 1, made to count from 0.
+ */
+const termMouseEvent = (d: KeyDecoder, bytes: u8[], from: i32, to: i32, final: i32): TermEvent => {
+  const b: i32 = termCsiField(bytes, from, to, 0, 0)
+  const x: i32 = termClamp(termCsiField(bytes, from, to, 1, 0) - 1, 0, 2147483646)
+  const y: i32 = termClamp(termCsiField(bytes, from, to, 2, 0) - 1, 0, 2147483646)
+  const e: TermEvent = new TermEvent(EVENT_MOUSE)
+  const bits: i32 = b < 0 ? 3 : b
+  const none: i32 = 0
+  e.modifiers =
+    ((bits & 4) !== 0 ? MOD_SHIFT : none) |
+    ((bits & 8) !== 0 ? MOD_ALT : none) |
+    ((bits & 16) !== 0 ? MOD_CTRL : none)
+  const low: i32 = bits & 3
+  if ((bits & 128) !== 0) {
+    e.button = MOUSE_BUTTON_8 + low
+  } else if ((bits & 64) !== 0) {
+    e.button = MOUSE_WHEEL_UP + low
+  } else {
+    e.button = low === 3 ? MOUSE_NONE : low + 1
+  }
+  if ((bits & 32) !== 0) {
+    e.action = ACTION_MOVE
+  } else {
+    e.action = final === 77 ? ACTION_PRESS : ACTION_RELEASE
+  }
+  if (!d.pixelMouse) {
+    e.x = x
+    e.y = y
+    return e
+  }
+  e.px = x
+  e.py = y
+  e.x = d.cellWidthPx > 0 ? (x / d.cellWidthPx) | 0 : -1
+  e.y = d.cellHeightPx > 0 ? (y / d.cellHeightPx) | 0 : -1
+  return e
+}
+
+/** A reply opened by `introducer`, with `prefix`, `params`, `intermediate`, final byte `reply` and `text`. */
+const termReplyEvent = (
+  introducer: i32,
+  prefix: i32,
+  params: i32[],
+  intermediate: i32,
+  reply: i32,
+  text: string
+): TermEvent => {
+  const e: TermEvent = new TermEvent(EVENT_REPLY)
+  e.introducer = introducer
+  e.prefix = prefix
+  e.params = params
+  e.intermediate = intermediate
+  e.reply = reply
+  e.text = text
+  return e
+}
+
+/**
+ * The event of the complete control sequence `ESC [ prefix params
+ * intermediate final`, its parameters in `bytes[from, to)`, appended to
+ * `events` — or, for `ESC [ 200 ~`, the start of a paste, and for a stray
+ * `ESC [ 201 ~`, nothing.
+ */
+const termCsiEvent = (
+  d: KeyDecoder,
+  bytes: u8[],
+  from: i32,
+  to: i32,
+  prefix: i32,
+  intermediate: i32,
+  final: i32,
+  events: TermEvent[]
+): void => {
+  if (prefix === 60 && (final === 77 || final === 109)) {
+    events.push(termMouseEvent(d, bytes, from, to, final))
+    return
+  }
+  const first: i32 = termCsiField(bytes, from, to, 0, 0)
+  // DA1 `ESC [ ? … c`, DA2 `ESC [ > … c`, DECRPM `ESC [ ? n ; v $ y`, kitty's
+  // flags `ESC [ ? f u`, XTSMGRAPHICS `ESC [ ? i ; s ; v S`, DECXCPR: anything
+  // with a private marker or an intermediate is an answer, never a key. DSR
+  // `ESC [ 0 n` and the window reports `ESC [ 4|6|8 ; a ; b t` have no marker
+  // but a final no key uses (xterm ctlseqs, "Functions using CSI").
+  const cpr: boolean = final === 82 && d.cprOutstanding > 0
+  if (prefix !== 0 || intermediate !== 0 || final === 110 || final === 116 || cpr) {
+    if (cpr) {
+      d.cprOutstanding = d.cprOutstanding - 1
+    }
+    events.push(termReplyEvent(TERM_BRACKET, prefix, termCsiParams(bytes, from, to), intermediate, final, ""))
+    return
+  }
+  // Focus in `ESC [ I` and out `ESC [ O`, mode 1004 (xterm ctlseqs, "FocusIn/FocusOut").
+  if ((final === 73 || final === 79) && from === to) {
+    const e: TermEvent = new TermEvent(EVENT_FOCUS)
+    e.gained = final === 73
+    events.push(e)
+    return
+  }
+  if (final === 126 && (first === 200 || first === 201)) {
+    d.pasting = first === 200
+    d.pasteBytes = []
+    return
+  }
+  const mods: i32 = termModifiers(termCsiField(bytes, from, to, 1, 0))
+  const action: i32 = termAction(termCsiField(bytes, from, to, 1, 1))
+  // kitty `ESC [ code ; mods:event ; text u` (kitty keyboard protocol,
+  // "Key events"), and xterm's modifyOtherKeys `ESC [ 27 ; mods ; code ~`.
+  if (final === 117 || (final === 126 && first === 27)) {
+    const code: i32 = final === 117 ? first : termCsiField(bytes, from, to, 2, 0)
+    const e: TermEvent = termKeyEvent(termKittyKind(code), code < 0 ? final : code, mods, action)
+    if (final === 117) {
+      const text: u8[] = []
+      for (let s: i32 = 0; termCsiField(bytes, from, to, 2, s) >= 0; s++) {
+        termPushUtf8(text, termCsiField(bytes, from, to, 2, s))
+      }
+      e.text = termBytesText(text, toI32(text.length))
+    }
+    events.push(e)
+    return
+  }
+  // Shift-Tab, `ESC [ Z` (xterm ctlseqs, "CBT").
+  if (final === 90) {
+    events.push(termKeyEvent(KEY_TAB, 9, mods | MOD_SHIFT, action))
+    return
+  }
+  const kind: i32 = final === 126 ? termTildeKind(first) : termLetterKind(final)
+  const e: TermEvent = termKeyEvent(kind, final, mods, action)
+  if (kind === KEY_UNKNOWN) {
+    e.params = termCsiParams(bytes, from, to)
+  }
+  events.push(e)
+}
+
+/**
+ * Decode the control sequence at `bytes[i]` (`ESC [`) into `events` and answer
+ * where decoding resumes, or -1 when it is unfinished at the end and `last`
+ * is not set. Parameter and intermediate bytes run 32–63 and a final byte
+ * 64–126 (ECMA-48 § 5.4); a sequence broken off by another byte is an ESC
+ * key, and the bytes after it keys of their own, as `feed` has it.
+ */
+const termDecodeCsi = (d: KeyDecoder, bytes: u8[], i: i32, last: boolean, events: TermEvent[]): i32 => {
+  const n: i32 = toI32(bytes.length)
+  let j: i32 = i + 2
+  while (j < n && toI32(bytes[j]) >= 32 && toI32(bytes[j]) < 64) {
+    j = j + 1
+  }
+  if (j >= n && !last) {
+    return -1
+  }
+  const final: i32 = j < n ? toI32(bytes[j]) : 0
+  if (!(final >= 64 && final < 127)) {
+    events.push(termKeyEvent(KEY_ESCAPE, TERM_ESC, 0, ACTION_PRESS))
+    return i + 1
+  }
+  // The Linux console's F1–F5, `ESC [ [ A` to `ESC [ [ E` (console_codes(4)).
+  if (final === TERM_BRACKET && j === i + 2) {
+    if (j + 1 >= n && !last) {
+      return -1
+    }
+    const f: i32 = j + 1 < n ? toI32(bytes[j + 1]) : 0
+    if (f >= 65 && f <= 69) {
+      events.push(termKeyEvent(KEY_F1 + (f - 65), f, 0, ACTION_PRESS))
+      return j + 2
+    }
+  }
+  let from: i32 = i + 2
+  let prefix: i32 = 0
+  if (from < j && toI32(bytes[from]) >= 60) {
+    prefix = toI32(bytes[from])
+    from = from + 1
+  }
+  let to: i32 = from
+  while (to < j && termByte(bytes, to) >= TERM_DIGIT_0) {
+    to = to + 1
+  }
+  termCsiEvent(d, bytes, from, to, prefix, to < j ? toI32(bytes[j - 1]) : 0, final, events)
+  return j + 1
+}
+
+/**
+ * Decode the control string at `bytes[i]` — DCS `ESC P`, APC `ESC _`, OSC
+ * `ESC ]`, PM `ESC ^` or SOS `ESC X` — into one `EVENT_REPLY`, and answer
+ * where decoding resumes. It ends at ST, `ESC \`, or BEL (ECMA-48 § 8.3.143;
+ * xterm ctlseqs, "Operating System Commands"). Unfinished at the end it is -1
+ * unless `last`, when it is dropped; an ESC inside that starts no ST breaks
+ * it off, and decoding resumes at that ESC. A DCS reads as a CSI does then
+ * carries its data in `text`: XTVERSION `ESC P > | name ST`, DECRQSS
+ * `ESC P 1 $ r … ST`. An APC's first byte is its `reply` (kitty graphics
+ * `ESC _ G … ST`); an OSC's number is its one param and the rest its text.
+ */
+const termDecodeString = (bytes: u8[], i: i32, last: boolean, events: TermEvent[]): i32 => {
+  const n: i32 = toI32(bytes.length)
+  const introducer: i32 = toI32(bytes[i + 1])
+  let end: i32 = i + 2
+  while (end < n && toI32(bytes[end]) !== 7 && toI32(bytes[end]) !== TERM_ESC) {
+    end = end + 1
+  }
+  if (end + (end < n && toI32(bytes[end]) === TERM_ESC ? 1 : 0) >= n) {
+    return last ? n : -1
+  }
+  let resume: i32 = end + 1
+  if (toI32(bytes[end]) === TERM_ESC) {
+    if (toI32(bytes[end + 1]) !== 92) {
+      return end
+    }
+    resume = end + 2
+  }
+  const start: i32 = i + 2
+  if (introducer === 95) {
+    events.push(
+      termReplyEvent(
+        introducer,
+        0,
+        [],
+        0,
+        start < end ? toI32(bytes[start]) : 0,
+        termBytesRange(bytes, start + 1, end)
+      )
+    )
+    return resume
+  }
+  if (introducer === 93) {
+    let semi: i32 = start
+    while (semi < end && toI32(bytes[semi]) !== TERM_SEMICOLON) {
+      semi = semi + 1
+    }
+    events.push(
+      termReplyEvent(
+        introducer,
+        0,
+        termCsiParams(bytes, start, semi),
+        0,
+        0,
+        termBytesRange(bytes, semi + 1, end)
+      )
+    )
+    return resume
+  }
+  if (introducer !== 80) {
+    events.push(termReplyEvent(introducer, 0, [], 0, 0, termBytesRange(bytes, start, end)))
+    return resume
+  }
+  let from: i32 = start
+  let prefix: i32 = 0
+  if (from < end && toI32(bytes[from]) >= 60 && toI32(bytes[from]) < 64) {
+    prefix = toI32(bytes[from])
+    from = from + 1
+  }
+  let to: i32 = from
+  while (to < end && toI32(bytes[to]) >= TERM_DIGIT_0 && toI32(bytes[to]) < 64) {
+    to = to + 1
+  }
+  let f: i32 = to
+  while (f < end && toI32(bytes[f]) >= 32 && toI32(bytes[f]) < TERM_DIGIT_0) {
+    f = f + 1
+  }
+  const intermediate: i32 = f > to ? toI32(bytes[f - 1]) : 0
+  const final: i32 = f < end ? toI32(bytes[f]) : 0
+  events.push(
+    termReplyEvent(
+      introducer,
+      prefix,
+      termCsiParams(bytes, from, to),
+      intermediate,
+      final,
+      termBytesRange(bytes, f + 1, end)
+    )
+  )
+  return resume
+}
+
+/** The byte at `k` of `bytes`, or -1 past either end. */
+const termByte = (bytes: u8[], k: i32): i32 => (k >= 0 && k < toI32(bytes.length) ? toI32(bytes[k]) : -1)
+
+/** Whether `b`, after an ESC, opens a control string: DCS `P`, SOS `X`, OSC `]`, PM `^` or APC `_`. */
+const termOpensString = (b: i32): boolean => b === 80 || b === 88 || b === 93 || b === 94 || b === 95
+
+/**
+ * Decode `bytes` into `events` for `feedEvents` and `pollEvents`, and answer
+ * how many bytes were used. Unless `last` is set, an unfinished sequence at
+ * the end is left unused for the caller to hold; with it set, the unfinished
+ * start is given up. A paste carries on across calls in `d`.
+ */
+const termDecodeEvents = (d: KeyDecoder, bytes: u8[], last: boolean, events: TermEvent[]): i32 => {
+  const n: i32 = toI32(bytes.length)
+  let i: i32 = 0
+  while (i < toI32(bytes.length)) {
+    if (!(i >= 0)) {
+      panic("nish/term: the event decoder stepped back")
+    }
+    let next: i32 = i + 1
+    const b: i32 = toI32(bytes[i])
+    if (d.pasting) {
+      next = termDecodePaste(d, bytes, i, last, events)
+      if (next < n && d.pasting) {
+        return next
+      }
+    } else if (b === TERM_ESC && i + 1 >= n) {
+      if (!last) {
+        return i
+      }
+      events.push(termKeyEvent(KEY_ESCAPE, b, 0, ACTION_PRESS))
+    } else if (b === TERM_ESC) {
+      const after: i32 = termByte(bytes, i + 1)
+      if (after === TERM_BRACKET) {
+        next = termDecodeCsi(d, bytes, i, last, events)
+      } else if (termOpensString(after)) {
+        next = termDecodeString(bytes, i, last, events)
+      } else if (after === 79 && i + 2 >= n && !last) {
+        next = -1
+      } else if (after === 79 && termByte(bytes, i + 2) >= 64 && termByte(bytes, i + 2) < 127) {
+        // SS3 `ESC O X`: the arrows, Home, End and F1–F4 in application
+        // mode, and keypad Enter `ESC O M` (xterm ctlseqs, "PC-Style Function Keys").
+        const f: i32 = termByte(bytes, i + 2)
+        events.push(
+          termKeyEvent(f === 77 ? KEY_ENTER : termLetterKind(f), f === 77 ? 13 : f, 0, ACTION_PRESS)
+        )
+        next = i + 3
+      } else if (after !== TERM_ESC && after !== 79 && after < 128) {
+        // Alt held with a key sends ESC before it (xterm's metaSendsEscape).
+        events.push(termKeyEvent(termAsciiKind(after), after, MOD_ALT, ACTION_PRESS))
+        next = i + 2
+      } else {
+        events.push(termKeyEvent(KEY_ESCAPE, b, 0, ACTION_PRESS))
+      }
+      if (next < 0) {
+        return i
+      }
+    } else if (b < 128) {
+      events.push(termKeyEvent(termAsciiKind(b), b, 0, ACTION_PRESS))
+    } else {
+      const char: i32 = termUtf8At(bytes, i, last)
+      if (char < 0) {
+        return i
+      }
+      events.push(termKeyEvent(KEY_CHAR, char >> 3, 0, ACTION_PRESS))
+      next = i + (char & 7)
+    }
+    i = next
+  }
+  return n
 }

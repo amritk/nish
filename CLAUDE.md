@@ -17,9 +17,17 @@ only the guide your task touches; the rules there are authoritative:
 
 ## Definition of done
 
-`npm run check` and an undegraded `npm test` green (read the skip count, not
-just the exit code). A new construct ships with a golden `.ll`, an `llvm-as`
-pass, a native round trip with expected stdout, at least one negative test, its
+Locally, before pushing: `npm run check`, `npm run lint`, and
+`node tests/run.js <filter>` for every section or program the change touches
+(plus the `src/` runs below). **The full-suite gate is CI**: every
+`test (…, shard N/4)` row green on the current head, each shard's summary read
+for its skip count like a local run (`AGENTS.md` → "Trusting a test run"). Run
+the whole `npm test` locally only when the change is to the suite itself
+(`tests/run.js`'s structure, `tests/pool.js`) or CI cannot answer (a fork PR),
+and say so in the PR body.
+
+A new construct ships with a golden `.ll`, an `llvm-as` pass, a native round
+trip with expected stdout, at least one negative test, its
 `docs/LANGUAGE.md` rule, cookbook entry and user-guide page — the checklist is
 `docs/ARCHITECTURE.md` → "How to add a construct". Show the exact LLVM IR for
 every TypeScript snippet a PR adds to the tests. Copied code keeps its upstream
@@ -70,9 +78,11 @@ Every call re-reads the whole context, so cost is context size × calls.
 
 - **One deliverable per session.** Asked for a new, separate one after
   shipping, offer a short handoff for a fresh session instead.
-- **The full `npm test` (40–70 min) runs twice per pull request**: before
-  opening it, and after the last merge of `main`. In between, run
-  `node tests/run.js <section>`, `npm run check` and `npm run lint`.
+- **CI runs the full suite, not the session.** Unsharded, `npm test` takes 40
+  to 70 minutes in a 4-core cloud session; CI's `test` job runs all of it in
+  four cost-dealt shards on every push (about 14 minutes wall). Run the
+  targeted sections in the [definition of done](#definition-of-done) and let
+  the shards answer for the rest.
 - **Wait for a long run without polling.** Commit first, start it once in the
   background with output to a file, and end the turn. No `sleep` loops, no
   scheduled check-ins, never two runs at once (they share `build/`).

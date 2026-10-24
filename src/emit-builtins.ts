@@ -1018,6 +1018,11 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     const on = emitter.emitExpression(firstArgument(expr))
     return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_raw_mode")}(i1 zeroext ${on})`)
   }
+  if (name === "setTerminalRestore") {
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_set_terminal_restore")}(${stringArgs(emitter, expr)})`
+    )
+  }
   if (isNetExport(name)) {
     return emitNetCall(emitter, expr, name)
   }
@@ -1224,6 +1229,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "setRawMode") {
     out.push("nish_set_raw_mode")
+    return out
+  }
+  if (name === "setTerminalRestore") {
+    out.push("nish_set_terminal_restore")
     return out
   }
   // WP34 N5: one symbol each, and the slice panic behind the range check of

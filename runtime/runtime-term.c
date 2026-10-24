@@ -49,9 +49,17 @@
  * A stop by SIGSTOP, which no program can catch, leaves the terminal raw at a
  * shell that puts nothing back.
  *
+ * `setTerminalRestore(bytes)` gives that way out bytes to write to stdout
+ * first, such as the escapes that leave an alternate screen or show the
+ * cursor again: once, by `write` alone, at exit, on a panic and in each of the
+ * handlers that end the program, before the termios comes back. Setting them
+ * arms the same handlers, raw mode or not. A Ctrl-Z and `setRawMode(false)`
+ * do not end the program, so they write nothing.
+ *
  * WASI has `read` and `poll` on stdin and no terminal interface, so there the
  * first two work (`readStdin` waiting, below) and the TTY questions answer
- * "not a terminal": false, `[-25, 0]`, and -25 for entering raw mode.
+ * "not a terminal": false, `[-25, 0]`, and -25 for entering raw mode and for
+ * restore bytes, which are not kept.
  * Otherwise Linux and Darwin only; the file uses nothing else. */
 /* `SA_RESETHAND` is XSI, so _POSIX_C_SOURCE alone does not declare it on
    glibc; Darwin hides `TIOCGWINSZ` behind either unless `_DARWIN_C_SOURCE`
@@ -63,6 +71,7 @@
 #include "nish.h"
 
 #include <errno.h>
+#include <string.h>
 #include <unistd.h>
 #ifdef __wasi__
 #include <poll.h>
@@ -174,6 +183,9 @@ nish_array *nish_terminal_size(void) {
   return out;
 }
 int32_t nish_set_raw_mode(bool on) { return on ? -25 : 0; }
+int32_t nish_set_terminal_restore(const nish_str *bytes) {
+  return bytes->len > NISH_TERM_RESTORE_MAX ? -7 : bytes->len == 0 ? 0 : -25;
+}
 #else
 /* `isTerminal(fd)`: `isatty`. */
 bool nish_is_terminal(int32_t fd) { return isatty(fd) == 1; }
@@ -240,27 +252,69 @@ static void nish_term_drop(const sigset_t *old) {
   sigprocmask(SIG_SETMASK, old, 0);
 }
 
+/* The bytes `setTerminalRestore` left for the way out, in one of two buffers,
+   and which: `nish_term_out` is 0 for none, `len * 2 + buffer` for some, and
+   -1 once they went out, after which nothing is stored again. An update
+   copies into the buffer not published, under the lock, and publishes by
+   swapping the word last, so a signal mid-update writes the old bytes or the
+   new ones, never half of each; one update runs at a time, so the buffer a
+   writer reads is never the one being filled. `nish_term_next` is the buffer
+   the next update fills. */
+static char nish_term_bytes[2][NISH_TERM_RESTORE_MAX];
+static int nish_term_out, nish_term_next;
+
+/* Write the published bytes to stdout, once per process: the swap to -1
+   takes them, so the atexit handler, a panic and a signal racing each other
+   write them once between them. `write` alone, finished across short writes
+   and retried when a signal interrupts it; the program ends after it, so
+   errno is not kept. */
+static void nish_term_write_out(void) {
+  int s = __atomic_exchange_n(&nish_term_out, -1, __ATOMIC_ACQ_REL);
+  if (s <= 0) return;
+  const char *p = nish_term_bytes[s & 1];
+  size_t n = (size_t)(s >> 1);
+  while (n > 0) {
+    ssize_t w = write(1, p, n);
+    if (w < 0 && errno == EINTR) continue;
+    if (w <= 0) break;
+    p += w;
+    n -= (size_t)w;
+  }
+}
+
 /* Put the saved termios back, once. Called with the lock held, or from a
    handler that ends the program, so it uses only calls that are
    async-signal-safe and needs no Ctrl-Z kept out: SIGTSTP is blocked in both.
    The flag is cleared after the call, so any other signal that lands during it
-   restores again, which is harmless, rather than not at all. */
+   restores again, which is harmless, rather than not at all. The panic hook
+   stays while restore bytes wait. */
 static void nish_term_restore(void) {
   struct termios now;
   if (nish_term_raw || (nish_term_entering && tcgetattr(0, &now) == 0 && now.c_lflag == nish_term_raw_t.c_lflag &&
                         now.c_iflag == nish_term_raw_t.c_iflag)) {
     tcsetattr(0, TCSANOW, &nish_term_saved);
     nish_term_raw = 0;
-    __atomic_store_n(&nish_fatal_hook, 0, __ATOMIC_RELEASE);
+    if (__atomic_load_n(&nish_term_out, __ATOMIC_ACQUIRE) <= 0)
+      __atomic_store_n(&nish_fatal_hook, 0, __ATOMIC_RELEASE);
   }
 }
 
-/* The atexit and panic restore: under the lock, so it waits out a Ctrl-Z
-   handler on another thread rather than leave the terminal to its re-entry. */
-static void nish_term_leave(void) {
-  sigset_t old;
-  nish_term_hold(&old);
+/* The way out of the program: the restore bytes, then the termios. */
+static void nish_term_finish(void) {
+  nish_term_write_out();
   nish_term_restore();
+}
+
+/* The atexit and panic restore: under the lock, so it waits out a Ctrl-Z
+   handler on another thread rather than leave the terminal to its re-entry,
+   and with every signal blocked, so one that lands mid-write runs its handler
+   once the bytes are out rather than end the program with them half written. */
+static void nish_term_leave(void) {
+  sigset_t all, old;
+  sigfillset(&all);
+  sigprocmask(SIG_BLOCK, &all, &old);
+  nish_term_hold(&all);
+  nish_term_finish();
   nish_term_drop(&old);
 }
 
@@ -292,13 +346,18 @@ static void nish_term_on_signal(int sig);
    handler's own `raise` acts at once rather than after it returns, SIGTSTP
    aside. SIGTSTP is blocked in every handler, so a Ctrl-Z cannot stop one
    between its restore and its `raise`, and re-enter raw mode for the program
-   to die in. `SA_RESTART`, so a call that a Ctrl-Z and `fg` interrupt goes on
+   to die in. A handler that ends the program blocks every signal, its own
+   too, so a second one cannot nest into its write and end the program with
+   the bytes half out; its own `raise` then lands as the handler returns.
+   SIGTSTP's blocks only SIGTSTP, so a signal still ends a program its stop
+   holds. `SA_RESTART`, so a call that a Ctrl-Z and `fg` interrupt goes on
    where the system restarts it. */
 static void nish_term_catch(int sig) {
   struct sigaction sa;
   sa.sa_handler = nish_term_on_signal;
   sa.sa_flags = SA_RESETHAND | SA_ONSTACK | SA_NODEFER | SA_RESTART;
   sigemptyset(&sa.sa_mask);
+  if (sig != SIGTSTP) sigfillset(&sa.sa_mask);
   sigaddset(&sa.sa_mask, SIGTSTP);
   sigaction(sig, &sa, 0);
 }
@@ -314,7 +373,7 @@ static void nish_term_catch(int sig) {
    takes no lock, because the thread it interrupted may hold it. */
 static void nish_term_on_signal(int sig) {
   if (sig != SIGTSTP) {
-    nish_term_restore();
+    nish_term_finish();
     signal(sig, SIG_DFL);
     raise(sig);
     return;
@@ -333,6 +392,49 @@ static void nish_term_on_signal(int sig) {
   if (was) nish_term_enter(TCSANOW);
   nish_term_drop(&old);
   errno = err;
+}
+
+/* Put the atexit handler, the alternate stack and the signal handlers in
+   place, once, for raw mode and for restore bytes alike. Called with the
+   lock held. */
+static void nish_term_arm(void) {
+  if (nish_term_armed) return;
+  nish_term_armed = 1;
+  atexit(nish_term_leave);
+  /* An alternate stack the thread already has, from C code the program
+     links, is kept. */
+  stack_t alt;
+  if (sigaltstack(0, &alt) == 0 && (alt.ss_flags & SS_DISABLE)) {
+    alt.ss_sp = nish_term_alt_stack;
+    alt.ss_size = sizeof nish_term_alt_stack;
+    alt.ss_flags = 0;
+    sigaltstack(&alt, 0);
+  }
+  /* Every signal whose default ends the program, the real-time ones and those
+     a system adds (Linux's SIGIO, SIGPWR and SIGSTKFLT, Darwin's SIGEMT)
+     included, and SIGTSTP; not SIGKILL and SIGSTOP, which no handler sees, nor
+     those a default ignores or that stop the program, since the handler raises
+     its signal again at the default and a program that went on would go on
+     with its terminal restored. Off Linux SIGIO's default ignores it. A signal
+     the program or the C it links already handles is left alone, and one the C
+     library keeps for itself refuses the `sigaction`. */
+  unsigned spare = 1u << SIGCHLD | 1u << SIGCONT | 1u << SIGURG | 1u << SIGWINCH | 1u << SIGTTIN | 1u << SIGTTOU;
+#ifdef SIGINFO
+  spare |= 1u << SIGINFO;
+#endif
+#ifndef __linux__
+  spare |= 1u << SIGIO;
+#endif
+#ifdef SIGRTMAX
+  int last = SIGRTMAX;
+#else
+  int last = 31;
+#endif
+  for (int sig = 1; sig <= last; sig++) {
+    struct sigaction old;
+    if ((sig >= 32 || !(spare >> sig & 1)) && sigaction(sig, 0, &old) == 0 && old.sa_handler == SIG_DFL)
+      nish_term_catch(sig);
+  }
 }
 
 /* `setRawMode(on)`: 0, or -25 when stdin is not a terminal and the host's
@@ -356,45 +458,7 @@ static int32_t nish_term_set(bool on) {
   t->c_lflag &= ~(tcflag_t)(ECHO | ECHONL | ICANON | IEXTEN);
   t->c_cc[VMIN] = 1;
   t->c_cc[VTIME] = 0;
-  if (!nish_term_armed) {
-    nish_term_armed = 1;
-    atexit(nish_term_leave);
-    /* An alternate stack the thread already has, from C code the program
-       links, is kept. */
-    stack_t alt;
-    if (sigaltstack(0, &alt) == 0 && (alt.ss_flags & SS_DISABLE)) {
-      alt.ss_sp = nish_term_alt_stack;
-      alt.ss_size = sizeof nish_term_alt_stack;
-      alt.ss_flags = 0;
-      sigaltstack(&alt, 0);
-    }
-    /* Every signal whose default ends the program, the real-time ones and
-       those a system adds (Linux's SIGIO, SIGPWR and SIGSTKFLT, Darwin's
-       SIGEMT) included, and SIGTSTP; not SIGKILL and SIGSTOP, which no
-       handler sees, nor those a default ignores or that stop the program,
-       since the handler raises its signal again at the default and a program
-       that went on would go on with its terminal restored. Off Linux SIGIO's
-       default ignores it. A signal the program or the C it links already
-       handles is left alone, and one the C library keeps for itself refuses
-       the `sigaction`. */
-    unsigned spare = 1u << SIGCHLD | 1u << SIGCONT | 1u << SIGURG | 1u << SIGWINCH | 1u << SIGTTIN | 1u << SIGTTOU;
-#ifdef SIGINFO
-    spare |= 1u << SIGINFO;
-#endif
-#ifndef __linux__
-    spare |= 1u << SIGIO;
-#endif
-#ifdef SIGRTMAX
-    int last = SIGRTMAX;
-#else
-    int last = 31;
-#endif
-    for (int sig = 1; sig <= last; sig++) {
-      struct sigaction old;
-      if ((sig >= 32 || !(spare >> sig & 1)) && sigaction(sig, 0, &old) == 0 && old.sa_handler == SIG_DFL)
-        nish_term_catch(sig);
-    }
-  }
+  nish_term_arm();
   return nish_term_enter(TCSAFLUSH);
 }
 
@@ -404,5 +468,37 @@ int32_t nish_set_raw_mode(bool on) {
   int32_t r = nish_term_set(on);
   nish_term_drop(&old);
   return r;
+}
+
+/* `setTerminalRestore(bytes)`: keep a copy of `bytes` to write to stdout on
+   the way out, replacing what was kept; "" keeps nothing. 0, -7 past
+   `NISH_TERM_RESTORE_MAX` bytes and -25 when stdout is not a terminal, both
+   storing nothing. Once the bytes went out, as the program ends, it stores
+   nothing more and answers 0. The way out is each of `setRawMode`'s but
+   `setRawMode(false)` and a stop, which do not end the program, so the
+   bytes go before the termios and the handlers are put in place here too,
+   raw mode or not. */
+int32_t nish_set_terminal_restore(const nish_str *bytes) {
+  uint64_t n = bytes->len;
+  if (n > NISH_TERM_RESTORE_MAX) return -7;
+  if (n > 0 && !isatty(1)) return -25;
+  sigset_t old;
+  nish_term_hold(&old);
+  int cur = __atomic_load_n(&nish_term_out, __ATOMIC_ACQUIRE);
+  if (cur >= 0) {
+    int next = 0;
+    if (n > 0) {
+      nish_term_arm();
+      memcpy(nish_term_bytes[nish_term_next], bytes->data, n);
+      next = (int)(n * 2) + nish_term_next;
+      nish_term_next ^= 1;
+      __atomic_store_n(&nish_fatal_hook, nish_term_leave, __ATOMIC_RELEASE);
+    }
+    /* A writer that took the bytes meanwhile left -1, which stays. */
+    __atomic_compare_exchange_n(&nish_term_out, &cur, next, 0, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+    if (n == 0 && !nish_term_raw) __atomic_store_n(&nish_fatal_hook, 0, __ATOMIC_RELEASE);
+  }
+  nish_term_drop(&old);
+  return 0;
 }
 #endif
