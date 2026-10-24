@@ -149,7 +149,7 @@ collected in §7.
 | `i64` / `u64` are native 64-bit | the prelude throws at the first mixed arithmetic | C | `bigint`, `BigInt.asIntN(64, …)` / `asUintN` | Keep. The type becomes `bigint`, which is also the honest TS type. |
 | `i32 >>> n` reads back signed | `-1 >>> 0` is `-1` | C | `(a >>> n) \| 0` | Keep. It is the documented wart that `u32` exists for. |
 | `toI32` from `f64` saturates | `toI32(5e10)` | C | a runtime helper, already in `shim.mjs` | Keep. |
-| 1-ulp `sin` / `cos` / `tan` / `atan2` / `hypot` / `log` / `pow` | known-failures | — | nothing | Platform noise, not a language difference: two native targets can disagree the same way. Stated, not translated. |
+| 1-ulp `sin` / `cos` / `tan` / `atan2` / `hypot` / `log` / `pow` | known-failures | — | nothing | Platform noise, not a language difference. `sin`, `cos`, `log` and `pow` are the platform's libm, so two native targets can disagree the same way; `tan`, `atan2` and `hypot` are `std/math.ts` and identical on every native target, and only V8's answer can differ. Stated, not translated. |
 | integer divide by zero, `MIN / -1` | known-failures | B | `idiv`, which panics as native does | — |
 | signed overflow panics without `--wrapping` or `wrapping*` | LANGUAGE.md | B | wrapping, via the `\| 0` above | A program that overflows stops natively, and the TS reading picks one defined answer. |
 

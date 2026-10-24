@@ -80,7 +80,7 @@ rewritten. The rules, as the frozen store embodies them and as the helpers in
 | `s.length`, `charCodeAt`, `substring`, `slice`, `indexOf`, `startsWith`, `endsWith` | `__nish.strLen` and the same-named helpers, over the UTF-8 bytes |
 | `new Array<T>(n)` | `__nish.newArray(n, zero)`: zero-filled, no holes |
 | `console.log`, `process.exit`, `process.argv`, `throw` | `__nish.log` (synchronous), `__nish.exit`, `__nish.argv`, `__nish.trap` |
-| `Math.abs/min/max/sign` on integers | `\| 0`, `absI64`, `minI64` / `maxI64`, `minU64` / `maxU64`, `signI64` |
+| `Math.abs/min/max` on integers | `\| 0`, `absI64`, `minI64` / `maxI64`, `minU64` / `maxU64` |
 | `toI32`, `toI64`, `toF64`, any conversion with an unsigned or `f32` side | `__nish.toI32` / `toI64` / `toF64` / `convert` (saturating from floats, wrapping between integers) |
 | `parseInt`, `parseFloat`, `Number` | `__nish.parseInt` / `parseFloat` / `number`, with `strtoll` / `strtod` semantics |
 | file I/O | `__nish.*` over `node:fs` |

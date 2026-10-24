@@ -599,8 +599,9 @@ export const hypotF64 = (x: f64, y: f64): f64 => {
   const a: f64 = ax > ay ? ax : ay
   const b: f64 = ax > ay ? ay : ax
   if (a < 1.0e150 && a > 1.0e-150) {
-    // JavaScript's `hypot(x, 0)` is `|x|` exactly, which one compare guarantees and the core,
-    // a square root of a rounded sum, only almost always gives.
+    // JavaScript's `hypot(x, 0)` is `|x|` exactly. The core gives it too -- its sum is a^2 to
+    // within 2^-18 ulp before rounding, and the root of a double that near a^2 rounds to a -- so
+    // the compare only skips the core's work.
     return b === 0.0 ? a : hypotCoreF(a, b)
   }
   return hypotRest(ax, ay, a, b)

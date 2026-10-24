@@ -13,7 +13,8 @@ protocol is in bench/README.md ("Math accuracy"); not run in CI.
 
 prints instead the operand tables of `tests/cases/math_ulp_samples.ts`: a few
 hundred operands per function, drawn across every reduction branch, each with
-its correctly rounded result.
+its correctly rounded result and the side of that result the exact value lies
+on (1 above, -1 below, 0 exact).
 """
 
 import math
@@ -23,6 +24,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+from fractions import Fraction
 from multiprocessing import Pool
 
 import mpmath
@@ -96,9 +98,13 @@ def measure(path):
 
 
 def rounded(ex):
-    """The double nearest an mpmath value, ties to even."""
-    mp.prec = 53
-    return float(+ex)
+    """The double nearest an mpmath value, ties to even, and the side of it the
+    exact value lies on: 1 above, -1 below, 0 when the double is exact."""
+    # A Fraction's float is correctly rounded, subnormals included.
+    sign, man, exp, _ = mpmath.mpf(ex)._mpf_
+    q = Fraction(-int(man) if sign else int(man)) * Fraction(2) ** int(exp)
+    r = float(q)
+    return r, (q > Fraction(r)) - (q < Fraction(r))
 
 
 def draws():
@@ -135,6 +141,33 @@ def draws():
             out.append(("A", (x * g.uniform(lo, hi) * g.choice((-1.0, 1.0)), x)))
     out += [("A", (lu(-1000, 1000), lu(-1000, 1000))) for _ in range(40)]
     out += [("A", (lu(-60, 60), lu(-1022, -1000))) for _ in range(20)]
+    # atan2 with a subnormal x (the rescale by 2^1023 when its high word is 0),
+    # and with both operands subnormal.
+    def sub():
+        v = math.ldexp(max(1, g.randint(1, 2**52 - 1) >> g.randint(0, 51)), -1074)
+        return -v if g.random() < 0.5 else v
+
+    out += [("A", (3e-320, 4e-320)), ("A", (-5e-324, 1e-310))]
+    out += [("A", (lu(-1074, 60), sub())) for _ in range(20)]
+    out += [("A", (sub(), sub())) for _ in range(20)]
+    # atan2 where plain fdlibm (an uncompensated quotient and pi - (z - pi_lo))
+    # answers the double past the exact value's neighbour, 1.12 to 1.22 ulp off:
+    # the worst of 30,000 draws with x < 0 or |y/x| beside an interval edge.
+    hard = (
+        (137768.8239278642, -51187.6838868487),
+        (31.517608247237735, -11.445081511445295),
+        (210.83916966352572, -72.91759115449184),
+        (-8619.04378461657, 34138.832752146816),
+        (9.279620559638634e-06, -3.3184029198349453e-06),
+        (1550068.4961635876, -477159.3694825106),
+        (-0.00010998855276162424, -3.721846483860442e-05),
+        (-13.336796314225001, -4.610170132512149),
+        (4.308533249751299, -1.4862773688891364),
+        (-0.056809069831333076, -0.024810489499997326),
+        (-0.00023627813689758873, -8.94030526268767e-05),
+        (-0.001391832202215449, -0.000503429464750885),
+    )
+    out += [("A", a) for a in hard]
     # hypot: close and far exponents in the core, b tiny beside a (to 2^-60),
     # and both rescales.
     for _ in range(60):
@@ -153,7 +186,7 @@ def samples():
     names = {"T": "tan", "A": "atan2", "H": "hypot"}
     tables = {"T": [], "A": [], "H": []}
     for kind, a in draws():
-        tables[kind].append((a, rounded(exact(kind, list(a)))))
+        tables[kind].append((a, *rounded(exact(kind, list(a)))))
     for kind in ("T", "A", "H"):
         name = names[kind]
         rows = tables[kind]
@@ -161,6 +194,7 @@ def samples():
         for i in range(ops):
             print(f"const {name}In{i}: f64[] = [{', '.join(repr(r[0][i]) for r in rows)}]")
         print(f"const {name}Want: f64[] = [{', '.join(repr(r[1]) for r in rows)}]")
+        print(f"const {name}Side: i32[] = [{', '.join(str(r[2]) for r in rows)}]")
     return 0
 
 

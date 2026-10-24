@@ -36,9 +36,10 @@
 // - An i64 or u64 string index, or offset of an array's `fill`,
 //   goes through `Number`.
 // - The conversions whose source or target is unsigned or f32 go through
-//   `convert(x, from, to)`; `Math.min`, `Math.max`, `Math.sign` and
-//   `Math.abs` on a wide or i32 integer through the core, where Math answers
-//   differently or refuses a BigInt.
+//   `convert(x, from, to)`; `Math.min`, `Math.max` and `Math.sign` on an
+//   i64 or u64, and `Math.abs` on an i64, through the core, where Math
+//   refuses a BigInt. On an i32, `abs` is inlined `| 0` and the rest are
+//   Math's own.
 //   On a float, `min`, `max` and `round` are Math's own, which native code
 //   matches, NaN and `-0` included.
 //
