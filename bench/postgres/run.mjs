@@ -108,6 +108,30 @@ const LDFLAGS =
         ...(spawnSync("ld.lld", ["--version"]).status === 0 ? ["-fuse-ld=lld"] : []),
       ]
     : []
+// scripts/build.sh's hardening, read from the script rather than copied: its
+// block runs here with this compiler, so the target's control-flow flag and
+// the ELF-only stack-clash and relro flags come out as the build picks them.
+// Less the stack protector and _FORTIFY_SOURCE, which build.sh's own comment
+// says reach its C runtime alone (Nish's module is IR, where neither applies),
+// so the twin's C takes what the Nish binary's generated code does.
+const HARDEN = (() => {
+  const script = fs.readFileSync(path.join(root, "scripts", "build.sh"), "utf8")
+  const block = /^# Hardening, on every native profile[\s\S]*?^tls=\(\)$/m.exec(script)?.[0]
+  if (block === undefined) {
+    fail("scripts/build.sh has no hardening block ending at `tls=()` to read")
+  }
+  const r = spawnSync(
+    "bash",
+    ["-c", 'CC=$1; profile=speed; common=(); eval "$2"; printf "%s\\n" "${common[@]}"', "_", cc, block],
+    { encoding: "utf8" }
+  )
+  if (r.status !== 0) {
+    fail(`reading scripts/build.sh's hardening failed\n${r.stderr}`)
+  }
+  return r.stdout
+    .split("\n")
+    .filter((f) => f !== "" && f !== "-fstack-protector-strong" && !/^-[UD]_FORTIFY_SOURCE/.test(f))
+})()
 
 const run = (cmd, args, what) => {
   const r = spawnSync(cmd, args, { cwd: root, encoding: "utf8", maxBuffer: 1 << 26 })
@@ -155,6 +179,7 @@ run(
   cc,
   [
     ...CFLAGS,
+    ...HARDEN,
     ...LDFLAGS,
     "-I",
     pgConfig("--includedir"),
