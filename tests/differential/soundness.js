@@ -59,24 +59,25 @@
  * a program that reads its input from stdin sees end of file on both sides and
  * one that writes a file cannot see the other's. A difference is checked by
  * running each side a second time: a side that answers differently then is
- * nondeterministic -- a clock, a pid, a socket -- and is reported as that
- * rather than as a difference.
+ * nondeterministic -- a clock, a pid, a socket, or freed memory read -- and is
+ * reported as that rather than as a difference.
  *
  * A failure saves its source, both IR directories and both runs under
  * `build/test/differential/soundness/<name>/` and prints that path.
  *
  * A program whose two builds fail to build alike is `broken`, which fails the
  * run: a corpus program that builds nowhere is the runner's mistake or the
- * compiler's. A build or run that outlives its bound is a `timeout`, and one
- * whose either side answers differently on a second run is
- * `nondeterministic`; both are counted and listed, and fail nothing. The
- * summary line counts every verdict, and `elided`, the programs whose two
+ * compiler's. So does one that is `nondeterministic`, either side answering
+ * differently on a second run: every corpus case has one expected run, and a
+ * read of freed memory may show up that way rather than as a difference. A
+ * build or run that outlives its bound is a `timeout`, counted and listed,
+ * and fails nothing. The summary line counts every verdict, and `elided`, the programs whose two
  * builds' IR differs: none at all means the flag changed nothing, and the run
  * answers 2, since every agreement compared a build with itself.
  *
  * Exit status: 0 when every compared program agreed, 1 on a difference, a
- * broken program or a stale `KNOWN` entry, 2 when nothing could be compared
- * or no build differed from its reference.
+ * broken or nondeterministic program or a stale `KNOWN` entry, 2 when nothing
+ * could be compared or no build differed from its reference.
  */
 import { spawn, spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -697,7 +698,7 @@ const main = async () => {
       `broken=${count("broken")} timeout=${count("timeout")} skipped=${skipped.length} ` +
       `unreached=${unreached.length} (${((Date.now() - started) / 1000).toFixed(1)} s)`
   )
-  if (failures.length + stale.length + count("broken") > 0) {
+  if (failures.length + stale.length + count("broken") + count("nondeterministic") > 0) {
     return 1
   }
   if (count("agree") === 0) {
