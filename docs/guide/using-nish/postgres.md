@@ -229,11 +229,77 @@ the program can queue unsent. A cap out of range — `maxMessage` or
 an empty `user`, a startup parameter holding a NUL, or a nonce shorter than 18
 bytes is a mistake in the program, and the constructor panics.
 
+## A pool
+
+`PgPool` holds up to `size` connections to one server and a queue of requests
+waiting for one. It is sans-IO like the connection: it says which slot needs a
+socket, and your loop makes it and moves its bytes.
+
+```ts
+const pool = new PgPool(config, password, 4, 256); // 4 connections, 256 waiting requests
+wipe(password); // the pool keeps its own copy until dispose()
+pool.register("by_id", "select name from users where id = $1", [20]);
+
+const ticket: i32 = pool.request(); // PG_POOL_FULL when 256 wait
+// In the loop:
+let slot: i32 = pool.dispatch(); // the oldest request, on the least busy ready connection
+while (slot >= 0) {
+  const conn = pool.connection(slot);
+  conn.bindStart("by_id"); // pool.ticket names the request
+  conn.paramInt(toI64(42));
+  conn.bindEnd();
+  pool.send(); // ends the group: send(), not sync()
+  slot = pool.dispatch();
+}
+slot = pool.wanted(); // a slot that needs a socket
+while (slot >= 0) {
+  pool.connect(slot, nonce); // a fresh 18-byte nonce each time
+  // tcpConnect, pollAdd, and remember which socket is slot's
+  slot = pool.wanted();
+}
+// ... read and write each slot's socket through pool.connection(slot), as above ...
+let event: i32 = pool.next(slot); // PG_ROW, PG_GROUP_DONE, ...: pool.ticket says whose
+```
+
+- **Requests.** `request()` queues a request and answers its ticket.
+  `dispatch()` hands the oldest one to the ready connection with the fewest
+  groups in flight, never more than `PgConfig.maxInFlight` on one; build its
+  group on `connection(slot)` and end it with `send()`. A connection is made
+  only when the waiting requests outgrow the ones there are, one for every
+  `maxInFlight` of them, up to `size`.
+- **Statements.** A statement given to `register` is prepared on each
+  connection in the same write as its first request, so a request binds it by
+  name at once. Register them all before the first `connect`; after it,
+  `register` answers `false`.
+- **Events.** `next(slot)` answers what `PgConnection.next()` does, with
+  `ticket` naming the request. An error fails only its own request's group:
+  the other requests on the connection are answered.
+- **Failures.** When a connection fails, `next(slot)` answers `PG_LOST` for
+  each request it took with it, oldest first, then `PG_FAILED`: close the
+  socket. The slot is connected again when a request next needs it. A
+  connection that fails before it is ready, while no other is, takes the
+  oldest waiting request with it, so a server that cannot be reached empties
+  the queue rather than holds it. When a socket's connect fails, or the
+  socket ends, call `connection(slot).closed()`.
+- **The password.** `dispose()` wipes the pool's copy and every
+  connection's; `passwordWiped()` says whether it is gone.
+
+The constructor panics on a `size` outside 1 to 1024, a `queueSize` outside 1
+to 2^20, or a `maxInFlight` over 1024, as well as on what `PgConnection`
+panics on. `connect` panics on a slot that wants no connection, or after
+`dispose()`; `connection` on a slot that never had one.
+
+[`tests/postgres/carrier.ts`](../../../tests/postgres/carrier.ts) is a whole
+program: one `pollWait` loop holding the pool's sockets beside an HTTP server,
+which answers requests while a query is in flight.
+
 ## What it does not do
 
 TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query
-cancellation, binary-format results and the simple query protocol. A pool is a
-program's own: an array of connections and the loop above.
+cancellation, binary-format results and the simple query protocol. A pool
+neither reads a clock nor retries: a request waits in its queue until a
+connection takes it, and one lost with its connection is the program's to run
+again.
 
 It does not insist on authentication: a server that answers
 `AuthenticationOk` without asking for a password is believed, as
