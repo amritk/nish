@@ -43,6 +43,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and the keys it reads decoded |
+| [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and `nish/term-pixels` are its pure parts |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url |
@@ -996,6 +997,13 @@ the module reaches no capability, a program that uses it builds under
 `--deny` of all of them and prints the same bytes under Node. Reading the
 keys, raw mode and the terminal's size come from
 [`nish:term`](terminal.md).
+
+To have all of it done for you — opening the terminal, asking it what it can
+draw, drawing a framebuffer with kitty graphics, Sixel, half blocks or ASCII,
+and slowing the frame rate when the link cannot keep up — use
+`runTerminal` from `nish/term-io`, which [Terminal programs](terminal.md)
+walks through. This section is the layer underneath, for a program that
+wants its own loop.
 
 ```ts nish:ok
 import { ATTR_BOLD, COLOR_DEFAULT, Canvas, Screen, hideCursor, rgb, showCursor } from "nish/term";

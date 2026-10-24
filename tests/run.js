@@ -1862,6 +1862,176 @@ if (!only || "term".includes(only)) {
   )
 }
 
+// `nish/term-io` against the fake terminal `tests/term-io/relay.mjs` plays
+// under script(1): the guide's program (the `runTerminal` block of
+// docs/guide/using-nish/terminal.md) quits on `q` and on kitty's Ctrl-C and
+// refuses a pipe on either side; a panic mid-frame leaves the restore string
+// as the last bytes and the termios as it was; over a slow modelled link the
+// tier falls, the frames in flight stay at the limit, and a key still reaches
+// `update` within a frame of the lowest rate; the key state's watermark holds
+// while an answer is in and lapses after a second without one; and a present
+// loop of each backend keeps its memory while one that leaks 0.27 MB a frame
+// does not; and examples/term-probe.ts reports what it found. Linux only:
+// the relay finds the program through /proc.
+if (!only || "term".includes(only) || "term-io".includes(only)) {
+  const ioDir = path.join(buildDir, "term-io")
+  if (process.platform !== "linux" || !has("script")) {
+    skip("term-io: needs Linux and `script` for the pseudo-terminal the relay plays the terminal on")
+  } else {
+    fs.rmSync(ioDir, { recursive: true, force: true })
+    fs.mkdirSync(ioDir, { recursive: true })
+    const { relay } = await import("./term-io/relay.mjs")
+    const guidePage = path.join(root, "docs", "guide", "using-nish", "terminal.md")
+    const guideSrc = [...fs.readFileSync(guidePage, "utf8").matchAll(/```ts nish:ok\n([\s\S]*?)```/g)]
+      .map((m) => m[1])
+      .find((block) => block.includes("runTerminal"))
+    const build = (name, src) => {
+      const dir = path.join(ioDir, name)
+      fs.mkdirSync(dir, { recursive: true })
+      const exe = path.join(dir, "app")
+      const r = spawnSync(NISH, [src, "-o", dir + path.sep, "--link", exe], { cwd: root, encoding: "utf8" })
+      return check(`term-io: ${name} links`, r.status === 0, shown(r)) ? exe : null
+    }
+    const guideTs = path.join(ioDir, "guide.ts")
+    if (guideSrc === undefined) {
+      check("term-io: docs/guide/using-nish/terminal.md has a nish:ok block that calls runTerminal", false)
+    } else {
+      fs.writeFileSync(guideTs, guideSrc)
+    }
+    const guideExe = guideSrc === undefined ? null : build("guide", guideTs)
+    const loopExe = build("loop", path.join(root, "tests", "link", "std_term_io_relay", "loop.ts"))
+    const probeExe = build("term-probe", path.join(root, "examples", "term-probe.ts"))
+    const at = (name) => path.join(ioDir, "runs", name)
+    const said = (r) =>
+      `exit ${r.status}${r.timedOut ? " (timed out)" : ""}, frames ${r.frames}, same stty ${r.sameStty}\n` +
+      `stderr: ${r.err}${r.scriptErr}\nstdout tail: ${JSON.stringify(r.out.slice(-400))}`
+    if (guideExe !== null) {
+      for (const [how, bytes] of [
+        ["q", "q"],
+        ["kitty's Ctrl-C", "\x1b[99;5u"],
+      ]) {
+        const r = await relay(guideExe, "", { dir: at(`guide-${how.length}`), keys: [{ afterFrames: 5, bytes }] })
+        check(
+          `term-io: the guide's program quits on ${how} with 0, and the terminal is as it was`,
+          r.status === 0 && r.sameStty && !r.timedOut && r.frames >= 5,
+          said(r)
+        )
+      }
+      for (const [side, options, needle] of [
+        ["stdin", { stdinNull: true }, "stdin is not a terminal"],
+        ["stdout", { stdoutPipe: true }, "stdout is not a terminal"],
+      ]) {
+        const r = await relay(guideExe, "", { dir: at(`refuse-${side}`), ...options })
+        check(
+          `term-io: the guide's program refuses ${side} off a terminal with one sentence on stderr and 1`,
+          r.status === 1 && r.err.trim().split("\n").length === 1 && r.err.includes(needle) && r.sameStty,
+          said(r)
+        )
+      }
+    }
+    if (probeExe !== null) {
+      const r = await relay(probeExe, "", { dir: at("probe"), timeoutMs: 20000 })
+      const lines = r.out.split("\n")
+      const statsLines = lines.filter((l) => /^\ds frames \d+ tier \d+ backend kitty /.test(l))
+      check(
+        "term-io: examples/term-probe.ts prints the caps it found under kitty field by field and a stats line a second for 5 s",
+        r.status === 0 &&
+          r.sameStty &&
+          ["name kitty(0.49.2)", "answered true", "graphics kitty", "cellWidthPx 10", "multiplexer none"].every((l) =>
+            r.out.includes(`${l}\n`)
+          ) &&
+          statsLines.length === 5,
+        `${said(r)}\nstats lines ${JSON.stringify(statsLines)}`
+      )
+    }
+    if (loopExe !== null) {
+      const panic = await relay(loopExe, "panic", { dir: at("panic") })
+      const restore =
+        "\x18\x1b[?2026l\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b[<u\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l"
+      const afterPanic = panic.out.slice(panic.out.lastIndexOf("<panic>") + "<panic>".length)
+      check(
+        "term-io: a panic in the tenth render leaves the restore string as the last bytes, in reverse of turning on, and the termios as it was",
+        panic.status === 1 &&
+          panic.err.includes("index out of range: 10 >= 3") &&
+          panic.out.includes("<panic>") &&
+          afterPanic === restore &&
+          panic.sameStty,
+        `${said(panic)}\nafter <panic>: ${JSON.stringify(afterPanic)}\nwant: ${JSON.stringify(restore)}`
+      )
+
+      const throttle = await relay(loopExe, "throttle", {
+        dir: at("throttle"),
+        link: { rttMs: 60, bytesPerSec: 300000 },
+        keys: [
+          { afterFrames: 30, bytes: "k" },
+          { afterFrames: 45, bytes: "q" },
+        ],
+        timeoutMs: 30000,
+      })
+      const tier = /tier (\d+) (\d+)/.exec(throttle.out)
+      const unacked = /unacked (\d+)/.exec(throttle.out)
+      const keyNs = /key (\d+)/.exec(throttle.out)
+      const latencyMs =
+        keyNs === null || throttle.keySentNs.length === 0
+          ? -1
+          : Number(BigInt(keyNs[1]) - throttle.keySentNs[0]) / 1e6
+      check(
+        "term-io: over a 60 ms, 300 kB/s link the tier falls, at most two frames go unacknowledged, and a key reaches update within 100 ms",
+        throttle.status === 0 &&
+          tier !== null &&
+          Number(tier[2]) < Number(tier[1]) &&
+          unacked !== null &&
+          Number(unacked[1]) <= 2 &&
+          throttle.maxUnacked <= 2 &&
+          latencyMs >= 0 &&
+          latencyMs < 100,
+        `${said(throttle)}\ntier ${tier?.slice(1)}, unacked ${unacked?.[1]} (relay saw ${throttle.maxUnacked}), key latency ${latencyMs} ms`
+      )
+
+      const watermark = await relay(loopExe, "watermark", { dir: at("watermark") })
+      check(
+        "term-io: the key state is watermarked once a frame's answer is in, and not after a second without one",
+        watermark.status === 0 && watermark.out.includes("answered true watermarked true then false") && watermark.sameStty,
+        said(watermark)
+      )
+
+      // Each backend's resident memory at frame 50 and at frame 250; 0.27 MB a
+      // frame over the 200 between is 54 MB, and the bound is 8.
+      const boundKb = 8 * 1024
+      const runs = [
+        ["kitty", "rss"],
+        ["sixel", "rss"],
+        ["halfblock", "rss"],
+        ["ascii", "rss"],
+        ["kitty", "rss-leak"],
+      ]
+      const rssRuns = await Promise.all(
+        runs.map(([backend, mode]) =>
+          relay(loopExe, mode, {
+            dir: at(`${mode}-${backend}`),
+            env: { NISH_TERM_GRAPHICS: backend },
+            rssAt: [50, 250],
+            keys: [{ afterFrames: 250, bytes: "q" }],
+            timeoutMs: 60000,
+          })
+        )
+      )
+      runs.forEach(([backend, mode], i) => {
+        const r = rssRuns[i]
+        const grew = r.rss.length === 2 && r.rss.every((s) => s.kb > 0) ? r.rss[1].kb - r.rss[0].kb : NaN
+        const leaks = mode === "rss-leak"
+        check(
+          leaks
+            ? `term-io: a ${backend} present loop that keeps 0.27 MB a frame grows past the 8 MB bound`
+            : `term-io: a ${backend} present loop of 250 frames grows less than 8 MB`,
+          r.status === 0 && r.out.includes("frames 250") && (leaks ? grew > boundKb : grew < boundKb),
+          `${said(r)}\nrss ${JSON.stringify(r.rss)}`
+        )
+      })
+    }
+  }
+}
+
 // The same two reading programs as `--profile wasi` builds under Node's WASI,
 // where `readStdin` reads without asking whether stdin is ready (runtime-term.c) and the terminal
 // questions answer "not a terminal", so the native expected lines hold; and a
@@ -8252,6 +8422,18 @@ if (!only || "par_alloc".includes(only)) {
   )
 }
 
+/**
+ * A resolve hook that answers a relative specifier written without an
+ * extension (`./fixtures`, as the compiler takes it) with its `.ts` file.
+ * runtime/nish.mjs answers only `nish/` and `nish:`, and Node resolves no
+ * extension itself, so a fixture split across files needs this to run there.
+ */
+const tsExtensionHook = `data:text/javascript,${encodeURIComponent(
+  'import { registerHooks } from "node:module";' +
+    "registerHooks({ resolve: (s, c, next) => " +
+    '/^\\.\\.?\\//.test(s) && !/\\.[cm]?[jt]s$/.test(s) ? next(s + ".ts", c) : next(s, c) });'
+)}`
+
 /** Run a link fixture's `main` under runtime/nish.mjs, its output read as `encoding`. */
 const runFixtureUnderNode = (entry, encoding) =>
   spawnSync(
@@ -8262,6 +8444,8 @@ const runFixtureUnderNode = (entry, encoding) =>
       "--no-warnings",
       "--import",
       path.join(root, "runtime", "nish.mjs"),
+      "--import",
+      tsExtensionHook,
       "-e",
       `const m = await import(${JSON.stringify(entry)}); process.exit(m.main());`,
     ],
@@ -8480,16 +8664,34 @@ for (const name of [
 // text: the canvas lines carry raw half blocks, and Node builds them from
 // UTF-16 code units where the native screen builds UTF-8, so a wrong lead or
 // continuation byte would decode to U+FFFD on both sides of a string compare.
-for (const name of ["std_term", "std_term_f64"]) {
+// The pure modules nish/term-io drives (an event stream, the probe, the rate
+// controller, the pixel encoders and the base64 they send) are held to the same
+// bytes. Trailing newlines are not compared, as the link loop trims them too.
+for (const name of [
+  "std_term",
+  "std_term_f64",
+  "std_term_events",
+  "std_term_probe",
+  "std_term_rate",
+  "std_term_pixels",
+  "std_base64",
+]) {
   if (only && !name.includes(only) && !"term-under-node".includes(only)) {
     continue
   }
   const entry = path.join(linkDir, name, "main.ts")
   const run = runFixtureUnderNode(entry, "buffer")
   const want = fs.readFileSync(path.join(linkDir, name, "expected.out"))
+  const untrailed = (bytes) => {
+    let end = bytes.length
+    while (end > 0 && bytes[end - 1] === 0x0a) {
+      end--
+    }
+    return bytes.subarray(0, end)
+  }
   check(
-    `link/${name}: nish/term prints the same bytes under runtime/nish.mjs as natively`,
-    run.status === 0 && Buffer.compare(run.stdout, want) === 0,
+    `link/${name}: prints the same bytes under runtime/nish.mjs as natively`,
+    run.status === 0 && Buffer.compare(untrailed(run.stdout), untrailed(want)) === 0,
     `exit ${run.status}\n--- native (expected.out)\n${want.toString("utf8")}--- node\n${run.stdout.toString("utf8")}${run.stderr.toString("utf8")}`
   )
 }
