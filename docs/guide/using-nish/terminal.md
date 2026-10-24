@@ -128,8 +128,7 @@ hides the cursor and asks the terminal what it can do (below). Then it turns
 on what the options ask for and the terminal has: the kitty keyboard protocol,
 mouse reports, bracketed paste and focus reports. Before each of those reaches
 the terminal, the bytes that undo everything so far are handed to the runtime
-([`setTerminalRestore`](#leaving-the-screen-as-you-found-it)), in reverse
-order. So a panic in `render`, a Ctrl-C, or a `kill` leaves the terminal as it
+([`setTerminalRestore`](#leaving-the-screen-as-you-found-it)). So a panic in `render`, a Ctrl-C, or a `kill` leaves the terminal as it
 was, with the cursor back and the screen you started from.
 
 ## What it detects, and what it falls back to
@@ -202,7 +201,9 @@ there, fix the rate or the backend with the overrides below.
 | `NISH_TERM_FPS` | a fixed frame rate, over everything else |
 
 The variables are the user's: they let someone running your program fix it
-for their terminal without a rebuild.
+for their terminal without a rebuild. What each one changed is listed in
+`frame.caps.overrides`, joined by `; `, so a bug report shows it, for example
+`NO_COLOR: 16 colours; NISH_TERM_FPS=20: 20 frames a second`.
 
 ## Reporting a terminal that draws wrong
 

@@ -150,7 +150,7 @@ export class TermCaps {
   graphics: string
   /** The terminal's name and version from XTVERSION, else `TERM_PROGRAM`, else "". */
   name: string
-  /** What the environment forced, one `VARIABLE: effect` per entry joined by `; `; "" when nothing. */
+  /** What the environment forced, one `VARIABLE: effect` per entry joined by `; `; "" when nothing. `nish/term-io` adds `NISH_TERM_FPS`'s, which the controller applies. */
   overrides: string
   /** How many colours to draw with: 16, 256 or 16777216. */
   colors: i32
