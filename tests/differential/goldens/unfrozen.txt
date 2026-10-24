@@ -159,6 +159,7 @@ cases/enum_loop_held_several added after R6: no rewriter to freeze it with
 cases/enum_loop_join_gap added after R6: no rewriter to freeze it with
 cases/enum_narrowing added after R6: no rewriter to freeze it with
 cases/export_memory_native added after R6: no rewriter to freeze it with
+cases/f32_to_bits added after R6: no rewriter to freeze it with
 cases/ffi_buffer_call_sites added after R6: no rewriter to freeze it with
 cases/ffi_buffer_count_proved added after R6: no rewriter to freeze it with
 cases/ffi_buffer_declared added after R6: no rewriter to freeze it with
@@ -255,8 +256,18 @@ cases/map_key_u8 added after R6: no rewriter to freeze it with
 cases/map_type_param_shadow added after R6: no rewriter to freeze it with
 cases/map_value_result added after R6: no rewriter to freeze it with
 cases/map_value_result_by_value added after R6: no rewriter to freeze it with
+cases/math_atan2 added after R6: no rewriter to freeze it with
 cases/math_clz32 added after R6: no rewriter to freeze it with
+cases/math_hypot added after R6: no rewriter to freeze it with
+cases/math_imul added after R6: no rewriter to freeze it with
+cases/math_minmax_nan added after R6: no rewriter to freeze it with
 cases/math_numeric_separators added after R6: no rewriter to freeze it with
+cases/math_round_negzero added after R6: no rewriter to freeze it with
+cases/math_sign added after R6: no rewriter to freeze it with
+cases/math_split_member added after R6: no rewriter to freeze it with
+cases/math_std_edges added after R6: no rewriter to freeze it with
+cases/math_tan added after R6: no rewriter to freeze it with
+cases/math_ulp_samples added after R6: no rewriter to freeze it with
 cases/mem_callee_scope added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_control added after R6: no rewriter to freeze it with
 cases/mem_callee_scope_escape added after R6: no rewriter to freeze it with

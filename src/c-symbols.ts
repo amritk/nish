@@ -32,12 +32,11 @@
 //   - the names `isCLibrarySymbol` lists:
 //       - every symbol the runtime's objects leave undefined, natively, with
 //         `-DNISH_THREADS` and for wasm32-wasi, and every one
-//         `runtime/runtime-wasm.c` defines or leaves undefined (it defines
-//         `fmin`, `fminf`, `fmax` and `fmaxf` itself);
+//         `runtime/runtime-wasm.c` defines or leaves undefined;
 //       - what the runtime calls only on Darwin and the BSDs, which no Linux
 //         run can list: `accept`, `getentropy`, `kevent`, `kqueue`, `pipe`;
 //       - the C library calls a program's own code reaches through LLVM: the
-//         libm functions behind every `Math` builtin and `%` on a float, in
+//         libm functions behind the `Math` builtins and `%` on a float, in
 //         `double` and in `float` (LLVM narrows a `double` call whose result
 //         is truncated), the ones the optimiser rewrites them into (`sincos`,
 //         `exp2`, `ldexp`, `cbrt`, ...), and the `memcpy` family and `bcmp`
@@ -74,7 +73,7 @@
 // `tests/run.js` holds the list to the toolchain ("c-symbols: ..."): every
 // symbol `llvm-nm -u` finds in the runtime's objects, in `runtime-wasm.c`, in
 // the N-API shim, and in two programs -- `tests/c-symbols/math.ts`, which calls
-// every `Math` builtin and `%` on a float, and `lowered.ts`, which multiplies
+// every `Math` builtin LLVM can lower to libm and `%` on a float, and `lowered.ts`, which multiplies
 // and divides `i64`s, copies and fills arrays and builds and prints strings --
 // each linked at `-O0`, `-Oz` and `-O3` with LTO (its LTO object and its
 // executable both) and compiled for wasm32-wasi, every global the wasi-libc
