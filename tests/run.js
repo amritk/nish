@@ -2800,6 +2800,43 @@ if (!only || "diagnostics".includes(only)) {
     codesGen.stdout + codesGen.stderr
   )
 
+  // ---- the security records' scope ---------------------------------------
+  // Every file of the attacker-facing surface is in a record's scope or on the
+  // index's "Not yet audited" list (CLAUDE.md, "Definition of done").
+  const scopeScript = path.join(root, "scripts", "security-scope.mjs")
+  const scopeLive = spawnSync("node", [scopeScript], { cwd: root, encoding: "utf8" })
+  check(
+    "security-scope: every std/net, std/crypto and runtime C file is in a record or listed as not yet audited",
+    scopeLive.status === 0,
+    scopeLive.stdout + scopeLive.stderr
+  )
+  {
+    // A new file in no scope is refused, and so is a listed file now covered.
+    const tree = fs.mkdtempSync(path.join(os.tmpdir(), "nish-scope-"))
+    const put = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(tree, rel)), { recursive: true })
+      fs.writeFileSync(path.join(tree, rel), text)
+    }
+    put("std/net/new.ts", "")
+    put("std/crypto/listed.ts", "")
+    put("runtime/runtime.c", "")
+    put("docs/security/r.md", "## Scope\n\n| File | Functions |\n| --- | --- |\n| `runtime/*.c` | all |\n| `std/crypto/listed.ts` | all |\n")
+    put(
+      "docs/security/README.md",
+      "## Areas\n\n| Area | Record | Scope |\n| --- | --- | --- |\n\n## Not yet audited\n\n| File | Why |\n| --- | --- |\n| `std/crypto/listed.ts` | later |\n"
+    )
+    const scopeBad = spawnSync("node", [scopeScript, "--root", tree], { encoding: "utf8" })
+    fs.rmSync(tree, { recursive: true, force: true })
+    check(
+      "security-scope: refuses a file in no record's scope and a listed file a record now covers",
+      scopeBad.status === 1 &&
+        scopeBad.stderr.includes("std/net/new.ts: in no record's scope") &&
+        scopeBad.stderr.includes("std/crypto/listed.ts: in a record's scope") &&
+        !scopeBad.stderr.includes("runtime/runtime.c"),
+      scopeBad.stdout + scopeBad.stderr
+    )
+  }
+
   // ...and that it refuses what `codeFor` would misread (issue #107). The live
   // registry is copied with one line broken, and `--check` has to reject each
   // copy and name the table. A stray string with no other half is skipped by
