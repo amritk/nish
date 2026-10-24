@@ -2026,19 +2026,20 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
         link: { rttMs: 60, bytesPerSec: 300000 },
         keys: [
           { afterFrames: 30, bytes: "k" },
-          { afterFrames: 45, bytes: "q" },
+          { afterFrames: 90, bytes: "q" },
         ],
         timeoutMs: 60000,
       })
       const tier = /tier (\d+) (\d+)/.exec(throttle.out)
       const keyNs = /key (\d+)/.exec(throttle.out)
       const peak = /peak (\d+) B\/s cost (\S+) ms/.exec(throttle.out)
+      const final = /final (\d+) B\/s/.exec(throttle.out)
       const latencyMs =
         keyNs === null || throttle.keySentNs.length === 0
           ? -1
           : Number(BigInt(keyNs[1]) - throttle.keySentNs[0]) / 1e6
       const linkMs = (throttle.maxFrameBytes * 1000) / 300000
-      const measured = `peak ${peak?.[1]} B/s, peak cost ${peak?.[2]} ms, largest frame ${throttle.maxFrameBytes} bytes (${Math.round(linkMs)} ms on the link)`
+      const measured = `final ${final?.[1]} B/s, peak ${peak?.[1]} B/s, peak cost ${peak?.[2]} ms, largest frame ${throttle.maxFrameBytes} bytes (${Math.round(linkMs)} ms on the link)`
       // The limit is `RateOptions.maxUnacked`, 1 unless a program asks for 2;
       // the relay counts it, as the program cannot see past its own gate.
       check(
@@ -2051,14 +2052,18 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
           latencyMs < 250,
         `${said(throttle)}\ntier ${tier?.slice(1)}, relay saw ${throttle.maxUnacked} unacknowledged, key latency ${latencyMs} ms, ${measured}`
       )
-      // The peak is the first, half-megabyte frames' estimate: once the tier
-      // falls the frames are 1.5 kB, the round trip is most of each answer's
-      // wait, and term-rate's estimate drifts down towards bytes over the round
-      // trip. A send time taken after the write, which blocks while the link
-      // drains, leaves the transmission out and reads several times the rate.
+      // The estimate on the last frame, once the tier has fallen and the frames
+      // have been 1.5 kB for about 12 s (so `q` comes after 90 frames, not
+      // sooner): the round trip is most of each answer's wait, so an
+      // estimator that divides bytes by the whole trip drifts down towards
+      // bytes over the round trip, far under the link. term-rate keeps what
+      // the large frames measured until a sample replaces it or the trips
+      // contradict it. A send time taken after the write, which blocks while
+      // the link drains, leaves the transmission out and reads several times
+      // the rate.
       check(
-        "term-io: over a 300 kB/s link the bandwidth measured on its large frames is within 0.5×–2× of the link's",
-        peak !== null && Number(peak[1]) >= 150000 && Number(peak[1]) <= 600000,
+        "term-io: over a 300 kB/s link the bandwidth estimate on the last, small frames is within 0.5×–2× of the link's",
+        final !== null && Number(final[1]) >= 150000 && Number(final[1]) <= 600000,
         `${said(throttle)}\n${measured}`
       )
       // A write the link holds back for over a second is not the frame's cost.

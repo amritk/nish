@@ -6,8 +6,8 @@
 //              tier of the first and the last frame, the monotonic time
 //              `update` first saw `k`, the replies `update` was handed (none
 //              should be), the cell width the terminal learned, the highest
-//              bandwidth the controller measured and the highest frame cost
-//              it was handed
+//              bandwidth the controller measured, its estimate on the last
+//              frame and the highest frame cost it was handed
 //   panic      `runTerminal` that writes `<panic>` and fails a bounds check
 //              in its tenth `render`, so the bytes after the mark are the
 //              runtime's restore string
@@ -34,6 +34,7 @@ class Run {
   replies: i32 = 0;
   cellWidthPx: i32 = 0;
   peakBytesPerSec: f64 = 0.0;
+  finalBytesPerSec: f64 = 0.0;
   peakCostMs: f64 = 0.0;
 }
 
@@ -74,6 +75,7 @@ const render = (run: Run, frame: Frame): void => {
   if (frame.stats.bytesPerSec > run.peakBytesPerSec) {
     run.peakBytesPerSec = frame.stats.bytesPerSec;
   }
+  run.finalBytesPerSec = frame.stats.bytesPerSec;
   if (frame.stats.frameCostMs > run.peakCostMs) {
     run.peakCostMs = frame.stats.frameCostMs;
   }
@@ -127,6 +129,7 @@ const runLoop = (panics: boolean, mouse: boolean): number => {
   console.log(`replies ${run.replies}`);
   console.log(`cell ${run.cellWidthPx}`);
   console.log(`peak ${Math.round(run.peakBytesPerSec)} B/s cost ${run.peakCostMs} ms`);
+  console.log(`final ${Math.round(run.finalBytesPerSec)} B/s`);
   return 0;
 };
 
