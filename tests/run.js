@@ -19634,6 +19634,20 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       dependencyRun.stderr.startsWith(shownDependency[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
     shownDependency === null ? "no caps_dep_net_refused capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(dependencyRun)
   )
+  // WP40: and the lockfile refusal after it, from its link program.
+  const shownLock = /<!-- capabilities-refusal caps_lock_growth -->\n```text\n([\s\S]*?)```\n/.exec(cookbookText)
+  const lockRefusedRun = spawnSync(
+    NISH,
+    [path.join(root, "tests", "link", "caps_lock_growth", "main.ts"), "-o", path.join(capsDir, "lock-cookbook") + path.sep],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capability lock: the refusal docs/IR_COOKBOOK.md shows is the one tests/link/caps_lock_growth prints",
+    shownLock !== null &&
+      lockRefusedRun.status === 1 &&
+      lockRefusedRun.stderr.startsWith(shownLock[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
+    shownLock === null ? "no caps_lock_growth capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(lockRefusedRun)
+  )
   const grantedDir = path.join(capsDir, "granted") + path.sep
   const grantedRun = spawnSync(
     NISH,
