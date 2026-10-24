@@ -3,7 +3,8 @@
 `nish/crypto/bcrypt` stores passwords the way most servers already do: as a
 bcrypt hash, the 60-character `$2b$10$...` string that OpenBSD, libxcrypt,
 PHP's `password_hash` and the bcrypt packages for Node, Python and Go all read
-and write. A hash made here verifies there, and the other way round.
+and write. A hash made here verifies there, and the other way round, but for
+the few unusual passwords [below](#what-bcrypt-reads-of-a-password).
 
 The password is a `Secret<u8[]>` ([Secrets](../../LANGUAGE.md#secrets-nishsecret)),
 so the compiler keeps it out of logs and templates. The hash is computed inside
@@ -78,9 +79,7 @@ own server stored, never one a client sends.
 ## What bcrypt reads of a password
 
 bcrypt reads at most **72 bytes** of a password, and it stops at the first NUL
-byte. Both are part of the format: libxcrypt, crypt_blowfish and OpenBSD do the
-same, so a hash made here verifies there. Go's `x/crypto` differs on both: it
-keeps the bytes after a NUL, and it refuses to hash a password over 72 bytes. A user who types a 100-character passphrase
+byte, as libxcrypt and crypt_blowfish do. A user who types a 100-character passphrase
 is protected by its first 72 bytes only. If you want long passphrases to count
 in full, hash the password with `hmacSha256` from `nish/crypto/hmac` under a
 server-side key and pass that to bcrypt instead. Hex- or base64-encode the HMAC
@@ -89,12 +88,14 @@ users at sign-up.
 
 `bcryptVerify` reads hashes that begin `$2a$`, `$2b$` and `$2y$`. They differ
 only in how old implementations handled 8-bit bytes and long passwords, and
-each is checked the way libxcrypt and crypt_blowfish check it. Two cases
-differ from OpenBSD, and the second from Go: a `$2a$` hash OpenBSD made from a
-password over 254 bytes does not verify here, and neither does a `$2a$` hash
-OpenBSD or Go made from a password with a 0xff byte before another 8-bit byte
-(such as `\xff\xff\xa3`), which libxcrypt hashes with a countermeasure for
-an old bug. Text in UTF-8 never holds such bytes. A `$2x$` hash
+each is checked the way libxcrypt and crypt_blowfish check it. Other
+implementations answer otherwise for a few passwords: one with a NUL byte, one
+over 72 bytes, or one with a 0xff byte before another 8-bit byte (such as
+`\xff\xff\xa3`) under `$2a$`. A hash another implementation made of such a
+password may not verify here; the
+[interoperability table](../../security/crypto-bcrypt.md#interoperability) in
+the security record says which, implementation by implementation. Text in
+UTF-8 never holds the third kind. A `$2x$` hash
 comes from a known-buggy implementation and is refused: such a hash cannot be
 verified safely, so ask that user to reset their password.
 

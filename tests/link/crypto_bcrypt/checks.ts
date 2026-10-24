@@ -44,6 +44,17 @@ const cycled = (hex: string, times: i32): u8[] => {
   return out;
 };
 
+/** `n` bytes of `abc…z` over and over. */
+const lettered = (n: i32): u8[] => {
+  const out: u8[] = [];
+  const a: i32 = 97;
+  const letters: i32 = 26;
+  for (let i: i32 = 0; i < n; i += 1) {
+    out.push(toU8(a + i % letters));
+  }
+  return out;
+};
+
 /** `a` followed by `b`. */
 const joined = (a: u8[], b: u8[]): u8[] => {
   const out: u8[] = copyOf(a);
@@ -93,6 +104,7 @@ export const bcryptChecks = (): i32 => {
   const n255: i32 = 255;
   const n256: i32 = 256;
   const n300: i32 = 300;
+  const n400: i32 = 400;
   const saltC: u8[] = joined(cycled("104104", c5), fromHex("10"));
   const saltOK: u8[] = fromHex("05030085d5ed4c176b2ac3cbee47291c");
   const saltAbc: u8[] = fromHex("71d79f8218a39259a7a29aabb2dbafc3");
@@ -148,11 +160,20 @@ export const bcryptChecks = (): i32 => {
   t.eqStr("255 x hash as 72 under $2b$", hashOf(cycled("78", n255), saltZero, c4), "$2b$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi");
   t.eqStr("256 x", hashOf(cycled("78", n256), saltZero, c4), "$2b$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi");
   t.eqStr("300 x", hashOf(cycled("78", n300), saltZero, c4), "$2b$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi");
-  // OpenBSD wraps a $2a$ key's length to a byte past 254; crypt_r reads the
-  // first 72 bytes at any length, and so does the module.
+  // crypt_r reads the first 72 bytes of a key at any length, and so does the
+  // module. OpenBSD's bcrypt.c keeps a $2a$ key's length plus one in a byte,
+  // so it reads fewer than 72 when that byte is under 72 (255 to 326 bytes,
+  // 511 to 582, …); see the interop table in docs/security/crypto-bcrypt.md.
   t.eqStr("255 x verify as 72 under $2a$", verifyOf(cycled("78", n255), "$2a$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi"), "true");
   t.eqStr("256 x under $2a$", verifyOf(cycled("78", n256), "$2a$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi"), "true");
   t.eqStr("300 x under $2a$", verifyOf(cycled("78", n300), "$2a$04$......................SZFhVdUK5wGKY4lx/QrgUMHG0XsWjbi"), "true");
+  // Made by OpenBSD's own bcrypt.c (1.58, openbsd/src 65a9769f7625, the
+  // files bench/crypto/bcrypt/run.mjs fetches) with
+  // `bcrypt(lettered(n), "$2a$04$abcdefghijklmnopqrstuu")`; the command is in
+  // the record. At 300 bytes its key is 45 bytes long, at 400 it is 145.
+  t.eqStr("OpenBSD's $2a$ hash of 300 bytes does not verify", verifyOf(lettered(n300), "$2a$04$abcdefghijklmnopqrstuuZhbhEFpDIPOzoWgIIoxfm98VTZSo7Ny"), "false");
+  t.eqStr("its $2a$ hash of 400 bytes does", verifyOf(lettered(n400), "$2a$04$abcdefghijklmnopqrstuup5OpK2YVWOf8zhcTL0LOco4/tHSabd2"), "true");
+  t.eqStr("and so does its $2b$ hash of 300 bytes", verifyOf(lettered(n300), "$2b$04$abcdefghijklmnopqrstuup5OpK2YVWOf8zhcTL0LOco4/tHSabd2"), "true");
   t.eqStr("hash at cost 10", hashOf(bytesOf("password123"), saltOK, c10), "$2b$10$/OK.fbVrR/bpIqNJ5ianF.Qrsl67.FGD/Dk.h7tC/VKy1qgxnTM1W");
   t.eqStr("a hash verifies under its own password", verifyOf(bytesOf("U*U"), hashOf(bytesOf("U*U"), saltC, c4)), "true");
   t.eqStr("and not under another", verifyOf(bytesOf("U*V"), "$2b$04$CCCCCCCCCCCCCCCCCCCCC.K7Qr0se1MxuggH4aP4YgB.U2Em1pGSK"), "false");

@@ -1,8 +1,10 @@
 /**
  * `nish/crypto/bcrypt` — bcrypt password hashing, `$2b$` out and `$2a$`,
- * `$2b$`, `$2y$` in, bit for bit what libxcrypt's `crypt_r` and
- * crypt_blowfish answer. OpenBSD's `bcrypt` and Go's `x/crypto` agree on every
- * password but one kind under `$2a$`: they lack the countermeasure below.
+ * `$2b$`, `$2y$` in. It makes the hash libxcrypt's `crypt_r` and
+ * crypt_blowfish make, and verifies as they do but for `$2x$` and a digest
+ * character outside the alphabet. Where OpenBSD's `bcrypt.c` and Go's
+ * `x/crypto` answer otherwise is the interoperability table in
+ * docs/security/crypto-bcrypt.md.
  *
  *     import { bcryptHash, bcryptVerify } from "nish/crypto/bcrypt"
  *     import { Secret, secret } from "nish:secret"
@@ -20,17 +22,14 @@
  *
  * **The key is the reference's.** The bytes up to the first NUL, then one NUL,
  * repeated until 72 bytes are taken: a password longer than 72 bytes hashes as
- * its first 72, and bytes after an embedded NUL are not read. Both are what
- * every C implementation does, so a hash made elsewhere verifies here and the
- * other way round; docs/security/crypto-bcrypt.md says why a longer password
- * is cut rather than refused. Bytes above 127 are unsigned, as `$2b$` and
+ * its first 72, and bytes after an embedded NUL are not read, as under
+ * `crypt_r`; docs/security/crypto-bcrypt.md says why a longer password is cut
+ * rather than refused. Bytes above 127 are unsigned, as `$2b$` and
  * `$2y$` define them. A `$2a$` hash gets crypt_blowfish's countermeasure for
  * the old sign-extension bug: when an 8-bit byte was sign-extended into a key
  * word and yet the buggy and the correct key came out equal, one bit of the
  * first P word is flipped, as crypt_blowfish flips it, so the `$2a$` digest of
- * such a password (`\xff\xff\xa3`) is not its `$2y$` one. OpenBSD and Go
- * hash it as `$2y$` does, so their `$2a$` hash of it verifies false here. It
- * takes a 0xff byte before another 8-bit byte in a key word, which UTF-8 never
+ * such a password (`\xff\xff\xa3`) is not its `$2y$` one. It takes a 0xff byte before another 8-bit byte in a key word, which UTF-8 never
  * holds. `$2x$` (the bug itself) is refused.
  *
  * **Errors are `Err`s.** A salt that is not 16 bytes, a cost outside 4–31, or

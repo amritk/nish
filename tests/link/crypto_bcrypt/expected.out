@@ -40,6 +40,9 @@ PASS  300 x
 PASS  255 x verify as 72 under $2a$
 PASS  256 x under $2a$
 PASS  300 x under $2a$
+PASS  OpenBSD's $2a$ hash of 300 bytes does not verify
+PASS  its $2a$ hash of 400 bytes does
+PASS  and so does its $2b$ hash of 300 bytes
 PASS  hash at cost 10
 PASS  a hash verifies under its own password
 PASS  and not under another
@@ -65,4 +68,4 @@ PASS  cost 03 is refused
 PASS  cost 32 in a hash is refused
 PASS  a salt character outside bcrypt base64 is refused
 PASS  a digest character outside bcrypt base64 is refused
-bcrypt: 67 passed, 0 failed, 0 skipped
+bcrypt: 70 passed, 0 failed, 0 skipped

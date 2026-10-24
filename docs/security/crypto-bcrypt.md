@@ -21,12 +21,11 @@ the block and the digest are wiped by stores `opt -O2` keeps; the verify
 compares the whole 60-character hash in constant time. Two things are not
 reached, by the nature of the algorithm or of the language, and are recorded:
 the secret-indexed S-box loads (BCRYPT-6) and registers and spills (BCRYPT-7).
-Nothing was found to fix or left open. Three rows diverge from one reference
-on purpose: `$2x$` is refused, as OpenBSD refuses it, where `crypt_r` verifies
-it; a `$2a$` password past 254 bytes is read as `crypt_r` reads it, not as
-OpenBSD's wrapped length; and a `$2a$` password that triggers crypt_blowfish's
-sign-extension countermeasure gets it, as under `crypt_r`, where OpenBSD and
-Go hash it as `$2y$`.
+Nothing was found to fix or left open. Where the implementations a hash
+travels between answer differently, the [interoperability
+table](#interoperability) is the one place that says who answers what; the
+module departs from `crypt_r` on two rows of it, `$2x$` and a digest character
+outside the alphabet.
 
 ## Scope
 
@@ -58,29 +57,59 @@ or the password, or the state derived from it, left in memory.
 
 ## The reference's behaviour
 
-The references are OpenBSD's `bcrypt.c`, Solar Designer's crypt_blowfish 1.3
-(the code the module adapts) and libxcrypt's `crypt_r`, which uses
-crypt_blowfish, with Go's `x/crypto` for the hashes Go programs store. They
-differ on three rows. On `$2x$` crypt_blowfish and libxcrypt reproduce the bug
-and OpenBSD refuses it; the module follows OpenBSD. On a `$2a$` password past
-254 bytes OpenBSD wraps the length; the module follows crypt_blowfish and
-libxcrypt. On the `$2a$` sign-extension countermeasure OpenBSD and Go have
-none; the module follows crypt_blowfish and libxcrypt. The countermeasure
-fires only when a 0xff byte comes before another 8-bit byte in the same key
-word, which never happens in UTF-8, so no text password is affected: the Go
-`$2a$` hashes the challenge server seeds verify here.
+The references are Solar Designer's crypt_blowfish 1.3 (the code the module
+adapts) and libxcrypt's `crypt_r`, which uses crypt_blowfish. The module
+answers as they do on every input in the table below but `$2x$` and a digest
+character outside the alphabet. How a hash is built:
 
-| Input | What the references do | What the module does |
+| Input | What crypt_blowfish and `crypt_r` do | What the module does |
 | --- | --- | --- |
 | The key bytes | The password as a C string, its terminating NUL included, cycled until the 18 P words (72 bytes) are filled. | The same. |
-| A password of 72 bytes or more | The first 72 bytes are used; the terminating NUL is not reached, and the rest is ignored. | The same (BCRYPT-1). |
-| An embedded NUL | The key ends at it: C reads a string to its first NUL, so `ab\0cd` is the key of `ab`. Go hashes the whole slice and one NUL, so it keeps the bytes after it. | The C references' (BCRYPT-2). |
+| A password of 72 bytes or more | The first 72 bytes are used under every prefix; the terminating NUL is not reached, and the rest is ignored. | The same (BCRYPT-1). |
+| An embedded NUL | The key ends at it: C reads a string to its first NUL, so `ab\0cd` is the key of `ab`. | The same (BCRYPT-2). |
 | 8-bit bytes, `$2b$` and `$2y$` | Read unsigned. | The same. |
-| 8-bit bytes, `$2a$` | crypt_blowfish's countermeasure: the key is also built with sign-extended bytes, as the old bug built it; if an 8-bit byte was sign-extended into a word and yet the two keys come out equal, bit 16 of P[0] is flipped, so the `$2a$` digest of such a password (`\xff\xff\xa3`) is not its `$2y$` one. OpenBSD and Go have no countermeasure: their `$2a$` digest is the `$2y$` one. | crypt_blowfish's. An OpenBSD or Go `$2a$` hash of such a password does not verify here ("and is not the $2y$ digest under $2a$"); UTF-8 cannot produce one (BCRYPT-3). |
-| `$2x$` | crypt_blowfish and libxcrypt reproduce the bug, for old hashes; OpenBSD refuses it. | Refused (BCRYPT-3). |
+| 8-bit bytes, `$2a$` | The countermeasure: the key is also built with sign-extended bytes, as the old bug built it; if an 8-bit byte was sign-extended into a word and yet the two keys come out equal, bit 16 of P[0] is flipped, so the `$2a$` digest of such a password (`\xff\xff\xa3`) is not its `$2y$` one. It fires only when a 0xff byte comes before another 8-bit byte in the same key word, which never happens in UTF-8. | The same (BCRYPT-3). |
+| `$2x$` | Hashed with the bug, for old hashes. | Refused (BCRYPT-3). |
 | The salt's last character | It carries 2 bits of the 128; the 4 low bits of its sextet are dropped, and the hash made is written with them cleared. | The same; a hash string with them set verifies false, as `crypt_r`'s whole-string compare does (BCRYPT-4). |
-| A cost outside 04–31, a bad prefix or character | Refused (`*0`/`*1` from `crypt_r`, -1 from OpenBSD). | An `Err` naming it (BCRYPT-5). |
-| `$2a$` with a password over 254 bytes | OpenBSD computes the key length as a `u8`, the password's length plus its NUL, so it wraps: a 255-byte password gets length 0. `$2b$` caps the length at 72 first; it was made to mark the fix. crypt_blowfish and libxcrypt take the first 72 bytes at any length under every prefix. Go's `x/crypto` refuses a password over 72 bytes. | crypt_blowfish's: the first 72 bytes. An OpenBSD `$2a$` hash of such a password does not verify here; one from crypt_r or crypt_blowfish does ("255 x verify as 72 under $2a$"). |
+| A cost outside 04–31, a bad prefix or salt character | Refused (`*0`/`*1`). | An `Err` naming it (BCRYPT-5). |
+| A digest character outside the alphabet | A mismatch: the recomputed string differs. | An `Err` (BCRYPT-5). |
+
+## Interoperability
+
+What each implementation answers for the inputs where any two of them differ.
+Every other input (a password of up to 72 bytes with no NUL, under `$2b$`, or
+under `$2a$` with no 0xff before another 8-bit byte) hashes alike in all four.
+The sources: libxcrypt as packaged here, with crypt_blowfish 1.3's
+`wrapper.c`; OpenBSD's `lib/libc/crypt/bcrypt.c` 1.58 (openbsd/src
+65a9769f7625, the file `bench/crypto/bcrypt/run.mjs` fetches); Go's
+`golang.org/x/crypto/bcrypt` v0.58.0. Line numbers are in those files.
+
+| Input | This module | libxcrypt, crypt_blowfish | OpenBSD `bcrypt.c` | Go `x/crypto` |
+| --- | --- | --- | --- | --- |
+| 8-bit bytes under `$2a$`, a 0xff before another 8-bit byte in a key word | The countermeasure. | The countermeasure. | None: the `$2a$` digest is the `$2y$`/`$2b$` one, so its hash of such a password verifies false here ("and is not the $2y$ digest under $2a$"). | None, as OpenBSD. |
+| An embedded NUL | The key ends at it. | The key ends at it. | The key ends at it (`strlen`, lines 118 and 125). | The whole slice and one NUL are the key (line 226), so `ab\0cd` is not `ab`: a Go hash of a password with a NUL verifies false here. |
+| More than 72 bytes, hashing | The first 72. | The first 72. | The first 72 (`bcrypt_newhash` makes `$2b$`, capped at line 126). | Refused, `ErrPasswordTooLong` (line 97). Verifying reads the first 72. |
+| More than 72 bytes, a `$2a$` hash | The first 72. | The first 72. | The length plus one is kept in a byte (line 118), so the key is the first `(n + 1) mod 256` bytes, its NUL included: the first 72 bytes only when that is 72 or more. For n of 255 to 326, 511 to 582, and every such run 256 on, it is shorter, and the hash verifies false here ("OpenBSD's $2a$ hash of 300 bytes does not verify"); elsewhere it agrees ("its $2a$ hash of 400 bytes does"). | The first 72. |
+| `$2y$` | Accepted, as `$2b$`. | Accepted, as `$2b$`. | Refused: any minor but `a` and `b` is (lines 116–131). | Accepted, as `$2b$`. |
+| `$2x$` | Refused. | Hashed with the bug. | Refused (lines 116–131). | Accepted and hashed as `$2b$`, with no bug and no countermeasure (`decodeVersion`, line 265, takes any minor letter). |
+| A digest character outside the alphabet | An `Err`. | A mismatch. | A mismatch (`bcrypt_checkpass`, line 222, compares the recomputed string). | A mismatch (the recomputed string is compared, line 120). |
+
+The OpenBSD hashes the checks use were made by OpenBSD's own code, built from
+the files `bench/crypto/bcrypt/run.mjs` fetches into
+`build/bench/bcrypt/openbsd-65a9769f7625/`, with a ten-line `vec.c` that calls
+`bcrypt(p, setting)` on the password `p` of `n` bytes `abc…z` repeated and
+prints the result:
+
+```sh
+O=build/bench/bcrypt/openbsd-65a9769f7625
+gcc -O2 -w -include $O/shim.h -I$O $O/bcrypt.c $O/blowfish.c vec.c -o vec
+./vec 300 '$2a$04$abcdefghijklmnopqrstuu'   # ...ZhbhEFpDIPOzoWgIIoxfm98VTZSo7Ny
+./vec 400 '$2a$04$abcdefghijklmnopqrstuu'   # ...p5OpK2YVWOf8zhcTL0LOco4/tHSabd2
+./vec 300 '$2b$04$abcdefghijklmnopqrstuu'   # ...p5OpK2YVWOf8zhcTL0LOco4/tHSabd2
+```
+
+The same program gives the 400-byte digest from n = 327 on, the first length
+past the run, and refuses `$2y$` and `$2x$` settings.
 
 ## Findings
 
@@ -91,12 +120,12 @@ is counted as fixed or open in the index.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| BCRYPT-1 | Low | `bcryptSetKey` | A password past 72 bytes hashes as its first 72, so two passwords sharing those verify each other. | **Accepted.** Every C implementation cuts there, and a hash is useful only if the reference verifies it: refusing would make a password a C server accepts fail here, and pre-hashing it would make a hash no other implementation verifies. A program that wants long passphrases to count whole can pass an HMAC of them as the password; the guide page says so. |
-| BCRYPT-2 | Low | `bcryptSetKey` | A NUL ends the key, so `ab\0cd` verifies `ab`. | **Accepted.** As BCRYPT-1: `crypt_r` takes a C string, so a hash made with the NUL kept would verify nowhere but in Go. Text from a form has no NUL; a program hashing raw bytes refuses one itself. |
+| BCRYPT-1 | Low | `bcryptSetKey` | A password past 72 bytes hashes as its first 72, so two passwords sharing those verify each other. | **Accepted.** crypt_blowfish and `crypt_r` cut there at any length, and a hash is useful only if the reference verifies it: refusing would make a password they accept fail here, and pre-hashing it would make a hash no other implementation verifies. A program that wants long passphrases to count whole can pass an HMAC of them as the password; the guide page says so. |
+| BCRYPT-2 | Low | `bcryptSetKey` | A NUL ends the key, so `ab\0cd` verifies `ab`. | **Accepted.** As BCRYPT-1: `crypt_r` takes a C string, so a hash made with the NUL kept would verify only in Go ([Interoperability](#interoperability)). Text from a form has no NUL; a program hashing raw bytes refuses one itself. |
 | BCRYPT-3 | Low | `bcryptSetKey`, `bcryptParse` | `$2x$` hashes, made by the sign-extension bug, cannot be verified. | **Accepted.** Verifying them means running the bug; the systems that made them were told to rehash in 2011. `$2a$` keeps the countermeasure, so a `$2a$` hash made with the bug verifies false rather than verifying the wrong password. |
 | BCRYPT-4 | Low | `bcryptDecodeSalt` | A hash whose last salt character has the dropped bits set verifies false for its own password. | **Accepted.** It is `crypt_r`'s answer: it rebuilds the string with the bits cleared and compares the whole of it. Accepting it would make a hash string that verifies here and not there. |
 | BCRYPT-5 | Low if it failed | `bcryptVerify`, `bcryptParse` | A hash string of any length or bytes must not panic or read past itself. | **Holds.** The length is checked to be 60 first; every character after that is read at an index below 60 and checked against the alphabet, each refusal an `Err`. |
-| BCRYPT-6 | Low | `bcryptEncrypt` | Each Blowfish round loads four S-box words at indexes taken from the secret state, so the cache lines touched follow the password. | **Accepted.** It is the algorithm: every bcrypt does it, and the expensive key setup that is bcrypt's point is made of these loads. A local attacker sharing a cache with the hashing core could in principle learn about the state; a remote one times a cost-10 hash of ~50 ms, against which the loads' variance is noise. The key schedule (`bcryptSetKey`) does not branch on a password byte, the base64 that encodes the digest (`bcryptCharOf`, `bcryptSextetOf`) is branchless, since the digest is the stored hash when the password is right, and the verify's compare is constant-time. |
+| BCRYPT-6 | Low | `bcryptEncrypt` | Each Blowfish round loads four S-box words at indexes taken from the secret state, so the cache lines touched follow the password. | **Accepted.** It is the algorithm: every bcrypt does it, and the expensive key setup that is bcrypt's point is made of these loads. A local attacker sharing a cache with the hashing core could in principle learn about the state; a remote one times a cost-10 hash of ~50 ms, against which the loads' variance is noise. The key schedule (`bcryptSetKey`) does not branch on a password byte's value, but the copy's trip count follows the password's length (up to 72), and the cycle position `p` of the `key[p & 0x7f]` loads restarts at its first NUL (or at 72), so which of the 128-byte key array's two cache lines each load touches follows the length up to that NUL. A local attacker who can watch those lines learns the length (to within the line split), not a byte; C implementations walk a C string the same way. The base64 that encodes the digest (`bcryptCharOf`, `bcryptSextetOf`) is branchless, since the digest is the stored hash when the password is right, and the verify's compare is constant-time. |
 | BCRYPT-7 | Low | `bcryptExposed` | Values the generated code holds in registers, and any it spills to the stack, are not wiped; nor is the caller's own copy of the password before it became a `Secret`. | **Accepted.** No store from the language reaches a register or a spill slot (as AEAD-4 for the AES kernels). Every array holding key material is wiped; the `Secret` the caller passes is the caller's to wipe, and the checker makes it do so. |
 
 ## Properties verified
@@ -135,7 +164,8 @@ is the published vector set.
 the rest is ignored", "hash a 72-byte password at cost 6", "a 73rd byte changes
 nothing", "200 x hash as 72", "72 x", "255 x hash as 72 under $2b$", "256 x",
 "300 x", "255 x verify as 72 under $2a$", "256 x under $2a$", "300 x under
-$2a$", "ab\0cd hashes as ab: the key ends at its
+$2a$", "OpenBSD's $2a$ hash of 300 bytes does not verify", "its $2a$ hash of
+400 bytes does", "and so does its $2b$ hash of 300 bytes", "ab\0cd hashes as ab: the key ends at its
 first NUL", "and verifies as ab".
 
 **8-bit bytes and the sign-extension bug** (BCRYPT-3): "$2y$ \xff\xff\xa3",

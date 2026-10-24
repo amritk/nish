@@ -51,7 +51,8 @@ const hex = (b) => b.map((v) => v.toString(16).padStart(2, "0")).join("")
  * A password: mostly any byte, sometimes printable ASCII, sometimes high bytes
  * only (the sign-extension case), with a NUL forced into some. Most are under
  * 40 bytes, some just past 72, and some past 255, where OpenBSD's `$2a$`
- * wraps the length in a byte and `crypt_r` does not.
+ * keeps the length plus one in a byte and `crypt_r` reads the first 72 bytes
+ * (docs/security/crypto-bcrypt.md, "Interoperability").
  */
 const password = () => {
   const r = below(10)
