@@ -435,7 +435,7 @@ export class RateController {
         this.sentMs[i - this.head] = this.sentMs[i]
         this.sentBytes[i - this.head] = this.sentBytes[i]
       }
-      for (let i = 0; i < this.head; i++) {
+      for (let i: i32 = 0; i < this.head; i++) {
         this.sentMs.pop()
         this.sentBytes.pop()
       }
