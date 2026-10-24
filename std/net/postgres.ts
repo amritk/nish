@@ -90,6 +90,20 @@
  * connection with their own `failure` code. The constructor panics on a cap
  * out of range, as on a missing user or a short nonce.
  *
+ * **Pools.** `PgPool` holds up to `size` connections to one server and a FIFO
+ * queue of up to `queueSize` requests, still sans-IO: `wanted()` names a slot
+ * that needs a socket, `connect(slot, nonce)` starts its connection, and the
+ * program moves its bytes as above through `connection(slot)`. A request is a
+ * ticket from `request()`; `dispatch()` gives the oldest to the ready
+ * connection with the fewest groups in flight, the program builds its group and
+ * ends it with `send()`, and `next(slot)` reads that connection's events with
+ * `ticket` naming the request. Statements given to `register` are prepared on
+ * each connection ahead of its first request. A connection that fails reports
+ * `PG_LOST` for each request it took, then `PG_FAILED`; the program closes the
+ * socket and the slot is built again on its next use. `tests/postgres/carrier.ts`
+ * is a whole carrier: one `pollWait` loop holding the pool's sockets beside an
+ * HTTP listener.
+ *
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
  * and RFC 5802 and RFC 7677; not ported from another implementation.
  */
@@ -2007,7 +2021,12 @@ export class PgPool {
    * holds a NUL, or 256 are registered.
    */
   register(name: string, sql: string, paramTypes: i32[]): boolean {
-    if (this.started || pgHasNul(name) || pgHasNul(sql) || toI32(this.names.length) === PG_POOL_MAX_STATEMENTS) {
+    if (
+      this.started ||
+      pgHasNul(name) ||
+      pgHasNul(sql) ||
+      toI32(this.names.length) === PG_POOL_MAX_STATEMENTS
+    ) {
       return false
     }
     const types: i32[] = []

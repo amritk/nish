@@ -283,6 +283,16 @@ way, but for `json.js`'s loop over every UTF-16 code unit, whose 65,536 calls
 Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*.js. Copyright 2009-2026 the V8 project authors. Used under the BSD licence; see tests/json-conformance/LICENSE-v8.
 ```
 
+### `tests/postgres/live/LICENSE.md`
+
+The [multicore server challenge](https://github.com/arjaythedev/multicore-server-challenge),
+Copyright (c) 2026 arjaythedev and the challenge contributors, under the MIT
+licence: its schema, and the article-list query the live PostgreSQL suite runs.
+
+```notice
+Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see tests/postgres/live/LICENSE.md.
+```
+
 ## Files
 
 | File | Derived from | Licence | Licence text |
@@ -298,6 +308,8 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 | `bench/sqlite/schema.sql` | the twelve-dollar server challenge's `schema.sql`, unchanged | MIT | `bench/sqlite/LICENSE.md` |
 | `bench/sqlite/twin.c` | the seed: a port of the challenge's `seed/generate.mjs` (mulberry32 and seed 42, the table sizes, the author skew, the `ADJECTIVES` and `NOUNS` lists, part of the word list), and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
 | `bench/sqlite/main.ts` | the challenge's table sizes, `USERS` and `POSTS`, and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
+| `tests/postgres/live/schema.sql` | the multicore server challenge's `schema.sql`, unchanged | MIT | `tests/postgres/live/LICENSE.md` |
+| `tests/postgres/live/live.ts` | the `SPEC.md` article list, `ARTICLE_LIST_SELECT ORDER_PAGE` | MIT | `tests/postgres/live/LICENSE.md` |
 | `bench/spectral.ts` | Benchmarks Game spectral-norm, Node.js #1 (Ian Osgood, modified by Isaac Gouy) | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.go` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
