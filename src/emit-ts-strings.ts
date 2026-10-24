@@ -39,6 +39,12 @@
 // stripper rejects `"\uD83D\u{DE00}"` inside a template's `${…}`, which is
 // valid TypeScript, and the two spellings are one string.
 //
+// `tsc` gives an unannotated binding of a string literal the literal's own
+// type, and then refuses `===` against a different literal as a comparison
+// with no overlap; to Nish both are `string`. Such a binding is written
+// `name: string = "…"`, and a comparison of two literals writes its left one
+// `("…" as string)`.
+//
 // What this row does not make agree:
 //
 // - A byte-offset method inside a `?.` chain (`s?.slice(0, 1)`) stays as
@@ -54,7 +60,17 @@
 
 import { Operands, Walk } from "./emit-ts-edits"
 import { isOptionalChain } from "./emit-util"
-import { N_CALL, N_IDENT, N_MEMBER, N_STRING, N_TEMPLATE_TEXT, Node } from "./nodes"
+import {
+  N_BINARY,
+  N_CALL,
+  N_EMPTY,
+  N_IDENT,
+  N_MEMBER,
+  N_STRING,
+  N_TEMPLATE_TEXT,
+  N_VAR_DECL,
+  Node,
+} from "./nodes"
 import { hexOfI64, StringBuilder } from "./strings"
 import { T_STRING } from "./types"
 
@@ -194,6 +210,48 @@ const unbracedEscapes = (text: string): string | null => {
   return out.toText()
 }
 
+/**
+ * An unannotated `const` binding of a string literal, written with `: string`
+ * so `tsc` does not narrow it to the literal. A `let` is left as written:
+ * TypeScript widens it already, and a class-A module stays byte for byte. The
+ * keyword is on the statement, not the declaration, so it is read from the
+ * text just before the name; a later declaration of the list, after a comma,
+ * is left too.
+ */
+const widenedBinding = (walk: Walk, node: Node, operands: Operands): string | null => {
+  if (node.children.length !== 3 || node.children[0].kind !== N_IDENT || node.children[1].kind !== N_EMPTY) {
+    return null
+  }
+  const name = node.children[0]
+  const init = node.children[2]
+  if (init.kind !== N_STRING) {
+    return null
+  }
+  const text = walk.source.text
+  let before = name.start
+  while (before > 0 && (text.charCodeAt(before - 1) === 32 || text.charCodeAt(before - 1) === 9)) {
+    before = before - 1
+  }
+  if (before < 5 || text.substring(before - 5, before) !== "const") {
+    return null
+  }
+  return `${operands.at(0)}: string${text.substring(name.end, init.start)}${operands.at(2)}${text.substring(init.end, node.end)}`
+}
+
+/** `"a" === "b"` with its left literal widened to `string`, which `tsc` would refuse as no overlap. */
+const literalComparison = (walk: Walk, node: Node, operands: Operands): string | null => {
+  if (node.text !== "===" && node.text !== "!==") {
+    return null
+  }
+  const left = node.children[0]
+  const right = node.children[1]
+  if (left.kind !== N_STRING || right.kind !== N_STRING) {
+    return null
+  }
+  const text = walk.source.text
+  return `(${operands.at(0)} as string)${text.substring(left.end, right.start)}${operands.at(1)}${text.substring(right.end, node.end)}`
+}
+
 /** The strings row's rewrite of `node`, or `null` to leave it to the next row. */
 export const stringsRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   if (node.kind === N_STRING || node.kind === N_TEMPLATE_TEXT) {
@@ -201,6 +259,12 @@ export const stringsRow = (walk: Walk, node: Node, operands: Operands): string |
   }
   if (node.kind === N_MEMBER) {
     return stringLengthRewrite(walk, node, operands)
+  }
+  if (node.kind === N_VAR_DECL) {
+    return widenedBinding(walk, node, operands)
+  }
+  if (node.kind === N_BINARY) {
+    return literalComparison(walk, node, operands)
   }
   if (node.kind === N_CALL && node.children.length === 2) {
     return stringCallRewrite(walk, node, operands)

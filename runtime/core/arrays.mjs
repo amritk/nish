@@ -143,8 +143,8 @@ export function newArray(n, zero) {
 // so "the arena of the calling thread" and "the arena" are the same object, and
 // these stubs answer for both. If T1 ever lands a spawn the rewrite can reach,
 // that is when this file grows a second arena to keep count of.
-export function arenaUsed() { return 0; }
-export function arenaMark() { return 0; }
+export function arenaUsed() { return 0n; }
+export function arenaMark() { return 0n; }
 export function arenaRelease() {}
 export function arenaReset() {}
 /** `using a = arena()`: a disposable whose disposal does nothing, because there is no arena to release. */

@@ -10195,8 +10195,8 @@ by the caller.
   written. Last comes `entry.ts`, which imports `nish/runtime/node`, calls
   `main` and exits with what it answered. Imports are rewritten to match: a
   `nish:` specifier becomes `nish/runtime`, the one package the output names,
-  except `nish:secret`, which has source and becomes `./nish/secret.ts`;
-  a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
+  `nish:secret` included (its `std/secret.ts` is not written: the runtime's
+  `wipe` answers it); a `nish/x` or relative one becomes the relative path, with its `.ts`; and an
   imported name that is only a type (an interface, a generic interface, an
   alias) is written `type X`, because Node's type stripping does not know
   which names are types. A module that needs none of that is written byte for

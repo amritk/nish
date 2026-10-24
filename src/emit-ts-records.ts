@@ -294,8 +294,15 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
     return null
   }
   const receiver = writtenReceiver(written, method)
-  if (method === "pop" && args.length === 0 && checkedAt(walk, node)) {
-    return `${walk.helperName("pop")}(${receiver})`
+  // The web's own takes only a typed array, so `tsc` refuses the `u8[]` it is
+  // given; the runtime's takes either (`runtime/core/host.d.ts`).
+  if (method === "getRandomValues" && args.length === 1 && written === "crypto.getRandomValues") {
+    return `${walk.helperName("getRandomValues")}(${operands.at(1)})`
+  }
+  if (method === "pop" && args.length === 0) {
+    // Unchecked, the walk proved the array non-empty, which `tsc` cannot
+    // see: its `T | undefined` is the element.
+    return checkedAt(walk, node) ? `${walk.helperName("pop")}(${receiver})` : `${written}()!`
   }
   if (method === "push" && args.length === 1) {
     const arg = operands.at(1)
@@ -413,6 +420,17 @@ const typedArrayZero = (name: string): string => {
   return name === "BigInt64Array" ? "0n" : ""
 }
 
+/** The width a typed array holds, which its `newArray` is typed by. */
+const typedArrayWidth = (name: string): string => {
+  if (name === "Float64Array") {
+    return "f64"
+  }
+  if (name === "Float32Array") {
+    return "f32"
+  }
+  return name === "Int32Array" ? "i32" : "i64"
+}
+
 /** `new Array<T>(n)` or `new Float64Array(n)` as a checked, zero-filled `newArray`, or `null`. */
 const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const callee = node.children[0]
@@ -421,15 +439,23 @@ const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   }
   const typeArgs = node.children[1].children
   let zero = ""
+  let element = ""
   if (callee.text === "Array" && typeArgs.length === 1) {
     zero = fillZero(walk, typeArgs[0])
+    element = walk.spanOf(typeArgs[0])
   } else if (typeArgs.length === 0) {
     zero = typedArrayZero(callee.text)
+    element = typedArrayWidth(callee.text)
   }
   if (zero === "") {
     return null
   }
-  return `${walk.helperName("newArray")}(${operands.at(2)}, ${zero})`
+  if (typeArgs.length === 0) {
+    walk.widths.add(element)
+  }
+  // The element is written out: a zero is one value of it, which `tsc` would
+  // otherwise infer the array's type from.
+  return `${walk.helperName("newArray")}<${element}>(${operands.at(2)}, ${zero})`
 }
 
 /** The records row's rewrite of `node`, or `null` to leave it to the next row. */

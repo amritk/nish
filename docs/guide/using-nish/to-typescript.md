@@ -14,7 +14,7 @@ module, in three entry points:
 
 `nish/runtime` names no Node module, so it bundles for a browser; it reads
 the web `crypto`, `TextEncoder` and `TextDecoder` globals as it loads, which
-Node 20 and every browser have. On its own it
+every Node the package supports (22.18 and later) and every browser have. On its own it
 computes — `toI64`, `strLen`, `Ok(7).unwrapOr(0)` — but anything that needs the
 outside world (`log`, a file, the clock) throws `NishNoHost` until one of the
 other two has been imported. Import a host once, first, from the program's
@@ -46,7 +46,7 @@ export const main = (): void => {
 };
 ```
 
-The translation is written by hand today. As TypeScript, it imports the builtins it uses from `nish/runtime`, spells a
+Written as TypeScript, by hand or by `nish --emit-ts` (below), it imports the builtins it uses from `nish/runtime`, spells a
 string's length with `strLen`, which counts UTF-8 bytes as Nish does, and
 prints with `log`, which is Nish's `console.log`:
 
@@ -68,6 +68,49 @@ export const main = (): void => {
   }
 };
 ```
+
+## Writing it with the compiler
+
+`nish --emit-ts` writes the translation for you, one file per module, beside
+an `entry.ts` that installs the Node host, calls `main` and exits with what it
+answers:
+
+```sh
+nish app.ts --emit-ts out/
+node --experimental-strip-types out/entry.ts
+```
+
+Node 22.6 or newer runs it, and Node has to find the `nish` package from
+`out/`. Your modules keep their paths, each standard-library module the
+program imports is written under `out/nish/`, and every `nish:` import,
+`nish:secret` included, becomes `nish/runtime`.
+[The CLI page](cli.md#writing-typescript---emit-ts) lists every rewrite and
+the four kinds of module that are refused (C functions, NL4010; signals and
+`nish:net`, NL4011; a compound assignment whose index would run twice,
+NL4012; a generic whose instances need different code, NL4013).
+
+The output is faithful: it means what the native build means, helpers
+included. `i32` arithmetic that can overflow is `checkedAdd` and its
+siblings, an index the compiler could not prove is `idx` or `setIdx`, and
+each panics where the native build does. A team leaving for good then removes
+the helpers one at a time, each a place where it picks JavaScript's meaning
+over Nish's; the runtime imports left are the measure of how far it has gone.
+There is no flag that drops them all, since that would change what the
+program means without saying where.
+
+The rest of the time the two readings agree. Where they do not, the
+difference is one of these:
+
+| Row | What differs under Node |
+| --- | --- |
+| host | A call Node has no synchronous reading of: `spawn`, `waitPid`, `readStdin`, `waitStdin` and `setRawMode` throw, naming themselves, and so does `setTerminalRestore`. The arena counters (`arenaUsed`, `arenaMark`) count nothing, since Node has a collector and no arena. A lone surrogate in a string is three bytes natively and U+FFFD's three under Node. |
+| range | A ranged integer (`integer<0, 255>`) is a `number`, and its range is not checked, so a value that would panic natively leaving its range runs on. |
+| libm | `Math.atan2`, `Math.hypot` and their siblings are the engine's, which can differ from the native libm in the last bit. |
+| refused | The program is refused with NL4010 to NL4013 and nothing is written. |
+
+Anything else is a bug in the translation. The repository's test suite runs
+every test program both ways and holds the list of the ones that differ, each
+filed under its row; that list only shrinks.
 
 ## The types
 
@@ -96,7 +139,7 @@ configuration. They follow what the helpers return at run time:
 | a file, process or machine call (`readFileSync`, `spawnSync`, …) | Node's `fs`, `child_process` and `os` | panics, naming the call: `readFileSync is not available in a browser` |
 
 `spawn`, `waitPid`, `signalFd` and `readSignal` have no synchronous reading in
-JavaScript, so under either host they throw an `Error` that says so.
+JavaScript, so under either host they throw an `Error` that names the call.
 
 In a browser, output that `write` leaves without a newline waits for the next
 newline, for `exit`, or for the program to yield, and is then printed as its
@@ -104,7 +147,8 @@ own line. A page cannot end itself, so the code that starts the program
 catches the `NishExit`:
 
 ```js
-import { NishExit } from "nish/runtime/browser";
+import "nish/runtime/browser";
+import { NishExit } from "nish/runtime"; // also exported by nish/runtime/browser
 import { main } from "./program.js";
 
 try {

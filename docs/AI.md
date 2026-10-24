@@ -93,6 +93,21 @@ compiles and the warning would be printed: `NL9007`'s inserts the guard that
 proves an index in range (not under `--no-warn-performance`), and `NL7002`'s
 migrates a site off `--unchecked-indexing` (below).
 
+When it compiles, **check the native build against the program's TypeScript
+reading**. Run the project's tests natively; where it has none, write the
+program back out and run both:
+
+```bash
+nish program.ts --emit-ts out/    # the program as TypeScript, plus out/entry.ts
+node --experimental-strip-types out/entry.ts  # Node 22.6 or newer; compare with the binary
+```
+
+The two must print the same and exit the same, a panic included: `--emit-ts`
+keeps every check the native build makes. Where they differ, the difference
+is a row of [the user guide's table](guide/using-nish/to-typescript.md), or a
+bug in `nish` worth reporting. A program on `nish:net`, the signal descriptor
+or a C declaration is refused (NL4010, NL4011) and has no TypeScript to run.
+
 Two more surfaces worth knowing: `nish --emit-ast f.ts` prints what was parsed
 and `nish --emit-checked f.ts` prints the side tables the emitter reads. Both
 are one node per line, which is to say diffable.

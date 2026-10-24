@@ -215,7 +215,9 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          # Exact: tests/differential/emit-ts-known.txt quotes Node's own
+          # messages as evidence, and is regenerated under this version.
+          node-version: 22.23.4
           cache: npm
 
       # The crypto bench's Go twins (bench/crypto/*/go) build with
@@ -862,6 +864,16 @@ jobs:
           SEED: ${{ steps.download.outputs.path }}
         run: |
           NISH_BOOTSTRAP="$SEED" node tests/differential/fuzz.js --stage1 --seed 20261001 --count 200 \
+            --candidate build/self/compile
+
+      # The same programs held to the other round trip (WP33 R4): each built
+      # natively and written out with `--emit-ts` by the same HEAD compiler,
+      # and both runs required to print and exit alike. A generated program
+      # reaches no row `emit-ts-known.txt` may list, so every verdict but an
+      # agreement is red. About 13 s for the 200.
+      - name: HEAD's native build and its --emit-ts output agree on random programs
+        run: |
+          node tests/differential/fuzz.js --emit-ts --seed 20261001 --count 200 \
             --candidate build/self/compile
 
       # Reached only when the comparison agreed, which is the point: this line

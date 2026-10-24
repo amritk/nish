@@ -260,13 +260,15 @@ const firstLine = (buffer) => {
 }
 
 /**
- * One program, both halves. Answers `{ name, verdict, reason }`, where the
+ * One program, both halves, built under `workRoot`;
+ * `tests/differential/fuzz.js --emit-ts` runs its generated programs through it
+ * too, under a root of its own. Answers `{ name, verdict, reason }`, where the
  * verdict is `agree`, `native-error` (the program does not build natively, so
  * nothing is compared), `refused` (`--emit-ts` reported a diagnostic),
  * `emit-error` (it failed otherwise) or `differ`.
  */
-const compare = async (prog, compiler) => {
-  const work = path.join(WORK, prog.name.replace(/[\\/]/g, "_"))
+export const compare = async (prog, compiler, workRoot = WORK) => {
+  const work = path.join(workRoot, prog.name.replace(/[\\/]/g, "_"))
   fs.rmSync(work, { recursive: true, force: true })
   fs.mkdirSync(work, { recursive: true })
   const exe = path.join(work, "app")
@@ -348,6 +350,9 @@ const describe = (native, node) => {
   return `stderr line ${firstDifference(native.stderr, node.stderr)[0] + 1} differs`
 }
 
+/** A known row as the MOVED line names it: `host [spawn]`, or the row alone. */
+const listing = ({ row, api }) => (api ? `${row} [${api}]` : row)
+
 /**
  * The verdicts that are the harness's or the native build's failure, not a
  * row's: never listed, so always reported, and `--update` refuses to write a
@@ -355,7 +360,11 @@ const describe = (native, node) => {
  */
 const ERRORS = ["emit-error", "native-error", "timeout"]
 
-/** The known list: program name -> the row recorded for it. */
+/**
+ * The known list: program name -> the row recorded for it and, on a host line,
+ * the `HOST` name its evidence ends with (`[spawn]`), which a run must find
+ * again: a host line listed under one API and failing on another has moved.
+ */
 const readKnown = () => {
   const known = new Map()
   if (!fs.existsSync(KNOWN)) {
@@ -367,12 +376,13 @@ const readKnown = () => {
       continue
     }
     const [name, row] = text.split("#")[0].trim().split(/\s+/)
+    const api = /\[([^\]]+)\]$/.exec(text)
     if (!ROWS.includes(row)) {
       throw new Error(
         `${KNOWN}: ${name} is filed under "${row ?? ""}", which is not a row (${ROWS.join(", ")})`
       )
     }
-    known.set(name, row)
+    known.set(name, { row, api: row === "host" && api ? api[1] : "" })
   }
   return known
 }
@@ -444,6 +454,11 @@ const main = async (argv) => {
     console.error(`emit-ts.js: no program matches --only ${only}`)
     return 2
   }
+  // A whole run starts from an empty work directory, so what is under it is
+  // this run's corpus and nothing older: `tsc -p tests/emit-ts` reads all of it.
+  if (only === undefined) {
+    fs.rmSync(WORK, { recursive: true, force: true })
+  }
   const results = await pool(programs, jobs, (prog) => compare(prog, compiler))
   const errors = results.filter((r) => ERRORS.includes(r.verdict))
   if (update && errors.length === 0) {
@@ -456,12 +471,18 @@ const main = async (argv) => {
   )
   const xpass = results.filter((r) => r.verdict === "agree" && known.has(r.name))
   const moved = results.filter(
-    (r) => !errors.includes(r) && known.has(r.name) && r.row !== "" && known.get(r.name) !== r.row
+    (r) =>
+      !errors.includes(r) &&
+      known.has(r.name) &&
+      r.row !== "" &&
+      (known.get(r.name).row !== r.row || (r.row === "host" && known.get(r.name).api !== (r.api ?? "")))
   )
   const names = new Set(results.map((r) => r.name))
   const stale = only === undefined ? [...known.keys()].filter((name) => !names.has(name)) : []
   for (const r of moved) {
-    console.log(`${"MOVED".padEnd(12)} ${r.name}: listed under ${known.get(r.name)}, now ${r.row}`)
+    console.log(
+      `${"MOVED".padEnd(12)} ${r.name}: listed under ${listing(known.get(r.name))}, now ${listing(r)}`
+    )
   }
   for (const name of stale) {
     console.log(`${"STALE".padEnd(12)} ${name}: listed, but the corpus has no such program`)

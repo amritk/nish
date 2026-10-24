@@ -125,11 +125,13 @@ const AMBIENT_NAMES: string =
   " setTerminalRestore "
 
 /**
- * The width types `nish/runtime` declares (`runtime/core.d.ts`). Node's type
- * stripping erases them, so the `import type` line the driver writes for them
+ * The width types `nish/runtime` declares (`runtime/core.d.ts`), and the
+ * typed-array aliases, which it declares as the arrays they are in Nish
+ * (`Int32Array` is `i32[]`). Node's type stripping erases them, so the `import type` line the driver writes for them
  * is only there for a reader running `tsc` over the output.
  */
-const WIDTH_TYPES: string = " i32 i64 u8 u16 u32 u64 f32 f64 integer "
+const WIDTH_TYPES: string =
+  " i32 i64 u8 u16 u32 u64 f32 f64 integer Int32Array Float32Array Float64Array BigInt64Array "
 
 /** The message NL4011 carries; `src/codes.ts` keys the code on it. */
 export const SIGNAL_REFUSAL: string =

@@ -3,10 +3,11 @@
 **Decided (§7, 2026-09-28); in progress. Built: R1 (the portability class
 behind `--warn-portability`, #293, #301, #302, #304, #329; the parser that
 names every refusal's rule, #292 to #337), R2 (the typed-array names refuse
-`push` and `pop`, #335, widened by #409), and the `exact` half of R5, ahead of
-R4 (`fix` in `--json` and `nish --fix`, #421, #429, #431, #459, #460). Next:
-R3, the runtime split by host, and R4, `--emit ts`. §9 has each stage's
-state.** This is the plan of record for one
+`push` and `pop`, #335, widened by #409), the `exact` half of R5, ahead of
+R4 (`fix` in `--json` and `nish --fix`, #421, #429, #431, #459, #460), R3,
+the runtime split by host (#848, #851), and R4, `--emit-ts <dir>` with its
+live differential (#853, #859, #864, #866, #867, and the oracle that holds
+it). Next: R5's `review` tier and R6. §9 has each stage's state.** This is the plan of record for one
 requirement with two directions, and one constraint on both:
 
 1. **In.** A team with an ordinary TypeScript project can move it to Nish, and
@@ -53,7 +54,7 @@ edits to the source text.** Six rules:
    no translation is a bug in the language, not a limitation of the tool (§2,
    class D).
 2. **The way out is a patch over the source, not a pretty-printer.** The
-   checker records the span and type of every expression. `--emit ts` takes the
+   checker records the span and type of every expression. `--emit-ts` takes the
    original text and rewrites only the class-C sites (§3), so comments,
    formatting, names and module structure survive untouched. Code that already
    means the same thing is not reprinted at all.
@@ -90,7 +91,7 @@ The thesis, because it is the argument for spending on this at all:
 > **An exit path is what makes the way in cheap to say yes to.**
 
 A team does not adopt a compiler for a subset of its language if leaving means
-rewriting. With `--emit ts`, trying Nish on one hot module costs a branch, and
+rewriting. With `--emit-ts`, trying Nish on one hot module costs a branch, and
 backing out costs one command. The ledger in §3 is what makes that promise
 honest rather than hopeful.
 
@@ -111,7 +112,7 @@ construct, builtin and layout decision falls into exactly one class:
 | --- | --- | --- | --- |
 | **A — identical** | Same source, same output. | Always. | TS tests prove it. |
 | **B — safety net** | Native stops (exit 1, or a compile error) where TS carries on with `undefined`, `NaN` or a wrong value. A program that never trips the check prints the same thing both ways. | Always. It is Nish being stricter, never different. | TS tests prove it for every program that passes them. |
-| **C — translated** | The two readings differ, and `--emit ts` writes Nish's meaning in TS at that site. | When Nish's meaning is measurably faster, or taking TS's would cost the native build anything, and only with its translation stated in the same change. | TS tests prove nothing *at that site*. §5.2 names it. |
+| **C — translated** | The two readings differ, and `--emit-ts` writes Nish's meaning in TS at that site. | When Nish's meaning is measurably faster, or taking TS's would cost the native build anything, and only with its translation stated in the same change. | TS tests prove nothing *at that site*. §5.2 names it. |
 | **D — untranslatable** | The two readings differ, and no local rewrite recovers Nish's meaning. | **Never.** One found is a bug to close. | — |
 
 B is what the bounds check is. `a[i]` out of range is a panic natively and
@@ -142,20 +143,20 @@ collected in §7.
 
 ### 3.1 Numbers
 
-| Divergence | Reproduced | Class | `--emit ts` writes | Resolution |
+| Divergence | Reproduced | Class | `--emit-ts` writes | Resolution |
 | --- | --- | --- | --- | --- |
-| `number` is `i32` by default: signed `+ - *` overflow panics (and wraps under the deprecated `--wrapping`), `/` truncates | LANGUAGE.md | C | `(a + b) \| 0`, `Math.imul(a, b)`, `idiv(a, b)` | Keep. The translation is one token per operator, and the way in must default to f64 (wp28 §5.3), so ingested code never silently truncates. |
+| `number` is `i32` by default: signed `+ - *` overflow panics (and wraps under the deprecated `--wrapping`), `/` truncates | LANGUAGE.md | C | `(a + b) \| 0` and `Math.imul(a, b)` where the compiler proved no overflow or `--wrapping` is on, else `checkedAdd`, `checkedSub`, `checkedMul`, `checkedNeg`; `idiv(a, b)` | Keep. The translation is one token per operator, and the way in must default to f64 (wp28 §5.3), so ingested code never silently truncates. |
 | `u8` / `u16` / `u32` wrap | LANGUAGE.md | C | `& 0xff`, `& 0xffff`, `>>> 0` | Keep. |
 | `i64` / `u64` are native 64-bit | the prelude throws at the first mixed arithmetic | C | `bigint`, `BigInt.asIntN(64, …)` / `asUintN` | Keep. The type becomes `bigint`, which is also the honest TS type. |
 | `i32 >>> n` reads back signed | `-1 >>> 0` is `-1` | C | `(a >>> n) \| 0` | Keep. It is the documented wart that `u32` exists for. |
 | `toI32` from `f64` saturates | `toI32(5e10)` | C | a runtime helper, already in `shim.mjs` | Keep. |
 | 1-ulp `sin` / `cos` / `tan` / `atan2` / `hypot` / `log` / `pow` | known-failures | — | nothing | Platform noise, not a language difference. `sin`, `cos`, `log` and `pow` are the platform's libm, so two native targets can disagree the same way; `tan`, `atan2` and `hypot` are `std/math.ts` and identical on every native target, and only V8's answer can differ. Stated, not translated. |
 | integer divide by zero, `MIN / -1` | known-failures | B | `idiv`, which panics as native does | — |
-| signed overflow panics without `--wrapping` or `wrapping*` | LANGUAGE.md | B | wrapping, via the `\| 0` above | A program that overflows stops natively, and the TS reading picks one defined answer. |
+| signed overflow panics without `--wrapping` or `wrapping*` | LANGUAGE.md | B | the checked helpers (`checkedAdd`, `checkedSub`, `checkedMul`, `checkedNeg`), which panic with the native words; `\| 0` only where the checker proved the operation in range or `--wrapping` is on | The checked-helper rule: an operation the native build checks is checked in the output too, so a program that overflows stops, with the same message and exit status, in both readings. The `ovf_` and `panics_overflow` programs agree under `--emit-ts`. |
 
 ### 3.2 Strings
 
-| Divergence | Reproduced | Class | `--emit ts` writes | Resolution |
+| Divergence | Reproduced | Class | `--emit-ts` writes | Resolution |
 | --- | --- | --- | --- | --- |
 | `.length`, `charCodeAt`, `indexOf`, `slice`, `substring` count **UTF-8 bytes** | `"héllo".length` is 6 natively, 5 in TS | C | `utf8.length(s)`, `utf8.slice(s, a, b)`, … | **Keep it (§7 Q1).** Out is easy, since the helpers are exact. In is narrower than it looks: code that only passes offsets between string methods is consistent in either unit, and it breaks only where an offset or code unit meets a fact from outside. That means a length printed or stored, a non-ASCII literal compared with `charCodeAt`, or a hard-coded offset into non-ASCII text. Those are the sites §5.2 flags. |
 | `slice(a, b)` panics outside `[0, length]`, where JS clamps, and takes no negative index | `"abcdef".slice(2, 10)` panics natively and is `cdef` in TS; `slice(-2, 6)` panics natively and is `ef` in TS | C | a `slice` helper that panics | **Keep it.** [wp15-performance.md](wp15-performance.md) §4 measured the clamp at 13 x86-64 instructions per call (1.18x on a lexer-shaped scan). A check can be proven away and a clamp cannot: `opt -O2` deletes every `slice` check on constant offsets. `substring` already keeps JS's exact clamping, so the way in has a spelling for code that depends on it. The ingest fix rewrites `s.slice(-n)` to `s.slice(s.length - n)`, and `slice(a, b)` that may overrun to `substring` (`review`: they differ when `a > b`). |
@@ -164,20 +165,20 @@ collected in §7.
 
 ### 3.3 Arrays and records
 
-| Divergence | Reproduced | Class | `--emit ts` writes | Resolution |
+| Divergence | Reproduced | Class | `--emit-ts` writes | Resolution |
 | --- | --- | --- | --- | --- |
 | **A record put into an array is copied** (`push`, `[p, q]`, `ps[i] = p`, per [Arrays of records are contiguous](LANGUAGE.md#arrays-of-records-are-contiguous)) | `ps.push(p); p.x = 9` then `ps[0].x` is `1` natively and `9` in TS; `[p, p]` then writing `ps[0].x` leaves `ps[1].x` alone natively and changes it in TS | C | `{ ...p }` at each copy-in site (the copy is shallow natively too: a nested record field is a pointer, so the spread is exact) | Keep the layout, which is what makes `Point[]` vectorise. **On the way in, flag the aliasing** (§5.2): a write to a record, or to an element, while the other copy is still read afterwards. |
 | **A store into a slot overwrites what an element reference sees** | `const r = ps[0]; ps[0] = q` then `r.x` is `q.x` natively and the old value in TS | C | a field-by-field copy into the existing element: `ps[0].x = q.x; ps[0].y = q.y` | As above. Together the two translations are exact: a copy in is a fresh object, and a store is a write into the object already in the slot. |
 | `new Array<T>(n)` zero-fills | `new Array<f64>(3)` then `a[1] + 1.0` is `1` natively and `NaN` in TS | C | `new Array<T>(n).fill(0)` (`false` for `boolean`) | Keep. The translation is exact and obvious to a reader. |
 | `Float64Array` and the other three typed-array names are `f64[]`, without `push` and `pop` | `t.push(5.0)` would be a `TypeError: t.push is not a function` in TS | A for the receivers LANGUAGE.md lists; C for the residue | none needed for A; `f64[]` (`T[]`) where a residue value is bound | **Built, R2 (§7 Q4(b)), and #347.** A receiver spelled with one of the four names refuses `push` and `pop` at compile time (NL2415, [LANGUAGE.md](LANGUAGE.md#typed-array-names-have-no-push-or-pop)): `new X(n)`, a binding, a field, a return type, an index or `for...of` element of an array spelled `X[]` or `Array<X>`, and a ternary with a spelled branch. #347 added the three shapes R2 left: a field or return type written through another module's `type` alias, a value read out of a `Map` of typed arrays (`get`, `??` and a `values()` walk; a `Set` holds no arrays), and a generic function's `T` result bound to a spelled argument. Every program that still compiles has the IR it had. A value that flows into a binding spelled `f64[]` may be pushed there, which `tsc` refuses at the assignment. **Residue, class C:** a member of a generic class instantiated at a name, `new Box<Float64Array>(t).value`, still pushes natively and throws under Node. |
 | `dst.set(src, offset)` on an array of numbers ([Bulk writes](LANGUAGE.md#bulk-writes-set-and-fill), WP34 N2) | a `u8[]` is a plain `Array` under Node, and `Array` has no `set`: a `TypeError` without the prelude. `runtime/nish.mjs` adds `Array.prototype.set` with the typed array's copy-first meaning and the native panic, and the `bytes_*` programs agree byte for byte under it | C (A under the prelude) | an imported `set(dst, src, at)` helper, the prelude's own | Keep. `fill` needs no row: `Array.prototype.fill` already has `TypedArray.prototype.fill`'s meaning for every argument Nish admits, so it is class A (§3.6). A range past the end panics natively and under the prelude, where a real typed array throws a `RangeError`: class B, as `a[i]` is. |
-| `ctSelect` / `ctEq` over `u64` ([Constant time](LANGUAGE.md#constant-time-ctselect-and-cteq), WP34 N6) | a `u64` is a BigInt under `runtime/nish.mjs` and a bare `u64` literal a `number`, so a call mixing the two throws a `TypeError` there; over BigInts alone the prelude's answers are the native ones, which `ct_prelude` in `tests/run.js` checks against `ct_u64` | C, as all 64-bit arithmetic is | BigInt operands throughout, as `--emit ts` writes every `u64` | Keep. Over `u32` both are class A (§3.6): pure functions whose answers the prelude puts back in range with `>>> 0`, and `ct_select_u32` and `ct_eq_u32` agree unmodified. The timing is not part of any reading: Node promises no constant time. |
-| `a[i]` out of range, `pop()` on empty, `charCodeAt` past the end | panics natively; `undefined` / `NaN` in TS | B | nothing | — |
-| a ranged integer, `integer<Lo, Hi>`, leaves its range | an exit-1 panic natively, silent in TS, where `runtime/nish.d.ts` makes it `number` ([wp31-ranged-integers.md](wp31-ranged-integers.md) §6) | B | nothing | The check is what lets the compiler drop other checks, so it is a speed feature as well as a safety net. |
+| `ctSelect` / `ctEq` over `u64` ([Constant time](LANGUAGE.md#constant-time-ctselect-and-cteq), WP34 N6) | a `u64` is a BigInt under `runtime/nish.mjs` and a bare `u64` literal a `number`, so a call mixing the two throws a `TypeError` there; over BigInts alone the prelude's answers are the native ones, which `ct_prelude` in `tests/run.js` checks against `ct_u64` | C, as all 64-bit arithmetic is | BigInt operands throughout, as `--emit-ts` writes every `u64` | Keep. Over `u32` both are class A (§3.6): pure functions whose answers the prelude puts back in range with `>>> 0`, and `ct_select_u32` and `ct_eq_u32` agree unmodified. The timing is not part of any reading: Node promises no constant time. |
+| `a[i]` out of range, `pop()` on empty, `charCodeAt` past the end | panics natively; `undefined` / `NaN` in TS | B | the checked-helper rule again: `idx(a, i)`, `setIdx`, `updIdx`, `pop(a)` and `charCodeAt(s, i)`, which panic as native does, wherever the checker did not prove the index in range; a proven `a[i]` stays as written | The `arr_bounds_*` programs exit 1 with the native message under `--emit-ts`. |
+| a ranged integer, `integer<Lo, Hi>`, leaves its range | an exit-1 panic natively, silent in TS, where `runtime/nish.d.ts` makes it `number` ([wp31-ranged-integers.md](wp31-ranged-integers.md) §6) | B | nothing: the type is `number` and the range check is not written | The check is what lets the compiler drop other checks, so it is a speed feature as well as a safety net. The one class-B row the output does not keep: a program that leaves its range is listed under the `range` row of `tests/differential/emit-ts-known.txt` (the `rng_entry_*_panic` programs), and only such a program may be. |
 
 ### 3.4 Control flow and errors
 
-| Divergence | Reproduced | Class | `--emit ts` writes | Resolution |
+| Divergence | Reproduced | Class | `--emit-ts` writes | Resolution |
 | --- | --- | --- | --- | --- |
 | `x.orReturn()` returns from the caller | an uncaught exception under the prelude | C | `const t = x; if (t.isErr()) return Err(t.error); … t.value` hoisted to the statement | Keep. It is the language's `?`, and the rewrite is local to its statement. The checker already knows the statement and the function's `Result` type. |
 | `Ok`, `Err`, `Result` | globals the prelude installs | C | an import from the runtime (§4.3) | Keep. |
@@ -185,19 +186,20 @@ collected in §7.
 
 ### 3.5 The host
 
-| Divergence | Reproduced | Class | `--emit ts` writes | Resolution |
+| Divergence | Reproduced | Class | `--emit-ts` writes | Resolution |
 | --- | --- | --- | --- | --- |
 | `write`, `readFileSync`, `getenv`, `spawnSync`, `monotonicNanos`, `toI32`, `Arena`, … are **ambient globals** | they need `runtime/nish.mjs` installed first | C | named imports from the runtime (§4.3) | Keep the ambient spelling in the language, and emit imports. The globals are why the source cannot be bundled or tree-shaken as it stands. |
 | `nish/<module>` and `nish:fs` specifiers | resolved by a Node loader hook | C | the package's own specifiers (`nish/threads`, …; `package.json` already exports `./*` to `std/*.ts`) | — |
 | `export const main` is the entry, and its return is the exit code | nothing calls it under Node | C | a two-line entry module that calls `main` and exits with its answer | — |
 | `enum` | Node's `--experimental-strip-types` refuses it (not erasable); Bun accepts it | C | a `const` object and a type of the same name | — |
-| `console.log` prints `String(x)` | bare Node's console inspects, so `-0` prints as `-0`; `runtime/nish.mjs` replaces `console.log` and `console.error` with shims that print `String(x)`, so `-0` prints `0` in both readings | A under the prelude | the runtime's `log` | Not a class-C row: the reading the portability class is defined against prints what native prints, so NL8011, which flagged it, is retired. `--emit ts` keeps importing the runtime's `log`; output that did not would have to revive the row under a new code. |
+| `console.log` prints `String(x)` | bare Node's console inspects, so `-0` prints as `-0`; `runtime/nish.mjs` replaces `console.log` and `console.error` with shims that print `String(x)`, so `-0` prints `0` in both readings | A under the prelude | the runtime's `log` | Not a class-C row: the reading the portability class is defined against prints what native prints, so NL8011, which flagged it, is retired. `--emit-ts` keeps importing the runtime's `log`; output that did not would have to revive the row under a new code. |
+| the host itself: a call Node answers only on its event loop, or a fact Node does not keep | `spawn`, `waitPid`, `readStdin`, `waitStdin`, `setRawMode` and `setTerminalRestore` throw under `nish/runtime/node`, naming the call; `arenaUsed` and `arenaMark` answer 0, there being a collector and no arena; a lone surrogate is three WTF-8 bytes natively and U+FFFD in a UTF-16 string | C | the runtime's helper, which says why where it cannot answer | A fixed list, not a class: `HOST` in `tests/differential/emit-ts.js` names each API with the evidence that matches it, and `tests/run.js` refuses a `host` entry in the known list whose API is not on it. Adding an API is a change to that list, reviewed as one. |
 | the prelude needs Node | Bun cannot load it (`registerHooks` is not in Bun's `node:module`); a browser cannot load `shim.mjs` (`node:fs`, `node:child_process`, `process`) | — | — | Split the runtime by host (§4.3). |
-| scoped tasks, `using s = scope()` | the tasks run one after another at each `spawn` under Node, and together at the block's end natively; the checker refuses every program where the two could print differently ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)) | A | the source as written | Node 22 needs `--js-explicit-resource-management` for `using`, and Node 24 has it natively. `--emit ts` output targets the host's `using` support, or lowers the block to a `try`/`finally` for a host without it. |
-| `crypto.getRandomValues(bytes)` on a `u8[]` ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals), WP34 N3) | Node's global takes only a typed array, and a `u8[]` is a plain `Array` under Node: a `TypeError` without the prelude. `runtime/nish.mjs` replaces the method on Node's `crypto` with one that draws into a `Uint8Array` and copies across, and panics past 65,536 bytes with the native words where Node throws a `QuotaExceededError`; `os_random` and `os_random_limit` agree under it, and the `os_` block of `tests/run.js` checks the draws and the panic both ways | C (A under the prelude) | the source as written, with the prelude's `getRandomValues` imported (§4.3) | Keep. The bytes cannot agree, being random; what the reading keeps is every other fact: the length filled, the empty array, the limit and its exit status. |
-| `signalFd()` and `readSignal(fd)` ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals), WP34 N3) | **no faithful shim exists.** Node delivers SIGTERM and SIGINT only to its event loop (`process.on("SIGTERM")`), a worker thread is never told of one, and a synchronous `readSignal` keeps the loop from running, so no function the prelude could install learns that a signal arrived. The prelude's two throw, naming this row, and the `os_` block checks that they do | C | `signalFd()` becomes a helper that installs one `process.on` listener per signal and queues the numbers; `readSignal(fd)` becomes `await nextSignal()` on that queue | Keep, and note what is new about it: it is the first translation that is not local to its statement, because the function holding the `await` becomes `async` and so does each caller up to `main`. N5's loop, which waits on this descriptor beside its sockets, has the same shape and will decide whether §7 records it as C or opens it as D. |
-| `nish:net`: the sockets and the readiness loop, `netAddress` through `pollWait` ([nish:net](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop), WP34 N5) | **no faithful shim exists**, for `readSignal`'s reason. Node's `net` and `dgram` sockets are asynchronous only: a connection, a byte or a datagram is handed to a callback when the event loop runs, and a program blocked in `pollWait`, or calling `netRead` again on `-11`, never lets it run, so no synchronous function the prelude could install ever sees one. The prelude's sixteen throw, each naming itself and this note, and the `net_` blocks of `tests/run.js` check that `netAddress`, `udpBind` and `pollCreate` do | C | a descriptor becomes a handle over a Node `net.Server`, `net.Socket` or `dgram` socket whose listeners queue what arrives; `netRead`, `tcpAccept` and `udpRecvFrom` take from that queue and answer `-11` when it is empty; a loop is the set of those handles, and `pollWait` becomes `await` on the first queue to fill, a timer for its timeout, and `nextSignal()` for the signal descriptor | Keep, and record the answer §3.5 left open for N5: it is C, not D. The translation is the one `readSignal` has, non-local in the same way (the function holding the `await` becomes `async`, and so does each caller up to `main`), and nothing a socket does lacks a Node counterpart; what changes is only who owns the loop. |
-| `declare function` (FFI) and `CPtr` | no JS counterpart (`ffi_scalar` in known-failures) | not a TS program | the module stays native and is imported through `--emit-napi` or wasm (§4.4) | This is the only row with no TS reading, and it is not D: the interop layer already gives it a *JS* reading, one module at a time. |
+| scoped tasks, `using s = scope()` | the tasks run one after another at each `spawn` under Node, and together at the block's end natively; the checker refuses every program where the two could print differently ([LANGUAGE.md](LANGUAGE.md#scoped-tasks-using-s--scope)) | A | the source as written | Node 22 needs `--js-explicit-resource-management` for `using`, and Node 24 has it natively. `--emit-ts` output targets the host's `using` support, or lowers the block to a `try`/`finally` for a host without it. |
+| `crypto.getRandomValues(bytes)` on a `u8[]` ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals), WP34 N3) | Node's global takes only a typed array, and a `u8[]` is a plain `Array` under Node: a `TypeError` without the prelude. `runtime/nish.mjs` replaces the method on Node's `crypto` with one that draws into a `Uint8Array` and copies across, and panics past 65,536 bytes with the native words where Node throws a `QuotaExceededError`; `os_random` and `os_random_limit` agree under it, and the `os_` block of `tests/run.js` checks the draws and the panic both ways | C (A under the prelude) | `getRandomValues(bytes)` from `nish/runtime`, which takes a `u8[]` and keeps the limit (§4.3) | Keep. The bytes cannot agree, being random; what the reading keeps is every other fact: the length filled, the empty array, the limit and its exit status. |
+| `signalFd()` and `readSignal(fd)` ([The host](LANGUAGE.md#the-host-the-wall-clock-entropy-file-times-and-signals), WP34 N3) | **no faithful shim exists.** Node delivers SIGTERM and SIGINT only to its event loop (`process.on("SIGTERM")`), a worker thread is never told of one, and a synchronous `readSignal` keeps the loop from running, so no function the prelude could install learns that a signal arrived. The prelude's two throw, naming this row, and the `os_` block checks that they do | C | refused: `--emit-ts` writes nothing for a program that calls either (NL4011, `reject_emit_ts_signal`). The translation this row plans — `signalFd()` a helper that installs one `process.on` listener per signal and queues the numbers, `readSignal(fd)` an `await nextSignal()` on that queue — is not local to its statement, and the emitter writes only statement-local edits | Keep, and note what is new about it: it is the first translation that is not local to its statement, because the function holding the `await` becomes `async` and so does each caller up to `main`. N5's loop, which waits on this descriptor beside its sockets, has the same shape and will decide whether §7 records it as C or opens it as D. |
+| `nish:net`: the sockets and the readiness loop, `netAddress` through `pollWait` ([nish:net](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop), WP34 N5) | **no faithful shim exists**, for `readSignal`'s reason. Node's `net` and `dgram` sockets are asynchronous only: a connection, a byte or a datagram is handed to a callback when the event loop runs, and a program blocked in `pollWait`, or calling `netRead` again on `-11`, never lets it run, so no synchronous function the prelude could install ever sees one. The prelude's sixteen throw, each naming itself and this note, and the `net_` blocks of `tests/run.js` check that `netAddress`, `udpBind` and `pollCreate` do | C | refused: a module that imports `nish:net` or calls one of its functions is written as nothing (NL4011, `reject_emit_ts_net`, `reject_emit_ts_net_global`). The planned translation — a descriptor a handle over a Node `net.Server`, `net.Socket` or `dgram` socket whose listeners queue what arrives, `netRead`, `tcpAccept` and `udpRecvFrom` taking from that queue and answering `-11` when it is empty, `pollWait` an `await` on the first queue to fill — waits for the non-local edits `readSignal` needs too | Keep, and record the answer §3.5 left open for N5: it is C, not D. The translation is the one `readSignal` has, non-local in the same way (the function holding the `await` becomes `async`, and so does each caller up to `main`), and nothing a socket does lacks a Node counterpart; what changes is only who owns the loop. |
+| `declare function` (FFI) and `CPtr` | no JS counterpart (`ffi_scalar` in known-failures) | not a TS program | refused (NL4010, `reject_emit_ts_ffi`): the module stays native and is imported through `--emit-napi` or wasm (§4.4) | This is the only row with no TS reading, and it is not D: the interop layer already gives it a *JS* reading, one module at a time. |
 
 ### 3.6 Identical, for the record
 
@@ -217,12 +219,16 @@ parallel calls, whose std bodies are their sequential meaning; ASI.
 
 ---
 
-## 4. The way out: `--emit ts`
+## 4. The way out: `--emit-ts`
 
 ```
-nish src/main.ts --emit ts -o out/      # one .ts per module, and out/entry.ts
-node out/entry.ts                       # or bun, or a bundler for a browser
+nish src/main.ts --emit-ts out/         # one .ts per module, and out/entry.ts
+node out/entry.ts                       # Node 22.6 or newer; a bundler for a browser
 ```
+
+Built (R4): `--emit-ts <dir>` takes the directory to write and answers in place
+of the other outputs ([LANGUAGE.md](LANGUAGE.md) has the rule, and
+[the user guide](guide/using-nish/to-typescript.md) the walkthrough).
 
 ### 4.1 What it writes
 
@@ -237,7 +243,8 @@ node out/entry.ts                       # or bun, or a bundler for a browser
   `import type { i32 } from "nish/runtime"`, so the intent survives as
   documentation. `i64` and `u64` become `bigint`.
 - **The emitted TS type-checks under `tsc --strict`**, and a test holds it to
-  that.
+  that: `tests/run.js`'s emit-ts section runs `tsc -p tests/emit-ts` over the
+  whole emitted corpus, with no allow-list.
 
 ### 4.2 Faithful first, idiomatic by ratchet
 
@@ -245,7 +252,7 @@ The output is faithful: it means what the native build meant, helpers
 included. A team that is leaving for good then removes helpers one by one,
 because each one is a place where it chooses JS's meaning over Nish's. That is
 wp28's ratchet run backwards, and the number of runtime imports left is the
-dashboard. A `--emit ts` flag for "idiomatic, drop the helpers" is declined
+dashboard. A `--emit-ts` flag for "idiomatic, drop the helpers" is declined
 (§8): it would be the only way to leave that changes the program's meaning
 without saying where.
 
@@ -258,8 +265,10 @@ Today's `runtime/shim.mjs` is one module that imports `node:fs`,
   string helpers, `Result`, `Ok`, `Err`, `panic`, `log`, `parseInt`,
   `parseFloat`, the conversions and `Arena` as no-ops. No `node:` import and no
   `process`, so it bundles for a browser.
-- **`nish/runtime/node`**, **`…/bun`**, **`…/browser`**: the file
-  system, environment, process and clock. The browser adapter answers what a
+- **`nish/runtime/node`** and **`…/browser`**: the file
+  system, environment, process and clock. **Bun is deferred**: Bun runs the
+  Node adapter's `node:` imports, so no adapter of its own was needed for R4,
+  and one is written when a difference shows. The browser adapter answers what a
   browser can (`monotonicNanos` from `performance.now`, `getenv` as `null`),
   and a file-system call there is a `panic` that names the host.
 
@@ -270,7 +279,9 @@ becomes a thin layer over these. The package's `exports` already maps
 ### 4.4 Leaving one module at a time
 
 A module that declares C functions, or one a team wants to keep fast, stays
-native. The rest of the program imports it through the addon or wasm module the
+native; `--emit-ts` refuses the first kind (NL4010), and a program on
+`nish:net` or the signal descriptor (NL4011), naming the module, so the
+boundary is explicit. The rest of the program imports it through the addon or wasm module the
 compiler already emits (`--emit-napi`, `--emit-dts`, wasm). That makes the way
 out incremental in the same shape as the way in: a program can be half TS and
 half Nish for as long as the team likes, and the boundary is a module import on
@@ -278,14 +289,17 @@ both sides.
 
 ### 4.5 How it is tested
 
-`tests/differential/` gains a live mode again. Every program in the corpus with
-a `main` is emitted with `--emit ts`, run under Node, and compared with its
+`tests/differential/emit-ts.js` is the live mode. Every program in the corpus with
+a `main` is emitted with `--emit-ts`, run under Node, and compared with its
 native binary on stdout, stderr and exit status. Class-B programs (the ones
 that panic) must still exit 1 with the same message, because the helpers panic
-as the native build does. `known-failures.txt` shrinks to the libm row and the
-FFI rows. The fuzz differential against Node, which WP19 lost with the
-rewriter, runs over `--emit ts` output instead. And `tsc --strict --noEmit`
-over the emitted corpus keeps the output honest TypeScript.
+as the native build does. Its known list, `emit-ts-known.txt`, holds only the
+`libm`, `ffi`, `refused`, `host` and `range` rows, which `tests/run.js` checks.
+The fuzz differential against Node, which WP19 lost with the rewriter, runs
+over `--emit-ts` output instead (`tests/differential/fuzz.js --emit-ts`, 200
+programs on every CI run, where every verdict but an agreement is red). And
+`tsc --strict --noEmit` over the emitted corpus keeps the output honest
+TypeScript.
 
 ---
 
@@ -366,7 +380,7 @@ touches a class-C row would need a key of its own, which is a change to the
 ### 5.2 The `portability` diagnostic class
 
 A warning at every class-C site in the program, with `--json` and a code in a
-new band, off by default and on under `--compat` and `--emit ts`, and
+new band, off by default and on under `--compat` and `--emit-ts`, and
 `--warn-portability` until they exist. It prints in the shape every
 diagnostic has, the summary line and the excerpt, with `portability` as the
 kind ([LANGUAGE.md](LANGUAGE.md#diagnostics-and-debugging-flags)):
@@ -383,7 +397,7 @@ Under `--json` it is one object with `"severity":"portability"` and its NL8xxx
 It is the map both directions need. On the way in, it lists exactly where "the
 tests still pass" stops being evidence, which is what an agent should look at
 by hand or cover with a new test. On the way out, it is the list of places
-`--emit ts` will put a helper. Most of the facts are the checker's already
+`--emit-ts` will put a helper. Most of the facts are the checker's already
 (the type of `name`, which array a record was copied into), so the class is
 cheap. Two rows need a new analysis. Record aliasing reuses the
 element-reference tracking behind `reject_arr_element_across_push`. The string
@@ -403,13 +417,13 @@ where it meets an outside fact. Both are warnings, so neither changes the IR
    everything the agent writes is still TypeScript, the suite is the oracle for
    every class-A and class-B change.
 6. When it compiles, run the same tests natively. Where the project has none,
-   `--emit ts` output under Node against the native binary is the differential.
+   `--emit-ts` output under Node against the native binary is the differential.
 7. Narrow `nish.compat` (wp28 §5.2) until it is empty.
 
 [AI.md](AI.md)'s "The loop: compile, read the code, fix" states steps 1, 2
-and 4 against strict today, with `nish --fix` as step 2, and names
-`--warn-portability`, step 3's warnings. The rest of step 3 waits on the
-`review` tier, step 6's differential on `--emit ts` (R4), and step 7 on wp28's
+and 4 against strict today, with `nish --fix` as step 2, names
+`--warn-portability`, step 3's warnings, and states step 6 with `--emit-ts`
+(R4). The rest of step 3 waits on the `review` tier, and step 7 on wp28's
 compat mode; an agent skill that wraps the whole loop waits with them.
 
 ---
@@ -420,7 +434,7 @@ This is what "keep it in mind as we design the language" means in practice.
 
 1. **Every new construct, builtin or semantics decision states its TypeScript
    reading: A, B or C, and for C the translation.** It goes in the PR and in
-   the construct's LANGUAGE.md rule. Once `--emit ts` exists, a C construct
+   the construct's LANGUAGE.md rule. Once `--emit-ts` exists, a C construct
    ships with its translation and its `portability` warning in the same PR, the
    way a construct ships with its golden `.ll` today. The step is in
    [ARCHITECTURE.md](ARCHITECTURE.md#how-to-add-a-construct).
@@ -468,7 +482,7 @@ and the stages in §9 build it.
 
 ## 8. Declined
 
-- **An "idiomatic" `--emit ts` that drops the helpers.** It changes what the
+- **An "idiomatic" `--emit-ts` that drops the helpers.** It changes what the
   program means with no record of where. The ratchet in §4.2 gets there one
   reviewed site at a time.
 - **A JS-to-Nish transpiler that accepts arbitrary TypeScript.** wp28 §2.2
@@ -490,9 +504,9 @@ and the stages in §9 build it.
 | --- | --- | --- |
 | **R0** | This note; the ledger in [RUN_UNDER_NODE.md](RUN_UNDER_NODE.md) brought up to date; the TypeScript-reading step in ARCHITECTURE.md's checklist | Makes the rule binding before any tool exists. |
 | **R1** | The `portability` class (§5.2); the parser reading all of TypeScript's syntax (§5.0) | Both directions need the map, it is cheap, and it is useful on its own. The parser is what makes every diagnostic an agent reads name its rule. |
-| **R2** | Close the rows that are free to close: typed-array names (Q4), a compile-time refusal. | Every row closed now is a helper `--emit ts` never needs and a warning an agent never reads. Only compile-time changes qualify (§1 rule 6). |
-| **R3** | The runtime split by host (§4.3) | `--emit ts` imports from it, and Bun and the browser need it anyway. |
-| **R4** | `--emit ts` (§4), with the live differential (§4.5) | The exit door, and the oracle §5.3 step 6 leans on. |
+| **R2** | Close the rows that are free to close: typed-array names (Q4), a compile-time refusal. | Every row closed now is a helper `--emit-ts` never needs and a warning an agent never reads. Only compile-time changes qualify (§1 rule 6). |
+| **R3** | The runtime split by host (§4.3) | `--emit-ts` imports from it, and Bun and the browser need it anyway. |
+| **R4** | `--emit-ts` (§4), with the live differential (§4.5) | The exit door, and the oracle §5.3 step 6 leans on. |
 | **R5** | `fix` in `--json` and `nish fix` (§5.1); the AI.md section | The agent loop, once the compiler can say where the risks are. |
 | **R6** | wp28's compat mode, on wp28's own staging | The way in widens once there is a safe way back out. |
 
@@ -532,9 +546,17 @@ again with no `.ll` golden moving (`reject_typed_push_map`,
 names the class-C residue the spelling still does not reach: a member of a
 generic class instantiated at a name, `new Box<Float64Array>(t).value`.
 
-**R3 and R4 are not started.** `runtime/shim.mjs` is still one module over
-`node:` imports with no Bun or browser adapter, `runtime/nish.mjs` is still the
-Node prelude, and the compiler has no `--emit ts`.
+**R3 is built** (#848, #851). `runtime/core/` is the host-agnostic core with
+no `node:` import, `runtime/node.mjs` and `runtime/browser.mjs` the adapters,
+`runtime/nish.mjs` the prelude over them, and `nish/runtime` is published
+with declarations. Bun's adapter is deferred (§4.3).
+
+**R4 is built** (#853, #859, #864, #866, #867). `--emit-ts <dir>` writes the
+program back out (#853), and the number, string, array and record, and control
+rows of §3 are translated (#866, #859, #867, #864). The oracle holds it: the
+live differential agrees on every program but the known list's 62, each under
+a row TypeScript under Node cannot say (§4.5); the emitted corpus type-checks
+under `tsc --strict`; and the random programs of `fuzz.js --emit-ts` agree.
 
 **R5's `exact` half is built, ahead of R4.** `fix` rides in `--json` and
 `nish --fix` applies it (#421, #429, #431, #459, #460; §5.1 has the shape and
@@ -553,7 +575,7 @@ speed, which nothing gates today. A stage that changes the parser or the
 checker times the compiler building itself (`scripts/bootstrap.sh --verify`)
 before and after, and says the number.
 
-What the native build does not pay, the TypeScript side does. `--emit ts`
+What the native build does not pay, the TypeScript side does. `--emit-ts`
 output is slower than hand-written TypeScript wherever a helper stands in for
 a Nish meaning, and the UTF-8 string helpers are the expensive ones. The i32
 idioms (`| 0`, `Math.imul`) are the ones V8 already optimises best. That is

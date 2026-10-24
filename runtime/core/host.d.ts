@@ -20,6 +20,16 @@ export declare class NishNoHost extends Error {
   readonly requested: string;
 }
 
+/**
+ * What the browser host's `exit(code)`, and every panic there, throws: a page
+ * cannot end itself. Tell it apart with `instanceof`, not by its `name`.
+ */
+export declare class NishExit extends Error {
+  /** The 8-bit status a native exit would leave: `code & 0xff`. */
+  readonly code: number;
+  constructor(code: number);
+}
+
 export declare function installHost(next: Host): void;
 export declare function log(x: unknown): void;
 export declare function error(x: unknown): void;

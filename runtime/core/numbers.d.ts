@@ -17,6 +17,11 @@ export type f64 = number;
  * the native build's check, which Node does not make (wp33 §3.3, the range row).
  */
 export type integer<Lo extends number, Hi extends number> = number;
+/** The typed-array aliases (docs/LANGUAGE.md): in Nish each is an ordinary array of its width. */
+export type Int32Array = i32[];
+export type Float32Array = f32[];
+export type Float64Array = f64[];
+export type BigInt64Array = i64[];
 
 /** A width as the rewriter names it, for `convert`. */
 export type NumericKind = "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64";

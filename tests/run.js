@@ -4618,6 +4618,22 @@ if (!only || "emit-ts".includes(only)) {
     corpus.stdout + corpus.stderr
   )
 
+  // What the corpus run just wrote, every program at once, under `tsc
+  // --strict` (tests/emit-ts/tsconfig.json): the output is TypeScript a user
+  // type-checks, not only text Node strips, and the runtime's `.d.ts` files are
+  // read with it. There is no allow-list; an error is a translation to fix.
+  const tsc = spawnSync(
+    process.execPath,
+    [path.join(root, "node_modules", "typescript", "bin", "tsc"), "-p", path.join(root, "tests", "emit-ts", "tsconfig.json")],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  )
+  const tscErrors = (tsc.stdout.match(/error TS\d+/g) ?? []).length
+  check(
+    `emit-ts: the emitted corpus type-checks under tsc --strict${tscErrors > 0 ? ` (${tscErrors} errors)` : ""}`,
+    tally !== null && tsc.status === 0,
+    tsc.stdout.split("\n").slice(0, 40).join("\n") + tsc.stderr
+  )
+
   // The known list is a ratchet, not a parking lot (wp33 §4.2): a program may
   // stay on it only under a row that names what TypeScript under Node cannot
   // say — libm's last bit, C behind `declare`, a refusal, the host, or a range

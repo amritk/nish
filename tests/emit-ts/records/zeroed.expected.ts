@@ -6,10 +6,10 @@ class Tag {}
 
 export const main = (): number => {
   const n: i32 = 4;
-  const xs = newArray(n, 0);
-  const big = newArray(2, 0n);
-  const flags = newArray(2, false);
-  const bytes: u8[] = newArray(6, 0);
+  const xs = newArray<i32>(n, 0);
+  const big = newArray<i64>(2, 0n);
+  const flags = newArray<boolean>(2, false);
+  const bytes: u8[] = newArray<u8>(6, 0);
   const src: u8[] = [1, 2, 3];
   arraySetAt(bytes, src, 2);
   const tag = new Tag();

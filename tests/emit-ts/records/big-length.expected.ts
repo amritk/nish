@@ -4,8 +4,8 @@ import { newArray, idx, checkedAdd, setIdx } from "nish/runtime"
 import type { i32, i64 } from "nish/runtime"
 export const main = (): i32 => {
   const n: i64 = 3n;
-  const xs = newArray(Number(n), 0);
-  const ys = newArray(Number(n), 0n);
+  const xs = newArray<i32>(Number(n), 0);
+  const ys = newArray<i64>(Number(n), 0n);
   setIdx(xs, 2, checkedAdd(idx(xs, 2), 4));
   console.log(`${xs.length} ${xs[0]} ${xs[2]} ${ys.length} ${idx(ys, 1)}`);
   return 0;
