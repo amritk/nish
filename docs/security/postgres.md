@@ -8,7 +8,7 @@ wiped, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the database layer starts
 from evidence.
 
-Anchors are function names in `std/net/postgres.ts` at `eed1ae3`, the last
+Anchors are function names in `std/net/postgres.ts` at `971682d`, the last
 commit to change it on the head that merges this record.
 
 **Result.** Every message is framed once, by its length, and a length under 4
