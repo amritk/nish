@@ -54,7 +54,7 @@ import {
   TLS_TCP_START_BYTES,
 } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
-import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
+import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
@@ -619,9 +619,12 @@ if (
 // -- a later section reads the `.ll` a case left in `build/test` -- so every
 // case has finished before the next section starts, and the checks are
 // reported in corpus order, which keeps the output the same at any width.
-const only = withoutSeed(process.argv.slice(2).filter((_, i) => i + 2 !== shardAt && i + 1 !== shardAt)).find(
-  (arg) => !arg.startsWith("-")
-)
+// The filter is the first argument that is neither a flag nor the value of
+// one (`--shard 2/4`, `--jobs 4`).
+const jobsAt = process.argv.indexOf("--jobs")
+const only = withoutSeed(
+  process.argv.slice(2).filter((_, i) => ![shardAt, jobsAt].some((at) => i + 2 === at || i + 1 === at))
+).find((arg) => !arg.startsWith("-"))
 const cases = fs
   .readdirSync(casesDir)
   .filter((f) => f.endsWith(".ts"))
@@ -5218,22 +5221,84 @@ const { linkShard, sectionShard } = (() => {
  * runs here. A check in the WP14 section holds ci.yml to it.
  */
 const DELEGATE_IR_CHECKS = process.argv.includes("--delegate-ir-checks") && process.env.GITHUB_ACTIONS === "true"
-let irDelegated = 0
 const linkDealtAway = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) !== SHARD)
+/**
+ * How many link programs are in flight at once: `--jobs N`, `defaultJobs()`
+ * without it. `--jobs 1` is the sequential loop. Whatever the width, every
+ * program's checks are replayed in `linkTests` order, so the output is the same
+ * byte for byte.
+ */
+const LINK_JOBS = jobsFrom(process.argv)
+/**
+ * How many of one program's modules llvm-as and opt read at once. The programs
+ * around it are already filling the cores, so the two pools share
+ * `defaultJobs()` between them rather than each taking all of it: `LINK_JOBS`
+ * programs each forking `defaultJobs()` verifiers would be `defaultJobs()`
+ * squared processes, more than the cores and more than the memory a CI runner
+ * has for that many module graphs. At `--jobs 1` one program gets every core.
+ */
+const MODULE_JOBS = Math.max(1, Math.floor(defaultJobs() / LINK_JOBS))
+/**
+ * The link programs that run alone, one at a time, after the pool has drained,
+ * each with why. A program belongs here when other programs beside it change
+ * what it measures (a wall-clock bound, a resident size), not when it shares a
+ * file or a port: no program does (see `runLinkProgram`).
+ */
+const LINK_SERIAL = new Map([])
 
-for (const name of linkTests) {
-  if (only && !name.includes(only)) {
-    continue
+/**
+ * One link program from its compile to its last native run, with what it found
+ * kept as steps, as section A's `runCase` keeps them, rather than printed:
+ * `{ steps, irDelegated }`. The programs run `LINK_JOBS` at a time and finish in
+ * any order, so nothing here reaches the output or the counters; the loop below
+ * replays each record in `linkTests` order with `reportCase`, and counts
+ * `irDelegated` from the records.
+ *
+ * What two programs in flight could share, and why they do not:
+ * - Their outputs. Every directory written here is named after the program --
+ *   `build/test/link/<name>/`, `build/test/link/<name>.portability/` and
+ *   `build/test/link-panics/<name>/` -- and the names are directory names
+ *   under tests/link, so no two programs ever share one.
+ * - The compiled runtime. Every `--link` takes it from
+ *   `$XDG_CACHE_HOME/nish/runtime`, the suite's own cache, which
+ *   `cachedRuntime` (src/compile.ts) keeps safe for concurrent links (CLI-5):
+ *   a miss compiles into a scratch directory of its own, moves whole objects
+ *   in with `rename` and writes the key last, so two misses at once each
+ *   compile the same recipe and a link reading an object always reads a whole
+ *   one. scripts/build.sh's own scratch (`--runtime-from`) is a `mktemp -d`
+ *   per link.
+ * - The process. Nothing here changes `process.env` or the working
+ *   directory; an environment a native run needs (`envWithThreads`) is a copy
+ *   handed to that one spawn.
+ * - The world the programs run in. The four that write files write paths
+ *   named after themselves (`build/net_relay/`, `build/rt_sec_read_cap/`,
+ *   `build/rt_sec_wasm_arena/`, and net_relay_soak's server's
+ *   `build/net_relay_soak_<n>.*`), and nothing else reads them;
+ *   net_interop_server writes only when started by hand. Every socket a
+ *   program's checks open is bound to port 0, which the kernel picks free; the
+ *   literal ports in tests/link are a server's CLI argument or bytes in a
+ *   replayed trace. One port is held by nobody for a moment: net_prefork's
+ *   `freePort` binds port 0, reads the number, closes it and hands it to the
+ *   supervisor it spawns, which binds it again. A program in flight beside it
+ *   could take that number with its own port 0 bind in between. It stays in
+ *   the pool rather than LINK_SERIAL because the kernel would have to pick
+ *   that one number out of the ephemeral range within a spawn's time, and if
+ *   it did, the supervisor's bind fails and net_prefork's checks fail loudly,
+ *   never a wrong pass. Three full runs at two widths never saw it.
+ */
+const runLinkProgram = async (name) => {
+  const steps = []
+  const expect = (label, ok, detail) => {
+    steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
-  if (linkShard(name) !== SHARD) {
-    continue
-  }
+  const record = { steps, irDelegated: false }
   const dir = path.join(linkDir, name)
   const side = (f) => path.join(dir, f)
   const read = (f) => fs.readFileSync(side(f), "utf8")
   const args = fs.existsSync(side("args")) ? read("args").trim().split(/\s+/).filter(Boolean) : []
   const outDir = path.join(buildDir, "link", name) + path.sep
   const exe = path.join(outDir, "app")
+  // This program's own directory: no other program in flight names it.
   fs.rmSync(outDir, { recursive: true, force: true })
   // WP35: the report is written beside the modules by the same compile, since
   // nothing here compares the IR of a second one.
@@ -5241,10 +5306,12 @@ for (const name of linkTests) {
   const capsArgs =
     !DELEGATE_IR_CHECKS && fs.existsSync(side("expected.caps.json")) ? ["--emit-capabilities", capsJson] : []
   if (DELEGATE_IR_CHECKS && fs.existsSync(side("expected.err"))) {
-    irDelegated++
-    continue
+    record.irDelegated = true
+    return record
   }
-  const r = spawnSync(
+  // The link reads the suite's runtime cache, which concurrent links share
+  // safely (CLI-5; see above).
+  const r = await spawnAsync(
     NISH,
     [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...linkProfile(name, args), ...capsArgs],
     { cwd: root }
@@ -5253,37 +5320,38 @@ for (const name of linkTests) {
 
   if (fs.existsSync(side("expected.err"))) {
     const needle = read("expected.err").trim()
-    check(
+    expect(
       `link/${name}: rejected with "${needle}"`,
       r.status === 1 && stderr.includes(needle),
       stderr || "(compiled successfully)"
     )
     if (fs.existsSync(side("expected.json"))) {
-      const json = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--json", ...args], {
+      const json = await spawnAsync(NISH, [side("main.ts"), "-o", outDir, "--json", ...args], {
         cwd: root,
         encoding: "utf8",
       })
       const got = json.stdout.split(`${root}/`).join("").trim()
       const want = read("expected.json").trim()
-      check(
+      expect(
         `link/${name}: --json reports every diagnostic in expected.json, and no other`,
         json.status === 1 && got === want,
         `--- expected\n${want}\n--- actual (exit ${json.status})\n${got}\n${json.stderr}`
       )
     }
-    continue
+    return record
   }
   if (r.status !== 0) {
-    check(`link/${name}: compiles and links`, false, stderr)
-    continue
+    expect(`link/${name}: compiles and links`, false, stderr)
+    return record
   }
   if (DELEGATE_IR_CHECKS) {
-    irDelegated++
+    record.irDelegated = true
   } else {
     // The `--emit-panics` compile below reads nothing this loop writes, so it
     // runs while the modules are checked rather than after them. Nothing between
     // here and its `await` leaves the iteration, so no compile outlives its program.
     const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
+    // Named after the program, like `outDir`.
     fs.rmSync(panicsDir, { recursive: true, force: true })
     const panicsFile = path.join(panicsDir, "panics.json")
     const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
@@ -5297,10 +5365,10 @@ for (const name of linkTests) {
       .sort()
       .map((f) => ({ file: f, ir: fs.readFileSync(path.join(outDir, f), "utf8") }))
     // A program that imports std/net is about a hundred modules, and llvm-as and
-    // opt read each one alone, so they run `defaultJobs()` modules at a time; the
+    // opt read each one alone, so they run `MODULE_JOBS` modules at a time; the
     // checks are still made in module order, so the output is the sequential
     // loop's. One at a time they were a fifth of the runtime-net job's wall clock.
-    const verified = await pool(modules, defaultJobs(), async (m) => ({
+    const verified = await pool(modules, MODULE_JOBS, async (m) => ({
       as: HAS_LLVM_AS ? await spawnAsync("llvm-as", [path.join(outDir, m.file), "-o", "/dev/null"]) : null,
       v: HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)]) : null,
     }))
@@ -5309,10 +5377,10 @@ for (const name of linkTests) {
         const actual = stripHeader(m.ir)
         if (UPDATE_LINK_GOLDENS && read(m.file).trim() !== actual) {
           fs.writeFileSync(side(m.file), `${actual}\n`)
-          console.log(`WROTE link/${name}/${m.file}`)
+          steps.push({ kind: "log", text: `WROTE link/${name}/${m.file}` })
         }
         const expected = read(m.file).trim()
-        check(
+        expect(
           `link/${name}: ${m.file} matches golden`,
           actual === expected,
           `--- expected\n${expected}\n--- actual\n${actual}`
@@ -5320,17 +5388,18 @@ for (const name of linkTests) {
       }
       const { as, v } = verified[i]
       if (as !== null) {
-        check(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
+        expect(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
       }
       if (v !== null) {
-        check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
+        expect(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
       }
     }
 
     if (fs.existsSync(side("expected.portability"))) {
       const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
+      // Named after the program, like `outDir`.
       fs.rmSync(warnedDir, { recursive: true, force: true })
-      const warned = spawnSync(
+      const warned = await spawnAsync(
         NISH,
         [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
         {
@@ -5345,12 +5414,12 @@ for (const name of linkTests) {
         .join("\n")
         .split(`${root}/`)
         .join("")
-      check(
+      expect(
         `link/${name}: --warn-portability --json matches expected.portability`,
         warned.status === 0 && got === want,
         `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
       )
-      check(
+      expect(
         `link/${name}: --warn-portability changes no byte of the IR`,
         modules.every(
           (m) =>
@@ -5386,7 +5455,7 @@ for (const name of linkTests) {
         }
       }
     }
-    check(
+    expect(
       `link/${name}: ${declares} imported declare(s) match their define(s) attribute for attribute`,
       declares > 0 && mismatches.length === 0,
       mismatches.join("\n") || "(no cross-module declares found)"
@@ -5399,7 +5468,7 @@ for (const name of linkTests) {
         .map((l) => l.trim())
         .filter(Boolean)
         .filter((l) => !all.includes(l))
-      check(
+      expect(
         `link/${name}: emitted IR contains every expected.ir line`,
         missing.length === 0,
         missing.map((l) => `missing: ${l}`).join("\n")
@@ -5414,7 +5483,7 @@ for (const name of linkTests) {
     // That compile was started beside the module checks above (`listing`).
     const listed = await listing
     if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
-      check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
+      expect(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
     } else {
       const listText = fs.readFileSync(panicsFile, "utf8")
       const ir = fs
@@ -5427,7 +5496,7 @@ for (const name of linkTests) {
       // drift check too; a module of a library that writes no `.ll` of its own
       // stays skipped (`panicOracle`'s `module`).
       const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
-      check(
+      expect(
         `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
         oracle.failures.length === 0 && oracle.own > 0,
         oracle.own > 0
@@ -5437,7 +5506,7 @@ for (const name of linkTests) {
       if (fs.existsSync(side("expected.panics"))) {
         const want = read("expected.panics").trim()
         const got = listText.split(`${root}/`).join("").trim()
-        check(
+        expect(
           `link/${name}: --emit-panics matches expected.panics`,
           got === want,
           `--- expected\n${want}\n--- actual\n${got}`
@@ -5448,7 +5517,7 @@ for (const name of linkTests) {
     if (capsArgs.length > 0) {
       const want = read("expected.caps.json")
       const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
-      check(
+      expect(
         `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
         got === want,
         `--- expected\n${want}\n--- actual\n${got}`
@@ -5456,14 +5525,17 @@ for (const name of linkTests) {
     }
   }
 
+  // The programs in flight share the repository root as their working
+  // directory, and nothing in it: each writes only a directory of its own and
+  // binds port 0 (see above, with net_prefork's one rebind).
   const run = await runNative(`link/${name}`, exe, [])
   if (run.death !== null) {
-    check(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
-    continue
+    expect(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
+    return record
   }
   const wantCode = Number(read("expected.code").trim())
   const wantOut = fs.existsSync(side("expected.out")) ? read("expected.out").trim() : ""
-  check(
+  expect(
     `link/${name}: exits with ${wantCode} and stdout matches expected.out`,
     run.status === wantCode && String(run.stdout).trim() === wantOut,
     `--- expected exit ${wantCode}, stdout:\n${wantOut}\n--- actual exit ${run.status}, stdout:\n${run.stdout}${run.stderr}`
@@ -5478,7 +5550,7 @@ for (const name of linkTests) {
       const sized = await runNative(`link/${name} (NISH_NUM_THREADS=${threads})`, exe, [], {
         env: envWithThreads(threads),
       })
-      check(
+      expect(
         sized.death ?? `link/${name}: the same exit and stdout under NISH_NUM_THREADS=${threads}`,
         sized.death === null && sized.status === wantCode && String(sized.stdout).trim() === wantOut,
         `--- actual exit ${sized.status}, stdout:\n${sized.stdout}${sized.stderr}`
@@ -5506,12 +5578,39 @@ for (const name of linkTests) {
         }
       }
     }
-    check(
+    expect(
       `link/${name}: every one of ${PANIC_ONCE_RUNS} runs at 2 and 8 threads prints expected.stderr once and exits ${wantCode}`,
       bad.length === 0,
       `--- expected stderr ${JSON.stringify(wantErr)}\n${bad.join("\n")}`
     )
   }
+  return record
+}
+
+// Each program is reported as soon as every program before it has been, so the
+// log moves while the pool runs. A program of `LINK_SERIAL` holds the report
+// at its place until the pool has drained and it has run alone; the programs
+// after it are reported then, in order, with it.
+const linkSelected = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) === SHARD)
+const linkRuns = new Array(linkSelected.length).fill(null)
+let linkReported = 0
+let irDelegated = 0
+const reportLink = (record) => {
+  reportCase(record)
+  if (record.irDelegated) {
+    irDelegated++
+  }
+  linkReported++
+}
+await pool(linkSelected, LINK_JOBS, async (name, at) => {
+  linkRuns[at] = LINK_SERIAL.has(name) ? { serial: true } : await runLinkProgram(name)
+  while (linkReported < linkRuns.length && linkRuns[linkReported] !== null && !linkRuns[linkReported].serial) {
+    reportLink(linkRuns[linkReported])
+  }
+})
+while (linkReported < linkRuns.length) {
+  const at = linkReported
+  reportLink(linkRuns[at].serial ? await runLinkProgram(linkSelected[at]) : linkRuns[at])
 }
 
 /** The `.ll` files an output directory holds, in name order. */
@@ -8760,8 +8859,11 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `sqlite_memory` builds the vendored SQLite for wasm32 against wasi-libc
 // (scripts/build.sh's wasi `sqlite_objects`) and opens an in-memory database
 // with it, so a wasi compile of the amalgamation that breaks fails here.
+// `std_sqlite_wasi` runs `nish/sqlite` itself there: prepare, bind, step,
+// `columnInto` and a constraint error, as docs/LANGUAGE.md says it does.
 for (const name of [
   "sqlite_memory",
+  "std_sqlite_wasi",
   "thread_atomic_tasks",
   "par_atomic",
   "thread_channel_pipeline",
@@ -11143,6 +11245,29 @@ if (has("opt")) {
 }
 
 // ---- WP32: one probe, counted -----------------------------------------------------
+/**
+ * Compiles `tests/cases/<name>.ts` and links it with `<name>.c` under
+ * `-Wl,--wrap=nish_str_eq`, so the shim sees every key compare. `wrapUnsupported`
+ * is an `ld.lld` without `--wrap`, which skips rather than fails.
+ */
+const linkCountingStrEq = (name, dirName) => {
+  const dir = path.join(buildDir, dirName)
+  fs.mkdirSync(dir, { recursive: true })
+  const source = path.join(root, "tests", "cases", `${name}.ts`)
+  const shim = path.join(root, "tests", "cases", `${name}.c`)
+  const ll = path.join(dir, `${name}.ll`)
+  const exe = path.join(dir, name)
+  const built = spawnSync(NISH, [source, "-o", ll], { cwd: root, encoding: "utf8" })
+  const wrapped = ["-Wno-override-module", "-O2", "-Iruntime", "-fuse-ld=lld", "-Wl,--wrap=nish_str_eq"]
+  const linked =
+    built.status === 0
+      ? spawnSync("clang", [...wrapped, ll, shim, ...RUNTIME_C, "-o", exe], { cwd: root, encoding: "utf8" })
+      : built
+  const wrapUnsupported =
+    linked.status !== 0 && /unknown argument.*--wrap|--wrap.*(unknown|unsupported)/.test(linked.stderr)
+  return { exe, linked, wrapUnsupported }
+}
+
 // docs/wp32-map.md §2.3, acceptance criterion 4: a probe reads the entry list
 // only on a fingerprint match and compares the stored hash before the key, so
 // an absent key costs no key compare and a present one exactly one. A golden
@@ -11156,20 +11281,7 @@ if (!only || "map_fingerprint_miss".includes(only)) {
   if (!HAS_CLANG || !has("ld.lld")) {
     skip("map_fingerprint_miss: the key-compare count needs clang and ld.lld for --wrap")
   } else {
-    const dir = path.join(buildDir, "map_fingerprint")
-    fs.mkdirSync(dir, { recursive: true })
-    const source = path.join(root, "tests", "cases", "map_fingerprint_miss.ts")
-    const shim = path.join(root, "tests", "cases", "map_fingerprint_miss.c")
-    const ll = path.join(dir, "map_fingerprint_miss.ll")
-    const exe = path.join(dir, "map_fingerprint_miss")
-    const built = spawnSync(NISH, [source, "-o", ll], { cwd: root, encoding: "utf8" })
-    const wrapped = ["-Wno-override-module", "-O2", "-Iruntime", "-fuse-ld=lld", "-Wl,--wrap=nish_str_eq"]
-    const linked =
-      built.status === 0
-        ? spawnSync("clang", [...wrapped, ll, shim, ...RUNTIME_C, "-o", exe], { cwd: root, encoding: "utf8" })
-        : built
-    const wrapUnsupported =
-      linked.status !== 0 && /unknown argument.*--wrap|--wrap.*(unknown|unsupported)/.test(linked.stderr)
+    const { exe, linked, wrapUnsupported } = linkCountingStrEq("map_fingerprint_miss", "map_fingerprint")
     if (wrapUnsupported) {
       skip("map_fingerprint_miss: this ld.lld has no --wrap")
     } else {
@@ -11183,6 +11295,69 @@ if (!only || "map_fingerprint_miss".includes(only)) {
   }
 }
 
+// docs/security/json.md, JSON-13: the string hash is keyed. 4096 keys that share
+// one FNV-1a hash cost 8,386,560 key compares to insert under the unkeyed hash
+// and none under SipHash, bar a full 32-bit collision, which the bound of 16
+// allows for. Linked like `map_fingerprint_miss`, with a wrapper that counts
+// the compares and also answers the key, so two runs show it is filled, and
+// filled differently each time.
+if (!only || "map_hash_collide".includes(only)) {
+  if (!HAS_CLANG || !has("ld.lld")) {
+    skip("map_hash_collide: the key-compare count needs clang and ld.lld for --wrap")
+  } else {
+    const { exe, linked, wrapUnsupported } = linkCountingStrEq("map_hash_collide", "map_hash_collide")
+    if (wrapUnsupported) {
+      skip("map_hash_collide: this ld.lld has no --wrap")
+    } else {
+      const runs = [0, 1].map(() => (linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : linked))
+      const read = (run, pattern) => Number((pattern.exec(run.stdout ?? "") ?? [])[1])
+      const first = runs[0]
+      const inserts = read(first, /^inserts: (\d+) key compares$/m)
+      const hits = read(first, /^hits 4096: (\d+) key compares$/m)
+      const seeds = runs.map((run) => read(run, /^seed (-?\d+)$/m))
+      check(
+        "map_hash_collide: 4096 keys with one FNV-1a hash insert with under 16 key compares (8,386,560 unkeyed)",
+        first.status === 0 && /^size 4096$/m.test(first.stdout) && inserts < 16 && hits >= 4096 && hits < 4096 + 16,
+        `${first.stdout ?? ""}${first.stderr ?? ""}`
+      )
+      check(
+        "map_hash_collide: the hash key is filled before main, and differently in two runs",
+        runs.every((run) => run.status === 0) && seeds[0] !== 0 && seeds[1] !== 0 && seeds[0] !== seeds[1],
+        runs.map((run) => `${run.stdout ?? ""}${run.stderr ?? ""}`).join("---\n")
+      )
+    }
+  }
+}
+
+// docs/security/json.md, JSON-13: a known answer for the string hash. Under the
+// key 00..0f each pair in `map_hash_kat.ts` collides in the reference
+// SipHash-1-3 of `map_hash_kat.c` (itself checked against SipHash-2-4's
+// published vector), so a lookup of a pair's absent half compares one key only
+// when the emitted hash and its 32-bit fold agree with the reference bit for bit.
+if (!only || "map_hash_kat".includes(only)) {
+  if (!HAS_CLANG || !has("ld.lld")) {
+    skip("map_hash_kat: the key-compare count needs clang and ld.lld for --wrap")
+  } else {
+    const { exe, linked, wrapUnsupported } = linkCountingStrEq("map_hash_kat", "map_hash_kat")
+    if (wrapUnsupported) {
+      skip("map_hash_kat: this ld.lld has no --wrap")
+    } else {
+      const run = linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : linked
+      check(
+        "map_hash_kat: the string hash is SipHash-1-3 folded to 32 bits, as the reference computes it under key 00..0f",
+        run.status === 0 &&
+          run.stdout ===
+            "reference SipHash-2-4 vector matches\n" +
+              "2y0ea 50575391, z7dnaa 50575391: -1, 1 key compare\n" +
+              "b7ylaaaa 159576390, ozanaaaa 159576390: -1, 1 key compare\n" +
+              "74uiaaaaaaaaaaaa 4778237, 5efjaaaaaaa 4778237: -1, 1 key compare\n" +
+              "l2ccaaaaaaaaaaaaaaaaaaa 35261890, hxkkaaa 35261890: -1, 1 key compare\n",
+        `${run.stdout ?? ""}${run.stderr ?? ""}`
+      )
+    }
+  }
+}
+
 // ---- WP32 S5: one probe per fused lookup, counted in the goldens ----------------
 // docs/wp32-map.md §9, acceptance criterion 3: word count and `getOrInsert` are
 // one hash and one search per iteration. The loop is the whole of one function
@@ -11190,7 +11365,7 @@ if (!only || "map_fingerprint_miss".includes(only)) {
 // golden — which section A has already compared with what the compiler writes —
 // proves it without trusting anyone's eye: exactly one call of the table's
 // `probe`, whose hash is inside it, no hash loop of its own (`hash.test` is the
-// block FNV-1a is lowered to), and no call of `get`, `set`, `has` or of
+// head of the loop the string hash reads its words in), and no call of `get`, `set`, `has` or of
 // `getOrInsert` itself. The negatives are counted too, so the rule is proven
 // on both sides. A golden that is not there reads as no function at all,
 // which fails the check, so a renamed fixture fails here rather than dropping it.
@@ -19594,6 +19769,26 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       ),
     shownRefusal === null ? "no capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(refusedRun)
   )
+  // WP40: the refused dependency the same section shows, from its link program.
+  const shownDependency = /<!-- capabilities-refusal caps_dep_net_refused -->\n```text\n([\s\S]*?)```\n/.exec(
+    cookbookText
+  )
+  const dependencyRun = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "caps_dep_net_refused", "main.ts"),
+      "-o",
+      path.join(capsDir, "dependency") + path.sep,
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  check(
+    "capability policy: the dependency refusal docs/IR_COOKBOOK.md shows is the one tests/link/caps_dep_net_refused prints",
+    shownDependency !== null &&
+      dependencyRun.status === 1 &&
+      dependencyRun.stderr.startsWith(shownDependency[1].replace("tests/link/", `${path.join(root, "tests", "link")}/`)),
+    shownDependency === null ? "no caps_dep_net_refused capabilities-refusal block in docs/IR_COOKBOOK.md" : shown(dependencyRun)
+  )
   const grantedDir = path.join(capsDir, "granted") + path.sep
   const grantedRun = spawnSync(
     NISH,
@@ -20452,35 +20647,35 @@ if (!only || "sqlite-link".includes(only)) {
       .readdirSync(path.join(root, "runtime"))
       .filter((f) => f.endsWith(".c") && f !== "runtime-wasm.c").length
     const program = "tests/link/sqlite_link/main.ts"
+    // The units of runtime/sqlite/: the amalgamation and the `nish/sqlite`
+    // adapter. `sqliteUnits` (src/run-cache.ts) reads the directory, so a unit
+    // added there compiles, lands in the entry and is linked.
+    const sqliteC = fs
+      .readdirSync(path.join(root, "runtime", "sqlite"))
+      .filter((f) => f.endsWith(".c"))
+      .sort()
+    const vendored = sqliteC.map((f) => f.replace(/\.c$/, ".o"))
 
     const first = link(program, "first")
     const firstC = compiledC()
     const sq = sqliteEntries()
     const sqEntry = sq.length === 1 ? path.join(cacheRoot, sq[0]) : ""
     check(
-      "sqlite-link: the first link of a program that calls SQLite compiles the runtime and sqlite3.c once each",
+      "sqlite-link: the first link of a program that calls SQLite compiles the runtime and runtime/sqlite/ once each",
       first.status === 0 &&
         runOut("first").stdout === "3.54.1 3054001 0\n" &&
-        firstC.length === runtimeUnits + 1 &&
-        firstC.filter((c) => c === "sqlite3.c").length === 1,
+        firstC.length === runtimeUnits + sqliteC.length &&
+        sqliteC.every((u) => firstC.filter((c) => c === u).length === 1),
       first.stderr + firstC.join(", ")
     )
     check(
-      "sqlite-link: SQLite's objects are an entry of their own, named by 64 hex digits, holding sqlite3.o and the key alone",
+      "sqlite-link: SQLite's objects are an entry of their own, named by 64 hex digits, holding runtime/sqlite/'s objects and the key alone",
       entries().length === 2 &&
         sqEntry.length > 0 &&
         /^[0-9a-f]{64}$/.test(sq[0]) &&
-        fs.readdirSync(sqEntry).sort().join(",") === "key,sqlite3.o",
+        fs.readdirSync(sqEntry).sort().join(",") === ["key", ...vendored].join(","),
       entries().join(", ") + (sqEntry.length > 0 ? ` / ${fs.readdirSync(sqEntry).join(", ")}` : "")
     )
-    // The cache holds what runtime/sqlite/ holds: `sqliteUnits`
-    // (src/run-cache.ts) reads the directory, so a unit added there compiles,
-    // lands in the entry and is linked.
-    const vendored = fs
-      .readdirSync(path.join(root, "runtime", "sqlite"))
-      .filter((f) => f.endsWith(".c"))
-      .map((f) => f.replace(/\.c$/, ".o"))
-      .sort()
     check(
       "sqlite-link: the SQLite entry holds one object for every runtime/sqlite/*.c",
       sqEntry.length > 0 &&
@@ -20578,10 +20773,10 @@ if (!only || "sqlite-link".includes(only)) {
     // NISH_SQLITE_CFLAGS is in the key, and a -D in it for a default replaces it.
     const flagged = link(program, "flagged", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_THREADSAFE=1" })
     check(
-      "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles sqlite3.c alone again, into a new entry, and replaces the default",
+      "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles runtime/sqlite/ alone again, into a new entry, and replaces the default",
       flagged.status === 0 &&
         runOut("flagged").stdout === "3.54.1 3054001 1\n" &&
-        compiledC().join(",") === "sqlite3.c" &&
+        compiledC().join(",") === sqliteC.join(",") &&
         sqliteEntries().length === 2 &&
         entries().length === 3,
       flagged.stderr
@@ -20669,18 +20864,18 @@ if (!only || "sqlite-link".includes(only)) {
       path.join(sqDir, "missing"),
     ])
     check(
-      "sqlite-link: build.sh --sqlite-from a directory without sqlite3.o fails with exit 2, naming the object",
-      missing.status === 2 && missing.stderr.includes("sqlite3.o is missing"),
+      "sqlite-link: build.sh --sqlite-from a directory without runtime/sqlite/'s objects fails with exit 2, naming one",
+      missing.status === 2 && vendored.some((o) => missing.stderr.includes(`${o} is missing`)),
       missing.stderr
     )
     const objects = path.join(sqDir, "objects")
     const compiled = buildSh(["--sqlite-objects", objects])
     const fromObjects = buildSh([...lls, runtimeC, "--sqlite-from", objects, "-o", path.join(sqDir, "from")])
     check(
-      "sqlite-link: build.sh --sqlite-objects compiles sqlite3.o alone, printing nothing, and --sqlite-from links it",
+      "sqlite-link: build.sh --sqlite-objects compiles runtime/sqlite/ alone, printing nothing, and --sqlite-from links it",
       compiled.status === 0 &&
         compiled.stdout === "" &&
-        fs.readdirSync(objects).join(",") === "sqlite3.o" &&
+        fs.readdirSync(objects).sort().join(",") === vendored.join(",") &&
         fromObjects.status === 0 &&
         runOut("from").stdout === "3.54.1 3054001 0\n",
       compiled.stderr + fromObjects.stderr
@@ -20761,7 +20956,7 @@ if (!only || "sqlite-link".includes(only)) {
       copyBase.status === 0 &&
         withHeader.status === 0 &&
         runOut("copy-header").stdout === "3.54.1 3054001 0\n" &&
-        headerC.join(",") === "sqlite3.c" &&
+        headerC.join(",") === sqliteC.join(",") &&
         headerEntries.length === 1,
       `${copyBase.stderr}${withHeader.stderr}compiled: ${headerC.join(", ")}; new entries: ${headerEntries.join(", ")}`
     )
@@ -20779,9 +20974,9 @@ if (!only || "sqlite-link".includes(only)) {
       "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside sqlite3.o, links into a program that calls it, and a second link reuses it",
       withUnit.status === 0 &&
         runOut("copy-unit").stdout === "3.54.1 7\n" &&
-        unitC.join(",") === "nish_throwaway.c,sqlite3.c" &&
+        unitC.join(",") === [...sqliteC, "nish_throwaway.c"].sort().join(",") &&
         unitEntry.length > 0 &&
-        fs.readdirSync(unitEntry).sort().join(",") === "key,nish_throwaway.o,sqlite3.o" &&
+        fs.readdirSync(unitEntry).sort().join(",") === ["key", ...vendored, "nish_throwaway.o"].sort().join(",") &&
         reused.status === 0 &&
         runOut("copy-unit-again").stdout === "3.54.1 7\n" &&
         reusedC.length === 0 &&
@@ -25494,6 +25689,9 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       "export const sub = (a: i32): i32 => wrappingSub(a, 1);\n" +
       "export const mul = (a: i32): i32 => wrappingMul(a, 2);\n" +
       'export const str = (): string => {\n  const p = cbuf();\n  return p !== null ? readCString(p) : "";\n};\n',
+    // The root grants `pkg_fast` its `unsafe` (docs/wp40-dependency-capabilities.md).
+    "package.json":
+      '{ "name": "caps-unsafe", "private": true, "nish": { "capabilities": { "dependencies": { "pkg_fast": ["unsafe"] } } } }\n',
     "node_modules/pkg_fast/package.json":
       '{ "name": "pkg_fast", "version": "1.0.0", "exports": { ".": { "nish": "./src/index.ts" } } }\n',
     "node_modules/pkg_fast/src/index.ts":

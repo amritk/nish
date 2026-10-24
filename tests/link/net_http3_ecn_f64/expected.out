@@ -1,0 +1,16 @@
+PASS  a handshake across loopback, the client acknowledging nothing yet
+PASS  the slot's connection marks where the platform sends ECN
+PASS  every 1-RTT packet counted as marked arrived ECT(0), and the handshake's first flight too
+PASS  an ACK_ECN counting them validates the path
+PASS  40,000 bytes after validation, each acknowledged with ACK_ECN
+PASS  past the ten testing packets, every datagram of the response arrived marked where the platform sends ECN
+PASS  and the path is still capable
+PASS  an ACK_ECN reporting one CE is a congestion event at the server
+PASS  which shrinks its window
+PASS  another handshake, acknowledging nothing
+PASS  the response's first window, unacknowledged: marked until the ten testing packets are spent, then unmarked to the end
+PASS  the datagrams that arrived ECT(0) are the packets the server counted as marked
+PASS  unmark turns marking off for the server and every slot
+PASS  a handshake after it
+PASS  and its connection sends every datagram unmarked, counting none as marked
+http3 ecn: 15 passed, 0 failed, 0 skipped
