@@ -2545,6 +2545,52 @@ The whole of `text.ll` is `tests/link/std_text_index_of_any`'s golden; the same
 `std/text.ts` compiled as a root keeps `call i32 @indexOfAnyFrom(` and declares
 no kernel (`tests/run.js`, "kernels:").
 
+### `nish/bytes`: the runs on their kernels, the copy as one move
+
+`skipBlank`, `skipDigits` and `skipJsonText` are lowered as `indexOfAny` is:
+each clamps its range in Nish and makes one call to a private walker, and in
+the module that is `nish/bytes` that call becomes a kernel of
+`runtime/runtime-bytes.c` (`src/kernels.ts`, `bytesWalkOf`). The kernel is
+handed the array's data pointer rather than the array, and both ends of the
+range widened to `i64`:
+
+```llvm
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %b, i64 0, i32 2
+  %5 = load i8*, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %6 = sext i32 %2 to i64
+  %7 = sext i32 %3 to i64
+  %8 = call i64 @nish_bytes_skip_blank(i8* %5, i64 %6, i64 %7)
+  %9 = trunc i64 %8 to i32
+  ret i32 %9
+}
+```
+
+declared as `indexOfAny`'s kernel is, reading only through its pointer and
+writing only its own choice of path:
+
+```llvm
+declare i64 @nish_bytes_skip_blank(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #4
+
+attributes #4 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
+```
+
+`copyBytes` checks both windows and panics before its call, so the walker's
+call becomes one `llvm.memmove` of the two data pointers offset by `at` and
+`from`. It is a move rather than a copy because `dst` and `src` may be one
+array, and its stores and loads are in the data domain, so nothing about the
+headers is reloaded after it:
+
+```llvm
+  %25 = sext i32 %count to i64
+  call void @llvm.memmove.p0i8.p0i8.i64(i8* %20, i8* %24, i64 %25, i1 false), !alias.scope !4, !noalias !3
+  ret void
+}
+```
+
+The walkers stay defined, `internal` and uncalled, and `opt` deletes them.
+The whole of `bytes.ll` is `tests/link/std_bytes`'s golden;
+`tests/link/std_bytes_runs` runs every class and clamp against the kernels.
+
 ### `nish/regex`: a match's first byte on the runtime kernel
 
 A pattern whose first few positions each take a small set of bytes, such as
@@ -10104,6 +10150,162 @@ attributes #2 = { nounwind noreturn cold }
 !14 = !{!13, !13, i64 0}
 ```
 <!-- cookbook:end decl-ffi-buffer -->
+
+### `using` of a handle class: the close at every exit
+
+A class with a `CPtr` field is a handle class (WP40 H1.2), and a `using` of
+one closes it at every exit of its block, once. The object is the class's
+plain `%struct` on the stack, as a `using` of an arena or a lock is; it opens
+as soon as `new` returns, before anything after it runs. The close is the
+class's `[Symbol.dispose]` inlined at each exit: a load of the `CPtr` field,
+an `icmp eq i8* %p, null` when the dispose tests a `CPtr | null` field
+(a dispose that is the bare `close(this.f)` calls it untested, `null`
+included), and the `call i32 @fclose`, whose result nothing reads. Below, the early `return k` and the
+fall-through `return f.read()` each carry their own copy, after the returned
+value is computed, so a `return` of a call in a `using` block is never a
+`tail call`. Beside an arena, a scope or a lock, falling off the end,
+`break` and `continue` close in reverse order of opening; a `return` joins its
+scopes before the value, then closes handles and locks innermost first, then
+releases its arenas. A panic or `process.exit` does not close (LANGUAGE.md); the
+module carries the `ffi` capability, so `--deny ffi` refuses it.
+
+<!-- cookbook:begin decl-ffi-handle -->
+```ts
+declare function fopen(path: string, mode: string): CPtr | null
+declare function fclose(p: CPtr): i32
+declare function fgetc(p: CPtr): i32
+
+class File {
+  readonly file: CPtr | null
+  constructor(path: string) {
+    this.file = fopen(path, "r")
+  }
+  read(): i32 {
+    const p = this.file
+    if (p === null) {
+      return -1
+    }
+    return fgetc(p)
+  }
+  [Symbol.dispose](): void {
+    const p = this.file
+    if (p !== null) {
+      fclose(p)
+    }
+  }
+}
+
+export const firstByte = (k: i32): i32 => {
+  using f = new File("/dev/null")
+  if (k > 0) {
+    return k
+  }
+  return f.read()
+}
+```
+
+```llvm
+%struct.File = type { i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"\00\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [89 x i8] } { i64 88, [89 x i8] c"`fopen`: argument 1 (path) holds a NUL byte, which C would read as the end of the string\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"r\00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"/dev/null\00" }, align 8
+
+declare i8* @fopen(i8*, i8*)
+declare i32 @fclose(i8*)
+declare i32 @fgetc(i8*)
+declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #2
+
+define internal void @File.constructor(%struct.File* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i8* noundef nonnull noalias readonly align 8 %path) #0 {
+entry:
+  %0 = call i64 @nish_str_index_of(i8* %path, i8* bitcast ({ i64, [2 x i8] }* @.str.0 to i8*))
+  %1 = icmp sge i64 %0, 0
+  br i1 %1, label %ffi.nul, label %ffi.ok
+
+ffi.nul:
+  call void @nish_panic(i8* bitcast ({ i64, [89 x i8] }* @.str.1 to i8*))
+  unreachable
+
+ffi.ok:
+  %2 = getelementptr inbounds i8, i8* %path, i64 8
+  %3 = getelementptr inbounds i8, i8* bitcast ({ i64, [2 x i8] }* @.str.2 to i8*), i64 8
+  %4 = call i8* @fopen(i8* %2, i8* %3)
+  %5 = getelementptr inbounds %struct.File, %struct.File* %this, i32 0, i32 0
+  store i8* %4, i8** %5, align 8, !tbaa !4
+  ret void
+}
+
+define internal noundef i32 @File.read(%struct.File* noundef nonnull readonly align 8 dereferenceable(8) nocapture %this) #0 {
+entry:
+  %p.addr = alloca i8*, align 8
+  %0 = getelementptr inbounds %struct.File, %struct.File* %this, i32 0, i32 0
+  %1 = load i8*, i8** %0, align 8, !tbaa !4
+  store i8* %1, i8** %p.addr, align 8
+  %2 = load i8*, i8** %p.addr, align 8
+  %3 = icmp eq i8* %2, null
+  br i1 %3, label %if.then, label %if.end
+
+if.then:
+  ret i32 -1
+
+if.end:
+  %4 = load i8*, i8** %p.addr, align 8
+  %5 = call i32 @fgetc(i8* %4)
+  ret i32 %5
+}
+
+define noundef i32 @firstByte(i32 noundef %k) #0 {
+entry:
+  %f.addr = alloca %struct.File*, align 8
+  %File.obj = alloca %struct.File, align 8
+  call void @File.constructor(%struct.File* %File.obj, i8* bitcast ({ i64, [10 x i8] }* @.str.3 to i8*))
+  store %struct.File* %File.obj, %struct.File** %f.addr, align 8
+  %0 = load %struct.File*, %struct.File** %f.addr, align 8
+  %1 = icmp sgt i32 %k, 0
+  br i1 %1, label %if.then, label %if.end
+
+if.then:
+  %2 = getelementptr inbounds %struct.File, %struct.File* %0, i32 0, i32 0
+  %3 = load i8*, i8** %2, align 8, !tbaa !4
+  %4 = icmp eq i8* %3, null
+  br i1 %4, label %handle.closed, label %handle.close
+
+handle.close:
+  %5 = call i32 @fclose(i8* %3)
+  br label %handle.closed
+
+handle.closed:
+  ret i32 %k
+
+if.end:
+  %6 = load %struct.File*, %struct.File** %f.addr, align 8
+  %7 = call i32 @File.read(%struct.File* %6)
+  %8 = getelementptr inbounds %struct.File, %struct.File* %0, i32 0, i32 0
+  %9 = load i8*, i8** %8, align 8, !tbaa !4
+  %10 = icmp eq i8* %9, null
+  br i1 %10, label %handle.closed.1, label %handle.close.1
+
+handle.close.1:
+  %11 = call i32 @fclose(i8* %9)
+  br label %handle.closed.1
+
+handle.closed.1:
+  ret i32 %7
+}
+
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn memory(argmem: read) }
+attributes #2 = { nounwind noreturn cold }
+
+!0 = !{!"nish TBAA"}
+!1 = !{!"omnipotent char", !0, i64 0}
+!2 = !{!"ptr", !1, i64 0}
+!3 = !{!"File", !2, i64 0}
+!4 = !{!3, !2, i64 0}
+```
+<!-- cookbook:end decl-ffi-handle -->
 
 ### Numeric `enum`
 
@@ -22063,6 +22265,9 @@ declare zeroext i1 @nish_str_eq(i8* noundef nonnull readonly align 8 nocapture, 
 declare zeroext i1 @nish_str_at(i8* noundef nonnull readonly align 8 nocapture, i64 noundef, i8* noundef nonnull readonly align 8 nocapture) #4
 declare i64 @nish_str_index_of(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #4
 declare i64 @nish_str_index_of_any(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #5
+declare i64 @nish_bytes_skip_blank(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
+declare i64 @nish_bytes_skip_digits(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
+declare i64 @nish_bytes_skip_json_text(i8* noundef readonly nocapture, i64 noundef, i64 noundef) #5
 declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, i64 noundef, i64 noundef) #6
 declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #4
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4

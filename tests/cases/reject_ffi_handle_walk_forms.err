@@ -4,6 +4,5 @@ reject_ffi_handle_walk_forms.ts:21:15: error: The pointer `file` of handle class
 reject_ffi_handle_walk_forms.ts:28:14: error: The pointer `file` of handle class `File` cannot be used here
 reject_ffi_handle_walk_forms.ts:28:20: error: The pointer `file` of handle class `File` cannot be used here
 reject_ffi_handle_walk_forms.ts:34:9: error: The pointer `file` of handle class `File` cannot be used here
-reject_ffi_handle_walk_forms.ts:38:15: error: `using` of handle class `File` is not lowered yet
 reject_ffi_handle_walk_forms.ts:38:24: error: The pointer `file` of handle class `File` cannot be used here
 reject_ffi_handle_walk_forms.ts:53:15: error: A `File` cannot be used here

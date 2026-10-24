@@ -46,9 +46,10 @@ struct HandleFinding (class) size=16 align=8 exported
   field node: Node index=0 offset=0
   field message: string index=1 offset=8
   constructor -> @HandleFinding.constructor
-struct HandleClose (class) size=16 align=8
+struct HandleClose (class) size=24 align=8
   field info: StructInfo index=0 offset=0
   field sig: FunctionSig index=1 offset=8
+  field tested: boolean index=2 offset=16
   constructor -> @HandleClose.constructor
 struct HandleWalk (class) size=72 align=8
   field program: CheckedProgram index=0 offset=0
@@ -122,10 +123,6 @@ function closeCallMessage(name: string, cls: string): string -> @closeCallMessag
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat
   stackSites=0 stackLocals=0
-function usingMessage(cls: string): string -> @usingMessage
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_concat
-  stackSites=0 stackLocals=0
 function handleOf(program: CheckedProgram, table: TypeTable, type: i32): StructInfo | null -> @handleOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
@@ -139,6 +136,14 @@ function handleOf(program: CheckedProgram, table: TypeTable, type: i32): StructI
   local +4:9 info: StructInfo | null (const)
   callee +4:16 CheckedProgram.struct -> @CheckedProgram.struct
   callee +4:31 TypeTable.nameOf -> @TypeTable.nameOf
+function openedHandle(program: CheckedProgram, table: TypeTable, init: Node): StructInfo | null -> @openedHandle [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: handleOf nish_panic_index
+  pointer program: size=656 writesThrough=false captured=false passedTo=handleOf#0
+  pointer table: size=96 writesThrough=false captured=false passedTo=handleOf#1
+  pointer init: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:25 handleOf -> @handleOf
 function rejectHandleArgument(ctx: CheckContext, type: i32, at: Node): boolean -> @rejectHandleArgument [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
@@ -162,11 +167,11 @@ function isHandleFieldAnnotation(type: Node): boolean -> @isHandleFieldAnnotatio
   local +11:7 nulls: i32 (let)
   local +12:14 member: Node (const)
   local +13:9 inner: Node (let)
-function HandleClose.constructor(this: HandleClose, info: StructInfo, sig: FunctionSig): void -> @HandleClose.constructor [constructor]
+function HandleClose.constructor(this: HandleClose, info: StructInfo, sig: FunctionSig, tested: boolean): void -> @HandleClose.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
-  escaping: info sig
-  pointer this: size=16 writesThrough=true captured=false
-  pointer info: size=152 writesThrough=true captured=true
+  escaping: info sig tested
+  pointer this: size=24 writesThrough=true captured=false
+  pointer info: size=168 writesThrough=true captured=true
   pointer sig: size=136 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function isThisField(expr: Node): boolean -> @isThisField
@@ -227,7 +232,7 @@ function checkDispose(program: CheckedProgram, table: TypeTable, info: StructInf
   calls: HandleClose.constructor HandleFinding.constructor StructInfo.field TypeTable.assignable TypeTable.stripNull TypeTable.typeName closeArityMessage closeTypeMessage closeUnknownMessage disposeCall disposeMethod disposeShapeMessage functionNamed nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq noDisposeMessage
   pointer program: size=656 writesThrough=false captured=false passedTo=functionNamed#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.stripNull#0 TypeTable.assignable#0 TypeTable.typeName#0 TypeTable.typeName#0
-  pointer info: size=152 writesThrough=true captured=true passedTo=StructInfo.field#0 HandleClose.constructor#1
+  pointer info: size=168 writesThrough=true captured=true passedTo=StructInfo.field#0 HandleClose.constructor#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:9 cls: string (const)
@@ -364,7 +369,7 @@ function checkFieldRead(walk: HandleWalk, member: Node, info: StructInfo): void 
   calls: HandleFinding.constructor HandleWalk.parent climbParens foreignCallOf handlePointerMessage nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow refuseClose sourceLocal unwrapParens
   pointer walk: size=72 writesThrough=false captured=false passedTo=climbParens#0 foreignCallOf#0 refuseClose#0 HandleWalk.parent#0 HandleWalk.parent#0
   pointer member: size=40 writesThrough=true captured=true passedTo=HandleFinding.constructor#1
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -21:9 receiver: Node (const)
   callee -21:20 unwrapParens -> @unwrapParens
@@ -425,20 +430,18 @@ function isDerived(walk: HandleWalk, local: Local | null): boolean -> @isDerived
   local +0:14 derived: Local (const)
 function checkHandleNew(walk: HandleWalk, node: Node, info: StructInfo, depth: i32): void -> @checkHandleNew
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:3
-  calls: HandleFinding.constructor HandleWalk.parent climbParens handleValueMessage nish_alloc_struct nish_array_grow nish_panic_overflow usingMessage
+  sharedWrite: +0:5
+  calls: HandleFinding.constructor HandleWalk.parent climbParens handleValueMessage nish_alloc_struct nish_array_grow nish_panic_overflow
   pointer walk: size=72 writesThrough=false captured=false passedTo=climbParens#0 HandleWalk.parent#0
   pointer node: size=40 writesThrough=true captured=true passedTo=HandleFinding.constructor#1
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -5:9 up: i32 (const)
   callee -5:14 climbParens -> @climbParens
   local -2:9 stmt: Node | null (const)
   callee -2:16 HandleWalk.parent -> @HandleWalk.parent
-  local -1:9 opened: boolean (const)
-  callee +0:17 new HandleFinding -> @HandleFinding.constructor
-  callee +0:50 usingMessage -> @usingMessage
-  callee +0:76 handleValueMessage -> @handleValueMessage
+  callee +0:19 new HandleFinding -> @HandleFinding.constructor
+  callee +0:43 handleValueMessage -> @handleValueMessage
 function walkValues(walk: HandleWalk, node: Node, depth: i32): void -> @walkValues
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
@@ -482,28 +485,28 @@ function handleFindings(program: CheckedProgram, table: TypeTable): HandleFindin
   pointer program: size=656 writesThrough=true captured=true passedTo=checkDispose#0 walkTypes#0 CheckedProgram.enterInstance#0 HandleWalk.constructor#1 CheckedProgram.leaveInstance#0
   pointer table: size=96 writesThrough=true captured=true passedTo=checkDispose#1 HandleWalk.constructor#2
   stackSites=3 stackLocals=2
-  local -8:9 found: HandleFinding[] (const)
-  local -7:7 any: boolean (let)
-  local -6:9 closes: HandleClose[] (const)
-  local -5:14 info: StructInfo (const)
-  local -2:13 close: HandleClose | null (const)
-  callee -2:21 checkDispose -> @checkDispose
-  callee +7:3 walkTypes -> @walkTypes
-  local +8:14 sig: FunctionSig (const)
-  local +9:11 body: Node | null (const)
-  callee +9:18 FunctionSig.body -> @FunctionSig.body
-  callee +10:41 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local +13:11 instance: Instantiation | null (const)
-  callee +15:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  local +17:11 walk: HandleWalk (const)
-  callee +17:18 new HandleWalk -> @HandleWalk.constructor
-  local +18:11 owner: StructInfo | null (const)
-  callee +22:5 walkValues -> @walkValues
-  callee +24:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
-  local +27:9 out: HandleFinding[] (const)
-  local +28:9 seen: StringSet (const)
-  callee +28:16 new StringSet -> @StringSet.constructor
-  local +29:14 finding: HandleFinding (const)
-  local +30:11 key: string (const)
-  callee +31:10 StringSet.has -> @StringSet.has
-  callee +32:7 StringSet.add -> @StringSet.add
+  local -9:9 found: HandleFinding[] (const)
+  local -8:7 any: boolean (let)
+  local -7:9 closes: HandleClose[] (const)
+  local -6:14 info: StructInfo (const)
+  local -3:13 close: HandleClose | null (const)
+  callee -3:21 checkDispose -> @checkDispose
+  callee +8:3 walkTypes -> @walkTypes
+  local +9:14 sig: FunctionSig (const)
+  local +10:11 body: Node | null (const)
+  callee +10:18 FunctionSig.body -> @FunctionSig.body
+  callee +11:41 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +14:11 instance: Instantiation | null (const)
+  callee +16:7 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  local +18:11 walk: HandleWalk (const)
+  callee +18:18 new HandleWalk -> @HandleWalk.constructor
+  local +19:11 owner: StructInfo | null (const)
+  callee +23:5 walkValues -> @walkValues
+  callee +25:7 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local +28:9 out: HandleFinding[] (const)
+  local +29:9 seen: StringSet (const)
+  callee +29:16 new StringSet -> @StringSet.constructor
+  local +30:14 finding: HandleFinding (const)
+  local +31:11 key: string (const)
+  callee +32:10 StringSet.has -> @StringSet.has
+  callee +33:7 StringSet.add -> @StringSet.add

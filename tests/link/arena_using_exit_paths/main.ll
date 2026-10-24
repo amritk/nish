@@ -588,9 +588,9 @@ entry:
   %ys.addr = alloca %struct.nish_array*, align 8
   %0 = call i64 @nish_arena_mark()
   store i64 %0, i64* %a.addr, align 8
-  %1 = call i64 @nish_arena_mark()
-  store i64 %1, i64* %b.addr, align 8
-  %2 = load i64, i64* %a.addr, align 8
+  %1 = load i64, i64* %a.addr, align 8
+  %2 = call i64 @nish_arena_mark()
+  store i64 %2, i64* %b.addr, align 8
   %3 = load i64, i64* %b.addr, align 8
   %4 = call %struct.nish_array* @fill(i32 %k)
   store %struct.nish_array* %4, %struct.nish_array** %xs.addr, align 8
@@ -609,12 +609,12 @@ ovf.ok:
   %14 = getelementptr inbounds %struct.Tally, %struct.Tally* %t, i32 0, i32 0
   store i32 %12, i32* %14, align 4, !tbaa !17
   call void @nish_arena_release(i64 %3)
-  call void @nish_arena_release(i64 %2)
+  call void @nish_arena_release(i64 %1)
   %15 = call i64 @nish_arena_mark()
   store i64 %15, i64* %c.addr, align 8
-  %16 = call i64 @nish_arena_mark()
-  store i64 %16, i64* %d.addr, align 8
-  %17 = load i64, i64* %c.addr, align 8
+  %16 = load i64, i64* %c.addr, align 8
+  %17 = call i64 @nish_arena_mark()
+  store i64 %17, i64* %d.addr, align 8
   %18 = load i64, i64* %d.addr, align 8
   %19 = call %struct.nish_array* @fill(i32 %k)
   store %struct.nish_array* %19, %struct.nish_array** %ys.addr, align 8
@@ -626,7 +626,7 @@ ovf.ok:
   br i1 %24, label %if.then, label %if.end
 
 if.then:
-  call void @nish_arena_release(i64 %17)
+  call void @nish_arena_release(i64 %16)
   ret %struct.Tally* %t
 
 if.end:
@@ -644,7 +644,7 @@ if.end:
 ovf.ok.1:
   %34 = getelementptr inbounds %struct.Tally, %struct.Tally* %t, i32 0, i32 0
   store i32 %32, i32* %34, align 4, !tbaa !17
-  call void @nish_arena_release(i64 %17)
+  call void @nish_arena_release(i64 %16)
   ret %struct.Tally* %t
 
 ovf.fail:

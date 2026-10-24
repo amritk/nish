@@ -23,9 +23,9 @@
 #       a release carries a seed it can use and there is no row otherwise; the
 #       `cmpSince` note in .github/seed-targets.json says which releases those
 #       are and why it is not all of them.
-# simd-arm64: runtime/runtime-simd.c's and runtime/runtime-aes.c's agreement
-#       tests on an AArch64 runner, where their native runs are the NEON and
-#       the ARMv8 AES and PMULL paths no x86-64 job can run, and the `aes
+# simd-arm64: runtime/runtime-simd.c's, runtime/runtime-bytes.c's and
+#       runtime/runtime-aes.c's agreement tests on an AArch64 runner, where
+#       their native runs are the NEON and the ARMv8 AES and PMULL paths no x86-64 job can run, and the `aes
 #       kernel` section, std/crypto/aes.ts lowered onto those AES kernels.
 # runtime-net: runtime/runtime-net.c's Darwin branch (kqueue, SO_NOSIGPIPE,
 #       errno translated to Linux's numbers) on a macOS runner: the runtime
@@ -391,15 +391,16 @@ jobs:
       # section again, which built stage1 anew each time: three minutes of
       # shard 1, the longest of the four.
 
-      # WP38 S1: the `simd` section (shard 1) passes when the kernel's paths
+      # WP38 S1 and S6a: the `simd` section (shard 1) passes when a kernel's paths
       # agree, which they also do when the AVX2 path did not run at all. These
-      # runners have AVX2, so here the driver the suite built must name it, as
+      # runners have AVX2, so here the drivers the suite built must name it, as
       # the `simd-arm64` job's line must name the NEON path.
       - name: The AVX2 path ran
         if: matrix.shard == 1
         run: |
           set -o pipefail
           build/test/simd/index-of-any | grep -E '^index-of-any: [0-9]+ cases agree across scalar base avx2;'
+          build/test/simd/byte-runs | grep -E '^byte-runs: [0-9]+ cases agree across scalar base avx2;'
 
       # WP38 S5: likewise for runtime/runtime-aes.c, whose `simd` section passes
       # with the reference alone on a CPU without AES-NI. These runners have it
@@ -945,7 +946,8 @@ jobs:
           summary="$(tail -n 1 "$RUNNER_TEMP/nish-runner.log" 2>/dev/null || echo 'the runner produced no summary')"
           echo "::notice::tests/nish/run.ts over tests/cases: $summary"
 
-  # WP38 S1: runtime/runtime-simd.c's NEON path, run on the hardware it is for,
+  # WP38 S1 and S6a: runtime/runtime-simd.c's and runtime/runtime-bytes.c's NEON
+  # paths, run on the hardware they are for,
   # and WP38 S5's runtime/runtime-aes.c on the ARMv8 AES and PMULL instructions.
   #
   # The kernel has a base path per architecture, and every other job here is
@@ -996,6 +998,7 @@ jobs:
           set -o pipefail
           node tests/run.js simd | tee "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: byte-runs native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: aes-gcm native arm64: [0-9]+ cases agree across armv8-aes-pmull;' "$RUNNER_TEMP/simd.log"
 
       # WP38 S5's lowering on AArch64: the compiler's branch to the ARMv8 AES and

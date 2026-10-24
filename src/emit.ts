@@ -44,7 +44,7 @@ import {
 } from "./attributes"
 import { DebugInfo } from "./debug"
 import { marksTailCall, reclaimsReturnedString } from "./escape"
-import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit-arrays"
+import { emitArrayLiteral, emitBytesKernel, emitElementAccess, emitForOf } from "./emit-arrays"
 import {
   checksArgumentRange,
   emitBuiltinCall,
@@ -106,12 +106,12 @@ import {
   emitAtomicBody,
   emitChannelSendBody,
   emitLockBody,
-  emitLockReleases,
+  emitHeldReleases,
   emitParallelRegion,
   emitScopeJoins,
   elementKeepSize,
   emitSpawnTask,
-  holdsLock,
+  holdsRelease,
   isParallelRegionCall,
   isSpawnTaskCall,
   keepElement,
@@ -138,7 +138,16 @@ import {
 import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
-import { AES_HW, AES_SEAM_NONE, aesKernelOf, isAesSeam, isIndexOfAnyWalk, isRegexScanWalk } from "./kernels"
+import {
+  AES_HW,
+  AES_SEAM_NONE,
+  aesKernelOf,
+  BYTES_WALK_NONE,
+  bytesWalkOf,
+  isAesSeam,
+  isIndexOfAnyWalk,
+  isRegexScanWalk,
+} from "./kernels"
 import { StringMap, StringSet } from "./map"
 import {
   N_ARRAY,
@@ -188,6 +197,7 @@ import {
   MAP_NONE,
   MAP_STORED_KEY,
   ROLE_CONSTRUCTOR,
+  StructInfo,
 } from "./program"
 import {
   ARENA_GLOBAL,
@@ -282,6 +292,11 @@ export class Emitter {
   openScopeArenas: boolean[]
   /** WP29 P3: true for a `using g = m.lock()`, whose entry is the address of its guard's lock word. */
   openScopeLocks: boolean[]
+  /**
+   * WP40 H1.2: for a `using f = new File(p)`, the handle class, whose entry is
+   * the object every exit closes the pointer of; `null` for the rest.
+   */
+  openScopeHandles: (StructInfo | null)[]
   /** WP29 P3: for a scope, the `state` word of each channel it seals before it joins; empty for the rest. */
   openScopeSeals: string[][]
   /** Alloca slots of the locals of the function being emitted, by identity. */
@@ -351,6 +366,7 @@ export class Emitter {
     this.openScopeLoops = []
     this.openScopeArenas = []
     this.openScopeLocks = []
+    this.openScopeHandles = []
     this.openScopeSeals = []
     this.slotLocals = []
     this.slotNames = []
@@ -533,6 +549,7 @@ export class Emitter {
     this.openScopeLoops = []
     this.openScopeArenas = []
     this.openScopeLocks = []
+    this.openScopeHandles = []
     this.openScopeSeals = []
     this.current = facts
     this.currentSig = sig
@@ -673,9 +690,9 @@ export class Emitter {
     if (capturesOf(callee).length > 0) {
       return false
     }
-    // WP29 P3: a lock is given back after the value, and a tail call would
-    // take the release ahead of itself.
-    if (holdsLock(this)) {
+    // WP29 P3, WP40 H1.2: a lock is given back and a handle closed after the
+    // value, and a tail call would take the release ahead of itself.
+    if (holdsRelease(this)) {
       return false
     }
     // The release a tail call sinks ahead of itself is a pass's too, inside a
@@ -713,7 +730,7 @@ export class Emitter {
    */
   emitScopeExit(): void {
     emitWalkExits(this) // WP32: a `return` leaves every walk around it
-    emitLockReleases(this) // WP29 P3: after the value, which may read through a guard
+    emitHeldReleases(this) // WP29 P3, WP40 H1.2: after the value, which may read through a guard or a handle
     if (this.current.arenaScope) {
       this.fn.emit(`call void ${this.useRuntime("nish_arena_release")}(i64 %arena.mark)`)
       return
@@ -1117,9 +1134,14 @@ export class Emitter {
         this.emitReturn(stmt)
         return
       case N_VAR:
-        this.emitVariableDeclarations(stmt.children[0])
-        if ((stmt.flags & FLAG_USING) !== 0) {
-          openScope(this, stmt.children[0]) // WP29 P2
+        // WP40 Q12(a): each declarator of a `using` opens before the next
+        // initialiser runs, so one that leaves the function closes the ones
+        // before it.
+        for (const decl of stmt.children[0].children) {
+          this.emitVariableDeclaration(decl)
+          if ((stmt.flags & FLAG_USING) !== 0) {
+            openScope(this, decl) // WP29 P2
+          }
         }
         return
       case N_EXPR_STMT:
@@ -1228,23 +1250,25 @@ export class Emitter {
    */
   emitVariableDeclarations(list: Node): void {
     for (const decl of list.children) {
-      const local = this.program.nodeLocals[decl.id]
-      if (local === null) {
-        process.exit(
-          internalErrorFor("emitter: a variable declaration with no local recorded", this.opts.json)
-        )
-      } else if (this.table.isMaybe(local.type)) {
-        emitMaybeLocal(this, local, decl) // WP32: two SSA values, no slot
-      } else {
-        const ty = this.llvm(local.type)
-        const slot = this.fn.emitAlloca(`${local.name}.addr`, ty, this.align(local.type))
-        this.setSlot(local, slot)
-        const init = this.emitExpression(decl.children[2])
-        this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${this.alignSuffix(local.type)}`)
-        const debug = this.debug
-        if (debug !== null) {
-          debug.declareLocal(this.fn, local, slot, decl) // `-g`: llvm.dbg.declare on the slot
-        }
+      this.emitVariableDeclaration(decl)
+    }
+  }
+
+  emitVariableDeclaration(decl: Node): void {
+    const local = this.program.nodeLocals[decl.id]
+    if (local === null) {
+      process.exit(internalErrorFor("emitter: a variable declaration with no local recorded", this.opts.json))
+    } else if (this.table.isMaybe(local.type)) {
+      emitMaybeLocal(this, local, decl) // WP32: two SSA values, no slot
+    } else {
+      const ty = this.llvm(local.type)
+      const slot = this.fn.emitAlloca(`${local.name}.addr`, ty, this.align(local.type))
+      this.setSlot(local, slot)
+      const init = this.emitExpression(decl.children[2])
+      this.fn.emit(`store ${ty} ${init}, ${ty}* ${slot}${this.alignSuffix(local.type)}`)
+      const debug = this.debug
+      if (debug !== null) {
+        debug.declareLocal(this.fn, local, slot, decl) // `-g`: llvm.dbg.declare on the slot
       }
     }
   }
@@ -1597,6 +1621,12 @@ export class Emitter {
     // which allocates nothing, so there is no bracket to open.
     if (isIndexOfAnyWalk(this.program, sig)) {
       return emitIndexOfAnyKernel(this, operandValues)
+    }
+    // WP38 S6a: `nish/bytes`'s walks are kernels and a `memmove`, which
+    // allocate nothing either.
+    const bytesWalk = bytesWalkOf(this.program, sig)
+    if (bytesWalk !== BYTES_WALK_NONE) {
+      return emitBytesKernel(this, bytesWalk, operandValues)
     }
     if (isRegexScanWalk(this.program, sig)) {
       return emitRegexScanKernel(this, operandValues)

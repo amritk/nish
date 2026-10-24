@@ -242,7 +242,7 @@ function DebugInfo.composite(this: DebugInfo, info: StructInfo): string -> @Debu
   sharedWrite: via IRModule.reserveMetadata
   calls: DebugInfo.arrayHeader DebugInfo.fileOf DebugInfo.lineOf DebugInfo.member DebugInfo.pointerTo DebugInfo.setTypeRef DebugInfo.typeRef FieldInfo.inline IRModule.addMetadata IRModule.reserveMetadata IRModule.setMetadata TypeTable.mangle TypeTable.refOf TypeTable.typeName bitsOfIn nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32 quote
   pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.setTypeRef#0 DebugInfo.pointerTo#0 DebugInfo.fileOf#0 DebugInfo.lineOf#0 DebugInfo.arrayHeader#0 DebugInfo.member#0 DebugInfo.typeRef#0 DebugInfo.member#0 DebugInfo.lineOf#0
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 ref: string (const)
   callee +0:17 IRModule.reserveMetadata -> @IRModule.reserveMetadata

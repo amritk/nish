@@ -56,10 +56,10 @@ entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call %struct.ThreadScope* @nish.scope()
   store %struct.ThreadScope* %0, %struct.ThreadScope** %s.addr, align 8
-  %1 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
-  store %struct.MutexGuard$$Tally* %1, %struct.MutexGuard$$Tally** %g.addr, align 8
-  %2 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
-  %3 = bitcast %struct.ThreadScope* %2 to i8*
+  %1 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %2 = bitcast %struct.ThreadScope* %1 to i8*
+  %3 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
+  store %struct.MutexGuard$$Tally* %3, %struct.MutexGuard$$Tally** %g.addr, align 8
   %4 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
   %5 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %4, i32 0, i32 1
   %6 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
@@ -79,7 +79,7 @@ ovf.ok:
   %17 = getelementptr inbounds %struct.Tally, %struct.Tally* %8, i32 0, i32 0
   store i32 %15, i32* %17, align 4, !tbaa !7
   store atomic i32 0, i32* %5 release, align 4
-  call void @nish_scope_join(i8* %3)
+  call void @nish_scope_join(i8* %2)
   %18 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
   store %struct.MutexGuard$$Tally* %18, %struct.MutexGuard$$Tally** %g.addr.1, align 8
   %19 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
@@ -107,9 +107,9 @@ entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i64 @nish_arena_mark()
   store i64 %0, i64* %a.addr, align 8
-  %1 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
-  store %struct.MutexGuard$$Tally* %1, %struct.MutexGuard$$Tally** %g.addr, align 8
-  %2 = load i64, i64* %a.addr, align 8
+  %1 = load i64, i64* %a.addr, align 8
+  %2 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
+  store %struct.MutexGuard$$Tally* %2, %struct.MutexGuard$$Tally** %g.addr, align 8
   %3 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
   %4 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %3, i32 0, i32 1
   %5 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
@@ -141,7 +141,7 @@ ovf.ok:
   %27 = getelementptr inbounds %struct.Tally, %struct.Tally* %14, i32 0, i32 0
   store i32 %25, i32* %27, align 4, !tbaa !7
   store atomic i32 0, i32* %4 release, align 4
-  call void @nish_arena_release(i64 %2)
+  call void @nish_arena_release(i64 %1)
   %28 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
   store %struct.MutexGuard$$Tally* %28, %struct.MutexGuard$$Tally** %g.addr.1, align 8
   %29 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
@@ -169,10 +169,10 @@ entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
   store %struct.MutexGuard$$Tally* %0, %struct.MutexGuard$$Tally** %g.addr, align 8
-  %1 = call i64 @nish_arena_mark()
-  store i64 %1, i64* %a.addr, align 8
-  %2 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
-  %3 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %2, i32 0, i32 1
+  %1 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
+  %2 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %1, i32 0, i32 1
+  %3 = call i64 @nish_arena_mark()
+  store i64 %3, i64* %a.addr, align 8
   %4 = load i64, i64* %a.addr, align 8
   %5 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr, align 8
   %6 = getelementptr inbounds %struct.MutexGuard$$Tally, %struct.MutexGuard$$Tally* %5, i32 0, i32 0
@@ -209,7 +209,7 @@ ovf.ok.1:
   %30 = getelementptr inbounds %struct.Tally, %struct.Tally* %14, i32 0, i32 0
   store i32 %28, i32* %30, align 4, !tbaa !7
   call void @nish_arena_release(i64 %4)
-  store atomic i32 0, i32* %3 release, align 4
+  store atomic i32 0, i32* %2 release, align 4
   %31 = call %struct.MutexGuard$$Tally* @nish.Mutex$$Tally.lock(%struct.Mutex$$Tally* %m)
   store %struct.MutexGuard$$Tally* %31, %struct.MutexGuard$$Tally** %g.addr.1, align 8
   %32 = load %struct.MutexGuard$$Tally*, %struct.MutexGuard$$Tally** %g.addr.1, align 8
