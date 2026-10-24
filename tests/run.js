@@ -19323,10 +19323,16 @@ if (!only || "runtime-cache".includes(only)) {
 
     // A build.sh stopped by a signal stops the compiles it started. The C
     // compiler here records its pid and sleeps, so every job is still running
-    // when the script is sent TERM; afterwards none of them may be.
+    // when the script is sent TERM; afterwards none of them may be. The
+    // `-dumpmachine` build.sh asks to pick its control-flow flag is not a
+    // compile, and answers at once, as a real driver's does.
     const sleeper = path.join(tools, "cc-sleeps")
     const sleeperPids = path.join(rcDir, "sleeper-pids")
-    fs.writeFileSync(sleeper, `#!/bin/sh\necho $$ > '${sleeperPids}'/$$\nexec sleep 60\n`, { mode: 0o755 })
+    fs.writeFileSync(
+      sleeper,
+      `#!/bin/sh\n[ "$1" = -dumpmachine ] && exit 0\necho $$ > '${sleeperPids}'/$$\nexec sleep 60\n`,
+      { mode: 0o755 }
+    )
     for (const [mode, args] of [
       [
         "--runtime-objects",

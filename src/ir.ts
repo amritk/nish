@@ -551,7 +551,7 @@ export class IRModule {
       const groups: string[] = []
       let i = 0
       while (i < this.attrGroups.length) {
-        groups.push(`attributes #${i} = { ${withAttrs(this.attrGroups[i], this.definitionAttrs)} }`)
+        groups.push(attributeGroup(i, this.attrGroups[i], this.definitionAttrs))
         i = i + 1
       }
       sections.push(groups.join("\n"))
@@ -576,15 +576,20 @@ export class IRModule {
 }
 
 /**
- * A group's attributes with `extra` after them. A group a declaration shares
- * gets them too, where they are inert: LLVM reads a function attribute such as
- * `probe-stack` only when it lays out a frame, and a declaration has none.
+ * Group `index`'s line, its attributes with `extra` after them. A group a
+ * declaration shares gets them too, where they are inert: LLVM reads a function
+ * attribute such as `probe-stack` only when it lays out a frame, and a
+ * declaration has none. The whole line is built here, so the loop that collects
+ * the lines keeps no intermediate string.
  */
-const withAttrs = (attrs: string, extra: string): string => {
+const attributeGroup = (index: i32, attrs: string, extra: string): string => {
   if (extra.length === 0) {
-    return attrs
+    return `attributes #${index} = { ${attrs} }`
   }
-  return attrs.length === 0 ? extra : `${attrs} ${extra}`
+  if (attrs.length === 0) {
+    return `attributes #${index} = { ${extra} }`
+  }
+  return `attributes #${index} = { ${attrs} ${extra} }`
 }
 
 /**
