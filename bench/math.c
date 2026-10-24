@@ -128,6 +128,27 @@ int main(int argc, char **argv) {
     }
     printf("round %d\n", h);
   }
+  if (wanted(only, "floor")) {
+    int32_t h = -2128831035;
+    for (int32_t i = 0; i < 8 * N; i++) {
+      h = mix(h, bits(floor(xs[i & 4095])));
+    }
+    printf("floor %d\n", h);
+  }
+  if (wanted(only, "ceil")) {
+    int32_t h = -2128831035;
+    for (int32_t i = 0; i < 8 * N; i++) {
+      h = mix(h, bits(ceil(xs[i & 4095])));
+    }
+    printf("ceil %d\n", h);
+  }
+  if (wanted(only, "trunc")) {
+    int32_t h = -2128831035;
+    for (int32_t i = 0; i < 8 * N; i++) {
+      h = mix(h, bits(trunc(xs[i & 4095])));
+    }
+    printf("trunc %d\n", h);
+  }
   if (wanted(only, "min")) {
     int32_t h = -2128831035;
     for (int32_t i = 0; i < 8 * N; i++) {

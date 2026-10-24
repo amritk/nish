@@ -128,6 +128,27 @@ func main() {
 		}
 		fmt.Printf("round %d\n", h)
 	}
+	if wanted("floor") {
+		h := int32(-2128831035)
+		for i := int32(0); i < 8*N; i++ {
+			h = mix(h, bits(math.Floor(xs[i&4095])))
+		}
+		fmt.Printf("floor %d\n", h)
+	}
+	if wanted("ceil") {
+		h := int32(-2128831035)
+		for i := int32(0); i < 8*N; i++ {
+			h = mix(h, bits(math.Ceil(xs[i&4095])))
+		}
+		fmt.Printf("ceil %d\n", h)
+	}
+	if wanted("trunc") {
+		h := int32(-2128831035)
+		for i := int32(0); i < 8*N; i++ {
+			h = mix(h, bits(math.Trunc(xs[i&4095])))
+		}
+		fmt.Printf("trunc %d\n", h)
+	}
 	if wanted("min") {
 		h := int32(-2128831035)
 		for i := int32(0); i < 8*N; i++ {

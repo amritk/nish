@@ -282,6 +282,14 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len);
    Variable-time: never call it on a secret. */
 int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t depth, int64_t off, int64_t width,
                         int64_t from);
+/* `Math.floor`, `Math.ceil` and `Math.trunc` where compiled code was not built
+   for a target that rounds in one instruction: C's floor, ceil and trunc,
+   exactly, -0 and NaN included. On x86-64 without SSE4.1 in the baseline
+   they run `roundsd` where the CPU has it and `NISH_SIMD` does not pin a
+   path, and libm otherwise. They live in runtime/runtime-simd.c. */
+double nish_floor_f64(double x);
+double nish_ceil_f64(double x);
+double nish_trunc_f64(double x);
 /* No array grows past 2^31 - 1 elements and no string past 2^31 - 1 bytes:
  * `nish_array_grow`, `nish_alloc_array` and `nish_str_concat` fail as an
  * allocation does (`nish: out of memory`, exit 1; a trap on wasm) rather than

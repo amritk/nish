@@ -128,6 +128,27 @@ fn main() {
         }
         println!("round {}", h);
     }
+    if wanted("floor") {
+        let mut h: i32 = -2128831035;
+        for i in 0..8 * N {
+            h = mix(h, bits(xs[(i & 4095) as usize].floor()));
+        }
+        println!("floor {}", h);
+    }
+    if wanted("ceil") {
+        let mut h: i32 = -2128831035;
+        for i in 0..8 * N {
+            h = mix(h, bits(xs[(i & 4095) as usize].ceil()));
+        }
+        println!("ceil {}", h);
+    }
+    if wanted("trunc") {
+        let mut h: i32 = -2128831035;
+        for i in 0..8 * N {
+            h = mix(h, bits(xs[(i & 4095) as usize].trunc()));
+        }
+        println!("trunc {}", h);
+    }
     if wanted("min") {
         let mut h: i32 = -2128831035;
         for i in 0..8 * N {

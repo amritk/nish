@@ -85,6 +85,12 @@ JavaScript. `Math.min`, `max` and `hypot` take exactly two arguments.
 `Math.tan`, `atan2` and `hypot` are compiled from the standard library's
 `std/math.ts` rather than called from the C library, so they answer the same
 on every target, WebAssembly included, within one unit in the last place.
+On x86-64, `Math.floor`, `ceil`, `trunc` and `round` use the CPU's own
+rounding instruction when it has one (SSE4.1: Intel since 2008, AMD
+since 2011). On an older CPU they use the C library. Either way the answers
+are the same, `-0` and `NaN` included. Set `NISH_SIMD=base` to make a binary
+use the C library on any CPU, the way that variable pins the vector code in
+the standard library.
 
 ```ts nish:ok
 export const main = (): i32 => {

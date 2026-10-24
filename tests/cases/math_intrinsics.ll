@@ -2,10 +2,10 @@ declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
+declare double @nish_floor_f64(double) #2
+declare double @nish_ceil_f64(double) #2
+declare double @nish_trunc_f64(double) #2
 declare double @llvm.sqrt.f64(double) #0
-declare double @llvm.floor.f64(double) #0
-declare double @llvm.ceil.f64(double) #0
-declare double @llvm.trunc.f64(double) #0
 declare double @llvm.sin.f64(double) #0
 declare double @llvm.cos.f64(double) #0
 declare double @llvm.exp.f64(double) #0
@@ -37,17 +37,17 @@ entry:
   %0 = call double @hypot$(double 0x4008000000000000, double 0x4010000000000000)
   %1 = call i8* @nish_str_from_f64(double %0)
   call void @nish_print(i8* %1)
-  %2 = call double @llvm.floor.f64(double 0x400599999999999A)
+  %2 = call double @nish_floor_f64(double 0x400599999999999A)
   %3 = call i8* @nish_str_from_f64(double %2)
   call void @nish_print(i8* %3)
-  %4 = call double @llvm.ceil.f64(double 0x4000CCCCCCCCCCCD)
+  %4 = call double @nish_ceil_f64(double 0x4000CCCCCCCCCCCD)
   %5 = call i8* @nish_str_from_f64(double %4)
   call void @nish_print(i8* %5)
   %6 = fneg double 0x400599999999999A
-  %7 = call double @llvm.trunc.f64(double %6)
+  %7 = call double @nish_trunc_f64(double %6)
   %8 = call i8* @nish_str_from_f64(double %7)
   call void @nish_print(i8* %8)
-  %9 = call double @llvm.floor.f64(double 0x4004000000000000)
+  %9 = call double @nish_floor_f64(double 0x4004000000000000)
   %10 = fsub double 0x4004000000000000, %9
   %11 = fcmp oge double %10, 0x3FE0000000000000
   %12 = fadd double %9, 0x3FF0000000000000
@@ -56,7 +56,7 @@ entry:
   %15 = call i8* @nish_str_from_f64(double %14)
   call void @nish_print(i8* %15)
   %16 = fneg double 0x4004000000000000
-  %17 = call double @llvm.floor.f64(double %16)
+  %17 = call double @nish_floor_f64(double %16)
   %18 = fsub double %16, %17
   %19 = fcmp oge double %18, 0x3FE0000000000000
   %20 = fadd double %17, 0x3FF0000000000000
@@ -64,7 +64,7 @@ entry:
   %22 = call double @llvm.copysign.f64(double %21, double %16)
   %23 = call i8* @nish_str_from_f64(double %22)
   call void @nish_print(i8* %23)
-  %24 = call double @llvm.floor.f64(double 0x3FDFFFFFFFFFFFFF)
+  %24 = call double @nish_floor_f64(double 0x3FDFFFFFFFFFFFFF)
   %25 = fsub double 0x3FDFFFFFFFFFFFFF, %24
   %26 = fcmp oge double %25, 0x3FE0000000000000
   %27 = fadd double %24, 0x3FF0000000000000
@@ -144,6 +144,7 @@ max.end:
 
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn memory(inaccessiblemem: readwrite) "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}

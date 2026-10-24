@@ -234,6 +234,19 @@ const emitMathPow = (emitter: Emitter, expr: Node): string => {
 }
 
 /**
+ * `floor`, `ceil` or `trunc` of a double. At the x86-64 baseline the
+ * intrinsic is a call into libm, because rounding in one instruction is
+ * SSE4.1's `roundsd`, so where the emitter knows no other target it calls the
+ * runtime's `nish_<which>_f64` instead: `roundsd` behind a flag the first call
+ * sets from `cpuid`, libm without SSE4.1 (runtime/runtime-simd.c). Under LTO
+ * the helper inlines, so a call costs a load and a branch.
+ */
+const emitRounding = (emitter: Emitter, which: string, x: string): string => {
+  const callee = emitter.roundsInRuntime ? `nish_${which}_f64` : `llvm.${which}.f64`
+  return callIntrinsic(emitter, callee, "double", `double ${x}`)
+}
+
+/**
  * `Math.round(x)`: JavaScript rounds half toward +infinity, which is neither
  * `llvm.round` nor `llvm.roundeven`, and `floor(x + 0.5)` is wrong for
  * 0.49999999999999994. `f = floor(x)`, plus one when `x - f >= 0.5`, then
@@ -242,7 +255,7 @@ const emitMathPow = (emitter: Emitter, expr: Node): string => {
  */
 const emitMathRound = (emitter: Emitter, expr: Node): string => {
   const x = emitter.emitExpression(firstArgument(expr))
-  const floor = callIntrinsic(emitter, "llvm.floor.f64", "double", `double ${x}`)
+  const floor = emitRounding(emitter, "floor", x)
   const frac = emitter.fn.emitValue(`fsub double ${x}, ${floor}`)
   const up = emitter.fn.emitValue(`fcmp oge double ${frac}, ${f64Hex(0.5)}`)
   const next = emitter.fn.emitValue(`fadd double ${floor}, ${f64Hex(1.0)}`)
@@ -587,6 +600,9 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
   }
   if (name === "Math.random") {
     return emitter.fn.emitValue(`call double ${emitter.useRuntime("nish_random")}()`)
+  }
+  if (name === "Math.floor" || name === "Math.ceil" || name === "Math.trunc") {
+    return emitRounding(emitter, name.substring(5, name.length), emitter.emitExpression(firstArgument(expr)))
   }
   if (name.startsWith("Math.")) {
     const intrinsic = f64UnaryIntrinsic(name.substring(5, name.length))

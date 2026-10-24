@@ -6458,7 +6458,7 @@ shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
 
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
-| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...) | none | `math_intrinsics`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
+| `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...), except `floor`/`ceil`/`trunc` on x86-64, which call the runtime's rounders (below) | none | `math_intrinsics`, `math_round_edges`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
 | `Math.tan(x: f64): f64` | a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the module as `internal @nish.tanF64`, so no target calls libm; exact near every multiple of π/2 and within one ulp | none | `math_tan`, `math_std_edges` |
 | `Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64` | calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in like `tan`; ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is −π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two arguments, not JavaScript's any number | none | `math_atan2`, `math_hypot`; `reject_math_atan2_f32` (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``), `reject_math_hypot_arity` (`` `Math.hypot` expects exactly 2 arguments, got 3 ``) |
 | `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C | none | `math_intrinsics`; `tests/differential/corpus/f64_pow_spec` |
@@ -6474,6 +6474,19 @@ shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
 The f64-only functions reject `i32`/`i64` arguments; `number` in i32 mode is
 an `i32`, so write `Math.sqrt(toF64(n))` or use f64 mode. A numeric literal
 argument is typed `f64` by context (`Math.sqrt(2)` works in both modes).
+
+**Rounding on x86-64.** x86-64's SSE2 baseline has no instruction that rounds
+an `f64` to an integer. So on x86-64, `Math.floor`, `ceil` and `trunc`, and
+the floor in `Math.round`, call the runtime's `nish_floor_f64`,
+`nish_ceil_f64` and `nish_trunc_f64`. On a CPU with SSE4.1, each runs
+`roundsd`. On a CPU without it, each runs libm's function. The choice is
+made by reading the CPU's feature bits on the first call, and `NISH_SIMD`
+pins it, as it pins the vector kernels: `NISH_SIMD=base` or `scalar` runs
+libm on every CPU. The two paths give the same bits for every operand,
+including `-0`, the halves, the subnormals, the infinities and NaN
+(`math_round_edges`, which `tests/run.js` runs both ways against Node).
+Every other target, wasm32 and AArch64 included, emits
+`llvm.floor`/`ceil`/`trunc.f64`.
 
 ### Numeric conversions
 

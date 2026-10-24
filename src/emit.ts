@@ -329,6 +329,14 @@ export class Emitter {
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
   debug: DebugInfo | null
   /**
+   * `floor`, `ceil` and `trunc` call the runtime's `nish_floor_f64` family,
+   * which runs SSE4.1 `roundsd` where the CPU has it, rather than the LLVM
+   * intrinsics (`emitRounding` in src/emit-builtins.ts): true for target-neutral
+   * IR and an x86-64 triple, false for wasm and AArch64, whose baselines
+   * round in one instruction already.
+   */
+  roundsInRuntime: boolean
+  /**
    * WP32: the libraries whose functions this module's code reaches are emitted
    * into this module as `internal` copies (`src/emit-map.ts`):
    * `std/collections.ts` when the program named `Map` or `Set`, and
@@ -382,6 +390,7 @@ export class Emitter {
     this.strings = new StringMap()
     this.stringRefs = []
     this.debug = null
+    this.roundsInRuntime = !isWasmBuild(opts) && opts.target.length === 0
     this.libraries = []
     this.jsonParts = []
     this.jsonPartNames = new StringSet()
@@ -401,6 +410,7 @@ export class Emitter {
         process.exit(internalErrorFor(`emitter: unsupported target \`${opts.target}\``, opts.json))
       } else {
         this.module.targetHeader = targetHeader(target)
+        this.roundsInRuntime = !isWasmBuild(opts) && target.triple.startsWith("x86_64")
       }
     }
   }

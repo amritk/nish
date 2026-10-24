@@ -20995,6 +20995,26 @@ clang gives the same C: an unordered compare to a quiet NaN, an ordered
 compare and `select`, and on equal operands the one whose sign bit says `-0`.
 A wasm build calls `llvm.minimum`/`maximum` instead, which are `f64.min`/`max`
 there. All of these are `readnone willreturn`, so the callers stay pure.
+
+On every target but x86-64, `Math.floor`, `ceil` and `trunc`, and the floor
+inside `Math.round`, are `llvm.floor`/`ceil`/`trunc.f64`. x86-64's SSE2
+baseline has no rounding instruction, so there the intrinsic would be a call
+into libm. Instead, x86-64 IR calls the runtime's `nish_floor_f64`,
+`nish_ceil_f64` or `nish_trunc_f64` (`runtime/runtime-simd.c`), and
+`--link`'s LTO inlines them:
+
+- On a CPU with SSE4.1, each is one `roundsd` (immediate 9, 10 or 11) behind
+  a test of a flag.
+- Until the first call has read the CPU's feature bits, the flag is unset,
+  and an unset flag takes the libm path.
+- On a CPU without SSE4.1, or under `NISH_SIMD=base` or `scalar`, each call
+  is libm's `floor`, `ceil` or `trunc`.
+- A constant operand still folds, since `__builtin_constant_p` is decided
+  after inlining.
+- The declarations are `memory(inaccessiblemem: readwrite)`, because that
+  flag is all they touch, so a caller stays `readnone`.
+- Under `--cpu x86-64-v3` the runtime is built with SSE4.1, so the same call
+  is a bare `roundsd`, with no flag.
 `Math.tan`, `Math.atan2` and `Math.hypot` are not builtins in the IR at all:
 each is a call to `std/math.ts`'s Nish port of fdlibm, copied into the module
 as `internal @nish.tanF64`, `@nish.atan2F64` and `@nish.hypotF64`, so no target calls
@@ -21012,8 +21032,8 @@ const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1)
 ```
 
 ```llvm
+declare double @nish_floor_f64(double) #1
 declare double @llvm.sqrt.f64(double) #0
-declare double @llvm.floor.f64(double) #0
 declare double @llvm.copysign.f64(double, double) #0
 
 define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
@@ -21027,7 +21047,7 @@ entry:
 
 define internal noundef double @roundHalfUp(double noundef %x) #0 {
 entry:
-  %0 = call double @llvm.floor.f64(double %x)
+  %0 = call double @nish_floor_f64(double %x)
   %1 = fsub double %x, %0
   %2 = fcmp oge double %1, 0x3FE0000000000000
   %3 = fadd double %0, 0x3FF0000000000000
@@ -21076,6 +21096,7 @@ min.end:
 }
 
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn memory(inaccessiblemem: readwrite) "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}
@@ -24212,6 +24233,9 @@ declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 noca
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_ctr(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
 declare void @nish_aes_ghash(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #2
+declare double @nish_floor_f64(double) #9
+declare double @nish_ceil_f64(double) #9
+declare double @nish_trunc_f64(double) #9
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #10 {
 entry:

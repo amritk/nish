@@ -23,6 +23,10 @@
  * asked for it gets the base path, because running it would fault. The
  * instruction gate sets `NISH_SIMD=base` (bench/run.mjs) so that a count does
  * not depend on the host it was measured on.
+ *
+ * The file's end holds the x86-64 rounders `Math.floor`, `ceil`, `trunc` and
+ * `round` call: SSE4.1 `roundsd` behind a flag set on the first call, libm
+ * before then, on a CPU without SSE4.1, and under a pinned `NISH_SIMD`.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -171,26 +175,24 @@ static int nish_cpu_has_avx2(void) {
 }
 #endif
 
-/* Which path `NISH_SIMD` and this machine pick, for every kernel here. AVX2 is
-   asked of the CPU only when the answer could matter, so a pinned `scalar` or
+/* Which path `NISH_SIMD` pins, for every kernel here: `scalar`, `base`, or
+   the best this machine has. The caller asks the CPU about the extension its
+   best path needs only when the answer could matter, so a pinned `scalar` or
    `base` never reads the CPU's feature bits at all. */
-enum { NISH_PATH_SCALAR, NISH_PATH_BASE, NISH_PATH_AVX2 };
+enum { NISH_PATH_SCALAR, NISH_PATH_BASE, NISH_PATH_BEST };
 
 static int nish_simd_choose(void) {
   const char *pin = getenv("NISH_SIMD");
   if (pin != NULL && strcmp(pin, "scalar") == 0) return NISH_PATH_SCALAR;
   if (pin != NULL && strcmp(pin, "base") == 0) return NISH_PATH_BASE;
-#if defined(NISH_SIMD_SSE2)
-  if (nish_cpu_has_avx2()) return NISH_PATH_AVX2;
-#endif
-  return NISH_PATH_BASE;
+  return NISH_PATH_BEST;
 }
 
 static nish_any_path nish_any_choose(void) {
   int path = nish_simd_choose();
   if (path == NISH_PATH_SCALAR) return nish_any_scalar;
 #if defined(NISH_SIMD_SSE2)
-  if (path == NISH_PATH_AVX2) return nish_any_avx2;
+  if (path == NISH_PATH_BEST && nish_cpu_has_avx2()) return nish_any_avx2;
 #endif
   return nish_any_base;
 }
@@ -403,7 +405,7 @@ static nish_scan_path nish_scan_choose(void) {
   int path = nish_simd_choose();
   if (path == NISH_PATH_SCALAR) return nish_scan_scalar;
 #if defined(NISH_SIMD_SSE2)
-  if (path == NISH_PATH_AVX2) return nish_scan_avx2;
+  if (path == NISH_PATH_BEST && nish_cpu_has_avx2()) return nish_scan_avx2;
 #endif
   return nish_scan_base;
 }
@@ -425,3 +427,56 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
                         int64_t from) {
   return __atomic_load_n(&nish_scan, __ATOMIC_RELAXED)(s, masks, depth, off, width, from);
 }
+
+/* `nish_floor_f64`, `nish_ceil_f64` and `nish_trunc_f64`: the contract in
+   nish.h. The x86-64 baseline is SSE2, so there `__builtin_floor` is a call
+   into libm, whose ifunc lands on SSE4.1 `roundsd` on a machine that has it;
+   the call is the cost, not the rounding. Here `roundsd` runs inline once
+   `nish_round_hw` says the CPU has SSE4.1, and under LTO the whole helper
+   inlines into its caller. The flag starts at 0, unknown, and an unknown flag
+   takes the libm path, so a call that sets it answers what libm answers, as
+   every call does on a machine without SSE4.1 or under a pinned `NISH_SIMD`.
+   Two threads that race on the first call store the same answer. Leaf 1 of
+   `cpuid` is asked without first asking the highest leaf: every x86-64 CPU
+   has it. A constant operand rounds through `__builtin_*` so LLVM still folds
+   it after inlining, which it cannot do through the assembly. With SSE4.1 in
+   the baseline (`--cpu x86-64-v3`) and on every other target the builtin is
+   one instruction already, and the helpers are that builtin. */
+#if defined(__x86_64__) && !defined(__SSE4_1__)
+static int nish_round_hw; /* 0 unknown, 1 libm, 2 roundsd */
+
+__attribute__((noinline, cold)) static double nish_round_libm(double x, int mode) {
+  if (__atomic_load_n(&nish_round_hw, __ATOMIC_RELAXED) == 0) {
+    unsigned a, b, c, d;
+    int hw = 0;
+    if (nish_simd_choose() == NISH_PATH_BEST) {
+      __cpuid(1, a, b, c, d);
+      hw = (c & bit_SSE4_1) != 0;
+    }
+    __atomic_store_n(&nish_round_hw, hw + 1, __ATOMIC_RELAXED);
+  }
+  return mode == 9 ? __builtin_floor(x) : mode == 10 ? __builtin_ceil(x) : __builtin_trunc(x);
+}
+
+/* `roundsd`'s immediate names the rounding: 9 is toward -infinity, 10 toward
+   +infinity, 11 toward zero, each with the precision exception suppressed. The
+   operand is tied to the result: `roundsd` writes only the low lane of its
+   destination, so a destination of its own carries a false dependency on that
+   register's last writer, which in a loop became a chain through every
+   iteration and ran 3.5 times slower. */
+#define NISH_ROUNDER(name, builtin, imm)                                                  \
+  double name(double x) {                                                                 \
+    if (__builtin_constant_p(x)) return builtin(x);                                       \
+    if (__builtin_expect(__atomic_load_n(&nish_round_hw, __ATOMIC_RELAXED) != 2, 0))      \
+      return nish_round_libm(x, imm);                                                     \
+    __asm__("roundsd $" #imm ", %0, %0" : "+x"(x));                                       \
+    return x;                                                                             \
+  }
+NISH_ROUNDER(nish_floor_f64, __builtin_floor, 9)
+NISH_ROUNDER(nish_ceil_f64, __builtin_ceil, 10)
+NISH_ROUNDER(nish_trunc_f64, __builtin_trunc, 11)
+#else
+double nish_floor_f64(double x) { return __builtin_floor(x); }
+double nish_ceil_f64(double x) { return __builtin_ceil(x); }
+double nish_trunc_f64(double x) { return __builtin_trunc(x); }
+#endif

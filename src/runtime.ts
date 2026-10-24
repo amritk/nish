@@ -1185,6 +1185,24 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `Math.floor`, `ceil` and `trunc` at the x86-64 baseline (runtime-simd.c,
+    // `emitRounding` in src/emit-builtins.ts). The one store a call can make
+    // is the first call's answer to "has this CPU SSE4.1", into a static of
+    // its unit that no Nish code can name, which is what `inaccessiblemem`
+    // says. Every call answers exactly the double the intrinsic would, on
+    // either path, so to a caller each is a total function of its operand,
+    // as `llvm.floor.f64` is: `EFFECT_NONE`, and a caller stays `readnone`.
+    const rounding: string[] = ["floor", "ceil", "trunc"]
+    for (const f of rounding) {
+      this.add(
+        new RuntimeFunction(
+          `nish_${f}_f64`,
+          `declare double @nish_${f}_f64(double)`,
+          attrs3("nounwind", "willreturn", "memory(inaccessiblemem: readwrite)"),
+          EFFECT_NONE
+        )
+      )
+    }
     this.buildIntrinsics()
   }
 

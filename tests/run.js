@@ -9205,6 +9205,47 @@ if (!only || "c_symbol_private_libm".includes(only)) {
   )
 }
 
+// On x86-64 below SSE4.1, Math.floor, ceil, trunc and round call the runtime's
+// rounders, which run `roundsd` where the CPU has SSE4.1 and libm everywhere else
+// or under `NISH_SIMD=base` (runtime/runtime-simd.c). A path wrong only on some
+// machines would ship, so tests/cases/math_round_edges is linked once and run
+// both ways, each against what Node prints for the same source, and the binary
+// is held to having the instruction to run.
+if (!only || "math_round_edges".includes(only)) {
+  const entry = path.join(root, "tests", "cases", "math_round_edges.ts")
+  const want = fs.readFileSync(path.join(root, "tests", "cases", "math_round_edges.out"), "utf8")
+  const node = runUnderPrelude(entry, [])
+  check(
+    "math_round_edges: Node prints the case's expected output",
+    node.status === 0 && node.stdout === want,
+    shown(node)
+  )
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "math_round_edges_both") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const { NISH_SIMD: _pinned, ...unpinned } = process.env
+    for (const [label, env] of [
+      ["NISH_SIMD unset", unpinned],
+      ["NISH_SIMD=base", { ...unpinned, NISH_SIMD: "base" }],
+    ]) {
+      const run = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8", env }) : built
+      check(
+        `math_round_edges: the native binary prints what Node does, ${label}`,
+        run.status === 0 && run.stdout === want,
+        shown(run)
+      )
+    }
+    if (process.arch === "x64" && has("llvm-objdump") && built.status === 0) {
+      const dis = spawnSync("llvm-objdump", ["-d", "--no-show-raw-insn", exe], { encoding: "utf8" })
+      const found = (String(dis.stdout).match(/\troundsd\t/g) ?? []).length
+      check(`math_round_edges: the x86-64 binary has roundsd to run (${found} found)`, found > 0, dis.stderr)
+    }
+  } else {
+    skip("skipped: math_round_edges: no clang, so the case is not linked and run both ways")
+  }
+}
+
 runFfiStringChecks({ only, check, shown, nish: NISH, root, buildDir })
 
 runFfiBufferChecks({ only, has, check, skip, shown, nish: NISH, root, buildDir })

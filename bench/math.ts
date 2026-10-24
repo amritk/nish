@@ -1,6 +1,7 @@
 // The Math builtins whose lowering has a choice to make (docs/LANGUAGE.md,
 // "Builtins"), one kernel each: `Math.atan2`, `tan`, `hypot`, `sign` on an
-// `i32` and on an `f64`, `imul`, `round`, `min`, `max`, and `f32ToBits`.
+// `i32` and on an `f64`, `imul`, `round`, `floor`, `ceil`, `trunc`, `min`,
+// `max`, and `f32ToBits`.
 // Compile with --number-mode f64.
 //
 //   math [kernel]
@@ -152,6 +153,30 @@ export const main = (): i32 => {
       h = mix(h, bits(Math.round(xs[j])))
     }
     console.log(`round ${h}`)
+  }
+  if (only === "" || only === "floor") {
+    let h: i32 = -2128831035
+    for (let i: i32 = 0; i < 8 * N; i++) {
+      const j: i32 = i & 4095
+      h = mix(h, bits(Math.floor(xs[j])))
+    }
+    console.log(`floor ${h}`)
+  }
+  if (only === "" || only === "ceil") {
+    let h: i32 = -2128831035
+    for (let i: i32 = 0; i < 8 * N; i++) {
+      const j: i32 = i & 4095
+      h = mix(h, bits(Math.ceil(xs[j])))
+    }
+    console.log(`ceil ${h}`)
+  }
+  if (only === "" || only === "trunc") {
+    let h: i32 = -2128831035
+    for (let i: i32 = 0; i < 8 * N; i++) {
+      const j: i32 = i & 4095
+      h = mix(h, bits(Math.trunc(xs[j])))
+    }
+    console.log(`trunc ${h}`)
   }
   if (only === "" || only === "min") {
     let h: i32 = -2128831035
