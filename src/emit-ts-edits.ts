@@ -60,7 +60,7 @@ import { numbersRow } from "./emit-ts-numbers"
 import { recordsRow } from "./emit-ts-records"
 import { stringsRow } from "./emit-ts-strings"
 import { StringSet } from "./map"
-import { isNetExport } from "./nish-modules"
+import { isBuiltinSpecifier, isNetExport, nishExport } from "./nish-modules"
 import {
   FLAG_FOREIGN,
   FLAG_OPTIONAL,
@@ -71,6 +71,7 @@ import {
   N_BINARY,
   N_BLOCK,
   N_CALL,
+  N_CLASS,
   N_EMPTY,
   N_EXPR_STMT,
   N_FOR,
@@ -83,6 +84,7 @@ import {
   N_INDEX,
   N_LIST,
   N_MEMBER,
+  N_METHOD,
   N_MODULE_CONST,
   N_NEW,
   N_OBJECT,
@@ -127,7 +129,7 @@ const AMBIENT_NAMES: string =
  * stripping erases them, so the `import type` line the driver writes for them
  * is only there for a reader running `tsc` over the output.
  */
-const WIDTH_TYPES: string = " i32 i64 u8 u16 u32 u64 f32 f64 "
+const WIDTH_TYPES: string = " i32 i64 u8 u16 u32 u64 f32 f64 integer "
 
 /** The message NL4011 carries; `src/codes.ts` keys the code on it. */
 export const SIGNAL_REFUSAL: string =
@@ -160,6 +162,12 @@ export class Walk {
   instanceHead: i32[]
   instanceNext: i32[]
   instances: Instantiation[]
+  /**
+   * Per node id, whether the node is a generic function or method that no
+   * instance reaches: the native build compiles no body for it, and the
+   * checker typed none, so it is written as one that throws (`stubText`).
+   */
+  stubbed: boolean[]
   /** An instance's tables are installed, so a template node is walked as itself. */
   inInstance: boolean
   /** The second or a later instance of one template is being walked: its refusals were already recorded. */
@@ -215,9 +223,11 @@ export class Walk {
     this.table = table
     this.source = source
     this.instanceHead = []
+    this.stubbed = []
     let i = 0
     while (i < nodeCount) {
       this.instanceHead.push(-1)
+      this.stubbed.push(false)
       i = i + 1
     }
     this.instanceNext = []
@@ -267,6 +277,42 @@ export class Walk {
         this.instanceHead[sig.decl.id] = this.instances.length
         this.instances.push(instance)
       }
+    }
+    for (const template of program.templateList) {
+      if (template.origin === source && template.count === 0) {
+        this.stub(template.decl, nodeCount)
+      }
+    }
+    // A generic method is minted per receiver; it is uninstantiated only when
+    // no receiver's was ever called.
+    const called = new StringSet()
+    for (const template of program.methodTemplateList) {
+      if (template.count > 0) {
+        called.add(`${template.decl.id}`)
+      }
+    }
+    for (const template of program.methodTemplateList) {
+      if (template.origin === source && !called.has(`${template.decl.id}`)) {
+        this.stub(template.decl, nodeCount)
+      }
+    }
+    // A class template no type argument list reached: every method of it. Its
+    // constructor is kept, so the fields it assigns stay definitely assigned.
+    for (const template of program.structTemplateList) {
+      if (template.origin === source && template.count === 0 && template.decl.kind === N_CLASS) {
+        for (const member of template.decl.children[3].children) {
+          if (member.kind === N_METHOD) {
+            this.stub(member, nodeCount)
+          }
+        }
+      }
+    }
+  }
+
+  /** Mark `decl` as written with a throwing body (`stubbed`). */
+  stub(decl: Node, nodeCount: i32): void {
+    if (decl.id >= 0 && decl.id < nodeCount) {
+      this.stubbed[decl.id] = true
     }
   }
 
@@ -630,6 +676,21 @@ const statementText = (walk: Walk, stmt: Node, out: Operands, slot: i32): void =
   }
 }
 
+/**
+ * A generic function or method no instance reaches, written with a body that
+ * throws: the source's body was never typed, and the native build compiles
+ * none, so nothing can call it. The empty string where there is no body, as a
+ * `declare`d one has none.
+ */
+const stubText = (walk: Walk, node: Node): string => {
+  if (node.children.length < 4 || node.children[3].kind !== N_BLOCK) {
+    return ""
+  }
+  const body = node.children[3]
+  const text = walk.source.text
+  return `${text.substring(node.start, body.start)}{\n    throw new Error("--emit-ts: a generic no instance reaches")\n  }${text.substring(body.end, node.end)}`
+}
+
 /** Whether two answers of `changedText` agree: both unchanged, or the same text. */
 const sameAnswer = (aChanged: boolean, a: string, bChanged: boolean, b: string): boolean =>
   aChanged === bChanged && (!aChanged || a === b)
@@ -641,6 +702,14 @@ const sameAnswer = (aChanged: boolean, a: string, bChanged: boolean, b: string):
  * nullable string per node.
  */
 const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => {
+  if (!walk.inInstance && node.id >= 0 && node.id < walk.stubbed.length && walk.stubbed[node.id]) {
+    const text = stubText(walk, node)
+    if (text.length > 0) {
+      out.texts[slot] = text
+      out.changed[slot] = true
+      return
+    }
+  }
   if (
     !walk.inInstance &&
     node.id >= 0 &&
@@ -898,6 +967,39 @@ const collectNames = (walk: Walk, node: Node): void => {
 }
 
 /**
+ * The bindings after a builtin import whose names are values rather than
+ * functions: `argv` from `nish:process` is the command line, and the runtime
+ * exports it as the function that reads it. Each such name is imported under
+ * `__nish_<local>` (an edit pushed here) and bound by the text this answers,
+ * `const argv = __nish_argv();`, which goes after the import.
+ */
+const propertyImports = (stmt: Node, edits: Edit[]): string => {
+  if (
+    !isBuiltinSpecifier(stmt.text) ||
+    stmt.children.length === 0 ||
+    stmt.children[0].kind !== N_LIST ||
+    (stmt.flags & FLAG_TYPE_ONLY) !== 0
+  ) {
+    return ""
+  }
+  const sb = new StringBuilder()
+  for (const spec of stmt.children[0].children) {
+    if (spec.kind !== N_IMPORT_SPEC || (spec.flags & FLAG_TYPE_ONLY) !== 0) {
+      continue
+    }
+    const exported = spec.children.length > 0 ? spec.children[0].text : spec.text
+    const builtin = nishExport(stmt.text, exported)
+    if (builtin === null || !builtin.isProperty) {
+      continue
+    }
+    const alias = `__nish_${spec.text}`
+    edits.push(new Edit(spec.start, spec.end, `${exported} as ${alias}`))
+    sb.add(`\nconst ${spec.text} = ${alias}();`)
+  }
+  return sb.toText()
+}
+
+/**
  * Walk the module's top-level statements and collect their edits, front to
  * back: `type` before an imported name that is only a type (`typeNames`), a
  * rewritten import specifier (from `specifierFrom`), and each statement that
@@ -923,6 +1025,7 @@ export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
           }
         }
       }
+      const values = propertyImports(stmt, edits)
       let k = 0
       while (k < walk.specifierFrom.length) {
         if (walk.specifierFrom[k] === stmt.text) {
@@ -936,6 +1039,9 @@ export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
           edits.push(new Edit(start, start + stmt.text.length, walk.specifierTo[k]))
         }
         k = k + 1
+      }
+      if (values.length > 0) {
+        edits.push(new Edit(stmt.end, stmt.end, values))
       }
       continue
     }

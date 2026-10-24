@@ -2,27 +2,22 @@
 #
 # Every program the --emit-ts differential does not yet see agree with its
 # native build, one "<program> <row>" line each, where the row is the wp33 §3
-# ledger row whose stage fixes it (numbers, strings, records, control, libm,
-# ffi, refused); the comment is the evidence. A stage that fixes a program
-# regenerates this list, and the program leaves it.
+# ledger row that explains it (numbers, strings, records, control, libm, ffi,
+# refused, host, range); the comment is the evidence, and a host line names
+# the API Node cannot express in brackets. A stage that fixes a program
+# regenerates this list, and the program leaves it. tests/run.js accepts only
+# the libm, ffi, refused, host and range rows here, and a host line only for
+# an API in emit-ts.js's HOST.
 #
 # The run fails on a program that does not agree and is not listed, on a
 # listed one that agrees, on one whose row has moved, and on a listed name
 # the corpus no longer has. A build, emit or timeout failure is never listed.
 
-cases/argv_echo numbers  # differ: stdout line 1 differs
-cases/arr_bounds_lazy_expect records  # differ: exit 1 vs 0
-cases/arr_bounds_lazy_unwrap_or records  # differ: exit 1 vs 0
-cases/bytes_offset_u64 numbers  # differ: exit 0 vs 1: TypeError: Cannot convert a BigInt value to a number
-cases/bytes_set_float_panic strings  # differ: stderr line 1 differs
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
 cases/caps_ffi_handle ffi  # refused: NL4010 under --emit-ts
 cases/caps_net refused  # refused: NL4011 under --emit-ts
-cases/caps_process_wait numbers  # differ: exit 0 vs 1: throw new Error(
+cases/caps_process_wait host  # differ: exit 0 vs 1: throw new Error( [spawn]
 cases/caps_signal refused  # refused: NL4011 under --emit-ts
-cases/ct_asm_x25519 strings  # differ: node passed 30000 ms
-cases/deny_panics_overflow_wrapping numbers  # differ: stdout line 1 differs
-cases/deny_panics_overflow_wrapping_add numbers  # differ: stdout line 1 differs
 cases/ffi_buffer_call_sites ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_count_proved ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_declared ffi  # refused: NL4010 under --emit-ts
@@ -38,20 +33,17 @@ cases/ffi_scalar ffi  # refused: NL4010 under --emit-ts
 cases/ffi_string_loops ffi  # refused: NL4010 under --emit-ts
 cases/ffi_string_param ffi  # refused: NL4010 under --emit-ts
 cases/ffi_string_return ffi  # refused: NL4010 under --emit-ts
-cases/io_nish_import numbers  # differ: stdout line 2 differs
-cases/io_nish_rename numbers  # differ: stdout line 1 differs
 cases/map_fingerprint_miss ffi  # refused: NL4010 under --emit-ts
-cases/math_ulp_samples numbers  # differ: stdout line 2 differs
-cases/mem_arena_builtins numbers  # differ: stdout line 2 differs
-cases/mem_join_parts_same_pass numbers  # differ: stdout line 1 differs
-cases/mem_join_parts_scope numbers  # differ: stdout line 1 differs
-cases/mem_loop_scope numbers  # differ: stdout line 1 differs
-cases/mem_loop_scope_chunk numbers  # differ: stdout line 1 differs
-cases/mem_loop_scope_control numbers  # differ: stdout line 1 differs
-cases/mem_return_array_scope numbers  # differ: stdout line 1 differs
-cases/mem_scope_dynamic_array numbers  # differ: stdout line 2 differs
-cases/mem_using_arena_tail numbers  # differ: stdout line 1 differs
-cases/mem_wait_pid_scope numbers  # differ: exit 0 vs 1: throw new Error(
+cases/math_ulp_samples libm  # differ: stdout line 2 differs
+cases/mem_arena_builtins host  # differ: stdout line 2 differs [arenaUsed]
+cases/mem_join_parts_same_pass host  # differ: stdout line 1 differs [arenaUsed]
+cases/mem_join_parts_scope host  # differ: stdout line 1 differs [arenaUsed]
+cases/mem_loop_scope host  # differ: stdout line 1 differs [arenaUsed]
+cases/mem_loop_scope_control host  # differ: stdout line 1 differs [arenaUsed]
+cases/mem_return_array_scope host  # differ: stdout line 1 differs [arenaUsed]
+cases/mem_scope_dynamic_array host  # differ: stdout line 2 differs [arenaUsed]
+cases/mem_using_arena_tail host  # differ: stdout line 1 differs [arenaUsed]
+cases/mem_wait_pid_scope host  # differ: exit 0 vs 1: throw new Error( [waitPid]
 cases/net_dual_stack refused  # refused: NL4011 under --emit-ts
 cases/net_loop_calls refused  # refused: NL4011 under --emit-ts
 cases/net_loop_two refused  # refused: NL4011 under --emit-ts
@@ -64,45 +56,22 @@ cases/net_tcp_reuseport refused  # refused: NL4011 under --emit-ts
 cases/net_udp_calls refused  # refused: NL4011 under --emit-ts
 cases/net_udp_echo refused  # refused: NL4011 under --emit-ts
 cases/net_udp_offload refused  # refused: NL4011 under --emit-ts
-cases/os_cpu numbers  # differ: stdout line 2 differs
-cases/os_kill numbers  # differ: exit 0 vs 1: throw new Error(
-cases/os_memory numbers  # differ: stdout line 2 differs
-cases/os_mtime numbers  # differ: stdout line 3 differs
-cases/os_now numbers  # differ: stdout line 3 differs
-cases/os_random numbers  # differ: exit 0 vs 1: DOMException [TypeMismatchError]: The data argument must be an integer-type TypedArray
-cases/os_random_limit numbers  # differ: stdout line 1 differs
+cases/os_kill host  # differ: exit 0 vs 1: throw new Error( [spawn]
 cases/os_signal refused  # refused: NL4011 under --emit-ts
 cases/os_signal_import refused  # refused: NL4011 under --emit-ts
-cases/os_spawn numbers  # differ: exit 0 vs 1: throw new Error(
-cases/os_wait numbers  # differ: exit 0 vs 1: throw new Error(
-cases/ovf_matrix numbers  # differ: exit 0 vs 1
-cases/ovf_repro_wrapping numbers  # differ: stdout line 1 differs
-cases/panics_call_cycle records  # differ: exit 0 vs 1
-cases/panics_io_exit numbers  # differ: exit 0 vs 1: DOMException [TypeMismatchError]: The data argument must be an integer-type TypedArray
-cases/panics_overflow numbers  # differ: stdout line 1 differs
-cases/panics_overflow_via records  # differ: exit 0 vs 1
-cases/panics_overflow_wrapping numbers  # differ: stdout line 1 differs
-cases/perf_arena_control numbers  # differ: stdout line 4 differs
-cases/perf_rng_counter numbers  # differ: exit 1 vs 0
-cases/rng_entry_bitwise_panic numbers  # differ: exit 1 vs 0
-cases/rng_entry_panic numbers  # differ: exit 1 vs 0
-cases/rng_entry_panic_f64 numbers  # differ: exit 1 vs 0
-cases/rng_entry_push_panic numbers  # differ: exit 1 vs 0
-cases/rng_entry_range_panic numbers  # differ: exit 1 vs 0
-cases/secret_field_wipe_o2 numbers  # differ: stdout line 1 differs
-cases/secret_field_wipe_o2_plain numbers  # differ: stdout line 1 differs
-cases/secret_wipe numbers  # differ: stdout line 3 differs
-cases/secret_wipe_o2 numbers  # differ: stdout line 1 differs
-cases/secret_wipe_o2_inferred numbers  # differ: stdout line 1 differs
-cases/secret_wipe_o2_inferred_plain numbers  # differ: stdout line 1 differs
-cases/secret_wipe_o2_plain numbers  # differ: stdout line 1 differs
-cases/str_surrogate_lone numbers  # differ: stdout line 1 differs
-cases/str_surrogate_pair numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Bad character escape sequence, expected 4 hex characters
-cases/term_calls numbers  # differ: exit 0 vs 1: throw new Error(
-cases/term_import numbers  # differ: exit 0 vs 1: throw new Error(
-cases/term_pty numbers  # differ: exit 0 vs 1: throw new Error(
-cases/term_restore numbers  # differ: exit 0 vs 1: throw new Error(
-corpus/argv_words numbers  # differ: exit 29 vs 106
+cases/os_spawn host  # differ: exit 0 vs 1: throw new Error( [spawn]
+cases/os_wait host  # differ: exit 0 vs 1: throw new Error( [spawn]
+cases/perf_arena_control host  # differ: stdout line 4 differs [arenaUsed]
+cases/perf_rng_counter range  # differ: exit 1 vs 0
+cases/rng_entry_bitwise_panic range  # differ: exit 1 vs 0
+cases/rng_entry_panic range  # differ: exit 1 vs 0
+cases/rng_entry_panic_f64 range  # differ: exit 1 vs 0
+cases/rng_entry_push_panic range  # differ: exit 1 vs 0
+cases/rng_entry_range_panic range  # differ: exit 1 vs 0
+cases/str_surrogate_lone host  # differ: stdout line 1 differs [lone surrogate]
+cases/term_calls host  # differ: exit 0 vs 1: throw new Error( [readStdin]
+cases/term_import host  # differ: exit 0 vs 1: throw new Error( [waitStdin]
+cases/term_pty host  # differ: exit 0 vs 1: throw new Error( [setRawMode]
+cases/term_restore host  # differ: exit 0 vs 1: throw new Error( [setTerminalRestore]
 corpus/bit_compound_target refused  # refused: NL4012 under --emit-ts
 corpus/f64_libm libm  # differ: stdout line 33 differs
-corpus/parse_argv_sum numbers  # differ: stdout line 1 differs

@@ -12,6 +12,11 @@ export type u32 = number;
 export type u64 = bigint;
 export type f32 = number;
 export type f64 = number;
+/**
+ * A ranged integer (docs/wp31-ranged-integers.md) is a `number`; its range is
+ * the native build's check, which Node does not make (wp33 §3.3, the range row).
+ */
+export type integer<Lo extends number, Hi extends number> = number;
 
 /** A width as the rewriter names it, for `convert`. */
 export type NumericKind = "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64";
@@ -46,7 +51,10 @@ export declare function shlU64(a: u64, b: u64): u64;
 export declare function lshrU64(a: u64, b: u64): u64;
 export declare function minU64(a: u64, b: u64): u64;
 export declare function maxU64(a: u64, b: u64): u64;
-export declare function convert(x: number | bigint, from: NumericKind, to: NumericKind): number | bigint;
+/** What `convert` answers for the width `K`: a `bigint` for the 64-bit integers. */
+export type Width<K extends NumericKind> = K extends "i64" | "u64" ? bigint : number;
+
+export declare function convert<K extends NumericKind>(x: number | bigint, from: NumericKind, to: K): Width<K>;
 export declare function parseInt(s: string): i32;
 export declare function parseFloat(s: string): f64;
 export declare function number(x: string | number | bigint | boolean): f64;

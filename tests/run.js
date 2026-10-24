@@ -58,7 +58,7 @@ import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
-import { NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
+import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
 import { urlFuzzVerdict } from "./link/std_url/verdict.js"
@@ -4616,6 +4616,32 @@ if (!only || "emit-ts".includes(only)) {
     `emit-ts: the corpus under --emit-ts agrees with native (${tally ? `${tally[2]} programs, ${tally[3]} known` : "no tally"})`,
     corpus.status === 0 && tally !== null,
     corpus.stdout + corpus.stderr
+  )
+
+  // The known list is a ratchet, not a parking lot (wp33 §4.2): a program may
+  // stay on it only under a row that names what TypeScript under Node cannot
+  // say — libm's last bit, C behind `declare`, a refusal, the host, or a range
+  // check `--emit-ts` writes nothing for — and a host line only for an API in
+  // emit-ts.js's fixed HOST list, whose evidence the differential matched.
+  const knownLines = fs
+    .readFileSync(path.join(root, "tests", "differential", "emit-ts-known.txt"), "utf8")
+    .split("\n")
+    .filter((l) => l.trim().length > 0 && !l.trim().startsWith("#"))
+  const hostApis = emitTsHost.map((entry) => entry[0])
+  const strays = []
+  for (const line of knownLines) {
+    const [name, row] = line.split("#")[0].trim().split(/\s+/)
+    const api = /\[([^\]]+)\]\s*$/.exec(line)
+    if (!emitTsAcceptedRows.includes(row)) {
+      strays.push(`${name}: row "${row}" is not one of ${emitTsAcceptedRows.join(", ")}`)
+    } else if (row === "host" && (api === null || !hostApis.includes(api[1]))) {
+      strays.push(`${name}: host entry names ${api === null ? "no API" : `"${api[1]}"`}, not one of ${hostApis.join(", ")}`)
+    }
+  }
+  check(
+    `emit-ts: the known list holds only accepted rows (${knownLines.length} entries)`,
+    strays.length === 0,
+    strays.join("\n")
   )
 }
 

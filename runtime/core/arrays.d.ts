@@ -9,6 +9,8 @@ export declare function uncheckedSet<T extends number>(xs: T[], i: i32, v: T): v
 export declare function copyIn<T>(v: T): T;
 export declare function storeIdx<T>(a: T[], i: number | bigint, v: T): T;
 export declare function arraySet<T>(dst: T[], src: readonly T[], offset?: number): void;
+/** `dst.set(src, offset)` as `--emit-ts` writes it: a 64-bit offset is a bigint, checked exactly. */
+export declare function arraySetAt<T>(dst: T[], src: readonly T[], offset?: number | bigint): void;
 export declare function newArray<T>(n: number | bigint, zero: T): T[];
 export declare function arenaUsed(): number;
 export declare function arenaMark(): number;

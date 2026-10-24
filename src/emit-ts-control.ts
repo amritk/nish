@@ -25,6 +25,9 @@
 //   `const t = x;` and `if (t.isErr()) return Err(t.error);` go before the
 //   statement and the call becomes `t.value`. Several in one statement hoist
 //   left to right, which is the order they run in.
+// - `x.expect(m)` and `x.unwrapOr(d)` whose argument is more than a name or a
+//   literal become `expectLazy(x, () => m)` and `unwrapOrLazy`, because the
+//   native program evaluates it on the `Err` path only (#182).
 // - Any other `orReturn` stays a call, which the runtime's `orReturn` throws
 //   from; the function, method or arrow around it then gets its body wrapped
 //   in a `try` whose `catch` hands the throw to `caught`, which answers the
@@ -46,10 +49,15 @@ import {
   N_BLOCK,
   N_CALL,
   N_ENUM,
+  N_FALSE,
   N_FUNCTION,
   N_IDENT,
   N_MEMBER,
   N_METHOD,
+  N_NULL,
+  N_NUMBER,
+  N_STRING,
+  N_TRUE,
   N_TYPE_REF,
   Node,
 } from "./nodes"
@@ -59,7 +67,7 @@ import { StringBuilder } from "./strings"
 export const controlRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const kind = node.kind
   if (kind === N_CALL) {
-    return isOrReturn(walk, node) ? hoistOrReturn(walk, node, operands) : null
+    return isOrReturn(walk, node) ? hoistOrReturn(walk, node, operands) : lazyArgument(walk, node, operands)
   }
   if (kind === N_FUNCTION || kind === N_METHOD || kind === N_ARROW) {
     return wrapBody(walk, node, operands)
@@ -109,6 +117,38 @@ const hoistOrReturn = (walk: Walk, call: Node, operands: Operands): string | nul
   walk.hoist(`const ${t} = ${callee.substring(0, callee.length - suffix.length)};`)
   walk.hoist(`if (${t}.isErr()) return ${walk.helperName("Err")}(${t}.error);`)
   return `${t}.value`
+}
+
+/** `r.expect(m)` or `r.unwrapOr(d)` as `expectLazy(r, () => m)`, where `m` is more than a name or a literal; or `null`. */
+const lazyArgument = (walk: Walk, call: Node, operands: Operands): string | null => {
+  const callee = call.children[0]
+  if (
+    callee.kind !== N_MEMBER ||
+    (callee.text !== "expect" && callee.text !== "unwrapOr") ||
+    call.children.length < 2 ||
+    call.children[1].children.length !== 1 ||
+    walk.program.nodeCallees[call.id] !== null
+  ) {
+    return null
+  }
+  const kind = call.children[1].children[0].kind
+  if (
+    kind === N_IDENT ||
+    kind === N_NUMBER ||
+    kind === N_STRING ||
+    kind === N_TRUE ||
+    kind === N_FALSE ||
+    kind === N_NULL
+  ) {
+    return null
+  }
+  const written = operands.at(0)
+  const suffix = `.${callee.text}`
+  if (!written.endsWith(suffix)) {
+    return null
+  }
+  const helper = walk.helperName(callee.text === "expect" ? "expectLazy" : "unwrapOrLazy")
+  return `${helper}(${written.substring(0, written.length - suffix.length)}, () => (${operands.at(1)}))`
 }
 
 /** `node` with its body inside a `try` that turns an `orReturn` throw into the `Err` it returns, when the body still calls one. */

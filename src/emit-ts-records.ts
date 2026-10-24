@@ -29,7 +29,7 @@
 //   by field into the element already there (`Object.assign`), so a
 //   reference taken to the slot sees it.
 // - `new Array<T>(n)` is `newArray(n, zero)` and `dst.set(src, at)` is
-//   `arraySet(dst, src, at)`, each checked as the native one is.
+//   `arraySetAt(dst, src, at)`, each checked as the native one is.
 //
 // The hook sees no type table, so "a record held inline" is read off the
 // program's struct list: an interface no class implements. A generic body is
@@ -309,7 +309,7 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
     walk.program.nodeTypes[args[0].id] > T_CPTR &&
     walk.program.nodeTypes[args[0].id] === walk.program.nodeTypes[callee.children[0].id]
   ) {
-    return `${walk.helperName("arraySet")}(${receiver}, ${operands.at(1)})`
+    return `${walk.helperName("arraySetAt")}(${receiver}, ${operands.at(1)})`
   }
   return null
 }

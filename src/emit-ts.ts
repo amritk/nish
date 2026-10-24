@@ -5,18 +5,19 @@
 // share; every standard-library module the program reaches is written under
 // `nish/` beside them, so a `nish/x` import becomes a relative one and the
 // output needs nothing installed but the runtime. A `nish:` builtin import
-// becomes `nish/runtime`, the one package the output names; `nish:secret`,
-// which has source, becomes the relative path of its `std/secret.ts`. Last comes
+// becomes `nish/runtime`, the one package the output names, and so does
+// `nish:secret`, whose `std/secret.ts` is not written. Last comes
 // `entry.ts`, the launcher: it installs the Node host, calls `main` and exits
 // with what it answered, which a module cannot do for itself because Nish's
 // `main` is called, not run at load.
 //
 // What a module says is decided by the composer (`src/emit-ts-edits.ts`); this
 // file decides where it goes, what its imports name, and whether it may be
-// written at all. Two kinds of module are refused, with nothing written:
-// one that declares C functions (NL4010), whose bodies are not in the program,
-// and one that uses a builtin whose translation would reach past its own
-// statement (NL4011).
+// written at all. A module the composer refuses leaves nothing written: one
+// that declares C functions (NL4010), whose bodies are not in the program, one
+// that uses a builtin whose translation would reach past its own statement
+// (NL4011), a compound assignment whose index would run twice (NL4012), and a
+// generic whose instances would be written differently (NL4013).
 
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
@@ -24,7 +25,7 @@ import { Edit } from "./diagnostics"
 import { applyModuleEdits, emitModule, SIGNAL_REFUSAL, Walk } from "./emit-ts-edits"
 import { StringSet } from "./map"
 import { Lexer } from "./lexer"
-import { isBuiltinSpecifier } from "./nish-modules"
+import { isBuiltinSpecifier, SECRET_SPECIFIER } from "./nish-modules"
 import { N_IMPORT } from "./nodes"
 import { ROOT_PACKAGE } from "./packages"
 import { dirname, normalizePath, relativePath } from "./paths"
@@ -108,6 +109,11 @@ const commonDirectory = (a: string, b: string): string => {
 const outputPathOf = (unit: ModuleUnit, base: string): string => {
   if (unit.packageName === ROOT_PACKAGE) {
     return relativePath(base, unit.path)
+  }
+  // `std/secret.ts` is the meaning of `nish:secret`, not its body: its `wipe`
+  // is lowered natively and empty here, so the runtime's answers the import.
+  if (unit.packageName === CLI && unit.name === "std/secret.ts") {
+    return ""
   }
   if (unit.packageName === CLI && unit.name.startsWith("std/")) {
     return `nish/${unit.name.substring(4)}`
@@ -259,9 +265,9 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       if (holds(walk.specifierFrom, stmt.text)) {
         continue
       }
-      // `nish:secret` has source behind it, written under `nish/` like any
-      // standard-library module, so it falls through to the path it resolved to.
-      if (isBuiltinSpecifier(stmt.text)) {
+      // `nish:secret` has source behind it, but it is answered by the runtime
+      // like every other builtin module (`outputPathOf`).
+      if (isBuiltinSpecifier(stmt.text) || stmt.text === SECRET_SPECIFIER) {
         walk.specifierFrom.push(stmt.text)
         walk.specifierTo.push(RUNTIME)
         continue

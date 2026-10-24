@@ -34,6 +34,11 @@
 // `o?.s.length` is `strLenOpt(o?.s)`: the chain evaluated once, as the
 // argument, and `undefined` when it stopped short.
 //
+// A `\u{…}` escape in a string or template literal is written as the
+// `\uXXXX` code units it stands for, a surrogate pair past U+FFFF: Node's type
+// stripper rejects `"\uD83D\u{DE00}"` inside a template's `${…}`, which is
+// valid TypeScript, and the two spellings are one string.
+//
 // What this row does not make agree:
 //
 // - A byte-offset method inside a `?.` chain (`s?.slice(0, 1)`) stays as
@@ -49,7 +54,8 @@
 
 import { Operands, Walk } from "./emit-ts-edits"
 import { isOptionalChain } from "./emit-util"
-import { N_CALL, N_IDENT, N_MEMBER, Node } from "./nodes"
+import { N_CALL, N_IDENT, N_MEMBER, N_STRING, N_TEMPLATE_TEXT, Node } from "./nodes"
+import { hexOfI64, StringBuilder } from "./strings"
 import { T_STRING } from "./types"
 
 /** The string methods whose offsets count bytes, each a core helper of the same name. */
@@ -136,8 +142,63 @@ const stringCallRewrite = (walk: Walk, node: Node, operands: Operands): string |
   return stringHelperCall(walk, callee.text, `${target}, ${operands.at(1)}`)
 }
 
+/** The value of one hex digit, or -1. */
+const escapeDigit = (c: i32): i32 => {
+  if (c >= 48 && c <= 57) {
+    return c - 48
+  }
+  if (c >= 97 && c <= 102) {
+    return c - 87
+  }
+  return c >= 65 && c <= 70 ? c - 55 : -1
+}
+
+/** A literal's source with each `\u{…}` escape as its `\uXXXX` code units, or `null` when it has none. */
+const unbracedEscapes = (text: string): string | null => {
+  if (text.indexOf("\\u{") < 0) {
+    return null
+  }
+  const out = new StringBuilder()
+  let i = 0
+  while (i < text.length) {
+    const c = text.charCodeAt(i)
+    if (c !== 92 || i + 1 >= text.length) {
+      out.add(text.substring(i, i + 1))
+      i = i + 1
+      continue
+    }
+    // `\u{`, hex digits and `}`; any other escape, `\\` among them, is copied whole.
+    let end = i + 3
+    let value: i64 = 0
+    let digits = 0
+    if (text.charCodeAt(i + 1) === 117 && i + 2 < text.length && text.charCodeAt(i + 2) === 123) {
+      while (end < text.length && escapeDigit(text.charCodeAt(end)) >= 0) {
+        value = value * 16 + toI64(escapeDigit(text.charCodeAt(end)))
+        digits = digits + 1
+        end = end + 1
+      }
+    }
+    if (digits === 0 || digits > 6 || end >= text.length || text.charCodeAt(end) !== 125 || value > 1114111) {
+      out.add(text.substring(i, i + 2))
+      i = i + 2
+      continue
+    }
+    if (value > 65535) {
+      out.add(`\\u${hexOfI64(toI64(55296) + ((value - toI64(65536)) >> toI64(10)), 4)}`)
+      out.add(`\\u${hexOfI64(toI64(56320) + ((value - toI64(65536)) & toI64(1023)), 4)}`)
+    } else {
+      out.add(`\\u${hexOfI64(value, 4)}`)
+    }
+    i = end + 1
+  }
+  return out.toText()
+}
+
 /** The strings row's rewrite of `node`, or `null` to leave it to the next row. */
 export const stringsRow = (walk: Walk, node: Node, operands: Operands): string | null => {
+  if (node.kind === N_STRING || node.kind === N_TEMPLATE_TEXT) {
+    return unbracedEscapes(walk.spanOf(node))
+  }
   if (node.kind === N_MEMBER) {
     return stringLengthRewrite(walk, node, operands)
   }

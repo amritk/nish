@@ -27,6 +27,19 @@ export function exposeWith(s, arg, f) {
   return f(s.value, arg);
 }
 
+/**
+ * `r.expect(message)` and `r.unwrapOr(fallback)` as `--emit-ts` writes them
+ * when the argument is more than a name or a literal: natively it is
+ * evaluated on the `Err` path only (#182), so here it is a function of none.
+ */
+export function expectLazy(r, message) {
+  return r.ok ? r.value : r.expect(message());
+}
+
+export function unwrapOrLazy(r, fallback) {
+  return r.ok ? r.value : fallback();
+}
+
 /** Zero an array of integers, or every integer field of a record: `0` for a number, `0n` for an `i64` or `u64`. */
 function zeroFill(target) {
   if (Array.isArray(target) || ArrayBuffer.isView(target)) {

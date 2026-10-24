@@ -80,6 +80,22 @@ export function storeIdx(a, i, v) {
 }
 
 /**
+ * `dst.set(src, offset)` as `nish --emit-ts` writes it: an `i64` or `u64`
+ * offset, a bigint here, is compared as one, so a value past 2^53 fails with
+ * the native panic rather than being rounded into range, and one in range is
+ * the number `arraySet` takes. `runtime/nish.mjs` keeps `arraySet`, whose
+ * bigint offset throws as `docs/LANGUAGE.md` says.
+ */
+export function arraySetAt(dst, src, offset) {
+  if (typeof offset === "bigint") {
+    const end = offset + BigInt(src.length);
+    if (offset < 0n || end > BigInt(dst.length)) panicSlice(offset, end, dst.length);
+    offset = Number(offset);
+  }
+  arraySet(dst, src, offset);
+}
+
+/**
  * `dst.set(src, offset)` (WP34 N2): `TypedArray.prototype.set`'s copy on the
  * plain array a `u8[]` is here. The source is copied first, so a self-copy or
  * an overlapping one reads what was there before, as `memmove` does natively;
@@ -94,11 +110,23 @@ export function arraySet(dst, src, offset) {
   // to the nearest double past 2^53 (docs/RUN_UNDER_NODE.md).
   const at = offset === undefined ? 0 : Math.trunc(offset) || 0;
   const end = at + src.length;
-  if (!(at >= 0 && end <= dst.length)) panicSlice(at, end, dst.length);
+  if (!(at >= 0 && end <= dst.length)) panicSlice(...saturatedRange(at, src.length), dst.length);
   // Two plain arrays overlap only when they are one array, which is the one
   // case that must read the source before writing it.
   const from = src === dst ? src.slice() : src;
   for (let i = 0; i < from.length; i++) dst[at + i] = from[i];
+}
+
+/**
+ * `[at, at + n)` as the native panic spells it: the offset saturated into an
+ * `i64`, as `llvm.fptosi.sat` leaves it, and the end wrapped, so `1e300` is
+ * `9223372036854775807` and its end `-9223372036854775808`.
+ */
+function saturatedRange(at, n) {
+  if (Number.isSafeInteger(at + n)) return [at, at + n];
+  const max = 2n ** 63n - 1n;
+  const start = at === Infinity || at >= 2 ** 63 ? max : at <= -(2 ** 63) ? -max - 1n : BigInt(at);
+  return [start, BigInt.asIntN(64, start + BigInt(n))];
 }
 
 /** `new Array<T>(n)`: `n` zero-filled elements (`0`, `0n`, or `false`). */
