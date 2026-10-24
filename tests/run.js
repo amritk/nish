@@ -19715,6 +19715,19 @@ if (!only || "sqlite-link".includes(only)) {
       namedLink.status === 0 && runOut("named").stdout === "@sqlite3_open\n" && compiledC().length === 0,
       namedLink.stderr
     )
+    const namedAdapter = path.join(sqDir, "named-adapter.ts")
+    fs.writeFileSync(
+      namedAdapter,
+      'declare function puts(s: string): i32;\n\nexport const main = (): i32 => {\n  puts("@nishsqlite_open");\n  return 0;\n};\n'
+    )
+    const namedAdapterLink = link(namedAdapter, "named-adapter")
+    check(
+      "sqlite-link: a string constant that names `@nishsqlite_open` does not link SQLite",
+      namedAdapterLink.status === 0 &&
+        runOut("named-adapter").stdout === "@nishsqlite_open\n" &&
+        compiledC().length === 0,
+      namedAdapterLink.stderr
+    )
 
     // NISH_SQLITE_CFLAGS is in the key, and a -D in it for a default replaces it.
     const flagged = link(program, "flagged", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_THREADSAFE=1" })

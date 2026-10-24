@@ -51,37 +51,32 @@ Every unit in `runtime/sqlite/` is compiled with:
 | `SQLITE_DEFAULT_MEMSTATUS=0` | No memory statistics, and no mutex to keep them |
 | `SQLITE_DEFAULT_WAL_SYNCHRONOUS=1` | `synchronous=NORMAL` in WAL mode |
 | `SQLITE_LIKE_DOESNT_MATCH_BLOBS` | `LIKE` and `GLOB` do not match a blob |
-| `SQLITE_MAX_EXPR_DEPTH=0` | Expression depth is bounded by the stack, not a counter |
+| `SQLITE_MAX_EXPR_DEPTH=0` | No limit on expression depth: the parser does not count it |
 | `SQLITE_OMIT_DEPRECATED` | No deprecated interface |
 | `SQLITE_OMIT_PROGRESS_CALLBACK` | No progress callback |
 | `SQLITE_OMIT_SHARED_CACHE` | No shared cache |
 | `SQLITE_USE_ALLOCA` | Scratch space on the stack where SQLite allows it |
 | `SQLITE_OMIT_LOAD_EXTENSION` | No `load_extension`: nothing can load code |
-| `SQLITE_THREADSAFE=0`, or `=2` with `--threads` | No mutex for one thread; each connection serialised for several; always `0` on wasi |
+| `SQLITE_THREADSAFE=0`, or `=2` with `--threads` | Single-thread mode, or multi-thread mode: no mutex guards a connection, so a program must not share one across threads (serialized mode is `1`); always `0` on wasi |
 
 `NISH_SQLITE_CFLAGS` is appended, and a `-D` or `-U` in it for one of these
 names replaces the default. A program built with it is compiled with what its
 builder chose, and this record covers only the defaults.
 
-`SQLITE_MAX_EXPR_DEPTH=0` leaves a deeply nested expression bounded only by the
-stack. It is SQL text, which is trusted, so it is recorded here rather than as
-a finding; a program that runs SQL it did not write sets a depth itself.
+`SQLITE_MAX_EXPR_DEPTH=0` removes the limit, so a deeply enough nested
+expression recurses until the stack overflows and the process dies. Only SQL
+text reaches the parser, and it is trusted, so this is recorded here rather
+than as a finding; a program that runs SQL it did not write sets
+`NISH_SQLITE_CFLAGS=-DSQLITE_MAX_EXPR_DEPTH=1000` (SQLite's default) or
+lowers it per connection with `sqlite3_limit(db, SQLITE_LIMIT_EXPR_DEPTH, n)`.
 
 ## Bumping for a CVE
 
-1. Download the amalgamation for the fixed release from
-   [sqlite.org/download.html](https://sqlite.org/download.html) and check it
-   against the SHA3-256 published there.
-2. Replace `runtime/sqlite/sqlite3.c`, `sqlite3.h` and `LICENSE.md` byte for
-   byte; edit none of them.
-3. Update the version and the SHA3-256s of the archive and both files in
-   `runtime/sqlite/README.md`, the version in `THIRD_PARTY_NOTICES.md` and
-   `docs/guide/using-nish/cli.md`, and the version the `sqlite-link` checks in
-   `tests/run.js` expect (`3054001` for 3.54.1).
-4. Update the version and the commit in this record.
-5. Run `node tests/run.js sqlite-link`, `third-party-licence` and `package`.
-   The changed sources change the SQLite cache key, so every program relinks
-   against the new objects.
+Follow "Updating" in [runtime/sqlite/README.md](../../runtime/sqlite/README.md):
+it lists every file the version lives in and the sections to run. Then update
+the version and the commit in this record, and the version in
+`docs/guide/using-nish/cli.md`. The changed sources change the SQLite cache
+key, so every program relinks against the new objects.
 
 ## Not yet covered by the scope check
 
@@ -94,7 +89,14 @@ here. Widening its surface is a `scripts/` change for a later pull request.
 In `tests/run.js`, section `sqlite-link`:
 
 - "sqlite-link: runtime/sqlite/README.md records the SHA3-256 of sqlite3.c and sqlite3.h as they are"
-- "sqlite-link: the first link of a program that calls SQLite compiles the runtime and sqlite3.c once each"
+  — the vendored files are the ones the README's hashes name, so an edit to
+  either fails it.
 - "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles sqlite3.c alone again, into a new entry, and replaces the default"
+  — a builder's option replaces the default rather than joining it.
 - "sqlite-link: a program that does not call SQLite compiles no C, adds no entry and links no SQLite symbol"
-- "sqlite-link: the wasm profile refuses a module that calls SQLite with exit 2, naming wasi"
+  — a program that never names SQLite carries none of its code.
+- "sqlite-link: a string constant that names `@sqlite3_open` does not link SQLite"
+  and "sqlite-link: a string constant that names `@nishsqlite_open` does not link SQLite"
+  — only a declaration triggers the link, not text in the program.
+- "sqlite-link: the napi addon exports no `sqlite3_` symbol"
+  — an addon keeps SQLite's API out of the Node process's namespace.

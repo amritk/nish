@@ -412,7 +412,8 @@ case "$CC" in /*) ;; */*) CC="$(pwd)/$CC" ;; esac
 # statistics, no progress callback, no shared cache and no loadable extensions.
 # Expression depth is bounded by the stack, not a counter. A program has one
 # thread unless it was built with --threads. SQLite takes no mutex for one
-# thread (THREADSAFE=0) and serialises each connection for several (=2). wasi
+# thread (THREADSAFE=0). Under --threads it is multi-thread mode (=2): no mutex
+# guards a connection, so a program must not share one across threads. wasi
 # has no threads, so it gets 0 whatever the module says. NISH_SQLITE_CFLAGS is
 # appended: `read` takes its first line and splits it on whitespace, so a
 # word cannot hold a space and a quote is an ordinary character. A relative

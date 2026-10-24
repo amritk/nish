@@ -124,8 +124,8 @@ $ nish run version.ts
   runtime cache, so every later link takes about as long as one without
   SQLite.
 - **One thread, unless you build with `--threads`.** SQLite is compiled with
-  `SQLITE_THREADSAFE=0`, and with `=2` under `--threads`, so each connection is
-  used by one thread at a time.
+  `SQLITE_THREADSAFE=0`, and with `=2` under `--threads`: multi-thread mode,
+  where no mutex guards a connection, so open one per thread and never share it.
 - **The defaults are most of SQLite's
   [recommended options](https://sqlite.org/compile.html#recommended_compile_time_options).**
   Two are left out. `SQLITE_OMIT_DECLTYPE` would remove
