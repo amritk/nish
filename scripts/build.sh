@@ -3,7 +3,7 @@
 #
 #   scripts/build.sh <module.ll> [more .ll/.c files...] -o <out> [--profile debug|speed|size|wasm|wasi|napi]
 #
-# The C runtime is nine translation units and is named as one: an input
+# The C runtime is ten translation units and is named as one: an input
 # <dir>/runtime.c also compiles <dir>/runtime-os.c, the half that wraps the
 # system calls (files, directories, subprocesses, the environment, the clock),
 # <dir>/runtime-parallel.c, the half that divides a range of work across
@@ -11,8 +11,9 @@
 # from one thread's arena to another's, <dir>/runtime-host.c, the wall clock, entropy, file times and
 # signals, <dir>/runtime-net.c, the sockets of `nish:net`,
 # <dir>/runtime-simd.c, the byte searches that read a vector at a time,
-# <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions, and
-# <dir>/runtime-term.c, stdin and the terminal of `nish:term`. Each of those
+# <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions,
+# <dir>/runtime-term.c, stdin and the terminal of `nish:term`, and
+# <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`. Each of those
 # files says why they are compiled and measured apart.
 #
 # Profiles:
@@ -154,11 +155,12 @@ if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
 fi
 [ -n "$out" ] || [ -n "$objects_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
-# The runtime is nine translation units, and a caller names one: whoever passes
+# The runtime is ten translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
 # <dir>/runtime-cross.c, <dir>/runtime-host.c, <dir>/runtime-net.c, <dir>/runtime-simd.c,
-# <dir>/runtime-aes.c and <dir>/runtime-term.c compiled beside it, on every profile, wasi included:
-# runtime-simd.c takes its scalar path there unless the build adds -msimd128,
+# <dir>/runtime-aes.c, <dir>/runtime-term.c and <dir>/runtime-bytes.c compiled beside it, on every profile,
+# wasi included: runtime-simd.c and runtime-bytes.c take their scalar paths there
+# unless the build adds -msimd128,
 # runtime-aes.c compiles to an answer of 0 and stubs that nothing calls,
 # because the compiler emits no call to its kernels for wasm32, and
 # runtime-term.c reads stdin and answers "not a terminal". They were one file until the
@@ -171,7 +173,7 @@ fi
 # here keeps every one of those correct, and keeps "the runtime" one thing to
 # name from the outside. A caller that names one itself is left alone, because
 # naming one object twice is a duplicate-symbol error.
-halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-term.c"
+halves="runtime-os.c runtime-parallel.c runtime-cross.c runtime-host.c runtime-net.c runtime-simd.c runtime-aes.c runtime-term.c runtime-bytes.c"
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
     */runtime.c|runtime.c)
@@ -410,6 +412,21 @@ case "$profile" in
     done
     if [ "$aes_wanted" = 1 ] && [ "$aes_named" = 0 ]; then
       inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-aes.c")
+    fi
+    # IR of either kind that imports std/json or calls nish/bytes's byte-class runs
+    # calls runtime-bytes.c's kernels (src/kernels.ts), which compile freestanding:
+    # the scalar path, or the 128-bit one under -msimd128. It is added the same way,
+    # only for such IR and only when the caller has not named it.
+    bytes_named=0
+    bytes_wanted=0
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        */runtime-bytes.c|runtime-bytes.c) bytes_named=1 ;;
+        *.ll) if grep -q '@nish_bytes_skip_' "$i"; then bytes_wanted=1; fi ;;
+      esac
+    done
+    if [ "$bytes_wanted" = 1 ] && [ "$bytes_named" = 0 ]; then
+      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-bytes.c")
     fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.

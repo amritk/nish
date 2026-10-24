@@ -48,6 +48,21 @@
  * the prelude saturates too (`setI32LE(b, 0, -2)` writes zeros), and the
  * 64-bit functions and `f64` meet its BigInt `u64` and `i64`, which `toU8`
  * refuses.
+ *
+ * The module also has the runs a parser walks and the copy it makes of them.
+ * `skipBlank`, `skipDigits` and `skipJsonText` each answer the first index in
+ * a range whose byte is not in their class — JSON's blanks, the ASCII digits,
+ * the bytes a JSON string holds as themselves — and `copyBytes` copies a
+ * window of one array into another, or into itself, as one move:
+ *
+ *     const text: u8[] = [32, 32, 52, 50, 44]; // "  42,"
+ *     const start = skipBlank(text, 0, 5); // 2
+ *     const end = skipDigits(text, start, 5); // 4
+ *
+ * The three runs clamp their range and never panic; `copyBytes` panics on a
+ * range outside its array. Natively each is a runtime kernel
+ * (docs/LANGUAGE.md, "Byte runs"), and the runs are variable-time: they are
+ * for text, never for secret data.
  */
 
 /** The `u16` whose low byte is `b[off]` and high byte `b[off + 1]`. */
@@ -161,3 +176,215 @@ export const setF64LE = (b: u8[], off: i32, v: f64): void => setU64LE(b, off, to
 
 /** Writes `v`'s IEEE 754 bits as `setU64BE` does. */
 export const setF64BE = (b: u8[], off: i32, v: f64): void => setU64BE(b, off, toU64(f64ToBits(v)))
+
+// ---- Byte-class runs and the byte copy (WP38 S6a) ----------------------------------------
+
+/** JSON's four blanks (RFC 8259 §2): space, tab, newline and carriage return. */
+const BYTES_SPACE: i32 = 32
+const BYTES_TAB: i32 = 9
+const BYTES_NEWLINE: i32 = 10
+const BYTES_CARRIAGE_RETURN: i32 = 13
+/** `0` and `9`. */
+const BYTES_DIGIT_ZERO: i32 = 48
+const BYTES_DIGIT_NINE: i32 = 57
+/** The two printable ASCII bytes a JSON string escapes, `"` and `\`. */
+const BYTES_QUOTE: i32 = 34
+const BYTES_BACKSLASH: i32 = 92
+/** The first byte that is not ASCII, and the continuation bytes' range. */
+const BYTES_NON_ASCII: i32 = 128
+const BYTES_CONTINUATION_TOP: i32 = 191
+
+/** `to` clamped into `[0, b.length]`: where a run's scan stops. */
+const bytesRunEnd = (b: u8[], to: i32): i32 => {
+  const n: i32 = toI32(b.length)
+  if (to < 0) {
+    return 0
+  }
+  return to < n ? to : n
+}
+
+/** `from` clamped into `[0, end]`: where a run's scan starts. */
+const bytesRunStart = (from: i32, end: i32): i32 => {
+  if (from < 0) {
+    return 0
+  }
+  return from < end ? from : end
+}
+
+/**
+ * The first index in `[from, to)` whose byte is not one of JSON's blanks —
+ * space, tab, newline, carriage return — or `to` when every byte there is
+ * one. `to` is clamped to `[0, b.length]` and `from` to `[0, to]`, as
+ * `indexOfAny` clamps, so no range panics: one past the end answers the end.
+ *
+ * Natively the scan is the runtime's `nish_bytes_skip_blank`, which reads 16
+ * or 32 bytes at a time (docs/LANGUAGE.md, "Byte runs"). It is
+ * **variable-time**: how long it takes says how long the run is, so it is
+ * never for secret data.
+ */
+export const skipBlank = (b: u8[], from: i32, to: i32): i32 => {
+  const end: i32 = bytesRunEnd(b, to)
+  return skipBlankWalk(b, bytesRunStart(from, end), end)
+}
+
+/** `skipBlank` for the ASCII digits `0` to `9`: the same clamps, the same kernel family, `nish_bytes_skip_digits`. */
+export const skipDigits = (b: u8[], from: i32, to: i32): i32 => {
+  const end: i32 = bytesRunEnd(b, to)
+  return skipDigitsWalk(b, bytesRunStart(from, end), end)
+}
+
+/**
+ * `skipBlank` for the bytes a JSON string holds as themselves: printable ASCII
+ * other than `"` and `\`, and every well-formed UTF-8 sequence (RFC 3629 §4)
+ * that ends before `to`. The run stops at the first quote, backslash or
+ * control byte, and at the lead byte of a sequence that is malformed — an
+ * overlong form, a surrogate, a code point past U+10FFFF, a stray continuation
+ * byte — or cut short by `to`. So a whole JSON string body with no escape is
+ * one call, and where it stops is the byte a decoder has to look at. Natively
+ * the scan is `nish_bytes_skip_json_text`: blocks of ASCII 16 or 32 bytes at a
+ * time, each multi-byte sequence a byte at a time. Variable-time, as
+ * `skipBlank` is.
+ */
+export const skipJsonText = (b: u8[], from: i32, to: i32): i32 => {
+  const end: i32 = bytesRunEnd(b, to)
+  return skipJsonTextWalk(b, bytesRunStart(from, end), end)
+}
+
+/**
+ * `count` bytes of `src` from `from` written over `dst` from `at`, as one
+ * copy: where `dst` and `src` are one array and the two ranges overlap, the
+ * bytes land as if every one were read before any was written, as
+ * `copyWithin` promises. Where `dst.set(src, at)` copies all of `src`, this
+ * copies a window of it, and allocates nothing.
+ *
+ * A negative `count`, or a range that does not lie inside its array —
+ * `0 <= from <= from + count <= src.length` and the same for `at` in `dst` —
+ * panics `copyBytes` before any byte is written. Natively the copy is one
+ * `llvm.memmove`.
+ */
+export const copyBytes = (dst: u8[], at: i32, src: u8[], from: i32, count: i32): void => {
+  if (count < 0 || at < 0 || from < 0 || at > toI32(dst.length) - count || from > toI32(src.length) - count) {
+    panic("copyBytes: the range lies outside an array")
+  }
+  copyBytesWalk(dst, at, src, from, count)
+}
+
+/**
+ * `skipBlank`'s walk, once its range is clamped. This loop and the three
+ * below are what run under Node; natively the compiler replaces the one call
+ * each public function makes with the runtime kernel (`src/kernels.ts`), as it
+ * does `indexOfAny`'s walk, so each loop is its kernel's meaning written in
+ * the language. The `i < b.length` test never fails after the clamp; it is
+ * written because it is what proves the index.
+ */
+const skipBlankWalk = (b: u8[], from: i32, to: i32): i32 => {
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(b.length)) {
+    const c: i32 = toI32(b[i])
+    if (c !== BYTES_SPACE && c !== BYTES_TAB && c !== BYTES_NEWLINE && c !== BYTES_CARRIAGE_RETURN) {
+      return i
+    }
+    i += 1
+  }
+  return i
+}
+
+/** `skipDigits`'s walk, once its range is clamped. */
+const skipDigitsWalk = (b: u8[], from: i32, to: i32): i32 => {
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(b.length)) {
+    const c: i32 = toI32(b[i])
+    if (c < BYTES_DIGIT_ZERO || c > BYTES_DIGIT_NINE) {
+      return i
+    }
+    i += 1
+  }
+  return i
+}
+
+/**
+ * The length of the well-formed UTF-8 sequence whose lead byte is `b[i]` and
+ * that ends at or before `to`, or 0: RFC 3629's table, with the narrowed
+ * second byte after `E0`, `ED`, `F0` and `F4`.
+ */
+const bytesUtf8Length = (b: u8[], i: i32, to: i32): i32 => {
+  const lead: i32 = toI32(b[i])
+  let low: i32 = BYTES_NON_ASCII
+  let high: i32 = BYTES_CONTINUATION_TOP
+  let n: i32 = 0
+  if (lead >= 0xc2 && lead <= 0xdf) {
+    n = 2
+  } else if (lead >= 0xe0 && lead <= 0xef) {
+    n = 3
+    if (lead === 0xe0) {
+      low = 0xa0
+    }
+    if (lead === 0xed) {
+      high = 0x9f
+    }
+  } else if (lead >= 0xf0 && lead <= 0xf4) {
+    n = 4
+    if (lead === 0xf0) {
+      low = 0x90
+    }
+    if (lead === 0xf4) {
+      high = 0x8f
+    }
+  } else {
+    return 0
+  }
+  if (to - i < n) {
+    return 0
+  }
+  const second: i32 = toI32(b[i + 1])
+  if (second < low || second > high) {
+    return 0
+  }
+  let k: i32 = 2
+  while (k < n) {
+    const c: i32 = toI32(b[i + k])
+    if (c < BYTES_NON_ASCII || c > BYTES_CONTINUATION_TOP) {
+      return 0
+    }
+    k += 1
+  }
+  return n
+}
+
+/** `skipJsonText`'s walk, once its range is clamped. */
+const skipJsonTextWalk = (b: u8[], from: i32, to: i32): i32 => {
+  let i: i32 = from
+  while (i >= 0 && i < to && i < toI32(b.length)) {
+    const c: i32 = toI32(b[i])
+    if (c >= BYTES_NON_ASCII) {
+      const n: i32 = bytesUtf8Length(b, i, to)
+      if (n === 0) {
+        return i
+      }
+      i += n
+      continue
+    }
+    if (c < BYTES_SPACE || c === BYTES_QUOTE || c === BYTES_BACKSLASH) {
+      return i
+    }
+    i += 1
+  }
+  return i
+}
+
+/** `copyBytes`'s walk, once its ranges are checked: forward, or backward when `dst` is `src` and the bytes move up. */
+const copyBytesWalk = (dst: u8[], at: i32, src: u8[], from: i32, count: i32): void => {
+  if (at <= from) {
+    let k: i32 = 0
+    while (k < count) {
+      dst[at + k] = src[from + k]
+      k += 1
+    }
+    return
+  }
+  let k: i32 = count - 1
+  while (k >= 0) {
+    dst[at + k] = src[from + k]
+    k -= 1
+  }
+}
