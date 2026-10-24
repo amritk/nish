@@ -4,11 +4,12 @@ entry: tests/cases/math_ulp_samples.ts
 import Math.tan from "nish/math" -> function @nish.tanF64
 import Math.atan2 from "nish/math" -> function @nish.atan2F64
 import Math.hypot from "nish/math" -> function @nish.hypotF64
-function near(r: f64, want: f64): boolean -> @near
+function near(r: f64, want: f64, side: i32): boolean -> @near
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: side
   calls: nish_panic_overflow
   stackSites=0 stackLocals=0
-  local +0:9 d: i64 (const)
+  local +0:9 step: i32 (const)
 function report(name: string, passed: i32, total: i32, first: i32): void -> @report
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
@@ -18,29 +19,32 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via report
   calls: near nish.atan2F64 nish.hypotF64 nish.tanF64 nish_panic_overflow report
-  stackSites=8 stackLocals=8
+  stackSites=11 stackLocals=11
   local +0:9 tanIn0: f64[] (const)
-  local +66:9 tanWant: f64[] (const)
-  local +135:9 atan2In0: f64[] (const)
-  local +213:9 atan2In1: f64[] (const)
-  local +292:9 atan2Want: f64[] (const)
-  local +367:9 hypotIn0: f64[] (const)
-  local +448:9 hypotIn1: f64[] (const)
-  local +530:9 hypotWant: f64[] (const)
-  local +607:7 passed: i32 (let)
-  local +608:7 first: i32 (let)
-  local +609:12 i: i32 (let)
-  callee +610:9 near -> @near
-  callee +610:14 tanF64 -> @nish.tanF64
-  callee +616:3 report -> @report
-  local +619:12 i: i32 (let)
-  callee +620:9 near -> @near
-  callee +620:14 atan2F64 -> @nish.atan2F64
-  callee +626:3 report -> @report
-  local +629:12 i: i32 (let)
-  callee +630:9 near -> @near
-  callee +630:14 hypotF64 -> @nish.hypotF64
-  callee +636:3 report -> @report
+  local +69:9 tanWant: f64[] (const)
+  local +139:9 tanSide: i32[] (const)
+  local +151:9 atan2In0: f64[] (const)
+  local +244:9 atan2In1: f64[] (const)
+  local +335:9 atan2Want: f64[] (const)
+  local +425:9 atan2Side: i32[] (const)
+  local +440:9 hypotIn0: f64[] (const)
+  local +528:9 hypotIn1: f64[] (const)
+  local +616:9 hypotWant: f64[] (const)
+  local +697:9 hypotSide: i32[] (const)
+  local +709:7 passed: i32 (let)
+  local +710:7 first: i32 (let)
+  local +711:12 i: i32 (let)
+  callee +712:9 near -> @near
+  callee +712:14 tanF64 -> @nish.tanF64
+  callee +718:3 report -> @report
+  local +722:9 i: i32 (let)
+  callee +729:9 near -> @near
+  callee +729:14 atan2F64 -> @nish.atan2F64
+  callee +735:3 report -> @report
+  local +739:9 i: i32 (let)
+  callee +746:9 near -> @near
+  callee +746:14 hypotF64 -> @nish.hypotF64
+  callee +752:3 report -> @report
 module std/math.ts [package nish]
 function hiWord(x: f64): i32 -> @nish.hiWord
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -300,5 +304,5 @@ function hypotF64(x: f64, y: f64): f64 -> @nish.hypotF64 [exported]
   local +1:9 ay: f64 (const)
   local +2:9 a: f64 (const)
   local +3:9 b: f64 (const)
-  callee +7:28 hypotCoreF -> @nish.hypotCoreF
-  callee +9:10 hypotRest -> @nish.hypotRest
+  callee +8:28 hypotCoreF -> @nish.hypotCoreF
+  callee +10:10 hypotRest -> @nish.hypotRest

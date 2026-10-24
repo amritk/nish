@@ -43,7 +43,7 @@ function declareResultTypes(emitter: Emitter, type: i32): void -> @declareResult
   sharedWrite: via declareResultTypes
   escaping: type
   calls: Emitter.declareType TypeTable.errOf TypeTable.kindOf TypeTable.okOf TypeTable.refOf declareResultTypes resultTypeDecl
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=declareResultTypes#0 declareResultTypes#0 declareResultTypes#0 Emitter.declareType#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=declareResultTypes#0 declareResultTypes#0 declareResultTypes#0 Emitter.declareType#0
   stackSites=0 stackLocals=0
   local +0:9 kind: i32 (const)
   callee +0:16 TypeTable.kindOf -> @TypeTable.kindOf
@@ -59,7 +59,7 @@ function slotPointer(emitter: Emitter, layout: ResultLayout, receiver: string, i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat nish_str_from_i32 resultTypeName
-  pointer emitter: size=264 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer layout: size=56 writesThrough=false captured=false passedTo=resultTypeName#0
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -70,7 +70,7 @@ function loadSlot(emitter: Emitter, layout: ResultLayout, receiver: string, inde
   sharedWrite: via Emitter.llvm
   escaping: index receiver type
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emitValue nish_str_concat slotPointer
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvm#0 slotPointer#0 Emitter.alignSuffix#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 slotPointer#0 Emitter.alignSuffix#0
   pointer layout: size=56 writesThrough=false captured=false passedTo=slotPointer#1
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -84,7 +84,7 @@ function storeSlot(emitter: Emitter, layout: ResultLayout, receiver: string, ind
   sharedWrite: via Emitter.llvm
   escaping: index receiver type
   calls: Emitter.alignSuffix Emitter.llvm IRFunction.emit nish_str_concat slotPointer
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvm#0 slotPointer#0 Emitter.alignSuffix#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 slotPointer#0 Emitter.alignSuffix#0
   pointer layout: size=56 writesThrough=false captured=false passedTo=slotPointer#1
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -98,7 +98,7 @@ function loadOk(emitter: Emitter, layout: ResultLayout, receiver: string): strin
   sharedWrite: via loadSlot
   escaping: receiver
   calls: loadSlot
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=loadSlot#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=loadSlot#0
   pointer layout: size=56 writesThrough=false captured=false passedTo=loadSlot#1
   stackSites=0 stackLocals=0
   callee +0:3 loadSlot -> @loadSlot
@@ -106,7 +106,7 @@ function allocateResultIn(emitter: Emitter, layout: ResultLayout, stack: boolean
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitAlloca
   calls: Emitter.useRuntime IRFunction.emitAlloca IRFunction.emitValue nish_str_concat nish_str_from_i32 resultTypeName
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0
   pointer layout: size=56 writesThrough=false captured=false passedTo=resultTypeName#0
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -120,7 +120,7 @@ function allocateResult(emitter: Emitter, layout: ResultLayout, site: Node | nul
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via allocateResultIn
   calls: Emitter.isStackSite allocateResultIn
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=allocateResultIn#0 Emitter.isStackSite#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=allocateResultIn#0 Emitter.isStackSite#0
   pointer layout: size=56 writesThrough=false captured=false passedTo=allocateResultIn#1
   pointer site: size=40 writesThrough=false captured=false passedTo=Emitter.isStackSite#1
   stackSites=0 stackLocals=0
@@ -131,7 +131,7 @@ function construct(emitter: Emitter, type: i32, isOk: boolean, payload: string, 
   sharedWrite: via declareResultTypes
   escaping: payload type
   calls: allocateResult declareResultTypes resultLayout storeSlot
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=declareResultTypes#0 allocateResult#0 storeSlot#0 storeSlot#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=declareResultTypes#0 allocateResult#0 storeSlot#0 storeSlot#0
   pointer site: size=40 writesThrough=false captured=false passedTo=allocateResult#2
   stackSites=0 stackLocals=0
   callee +0:3 declareResultTypes -> @declareResultTypes
@@ -157,7 +157,7 @@ function emitResultConstructor(emitter: Emitter, expr: Node, name: string): stri
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf
   calls: Emitter.emitExpression Emitter.typeOf construct nish_panic_index nish_str_eq
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 construct#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.typeOf#0 Emitter.emitExpression#0 construct#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1 construct#5
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -172,7 +172,7 @@ function payloadToWord(emitter: Emitter, type: i32, value: string): string -> @p
   sharedWrite: via IRFunction.emitValue
   escaping: type value
   calls: Emitter.llvm IRFunction.emitValue TypeTable.kindOf nish_str_concat nish_str_eq
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.kindOf -> @TypeTable.kindOf
   local +3:9 isF32: boolean (const)
@@ -187,7 +187,7 @@ function wordToPayload(emitter: Emitter, type: i32, high: string): string -> @wo
   sharedWrite: via Emitter.llvm
   escaping: high type
   calls: Emitter.llvm IRFunction.emitValue TypeTable.kindOf nish_str_concat nish_str_eq
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0
   stackSites=0 stackLocals=0
   local +0:9 isF32: boolean (const)
   callee +0:17 TypeTable.kindOf -> @TypeTable.kindOf
@@ -201,7 +201,7 @@ function packArm(emitter: Emitter, type: i32, isOk: boolean, payload: string, ha
   sharedWrite: via payloadToWord
   escaping: payload type
   calls: IRFunction.emitValue TypeTable.errOf TypeTable.kindOf TypeTable.okOf nish_str_concat nish_str_from_i32 payloadToWord
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=payloadToWord#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=payloadToWord#0
   stackSites=0 stackLocals=0
   local +0:9 payloadType: i32 (const)
   callee +0:30 TypeTable.okOf -> @TypeTable.okOf
@@ -217,7 +217,7 @@ function packObject(emitter: Emitter, type: i32, object: string): string -> @pac
   sharedWrite: via loadOk
   escaping: object type
   calls: IRFunction.emitValue loadOk loadSlot nish_str_concat nish_str_from_i32 payloadToWord resultLayout
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=loadOk#0 payloadToWord#0 loadSlot#0 payloadToWord#0 loadSlot#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=loadOk#0 payloadToWord#0 loadSlot#0 payloadToWord#0 loadSlot#0
   stackSites=0 stackLocals=0
   local +0:9 layout: ResultLayout (const)
   callee +0:18 resultLayout -> @resultLayout
@@ -241,7 +241,7 @@ function emitPackedResult(emitter: Emitter, expr: Node, type: i32, isPrivate: bo
   sharedWrite: via declareResultTypes
   escaping: isPrivate type
   calls: Emitter.emitExpression armsForArm declareResultTypes isResultConstructorCall nish_panic_index nish_str_eq packArm packResultObject
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 armsForArm#0 packArm#0 packResultObject#0 Emitter.emitExpression#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 armsForArm#0 packArm#0 packResultObject#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=isResultConstructorCall#2 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
   callee +0:3 declareResultTypes -> @declareResultTypes
@@ -260,7 +260,7 @@ function packResultObject(emitter: Emitter, type: i32, object: string, isPrivate
   sharedWrite: via armsForObject
   escaping: object type
   calls: armsForObject packObject
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=armsForObject#0 packObject#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=armsForObject#0 packObject#0
   stackSites=0 stackLocals=0
   callee +0:15 armsForObject -> @armsForObject
   callee +0:54 packObject -> @packObject
@@ -269,7 +269,7 @@ function unpackResult(emitter: Emitter, type: i32, word: string, stack: boolean)
   sharedWrite: via declareResultTypes
   escaping: stack type
   calls: Emitter.llvm IRFunction.emitValue allocateResultIn declareResultTypes nish_str_concat nish_str_eq nish_str_from_i32 resultLayout storeSlot wordToPayload
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=declareResultTypes#0 allocateResultIn#0 storeSlot#0 wordToPayload#0 storeSlot#0 Emitter.llvm#0 Emitter.llvm#0 wordToPayload#0 storeSlot#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=declareResultTypes#0 allocateResultIn#0 storeSlot#0 wordToPayload#0 storeSlot#0 Emitter.llvm#0 Emitter.llvm#0 wordToPayload#0 storeSlot#0
   stackSites=0 stackLocals=0
   callee +0:3 declareResultTypes -> @declareResultTypes
   local +1:9 layout: ResultLayout (const)
@@ -304,7 +304,7 @@ function payloadToSlot(emitter: Emitter, type: i32, value: string): string -> @p
   sharedWrite: via IRFunction.emitValue
   escaping: type value
   calls: Emitter.llvm IRFunction.emitValue TypeTable.kindOf nish_str_concat nish_str_eq
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0
   stackSites=0 stackLocals=0
   callee +0:7 TypeTable.kindOf -> @TypeTable.kindOf
   callee +3:7 TypeTable.kindOf -> @TypeTable.kindOf
@@ -317,7 +317,7 @@ function slotToPayload(emitter: Emitter, type: i32, slot: string): string -> @sl
   sharedWrite: via Emitter.llvm
   escaping: slot type
   calls: Emitter.llvm IRFunction.emitValue TypeTable.kindOf nish_str_concat nish_str_eq
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0
   stackSites=0 stackLocals=0
   local +0:9 isF32: boolean (const)
   callee +0:17 TypeTable.kindOf -> @TypeTable.kindOf
@@ -331,7 +331,7 @@ function armsForArm(emitter: Emitter, type: i32, isOk: boolean, payload: string,
   sharedWrite: via payloadToSlot
   escaping: isOk payload type
   calls: IRFunction.emitValue TypeTable.errOf TypeTable.kindOf TypeTable.okOf armsFor nish_str_concat nish_str_from_i32 payloadToSlot
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=payloadToSlot#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=payloadToSlot#0
   stackSites=0 stackLocals=0
   local +0:9 payloadType: i32 (const)
   callee +0:30 TypeTable.okOf -> @TypeTable.okOf
@@ -348,7 +348,7 @@ function armsForObject(emitter: Emitter, type: i32, object: string): string -> @
   sharedWrite: via loadOk
   escaping: object type
   calls: IRFunction.emitValue loadOk loadSlot nish_str_concat payloadToSlot resultLayout
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=loadOk#0 payloadToSlot#0 loadSlot#0 payloadToSlot#0 loadSlot#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=loadOk#0 payloadToSlot#0 loadSlot#0 payloadToSlot#0 loadSlot#0
   stackSites=0 stackLocals=0
   local +0:9 layout: ResultLayout (const)
   callee +0:18 resultLayout -> @resultLayout
@@ -369,7 +369,7 @@ function unpackArms(emitter: Emitter, type: i32, arms: string, stack: boolean): 
   sharedWrite: via declareResultTypes
   escaping: stack type
   calls: IRFunction.emitValue allocateResultIn declareResultTypes nish_str_concat resultLayout slotToPayload storeSlot
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=declareResultTypes#0 allocateResultIn#0 storeSlot#0 slotToPayload#0 storeSlot#0 slotToPayload#0 storeSlot#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=declareResultTypes#0 allocateResultIn#0 storeSlot#0 slotToPayload#0 storeSlot#0 slotToPayload#0 storeSlot#0
   stackSites=0 stackLocals=0
   callee +0:3 declareResultTypes -> @declareResultTypes
   local +1:9 layout: ResultLayout (const)
@@ -394,7 +394,7 @@ function unpackReturnedResult(emitter: Emitter, type: i32, value: string, stack:
   sharedWrite: via unpackArms
   escaping: stack type value
   calls: unpackArms unpackResult
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=unpackArms#0 unpackResult#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=unpackArms#0 unpackResult#0
   stackSites=0 stackLocals=0
   callee +0:12 unpackArms -> @unpackArms
   callee +2:10 unpackResult -> @unpackResult
@@ -402,7 +402,7 @@ function emitResultReturn(emitter: Emitter, value: string): void -> @emitResultR
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.llvmAbi FunctionSig.visibleOutside IRFunction.emit internalErrorFor nish_exit nish_str_concat privateAbi
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0
   stackSites=0 stackLocals=0
   local +0:9 sig: FunctionSig | null (const)
   callee +2:18 internalErrorFor -> @internalErrorFor
@@ -416,7 +416,7 @@ function emitResultReturningCall(emitter: Emitter, call: string, type: i32, site
   sharedWrite: via IRFunction.emitValue
   escaping: call isPrivate type
   calls: Emitter.isStackSite IRFunction.emitValue unpackReturnedResult
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=unpackReturnedResult#0 Emitter.isStackSite#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=unpackReturnedResult#0 Emitter.isStackSite#0
   pointer site: size=40 writesThrough=false captured=false passedTo=Emitter.isStackSite#1
   stackSites=0 stackLocals=0
   local +0:9 returned: string (const)
@@ -428,7 +428,7 @@ function emitResultProperty(emitter: Emitter, expr: Node, receiver: i32): string
   sharedWrite: via declareResultTypes
   escaping: receiver
   calls: Emitter.emitExpression declareResultTypes loadOk loadSlot nish_panic_index nish_str_eq resultLayout
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 loadSlot#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 loadSlot#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 declareResultTypes -> @declareResultTypes
@@ -444,7 +444,7 @@ function emitOrReturn(emitter: Emitter, expr: Node, receiver: i32): string -> @e
   sharedWrite: via nish_exit
   escaping: receiver
   calls: Emitter.emitExpression Emitter.emitScopeExit Emitter.llvm FunctionSig.visibleOutside IRFunction.emit IRFunction.newBlock IRFunction.placeBlock TypeTable.resultByValue armsForArm construct declareResultTypes emitResultReturn internalErrorFor loadOk loadSlot nish_exit nish_panic_index nish_str_concat packArm privateAbi resultLayout
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=declareResultTypes#0 declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 armsForArm#0 packArm#0 Emitter.emitScopeExit#0 emitResultReturn#0 construct#0 Emitter.emitScopeExit#0 Emitter.llvm#0 loadSlot#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=declareResultTypes#0 declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 armsForArm#0 packArm#0 Emitter.emitScopeExit#0 emitResultReturn#0 construct#0 Emitter.emitScopeExit#0 Emitter.llvm#0 loadSlot#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 sig: FunctionSig | null (const)
@@ -487,7 +487,7 @@ function emitUnwrapOr(emitter: Emitter, expr: Node, receiver: i32): string -> @e
   sharedWrite: via declareResultTypes
   escaping: receiver
   calls: Emitter.emitExpression Emitter.llvm IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock declareResultTypes loadOk loadSlot nish_panic_index nish_str_concat resultLayout
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 Emitter.emitExpression#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 loadSlot#0 Emitter.emitExpression#0 Emitter.llvm#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 declareResultTypes -> @declareResultTypes
@@ -526,7 +526,7 @@ function emitExpect(emitter: Emitter, expr: Node, receiver: i32): string -> @emi
   sharedWrite: via declareResultTypes
   escaping: receiver
   calls: Emitter.emitExpression IRFunction.emit IRFunction.newBlock IRFunction.placeBlock declareResultTypes emitPanicTail loadOk loadSlot nish_panic_index nish_str_concat resultLayout
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 emitPanicTail#0 Emitter.emitExpression#0 loadSlot#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=declareResultTypes#0 Emitter.emitExpression#0 loadOk#0 emitPanicTail#0 Emitter.emitExpression#0 loadSlot#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 declareResultTypes -> @declareResultTypes
@@ -552,7 +552,7 @@ function emitDiscriminantTest(emitter: Emitter, expr: Node, receiver: i32, posit
   sharedWrite: via declareResultTypes
   escaping: receiver
   calls: Emitter.emitExpression IRFunction.emitValue declareResultTypes loadOk nish_panic_index nish_str_concat resultLayout
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=declareResultTypes#0 loadOk#0 Emitter.emitExpression#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=declareResultTypes#0 loadOk#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 declareResultTypes -> @declareResultTypes
@@ -568,7 +568,7 @@ function emitResultMethod(emitter: Emitter, expr: Node, receiver: i32): string -
   sharedWrite: via emitDiscriminantTest
   escaping: receiver
   calls: emitDiscriminantTest emitExpect emitOrReturn emitUnwrapOr nish_panic_index nish_str_eq
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitDiscriminantTest#0 emitOrReturn#0 emitUnwrapOr#0 emitExpect#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitDiscriminantTest#0 emitOrReturn#0 emitUnwrapOr#0 emitExpect#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitDiscriminantTest#1 emitOrReturn#1 emitUnwrapOr#1 emitExpect#1
   stackSites=0 stackLocals=0
   local +0:9 access: Node (const)

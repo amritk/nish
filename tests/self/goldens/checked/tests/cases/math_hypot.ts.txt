@@ -25,6 +25,12 @@ function main(): i32 -> @nish_main [exported entry]
   callee +5:18 hyp -> @hyp
   callee +5:44 hyp -> @hyp
   callee +5:77 hyp -> @hyp
+  callee +7:8 hyp -> @hyp
+  callee +7:48 hyp -> @hyp
+  callee +7:88 hyp -> @hyp
+  callee +7:133 hyp -> @hyp
+  callee +7:174 hyp -> @hyp
+  callee +7:214 hyp -> @hyp
 module std/math.ts [package nish]
 function hiWord(x: f64): i32 -> @nish.hiWord
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -284,5 +290,5 @@ function hypotF64(x: f64, y: f64): f64 -> @nish.hypotF64 [exported]
   local +1:9 ay: f64 (const)
   local +2:9 a: f64 (const)
   local +3:9 b: f64 (const)
-  callee +7:28 hypotCoreF -> @nish.hypotCoreF
-  callee +9:10 hypotRest -> @nish.hypotRest
+  callee +8:28 hypotCoreF -> @nish.hypotCoreF
+  callee +10:10 hypotRest -> @nish.hypotRest

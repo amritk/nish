@@ -68,7 +68,7 @@ function noteJsonOptions(ctx: CheckContext, owner: StructInfo, decl: Node): void
   escaping: decl
   calls: CheckContext.error nish_panic_index nish_str_concat
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer owner: size=152 writesThrough=true captured=false
+  pointer owner: size=168 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee -3:5 CheckContext.error -> @CheckContext.error
@@ -103,7 +103,7 @@ function jsonNotLiteral(ctx: CheckContext, info: StructInfo, node: Node, where: 
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error
@@ -113,7 +113,7 @@ function jsonOptionField(ctx: CheckContext, info: StructInfo, node: Node, option
   escaping: name
   calls: CheckContext.error StructInfo.field nish_str_concat
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer info: size=152 writesThrough=false captured=false passedTo=StructInfo.field#0
+  pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.field#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:9 field: FieldInfo | null (const)
@@ -124,7 +124,7 @@ function jsonDuplicate(ctx: CheckContext, info: StructInfo, node: Node, detail: 
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
-  pointer info: size=152 writesThrough=false captured=false
+  pointer info: size=168 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   callee +0:3 CheckContext.error -> @CheckContext.error
@@ -133,7 +133,7 @@ function jsonReadRename(ctx: CheckContext, info: StructInfo, value: Node): void 
   sharedWrite: +0:7
   calls: CheckContext.error StringSet.add StringSet.constructor jsonDuplicate jsonIsOtherLiteral jsonIsStringLiteral jsonIsUtf8 jsonNotLiteral jsonOptionField jsonStringLiteral nish_panic_index nish_str_concat
   pointer ctx: size=288 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0 CheckContext.error#0 jsonNotLiteral#0
-  pointer info: size=152 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonOptionField#1 jsonDuplicate#1 jsonNotLiteral#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonOptionField#1 jsonDuplicate#1 jsonNotLiteral#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=1 stackLocals=1
   callee -29:5 jsonNotLiteral -> @jsonNotLiteral
@@ -159,7 +159,7 @@ function jsonReadOptional(ctx: CheckContext, info: StructInfo, value: Node): voi
   sharedWrite: +0:5
   calls: CheckContext.error jsonDuplicate jsonIsStringLiteral jsonNotLiteral jsonOptionField jsonStringLiteral nish_str_concat
   pointer ctx: size=288 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0
-  pointer info: size=152 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonNotLiteral#1 jsonOptionField#1 jsonDuplicate#1
+  pointer info: size=168 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonNotLiteral#1 jsonOptionField#1 jsonDuplicate#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=0 stackLocals=0
   callee -28:5 jsonNotLiteral -> @jsonNotLiteral
@@ -176,7 +176,7 @@ function checkJsonOptions(ctx: CheckContext, info: StructInfo): void -> @checkJs
   sharedWrite: +0:5
   calls: CheckContext.error CheckedProgram.isJsonTyped StringSet.add StringSet.constructor TypeTable.typeName jsonDuplicate jsonNotLiteral jsonOptionsShapeMessage jsonReadOptional jsonReadRename nish_panic_index nish_str_concat nish_str_eq
   pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 jsonNotLiteral#0 CheckContext.error#0 jsonDuplicate#0 jsonReadRename#0 jsonReadOptional#0 jsonDuplicate#0
-  pointer info: size=152 writesThrough=true captured=false passedTo=jsonNotLiteral#1 jsonDuplicate#1 jsonReadRename#1 jsonReadOptional#1 jsonDuplicate#1
+  pointer info: size=168 writesThrough=true captured=false passedTo=jsonNotLiteral#1 jsonDuplicate#1 jsonReadRename#1 jsonReadOptional#1 jsonDuplicate#1
   stackSites=2 stackLocals=2
   callee -1:67 CheckedProgram.isJsonTyped -> @CheckedProgram.isJsonTyped
   local +2:9 decl: Node | null (const)
@@ -309,7 +309,7 @@ function jsonClasses(program: CheckedProgram, table: TypeTable, root: StructInfo
   calls: StringSet.add StringSet.constructor jsonFieldOf jsonValuesOf nish_array_grow
   pointer program: size=656 writesThrough=false captured=false passedTo=jsonFieldOf#0
   pointer table: size=96 writesThrough=false captured=false passedTo=jsonFieldOf#1
-  pointer root: size=152 writesThrough=true captured=true
+  pointer root: size=168 writesThrough=true captured=true
   stackSites=2 stackLocals=2
   local +0:9 out: StructInfo[] (const)
   local +1:9 seen: StringSet (const)
@@ -331,7 +331,7 @@ function jsonValues(program: CheckedProgram, table: TypeTable, root: StructInfo)
   calls: jsonClasses jsonFieldOf jsonValuesOf
   pointer program: size=656 writesThrough=false captured=false passedTo=jsonClasses#0 jsonFieldOf#0
   pointer table: size=96 writesThrough=false captured=false passedTo=jsonClasses#1 jsonFieldOf#1
-  pointer root: size=152 writesThrough=true captured=true passedTo=jsonClasses#2
+  pointer root: size=168 writesThrough=true captured=true passedTo=jsonClasses#2
   stackSites=0 stackLocals=0
   local +0:9 out: JsonField[] (const)
   local +1:14 info: StructInfo (const)
@@ -350,7 +350,7 @@ function jsonMadeClasses(program: CheckedProgram, table: TypeTable, root: Struct
   calls: StringSet.add StringSet.constructor jsonMakes jsonValues nish_array_grow
   pointer program: size=656 writesThrough=false captured=false passedTo=jsonValues#0
   pointer table: size=96 writesThrough=false captured=false passedTo=jsonValues#1
-  pointer root: size=152 writesThrough=true captured=true passedTo=jsonValues#2
+  pointer root: size=168 writesThrough=true captured=true passedTo=jsonValues#2
   stackSites=1 stackLocals=1
   local +0:9 out: StructInfo[] (const)
   local +1:9 made: StringSet (const)
@@ -366,7 +366,7 @@ function jsonMaps(program: CheckedProgram, table: TypeTable, root: StructInfo, m
   calls: StringSet.add StringSet.constructor jsonMakes jsonValues nish_array_grow
   pointer program: size=656 writesThrough=false captured=false passedTo=jsonValues#0
   pointer table: size=96 writesThrough=false captured=false passedTo=jsonValues#1
-  pointer root: size=152 writesThrough=true captured=true passedTo=jsonValues#2
+  pointer root: size=168 writesThrough=true captured=true passedTo=jsonValues#2
   stackSites=1 stackLocals=1
   local +0:9 out: StructInfo[] (const)
   local +1:9 seen: StringSet (const)
@@ -425,7 +425,7 @@ function jsonRouteNames(program: CheckedProgram, table: TypeTable, role: i32, ro
   calls: StringSet.add StringSet.constructor jsonDecodeMethod jsonEncodeHelper jsonScalarMethod jsonValues nish_alloc_struct
   pointer program: size=656 writesThrough=false captured=false passedTo=jsonValues#0
   pointer table: size=96 writesThrough=false captured=false passedTo=jsonValues#1
-  pointer root: size=152 writesThrough=true captured=true passedTo=jsonValues#2
+  pointer root: size=168 writesThrough=true captured=true passedTo=jsonValues#2
   stackSites=2 stackLocals=0
   local +0:9 names: StringSet (const)
   callee +0:17 new StringSet -> @StringSet.constructor

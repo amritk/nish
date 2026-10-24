@@ -283,5 +283,5 @@ function hypotF64(x: f64, y: f64): f64 -> @nish.hypotF64 [exported]
   local +1:9 ay: f64 (const)
   local +2:9 a: f64 (const)
   local +3:9 b: f64 (const)
-  callee +7:28 hypotCoreF -> @nish.hypotCoreF
-  callee +9:10 hypotRest -> @nish.hypotRest
+  callee +8:28 hypotCoreF -> @nish.hypotCoreF
+  callee +10:10 hypotRest -> @nish.hypotRest

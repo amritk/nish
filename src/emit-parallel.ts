@@ -34,6 +34,7 @@
 // source, and a function without one may call one that has one.
 
 import { Emitter, LoopTarget } from "./emit"
+import { openedHandle } from "./handles"
 import { isScalarArgument } from "./escape"
 import { loadField, structFieldPointer, structInfoOf } from "./emit-classes"
 import { internalErrorFor } from "./ice"
@@ -775,26 +776,17 @@ const atomicRmwOperation = (name: string): string => {
 }
 
 /**
- * A `using` declaration has just been emitted: its scope is open until the
+ * A `using` declarator has just been emitted: its scope is open until the
  * block that declared it ends. The scope's address, as the `i8*` its tasks
  * are filed under, is read once here; every exit of the block is dominated by
  * the declaration, so each join can name the same value. A `using a = arena()`
- * goes on the same stack, as the mark its local holds, and a guard as the
- * address of its lock word, so that every exit closes the three kinds in the
- * reverse of the order they opened in.
+ * goes on the same stack, as the mark its local holds, a guard as the address
+ * of its lock word, and a handle (WP40 H1.2) as the object whose pointer it
+ * closes, so that every exit closes the four kinds in the reverse of the order
+ * they opened in. What it allocates is the name of a value every exit of the
+ * block reads, so it is kept on purpose.
  */
-export const openScope = (emitter: Emitter, list: Node): void => {
-  for (const decl of list.children) {
-    openOneScope(emitter, decl)
-  }
-}
-
-/**
- * One declarator of `openScope`'s. What it allocates is the name of a value
- * every exit of the block reads, so it is kept on purpose, and a function of
- * its own keeps the declarator loop from owning it.
- */
-const openOneScope = (emitter: Emitter, decl: Node): void => {
+export const openScope = (emitter: Emitter, decl: Node): void => {
   const local = emitter.program.nodeLocals[decl.id]
   if (local === null) {
     process.exit(internalErrorFor("emitter: a `using` declaration with no local recorded", emitter.opts.json))
@@ -803,19 +795,21 @@ const openOneScope = (emitter: Emitter, decl: Node): void => {
   const init = unwrapParens(decl.children[2])
   const arena = isArenaCall(emitter.program, init)
   const lock = isLockCall(emitter.program, init)
+  const handle = openedHandle(emitter.program, emitter.table, init)
   if (lock) {
     const info = structInfoOf(emitter, local.type)
     emitter.openScopes.push(structFieldPointer(emitter, info, value, lockWord(emitter, info, "word")))
+  } else if (arena || handle !== null) {
+    emitter.openScopes.push(value)
   } else {
-    emitter.openScopes.push(
-      arena ? value : emitter.fn.emitValue(`bitcast ${emitter.llvm(local.type)} ${value} to i8*`)
-    )
+    emitter.openScopes.push(emitter.fn.emitValue(`bitcast ${emitter.llvm(local.type)} ${value} to i8*`))
   }
   emitter.openScopeLoops.push(emitter.loops.length)
   emitter.openScopeArenas.push(arena)
   emitter.openScopeLocks.push(lock)
+  emitter.openScopeHandles.push(handle)
   const none: string[] = []
-  emitter.openScopeSeals.push(arena || lock ? none : scopeSeals(emitter, decl))
+  emitter.openScopeSeals.push(arena || lock || handle !== null ? none : scopeSeals(emitter, decl))
 }
 
 /**
@@ -839,9 +833,53 @@ const scopeSeals = (emitter: Emitter, decl: Node): string[] => {
   return seals
 }
 
-/** Close open entry `i`: join a scope's tasks, release an arena to its mark, or give a lock back. */
+/** Emit `call`, whose result is dropped: a call that yields a value still takes an SSA number. */
+const emitDropped = (emitter: Emitter, call: string, result: string): void => {
+  if (result === "void") {
+    emitter.fn.emit(call)
+  } else {
+    emitter.fn.emitValue(call)
+  }
+}
+
+/**
+ * WP40 H1.2: close the pointer the handle `object` owns, exactly as its
+ * `[Symbol.dispose]` does: one call of the close it names on the field, behind
+ * a `null` test only when the dispose writes one (§4b shape 2) and the field
+ * may be `null`. Shape 1 passes the field as it is, `null` included. The
+ * field is read here rather than when the `using` opened, because a dispose
+ * reads it when it runs.
+ */
+const closeHandle = (emitter: Emitter, info: StructInfo, object: string): void => {
+  const close = info.handleClose
+  if (close === null) {
+    process.exit(internalErrorFor(`emitter: handle class \`${info.name}\` has no close`, emitter.opts.json))
+  }
+  const field = lockWord(emitter, info, info.handleField)
+  const pointer = loadField(emitter, info, object, field)
+  const param = emitter.llvmAbi(close.paramTypes[0], false)
+  const result = emitter.llvmAbi(close.returnType, false)
+  const call = `call ${result} @${close.name}(${param} ${pointer})`
+  if (!info.handleTested) {
+    emitDropped(emitter, call, result)
+    return
+  }
+  const open = emitter.fn.newBlock("handle.close")
+  const done = emitter.fn.newBlock("handle.closed")
+  const isNull = emitter.fn.emitValue(`icmp eq ${emitter.llvm(field.type)} ${pointer}, null`)
+  emitter.fn.emit(`br i1 ${isNull}, label %${done.label}, label %${open.label}`)
+  emitter.fn.placeBlock(open)
+  emitDropped(emitter, call, result)
+  emitter.fn.emit(`br label %${done.label}`)
+  emitter.fn.placeBlock(done)
+}
+
+/** Close open entry `i`: join a scope's tasks, release an arena to its mark, give a lock back, or close a handle. */
 const closeScope = (emitter: Emitter, i: i32): void => {
-  if (emitter.openScopeLocks[i]) {
+  const handle = emitter.openScopeHandles[i]
+  if (handle !== null) {
+    closeHandle(emitter, handle, emitter.openScopes[i])
+  } else if (emitter.openScopeLocks[i]) {
     emitter.fn.emit(`store atomic i32 0, i32* ${emitter.openScopes[i]} release, align 4`)
   } else if (emitter.openScopeArenas[i]) {
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${emitter.openScopes[i]})`)
@@ -862,13 +900,15 @@ const closeScope = (emitter: Emitter, i: i32): void => {
  * opened inside the loop it targets. They stay open for the paths that did
  * not take this exit. A `return` passes `arenas` false: its scopes join
  * before its value is computed, which may read what the tasks stored, and its
- * arenas and locks are given back after (`Emitter.emitScopeExit`), because the
- * value may read what the block allocated or what a guard reaches.
+ * arenas, locks and handles are given back after (`Emitter.emitScopeExit`),
+ * because the value may read what the block allocated, what a guard reaches
+ * or what a handle's pointer reads.
  */
 export const emitScopeJoins = (emitter: Emitter, minLoops: i32, arenas: boolean): void => {
   let i = emitter.openScopes.length - 1
   while (i >= 0) {
-    const later = emitter.openScopeArenas[i] || emitter.openScopeLocks[i]
+    const later =
+      emitter.openScopeArenas[i] || emitter.openScopeLocks[i] || emitter.openScopeHandles[i] !== null
     if (emitter.openScopeLoops[i] >= minLoops && (arenas || !later)) {
       closeScope(emitter, i)
     }
@@ -894,23 +934,35 @@ export const closeBlockScopes = (emitter: Emitter, count: i32): void => {
     emitter.openScopeLoops.pop()
     emitter.openScopeArenas.pop()
     emitter.openScopeLocks.pop()
+    emitter.openScopeHandles.pop()
     emitter.openScopeSeals.pop()
   }
 }
 
-/** Give back every lock still held, innermost first: a function's exit, after its value (`emitScopeExit`). */
-export const emitLockReleases = (emitter: Emitter): void => {
+/**
+ * Give back every lock still held and close every handle still open, in one
+ * pass, innermost first: a function's exit, after its value
+ * (`emitScopeExit`), which may read through a guard or a handle.
+ */
+export const emitHeldReleases = (emitter: Emitter): void => {
   let i = emitter.openScopes.length - 1
   while (i >= 0) {
-    if (emitter.openScopeLocks[i]) {
+    if (emitter.openScopeLocks[i] || emitter.openScopeHandles[i] !== null) {
       closeScope(emitter, i)
     }
     i = i - 1
   }
 }
 
-/** Whether a lock is held where the emitter stands, which keeps a `return`'s call from being a tail call. */
-export const holdsLock = (emitter: Emitter): boolean => emitter.openScopeLocks.indexOf(true) >= 0
+/** Whether a lock is held or a handle open where the emitter stands, which keeps a `return`'s call from being a tail call. */
+export const holdsRelease = (emitter: Emitter): boolean => {
+  for (const handle of emitter.openScopeHandles) {
+    if (handle !== null) {
+      return true
+    }
+  }
+  return emitter.openScopeLocks.indexOf(true) >= 0
+}
 
 // ---- WP29 P3: a channel of scalars ---------------------------------------------------
 //

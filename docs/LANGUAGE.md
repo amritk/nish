@@ -3979,7 +3979,9 @@ breaks one is refused with that rule's own code:
   third disposable beside `scope()` and `arena()`, and one `using` takes one
   lock (a second declarator's `lock()` is R5's, below). A lock may share a
   `using` with a scope opened before it or with an arena on either side, and
-  the declarators close in the reverse of the order they opened, so in
+  the declarators close in the reverse of the order they opened, each opening
+  before the next declarator's initialiser runs (an `orReturn()` there closes
+  the ones before it), so in
   `using a = arena(), g = m.lock()` the lock is given back before the arena
   releases (`tests/link/thread_mutex_using_mixed`); a scope opened after the
   lock, `using g = m.lock(), s = scope()`, is R5's
@@ -4680,6 +4682,60 @@ On a 1 MiB text with a match every 4,099 bytes, the kernel scans at 14 GB/s
 with AVX2 and 7 GB/s on the 16-byte path, against 1.6 GB/s for the same
 walker compiled as written (`bench/index-of-any.ts`).
 
+### Byte runs: `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` in `nish/bytes`
+
+The three runs answer the first index in `[from, to)` of a `u8[]` whose byte
+is not in their class, or `to` when every byte there is; `copyBytes` copies a
+window of one array into another, or into itself
+([wp38-simd.md](wp38-simd.md), S6a). They are the scans and the copy a parser
+spends its time in, and `std/json` is written over them.
+
+```typescript
+import { copyBytes, skipBlank, skipDigits, skipJsonText } from "nish/bytes";
+
+export const main = (): i32 => {
+  const text: u8[] = [32, 10, 52, 50, 44, 34, 104, 105, 34]; // " \n42,\"hi\""
+  const start = skipBlank(text, 0, 9);
+  console.log(`${start} ${skipDigits(text, start, 9)}`);   // 2 4
+  console.log(`${skipJsonText(text, 6, 9)}`);              // 8, the closing quote
+  const word: u8[] = [0, 0];
+  copyBytes(word, 0, text, 6, 2);
+  console.log(`${word[0]} ${word[1]}`);                    // 104 105
+  return 0;
+};
+```
+
+- **The classes.** `skipBlank` skips JSON's four blanks (space, tab, newline,
+  carriage return) and `skipDigits` the ASCII digits. `skipJsonText` skips
+  what a JSON string holds as itself: printable ASCII other than `"` and `\`
+  (DEL included, which JSON does not escape), and every well-formed UTF-8
+  sequence (RFC 3629 §4) that ends before `to`. It stops at a quote, a
+  backslash or a control byte, and at the lead byte of a sequence that is
+  overlong, a surrogate, past U+10FFFF, a stray continuation byte or cut short
+  by `to`, so where it stops is the byte a decoder has to look at.
+- **The runs never panic.** `to` is clamped into `[0, b.length]` and `from`
+  into `[0, to]`, as `indexOfAny` clamps: a negative `from` scans from the
+  start, and a `from` at or past `to` answers it
+  (`tests/link/std_bytes_runs`).
+- **`copyBytes` panics on a range outside its array.** A negative `count`, or
+  a window that does not lie inside `src` or `dst`, panics
+  `copyBytes: the range lies outside an array` before any byte is written
+  (`tests/link/std_bytes_copy_outside`). Overlapping ranges of one array copy
+  as if every byte were read before any was written, as `copyWithin` does.
+- **The walkers are the meaning.** Each public function clamps or checks its
+  range, then makes one call to a private walker, a plain loop over the bytes,
+  which is what runs under Node. Natively the compiler recognises that call by
+  module and name (`src/kernels.ts`), as it does `indexOfAny`'s, and emits the
+  runtime's `nish_bytes_skip_blank`, `nish_bytes_skip_digits` or
+  `nish_bytes_skip_json_text` (`runtime/runtime-bytes.c`) in its place, or one
+  `llvm.memmove` for the copy. The kernels pick a scalar, a 16-byte (SSE2,
+  NEON or wasm SIMD) or a 32-byte (AVX2) path on their first call, and
+  `NISH_SIMD=scalar|base|avx2` pins it, except in a freestanding wasm32 build,
+  which has no environment to read it from.
+- **The runs are variable-time.** How long one takes says how long the run is,
+  so they are for text, never for secret data: `std/crypto` does not call
+  them.
+
 ### Interfaces and object literals
 
 ```ts
@@ -5173,14 +5229,36 @@ class File {
 const first = (f: File): i32 => f.read();
 ```
 
-**`using` of a handle class is not lowered yet.** The class, its methods and
-every function that borrows one are checked, and `using f = new File(p)` is
-`` `using` of handle class `File` is not lowered yet: until a release emits its
-close, hold the `CPtr` in a local and close it yourself `` (NL2573,
-`reject_ffi_handle_using`) until the compiler emits the close at every exit of
-the block. Until then, a program holds the `CPtr` in a local and calls the
-close itself, as the declared-function examples above do; what the rules
-below fix is the shape a program will open a `File` with.
+**`using` of a handle class closes it at every exit of its block, once.**
+`using f = new File(p)` opens `f` as soon as its initialiser returns, before a
+later declarator's initialiser runs, and calls the close its
+`[Symbol.dispose]` names on every way control leaves the block: falling off
+its end, `return`, `break`, `continue`, and an `orReturn()` that propagates,
+including one in a later declarator's initialiser. A `return` computes its
+value first and closes after it, so `return twice(n)` inside the block is not
+a tail call. Each declarator opens before the next one's initialiser runs.
+Falling off the end, `break` and `continue` close the declarators in the
+reverse of the order they opened, beside an arena, a scope or a lock in the
+same `using`. A `return` or a propagating `orReturn()` joins every `scope()`
+before its value is computed (the value may read what the tasks stored), then
+closes the handles and gives back the locks, innermost first, then releases
+the arenas (`ffi_handle_file`, `ffi_handle_exits`, `ffi_handle_arena`,
+`ffi_handle_shapes`, `tests/link/ffi_handle_mutex`,
+`tests/link/using_declarator_exit`). The close is inlined as the dispose spells
+it: the field is loaded and the C function called with it, behind a `null`
+test only when the dispose writes one (`const p = this.f; if (p !== null)`);
+a dispose that is the single call `close(this.f)` calls it with the field as
+it is, `null` included (`ffi_handle_shapes`). The `using` is where the program reaches `ffi`, so
+`--deny ffi` refuses it and names the close (`caps_ffi_handle`,
+`reject_ffi_handle_deny`).
+
+A panic and `process.exit` do not close: the process ends, and the operating
+system takes back the descriptor. What it does not take back is what a C
+library still buffers. `panic`, `expect` and a failed range entry end through
+`exit(1)`, which flushes stdio, but a failed check and out of memory end
+through `_exit(1)`, which does not, so bytes written to a `FILE *` with
+`fwrite` and not yet flushed are lost on a bounds panic. Flush (`fflush`)
+before code that may panic when those bytes matter.
 
 - **The class.** Exactly one `CPtr` or `CPtr | null` field, `readonly` and with
   no initialiser (`reject_ffi_handle_two_fields`, `_field_mutable`,
@@ -8132,7 +8210,7 @@ const tally = (rows: string[]): i32 => {
   | stored into an element, `xs[i] = v` | likewise | NL2420 | `reject_using_arena_element` |
   | stored into memory any other way: handed to a callee that keeps it, held by an object or array literal | always: the escape analysis stops following a stored value | NL2421 | `reject_using_arena_stored` |
   | `push` onto an array | the array is not a `const` the block binds to a fresh array, whatever is pushed: a `push` moves the array's storage into the arena | NL2422 | `reject_using_arena_push` |
-  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return` |
+  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return`, `reject_using_arena_declarator_or_return` |
   | a call to a function that stores an allocation into memory | always | NL2424 | `reject_using_arena_callee_stores` |
   | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
   | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |

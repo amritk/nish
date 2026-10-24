@@ -27,7 +27,7 @@ function branch(emitter: Emitter, target: IRBlock): void -> @branch
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emit
   calls: IRFunction.emit nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer target: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 IRFunction.emit -> @IRFunction.emit
@@ -35,7 +35,7 @@ function condBranch(emitter: Emitter, cond: string, ifTrue: IRBlock, ifFalse: IR
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emit
   calls: IRFunction.emit nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer ifTrue: size=16 writesThrough=false captured=false
   pointer ifFalse: size=16 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -44,7 +44,7 @@ function fallThrough(emitter: Emitter, target: IRBlock): boolean -> @fallThrough
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via branch
   calls: IRBlock.terminated IRFunction.currentBlock branch
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=branch#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=branch#0
   pointer target: size=16 writesThrough=false captured=false passedTo=branch#1
   stackSites=0 stackLocals=0
   callee +0:7 IRBlock.terminated -> @IRBlock.terminated
@@ -61,7 +61,7 @@ function emitLoopBody(emitter: Emitter, body: Node, loop: LoopTarget): void -> @
   sharedWrite: +0:3
   escaping: loop
   calls: Emitter.emitStatement nish_array_grow nish_panic_index
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitStatement#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitStatement#0
   pointer body: size=40 writesThrough=false captured=false passedTo=Emitter.emitStatement#1
   pointer loop: size=48 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -70,7 +70,7 @@ function emitIf(emitter: Emitter, stmt: Node): void -> @emitIf [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.newBlock
   calls: Emitter.emitExpression Emitter.emitStatement IRFunction.newBlock IRFunction.placeBlock condBranch fallThrough nish_panic_index
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 condBranch#0 Emitter.emitStatement#0 fallThrough#0 Emitter.emitStatement#0 fallThrough#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 condBranch#0 Emitter.emitStatement#0 fallThrough#0 Emitter.emitStatement#0 fallThrough#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -96,7 +96,7 @@ function emitWhile(emitter: Emitter, stmt: Node): void -> @emitWhile [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.newBlock
   calls: Emitter.emitExpression IRFunction.emit IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor branch closeHeaderScope condBranch emitLoopBody fallThrough isAlwaysTrue nish_alloc_struct nish_panic_index openHeaderScope
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=openHeaderScope#0 branch#0 condBranch#0 Emitter.emitExpression#0 emitLoopBody#0 fallThrough#0 closeHeaderScope#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=openHeaderScope#0 branch#0 condBranch#0 Emitter.emitExpression#0 emitLoopBody#0 fallThrough#0 closeHeaderScope#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=openHeaderScope#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -124,7 +124,7 @@ function emitDo(emitter: Emitter, stmt: Node): void -> @emitDo [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.newBlock
   calls: Emitter.emitExpression IRFunction.emit IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor branch closeHeaderScope condBranch emitLoopBody fallThrough isAlwaysTrue nish_alloc_struct nish_panic_index openHeaderScope
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=openHeaderScope#0 branch#0 emitLoopBody#0 fallThrough#0 condBranch#0 Emitter.emitExpression#0 closeHeaderScope#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=openHeaderScope#0 branch#0 emitLoopBody#0 fallThrough#0 condBranch#0 Emitter.emitExpression#0 closeHeaderScope#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=openHeaderScope#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -152,7 +152,7 @@ function emitFor(emitter: Emitter, stmt: Node): void -> @emitFor [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.newBlock
   calls: Emitter.emitExpression Emitter.emitVariableDeclarations IRFunction.emit IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor branch closeHeaderScope condBranch emitLoopBody fallThrough isAlwaysTrue nish_alloc_struct nish_panic_index openHeaderScope
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitVariableDeclarations#0 Emitter.emitExpression#0 openHeaderScope#0 branch#0 condBranch#0 Emitter.emitExpression#0 emitLoopBody#0 fallThrough#0 Emitter.emitExpression#0 branch#0 fallThrough#0 closeHeaderScope#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitVariableDeclarations#0 Emitter.emitExpression#0 openHeaderScope#0 branch#0 condBranch#0 Emitter.emitExpression#0 emitLoopBody#0 fallThrough#0 Emitter.emitExpression#0 branch#0 fallThrough#0 closeHeaderScope#0
   pointer stmt: size=40 writesThrough=false captured=false passedTo=openHeaderScope#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -194,7 +194,7 @@ function emitSwitch(emitter: Emitter, stmt: Node): void -> @emitSwitch [exported
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Emitter.emitExpression Emitter.emitStatement Emitter.llvm Emitter.typeOf IRFunction.emit IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor clauseBody fallThrough nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i64 targetOf
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitStatement#0 fallThrough#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitStatement#0 fallThrough#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=2 stackLocals=2
   local -45:9 fn: IRFunction (const)
@@ -251,7 +251,7 @@ function emitBreak(emitter: Emitter): void -> @emitBreak [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Emitter.releasePass LoopTarget.scopesPass branch emitScopeJoins nish_panic_index
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=emitScopeJoins#0 Emitter.releasePass#0 branch#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=emitScopeJoins#0 Emitter.releasePass#0 branch#0
   stackSites=0 stackLocals=0
   local -1:9 target: LoopTarget (const)
   callee +2:3 emitScopeJoins -> @emitScopeJoins
@@ -262,7 +262,7 @@ function emitContinue(emitter: Emitter): void -> @emitContinue [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitScopeJoins
   calls: Emitter.releasePass LoopTarget.scopesPass branch emitScopeJoins nish_panic_index
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=emitScopeJoins#0 Emitter.releasePass#0 branch#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=emitScopeJoins#0 Emitter.releasePass#0 branch#0
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
   local +2:11 loop: LoopTarget (const)
@@ -275,7 +275,7 @@ function emitThrow(emitter: Emitter, stmt: Node): void -> @emitThrow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
   calls: Emitter.declare Emitter.emitExpression IRFunction.emit nish_panic_index
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.declare#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.declare#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 Emitter.emitExpression -> @Emitter.emitExpression
@@ -286,7 +286,7 @@ function emitConditional(emitter: Emitter, expr: Node): string -> @emitCondition
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.newBlock
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.currentBlock IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock branch condBranch nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=condBranch#0 Emitter.emitExpression#0 Emitter.emitExpression#0 branch#0 Emitter.emitExpression#0 branch#0 Emitter.llvm#0 Emitter.typeOf#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=condBranch#0 Emitter.emitExpression#0 Emitter.emitExpression#0 branch#0 Emitter.emitExpression#0 branch#0 Emitter.llvm#0 Emitter.typeOf#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -318,7 +318,7 @@ function emitLogical(emitter: Emitter, expr: Node): string -> @emitLogical [expo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.newBlock
   calls: Emitter.emitExpression IRFunction.currentBlock IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock branch condBranch nish_panic_index nish_str_concat nish_str_eq
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 condBranch#0 condBranch#0 Emitter.emitExpression#0 branch#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 condBranch#0 condBranch#0 Emitter.emitExpression#0 branch#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 isAnd: boolean (const)
@@ -345,7 +345,7 @@ function emitCompoundAssignment(emitter: Emitter, expr: Node): string -> @emitCo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via targetLocal
   calls: Emitter.emitExpression Emitter.llvm IRFunction.emitValue compoundFloatOpcode compoundIntegerOpcode emitIntBinary emitRangedStore isFloat loadLocal nish_panic_index nish_str_concat storeLocal targetLocal
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=targetLocal#0 loadLocal#0 Emitter.emitExpression#0 Emitter.llvm#0 emitIntBinary#0 emitRangedStore#0 storeLocal#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=targetLocal#0 loadLocal#0 Emitter.emitExpression#0 Emitter.llvm#0 emitIntBinary#0 emitRangedStore#0 storeLocal#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitIntBinary#5 emitRangedStore#1
   stackSites=0 stackLocals=0
   local +0:9 local: Local (const)
@@ -367,7 +367,7 @@ function emitIncDec(emitter: Emitter, expr: Node): string -> @emitIncDec [export
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via targetLocal
   calls: Emitter.llvm IRFunction.emitValue emitIntBinary emitRangedStore isFloat loadLocal nish_panic_index nish_str_concat nish_str_eq storeLocal targetLocal
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=targetLocal#0 loadLocal#0 Emitter.llvm#0 emitIntBinary#0 emitRangedStore#0 storeLocal#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=targetLocal#0 loadLocal#0 Emitter.llvm#0 emitIntBinary#0 emitRangedStore#0 storeLocal#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitIntBinary#5 emitRangedStore#1
   stackSites=0 stackLocals=0
   local +0:9 local: Local (const)

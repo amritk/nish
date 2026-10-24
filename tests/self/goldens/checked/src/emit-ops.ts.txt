@@ -64,7 +64,7 @@ function constantText(emitter: Emitter, info: ConstInfo): string -> @constantTex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.stringConstant
   calls: Emitter.stringConstant floatText isFloat nish_str_from_i64
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.stringConstant#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.stringConstant#0
   pointer info: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:12 Emitter.stringConstant -> @Emitter.stringConstant
@@ -79,7 +79,7 @@ function emitSignedArith(emitter: Emitter, opcode: string, ty: string, lhs: stri
   sharedWrite: via IRFunction.emitValue
   escaping: panicCode
   calls: Emitter.useRuntime IRFunction.branchOnOverflow IRFunction.emitValue nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.useRuntime#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -102,7 +102,7 @@ function emitWrapping(emitter: Emitter, expr: Node, opcode: string): string -> @
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
   stackSites=0 stackLocals=0
   local +0:9 args: Node[] (const)
@@ -133,7 +133,7 @@ function emitIntBinary(emitter: Emitter, opcode: string, type: i32, lhs: string,
   sharedWrite: via Emitter.llvm
   escaping: lhs opcode rhs type
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock emitSignedArith intMin isDivision isOverflowOpcode isUnsigned nish_panic_index nish_str_concat overflowCode signedOpcode
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvm#0 emitSignedArith#0 Emitter.useRuntime#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 emitSignedArith#0 Emitter.useRuntime#0
   pointer site: size=40 writesThrough=false captured=false passedTo=emitSignedArith#5
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -220,7 +220,7 @@ function emitShiftCount(emitter: Emitter, type: i32, count: Node): string -> @em
   sharedWrite: via Emitter.llvm
   escaping: type
   calls: Emitter.emitExpression Emitter.llvm IRFunction.emitValue constantCount intBits nish_str_concat nish_str_from_i64
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.emitExpression#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.emitExpression#0
   pointer count: size=40 writesThrough=true captured=true passedTo=constantCount#0 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -236,7 +236,7 @@ function emitRightOperand(emitter: Emitter, opcode: string, type: i32, right: No
   sharedWrite: via emitShiftCount
   escaping: opcode type
   calls: Emitter.emitExpression emitShiftCount isShiftOpcode
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitShiftCount#0 Emitter.emitExpression#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitShiftCount#0 Emitter.emitExpression#0
   pointer right: size=40 writesThrough=true captured=true passedTo=emitShiftCount#2 Emitter.emitExpression#1
   stackSites=0 stackLocals=0
   callee +0:3 isShiftOpcode -> @isShiftOpcode
@@ -246,7 +246,7 @@ function emitBinary(emitter: Emitter, expr: Node): string -> @emitBinary [export
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitLogical
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue bitwiseOpcode emitBitwise emitCoalesce emitConcat emitIntBinary emitLogical emitStrictEquality emitUndefinedTest floatOpcode integerOpcode isInteger isUndefinedTest nish_panic_index nish_str_concat nish_str_eq
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitLogical#0 isUndefinedTest#0 emitUndefinedTest#0 emitStrictEquality#0 emitCoalesce#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitConcat#0 emitBitwise#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitIntBinary#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitLogical#0 isUndefinedTest#0 emitUndefinedTest#0 emitStrictEquality#0 emitCoalesce#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitConcat#0 emitBitwise#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitIntBinary#0 Emitter.llvm#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitLogical#1 isUndefinedTest#1 emitUndefinedTest#1 emitStrictEquality#1 emitCoalesce#1 emitBitwise#1 emitIntBinary#5
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)
@@ -279,7 +279,7 @@ function emitBitwise(emitter: Emitter, expr: Node, type: i32): string -> @emitBi
   sharedWrite: via Emitter.emitExpression
   escaping: type
   calls: Emitter.emitExpression Emitter.llvm IRFunction.emitValue bitwiseOpcode emitRightOperand nish_panic_index nish_str_concat shiftOpcodeFor
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 emitRightOperand#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 emitRightOperand#0 Emitter.llvm#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 opcode: string (const)
@@ -304,7 +304,7 @@ function emitUnary(emitter: Emitter, expr: Node): string -> @emitUnary [exported
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitIncDec
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.emitValue emitIncDec emitSignedArith internalErrorFor isInteger isUnsigned negatedLiteral nish_exit nish_panic_index nish_str_concat nish_str_eq unwrapParens
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitIncDec#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.llvm#0 emitSignedArith#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitIncDec#0 Emitter.typeOf#0 Emitter.emitExpression#0 Emitter.llvm#0 emitSignedArith#0 Emitter.emitExpression#0 Emitter.llvm#0 Emitter.typeOf#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitIncDec#1 emitSignedArith#5
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)
@@ -338,7 +338,7 @@ function loadLocal(emitter: Emitter, local: Local): string -> @loadLocal [export
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
   calls: Emitter.alignSuffix Emitter.llvm Emitter.slotOf IRFunction.emitValue nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
   pointer local: size=64 writesThrough=false captured=false passedTo=Emitter.slotOf#1
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -350,7 +350,7 @@ function storeLocal(emitter: Emitter, local: Local, value: string): void -> @sto
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
   calls: Emitter.alignSuffix Emitter.llvm Emitter.slotOf IRFunction.emit nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.slotOf#0 Emitter.alignSuffix#0
   pointer local: size=64 writesThrough=false captured=false passedTo=Emitter.slotOf#1
   stackSites=0 stackLocals=0
   local +0:9 ty: string (const)
@@ -362,7 +362,7 @@ function targetLocal(emitter: Emitter, target: Node): Local -> @targetLocal [exp
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=64
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_panic_index nish_str_concat
-  pointer emitter: size=264 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer target: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 local: Local | null (const)
@@ -371,7 +371,7 @@ function emitAssignment(emitter: Emitter, expr: Node): string -> @emitAssignment
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitFieldAssignment
   calls: Emitter.alignSuffix Emitter.emitExpression Emitter.llvm Emitter.slotOf IRFunction.emit bitwiseOpcode emitBitwiseAssignment emitCompoundAssignment emitElementAssignment emitFieldAssignment nish_panic_index nish_str_concat nish_str_eq targetLocal
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitFieldAssignment#0 emitElementAssignment#0 targetLocal#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.slotOf#0 Emitter.alignSuffix#0 emitBitwiseAssignment#0 emitCompoundAssignment#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitFieldAssignment#0 emitElementAssignment#0 targetLocal#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.slotOf#0 Emitter.alignSuffix#0 emitBitwiseAssignment#0 emitCompoundAssignment#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitFieldAssignment#1 emitElementAssignment#1 emitBitwiseAssignment#1 emitCompoundAssignment#1
   stackSites=0 stackLocals=0
   local +0:9 target: Node (const)
@@ -401,7 +401,7 @@ function emitBitwiseCombine(emitter: Emitter, op: string, type: i32, old: string
   sharedWrite: via emitRightOperand
   escaping: op type
   calls: Emitter.llvm IRFunction.emitValue TypeTable.baseOf bitwiseOpcode emitRightOperand nish_str_concat shiftOpcodeFor
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=emitRightOperand#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitRightOperand#0 Emitter.llvm#0
   pointer right: size=40 writesThrough=true captured=true passedTo=emitRightOperand#3
   stackSites=0 stackLocals=0
   local +0:9 operand: i32 (const)
@@ -417,7 +417,7 @@ function emitBitwiseAssignment(emitter: Emitter, expr: Node): string -> @emitBit
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via targetLocal
   calls: emitBitwiseCombine emitRangedStore loadLocal nish_panic_index storeLocal targetLocal
-  pointer emitter: size=264 writesThrough=true captured=false passedTo=targetLocal#0 loadLocal#0 emitBitwiseCombine#0 emitRangedStore#0 storeLocal#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=targetLocal#0 loadLocal#0 emitBitwiseCombine#0 emitRangedStore#0 storeLocal#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitRangedStore#1
   stackSites=0 stackLocals=0
   local +0:9 local: Local (const)

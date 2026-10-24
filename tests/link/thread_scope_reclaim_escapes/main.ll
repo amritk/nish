@@ -873,10 +873,10 @@ entry:
   store %struct.nish_array* %10, %struct.nish_array** %more.addr, align 8
   %17 = call %struct.ThreadScope* @nish.scope()
   store %struct.ThreadScope* %17, %struct.ThreadScope** %s.addr, align 8
-  %18 = call %struct.ThreadScope* @nish.scope()
-  store %struct.ThreadScope* %18, %struct.ThreadScope** %u.addr, align 8
-  %19 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
-  %20 = bitcast %struct.ThreadScope* %19 to i8*
+  %18 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
+  %19 = bitcast %struct.ThreadScope* %18 to i8*
+  %20 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %20, %struct.ThreadScope** %u.addr, align 8
   %21 = load %struct.ThreadScope*, %struct.ThreadScope** %u.addr, align 8
   %22 = bitcast %struct.ThreadScope* %21 to i8*
   %23 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
@@ -888,7 +888,7 @@ entry:
   %28 = load %struct.nish_array*, %struct.nish_array** %more.addr, align 8
   call void @nish.ThreadScope.spawn$arr.i32$i32$fn.3.sum(%struct.ThreadScope* %26, %struct.nish_array* %27, %struct.nish_array* %28, i32 0)
   call void @nish_scope_join(i8* %22)
-  call void @nish_scope_join(i8* %20)
+  call void @nish_scope_join(i8* %19)
   %29 = load %struct.nish_array*, %struct.nish_array** %ys.addr, align 8
   %30 = getelementptr inbounds %struct.Holder, %struct.Holder* %h, i32 0, i32 0
   store %struct.nish_array* %29, %struct.nish_array** %30, align 8, !tbaa !19
@@ -1013,9 +1013,9 @@ entry:
   store %struct.nish_array* %1, %struct.nish_array** %out.addr, align 8
   %7 = call i64 @nish_arena_mark()
   store i64 %7, i64* %a.addr, align 8
-  %8 = call %struct.ThreadScope* @nish.scope()
-  store %struct.ThreadScope* %8, %struct.ThreadScope** %s.addr, align 8
-  %9 = load i64, i64* %a.addr, align 8
+  %8 = load i64, i64* %a.addr, align 8
+  %9 = call %struct.ThreadScope* @nish.scope()
+  store %struct.ThreadScope* %9, %struct.ThreadScope** %s.addr, align 8
   %10 = load %struct.ThreadScope*, %struct.ThreadScope** %s.addr, align 8
   %11 = bitcast %struct.ThreadScope* %10 to i8*
   %12 = add nsw i32 %k, 40
@@ -1026,7 +1026,7 @@ entry:
   %16 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   call void @nish.ThreadScope.spawn$arr.i32$i32$fn.3.sum(%struct.ThreadScope* %14, %struct.nish_array* %15, %struct.nish_array* %16, i32 0)
   call void @nish_scope_join(i8* %11)
-  call void @nish_arena_release(i64 %9)
+  call void @nish_arena_release(i64 %8)
   %17 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
   %18 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %17, i64 0, i32 0
   %19 = load i64, i64* %18, align 8, !alias.scope !3, !noalias !4, !tbaa !10
