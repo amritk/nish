@@ -20265,9 +20265,17 @@ attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
 ### `Math.*` on `f64`
 
 `Math.sqrt` is `llvm.sqrt.f64`; `Math.round` is the floor/compare/select
-sequence that matches JavaScript's round-half-up; `Math.min`/`max` are
-`llvm.minnum`/`maxnum`. All intrinsics are `readnone willreturn`, so the
-callers stay pure.
+sequence that matches JavaScript's round-half-up, then `llvm.copysign.f64`
+so that `Math.round(-0.3)` is `-0`; `Math.min`/`max` answer NaN for a NaN
+operand and order `-0` below `+0`, as JavaScript does, through the branches
+clang gives the same C: an unordered compare to a quiet NaN, an ordered
+compare and `select`, and on equal operands the one whose sign bit says `-0`.
+A wasm build calls `llvm.minimum`/`maximum` instead, which are `f64.min`/`max`
+there. All of these are `readnone willreturn`, so the callers stay pure.
+`Math.tan`, `Math.atan2` and `Math.hypot` are not builtins in the IR at all:
+each is a call to `std/math.ts`'s Nish port of fdlibm, copied into the module
+as `internal @nish.tanF64`, `@nish.atan2F64` and `@nish.hypotF64`, so no target calls
+libm and the optimiser sees the whole body.
 
 <!-- cookbook:begin builtin-math-f64 -->
 Compiled with `--number-mode f64`.
@@ -20283,8 +20291,7 @@ const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1)
 ```llvm
 declare double @llvm.sqrt.f64(double) #0
 declare double @llvm.floor.f64(double) #0
-declare double @llvm.minnum.f64(double, double) #0
-declare double @llvm.maxnum.f64(double, double) #0
+declare double @llvm.copysign.f64(double, double) #0
 
 define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
 entry:
@@ -20302,14 +20309,47 @@ entry:
   %2 = fcmp oge double %1, 0x3FE0000000000000
   %3 = fadd double %0, 0x3FF0000000000000
   %4 = select i1 %2, double %3, double %0
-  ret double %4
+  %5 = call double @llvm.copysign.f64(double %4, double %x)
+  ret double %5
 }
 
 define internal noundef double @clamp01(double noundef %x) #0 {
 entry:
-  %0 = call double @llvm.maxnum.f64(double %x, double 0x0000000000000000)
-  %1 = call double @llvm.minnum.f64(double %0, double 0x3FF0000000000000)
-  ret double %1
+  %0 = fcmp uno double %x, 0x0000000000000000
+  br i1 %0, label %max.end, label %max.num
+
+max.num:
+  %1 = fcmp ogt double %x, 0x0000000000000000
+  %2 = select i1 %1, double %x, double 0x0000000000000000
+  %3 = fcmp oeq double %x, 0x0000000000000000
+  br i1 %3, label %max.same, label %max.end
+
+max.same:
+  %4 = bitcast double %x to i64
+  %5 = icmp slt i64 %4, 0
+  %6 = select i1 %5, double 0x0000000000000000, double %x
+  br label %max.end
+
+max.end:
+  %7 = phi double [ 0x7FF8000000000000, %entry ], [ %2, %max.num ], [ %6, %max.same ]
+  %8 = fcmp uno double %7, 0x3FF0000000000000
+  br i1 %8, label %min.end, label %min.num
+
+min.num:
+  %9 = fcmp olt double %7, 0x3FF0000000000000
+  %10 = select i1 %9, double %7, double 0x3FF0000000000000
+  %11 = fcmp oeq double %7, 0x3FF0000000000000
+  br i1 %11, label %min.same, label %min.end
+
+min.same:
+  %12 = bitcast double %7 to i64
+  %13 = icmp slt i64 %12, 0
+  %14 = select i1 %13, double %7, double 0x3FF0000000000000
+  br label %min.end
+
+min.end:
+  %15 = phi double [ 0x7FF8000000000000, %max.end ], [ %10, %min.num ], [ %14, %min.same ]
+  ret double %15
 }
 
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }

@@ -782,7 +782,7 @@ the skip count is the number to read, not only the exit code.
   saturating conversions) and there is no live rewriter any more — so a corpus
   program with no frozen rewrite is named in a register rather than skipped
   in silence. Programs listed in `tests/differential/known-failures.txt`
-  (libm 1-ulp differences, `minnum`/`maxnum` with NaN, `Math.round(-0)`, the
+  (libm 1-ulp differences, the
   division panics, raw `Arena.used()` prints) are reported but do not fail.
   `tests/differential/fuzz.js --stage1` generates random integer/boolean
   programs from a printed seed, compiles each with the released compiler and

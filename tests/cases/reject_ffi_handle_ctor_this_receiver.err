@@ -1,0 +1,1 @@
+reject_ffi_handle_ctor_this_receiver.ts:12:5: error: A `File` cannot be used here

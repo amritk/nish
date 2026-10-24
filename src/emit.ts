@@ -1498,10 +1498,13 @@ export class Emitter {
 
   emitCall(expr: Node): string {
     const callee = expr.children[0]
-    if (callee.kind === N_MEMBER) {
-      if (!receiverIsValue(this.program, callee.children[0])) {
+    if (callee.kind === N_MEMBER && !receiverIsValue(this.program, callee.children[0])) {
+      // `Math.atan2`, `Math.tan` and `Math.hypot` are calls into `std/math.ts`
+      // (`importMath`), so they take the ordinary route below.
+      if (callee.children[0].text !== "Math" || this.program.nodeCallees[expr.id] === null) {
         return emitBuiltinCall(this, expr, dottedName(callee))
       }
+    } else if (callee.kind === N_MEMBER) {
       const receiver = this.typeOf(callee.children[0])
       if (this.table.isResult(receiver)) {
         return emitResultMethod(this, expr, receiver) // WP16
