@@ -380,7 +380,7 @@ function IRModule.attrGroupFor(this: IRModule, attrs: string[]): string -> @IRMo
 function IRModule.toText(this: IRModule): string -> @IRModule.toText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.toText
-  calls: IRFunction.toText nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32 withAttrs
+  calls: IRFunction.toText attributeGroup nish_alloc_struct nish_array_grow nish_str_concat nish_str_from_i32
   pointer this: size=96 writesThrough=false captured=false
   stackSites=5 stackLocals=5
   local +0:11 sections: string[] (const)
@@ -391,14 +391,13 @@ function IRModule.toText(this: IRModule): string -> @IRModule.toText [exported m
   callee +24:21 IRFunction.toText -> @IRFunction.toText
   local +29:13 groups: string[] (const)
   local +30:11 i: i32 (let)
-  callee +32:45 withAttrs -> @withAttrs
+  callee +32:21 attributeGroup -> @attributeGroup
   local +38:13 nodes: string[] (const)
   local +39:18 line: string (const)
   local +45:11 m: i32 (let)
-function withAttrs(attrs: string, extra: string): string -> @withAttrs
+function attributeGroup(index: i32, attrs: string, extra: string): string -> @attributeGroup
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: attrs extra
-  calls: nish_str_concat
+  calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function metadataIndex(ref: string): i32 -> @metadataIndex
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false

@@ -1542,14 +1542,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #5 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!36, !37, !38, !39, !40}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -1586,3 +1587,8 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !33 = !{!31, !16, i64 8}
 !34 = !{!"MutexGuard$$Log", !15, i64 0, !16, i64 8}
 !35 = !{!34, !15, i64 0}
+!36 = !{i32 8, !"cf-protection-branch", i32 1}
+!37 = !{i32 8, !"cf-protection-return", i32 1}
+!38 = !{i32 8, !"branch-target-enforcement", i32 1}
+!39 = !{i32 8, !"sign-return-address", i32 1}
+!40 = !{i32 4, !"probe-stack", !"inline-asm"}
