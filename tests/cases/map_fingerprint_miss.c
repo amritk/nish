@@ -6,12 +6,12 @@
  * The hash key is fixed on purpose. A probe compares keys only on a full
  * 32-bit hash match, so under the per-process random key an absent key or a
  * second present one matches a stored hash in about 3% of runs and the count
- * is off by one. `useFixedKey` writes the bytes 00..0f, the key `map_hash_kat`
- * uses, under which no absent key here hashes like a present one and no two
- * present keys share a hash. The emitted seed leaves a key whose first word is
- * nonzero alone, so the key is the same whichever constructor runs first, and
- * both run before `main`. That the random key is filled differently in two
- * runs stays covered by `map_hash_collide`. */
+ * is off by one or two. `useFixedKey` writes the bytes 00..0f, the key
+ * `map_hash_kat` uses, under which no absent key here hashes like a present one
+ * and no two present keys share a hash. The emitted seed leaves a key whose
+ * first word is nonzero alone, so the key is the same whichever constructor
+ * runs first, and both run before `main`. That the random key is filled
+ * differently in two runs stays covered by `map_hash_collide`. */
 #include <stdbool.h>
 #include <stdint.h>
 #include "nish.h"
