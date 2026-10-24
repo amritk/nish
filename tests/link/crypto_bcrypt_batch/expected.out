@@ -1,0 +1,38 @@
+PASS  hash4, null lanes 0
+PASS  hash4, null lanes 2
+PASS  hash4, null lanes 4
+PASS  hash4, null lanes 6
+PASS  hash4, null lanes 8
+PASS  hash4, null lanes 10
+PASS  hash4, null lanes 12
+PASS  hash4, null lanes 14
+PASS  hash4, four lanes, round 0
+PASS  hash4, four lanes, round 1
+PASS  hash4, four lanes, round 2
+PASS  hash4, four lanes, round 3
+PASS  hash4, four lanes, round 4
+PASS  hash4, four lanes, round 5
+PASS  verify4: crypt_blowfish's and Go's vectors, costs 5, 5, 4, 5
+PASS  verify4 = verify, null lanes 0
+PASS  verify4 = verify, null lanes 2
+PASS  verify4 = verify, null lanes 4
+PASS  verify4 = verify, null lanes 6
+PASS  verify4 = verify, null lanes 8
+PASS  verify4 = verify, null lanes 10
+PASS  verify4 = verify, null lanes 12
+PASS  verify4 = verify, null lanes 14
+PASS  verify4: a wrong password is false in its lane only
+PASS  verify4 = verify, mixed costs, round 0
+PASS  verify4 = verify, mixed costs, round 1
+PASS  verify4 = verify, mixed costs, round 2
+PASS  verify4 = verify, mixed costs, round 3
+PASS  63 bytes of salt are refused
+PASS  cost 3 is refused
+PASS  a malformed lane is an Err naming it
+PASS  and is not read when the lane is null
+PASS  a short lane 0 is an Err naming it
+PASS  a bad digest character in lane 1 is an Err naming it
+PASS  a bad salt character in lane 3 is an Err naming it
+PASS  a long lane 3 is an Err naming it
+PASS  a batch is four hashes
+bcrypt batch: 37 passed, 0 failed, 0 skipped

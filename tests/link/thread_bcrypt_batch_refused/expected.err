@@ -1,0 +1,1 @@
+`hashFour` writes memory its caller can see through `bcryptHash4`, and `spawn` runs it beside the scope's other tasks

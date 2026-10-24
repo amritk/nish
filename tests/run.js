@@ -2844,6 +2844,7 @@ const SPEED_LINK = new Map([
   ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
   ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
   ["crypto_bcrypt", "tests/wipes counts its wipes after -O2"],
+  ["crypto_bcrypt_batch", "tests/wipes counts its wipes after -O2"],
   ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
   ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
   ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
@@ -10858,31 +10859,35 @@ if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includ
   }
 }
 
-// The bcrypt vectors of tests/link/crypto_bcrypt as a `--profile wasi` module
-// under Node's WASI: the module is pure, so it builds for wasm32 and answers
-// every vector there as natively.
-if (!only || ["crypto_bcrypt", "bcrypt", "wasi"].some((name) => name.includes(only))) {
+// The bcrypt vectors of tests/link/crypto_bcrypt, and the four-lane batch of
+// tests/link/crypto_bcrypt_batch, as `--profile wasi` modules under Node's
+// WASI: both are pure, so they build for wasm32 and answer every case there as
+// natively.
+for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch"]) {
+  if (only && ![program, "bcrypt", "wasi"].some((name) => name.includes(only))) {
+    continue
+  }
   if (WASI_SYSROOT && has("wasm-ld")) {
-    const dir = path.join(buildDir, "wasi_crypto_bcrypt")
+    const dir = path.join(buildDir, `wasi_${program}`)
     const wasm = path.join(dir, "app.wasm")
     const built = spawnSync(
       NISH,
-      [path.join(linkDir, "crypto_bcrypt", "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      [path.join(linkDir, program, "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
       { cwd: root, encoding: "utf8" }
     )
     const ran =
       built.status === 0
         ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
         : built
-    const want = fs.readFileSync(path.join(linkDir, "crypto_bcrypt", "expected.out"), "utf8")
+    const want = fs.readFileSync(path.join(linkDir, program, "expected.out"), "utf8")
     check(
-      `link/crypto_bcrypt: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      `link/${program}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
       built.status === 0 && ran.status === 0 && ran.stdout === want,
       shown(ran)
     )
   } else {
     skip(
-      `skipped: link/crypto_bcrypt: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the bcrypt vectors is not run`
+      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program === "crypto_bcrypt" ? "the bcrypt vectors" : "the bcrypt batch"} is not run`
     )
   }
 }
