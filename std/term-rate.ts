@@ -431,7 +431,7 @@ export class RateController {
     const length: i32 = toI32(this.sentMs.length)
     if (this.head > 0 && this.head * 2 >= length) {
       // Drop the answered prefix once it is half the queue: a link always a frame behind never empties it.
-      for (let i = this.head; i < length; i++) {
+      for (let i: i32 = this.head; i < length; i++) {
         this.sentMs[i - this.head] = this.sentMs[i]
         this.sentBytes[i - this.head] = this.sentBytes[i]
       }

@@ -1,0 +1,3 @@
+fast: fps 60, divisor 1, backend 3, palette256 false, most unacked 1, dropped 0, queue 1
+slow: fps 5, divisor 1, backend 3, palette256 false, most unacked 1, dropped 77, queue 1
+behind: fps 60, divisor 1, backend 3, palette256 false, most unacked 2, dropped 0, queue 2
