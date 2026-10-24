@@ -59,6 +59,24 @@ stages:
       - id: tw-goldens
         content: Regenerate tests/self/goldens/checked and register the new positive case — see Verification
         status: pending
+  - id: threads-wipe-secret
+    title: fix(checker) — a std/threads task may wipe a Secret it made from a fresh value
+    goal: Let a task call a function that makes a Secret from a fresh value and wipes it in the same body (the bcrypt batch's state), while a Secret made from a parameter, field, capture, call result or moved local stays a shared write
+    verification: npm run check, npm run lint, node tests/run.js thread, node tests/run.js secret, node tests/run.js wasi, node tests/run.js performance, bash scripts/bootstrap.sh --verify and the full suite per CLAUDE.md green; the batch runs on a task under NISH_NUM_THREADS 1, 2 and 8
+    status: pending
+    todos:
+      - id: tws-facts
+        content: Extend the private-array rule in src/attributes.ts so secret(v) of a fresh v, owned by a const local and wiped in the same function, is the function's own storage — see Secrets on tasks
+        status: pending
+      - id: tws-tests
+        content: Flip reject_thread_wipe_secret into a positive case, add negatives for secret(param), secret(field), secret(call result), a moved local and a holder field, and pin the wipe under -O2 — see Secrets on tasks
+        status: pending
+      - id: tws-bcrypt
+        content: Once bcrypt-batch has merged, turn tests/link/thread_bcrypt_batch_refused into a passing thread test of bcryptHash4 and bcryptVerify4 and update the guide, record and README where they say the batch cannot run on a task — see Secrets on tasks
+        status: pending
+      - id: tws-docs
+        content: Update the NL2471 rule in docs/LANGUAGE.md, docs/guide/using-nish/threads.md and docs/security/secret.md — see Secrets on tasks
+        status: pending
   - id: bcrypt-batch
     title: perf(crypto) — hash and verify up to four bcrypt passwords at once, interleaved
     goal: Compute up to four independent bcrypt hashes in one call with their Blowfish encryptions interleaved, equal to the single path byte for byte, at parity with tigokraft's 4-way C
@@ -273,6 +291,21 @@ If the facts cannot tell the two apart soundly, stop (draft PR, blocker in
 the body) and say what the analysis needs. Do not weaken the shared-write
 rule for anything but this case.
 
+## Secrets on tasks
+
+Added after bcrypt-batch's round 1 (user decision, 2026-10-24T18:10Z, option 1
+of three). #894 made a task's wipe of an array the function allocated a local
+write, but a `Secret` made with `secret(...)` and wiped stayed a shared write
+(`reject_thread_wipe_secret`), so `bcryptHash4` — whose one `Secret<u32[]>`
+state is `secret(new Array(...))`, wiped before return — cannot run on a task.
+Extend the rule: `secret(v)` where `v` is fresh by the sole-reference rule
+(LANGUAGE.md, "secret takes a value nothing else holds"), bound to a `const`
+the same function wipes, is that function's own storage. A `Secret` from a
+parameter, a field, a capture, a call's answer or a moved local, a borrowed
+`Secret`, and a holder's field keep today's facts. The wipe stays one volatile
+`llvm.memset`. If the facts cannot tell the cases apart soundly, stop (draft PR)
+and say what the analysis needs.
+
 ## Stages
 
 - `bcrypt-core` and `threads-wipe` run in parallel; their Owns are
@@ -303,8 +336,20 @@ entries only (user decision, 2026-10-24), `src/std-modules.ts` and
 generated `tests/self/goldens/checked/**` and `tests/differential/**`
 registrations
 
+### threads-wipe-secret
+
+**Depends on:** `bcrypt-batch` merged, for the merge only (it develops against
+main now; its `tws-bcrypt` todo lands after bcrypt-batch's files are on main).
+
+**Owns:** `src/attributes.ts`, `src/parallel.ts`, `tests/cases/*thread*wipe*`,
+`tests/cases/*wipe*thread*`, `tests/link/thread_*wipe*/**`, `docs/LANGUAGE.md`,
+`docs/guide/using-nish/threads.md`, `docs/security/secret.md`, the generated
+goldens; and, after bcrypt-batch merges, `tests/link/thread_*bcrypt*/**`,
+`docs/guide/using-nish/password-hashing.md`, `docs/security/crypto-bcrypt.md`
+and the bcrypt row of `std/README.md`
+
 ### bcrypt-batch
 
 **Depends on:** `bcrypt-core` and `threads-wipe` merged.
 
-**Owns:** `bcrypt-core`'s globs, plus `docs/guide/using-nish/threads.md`.
+**Owns:** `bcrypt-core`'s globs (`docs/guide/using-nish/threads.md` moved to threads-wipe-secret).
