@@ -12,10 +12,9 @@
  *   3. compared byte for byte.
  *
  * Unlike `run.js`, nothing here is frozen: the TypeScript is written by the
- * compiler under test on every run, which is the point. The rows that rewrite
- * what Node runs differently arrive a stage at a time, so most programs do not
- * agree yet, and `emit-ts-known.txt` lists each one that does not under the
- * ledger row whose stage will fix it (`ROWS`), with the evidence in a comment.
+ * compiler under test on every run, which is the point. Most programs agree;
+ * `emit-ts-known.txt` lists each one that does not under the ledger row that
+ * accounts for it (`ROWS`), with the evidence in a comment.
  * The row is read off the evidence by `rowOf`, a heuristic, so a program may
  * move rows as earlier ones land. The list is generated, never edited:
  *
@@ -116,9 +115,45 @@ const scratchRoot = (work, side) => {
  * their stages land: R4b's numbers, R4c's strings, R4d's records, R4e's
  * control flow; `libm` is the 1-ulp row that stays; `ffi` a program whose C
  * functions cannot be written (NL4010); `refused` one `--emit-ts` refuses for
- * now (NL4011, NL4012).
+ * now (NL4011 to NL4014); `host` a program reading what Node cannot express
+ * (`HOST`); `range` a ranged integer leaving its range, a native panic Node
+ * does not check (§3.3, class B).
  */
-const ROWS = ["numbers", "strings", "records", "control", "libm", "ffi", "refused"]
+const ROWS = ["numbers", "strings", "records", "control", "libm", "ffi", "refused", "host", "range"]
+
+/**
+ * The rows the corpus may still hold once R4 is built: each is a divergence
+ * wp33 §3 keeps, not a stage still to land. `tests/run.js` pins the known list
+ * to them.
+ */
+export const ACCEPTED_ROWS = ["libm", "ffi", "refused", "host", "range"]
+
+/**
+ * The fixed list of what Node cannot express (wp33 §3.5), as `[api, pattern,
+ * where]`: the pattern names that API and nothing broader, and `where` says
+ * what it is matched against: the emitted modules (`source`) or Node's stderr,
+ * where the runtime's refusal names the call (`stderr`). A `host` entry's
+ * comment ends with the api, which `tests/run.js` checks is one of these.
+ */
+export const HOST = [
+  // The native arena's counters; Node has a collector and no arena to count.
+  ["arenaUsed", /\barenaUsed\b/, "source"],
+  ["arenaMark", /\barenaMark\b/, "source"],
+  // A child is reaped by the event loop, which a synchronous wait never returns to.
+  ["spawn", /`spawn` has no synchronous reading under Node/, "stderr"],
+  ["waitPid", /`waitPid` has no synchronous reading under Node/, "stderr"],
+  // Stdin is read only by the event loop; the restore bytes go out on native exit paths.
+  ["readStdin", /`readStdin` has no synchronous reading under Node/, "stderr"],
+  ["waitStdin", /`waitStdin` has no synchronous reading under Node/, "stderr"],
+  ["setRawMode", /`setRawMode` has no synchronous reading under Node/, "stderr"],
+  ["setTerminalRestore", /`setTerminalRestore` has no reading under Node/, "stderr"],
+  // A lone surrogate is three WTF-8 bytes natively and U+FFFD's in a UTF-16 string.
+  [
+    "lone surrogate",
+    /\\uD[89AB][0-9A-F]{2}(?!\\uD[C-F])|(?<!\\uD[89AB][0-9A-F]{2})\\uD[C-F][0-9A-F]{2}/i,
+    "source",
+  ],
+]
 
 /**
  * The evidence, as a regular expression over Node's stderr, the native
@@ -135,6 +170,15 @@ const EVIDENCE = [
     /unchecked[A-Z]|newArray|arraySet|\.set is not|\.push is not|out of bounds|\bindex\b|undefined|\bNaN\b/,
   ],
 ]
+
+/** The native panic of a ranged integer leaving its range: the `range` row. */
+const RANGE_PANIC = /^value out of range: expected integer<-?\d+, -?\d+>$/m
+
+/** A ranged integer annotation in the emitted source, which the `range` row also needs. */
+const RANGED = /\binteger</
+
+/** The libm row's own words: a program that counts its answers within an ulp. */
+const ULP_COUNT = /\bwithin \d+ ulps?\b/
 
 /** The compiler's dump flags, which take no value and `--emit-ts` refuses alongside it. */
 const DUMPS = ["--emit-ast", "--emit-checked"]
@@ -160,23 +204,98 @@ const firstDifference = (a, b) => {
   return [i, x[i], y[i]]
 }
 
-/** The ledger row a disagreement is filed under (`ROWS`), from what the two runs said. */
-const rowOf = (native, node) => {
+/**
+ * The `HOST` api a disagreement reads, or the empty string: `source` is the
+ * text of the emitted modules.
+ */
+const hostOf = (node, source) => {
+  for (const [api, pattern, where] of HOST) {
+    if (pattern.test(where === "source" ? source : String(node.stderr))) {
+      return api
+    }
+  }
+  return ""
+}
+
+/**
+ * The ledger row a disagreement is filed under (`ROWS`), from what the two
+ * runs said and, for `host`, what the emitted modules import. Answers `[row,
+ * api]`, the api set for `host` alone.
+ */
+const rowOf = (native, node, source) => {
+  const host = hostOf(node, source)
+  if (host !== "") {
+    return ["host", host]
+  }
+  if (
+    RANGE_PANIC.test(String(native.stderr)) &&
+    !RANGE_PANIC.test(String(node.stderr)) &&
+    RANGED.test(source)
+  ) {
+    return ["range", ""]
+  }
   const [, ours, theirs] = firstDifference(native.stdout, node.stdout)
   const evidence = `${node.stderr}\n${native.stderr}\n${ours ?? ""}\n${theirs ?? ""}`
   for (const [row, pattern] of EVIDENCE) {
     if (pattern.test(evidence)) {
-      return row
+      return [row, ""]
     }
   }
-  if (ulpApart(ours, theirs)) {
-    return "libm"
+  if (ulpApart(ours, theirs) || (ULP_COUNT.test(ours ?? "") && ULP_COUNT.test(theirs ?? ""))) {
+    return ["libm", ""]
   }
   // UTF-8 bytes against UTF-16 units shows up first wherever a line holds
   // something past ASCII; anything else is an integer the TypeScript reading
   // let grow past its width, the commonest disagreement there is.
-  return /[\u0080-\uffff]/.test(`${ours ?? ""}${theirs ?? ""}`) ? "strings" : "numbers"
+  return [/[\u0080-\uffff]/.test(`${ours ?? ""}${theirs ?? ""}`) ? "strings" : "numbers", ""]
 }
+
+/**
+ * `text` with its comments blanked, its strings and templates kept: a row's
+ * evidence is what the program does, never what a comment says about it. A
+ * template's `${...}` is kept whole with the template, which over-keeps at
+ * worst; a `/` that starts a regular expression is not one Nish admits.
+ */
+export const codeOf = (text) => {
+  let out = ""
+  let i = 0
+  while (i < text.length) {
+    const c = text[i]
+    if (c === "/" && text[i + 1] === "/") {
+      const end = text.indexOf("\n", i)
+      i = end < 0 ? text.length : end
+    } else if (c === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2)
+      i = end < 0 ? text.length : end + 2
+      out += " "
+    } else if (c === '"' || c === "'" || c === "`") {
+      let j = i + 1
+      while (j < text.length && text[j] !== c) {
+        j += text[j] === "\\" ? 2 : 1
+      }
+      out += text.slice(i, j + 1)
+      i = j + 1
+    } else {
+      out += c
+      i += 1
+    }
+  }
+  return out
+}
+
+/**
+ * The code of every module of the program's own that `--emit-ts` wrote under
+ * `dir`: not the launcher, and not a standard-library module under `nish/`,
+ * whose use of an API is not the program's (a `host` or `range` row is the
+ * program's own reading, wp33 §4.2). Comments are blanked (`codeOf`).
+ */
+export const emittedSource = (dir) =>
+  fs
+    .readdirSync(dir, { recursive: true })
+    .map((f) => String(f).split(path.sep).join("/"))
+    .filter((f) => f.endsWith(".ts") && f !== "entry.ts" && !f.startsWith("nish/"))
+    .map((f) => codeOf(fs.readFileSync(path.join(dir, f), "utf8")))
+    .join("\n")
 
 /** The first line of a compiler's stderr that says why, for the known list. */
 const firstLine = (buffer) => {
@@ -186,13 +305,15 @@ const firstLine = (buffer) => {
 }
 
 /**
- * One program, both halves. Answers `{ name, verdict, reason }`, where the
+ * One program, both halves, built under `workRoot`;
+ * `tests/differential/fuzz.js --emit-ts` runs its generated programs through it
+ * too, under a root of its own. Answers `{ name, verdict, reason }`, where the
  * verdict is `agree`, `native-error` (the program does not build natively, so
  * nothing is compared), `refused` (`--emit-ts` reported a diagnostic),
  * `emit-error` (it failed otherwise) or `differ`.
  */
-const compare = async (prog, compiler) => {
-  const work = path.join(WORK, prog.name.replace(/[\\/]/g, "_"))
+export const compare = async (prog, compiler, workRoot = WORK) => {
+  const work = path.join(workRoot, prog.name.replace(/[\\/]/g, "_"))
   fs.rmSync(work, { recursive: true, force: true })
   fs.mkdirSync(work, { recursive: true })
   const exe = path.join(work, "app")
@@ -211,7 +332,7 @@ const compare = async (prog, compiler) => {
   // refuses it as a usage error.
   const emitArgs = prog.args.filter((arg) => !DUMPS.includes(arg))
   const emitted = await run(compiler, [prog.entry, "--json", "--emit-ts", out, ...emitArgs])
-  const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL40(10|11|12))"/)
+  const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL40(10|11|12|13|14))"/)
   // The native build is read first, so a program that is both refused and
   // broken natively is an error rather than a listed refusal. The exception is
   // an NL4010 refusal: a module that declares C functions may need C this
@@ -243,13 +364,9 @@ const compare = async (prog, compiler) => {
       reason: `the native run passed ${RUN_TIMEOUT_MS} ms`,
     }
   }
+  const [row, api] = rowOf(native, node, emittedSource(out))
   if (node.timedOut) {
-    return {
-      name: prog.name,
-      verdict: "differ",
-      row: rowOf(native, node),
-      reason: `node passed ${RUN_TIMEOUT_MS} ms`,
-    }
+    return { name: prog.name, verdict: "differ", row, api, reason: `node passed ${RUN_TIMEOUT_MS} ms` }
   }
   const same =
     native.status === node.status &&
@@ -259,7 +376,7 @@ const compare = async (prog, compiler) => {
   if (same) {
     return { name: prog.name, verdict: "agree", row: "", reason: "" }
   }
-  return { name: prog.name, verdict: "differ", row: rowOf(native, node), reason: describe(native, node) }
+  return { name: prog.name, verdict: "differ", row, api, reason: describe(native, node) }
 }
 
 /** Why two runs differ, in one line: the exit, else the first stdout line apart, else stderr. */
@@ -278,6 +395,9 @@ const describe = (native, node) => {
   return `stderr line ${firstDifference(native.stderr, node.stderr)[0] + 1} differs`
 }
 
+/** A known row as the MOVED line names it: `host [spawn]`, or the row alone. */
+const listing = ({ row, api }) => (api ? `${row} [${api}]` : row)
+
 /**
  * The verdicts that are the harness's or the native build's failure, not a
  * row's: never listed, so always reported, and `--update` refuses to write a
@@ -285,7 +405,11 @@ const describe = (native, node) => {
  */
 const ERRORS = ["emit-error", "native-error", "timeout"]
 
-/** The known list: program name -> the row recorded for it. */
+/**
+ * The known list: program name -> the row recorded for it and, on a host line,
+ * the `HOST` name its evidence ends with (`[spawn]`), which a run must find
+ * again: a host line listed under one API and failing on another has moved.
+ */
 const readKnown = () => {
   const known = new Map()
   if (!fs.existsSync(KNOWN)) {
@@ -297,12 +421,13 @@ const readKnown = () => {
       continue
     }
     const [name, row] = text.split("#")[0].trim().split(/\s+/)
+    const api = /\[([^\]]+)\]$/.exec(text)
     if (!ROWS.includes(row)) {
       throw new Error(
         `${KNOWN}: ${name} is filed under "${row ?? ""}", which is not a row (${ROWS.join(", ")})`
       )
     }
-    known.set(name, row)
+    known.set(name, { row, api: row === "host" && api ? api[1] : "" })
   }
   return known
 }
@@ -311,9 +436,12 @@ const HEADER = `# Generated by \`node tests/differential/emit-ts.js --update\`; 
 #
 # Every program the --emit-ts differential does not yet see agree with its
 # native build, one "<program> <row>" line each, where the row is the wp33 §3
-# ledger row whose stage fixes it (numbers, strings, records, control, libm,
-# ffi, refused); the comment is the evidence. A stage that fixes a program
-# regenerates this list, and the program leaves it.
+# ledger row that explains it (numbers, strings, records, control, libm, ffi,
+# refused, host, range); the comment is the evidence, and a host line names
+# the API Node cannot express in brackets. A stage that fixes a program
+# regenerates this list, and the program leaves it. tests/run.js accepts only
+# the libm, ffi, refused, host and range rows here, and a host line only for
+# an API in emit-ts.js's HOST.
 #
 # The run fails on a program that does not agree and is not listed, on a
 # listed one that agrees, on one whose row has moved, and on a listed name
@@ -324,7 +452,10 @@ const writeKnown = (results) => {
   const rows = results
     .filter((r) => r.verdict !== "agree")
     .sort((a, b) => (a.name < b.name ? -1 : 1))
-    .map((r) => `${r.name} ${r.row}  # ${r.verdict}: ${r.reason.replace(/\s+/g, " ").slice(0, 160)}`)
+    .map((r) => {
+      const why = `${r.verdict}: ${r.reason.replace(/\s+/g, " ").slice(0, 160)}`
+      return `${r.name} ${r.row}  # ${r.api ? `${why} [${r.api}]` : why}`
+    })
   fs.writeFileSync(KNOWN, `${HEADER}\n${rows.join("\n")}\n`)
 }
 
@@ -368,6 +499,11 @@ const main = async (argv) => {
     console.error(`emit-ts.js: no program matches --only ${only}`)
     return 2
   }
+  // A whole run starts from an empty work directory, so what is under it is
+  // this run's corpus and nothing older: `tsc -p tests/emit-ts` reads all of it.
+  if (only === undefined) {
+    fs.rmSync(WORK, { recursive: true, force: true })
+  }
   const results = await pool(programs, jobs, (prog) => compare(prog, compiler))
   const errors = results.filter((r) => ERRORS.includes(r.verdict))
   if (update && errors.length === 0) {
@@ -380,12 +516,18 @@ const main = async (argv) => {
   )
   const xpass = results.filter((r) => r.verdict === "agree" && known.has(r.name))
   const moved = results.filter(
-    (r) => !errors.includes(r) && known.has(r.name) && r.row !== "" && known.get(r.name) !== r.row
+    (r) =>
+      !errors.includes(r) &&
+      known.has(r.name) &&
+      r.row !== "" &&
+      (known.get(r.name).row !== r.row || (r.row === "host" && known.get(r.name).api !== (r.api ?? "")))
   )
   const names = new Set(results.map((r) => r.name))
   const stale = only === undefined ? [...known.keys()].filter((name) => !names.has(name)) : []
   for (const r of moved) {
-    console.log(`${"MOVED".padEnd(12)} ${r.name}: listed under ${known.get(r.name)}, now ${r.row}`)
+    console.log(
+      `${"MOVED".padEnd(12)} ${r.name}: listed under ${listing(known.get(r.name))}, now ${listing(r)}`
+    )
   }
   for (const name of stale) {
     console.log(`${"STALE".padEnd(12)} ${name}: listed, but the corpus has no such program`)

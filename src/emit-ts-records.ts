@@ -29,7 +29,7 @@
 //   by field into the element already there (`Object.assign`), so a
 //   reference taken to the slot sees it.
 // - `new Array<T>(n)` is `newArray(n, zero)` and `dst.set(src, at)` is
-//   `arraySet(dst, src, at)`, each checked as the native one is.
+//   `arraySetAt(dst, src, at)`, each checked as the native one is.
 //
 // The hook sees no type table, so "a record held inline" is read off the
 // program's struct list: an interface no class implements. A generic body is
@@ -102,11 +102,26 @@ const COPY_AT_RUN: i32 = 2
 const recordReference = (walk: Walk, type: i32): boolean =>
   type >= 0 && walk.table.isNullable(type) && inlineRecord(walk.program, walk.table.refOf(type))
 
+/**
+ * The type of `node`, whose slot a value is copied into, or -1. An untyped
+ * body's -1 is no miss here (`Walk.typeAt`): `slotCopy` answers it, as a copy
+ * choice where a record of the module is held inline and as no copy where none is.
+ */
+const slotTypeRaw = (walk: Walk, node: Node): i32 => {
+  const types = walk.program.nodeTypes
+  return node.id >= 0 && node.id < types.length ? types[node.id] : -1
+}
+
 /** How a value put into a slot of type `slot` is copied in. */
 const slotCopy = (walk: Walk, slot: i32): i32 => {
   if (walk.inInstance) {
     walk.instanceChoice = true
     return hasInlineRecords(walk.program) && !recordReference(walk, slot) ? COPY_AT_RUN : COPY_NONE
+  }
+  // No instance says what the slot holds; one that held a record inline would copy it.
+  if (walk.untyped && hasInlineRecords(walk.program)) {
+    walk.instanceChoice = true
+    return COPY_NONE
   }
   return inlineRecord(walk.program, slot) ? COPY_SPREAD : COPY_NONE
 }
@@ -250,7 +265,7 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
   const left = operands.at(0)
   let args = idxArguments(left)
   if (node.text === "=") {
-    const record = slotCopy(walk, walk.program.nodeTypes[target.id]) !== COPY_NONE
+    const record = slotCopy(walk, slotTypeRaw(walk, target)) !== COPY_NONE
     // An instance under unchecked indexing writes a plain `a[i]`, but its
     // slot can hold a record inline, which `storeIdx` writes field by field.
     if (record && args === "" && walk.inInstance) {
@@ -293,30 +308,46 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
   if (!written.endsWith(`.${method}`)) {
     return null
   }
+  // An untyped body binds no call, so a method of the program's own named
+  // `pop` would read as the array's: whether it is needs a type. A `push`
+  // still goes on to `copied`, which records the choice of a copy.
+  if (walk.untyped) {
+    walk.missType()
+    if (method !== "push" || args.length !== 1) {
+      return null
+    }
+  }
   const receiver = writtenReceiver(written, method)
-  if (method === "pop" && args.length === 0 && checkedAt(walk, node)) {
-    return `${walk.helperName("pop")}(${receiver})`
+  // The web's own takes only a typed array, so `tsc` refuses the `u8[]` it is
+  // given; the runtime's takes either (`runtime/core/host.d.ts`).
+  if (method === "getRandomValues" && args.length === 1 && written === "crypto.getRandomValues") {
+    return `${walk.helperName("getRandomValues")}(${operands.at(1)})`
+  }
+  if (method === "pop" && args.length === 0) {
+    // Unchecked, the walk proved the array non-empty, which `tsc` cannot
+    // see: its `T | undefined` is the element.
+    return checkedAt(walk, node) ? `${walk.helperName("pop")}(${receiver})` : `${written}()!`
   }
   if (method === "push" && args.length === 1) {
     const arg = operands.at(1)
-    const copy = copied(walk, elementOf(walk, walk.program.nodeTypes[callee.children[0].id]), args[0], arg)
+    const copy = copied(walk, elementOf(walk, slotTypeRaw(walk, callee.children[0])), args[0], arg)
     return copy === arg ? null : `${written}(${copy})`
   }
   if (
     method === "set" &&
     args.length > 0 &&
     args.length <= 2 &&
-    walk.program.nodeTypes[args[0].id] > T_CPTR &&
-    walk.program.nodeTypes[args[0].id] === walk.program.nodeTypes[callee.children[0].id]
+    walk.typeAt(args[0]) > T_CPTR &&
+    walk.typeAt(args[0]) === walk.typeAt(callee.children[0])
   ) {
-    return `${walk.helperName("arraySet")}(${receiver}, ${operands.at(1)})`
+    return `${walk.helperName("arraySetAt")}(${receiver}, ${operands.at(1)})`
   }
   return null
 }
 
 /** An array literal rebuilt with a copy for each element that could be a record, or `null`. */
 const literalRow = (walk: Walk, node: Node, operands: Operands): string | null => {
-  const slot = elementOf(walk, walk.program.nodeTypes[node.id])
+  const slot = elementOf(walk, slotTypeRaw(walk, node))
   const parts: string[] = []
   let copies = false
   let i = 0
@@ -397,6 +428,11 @@ const fillZero = (walk: Walk, type: Node): string => {
   if (alias !== null) {
     return fillZero(walk, alias.decl.children[1])
   }
+  // Any other name may be a parameter no instance binds, whose zero is unknown.
+  if (walk.untyped) {
+    walk.instanceChoice = true
+    return ""
+  }
   const instance = program.activeInstance
   if (instance !== null) {
     walk.instanceChoice = true
@@ -413,6 +449,17 @@ const typedArrayZero = (name: string): string => {
   return name === "BigInt64Array" ? "0n" : ""
 }
 
+/** The width a typed array holds, which its `newArray` is typed by. */
+const typedArrayWidth = (name: string): string => {
+  if (name === "Float64Array") {
+    return "f64"
+  }
+  if (name === "Float32Array") {
+    return "f32"
+  }
+  return name === "Int32Array" ? "i32" : "i64"
+}
+
 /** `new Array<T>(n)` or `new Float64Array(n)` as a checked, zero-filled `newArray`, or `null`. */
 const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const callee = node.children[0]
@@ -421,15 +468,49 @@ const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   }
   const typeArgs = node.children[1].children
   let zero = ""
+  let element = ""
   if (callee.text === "Array" && typeArgs.length === 1) {
     zero = fillZero(walk, typeArgs[0])
+    element = walk.spanOf(typeArgs[0])
   } else if (typeArgs.length === 0) {
     zero = typedArrayZero(callee.text)
+    element = typedArrayWidth(callee.text)
   }
   if (zero === "") {
     return null
   }
-  return `${walk.helperName("newArray")}(${operands.at(2)}, ${zero})`
+  if (typeArgs.length === 0) {
+    walk.widths.add(element)
+  }
+  // The element is written out: a zero is one value of it, which `tsc` would
+  // otherwise infer the array's type from.
+  return `${walk.helperName("newArray")}<${element}>(${operands.at(2)}, ${zero})`
+}
+
+/**
+ * `process.argv` as the runtime's `argv()`: the program then its arguments, a
+ * fresh copy on each read, which Node's own global is not (it holds `node`
+ * first). A local or constant named `process` is the program's and stays.
+ */
+const processArgv = (walk: Walk, node: Node): string | null => {
+  if (node.text !== "argv" || node.children.length !== 1) {
+    return null
+  }
+  const receiver = node.children[0]
+  if (
+    receiver.kind !== N_IDENT ||
+    receiver.text !== "process" ||
+    walk.program.nodeLocals[receiver.id] !== null ||
+    walk.program.nodeConstants[receiver.id] !== null
+  ) {
+    return null
+  }
+  // An untyped body binds no local, so a `process` of its own looks global.
+  if (walk.untyped) {
+    walk.missType()
+    return null
+  }
+  return `${walk.helperName("argv")}()`
 }
 
 /** The records row's rewrite of `node`, or `null` to leave it to the next row. */
@@ -448,6 +529,8 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
       return literalRow(walk, node, operands)
     case N_NEW:
       return newRow(walk, node, operands)
+    case N_MEMBER:
+      return processArgv(walk, node)
     default:
       return null
   }

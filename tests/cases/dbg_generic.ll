@@ -106,16 +106,16 @@ entry:
   ret %struct.Box$i32* %x, !dbg !66
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn readnone }
-attributes #4 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #5 = { nounwind noreturn cold }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #5 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
 !llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!2, !3}
+!llvm.module.flags = !{!2, !3, !69, !70, !71, !72, !73}
 !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "nish <version>", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/dbg_generic.ts", directory: ".")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
@@ -185,3 +185,8 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !66 = !DILocation(line: 8, column: 1, scope: !65)
 !67 = !DILocalVariable(name: "x", arg: 1, scope: !65, file: !1, line: 8, type: !14)
 !68 = !DILocation(line: 8, column: 34, scope: !65)
+!69 = !{i32 8, !"cf-protection-branch", i32 1}
+!70 = !{i32 8, !"cf-protection-return", i32 1}
+!71 = !{i32 8, !"branch-target-enforcement", i32 1}
+!72 = !{i32 8, !"sign-return-address", i32 1}
+!73 = !{i32 4, !"probe-stack", !"inline-asm"}

@@ -1,0 +1,1 @@
+`wide` is never instantiated, and its body needs the checker's types to translate: --emit-ts writes it as a stub that throws

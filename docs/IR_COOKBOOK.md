@@ -100,9 +100,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end fn-add -->
 
@@ -143,9 +150,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end fn-add-function -->
 
@@ -180,9 +194,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end fn-add-no-semicolons -->
 
@@ -199,7 +220,7 @@ const add = (a: number, b: number): number => a + b
 declare extern_weak void @nish_panic_overflow(i32 noundef)
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32)
 
-define internal i32 @add(i32 %a, i32 %b) {
+define internal i32 @add(i32 %a, i32 %b) "probe-stack"="inline-asm" {
 entry:
   %0 = call { i32, i1 } @llvm.sadd.with.overflow.i32(i32 %a, i32 %b)
   %1 = extractvalue { i32, i1 } %0, 0
@@ -213,6 +234,13 @@ ovf.fail:
   call void @nish_panic_overflow(i32 0)
   unreachable
 }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end fn-add-plain -->
 
@@ -235,7 +263,14 @@ entry:
   ret double %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end fn-f64 -->
 
@@ -307,9 +342,16 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end gen-function -->
 
@@ -423,13 +465,14 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn }
-attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #5 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -445,6 +488,11 @@ attributes #5 = { nounwind noreturn cold }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element i32", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end gen-infer -->
 
@@ -548,10 +596,11 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!8, !9, !10, !11, !12}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -560,6 +609,11 @@ attributes #2 = { nounwind }
 !5 = !{!"ptr", !1, i64 0}
 !6 = !{!"Box$str", !5, i64 0}
 !7 = !{!6, !5, i64 0}
+!8 = !{i32 8, !"cf-protection-branch", i32 1}
+!9 = !{i32 8, !"cf-protection-return", i32 1}
+!10 = !{i32 8, !"branch-target-enforcement", i32 1}
+!11 = !{i32 8, !"sign-return-address", i32 1}
+!12 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end gen-class -->
 
@@ -700,11 +754,18 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end gen-constraint -->
 
@@ -848,12 +909,13 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!8, !9, !10, !11, !12}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i1", !1, i64 0}
@@ -862,6 +924,11 @@ attributes #4 = { nounwind willreturn readnone }
 !5 = !{!"i32", !1, i64 0}
 !6 = !{!"Box$i32", !5, i64 0}
 !7 = !{!6, !5, i64 0}
+!8 = !{i32 8, !"cf-protection-branch", i32 1}
+!9 = !{i32 8, !"cf-protection-return", i32 1}
+!10 = !{i32 8, !"branch-target-enforcement", i32 1}
+!11 = !{i32 8, !"sign-return-address", i32 1}
+!12 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end gen-method -->
 
@@ -978,9 +1045,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end fnarg-named -->
 
@@ -1121,12 +1195,13 @@ forof.end:
   ret %struct.nish_array* %30
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind willreturn }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!17, !18, !19, !20, !21}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -1144,6 +1219,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !14 = !{!13, !13, i64 0}
 !15 = !{!"element double", !6, i64 0}
 !16 = !{!15, !15, i64 0}
+!17 = !{i32 8, !"cf-protection-branch", i32 1}
+!18 = !{i32 8, !"cf-protection-return", i32 1}
+!19 = !{i32 8, !"branch-target-enforcement", i32 1}
+!20 = !{i32 8, !"sign-return-address", i32 1}
+!21 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end fnarg-arrow -->
 
@@ -1217,8 +1297,15 @@ entry:
   ret double %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end par-map -->
 
@@ -1288,8 +1375,15 @@ entry:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end par-alloc -->
 
@@ -1384,9 +1478,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end par-capture -->
 
@@ -1597,13 +1698,14 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -1619,6 +1721,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element i32", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end thread-scope -->
 
@@ -1798,13 +1905,14 @@ entry:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!8, !9, !10, !11, !12}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"ptr", !1, i64 0}
@@ -1813,6 +1921,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !5 = !{!4, !2, i64 0}
 !6 = !{!"Tally", !3, i64 0}
 !7 = !{!6, !3, i64 0}
+!8 = !{i32 8, !"cf-protection-branch", i32 1}
+!9 = !{i32 8, !"cf-protection-return", i32 1}
+!10 = !{i32 8, !"branch-target-enforcement", i32 1}
+!11 = !{i32 8, !"sign-return-address", i32 1}
+!12 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end thread-task-arrow -->
 
@@ -1896,11 +2009,12 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!8, !9, !10, !11, !12}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"ptr", !1, i64 0}
@@ -1909,6 +2023,11 @@ attributes #3 = { nounwind willreturn readnone }
 !5 = !{!4, !2, i64 0}
 !6 = !{!"Tally", !3, i64 0}
 !7 = !{!6, !3, i64 0}
+!8 = !{i32 8, !"cf-protection-branch", i32 1}
+!9 = !{i32 8, !"cf-protection-return", i32 1}
+!10 = !{i32 8, !"branch-target-enforcement", i32 1}
+!11 = !{i32 8, !"sign-return-address", i32 1}
+!12 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end thread-mutex -->
 
@@ -1997,10 +2116,17 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end thread-atomic -->
 
@@ -2205,14 +2331,15 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #5 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -2228,6 +2355,11 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element i32", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end thread-channel -->
 
@@ -2423,13 +2555,14 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -2445,6 +2578,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element ptr", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end thread-cross -->
 
@@ -2504,7 +2642,14 @@ entry:
   ret i32 %4
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end std-random -->
 
@@ -2889,10 +3034,11 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!21, !22, !23, !24, !25}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -2914,6 +3060,11 @@ attributes #2 = { nounwind noreturn cold }
 !18 = !{!16, !15, i64 16}
 !19 = !{!"element i32", !1, i64 0}
 !20 = !{!19, !19, i64 0}
+!21 = !{i32 8, !"cf-protection-branch", i32 1}
+!22 = !{i32 8, !"cf-protection-return", i32 1}
+!23 = !{i32 8, !"branch-target-enforcement", i32 1}
+!24 = !{i32 8, !"sign-return-address", i32 1}
+!25 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end map-has -->
 
@@ -4505,14 +4656,15 @@ while.end:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { nounwind noreturn cold }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #5 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!28, !29, !30, !31, !32}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -4541,6 +4693,11 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !25 = !{!"element ptr", !6, i64 0}
 !26 = !{!25, !25, i64 0}
 !27 = !{!17, !15, i64 0}
+!28 = !{i32 8, !"cf-protection-branch", i32 1}
+!29 = !{i32 8, !"cf-protection-return", i32 1}
+!30 = !{i32 8, !"branch-target-enforcement", i32 1}
+!31 = !{i32 8, !"sign-return-address", i32 1}
+!32 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end map-get -->
 
@@ -4771,11 +4928,12 @@ if.end:
   ret i32 %15
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind readonly }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!20, !21, !22, !23, !24}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -4796,6 +4954,11 @@ attributes #3 = { nounwind willreturn readnone }
 !17 = !{!16, !14, i64 48}
 !18 = !{!16, !15, i64 40}
 !19 = !{!16, !15, i64 32}
+!20 = !{i32 8, !"cf-protection-branch", i32 1}
+!21 = !{i32 8, !"cf-protection-return", i32 1}
+!22 = !{i32 8, !"branch-target-enforcement", i32 1}
+!23 = !{i32 8, !"sign-return-address", i32 1}
+!24 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end map-iter -->
 
@@ -6634,14 +6797,15 @@ while.end:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { nounwind noreturn cold }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #5 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!36, !37, !38, !39, !40}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -6678,6 +6842,11 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !33 = !{!28, !15, i64 20}
 !34 = !{!28, !15, i64 40}
 !35 = !{!28, !15, i64 0}
+!36 = !{i32 8, !"cf-protection-branch", i32 1}
+!37 = !{i32 8, !"cf-protection-return", i32 1}
+!38 = !{i32 8, !"branch-target-enforcement", i32 1}
+!39 = !{i32 8, !"sign-return-address", i32 1}
+!40 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end map-fused -->
 
@@ -8308,14 +8477,15 @@ while.end:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind willreturn memory(argmem: read) }
-attributes #4 = { nounwind willreturn }
-attributes #5 = { nounwind noreturn cold }
-attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #5 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #6 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!28, !29, !30, !31, !32}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -8344,6 +8514,11 @@ attributes #6 = { alwaysinline nounwind willreturn allocsize(0) }
 !25 = !{!4, !2, i64 48}
 !26 = !{!"element ptr", !1, i64 0}
 !27 = !{!26, !26, i64 0}
+!28 = !{i32 8, !"cf-protection-branch", i32 1}
+!29 = !{i32 8, !"cf-protection-return", i32 1}
+!30 = !{i32 8, !"branch-target-enforcement", i32 1}
+!31 = !{i32 8, !"sign-return-address", i32 1}
+!32 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end map-fused-extras -->
 
@@ -8484,8 +8659,9 @@ if.end.1:
   ret i8* %46
 }
 
-attributes #0 = { nounwind }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -8501,6 +8677,11 @@ attributes #0 = { nounwind }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element ptr", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end json-fields -->
 
@@ -8605,9 +8786,16 @@ entry:
   ret i32 %1
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end json-writer -->
 
@@ -8785,10 +8973,11 @@ cond.end:
   ret i32 %27
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!17, !18, !19, !20, !21}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -8806,6 +8995,11 @@ attributes #2 = { nounwind willreturn readonly }
 !14 = !{!"i1", !6, i64 0}
 !15 = !{!"JsonTokenizer", !11, i64 0, !12, i64 8, !12, i64 16, !11, i64 24, !13, i64 32, !13, i64 36, !13, i64 40, !13, i64 44, !13, i64 48, !13, i64 52, !13, i64 56, !13, i64 60, !13, i64 64, !13, i64 68, !13, i64 72, !13, i64 76, !13, i64 80, !13, i64 84, !13, i64 88, !14, i64 92}
 !16 = !{!15, !13, i64 60}
+!17 = !{i32 8, !"cf-protection-branch", i32 1}
+!18 = !{i32 8, !"cf-protection-return", i32 1}
+!19 = !{i32 8, !"branch-target-enforcement", i32 1}
+!20 = !{i32 8, !"sign-return-address", i32 1}
+!21 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end json-tokenizer -->
 
@@ -9078,7 +9272,7 @@ if.end:
   ret i32 %7
 }
 
-define internal void @.json.decode.Greeting(%struct.JsonDecoder* %r, %struct.Greeting* %v) {
+define internal void @.json.decode.Greeting(%struct.JsonDecoder* %r, %struct.Greeting* %v) "probe-stack"="inline-asm" {
 entry:
   %seen = alloca i1, align 1
   %seen.1 = alloca i1, align 1
@@ -9277,7 +9471,7 @@ json.done:
   ret void
 }
 
-define internal void @.json.encode.Greeting(%struct.JsonWriter* %r, %struct.Greeting* %v) {
+define internal void @.json.encode.Greeting(%struct.JsonWriter* %r, %struct.Greeting* %v) "probe-stack"="inline-asm" {
 entry:
   %0 = getelementptr inbounds %struct.JsonWriter, %struct.JsonWriter* %r, i32 0, i32 3
   %1 = load i32, i32* %0, align 4, !tbaa !16
@@ -9317,24 +9511,25 @@ json.write:
   ret void
 }
 
-define internal void @.json.decode.JsonNumber(%struct.JsonDecoder* %r, %struct.JsonNumber* %v) {
+define internal void @.json.decode.JsonNumber(%struct.JsonDecoder* %r, %struct.JsonNumber* %v) "probe-stack"="inline-asm" {
 entry:
   call void @nish.JsonDecoder.number(%struct.JsonDecoder* %r, %struct.JsonNumber* %v)
   ret void
 }
 
-define internal void @.json.encode.JsonNumber(%struct.JsonWriter* %r, %struct.JsonNumber* %v) {
+define internal void @.json.encode.JsonNumber(%struct.JsonWriter* %r, %struct.JsonNumber* %v) "probe-stack"="inline-asm" {
 entry:
   call void @nish.jsonEncodeNumber(%struct.JsonWriter* %r, %struct.JsonNumber* %v)
   ret void
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!17, !18, !19, !20, !21}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i64", !1, i64 0}
@@ -9352,6 +9547,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !14 = !{!13, !4, i64 8}
 !15 = !{!"JsonWriter", !3, i64 0, !4, i64 8, !4, i64 12, !4, i64 16, !4, i64 20, !4, i64 24, !4, i64 28, !4, i64 32, !4, i64 36, !4, i64 40, !12, i64 44, !12, i64 45, !12, i64 46}
 !16 = !{!15, !4, i64 16}
+!17 = !{i32 8, !"cf-protection-branch", i32 1}
+!18 = !{i32 8, !"cf-protection-return", i32 1}
+!19 = !{i32 8, !"branch-target-enforcement", i32 1}
+!20 = !{i32 8, !"sign-return-address", i32 1}
+!21 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end json-typed -->
 
@@ -9525,10 +9725,17 @@ cond.end:
   ret i64 %8
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind readonly }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind readonly "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end json-value -->
 
@@ -9574,9 +9781,16 @@ entry:
   ret i32 %1
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end types-i64 -->
 
@@ -9613,7 +9827,14 @@ land.end:
   ret i1 %2
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end types-bool -->
 
@@ -9650,7 +9871,14 @@ entry:
   ret double %5
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-literals -->
 
@@ -9734,9 +9962,10 @@ rng.ok:
   ret i8 %1
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -9751,6 +9980,11 @@ attributes #1 = { nounwind noreturn cold }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i8", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end type-ranged -->
 
@@ -9847,11 +10081,12 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -9866,6 +10101,11 @@ attributes #3 = { nounwind willreturn readnone }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end type-ranged-proven -->
 
@@ -9928,9 +10168,16 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end type-ranged-export -->
 
@@ -10006,9 +10253,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-locals -->
 
@@ -10060,8 +10314,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-const -->
 
@@ -10159,10 +10420,11 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -10178,6 +10440,11 @@ attributes #2 = { nounwind willreturn }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element i8", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-type-alias -->
 
@@ -10268,10 +10535,17 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi -->
 
@@ -10341,8 +10615,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-pointer -->
 
@@ -10444,10 +10725,17 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn memory(argmem: read) }
-attributes #3 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-string -->
 
@@ -10591,9 +10879,16 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-string-result -->
 
@@ -10734,10 +11029,17 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn memory(argmem: read) }
-attributes #3 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-owned-string -->
 
@@ -10835,10 +11137,11 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -10854,6 +11157,11 @@ attributes #2 = { nounwind noreturn cold }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element i8", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-buffer -->
 
@@ -11001,15 +11309,21 @@ handle.closed.1:
   ret i32 %7
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn memory(argmem: read) }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!5, !6, !7, !8, !9}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"ptr", !1, i64 0}
 !3 = !{!"File", !2, i64 0}
 !4 = !{!3, !2, i64 0}
+!5 = !{i32 8, !"cf-protection-branch", i32 1}
+!6 = !{i32 8, !"cf-protection-return", i32 1}
+!7 = !{i32 8, !"branch-target-enforcement", i32 1}
+!8 = !{i32 8, !"sign-return-address", i32 1}
+!9 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-ffi-handle -->
 
@@ -11097,9 +11411,16 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-enum -->
 
@@ -11212,16 +11533,22 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!6, !7, !8, !9, !10}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
 !3 = !{!"Loop", !2, i64 0, !2, i64 4}
 !4 = !{!3, !2, i64 0}
 !5 = !{!3, !2, i64 4}
+!6 = !{i32 8, !"cf-protection-branch", i32 1}
+!7 = !{i32 8, !"cf-protection-return", i32 1}
+!8 = !{i32 8, !"branch-target-enforcement", i32 1}
+!9 = !{i32 8, !"sign-return-address", i32 1}
+!10 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-enum-member -->
 
@@ -11366,12 +11693,13 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!9, !10, !11, !12, !13}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -11381,6 +11709,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !6 = !{!"Square", !2, i64 0, !2, i64 4}
 !7 = !{!6, !2, i64 0}
 !8 = !{!6, !2, i64 4}
+!9 = !{i32 8, !"cf-protection-branch", i32 1}
+!10 = !{i32 8, !"cf-protection-return", i32 1}
+!11 = !{i32 8, !"branch-target-enforcement", i32 1}
+!12 = !{i32 8, !"sign-return-address", i32 1}
+!13 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-union -->
 
@@ -11531,12 +11864,13 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!9, !10, !11, !12, !13}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -11546,6 +11880,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !6 = !{!"Square", !2, i64 0, !2, i64 4}
 !7 = !{!6, !2, i64 0}
 !8 = !{!6, !2, i64 4}
+!9 = !{i32 8, !"cf-protection-branch", i32 1}
+!10 = !{i32 8, !"cf-protection-return", i32 1}
+!11 = !{i32 8, !"branch-target-enforcement", i32 1}
+!12 = !{i32 8, !"sign-return-address", i32 1}
+!13 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-union-narrow -->
 
@@ -11653,9 +11992,16 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end union-switch -->
 
@@ -11691,8 +12037,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-main -->
 
@@ -11732,8 +12085,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-shebang -->
 
@@ -11787,9 +12147,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-strict-exports -->
 
@@ -11841,9 +12208,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end decl-no-strict-exports -->
 
@@ -11873,9 +12247,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mod-math -->
 
@@ -11909,8 +12290,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mod-main -->
 
@@ -11947,8 +12335,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mod-package -->
 
@@ -12024,9 +12419,16 @@ if.end:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-if -->
 
@@ -12088,9 +12490,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-while -->
 
@@ -12151,9 +12560,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-do -->
 
@@ -12217,9 +12633,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-for -->
 
@@ -12273,7 +12696,14 @@ sw.default:
   ret i32 40
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-switch -->
 
@@ -12361,9 +12791,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-break-continue -->
 
@@ -12513,9 +12950,16 @@ if.end:
   ret i8* %11
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-result -->
 
@@ -12686,10 +13130,17 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-result-by-value -->
 
@@ -12719,9 +13170,16 @@ entry:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { noreturn nounwind }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { noreturn nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-process-exit -->
 
@@ -12796,10 +13254,11 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -12814,6 +13273,11 @@ attributes #2 = { nounwind willreturn readnone }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end stmt-for-of -->
 
@@ -12843,7 +13307,14 @@ cond.end:
   ret i32 %1
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-ternary -->
 
@@ -12889,7 +13360,14 @@ lor.end:
   ret i1 %3
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-logical -->
 
@@ -12966,9 +13444,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-compound -->
 
@@ -13009,7 +13494,14 @@ entry:
   ret i32 %2
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-bitwise -->
 
@@ -13090,10 +13582,11 @@ entry:
   ret void
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -13108,6 +13601,11 @@ attributes #2 = { nounwind noreturn cold }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-compound-target -->
 
@@ -13173,9 +13671,16 @@ entry:
   ret i64 %1
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-shifts -->
 
@@ -13218,8 +13723,15 @@ div.ok:
   ret i32 %5
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-div-checked -->
 
@@ -13270,9 +13782,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-overflow-checked -->
 
@@ -13344,10 +13863,11 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -13359,6 +13879,11 @@ attributes #2 = { nounwind willreturn readnone }
 !8 = !{!"header ptr", !6, i64 0}
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-overflow-proven -->
 
@@ -13531,9 +14056,16 @@ entry:
   ret i32 %a
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-unsigned -->
 
@@ -13595,7 +14127,14 @@ entry:
   ret float 0x3FB99999A0000000
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end expr-f32 -->
 
@@ -13627,7 +14166,14 @@ entry:
   ret i8* bitcast ({ i64, [13 x i8] }* @.str.0 to i8*)
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end str-literal -->
 
@@ -13670,9 +14216,16 @@ entry:
   ret i32 %2
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn memory(argmem: read) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end str-ops -->
 
@@ -13759,12 +14312,19 @@ lor.end:
   ret i1 %7
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn memory(argmem: read) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #5 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end str-bytes -->
 
@@ -13864,9 +14424,16 @@ slice.ok:
   ret i8* %8
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end str-slice -->
 
@@ -13942,10 +14509,11 @@ bytes.ok:
   ret i8* %9
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!12, !13, !14, !15, !16}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -13958,6 +14526,11 @@ attributes #2 = { nounwind noreturn cold }
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
 !11 = !{!9, !8, i64 16}
+!12 = !{i32 8, !"cf-protection-branch", i32 1}
+!13 = !{i32 8, !"cf-protection-return", i32 1}
+!14 = !{i32 8, !"branch-target-enforcement", i32 1}
+!15 = !{i32 8, !"sign-return-address", i32 1}
+!16 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end str-from-bytes -->
 
@@ -14060,11 +14633,18 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn memory(argmem: read) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end str-index-of-from -->
 
@@ -14099,8 +14679,15 @@ entry:
   ret i8* %5
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end str-template -->
 
@@ -14137,7 +14724,14 @@ entry:
   ret void
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end str-console-log -->
 
@@ -14205,9 +14799,10 @@ bounds.ok:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -14222,6 +14817,11 @@ attributes #1 = { nounwind noreturn cold }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-index -->
 
@@ -14306,9 +14906,10 @@ bounds.ok:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -14323,6 +14924,11 @@ attributes #1 = { nounwind noreturn cold }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i8", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-u8-elements -->
 
@@ -14427,11 +15033,12 @@ if.end:
   ret i32 0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -14446,6 +15053,11 @@ attributes #3 = { nounwind willreturn readnone }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-bounds-proven -->
 
@@ -14542,11 +15154,12 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!17, !18, !19, !20, !21}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"ptr", !1, i64 0}
@@ -14564,6 +15177,11 @@ attributes #3 = { nounwind willreturn readnone }
 !14 = !{!12, !11, i64 16}
 !15 = !{!"element i32", !1, i64 0}
 !16 = !{!15, !15, i64 0}
+!17 = !{i32 8, !"cf-protection-branch", i32 1}
+!18 = !{i32 8, !"cf-protection-return", i32 1}
+!19 = !{i32 8, !"branch-target-enforcement", i32 1}
+!20 = !{i32 8, !"sign-return-address", i32 1}
+!21 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-bounds-path -->
 
@@ -14723,11 +15341,12 @@ bounds.ok.1:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!18, !19, !20, !21, !22}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -14746,6 +15365,11 @@ attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
 !15 = !{!14, !13, i64 0}
 !16 = !{!"element i32", !6, i64 0}
 !17 = !{!16, !16, i64 0}
+!18 = !{i32 8, !"cf-protection-branch", i32 1}
+!19 = !{i32 8, !"cf-protection-return", i32 1}
+!20 = !{i32 8, !"branch-target-enforcement", i32 1}
+!21 = !{i32 8, !"sign-return-address", i32 1}
+!22 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-repeat-check -->
 
@@ -14871,10 +15495,11 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -14889,6 +15514,11 @@ attributes #2 = { nounwind willreturn readnone }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-bounds-offset -->
 
@@ -15023,10 +15653,11 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -15042,6 +15673,11 @@ attributes #2 = { nounwind willreturn readnone }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element i32", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-bounds-range -->
 
@@ -15208,13 +15844,14 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -15230,6 +15867,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element i32", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-bounds-returned -->
 
@@ -15328,9 +15970,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end str-bounds-toi32 -->
 
@@ -15555,12 +16204,13 @@ bounds.ok.1:
   ret void
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!18, !19, !20, !21, !22}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -15579,6 +16229,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !15 = !{!14, !13, i64 0}
 !16 = !{!"element i32", !6, i64 0}
 !17 = !{!16, !16, i64 0}
+!18 = !{i32 8, !"cf-protection-branch", i32 1}
+!19 = !{i32 8, !"cf-protection-return", i32 1}
+!20 = !{i32 8, !"branch-target-enforcement", i32 1}
+!21 = !{i32 8, !"sign-return-address", i32 1}
+!22 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-field-element -->
 
@@ -15731,12 +16386,13 @@ if.end:
   ret %struct.Link* %29
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!20, !21, !22, !23, !24}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -15757,6 +16413,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !17 = !{!16, !15, i64 0}
 !18 = !{!"Link", !15, i64 0}
 !19 = !{!18, !15, i64 0}
+!20 = !{i32 8, !"cf-protection-branch", i32 1}
+!21 = !{i32 8, !"cf-protection-return", i32 1}
+!22 = !{i32 8, !"branch-target-enforcement", i32 1}
+!23 = !{i32 8, !"sign-return-address", i32 1}
+!24 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-header-field -->
 
@@ -15885,10 +16546,11 @@ entry:
   ret i1 %8
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -15904,6 +16566,11 @@ attributes #2 = { nounwind noreturn cold }
 !12 = !{!11, !11, i64 0}
 !13 = !{!9, !7, i64 8}
 !14 = !{!9, !8, i64 16}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end cls-inline-array -->
 
@@ -15985,11 +16652,12 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -16004,6 +16672,11 @@ attributes #3 = { nounwind willreturn readnone }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end unsafe-unchecked-get -->
 
@@ -16037,8 +16710,9 @@ entry:
   ret i32 %5
 }
 
-attributes #0 = { nounwind willreturn readonly }
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -16052,6 +16726,11 @@ attributes #0 = { nounwind willreturn readonly }
 !10 = !{!9, !8, i64 16}
 !11 = !{!"element i32", !6, i64 0}
 !12 = !{!11, !11, i64 0}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-unchecked -->
 
@@ -16196,13 +16875,14 @@ entry:
   ret %struct.nish_array* %1
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -16218,6 +16898,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element i32", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-literal-push -->
 
@@ -16392,12 +17077,13 @@ idx.found:
   ret i32 %12
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind willreturn memory(argmem: read) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -16412,6 +17098,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element ptr", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-join -->
 
@@ -16614,12 +17305,13 @@ set.ok:
   ret %struct.nish_array* %57
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -16635,6 +17327,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !7, i64 8}
 !13 = !{!"element i8", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-bytes -->
 
@@ -16718,12 +17415,13 @@ entry:
   ret i32 %2
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -16737,6 +17435,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !10 = !{!9, !7, i64 0}
 !11 = !{!9, !7, i64 8}
 !12 = !{!9, !8, i64 16}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-new -->
 
@@ -16874,10 +17577,11 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -16892,6 +17596,11 @@ attributes #2 = { nounwind willreturn readnone }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-readonly -->
 
@@ -16988,9 +17697,10 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -17006,6 +17716,11 @@ attributes #1 = { nounwind }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element double", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-typed-names -->
 
@@ -17179,10 +17894,11 @@ while.end:
   ret double %29
 }
 
-attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -17196,6 +17912,11 @@ attributes #2 = { nounwind willreturn }
 !10 = !{!9, !7, i64 0}
 !11 = !{!9, !8, i64 16}
 !12 = !{!9, !7, i64 8}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end arr-records -->
 
@@ -17280,17 +18001,23 @@ entry:
   ret i32 %3
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!6, !7, !8, !9, !10}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
 !3 = !{!"Point", !2, i64 0, !2, i64 4}
 !4 = !{!3, !2, i64 0}
 !5 = !{!3, !2, i64 4}
+!6 = !{i32 8, !"cf-protection-branch", i32 1}
+!7 = !{i32 8, !"cf-protection-return", i32 1}
+!8 = !{i32 8, !"branch-target-enforcement", i32 1}
+!9 = !{i32 8, !"sign-return-address", i32 1}
+!10 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end cls-point -->
 
@@ -17356,10 +18083,11 @@ entry:
   ret %struct.Defaults* %1
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!9, !10, !11, !12, !13}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -17369,6 +18097,11 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 !6 = !{!5, !2, i64 0}
 !7 = !{!5, !3, i64 4}
 !8 = !{!5, !4, i64 8}
+!9 = !{i32 8, !"cf-protection-branch", i32 1}
+!10 = !{i32 8, !"cf-protection-return", i32 1}
+!11 = !{i32 8, !"branch-target-enforcement", i32 1}
+!12 = !{i32 8, !"sign-return-address", i32 1}
+!13 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end cls-initializers -->
 
@@ -17463,10 +18196,17 @@ entry:
   ret %struct.Pair* %0
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end cls-interface -->
 
@@ -17582,10 +18322,17 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end cls-prefix -->
 
@@ -17716,17 +18463,23 @@ entry:
   ret i32 %1
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!6, !7, !8, !9, !10}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
 !3 = !{!"Point", !2, i64 0, !2, i64 4}
 !4 = !{!3, !2, i64 0}
 !5 = !{!3, !2, i64 4}
+!6 = !{i32 8, !"cf-protection-branch", i32 1}
+!7 = !{i32 8, !"cf-protection-return", i32 1}
+!8 = !{i32 8, !"branch-target-enforcement", i32 1}
+!9 = !{i32 8, !"sign-return-address", i32 1}
+!10 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-stack-object -->
 
@@ -17891,19 +18644,25 @@ entry:
   ret i32 %3
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!6, !7, !8, !9, !10}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
 !3 = !{!"Point", !2, i64 0, !2, i64 4}
 !4 = !{!3, !2, i64 0}
 !5 = !{!3, !2, i64 4}
+!6 = !{i32 8, !"cf-protection-branch", i32 1}
+!7 = !{i32 8, !"cf-protection-return", i32 1}
+!8 = !{i32 8, !"branch-target-enforcement", i32 1}
+!9 = !{i32 8, !"sign-return-address", i32 1}
+!10 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-stack-object-arena -->
 
@@ -17955,8 +18714,15 @@ entry:
   ret i8* %1
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-arena-scope -->
 
@@ -18134,13 +18900,14 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!7, !8, !9, !10, !11}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -18148,6 +18915,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!"Cell", !2, i64 0, !3, i64 8}
 !5 = !{!4, !3, i64 8}
 !6 = !{!4, !2, i64 0}
+!7 = !{i32 8, !"cf-protection-branch", i32 1}
+!8 = !{i32 8, !"cf-protection-return", i32 1}
+!9 = !{i32 8, !"branch-target-enforcement", i32 1}
+!10 = !{i32 8, !"sign-return-address", i32 1}
+!11 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-callee-scope -->
 
@@ -18332,13 +19104,14 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!18, !19, !20, !21, !22}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -18357,6 +19130,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !15 = !{!12, !11, i64 16}
 !16 = !{!"element i32", !1, i64 0}
 !17 = !{!16, !16, i64 0}
+!18 = !{i32 8, !"cf-protection-branch", i32 1}
+!19 = !{i32 8, !"cf-protection-return", i32 1}
+!20 = !{i32 8, !"branch-target-enforcement", i32 1}
+!21 = !{i32 8, !"sign-return-address", i32 1}
+!22 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-loop-scope -->
 
@@ -18649,13 +19427,14 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -18671,6 +19450,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element ptr", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-join-parts -->
 
@@ -18986,13 +19770,14 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -19008,6 +19793,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element ptr", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-return-array -->
 
@@ -19178,10 +19968,17 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-tail-release -->
 
@@ -19324,14 +20121,20 @@ entry:
   ret i8* %4
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!5, !6, !7, !8, !9}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"ptr", !1, i64 0}
 !3 = !{!"Box", !2, i64 0}
 !4 = !{!3, !2, i64 0}
+!5 = !{i32 8, !"cf-protection-branch", i32 1}
+!6 = !{i32 8, !"cf-protection-return", i32 1}
+!7 = !{i32 8, !"branch-target-enforcement", i32 1}
+!8 = !{i32 8, !"sign-return-address", i32 1}
+!9 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-reclaim -->
 
@@ -19451,13 +20254,14 @@ entry:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -19471,6 +20275,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !10 = !{!9, !7, i64 0}
 !11 = !{!9, !7, i64 8}
 !12 = !{!9, !8, i64 16}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-arena-builtins -->
 
@@ -19636,8 +20445,15 @@ cond.end.1:
   ret i8* %44
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-using-arena -->
 
@@ -19796,12 +20612,13 @@ cond.end:
   ret i32 %13
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readonly }
-attributes #2 = { nounwind }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!19, !20, !21, !22, !23}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -19821,6 +20638,11 @@ attributes #4 = { nounwind willreturn readnone }
 !16 = !{!14, !13, i64 16}
 !17 = !{!"element ptr", !1, i64 0}
 !18 = !{!17, !17, i64 0}
+!19 = !{i32 8, !"cf-protection-branch", i32 1}
+!20 = !{i32 8, !"cf-protection-return", i32 1}
+!21 = !{i32 8, !"branch-target-enforcement", i32 1}
+!22 = !{i32 8, !"sign-return-address", i32 1}
+!23 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-nullable -->
 
@@ -19957,12 +20779,13 @@ while.end:
   ret %struct.Node* %10
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn readnone }
-attributes #2 = { nounwind readonly }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!7, !8, !9, !10, !11}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i32", !1, i64 0}
@@ -19970,6 +20793,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !4 = !{!"Node", !2, i64 0, !3, i64 8}
 !5 = !{!4, !3, i64 8}
 !6 = !{!4, !2, i64 0}
+!7 = !{i32 8, !"cf-protection-branch", i32 1}
+!8 = !{i32 8, !"cf-protection-return", i32 1}
+!9 = !{i32 8, !"branch-target-enforcement", i32 1}
+!10 = !{i32 8, !"sign-return-address", i32 1}
+!11 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-nullish -->
 
@@ -20117,10 +20945,11 @@ nullish.end:
   ret i8* %4
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn readonly }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!8, !9, !10, !11, !12}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"ptr", !1, i64 0}
@@ -20129,6 +20958,11 @@ attributes #2 = { nounwind willreturn readonly }
 !5 = !{!"Customer", !2, i64 0, !2, i64 8}
 !6 = !{!5, !2, i64 8}
 !7 = !{!5, !2, i64 0}
+!8 = !{i32 8, !"cf-protection-branch", i32 1}
+!9 = !{i32 8, !"cf-protection-return", i32 1}
+!10 = !{i32 8, !"branch-target-enforcement", i32 1}
+!11 = !{i32 8, !"sign-return-address", i32 1}
+!12 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end mem-optional-chain -->
 
@@ -20224,7 +21058,14 @@ min.end:
   ret double %15
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-math-f64 -->
 
@@ -20263,7 +21104,14 @@ entry:
   ret double %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-math-i32 -->
 
@@ -20299,7 +21147,14 @@ entry:
   ret i32 %3
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-math-clz32 -->
 
@@ -20337,7 +21192,14 @@ entry:
   ret double %0
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-conversions -->
 
@@ -20382,7 +21244,14 @@ entry:
   ret i64 %5
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-ct -->
 
@@ -20419,7 +21288,14 @@ entry:
   ret void
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-wipe -->
 
@@ -20492,7 +21368,14 @@ entry:
   ret i1 %0
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-owner -->
 
@@ -20642,13 +21525,14 @@ entry:
   ret void
 }
 
-attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!16, !17, !18, !19, !20}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -20665,6 +21549,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !13 = !{!"ptr", !6, i64 0}
 !14 = !{!"Secret$arr.u8", !13, i64 0}
 !15 = !{!14, !13, i64 0}
+!16 = !{i32 8, !"cf-protection-branch", i32 1}
+!17 = !{i32 8, !"cf-protection-return", i32 1}
+!18 = !{i32 8, !"branch-target-enforcement", i32 1}
+!19 = !{i32 8, !"sign-return-address", i32 1}
+!20 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-secret -->
 
@@ -20855,13 +21744,14 @@ entry:
   ret void
 }
 
-attributes #0 = { nounwind willreturn readonly }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!18, !19, !20, !21, !22}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -20880,6 +21770,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !15 = !{!14, !13, i64 0}
 !16 = !{!"Secret$arr.u8", !13, i64 0}
 !17 = !{!16, !13, i64 0}
+!18 = !{i32 8, !"cf-protection-branch", i32 1}
+!19 = !{i32 8, !"cf-protection-return", i32 1}
+!20 = !{i32 8, !"branch-target-enforcement", i32 1}
+!21 = !{i32 8, !"sign-return-address", i32 1}
+!22 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-secret-field -->
 
@@ -20946,8 +21841,15 @@ entry:
   ret i32 %1
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-host-facts -->
 
@@ -21051,10 +21953,11 @@ cond.end:
   ret i32 %23
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -21066,6 +21969,11 @@ attributes #2 = { nounwind noreturn cold }
 !8 = !{!"header ptr", !6, i64 0}
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-net -->
 
@@ -21200,10 +22108,11 @@ cond.end:
   ret i32 %39
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -21218,6 +22127,11 @@ attributes #2 = { nounwind noreturn cold }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-net-udp -->
 
@@ -21266,7 +22180,14 @@ entry:
   ret i32 %1
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-net-reuseport -->
 
@@ -21373,10 +22294,11 @@ cond.end:
   ret i32 %10
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -21391,6 +22313,11 @@ attributes #2 = { nounwind noreturn cold }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-net-loop -->
 
@@ -21527,10 +22454,11 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -21545,6 +22473,11 @@ attributes #2 = { nounwind noreturn cold }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-term -->
 
@@ -21567,7 +22500,14 @@ entry:
   ret i1 %1
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-random -->
 
@@ -21641,9 +22581,16 @@ if.else:
   ret i32 %7
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-streams -->
 
@@ -21699,8 +22646,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-files -->
 
@@ -21805,12 +22759,13 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -21826,6 +22781,11 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element ptr", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-process -->
 
@@ -21940,10 +22900,11 @@ entry:
   ret i64 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!14, !15, !16, !17, !18}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -21958,6 +22919,11 @@ attributes #2 = { nounwind noreturn cold }
 !11 = !{!9, !8, i64 16}
 !12 = !{!"element i32", !6, i64 0}
 !13 = !{!12, !12, i64 0}
+!14 = !{i32 8, !"cf-protection-branch", i32 1}
+!15 = !{i32 8, !"cf-protection-return", i32 1}
+!16 = !{i32 8, !"branch-target-enforcement", i32 1}
+!17 = !{i32 8, !"sign-return-address", i32 1}
+!18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-process-children -->
 
@@ -22043,10 +23009,17 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readnone }
-attributes #3 = { nounwind noreturn cold }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-host -->
 
@@ -22209,13 +23182,14 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!15, !16, !17, !18, !19}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -22231,6 +23205,11 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !12 = !{!9, !8, i64 16}
 !13 = !{!"element ptr", !6, i64 0}
 !14 = !{!13, !13, i64 0}
+!15 = !{i32 8, !"cf-protection-branch", i32 1}
+!16 = !{i32 8, !"cf-protection-return", i32 1}
+!17 = !{i32 8, !"branch-target-enforcement", i32 1}
+!18 = !{i32 8, !"sign-return-address", i32 1}
+!19 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-driver -->
 
@@ -22308,8 +23287,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-env -->
 
@@ -22390,8 +23376,15 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-realpath -->
 
@@ -22445,9 +23438,10 @@ if.end:
   ret i32 %6
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -22459,6 +23453,11 @@ attributes #1 = { nounwind willreturn }
 !8 = !{!"header ptr", !6, i64 0}
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-read-bytes -->
 
@@ -22658,10 +23657,17 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-capabilities -->
 
@@ -22782,9 +23788,10 @@ entry:
   ret i32 %0
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -22796,6 +23803,11 @@ attributes #1 = { nounwind willreturn }
 !8 = !{!"header ptr", !6, i64 0}
 !9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
 !10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-nish-modules -->
 
@@ -22874,9 +23886,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end opt-nsw -->
 
@@ -22940,9 +23959,16 @@ entry:
   ret i32 %2
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end unsafe-wrapping -->
 
@@ -22969,7 +23995,14 @@ entry:
   ret i32 %4
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end opt-wrapping -->
 
@@ -23016,9 +24049,16 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind noreturn cold }
-attributes #2 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end opt-target -->
 
@@ -23185,16 +24225,23 @@ entry:
   ret i8* %s
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { nounwind willreturn }
-attributes #3 = { nounwind }
-attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) }
-attributes #6 = { nounwind willreturn memory(read, inaccessiblemem: readwrite) }
-attributes #7 = { noreturn nounwind }
-attributes #8 = { nounwind noreturn cold }
-attributes #9 = { nounwind willreturn memory(inaccessiblemem: readwrite) }
-attributes #10 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #5 = { nounwind willreturn memory(argmem: read, inaccessiblemem: readwrite) "probe-stack"="inline-asm" }
+attributes #6 = { nounwind willreturn memory(read, inaccessiblemem: readwrite) "probe-stack"="inline-asm" }
+attributes #7 = { noreturn nounwind "probe-stack"="inline-asm" }
+attributes #8 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #9 = { nounwind willreturn memory(inaccessiblemem: readwrite) "probe-stack"="inline-asm" }
+attributes #10 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end runtime-prelude -->

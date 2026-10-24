@@ -155,7 +155,11 @@ own source until the seed compiles it, which is the next release.
    measured reason. Taking JavaScript's meaning is never worth a cost to the
    native build: where it is slower, Nish's meaning stays and the difference
    is a C row. The classes and the ledger of every C row are in
-   [wp33-round-trip.md](wp33-round-trip.md) §2, §3 and §6.
+   [wp33-round-trip.md](wp33-round-trip.md) §2, §3 and §6. A B or C construct
+   ships its `--emit-ts` translation (`src/emit-ts*.ts`) and a fixture under
+   `tests/emit-ts/`, so `node tests/run.js emit-ts` runs it both ways; one
+   that cannot be written yet is refused with an `NL40xx` code, never
+   written with JavaScript's meaning.
 2. **Parser and validator.** New syntax needs a node kind in `src/nodes.ts`
    (with its child layout written beside it) and a production in
    `src/parser.ts`. If the construct can *never* be compiled, add a rule to
@@ -678,24 +682,38 @@ intrinsics become libm calls for non-constant arguments).
 | Profile | Flags | Equivalent |
 | --- | --- | --- |
 | `debug` | clang defaults, `-lm` | the "before" number; symbols kept |
-| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, plus `-Wl,--lto-partitions=<cores>` under lld | Rust `--release` |
-| `size` | `speed` (one LTO partition) plus `-Oz -fno-stack-protector -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
+| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, plus `-Wl,--lto-partitions=<cores>` under lld on a target without control-flow landing pads | Rust `--release` |
+| `size` | `speed` (one LTO partition) plus `-Oz -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
 | `wasm` | `--target=wasm32-unknown-unknown -Oz -nostdlib -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections` | freestanding module for modules that do not use the C runtime |
 | `napi` | `speed` (one LTO partition) plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
 | `wasi` | `--target=wasm32-wasi --sysroot=<WASI sysroot> -Oz -DNDEBUG -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all`, plus `-nodefaultlibs -lc <libclang_rt.builtins-wasm32.a>` when clang has no wasm32 compiler-rt of its own | a WASI command module (`_start` runs `main`; `node examples/wasi-host.mjs`, `wasmtime`); see [wp7-runtime.md](wp7-runtime.md#wasi-target) |
+
+Every native profile (`debug`, `speed`, `size`, `napi`) also hardens the
+binary: `-fcf-protection=full` on x86-64 or `-mbranch-protection=standard` on
+arm64 (the triple from `$CC -dumpmachine` decides), `-fstack-protector-strong`,
+`-D_FORTIFY_SOURCE=3` (not in `debug`, where it needs an optimiser it lacks),
+and on ELF `-fstack-clash-protection -Wl,-z,relro,-z,now -Wl,-z,noexecstack`.
+The stack protector and FORTIFY reach the C runtime alone; the IR carries the
+control-flow and probe-stack module flags itself (`src/ir.ts`, numbered last,
+not on wasm). `scripts/check-hardening.mjs` reads the result back from the
+binary's headers. What each flag closes, what it costs and what it leaves
+uncovered: [security/runtime.md](security/runtime.md#binary-hardening-rt-harden).
 
 Platform notes: on macOS the script uses ld64's `-dead_strip` / `-x` instead
 of `--gc-sections` / `-s`, skips `-fuse-ld=lld` and `-fno-plt`; on Linux it
 prefers `lld` because GNU `ld` needs the gold plugin for LTO. `-flto`
 matters more here than for C: LLVM sees the Nish module and the runtime
 as one unit, so `nish_str_len` inlines into a load and unreferenced runtime
-functions vanish. Under lld the `speed` link splits LTO code generation
-into one partition per core (`nproc`, else `getconf _NPROCESSORS_ONLN`,
-else `sysctl -n hw.ncpu`) and runs them in parallel; the program is still
-optimised as one module, so the instructions it runs stay within a few of
-`bench/instructions.json`, and on a 4-core machine the link of
-`tests/link/net_relay_f64` takes about 0.7x the time. The bytes depend on
-the partition count, so they are the same for every link on one machine.
+functions vanish. Under lld the `speed` link of a target without control-flow landing pads
+splits LTO code generation into one partition per core (`nproc`, else
+`getconf _NPROCESSORS_ONLN`, else `sysctl -n hw.ncpu`) and runs them in
+parallel. x86-64 and arm64 link in one partition: a partition boundary makes
+the functions called across it external, each of which then opens with an
+`endbr64` or `bti c` the hot calls run (`fib` ran 6.5% more instructions with
+two partitions), so the hardened link gives up the parallel code generation,
+about 1.4x the time of a four-partition link of `tests/link/net_relay_f64`.
+The bytes depend on the partition count, so they are the same for every link
+on one machine.
 ld64 and the GNU ld fallback have no such flag and link in one partition.
 `CC` overrides the compiler; `NODE_INCLUDE` overrides the
 Node header directory for `napi`.

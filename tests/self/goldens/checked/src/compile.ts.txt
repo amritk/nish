@@ -41,6 +41,7 @@ import codeFor from "./codes" -> function @codeFor
 import TOOLCHAIN from "./codes" -> const TOOLCHAIN
 import Diagnostic from "./diagnostics" -> struct Diagnostic
 import formatList from "./diagnostics" -> function @formatList
+import EmittedProgram from "./emit-ts" -> struct EmittedProgram
 import emitTypeScript from "./emit-ts" -> function @emitTypeScript
 import fixProgram from "./fix" -> function @fixProgram
 import loadRoots from "./fix" -> function @loadRoots
@@ -267,8 +268,8 @@ function nearMiss(word: string): boolean -> @nearMiss
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_write
-  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.panicsText Options.constructor PackageSearch.wasRefused PackageSearch.where acceptsSidecars anyCallsSqlite astText basenameWithout cDeclared capabilityListMask capabilityNames capabilitySummary checkedText emitTypeScript externalFunctions findPackage fixProgram helpHint internalErrorFor isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nearMiss nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_realpath nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file planOutputs report reportDeprecations reportLoadFailure reportPerformance reportPortability reportToolchainFailure resolveTarget runProgram simulatedInternalError simulatedUnlabelledBuiltin supportedTargets usageText writeCapabilityReport writeSidecars
-  stackSites=6 stackLocals=4
+  calls: Compilation.arenaText Compilation.check Compilation.constructor Compilation.emit Compilation.entry Compilation.panicsText EmittedProgram.constructor Options.constructor PackageSearch.wasRefused PackageSearch.where acceptsSidecars anyCallsSqlite astText basenameWithout cDeclared capabilityListMask capabilityNames capabilitySummary checkedText emitTypeScript externalFunctions findPackage fixProgram helpHint internalErrorFor isProfile joinPath linkProgram loadRoots makeDirectoryFor missingToolchain nearMiss nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_print nish_realpath nish_str_at nish_str_concat nish_str_eq nish_write nish_write_file planOutputs report reportDeprecations reportLoadFailure reportPerformance reportPortability reportToolchainFailure resolveTarget runProgram simulatedInternalError simulatedUnlabelledBuiltin supportedTargets usageText writeCapabilityReport writeSidecars
+  stackSites=7 stackLocals=4
   callee +0:19 usageText -> @usageText
   callee +12:36 nearMiss -> @nearMiss
   local +16:9 opts: Options (const)
@@ -345,52 +346,53 @@ function main(): i32 -> @nish_main [exported entry]
   callee +577:5 report -> @report
   callee +580:3 reportDeprecations -> @reportDeprecations
   callee +581:3 reportPerformance -> @reportPerformance
-  callee +582:3 reportPortability -> @reportPortability
-  callee +592:5 Compilation.entry -> @Compilation.entry
-  local +594:9 asker: string (let)
-  callee +601:37 Compilation.entry -> @Compilation.entry
-  callee +615:19 capabilitySummary -> @capabilitySummary
-  callee +618:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +621:5 writeCapabilityReport -> @writeCapabilityReport
-  callee +630:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +633:36 Compilation.panicsText -> @Compilation.panicsText
-  callee +639:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +642:35 Compilation.arenaText -> @Compilation.arenaText
-  callee +648:11 checkedText -> @checkedText
-  local +656:11 ts: EmittedProgram (const)
-  callee +656:16 emitTypeScript -> @emitTypeScript
-  callee +658:14 internalErrorFor -> @internalErrorFor
-  callee +665:7 report -> @report
-  local +679:16 file: EmittedFile (const)
-  local +680:13 target: string | null (const)
-  callee +680:35 joinPath -> @joinPath
-  local +684:18 unit: ModuleUnit (const)
-  local +685:15 source: string | null (const)
-  local +694:16 file: EmittedFile (const)
-  local +695:13 path: string (const)
-  callee +695:20 joinPath -> @joinPath
-  callee +696:12 makeDirectoryFor -> @makeDirectoryFor
-  local +707:9 anySidecar: boolean (const)
-  local +712:9 fns: ExternalFunction[] (const)
-  callee +712:48 externalFunctions -> @externalFunctions
-  callee +713:22 acceptsSidecars -> @acceptsSidecars
-  callee +713:56 cDeclared -> @cDeclared
-  callee +714:5 report -> @report
-  local +717:9 emitted: EmittedModule[] (const)
-  callee +717:19 Compilation.emit -> @Compilation.emit
-  callee +719:12 runProgram -> @runProgram
-  callee +722:7 basenameWithout -> @basenameWithout
-  local +731:9 stems: string[] (const)
-  local +732:9 paths: string[] (const)
-  local +735:14 module: EmittedModule (const)
-  local +739:9 outputs: string[] (const)
-  callee +739:19 planOutputs -> @planOutputs
-  local +744:7 i: i32 (let)
-  local +746:11 file: string (const)
-  callee +747:10 makeDirectoryFor -> @makeDirectoryFor
-  callee +756:22 writeSidecars -> @writeSidecars
-  callee +762:10 linkProgram -> @linkProgram
-  callee +770:5 anyCallsSqlite -> @anyCallsSqlite
+  local +584:9 ts: EmittedProgram (const)
+  callee +584:39 emitTypeScript -> @emitTypeScript
+  callee +584:69 new EmittedProgram -> @EmittedProgram.constructor
+  callee +585:3 reportPortability -> @reportPortability
+  callee +595:5 Compilation.entry -> @Compilation.entry
+  local +597:9 asker: string (let)
+  callee +604:37 Compilation.entry -> @Compilation.entry
+  callee +618:19 capabilitySummary -> @capabilitySummary
+  callee +621:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +624:5 writeCapabilityReport -> @writeCapabilityReport
+  callee +633:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +636:36 Compilation.panicsText -> @Compilation.panicsText
+  callee +642:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +645:35 Compilation.arenaText -> @Compilation.arenaText
+  callee +651:11 checkedText -> @checkedText
+  callee +660:14 internalErrorFor -> @internalErrorFor
+  callee +667:7 report -> @report
+  local +681:16 file: EmittedFile (const)
+  local +682:13 target: string | null (const)
+  callee +682:35 joinPath -> @joinPath
+  local +686:18 unit: ModuleUnit (const)
+  local +687:15 source: string | null (const)
+  local +696:16 file: EmittedFile (const)
+  local +697:13 path: string (const)
+  callee +697:20 joinPath -> @joinPath
+  callee +698:12 makeDirectoryFor -> @makeDirectoryFor
+  local +709:9 anySidecar: boolean (const)
+  local +714:9 fns: ExternalFunction[] (const)
+  callee +714:48 externalFunctions -> @externalFunctions
+  callee +715:22 acceptsSidecars -> @acceptsSidecars
+  callee +715:56 cDeclared -> @cDeclared
+  callee +716:5 report -> @report
+  local +719:9 emitted: EmittedModule[] (const)
+  callee +719:19 Compilation.emit -> @Compilation.emit
+  callee +721:12 runProgram -> @runProgram
+  callee +724:7 basenameWithout -> @basenameWithout
+  local +733:9 stems: string[] (const)
+  local +734:9 paths: string[] (const)
+  local +737:14 module: EmittedModule (const)
+  local +741:9 outputs: string[] (const)
+  callee +741:19 planOutputs -> @planOutputs
+  local +746:7 i: i32 (let)
+  local +748:11 file: string (const)
+  callee +749:10 makeDirectoryFor -> @makeDirectoryFor
+  callee +758:22 writeSidecars -> @writeSidecars
+  callee +764:10 linkProgram -> @linkProgram
+  callee +772:5 anyCallsSqlite -> @anyCallsSqlite
 function programOnPath(program: string): string -> @programOnPath
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_getenv

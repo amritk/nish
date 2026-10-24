@@ -210,7 +210,7 @@ import {
   RuntimeTable,
 } from "./runtime"
 import { Local, STORAGE_PARAM } from "./symbols"
-import { resolveTarget, targetHeader } from "./target"
+import { HARDENING_ATTRS, hardeningModuleFlags, resolveTarget, targetHeader } from "./target"
 import { isForeignBuffer, T_STRING, T_VOID, TypeTable } from "./types"
 import { isWasmBuild } from "./visibility"
 
@@ -391,6 +391,9 @@ export class Emitter {
     if (opts.debugInfo) {
       this.debug = new DebugInfo(this.module, this.program, table)
     }
+    if (!isWasmBuild(opts)) {
+      this.module.definitionAttrs = HARDENING_ATTRS
+    }
     if (opts.target.length > 0) {
       // The driver validated the spec; an unknown one here is a programming error.
       const target = resolveTarget(opts.target)
@@ -443,6 +446,13 @@ export class Emitter {
     emitJsonParts(this)
     this.emitImportDeclarations()
     this.emitRuntimePrelude()
+    // Numbered last, so every other `!N` of the module is the one it was
+    // before the hardening flags existed.
+    if (!isWasmBuild(this.opts)) {
+      for (const flag of hardeningModuleFlags()) {
+        this.module.addModuleFlag(flag)
+      }
+    }
     return this.module.toText()
   }
 

@@ -78,7 +78,7 @@ import { basenameWithout, dirname, joinPath } from "./paths"
 import { hexOfI64, jsonQuote, splitByte } from "./strings"
 import { codeFor, TOOLCHAIN } from "./codes"
 import { Diagnostic, formatList } from "./diagnostics"
-import { emitTypeScript } from "./emit-ts"
+import { EmittedProgram, emitTypeScript } from "./emit-ts"
 import { fixProgram, loadRoots } from "./fix"
 import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
@@ -1042,6 +1042,9 @@ export const main = (): number => {
   }
   reportDeprecations(compilation, json)
   reportPerformance(compilation, warnPerformance, deprecationsOnly, json)
+  // `--emit-ts` writes its modules in memory here, ahead of the portability
+  // report: a generic it writes as a throwing stub is one of those warnings.
+  const ts = opts.emitTs.length > 0 ? emitTypeScript(compilation) : new EmittedProgram()
   reportPortability(compilation, json)
   // `--link` needs an entry point, and stage0 says so before it emits
   // anything rather than letting the linker answer `undefined reference to
@@ -1116,7 +1119,6 @@ export const main = (): number => {
   // last one leaves no half-written directory behind; a write that fails
   // part-way does leave the files before it.
   if (opts.emitTs.length > 0) {
-    const ts = emitTypeScript(compilation)
     if (ts.internal.length > 0) {
       return internalErrorFor(ts.internal, json)
     }
