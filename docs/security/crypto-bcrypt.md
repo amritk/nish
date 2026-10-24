@@ -38,7 +38,7 @@ batch](#the-four-lane-batch).
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/bcrypt.ts` | `bcryptHash`, `bcryptVerify`; `bcryptRun`, `bcryptExposed`, `bcryptSetKey`, `bcryptInitState`, `bcryptEncrypt`, `bcryptBody`, `bcryptXorKey`, `bcryptXorSalt`, `bcryptStore`, `bcryptMagic`; `bcryptParse`, `bcryptDecodeSalt`, `bcryptSaltWords`, `bcryptSettingOf`, `bcryptEncode`, `bcryptPut`, `bcryptCharOf`, `bcryptSextetOf`; the batch: `bcryptHash4`, `bcryptVerify4`, `bcryptVerifyGroup`, `bcryptRun4`, `bcryptRunLane`, `bcryptMaskOf`, `bcryptInit4`, `bcryptKeyWord`, `bcryptLoadLane` (and its four `bcryptLoadLane0`–`3`), `bcryptEks4`, `bcryptBody4`, `bcryptEncrypt4`, `bcryptXorKey4`, `bcryptXorSalt4`, `bcryptXorSalt4Lane`, `bcryptMagic4`, `bcryptSaltOf`, `bcryptJoin`, `bcryptBytesOf` |
+| `std/crypto/bcrypt.ts` | `bcryptHash`, `bcryptVerify`; `bcryptRun`, `bcryptExposed`, `bcryptSetKey`, `bcryptInitState`, `bcryptEncrypt`, `bcryptBody`, `bcryptXorKey`, `bcryptXorSalt`, `bcryptStore`, `bcryptMagic`, `bcryptPutBlock`; `bcryptParse`, `bcryptDecodeSalt`, `bcryptSaltWords`, `bcryptSettingOf`, `bcryptEncode`, `bcryptPut`, `bcryptCharOf`, `bcryptSextetOf`; the batch: `bcryptHash4`, `bcryptVerify4`, `bcryptVerifyGroup`, `bcryptRun4`, `bcryptRunLane`, `bcryptMaskOf`, `bcryptInit4`, `bcryptKeyWord`, `bcryptLoadLane` (and its four `bcryptLoadLane0`–`3`), `bcryptEks4`, `bcryptBody4`, `bcryptEncrypt4`, `bcryptXorKey4`, `bcryptXorSalt4`, `bcryptMagic4`, `bcryptSaltOf`, `bcryptJoin`, `bcryptBytesOf` |
 
 Out of scope: `timingSafeEqual` (`std/crypto/ct.ts`, in
 [crypto-k1.md](crypto-k1.md)), the `Secret` rules the checker enforces
