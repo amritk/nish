@@ -2473,22 +2473,41 @@ Nothing in the step can panic, which is what keeps its bits the same under
 Node, where the same two calls are `(a + b) | 0` and `Math.imul`
 (`tests/link/std_random`, whose `random.ll` golden holds the module).
 
+`roll` is one call to `nextInt`. Its unsigned counts are spelled in `i32` so
+that Node reads the same bits: an unsigned compare is a signed one of both
+sides with the sign bit flipped, and a remainder takes the sign bit off before
+its `%`. `opt -O2` sees through both. Once `remainder` is inlined, every
+division check folds away (the span is non-zero there, and each `%` has a
+non-negative side), and the rejection loop is one inlined step and an `icmp
+ult` against the refused count:
+
+```llvm
+while.body:
+  %39 = phi i32 [ %40, %while.body ], [ %29, %nish.remainder.exit ]
+  %40 = add i32 %39, -1640531527
+  ; ... MurmurHash3's finaliser, as in @nish.mix ...
+  %48 = xor i32 %47, %46
+  %49 = icmp ult i32 %48, %common.ret.op.i
+  br i1 %49, label %while.body, label %while.cond.while.end_crit_edge
+```
+
 <!-- cookbook:begin std-random -->
 ```ts
 import { Rng } from "nish/random"
 
 export const roll = (seed: i32): i32 => {
   const r = new Rng(seed)
-  return 1 + ((r.nextI32() >>> 1) % 6)
+  return r.nextInt(1, 6)
 }
 ```
 
 ```llvm
 %struct.Rng = type { i32 }
 
-declare void @nish.Rng.constructor(%struct.Rng* noundef nonnull noalias align 8 dereferenceable(4) nocapture, i32 noundef) #0
-declare noundef i32 @nish.Rng.nextI32(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture) #0
-declare noundef double @nish.Rng.nextF64(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture) #0
+declare void @nish.Rng.constructor(%struct.Rng* noundef nonnull noalias align 8 dereferenceable(4) nocapture, i32 noundef) #1
+declare noundef i32 @nish.Rng.nextI32(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture) #1
+declare noundef double @nish.Rng.nextF64(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture) #1
+declare noundef i32 @nish.Rng.nextInt(%struct.Rng* noundef nonnull align 8 dereferenceable(4) nocapture, i32 noundef, i32 noundef) #0
 
 define noundef i32 @roll(i32 noundef %seed) #0 {
 entry:
@@ -2497,14 +2516,12 @@ entry:
   call void @nish.Rng.constructor(%struct.Rng* %Rng.obj, i32 %seed)
   store %struct.Rng* %Rng.obj, %struct.Rng** %r.addr, align 8
   %0 = load %struct.Rng*, %struct.Rng** %r.addr, align 8
-  %1 = call i32 @nish.Rng.nextI32(%struct.Rng* %0)
-  %2 = lshr i32 %1, 1
-  %3 = srem i32 %2, 6
-  %4 = add nsw i32 1, %3
-  ret i32 %4
+  %1 = call i32 @nish.Rng.nextInt(%struct.Rng* %0, i32 1, i32 6)
+  ret i32 %1
 }
 
-attributes #0 = { nounwind willreturn }
+attributes #0 = { nounwind }
+attributes #1 = { nounwind willreturn }
 ```
 <!-- cookbook:end std-random -->
 

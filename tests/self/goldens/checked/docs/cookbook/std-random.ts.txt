@@ -3,31 +3,57 @@
 entry: docs/cookbook/std-random.ts
 import Rng from "nish/random" -> struct Rng
 function roll(seed: i32): i32 -> @roll [exported]
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: seed
-  calls: nish.Rng.constructor nish.Rng.nextI32
+  calls: nish.Rng.constructor nish.Rng.nextInt
   stackSites=1 stackLocals=1
   local +0:9 r: Rng (const)
   callee +0:13 new Rng -> @nish.Rng.constructor
-  callee +1:16 Rng.nextI32 -> @nish.Rng.nextI32
+  callee +1:10 Rng.nextInt -> @nish.Rng.nextInt
 module std/random.ts [package nish]
 import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
 import wrappingMul from "nish:unsafe" -> builtin wrappingMul
-unsafe import 40:10 wrappingAdd from "nish:unsafe"
-unsafe import 40:23 wrappingMul from "nish:unsafe"
-unsafe call 61:7 wrappingMul (node 76)
-unsafe call 63:7 wrappingMul (node 93)
-unsafe call 80:18 wrappingAdd (node 143)
+import wrappingSub from "nish:unsafe" -> builtin wrappingSub
+unsafe import 43:10 wrappingAdd from "nish:unsafe"
+unsafe import 43:23 wrappingMul from "nish:unsafe"
+unsafe import 43:36 wrappingSub from "nish:unsafe"
+unsafe call 77:30 wrappingSub (node 114)
+unsafe call 84:21 wrappingAdd (node 148)
+unsafe call 85:21 wrappingSub (node 163)
+unsafe call 86:24 wrappingSub (node 173)
+unsafe call 86:49 wrappingAdd (node 178)
+unsafe call 93:7 wrappingMul (node 213)
+unsafe call 95:7 wrappingMul (node 230)
+unsafe call 112:18 wrappingAdd (node 280)
+unsafe call 144:23 wrappingAdd (node 370)
+unsafe call 144:35 wrappingSub (node 373)
+unsafe call 149:36 wrappingSub (node 399)
+unsafe call 154:12 wrappingAdd (node 430)
 const GOLDEN: i32 = -1640531527
 const MIX_1: i32 = -2048144789
 const MIX_2: i32 = -1028477387
 const TWO_26: f64 = 67108864
 const TWO_53: f64 = 9007199254740992
+const SIGN: i32 = -2147483648
+const MAX: i32 = 2147483647
 struct Rng (class) size=4 align=4 exported
   field state: i32 index=0 offset=0
   constructor -> @nish.Rng.constructor
   method nextI32 -> @nish.Rng.nextI32
   method nextF64 -> @nish.Rng.nextF64
+  method nextInt -> @nish.Rng.nextInt
+function below(a: i32, b: i32): boolean -> @nish.below
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function remainder(a: i32, m: i32): i32 -> @nish.remainder
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: a m
+  calls: nish.below nish_panic_div
+  stackSites=0 stackLocals=0
+  callee +0:12 below -> @nish.below
+  local +6:9 low: i32 (const)
+  local +7:9 high: i32 (const)
+  local +8:9 room: i32 (const)
 function mix(h: i32): i32 -> @nish.mix
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: h
@@ -55,3 +81,18 @@ function Rng.nextF64(this: Rng): f64 -> @nish.Rng.nextF64 [exported method]
   callee +0:21 Rng.nextI32 -> @nish.Rng.nextI32
   local +1:11 lo: i32 (const)
   callee +1:21 Rng.nextI32 -> @nish.Rng.nextI32
+function Rng.nextInt(this: Rng, lo: i32, hi: i32): i32 -> @nish.Rng.nextInt [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.Rng.nextI32
+  calls: nish.Rng.nextI32 nish.below nish.remainder nish_panic
+  pointer this: size=4 writesThrough=true captured=false passedTo=nish.Rng.nextI32#0 nish.Rng.nextI32#0 nish.Rng.nextI32#0
+  stackSites=0 stackLocals=0
+  local +0:11 span: i32 (const)
+  callee +2:14 Rng.nextI32 -> @nish.Rng.nextI32
+  local +5:11 refused: i32 (const)
+  callee +5:26 remainder -> @nish.remainder
+  local +6:9 draw: i32 (let)
+  callee +6:21 Rng.nextI32 -> @nish.Rng.nextI32
+  callee +7:12 below -> @nish.below
+  callee +8:14 Rng.nextI32 -> @nish.Rng.nextI32
+  callee +10:28 remainder -> @nish.remainder

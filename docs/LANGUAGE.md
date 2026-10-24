@@ -4613,7 +4613,7 @@ import { Rng } from "nish/random";
 
 export const main = (): i32 => {
   const r = new Rng(42);
-  const die: i32 = 1 + ((r.nextI32() >>> 1) % 6);
+  const die: i32 = r.nextInt(1, 6); // 1 to 6, each with equal chance
   const u: f64 = r.nextF64(); // in [0, 1)
   console.log(`${die} ${u < 1.0}`);
   return 0;
@@ -4626,10 +4626,17 @@ export const main = (): i32 => {
   answer is MurmurHash3's 32-bit finaliser of it, so every seed, 0 included,
   starts a full sequence, and seeds 1, 2 and 3 start unrelated ones. It is not
   for cryptography: a key comes from `crypto.getRandomValues`.
-- **The same bits under Node** are the point of the design. The two
-  operations that wrap are `wrappingAdd` and `wrappingMul` from
-  [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), every shift has a constant count, and
-  `nextF64`'s double is exact, so `tests/link/std_random` prints the same lines
+- **`nextInt(lo, hi)`** answers an `i32` in [lo, hi], both ends included, each
+  with equal chance. It refuses the few `nextI32()` draws below 2^32 mod the
+  span and answers `lo` plus the draw mod the span, so no answer is likelier
+  than another; fewer than half the draws are refused, so a call takes under
+  two steps on average. `nextInt(-2147483648, 2147483647)` is one `nextI32()`,
+  and `lo > hi` panics with `Rng.nextInt: lo is greater than hi`.
+- **The same bits under Node** are the point of the design. The
+  operations that wrap are `wrappingAdd`, `wrappingSub` and `wrappingMul` from
+  [`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping), every shift has a constant count,
+  `nextInt` reads its unsigned counts through `i32` compares and remainders of
+  non-negative values, and `nextF64`'s double is exact, so `tests/link/std_random` prints the same lines
   both ways.
 - **A parallel body or a task steps an `Rng` it made itself**, which is its
   own memory (`const r = new Rng(i)`, "Nor is a write into an object's own

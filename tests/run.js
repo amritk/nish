@@ -9024,6 +9024,28 @@ for (const name of [
   )
 }
 
+// `Rng.nextInt(6, 1)` asks for an empty range: `tests/link/std_random/reversed.ts`
+// prints one roll and then panics with the documented message, exit 1, under
+// the Node prelude and natively, the same bytes on both streams.
+if (!only || "std_random_reversed".includes(only)) {
+  const entry = path.join(linkDir, "std_random", "reversed.ts")
+  const ends = (r) => r.status === 1 && r.stdout === "1\n" && r.stderr === "Rng.nextInt: lo is greater than hi\n"
+  const run = runUnderPrelude(entry, [])
+  check("link/std_random: nextInt(6, 1) panics with its message under the Node prelude", ends(run), shown(run))
+  if (HAS_CLANG) {
+    const outDir = path.join(buildDir, "std_random_reversed") + path.sep
+    const exe = path.join(outDir, "app")
+    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe, ...linkProfile("std_random")], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
+    check("link/std_random: nextInt(6, 1) panics with its message natively", ends(native), shown(native))
+  } else {
+    skip("skipped: link/std_random: no clang, so reversed.ts is not built natively")
+  }
+}
+
 // `nish/term` does no I/O, so a frame and a key decode are pure functions of
 // what was drawn or fed, and a program that prints them prints the same bytes
 // under runtime/nish.mjs as compiled. The comparison is of bytes, not decoded
