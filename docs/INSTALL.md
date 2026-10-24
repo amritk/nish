@@ -224,7 +224,8 @@ routes are
   # on the musl host, with its own clang and the runtime from this repository
   clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
     runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
-    runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-term.c runtime/runtime-bytes.c -lm -o app
+    runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-term.c runtime/runtime-bytes.c \
+    runtime/runtime-sandbox.c -lm -o app
   ```
 
   `--link`ing inside the container is the mistake to avoid: it shells out to the
@@ -373,12 +374,13 @@ working directory — and the binary runs from inside its own platform package
 for exactly that reason.
 
 Building the IR yourself rather than through `--link` means naming the runtime
-on the `clang` line, and it is ten files:
+on the `clang` line, and it is eleven files:
 
 ```bash
 clang app.ll runtime/runtime.c runtime/runtime-os.c runtime/runtime-parallel.c \
   runtime/runtime-cross.c runtime/runtime-host.c runtime/runtime-net.c \
-  runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-term.c runtime/runtime-bytes.c -lm -o app
+  runtime/runtime-simd.c runtime/runtime-aes.c runtime/runtime-term.c runtime/runtime-bytes.c \
+  runtime/runtime-sandbox.c -lm -o app
 ```
 
 `runtime.c` is the part every program touches — the arena, strings, arrays,
@@ -393,7 +395,7 @@ entropy, file times and signals, `runtime-net.c` the sockets of `nish:net`,
 `runtime-simd.c` and `runtime-aes.c` the vector text search and AES-GCM,
 `runtime-term.c` the stdin reads and terminal calls of `nish:term`, and
 `runtime-bytes.c` the byte-class runs of `nish/bytes`, which `nish/json` steps
-over.
+over, and `runtime-sandbox.c` the confinement a `--sandbox` build applies.
 They are separate so that each carries its own measured size ceiling
 ([docs/wp7-runtime.md](wp7-runtime.md)); nothing in the core calls into the
 others, so a line that names only `runtime.c` and `runtime-os.c` still links a
