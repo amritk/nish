@@ -133,15 +133,15 @@ const callsSqlite = (ir: string): boolean => {
   let at = ir.startsWith("declare ") ? 0 : ir.indexOf("\ndeclare ")
   while (at >= 0) {
     const next = ir.indexOf("\n", at + 1)
-    const end = next < 0 ? ir.length : next
-    const quote = ir.indexOf('"', at)
-    const stop = quote >= 0 && quote < end ? quote : end
-    let name = ir.indexOf("@", at)
+    const line = ir.slice(at, next < 0 ? ir.length : next)
+    const quote = line.indexOf('"')
+    const stop = quote >= 0 ? quote : line.length
+    let name = line.indexOf("@")
     while (name >= 0 && name < stop) {
-      if (ir.slice(name, name + 9) === "@sqlite3_" || ir.slice(name, name + 13) === "@nish_sqlite_") {
+      if (line.slice(name, name + 9) === "@sqlite3_" || line.slice(name, name + 13) === "@nish_sqlite_") {
         return true
       }
-      name = ir.indexOf("@", name + 1)
+      name = line.indexOf("@", name + 1)
     }
     at = next < 0 ? -1 : ir.indexOf("\ndeclare ", next)
   }
@@ -331,9 +331,12 @@ const addRecipeFingerprints = (key: StringBuilder, root: string): void => {
 
 /**
  * The lines both keys of a SQLite link carry: one per file of
- * `runtime/sqlite/` (`sqliteFiles`), and the flags it appends to SQLite's
+ * `runtime/sqlite/` (`sqliteFiles`), one for `runtime/nish.h`, which a unit
+ * there may include as `"../nish.h"`, and the flags it appends to SQLite's
  * options (`NISH_SQLITE_CFLAGS`), which change the objects as much as an edit
- * to their source does. Computed once per link and handed to `runCacheKey`
+ * to their source does. A unit that includes any other file from outside the
+ * directory adds that file's line here, or an edit to it leaves the SQLite
+ * entry stale. Computed once per link and handed to `runCacheKey`
  * and `sqliteCacheKey` both, because the amalgamation is megabytes to hash. A
  * program that does not call SQLite carries none of them, and keeps the key it
  * had before the directory existed.
@@ -341,6 +344,7 @@ const addRecipeFingerprints = (key: StringBuilder, root: string): void => {
 export const sqliteFingerprint = (root: string, sqliteFlags: string): string => {
   const key = new StringBuilder()
   addUnitFingerprints(key, `${root}/runtime`, "sqlite/", sqliteFiles(root), 0)
+  key.add(`${RUNTIME_HEADER} ${fileFingerprint(`${root}/runtime/${RUNTIME_HEADER}`)}\n`)
   key.add(`sqlite-cflags ${sqliteFlags.length}\n`)
   key.add(sqliteFlags)
   key.add("\n")

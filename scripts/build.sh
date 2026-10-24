@@ -136,7 +136,7 @@ while [ $# -gt 0 ]; do
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
       pgo=("-fprofile-use=$2"); shift 2 ;;
-    -h|--help) sed -n '2,101p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,/^[^#]/{/^#/p}' "$0"; exit 0 ;;   # the header comment, to its last line
     *) inputs+=("$1"); shift ;;
   esac
 done
@@ -234,7 +234,7 @@ done
 # that names a runtime/sqlite/*.c input itself is left alone, as `halves`
 # leaves a runtime half: naming one object twice is a duplicate-symbol error.
 # A tree without the directory still links every program that does not call it.
-sqlite_dir="$(cd "$(dirname "$0")/../runtime/sqlite" 2>/dev/null && pwd)" || sqlite_dir=""
+sqlite_dir="$(cd "$(dirname "$0")/../runtime/sqlite" 2>/dev/null && pwd -P)" || sqlite_dir=""
 sqlite_wanted=0
 if [ -n "$sqlite_to" ]; then
   if [ ${#inputs[@]} -gt 0 ]; then
@@ -249,7 +249,7 @@ for i in ${inputs[@]+"${inputs[@]}"}; do
 done
 for i in ${inputs[@]+"${inputs[@]}"}; do
   case "$i" in
-    *.c) if [ "$(cd "$(dirname -- "$i")" && pwd)" = "$sqlite_dir" ]; then sqlite_wanted=0; break; fi ;;
+    *.c) if [ "$(cd "$(dirname -- "$i")" && pwd -P)" = "$sqlite_dir" ]; then sqlite_wanted=0; break; fi ;;
   esac
 done
 if [ "$sqlite_wanted" = 1 ] && [ -z "$sqlite_dir" ]; then

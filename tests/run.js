@@ -8386,7 +8386,11 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // (three of three crashed with fast API calls on, none of six with them off).
 // examples/wasi-host.mjs turns them off itself, so the slow call is what runs.
 // #732 tracks the Node bug and when the host can drop the flag.
+// `sqlite_memory` builds the vendored SQLite for wasm32 against wasi-libc
+// (scripts/build.sh's wasi `sqlite_objects`) and opens an in-memory database
+// with it, so a wasi compile of the amalgamation that breaks fails here.
 for (const name of [
+  "sqlite_memory",
   "thread_atomic_tasks",
   "par_atomic",
   "thread_channel_pipeline",
@@ -19682,9 +19686,23 @@ if (!only || "sqlite-link".includes(only)) {
       )
     }
 
+    // `--help` prints the script's whole header comment, so the lines that
+    // document the SQLite flags, at its end, are in it.
+    const help = buildSh(["--help"])
+    check(
+      "sqlite-link: build.sh --help prints its header comment to the end, the --sqlite-from lines included",
+      help.status === 0 &&
+        help.stdout.includes("#   --sqlite-from <dir>") &&
+        help.stdout.includes("# All four refuse the wasm, wasi and napi profiles and --pgo-*, with exit 2.\n") &&
+        !help.stdout.includes("set -euo pipefail"),
+      help.stdout.slice(-400)
+    )
+
     // A unit and a header added to runtime/sqlite/, in a copied package so the
     // checkout's directory is never edited: each changes the SQLite entry's key,
-    // the new object lands in the new entry, and a cached link still runs.
+    // the new object lands in the new entry, and a cached link still runs. The
+    // program linked after the unit calls it, so the unit's object is linked
+    // from the entry (build.sh's `--sqlite-from` loop), not only compiled.
     const sqCopy = path.join(sqDir, "package")
     fs.mkdirSync(path.join(sqCopy, "bin"), { recursive: true })
     fs.copyFileSync(NISH, path.join(sqCopy, "bin", "nish"))
@@ -19692,12 +19710,26 @@ if (!only || "sqlite-link".includes(only)) {
     for (const dir of ["scripts", "runtime", "std"]) {
       fs.cpSync(path.join(root, dir), path.join(sqCopy, dir), { recursive: true })
     }
-    const linkSqCopy = (out) =>
-      spawnSync(path.join(sqCopy, "bin", "nish"), [program, "--link", path.join(sqDir, out), "--profile", "debug"], {
+    const linkSqCopy = (out, source = program) =>
+      spawnSync(path.join(sqCopy, "bin", "nish"), [source, "--link", path.join(sqDir, out), "--profile", "debug"], {
         cwd: root,
         encoding: "utf8",
         env: env(),
       })
+    const callsUnit = path.join(sqDir, "calls-unit.ts")
+    fs.writeFileSync(
+      callsUnit,
+      [
+        "declare function sqlite3_libversion(): string;",
+        "declare function nish_throwaway_unit(): i32;",
+        "",
+        "export const main = (): i32 => {",
+        "  console.log(`${sqlite3_libversion()} ${nish_throwaway_unit()}`);",
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
     const copyBase = linkSqCopy("copy-base")
     compiledC()
     const baseEntries = sqliteEntries()
@@ -19721,21 +19753,21 @@ if (!only || "sqlite-link".includes(only)) {
       path.join(sqCopy, "runtime", "sqlite", "nish_throwaway.c"),
       '#include "nish_throwaway.h"\n\nint nish_throwaway_unit(void) { return 7; }\n'
     )
-    const withUnit = linkSqCopy("copy-unit")
+    const withUnit = linkSqCopy("copy-unit", callsUnit)
     const unitC = compiledC()
     const unitEntries = sqliteEntries().filter((e) => !baseEntries.includes(e) && !headerEntries.includes(e))
     const unitEntry = unitEntries.length === 1 ? path.join(cacheRoot, unitEntries[0]) : ""
-    const reused = linkSqCopy("copy-unit-again")
+    const reused = linkSqCopy("copy-unit-again", callsUnit)
     const reusedC = compiledC()
     check(
-      "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside sqlite3.o, and a second link reuses it",
+      "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside sqlite3.o, links into a program that calls it, and a second link reuses it",
       withUnit.status === 0 &&
-        runOut("copy-unit").stdout === "3.54.1 3054001 0\n" &&
+        runOut("copy-unit").stdout === "3.54.1 7\n" &&
         unitC.join(",") === "nish_throwaway.c,sqlite3.c" &&
         unitEntry.length > 0 &&
         fs.readdirSync(unitEntry).sort().join(",") === "key,nish_throwaway.o,sqlite3.o" &&
         reused.status === 0 &&
-        runOut("copy-unit-again").stdout === "3.54.1 3054001 0\n" &&
+        runOut("copy-unit-again").stdout === "3.54.1 7\n" &&
         reusedC.length === 0 &&
         sqliteEntries().length === baseEntries.length + 2,
       `${withUnit.stderr}${reused.stderr}compiled: ${unitC.join(", ")}, then ${reusedC.join(", ")}; new entries: ${unitEntries.join(", ")}` +

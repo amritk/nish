@@ -49,7 +49,7 @@ function callsSqlite(ir: string): boolean -> @callsSqlite
   stackSites=0 stackLocals=0
   local +0:7 at: i32 (let)
   local +2:11 next: i32 (const)
-  local +3:11 end: i32 (const)
+  local +3:11 line: string (const)
   local +4:11 quote: i32 (const)
   local +5:11 stop: i32 (const)
   local +6:9 name: i32 (let)
@@ -155,16 +155,18 @@ function sqliteFingerprint(root: string, sqliteFlags: string): string -> @sqlite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via addUnitFingerprints
   escaping: root sqliteFlags
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addUnitFingerprints nish_str_concat nish_str_from_i32 sqliteFiles
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addUnitFingerprints fileFingerprint nish_str_concat nish_str_from_i32 sqliteFiles
   stackSites=1 stackLocals=1
   local +0:9 key: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
   callee +1:3 addUnitFingerprints -> @addUnitFingerprints
   callee +1:58 sqliteFiles -> @sqliteFiles
   callee +2:3 StringBuilder.add -> @StringBuilder.add
+  callee +2:32 fileFingerprint -> @fileFingerprint
   callee +3:3 StringBuilder.add -> @StringBuilder.add
   callee +4:3 StringBuilder.add -> @StringBuilder.add
-  callee +5:10 StringBuilder.toText -> @StringBuilder.toText
+  callee +5:3 StringBuilder.add -> @StringBuilder.add
+  callee +6:10 StringBuilder.toText -> @StringBuilder.toText
 function addUnitFingerprints(key: StringBuilder, runtime: string, dir: string, units: string[], at: i32): void -> @addUnitFingerprints
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
