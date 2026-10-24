@@ -440,13 +440,13 @@ const numbers = (t: Suite): void => {
   t.eqStr("numberF64(0.000001)", `${jtF64OfText("0.000001")}`, "0.000001");
   t.eqStr("numberF64(0.1), the fast path's divide", `${jtF64OfText("0.1")}`, "0.1");
   t.eqStr("numberF64(1e22), the largest exact power", `${jtF64OfText("1e22")}`, "1e+22");
-  t.eqStr("numberF64(1e23), parseFloat's path", `${jtF64OfText("1e23")}`, "1e+23");
-  t.eqStr("numberF64(1e-23), parseFloat's path", `${jtF64OfText("1e-23")}`, "1e-23");
-  t.eqStr("numberF64 of 17 significant digits goes to parseFloat", `${jtF64OfText("1234567890123456.7")}`, "1234567890123456.8");
-  // 16 digits are one too many for the fast path: 9007199254740993 rounds to
+  t.eqStr("numberF64(1e23), Eisel-Lemire's path", `${jtF64OfText("1e23")}`, "1e+23");
+  t.eqStr("numberF64(1e-23), Eisel-Lemire's path", `${jtF64OfText("1e-23")}`, "1e-23");
+  t.eqStr("numberF64 of 17 significant digits goes to Eisel-Lemire", `${jtF64OfText("1234567890123456.7")}`, "1234567890123456.8");
+  // 16 digits are one too many for the exact path: 9007199254740993 rounds to
   // ...992 as a double, and ten times that is not the nearest double to the text.
   t.eqStr(
-    "numberF64 of 16 significant digits goes to parseFloat",
+    "numberF64 of 16 significant digits past 2^53 goes to Eisel-Lemire",
     `${jtF64OfText("9007199254740993e1")}`,
     "90071992547409940"
   );
@@ -462,6 +462,20 @@ const numbers = (t: Suite): void => {
   t.eqI64("numberF64 of zero with an exponent past the cap", jtF64Bits("0e9999999999"), zero);
   t.eqStr("numberF64 of an exponent with leading zeros", `${jtF64OfText("1e0000000000000000002")}`, "100");
   t.eqStr("numberF64(9007199254740993) rounds to even", `${jtF64OfText("9007199254740993")}`, "9007199254740992");
+  t.eqStr("numberF64(9007199254740995) rounds to even, upward", `${jtF64OfText("9007199254740995")}`, "9007199254740996");
+  t.eqStr("numberF64 of 19 digits, Eisel-Lemire's widest", `${jtF64OfText("9999999999999999999")}`, "10000000000000000000");
+  t.eqStr("numberF64 of 20 digits goes to parseFloat", `${jtF64OfText("12345678901234567890")}`, "12345678901234567000");
+  t.eqStr("numberF64(7.2057594037927933e16) rounds up to 2^56", `${jtF64OfText("7.2057594037927933e16")}`, "72057594037927940");
+  t.eqI64("numberF64(2.2250738585072014e-308), the smallest normal", jtF64Bits("2.2250738585072014e-308"), toI64(1) << 52);
+  t.eqI64("numberF64(2.2250738585072012e-308) rounds up out of the subnormals", jtF64Bits("2.2250738585072012e-308"), toI64(1) << 52);
+  t.eqI64("numberF64(123456789e-330), a subnormal", jtF64Bits("123456789e-330"), toI64(25));
+  t.eqI64("numberF64 just above half the smallest subnormal", jtF64Bits("2.4703282292062328e-324"), toI64(1));
+  t.eqI64("numberF64 just below half the smallest subnormal", jtF64Bits("2.4703282292062327e-324"), zero);
+  t.eqI64("numberF64(1e-342), the smallest power in the table", jtF64Bits("1e-342"), zero);
+  t.eqI64("numberF64 of a power below the table", jtF64Bits("9999999999999999999e-343"), zero);
+  t.eqStr("numberF64(1e308), the largest power in the table", `${jtF64OfText("1e308")}`, "1e+308");
+  t.eqI64("numberF64 of a power above the table", jtF64Bits("0.0000001e316"), infinity);
+  t.eqI64("numberF64(1.7976931348623159e308) rounds up to an infinity", jtF64Bits("1.7976931348623159e308"), infinity);
 };
 
 /** `numberF64` of the first number in `text`, or 0. */

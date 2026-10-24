@@ -63,6 +63,7 @@ prototypes, `eval`, reflection, exceptions as control flow.
 │    runtime/runtime-simd.c       vector byte search (C, 0.7 KB)   │
 │    runtime/runtime-aes.c        AES-NI/PMULL AES-GCM (C, 2.5 KB) │
 │    runtime/runtime-term.c       stdin, raw mode (C, 0.7 KB)      │
+│    runtime/runtime-bytes.c      JSON byte-class runs (C, 1.3 KB) │
 │    scripts/build.sh             clang -O3/-Oz, LTO, gc-sections  │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -98,6 +99,7 @@ Design rules that every WP must respect:
   | `runtime-simd.c` | 2,337 (2026-10-23) | 2,560 |
   | `runtime-aes.c` | 2,532 (2026-10-11) | 2,560 |
   | `runtime-term.c` | 1,419 (2026-10-23) | 1,536 |
+  | `runtime-bytes.c` | 1,303 (2026-10-23) | 1,536 |
 
   `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the
   functions it calls. [wp7-runtime.md](wp7-runtime.md#runtime-additions-and-budget)
@@ -198,7 +200,7 @@ modules; the table below is the inventory.
 | Debug info | done (WP10, WP17) | `src/debug.ts` |
 | Interop: C header, `.d.ts` and loader, N-API (sync and async), wasm, C calls through `declare function` | done (WP8, WP17, WP24, WP27, WP30) | `src/interop-*.ts` |
 | Packages: `package.json` `exports`, bare specifiers, real-path identity, the manifest's `nish` field | S1–S2 and half of S3 (WP21) | `src/manifest.ts`, `paths.ts` |
-| Runtime: nine translation units, the WASI twin, the Node shim and prelude | done | `runtime/` |
+| Runtime: ten translation units, the WASI twin, the Node shim and prelude | done | `runtime/` |
 | Threads: `parallelMapInto`, `parallelReduce`, `parallelMap`, `parallelFrom`, `using s = scope()`, `Mutex<T>`, `AtomicI32`/`AtomicI64`, `Channel<T>` | done (WP20, WP29) | `std/threads.ts`, `runtime/runtime-parallel.c` |
 | Standard library: testing, text, json, pair, collections, secret, threads, `nish/crypto/*`, `nish/net/*` | growing (WP26, WP34) | `std/`, [std/README.md](../std/README.md) |
 | Build profiles `debug`, `speed`, `size`, `wasm`, `wasi`, `napi`, PGO | done (WP9) | `scripts/build.sh` |
@@ -480,7 +482,9 @@ major. Whether it happens at all is still wp22 §10's open question.
   (§7). A `nish:simd` module of 128-bit vector types (S3) is unbuilt, and is
   decided on S3a, its bar kernels measured without a surface, which is planned
   beside S2 (§7, Q8). S7, crediting an offset index from the test that bounds
-  it, was to come first and was already built by #561 (§7, Q9). Every
+  it, was to come first and was already built by #561 (§7, Q9). S6b,
+  Eisel–Lemire in `numberF64`, met its bar: canada.json tokenizes 2.78x
+  faster, bit-for-bit `parseFloat`'s. Every
   stage adds a function, a flag or a module and withdraws nothing, so it fits
   a minor.
 

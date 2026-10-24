@@ -3,6 +3,7 @@
 entry: src/kernels.ts src/program.ts src/context.ts src/diagnostics.ts src/codes.ts src/strings.ts src/map.ts src/lexer.ts src/tokens.ts src/nodes.ts src/symbols.ts src/types.ts src/ice.ts src/branding.ts src/nish-modules.ts src/packages.ts src/panics.ts src/attributes.ts src/emit-secret.ts src/emit.ts src/secret.ts src/builtins.ts src/arrays.ts src/annotations.ts src/constants.ts src/generics.ts src/c-symbols.ts src/json-typed.ts src/handles.ts src/emit-util.ts src/parallel.ts src/escape.ts src/emit-arrays.ts src/bounds.ts src/options.ts src/emit-builtins.ts src/emit-strings.ts src/ir.ts src/emit-ops.ts src/emit-control.ts src/emit-parallel.ts src/emit-classes.ts src/emit-result.ts src/result.ts src/structs.ts src/declarations.ts src/checker.ts src/expressions.ts src/members.ts src/fusion.ts src/parents.ts src/validator.ts src/assignment.ts src/std-modules.ts src/paths.ts src/statements.ts src/loop-flow.ts src/tbaa.ts src/runtime.ts src/emit-map.ts src/emit-json.ts src/debug.ts src/target.ts src/visibility.ts src/capabilities.ts
 import CheckedProgram from "./program" -> struct CheckedProgram
 import FunctionSig from "./program" -> struct FunctionSig
+import isBytesModule from "./std-modules" -> function @isBytesModule
 import isCryptoAesModule from "./std-modules" -> function @isCryptoAesModule
 import isRegexModule from "./std-modules" -> function @isRegexModule
 import isTextModule from "./std-modules" -> function @isTextModule
@@ -16,6 +17,11 @@ const AES_SEAM_BLOCK: i32 = 2
 const AES_SEAM_CTR: i32 = 3
 const AES_SEAM_GHASH: i32 = 4
 const AES_HW: string = "nish_aes_hw" [exported]
+const BYTES_WALK_NONE: i32 = 0 [exported]
+const BYTES_WALK_BLANK: i32 = 1
+const BYTES_WALK_DIGITS: i32 = 2
+const BYTES_WALK_JSON_TEXT: i32 = 3
+const BYTES_WALK_COPY: i32 = 4 [exported]
 function isIndexOfAnyWalk(program: CheckedProgram, sig: FunctionSig): boolean -> @isIndexOfAnyWalk [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: isTextModule nish_str_eq
@@ -40,5 +46,17 @@ function isAesSeam(program: CheckedProgram, sig: FunctionSig): i32 -> @isAesSeam
   local +1:7 seam: i32 (let)
   callee +11:34 isCryptoAesModule -> @isCryptoAesModule
 function aesKernelOf(seam: i32): string -> @aesKernelOf [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function bytesWalkOf(program: CheckedProgram, sig: FunctionSig): i32 -> @bytesWalkOf [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: isBytesModule nish_str_eq
+  pointer program: size=656 writesThrough=false captured=false
+  pointer sig: size=136 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 name: string (const)
+  local +1:7 walk: i32 (let)
+  callee +11:36 isBytesModule -> @isBytesModule
+function bytesKernelOf(walk: i32): string -> @bytesKernelOf [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

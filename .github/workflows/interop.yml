@@ -47,6 +47,7 @@ on:
       - "src/run-cache.ts"
       - "scripts/build.sh"
       - "runtime/runtime-aes.c"
+      - "runtime/runtime-bytes.c"
       - "tests/interop/**"
       - "tests/link/net_interop_server*/**"
       - ".github/workflows/interop.yml"

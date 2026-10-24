@@ -66,6 +66,20 @@ export const wipeChecks = [
       ["nish.hkdfExpandLabelInto", 49],
     ],
   },
+  // `pbkdf2HmacSha256` in `nish/crypto/hmac` (#868). `std_pbkdf2` imports
+  // it alone. The roots: `pbkdf2Finish` 2 (the inner digest and the tag), and
+  // the derivation 21 (keying both hashers, the HMAC constructor's 6; the
+  // first U and the loop's, `pbkdf2Finish` twice; U and T after the loop; and
+  // the working hasher and both keyed ones, three arrays each).
+  {
+    name: "crypto_pbkdf2: the wipes survive opt -O2 (PBKDF2's U_j, T_i, digests and keyed hashers)",
+    program: "tests/link/std_pbkdf2/main.ts",
+    modules: HMAC_HKDF_MODULES,
+    roots: [
+      ["nish.pbkdf2Finish", 2],
+      ["nish.pbkdf2HmacSha256", 21],
+    ],
+  },
   // `nish/crypto/aes` and `nish/crypto/chacha20poly1305` (#430).
   // `crypto_aes_wipes` imports both modules. AES: `aesKeyWipe` 2 (the whole
   // of `roundKeys`, the kernels' powers of H included, and `h`); the

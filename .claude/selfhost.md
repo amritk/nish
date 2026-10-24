@@ -270,7 +270,10 @@ Four pairings CI checks and a local run on one machine does not:
   `--profile wasm` route.** `scripts/build.sh --profile wasm` links IR that was
   compiled for the host, so a wasm32 guard in the compiler never sees it. On
   #598's first head, such a link of AES IR referenced `nish_aes_*` without
-  `runtime-aes.c`.
+  `runtime-aes.c`. A lowering that is not skipped there needs its unit in
+  that link: `build.sh`'s `wasm)` arm adds `runtime-aes.c` and
+  `runtime-bytes.c` to IR that names their symbols, and the `simd` section
+  links both IR kinds that way.
 - **A positive check gated on `/proc/cpuinfo` has a CI step that greps its
   PASS line.** A runner that masks the instructions takes the check's other arm
   and stays green, so the line that says the path ran is required in
