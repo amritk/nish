@@ -169,7 +169,7 @@ name or SQL holding a NUL byte — answers `false` and writes nothing.
 
 ## Authentication
 
-The password is a `Secret<u8[]>` ([`nish:secret`](../../LANGUAGE.md#nishsecret)):
+The password is a `Secret<u8[]>` ([`nish:secret`](../../LANGUAGE.md#secrets-nishsecret)):
 the connection keeps its own copy, so the caller wipes theirs at once, and it
 wipes the copy once the proof is computed, or when the connection fails or is
 disposed. The nonce is 18 random bytes from

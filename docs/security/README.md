@@ -59,7 +59,8 @@ the record that found it. The notes below the table name each such finding.
 | Percent-decoding and query strings | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
-| **Total** ⁸ | | | **3 / 10 / 17 / 94** | **0 / 0 / 3 / 13** |
+| PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 ¹⁴ |
+| **Total** ⁸ | | | **3 / 10 / 17 / 94** | **0 / 0 / 3 / 14** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -164,6 +165,11 @@ the record that found it. The notes below the table name each such finding.
     matched as bytes, and ROUTE-9 (Low), the path matched before it is
     decoded, are accepted, with the reason in their record, and are not
     counted, as SC-17 is not.
+14. PG-1 to PG-8 are the shapes a hostile server's bytes can take, checked
+    and found to hold, and are not findings. PG-9 (Medium), no TLS, PG-10
+    (Low), no way to require SCRAM, and PG-11 (Low), MD5 and cleartext
+    refused, are accepted, with the reason in their record, and are not
+    counted. PG-12 (Low) is open.
 
 ## Open findings
 
@@ -185,6 +191,7 @@ only.
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
 | QUIC-10 | Low | `std/net/quic-recovery.ts` (`onAckEcn`, `processEcn`), `std/net/quic.ts` (`ecnMarking`, `datagramEcn`) | Recovery validates ACK_ECN counts and reacts to a CE rise, but no carrier marks ECT yet: `http3-server.ts` and `quic-listener.ts` send with ECN 0 and leave `ecnMarking` false, so a deployed server's counts fail validation and a CE rise is never used. Wiring the carriers to `ecnMarking` and `datagramEcn` closes it | — |
+| PG-12 | Low | `std/net/postgres.ts` (`pgScramKeys`) | The one-shot `sha256(clientKey)` leaves a hasher whose state absorbed ClientKey; `std/crypto/sha256.ts` has no wipe to reach it. The fix is a wiping one-shot there | — |
 | X509-6 | Low | `std/crypto/x509.ts` (`x509MintSelfSigned`) | The mint takes its key and serial from the caller. A helper that draws both would have to be a native-only module | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | JSON-13 | Medium | `src/emit-json.ts` (`emitJsonDecodeMapBody`), `std/json-typed.ts` (`mapRoom`), `std/collections.ts` and `src/emit-map.ts` (the string hash) | The global `Map` hashes a string with no seed, so a body can give a `Map<string, V>` field keys that all collide. `maxMapKeys` (4,096 by default) bounds the keys of one decoding, and with them its probes; the fix is a seeded hash | — |
