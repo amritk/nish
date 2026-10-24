@@ -142,6 +142,23 @@ Some constructs JavaScript spells differently are rewritten too:
 - **`Arena.used()`** and its siblings become `nish/runtime`'s `arenaUsed`,
   `arenaMark`, `arenaRelease` and `arenaReset`, and a `Result` annotation
   imports `Result` from it.
+- **An element read `a[i]`** whose index the compiler cannot prove in range
+  becomes `idx(a, i)`, and a store `a[i] = v` becomes `setIdx(a, i, v)`.
+  Both panic out of range as the native check does, where JavaScript would
+  read `undefined` or grow the array. A compound store `a[i] += v` checks
+  the index again after `v` runs, at a proven index too, since `v` can
+  shrink the array.
+- **`new Array<T>(n)`** becomes `newArray(n, zero)`, filled with `T`'s zero
+  (`0`, `0n`, `false`, or `null` for a nullable `T`) where JavaScript would
+  leave holes. An `i64` or `u64` length goes through `Number`.
+- **A record an array holds inline** is copied as it goes in:
+  `xs.push(p)` pushes `{ ...p }`, and `xs[i] = p` writes `p`'s fields into
+  the record already in the slot, so a later change to `p` leaves `xs`
+  alone, as it does natively. A `(P | null)[]` holds references and copies
+  nothing.
+- **`dst.set(src, at)`** between two arrays of one type becomes
+  `arraySet(dst, src, at)`, the copy a plain JavaScript array lacks, which
+  panics past the end as the native one does.
 
 The flag also turns on `--warn-portability`. Those warnings name the places
 where your program can answer differently under Node.

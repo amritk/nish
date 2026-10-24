@@ -47,6 +47,7 @@
 // line has no semicolon.
 
 import { Operands, Walk } from "./emit-ts-edits"
+import { elementArguments, idxArguments } from "./emit-ts-records"
 import { isAssignmentOperator } from "./emit-util"
 import {
   FLAG_POSTFIX,
@@ -102,7 +103,8 @@ export const numbersRow = (walk: Walk, node: Node, operands: Operands): string |
     return typedConstant(walk, node, operands)
   }
   if (kind === N_NEW) {
-    return arrayLength(walk, node, operands)
+    arrayLength(walk, node, operands)
+    return null
   }
   return null
 }
@@ -363,11 +365,16 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
       walk.refuse(node, COMPOUND_REFUSAL)
       return null
     }
-    // The records row writes an element target whose index is unproven as
-    // `idx(a, i)`, which is no target: the store goes through `setIdx`.
-    if (target.kind === N_INDEX && operands.changed[0] && name.startsWith("idx(") && name.endsWith(")")) {
-      walk.useHelper("setIdx")
-      return `setIdx(${name.substring(4, name.length - 1)}, ${value})`
+    // An element target stores through `setIdx`, which checks the index again
+    // after the right side ran, as the right side can shrink the array. The
+    // records row writes one whose index is unproven as `idx(a, i)`, which is
+    // no target; a proven one keeps its plain read.
+    if (target.kind === N_INDEX && !walk.program.uncheckedIndexing) {
+      const args = operands.changed[0] && idxArguments(name) !== "" ? idxArguments(name) : elementArguments(name)
+      if (args !== "") {
+        walk.useHelper("setIdx")
+        return `setIdx(${args}, ${value})`
+      }
     }
     return `${name} = ${value}`
   }
@@ -672,22 +679,21 @@ const wrappedFrom = (walk: Walk, args: Node, i: i32, from: i32, end: i32): strin
 /**
  * `new Array<T>(n)` at an i64 or u64 length, which JavaScript would take as a
  * one-element array holding the `bigint`: the length goes through `Number`.
+ * Only the argument is rewritten and the `new` left to the later rows, so the
+ * records row builds its zero-filled `newArray` from the converted length.
  */
-const arrayLength = (walk: Walk, node: Node, operands: Operands): string | null => {
+const arrayLength = (walk: Walk, node: Node, operands: Operands): void => {
   if (node.children.length !== 3 || node.children[0].kind !== N_IDENT || node.children[0].text !== "Array") {
-    return null
+    return
   }
   const args = node.children[2]
-  if (
-    operands.changed[0] ||
-    operands.changed[1] ||
-    args.children.length !== 1 ||
-    !isBig(typeOf(walk, args.children[0]))
-  ) {
-    return null
+  if (args.children.length !== 1 || !isBig(typeOf(walk, args.children[0]))) {
+    return
   }
   // One argument: the list's text is that argument's, rewritten or not.
-  return `${between(walk, node.start, args.start)}Number(${operands.at(2)})${between(walk, args.end, node.end)}`
+  operands.texts[2] = `Number(${operands.at(2)})`
+  operands.changed[2] = true
+  operands.any = true
 }
 
 /**

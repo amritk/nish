@@ -82,16 +82,31 @@ const hasInlineRecords = (program: CheckedProgram): boolean => {
 }
 
 // How a value put into a slot is copied in: not at all, as a spread copy, or
-// through `copyIn`, which looks at the value when it runs. A generic body is
-// written once for every instance and one instance's element can be a record
-// where another's is a number, so in an instance the choice is made at run
-// time for any value that could be a record.
+// through `copyIn`, which looks at the value when it runs. Only a slot that
+// holds a record inline copies; a `(P | null)[]` slot holds a reference. A
+// generic body is written once for every instance and one instance's element
+// can be a record where another's is a number, so in an instance the choice
+// is made at run time for a slot that holds a record inline or none at all.
+// An instance whose slot holds a reference to a record writes no copy, and
+// the composer reports a generic whose instances disagree on that.
 const COPY_NONE: i32 = 0
 const COPY_SPREAD: i32 = 1
 const COPY_AT_RUN: i32 = 2
 
-/** How `value`, put into an array slot, is copied in. */
-const copyKind = (walk: Walk, value: Node): i32 => {
+/** Whether a slot of `type` holds a reference to a record an array would otherwise hold inline. */
+const recordReference = (walk: Walk, type: i32): boolean =>
+  type >= 0 && walk.table.isNullable(type) && inlineRecord(walk.program, walk.table.refOf(type))
+
+/** How a value put into a slot of type `slot` is copied in. */
+const slotCopy = (walk: Walk, slot: i32): i32 => {
+  if (walk.inInstance) {
+    return hasInlineRecords(walk.program) && !recordReference(walk, slot) ? COPY_AT_RUN : COPY_NONE
+  }
+  return inlineRecord(walk.program, slot) ? COPY_SPREAD : COPY_NONE
+}
+
+/** How `value`, put into an array slot of type `slot`, is copied in. */
+const copyKind = (walk: Walk, slot: i32, value: Node): i32 => {
   if (
     value.kind === N_OBJECT ||
     value.kind === N_SPREAD ||
@@ -100,15 +115,16 @@ const copyKind = (walk: Walk, value: Node): i32 => {
   ) {
     return COPY_NONE
   }
-  if (walk.inInstance) {
-    return hasInlineRecords(walk.program) ? COPY_AT_RUN : COPY_NONE
-  }
-  return inlineRecord(walk.program, walk.program.nodeTypes[value.id]) ? COPY_SPREAD : COPY_NONE
+  return slotCopy(walk, slot)
 }
 
-/** `written`, the text of `value`, as the copy a slot takes in, or `written` itself. */
-const copied = (walk: Walk, value: Node, written: string): string => {
-  const kind = copyKind(walk, value)
+/** The element type of the array type `type`, or -1. */
+const elementOf = (walk: Walk, type: i32): i32 =>
+  type >= 0 && walk.table.isArray(type) ? walk.table.refOf(type) : -1
+
+/** `written`, the text of `value`, as the copy a slot of type `slot` takes in, or `written` itself. */
+const copied = (walk: Walk, slot: i32, value: Node, written: string): string => {
+  const kind = copyKind(walk, slot, value)
   if (kind === COPY_SPREAD) {
     return `{ ...${written} }`
   }
@@ -128,11 +144,47 @@ const checkedAt = (walk: Walk, node: Node): boolean =>
   !walk.program.uncheckedIndexing && (walk.inInstance || !walk.program.nodeProvenIndex[node.id])
 
 /** The `a, i` of a written `idx(a, i)`, or the empty string when `text` is no such call. */
-const idxArguments = (text: string): string => {
+export const idxArguments = (text: string): string => {
   if (text.startsWith("idx(") && text.endsWith(")")) {
     return text.substring(4, text.length - 1)
   }
   return ""
+}
+
+/**
+ * The `a, i` of a written element `a[i]`, or the empty string when `text` ends
+ * in no index. The scan pairs brackets outside quoted strings; a template
+ * literal, whose `${}` it does not follow, gives the empty string.
+ */
+export const elementArguments = (text: string): string => {
+  if (!text.endsWith("]") || text.indexOf("`") >= 0) {
+    return ""
+  }
+  let depth = 0
+  let open = -1
+  let i = 0
+  while (i < text.length) {
+    const c = text.charCodeAt(i)
+    if (c === 34 || c === 39) {
+      // A quoted string, whose brackets are text: skip to its closing quote.
+      i = i + 1
+      while (i < text.length && text.charCodeAt(i) !== c) {
+        i = i + (text.charCodeAt(i) === 92 ? 2 : 1)
+      }
+    } else if (c === 40 || c === 91 || c === 123) {
+      if (depth === 0 && c === 91) {
+        open = i
+      }
+      depth = depth + 1
+    } else if (c === 41 || c === 93 || c === 125) {
+      depth = depth - 1
+    }
+    i = i + 1
+  }
+  if (depth !== 0 || open <= 0) {
+    return ""
+  }
+  return `${text.substring(0, open)}, ${text.substring(open + 1, text.length - 1)}`
 }
 
 /** `text` with the `.name` of the member access it ends in taken off. */
@@ -178,11 +230,9 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
     return null
   }
   const left = operands.at(0)
-  const args = idxArguments(left)
+  let args = idxArguments(left)
   if (node.text === "=") {
-    const record = walk.inInstance
-      ? hasInlineRecords(walk.program)
-      : inlineRecord(walk.program, walk.program.nodeTypes[target.id])
+    const record = slotCopy(walk, walk.program.nodeTypes[target.id]) !== COPY_NONE
     if (record && args !== "") {
       walk.useHelper("storeIdx")
       return `storeIdx(${args}, ${operands.at(1)})`
@@ -196,13 +246,18 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
     walk.useHelper("setIdx")
     return `setIdx(${args}, ${operands.at(1)})`
   }
-  if (args === "" || !node.text.endsWith("=") || node.text === "==" || node.text === "===") {
+  if (!node.text.endsWith("=") || node.text === "==" || node.text === "===") {
     return null
   }
   if (node.text === "!=" || node.text === "!==" || node.text === "<=" || node.text === ">=") {
     return null
   }
-  return compoundStore(walk, node, operands, args)
+  // A proven index still stores through `updIdx`, which checks it again after
+  // the right side ran: the right side can shrink the array.
+  if (args === "" && !walk.program.uncheckedIndexing) {
+    args = elementArguments(left)
+  }
+  return args === "" ? null : compoundStore(walk, node, operands, args)
 }
 
 /** The rewrite of a builtin array method call — `pop`, `push` of a record, `set` — or `null`. */
@@ -224,7 +279,7 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
   }
   if (method === "push" && args.length === 1) {
     const arg = operands.at(1)
-    const copy = copied(walk, args[0], arg)
+    const copy = copied(walk, elementOf(walk, walk.program.nodeTypes[callee.children[0].id]), args[0], arg)
     return copy === arg ? null : `${written}(${copy})`
   }
   if (
@@ -242,12 +297,13 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
 
 /** An array literal rebuilt with a copy for each element that could be a record, or `null`. */
 const literalRow = (walk: Walk, node: Node, operands: Operands): string | null => {
+  const slot = elementOf(walk, walk.program.nodeTypes[node.id])
   const parts: string[] = []
   let copies = false
   let i = 0
   while (i < node.children.length) {
     const written = operands.at(i)
-    const part = copied(walk, node.children[i], written)
+    const part = copied(walk, slot, node.children[i], written)
     if (part !== written) {
       copies = true
     }
@@ -257,8 +313,11 @@ const literalRow = (walk: Walk, node: Node, operands: Operands): string | null =
   return copies ? `[${parts.join(", ")}]` : null
 }
 
-/** The zero of a primitive type id, or the empty string for any other type. */
-const primitiveZero = (type: i32): string => {
+/** The zero of a primitive or nullable type id, or the empty string for any other type. */
+const primitiveZero = (walk: Walk, type: i32): string => {
+  if (type >= 0 && walk.table.isNullable(type)) {
+    return "null"
+  }
   if (type === T_I64 || type === T_U64) {
     return "0n"
   }
@@ -321,7 +380,7 @@ const fillZero = (walk: Walk, type: Node): string => {
   }
   const instance = program.activeInstance
   if (instance !== null) {
-    return primitiveZero(instance.bindings.get(name, -1))
+    return primitiveZero(walk, instance.bindings.get(name, -1))
   }
   return ""
 }

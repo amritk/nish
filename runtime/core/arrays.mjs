@@ -31,11 +31,15 @@ export function setIdx(a, i, v) {
   return v;
 }
 
-/** `a[i] op= v`: evaluates `a`, `i`, checks, loads, then `f(old)` computes the new element. */
+/**
+ * `a[i] op= v`: evaluates `a`, `i`, checks, loads, then `f(old)` computes the
+ * new element, and checks again before the store, as `f` can shrink `a`.
+ */
 export function updIdx(a, i, f) {
   const k = toIndex(i);
   if (!(k >= 0 && k < a.length)) outOfRange(i, a.length);
   const v = f(a[k]);
+  if (!(k < a.length)) outOfRange(i, a.length);
   a[k] = v;
   return v;
 }
