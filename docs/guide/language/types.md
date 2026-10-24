@@ -73,6 +73,32 @@ list of those places is under
 Integer arithmetic is checked: what happens when a value overflows is on the
 [Control flow](control-flow.md#checked-arithmetic) page.
 
+### `Math`
+
+`Math` gives the functions you know from JavaScript, with JavaScript's
+answers. `Math.sqrt`, `floor`, `ceil`, `trunc`, `round`, `sin`, `cos`, `tan`,
+`exp`, `log`, `atan2` and `hypot` take `f64`; `Math.abs`, `min`, `max` and
+`sign` take any number and answer in its type; `Math.imul` multiplies two
+`i32`s the way JavaScript's 32-bit multiply wraps. `Math.round(-0.3)` is
+`-0`, and `Math.min` or `Math.max` with a `NaN` operand is `NaN`, as in
+JavaScript. `Math.min`, `max` and `hypot` take exactly two arguments.
+`Math.tan`, `atan2` and `hypot` are compiled from the standard library's
+`std/math.ts` rather than called from the C library, so they answer the same
+on every target, WebAssembly included, within one unit in the last place.
+
+```ts nish:ok
+export const main = (): i32 => {
+  const angle: f64 = Math.atan2(1.0, 1.0);
+  console.log(`${Math.hypot(3.0, 4.0)} ${Math.sign(-7)} ${Math.imul(65536, 65536)}`); // 5 -1 0
+  console.log(`${angle * 4.0 === Math.PI}`); // true
+  return 0;
+};
+```
+
+`f64ToBits(x)` and `f32ToBits(x)` give a float's raw IEEE-754 bits, as an
+`i64` and an `i32`; the whole list of builtins is in the reference's
+[Math table](../../LANGUAGE.md#builtins).
+
 ## Booleans
 
 `boolean` is `true` or `false`, and it is the only type a condition accepts.
