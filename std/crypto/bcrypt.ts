@@ -59,6 +59,10 @@
  * share the importing program's flat symbol namespace
  * (`docs/wp26-stdlib.md` §3e).
  *
+ * Adapted from crypt_blowfish (https://www.openwall.com/crypt/), crypt_blowfish.c.
+ * Written by Solar Designer, 1998-2014, and placed in the public domain, with a
+ * permissive licence as the fallback; see std/crypto/LICENSE-crypt_blowfish.
+ *
  * crypt_blowfish's notice, kept as it asks:
  *
  * Written by Solar Designer <solar at openwall.com> in 1998-2014.

@@ -1,0 +1,56 @@
+PASS  U*U
+PASS  U*U*
+PASS  U*U*U
+PASS  a key past 72 bytes: the rest is ignored
+PASS  $2y$ \xff\xff\xa3
+PASS  $2b$ \xff\xff\xa3 is $2y$'s digest
+PASS  $2a$ \xff\xff\xa3 takes the countermeasure
+PASS  and is not the $2y$ digest under $2a$
+PASS  $2y$ \xa3
+PASS  $2a$ \xa3 (one 8-bit byte: no countermeasure needed)
+PASS  $2b$ \xa3
+PASS  $2y$ \xff\xa334\xff\xff\xff\xa3345
+PASS  $2a$ \xff\xa334\xff\xff\xff\xa3345
+PASS  $2y$ \xff\xa3345
+PASS  $2a$ \xff\xa3345
+PASS  $2a$ \xa3ab
+PASS  $2y$ \xa3ab
+PASS  72 bytes of \xaa, then more
+PASS  \xaa\x55 36 times
+PASS  \x55\xaa\xff 24 times
+PASS  the empty password
+PASS  $2x$ \xa3 is refused
+PASS  $2x$ \xd1\x91 is refused
+PASS  hash U*U at cost 4
+PASS  hash U* at cost 4
+PASS  hash U*V at cost 4
+PASS  hash the empty password at cost 5
+PASS  hash \xa3
+PASS  hash \xff\xa334\xff\xff\xff\xa3345
+PASS  hash ab
+PASS  ab\0cd hashes as ab: the key ends at its first NUL
+PASS  and verifies as ab
+PASS  hash a 72-byte password at cost 6
+PASS  a 73rd byte changes nothing
+PASS  200 x hash as 72
+PASS  72 x
+PASS  a hash verifies under its own password
+PASS  and not under another
+PASS  nor under the empty password
+PASS  the canonical last salt character verifies
+PASS  one with dropped bits set does not, as with crypt_r
+PASS  cost 3 is refused
+PASS  cost 32 is refused
+PASS  a 15-byte salt is refused
+PASS  a 17-byte salt is refused
+PASS  a 59-character hash is refused
+PASS  a 61-character hash is refused
+PASS  the empty string is refused
+PASS  $2c$ is refused
+PASS  $3b$ is refused
+PASS  a cost that is not two digits is refused
+PASS  cost 03 is refused
+PASS  cost 32 in a hash is refused
+PASS  a salt character outside bcrypt base64 is refused
+PASS  a digest character outside bcrypt base64 is refused
+bcrypt: 55 passed, 0 failed, 0 skipped

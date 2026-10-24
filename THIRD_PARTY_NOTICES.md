@@ -10,7 +10,7 @@ the tree.
 
 ## What the npm package ships
 
-Three of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
+Four of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
 formatter is adapted from Ryu. The package carries `runtime/LICENSE-ryu` beside
 it, because `package.json`'s `files` names the whole `runtime/` directory, and
 the release tarball and the platform packages copy that directory too. Ryu is
@@ -38,6 +38,15 @@ licence makes no exception for object code: a program built with
 same file's inversion of the signing nonce is ported from libsecp256k1, under
 MIT too, so the package carries `std/crypto/LICENSE-libsecp256k1` beside it as
 well, and such a program carries libsecp256k1's notice beside fiat-crypto's.
+
+The fourth is `std/crypto/bcrypt.ts`, whose Blowfish key schedule, rounds,
+base64 and setting parser are adapted from Solar Designer's crypt_blowfish, and
+whose 1042 initial words are its `BF_init_state`. The package carries
+`std/crypto/LICENSE-crypt_blowfish` beside it, for the same reason.
+crypt_blowfish is placed in the public domain, with a fallback licence that
+permits redistribution and use with or without modification and asks for
+nothing, so neither the source nor a program built with `nish/crypto/bcrypt`
+owes a notice; the file keeps it anyway, as upstream asks for credit.
 
 Nothing else here ships. `package.json`'s `files` names neither `bench/`,
 `tests/`, `examples/` nor `docs/cookbook/`.
@@ -137,6 +146,17 @@ and `fiat-c/src/p256_scalar_32.c` at commit
 Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
 ```
 
+### `std/crypto/LICENSE-crypt_blowfish`
+
+[crypt_blowfish](https://www.openwall.com/crypt/) 1.3, written by Solar
+Designer in 1998-2014 and placed in the public domain, with a permissive
+licence as the fallback where that disclaimer does not hold. The licence text
+is the notice at the top of upstream's `crypt_blowfish.c`, verbatim.
+
+```notice
+Adapted from crypt_blowfish (https://www.openwall.com/crypt/), crypt_blowfish.c. Written by Solar Designer, 1998-2014, and placed in the public domain, with a permissive licence as the fallback; see std/crypto/LICENSE-crypt_blowfish.
+```
+
 ### `std/crypto/LICENSE-libsecp256k1`
 
 [libsecp256k1](https://github.com/bitcoin-core/secp256k1), Copyright (c) 2013
@@ -233,6 +253,7 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 | `bench/simd-s3a/mat-vec-unchecked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |
+| `std/crypto/bcrypt.ts` | crypt_blowfish 1.3, `crypt_blowfish.c`: `BF_init_state` as `bcryptInitState`, `BF_ENCRYPT`/`BF_ROUND` as `bcryptEncrypt` and the rounds of `bcryptBody`, `BF_body` as `bcryptBody`, `BF_set_key` as `bcryptSetKey`, `BF_decode`/`BF_encode` as `bcryptDecode`/`bcryptEncode`, and `BF_crypt` as `bcryptParse` and `bcryptExposed` | public domain, fallback permissive | `std/crypto/LICENSE-crypt_blowfish` |
 | `std/crypto/p256.ts` | fiat-crypto, `fiat-c/src/p256_32.c` (`mul`, `square`, `add`, `sub`, `nonzero`, `selectznz`, `set_one` and the `addcarryx`, `subborrowx`, `mulx` and `cmovznz` helpers) and `fiat-c/src/p256_scalar_32.c` (`mul`, `add`, `set_one`), as the `p256Fiat*` functions | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256FiatMul`, `p256FiatSquare`, `p256FiatScalarMul`, `p256FiatCmovznzU32` and helpers, for the assembly check | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `std/crypto/p256.ts` | libsecp256k1 v0.6.0, `src/modinv32_impl.h` (`secp256k1_modinv32_divsteps_30`, `_update_de_30`, `_update_fg_30`, `_normalize_30` and `secp256k1_modinv32`) and the signed-30 conversions of `src/scalar_8x32_impl.h`, as `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`, `p256Normalize30`, `p256ScalarInverse`, `p256ToSigned30` and `p256FromSigned30` | MIT | `std/crypto/LICENSE-libsecp256k1` |
