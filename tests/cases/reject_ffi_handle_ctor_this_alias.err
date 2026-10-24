@@ -1,0 +1,1 @@
+reject_ffi_handle_ctor_this_alias.ts:13:16: error: A `File` cannot be used here

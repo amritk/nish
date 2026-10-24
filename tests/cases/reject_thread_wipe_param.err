@@ -1,0 +1,1 @@
+`clear` writes memory its caller can see through `wipe<u8[]>`

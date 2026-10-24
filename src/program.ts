@@ -24,7 +24,13 @@ import { StringMap, StringSet } from "./map"
 import { FLAG_FOREIGN, N_CONSTRUCTOR, N_EMPTY, N_IDENT, N_MEMBER, Node } from "./nodes"
 import { packageSymbolPrefix } from "./packages"
 import { PanicSite } from "./panics"
-import { isCollectionsModule, isJsonTypedModule, isMapExtrasModule, isSecretModule } from "./std-modules"
+import {
+  isCollectionsModule,
+  isJsonTypedModule,
+  isMapExtrasModule,
+  isMathModule,
+  isSecretModule,
+} from "./std-modules"
 import { Local } from "./symbols"
 import { TypeTable } from "./types"
 
@@ -1501,6 +1507,8 @@ export class CheckedProgram {
   mapExtrasLibrary: boolean
   /** `isJsonTyped()`, decided once, as `collectionsLibrary` is. */
   jsonTypedLibrary: boolean
+  /** `isMathLibrary()`, decided once, as `collectionsLibrary` is. */
+  mathLibrary: boolean
 
   /** Node id -> resolved type, or -1 where nothing was recorded. */
   nodeTypes: i32[]
@@ -1683,6 +1691,7 @@ export class CheckedProgram {
     this.mapExtrasLibrary = isMapExtrasModule(packageName, source.path)
     this.jsonTypedLibrary = isJsonTypedModule(packageName, source.path)
     this.secretLibrary = isSecretModule(packageName, source.path)
+    this.mathLibrary = isMathModule(packageName, source.path)
     this.usesArgv = false
     this.uncheckedIndexing = false
     this.wrapping = false
@@ -1746,18 +1755,23 @@ export class CheckedProgram {
   }
 
   /**
-   * Whether this module writes no `.ll` of its own: `std/collections.ts` and
+   * Whether this module writes no `.ll` of its own: `std/collections.ts`, `std/math.ts` and
    * `std/secret.ts`, whose code is copied into each module that uses it, and
    * `std/map.ts`, whose every call is lowered in place at the call
    * (docs/wp32-map.md §4.1, §9.2).
    */
   writesNoOutput(): boolean {
-    return this.collectionsLibrary || this.mapExtrasLibrary || this.secretLibrary
+    return this.collectionsLibrary || this.mapExtrasLibrary || this.secretLibrary || this.mathLibrary
   }
 
   /** Whether this module is `std/secret.ts`, the source behind `nish:secret`, copied like `std/collections.ts`. */
   isSecretLibrary(): boolean {
     return this.secretLibrary
+  }
+
+  /** Whether this module is `std/math.ts`, `nish/math`, copied like `std/collections.ts`. */
+  isMathLibrary(): boolean {
+    return this.mathLibrary
   }
 
   /** The constraint list of the generic method `decl` declares, made the first time it is asked for. */

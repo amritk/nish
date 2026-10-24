@@ -1,0 +1,4 @@
+reject_ffi_handle_use_after_close_keep_field.ts:28:9: error: `File` is a handle class, and its name may be written only as the type of a parameter that borrows one
+reject_ffi_handle_use_after_close_keep_field.ts:30:5: error: A `File` cannot be used here
+reject_ffi_handle_use_after_close_keep_field.ts:34:6: error: `File` is a handle class, and its name may be written only as the type of a parameter that borrows one
+reject_ffi_handle_use_after_close_keep_field.ts:37:3: error: A `File` cannot be used here

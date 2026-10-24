@@ -385,6 +385,14 @@ export const main = (): i32 => {
   share a table that way; changing it, or walking it with `for...of`, is a
   write. A task may `panic`: if several threads panic at once, only the first
   prints its message, and the program exits 1.
+- **A task may `wipe` what it made.** An array the task, or a function it
+  calls, allocates itself (`const buf = new Array<u8>(n)`) is its own, so
+  `wipe(buf)` before it returns is not a write another thread can see.
+  Wiping anything else is: its argument, a local it captured, a field, or an
+  array another call answered. A key shared with the tasks stays the parent's
+  — make the `Secret` before the block, let each task `expose` it, and
+  `wipe` it after the block. A `Secret` a task makes with `secret(...)` and
+  wipes is refused too, because `secret` keeps its value.
 - **A scope never leaves its block.** It is only ever the receiver of
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.
