@@ -353,8 +353,9 @@ if [ -n "$cpu" ]; then common+=(-march=x86-64-v3 -ffp-contract=off); fi
 # and is left out of debug, where it would only warn. -U first, because a
 # distribution clang may already define it at another level.
 case "$("$CC" -dumpmachine 2>/dev/null)" in
-  x86_64*|amd64*) common+=(-fcf-protection=full) ;;
-  aarch64*|arm64*) common+=(-mbranch-protection=standard) ;;
+  x86_64*|amd64*) common+=(-fcf-protection=full); landing=1 ;;
+  aarch64*|arm64*) common+=(-mbranch-protection=standard); landing=1 ;;
+  *) landing=0 ;;
 esac
 common+=(-fstack-protector-strong)
 if [ "$profile" != debug ]; then common+=(-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3); fi
@@ -394,14 +395,18 @@ esac
 
 # The speed link splits full LTO's code generation into one partition per core,
 # run in parallel: lld's --lto-partitions, after the whole program is optimised
-# as one module, so inlining and the instructions a program runs do not change
-# (bench/instructions.json agrees to a few instructions in hundreds of
-# millions). The bytes depend on the count, so one machine links one input to
-# one output, as scripts/bootstrap.sh needs. ld64 and GNU ld have no such flag
-# and link as before, and so does every other profile. The count comes
-# from nproc (Linux), else getconf (both), else sysctl (macOS).
+# as one module, so inlining does not change. But a partition boundary promotes
+# the internal functions called across it to external ones, and under the
+# control-flow hardening above every external function opens with a landing pad
+# (endbr64, or bti c), which the hot calls then run: fib runs 6.5% more
+# instructions with two partitions than with one. So a target with landing pads
+# links in one partition, and the split is left to the rest. The bytes depend
+# on the count, so one machine links one input to one output, as
+# scripts/bootstrap.sh needs. ld64 and GNU ld have no such flag and link as
+# before, and so does every other profile. The count comes from nproc (Linux),
+# else getconf (both), else sysctl (macOS).
 lto_parts=()
-if [ "$profile" = speed ] && [ "$lld" = 1 ]; then
+if [ "$profile" = speed ] && [ "$lld" = 1 ] && [ "$landing" = 0 ]; then
   cores=$(nproc 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null ||
     sysctl -n hw.ncpu 2>/dev/null || echo 1)
   # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's

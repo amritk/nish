@@ -189,6 +189,13 @@ Instructions retired (`bench/run.mjs --instructions`, cachegrind, `speed`):
 `strbuild` runs 53,754,318 against 53,229,282 for the same build without
 `-fstack-protector-strong` (+0.99%), the guard on the runtime's string
 builders; its baseline in `bench/instructions.json` moves with this change.
+The landing pads also end the `speed` link's LTO partitions on x86-64 and
+arm64 (`scripts/build.sh`): a partition boundary turns the internal functions
+called across it into external ones, each opening with `endbr64`, and `fib`
+ran 492,835,930 instructions with two to eight partitions against 462,974,845
+with one (+6.5%; `Permute` +3.9%, `Towers` +3.2%). One partition costs link
+time instead: 11.5 s against 8.3 s for `tests/link/net_relay_f64` on four
+cores, compile included.
 
 **What it does not cover.**
 

@@ -678,7 +678,7 @@ intrinsics become libm calls for non-constant arguments).
 | Profile | Flags | Equivalent |
 | --- | --- | --- |
 | `debug` | clang defaults, `-lm` | the "before" number; symbols kept |
-| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, plus `-Wl,--lto-partitions=<cores>` under lld | Rust `--release` |
+| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, plus `-Wl,--lto-partitions=<cores>` under lld on a target without control-flow landing pads | Rust `--release` |
 | `size` | `speed` (one LTO partition) plus `-Oz -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
 | `wasm` | `--target=wasm32-unknown-unknown -Oz -nostdlib -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections` | freestanding module for modules that do not use the C runtime |
 | `napi` | `speed` (one LTO partition) plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
@@ -700,13 +700,16 @@ of `--gc-sections` / `-s`, skips `-fuse-ld=lld` and `-fno-plt`; on Linux it
 prefers `lld` because GNU `ld` needs the gold plugin for LTO. `-flto`
 matters more here than for C: LLVM sees the Nish module and the runtime
 as one unit, so `nish_str_len` inlines into a load and unreferenced runtime
-functions vanish. Under lld the `speed` link splits LTO code generation
-into one partition per core (`nproc`, else `getconf _NPROCESSORS_ONLN`,
-else `sysctl -n hw.ncpu`) and runs them in parallel; the program is still
-optimised as one module, so the instructions it runs stay within a few of
-`bench/instructions.json`, and on a 4-core machine the link of
-`tests/link/net_relay_f64` takes about 0.7x the time. The bytes depend on
-the partition count, so they are the same for every link on one machine.
+functions vanish. Under lld the `speed` link of a target without control-flow landing pads
+splits LTO code generation into one partition per core (`nproc`, else
+`getconf _NPROCESSORS_ONLN`, else `sysctl -n hw.ncpu`) and runs them in
+parallel. x86-64 and arm64 link in one partition: a partition boundary makes
+the functions called across it external, each of which then opens with an
+`endbr64` or `bti c` the hot calls run (`fib` ran 6.5% more instructions with
+two partitions), so the hardened link gives up the parallel code generation,
+about 1.4x the time of a four-partition link of `tests/link/net_relay_f64`.
+The bytes depend on the partition count, so they are the same for every link
+on one machine.
 ld64 and the GNU ld fallback have no such flag and link in one partition.
 `CC` overrides the compiler; `NODE_INCLUDE` overrides the
 Node header directory for `napi`.
