@@ -1,0 +1,6 @@
+victim: answered with its pid
+killer: pg_terminate_backend answered t
+victim: connection failed: 7 57P01 FATAL: terminating connection due to administrator command
+victim: answered again, a new backend
+victim: 2 connections made
+exit 0

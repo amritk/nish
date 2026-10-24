@@ -48,12 +48,12 @@ entry:
   ret i32 %0, !dbg !41
 }
 
-attributes #0 = { nounwind willreturn readnone }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind "probe-stack"="inline-asm" }
 
 !llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!2, !3}
+!llvm.module.flags = !{!2, !3, !42, !43, !44, !45, !46}
 !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "nish <version>", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/dbg_rng.ts", directory: ".")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
@@ -96,3 +96,8 @@ attributes #2 = { nounwind }
 !39 = !DILocation(line: 16, column: 10, scope: !15)
 !40 = distinct !DISubprogram(name: "main", linkageName: "main", scope: !1, file: !1, line: 11, type: !14, scopeLine: 11, flags: DIFlagPrototyped | DIFlagArtificial, spFlags: DISPFlagDefinition, unit: !0)
 !41 = !DILocation(line: 11, column: 1, scope: !40)
+!42 = !{i32 8, !"cf-protection-branch", i32 1}
+!43 = !{i32 8, !"cf-protection-return", i32 1}
+!44 = !{i32 8, !"branch-target-enforcement", i32 1}
+!45 = !{i32 8, !"sign-return-address", i32 1}
+!46 = !{i32 4, !"probe-stack", !"inline-asm"}

@@ -90,6 +90,20 @@
  * connection with their own `failure` code. The constructor panics on a cap
  * out of range, as on a missing user or a short nonce.
  *
+ * **Pools.** `PgPool` holds up to `size` connections to one server and a FIFO
+ * queue of up to `queueSize` requests, still sans-IO: `wanted()` names a slot
+ * that needs a socket, `connect(slot, nonce)` starts its connection, and the
+ * program moves its bytes as above through `connection(slot)`. A request is a
+ * ticket from `request()`; `dispatch()` gives the oldest to the ready
+ * connection with the fewest groups in flight, the program builds its group and
+ * ends it with `send()`, and `next(slot)` reads that connection's events with
+ * `ticket` naming the request. Statements given to `register` are prepared on
+ * each connection ahead of its first request. A connection that fails reports
+ * `PG_LOST` for each request it took, then `PG_FAILED`; the program closes the
+ * socket and the slot is built again on its next use. `tests/postgres/carrier.ts`
+ * is a whole carrier: one `pollWait` loop holding the pool's sockets beside an
+ * HTTP listener.
+ *
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
  * and RFC 5802 and RFC 7677; not ported from another implementation.
  */
@@ -293,6 +307,35 @@ class PgPassword {
 
   wiped(): boolean {
     return expose(this.bytes, pgAllZero)
+  }
+}
+
+/** Panics on a `PgConfig` that is a mistake in the program: no user, a cap out of range, a NUL in a startup parameter. */
+const pgCheckConfig = (config: PgConfig): void => {
+  if (config.user.length === 0) {
+    panic("nish/net/postgres: PgConfig.user is required")
+  }
+  if (
+    config.maxMessage < 1024 ||
+    config.maxMessage > PG_MAX_CAP ||
+    config.maxOutput < 1024 ||
+    config.maxOutput > PG_MAX_CAP ||
+    config.maxInFlight < 1 ||
+    config.maxColumns < 1 ||
+    config.maxColumns > 65535 ||
+    config.minIterations < 1 ||
+    config.maxIterations < config.minIterations ||
+    config.maxIterations > PG_MAX_ITERATIONS
+  ) {
+    panic("nish/net/postgres: a PgConfig cap out of range")
+  }
+  if (
+    pgHasNul(config.user) ||
+    pgHasNul(config.database) ||
+    pgHasNul(config.applicationName) ||
+    pgHasNul(config.options)
+  ) {
+    panic("nish/net/postgres: a startup parameter holds a NUL byte")
   }
 }
 
@@ -743,31 +786,7 @@ export class PgConnection {
     if (toI32(nonce.length) < PG_NONCE_BYTES) {
       panic("nish/net/postgres: the SCRAM nonce needs at least 18 random bytes")
     }
-    if (config.user.length === 0) {
-      panic("nish/net/postgres: PgConfig.user is required")
-    }
-    if (
-      config.maxMessage < 1024 ||
-      config.maxMessage > PG_MAX_CAP ||
-      config.maxOutput < 1024 ||
-      config.maxOutput > PG_MAX_CAP ||
-      config.maxInFlight < 1 ||
-      config.maxColumns < 1 ||
-      config.maxColumns > 65535 ||
-      config.minIterations < 1 ||
-      config.maxIterations < config.minIterations ||
-      config.maxIterations > PG_MAX_ITERATIONS
-    ) {
-      panic("nish/net/postgres: a PgConfig cap out of range")
-    }
-    if (
-      pgHasNul(config.user) ||
-      pgHasNul(config.database) ||
-      pgHasNul(config.applicationName) ||
-      pgHasNul(config.options)
-    ) {
-      panic("nish/net/postgres: a startup parameter holds a NUL byte")
-    }
+    pgCheckConfig(config)
     this.config = config
     this.text = new PgText()
     this.password = new PgPassword(password)
@@ -1871,5 +1890,387 @@ export class PgConnection {
     const overflowed: boolean = this.text.failed
     this.text.failed = failed
     return overflowed ? -1 : rows
+  }
+}
+
+// --- The pool ------------------------------------------------------------------
+
+/** `PgPool.next(slot)`: the request `ticket` names will get no answer, because its connection failed first. */
+export const PG_LOST: i32 = 9
+/** `PgPool.dispatch()` and `PgPool.wanted()`: no slot. */
+export const PG_POOL_NONE: i32 = -1
+/** `PgPool.request()`: the queue is full, and the request was not taken. */
+export const PG_POOL_FULL: i32 = -2
+
+/** The most slots a pool may have. */
+const PG_POOL_MAX_SLOTS: i32 = 1024
+/** The longest queue a pool may have. */
+const PG_POOL_MAX_QUEUE: i32 = 1048576
+/** The most groups a pooled connection may have in flight, which sizes each slot's ring. */
+const PG_POOL_MAX_IN_FLIGHT: i32 = 1024
+/** The most statements a pool may register. */
+const PG_POOL_MAX_STATEMENTS: i32 = 256
+
+/** No connection: one is built the next time a request needs it. */
+const PG_SLOT_IDLE: i32 = 0
+/** A request needs a connection here: the carrier is to make a socket. */
+const PG_SLOT_WANTED: i32 = 1
+/** The connection is made and authenticating. */
+const PG_SLOT_STARTING: i32 = 2
+const PG_SLOT_READY: i32 = 3
+/** The connection failed: `next` is reporting the requests it took with it. */
+const PG_SLOT_DRAINING: i32 = 4
+
+/** One of a pool's connections, and the groups it has in flight. */
+class PgPoolSlot {
+  state: i32 = 0
+  conn: PgConnection | null = null
+  /** How many registered statements this connection has queued, and how many the server has described. */
+  queued: i32 = 0
+  described: i32 = 0
+  /** The groups in flight, oldest first, in a ring: each one's ticket, and how many of the pool's own prepares lead it. */
+  readonly tickets: i32[]
+  readonly leads: i32[]
+  head: i32 = 0
+  count: i32 = 0
+
+  constructor(ring: i32) {
+    this.tickets = new Array<i32>(ring)
+    this.leads = new Array<i32>(ring)
+  }
+
+  push(ticket: i32, leads: i32): void {
+    const at: i32 = (this.head + this.count) % toI32(this.tickets.length)
+    this.tickets[at] = ticket
+    this.leads[at] = leads
+    this.count += 1
+  }
+
+  pop(): void {
+    this.head = (this.head + 1) % toI32(this.tickets.length)
+    this.count -= 1
+  }
+}
+
+/**
+ * A pool of connections to one server, sans-IO like `PgConnection`: it makes
+ * no socket and reads no clock, and says which slot needs a socket and when.
+ * Its size is a cap, and no connection is made until a request needs one and
+ * no ready connection has room.
+ *
+ * A request is a ticket from `request()`, queued in FIFO order. `dispatch()`
+ * hands the queue's head to the ready connection with the fewest groups in
+ * flight, never past `maxInFlight` on one; the program builds the request's
+ * group on `connection(slot)` and ends it with `send()`, not `sync()`.
+ * `next(slot)` then reads that connection's events, `ticket` naming the
+ * request each is about. A connection that fails reports `PG_LOST` for each
+ * request it took with it, then `PG_FAILED`, and is built again on its next
+ * use. Statements given to `register` are prepared on each connection in the
+ * same group as its first request, so a request may bind them at once.
+ */
+export class PgPool {
+  /** The request the last `dispatch()`, or event from `next(slot)`, is about; -1 for none. */
+  ticket: i32 = -1
+  /** The number of slots, the most connections the pool makes. */
+  readonly size: i32
+
+  private readonly config: PgConfig
+  private readonly password: PgPassword
+  private readonly slots: PgPoolSlot[]
+  private readonly queue: i32[]
+  private queueHead: i32 = 0
+  private queueCount: i32 = 0
+  private nextTicket: i32 = 0
+  /** The slot whose request is being built, between `dispatch()` and `send()`. */
+  private building: i32 = -1
+  private started: boolean = false
+  private readonly names: string[]
+  private readonly sqls: string[]
+  private readonly types: i32[][]
+
+  /**
+   * A pool of up to `size` connections (1 to 1024) and up to `queueSize`
+   * waiting requests (1 to 2^20). `password` is copied and kept until
+   * `dispose()`, since a connection is made again after a failure. Panics as
+   * `PgConnection` does on `config`, and on a `maxInFlight` over 1024.
+   */
+  constructor(config: PgConfig, password: Secret<u8[]>, size: i32, queueSize: i32) {
+    pgCheckConfig(config)
+    if (size < 1 || size > PG_POOL_MAX_SLOTS) {
+      panic("nish/net/postgres: a PgPool size out of range")
+    }
+    if (queueSize < 1 || queueSize > PG_POOL_MAX_QUEUE) {
+      panic("nish/net/postgres: a PgPool queueSize out of range")
+    }
+    if (config.maxInFlight > PG_POOL_MAX_IN_FLIGHT) {
+      panic("nish/net/postgres: a PgPool connection's maxInFlight is over 1024")
+    }
+    this.config = config
+    this.password = new PgPassword(password)
+    this.size = size
+    this.slots = []
+    for (let i: i32 = 0; i < size; i++) {
+      this.slots.push(new PgPoolSlot(config.maxInFlight))
+    }
+    this.queue = new Array<i32>(queueSize)
+    this.names = []
+    this.sqls = []
+    this.types = []
+  }
+
+  /**
+   * Registers a statement for every connection to prepare before its first
+   * request. False when a connection has been made already, `name` or `sql`
+   * holds a NUL, or 256 are registered.
+   */
+  register(name: string, sql: string, paramTypes: i32[]): boolean {
+    if (
+      this.started ||
+      pgHasNul(name) ||
+      pgHasNul(sql) ||
+      toI32(this.names.length) === PG_POOL_MAX_STATEMENTS
+    ) {
+      return false
+    }
+    const types: i32[] = []
+    for (const oid of paramTypes) {
+      types.push(oid)
+    }
+    this.names.push(name)
+    this.sqls.push(sql)
+    this.types.push(types)
+    return true
+  }
+
+  /** Queues a request and answers its ticket, or `PG_POOL_FULL` when `queueSize` are waiting. */
+  request(): i32 {
+    const room: i32 = toI32(this.queue.length)
+    if (this.queueCount === room) {
+      return PG_POOL_FULL
+    }
+    const ticket: i32 = this.nextTicket
+    this.nextTicket = ticket === 2147483647 ? 0 : ticket + 1
+    this.queue[(this.queueHead + this.queueCount) % room] = ticket
+    this.queueCount += 1
+    return ticket
+  }
+
+  /** The number of requests waiting for a connection. */
+  waiting(): i32 {
+    return this.queueCount
+  }
+
+  /**
+   * Hands the oldest waiting request to a ready connection with room, and
+   * answers its slot, `ticket` set to the request: build its group on
+   * `connection(slot)`, then `send()`. `PG_POOL_NONE` when nothing waits, a
+   * request is still being built, or no ready connection has room; then a
+   * connection may be wanted (`wanted()`): one more for every `maxInFlight`
+   * waiting requests that the connections already starting cannot take. A
+   * request handed out is the program's to end with `send()`: until then no
+   * other is handed out.
+   */
+  dispatch(): i32 {
+    if (this.building >= 0 || this.queueCount === 0) {
+      return PG_POOL_NONE
+    }
+    const cap: i32 = this.config.maxInFlight
+    let best: i32 = -1
+    let load: i32 = 0
+    let starting: i32 = 0
+    let idle: i32 = -1
+    for (let s: i32 = 0; s < this.size; s++) {
+      const slot: PgPoolSlot = this.slots[s]
+      const conn: PgConnection | null = slot.conn
+      if (slot.state === PG_SLOT_READY && conn !== null) {
+        if (conn.inFlight < cap && (best < 0 || conn.inFlight < load)) {
+          best = s
+          load = conn.inFlight
+        }
+      } else if (slot.state === PG_SLOT_WANTED || slot.state === PG_SLOT_STARTING) {
+        starting += 1
+      } else if (slot.state === PG_SLOT_IDLE && idle < 0) {
+        idle = s
+      }
+    }
+    if (best < 0) {
+      if (idle >= 0 && toI64(this.queueCount) > toI64(starting) * toI64(cap)) {
+        this.slots[idle].state = PG_SLOT_WANTED
+      }
+      return PG_POOL_NONE
+    }
+    const ticket: i32 = this.queue[this.queueHead]
+    this.queueHead = (this.queueHead + 1) % toI32(this.queue.length)
+    this.queueCount -= 1
+    const slot: PgPoolSlot = this.slots[best]
+    const conn: PgConnection = this.connection(best)
+    let leads: i32 = 0
+    while (slot.queued < toI32(this.names.length)) {
+      const k: i32 = slot.queued
+      if (!conn.prepare(this.names[k], this.sqls[k], this.types[k])) {
+        break
+      }
+      slot.queued += 1
+      leads += 1
+    }
+    slot.push(ticket, leads)
+    this.building = best
+    this.ticket = ticket
+    return best
+  }
+
+  /**
+   * Ends the group of the request `dispatch()` handed out. False when there
+   * is none; when a bind is still open, so finish it and call again; and
+   * when no message of the group was written, so the request is dropped and
+   * gets no events (`PG_LOST` if its connection has failed).
+   */
+  send(): boolean {
+    const s: i32 = this.building
+    if (s < 0) {
+      return false
+    }
+    const slot: PgPoolSlot = this.slots[s]
+    const conn: PgConnection = this.connection(s)
+    if (conn.sync()) {
+      this.building = -1
+      return true
+    }
+    if (conn.inFlight < slot.count) {
+      // No message opened the group. A failed connection reports the request
+      // lost with the rest; a live one would never answer it, so it is dropped.
+      if (conn.failure === PG_ERR_NONE) {
+        slot.count -= 1
+      }
+      this.building = -1
+    }
+    return false
+  }
+
+  /** A slot that needs a socket, or `PG_POOL_NONE`: connect it, then call `connect(slot, nonce)`. */
+  wanted(): i32 {
+    for (let s: i32 = 0; s < this.size; s++) {
+      if (this.slots[s].state === PG_SLOT_WANTED) {
+        return s
+      }
+    }
+    return PG_POOL_NONE
+  }
+
+  /**
+   * Makes the wanted `slot`'s connection, `nonce` as `PgConnection` takes it:
+   * send its output once the socket is connected, and if the socket fails,
+   * call `connection(slot).closed()`. Panics when `slot` is not wanted or the
+   * pool is disposed.
+   */
+  connect(slot: i32, nonce: u8[]): void {
+    if (slot < 0 || slot >= this.size || this.slots[slot].state !== PG_SLOT_WANTED) {
+      panic("nish/net/postgres: PgPool.connect on a slot that wants no connection")
+    }
+    if (this.password.gone) {
+      panic("nish/net/postgres: PgPool.connect after dispose")
+    }
+    const s: PgPoolSlot = this.slots[slot]
+    s.conn = new PgConnection(this.config, this.password.bytes, nonce)
+    s.state = PG_SLOT_STARTING
+    s.queued = 0
+    s.described = 0
+    s.head = 0
+    s.count = 0
+    this.started = true
+  }
+
+  /** The connection in `slot`, its buffers the carrier's to fill and drain; the last one made after it fails. Panics when none was made. */
+  connection(slot: i32): PgConnection {
+    const conn: PgConnection | null = slot < 0 || slot >= this.size ? null : this.slots[slot].conn
+    if (conn === null) {
+      panic("nish/net/postgres: PgPool.connection on a slot with no connection")
+    }
+    return conn
+  }
+
+  /**
+   * The next event from `slot`'s input, as `PgConnection.next()` answers it,
+   * `ticket` naming the request it is about (-1 for `PG_READY`, `PG_FAILED`,
+   * and a notice while no request is in flight). The `PG_DESCRIBED` of a registered
+   * statement is the pool's and is not answered. When the connection fails,
+   * `PG_LOST` comes for each request in flight on it, oldest first, then
+   * `PG_FAILED`: close its socket. A connection that fails before it is ready,
+   * while no other is, takes the oldest waiting request with it, so that a
+   * server that cannot be reached empties the queue rather than holds it.
+   * `PG_NEED_MORE` once `PG_FAILED` was answered, until `connect` builds the
+   * slot again. Panics as `connection(slot)` does.
+   */
+  next(slot: i32): i32 {
+    const conn: PgConnection = this.connection(slot)
+    const s: PgPoolSlot = this.slots[slot]
+    if (s.state === PG_SLOT_IDLE || s.state === PG_SLOT_WANTED) {
+      this.ticket = -1
+      return PG_NEED_MORE
+    }
+    while (s.state === PG_SLOT_STARTING || s.state === PG_SLOT_READY) {
+      this.ticket = s.count > 0 ? s.tickets[s.head] : -1
+      const event: i32 = conn.next()
+      if (event === PG_READY) {
+        s.state = PG_SLOT_READY
+      } else if (event === PG_DESCRIBED && s.count > 0 && s.leads[s.head] > 0) {
+        s.leads[s.head] -= 1
+        s.described += 1
+        continue
+      } else if (event === PG_ERROR && s.count > 0 && s.leads[s.head] > 0) {
+        // The rest of the group's prepares were skipped: the next request prepares them again.
+        s.leads[s.head] = 0
+        s.queued = s.described
+      } else if (event === PG_GROUP_DONE) {
+        s.pop()
+      } else if (event === PG_FAILED) {
+        if (s.state === PG_SLOT_STARTING && this.queueCount > 0 && !this.anyReady()) {
+          s.push(this.queue[this.queueHead], toI32(0))
+          this.queueHead = (this.queueHead + 1) % toI32(this.queue.length)
+          this.queueCount -= 1
+        }
+        if (this.building === slot) {
+          this.building = -1
+        }
+        s.state = PG_SLOT_DRAINING
+        break
+      }
+      return event
+    }
+    if (s.state === PG_SLOT_DRAINING && s.count > 0) {
+      this.ticket = s.tickets[s.head]
+      s.pop()
+      return PG_LOST
+    }
+    s.state = PG_SLOT_IDLE
+    this.ticket = -1
+    return PG_FAILED
+  }
+
+  private anyReady(): boolean {
+    for (const slot of this.slots) {
+      if (slot.state === PG_SLOT_READY) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /** Whether every byte of the pool's copy of the password is zero, as `PgConnection.passwordWiped()` reads its own. */
+  passwordWiped(): boolean {
+    return this.password.wiped()
+  }
+
+  /** Wipes the pool's password and every connection's; `connect` panics after it. */
+  dispose(): void {
+    if (!this.password.gone) {
+      this.password.wipe()
+    }
+    for (const slot of this.slots) {
+      const conn: PgConnection | null = slot.conn
+      if (conn !== null) {
+        conn.dispose()
+      }
+    }
   }
 }

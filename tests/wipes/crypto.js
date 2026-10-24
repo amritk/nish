@@ -224,4 +224,26 @@ export const wipeChecks = [
       ["nish.bcryptVerify", 5],
     ],
   },
+  // The batch (`bcryptHash4`, `bcryptVerify4`). The roots: `bcryptKeyWord` 2
+  // (its 19-word expanded key and `bcryptKeySchedule`'s 128-byte key stream,
+  // inlined), `bcryptEks4` 3 (the blocks, the digests and one lane's digest),
+  // `bcryptRun4` 20 (the 4244-word state, `bcryptEks4`'s 3, and four lane
+  // loaders with two `bcryptKeyWord` call sites each), `bcryptHash4` 25
+  // (`bcryptRun4` and the one-lane path's `bcryptHash` through `bcryptRun`,
+  // 5), and `bcryptVerify4` 40 (`bcryptRun4` through `bcryptVerifyGroup`, and
+  // `bcryptRunLane`'s four `bcryptRun` sites for a cost a single lane holds).
+  // Turning
+  // `bcryptKeyWord`'s wipe into `fill(0)` dropped them to 1, 12, 17 and 32.
+  {
+    name: "crypto: the wipes survive opt -O2 (bcrypt's batch state, key words, block and digests in bcryptRun4)",
+    program: "tests/link/crypto_bcrypt_batch/main.ts",
+    modules: BCRYPT_MODULES,
+    roots: [
+      ["nish.bcryptKeyWord", 2],
+      ["nish.bcryptEks4", 3],
+      ["nish.bcryptRun4", 20],
+      ["nish.bcryptHash4", 25],
+      ["nish.bcryptVerify4", 40],
+    ],
+  },
 ]
