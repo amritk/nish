@@ -65,6 +65,7 @@ the record that found it. The notes below the table name each such finding.
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
 | `--sandbox` | [sandbox.md](sandbox.md) | `runtime/runtime-sandbox.c`; the wrapper in `src/emit.ts`; the flag and its refusals in `src/compile.ts`, `src/options.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
 | SQLite amalgamation | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁶ |
 | **Total** ⁸ | | | **3 / 10 / 20 / 107** | **0 / 0 / 3 / 13** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
@@ -178,6 +179,12 @@ the record that found it. The notes below the table name each such finding.
     (Low), a lone surrogate the core reads as U+FFFD, are accepted, with the
     reason in their record, and are not counted. The guide says what a
     caller does about each.
+16. CAPS-1 to CAPS-4 are the ways a dependency could hide a capability,
+    checked and found to hold, and are not findings. CAPS-5 to CAPS-8 (Low),
+    the limits of a compile-time check (install scripts, the C behind a
+    granted `ffi`, a function argument blamed on its template, nothing
+    confined at run time), are accepted, with the reason in their record,
+    and are not counted.
 
 ## Not yet audited
 

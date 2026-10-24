@@ -14,7 +14,7 @@ functions rather than lines, so it has no `file:line` anchors to move.
 | --- | --- |
 | `runtime/runtime-sandbox.c` | `nish_sandbox` (the six steps), `nish_sandbox_check`, `nish_sb_drop_capabilities`, `nish_sb_landlock`, `nish_sb_granted`, `nish_sb_seccomp` and its syscall tables; the non-Linux stubs |
 | `src/emit.ts` | the wrapper: `@.sandbox.apply`, its `.preinit_array` entry kept by `@llvm.used`, and the call of `@nish_sandbox_check` first in `@main` |
-| `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3041), `--emit-napi`, `--emit-ast`, `--emit-checked`, `--fix`, an entry with no `main` |
+| `src/compile.ts`, `src/options.ts` | the flag, its modes, and the refusals: darwin (NL3043), `--emit-napi`, `--emit-ast`, `--emit-checked`, `--fix`, an entry with no `main` |
 
 Out of scope, for stage 2: the `fs.read=<dir>` and `fs.write=<dir>` scopes
 (still refused beside `--sandbox`, word for word), widening `ffi` (open
@@ -245,7 +245,7 @@ The `sandbox` section of `tests/run.js` (`node tests/run.js sandbox`) and the
 - `` `--sandbox --emit-napi` is a usage error, exit 2 ``
 - `` `--sandbox` on an entry with no `main` is a usage error, exit 2 ``
 - `` a directory scope beside `--sandbox` is still a usage error, exit 2 ``
-- `tests/wordings/nl3041_sandbox_darwin` (the darwin refusal, word for word)
+- `tests/wordings/nl3043_sandbox_darwin` (the darwin refusal, word for word)
 - `tests/runtime-budgets.js`: `RUNTIME_SANDBOX_TEXT_BUDGET`, the ceiling on
   the unit's `.text`
 

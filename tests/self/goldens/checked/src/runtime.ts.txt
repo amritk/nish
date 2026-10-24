@@ -7,6 +7,7 @@ const ARRAY_TYPE: string = "%struct.nish_array = type { i64, i64, i8* }" [export
 const ARENA_GLOBAL: string = "@nish_arena = external global %struct.nish_arena, align 8" [exported]
 const ARENA_GLOBAL_TLS: string = "@nish_arena = external thread_local(initialexec) global %struct.nish_arena, align 8" [exported]
 const ARGV_GLOBAL: string = "@nish_argv = external global %struct.nish_array*, align 8" [exported]
+const HASH_KEY_GLOBAL: string = "@nish_hash_key = external global [2 x i64], align 8" [exported]
 const EFFECT_NONE: i32 = 0 [exported]
 const EFFECT_READ: i32 = 1 [exported]
 const EFFECT_WRITE: i32 = 2 [exported]

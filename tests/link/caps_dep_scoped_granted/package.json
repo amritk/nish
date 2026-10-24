@@ -1,0 +1,13 @@
+{
+  "name": "caps-dep-scoped-granted",
+  "private": true,
+  "nish": {
+    "capabilities": {
+      "dependencies": {
+        "@acme/http": [
+          "net"
+        ]
+      }
+    }
+  }
+}

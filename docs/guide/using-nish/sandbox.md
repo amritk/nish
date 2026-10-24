@@ -93,7 +93,7 @@ C library skipped the step that applies the sandbox (musl does), or if its
 ## Where it does not apply
 
 - **macOS** has neither Landlock nor seccomp, so a darwin target refuses the
-  flag (NL3041).
+  flag (NL3043).
 - **WebAssembly** targets accept it and add nothing: the host already decides
   what a module may import.
 - `--emit-ast`, `--emit-checked`, `--fix` and `--emit-napi` refuse it, and so
