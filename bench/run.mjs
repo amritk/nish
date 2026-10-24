@@ -601,6 +601,16 @@ const PINNED_LIBC = [
  */
 const PINNED_SIMD = "base"
 
+/**
+ * The hash key, pinned the same way. A string-keyed `Map` or `Set` seeds its
+ * key from `getentropy` before `main`, and a different key lays out the same
+ * keys differently, so the count moved by up to 0.35% from run to run.
+ * bench/fixed-key.c answers that call with fixed bytes, preloaded from the
+ * program's own directory under a relative name so that, like argv[0], the
+ * checkout's path never reaches the loader.
+ */
+const FIXED_KEY = "fixed-key.so"
+
 /** How far `count` is from `base`, as a fraction of `base`: positive when it runs more. */
 const change = (count, base) => (count - base) / base
 
@@ -610,8 +620,8 @@ const change = (count, base) => (count - base) / base
  * separates them from the program's own code in a stripped `--profile speed`
  * binary on a host without libc's debug symbols. They are about 120 thousand
  * of a count in the hundreds of millions. What varies with the host is pinned
- * instead: the child's environment is `PINNED_LIBC`, `PINNED_SIMD` and nothing
- * else, and its argv[0] is relative (`./fib`, run from its own directory), so neither the
+ * instead: the child's environment is `PINNED_LIBC`, `PINNED_SIMD`, `FIXED_KEY`
+ * and nothing else, and its argv[0] is relative (`./fib`, run from its own directory), so neither the
  * caller's variables nor the checkout's path reach the loader. bench/README.md
  * has the measurements that show what is left.
  */
@@ -629,7 +639,7 @@ const countInstructions = (valgrind, exe, args, name) => {
     ],
     {
       cwd: dir,
-      env: { GLIBC_TUNABLES: PINNED_LIBC, NISH_SIMD: PINNED_SIMD },
+      env: { GLIBC_TUNABLES: PINNED_LIBC, NISH_SIMD: PINNED_SIMD, LD_PRELOAD: `./${FIXED_KEY}` },
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     }
@@ -687,6 +697,11 @@ const runInstructions = () => {
   const src = path.join(dir, "src")
   fs.mkdirSync(src, { recursive: true })
   const rel = (p) => path.relative(root, p)
+  run(
+    CC,
+    ["-O2", "-shared", "-fPIC", path.join(benchDir, "fixed-key.c"), "-o", path.join(dir, FIXED_KEY)],
+    "fixed-key"
+  )
   const jobs = [] // { name, size, exe, args }
   process.stderr.write("instructions: building")
   const programs = [

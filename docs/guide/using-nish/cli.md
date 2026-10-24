@@ -192,17 +192,35 @@ Some constructs JavaScript spells differently are rewritten too:
 - **`Arena.used()`** and its siblings become `nish/runtime`'s `arenaUsed`,
   `arenaMark`, `arenaRelease` and `arenaReset`, and a `Result` annotation
   imports `Result` from it.
+- **An element read `a[i]`** whose index the compiler cannot prove in range
+  becomes `idx(a, i)`, and a store `a[i] = v` becomes `setIdx(a, i, v)`.
+  Both panic out of range as the native check does, where JavaScript would
+  read `undefined` or grow the array. A compound store `a[i] += v` checks
+  the index again after `v` runs, at a proven index too, since `v` can
+  shrink the array.
+- **`new Array<T>(n)`** becomes `newArray(n, zero)`, filled with `T`'s zero
+  (`0`, `0n`, `false`, or `null` for a nullable `T`) where JavaScript would
+  leave holes. An `i64` or `u64` length goes through `Number`.
+- **A record an array holds inline** is copied as it goes in:
+  `xs.push(p)` pushes `{ ...p }`, and `xs[i] = p` writes `p`'s fields into
+  the record already in the slot, so a later change to `p` leaves `xs`
+  alone, as it does natively. A `(P | null)[]` holds references and copies
+  nothing.
+- **`dst.set(src, at)`** between two arrays of one type becomes
+  `arraySet(dst, src, at)`, the copy a plain JavaScript array lacks, which
+  panics past the end as the native one does.
 
 The flag also turns on `--warn-portability`. Those warnings name the places
 where your program can answer differently under Node.
 
-Three kinds of module cannot be written. In each case `nish` exits 1 and
+Four kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
 ```text
 app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
 app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
+app.ts:9:1: error: --emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type
 ```
 
 The second is reported at each `nish:net` import and at each call to a
@@ -212,6 +230,12 @@ The third is reported at an `x op= e` that Node needs written as
 `x = x op e`, such as `+=` on a `u8` that has to wrap, when the index in `x`
 holds a call, a `++`, or another array read: `hist[data[0]] += 10`. Read the
 index into a `const` first, `const at = data[0]`, then `hist[at] += 10`.
+
+The fourth is reported at a generic function that TypeScript writes once
+for all the types it is called at, when those types need different code: a
+record held inline in one call and a `P | null` reference in another, or an
+`i32` and an `i64` element in `new Array<T>(n)`, whose zeros differ. Write a
+function per element type.
 
 Not every builtin has a runtime export yet. The `nish:unsafe` functions
 (`uncheckedGet`, `wrappingAdd`, `readCString` and the rest) are written as
