@@ -281,7 +281,10 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
  * `nish_array_grow`, `nish_alloc_array` and `nish_str_concat` fail as an
  * allocation does (`nish: out of memory`, exit 1; a trap on wasm) rather than
  * make one, because under --number-mode i32 its `length` would read back
- * negative (docs/security/codegen.md K1-6, docs/security/runtime.md RT-2). */
+ * negative (docs/security/codegen.md K1-6, docs/security/runtime.md RT-2).
+ * A host that hands an array in keeps the same bound: the N-API shim refuses a
+ * longer typed array, and a C host must not pass a `len` past it
+ * (docs/security/bytes.md, BYTES-1). */
 /* The cold paths compiled code calls: `push` when len == cap, a failed bounds
  * check. `nish_array_grow` moves `cap * elem_size` bytes into a fresh arena
  * block and writes `data`/`cap`, so for a record element type it relocates the

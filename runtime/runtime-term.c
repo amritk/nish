@@ -204,7 +204,7 @@ nish_array *nish_terminal_size(void) {
    whether that is in force now, and whether the exit and signal handlers are
    in place. One terminal per process, so one of each. */
 static struct termios nish_term_saved, nish_term_raw_t;
-static volatile sig_atomic_t nish_term_raw;
+static volatile sig_atomic_t nish_term_raw, nish_term_entering;
 static int nish_term_armed;
 
 /* Held across `setRawMode`, the atexit and panic restores, and the whole
@@ -246,7 +246,9 @@ static void nish_term_drop(const sigset_t *old) {
    The flag is cleared after the call, so any other signal that lands during it
    restores again, which is harmless, rather than not at all. */
 static void nish_term_restore(void) {
-  if (nish_term_raw) {
+  struct termios now;
+  if (nish_term_raw || (nish_term_entering && tcgetattr(0, &now) == 0 && now.c_lflag == nish_term_raw_t.c_lflag &&
+                        now.c_iflag == nish_term_raw_t.c_iflag)) {
     tcsetattr(0, TCSANOW, &nish_term_saved);
     nish_term_raw = 0;
     __atomic_store_n(&nish_fatal_hook, 0, __ATOMIC_RELEASE);
@@ -268,8 +270,13 @@ static void nish_term_leave(void) {
    background, finds the terminal as it was and leaves it, rather than setting
    it from the background and being stopped again. */
 static int32_t nish_term_enter(int when) {
-  if (tcsetattr(0, when, &nish_term_raw_t) != 0) return -errno;
+  nish_term_entering = 1;
+  if (tcsetattr(0, when, &nish_term_raw_t) != 0) {
+    nish_term_entering = 0;
+    return -errno;
+  }
   nish_term_raw = 1;
+  nish_term_entering = 0;
   __atomic_store_n(&nish_fatal_hook, nish_term_leave, __ATOMIC_RELEASE);
   return 0;
 }
@@ -361,13 +368,31 @@ static int32_t nish_term_set(bool on) {
       alt.ss_flags = 0;
       sigaltstack(&alt, 0);
     }
-    static const int sigs[] = {
-        SIGINT,  SIGTERM, SIGQUIT, SIGHUP,  SIGPIPE, SIGALRM, SIGUSR1,
-        SIGUSR2, SIGPROF, SIGVTALRM, SIGXCPU, SIGXFSZ, SIGSYS, SIGILL,
-        SIGTRAP, SIGABRT, SIGFPE,  SIGBUS,  SIGSEGV, SIGTSTP};
-    for (unsigned i = 0; i < sizeof sigs / sizeof sigs[0]; i++) {
+    /* Every signal whose default ends the program, the real-time ones and
+       those a system adds (Linux's SIGIO, SIGPWR and SIGSTKFLT, Darwin's
+       SIGEMT) included, and SIGTSTP; not SIGKILL and SIGSTOP, which no
+       handler sees, nor those a default ignores or that stop the program,
+       since the handler raises its signal again at the default and a program
+       that went on would go on with its terminal restored. Off Linux SIGIO's
+       default ignores it. A signal the program or the C it links already
+       handles is left alone, and one the C library keeps for itself refuses
+       the `sigaction`. */
+    unsigned spare = 1u << SIGCHLD | 1u << SIGCONT | 1u << SIGURG | 1u << SIGWINCH | 1u << SIGTTIN | 1u << SIGTTOU;
+#ifdef SIGINFO
+    spare |= 1u << SIGINFO;
+#endif
+#ifndef __linux__
+    spare |= 1u << SIGIO;
+#endif
+#ifdef SIGRTMAX
+    int last = SIGRTMAX;
+#else
+    int last = 31;
+#endif
+    for (int sig = 1; sig <= last; sig++) {
       struct sigaction old;
-      if (sigaction(sigs[i], 0, &old) == 0 && old.sa_handler == SIG_DFL) nish_term_catch(sigs[i]);
+      if ((sig >= 32 || !(spare >> sig & 1)) && sigaction(sig, 0, &old) == 0 && old.sa_handler == SIG_DFL)
+        nish_term_catch(sig);
     }
   }
   return nish_term_enter(TCSAFLUSH);

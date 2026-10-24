@@ -175,12 +175,21 @@ in JavaScript. `regexEscape(text)` makes a pattern that matches `text`
 exactly. The flags are `i` (ASCII letters), `m` and `s`; there is no `g`,
 since `findAll` and `replaceAll` are the global forms.
 
-Matching never backtracks, so a pattern cannot make it slow: `(a+)+$` against
-a long run of `a`s takes as long as `a+$`. The price is that backreferences
-(`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused when the pattern is
-compiled. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
+Matching never backtracks, so a pattern cannot make one search slow:
+`(a+)+$` against a long run of `a`s takes as long as `a+$`. The price is
+that backreferences (`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused
+when the pattern is compiled. So is a pattern past the engine's limits: a
+repeat count over 1,000, more than 1,024 capturing groups, more than 10,000
+ranges in one class, or more than 100,000 instructions once its repeats are
+written out. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
 `\b` are ASCII, as they are in JavaScript. The `i` flag folds only ASCII
 letters, where JavaScript's folds every letter: `é` does not match `É`.
+
+Finding every match is one search per match, so `findAll`, `count`,
+`replaceAll` and `split` are quadratic when a long branch is preferred to a
+short one that wins: `<[^>]*>|<` over a run of `<`s reads the rest of the
+text at each. Bound the long branch (`<[^<>]*>|<`) or put the short one
+first.
 
 A search runs a lazy DFA, a table of states built as the text needs them,
 and falls back to a slower engine only to fill in groups or when a pattern
@@ -948,7 +957,8 @@ before. An empty answer means nothing changed. On a 200 × 60 screen,
 rewriting every cell flushes in about 0.1 ms, and one changed cell in about
 0.03 ms. After `resize(width, height)` the next flush redraws everything, and
 so does one after `invalidate()`: call that when something else has written
-to the terminal.
+to the terminal. A side is at most 4,096 cells and a screen at most 1,048,576,
+with rows dropped to fit, so any size a terminal reports is safe to pass.
 
 **A `Canvas`** puts pixels on a screen, two to a cell, one above the other.
 It draws with the half-block character "▀": the foreground is the top pixel's
@@ -981,7 +991,9 @@ A read can stop in the middle of an arrow key's
 `feed`. The ESC key sends a lone ESC, which is also how an arrow key begins.
 So the decoder holds an ESC until either the rest of a sequence arrives or
 the timeout you gave the constructor passes. While `waiting()` is true, call
-`poll(nowMs)` once the timeout is up to collect the `KEY_ESCAPE`.
+`poll(nowMs)` once the timeout is up to collect the `KEY_ESCAPE`. An `ESC [`
+followed by more than 32 parameter bytes is no key, so the decoder gives the
+ESC up as `KEY_ESCAPE` at once rather than holding what follows.
 
 ```ts nish:ok
 import { KEY_LEFT, KeyDecoder } from "nish/term";

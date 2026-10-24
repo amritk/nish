@@ -1595,6 +1595,11 @@ if (!only || "term".includes(only)) {
   // with `-`.
   const ptyExe = has("script") ? buildCaseIn(termDir, "term_pty") : null
   const tstpStatus = 128 + os.constants.signals.SIGTSTP
+  // Signals that end a program by default and that the list of named signals
+  // runtime-term.c caught once missed (docs/security/term.md, TERM-1): Linux's
+  // SIGIO, SIGPWR and SIGSTKFLT, and glibc's SIGRTMIN, 34.
+  const { SIGIO, SIGPWR, SIGSTKFLT } = os.constants.signals
+  const extraSigs = process.platform === "linux" ? [SIGIO, SIGPWR, SIGSTKFLT, 34] : []
   if (!has("script")) {
     skip("term_pty: no `script` on this host, so no pseudo-terminal to run it under")
   } else if (ptyExe !== null) {
@@ -1623,6 +1628,23 @@ if (!only || "term".includes(only)) {
         "i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
         'kill -SEGV $pid; wait $pid',
         'echo "fault $? stty $(same)"',
+        'for s in $NISH_PTY_SIGS; do',
+        '  : > "$D/hold.out"',
+        '  "$E" hold </dev/tty > "$D/hold.out" & pid=$!',
+        "  i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/hold.out\"; do sleep 0.1; i=$((i + 1)); done",
+        '  kill -"$s" $pid; wait $pid',
+        '  echo "signal $s $? stty $(same)"',
+        "done",
+        "n=0; k=0",
+        "while [ $k -lt 200 ]; do",
+        '  : > "$D/hold.out"',
+        '  "$E" flip </dev/tty > "$D/hold.out" & pid=$!',
+        '  while ! grep -q ready "$D/hold.out"; do :; done',
+        '  kill -TERM $pid; wait $pid',
+        '  if [ "$(same)" != same ]; then n=$((n + 1)); stty "$(cat "$D/before")"; fi',
+        "  k=$((k + 1))",
+        "done",
+        'echo "flipped $n raw"',
         "icanon() { stty -a | tr ' ;' '\\n\\n' | grep -x -- '-\\{0,1\\}icanon'; }",
         "set -m",
         ': > "$D/hold.out"',
@@ -1663,9 +1685,10 @@ if (!only || "term".includes(only)) {
         NISH_PTY_EXE: ptyExe,
         NISH_PTY_DIR: termDir,
         NISH_PTY_TSTP: String(tstpStatus),
+        NISH_PTY_SIGS: extraSigs.join(" "),
       },
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: 30000,
+      timeout: 60000,
     })
     const lines = String(r.stdout).replaceAll("\r", "").split("\n")
     if (!lines.includes("pty")) {
@@ -1685,10 +1708,25 @@ if (!only || "term".includes(only)) {
         "continued 143 stty same was -icanon said raw 0 ready ",
         `deadline ${tstpStatus} 0 stty same said raw 0 ready timed false `,
       ]
+      const caught = extraSigs.map((sig) => `signal ${sig} ${128 + sig} stty same`)
       check(
         "term_pty: under a pseudo-terminal raw mode takes, and returning, a panic, SIGTERM and SIGSEGV each leave the terminal as it was, and so does a stop by SIGTSTP, through `bg` too, after which `fg` gives raw mode back and the wait goes on rather than ending early, and once stopped mid-wait only until its deadline",
         want.every((line) => lines.includes(line)),
         `want every line of ${JSON.stringify(want)}\n${shown(r)}`
+      )
+      if (extraSigs.length > 0) {
+        check(
+          "term_pty: SIGIO, SIGPWR, SIGSTKFLT and SIGRTMIN each leave the terminal as it was",
+          caught.every((line) => lines.includes(line)),
+          `want every line of ${JSON.stringify(caught)}\n${shown(r)}`
+        )
+      }
+      // Before the fix about one SIGTERM in fifty landed between the switch
+      // into raw mode and the flag that says so, and left the terminal raw.
+      check(
+        "term_pty: SIGTERM sent while a loop enters and leaves raw mode never leaves the terminal raw (200 tries)",
+        lines.includes("flipped 0 raw"),
+        shown(r)
       )
     }
   }
@@ -9854,6 +9892,37 @@ if (!only || "secret wipe survives -O2".includes(only)) {
   }
 }
 
+// `isPureRuntime` lets code inside `expose` call the byte-class runs of
+// `nish/bytes` and `nish_str_index_of_any`, which take time that depends on the
+// bytes they scan. `std/crypto` keeps out of them (docs/security/bytes.md,
+// BYTES-2): no module's IR names one. `std_bytes_runs` is the control that
+// shows the pattern still matches what a caller of the runs declares.
+if (!only || "std/crypto calls no variable-time scan".includes(only)) {
+  const scanDir = path.join(buildDir, "crypto-scans")
+  fs.rmSync(scanDir, { recursive: true, force: true })
+  const scan = /@(nish_bytes_skip_\w+|nish_str_index_of_any)\b/g
+  /** Each scan kernel the IR of `file` and its imports names, or the failure to compile it. */
+  const scansOf = (file, dir) => {
+    const c = spawnSync(NISH, [file, "-o", `${dir}/`], { cwd: root, encoding: "utf8" })
+    if (c.status !== 0) {
+      return [`${file}: ${c.stderr}`]
+    }
+    return fs
+      .readdirSync(dir)
+      .flatMap((ll) => (fs.readFileSync(path.join(dir, ll), "utf8").match(scan) || []).map((m) => `${ll}: ${m}`))
+  }
+  const cryptoFiles = fs.readdirSync(path.join(root, "std", "crypto")).filter((f) => f.endsWith(".ts"))
+  const found = [
+    ...new Set(cryptoFiles.flatMap((f) => scansOf(path.join("std", "crypto", f), path.join(scanDir, "crypto")))),
+  ]
+  const control = scansOf(path.join("tests", "link", "std_bytes_runs", "main.ts"), path.join(scanDir, "control"))
+  check(
+    `std/crypto: no module's IR calls a variable-time scan kernel (${cryptoFiles.length} modules; std_bytes_runs, the control, names ${control.length})`,
+    found.length === 0 && control.some((m) => m.includes("@nish_bytes_skip_")),
+    `std/crypto names:\n${found.join("\n")}\ncontrol names:\n${control.join("\n")}`
+  )
+}
+
 // The wipes of key material in `std/` survive `-O2`: one check per group of
 // roots in the area files of `tests/wipes/` (`tests/wipes/index.js` says what a
 // group is and how a root's wipes are counted).
@@ -16576,6 +16645,11 @@ if (!only || "interop".includes(only)) {
         ? [
             `const strings = createRequire(import.meta.url)(${JSON.stringify(stringsAddon)});`,
             'let serr = ""; try { strings.pick(true, 1, "b"); } catch (e) { serr = e.message; }',
+            // BYTES-1 (docs/security/bytes.md): an array longer than 2^31-1 would
+            // read as a negative `.length`, so the shim refuses it. The buffer is
+            // zero pages the kernel maps on touch, and nothing touches it.
+            'let lerr = ""; try { apis.napi.sumI32(new Int32Array(2 ** 31 + 5)); } catch (e) { lerr = e.constructor.name + ": " + e.message; }',
+            "console.log('long | ' + lerr);",
             'console.log(["strings", strings.pick(true, "hello", "world"), strings.identity("caf\\u00e9 \\u{1F600}"), strings.len2("x"), serr].join(" | "));',
           ]
         : []),
@@ -16607,6 +16681,11 @@ if (!only || "interop".includes(only)) {
       check(
         "N-API: strings cross both ways (UTF-8 preserved) and a non-string argument is a TypeError",
         lines.includes("strings | hello | café \u{1F600} | 2 | pick: argument 2 (a) must be a string"),
+        detail
+      )
+      check(
+        "N-API: a typed array longer than 2^31-1 is a TypeError, not an array whose length reads negative",
+        lines.includes("long | TypeError: sumI32: argument 1 (xs) has more than 2147483647 elements"),
         detail
       )
       const ex = spawnSync("node", ["examples/node-addon.mjs", addon], { cwd: root })
@@ -20181,6 +20260,7 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/core.d.ts",
       "runtime/node.mjs",
       "runtime/browser.mjs",
+      "runtime/browser.d.ts",
       "runtime/host.d.ts",
       "runtime/core/arrays.mjs",
       "runtime/core/checks.mjs",
