@@ -67,10 +67,10 @@ None is counted as fixed or open in the index.
 
 ## Properties verified
 
-Each property below is pinned by a test that fails if it stops holding. Every
-negative link fixture is also held whole by
-`link/${name}: --json reports every diagnostic in expected.json, and no other`,
-so a fixture that grew a second error, or lost one, fails.
+Each property below is pinned by a test that fails if it stops holding.
+Every negative link fixture is also held whole, so a fixture that grew a
+second error, or lost one, fails:
+`link/${name}: --json reports every diagnostic in expected.json, and no other`.
 
 **Each capability is refused and granted** (CAPS-1):
 `link/caps_dep_net_refused: rejected with "the dependency `pkg_http` reaches `net` through `dial`"`,
@@ -98,7 +98,9 @@ A chain whose every package is granted compiles:
 (the library's own `net` is not refused) and
 `link/caps_dep_named_nish: rejected with "the dependency `nish` reaches `net` through `dial`"`.
 A scoped package is named whole:
-`link/caps_dep_scoped: rejected with "the dependency `@acme/http` reaches `net` through `dial`"`.
+`link/caps_dep_scoped: rejected with "the dependency `@acme/http` reaches `net` through `dial`"`,
+and granted by that name it compiles:
+`link/caps_dep_scoped_granted: exits with 0 and stdout matches expected.out`.
 
 **Only the root grants** (CAPS-3):
 `link/caps_dep_cli_cannot_grant: rejected with "the dependency `pkg_http` reaches `net` through `dial`"`

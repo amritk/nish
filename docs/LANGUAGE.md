@@ -9088,7 +9088,9 @@ and `"nish": { "capabilities": { "allow": [...], "deny": [...] } }` in the
 root `package.json` (the one nearest above the entry, where `noPanic` is read)
 are a **capability policy**, and a program whose entry reaches a capability
 the policy does not grant is refused
-([wp36-capability-policy.md](wp36-capability-policy.md)):
+([wp36-capability-policy.md](wp36-capability-policy.md)). The same object's
+`dependencies` key grants a dependency its gated capabilities, as [a
+dependency's capabilities](#a-dependencys-capabilities) says (NL3041, NL3042):
 
 ```text
 main.ts:6:36: error: `main` reaches `net`, which the capability policy does not grant (the root package's `deny`); the chain that reaches it: main.ts:6:36 calls dial, client.ts:5:10 calls netAddress
@@ -9188,9 +9190,9 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
   refused for it (`caps_dep_fnarg_callback`).
 - Only the root manifest grants: no flag does (`--allow net` leaves the
   dependency refused, `caps_dep_cli_cannot_grant`), nor the dependency's own
-  manifest (`caps_dep_self_grant`), and a grant never widens
-  the root's own policy — a capability the root denies is refused by NL2459
-  whoever is granted it (`caps_dep_root_deny_wins`).
+  manifest (`caps_dep_self_grant`), and a grant never widens the root's own
+  policy — a capability the root denies is refused by NL2459 whoever is
+  granted it (`caps_dep_root_deny_wins`).
 - `dependencies` is read as strictly as the rest of the field: a value that is
   not an object, a package named twice, a grant that is not an array and an
   entry that is not a string are NL3041 (`caps_dep_manifest_not_object`,

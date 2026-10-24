@@ -1,9 +1,0 @@
-{
-  "name": "ffi-package-declare-mismatch",
-  "private": true,
-  "nish": {
-    "capabilities": {
-      "dependencies": { "wide": ["ffi"] }
-    }
-  }
-}

@@ -43,6 +43,7 @@ import capabilityName from "./capabilities" -> function @capabilityName
 import capabilityNames from "./capabilities" -> function @capabilityNames
 import everyCapabilityName from "./capabilities" -> function @everyCapabilityName
 import optInCapabilities from "./capabilities" -> function @optInCapabilities
+import chainHops from "./capability-report" -> function @chainHops
 import dependencyMasks from "./capability-report" -> function @dependencyMasks
 import dependencyPackages from "./capability-report" -> function @dependencyPackages
 import dependencyWitness from "./capability-report" -> function @dependencyWitness
@@ -744,9 +745,9 @@ function Compilation.policyListMask(this: Compilation, source: SourceFile, list:
 function Compilation.refuseCapabilities(this: Compilation): void -> @Compilation.refuseCapabilities [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
-  calls: Compilation.analyze Compilation.entry Compilation.reportRefusal FunctionSig.definedIn allCapabilities buildModeOf functionIndex hostVisible nish_array_grow nish_str_concat nish_str_eq optInCapabilities witnessChain
+  calls: Compilation.analyze Compilation.entry Compilation.reportRefusal FunctionSig.definedIn allCapabilities buildModeOf chainHops functionIndex hostVisible nish_array_grow nish_str_eq optInCapabilities witnessChain
   pointer this: size=144 writesThrough=true captured=false passedTo=Compilation.analyze#0 functionIndex#0 Compilation.entry#0 Compilation.reportRefusal#0
-  stackSites=3 stackLocals=3
+  stackSites=2 stackLocals=2
   local +0:11 allow: i32 (const)
   local +1:11 deny: i32 (const)
   local +2:11 refused: i32 (const)
@@ -774,9 +775,8 @@ function Compilation.refuseCapabilities(this: Compilation): void -> @Compilation
   callee +40:25 witnessChain -> @witnessChain
   local +41:17 source: SourceFile | null (const)
   local +42:17 site: Node | null (const)
-  local +44:19 hops: string[] (const)
-  local +45:24 hop: WitnessHop (const)
-  callee +48:13 Compilation.reportRefusal -> @Compilation.reportRefusal
+  callee +44:13 Compilation.reportRefusal -> @Compilation.reportRefusal
+  callee +44:54 chainHops -> @chainHops
 function Compilation.reportRefusal(this: Compilation, source: SourceFile, site: Node, sig: FunctionSig, c: i32, hops: string[]): void -> @Compilation.reportRefusal [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report
@@ -794,9 +794,9 @@ function Compilation.reportRefusal(this: Compilation, source: SourceFile, site: 
 function Compilation.refuseDependencyCapabilities(this: Compilation): void -> @Compilation.refuseDependencyCapabilities [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Compilation.analyze
-  calls: Compilation.analyze Compilation.reportDependencyRefusal dependencyMasks dependencyPackages dependencyWitness functionIndex gatedCapabilities nish_array_grow nish_panic_index nish_str_concat nish_str_eq
+  calls: Compilation.analyze Compilation.reportDependencyRefusal chainHops dependencyMasks dependencyPackages dependencyWitness functionIndex gatedCapabilities nish_panic_index nish_str_eq
   pointer this: size=144 writesThrough=true captured=false passedTo=dependencyPackages#0 Compilation.analyze#0 functionIndex#0 Compilation.reportDependencyRefusal#0
-  stackSites=1 stackLocals=1
+  stackSites=0 stackLocals=0
   local +0:11 reach: DependencyReach (const)
   callee +0:19 dependencyPackages -> @dependencyPackages
   local +4:11 facts: FactsTable (const)
@@ -816,9 +816,8 @@ function Compilation.refuseDependencyCapabilities(this: Compilation): void -> @C
   callee +17:25 dependencyWitness -> @dependencyWitness
   local +18:17 source: SourceFile | null (const)
   local +19:17 site: Node | null (const)
-  local +21:19 hops: string[] (const)
-  local +22:24 hop: WitnessHop (const)
-  callee +25:13 Compilation.reportDependencyRefusal -> @Compilation.reportDependencyRefusal
+  callee +21:13 Compilation.reportDependencyRefusal -> @Compilation.reportDependencyRefusal
+  callee +21:82 chainHops -> @chainHops
 function Compilation.reportDependencyRefusal(this: Compilation, source: SourceFile, site: Node, name: string, caller: string, c: i32, hops: string[]): void -> @Compilation.reportDependencyRefusal [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via DiagnosticSink.report

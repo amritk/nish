@@ -138,7 +138,9 @@ const pushNames = (out: string[], mask: i32): void => {
  * Every function the program defines, by symbol, with the report's path of
  * the module it is defined in: what a witness chain is followed through, since
  * a chain names its next hop by symbol. `moduleMasks` is each module's set,
- * the union over the functions defined in it, in `modules` order.
+ * the union over the functions defined in it, in `modules` order, and
+ * `moduleStarts` where its functions begin in `sigs`: a module's functions
+ * are pushed together, so they run to the next module's start.
  */
 export class FunctionIndex {
   bySymbol: StringMap
@@ -146,6 +148,7 @@ export class FunctionIndex {
   sigModules: i32[]
   paths: string[]
   moduleMasks: i32[]
+  moduleStarts: i32[]
 
   constructor() {
     this.bySymbol = new StringMap()
@@ -153,6 +156,7 @@ export class FunctionIndex {
     this.sigModules = []
     this.paths = []
     this.moduleMasks = []
+    this.moduleStarts = []
   }
 }
 
@@ -163,6 +167,7 @@ export const functionIndex = (compilation: Compilation, facts: FactsTable): Func
   for (const unit of compilation.modules) {
     const program = unit.checker.program
     let mask = 0
+    index.moduleStarts.push(index.sigs.length)
     for (const sig of program.functions) {
       if (sig.definedIn(program.source)) {
         mask = mask | capsOf(facts, sig)
@@ -342,18 +347,26 @@ export const dependencyWitness = (
   }
   sortTogether(paths, ties, order)
   for (const at of order) {
-    let k = 0
-    while (k < index.sigs.length && k < index.sigModules.length) {
-      if (index.sigModules[k] === at) {
-        const chain = witnessChain(index, facts, index.sigs[k], c)
-        if (chain.length > 0 && chain[0].source !== null && chain[0].site !== null) {
-          return chain
-        }
+    let k = at < index.moduleStarts.length ? index.moduleStarts[at] : index.sigs.length
+    const end = at + 1 < index.moduleStarts.length ? index.moduleStarts[at + 1] : index.sigs.length
+    while (k < end && k < index.sigs.length) {
+      const chain = witnessChain(index, facts, index.sigs[k], c)
+      if (chain.length > 0 && chain[0].source !== null && chain[0].site !== null) {
+        return chain
       }
       k = k + 1
     }
   }
   return []
+}
+
+/** A witness chain's hops as a refusal names them, `<at> calls <callee>` each. */
+export const chainHops = (chain: WitnessHop[]): string[] => {
+  const hops: string[] = []
+  for (const hop of chain) {
+    hops.push(`${hop.at} calls ${hop.calls}`)
+  }
+  return hops
 }
 
 /**

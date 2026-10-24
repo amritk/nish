@@ -83,6 +83,7 @@ import {
   optInCapabilities,
 } from "./capabilities"
 import {
+  chainHops,
   dependencyMasks,
   dependencyPackages,
   dependencyWitness,
@@ -1551,11 +1552,7 @@ export class Compilation {
           const source: SourceFile | null = chain.length > 0 ? chain[0].source : null
           const site: Node | null = chain.length > 0 ? chain[0].site : null
           if (source !== null && site !== null) {
-            const hops: string[] = []
-            for (const hop of chain) {
-              hops.push(`${hop.at} calls ${hop.calls}`)
-            }
-            this.reportRefusal(source, site, sig, c, hops)
+            this.reportRefusal(source, site, sig, c, chainHops(chain))
             break
           }
         }
@@ -1614,11 +1611,7 @@ export class Compilation {
           const source: SourceFile | null = chain.length > 0 ? chain[0].source : null
           const site: Node | null = chain.length > 0 ? chain[0].site : null
           if (source !== null && site !== null) {
-            const hops: string[] = []
-            for (const hop of chain) {
-              hops.push(`${hop.at} calls ${hop.calls}`)
-            }
-            this.reportDependencyRefusal(source, site, name, chain[0].caller, c, hops)
+            this.reportDependencyRefusal(source, site, name, chain[0].caller, c, chainHops(chain))
           }
         }
         c = c + 1
