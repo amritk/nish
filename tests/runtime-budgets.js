@@ -438,6 +438,23 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  * above the measurement, as every ceiling here was set.
  */
 const RUNTIME_TERM_TEXT_BUDGET = 1792
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-bytes.c`
+ * -- the byte-class runs of `nish/bytes` (WP38 S6a): `nish_bytes_skip_blank`,
+ * `nish_bytes_skip_digits` and `nish_bytes_skip_json_text`, their scalar, SSE2 and AVX2
+ * paths, the UTF-8 step the JSON text class takes, and the resolver with its CPUID
+ * question and `NISH_SIMD` pin.
+ *
+ * Measured **1,303 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
+ * `.text`: the scalar path 137, the SSE2 path 265, the AVX2 path 368, the UTF-8 step
+ * 238 and its resume 29, the resolver 204 and the three entry points 62. A tenth
+ * translation unit rather than more of `runtime-simd.c`: folded in, the two measured
+ * 1,960 bytes against that file's ceiling of 768, and the rule is a new file with its
+ * own measured ceiling, never a raised one. Apart, a program that searches text carries
+ * no JSON run and one that tokenizes JSON no byte-set search. The budget is the next
+ * 256-byte boundary above the measurement, as every ceiling here was set.
+ */
+const RUNTIME_BYTES_TEXT_BUDGET = 1536
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
@@ -570,6 +587,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-simd.c", RUNTIME_SIMD_TEXT_BUDGET, "RUNTIME_SIMD_TEXT_BUDGET", []],
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
+  ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
 /**

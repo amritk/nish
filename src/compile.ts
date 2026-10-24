@@ -1842,9 +1842,9 @@ const pushRecipeFlags = (
  *
  * A hit is the stored key equal to this one, byte for byte (CLI-8). A miss
  * compiles into a scratch directory of the entry's own, empties the entry's
- * key, moves the nine objects in with one `mv` -- a `rename` each, inside one
+ * key, moves the ten objects in with one `mv` -- a `rename` each, inside one
  * directory -- and writes the key last, so a key on disk always stands beside
- * nine whole objects of its own recipe (CLI-5). Two misses at once each compile
+ * ten whole objects of its own recipe (CLI-5). Two misses at once each compile
  * their own and move them over the other's; both sets are the same recipe's,
  * and an object is only ever replaced whole, so a link that reads one while
  * another lands reads a whole object either way.

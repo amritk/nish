@@ -44,7 +44,7 @@ import {
 } from "./attributes"
 import { DebugInfo } from "./debug"
 import { marksTailCall, reclaimsReturnedString } from "./escape"
-import { emitArrayLiteral, emitElementAccess, emitForOf } from "./emit-arrays"
+import { emitArrayLiteral, emitBytesKernel, emitElementAccess, emitForOf } from "./emit-arrays"
 import {
   checksArgumentRange,
   emitBuiltinCall,
@@ -138,7 +138,16 @@ import {
 import { dottedName, intrinsicType, isAssignmentOperator, receiverIsValue } from "./emit-util"
 import { internalErrorFor } from "./ice"
 import { IRBlock, IRFunction, IRModule, IRParam, paramValue } from "./ir"
-import { AES_HW, AES_SEAM_NONE, aesKernelOf, isAesSeam, isIndexOfAnyWalk, isRegexScanWalk } from "./kernels"
+import {
+  AES_HW,
+  AES_SEAM_NONE,
+  aesKernelOf,
+  BYTES_WALK_NONE,
+  bytesWalkOf,
+  isAesSeam,
+  isIndexOfAnyWalk,
+  isRegexScanWalk,
+} from "./kernels"
 import { StringMap, StringSet } from "./map"
 import {
   N_ARRAY,
@@ -1612,6 +1621,12 @@ export class Emitter {
     // which allocates nothing, so there is no bracket to open.
     if (isIndexOfAnyWalk(this.program, sig)) {
       return emitIndexOfAnyKernel(this, operandValues)
+    }
+    // WP38 S6a: `nish/bytes`'s walks are kernels and a `memmove`, which
+    // allocate nothing either.
+    const bytesWalk = bytesWalkOf(this.program, sig)
+    if (bytesWalk !== BYTES_WALK_NONE) {
+      return emitBytesKernel(this, bytesWalk, operandValues)
     }
     if (isRegexScanWalk(this.program, sig)) {
       return emitRegexScanKernel(this, operandValues)
