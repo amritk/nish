@@ -171,7 +171,7 @@ entry:
   ret void
 }
 
-define internal void @.json.decode.Renamed(%struct.JsonDecoder* %r, %struct.Renamed* %v) {
+define internal void @.json.decode.Renamed(%struct.JsonDecoder* %r, %struct.Renamed* %v) "probe-stack"="inline-asm" {
 entry:
   %seen = alloca i1, align 1
   %seen.1 = alloca i1, align 1
@@ -271,7 +271,7 @@ json.done:
   ret void
 }
 
-define internal void @.json.encode.Renamed(%struct.JsonWriter* %r, %struct.Renamed* %v) {
+define internal void @.json.encode.Renamed(%struct.JsonWriter* %r, %struct.Renamed* %v) "probe-stack"="inline-asm" {
 entry:
   %0 = getelementptr inbounds %struct.JsonWriter, %struct.JsonWriter* %r, i32 0, i32 3
   %1 = load i32, i32* %0, align 4, !tbaa !10
@@ -299,24 +299,25 @@ json.write:
   ret void
 }
 
-define internal void @.json.decode.JsonNumber(%struct.JsonDecoder* %r, %struct.JsonNumber* %v) {
+define internal void @.json.decode.JsonNumber(%struct.JsonDecoder* %r, %struct.JsonNumber* %v) "probe-stack"="inline-asm" {
 entry:
   call void @nish.JsonDecoder.number(%struct.JsonDecoder* %r, %struct.JsonNumber* %v)
   ret void
 }
 
-define internal void @.json.encode.JsonNumber(%struct.JsonWriter* %r, %struct.JsonNumber* %v) {
+define internal void @.json.encode.JsonNumber(%struct.JsonWriter* %r, %struct.JsonNumber* %v) "probe-stack"="inline-asm" {
 entry:
   call void @nish.jsonEncodeNumber(%struct.JsonWriter* %r, %struct.JsonNumber* %v)
   ret void
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"ptr", !1, i64 0}
@@ -328,3 +329,8 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !8 = !{!"i1", !1, i64 0}
 !9 = !{!"JsonWriter", !2, i64 0, !3, i64 8, !3, i64 12, !3, i64 16, !3, i64 20, !3, i64 24, !3, i64 28, !3, i64 32, !3, i64 36, !3, i64 40, !8, i64 44, !8, i64 45, !8, i64 46}
 !10 = !{!9, !3, i64 16}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}

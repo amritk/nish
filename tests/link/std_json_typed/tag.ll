@@ -200,7 +200,7 @@ entry:
   ret void
 }
 
-define internal void @.json.decode.Tag(%struct.JsonDecoder* %r, %struct.Tag* %v) {
+define internal void @.json.decode.Tag(%struct.JsonDecoder* %r, %struct.Tag* %v) "probe-stack"="inline-asm" {
 entry:
   %seen = alloca i1, align 1
   %seen.1 = alloca i1, align 1
@@ -375,7 +375,7 @@ json.done:
   ret void
 }
 
-define internal void @.json.encode.Tag(%struct.JsonWriter* %r, %struct.Tag* %v) {
+define internal void @.json.encode.Tag(%struct.JsonWriter* %r, %struct.Tag* %v) "probe-stack"="inline-asm" {
 entry:
   %0 = getelementptr inbounds %struct.JsonWriter, %struct.JsonWriter* %r, i32 0, i32 3
   %1 = load i32, i32* %0, align 4, !tbaa !26
@@ -411,7 +411,7 @@ json.write:
   ret void
 }
 
-define internal %struct.nish_array* @.json.decode.array.enum.Level(%struct.JsonDecoder* %r, %struct.nish_array* %v) {
+define internal %struct.nish_array* @.json.decode.array.enum.Level(%struct.JsonDecoder* %r, %struct.nish_array* %v) "probe-stack"="inline-asm" {
 entry:
   %0 = call i1 @nish.JsonDecoder.beginArray(%struct.JsonDecoder* %r)
   br i1 %0, label %json.empty, label %json.done
@@ -465,7 +465,7 @@ json.done:
   ret %struct.nish_array* %v
 }
 
-define internal void @.json.encode.array.enum.Level(%struct.JsonWriter* %r, %struct.nish_array* %v) {
+define internal void @.json.encode.array.enum.Level(%struct.JsonWriter* %r, %struct.nish_array* %v) "probe-stack"="inline-asm" {
 entry:
   %at = alloca i64, align 8
   store i64 0, i64* %at, align 8
@@ -495,12 +495,13 @@ json.end:
   ret void
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!29, !30, !31, !32, !33}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i64", !1, i64 0}
@@ -530,3 +531,8 @@ attributes #4 = { alwaysinline nounwind willreturn allocsize(0) }
 !26 = !{!25, !4, i64 16}
 !27 = !{!"element i32", !1, i64 0}
 !28 = !{!27, !27, i64 0}
+!29 = !{i32 8, !"cf-protection-branch", i32 1}
+!30 = !{i32 8, !"cf-protection-return", i32 1}
+!31 = !{i32 8, !"branch-target-enforcement", i32 1}
+!32 = !{i32 8, !"sign-return-address", i32 1}
+!33 = !{i32 4, !"probe-stack", !"inline-asm"}

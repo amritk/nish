@@ -321,7 +321,7 @@ entry:
   ret i32 %0
 }
 
-define internal void @.json.decode.Hello(%struct.JsonDecoder* %r, %struct.Hello* %v) {
+define internal void @.json.decode.Hello(%struct.JsonDecoder* %r, %struct.Hello* %v) "probe-stack"="inline-asm" {
 entry:
   %seen = alloca i1, align 1
   store i1 false, i1* %seen, align 1
@@ -374,7 +374,7 @@ json.done:
   ret void
 }
 
-define internal void @.json.encode.Hello(%struct.JsonWriter* %r, %struct.Hello* %v) {
+define internal void @.json.encode.Hello(%struct.JsonWriter* %r, %struct.Hello* %v) "probe-stack"="inline-asm" {
 entry:
   %0 = getelementptr inbounds %struct.JsonWriter, %struct.JsonWriter* %r, i32 0, i32 3
   %1 = load i32, i32* %0, align 4, !tbaa !21
@@ -394,13 +394,14 @@ json.write:
   ret void
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind noreturn cold }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!22, !23, !24, !25, !26}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -423,3 +424,8 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) }
 !19 = !{!"i1", !6, i64 0}
 !20 = !{!"JsonWriter", !15, i64 0, !18, i64 8, !18, i64 12, !18, i64 16, !18, i64 20, !18, i64 24, !18, i64 28, !18, i64 32, !18, i64 36, !18, i64 40, !19, i64 44, !19, i64 45, !19, i64 46}
 !21 = !{!20, !18, i64 16}
+!22 = !{i32 8, !"cf-protection-branch", i32 1}
+!23 = !{i32 8, !"cf-protection-return", i32 1}
+!24 = !{i32 8, !"branch-target-enforcement", i32 1}
+!25 = !{i32 8, !"sign-return-address", i32 1}
+!26 = !{i32 4, !"probe-stack", !"inline-asm"}
