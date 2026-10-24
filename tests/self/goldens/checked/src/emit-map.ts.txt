@@ -235,30 +235,30 @@ function emitStringHash(emitter: Emitter, str: string): string -> @emitStringHas
   local +48:9 b: string (const)
   callee +48:13 IRFunction.emitValue -> @IRFunction.emitValue
   callee +49:3 IRFunction.emit -> @IRFunction.emit
-  callee +49:24 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +49:53 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +50:3 IRFunction.emit -> @IRFunction.emit
-  callee +50:24 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +51:3 IRFunction.emit -> @IRFunction.emit
-  callee +52:3 IRFunction.placeBlock -> @IRFunction.placeBlock
-  callee +53:3 compress -> @compress
-  callee +53:28 IRFunction.emitValue -> @IRFunction.emitValue
-  local +54:9 v2: string (const)
-  callee +54:14 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +55:3 IRFunction.emit -> @IRFunction.emit
-  callee +55:24 IRFunction.emitValue -> @IRFunction.emitValue
-  local +56:9 v: string[] (const)
-  callee +56:13 sipRounds -> @sipRounds
-  local +57:9 x: string (const)
-  callee +57:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +57:37 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +57:82 IRFunction.emitValue -> @IRFunction.emitValue
-  local +58:9 low: string (const)
-  callee +58:15 IRFunction.emitValue -> @IRFunction.emitValue
-  local +59:9 high: string (const)
-  callee +59:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +59:42 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +60:10 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +50:18 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +50:47 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +52:3 IRFunction.emit -> @IRFunction.emit
+  callee +52:24 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +53:3 IRFunction.emit -> @IRFunction.emit
+  callee +54:3 IRFunction.placeBlock -> @IRFunction.placeBlock
+  callee +55:3 compress -> @compress
+  callee +55:28 IRFunction.emitValue -> @IRFunction.emitValue
+  local +56:9 v2: string (const)
+  callee +56:14 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +57:3 IRFunction.emit -> @IRFunction.emit
+  callee +57:24 IRFunction.emitValue -> @IRFunction.emitValue
+  local +58:9 v: string[] (const)
+  callee +58:13 sipRounds -> @sipRounds
+  local +59:9 x: string (const)
+  callee +59:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +60:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +60:61 IRFunction.emitValue -> @IRFunction.emitValue
+  local +62:9 low: string (const)
+  callee +62:15 IRFunction.emitValue -> @IRFunction.emitValue
+  local +63:9 high: string (const)
+  callee +63:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +63:42 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +64:10 IRFunction.emitValue -> @IRFunction.emitValue
 function hashKeyWord(i: i32): string -> @hashKeyWord
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat nish_str_from_i32

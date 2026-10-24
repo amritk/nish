@@ -224,7 +224,9 @@ const emitStringHash = (emitter: Emitter, str: string): string => {
   const wide = fn.emitValue(`zext i8 ${fn.emitValue(`load i8, i8* ${from}`)} to i64`)
   const shift = fn.emitValue(`shl i64 ${fn.emitValue(`sub i64 ${rest}, ${words}`)}, 3`)
   const b = fn.emitValue(`load i64, i64* ${last}${a64}`)
-  fn.emit(`store i64 ${fn.emitValue(`or i64 ${b}, ${fn.emitValue(`shl i64 ${wide}, ${shift}`)}`)}, i64* ${last}${a64}`)
+  fn.emit(
+    `store i64 ${fn.emitValue(`or i64 ${b}, ${fn.emitValue(`shl i64 ${wide}, ${shift}`)}`)}, i64* ${last}${a64}`
+  )
   fn.emit(`store i64 ${fn.emitValue(`add i64 ${rest}, 1`)}, i64* ${index}${a64}`)
   fn.emit(`br label %${more.label}`)
   fn.placeBlock(done)
@@ -232,7 +234,9 @@ const emitStringHash = (emitter: Emitter, str: string): string => {
   const v2 = fn.emitValue(`load i64, i64* ${slots[2]}${a64}`)
   fn.emit(`store i64 ${fn.emitValue(`xor i64 ${v2}, 255`)}, i64* ${slots[2]}${a64}`)
   const v = sipRounds(emitter, slots, 3)
-  const x = fn.emitValue(`xor i64 ${fn.emitValue(`xor i64 ${v[0]}, ${v[1]}`)}, ${fn.emitValue(`xor i64 ${v[2]}, ${v[3]}`)}`)
+  const x = fn.emitValue(
+    `xor i64 ${fn.emitValue(`xor i64 ${v[0]}, ${v[1]}`)}, ${fn.emitValue(`xor i64 ${v[2]}, ${v[3]}`)}`
+  )
   const low = fn.emitValue(`trunc i64 ${x} to i32`)
   const high = fn.emitValue(`trunc i64 ${fn.emitValue(`lshr i64 ${x}, 32`)} to i32`)
   return fn.emitValue(`xor i32 ${low}, ${high}`)

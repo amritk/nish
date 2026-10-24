@@ -10652,6 +10652,29 @@ if (has("opt")) {
 }
 
 // ---- WP32: one probe, counted -----------------------------------------------------
+/**
+ * Compiles `tests/cases/<name>.ts` and links it with `<name>.c` under
+ * `-Wl,--wrap=nish_str_eq`, so the shim sees every key compare. `wrapUnsupported`
+ * is an `ld.lld` without `--wrap`, which skips rather than fails.
+ */
+const linkCountingStrEq = (name, dirName) => {
+  const dir = path.join(buildDir, dirName)
+  fs.mkdirSync(dir, { recursive: true })
+  const source = path.join(root, "tests", "cases", `${name}.ts`)
+  const shim = path.join(root, "tests", "cases", `${name}.c`)
+  const ll = path.join(dir, `${name}.ll`)
+  const exe = path.join(dir, name)
+  const built = spawnSync(NISH, [source, "-o", ll], { cwd: root, encoding: "utf8" })
+  const wrapped = ["-Wno-override-module", "-O2", "-Iruntime", "-fuse-ld=lld", "-Wl,--wrap=nish_str_eq"]
+  const linked =
+    built.status === 0
+      ? spawnSync("clang", [...wrapped, ll, shim, ...RUNTIME_C, "-o", exe], { cwd: root, encoding: "utf8" })
+      : built
+  const wrapUnsupported =
+    linked.status !== 0 && /unknown argument.*--wrap|--wrap.*(unknown|unsupported)/.test(linked.stderr)
+  return { exe, linked, wrapUnsupported }
+}
+
 // docs/wp32-map.md §2.3, acceptance criterion 4: a probe reads the entry list
 // only on a fingerprint match and compares the stored hash before the key, so
 // an absent key costs no key compare and a present one exactly one. A golden
@@ -10665,20 +10688,7 @@ if (!only || "map_fingerprint_miss".includes(only)) {
   if (!HAS_CLANG || !has("ld.lld")) {
     skip("map_fingerprint_miss: the key-compare count needs clang and ld.lld for --wrap")
   } else {
-    const dir = path.join(buildDir, "map_fingerprint")
-    fs.mkdirSync(dir, { recursive: true })
-    const source = path.join(root, "tests", "cases", "map_fingerprint_miss.ts")
-    const shim = path.join(root, "tests", "cases", "map_fingerprint_miss.c")
-    const ll = path.join(dir, "map_fingerprint_miss.ll")
-    const exe = path.join(dir, "map_fingerprint_miss")
-    const built = spawnSync(NISH, [source, "-o", ll], { cwd: root, encoding: "utf8" })
-    const wrapped = ["-Wno-override-module", "-O2", "-Iruntime", "-fuse-ld=lld", "-Wl,--wrap=nish_str_eq"]
-    const linked =
-      built.status === 0
-        ? spawnSync("clang", [...wrapped, ll, shim, ...RUNTIME_C, "-o", exe], { cwd: root, encoding: "utf8" })
-        : built
-    const wrapUnsupported =
-      linked.status !== 0 && /unknown argument.*--wrap|--wrap.*(unknown|unsupported)/.test(linked.stderr)
+    const { exe, linked, wrapUnsupported } = linkCountingStrEq("map_fingerprint_miss", "map_fingerprint")
     if (wrapUnsupported) {
       skip("map_fingerprint_miss: this ld.lld has no --wrap")
     } else {
@@ -10702,19 +10712,8 @@ if (!only || "map_hash_collide".includes(only)) {
   if (!HAS_CLANG || !has("ld.lld")) {
     skip("map_hash_collide: the key-compare count needs clang and ld.lld for --wrap")
   } else {
-    const dir = path.join(buildDir, "map_hash_collide")
-    fs.mkdirSync(dir, { recursive: true })
-    const source = path.join(root, "tests", "cases", "map_hash_collide.ts")
-    const shim = path.join(root, "tests", "cases", "map_hash_collide.c")
-    const ll = path.join(dir, "map_hash_collide.ll")
-    const exe = path.join(dir, "map_hash_collide")
-    const built = spawnSync(NISH, [source, "-o", ll], { cwd: root, encoding: "utf8" })
-    const wrapped = ["-Wno-override-module", "-O2", "-Iruntime", "-fuse-ld=lld", "-Wl,--wrap=nish_str_eq"]
-    const linked =
-      built.status === 0
-        ? spawnSync("clang", [...wrapped, ll, shim, ...RUNTIME_C, "-o", exe], { cwd: root, encoding: "utf8" })
-        : built
-    if (linked.status !== 0 && /unknown argument.*--wrap|--wrap.*(unknown|unsupported)/.test(linked.stderr)) {
+    const { exe, linked, wrapUnsupported } = linkCountingStrEq("map_hash_collide", "map_hash_collide")
+    if (wrapUnsupported) {
       skip("map_hash_collide: this ld.lld has no --wrap")
     } else {
       const runs = [0, 1].map(() => (linked.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : linked))
