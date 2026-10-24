@@ -163,6 +163,13 @@ export const main = (): i32 => {
 };
 ```
 
+A package or a `std/` module may declare C functions too, and they bind to the
+same C name: `declare function abs` in a package calls C's `abs`, not a symbol
+of the package. Every declaration of one name must give it the same types.
+A function you define may not take a declared name either, since its symbol
+would be the C one, unless it is private and named like a C library function
+(`abs`, `free`, …): those always get a symbol of their own.
+
 A function from the C library links with `nish run` or `--link` as it is. One
 of your own goes on the build line beside the runtime:
 

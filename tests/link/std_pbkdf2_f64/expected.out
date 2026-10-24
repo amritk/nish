@@ -1,0 +1,12 @@
+PASS  RFC 7914 §11: P="passwd", S="salt", c=1, dkLen=64
+PASS  RFC 7914 §11: P="Password", S="NaCl", c=80000, dkLen=64
+PASS  dkLen=20 is the first 20 bytes of the c=1 vector
+PASS  a 100-byte password, c=2, dkLen=33
+PASS  an empty salt, c=3, dkLen=32
+PASS  dkLen=100 runs to block 4, c=2
+PASS  0 iterations answers null
+PASS  -1 iterations answers null
+PASS  dkLen=0 answers null
+PASS  dkLen=-1 answers null
+PASS  c=1000 keeps no more arena than c=1
+pbkdf2: 11 passed, 0 failed, 0 skipped

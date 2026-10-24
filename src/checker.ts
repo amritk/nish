@@ -398,6 +398,13 @@ export class Checker {
    * `main` needs no exception: only the entry module may declare it, and the
    * entry module is the root package by construction (`Compilation` derives
    * every other module's package by comparing it with the entry's own).
+   *
+   * A `declare function` is the exception that is not a symbol of the package
+   * at all: it names a C function, and C has one namespace, so it keeps the
+   * name as written wherever it is declared (`docs/LANGUAGE.md` "Calling C").
+   * The fact table it shares a key in holds the same facts for every
+   * declaration that agrees, and `Compilation.rejectSymbolClashes` refuses two
+   * that do not.
    */
   qualifySymbols(): void {
     const prefix = this.program.symbolPrefix
@@ -415,7 +422,7 @@ export class Checker {
       // signature annotation that names `Box<i32>` runs before it, and a
       // `new Box<i32>(v)` in a body runs long after. Qualifying it again would
       // spell the package twice.
-      if (sig.instance === null && sig.definedIn(this.program.source)) {
+      if (sig.instance === null && !sig.foreign() && sig.definedIn(this.program.source)) {
         sig.name = `${prefix}${sig.name}`
       }
     }

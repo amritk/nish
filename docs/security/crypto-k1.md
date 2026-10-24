@@ -10,7 +10,7 @@ is `main` at `882857d`.
 | --- | --- |
 | `std/crypto/sha256.ts` | `Sha256` (`update`, `copy`, `digest`), `sha256`, and the private `sha256Compress`, `sha256RoundConstant`, `sha256LoadWord`, `sha256CopyBytes` |
 | `std/crypto/sha512.ts` | `Sha512Engine` (`compress`, `absorb`, `copyInto`, `finish`), `Sha512`, `Sha384`, `sha512`, `sha384` |
-| `std/crypto/hmac.ts` | `HmacSha256`, `HmacSha384`, `hmacSha256`, `hmacSha384`, `hmacSha256Verify`, `hmacSha384Verify`, `hmacPadBlock` |
+| `std/crypto/hmac.ts` | `HmacSha256`, `HmacSha384`, `hmacSha256`, `hmacSha384`, `hmacSha256Verify`, `hmacSha384Verify`, `hmacPadBlock`; added since (#868): `pbkdf2HmacSha256` and the private `pbkdf2HmacSha256Exposed` and `pbkdf2Finish`, see "Addendum: PBKDF2-HMAC-SHA256 (#868)" |
 | `std/crypto/hkdf.ts` | `hkdfExtractSha256/384`, `hkdfExpandSha256/384`, `hkdfSalt`, `hkdfAppend`; added since (#668): `hkdfExpandLabelSha256Held/384Held` and `hkdfExpandLabelHeldInto`, which read a held PRK only inside `exposeWith`, derive into a fresh plain buffer, copy it into the held `dst` (or the caller's plain window) and `wipe` it, counted after `opt -O2` by `tests/wipes/crypto.js` ("crypto: the wipes survive opt -O2 (the plain output of each derivation into a held Secret in HKDF, the TLS schedule and record layer, and QUIC)"); test `crypto_held_derive` |
 | `std/crypto/ct.ts` | `timingSafeEqual`, `timingSafeEqualAt` |
 | `std/crypto/base64url.ts` | `base64urlEncode`, `base64urlDecode`, and the maps `base64urlRangeMask`, `base64urlCharOf`, `base64urlSextetOf` |
@@ -217,3 +217,38 @@ bytes is refused by HMAC rather than by `sha256`, so K1-1's reasoning for the
 key holds where it is checked: `crypto_hmac_sha256_long_key_f64` pins the
 refusal, and `crypto_hmac_sha512_digest_twice` that a wiped, finished
 `HmacSha512` still refuses a second `digest`.
+
+## Addendum: PBKDF2-HMAC-SHA256 (#868)
+
+Added after this audit, for the SCRAM-SHA-256 client of #868, and not covered
+by the reading above: `pbkdf2HmacSha256` in `std/crypto/hmac.ts`, RFC 8018
+§5.2's PBKDF2 with HMAC-SHA-256 as its PRF. Anchors are at `66dc885`.
+
+| What | Where | Pinned by |
+| --- | --- | --- |
+| The password goes in and the key comes out as a `Secret<u8[]>`; the password is read only inside `exposeWith` | `std/crypto/hmac.ts:784`, `:791` | `std_pbkdf2`, `std_pbkdf2_f64` |
+| Bad input answers `null` and never panics: fewer than 1 iteration, a `dkLen` below 1, a password or salt longer than 2^31 − 1 bytes, compared as a `number` before any `toI32` (K1-1's reasoning) | `std/crypto/hmac.ts:714`, `:717` | `std_pbkdf2` ("0 iterations answers null", "-1 iterations answers null", "dkLen=0 answers null", "dkLen=-1 answers null") |
+| The answer: RFC 7914 §11's two PBKDF2-HMAC-SHA256 vectors (c = 1 and c = 80000, dkLen 64), a 20-byte prefix, a 100-byte password past the block at c = 2 and dkLen 33 (a partial second block), an empty salt, and dkLen 100 at c = 2 (four blocks, a partial fourth), the last three checked against Python's `hashlib.pbkdf2_hmac` and the four-block key also against OpenSSL | `std/crypto/hmac.ts:732`–`:760` | `std_pbkdf2`, `std_pbkdf2_f64` |
+| Every U_j, every T_i, the inner digest and tag of each HMAC, the working hasher and both keyed hashers are wiped before the key is answered | `std/crypto/hmac.ts:700`, `:705`, `:761`–`:765` | `tests/wipes/crypto.js` ("crypto_pbkdf2: the wipes survive opt -O2 (PBKDF2's U_j, T_i, digests and keyed hashers)"): exact counts from `pbkdf2Finish` (2) and `pbkdf2HmacSha256` (21), so deleting any one wipe, or making it an ordinary store, fails it; `wipe(t)` made `t.fill(0)` was tried and fails it with 20 of 21 |
+| The digests of each HMAC die with the call that made them, so the arena does not grow with the count | `std/crypto/hmac.ts:696` | `std_pbkdf2` ("c=1000 keeps no more arena than c=1") |
+
+dkLen is an `i32`, so it never reaches RFC 8018's (2^32 − 1) × hLen bound and
+the block index never passes 2^26; the bound is checked by the type, not at
+run time. The time taken depends on the iteration count, dkLen and whether the
+password is longer than a block, which RFC 8018 and SCRAM treat as public, and
+on none of the password's bytes. The time is linear in the iteration count,
+and nothing in `pbkdf2HmacSha256` bounds it: 2^31 − 1 rounds is about 2^32
+compressions with no abort. A caller that takes the count from an untrusted
+peer must cap it first; SCRAM's `i=` comes from the server, and the
+`std/net/postgres` client will cap it. A null answer is the `Secret` forms' contract
+(HKDF's, K1-7): a `Result` cannot hold a `Secret`.
+
+**Not reached**, and recorded rather than claimed: the caller's password array,
+which is theirs to `wipe` as the `Secret` it is; the derived key once
+answered, the same; the salt, which is public; and the compression functions'
+working variables, which live in registers or spill slots no store in the
+language can name (K1-7).
+
+The closest upstream is Go's `golang.org/x/crypto/pbkdf2` (BSD-3-Clause),
+which keys the PRF once and runs the same XOR loop. This code is written from
+RFC 8018 and copies none of it; the shared structure is the RFC's.
