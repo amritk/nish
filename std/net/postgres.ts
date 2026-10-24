@@ -362,7 +362,7 @@ const pgSaltedPassword = (password: Secret<u8[]>, salt: u8[], iterations: i32): 
  */
 const pgSha256Wiped = (data: u8[]): u8[] => {
   const h = new Sha256()
-  h.update(data, 0, toI32(data.length))
+  h.update(data, toI32(0), toI32(data.length))
   const digest: u8[] = h.digest()
   wipe(h.state)
   wipe(h.block)
@@ -1574,7 +1574,7 @@ export class PgConnection {
       return false
     }
     const sqlLength: i32 = toI32(sql.length)
-    if (sqlLength > PG_MAX_CAP || !this.canOpen(16 + 2 * nameLength + sqlLength + 4 * types)) {
+    if (sqlLength > PG_MAX_CAP || !this.canOpen(toI32(16) + 2 * nameLength + sqlLength + 4 * types)) {
       return false
     }
     const at: i32 = this.startMessage(PG_FE_PARSE)
@@ -1674,7 +1674,7 @@ export class PgConnection {
 
   /** A NULL parameter. */
   paramNull(): boolean {
-    if (this.startParam(0) < 0) {
+    if (this.startParam(toI32(0)) < 0) {
       return false
     }
     setI32BE(this.out, this.outEnd - 4, -1)
@@ -1683,7 +1683,7 @@ export class PgConnection {
 
   /** An integer parameter, in decimal. */
   paramInt(value: i64): boolean {
-    const at: i32 = this.startParam(20)
+    const at: i32 = this.startParam(toI32(20))
     if (at < 0) {
       return false
     }
@@ -1786,7 +1786,7 @@ export class PgConnection {
       return false
     }
     this.groupOpen = false
-    this.tailRoom(5)
+    this.tailRoom(toI32(5))
     const at: i32 = this.startMessage(PG_FE_SYNC)
     this.endMessage(at)
     return true
@@ -1798,7 +1798,7 @@ export class PgConnection {
       this.outEnd = this.bindAt
       this.bindAt = -1
     }
-    this.tailRoom(5)
+    this.tailRoom(toI32(5))
     const at: i32 = this.startMessage(PG_FE_TERMINATE)
     this.endMessage(at)
   }
