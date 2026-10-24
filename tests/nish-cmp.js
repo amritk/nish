@@ -3356,7 +3356,7 @@ const withoutHardening = (text) => {
   }
   const flagsLine = "!llvm.module.flags = !{"
   const out = []
-  for (const line of kept) {
+  for (const [i, line] of kept.entries()) {
     if (line.startsWith(flagsLine) && line.endsWith("}")) {
       const refs = line
         .slice(flagsLine.length, -1)
@@ -3364,6 +3364,10 @@ const withoutHardening = (text) => {
         .filter((ref) => !ids.has(ref))
       if (refs.length > 0) {
         out.push(`${flagsLine}${refs.join(", ")}}`)
+      } else if (out.at(-1) === "" && !kept[i + 1]?.startsWith("!")) {
+        // A module with no metadata of its own: the blank line before the
+        // flags opened a section the hardening alone wrote.
+        out.pop()
       }
     } else {
       out.push(line.split(' "probe-stack"="inline-asm"').join(""))
@@ -3389,6 +3393,13 @@ const selfCheckHardening = () => {
     '!3 = !{i32 2, !"Debug Info Version", i32 3}'
   const cases = [
     [hardened, plain],
+    // The blank line before flags that end the module goes with them; one
+    // before metadata of the module's own stays.
+    [`${plain}\n\n${hardened.slice(hardened.indexOf("!llvm"))}\n`, `${plain}\n`],
+    [
+      `${plain}\n\n!llvm.module.flags = !{!1}\n!0 = !{!"nish TBAA"}\n!1 = ${flags[4]}`,
+      `${plain}\n\n!0 = !{!"nish TBAA"}`,
+    ],
     // The debug flags stay, and so does their line.
     [`${debug(", !9")}\n!9 = ${flags[0]}`, debug("")],
     // An attribute with no group, on the definition itself.
