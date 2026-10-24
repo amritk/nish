@@ -116,8 +116,7 @@ function FunctionIndex.constructor(this: FunctionIndex): void -> @FunctionIndex.
   stackSites=0 stackLocals=0
   callee +0:21 new StringMap -> @StringMap.constructor
 function functionIndex(compilation: Compilation, facts: FactsTable): FunctionIndex -> @functionIndex [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
-  sharedWrite: via StringMap.set
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=48
   calls: Compilation.entry FunctionIndex.constructor FunctionSig.definedIn StringMap.get StringMap.set capsOf dirname modulePath nish_alloc_struct nish_array_grow nish_panic_overflow
   pointer compilation: size=160 writesThrough=false captured=false passedTo=Compilation.entry#0 modulePath#0
   pointer facts: size=24 writesThrough=false captured=false passedTo=capsOf#0

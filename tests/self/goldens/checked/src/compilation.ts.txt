@@ -1135,7 +1135,7 @@ function Compilation.reportPortability(this: Compilation): void -> @Compilation.
   callee +2:9 DiagnosticSink.reportPortability -> @DiagnosticSink.reportPortability
 function Compilation.rejectInstantiatedStructClashes(this: Compilation): void -> @Compilation.rejectInstantiatedStructClashes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringMap.set
+  sharedWrite: via Compilation.reportTemplateClash
   calls: Compilation.reportTemplateClash DiagnosticSink.report StringMap.constructor StringMap.get StringMap.set StringSet.add StringSet.constructor TypeTable.typeName describePackage nish_array_grow nish_panic_index nish_str_concat
   pointer this: size=160 writesThrough=false captured=false passedTo=Compilation.reportTemplateClash#0
   stackSites=5 stackLocals=5
@@ -1227,7 +1227,7 @@ function Compilation.reportTemplateClash(this: Compilation, unit: ModuleUnit, te
   callee +2:5 DiagnosticSink.report -> @DiagnosticSink.report
 function Compilation.rejectSymbolClashes(this: Compilation, clashed: StringSet): void -> @Compilation.rejectSymbolClashes [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringMap.set
+  sharedWrite: via DiagnosticSink.report
   calls: Compilation.entry Compilation.reportForeignMismatch DiagnosticSink.report FunctionSig.definedIn FunctionSig.foreign StringMap.constructor StringMap.get StringMap.set StringSet.has clashMessage nameNode nish_array_grow nish_panic_index nish_str_concat nish_str_eq sameSignature
   pointer this: size=160 writesThrough=false captured=false passedTo=Compilation.entry#0 Compilation.reportForeignMismatch#0
   pointer clashed: size=8 writesThrough=false captured=false passedTo=StringSet.has#0
@@ -1288,7 +1288,7 @@ function Compilation.reportForeignMismatch(this: Compilation, unit: ModuleUnit, 
   callee +5:109 signatureText -> @signatureText
 function Compilation.rejectForeignShadows(this: Compilation): void -> @Compilation.rejectForeignShadows [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringMap.set
+  sharedWrite: via Compilation.reportForeignShadow
   calls: Compilation.reportForeignShadow FunctionSig.definedIn FunctionSig.foreign StringMap.constructor StringMap.get StringMap.has StringMap.set nish_array_grow
   pointer this: size=160 writesThrough=false captured=false passedTo=Compilation.reportForeignShadow#0
   stackSites=2 stackLocals=2
@@ -1418,8 +1418,7 @@ function Compilation.emit(this: Compilation): EmittedModule[] -> @Compilation.em
   callee +13:11 new EmittedModule -> @EmittedModule.constructor
   callee +15:13 emitProgram -> @emitProgram
 function Compilation.outputStems(this: Compilation): string[] -> @Compilation.outputStems [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringMap.set
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: Compilation.entry Compilation.writesOutput StringMap.constructor StringMap.get StringMap.set StringSet.add StringSet.constructor StringSet.has basenameWithout dirname nish_array_grow nish_panic_overflow nish_str_concat nish_str_from_i32 pathStem
   pointer this: size=160 writesThrough=false captured=false passedTo=Compilation.writesOutput#0 Compilation.entry#0 Compilation.writesOutput#0
   stackSites=2 stackLocals=2

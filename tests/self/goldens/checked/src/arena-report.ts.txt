@@ -163,7 +163,7 @@ function walkNode(walk: ArenaWalk, program: CheckedProgram, node: Node, scope: i
   callee +28:7 walkNode -> @walkNode
 function arenaJson(units: AnalysisUnit[], facts: FactsTable): string -> @arenaJson [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringBuilder.add
+  sharedWrite: via walkNode
   calls: ArenaWalk.constructor FactsTable.get FunctionSig.body FunctionSig.definedIn FunctionSig.foreign SourceFile.columnOf SourceFile.lineOf StringBuilder.add StringBuilder.constructor StringBuilder.toText addJsonQuoted nish_str_concat nish_str_from_i32 walkNode
   pointer units: size=0 writesThrough=false captured=false
   pointer facts: size=24 writesThrough=true captured=true passedTo=FactsTable.get#0 ArenaWalk.constructor#2

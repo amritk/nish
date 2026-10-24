@@ -16389,8 +16389,7 @@ function aesEncryptOne(key: AesKey, src: u8[], dst: u8[]): void -> @nish.aesEncr
   callee +0:8 aesKeyUsable -> @nish.aesKeyUsable
   callee +3:3 aesBlockInto -> @nish.aesBlockInto
 function aesKey(key: u8[]): AesKey | null -> @nish.aesKey [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesKeyInto
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.AesKey.constructor nish.aesKeyInto nish_alloc_struct nish_panic nish_panic_overflow
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.aesKeyInto#0
   stackSites=0 stackLocals=0
@@ -16643,7 +16642,7 @@ function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | n
   callee +14:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.aesGcmOpen [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesGcmCtr
+  sharedWrite: via nish.wipe$arr.u8
   calls: nish.aesGcmCtr nish.aesGcmJ0 nish.aesGcmLengthFits nish.aesGcmTag nish.aesGcmTagMask nish.aesKeyUsable nish.aesLoad64 nish.wipe$arr.u64 nish.wipe$arr.u8 nish_panic nish_panic_index
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesGcmJ0#0 nish.aesGcmTag#1 nish.aesGcmCtr#0
   pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesGcmJ0#1

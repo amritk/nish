@@ -1820,8 +1820,7 @@ function jsonDecode<Greeting>(_d: JsonDecoder, _out: Greeting): i32 -> @nish.jso
   pointer _out: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function jsonEncode<Greeting>(_w: JsonWriter, _value: Greeting): void -> @nish.jsonEncode$$Greeting [exported instance]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.jsonEncodeU64
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.JsonWriter.beginObject nish.JsonWriter.endObject nish.JsonWriter.i32 nish.JsonWriter.key nish.JsonWriter.string nish.jsonEncodeNumber nish.jsonEncodeU64
   pointer _w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.beginObject#0 nish.JsonWriter.key#0 nish.JsonWriter.endObject#0 nish.JsonWriter.string#0 nish.JsonWriter.i32#0 nish.jsonEncodeU64#0 nish.jsonEncodeNumber#0
   pointer _value: size=40 writesThrough=false captured=false

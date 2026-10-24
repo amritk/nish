@@ -98,8 +98,7 @@ function addUnitEscape(out: StringBuilder, unit: i64): void -> @addUnitEscape
   local +4:11 digit: i32 (const)
   callee +5:5 StringBuilder.addChar -> @StringBuilder.addChar
 function unbracedEscapes(text: string): string | null -> @unbracedEscapes
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via StringBuilder.addChar
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: StringBuilder.addChar StringBuilder.constructor StringBuilder.toText addUnitEscape escapeDigit nish_panic_overflow nish_str_index_of nish_str_index_of_from
   stackSites=1 stackLocals=1
   local +0:9 out: StringBuilder (const)
@@ -145,7 +144,7 @@ function literalComparison(walk: Walk, node: Node, operands: Operands): string |
   callee +6:82 Operands.at -> @Operands.at
 function stringsRow(walk: Walk, node: Node, operands: Operands): string | null -> @stringsRow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via unbracedEscapes
+  sharedWrite: via stringLengthRewrite
   calls: Walk.spanOf literalComparison stringCallRewrite stringLengthRewrite unbracedEscapes widenedBinding
   pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.spanOf#0 stringLengthRewrite#0 widenedBinding#0 literalComparison#0 stringCallRewrite#0
   pointer node: size=40 writesThrough=true captured=true passedTo=Walk.spanOf#1 stringLengthRewrite#1 widenedBinding#1 literalComparison#1 stringCallRewrite#1

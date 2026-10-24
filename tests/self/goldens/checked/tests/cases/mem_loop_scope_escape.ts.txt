@@ -101,7 +101,7 @@ function churn(): i32 -> @churn
   local +1:12 i: i32 (let)
 function main(): void -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: via keepThroughCallee
+  sharedWrite: via nish_print
   calls: Log.constructor churn firstLong growAll joined keepAll keepField keepInCallee keepLast keepThroughCallee nish_arena_mark nish_arena_release nish_panic_index nish_print nish_str_concat nish_str_from_i32
   stackSites=2 stackLocals=2
   local +0:9 last: string (const)

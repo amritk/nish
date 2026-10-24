@@ -383,7 +383,8 @@ export const main = (): i32 => {
   the scope joins — and opens no scope of its own. Looking a key up
   in a shared `Map` or `Set` (`get`, `has`, `size`) is a read, so tasks may
   share a table that way; changing it, or walking it with `for...of`, is a
-  write. A task may `panic`: if several threads panic at once, only the first
+  write. Handing a helper a string from a shared array (`check(hashes[k])`)
+  is a read too: a string has nothing to write into. A task may `panic`: if several threads panic at once, only the first
   prints its message, and the program exits 1.
 - **A task may `wipe` what it made.** An array the task, or a function it
   calls, allocates itself (`const buf = new Array<u8>(n)`) is its own, so
@@ -391,8 +392,11 @@ export const main = (): i32 => {
   Wiping anything else is: its argument, a local it captured, a field, or an
   array another call answered. A key shared with the tasks stays the parent's
   — make the `Secret` before the block, let each task `expose` it, and
-  `wipe` it after the block. A `Secret` a task makes with `secret(...)` and
-  wipes is refused too, because `secret` keeps its value.
+  `wipe` it after the block. A task may make a `Secret` of its own and wipe
+  it, when the value is allocated right in the call:
+  `const k = secret(new Array<u8>(n))`, filled inside `exposeWith`, then
+  `wipe(k)`. A `Secret` made from a local moved in (`secret(buf)`) or from
+  another call's answer is refused, so allocate inside the `secret(...)`.
 - **A scope never leaves its block.** It is only ever the receiver of
   `spawn`: passing, storing or returning it is refused, and so is a scope
   bound without `using`.

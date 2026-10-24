@@ -1,10 +1,10 @@
-// A task may not wipe a `Secret` it made with `secret(...)`: `secret` keeps its
-// value, so the storage is not one the task allocated, and the wipe is a write
-// another thread could see.
+// A task may wipe a `Secret` it makes and holds in a `const`, but not one
+// held in a `let`: a `let` may be rebound to anyone's `Secret` before the
+// wipe. Hold it in a `const`.
 import { secret, wipe } from "nish:secret";
 import { scope } from "nish/threads";
 const clear = (n: i32): i32 => {
-  const k = secret([toU8(n), toU8(2)]);
+  let k = secret(new Array<u8>(n));
   wipe(k);
   return 0;
 };

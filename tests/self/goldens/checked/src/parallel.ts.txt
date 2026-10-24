@@ -3511,7 +3511,7 @@ function channelOpsOf(program: CheckedProgram, sig: FunctionSig, summaries: Chan
   callee +11:5 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
 function channelSummaries(programs: CheckedProgram[]): ChannelSummaries -> @channelSummaries [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: via ChannelSummaries.merge
+  sharedWrite: via channelOpsOf
   calls: ChannelSummaries.constructor ChannelSummaries.merge FunctionSig.definedIn channelOpsOf namesChannel nish_alloc_struct threadsLoaded
   pointer programs: size=0 writesThrough=false captured=false passedTo=threadsLoaded#0 namesChannel#0
   stackSites=0 stackLocals=0

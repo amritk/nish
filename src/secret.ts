@@ -100,7 +100,7 @@ const SECRET_CLASS: string = "Secret"
 /** What an instance of one of `nish:secret`'s templates is. */
 const SECRET_NONE: i32 = 0
 /** `secret(v)`. */
-const SECRET_MAKE: i32 = 1
+export const SECRET_MAKE: i32 = 1
 /** `expose(s, f)`. */
 export const SECRET_EXPOSE: i32 = 2
 /** `exposeWith(s, arg, f)`. */
