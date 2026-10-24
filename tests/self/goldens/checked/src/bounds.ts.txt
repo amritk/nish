@@ -3680,3 +3680,26 @@ function walkWithRanges(ctx: CheckContext, params: Local | null[], body: Node, t
   callee +15:5 walkBoundsStatement -> @walkBoundsStatement
   callee +18:5 noteReturn -> @noteReturn
   callee +19:5 walkExpression -> @walkExpression
+function forgetTable(table: boolean[]): void -> @forgetTable
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer table: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:12 i: i32 (let)
+function forgetProofs(program: CheckedProgram): void -> @forgetProofs [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  calls: forgetTable
+  pointer program: size=656 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee -5:3 forgetTable -> @forgetTable
+  callee -4:3 forgetTable -> @forgetTable
+  callee -3:3 forgetTable -> @forgetTable
+  callee -2:3 forgetTable -> @forgetTable
+  callee -1:3 forgetTable -> @forgetTable
+  local +3:14 info: Instantiation (const)
+  callee +4:5 forgetTable -> @forgetTable
+  callee +5:5 forgetTable -> @forgetTable
+  callee +6:5 forgetTable -> @forgetTable
+  callee +7:5 forgetTable -> @forgetTable
+  callee +8:5 forgetTable -> @forgetTable

@@ -2505,6 +2505,83 @@ if (!only || "net_loop".includes(only)) {
   )
 }
 
+// ---- The link profile of a `tests/link` program (WP5) -------------------------
+//
+// A program links under `--profile debug` (no optimiser, no LTO, the runtime's asserts
+// on) unless it is on `SPEED_LINK` or its args name a profile of its own. The profile
+// changes the link, never a byte of the IR (src/compile.ts), so the goldens, expected.ir
+// and the wipe checks read what they always read. Measured on main at 804120e, every
+// positive program built under each profile on one 4-core machine, speed twice:
+//   541 positive programs   build    run   total
+//   speed, first          738.5 s  83.6 s  822.1 s
+//   speed, second         735.1 s  64.0 s  799.1 s
+//   debug                 173.1 s 171.7 s  344.8 s
+// The two speed passes differ by 0.5% in build and 23 s in run (the first run of each
+// binary pays a cold start), so the band is about 3%; debug saves 454-477 s, far
+// outside it, and the default is debug. No program's exit code or stdout differed
+// between the profiles; only stderr's timings and addresses did.
+// The programs below keep the speed profile, each for the reason beside it.
+const SPEED_LINK = new Map([
+  // expected.ir pins alias metadata, which only an optimised link acts on.
+  ["class_export", "expected.ir pins `noalias`"],
+  ["generic_import", "expected.ir pins `noalias`"],
+  ["net_prefork", "expected.ir pins `noalias`"],
+  ["result_import", "expected.ir pins `noalias`"],
+  // arr_* aliasing domains.
+  ["arr_bounds_returned_import", "an arr_* aliasing domain"],
+  // Wipes that must survive optimisation: tests/wipes and the `-O2` wipe checks
+  // compile these, so the binary the link loop runs is the optimised one too.
+  ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
+  ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
+  ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
+  ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
+  ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
+  ["crypto_p256", "tests/wipes and the p256ScalarInverse wipes survive opt -O2"],
+  ["net_quic_server_wipes", "tests/wipes counts its wipes after -O2"],
+  ["net_quic_server_wipes_f64", "the f64 twin of net_quic_server_wipes"],
+  ["net_quic_wipes", "tests/wipes counts its wipes after -O2"],
+  ["net_quic_wipes_f64", "the f64 twin of net_quic_wipes"],
+  ["net_tls_rfc8448", "tests/wipes counts its wipes after -O2"],
+  ["net_tls_ticket", "tests/wipes counts its wipes after -O2"],
+  ["net_tls_wipes", "tests/wipes counts its wipes after -O2"],
+  ["net_tls_wipes_f64", "the f64 twin of net_tls_wipes"],
+  ["std_pbkdf2", "tests/wipes counts its wipes after -O2"],
+  // SIMD kernels: runtime-simd.c's byte search and regex scan, runtime-aes.c's
+  // AES rounds, and a parallel map whose element loop vectorises.
+  ["crypto_aes", "runtime-aes.c's kernels"],
+  ["crypto_aes_agree", "runtime-aes.c's kernels"],
+  ["crypto_aes_f64", "runtime-aes.c's kernels"],
+  ["crypto_aes_into", "runtime-aes.c's kernels"],
+  ["crypto_aes_into_f64", "runtime-aes.c's kernels"],
+  ["par_map_vector", "its element loop vectorises"],
+  ["std_regex", "runtime-simd.c's regex scan"],
+  ["std_regex_f64", "runtime-simd.c's regex scan"],
+  ["std_text_index_of_any", "runtime-simd.c's byte search"],
+  ["std_text_index_of_any_non_ascii_offset", "runtime-simd.c's byte search"],
+  // Size and performance figures a check after the loop reads from the binary.
+  ["net_tls_resume_bench", "a timed handshake ratio"],
+  ["par_map_idle", "an RSS bound"],
+  ["par_map_join_small", "an RSS bound"],
+  ["par_map_reclaim", "an RSS bound"],
+  ["par_map_release", "an RSS bound"],
+  ["thread_channel_string_many", "a wall-clock bound"],
+  ["thread_scope_reclaim", "an RSS bound"],
+  ["thread_task_release", "an RSS bound"],
+  ["net_relay_soak", "an RSS bound, and 4.9 s of run becomes 37.8 s"],
+  // Run so much slower unoptimised that the debug build costs more in all
+  // (speed build + run, then debug build + run).
+  ["crypto_x25519", "1.7 + 0.2 s, against 0.2 + 2.3 s"],
+  ["crypto_x509_malformed", "2.2 + 2.0 s, against 0.5 + 11.7 s"],
+  ["net_tls_memory", "4.8 + 1.3 s, against 0.8 + 14.4 s"],
+  ["net_tls_memory_f64", "4.7 + 1.5 s, against 0.8 + 15.2 s"],
+])
+/**
+ * The `--profile` flags a link of `tests/link/<name>` adds: none when its `args` name a
+ * profile or it is on `SPEED_LINK` (build.sh's default, speed), and `debug` otherwise.
+ */
+const linkProfile = (name, args = []) =>
+  args.includes("--profile") || SPEED_LINK.has(name) ? [] : ["--profile", "debug"]
+
 // ---- `nish/net/tls-tcp`, against openssl s_client and Node's TLS (WP34 T2) -------
 //
 // What the Nish client in `tests/link/net_tls_record_tcp` cannot say: that a
@@ -2532,6 +2609,7 @@ if (!only || "net_tls_tcp".includes(only)) {
       tlsDir + path.sep,
       "--link",
       exe,
+      ...linkProfile("net_tls_record_tcp"),
     ],
     { cwd: root, encoding: "utf8" }
   )
@@ -4503,6 +4581,9 @@ if (!only || "emit-ts".includes(only)) {
     ["NL4011", "reject_emit_ts_net_global"],
     ["NL4011", "reject_emit_ts_signal"],
     ["NL4012", "reject_emit_ts_compound"],
+    ["NL4013", "reject_emit_ts_instances"],
+    ["NL4013", "reject_emit_ts_instances_zero"],
+    ["NL4013", "reject_emit_ts_instances_zero_string"],
   ]) {
     const dir = path.join(work, name)
     const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
@@ -4958,11 +5039,11 @@ if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)
 
 // ---- WP5: link -------------------------------------------------------------------
 // Multi-module programs in tests/link/<name>/. `main.ts` is the entry; the program is
-// compiled with `-o <dir>/` (one .ll per module) and `--link` (scripts/build.sh, speed
-// profile) into build/test/link/<name>/app. Nothing can print yet (console.log is
-// WP3), so each program returns its result from `main` and the harness compares the
-// process exit code with `expected.code`; `expected.out` is the expected stdout
-// (empty for now). Other optional files:
+// compiled with `-o <dir>/` (one .ll per module) and `--link` (scripts/build.sh, under
+// the profile `linkProfile` picks) into build/test/link/<name>/app. Nothing can print
+// yet (console.log is WP3), so each program returns its result from `main` and the
+// harness compares the process exit code with `expected.code`; `expected.out` is the
+// expected stdout (empty for now). Other optional files:
 //   expected.err   compile must fail and stderr must contain this text
 //   expected.json  beside expected.err: the `--json` diagnostics of the refused compile,
 //                  one object per line and paths relative to the repository, compared
@@ -5162,9 +5243,11 @@ for (const name of linkTests) {
     irDelegated++
     continue
   }
-  const r = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...capsArgs], {
-    cwd: root,
-  })
+  const r = spawnSync(
+    NISH,
+    [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...linkProfile(name, args), ...capsArgs],
+    { cwd: root }
+  )
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("expected.err"))) {
@@ -7339,6 +7422,61 @@ if (!only) {
     `not in tests/link: ${gone.join(", ")}`
   )
 }
+// `SPEED_LINK` against the tree, with no compile: every name is a program, every
+// program whose optimised binary something checks is on it, and no listed program
+// names a profile of its own, which `linkProfile` would honour over the list. An
+// optimisation marker is alias metadata in expected.ir, or a wipe check that covers
+// the program: a tests/wipes group, or a check here that runs `opt -O2` on it.
+if (!only || "speed-link".includes(only)) {
+  const missing = [...SPEED_LINK.keys()].filter((name) => !linkTests.includes(name))
+  check(
+    "every program on SPEED_LINK has a tests/link/<name>/main.ts",
+    missing.length === 0,
+    `no tests/link/<name>/main.ts: ${missing.join(", ")}`
+  )
+  const wipesDir = path.join(root, "tests", "wipes")
+  const wiped = new Set(
+    fs
+      .readdirSync(wipesDir)
+      .filter((file) => file.endsWith(".js"))
+      .flatMap((file) =>
+        [...fs.readFileSync(path.join(wipesDir, file), "utf8").matchAll(/tests\/link\/(\w+)\//g)].map(
+          (m) => m[1]
+        )
+      )
+  )
+  const self = fs.readFileSync(import.meta.filename, "utf8").split("\n")
+  self.forEach((line, i) => {
+    const program = line.match(/"tests\/link\/(\w+)\/main\.ts"/)
+    if (program && self.slice(i, i + 15).some((next) => next.includes('"opt", ["-O2"'))) {
+      wiped.add(program[1])
+    }
+  })
+  const unmarked = linkTests.filter((name) => {
+    if (SPEED_LINK.has(name)) {
+      return false
+    }
+    const ir = path.join(linkDir, name, "expected.ir")
+    return (
+      wiped.has(name) ||
+      (fs.existsSync(ir) && /!tbaa|noalias|!alias\.scope/.test(fs.readFileSync(ir, "utf8")))
+    )
+  })
+  check(
+    "every tests/link program with alias metadata in expected.ir or a wipe check is on SPEED_LINK",
+    unmarked.length === 0,
+    `not on SPEED_LINK: ${unmarked.join(", ")}`
+  )
+  const ownProfile = [...SPEED_LINK.keys()].filter((name) => {
+    const args = path.join(linkDir, name, "args")
+    return fs.existsSync(args) && fs.readFileSync(args, "utf8").split(/\s+/).includes("--profile")
+  })
+  check(
+    "no program on SPEED_LINK names a profile in its args",
+    ownProfile.length === 0,
+    `args name a profile: ${ownProfile.join(", ")}`
+  )
+}
 
 // X509-6: `nish/crypto/x509-random` draws from `crypto.getRandomValues`, so
 // `tests/link/crypto_x509_random_wasm` (a wasm32 build importing it) is refused
@@ -7401,10 +7539,12 @@ const p256SeamProgram = ({ label, dir, program, source, extra, nativeName }) => 
   const entry = path.join(programDir, "main.ts")
   if (only !== "wasi") {
     const exe = path.join(seamDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe], {
-      cwd: root,
-      encoding: "utf8",
-    })
+    // Speed, not `linkProfile`'s debug: on CI the agree corpus ran 73.7 s debug, 9.7 s speed.
+    const built = spawnSync(
+      NISH,
+      [entry, "-o", path.join(seamDir, "native") + path.sep, "--link", exe, "--profile", "speed"],
+      { cwd: root, encoding: "utf8" }
+    )
     const ran = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
     check(nativeName, built.status === 0 && ran.status === 0 && ran.stdout === want, shown(ran))
   }
@@ -7580,7 +7720,15 @@ if (!only || "net_http1_server".includes(only) || "runtime-budget".includes(only
   const exe = path.join(dir, "app")
   const built = spawnSync(
     NISH,
-    [path.join(root, "tests", "link", "net_http1_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    [
+      path.join(root, "tests", "link", "net_http1_server", "startup.ts"),
+      "-o",
+      dir + path.sep,
+      "--link",
+      exe,
+      "--profile",
+      "speed",
+    ],
     { cwd: root, encoding: "utf8" }
   )
   if (check("net_http1_server: startup.ts links", built.status === 0, shown(built))) {
@@ -7629,7 +7777,15 @@ for (const [unit, program, name, ceiling, ceilingName] of [
   const exe = path.join(dir, "app")
   const built = spawnSync(
     NISH,
-    [path.join(root, "tests", "link", unit, program), "-o", dir + path.sep, "--link", exe],
+    [
+      path.join(root, "tests", "link", unit, program),
+      "-o",
+      dir + path.sep,
+      "--link",
+      exe,
+      "--profile",
+      "speed",
+    ],
     {
       cwd: root,
       encoding: "utf8",
@@ -7661,7 +7817,15 @@ if (!only || "net_http3_server".includes(only) || "runtime-budget".includes(only
   const exe = path.join(dir, "app")
   const built = spawnSync(
     NISH,
-    [path.join(root, "tests", "link", "net_http3_server", "startup.ts"), "-o", dir + path.sep, "--link", exe],
+    [
+      path.join(root, "tests", "link", "net_http3_server", "startup.ts"),
+      "-o",
+      dir + path.sep,
+      "--link",
+      exe,
+      "--profile",
+      "speed",
+    ],
     { cwd: root, encoding: "utf8" }
   )
   if (check("net_http3_server: startup.ts links", built.status === 0, shown(built))) {
@@ -8592,7 +8756,11 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // (three of three crashed with fast API calls on, none of six with them off).
 // examples/wasi-host.mjs turns them off itself, so the slow call is what runs.
 // #732 tracks the Node bug and when the host can drop the flag.
+// `sqlite_memory` builds the vendored SQLite for wasm32 against wasi-libc
+// (scripts/build.sh's wasi `sqlite_objects`) and opens an in-memory database
+// with it, so a wasi compile of the amalgamation that breaks fails here.
 for (const name of [
+  "sqlite_memory",
   "thread_atomic_tasks",
   "par_atomic",
   "thread_channel_pipeline",
@@ -8805,7 +8973,11 @@ if (!only || "std_json_tokenizer".includes(only)) {
   if (HAS_CLANG) {
     const outDir = path.join(buildDir, "json_tokenizer_node") + path.sep
     const exe = path.join(outDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const built = spawnSync(
+      NISH,
+      [entry, "-o", outDir, "--link", exe, ...linkProfile("std_json_tokenizer")],
+      { cwd: root, encoding: "utf8" }
+    )
     const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
     check(
       "link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to",
@@ -8843,10 +9015,14 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
   if (HAS_CLANG) {
     const outDir = path.join(buildDir, "std_url_alloc") + path.sep
     const exe = path.join(outDir, "app")
-    const built = spawnSync(NISH, [path.join(urlDir, "alloc.ts"), "-o", outDir, "--link", exe], {
-      cwd: root,
-      encoding: "utf8",
-    })
+    const built = spawnSync(
+      NISH,
+      [path.join(urlDir, "alloc.ts"), "-o", outDir, "--link", exe, ...linkProfile("std_url")],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
     const run = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
     check(
       "link/std_url: 10,000 targets split, decoded and searched leave Arena.used() where it was",
@@ -8875,7 +9051,10 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
     if (HAS_CLANG) {
       const outDir = path.join(buildDir, `std_url_${file}`) + path.sep
       const exe = path.join(outDir, "app")
-      const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+      const built = spawnSync(NISH, [entry, "-o", outDir, "--link", exe, ...linkProfile("std_url")], {
+        cwd: root,
+        encoding: "utf8",
+      })
       const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
       check(
         `link/std_url: ${file}.ts built natively exits 1 with "${message}"`,
@@ -8897,7 +9076,10 @@ if (!only || "std_url".includes(only) || only.startsWith("std_url")) {
   if (HAS_CLANG) {
     const outDir = path.join(buildDir, "std_url_fuzz") + path.sep
     const exe = path.join(outDir, "app")
-    const built = spawnSync(NISH, [fuzzEntry, "-o", outDir, "--link", exe], { cwd: root, encoding: "utf8" })
+    const built = spawnSync(NISH, [fuzzEntry, "-o", outDir, "--link", exe, ...linkProfile("std_url")], {
+      cwd: root,
+      encoding: "utf8",
+    })
     const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8", maxBuffer: 1 << 24 }) : built
     const fromNative = urlFuzzVerdict(native.stdout ?? "")
     check(
@@ -9167,10 +9349,14 @@ if (!only || "std_json_writer".includes(only)) {
     const outDir = path.join(buildDir, "link", "std_json_writer_node")
     fs.rmSync(outDir, { recursive: true, force: true })
     const exe = path.join(outDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", `${outDir}${path.sep}`, "--link", exe], {
-      cwd: root,
-      encoding: "utf8",
-    })
+    const built = spawnSync(
+      NISH,
+      [entry, "-o", `${outDir}${path.sep}`, "--link", exe, ...linkProfile("std_json_writer")],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
     const native = built.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }) : built
     check(
       "link/std_json_writer: node.ts built natively prints the same JSON.stringify lines",
@@ -9361,10 +9547,14 @@ if (!only || "std_json_typed".includes(only)) {
     const outDir = path.join(buildDir, "link", "std_json_typed_readers")
     fs.rmSync(outDir, { recursive: true, force: true })
     const app = path.join(outDir, "app")
-    const built = spawnSync(NISH, [readers, "-o", `${outDir}${path.sep}`, "--link", app], {
-      cwd: root,
-      encoding: "utf8",
-    })
+    const built = spawnSync(
+      NISH,
+      [readers, "-o", `${outDir}${path.sep}`, "--link", app, ...linkProfile("std_json_typed")],
+      {
+        cwd: root,
+        encoding: "utf8",
+      }
+    )
     const native = built.status === 0 ? spawnSync(app, [], { encoding: "utf8" }) : built
     check(
       "link/std_json_typed: readers.ts built natively prints the same lines",
@@ -9527,7 +9717,10 @@ if (!only || "std_json_value".includes(only)) {
     const outDir = path.join(buildDir, "link", "std_json_value_node") + path.sep
     fs.rmSync(outDir, { recursive: true, force: true })
     const app = path.join(outDir, "app")
-    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", app], { cwd: root, encoding: "utf8" })
+    const built = spawnSync(NISH, [entry, "-o", outDir, "--link", app, ...linkProfile("std_json_value")], {
+      cwd: root,
+      encoding: "utf8",
+    })
     const native = built.status === 0 ? spawnSync(app, [], { encoding: "utf8" }) : built
     check(
       "link/std_json_value: the same node.ts, built natively, prints the same lines",
@@ -9749,10 +9942,14 @@ if (!only || "std_json_conformance".includes(only)) {
     const outDir = path.join(buildDir, "link", outName)
     fs.rmSync(outDir, { recursive: true, force: true })
     const exe = path.join(outDir, "app")
-    const r = spawnSync(NISH, ["main.ts", second, "-o", `${outDir}${path.sep}`, "--link", exe], {
-      cwd: twiceDir,
-      encoding: "utf8",
-    })
+    const r = spawnSync(
+      NISH,
+      ["main.ts", second, "-o", `${outDir}${path.sep}`, "--link", exe, ...linkProfile("root_named_twice")],
+      {
+        cwd: twiceDir,
+        encoding: "utf8",
+      }
+    )
     const wroteTypes = r.stderr.split("\n").filter((l) => l.startsWith("wrote ") && l.endsWith("types.ll"))
     const run = r.status === 0 ? spawnSync(exe) : { status: null }
     check(
@@ -9834,7 +10031,7 @@ if (fs.existsSync(path.join(aboveDir, "src", "main.ts"))) {
   const outDir = path.join(buildDir, "link", "package_above") + path.sep
   fs.rmSync(outDir, { recursive: true, force: true })
   const exe = path.join(buildDir, "link", "package_above-app")
-  const r = spawnSync(NISH, ["main.ts", "-o", outDir, "--link", exe], {
+  const r = spawnSync(NISH, ["main.ts", "-o", outDir, "--link", exe, ...linkProfile("package_above")], {
     cwd: path.join(aboveDir, "src"),
     encoding: "utf8",
   })
@@ -9889,10 +10086,14 @@ if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
   const outDir = path.join(buildDir, "link", "package_doubled") + path.sep
   fs.rmSync(outDir, { recursive: true, force: true })
   const exe = path.join(buildDir, "link", "package_doubled-app")
-  const inside = spawnSync(NISH, ["main.ts", "-o", outDir, "--link", exe], {
-    cwd: doubledApp,
-    encoding: "utf8",
-  })
+  const inside = spawnSync(
+    NISH,
+    ["main.ts", "-o", outDir, "--link", exe, ...linkProfile("package_doubled")],
+    {
+      cwd: doubledApp,
+      encoding: "utf8",
+    }
+  )
   const ir =
     inside.status === 0
       ? llFilesIn(outDir)
@@ -11575,6 +11776,322 @@ if (!only || "range_reference".includes(only) || only.startsWith("range_referenc
   }
 }
 
+// The reference build of the soundness differential (`--no-elision`,
+// `noElision` in `src/options.ts`; `tests/differential/soundness.js`). One
+// program reaches every proof the flag turns off: `sum` indexes by a loop
+// counter proven in bounds whose increment is proven to fit, `norm` builds a
+// `Point` that never escapes, `width` makes a string per iteration that the
+// inferred loop arena reclaims. The default build must show each elision and
+// the reference none of them, so a switch that stops working cannot leave the
+// differential comparing a build with itself. Then a sample of `tests/cases`
+// runs both ways and must print the same.
+if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
+  const dir = path.join(buildDir, "no_elision")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const src = path.join(dir, "elide.ts")
+  fs.writeFileSync(
+    src,
+    [
+      "class Point { x: i32; y: i32; constructor(x: i32, y: i32) { this.x = x; this.y = y } }",
+      "const sum = (xs: i32[]): i32 => { let total = 0; for (let i = 0; i < xs.length; i++) { total += xs[i] } return total }",
+      "const norm = (x: i32, y: i32): i32 => { const p = new Point(x, y); return p.x * p.x + p.y * p.y }",
+      "const width = (n: i32): i32 => { let w = 0; for (let i = 0; i < n; i++) { const s = `${i}`; w = w + s.length } return w }",
+      "export const main = (): void => { console.log(`${sum([1, 2, 3])} ${norm(3, 4)} ${width(12)}`) }",
+      "",
+    ].join("\n")
+  )
+  const irOf = (extra) => {
+    const out = path.join(dir, `${extra.length ? "reference" : "default"}.ll`)
+    const r = spawnSync(NISH, [src, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
+    return { status: r.status, stderr: r.stderr, ir: fs.existsSync(out) ? fs.readFileSync(out, "utf8") : "" }
+  }
+  // One function's body, from its `define` to the closing brace.
+  const bodies = (ir) => {
+    const body = (name) => {
+      const at = ir.search(new RegExp(`^define [^\\n]*@${name}\\(`, "m"))
+      return at < 0 ? "" : ir.slice(at, ir.indexOf("\n}\n", at) + 2)
+    }
+    return { sum: body("sum"), norm: body("norm"), width: body("width") }
+  }
+  const elided = irOf([])
+  const reference = irOf(["--no-elision"])
+  check(
+    "no_elision: the program compiles both ways",
+    elided.status === 0 && reference.status === 0,
+    `${elided.stderr}\n${reference.stderr}`
+  )
+  const a = bodies(elided.ir)
+  const b = bodies(reference.ir)
+  const arena = /nish_arena_(mark|release)|@nish_arena\b/
+  // The runtime prelude's declarations keep their attributes: they state the
+  // runtime's contract, not a proof about this program.
+  const attributes = /\b(noalias|nocapture|willreturn|readonly|dereferenceable)\b|!tbaa/
+  const own = (fns) => Object.values(fns).join("")
+  for (const [what, ok, detail] of [
+    ["a proven index has no `nish_panic_index`", !a.sum.includes("nish_panic_index"), a.sum],
+    ["the reference keeps `nish_panic_index`", b.sum.includes("nish_panic_index"), b.sum],
+    ["a proven add carries `nsw`", / add nsw /.test(a.sum), a.sum],
+    [
+      "the reference has no `nsw` and checks the add",
+      !/ nsw /.test(reference.ir) && b.sum.includes("llvm.sadd.with.overflow") && b.sum.includes("nish_panic_overflow"),
+      b.sum,
+    ],
+    ["the default has proof-backed attributes and TBAA", attributes.test(own(a)) && own(a).includes("!tbaa"), own(a)],
+    [
+      "the reference has none",
+      !attributes.test(own(b)),
+      own(b)
+        .split("\n")
+        .filter((line) => attributes.test(line))
+        .slice(0, 5)
+        .join("\n"),
+    ],
+    ["a `Point` that never escapes is an `alloca`", /alloca %struct\.Point\b(?!\*)/.test(a.norm), a.norm],
+    [
+      "the reference allocates it",
+      !/alloca %struct\.Point\b(?!\*)/.test(b.norm) && b.norm.includes("@nish_alloc_struct("),
+      b.norm,
+    ],
+    ["the loop's strings are reclaimed by an inferred arena", arena.test(a.width), a.width],
+    ["the reference reclaims nothing", !arena.test(b.width), b.width],
+  ]) {
+    check(`no_elision: ${what}`, ok, detail)
+  }
+  const runs = [[], ["--no-elision"]].map((extra) => {
+    const exe = path.join(dir, extra.length ? "reference" : "default")
+    const link = spawnSync(NISH, [src, "--link", exe, ...extra], { cwd: root, encoding: "utf8" })
+    return link.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }).stdout : `link: ${link.stderr}`
+  })
+  check("no_elision: both builds print `6 25 14`", runs[0] === "6 25 14\n" && runs[1] === runs[0], runs.join("\n---\n"))
+  // The `ffi-length` check a `toU64(buf.length)` count proves is written
+  // only by the reference.
+  const ffi = path.join(dir, "ffi.ts")
+  fs.writeFileSync(
+    ffi,
+    [
+      "declare function strnlen(s: readonly u8[], n: u64): u64",
+      "export const find = (xs: readonly u8[]): u64 => strnlen(xs, toU64(xs.length))",
+      "",
+    ].join("\n")
+  )
+  const ffiIr = [[], ["--no-elision"]].map((extra) => {
+    const out = path.join(dir, `ffi${extra.length ? "-reference" : ""}.ll`)
+    const r = spawnSync(NISH, [ffi, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
+    return r.status === 0 ? fs.readFileSync(out, "utf8") : `compile: ${r.stderr}`
+  })
+  check(
+    "no_elision: a proven FFI count has no `ffi.length` check",
+    ffiIr[0].includes("@strnlen(") && !ffiIr[0].includes("ffi.length"),
+    ffiIr[0]
+  )
+  check("no_elision: the reference checks the count", ffiIr[1].includes("ffi.length"), ffiIr[1])
+  // One function per switch of `Options.noElision` the first program does not
+  // reach, each with the mark its proof leaves in the default IR and the
+  // reference must not have. The flag changes every function's attributes, so
+  // only a pin per switch shows that one is wired.
+  const switches = path.join(dir, "switches.ts")
+  fs.writeFileSync(
+    switches,
+    [
+      'import { parallelFrom } from "nish/threads"',
+      "class Board { cells: i32[]; constructor() { this.cells = [0, 0, 0, 0] } }",
+      "const clampHead = (s: string): string => { const n = s.length; return s.substring(0, n) }",
+      "const entry = (b: u8): integer<0, 255> => { const r: integer<0, 255> = toI32(b); return r }",
+      "const disjoint = (): u8[] => { const dst: u8[] = [0, 0, 0, 0]; const src: u8[] = [1, 2]; dst.set(src, 1); return dst }",
+      "const raise = (m: Map<string, number>, k: string): boolean => { if (m.has(k)) { m.set(k, 10); return true } return false }",
+      "const piece = (i: i32): string => `${i},`",
+      "const joined = (n: i32): string => { let s = \"\"; for (let i = 0; i < n; i++) { s = s + piece(i) } return s }",
+      "const pick = (xs: i32[], i: i32): i32 => xs[i]",
+      "const picks = (xs: i32[]): i32 => { let t = 0; for (let i = 0; i < xs.length; i++) { t = t + pick(xs, i) } return t }",
+      "const last = <T>(xs: T[], x: T): T => { let r = x; for (let i = 0; i < xs.length; i++) { r = xs[i] } return r }",
+      "const widths = (n: i32): i32[] => parallelFrom(n, (i) => `${i}`.length)",
+      "const headOf = <T>(s: string, x: T): string => { const n = s.length; return s.substring(0, n) }",
+      "const entryOf = <T>(b: u8, x: T): integer<0, 255> => { const r: integer<0, 255> = toI32(b); return r }",
+      "const spliceOf = <T>(x: T): u8[] => { const dst: u8[] = [0, 0, 0, 0]; const src: u8[] = [1, 2]; dst.set(src, 1); return dst }",
+      "const raiseOf = <T>(m: Map<string, T>, k: string, v: T): boolean => { if (m.has(k)) { m.set(k, v); return true } return false }",
+      "export const main = (): void => {",
+      "  const m = new Map<string, number>()",
+      "  m.set(\"a\", 1)",
+      "  const w = widths(12)",
+      "  console.log(`${new Board().cells.length} ${clampHead(\"abc\")} ${entry(7)} ${disjoint().length} ${raise(m, \"a\")}`)",
+      "  console.log(`${joined(3)} ${picks([1, 2])} ${last([1, 2], 0)} ${last([\"x\"], \"y\")} ${w[11]}`)",
+      "  console.log(`${headOf(\"abc\", 1)} ${entryOf(7, 1)} ${spliceOf(1).length} ${raiseOf(m, \"a\", 20)}`)",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const [sw, swRef] = [[], ["--no-elision"]].map((extra) => {
+    const out = path.join(dir, `switches${extra.length ? "-reference" : ""}${path.sep}`)
+    const r = spawnSync(NISH, [switches, "-o", out, "--no-warn-performance", ...extra], { cwd: root, encoding: "utf8" })
+    const ll = path.join(out, "switches.ll")
+    return r.status === 0 && fs.existsSync(ll) ? fs.readFileSync(ll, "utf8") : `compile: ${r.stderr}`
+  })
+  const fn = (ir, name) => {
+    const at = ir.search(new RegExp(`^define [^\\n]*@${name.replace(/\$/g, "\\$")}\\(`, "m"))
+    return at < 0 ? `no @${name}` : ir.slice(at, ir.indexOf("\n}\n", at) + 2)
+  }
+  const count = (text, re) => (text.match(re) ?? []).length
+  const clamps = /@llvm\.smin\.i64\(/g
+  for (const [what, ok, detail] of [
+    [
+      "a proven `substring` bound is not clamped",
+      count(fn(sw, "clampHead"), clamps) < count(fn(swRef, "clampHead"), clamps),
+      `${fn(sw, "clampHead")}\n---\n${fn(swRef, "clampHead")}`,
+    ],
+    [
+      "a proven range entry has no check",
+      !fn(sw, "entry").includes("rng.fail") && fn(swRef, "entry").includes("rng.fail"),
+      `${fn(sw, "entry")}\n---\n${fn(swRef, "entry")}`,
+    ],
+    [
+      "a disjoint `set` is a memcpy",
+      fn(sw, "disjoint").includes("@llvm.memcpy") && fn(swRef, "disjoint").includes("@llvm.memmove"),
+      `${fn(sw, "disjoint")}\n---\n${fn(swRef, "disjoint")}`,
+    ],
+    [
+      "a fused `has`/`set` shares one probe",
+      fn(sw, "raise$").includes(".setValueAt(") && !fn(swRef, "raise$").includes(".setValueAt("),
+      `${fn(sw, "raise$")}\n---\n${fn(swRef, "raise$")}`,
+    ],
+    [
+      "a call site reclaims what its callee left",
+      fn(sw, "joined").includes("@nish_arena_keep(") && !fn(swRef, "joined").includes("@nish_arena_keep("),
+      `${fn(sw, "joined")}\n---\n${fn(swRef, "joined")}`,
+    ],
+    [
+      "a fixed-length array field is laid inline",
+      /^%struct\.Board = type \{ \{ %struct\.nish_array, \[4 x i32\] \} \}$/m.test(sw) &&
+        /^%struct\.Board = type \{ %struct\.nish_array\* \}$/m.test(swRef),
+      `${sw.match(/^%struct\.Board = .*$/m)}\n---\n${swRef.match(/^%struct\.Board = .*$/m)}`,
+    ],
+    [
+      "an index every call site proves has no check",
+      !fn(sw, "pick").includes("nish_panic_index") && fn(swRef, "pick").includes("nish_panic_index"),
+      `${fn(sw, "pick")}\n---\n${fn(swRef, "pick")}`,
+    ],
+    [
+      "an instantiation's proven index has no check",
+      ["last$i32", "last$str"].every((f) => !fn(sw, f).includes("nish_panic_index") && fn(swRef, f).includes("nish_panic_index")),
+      `${fn(sw, "last$i32")}\n---\n${fn(swRef, "last$i32")}`,
+    ],
+    // The instantiation tables, one switch at a time: `forgetProofs` clears
+    // each table of each instance apart from the program's own.
+    [
+      "an instantiation's proven no-overflow is `nsw`",
+      fn(sw, "last$i32").includes("add nsw") && !fn(swRef, "last$i32").includes("add nsw"),
+      `${fn(sw, "last$i32")}\n---\n${fn(swRef, "last$i32")}`,
+    ],
+    [
+      "an instantiation's proven `substring` bound is not clamped",
+      count(fn(sw, "headOf$i32"), clamps) < count(fn(swRef, "headOf$i32"), clamps),
+      `${fn(sw, "headOf$i32")}\n---\n${fn(swRef, "headOf$i32")}`,
+    ],
+    [
+      "an instantiation's proven range entry has no check",
+      !fn(sw, "entryOf$i32").includes("rng.fail") && fn(swRef, "entryOf$i32").includes("rng.fail"),
+      `${fn(sw, "entryOf$i32")}\n---\n${fn(swRef, "entryOf$i32")}`,
+    ],
+    [
+      "an instantiation's disjoint `set` is a memcpy",
+      fn(sw, "spliceOf$i32").includes("@llvm.memcpy") && fn(swRef, "spliceOf$i32").includes("@llvm.memmove"),
+      `${fn(sw, "spliceOf$i32")}\n---\n${fn(swRef, "spliceOf$i32")}`,
+    ],
+    [
+      "an instantiation's fused `has`/`set` shares one probe",
+      fn(sw, "raiseOf$i32").includes(".setValueAt(") && !fn(swRef, "raiseOf$i32").includes(".setValueAt("),
+      `${fn(sw, "raiseOf$i32")}\n---\n${fn(swRef, "raiseOf$i32")}`,
+    ],
+    [
+      "a parallel body gets an arena scope",
+      fn(sw, "widths$arrow0").includes("@nish_arena_mark(") && !fn(swRef, "widths$arrow0").includes("nish_arena_"),
+      `${fn(sw, "widths$arrow0")}\n---\n${fn(swRef, "widths$arrow0")}`,
+    ],
+  ]) {
+    check(`no_elision: ${what}; the reference keeps it`, ok, detail)
+  }
+  // The runner, as CI runs it, through the differential itself.
+  const soundness = (args) =>
+    spawnSync(process.execPath, [path.join(root, "tests", "differential", "soundness.js"), ...args], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    })
+  const summary = (r) => {
+    const counts = {}
+    for (const [, k, v] of String(r.stdout).matchAll(/\b(\w+)=(\d+)\b/g)) {
+      counts[k] = Number(v)
+    }
+    return counts
+  }
+  // The flag changes the IR and must change nothing a program prints: a
+  // sample spread across the corpus. Every one of the sample is to be
+  // compared, and every one built two different programs: a runner that
+  // handed the flag to both sides, or to neither, compares nothing.
+  const sample = soundness(["--corpus", path.join(root, "tests", "cases"), "--sample", "40", "--compiler", NISH])
+  const counts = summary(sample)
+  check(
+    "no_elision: a sample of tests/cases prints the same with and without --no-elision",
+    sample.status === 0 && counts.agree === 40 && counts.elided === 40,
+    `exit ${sample.status}\n${sample.stdout.slice(-4000)}\n${sample.stderr.slice(-2000)}`
+  )
+  // And it sees a difference that is only in stderr: a compiler that builds
+  // the reference from a program whose panic says something else. Both exit 1
+  // and print the same stdout.
+  const pair = path.join(dir, "pair")
+  for (const [side, word] of [
+    ["default", "one"],
+    ["reference", "two"],
+  ]) {
+    fs.mkdirSync(path.join(pair, side), { recursive: true })
+    fs.writeFileSync(
+      path.join(pair, side, "panics.ts"),
+      `export const main = (): void => { console.log("a"); panic("${word}") }\n`
+    )
+  }
+  const swap = path.join(dir, "swap.mjs")
+  fs.writeFileSync(
+    swap,
+    [
+      "#!/usr/bin/env node",
+      'import { spawnSync } from "node:child_process"',
+      "const args = process.argv.slice(2)",
+      `const swapped = args.includes("--no-elision") ? args.map((a) => a.replace(${JSON.stringify(`${path.sep}default${path.sep}`)}, ${JSON.stringify(`${path.sep}reference${path.sep}`)})) : args`,
+      `process.exitCode = spawnSync(${JSON.stringify(NISH)}, swapped, { stdio: "inherit" }).status ?? 1`,
+      "",
+    ].join("\n")
+  )
+  fs.chmodSync(swap, 0o755)
+  const differs = soundness(["--corpus", path.join(pair, "default"), "--only", "panics", "--compiler", swap])
+  check(
+    "no_elision: a panic only stderr tells apart is a difference",
+    differs.status === 1 && differs.stdout.includes("panic: default one, --no-elision two"),
+    `exit ${differs.status}\n${differs.stdout}\n${differs.stderr}`
+  )
+  // And a hang on one side only is a difference, not the runner's limit: the
+  // reference never ends, and the default prints and exits. The reference
+  // keeps printing, so where the kill cuts its output differs between its two
+  // runs, and still it is a difference rather than nondeterministic.
+  fs.writeFileSync(path.join(pair, "default", "hangs.ts"), 'export const main = (): void => { console.log("a") }\n')
+  fs.writeFileSync(
+    path.join(pair, "reference", "hangs.ts"),
+    [
+      "export const main = (): void => {",
+      "  let i = 0",
+      "  let n = 0",
+      "  while (true) { i = i + 1; if (i === 20000000) { i = 0; n = n + 1; console.log(`${n}`) } }",
+      "}",
+      "",
+    ].join("\n")
+  )
+  const hangs = soundness(["--corpus", path.join(pair, "default"), "--only", "hangs", "--run-timeout", "2", "--compiler", swap])
+  check(
+    "no_elision: a run that hangs on one side only is a difference",
+    hangs.status === 1 && hangs.stdout.includes("ending: default exit 0, --no-elision timeout") && summary(hangs).differ === 1,
+    `exit ${hangs.status}\n${hangs.stdout}\n${hangs.stderr}`
+  )
+}
+
 // #183: a function that can reach `nish_panic_index` through an unproven
 // `charCodeAt` is not `willreturn`. With the attribute on `main`, the speed
 // profile's optimiser deleted the loop that panics and the program exited 0.
@@ -13164,6 +13681,117 @@ if (!only || "runtime_test".includes(only)) {
     rtThreadsRun !== null && rtThreadsRun.status === 0,
     String(rtThreads.stderr) + (rtThreadsRun ? String(rtThreadsRun.stdout) + String(rtThreadsRun.stderr) : "")
   )
+}
+
+/**
+ * Whether clang can link a program under `flags` (`-fsanitize=...`): null when
+ * it can, `{ skip }` when the toolchain lacks the sanitizer runtimes, and
+ * `{ error }` for any other failure to link. The sanitizer runtimes are a separate package on
+ * Debian and Ubuntu (libclang-rt-18-dev, which .claude/hooks/session-start.sh
+ * and CI's LLVM step install), so a toolchain without them is a named skip.
+ */
+const sanitizerProbe = (flags) => {
+  if (!has("clang")) {
+    return { skip: "no clang" }
+  }
+  const dir = path.join(buildDir, "sanitizer-probe")
+  fs.mkdirSync(dir, { recursive: true })
+  const src = path.join(dir, "probe.c")
+  fs.writeFileSync(
+    src,
+    flags.some((f) => f.includes("fuzzer"))
+      ? "#include <stddef.h>\n#include <stdint.h>\nint LLVMFuzzerTestOneInput(const uint8_t *d, size_t n) { (void)d; (void)n; return 0; }\n"
+      : "int main(void) { return 0; }\n"
+  )
+  const cc = spawnSync("clang", [...flags, src, "-o", path.join(dir, "probe")], { encoding: "utf8" })
+  if (cc.status === 0) {
+    return null
+  }
+  return /libclang_rt|clang_rt\./.test(cc.stderr)
+    ? { skip: "the clang_rt sanitizer libraries are missing (install libclang-rt-18-dev)" }
+    : { error: `clang ${flags.join(" ")} could not link a probe:\n${cc.stderr}` }
+}
+
+// The runtime unit test again, under AddressSanitizer and UndefinedBehavior-
+// Sanitizer, built single-threaded and with -DNISH_THREADS: a report is a
+// runtime finding (docs/security/runtime.md), not noise to suppress.
+// `-fno-sanitize-recover=undefined` makes the first UB report exit non-zero
+// rather than print and carry on, so the check cannot pass over one.
+if (!only || "runtime_sanitize".includes(only)) {
+  const flags = ["-fsanitize=address,undefined", "-fno-sanitize-recover=undefined"]
+  const probe = sanitizerProbe(flags)
+  for (const [label, defines] of [
+    ["single-threaded", []],
+    ["-DNISH_THREADS", ["-DNISH_THREADS=1", "-pthread"]],
+  ]) {
+    const name = `runtime_sanitize: the runtime unit test (${label}) runs clean under ASan and UBSan`
+    if (probe?.skip !== undefined) {
+      skip(`${name} (${probe.skip})`)
+      continue
+    }
+    const exe = path.join(buildDir, `runtime_test_sanitize${defines.length > 0 ? "_threads" : ""}`)
+    const cc =
+      probe === null
+        ? spawnSync(
+            "clang",
+            ["-std=c11", "-g", "-O1", ...flags, ...defines, ...RUNTIME_C, "tests/runtime-test.c", "-o", exe],
+            { cwd: root, encoding: "utf8" }
+          )
+        : { status: 1, stderr: probe.error }
+    const run =
+      cc.status === 0
+        ? spawnSync(exe, [], {
+            encoding: "utf8",
+            env: { ...envWithThreads(null), ASAN_OPTIONS: "detect_leaks=1:abort_on_error=0", UBSAN_OPTIONS: "print_stacktrace=1" },
+            timeout: 120_000,
+          })
+        : null
+    check(
+      name,
+      run !== null && run.status === 0,
+      cc.status !== 0 ? cc.stderr : `exit ${run.status} ${run.signal ?? ""}\n${run.stdout}${run.stderr}`.slice(-4000)
+    )
+  }
+}
+
+// The libFuzzer targets (tests/fuzz/README.md): every tests/fuzz/targets/*.ts
+// built by scripts/fuzz.sh with this checkout's compiler, and replayed once
+// over its seed corpus and its regressions. A regression input is a crash a
+// fix removed, so a replay that crashes is that bug back. Fuzzing itself is
+// CI's `fuzz-smoke` job and the scheduled fuzz.yml, not this suite.
+if (!only || "fuzz".includes(only)) {
+  const script = fs.readFileSync(path.join(root, "scripts", "fuzz.sh"), "utf8")
+  const listed = (script.match(/^RUNTIME_C=\(\n([\s\S]*?)\n\)/m)?.[1] ?? "").split(/\s+/).filter(Boolean)
+  check(
+    "fuzz: scripts/fuzz.sh links the runtime units tests/run.js's RUNTIME_C names",
+    listed.join(" ") === RUNTIME_C.join(" "),
+    `fuzz.sh: ${listed.join(" ")}\nrun.js:  ${RUNTIME_C.join(" ")}`
+  )
+  const targets = fs
+    .readdirSync(path.join(root, "tests", "fuzz", "targets"))
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => f.slice(0, -3))
+    .sort()
+  const probe = sanitizerProbe(["-fsanitize=fuzzer,address,undefined"])
+  for (const target of targets) {
+    const name = `fuzz: ${target} builds and replays its corpus and regressions without a crash`
+    if (probe?.skip !== undefined) {
+      skip(`${name} (${probe.skip})`)
+      continue
+    }
+    const corpus = path.join(root, "tests", "fuzz", "corpus", target)
+    const seeds = fs.existsSync(corpus) ? fs.readdirSync(corpus).length : 0
+    const r =
+      probe === null
+        ? spawnSync("bash", ["scripts/fuzz.sh", "--replay", target], {
+            cwd: root,
+            encoding: "utf8",
+            env: { ...process.env, NISH, FUZZ_OUT: path.join(buildDir, "fuzz") },
+            maxBuffer: 1 << 26,
+          })
+        : { status: 1, stdout: "", stderr: probe.error }
+    check(name, r.status === 0 && seeds > 0, seeds === 0 ? `no seed corpus in ${corpus}` : `${r.stdout}${r.stderr}`.slice(-4000))
+  }
 }
 
 if (!only) {
@@ -18032,9 +18660,9 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     `stdout:\n${help.stdout}\nstderr:\n${noInputs.stderr}`
   )
   // Every flag the driver accepts is listed, by one of its spellings, bar
-  // --help itself, the test hook `--range-reference`, the refused `--nsw` and
-  // the default `--strict-exports`: a wrapper that reads --help to learn the
-  // surface must not be missing one.
+  // --help itself, the test hooks `--range-reference` and `--no-elision`, the
+  // refused `--nsw` and the default `--strict-exports`: a wrapper that reads
+  // --help to learn the surface must not be missing one.
   const documented = [
     "--output",
     "-g",
@@ -18080,6 +18708,11 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     `--help lists every advertised flag (${documented.length} checked)`,
     undocumented.length === 0,
     `missing from --help: ${undocumented.join(", ")}`
+  )
+  check(
+    "--help leaves the test hooks out",
+    !listed("--range-reference") && !listed("--no-elision"),
+    help.stdout
   )
   check(
     "--help into a pipe: no escape codes",
@@ -19763,6 +20396,481 @@ if (!only || "runtime-cache".includes(only)) {
   }
 }
 
+// ---- SQLite: the vendored amalgamation, linked when the IR calls it --------------------
+// scripts/build.sh compiles runtime/sqlite/*.c for a link whose IR declares an
+// `sqlite3_*` or `nishsqlite_*` function, and `--link` and `nish run` cache
+// those objects in an entry of their own beside the runtime's (src/compile.ts
+// `cachedRuntime`). The `CC` wrapper logs every `.c` the compiler is handed, so
+// "compiled" and "reused" are read off what reached it.
+if (!only || "sqlite-link".includes(only)) {
+  if (!HAS_CLANG) {
+    skip("sqlite-link: clang not on PATH, so nothing can be linked")
+  } else {
+    const sqDir = path.join(buildDir, "sqlite-link")
+    fs.rmSync(sqDir, { recursive: true, force: true })
+    const tools = path.join(sqDir, "tools")
+    fs.mkdirSync(tools, { recursive: true })
+    const ccLog = path.join(sqDir, "cc.log")
+    fs.writeFileSync(
+      path.join(tools, "cc-log"),
+      `#!/bin/sh\nfor a in "$@"; do case "$a" in *.c) echo "$a" >> '${ccLog}' ;; esac; done\nexec clang "$@"\n`,
+      { mode: 0o755 }
+    )
+    const compiledC = () => {
+      const seen = fs.existsSync(ccLog)
+        ? fs
+            .readFileSync(ccLog, "utf8")
+            .split("\n")
+            .filter((l) => l.length > 0)
+            .map((l) => path.basename(l))
+            .sort()
+        : []
+      fs.rmSync(ccLog, { force: true })
+      return seen
+    }
+    const cacheRoot = path.join(sqDir, "cache", "nish", "runtime")
+    const entries = () => (fs.existsSync(cacheRoot) ? fs.readdirSync(cacheRoot).sort() : [])
+    // The entries that hold SQLite's objects rather than the runtime's.
+    const sqliteEntries = () => entries().filter((e) => fs.existsSync(path.join(cacheRoot, e, "sqlite3.o")))
+    const env = (extra = {}) => ({
+      ...process.env,
+      XDG_CACHE_HOME: path.join(sqDir, "cache"),
+      CC: "cc-log",
+      PATH: `${tools}:${process.env.PATH}`,
+      ...extra,
+    })
+    const link = (source, out, flags = [], extra = {}) =>
+      spawnSync(NISH, [source, "--link", path.join(sqDir, out), "--profile", "debug", ...flags], {
+        cwd: root,
+        encoding: "utf8",
+        env: env(extra),
+      })
+    const runOut = (out) => spawnSync(path.join(sqDir, out), [], { encoding: "utf8" })
+    // Every runtime unit but the wasm subset, which a native link never compiles.
+    const runtimeUnits = fs
+      .readdirSync(path.join(root, "runtime"))
+      .filter((f) => f.endsWith(".c") && f !== "runtime-wasm.c").length
+    const program = "tests/link/sqlite_link/main.ts"
+
+    const first = link(program, "first")
+    const firstC = compiledC()
+    const sq = sqliteEntries()
+    const sqEntry = sq.length === 1 ? path.join(cacheRoot, sq[0]) : ""
+    check(
+      "sqlite-link: the first link of a program that calls SQLite compiles the runtime and sqlite3.c once each",
+      first.status === 0 &&
+        runOut("first").stdout === "3.54.1 3054001 0\n" &&
+        firstC.length === runtimeUnits + 1 &&
+        firstC.filter((c) => c === "sqlite3.c").length === 1,
+      first.stderr + firstC.join(", ")
+    )
+    check(
+      "sqlite-link: SQLite's objects are an entry of their own, named by 64 hex digits, holding sqlite3.o and the key alone",
+      entries().length === 2 &&
+        sqEntry.length > 0 &&
+        /^[0-9a-f]{64}$/.test(sq[0]) &&
+        fs.readdirSync(sqEntry).sort().join(",") === "key,sqlite3.o",
+      entries().join(", ") + (sqEntry.length > 0 ? ` / ${fs.readdirSync(sqEntry).join(", ")}` : "")
+    )
+    // The cache holds what runtime/sqlite/ holds: `sqliteUnits`
+    // (src/run-cache.ts) reads the directory, so a unit added there compiles,
+    // lands in the entry and is linked.
+    const vendored = fs
+      .readdirSync(path.join(root, "runtime", "sqlite"))
+      .filter((f) => f.endsWith(".c"))
+      .map((f) => f.replace(/\.c$/, ".o"))
+      .sort()
+    check(
+      "sqlite-link: the SQLite entry holds one object for every runtime/sqlite/*.c",
+      sqEntry.length > 0 &&
+        fs
+          .readdirSync(sqEntry)
+          .filter((f) => f !== "key")
+          .sort()
+          .join(",") === vendored.join(","),
+      vendored.join(", ")
+    )
+
+    // What ships of runtime/sqlite/: its units, its headers and its notice.
+    // The README's SHA3-256 lines name the two vendored files' bytes, and each
+    // of release.yml's presence gates names every shipped file.
+    const sqliteSrc = path.join(root, "runtime", "sqlite")
+    const shippedSqlite = fs
+      .readdirSync(sqliteSrc)
+      .filter((f) => /\.[ch]$|^LICENSE/.test(f))
+      .map((f) => `runtime/sqlite/${f}`)
+    const readme = fs.readFileSync(path.join(sqliteSrc, "README.md"), "utf8")
+    const hashes = ["sqlite3.c", "sqlite3.h"].map((f) => [
+      f,
+      crypto.createHash("sha3-256").update(fs.readFileSync(path.join(sqliteSrc, f))).digest("hex"),
+    ])
+    const unrecorded = hashes.filter(([f, h]) => !new RegExp(`SHA3-256 of \`${f.replace(".", "\\.")}\`.*${h}`).test(readme))
+    check(
+      "sqlite-link: runtime/sqlite/README.md records the SHA3-256 of sqlite3.c and sqlite3.h as they are",
+      unrecorded.length === 0,
+      unrecorded.map(([f, h]) => `${f}: ${h}`).join("\n")
+    )
+    const gates = fs
+      .readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
+      .split("\n")
+      .filter((l) => /^\s*for f in \S+ /.test(l))
+    const ungated = gates.flatMap((line) =>
+      shippedSqlite.filter((f) => !line.split(/\s+/).includes(f)).map((f) => `${f} in: ${line.trim().slice(0, 80)}`)
+    )
+    check(
+      `sqlite-link: each of release.yml's ${gates.length} presence gates names every shipped file of runtime/sqlite/ (${shippedSqlite.join(", ")})`,
+      gates.length === 3 && shippedSqlite.length >= 3 && ungated.length === 0,
+      gates.length !== 3 ? `expected 3 gates, found ${gates.length}` : ungated.join("\n")
+    )
+
+    const second = link(program, "second")
+    check(
+      "sqlite-link: a second link of it compiles no C and adds no entry",
+      second.status === 0 &&
+        runOut("second").stdout === "3.54.1 3054001 0\n" &&
+        compiledC().length === 0 &&
+        entries().length === 2,
+      second.stderr
+    )
+
+    // A program that does not call SQLite compiles none of it and links none
+    // of it: its debug binary, which keeps its symbol table, names no
+    // `sqlite3_` function.
+    const hello = link("examples/hello.ts", "hello")
+    const helloBytes = fs.existsSync(path.join(sqDir, "hello")) ? fs.readFileSync(path.join(sqDir, "hello")) : null
+    check(
+      "sqlite-link: a program that does not call SQLite compiles no C, adds no entry and links no SQLite symbol",
+      hello.status === 0 &&
+        runOut("hello").stdout === "hello from Nish\n" &&
+        compiledC().length === 0 &&
+        entries().length === 2 &&
+        helloBytes !== null &&
+        !helloBytes.includes("sqlite3_"),
+      hello.stderr
+    )
+    // A string that names a SQLite function is not a call to one.
+    const named = path.join(sqDir, "named.ts")
+    fs.writeFileSync(
+      named,
+      'declare function puts(s: string): i32;\n\nexport const main = (): i32 => {\n  puts("@sqlite3_open");\n  return 0;\n};\n'
+    )
+    const namedLink = link(named, "named")
+    check(
+      "sqlite-link: a string constant that names `@sqlite3_open` does not link SQLite",
+      namedLink.status === 0 && runOut("named").stdout === "@sqlite3_open\n" && compiledC().length === 0,
+      namedLink.stderr
+    )
+    const namedAdapter = path.join(sqDir, "named-adapter.ts")
+    fs.writeFileSync(
+      namedAdapter,
+      'declare function puts(s: string): i32;\n\nexport const main = (): i32 => {\n  puts("@nishsqlite_open");\n  return 0;\n};\n'
+    )
+    const namedAdapterLink = link(namedAdapter, "named-adapter")
+    check(
+      "sqlite-link: a string constant that names `@nishsqlite_open` does not link SQLite",
+      namedAdapterLink.status === 0 &&
+        runOut("named-adapter").stdout === "@nishsqlite_open\n" &&
+        compiledC().length === 0,
+      namedAdapterLink.stderr
+    )
+
+    // NISH_SQLITE_CFLAGS is in the key, and a -D in it for a default replaces it.
+    const flagged = link(program, "flagged", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_THREADSAFE=1" })
+    check(
+      "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles sqlite3.c alone again, into a new entry, and replaces the default",
+      flagged.status === 0 &&
+        runOut("flagged").stdout === "3.54.1 3054001 1\n" &&
+        compiledC().join(",") === "sqlite3.c" &&
+        sqliteEntries().length === 2 &&
+        entries().length === 3,
+      flagged.stderr
+    )
+
+    // `nish run` caches the linked program by a key that holds SQLite's
+    // sources and flags when the program calls SQLite.
+    const run = (extra = {}) =>
+      spawnSync(NISH, ["run", program], { cwd: root, encoding: "utf8", env: env(extra) })
+    const ran = run()
+    const ranC = compiledC()
+    const again = run()
+    check(
+      "sqlite-link: `nish run` of it prints what the link prints and reuses the cached SQLite objects",
+      ran.status === 0 && ran.stdout === "3.54.1 3054001 0\n" && ranC.length === 0,
+      ran.stderr + ranC.join(", ")
+    )
+    check(
+      "sqlite-link: a second `nish run` of it compiles no C",
+      again.status === 0 && again.stdout === "3.54.1 3054001 0\n" && compiledC().length === 0,
+      again.stderr
+    )
+    const ranFlagged = run({ NISH_SQLITE_CFLAGS: "-DSQLITE_THREADSAFE=1" })
+    check(
+      "sqlite-link: `nish run` under a different NISH_SQLITE_CFLAGS links again rather than run the program cached for the default",
+      ranFlagged.status === 0 && ranFlagged.stdout === "3.54.1 3054001 1\n",
+      ranFlagged.stderr
+    )
+
+    // build.sh by itself: the IR of the program, linked without the cache.
+    const irDir = path.join(sqDir, "ir")
+    const emitted = spawnSync(NISH, ["-o", `${irDir}/`, program], { cwd: root, encoding: "utf8" })
+    const lls = emitted.status === 0 ? fs.readdirSync(irDir).map((f) => path.join(irDir, f)) : []
+    const buildSh = (args, extra = {}) =>
+      spawnSync("bash", [path.join(root, "scripts", "build.sh"), ...args], {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, ...extra },
+      })
+    const runtimeC = path.join(root, "runtime", "runtime.c")
+    const wasm = buildSh([...lls, "-o", path.join(sqDir, "refused.wasm"), "--profile", "wasm"])
+    check(
+      "sqlite-link: the wasm profile refuses a module that calls SQLite with exit 2, naming wasi",
+      lls.length === 2 && wasm.status === 2 && wasm.stderr.includes("calls SQLite") && wasm.stderr.includes("wasi"),
+      emitted.stderr + wasm.stderr
+    )
+    // A tree with the script and the runtime but no runtime/sqlite/: a program
+    // that does not call SQLite links as before, and one that does is refused.
+    const bare = path.join(sqDir, "bare")
+    fs.mkdirSync(path.join(bare, "scripts"), { recursive: true })
+    fs.mkdirSync(path.join(bare, "runtime"), { recursive: true })
+    fs.copyFileSync(path.join(root, "scripts", "build.sh"), path.join(bare, "scripts", "build.sh"))
+    for (const file of fs.readdirSync(path.join(root, "runtime"))) {
+      if (/\.(c|h)$/.test(file)) {
+        fs.copyFileSync(path.join(root, "runtime", file), path.join(bare, "runtime", file))
+      }
+    }
+    const helloIr = path.join(sqDir, "hello-ir")
+    const helloEmitted = spawnSync(NISH, ["-o", `${helloIr}/`, "examples/hello.ts"], { cwd: root, encoding: "utf8" })
+    const helloLls = helloEmitted.status === 0 ? fs.readdirSync(helloIr).map((f) => path.join(helloIr, f)) : []
+    const bareSh = (args) =>
+      spawnSync("bash", [path.join(bare, "scripts", "build.sh"), ...args, path.join(bare, "runtime", "runtime.c")], {
+        cwd: root,
+        encoding: "utf8",
+      })
+    const bareHello = bareSh([...helloLls, "-o", path.join(sqDir, "bare-hello")])
+    const bareHelloRan = bareHello.status === 0 ? spawnSync(path.join(sqDir, "bare-hello"), [], { encoding: "utf8" }) : null
+    check(
+      "sqlite-link: without runtime/sqlite/, build.sh still links a program that does not call SQLite",
+      helloLls.length > 0 && bareHelloRan !== null && bareHelloRan.stdout === "hello from Nish\n",
+      helloEmitted.stderr + bareHello.stderr
+    )
+    const bareSqlite = bareSh([...lls, "-o", path.join(sqDir, "bare-sqlite")])
+    check(
+      "sqlite-link: without runtime/sqlite/, build.sh refuses a program that calls SQLite with exit 2",
+      lls.length === 2 && bareSqlite.status === 2 && bareSqlite.stderr.includes("runtime/sqlite/ is not there"),
+      bareSqlite.stderr
+    )
+    const missing = buildSh([
+      ...lls,
+      runtimeC,
+      "--sqlite-from",
+      path.join(sqDir, "empty"),
+      "-o",
+      path.join(sqDir, "missing"),
+    ])
+    check(
+      "sqlite-link: build.sh --sqlite-from a directory without sqlite3.o fails with exit 2, naming the object",
+      missing.status === 2 && missing.stderr.includes("sqlite3.o is missing"),
+      missing.stderr
+    )
+    const objects = path.join(sqDir, "objects")
+    const compiled = buildSh(["--sqlite-objects", objects])
+    const fromObjects = buildSh([...lls, runtimeC, "--sqlite-from", objects, "-o", path.join(sqDir, "from")])
+    check(
+      "sqlite-link: build.sh --sqlite-objects compiles sqlite3.o alone, printing nothing, and --sqlite-from links it",
+      compiled.status === 0 &&
+        compiled.stdout === "" &&
+        fs.readdirSync(objects).join(",") === "sqlite3.o" &&
+        fromObjects.status === 0 &&
+        runOut("from").stdout === "3.54.1 3054001 0\n",
+      compiled.stderr + fromObjects.stderr
+    )
+    for (const [what, args, says] of [
+      ["an input", [runtimeC, "--sqlite-objects", objects], "alone"],
+      ["--runtime-objects", ["--sqlite-objects", objects, "--runtime-objects", objects], "alone"],
+      ["--sqlite-from", ["--sqlite-objects", objects, "--sqlite-from", objects], "two different builds"],
+      ["--profile wasm", ["--sqlite-objects", objects, "--profile", "wasm"], "debug, speed and size"],
+      ["--profile wasi", ["--sqlite-objects", objects, "--profile", "wasi"], "debug, speed and size"],
+      ["--profile napi", ["--sqlite-objects", objects, "--profile", "napi"], "debug, speed and size"],
+      ["--pgo-generate", ["--sqlite-objects", objects, "--profile", "speed", "--pgo-generate"], "--pgo-*"],
+    ]) {
+      const r = buildSh(args)
+      check(
+        `sqlite-link: build.sh --sqlite-objects refuses ${what} with exit 2`,
+        r.status === 2 && r.stderr.includes(says),
+        r.stderr
+      )
+    }
+
+    // `--help` prints the script's whole header comment, so the lines that
+    // document the SQLite flags, at its end, are in it.
+    const help = buildSh(["--help"])
+    check(
+      "sqlite-link: build.sh --help prints its header comment to the end, the --sqlite-from lines included",
+      help.status === 0 &&
+        help.stdout.includes("#   --sqlite-from <dir>") &&
+        help.stdout.includes("# All four refuse the wasm, wasi and napi profiles and --pgo-*, with exit 2.\n") &&
+        !help.stdout.includes("set -euo pipefail"),
+      help.stdout.slice(-400)
+    )
+
+    // A unit and a header added to runtime/sqlite/, in a copied package so the
+    // checkout's directory is never edited: each changes the SQLite entry's key,
+    // the new object lands in the new entry, and a cached link still runs. The
+    // program linked after the unit calls it, so the unit's object is linked
+    // from the entry (build.sh's `--sqlite-from` loop), not only compiled.
+    const sqCopy = path.join(sqDir, "package")
+    fs.mkdirSync(path.join(sqCopy, "bin"), { recursive: true })
+    fs.copyFileSync(NISH, path.join(sqCopy, "bin", "nish"))
+    fs.chmodSync(path.join(sqCopy, "bin", "nish"), 0o755)
+    for (const dir of ["scripts", "runtime", "std"]) {
+      fs.cpSync(path.join(root, dir), path.join(sqCopy, dir), { recursive: true })
+    }
+    const linkSqCopy = (out, source = program) =>
+      spawnSync(path.join(sqCopy, "bin", "nish"), [source, "--link", path.join(sqDir, out), "--profile", "debug"], {
+        cwd: root,
+        encoding: "utf8",
+        env: env(),
+      })
+    const callsUnit = path.join(sqDir, "calls-unit.ts")
+    fs.writeFileSync(
+      callsUnit,
+      [
+        "declare function sqlite3_libversion(): string;",
+        "declare function throwaway_unit(): i32;",
+        "",
+        "export const main = (): i32 => {",
+        "  console.log(`${sqlite3_libversion()} ${throwaway_unit()}`);",
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const copyBase = linkSqCopy("copy-base")
+    compiledC()
+    const baseEntries = sqliteEntries()
+    fs.writeFileSync(
+      path.join(sqCopy, "runtime", "sqlite", "nish_throwaway.h"),
+      "int throwaway_unit(void);\n"
+    )
+    const withHeader = linkSqCopy("copy-header")
+    const headerC = compiledC()
+    const headerEntries = sqliteEntries().filter((e) => !baseEntries.includes(e))
+    check(
+      "sqlite-link: a header added to runtime/sqlite/ changes the SQLite entry's key, and the link recompiles SQLite into a new entry",
+      copyBase.status === 0 &&
+        withHeader.status === 0 &&
+        runOut("copy-header").stdout === "3.54.1 3054001 0\n" &&
+        headerC.join(",") === "sqlite3.c" &&
+        headerEntries.length === 1,
+      `${copyBase.stderr}${withHeader.stderr}compiled: ${headerC.join(", ")}; new entries: ${headerEntries.join(", ")}`
+    )
+    fs.writeFileSync(
+      path.join(sqCopy, "runtime", "sqlite", "nish_throwaway.c"),
+      '#include "nish_throwaway.h"\n\nint throwaway_unit(void) { return 7; }\n'
+    )
+    const withUnit = linkSqCopy("copy-unit", callsUnit)
+    const unitC = compiledC()
+    const unitEntries = sqliteEntries().filter((e) => !baseEntries.includes(e) && !headerEntries.includes(e))
+    const unitEntry = unitEntries.length === 1 ? path.join(cacheRoot, unitEntries[0]) : ""
+    const reused = linkSqCopy("copy-unit-again", callsUnit)
+    const reusedC = compiledC()
+    check(
+      "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside sqlite3.o, links into a program that calls it, and a second link reuses it",
+      withUnit.status === 0 &&
+        runOut("copy-unit").stdout === "3.54.1 7\n" &&
+        unitC.join(",") === "nish_throwaway.c,sqlite3.c" &&
+        unitEntry.length > 0 &&
+        fs.readdirSync(unitEntry).sort().join(",") === "key,nish_throwaway.o,sqlite3.o" &&
+        reused.status === 0 &&
+        runOut("copy-unit-again").stdout === "3.54.1 7\n" &&
+        reusedC.length === 0 &&
+        sqliteEntries().length === baseEntries.length + 2,
+      `${withUnit.stderr}${reused.stderr}compiled: ${unitC.join(", ")}, then ${reusedC.join(", ")}; new entries: ${unitEntries.join(", ")}` +
+        (unitEntry.length > 0 ? ` / ${fs.readdirSync(unitEntry).join(", ")}` : "")
+    )
+
+    // The second prefix alone triggers the link: the program declares only an
+    // adapter-style `nishsqlite_` function, defined in a unit added to the
+    // copy's runtime/sqlite/, which answers SQLite's version number.
+    fs.writeFileSync(
+      path.join(sqCopy, "runtime", "sqlite", "nishsqlite_probe.c"),
+      '#include "sqlite3.h"\n\nint nishsqlite_probe(void) { return sqlite3_libversion_number(); }\n'
+    )
+    const callsAdapter = path.join(sqDir, "calls-adapter.ts")
+    fs.writeFileSync(
+      callsAdapter,
+      [
+        "declare function nishsqlite_probe(): i32;",
+        "",
+        "export const main = (): i32 => {",
+        "  console.log(`${nishsqlite_probe()}`);",
+        "  return 0;",
+        "};",
+        "",
+      ].join("\n")
+    )
+    const adapterLink = linkSqCopy("copy-adapter", callsAdapter)
+    const adapterC = compiledC()
+    check(
+      "sqlite-link: a module whose only SQLite declaration is a `nishsqlite_` function links runtime/sqlite/ in",
+      adapterLink.status === 0 &&
+        runOut("copy-adapter").stdout === "3054001\n" &&
+        adapterC.includes("nishsqlite_probe.c") &&
+        adapterC.includes("sqlite3.c"),
+      `${adapterLink.stderr}compiled: ${adapterC.join(", ")}`
+    )
+
+    // A Node addon links SQLite too, and keeps its API to itself: a Node that
+    // links a system libsqlite3 exports the same names.
+    const nodeInclude =
+      process.env.NODE_INCLUDE || path.join(path.dirname(process.execPath), "..", "include", "node")
+    if (!fs.existsSync(path.join(nodeInclude, "node_api.h"))) {
+      skip(`sqlite-link: Node headers not found (${path.join(nodeInclude, "node_api.h")}): the addon is not built`)
+    } else {
+      const addonTs = path.join(sqDir, "addon.ts")
+      fs.writeFileSync(
+        addonTs,
+        "declare function sqlite3_libversion_number(): i32;\n\nexport const sqliteVersion = (): i32 => sqlite3_libversion_number();\n"
+      )
+      const addonLl = path.join(sqDir, "addon.ll")
+      const shim = path.join(sqDir, "addon.napi.c")
+      const addon = path.join(sqDir, "addon.node")
+      const e = spawnSync(NISH, [addonTs, "-o", addonLl, "--emit-napi", shim], { cwd: root, encoding: "utf8" })
+      const b =
+        e.status === 0
+          ? buildSh([addonLl, runtimeC, shim, "-o", addon, "--profile", "napi"])
+          : { status: -1, stderr: e.stderr }
+      const loaded =
+        b.status === 0
+          ? spawnSync(
+              "node",
+              [
+                "-e",
+                `const a = require(${JSON.stringify(addon)}); console.log(a.sqliteVersion(), Object.keys(a).join(","))`,
+              ],
+              { encoding: "utf8" }
+            )
+          : null
+      check(
+        "sqlite-link: a napi addon whose module calls SQLite links it and answers from Node",
+        loaded !== null && loaded.status === 0 && loaded.stdout.startsWith("3054001 "),
+        b.stderr + (loaded ? loaded.stdout + loaded.stderr : "")
+      )
+      const nm = ["llvm-nm", "llvm-nm-18"].find(has)
+      if (nm === undefined) {
+        skip("sqlite-link: no llvm-nm on PATH, so the addon's dynamic symbols are not read")
+      } else {
+        const dynamic = spawnSync(nm, ["-D", addon], { encoding: "utf8" })
+        check(
+          "sqlite-link: the napi addon exports no `sqlite3_` symbol",
+          b.status === 0 && dynamic.status === 0 && !dynamic.stdout.includes("sqlite3_"),
+          b.stderr + dynamic.stderr + dynamic.stdout.slice(0, 2000)
+        )
+      }
+    }
+  }
+}
+
 // ---- WP38 S2: the CPU level ---------------------------------------------------------
 // `--cpu x86-64-v3` (docs/LANGUAGE.md, "The CPU level") compiles the module and
 // the runtime for one level above the baseline, and nothing else: every other
@@ -20545,6 +21653,13 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-cross.c",
       // And the ninth: stdin and the terminal of `nish:term`.
       "runtime/runtime-term.c",
+      // The vendored SQLite, which build.sh compiles for a program that calls
+      // it, and the notice that names its dedication to the public domain.
+      // Read from the directory, so a unit added there is held to shipping too.
+      ...fs
+        .readdirSync(path.join(root, "runtime", "sqlite"))
+        .filter((f) => /\.[ch]$|^LICENSE/.test(f))
+        .map((f) => `runtime/sqlite/${f}`),
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

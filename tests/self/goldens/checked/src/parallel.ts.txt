@@ -389,7 +389,7 @@ function sharedWriteMessage(program: CheckedProgram, table: TypeTable, sig: Func
   pointer table: size=96 writesThrough=false captured=false passedTo=serialRemedy#1
   pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0 parallelRoleOf#0 intrinsicName#0
   pointer fn: size=136 writesThrough=false captured=false passedTo=positionIn#0
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 FactsTable.get#0
   pointer call: size=40 writesThrough=false captured=false passedTo=serialRemedy#3
   stackSites=0 stackLocals=0
   local +0:9 own: FunctionFacts | null (const)
@@ -418,7 +418,7 @@ function arenaMessage(sig: FunctionSig, fn: FunctionSig, facts: FactsTable): str
   calls: FactsTable.get intrinsicName nish_str_concat
   pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0
   pointer fn: size=136 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=0 stackLocals=0
   local +0:9 own: FunctionFacts | null (const)
   callee +0:37 FactsTable.get -> @FactsTable.get
@@ -431,7 +431,7 @@ function escapeMessage(program: CheckedProgram, table: TypeTable, sig: FunctionS
   pointer table: size=96 writesThrough=false captured=false passedTo=serialRemedy#1
   pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0 intrinsicName#0
   pointer fn: size=136 writesThrough=false captured=false passedTo=positionIn#0
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer call: size=40 writesThrough=false captured=false passedTo=serialRemedy#3
   stackSites=0 stackLocals=0
   local +0:9 own: FunctionFacts | null (const)
@@ -454,7 +454,7 @@ function allocationWarning(table: TypeTable, sig: FunctionSig, fn: FunctionSig, 
   pointer table: size=96 writesThrough=false captured=false passedTo=crossesByCopy#0 TypeTable.typeName#0
   pointer sig: size=136 writesThrough=false captured=false passedTo=intrinsicName#0
   pointer fn: size=136 writesThrough=false captured=false
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   stackSites=0 stackLocals=0
   local +0:9 own: FunctionFacts | null (const)
   callee +0:37 FactsTable.get -> @FactsTable.get
@@ -1669,7 +1669,7 @@ function scopeFindings(programs: CheckedProgram[], program: CheckedProgram, tabl
   pointer programs: size=0 writesThrough=false captured=false passedTo=threadsLoaded#0 scopeSymbol#0
   pointer program: size=656 writesThrough=true captured=false passedTo=isThreadsModule#0 checkFieldTypes#0 CheckedProgram.enterInstance#0 walkScopes#0 checkBody#0 walkMutexes#0 findGuardBlocks#0 checkChannels#0 CheckedProgram.leaveInstance#0
   pointer table: size=96 writesThrough=false captured=false passedTo=TypeTable.structOf#0 checkFieldTypes#1 walkScopes#3 checkBody#1 walkMutexes#1 checkChannels#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=checkBody#2 findGuardBlocks#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=checkBody#2 findGuardBlocks#1
   pointer summaries: size=40 writesThrough=true captured=true passedTo=HeldContext.constructor#3 checkChannels#2
   stackSites=3 stackLocals=2
   local +0:9 out: ScopeFinding[] (const)
@@ -1987,7 +1987,7 @@ function regionCallMessage(program: CheckedProgram, table: TypeTable, facts: Fac
   calls: RegionState.isDestination VariableUses.isPrivate isArrayWriteMethod isAtomicMethod isSpawnEntry namedLocal nish_panic_index nish_str_concat nish_str_eq regionReadMessage regionWriteMessage resultMethodName sharedWriteBuiltin unwrapParens writesThroughMessage
   pointer program: size=656 writesThrough=false captured=false passedTo=sharedWriteBuiltin#0 resultMethodName#0 namedLocal#0 namedLocal#0 writesThroughMessage#0
   pointer table: size=96 writesThrough=false captured=false passedTo=resultMethodName#1 writesThroughMessage#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=writesThroughMessage#2
+  pointer facts: size=24 writesThrough=false captured=false passedTo=writesThroughMessage#2
   pointer node: size=40 writesThrough=false captured=false passedTo=sharedWriteBuiltin#1 resultMethodName#2 writesThroughMessage#3
   pointer state: size=48 writesThrough=false captured=false passedTo=regionWriteMessage#0 regionWriteMessage#0 RegionState.isDestination#0 regionReadMessage#0 regionWriteMessage#0 regionWriteMessage#0 writesThroughMessage#5
   pointer uses: size=48 writesThrough=false captured=false passedTo=sharedWriteBuiltin#2 VariableUses.isPrivate#0
@@ -2018,7 +2018,7 @@ function writesThroughMessage(program: CheckedProgram, table: TypeTable, facts: 
   calls: FactsTable.get isChannelParam lockCallName nish_str_eq regionWriteMessage
   pointer program: size=656 writesThrough=false captured=false passedTo=isChannelParam#0
   pointer table: size=96 writesThrough=false captured=false passedTo=isChannelParam#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0
   pointer node: size=40 writesThrough=false captured=false passedTo=lockCallName#0 lockCallName#0
   pointer sig: size=136 writesThrough=false captured=false passedTo=lockCallName#1 isChannelParam#2 lockCallName#1
   pointer state: size=48 writesThrough=false captured=false passedTo=regionWriteMessage#0 regionWriteMessage#0
@@ -2058,7 +2058,7 @@ function walkRegion(program: CheckedProgram, table: TypeTable, facts: FactsTable
   calls: RegionState.addDestination RegionState.isDestination RegionState.live RegionState.owns ScopeFinding.constructor collectDestinations isAssignmentOperator isMemoryTarget isPrivateSlot namedLocal nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_eq regionCallMessage regionCaptureReads regionLockMessageFor regionReadMessage regionWriteMessage spawnCallee spawnDestination spawnReceiver unwrapParens walkOpenOf walkRegion writesThroughMessage
   pointer program: size=656 writesThrough=false captured=false passedTo=regionCaptureReads#0 collectDestinations#0 spawnCallee#0 spawnReceiver#0 walkRegion#0 spawnDestination#0 regionLockMessageFor#0 walkRegion#0 isPrivateSlot#0 isPrivateSlot#0 namedLocal#0 namedLocal#0 walkOpenOf#0 walkOpenOf#0 writesThroughMessage#0 regionCallMessage#0 writesThroughMessage#0 regionCaptureReads#0 walkRegion#0
   pointer table: size=96 writesThrough=false captured=false passedTo=walkRegion#1 regionLockMessageFor#1 walkRegion#1 writesThroughMessage#1 regionCallMessage#1 writesThroughMessage#1 walkRegion#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=walkRegion#2 regionLockMessageFor#2 walkRegion#2 writesThroughMessage#2 regionCallMessage#2 writesThroughMessage#2 walkRegion#2
+  pointer facts: size=24 writesThrough=false captured=false passedTo=walkRegion#2 regionLockMessageFor#2 walkRegion#2 writesThroughMessage#2 regionCallMessage#2 writesThroughMessage#2 walkRegion#2
   pointer uses: size=48 writesThrough=false captured=false passedTo=walkRegion#3 walkRegion#3 isPrivateSlot#2 isPrivateSlot#2 regionCallMessage#5 walkRegion#3
   pointer node: size=40 writesThrough=true captured=true passedTo=regionCaptureReads#1 collectDestinations#1 spawnCallee#1 spawnReceiver#1 spawnDestination#1 regionLockMessageFor#3 ScopeFinding.constructor#1 walkOpenOf#1 walkOpenOf#1 writesThroughMessage#3 regionCallMessage#3 writesThroughMessage#3 ScopeFinding.constructor#1
   pointer state: size=48 writesThrough=true captured=false passedTo=RegionState.live#0 regionCaptureReads#2 collectDestinations#2 RegionState.owns#0 walkRegion#5 RegionState.addDestination#0 regionLockMessageFor#4 RegionState.live#0 walkRegion#5 regionWriteMessage#0 regionWriteMessage#0 RegionState.isDestination#0 regionReadMessage#0 RegionState.isDestination#0 regionReadMessage#0 writesThroughMessage#5 regionCallMessage#4 writesThroughMessage#5 regionCaptureReads#2 walkRegion#5
@@ -2148,7 +2148,7 @@ function findRegions(program: CheckedProgram, table: TypeTable, facts: FactsTabl
   calls: RegionState.constructor checkSiblingScopes collectTaskArgs findRegions holdsSpawnOn nish_array_grow nish_panic_index walkRegion
   pointer program: size=656 writesThrough=false captured=false passedTo=collectTaskArgs#0 holdsSpawnOn#0 walkRegion#0 checkSiblingScopes#0 findRegions#0
   pointer table: size=96 writesThrough=false captured=false passedTo=walkRegion#1 checkSiblingScopes#1 findRegions#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=walkRegion#2 checkSiblingScopes#2 findRegions#2
+  pointer facts: size=24 writesThrough=false captured=false passedTo=walkRegion#2 checkSiblingScopes#2 findRegions#2
   pointer uses: size=48 writesThrough=false captured=false passedTo=walkRegion#3 checkSiblingScopes#3 findRegions#3
   pointer node: size=40 writesThrough=false captured=false passedTo=checkSiblingScopes#4
   pointer out: size=0 writesThrough=true captured=false passedTo=walkRegion#6 checkSiblingScopes#7 findRegions#6
@@ -2178,7 +2178,7 @@ function checkSiblingScopes(program: CheckedProgram, table: TypeTable, facts: Fa
   calls: ScopeFinding.constructor collectSiblingSpawns nish_alloc_struct nish_array_grow nish_panic_overflow siblingShareMessage siblingsShare
   pointer program: size=656 writesThrough=false captured=false passedTo=collectSiblingSpawns#0 siblingShareMessage#0
   pointer table: size=96 writesThrough=false captured=false passedTo=collectSiblingSpawns#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=collectSiblingSpawns#2
+  pointer facts: size=24 writesThrough=false captured=false passedTo=collectSiblingSpawns#2
   pointer uses: size=48 writesThrough=false captured=false passedTo=collectSiblingSpawns#3
   pointer block: size=40 writesThrough=false captured=false
   pointer locals: size=0 writesThrough=false captured=false passedTo=collectSiblingSpawns#5
@@ -2221,7 +2221,7 @@ function collectSiblingSpawns(program: CheckedProgram, table: TypeTable, facts: 
   calls: CaptureSlot.type SiblingSpawn.constructor StringSet.constructor capturesOf collectSiblingSpawns namedLocal nish_alloc_struct nish_array_grow nish_panic_index reachesAtomic siblingReaches sourceLocal spawnCallee spawnDestination spawnReceiver takesLock taskArgTypeOf
   pointer program: size=656 writesThrough=false captured=false passedTo=spawnCallee#0 spawnReceiver#0 spawnDestination#0 namedLocal#0 siblingReaches#0 siblingReaches#0 collectSiblingSpawns#0
   pointer table: size=96 writesThrough=false captured=false passedTo=siblingReaches#1 siblingReaches#1 collectSiblingSpawns#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=takesLock#0 reachesAtomic#0 collectSiblingSpawns#2
+  pointer facts: size=24 writesThrough=false captured=false passedTo=takesLock#0 reachesAtomic#0 collectSiblingSpawns#2
   pointer uses: size=48 writesThrough=false captured=false passedTo=siblingReaches#2 siblingReaches#2 collectSiblingSpawns#3
   pointer node: size=40 writesThrough=true captured=true passedTo=spawnCallee#1 spawnReceiver#1 SiblingSpawn.constructor#1 spawnDestination#1
   pointer locals: size=0 writesThrough=false captured=false passedTo=collectSiblingSpawns#5
@@ -2350,7 +2350,7 @@ function checkBody(program: CheckedProgram, table: TypeTable, facts: FactsTable,
   calls: VariableUses.constructor checkDestinations collectUses findRegions
   pointer program: size=656 writesThrough=false captured=false passedTo=collectUses#0 checkDestinations#0 findRegions#0
   pointer table: size=96 writesThrough=false captured=false passedTo=findRegions#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=findRegions#2
+  pointer facts: size=24 writesThrough=false captured=false passedTo=findRegions#2
   pointer body: size=40 writesThrough=false captured=false passedTo=collectUses#1 checkDestinations#1 findRegions#4
   pointer out: size=0 writesThrough=true captured=false passedTo=checkDestinations#3 findRegions#6
   stackSites=1 stackLocals=1
@@ -2737,7 +2737,7 @@ function reachesWait(facts: FactsTable, name: string, locksOnly: boolean, scopeN
   sharedWrite: via StringSet.add
   escaping: locksOnly name scopeName
   calls: FactsTable.get StringSet.add StringSet.at StringSet.size isWaitSymbol reachesWait
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 reachesWait#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 reachesWait#0
   pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 reachesWait#4
   stackSites=0 stackLocals=0
   callee +0:7 isWaitSymbol -> @isWaitSymbol
@@ -2753,7 +2753,7 @@ function reachesAtomic(facts: FactsTable, name: string, seen: StringSet): boolea
   sharedWrite: via StringSet.add
   escaping: name
   calls: FactsTable.get StringSet.add StringSet.at StringSet.size reachesAtomic
-  pointer facts: size=16 writesThrough=false captured=false passedTo=FactsTable.get#0 reachesAtomic#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=FactsTable.get#0 reachesAtomic#0
   pointer seen: size=8 writesThrough=false captured=false passedTo=StringSet.add#0 reachesAtomic#2
   stackSites=0 stackLocals=0
   callee +0:8 StringSet.add -> @StringSet.add
@@ -2767,7 +2767,7 @@ function takesLock(facts: FactsTable, fn: FunctionSig): boolean -> @takesLock
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via reachesWait
   calls: StringSet.constructor reachesWait
-  pointer facts: size=16 writesThrough=false captured=false passedTo=reachesWait#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=reachesWait#0
   pointer fn: size=136 writesThrough=false captured=false
   stackSites=1 stackLocals=0
   callee +0:3 reachesWait -> @reachesWait
@@ -2781,7 +2781,7 @@ function bodyLockMessageFor(program: CheckedProgram, table: TypeTable, node: Nod
   pointer node: size=40 writesThrough=false captured=false passedTo=bodyLockRemedy#3
   pointer sig: size=136 writesThrough=false captured=false passedTo=bodyLockMessage#0 bodyLockRemedy#2
   pointer fn: size=136 writesThrough=false captured=false passedTo=takesLock#1 bodyLockMessage#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=takesLock#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=takesLock#0
   stackSites=0 stackLocals=0
   callee +0:15 takesLock -> @takesLock
   callee +0:38 bodyLockMessage -> @bodyLockMessage
@@ -3054,7 +3054,7 @@ function heldWhat(program: CheckedProgram, facts: FactsTable, node: Node, scopeT
   escaping: scopeName scopeType
   calls: StringSet.constructor intrinsicName isLockCall isParallelEntry isScopeCall isSpawnEntry lockCallName nish_panic_index nish_str_concat reachesWait
   pointer program: size=656 writesThrough=false captured=false passedTo=isLockCall#0 isScopeCall#0
-  pointer facts: size=16 writesThrough=false captured=false passedTo=reachesWait#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=reachesWait#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isLockCall#1 isScopeCall#1 lockCallName#0
   stackSites=1 stackLocals=0
   callee +0:7 isLockCall -> @isLockCall
@@ -3078,7 +3078,7 @@ function walkHeld(program: CheckedProgram, facts: FactsTable, node: Node, name: 
   escaping: lock name
   calls: ScopeFinding.constructor guardHeldMessage guardReceiveMessage heldWhat nish_alloc_struct nish_array_grow oneLine receiveWhat walkHeld
   pointer program: size=656 writesThrough=false captured=false passedTo=receiveWhat#0 heldWhat#0 oneLine#0 walkHeld#0
-  pointer facts: size=16 writesThrough=false captured=false passedTo=heldWhat#1 walkHeld#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=heldWhat#1 walkHeld#1
   pointer node: size=40 writesThrough=true captured=true passedTo=receiveWhat#2 ScopeFinding.constructor#1 heldWhat#2 ScopeFinding.constructor#1 oneLine#1
   pointer held: size=24 writesThrough=false captured=false passedTo=walkHeld#5
   pointer out: size=0 writesThrough=true captured=false passedTo=walkHeld#6
@@ -3099,7 +3099,7 @@ function findGuardBlocks(program: CheckedProgram, facts: FactsTable, node: Node,
   sharedWrite: via walkHeld
   calls: findGuardBlocks isLockCall nish_panic_index nish_str_concat shownSource unwrapParens walkHeld
   pointer program: size=656 writesThrough=false captured=false passedTo=isLockCall#0 shownSource#0 walkHeld#0 walkHeld#0 findGuardBlocks#0
-  pointer facts: size=16 writesThrough=false captured=false passedTo=walkHeld#1 walkHeld#1 findGuardBlocks#1
+  pointer facts: size=24 writesThrough=false captured=false passedTo=walkHeld#1 walkHeld#1 findGuardBlocks#1
   pointer node: size=40 writesThrough=false captured=false
   pointer held: size=24 writesThrough=false captured=false passedTo=walkHeld#5 walkHeld#5 findGuardBlocks#3
   pointer out: size=0 writesThrough=true captured=false passedTo=walkHeld#6 walkHeld#6 findGuardBlocks#4
@@ -3125,7 +3125,7 @@ function regionLockMessageFor(program: CheckedProgram, table: TypeTable, facts: 
   calls: StringSet.constructor isLockMethod lockCallName mutexPath nish_panic_index oneLine regionAtomicMessageFor regionLockMessage takesLock unwrapParens
   pointer program: size=656 writesThrough=false captured=false passedTo=regionAtomicMessageFor#0 mutexPath#1 oneLine#0 regionAtomicMessageFor#0
   pointer table: size=96 writesThrough=false captured=false passedTo=regionAtomicMessageFor#1 mutexPath#0 regionAtomicMessageFor#1
-  pointer facts: size=16 writesThrough=false captured=false passedTo=takesLock#0 regionAtomicMessageFor#2 regionAtomicMessageFor#2
+  pointer facts: size=24 writesThrough=false captured=false passedTo=takesLock#0 regionAtomicMessageFor#2 regionAtomicMessageFor#2
   pointer node: size=40 writesThrough=false captured=false passedTo=lockCallName#0 regionAtomicMessageFor#3 oneLine#1 regionAtomicMessageFor#3
   pointer state: size=48 writesThrough=false captured=false passedTo=regionAtomicMessageFor#5 regionLockMessage#0 regionAtomicMessageFor#5
   stackSites=1 stackLocals=0
@@ -3150,7 +3150,7 @@ function regionAtomicMessageFor(program: CheckedProgram, table: TypeTable, facts
   calls: StringSet.constructor heldPath isAtomicMethod lockCallName nish_panic_index nish_str_concat oneLine reachesAtomic regionAtomicMessage unwrapParens
   pointer program: size=656 writesThrough=false captured=false passedTo=heldPath#1 oneLine#0
   pointer table: size=96 writesThrough=false captured=false passedTo=heldPath#0
-  pointer facts: size=16 writesThrough=false captured=false passedTo=reachesAtomic#0
+  pointer facts: size=24 writesThrough=false captured=false passedTo=reachesAtomic#0
   pointer node: size=40 writesThrough=false captured=false passedTo=lockCallName#0 oneLine#1
   pointer callee: size=136 writesThrough=false captured=false passedTo=lockCallName#1 isAtomicMethod#0
   pointer state: size=48 writesThrough=false captured=false passedTo=regionAtomicMessage#0

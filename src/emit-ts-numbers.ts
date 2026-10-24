@@ -11,7 +11,9 @@
 // - Answer the node's whole text otherwise. `operands.at(i)` is child `i` as
 //   it will be written, so a rewrite composes with the rows below it.
 // - A rewrite that calls a `nish/runtime` export asks for it with
-//   `walk.useHelper(name)`; the driver writes the import line.
+//   `walk.helperName(name)` and writes the name it answers, which is
+//   `__nish_<name>` where the module spells `name` itself; the driver writes
+//   the import line.
 // - Read types through `walk.program`: inside a generic body the composer has
 //   installed one instance's tables, and it holds every instance to the same
 //   answer.
@@ -51,6 +53,7 @@
 // line has no semicolon.
 
 import { Operands, Walk } from "./emit-ts-edits"
+import { elementArguments, idxArguments } from "./emit-ts-records"
 import { isAssignmentOperator } from "./emit-util"
 import {
   FLAG_POSTFIX,
@@ -106,7 +109,8 @@ export const numbersRow = (walk: Walk, node: Node, operands: Operands): string |
     return typedConstant(walk, node, operands)
   }
   if (kind === N_NEW) {
-    return arrayLength(walk, node, operands)
+    arrayLength(walk, node, operands)
+    return null
   }
   return null
 }
@@ -172,10 +176,7 @@ const wrapTo = (type: i32, expr: string): string => {
 }
 
 /** A helper call, importing the helper. */
-const helper = (walk: Walk, name: string, args: string): string => {
-  walk.useHelper(name)
-  return `${name}(${args})`
-}
+const helper = (walk: Walk, name: string, args: string): string => `${walk.helperName(name)}(${args})`
 
 /** An integer literal at i64 or u64 is a `bigint`. */
 const wideLiteral = (walk: Walk, node: Node): string | null => {
@@ -366,6 +367,17 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
     if (!repeatable(target) || (operands.changed[0] && !rewrittenTarget(target, name))) {
       walk.refuse(node, COMPOUND_REFUSAL)
       return null
+    }
+    // An element target stores through `setIdx`, which checks the index again
+    // after the right side ran, as the right side can shrink the array. The
+    // records row writes one whose index is unproven as `idx(a, i)`, which is
+    // no target; a proven one keeps its plain read.
+    if (target.kind === N_INDEX && !walk.program.uncheckedIndexing) {
+      const args =
+        operands.changed[0] && idxArguments(name) !== "" ? idxArguments(name) : elementArguments(name)
+      if (args !== "") {
+        return `${walk.helperName("setIdx")}(${args}, ${value})`
+      }
     }
     return `${name} = ${value}`
   }
@@ -608,8 +620,7 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   if (replacement.length === 0) {
     return null
   }
-  walk.useHelper(replacement)
-  return `${replacement}${between(walk, callee.end, args.start)}${operands.at(1)}${between(walk, args.end, node.end)}`
+  return `${walk.helperName(replacement)}${between(walk, callee.end, args.start)}${operands.at(1)}${between(walk, args.end, node.end)}`
 }
 
 /**
@@ -640,8 +651,7 @@ const indexArguments = (walk: Walk, node: Node, operands: Operands, first: i32):
     return
   }
   if (operands.changed[1]) {
-    walk.useHelper("offsets")
-    operands.texts[1] = `...offsets(${first}, [${operands.at(1)}])`
+    operands.texts[1] = `...${walk.helperName("offsets")}(${first}, [${operands.at(1)}])`
   } else {
     operands.texts[1] = wrappedFrom(walk, args, first, args.start, args.end)
   }
@@ -668,22 +678,21 @@ const wrappedFrom = (walk: Walk, args: Node, i: i32, from: i32, end: i32): strin
 /**
  * `new Array<T>(n)` at an i64 or u64 length, which JavaScript would take as a
  * one-element array holding the `bigint`: the length goes through `Number`.
+ * Only the argument is rewritten and the `new` left to the later rows, so the
+ * records row builds its zero-filled `newArray` from the converted length.
  */
-const arrayLength = (walk: Walk, node: Node, operands: Operands): string | null => {
+const arrayLength = (walk: Walk, node: Node, operands: Operands): void => {
   if (node.children.length !== 3 || node.children[0].kind !== N_IDENT || node.children[0].text !== "Array") {
-    return null
+    return
   }
   const args = node.children[2]
-  if (
-    operands.changed[0] ||
-    operands.changed[1] ||
-    args.children.length !== 1 ||
-    !isBig(typeOf(walk, args.children[0]))
-  ) {
-    return null
+  if (args.children.length !== 1 || !isBig(typeOf(walk, args.children[0]))) {
+    return
   }
   // One argument: the list's text is that argument's, rewritten or not.
-  return `${between(walk, node.start, args.start)}Number(${operands.at(2)})${between(walk, args.end, node.end)}`
+  operands.texts[2] = `Number(${operands.at(2)})`
+  operands.changed[2] = true
+  operands.any = true
 }
 
 /**
