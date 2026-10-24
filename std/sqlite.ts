@@ -42,25 +42,28 @@
  * capability's view.
  */
 
-// biome-ignore-all lint/style/useNamingConvention: the declarations name C symbols, and scripts/build.sh links SQLite when the IR names one
-declare function nish_sqlite_open(path: string, flags: i32): i32
-declare function nish_sqlite_open_errmsg(): string
-declare function nish_sqlite_close(h: i32): i32
-declare function nish_sqlite_exec(h: i32, sql: string): i32
-declare function nish_sqlite_errmsg(h: i32): string
-declare function nish_sqlite_last_insert_rowid(h: i32): i64
-declare function nish_sqlite_changes(h: i32): i64
-declare function nish_sqlite_prepare(h: i32, sql: string): i32
-declare function nish_sqlite_stmt_errmsg(h: i32): string
-declare function nish_sqlite_finalize(h: i32): i32
-declare function nish_sqlite_step(h: i32): i32
-declare function nish_sqlite_reset(h: i32): i32
-declare function nish_sqlite_clear_bindings(h: i32): i32
-declare function nish_sqlite_bind_i64(h: i32, i: i32, v: i64): i32
-declare function nish_sqlite_bind_f64(h: i32, i: i32, v: f64): i32
-declare function nish_sqlite_bind_null(h: i32, i: i32): i32
-declare function nish_sqlite_bind_text(h: i32, i: i32, text: string): i32
-declare function nish_sqlite_bind_bytes(
+// biome-ignore-all lint/style/useNamingConvention: the declarations name C symbols
+// The adapters are `nishsqlite_`, not `nish_sqlite_`: `nish_` names are the
+// runtime's (NL2202). scripts/build.sh links SQLite for a module that declares
+// an `sqlite3_` function: `sqlite3_errstr` and `sqlite3_libversion` below.
+declare function nishsqlite_open(path: string, flags: i32): i32
+declare function nishsqlite_open_errmsg(): string
+declare function nishsqlite_close(h: i32): i32
+declare function nishsqlite_exec(h: i32, sql: string): i32
+declare function nishsqlite_errmsg(h: i32): string
+declare function nishsqlite_last_insert_rowid(h: i32): i64
+declare function nishsqlite_changes(h: i32): i64
+declare function nishsqlite_prepare(h: i32, sql: string): i32
+declare function nishsqlite_stmt_errmsg(h: i32): string
+declare function nishsqlite_finalize(h: i32): i32
+declare function nishsqlite_step(h: i32): i32
+declare function nishsqlite_reset(h: i32): i32
+declare function nishsqlite_clear_bindings(h: i32): i32
+declare function nishsqlite_bind_i64(h: i32, i: i32, v: i64): i32
+declare function nishsqlite_bind_f64(h: i32, i: i32, v: f64): i32
+declare function nishsqlite_bind_null(h: i32, i: i32): i32
+declare function nishsqlite_bind_text(h: i32, i: i32, text: string): i32
+declare function nishsqlite_bind_bytes(
   h: i32,
   i: i32,
   buf: readonly u8[],
@@ -69,13 +72,13 @@ declare function nish_sqlite_bind_bytes(
   len: i32,
   blob: i32
 ): i32
-declare function nish_sqlite_column_count(h: i32): i32
-declare function nish_sqlite_column_type(h: i32, c: i32): i32
-declare function nish_sqlite_column_i64(h: i32, c: i32): i64
-declare function nish_sqlite_column_f64(h: i32, c: i32): f64
-declare function nish_sqlite_column_bytes(h: i32, c: i32): i32
-declare function nish_sqlite_column_text(h: i32, c: i32): string | null
-declare function nish_sqlite_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
+declare function nishsqlite_column_count(h: i32): i32
+declare function nishsqlite_column_type(h: i32, c: i32): i32
+declare function nishsqlite_column_i64(h: i32, c: i32): i64
+declare function nishsqlite_column_f64(h: i32, c: i32): f64
+declare function nishsqlite_column_bytes(h: i32, c: i32): i32
+declare function nishsqlite_column_text(h: i32, c: i32): string | null
+declare function nishsqlite_column_into(h: i32, c: i32, buf: u8[], n: u64, at: i32): i32
 declare function sqlite3_errstr(code: i32): string
 declare function sqlite3_libversion(): string
 
@@ -196,9 +199,9 @@ const messageFor = (code: i32, connection: string): string => {
  * connection.
  */
 export const openDatabase = (path: string, flags: i32): Result<Database, SqliteError> => {
-  const h: i32 = nish_sqlite_open(path, flags)
+  const h: i32 = nishsqlite_open(path, flags)
   if (h < 0) {
-    return Err(new SqliteError(-h, nish_sqlite_open_errmsg()))
+    return Err(new SqliteError(-h, nishsqlite_open_errmsg()))
   }
   return Ok(new Database(h))
 }
@@ -214,7 +217,7 @@ export class Database {
 
   /** Runs every statement of `sql` in turn, discarding any rows. */
   exec(sql: string): Result<void, i32> {
-    return done(nish_sqlite_exec(this.handle, sql))
+    return done(nishsqlite_exec(this.handle, sql))
   }
 
   /** `exec("BEGIN")`. */
@@ -238,7 +241,7 @@ export class Database {
    * `SQLITE_MISUSE`.
    */
   prepare(sql: string): Result<Statement, SqliteError> {
-    const s: i32 = nish_sqlite_prepare(this.handle, sql)
+    const s: i32 = nishsqlite_prepare(this.handle, sql)
     if (s < 0) {
       return Err(this.error(-s))
     }
@@ -247,22 +250,22 @@ export class Database {
 
   /** The error for `code`, which this connection's last call answered. Ask before the next call. */
   error(code: i32): SqliteError {
-    return new SqliteError(code, messageFor(code, nish_sqlite_errmsg(this.handle)))
+    return new SqliteError(code, messageFor(code, nishsqlite_errmsg(this.handle)))
   }
 
   /** The rowid of the last row an INSERT on this connection made, 0 before any. */
   lastInsertRowid(): i64 {
-    return nish_sqlite_last_insert_rowid(this.handle)
+    return nishsqlite_last_insert_rowid(this.handle)
   }
 
   /** The rows the last INSERT, UPDATE or DELETE changed. */
   changes(): i64 {
-    return nish_sqlite_changes(this.handle)
+    return nishsqlite_changes(this.handle)
   }
 
   /** Finalizes every statement of this connection and closes it; the handles name nothing after. */
   close(): Result<void, i32> {
-    return done(nish_sqlite_close(this.handle))
+    return done(nishsqlite_close(this.handle))
   }
 }
 
@@ -283,42 +286,42 @@ export class Statement {
 
   /** Binds an integer to parameter `i`. */
   bindI64(i: i32, v: i64): Result<void, i32> {
-    return done(nish_sqlite_bind_i64(this.handle, i, v))
+    return done(nishsqlite_bind_i64(this.handle, i, v))
   }
 
   /** Binds a floating-point value to parameter `i`. */
   bindF64(i: i32, v: f64): Result<void, i32> {
-    return done(nish_sqlite_bind_f64(this.handle, i, v))
+    return done(nishsqlite_bind_f64(this.handle, i, v))
   }
 
   /** Binds SQL NULL to parameter `i`. */
   bindNull(i: i32): Result<void, i32> {
-    return done(nish_sqlite_bind_null(this.handle, i))
+    return done(nishsqlite_bind_null(this.handle, i))
   }
 
   /** Binds `text` to parameter `i`; SQLite copies it. */
   bindText(i: i32, text: string): Result<void, i32> {
-    return done(nish_sqlite_bind_text(this.handle, i, text))
+    return done(nishsqlite_bind_text(this.handle, i, text))
   }
 
   /** Binds `buf[off, off + len)` as text, copied; a window outside `buf` is `SQLITE_MISUSE`. */
   bindTextBytes(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32> {
-    return done(nish_sqlite_bind_bytes(this.handle, i, buf, toU64(buf.length), off, len, 0))
+    return done(nishsqlite_bind_bytes(this.handle, i, buf, toU64(buf.length), off, len, 0))
   }
 
   /** Binds `buf[off, off + len)` as a blob, copied; a window outside `buf` is `SQLITE_MISUSE`. */
   bindBlob(i: i32, buf: readonly u8[], off: i32, len: i32): Result<void, i32> {
-    return done(nish_sqlite_bind_bytes(this.handle, i, buf, toU64(buf.length), off, len, 1))
+    return done(nishsqlite_bind_bytes(this.handle, i, buf, toU64(buf.length), off, len, 1))
   }
 
   /** Clears every parameter back to NULL. */
   clearBindings(): Result<void, i32> {
-    return done(nish_sqlite_clear_bindings(this.handle))
+    return done(nishsqlite_clear_bindings(this.handle))
   }
 
   /** Runs the statement to its next row: `true` with a row to read, `false` when it has finished. */
   step(): Result<boolean, i32> {
-    const rc: i32 = nish_sqlite_step(this.handle)
+    const rc: i32 = nishsqlite_step(this.handle)
     if (rc === SQLITE_ROW) {
       return Ok(true)
     }
@@ -330,42 +333,42 @@ export class Statement {
 
   /** Rewinds the statement to run again, keeping its bindings. */
   reset(): Result<void, i32> {
-    return done(nish_sqlite_reset(this.handle))
+    return done(nishsqlite_reset(this.handle))
   }
 
   /** Frees the statement; its handle names nothing after. */
   finalize(): Result<void, i32> {
-    return done(nish_sqlite_finalize(this.handle))
+    return done(nishsqlite_finalize(this.handle))
   }
 
   /** The number of columns a row has. */
   columnCount(): i32 {
-    return nish_sqlite_column_count(this.handle)
+    return nishsqlite_column_count(this.handle)
   }
 
   /** The type of column `c` in this row, `SQLITE_INTEGER` to `SQLITE_NULL`; `SQLITE_NULL` for a column that is not there. */
   columnType(c: i32): i32 {
-    return nish_sqlite_column_type(this.handle, c)
+    return nishsqlite_column_type(this.handle, c)
   }
 
   /** Column `c` as an integer, converted as SQLite converts; 0 for NULL or a column that is not there. */
   columnI64(c: i32): i64 {
-    return nish_sqlite_column_i64(this.handle, c)
+    return nishsqlite_column_i64(this.handle, c)
   }
 
   /** Column `c` as a floating-point value; 0 for NULL or a column that is not there. */
   columnF64(c: i32): f64 {
-    return nish_sqlite_column_f64(this.handle, c)
+    return nishsqlite_column_f64(this.handle, c)
   }
 
   /** The bytes `columnInto` would copy for column `c`. */
   columnBytes(c: i32): i32 {
-    return nish_sqlite_column_bytes(this.handle, c)
+    return nishsqlite_column_bytes(this.handle, c)
   }
 
   /** Column `c` as a new string; `null` for NULL or a column that is not there. Allocates. */
   columnText(c: i32): string | null {
-    return nish_sqlite_column_text(this.handle, c)
+    return nishsqlite_column_text(this.handle, c)
   }
 
   /**
@@ -376,7 +379,7 @@ export class Statement {
    * there, `SQLITE_MISUSE` for an `at` outside `0..buf.length`.
    */
   columnInto(c: i32, buf: u8[], at: i32): Result<i32, i32> {
-    const n: i32 = nish_sqlite_column_into(this.handle, c, buf, toU64(buf.length), at)
+    const n: i32 = nishsqlite_column_into(this.handle, c, buf, toU64(buf.length), at)
     if (n < 0) {
       return Err(-n)
     }
@@ -385,6 +388,6 @@ export class Statement {
 
   /** The error for `code`, which this statement's last call answered. Ask before the next call. */
   error(code: i32): SqliteError {
-    return new SqliteError(code, messageFor(code, nish_sqlite_stmt_errmsg(this.handle)))
+    return new SqliteError(code, messageFor(code, nishsqlite_stmt_errmsg(this.handle)))
   }
 }

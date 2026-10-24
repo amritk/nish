@@ -1,0 +1,98 @@
+PASS  version
+PASS  open: CREATE alone is MISUSE
+PASS  open: its message
+PASS  open: a missing directory is CANTOPEN
+PASS  open: its message
+PASS  open: READONLY
+PASS  close: READONLY
+PASS  exec: CREATE
+PASS  exec: a syntax error is ERROR
+PASS  exec: its message
+PASS  begin
+PASS  exec: INSERT
+PASS  lastInsertRowid
+PASS  changes
+PASS  commit
+PASS  commit: none open is ERROR
+PASS  begin again
+PASS  exec: INSERT to roll back
+PASS  rollback
+PASS  rollback: none open is ERROR
+PASS  prepare: no statement is MISUSE
+PASS  prepare: an unknown column is ERROR
+PASS  prepare: its message
+PASS  bindText
+PASS  bindF64
+PASS  bindBlob
+PASS  bindI64
+PASS  step: INSERT is done
+PASS  reset
+PASS  bindTextBytes
+PASS  bindNull
+PASS  bindBlob: empty is a blob, not NULL
+PASS  bindI64 again
+PASS  step: second INSERT
+PASS  reset again
+PASS  step: a duplicate key is CONSTRAINT
+PASS  step: extended CONSTRAINT_PRIMARYKEY
+PASS  step: its message
+PASS  reset after a failed step
+PASS  clearBindings
+PASS  bindI64: index 5 of 4 is RANGE
+PASS  bindBlob: a window past the end is MISUSE
+PASS  bindTextBytes: a negative offset is MISUSE
+PASS  bindText: index 0 is RANGE
+PASS  bindF64: index 0 is RANGE
+PASS  bindNull: index 0 is RANGE
+PASS  finalize
+PASS  finalize: twice is MISUSE
+PASS  bindI64: after finalize is MISUSE
+PASS  step: after finalize is MISUSE
+PASS  reset: after finalize is MISUSE
+PASS  clearBindings: after finalize is MISUSE
+PASS  error: after finalize
+PASS  columnCount
+PASS  step: the rows end in DONE
+PASS  step: three rows
+PASS  columnI64: the ids
+PASS  reset: to read again
+PASS  step: the first row
+PASS  columnType: INTEGER
+PASS  columnType: TEXT
+PASS  columnType: FLOAT
+PASS  columnType: NULL
+PASS  columnType: past the end is NULL
+PASS  columnF64
+PASS  columnF64: past the end is 0
+PASS  columnI64: past the end is 0
+PASS  columnBytes
+PASS  columnBytes: NULL is 0
+PASS  columnText
+PASS  columnText: NULL is null
+PASS  columnInto: text
+PASS  columnInto: the bytes
+PASS  columnInto: too little room answers the length
+PASS  columnInto: and writes nothing
+PASS  columnInto: past the end is RANGE
+PASS  columnInto: an offset past the buffer is MISUSE
+PASS  step: the second row
+PASS  columnType: BLOB
+PASS  columnInto: blob
+PASS  columnInto: blob byte 0
+PASS  columnInto: blob byte 1
+PASS  step: the third row
+PASS  columnText: the bytes bound as text
+PASS  columnType: an empty blob is BLOB
+PASS  columnBytes: an empty blob
+PASS  columnInto: an empty blob at the end
+PASS  close: with a statement open
+PASS  close: twice is MISUSE
+PASS  columnCount: after close is 0
+PASS  step: a statement closed with its database is MISUSE
+PASS  finalize: after close is MISUSE
+PASS  exec: after close is MISUSE
+PASS  prepare: after close is MISUSE
+PASS  error: after close
+PASS  lastInsertRowid: after close is 0
+PASS  changes: after close is 0
+std_sqlite: 97 passed, 0 failed, 0 skipped

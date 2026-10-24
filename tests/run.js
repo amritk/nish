@@ -19396,7 +19396,7 @@ if (!only || "runtime-cache".includes(only)) {
 
 // ---- SQLite: the vendored amalgamation, linked when the IR calls it --------------------
 // scripts/build.sh compiles runtime/sqlite/*.c for a link whose IR declares an
-// `sqlite3_*` or `nish_sqlite_*` function, and `--link` and `nish run` cache
+// `sqlite3_*` function (`nish/sqlite` declares two), and `--link` and `nish run` cache
 // those objects in an entry of their own beside the runtime's (src/compile.ts
 // `cachedRuntime`). The `CC` wrapper logs every `.c` the compiler is handed, so
 // "compiled" and "reused" are read off what reached it.
@@ -19449,35 +19449,35 @@ if (!only || "sqlite-link".includes(only)) {
       .readdirSync(path.join(root, "runtime"))
       .filter((f) => f.endsWith(".c") && f !== "runtime-wasm.c").length
     const program = "tests/link/sqlite_link/main.ts"
+    // The units of runtime/sqlite/: the amalgamation and the `nish/sqlite`
+    // adapter. `sqliteUnits` (src/run-cache.ts) reads the directory, so a unit
+    // added there compiles, lands in the entry and is linked.
+    const sqliteC = fs
+      .readdirSync(path.join(root, "runtime", "sqlite"))
+      .filter((f) => f.endsWith(".c"))
+      .sort()
+    const vendored = sqliteC.map((f) => f.replace(/\.c$/, ".o"))
 
     const first = link(program, "first")
     const firstC = compiledC()
     const sq = sqliteEntries()
     const sqEntry = sq.length === 1 ? path.join(cacheRoot, sq[0]) : ""
     check(
-      "sqlite-link: the first link of a program that calls SQLite compiles the runtime and sqlite3.c once each",
+      "sqlite-link: the first link of a program that calls SQLite compiles the runtime and runtime/sqlite/ once each",
       first.status === 0 &&
         runOut("first").stdout === "3.54.1 3054001 0\n" &&
-        firstC.length === runtimeUnits + 1 &&
-        firstC.filter((c) => c === "sqlite3.c").length === 1,
+        firstC.length === runtimeUnits + sqliteC.length &&
+        sqliteC.every((u) => firstC.filter((c) => c === u).length === 1),
       first.stderr + firstC.join(", ")
     )
     check(
-      "sqlite-link: SQLite's objects are an entry of their own, named by 64 hex digits, holding sqlite3.o and the key alone",
+      "sqlite-link: SQLite's objects are an entry of their own, named by 64 hex digits, holding runtime/sqlite/'s objects and the key alone",
       entries().length === 2 &&
         sqEntry.length > 0 &&
         /^[0-9a-f]{64}$/.test(sq[0]) &&
-        fs.readdirSync(sqEntry).sort().join(",") === "key,sqlite3.o",
+        fs.readdirSync(sqEntry).sort().join(",") === ["key", ...vendored].join(","),
       entries().join(", ") + (sqEntry.length > 0 ? ` / ${fs.readdirSync(sqEntry).join(", ")}` : "")
     )
-    // The cache holds what runtime/sqlite/ holds: `sqliteUnits`
-    // (src/run-cache.ts) reads the directory, so a unit added there compiles,
-    // lands in the entry and is linked.
-    const vendored = fs
-      .readdirSync(path.join(root, "runtime", "sqlite"))
-      .filter((f) => f.endsWith(".c"))
-      .map((f) => f.replace(/\.c$/, ".o"))
-      .sort()
     check(
       "sqlite-link: the SQLite entry holds one object for every runtime/sqlite/*.c",
       sqEntry.length > 0 &&
@@ -19562,10 +19562,10 @@ if (!only || "sqlite-link".includes(only)) {
     // NISH_SQLITE_CFLAGS is in the key, and a -D in it for a default replaces it.
     const flagged = link(program, "flagged", [], { NISH_SQLITE_CFLAGS: "-DSQLITE_THREADSAFE=1" })
     check(
-      "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles sqlite3.c alone again, into a new entry, and replaces the default",
+      "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles runtime/sqlite/ alone again, into a new entry, and replaces the default",
       flagged.status === 0 &&
         runOut("flagged").stdout === "3.54.1 3054001 1\n" &&
-        compiledC().join(",") === "sqlite3.c" &&
+        compiledC().join(",") === sqliteC.join(",") &&
         sqliteEntries().length === 2 &&
         entries().length === 3,
       flagged.stderr
@@ -19653,18 +19653,18 @@ if (!only || "sqlite-link".includes(only)) {
       path.join(sqDir, "missing"),
     ])
     check(
-      "sqlite-link: build.sh --sqlite-from a directory without sqlite3.o fails with exit 2, naming the object",
-      missing.status === 2 && missing.stderr.includes("sqlite3.o is missing"),
+      "sqlite-link: build.sh --sqlite-from a directory without runtime/sqlite/'s objects fails with exit 2, naming one",
+      missing.status === 2 && vendored.some((o) => missing.stderr.includes(`${o} is missing`)),
       missing.stderr
     )
     const objects = path.join(sqDir, "objects")
     const compiled = buildSh(["--sqlite-objects", objects])
     const fromObjects = buildSh([...lls, runtimeC, "--sqlite-from", objects, "-o", path.join(sqDir, "from")])
     check(
-      "sqlite-link: build.sh --sqlite-objects compiles sqlite3.o alone, printing nothing, and --sqlite-from links it",
+      "sqlite-link: build.sh --sqlite-objects compiles runtime/sqlite/ alone, printing nothing, and --sqlite-from links it",
       compiled.status === 0 &&
         compiled.stdout === "" &&
-        fs.readdirSync(objects).join(",") === "sqlite3.o" &&
+        fs.readdirSync(objects).sort().join(",") === vendored.join(",") &&
         fromObjects.status === 0 &&
         runOut("from").stdout === "3.54.1 3054001 0\n",
       compiled.stderr + fromObjects.stderr
@@ -19745,7 +19745,7 @@ if (!only || "sqlite-link".includes(only)) {
       copyBase.status === 0 &&
         withHeader.status === 0 &&
         runOut("copy-header").stdout === "3.54.1 3054001 0\n" &&
-        headerC.join(",") === "sqlite3.c" &&
+        headerC.join(",") === sqliteC.join(",") &&
         headerEntries.length === 1,
       `${copyBase.stderr}${withHeader.stderr}compiled: ${headerC.join(", ")}; new entries: ${headerEntries.join(", ")}`
     )
@@ -19763,9 +19763,9 @@ if (!only || "sqlite-link".includes(only)) {
       "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside sqlite3.o, links into a program that calls it, and a second link reuses it",
       withUnit.status === 0 &&
         runOut("copy-unit").stdout === "3.54.1 7\n" &&
-        unitC.join(",") === "nish_throwaway.c,sqlite3.c" &&
+        unitC.join(",") === [...sqliteC, "nish_throwaway.c"].sort().join(",") &&
         unitEntry.length > 0 &&
-        fs.readdirSync(unitEntry).sort().join(",") === "key,nish_throwaway.o,sqlite3.o" &&
+        fs.readdirSync(unitEntry).sort().join(",") === ["key", ...vendored, "nish_throwaway.o"].sort().join(",") &&
         reused.status === 0 &&
         runOut("copy-unit-again").stdout === "3.54.1 7\n" &&
         reusedC.length === 0 &&
