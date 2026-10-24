@@ -274,7 +274,10 @@ jobs:
           # counted skips, "no WASI sysroot", and nothing here would notice a
           # runtime that stops building against wasi-libc, as runtime-os.c did
           # when it called a `realpath` wasi-libc does not have (#396).
-          pkgs="clang-18 lld-18 llvm-18 valgrind wasi-libc libclang-rt-18-dev-wasm32"
+          # libclang-rt-18-dev is the native sanitizer and libFuzzer runtimes
+          # the `runtime_sanitize` and `fuzz` sections link; without it they
+          # are counted skips.
+          pkgs="clang-18 lld-18 llvm-18 valgrind wasi-libc libclang-rt-18-dev-wasm32 libclang-rt-18-dev"
           for attempt in 1 2 3; do
             if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
               --download-only $pkgs; then
@@ -1132,6 +1135,79 @@ jobs:
               echo
             } >> "$GITHUB_STEP_SUMMARY"
           done
+
+  # Every fuzz target in tests/fuzz/targets/ built under
+  # -fsanitize=fuzzer,address,undefined, replayed over its seed corpus and
+  # regressions, then fuzzed for a minute from a fixed -seed, so a run is the
+  # same run on every push (tests/fuzz/README.md). Plus the runtime unit test
+  # under ASan and UBSan. Long campaigns are fuzz.yml's, weekly.
+  fuzz-smoke:
+    name: fuzz-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld + the sanitizer runtimes
+        timeout-minutes: 5
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 libclang-rt-18-dev
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        run: bash scripts/fetch-seed.sh
+
+      # build/nish: a target must be compiled with this checkout's std, which
+      # a compiler finds beside itself.
+      - name: Build the compiler
+        timeout-minutes: 10
+        run: npm run build
+
+      # Five targets at 60 seconds each, under ten minutes with the builds.
+      # A crash leaves its input in build/fuzz/artifacts/<target>/, uploaded
+      # below; `bash scripts/fuzz.sh --replay <target>` after copying it into
+      # tests/fuzz/regressions/<target>/ reproduces it.
+      - name: Fuzz smoke
+        timeout-minutes: 12
+        env:
+          FUZZ_SMOKE_SECONDS: "60"
+          FUZZ_SEED: "1"
+        run: bash scripts/fuzz.sh --smoke
+
+      # The step needs checks that passed and no SKIP line: a runner image
+      # without the sanitizer runtimes fails it rather than leaving it green.
+      - name: The runtime unit test under ASan and UBSan
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          node tests/run.js runtime_sanitize | tee "$RUNNER_TEMP/runtime-sanitize.log"
+          grep -E '^[1-9][0-9]* passed, 0 failed' "$RUNNER_TEMP/runtime-sanitize.log"
+          if grep -E '^SKIP  ' "$RUNNER_TEMP/runtime-sanitize.log"; then exit 1; fi
+
+      - name: Upload crash inputs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-smoke-artifacts
+          path: build/fuzz/artifacts/
+          if-no-files-found: ignore
 
   lint:
     name: lint

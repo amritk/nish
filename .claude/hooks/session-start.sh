@@ -34,7 +34,7 @@ if [ "$missing" -eq 1 ]; then
   # (clang-18, llc-18, ...), so expose the plain names through a private bin
   # dir ahead of /usr/bin, as CI does.
   sudo apt-get update -qq
-  sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18
+  sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 libclang-rt-18-dev
 
   bin="$HOME/.local/llvm-bin"
   mkdir -p "$bin"
@@ -45,6 +45,14 @@ if [ "$missing" -eq 1 ]; then
   if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
     echo "export PATH=\"$bin:\$PATH\"" >> "$CLAUDE_ENV_FILE"
   fi
+fi
+
+# The sanitizer and libFuzzer runtimes scripts/fuzz.sh and tests/run.js's
+# `runtime_sanitize` and `fuzz` sections link (tests/fuzz/README.md). An image
+# with clang but without them gets them here; non-fatal, as those sections
+# name the package in their skip.
+if ! clang -print-file-name=libclang_rt.fuzzer-"$(uname -m)".a 2>/dev/null | grep -q /; then
+  sudo apt-get install -y --no-install-recommends libclang-rt-18-dev || true
 fi
 
 # The seed: the last released compiler, in build/seed (scripts/fetch-seed.sh).
