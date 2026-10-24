@@ -1395,19 +1395,20 @@ The calls one query makes, on each side:
   sent with one `PQflush`, and each wakeup reads with one `PQconsumeInput`
   after `poll`, into libpq's input buffer (16 KiB to start).
 
-**Two deviations from the plain libpq loop.**
+**Three deviations from the plain libpq loop.**
 
 - **`PQsendPipelineSync`, not `PQpipelineSync`.** `PQpipelineSync` flushes the
   connection on every call, so a refill of 16 queries would be 16 `send`s
   where the Nish side makes one `netWrite`. The twin queues the sync with
-  `PQsendPipelineSync` (libpq 17) and flushes once per refill, so both sides
-  send once per refill. What each side's system calls then are is measured
-  below, not assumed.
+  `PQsendPipelineSync` (libpq 17) and flushes once per refill, so each side
+  writes a refill's queries together. How many refills a run makes, and the
+  system calls that follow, are measured below, not assumed.
 - **Nagle is off on both sockets.** libpq sets `TCP_NODELAY` on every TCP
   connection, and `nish:net`'s `tcpConnect` does not. `main.ts` sets it with
   `setsockopt` after the connect, so the kernel does the same work for both.
-  With Nagle on, the Nish side's CPU per `pk` query measured 41.6 % under the
-  twin's (below): a difference in the socket, not in the module.
+  With Nagle on, the Nish side's CPU per `pk` query measured 41.5 % under the
+  twin's (below), most likely from the socket rather than the module; that run
+  did not split user from system time.
   `tcpConnect`'s default is outside this benchmark; it is
   [#942](https://github.com/amritk/nish/issues/942).
 - **Plain TCP on both.** The twin sets `sslmode=disable` and
@@ -1472,8 +1473,11 @@ the counts are for comparing the sides, not for timing.
 | `list`, 1,000 | 990 / 1,923 / 1,924 | 989 / 1,022 / 1,024 | 4,534 / 8,895 |
 | `insert`, 2,000 | 2,007 / 2,006 / 2,007 | 2,008 / 2,007 / 2,009 | 27 / 32 |
 
-The two sides do not make the same system calls. Each sends once per refill,
-but the module's 8 KiB input buffer takes a `list` answer in about two reads
+The two sides do not make the same system calls. Each writes a refill's
+queries with one send, but a refill is whatever the last wakeup's answers
+freed, so the count of sends follows the wakeups: the module's `pk` sends were
+1,616 in one run and 705 in the other, and on `list`, where a wakeup most often
+completes one answer, both sides send about once a query. The module's 8 KiB input buffer takes a `list` answer in about two reads
 where libpq's 16 KiB buffer takes one, and on `pk` how many wakeups a run makes
 moves between runs on both sides. The twin's 32 `read`s, mostly the loader
 reading its shared libraries, come before the timed loop.
@@ -1495,9 +1499,7 @@ and its differences are within a few per cent.
   into it, where the module reads values in place from its receive buffer.
 - **`list`:** −13.69 µs (−11.98 µs for the copy), unexplained in part. Nish
   runs about 114,900 instructions per query and the twin about 129,600; of the
-  14,700 difference, libpq's RowDescription handling is about 2,180. About
-  60,000 of each side's instructions are the benchmark's own fold, the same
-  arithmetic on both sides. The user time is 14.70 µs against 23.63, a gap of
+  14,700 difference, libpq's RowDescription handling is about 2,180. The user time is 14.70 µs against 23.63, a gap of
   8.93 µs; at each side's own rate (0.13 ns an instruction for Nish, 0.18 for
   the twin) the 14,700-instruction gap is 1.9 to 2.7 µs of it, and the other
   6.3 to 7.0 µs are unexplained. The system time is 18.64 µs against 23.39, a
@@ -1513,7 +1515,8 @@ and its differences are within a few per cent.
   twin's 4,720; at each side's own rate (0.41 and 0.47 ns) the gap is 0.85 to
   0.98 µs of the 1.14 µs user gap. libpq sends 9 more bytes a query, the 7-byte
   Describe and 2 bytes in a Bind that names one result format where the
-  module's names none, and reads a 5-byte NoData.
+  module's names none, and reads a 5-byte NoData; with no columns to describe,
+  libpq's RowDescription handling counts about 0 instructions here.
 - **Callgrind** counts the client's instructions over a run of 16 queries and
   one of 1,016, against the same server, so the connect, SCRAM and the
   prepares cancel: per query = (instructions at 1,016 − instructions at 16) /
@@ -1553,8 +1556,9 @@ tried: the module reads results as text only, and a binary format would change
 its API.
 
 **Nagle.** Before `main.ts` turned Nagle off, its `pk` CPU was 4.97 µs median
-against the twin's 8.50 µs (−41.6 %, from the run's own medians). Nearly all of that difference was the
-kernel's work on fewer, larger segments, not the module.
+against the twin's 8.50 µs (−41.5 %, from the run's own medians). That run did
+not split user from system time, so the cause is not measured; most likely it
+was the kernel's work on fewer, larger segments rather than the module.
 
 ## YAML against @amritk/yaml
 
