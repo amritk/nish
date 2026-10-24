@@ -449,10 +449,25 @@ const capabilityListMask = (flag: string, list: string): i32 => {
   return mask
 }
 
+/** The words one guess away from `nish break`, which get a riddle rather than a missing file. */
+const nearMiss = (word: string): boolean =>
+  word === "brick" || word === "bricks" || word === "breakout" || word === "game" || word === "play"
+
 export const main = (): number => {
   if (process.argv.length < 2) {
     console.error(usageText(2))
     return 2
+  }
+  // `nish break` is left out of the help, the guide and `llms.txt` on
+  // purpose: it plays the brick breaker in `games/break/`, and the only
+  // pointers to it are the wall at the end of the help and the riddle below.
+  // It is `nish run` on that file, which the package ships, so the game is
+  // compiled when it is played and `src/` never imports `nish:term` (the
+  // rolling freeze). A file named `break` in the working directory wins.
+  const secret = process.argv.length === 2 && process.argv[1] === "break" && realpathSync("break") === null
+  if (process.argv.length === 2 && nearMiss(process.argv[1]) && realpathSync(process.argv[1]) === null) {
+    console.error(`no file named ${process.argv[1]}. every loop needs one, though.`)
+    return 1
   }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()
@@ -460,7 +475,7 @@ export const main = (): number => {
   // compiler's and everything after it is the program's, so a script is run by
   // the same line a shebang writes. The debug recipe is the default because a
   // script is relinked on every edit, and its link is the fast one.
-  const runMode = process.argv.length >= 2 && process.argv[1] === "run"
+  const runMode = secret || (process.argv.length >= 2 && process.argv[1] === "run")
   // The first flag seen that asks for a product — IR at a chosen path, a
   // binary, a sidecar or a dump — which neither `run` nor `--fix` writes, and
   // the first of the others `run` refuses (`--target`, `--fix`). Both are
@@ -748,6 +763,12 @@ export const main = (): number => {
       }
     }
     arg = arg + 1
+  }
+  if (secret) {
+    // A package that is not found or is refused leaves the name as it was
+    // typed, so the answer is the one any missing file gets.
+    const root = findPackage().root
+    roots.push(root.length > 0 ? `${root}/games/break/main.ts` : "break")
   }
   if (roots.length === 0) {
     console.error(usageText(2))

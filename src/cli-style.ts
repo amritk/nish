@@ -305,7 +305,33 @@ export const helpText = (style: Style, guide: string): string => {
   lines.push(helpRow(style, `${CLI} app.ts --link app`, "", "write app.ll and a binary, app"))
   lines.push(helpRow(style, `${CLI} --fix src/*.ts`, "", "rewrite what the compiler can fix"))
   lines.push(helpRow(style, `NO_COLOR=1 ${CLI} --help`, "", "this text, without colour"))
+  lines.push("")
+  lines.push(wall(style))
   return lines.join("\n")
+}
+
+/**
+ * The help's last line: a row of bricks with one knocked out, and a caption
+ * that names the command it hides. `nish break` is in no list above and in
+ * no guide page (`src/compile.ts`, `main`), so this line is the way in.
+ */
+const wall = (style: Style): string => {
+  const rich: string[] = [
+    "38;5;204",
+    "38;5;209",
+    "38;5;221",
+    "38;5;113",
+    "38;5;81",
+    "38;5;141",
+    "38;5;204",
+    "38;5;209",
+  ]
+  const basic: string[] = ["31", "33", "33", "32", "36", "34", "35", "31"]
+  const bricks: string[] = []
+  for (let i = 0; i < rich.length; i++) {
+    bricks.push(i === 5 ? "    " : style.paint("▀▀▀▀", rich[i], basic[i]))
+  }
+  return `  ${bricks.join(" ")}   ${style.dim("some walls are built to break")}`
 }
 
 /**
