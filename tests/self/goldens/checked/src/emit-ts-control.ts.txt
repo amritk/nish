@@ -165,15 +165,16 @@ function typeRef(walk: Walk, node: Node, operands: Operands): string | null -> @
   callee +9:21 Walk.spanOf -> @Walk.spanOf
 function arenaMember(walk: Walk, node: Node): string | null -> @arenaMember
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.helperName
-  calls: Walk.helperName arenaHelper nish_panic_index nish_str_eq
-  pointer walk: size=200 writesThrough=false captured=false passedTo=Walk.helperName#0
+  sharedWrite: via Walk.missType
+  calls: Walk.helperName Walk.missType arenaHelper nish_panic_index nish_str_eq
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.missType#0 Walk.helperName#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 receiver: Node (const)
-  local +8:9 helper: string | null (const)
-  callee +8:18 arenaHelper -> @arenaHelper
-  callee +9:35 Walk.helperName -> @Walk.helperName
+  callee +10:5 Walk.missType -> @Walk.missType
+  local +13:9 helper: string | null (const)
+  callee +13:18 arenaHelper -> @arenaHelper
+  callee +14:35 Walk.helperName -> @Walk.helperName
 function arenaHelper(member: string): string | null -> @arenaHelper
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq

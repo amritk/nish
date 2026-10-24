@@ -257,7 +257,7 @@ instead, and a warning (`portability:`, NL8012) names it and its line when it
 is the program's own; the standard library's are written without one. The
 fifth refusal (NL4014) is a generic of your own whose body fills
 `new Array<T>(n)` with `T`'s zero, or copies an element into an array slot in a
-module that keeps records inline: which code those need depends on a `T` no
+program that keeps records inline: which code those need depends on a `T` no
 call names, so it is refused rather than stubbed, even where a 64-bit integer
 or a builtin call in the same body would have made it a stub. Call it, or write a function per element type. The same
 body in the standard library is a stub, and the program is written.

@@ -251,6 +251,11 @@ const arenaMember = (walk: Walk, node: Node): string | null => {
   ) {
     return null
   }
+  // An untyped body binds no local, so an `Arena` of its own looks global.
+  if (walk.untyped) {
+    walk.missType()
+    return null
+  }
   const helper = arenaHelper(node.text)
   return helper === null ? null : walk.helperName(helper)
 }
