@@ -15,6 +15,11 @@ only the guide your task touches; the rules there are authoritative:
 | work in `std/crypto`, `std/net` or `docs/security/` | [`docs/security/README.md`](docs/security/README.md) |
 | write a *program* in Nish | [`docs/AI.md`](docs/AI.md), then [`docs/guide/`](docs/guide/index.md) |
 
+**An untyped emit-ts walk knows nothing.** In `src/emit-ts-*.ts`, read
+types only through `walk.typeAt`, and treat a null binding table
+(`nodeCallees`, `nodeLocals`, ...) under `walk.untyped` as unknown:
+call `walk.missType()`, never take the "not bound" branch.
+
 ## Definition of done
 
 Locally, before pushing: `npm run check`, `npm run lint`, and
@@ -68,6 +73,11 @@ any `src/` or `std/` change lands on `main`, even with no textual conflict. A
 new positive `tests/cases/*` is registered with
 `node tests/differential/goldens.js --update` in the same commit. Details:
 `.claude/selfhost.md` → "The goldens".
+
+**The emit-ts known list is Node-version-specific.** Regenerate
+`tests/differential/emit-ts-known.txt` only under the Node that
+`.github/workflows/ci.yml` pins; another minor flipped a verdict
+(`str_surrogate_pair`) and turned CI red.
 
 **Moving where a fact lives moves every pointer to it in the same PR.** Grep
 the docs, `.claude/`, `CLAUDE.md` and source comments for the old location.
