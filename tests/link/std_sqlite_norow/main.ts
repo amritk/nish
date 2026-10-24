@@ -24,7 +24,7 @@ const noRow = (t: Suite, when: string, db: Database, q: Statement, buf: u8[]): v
   t.ok(`${when}: column 99 is RANGE`, far.isErr() && far.error === SQLITE_RANGE);
   const negative = q.columnInto(-1, buf, 0);
   t.ok(`${when}: column -1 is RANGE`, negative.isErr() && negative.error === SQLITE_RANGE);
-  t.eqI32(`${when}: and writes nothing`, toI32(buf[0]), 0);
+  t.eqI32(`${when}: and writes nothing`, toI32(buf[0]), 7);
   t.eqStr(`${when}: the connection's message is unchanged`, db.error(SQLITE_ERROR).message, before);
 };
 
@@ -46,7 +46,7 @@ export function main(): i32 {
     return t.done();
   }
   const q = p.value;
-  const buf: u8[] = [0, 0, 0, 0, 0, 0, 0, 0];
+  const buf: u8[] = [7, 7, 7, 7, 7, 7, 7, 7];
   noRow(t, "before the first step", db, q, buf);
   t.ok("bind", q.bindI64(1, toI64(2)).isOk());
   const step = q.step();

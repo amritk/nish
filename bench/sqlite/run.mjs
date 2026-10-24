@@ -100,7 +100,7 @@ const SQLITE_DEFS = [
   "-DSQLITE_OMIT_LOAD_EXTENSION",
   "-DSQLITE_THREADSAFE=0",
 ]
-const cc = process.env.CC ?? "clang"
+const cc = process.env.CC || "clang"
 if ((process.env.NISH_SQLITE_CFLAGS ?? "").trim() !== "") {
   fail("NISH_SQLITE_CFLAGS is set: the build would compile SQLite with it and the twin would not; unset it")
 }

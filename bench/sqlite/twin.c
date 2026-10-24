@@ -16,8 +16,9 @@
  * seed/generate.mjs (https://github.com/arjaythedev/twelve-dollar-server-challenge):
  * its mulberry32 generator and seed 42, its table sizes, its users, posts
  * and bodies, and its ADJECTIVES and NOUNS lists verbatim; WORDS is part of
- * its word list with "sqlite" added, and the likes are this file's own, as are
- * the workloads. bench/sqlite/LICENSE.md says what is ported in full.
+ * its word list with "sqlite" added, and the likes are this file's own. The
+ * workloads' SQL is the challenge's SPEC.md queries; the loops are this
+ * file's own. bench/sqlite/LICENSE.md says what is ported in full.
  * Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
  * see bench/sqlite/LICENSE.md. */
 #include <stdint.h>
@@ -130,8 +131,10 @@ static int seed(const char *path, const char *schema_path) {
 
   sqlite3_stmt *u = prepare(db, "INSERT INTO users (id, username, created_at) VALUES (?, ?, ?)");
   for (int i = 1; i <= USERS; i++) {
-    int n = snprintf(text, sizeof text, "%s_%s_%d", ADJECTIVES[pick(COUNT(ADJECTIVES))],
-                     NOUNS[pick(COUNT(NOUNS))], i);
+    /* Drawn in two statements: C leaves the order of a call's arguments open. */
+    const char *adjective = ADJECTIVES[pick(COUNT(ADJECTIVES))];
+    const char *noun = NOUNS[pick(COUNT(NOUNS))];
+    int n = snprintf(text, sizeof text, "%s_%s_%d", adjective, noun, i);
     iso(end - 730 * day + (int64_t)(rnd() * 365 * day), ts);
     sqlite3_bind_int(u, 1, i);
     sqlite3_bind_text(u, 2, text, n, SQLITE_STATIC);

@@ -16,9 +16,10 @@ challenge's copyright notice:
   `ADJECTIVES` and `NOUNS` lists verbatim. Its `WORDS` list is part of the
   challenge's, with `sqlite` added; it draws no openers, and its likes are
   uniformly random rather than the challenge's per-post counts. The draws
-  differ, so its rows are not the challenge's rows. The workloads are written
-  here.
-- `main.ts` uses the same table sizes.
+  differ, so its rows are not the challenge's rows. Its workloads' SQL is the
+  challenge's `SPEC.md` queries (a post with its author and like count, the
+  feed, the insert with `RETURNING`); the loops around them are written here.
+- `main.ts` uses the same table sizes and the same `SPEC.md` queries.
 
 `run.mjs` and `README.md` copy nothing; they only name the sizes.
 

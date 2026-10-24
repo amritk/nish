@@ -20,7 +20,8 @@
 //
 // USERS and POSTS are the sizes of the twelve-dollar server challenge's
 // seed/generate.mjs (https://github.com/arjaythedev/twelve-dollar-server-challenge),
-// which twin.c's seed ports.
+// which twin.c's seed ports; POST_SQL and INSERT_SQL are the queries of its
+// SPEC.md.
 // Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
 // see bench/sqlite/LICENSE.md.
 import { OPEN_READWRITE, Statement, openDatabase } from "nish/sqlite"
