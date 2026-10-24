@@ -1822,7 +1822,7 @@ const pushRecipeFlags = (
 /**
  * The runtime cache: the directory holding the runtime compiled for this
  * recipe, compiled into it first when no link has needed it before. Nearly all
- * of a link was the runtime's eight translation units, compiled again on every
+ * of a link was the runtime's translation units, compiled again on every
  * one; an entry is compiled once per key (`runtimeCacheKey`) and every later
  * link only compiles the program. Empty when the link should compile the
  * runtime itself, as it always did: the wasi profile, which the cache does not
@@ -1842,9 +1842,9 @@ const pushRecipeFlags = (
  *
  * A hit is the stored key equal to this one, byte for byte (CLI-8). A miss
  * compiles into a scratch directory of the entry's own, empties the entry's
- * key, moves the eight objects in with one `mv` -- a `rename` each, inside one
+ * key, moves the nine objects in with one `mv` -- a `rename` each, inside one
  * directory -- and writes the key last, so a key on disk always stands beside
- * eight whole objects of its own recipe (CLI-5). Two misses at once each compile
+ * nine whole objects of its own recipe (CLI-5). Two misses at once each compile
  * their own and move them over the other's; both sets are the same recipe's,
  * and an object is only ever replaced whole, so a link that reads one while
  * another lands reads a whole object either way.

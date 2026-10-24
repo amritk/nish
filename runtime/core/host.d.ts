@@ -50,6 +50,8 @@ export declare function statMtimeSync(path: string): f64;
 export declare function lstatOwnerModeSync(path: string): i64;
 export declare function geteuid(): i64;
 export declare function isExecutableSync(path: string): boolean;
+export declare function isTerminal(fd: i32): boolean;
+export declare function terminalSize(): i32[];
 /** `crypto.getRandomValues(bytes)` for a `u8[]`; a typed array goes straight through. */
 export declare function getRandomValues<T extends u8[] | Uint8Array>(bytes: T): T;
 /** These four have no synchronous reading: each throws, naming itself, and is typed as `runtime/nish.d.ts` types it. */
@@ -59,3 +61,9 @@ export declare function signalFd(): i32;
 export declare function readSignal(fd: i32): i32;
 /** What each `nish:net` function is under the core: a throw naming `name`. */
 export declare function noNetReading(name: string): never;
+/** What `readStdin`, `waitStdin` and `setRawMode` are under the core: a throw naming `name`. */
+export declare function noTermReading(name: string): never;
+/** `nish:term`'s three that have no reading under Node: each throws, naming itself. */
+export declare function readStdin(buf: u8[], off: i32, len: i32): i32;
+export declare function waitStdin(timeoutMs: i32): boolean;
+export declare function setRawMode(on: boolean): i32;

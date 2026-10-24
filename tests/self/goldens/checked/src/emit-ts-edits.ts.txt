@@ -23,7 +23,7 @@ import CheckedProgram from "./program" -> struct CheckedProgram
 import Instantiation from "./program" -> struct Instantiation
 import STRUCT_INTERFACE from "./program" -> const STRUCT_INTERFACE
 import StringBuilder from "./strings" -> struct StringBuilder
-const AMBIENT_NAMES: string = " write writeError panic readFileSync readFileSyncOrNull readFileBytesSync writeFileSync appendFileSync mkdirSync isDirectorySync readdirSync realpathSync getenv spawnSync spawnSyncTo spawn kill waitPid availableParallelism totalMemory monotonicNanos statMtimeSync lstatOwnerModeSync geteuid isExecutableSync toI32 toI64 toF64 f64ToBits bitsToF64 ctSelect ctEq parseInt parseFloat secureZero Ok Err arena "
+const AMBIENT_NAMES: string = " write writeError panic readFileSync readFileSyncOrNull readFileBytesSync writeFileSync appendFileSync mkdirSync isDirectorySync readdirSync realpathSync getenv spawnSync spawnSyncTo spawn kill waitPid availableParallelism totalMemory monotonicNanos statMtimeSync lstatOwnerModeSync geteuid isExecutableSync toI32 toI64 toF64 f64ToBits bitsToF64 ctSelect ctEq parseInt parseFloat secureZero Ok Err arena readStdin waitStdin isTerminal terminalSize setRawMode "
 const WIDTH_TYPES: string = " i32 i64 u8 u16 u32 u64 f32 f64 "
 const SIGNAL_REFUSAL: string = "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)" [exported]
 const FOREIGN_REFUSAL: string = "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)"

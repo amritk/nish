@@ -83,12 +83,13 @@ export const isNishModule = (specifier: string): boolean =>
   specifier === `${BUILTIN_SCHEME}process` ||
   specifier === `${BUILTIN_SCHEME}io` ||
   specifier === `${BUILTIN_SCHEME}net` ||
+  specifier === `${BUILTIN_SCHEME}term` ||
   specifier === unsafeModule() ||
   isNishSourceModule(specifier)
 
 /** Every module name, for the diagnostic that lists them. */
 export const nishModuleNames = (): string =>
-  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}secret, ${unsafeModule()}`
+  `${BUILTIN_SCHEME}fs, ${BUILTIN_SCHEME}process, ${BUILTIN_SCHEME}io, ${BUILTIN_SCHEME}net, ${BUILTIN_SCHEME}term, ${BUILTIN_SCHEME}secret, ${unsafeModule()}`
 
 /**
  * `nish:secret`: key material and the rules that keep it in (docs/LANGUAGE.md,
@@ -122,6 +123,9 @@ export const nishModuleExports = (specifier: string): string => {
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
+  }
+  if (specifier === `${BUILTIN_SCHEME}term`) {
+    return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode"
   }
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString"
@@ -217,12 +221,21 @@ export const isNetWrittenLetter = (letter: i32): boolean => letter === NET_WRITT
 export const isNetBufferLetter = (letter: i32): boolean => isNetWrittenLetter(letter) || letter === NET_READ
 
 /**
+ * The buffer letters of a call that takes a range-checked `(buf, off, len)`
+ * triple: a `nish:net` signature, and `readStdin`'s, which is `netRead`'s
+ * without the descriptor. One string, so the emitter's range check, the
+ * written-argument rule and the panic set read `readStdin` as they read
+ * `netRead`.
+ */
+export const bufferSignature = (name: string): string => (name === "readStdin" ? "wnn" : netSignature(name))
+
+/**
  * Where a `nish:net` call's range-checked `(buf, off, len)` triple starts, or
  * -1: the buffer is the argument before the first `n`. `netRead`, `netWrite`,
- * `udpSendTo` and `udpRecvFrom` have one, at 1.
+ * `udpSendTo` and `udpRecvFrom` have one, at 1, and `readStdin` at 0.
  */
 export const netRangeBuffer = (name: string): i32 => {
-  const at = netSignature(name).indexOf("n")
+  const at = bufferSignature(name).indexOf("n")
   return at < 0 ? -1 : at - 1
 }
 
@@ -247,6 +260,19 @@ export const netSymbol = (name: string): string => {
 
 /** Whether `nish:net` exports `name`: every name with a signature, and `pollCreate`, whose is empty. */
 export const isNetExport = (name: string): boolean => netSignature(name).length > 0 || name === "pollCreate"
+
+/**
+ * `nish:term`: the terminal a program runs in (docs/LANGUAGE.md, "Terminal
+ * input"). Reading stdin, waiting on it with a timeout, and the TTY questions
+ * a full-screen program asks, without the `net` capability a `pollAdd(0)`
+ * would carry. Each name is a global too, as every `nish:` export is.
+ */
+export const isTermExport = (name: string): boolean =>
+  name === "readStdin" ||
+  name === "waitStdin" ||
+  name === "isTerminal" ||
+  name === "terminalSize" ||
+  name === "setRawMode"
 
 /** The builtin `specifier` exports under `name`, or null when it exports no such name. */
 export const nishExport = (specifier: string, name: string): BuiltinExport | null => {
@@ -299,6 +325,9 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return isNetExport(name) ? new BuiltinExport("", name, false) : null
+  }
+  if (specifier === `${BUILTIN_SCHEME}term`) {
+    return isTermExport(name) ? new BuiltinExport("", name, false) : null
   }
   if (specifier === unsafeModule()) {
     return isUnsafeExport(name) ? new BuiltinExport("", name, false) : null
