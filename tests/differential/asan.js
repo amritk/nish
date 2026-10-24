@@ -39,7 +39,9 @@
  * allocates them (push, a literal, `new Array(n)`, 8-, 4- and 1-byte elements)
  * in a build with `--unchecked-indexing`, which no check can stop, and fails
  * unless ASan reports each; it also runs the in-bounds twins, which must come
- * out clean, and a checked build, which must panic.
+ * out clean, and a checked build, which must panic. A C driver then checks
+ * that the runtime's `nish_array_grow` moves a block at the push a normal
+ * build would, after the arena forgot other blocks or grew many.
  * Without clang's ASan runtime (Debian: `libclang-rt-18-dev`) it says so and
  * exits 2 instead of passing.
  */
@@ -214,16 +216,18 @@ const build = (file, exe, { compiler, unchecked = false, threads = false }) => {
  * Which outcome a finished run is. ASan wins over everything, since a memory
  * error can go on to cause a panic; UBSan's reports do not stop the program,
  * so a run that also panics is still `ubsan`. A UBSan report is matched by the
- * `SUMMARY: UndefinedBehaviorSanitizer` line it ends with, or by its
- * `:line:col: runtime error:` anywhere in a line, so a path with a space or a
- * report after a partial line from another thread still counts.
+ * `SUMMARY: UndefinedBehaviorSanitizer: ` line it ends with, at the start of a
+ * line, or by its `runtime/<file>:line:col: runtime error: ` anywhere in one,
+ * so a report after a partial line from another thread still counts.
+ * Only the C runtime is built with UBSan, so a report names one of its files;
+ * a program printing `runtime error:` on its own does not.
  */
 const classify = ({ status, signal, stdout = "", stderr = "" }) => {
   const firstLine = (pattern) => stderr.split("\n").find((line) => pattern.test(line)) ?? ""
   if (/ERROR: AddressSanitizer/.test(stderr)) {
     return { kind: "asan", status, detail: firstLine(/ERROR: AddressSanitizer/) }
   }
-  const ubsan = /SUMMARY: UndefinedBehaviorSanitizer|:\d+:\d+: runtime error:/
+  const ubsan = /^SUMMARY: UndefinedBehaviorSanitizer: |runtime\/[\w-]+\.[ch]:\d+:\d+: runtime error: /m
   if (ubsan.test(stderr)) {
     return { kind: "ubsan", status, detail: firstLine(ubsan) }
   }
@@ -244,8 +248,8 @@ const classify = ({ status, signal, stdout = "", stderr = "" }) => {
 }
 
 /** Run `exe` under the sanitizers and classify how it ended. */
-const runExe = (exe, timeoutMs = 20000) => {
-  const res = run(exe, [], {
+const runExe = (exe, timeoutMs = 20000, args = []) => {
+  const res = run(exe, args, {
     timeout: timeoutMs,
     env: {
       ...process.env,
@@ -314,6 +318,77 @@ const selfTestSource = (shape, past) => {
 `
 }
 
+/**
+ * The runtime's own self-test: a C driver over `nish_array_grow`, since no Nish
+ * program the checker accepts keeps a pointer into an array across a push. It
+ * pushes an array to 10 elements, then either grows 200 other arrays or grows
+ * 20 and releases the arena back to before them, then pushes on to `at` elements and
+ * reads through a pointer taken before one more push. A normal build moves the
+ * block at the 17th and the 33rd push, so a pointer kept across either must
+ * read poison and one kept across the 16th or the 32nd must not. A grow that
+ * lost what it knew of the array, as a table that evicts or a release that
+ * forgets every entry did, moved it at the 11th, 21st and 41st instead.
+ */
+const GROW_DRIVER = `#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+typedef struct { uint64_t len, cap; char *data; } nish_array;
+void nish_array_grow(nish_array *a, uint64_t elem_size);
+uint64_t nish_arena_mark(void);
+void nish_arena_release(uint64_t mark);
+void *nish_alloc_struct(uint64_t size);
+static void push(nish_array *a, int64_t v) {
+  if (a->len == a->cap) nish_array_grow(a, 8);
+  ((int64_t *)a->data)[a->len++] = v;
+}
+static nish_array others[200];
+int main(int argc, char **argv) {
+  if (argc != 3) return 2;
+  int at = atoi(argv[2]);
+  nish_array a = { 0, 0, 0 };
+  while (a.len < 10) push(&a, 1);
+  uint64_t mark = nish_arena_mark();
+  for (int k = 0; k < (argv[1][0] == 'e' ? 200 : 20); k++) push(&others[k], k);
+  if (argv[1][0] == 'r') nish_arena_release(mark);
+  while ((int)a.len < at) push(&a, 1);
+  volatile int64_t *kept = (int64_t *)a.data;
+  push(&a, 2);
+  printf("%lld\\n", (long long)kept[0]);
+  return 0;
+}
+`
+
+const growCases = (dir) => {
+  const src = path.join(dir, "grow.c")
+  const exe = path.join(dir, "grow")
+  fs.writeFileSync(src, GROW_DRIVER)
+  const rt = runtimeObjects(false)
+  const linked =
+    rt.error === undefined
+      ? run("clang", [
+          "-g",
+          "-O1",
+          "-fsanitize=address,undefined",
+          src,
+          ...rt.objects,
+          "-lm",
+          "-pthread",
+          "-o",
+          exe,
+        ])
+      : { status: 1, stderr: rt.error }
+  return [
+    ["evicted", "e", 15, "clean"],
+    ["evicted", "e", 16, "asan"],
+    ["released", "r", 31, "clean"],
+    ["released", "r", 32, "asan"],
+  ].map(([what, mode, at, want]) => ({
+    name: `grow-${what}-kept-across-push-${at + 1}`,
+    want,
+    res: linked.status === 0 ? runExe(exe, 20000, [mode, String(at)]) : { error: linked.stderr },
+  }))
+}
+
 const selfTest = (compiler) => {
   const dir = path.join(asanDir, `self-test-${process.pid}`)
   fs.mkdirSync(dir, { recursive: true })
@@ -324,10 +399,16 @@ const selfTest = (compiler) => {
   }
   cases.push({ name: "push-one-past-checked", shape: "push", past: true, unchecked: false, want: "panic" })
   let failed = 0
-  for (const c of cases) {
+  const ran = cases.map((c) => {
     const file = path.join(dir, `${c.name}.ts`)
     fs.writeFileSync(file, selfTestSource(c.shape, c.past))
-    const res = runUnderAsan(file, { compiler, unchecked: c.unchecked, exe: path.join(dir, c.name) })
+    return {
+      ...c,
+      res: runUnderAsan(file, { compiler, unchecked: c.unchecked, exe: path.join(dir, c.name) }),
+    }
+  })
+  for (const c of [...ran, ...growCases(dir)]) {
+    const res = c.res
     const got = res.kind ?? (res.rejected ? "rejected" : "error")
     const ok = got === c.want
     console.log(`  ${ok ? "ok  " : "FAIL"} ${c.name}: ${got}${res.detail ? ` (${res.detail.trim()})` : ""}`)

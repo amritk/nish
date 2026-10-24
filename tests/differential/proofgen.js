@@ -608,9 +608,11 @@ const verdictOf = (exe) => {
  * Builds every `family:kind` in both variants as a program of its own, without
  * its `pad`. Each in-bounds variant must prove one of its own accesses, bar the
  * `PROOF_MISSES`, which must prove none; each one-past variant must keep more
- * check sites than the in-bounds one (at least one for a `PROOF_MISSES` shape,
- * none asked of a `LIBRARY_CHECKED` one), so the site kept is the one-past
- * access's; and, with clang, each must panic exactly when it is one past.
+ * check sites than the in-bounds one, and may prove at most one access fewer
+ * than it (none, for a `PROOF_MISSES` shape; nothing is asked of a
+ * `LIBRARY_CHECKED` one), so the site kept is the one-past access's even where
+ * the one-past variant's lines differ; and, with clang, each must panic
+ * exactly when it is one past.
  */
 const catalogue = (compiler, dir, seed, run, failures) => {
   const rows = []
@@ -634,10 +636,16 @@ const catalogue = (compiler, dir, seed, run, failures) => {
               : `${shape} in bounds proves none of its ${built.accesses} accesses (${built.sites} sites)`
           )
         }
-        const floor = miss || !row.in ? 1 : row.in.sites + 1
+        // The one-past variant is the in-bounds one with one proven access
+        // moved past the end, so it may prove at most one access fewer; a
+        // `PROOF_MISSES` shape proves none, so it keeps every site.
+        const proven = row.in ? row.in.accesses - row.in.sites : 1
+        const floor = miss ? built.accesses : Math.max((row.in?.sites ?? 0) + 1, built.accesses - proven + 1)
         if (past && built.sites < floor && !LIBRARY_CHECKED.includes(shape)) {
           failures.push(
-            `${shape}! keeps ${built.sites} check sites, fewer than ${floor}: an unsound proof elided the one-past access`
+            `${shape}! keeps ${built.sites} check sites of its ${built.accesses} accesses, fewer than ${floor}: ` +
+              "it proves more than the in-bounds variant less the one-past access, so either a proof elided " +
+              "that access or the in-bounds variant stopped proving one it shares"
           )
         }
         if (run) {
