@@ -1,0 +1,97 @@
+local: start 30fps /1 full, 1710 frames, 1 unacked at most, longest wait 1ms
+  3002ms 60fps /1 full
+PASS  local: the decisions
+PASS  local: one frame in flight at most
+PASS  allow120: the decisions
+allow120: start 30fps /1 full, 750 frames, 1 unacked at most, longest wait 1ms
+  3002ms 60fps /1 full
+  6003ms 120fps /1 full
+PASS  allow120 under maxFps 60: the decisions
+ssh: start 15fps /1 full, 153 frames, 1 unacked at most, longest wait 116ms
+  1000ms 10fps /1 full
+  2000ms 5fps /1 full
+PASS  ssh: starts at 15, remote
+PASS  ssh: the decisions
+PASS  ssh: one frame in flight at most
+PASS  ssh: every answer within 150 ms
+swing: start 30fps /1 full, 1304 frames, 1 unacked at most, longest wait 60ms
+  3002ms 60fps /1 full
+  5579ms 15fps /1 full
+  6579ms 10fps /1 full
+  18369ms 15fps /1 full
+  21370ms 20fps /1 full
+  24371ms 30fps /1 full
+  27372ms 60fps /1 full
+PASS  swing: the decisions
+PASS  swing: at most one change a second
+PASS  swing: no change undone within three seconds
+starved: start 30fps /1 full, 156 frames, 2 unacked at most, longest wait 2493ms
+  1760ms 10fps /1 full
+  2760ms 10fps /2 full
+  3760ms 10fps /4 full
+  4760ms 10fps /4 half
+PASS  starved: the decisions
+PASS  starved: resolution halves before the backend is capped
+PASS  starved: the backend is capped before a rate below the floor
+PASS  starved: two frames in flight at most
+detail: start 30fps /1 full, 81 frames, 2 unacked at most, longest wait 2493ms
+  1760ms 5fps /1 full
+  2760ms 5fps /2 full
+  3760ms 5fps /4 full
+  4760ms 5fps /4 half
+PASS  detail: the decisions
+limit 1: start 60fps /1 full, 151 frames, 1 unacked at most, longest wait 50ms
+limit 2: start 60fps /1 full, 301 frames, 2 unacked at most, longest wait 50ms
+PASS  limit 1: one in flight at most
+PASS  limit 2: two in flight at most
+PASS  limit 1: a fixed rate never changes
+PASS  limit 1: frames
+PASS  limit 2: frames
+PASS  limit 2: a fixed rate never changes
+widen: start 30fps /1 full, 909 frames, 2 unacked at most, longest wait 2493ms
+  1760ms 10fps /1 full
+  2760ms 10fps /2 full
+  3760ms 10fps /4 full
+  4760ms 10fps /4 half
+  13036ms 10fps /4 full
+  16037ms 10fps /2 full
+  19038ms 10fps /1 full
+  22039ms 15fps /1 full
+  25040ms 20fps /1 full
+  28041ms 30fps /1 full
+  31042ms 60fps /1 full
+PASS  widen: the decisions
+PASS  widen: stats tier
+PASS  widen: stats backend
+PASS  widen: stats round trip near 2 ms
+PASS  widen: stats bandwidth between 20 and 50 MB/s
+PASS  widen: stats frame cost 4 ms
+PASS  widen: stats lost
+PASS  widen: stats dropped some while starved
+PASS  probe: a local probe overrides the hint
+PASS  envFps: beats fixedFps
+PASS  envFps: never changes
+PASS  stray: no round trip
+PASS  stray: nothing in flight
+PASS  stray: no decision moved
+PASS  mute: frames given up
+PASS  mute: frames drawn
+PASS  mute: no decision without an answer
+PASS  behind: two frames in flight
+PASS  behind: none dropped
+PASS  behind: the queue stays short
+PASS  fixed step: logic steps at 60 fps drawing
+PASS  fixed step: logic steps at 10 fps drawing
+PASS  overlay: top left
+PASS  overlay: top right
+PASS  overlay: bottom left
+PASS  overlay: bottom right
+PASS  overlay: clipped
+PASS  overlay: full
+PASS  overlay: sixel
+PASS  overlay: ascii
+PASS  options: fixed rate clamped
+PASS  options: unacknowledged limit clamped
+PASS  options: unknown preference
+PASS  options: floor rounds up to a tier
+term-rate: 56 passed, 0 failed, 0 skipped
