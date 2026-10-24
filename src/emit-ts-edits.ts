@@ -968,6 +968,12 @@ const collectNames = (walk: Walk, node: Node): void => {
   }
 }
 
+/** Whether `name` from `specifier` is a builtin read as a property, which a call must stand in for. */
+const isPropertyExport = (specifier: string, name: string): boolean => {
+  const builtin = nishExport(specifier, name)
+  return builtin !== null && builtin.isProperty
+}
+
 /**
  * The bindings after a builtin import whose names are values rather than
  * functions: `argv` from `nish:process` is the command line, and the runtime
@@ -990,8 +996,7 @@ const propertyImports = (stmt: Node, edits: Edit[]): string => {
       continue
     }
     const exported = spec.children.length > 0 ? spec.children[0].text : spec.text
-    const builtin = nishExport(stmt.text, exported)
-    if (builtin === null || !builtin.isProperty) {
+    if (!isPropertyExport(stmt.text, exported)) {
       continue
     }
     const alias = `__nish_${spec.text}`

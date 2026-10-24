@@ -71,7 +71,7 @@ import {
   N_VAR_DECL,
   Node,
 } from "./nodes"
-import { hexOfI64, StringBuilder } from "./strings"
+import { StringBuilder } from "./strings"
 import { T_STRING } from "./types"
 
 /** The string methods whose offsets count bytes, each a core helper of the same name. */
@@ -169,6 +169,18 @@ const escapeDigit = (c: i32): i32 => {
   return c >= 65 && c <= 70 ? c - 55 : -1
 }
 
+/** `\u` and `unit` as four uppercase hex digits, added a character at a time so nothing is left behind. */
+const addUnitEscape = (out: StringBuilder, unit: i64): void => {
+  out.addChar(92)
+  out.addChar(117)
+  let shift = 12
+  while (shift >= 0) {
+    const digit = toI32(unit >> toI64(shift)) & 15
+    out.addChar(digit < 10 ? digit + 48 : digit + 55)
+    shift = shift - 4
+  }
+}
+
 /** A literal's source with each `\u{…}` escape as its `\uXXXX` code units, or `null` when it has none. */
 const unbracedEscapes = (text: string): string | null => {
   if (text.indexOf("\\u{") < 0) {
@@ -176,10 +188,10 @@ const unbracedEscapes = (text: string): string | null => {
   }
   const out = new StringBuilder()
   let i = 0
-  while (i < text.length) {
+  while (i >= 0 && i < text.length) {
     const c = text.charCodeAt(i)
     if (c !== 92 || i + 1 >= text.length) {
-      out.add(text.substring(i, i + 1))
+      out.addChar(c)
       i = i + 1
       continue
     }
@@ -195,15 +207,16 @@ const unbracedEscapes = (text: string): string | null => {
       }
     }
     if (digits === 0 || digits > 6 || end >= text.length || text.charCodeAt(end) !== 125 || value > 1114111) {
-      out.add(text.substring(i, i + 2))
+      out.addChar(c)
+      out.addChar(text.charCodeAt(i + 1))
       i = i + 2
       continue
     }
     if (value > 65535) {
-      out.add(`\\u${hexOfI64(toI64(55296) + ((value - toI64(65536)) >> toI64(10)), 4)}`)
-      out.add(`\\u${hexOfI64(toI64(56320) + ((value - toI64(65536)) & toI64(1023)), 4)}`)
+      addUnitEscape(out, toI64(55296) + ((value - toI64(65536)) >> toI64(10)))
+      addUnitEscape(out, toI64(56320) + ((value - toI64(65536)) & toI64(1023)))
     } else {
-      out.add(`\\u${hexOfI64(value, 4)}`)
+      addUnitEscape(out, value)
     }
     i = end + 1
   }
