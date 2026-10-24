@@ -175,6 +175,9 @@ const EVIDENCE = [
 /** The native panic of a ranged integer leaving its range: the `range` row. */
 const RANGE_PANIC = /^value out of range: expected integer<-?\d+, -?\d+>$/m
 
+/** A ranged integer annotation in the emitted source, which the `range` row also needs. */
+const RANGED = /\binteger</
+
 /** The libm row's own words: a program that counts its answers within an ulp. */
 const ULP_COUNT = /\bwithin \d+ ulps?\b/
 
@@ -225,7 +228,11 @@ const rowOf = (native, node, source) => {
   if (host !== "") {
     return ["host", host]
   }
-  if (RANGE_PANIC.test(String(native.stderr)) && !RANGE_PANIC.test(String(node.stderr))) {
+  if (
+    RANGE_PANIC.test(String(native.stderr)) &&
+    !RANGE_PANIC.test(String(node.stderr)) &&
+    RANGED.test(source)
+  ) {
     return ["range", ""]
   }
   const [, ours, theirs] = firstDifference(native.stdout, node.stdout)
