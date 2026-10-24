@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "entry": "caps_ffi_handle.ts",
+  "deterministic": false,
+  "capabilities": ["ffi"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["ffi"],
+      "modules": [
+        {
+          "path": "caps_ffi_handle.ts",
+          "capabilities": ["ffi"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["ffi"],
+              "witnesses": {
+                "ffi": [
+                  { "function": "main", "at": "caps_ffi_handle.ts:31:13", "calls": "fclose" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "caps_ffi_handle.ts:31:13", "callee": "File.constructor", "via": "ffi-nul" },
+                { "kind": "oom", "at": "caps_ffi_handle.ts:32:3", "allowed": true }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

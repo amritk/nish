@@ -95,6 +95,7 @@ cases/bytes_set_end records  # differ: exit 0 vs 1: TypeError: dst.set is not a 
 cases/bytes_set_float_panic strings  # differ: stdout line 1 differs
 cases/bytes_set_self records  # differ: exit 0 vs 1: TypeError: a.set is not a function
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
+cases/caps_ffi_handle ffi  # refused: NL4010 under --emit-ts
 cases/caps_net refused  # refused: NL4011 under --emit-ts
 cases/caps_process_wait numbers  # differ: exit 0 vs 1: throw new Error(
 cases/caps_signal refused  # refused: NL4011 under --emit-ts
@@ -110,6 +111,7 @@ cases/ffi_buffer_declared ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_late_load ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_memcpy ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_write ffi  # refused: NL4010 under --emit-ts
+cases/ffi_handle_arena ffi  # refused: NL4010 under --emit-ts
 cases/ffi_handle_class_template ffi  # refused: NL4010 under --emit-ts
 cases/ffi_handle_positions ffi  # refused: NL4010 under --emit-ts
 cases/ffi_owned_string ffi  # refused: NL4010 under --emit-ts

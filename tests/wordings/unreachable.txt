@@ -60,6 +60,7 @@ NL2276  retired: `Type aliases cannot be exported`, the refusal WP34 N1 replaced
 NL8011  retired: WP33's printed negative zero; the reference reading's console (runtime/nish.mjs) prints String(x), so -0 prints 0 there as it does natively and no site diverges (tests/cases/port_num_negzero pins the quiet)
 NL2391  retired: `The task given to `spawn` must be a top-level function named at the call, not an arrow`, the refusal WP29's task forms replaced; an arrow task reads its function's `const` locals and is lifted into a function named after that function (tests/link/thread_task_arrow)
 NL2554  retired: the refusal of a call to a `declare function` that takes a `u8[]`, from WP40 B1.1 until B1.2 lowered the call; the call passes `data` and holds the count to `len` now (tests/cases/ffi_buffer_call_sites, tests/cases/panics_ffi_length)
+NL2573  retired: the refusal of a `using` of a handle class, from WP40 H1.1 until H1.2 lowered its close; every exit of the block closes the handle now (tests/cases/ffi_handle_file, tests/cases/ffi_handle_exits)
 
 # --- Retired at R6: stage0 stated the rule, and stage0 is gone. ---------------
 # These were `tests/wordings/stage0_only.txt`: codes a program does provoke, but

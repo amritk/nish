@@ -3978,7 +3978,9 @@ breaks one is refused with that rule's own code:
   third disposable beside `scope()` and `arena()`, and one `using` takes one
   lock (a second declarator's `lock()` is R5's, below). A lock may share a
   `using` with a scope opened before it or with an arena on either side, and
-  the declarators close in the reverse of the order they opened, so in
+  the declarators close in the reverse of the order they opened, each opening
+  before the next declarator's initialiser runs (an `orReturn()` there closes
+  the ones before it), so in
   `using a = arena(), g = m.lock()` the lock is given back before the arena
   releases (`tests/link/thread_mutex_using_mixed`); a scope opened after the
   lock, `using g = m.lock(), s = scope()`, is R5's
@@ -5172,14 +5174,36 @@ class File {
 const first = (f: File): i32 => f.read();
 ```
 
-**`using` of a handle class is not lowered yet.** The class, its methods and
-every function that borrows one are checked, and `using f = new File(p)` is
-`` `using` of handle class `File` is not lowered yet: until a release emits its
-close, hold the `CPtr` in a local and close it yourself `` (NL2573,
-`reject_ffi_handle_using`) until the compiler emits the close at every exit of
-the block. Until then, a program holds the `CPtr` in a local and calls the
-close itself, as the declared-function examples above do; what the rules
-below fix is the shape a program will open a `File` with.
+**`using` of a handle class closes it at every exit of its block, once.**
+`using f = new File(p)` opens `f` as soon as its initialiser returns, before a
+later declarator's initialiser runs, and calls the close its
+`[Symbol.dispose]` names on every way control leaves the block: falling off
+its end, `return`, `break`, `continue`, and an `orReturn()` that propagates,
+including one in a later declarator's initialiser. A `return` computes its
+value first and closes after it, so `return twice(n)` inside the block is not
+a tail call. Each declarator opens before the next one's initialiser runs.
+Falling off the end, `break` and `continue` close the declarators in the
+reverse of the order they opened, beside an arena, a scope or a lock in the
+same `using`. A `return` or a propagating `orReturn()` joins every `scope()`
+before its value is computed (the value may read what the tasks stored), then
+closes the handles and gives back the locks, innermost first, then releases
+the arenas (`ffi_handle_file`, `ffi_handle_exits`, `ffi_handle_arena`,
+`ffi_handle_shapes`, `tests/link/ffi_handle_mutex`,
+`tests/link/using_declarator_exit`). The close is inlined as the dispose spells
+it: the field is loaded and the C function called with it, behind a `null`
+test only when the dispose writes one (`const p = this.f; if (p !== null)`);
+a dispose that is the single call `close(this.f)` calls it with the field as
+it is, `null` included (`ffi_handle_shapes`). The `using` is where the program reaches `ffi`, so
+`--deny ffi` refuses it and names the close (`caps_ffi_handle`,
+`reject_ffi_handle_deny`).
+
+A panic and `process.exit` do not close: the process ends, and the operating
+system takes back the descriptor. What it does not take back is what a C
+library still buffers. `panic`, `expect` and a failed range entry end through
+`exit(1)`, which flushes stdio, but a failed check and out of memory end
+through `_exit(1)`, which does not, so bytes written to a `FILE *` with
+`fwrite` and not yet flushed are lost on a bounds panic. Flush (`fflush`)
+before code that may panic when those bytes matter.
 
 - **The class.** Exactly one `CPtr` or `CPtr | null` field, `readonly` and with
   no initialiser (`reject_ffi_handle_two_fields`, `_field_mutable`,
@@ -8126,7 +8150,7 @@ const tally = (rows: string[]): i32 => {
   | stored into an element, `xs[i] = v` | likewise | NL2420 | `reject_using_arena_element` |
   | stored into memory any other way: handed to a callee that keeps it, held by an object or array literal | always: the escape analysis stops following a stored value | NL2421 | `reject_using_arena_stored` |
   | `push` onto an array | the array is not a `const` the block binds to a fresh array, whatever is pushed: a `push` moves the array's storage into the arena | NL2422 | `reject_using_arena_push` |
-  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return` |
+  | `return v`, `r.orReturn()` | `v` is not older than the block; `orReturn()` unless the function returns a `Result` packed into a register, whose payloads are numbers | NL2423 | `reject_using_arena_return`, `reject_using_arena_or_return`, `reject_using_arena_declarator_or_return` |
   | a call to a function that stores an allocation into memory | always | NL2424 | `reject_using_arena_callee_stores` |
   | a call the analysis has no facts for | always; every callee has facts today | NL2425 | — |
   | `Arena.release`, `Arena.reset`, or a callee that reaches either | always: the block's mark would be stale | NL2426 | `reject_using_arena_control`, `reject_using_arena_control_callee` |
