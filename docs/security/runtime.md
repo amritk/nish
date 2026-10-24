@@ -183,6 +183,10 @@ the noise band (a copy of the same binary moved up to ±1.5%, 4% on `lexer`);
 without the stack protector and FORTIFY measured the same as the full set.
 `fib`'s −9.9% (`speed`) and +16.4% (`size`), and `getbyte`'s +9.5% (`size`),
 are placement: their hot loops are the same instructions at a new address.
+Instructions retired (`bench/run.mjs --instructions`, cachegrind, `speed`):
+`strbuild` runs 53,754,318 against 53,229,282 for the same build without
+`-fstack-protector-strong` (+0.99%), the guard on the runtime's string
+builders; its baseline in `bench/instructions.json` moves with this change.
 
 **What it does not cover.**
 

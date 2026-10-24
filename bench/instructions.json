@@ -9,7 +9,7 @@
     "nbody": { "n": 600000, "instructions": 340936265 },
     "spectral": { "n": 800, "instructions": 320645332 },
     "sieve": { "n": 1000000, "instructions": 280313075, "commit": "3d7917e2", "valgrind": "valgrind-3.22.0" },
-    "strbuild": { "n": 131072, "instructions": 53423544 },
+    "strbuild": { "n": 131072, "instructions": 53754318, "commit": "9953eb43", "valgrind": "valgrind-3.22.0" },
     "vec3": { "n": 6000000, "instructions": 300137071 },
     "result": { "n": 40000000, "instructions": 340132277 },
     "math": { "n": 200000, "instructions": 284344433 },
