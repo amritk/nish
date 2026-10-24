@@ -831,7 +831,8 @@ export const main = (): i32 => {
   t.ok("far, probed: the bandwidth reads within a quarter of 200 kB/s", farPeak > ms(150000) && farPeak < ms(250000))
 
   // A link that narrows: 20 ms away at 1 MB/s, probed, so 20 kB frames measure it; then 50 kB/s from 3 s on, under
-  // frames of the same size, which measure nothing new. The old rate is forgotten 5 s after its last sample, and the
+  // frames of the same size, which measure nothing new. Their trips take ten times what the old rate predicts, so the
+  // reading drops to what the answers prove; the decisions forget the old rate 5 s after its last sample, and the
   // round trip's load, grown fourfold, cuts the rate to the floor and then the detail, with none restored.
   const narrowOpts = new RateOptions()
   narrowOpts.probeRttMs = 20.0
@@ -854,12 +855,13 @@ export const main = (): i32 => {
   const narrowRate: f64 = narrow.stats().bytesPerSec
   t.ok("narrow: the bandwidth follows to within a factor of two of 50 kB/s", narrowRate > ms(25000) && narrowRate < ms(100000))
 
-  // The small frames run on past their last sample: the bandwidth is forgotten for decisions, and the reading falls
-  // to what the answers prove, which is no more than the link.
+  // The small frames run on past their last sample: the bandwidth is forgotten for decisions, but their trips take
+  // what the large frames' rate predicts, so the reading keeps it rather than falling to bytes over the round trip.
   const agedLink = sshLink(0.0)
   const aged = smallFrames(smallOpts, agedLink, 30000)
   t.eqBool("small frames, later: the bandwidth is not known", aged.haveRate, false)
-  t.ok("small frames, later: the bandwidth read is no more than the link", aged.stats().bytesPerSec <= ms(300000))
+  const agedRate: f64 = aged.stats().bytesPerSec
+  t.ok("small frames, later: the bandwidth reads within a factor of two of 300 kB/s", agedRate > ms(150000) && agedRate < ms(600000))
 
   // A probe time that is not a finite number gives no round trip; nor does an answer read in its frame's millisecond.
   const infProbeOpts = new RateOptions()

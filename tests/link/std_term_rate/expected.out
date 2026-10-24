@@ -168,7 +168,7 @@ narrow: start 30fps /1 full, 196 frames, 1 unacked at most, longest wait 420ms
 PASS  narrow: the decisions
 PASS  narrow: the bandwidth follows to within a factor of two of 50 kB/s
 PASS  small frames, later: the bandwidth is not known
-PASS  small frames, later: the bandwidth read is no more than the link
+PASS  small frames, later: the bandwidth reads within a factor of two of 300 kB/s
 PASS  infinite probe: no round trip
 PASS  infinite probe: no trip kept
 PASS  same millisecond: answered

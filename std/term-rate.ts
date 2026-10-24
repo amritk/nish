@@ -53,10 +53,13 @@
  * Both kinds smooth the bytes and the time apart (weight 1/4 each), so answers
  * arriving in a burst, each taking almost no time, do not read as unbounded
  * bandwidth; answers under 2 ms apart measure nothing this way. A sample
- * counts for 5 seconds with no newer one, so a link that narrows is not held
- * to its old rate. The bandwidth reported is at least the most of the last 16
- * answers' bytes over their whole round trips, since the bytes took no longer
- * than that, so a link that widens shows on its first quick answer; but that
+ * counts for the decisions for 5 seconds with no newer one, so a link that
+ * narrows is not held to its old rate; the bandwidth reported keeps it until
+ * a newer sample, which starts the average afresh, replaces it, or three
+ * trips in a row take over twice what it and the quickest kept trip
+ * predict. The figure
+ * is at least the most of the last 16 answers' bytes over their whole round
+ * trips, since the bytes took no longer than that, so a link that widens shows on its first quick answer; but that
  * bound counts the latency as bytes' time, so alone it never makes the
  * bandwidth known to the decisions. The base latency is the least, over the
  * kept trips, of the round trip less the trip's bytes at the bandwidth: the
@@ -178,6 +181,12 @@ const rateSplitMs: f64 = 2.0
 
 /** How long a bandwidth sample counts with no newer one, in milliseconds, so a link that narrows is not held to its old rate. */
 const rateFreshMs: f64 = 5000.0
+
+/** A trip over this many times what an aged bandwidth sample predicts contradicts it. */
+const rateStaleFactor: f64 = 2.0
+
+/** How many trips in a row must contradict an aged sample before it goes, so one slow answer does not. */
+const rateStaleTrips: i32 = 3
 
 /** How long, past four round trips, an unanswered frame is waited for, in milliseconds. */
 const rateAckTimeoutMs: f64 = 2000.0
@@ -340,7 +349,10 @@ export class RateController {
   ackBytes: f64
   /** The smoothed time the link spent on an answered frame, in milliseconds, for the bandwidth. */
   ackBusyMs: f64
-  /** The bytes a second delivered: `ackBytes` over `ackBusyMs`, at least the most of `floorPerSec`, which alone is a lower bound. */
+  /**
+   * The bytes a second delivered: `ackBytes` over `ackBusyMs`, at least the most of `floorPerSec`, which alone is a lower
+   * bound. Samples older than `rateFreshMs` still count here while trips agree with them, but no decision uses them.
+   */
   bytesPerSec: f64
   /** When the bandwidth was last sampled, by a frame that waited behind another or by two trips. */
   rateAtMs: f64
@@ -372,6 +384,8 @@ export class RateController {
   stale: i32
   /** Where the next trip goes in `tripMs` once it is full. */
   tripNext: i32
+  /** How many trips in a row have contradicted the aged bandwidth sample. */
+  contradicted: i32
   /** Where the next goes in `floorPerSec` once it is full. */
   floorNext: i32
   /** Whether a frame has been asked for, so the pacer's clock runs. */
@@ -443,6 +457,7 @@ export class RateController {
     this.tripMs = []
     this.tripBytes = []
     this.tripNext = 0
+    this.contradicted = 0
     this.floorPerSec = []
     this.floorNext = 0
     if (this.haveRtt) {
@@ -577,6 +592,24 @@ export class RateController {
     } else {
       this.measureTrip(rtt, bytes)
     }
+    if (!this.haveRate && this.ackBusyMs > 0.0 && bytes > 0.0) {
+      // The aged sample still reported is kept while trips take what it predicts: the quickest kept trip, which holds
+      // the whole latency and perhaps some bytes, so the prediction errs long, plus these bytes' time at the sample.
+      let quickest: f64 = rtt
+      for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
+        if (this.tripMs[i] < quickest) {
+          quickest = this.tripMs[i]
+        }
+      }
+      const expected: f64 = quickest + (bytes * this.ackBusyMs) / this.ackBytes
+      this.contradicted = rtt > rateStaleFactor * expected ? this.contradicted + 1 : 0
+      if (this.contradicted >= rateStaleTrips) {
+        this.ackBytes = 0.0
+        this.ackBusyMs = 0.0
+        this.contradicted = 0
+        this.updateRate()
+      }
+    }
     if (bytes > 0.0 && rtt > rateMinBusyMs) {
       // Whatever the latency and however late the answer was read, the bytes took no longer than the whole trip.
       if (toI32(this.floorPerSec.length) < rateTripCount) {
@@ -629,7 +662,8 @@ export class RateController {
 
   /** The link spent `busyMs` on `bytes`: one sample of the bandwidth. */
   measureRate(bytes: f64, busyMs: f64): void {
-    const first: boolean = this.ackBusyMs <= 0.0
+    // A sample after the last aged out starts afresh, so a link that narrowed meanwhile is not averaged with its old rate.
+    const first: boolean = this.ackBusyMs <= 0.0 || !this.haveRate
     this.rateAtMs = this.lastAckMs
     this.ackBytes = rateSmooth(this.ackBytes, bytes, 0.25, first)
     this.ackBusyMs = rateSmooth(this.ackBusyMs, busyMs, 0.25, first)
@@ -639,13 +673,14 @@ export class RateController {
   /**
    * The bandwidth: the smoothed samples, but never under what the latest
    * answers prove, so a link that widens, or whose answers are read late, is
-   * not taken for a narrow one. Only samples make it known: an answer's bytes
-   * over its whole round trip count the latency as bytes' time, and on a far
-   * link that reads the bandwidth several times too low.
+   * not taken for a narrow one. Only samples make it known, and only while
+   * the latest is within `rateFreshMs` of the latest answer: an answer's
+   * bytes over its whole round trip count the latency as bytes' time, and on
+   * a far link that reads the bandwidth several times too low.
    */
   updateRate(): void {
     let rate: f64 = this.ackBusyMs > 0.0 ? (this.ackBytes * 1000.0) / this.ackBusyMs : 0.0
-    this.haveRate = rate > 0.0
+    this.haveRate = rate > 0.0 && this.lastAckMs - this.rateAtMs <= rateFreshMs
     for (let i: i32 = 0; i < toI32(this.floorPerSec.length); i++) {
       if (this.floorPerSec[i] > rate) {
         rate = this.floorPerSec[i]
@@ -654,13 +689,14 @@ export class RateController {
     this.bytesPerSec = rate
   }
 
-  /** Forget the bandwidth samples once none is newer than `rateFreshMs` at `nowMs`; the lower bound stays. */
+  /**
+   * Stop deciding on the bandwidth once no sample is newer than `rateFreshMs`
+   * at `nowMs`. The figure stays in `bytesPerSec` until a sample replaces it or a trip contradicts it.
+   */
   ageRate(nowMs: f64): void {
     if (this.haveRate && nowMs - this.rateAtMs > rateFreshMs) {
       this.heldLatencyMs = this.baseRttMs
-      this.ackBytes = 0.0
-      this.ackBusyMs = 0.0
-      this.updateRate()
+      this.haveRate = false
       this.baseRttMs = this.leastLatency()
     }
   }
