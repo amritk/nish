@@ -360,7 +360,8 @@ it into `build/seed/`; `NISH_BOOTSTRAP=<path>` names one you already have and
 skips the download. §2a has what the build does with it.
 
 The published package ships `bin/` (the `nish` command, which is a launcher),
-`runtime/` (the C runtime — ten translation units, the wasm subset and their header),
+`runtime/` (the C runtime — ten translation units, the wasm subset and their
+header — and `runtime/sqlite/`, SQLite's vendored source),
 `scripts/build.sh` (the link pipeline), `std/` (the standard library) and
 `docs/AI.md` (the rules card). The
 compiler itself is not in it: it arrives as one prebuilt
@@ -400,6 +401,12 @@ program that uses none of the other eight. `scripts/build.sh` compiles the other
 eight beside any
 `runtime.c` it is handed, so a build that goes through it — every `--link`,
 and every `--profile` recipe in these documents — needs to name only the one.
+
+A program whose IR declares an `sqlite3_*` function also needs SQLite on a
+hand-written line. `scripts/build.sh` adds it by itself; by hand, append
+`runtime/sqlite/sqlite3.c` with the options `scripts/build.sh` lists under
+"SQLite's compile-time options" (at least `-DSQLITE_THREADSAFE=0`, or `=2`
+beside `-DNISH_THREADS=1`).
 
 ## 2a. What `npm run build` does
 

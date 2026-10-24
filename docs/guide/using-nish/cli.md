@@ -97,6 +97,55 @@ The sidecars that let C, Node and WebAssembly call your code —
 `--emit-header`, `--emit-napi`, `--emit-dts` — have a page of their own:
 [Calling Nish from other languages](interop.md).
 
+### SQLite is linked when your program calls it
+
+`nish` ships [SQLite](https://sqlite.org/) 3.54.1 as source, and `--link`
+compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
+any other `sqlite3_*`). You need no SQLite library on your system, and a
+program that does not call SQLite gets none of it.
+
+```ts nish:ok
+declare function sqlite3_libversion(): string;
+
+export const main = (): i32 => {
+  console.log(sqlite3_libversion());
+  return 0;
+};
+```
+
+```console
+$ nish run version.ts
+3.54.1
+```
+
+- **The first link that uses it is slower.** SQLite is about 9.6 MB of C. The
+  first link compiles it once, which takes about 1.5 s under `debug` (and
+  `nish run`) and about 18 s under `speed`. `nish` keeps the result in the
+  runtime cache, so every later link takes about as long as one without
+  SQLite.
+- **One thread, unless you build with `--threads`.** SQLite is compiled with
+  `SQLITE_THREADSAFE=0`, and with `=2` under `--threads`, so each connection is
+  used by one thread at a time.
+- **The defaults are most of SQLite's
+  [recommended options](https://sqlite.org/compile.html#recommended_compile_time_options).**
+  Two are left out. `SQLITE_OMIT_DECLTYPE` would remove
+  `sqlite3_column_decltype`, which reports a column's declared type.
+  `SQLITE_OMIT_AUTOINIT` would make any call before `sqlite3_initialize()`
+  undefined behaviour.
+- **`NISH_SQLITE_CFLAGS` adds compile-time options.** Its words are added to
+  SQLite's compile line, and a `-D` or `-U` for an option `nish` already sets
+  replaces it. For example, `NISH_SQLITE_CFLAGS="-DSQLITE_ENABLE_FTS5"` adds
+  full-text search. The cache keeps a separate copy for each value. Only the
+  first line is read, and it is split on whitespace: quotes are not removed,
+  so a word cannot hold a space. A relative `-I` path is taken from
+  `runtime/sqlite/`, where SQLite is compiled, so give an absolute one.
+- **`--profile napi` links it with hidden visibility.** The addon uses SQLite
+  but does not export its functions to Node or to other addons.
+- **`--profile wasi` links it.** There SQLite locks a database with lock
+  files and has no WAL mode across processes. `scripts/build.sh --profile
+  wasm`, which links no C library, refuses a module that calls SQLite with
+  exit 2.
+
 ## Writing TypeScript: `--emit-ts`
 
 `nish app.ts --emit-ts out/` writes your program back out as TypeScript that

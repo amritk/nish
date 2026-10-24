@@ -70,6 +70,20 @@
 # stops with SIGILL on a CPU without AVX2. `nish --link --cpu x86-64-v3`
 # passes it through.
 #
+# SQLite: an input .ll that declares an `sqlite3_*` or `nish_sqlite_*` function
+# also compiles and links every runtime/sqlite/*.c, the vendored amalgamation
+# (runtime/sqlite/README.md). Any other program compiles none of it. sqlite3.c
+# is compiled to native code at the profile's level, even where the profile
+# compiles to LTO bitcode. The options are most of SQLite's recommended set
+# (see the defaults below), with THREADSAFE=0 (=2 under --threads).
+# NISH_SQLITE_CFLAGS is appended to them: its first line, split on whitespace
+# with no quoting, and a relative -I in it names a directory below
+# runtime/sqlite/, where each unit is compiled. A -D or -U in it for one of
+# their names replaces it. The napi profile compiles SQLite -fPIC and
+# -fvisibility=hidden, so an addon does not export its symbols. Every profile
+# but wasm links it; wasm has no libc to build it on and is refused with exit 2.
+# On wasi, SQLite locks with dot files and has no WAL shared memory.
+#
 # The runtime compiled once (the debug, speed and size profiles only; `nish
 # --link` and `nish run` use these through their runtime cache, src/compile.ts):
 #   --runtime-objects <dir>  compile the runtime.c input and its seven siblings,
@@ -82,7 +96,13 @@
 #                            runtime.c input, after compiling every other input
 #                            with its own $CC -c, all at once. The link line is
 #                            the one the profile always uses.
-# Both refuse the wasm, wasi and napi profiles and --pgo-*, with exit 2.
+#   --sqlite-objects <dir>   compile runtime/sqlite/*.c alone, into
+#                            <dir>/<unit>.o, as a link of a program that calls
+#                            SQLite would, and link nothing. Takes no inputs and
+#                            no -o, and prints nothing on success.
+#   --sqlite-from <dir>      link <dir>/<unit>.o in place of compiling
+#                            runtime/sqlite/, when the IR calls SQLite.
+# All four refuse the wasm, wasi and napi profiles and --pgo-*, with exit 2.
 #
 # Works on Linux (clang + lld preferred, GNU ld tolerated) and macOS (Apple ld64
 # or Homebrew llvm). Set CC to pick a compiler (default: clang on PATH).
@@ -97,6 +117,8 @@ threads=0                              # --threads: -DNISH_THREADS, the thread-l
 objects_to=""                          # --runtime-objects <dir>: compile the runtime alone, into <dir>
 objects_from=""                        # --runtime-from <dir>: link against the runtime compiled there
 cpu=""                                 # --cpu x86-64-v3: the one CPU level above the baseline (WP38 S2)
+sqlite_to=""                           # --sqlite-objects <dir>: compile runtime/sqlite/ alone, into <dir>
+sqlite_from=""                         # --sqlite-from <dir>: link runtime/sqlite/ compiled there
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
@@ -108,15 +130,17 @@ while [ $# -gt 0 ]; do
       cpu="$2"; shift 2 ;;
     --runtime-objects) objects_to="$2"; shift 2 ;;
     --runtime-from) objects_from="$2"; shift 2 ;;
+    --sqlite-objects) sqlite_to="$2"; shift 2 ;;
+    --sqlite-from) sqlite_from="$2"; shift 2 ;;
     --pgo-generate) pgo=(-fprofile-generate); shift ;;
     --pgo-use)
       [ -f "$2" ] || { echo "error: --pgo-use: profile '$2' not found (run the instrumented binary, then llvm-profdata merge)" >&2; exit 2; }
       pgo=("-fprofile-use=$2"); shift 2 ;;
-    -h|--help) sed -n '2,85p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,/^set -euo pipefail$/{/^set -euo pipefail$/!p;}' "$0"; exit 0 ;;   # the header, to the first command
     *) inputs+=("$1"); shift ;;
   esac
 done
-[ ${#inputs[@]} -gt 0 ] || { echo "error: no input files" >&2; exit 2; }
+[ ${#inputs[@]} -gt 0 ] || [ -n "$sqlite_to" ] || { echo "error: no input files" >&2; exit 2; }
 if [ -n "$cpu" ]; then
   [ "$cpu" = x86-64-v3 ] || { echo "error: --cpu takes x86-64-v3, not '$cpu'" >&2; exit 2; }
   case "$profile" in
@@ -153,7 +177,17 @@ if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
   [ ${#pgo[@]} -eq 0 ] || { echo "error: --runtime-objects and --runtime-from do not take --pgo-*" >&2; exit 2; }
   [ -z "$objects_to" ] || [ -z "$objects_from" ] || { echo "error: --runtime-objects and --runtime-from are two different builds" >&2; exit 2; }
 fi
-[ -n "$out" ] || [ -n "$objects_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
+if [ -n "$sqlite_to" ] || [ -n "$sqlite_from" ]; then
+  # The cached SQLite objects sit beside the cached runtime and take what it takes.
+  case "$profile" in
+    debug|speed|size) ;;
+    *) echo "error: --sqlite-objects and --sqlite-from take the debug, speed and size profiles, not '$profile'" >&2; exit 2 ;;
+  esac
+  [ ${#pgo[@]} -eq 0 ] || { echo "error: --sqlite-objects and --sqlite-from do not take --pgo-*" >&2; exit 2; }
+  [ -z "$sqlite_to" ] || [ -z "$sqlite_from" ] || { echo "error: --sqlite-objects and --sqlite-from are two different builds" >&2; exit 2; }
+  [ -z "$sqlite_to" ] || [ -z "$objects_to$objects_from" ] || { echo "error: --sqlite-objects compiles runtime/sqlite/ alone, without --runtime-objects or --runtime-from" >&2; exit 2; }
+fi
+[ -n "$out" ] || [ -n "$objects_to" ] || [ -n "$sqlite_to" ] || { echo "error: -o <out> is required" >&2; exit 2; }
 
 # The runtime is ten translation units, and a caller names one: whoever passes
 # <dir>/runtime.c gets <dir>/runtime-os.c, <dir>/runtime-parallel.c,
@@ -187,6 +221,45 @@ for i in ${inputs[@]+"${inputs[@]}"}; do
       done ;;
   esac
 done
+
+# SQLite (runtime/sqlite/) is an optional unit, and the IR selects it. A module
+# that declares a function of SQLite's C API (`sqlite3_*`) or of the adapter
+# beside it (`nish_sqlite_*`) gets every runtime/sqlite/*.c compiled and
+# linked. Any other program compiles none of it, so its link line and binary
+# stay as they were. The test reads `declare` lines, and only before the first
+# `"` on one, rather than any `@sqlite3_` in the file, because a string
+# constant or a quoted name may hold one. It is one rule with `callsSqlite` in
+# src/run-cache.ts, which decides whether a link asks the runtime cache for
+# SQLite's objects; change both or neither. A caller
+# that names a runtime/sqlite/*.c input itself is left alone, as `halves`
+# leaves a runtime half: naming one object twice is a duplicate-symbol error.
+# A tree without the directory still links every program that does not call it.
+sqlite_dir="$(cd "$(dirname "$0")/../runtime/sqlite" 2>/dev/null && pwd -P)" || sqlite_dir=""
+sqlite_wanted=0
+if [ -n "$sqlite_to" ]; then
+  if [ ${#inputs[@]} -gt 0 ]; then
+    echo "error: --sqlite-objects compiles runtime/sqlite/ alone, not ${inputs[0]}" >&2; exit 2
+  fi
+  sqlite_wanted=1
+fi
+for i in ${inputs[@]+"${inputs[@]}"}; do
+  case "$i" in
+    *.ll) if grep -Eq '^declare [^"]*@(sqlite3|nish_sqlite)_' "$i"; then sqlite_wanted=1; fi ;;
+  esac
+done
+for i in ${inputs[@]+"${inputs[@]}"}; do
+  case "$i" in
+    *.c) if [ "$(cd "$(dirname -- "$i")" && pwd -P)" = "$sqlite_dir" ]; then sqlite_wanted=0; break; fi ;;
+  esac
+done
+if [ "$sqlite_wanted" = 1 ] && [ -z "$sqlite_dir" ]; then
+  echo "error: the module calls SQLite, and $(dirname "$0")/../runtime/sqlite/ is not there" >&2
+  exit 2
+fi
+if [ "$sqlite_wanted" = 1 ] && [ "$profile" = wasm ]; then
+  echo "error: the module calls SQLite, which the wasm profile cannot link: it has no libc for runtime/sqlite/sqlite3.c to build on; use --profile wasi" >&2
+  exit 2
+fi
 
 CC=${CC:-clang}
 common=(-Wno-override-module)          # our IR is target-neutral; clang fills the triple in
@@ -279,6 +352,10 @@ case "$profile" in
       -ffunction-sections -fdata-sections -fomit-frame-pointer
       -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}
       -fno-stack-protector -fvisibility=hidden) ;;
+  napi)
+    optimise=(-O3 -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"}
+      -ffunction-sections -fdata-sections -fomit-frame-pointer
+      -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"}) ;;
 esac
 
 # --runtime-objects and --runtime-from: the one-command link split in two, with
@@ -288,37 +365,127 @@ esac
 # same object either way: native code for debug, -flto bitcode for speed and
 # size, which the link still optimises together with the program. The link
 # takes the same line the profile always uses, with objects for sources.
-if [ -n "$objects_to" ] || [ -n "$objects_from" ]; then
-  compile=()
-  for flag in "${common[@]}"; do
-    case "$flag" in -fuse-ld=*) ;; *) compile+=("$flag") ;; esac
+compile=()
+for flag in "${common[@]}"; do
+  case "$flag" in -fuse-ld=*) ;; *) compile+=("$flag") ;; esac
+done
+compile+=(${optimise[@]+"${optimise[@]}"})
+# Waits for every job, not just the last, and fails when any of them did.
+# bash 3.2 has no `wait -n`, so the jobs are waited for in order.
+pids=()
+join_jobs() {
+  local failed=0 pid
+  for pid in ${pids[@]+"${pids[@]}"}; do
+    wait "$pid" || failed=1
   done
-  compile+=(${optimise[@]+"${optimise[@]}"})
-  # Waits for every job, not just the last, and fails when any of them did.
-  # bash 3.2 has no `wait -n`, so the jobs are waited for in order.
   pids=()
-  join_jobs() {
-    local failed=0 pid
-    for pid in ${pids[@]+"${pids[@]}"}; do
-      wait "$pid" || failed=1
-    done
+  return "$failed"
+}
+# The compiles are this script's children, so a signal that stops it stops
+# them too, before anything they write into is removed. A finished script
+# has waited for every one of them, so there is nothing left to stop.
+stop_jobs() {
+  if [ ${#pids[@]} -gt 0 ]; then
+    kill "${pids[@]}" 2>/dev/null || true
+    wait "${pids[@]}" 2>/dev/null || true
     pids=()
-    return "$failed"
-  }
-  # The compiles are this script's children, so a signal that stops it stops
-  # them too, before anything they write into is removed. A finished script
-  # has waited for every one of them, so there is nothing left to stop.
-  stop_jobs() {
-    if [ ${#pids[@]} -gt 0 ]; then
-      kill "${pids[@]}" 2>/dev/null || true
-      wait "${pids[@]}" 2>/dev/null || true
-      pids=()
-    fi
-  }
-  work=""
-  trap 'stop_jobs; [ -z "$work" ] || rm -rf -- "$work"' EXIT
-  trap 'exit 130' INT
-  trap 'exit 143' TERM
+  fi
+}
+work=""
+trap 'stop_jobs; [ -z "$work" ] || rm -rf -- "$work"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+# A link's own objects go in a private directory of its own and go with it.
+make_work() {
+  [ -n "$work" ] || work=$(mktemp -d "${TMPDIR:-/tmp}/nish-link.XXXXXX")
+}
+# A CC named by a relative path is named from here, not from a unit's directory.
+case "$CC" in /*) ;; */*) CC="$(pwd)/$CC" ;; esac
+
+# SQLite's compile-time options (https://sqlite.org/compile.html): the set the
+# SQLite project recommends for a program that needs none of the legacy
+# behaviours, less two of it. SQLITE_OMIT_DECLTYPE is left out because it
+# removes sqlite3_column_decltype, which a binding reads to tell a column's
+# declared type. SQLITE_OMIT_AUTOINIT is left out because it makes a call
+# before sqlite3_initialize() undefined behaviour, and the check it saves is
+# a branch in a few entry points. Double-quoted strings are identifiers only. There are no memory
+# statistics, no progress callback, no shared cache and no loadable extensions.
+# Expression depth is bounded by the stack, not a counter. A program has one
+# thread unless it was built with --threads. SQLite takes no mutex for one
+# thread (THREADSAFE=0) and serialises each connection for several (=2). wasi
+# has no threads, so it gets 0 whatever the module says. NISH_SQLITE_CFLAGS is
+# appended: `read` takes its first line and splits it on whitespace, so a
+# word cannot hold a space and a quote is an ordinary character. A relative
+# path in it (-Iinclude) resolves against runtime/sqlite/, the directory every
+# unit is compiled from. A -D or -U in it for one of these names replaces the
+# default, so the compile does not warn about a macro defined twice.
+if [ "$threads" = 1 ] && [ "$profile" != wasi ]; then sqlite_threadsafe=2; else sqlite_threadsafe=0; fi
+sqlite_extra=()
+read -r -a sqlite_extra <<< "${NISH_SQLITE_CFLAGS:-}"
+sqlite_defs=()
+for d in -DSQLITE_DQS=0 -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 \
+         -DSQLITE_LIKE_DOESNT_MATCH_BLOBS -DSQLITE_MAX_EXPR_DEPTH=0 -DSQLITE_OMIT_DEPRECATED \
+         -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLITE_OMIT_SHARED_CACHE -DSQLITE_USE_ALLOCA \
+         -DSQLITE_OMIT_LOAD_EXTENSION "-DSQLITE_THREADSAFE=$sqlite_threadsafe"; do
+  name=${d#-D}; name=${name%%=*}
+  keep=1
+  for e in ${sqlite_extra[@]+"${sqlite_extra[@]}"}; do
+    case "$e" in "-D$name"|"-D$name="*|"-U$name") keep=0 ;; esac
+  done
+  if [ "$keep" = 1 ]; then sqlite_defs+=("$d"); fi
+done
+sqlite_defs+=(${sqlite_extra[@]+"${sqlite_extra[@]}"})
+
+# Compiles every runtime/sqlite/*.c with the flags given, all at once, into
+# $1/<unit>.o. Each unit is compiled from inside runtime/sqlite/ by its bare
+# name, as the runtime is, so -g's DWARF names no directory the link was
+# started in. sqlite3.c, the 9.6 MB amalgamation, is compiled to native code
+# even where the profile compiles to LTO bitcode. As bitcode, every link of a
+# program that uses it would generate its code again: measured on a program
+# that opens a database and runs a query, that is 10.6 s a link at -O3,
+# against 0.04 s for the native object. The adapter beside it stays LTO, and
+# it is what inlines into the program. So `-flto` comes off for that one unit
+# alone.
+sqlite_units() {
+  local to=$1 unit flag
+  local -a flags
+  shift
+  for unit in "$sqlite_dir"/*.c; do
+    unit=${unit##*/}
+    flags=()
+    for flag in "$@"; do
+      case "$unit:$flag" in sqlite3.c:-flto) ;; *) flags+=("$flag") ;; esac
+    done
+    (cd -- "$sqlite_dir" && exec "$CC" "${flags[@]}" "${sqlite_defs[@]}" -I. -c "$unit" -o "$to/${unit%.c}.o") &
+    pids+=("$!")
+  done
+  join_jobs || { echo "error: runtime/sqlite/ did not compile" >&2; exit 1; }
+}
+# Adds the objects of runtime/sqlite/ to this link, in the order of the units.
+# They are compiled into the link's own directory with the flags given, or
+# taken from --sqlite-from. Nothing is added for a module that does not call
+# SQLite.
+sqlite_objects() {
+  local from=$sqlite_from unit
+  [ "$sqlite_wanted" = 1 ] || return 0
+  if [ -z "$from" ]; then
+    make_work
+    from="$work/sqlite"
+    mkdir -p -- "$from"
+    sqlite_units "$from" "$@"
+  fi
+  for unit in "$sqlite_dir"/*.c; do
+    unit=${unit##*/}
+    [ -f "$from/${unit%.c}.o" ] || { echo "error: --sqlite-from: $from/${unit%.c}.o is missing" >&2; exit 2; }
+    inputs+=("$from/${unit%.c}.o")
+  done
+}
+
+if [ -n "$sqlite_to" ]; then
+  mkdir -p -- "$sqlite_to"
+  sqlite_to=$(cd -- "$sqlite_to" && pwd)
+  sqlite_units "$sqlite_to" "${compile[@]}"
+  exit 0
 fi
 
 if [ -n "$objects_to" ]; then
@@ -338,8 +505,6 @@ if [ -n "$objects_to" ]; then
   # the file `runtime.c` in the runtime's own directory, whichever directory
   # the first link that compiled it was run in.
   runtime_dir=$(dirname -- "$runtime")
-  # A CC named by a relative path is named from here, not from there.
-  case "$CC" in /*) ;; */*) CC="$(pwd)/$CC" ;; esac
   for unit in runtime.c $halves; do
     (cd -- "$runtime_dir" && exec "$CC" "${compile[@]}" -c "$unit" -o "$objects_to/${unit%.c}.o") &
     pids+=("$!")
@@ -352,9 +517,7 @@ if [ -n "$objects_from" ]; then
   for unit in runtime.c $halves; do
     [ -f "$objects_from/${unit%.c}.o" ] || { echo "error: --runtime-from: $objects_from/${unit%.c}.o is missing" >&2; exit 2; }
   done
-  # The program's own objects are this link's alone, so they go in a private
-  # directory of its own and go with it.
-  work=$(mktemp -d "${TMPDIR:-/tmp}/nish-link.XXXXXX")
+  make_work
   objects=()
   n=0
   for i in "${inputs[@]}"; do
@@ -382,6 +545,7 @@ fi
 # under `set -u` is a fatal "unbound variable" -- bash 4.4 made it legal, which is
 # why Linux never noticed. `pgo`, `elf`, `strip_flag` and `libs` are all empty on
 # ordinary builds, so please do not simplify these back.
+case "$profile" in debug|speed|size) sqlite_objects "${compile[@]}" ;; esac
 case "$profile" in
   debug)
     "$CC" "${common[@]}" "${inputs[@]}" -lm -o "$out" ;;
@@ -469,6 +633,10 @@ case "$profile" in
         exit 2
       fi
     fi
+    # SQLite builds on wasi-libc as it is: the amalgamation sees __wasi__ and
+    # takes dot-file locking, no mmap and no WAL shared memory.
+    sqlite_objects --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG \
+      ${tls[@]+"${tls[@]}"} -ffunction-sections -fdata-sections
     "$CC" -Wno-override-module --target=wasm32-wasi --sysroot="$sysroot" -Oz -DNDEBUG \
       ${tls[@]+"${tls[@]}"} \
       -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all \
@@ -495,9 +663,11 @@ case "$profile" in
     case "$(uname -s)" in Darwin) shared+=(-Wl,-undefined,dynamic_lookup) ;; esac
     # runtime/nish.h is the public ABI header the generated shim includes.
     runtime_inc="$(cd "$(dirname "$0")/../runtime" && pwd)"
-    "$CC" "${common[@]}" -O3 -flto -DNDEBUG ${pgo[@]+"${pgo[@]}"} -I"$node_inc" -I"$runtime_inc" \
-      -ffunction-sections -fdata-sections -fomit-frame-pointer \
-      -fno-asynchronous-unwind-tables -fno-unwind-tables ${elf[@]+"${elf[@]}"} \
+    # SQLite's API stays inside the addon: a Node linked against a system
+    # libsqlite3 exports the same names, and a call bound to that copy would
+    # run another version with other options.
+    sqlite_objects "${compile[@]}" -fPIC -fvisibility=hidden
+    "$CC" "${common[@]}" "${optimise[@]}" -I"$node_inc" -I"$runtime_inc" \
       "${shared[@]}" "${gc[@]}" ${strip_flag[@]+"${strip_flag[@]}"} "${inputs[@]}" -lm -o "$out" ;;
   *) echo "error: unknown profile '$profile'" >&2; exit 2 ;;
 esac

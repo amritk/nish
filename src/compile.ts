@@ -82,6 +82,7 @@ import { fixProgram, loadRoots } from "./fix"
 import { internalErrorFor, simulatedInternalError, simulatedUnlabelledBuiltin } from "./ice"
 import { resolveTarget, supportedTargets } from "./target"
 import {
+  anyCallsSqlite,
   runBinaryName,
   runCacheKey,
   runCacheRoot,
@@ -89,6 +90,9 @@ import {
   runtimeCacheRoot,
   runtimeUnits,
   sha256Hex,
+  sqliteCacheKey,
+  sqliteFingerprint,
+  sqliteUnits,
 } from "./run-cache"
 
 /**
@@ -1182,7 +1186,19 @@ export const main = (): number => {
   if (link.length === 0) {
     return 0
   }
-  return linkProgram(outputs, pkg, link, profile, cpu, opts.debugInfo, opts.threads, json, false)
+  return linkProgram(
+    outputs,
+    pkg,
+    link,
+    profile,
+    cpu,
+    opts.debugInfo,
+    opts.threads,
+    anyCallsSqlite(emitted),
+    "",
+    json,
+    false
+  )
 }
 
 /** `:`, the byte `$PATH` is cut on. */
@@ -1557,7 +1573,10 @@ const runProgram = (
     return 3
   }
   const file = runBinaryName(name)
-  const key = runCacheKey(emitted, file, pkg.root, profile, cpu, debugInfo, threads, cCompiler())
+  const sqlite = anyCallsSqlite(emitted)
+  // Hashed once, for this key and for the SQLite entry's below it.
+  const sqliteLines = sqlite ? sqliteFingerprint(pkg.root, sqliteCflags()) : ""
+  const key = runCacheKey(emitted, file, pkg.root, profile, cpu, debugInfo, threads, cCompiler(), sqliteLines)
   const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
   const binary = `${cacheEntry}/${file}`
   const keyFile = `${cacheEntry}/key`
@@ -1574,6 +1593,8 @@ const runProgram = (
       cpu,
       debugInfo,
       threads,
+      sqlite,
+      sqliteLines,
       json
     )
     if (status !== 0) {
@@ -1660,6 +1681,8 @@ const buildIntoCache = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  sqlite: boolean,
+  sqliteLines: string,
   json: boolean
 ): number => {
   const problem = missingToolchain("run")
@@ -1693,7 +1716,19 @@ const buildIntoCache = (
     outputs.push(file)
   }
   const built = `${work}/${name}`
-  let status = linkProgram(outputs, pkg, built, profile, cpu, debugInfo, threads, json, true)
+  let status = linkProgram(
+    outputs,
+    pkg,
+    built,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    sqlite,
+    sqliteLines,
+    json,
+    true
+  )
   if (status === 0) {
     writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--", built, `${cacheEntry}/${name}`]
@@ -1729,6 +1764,8 @@ const linkProgram = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  sqlite: boolean,
+  sqliteLines: string,
   json: boolean,
   quiet: boolean
 ): number => {
@@ -1744,10 +1781,21 @@ const linkProgram = (
     return 1
   }
   const script = `${root}/scripts/build.sh`
-  const runtime = cachedRuntime(root, quiet ? [] : outputs, profile, cpu, debugInfo, threads, json)
-  if (runtime === null) {
+  const cached = cachedRuntime(
+    root,
+    quiet ? [] : outputs,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    sqlite,
+    sqliteLines,
+    json
+  )
+  if (cached === null) {
     return 3
   }
+  const runtime = cached.runtime
   // `bash -c 'exec "$@" >/dev/null' <argv0> bash <script> ...` runs the script
   // with its stdout dropped and nothing else changed; `$0` is the name the
   // shell would use in its own errors.
@@ -1766,6 +1814,10 @@ const linkProgram = (
     argv.push(runtime)
   } else {
     argv.push(`${root}/runtime/runtime.c`)
+  }
+  if (cached.sqlite.length > 0) {
+    argv.push("--sqlite-from")
+    argv.push(cached.sqlite)
   }
   argv.push("-o")
   argv.push(link)
@@ -1820,15 +1872,39 @@ const pushRecipeFlags = (
 }
 
 /**
- * The runtime cache: the directory holding the runtime compiled for this
- * recipe, compiled into it first when no link has needed it before. Nearly all
- * of a link was the runtime's translation units, compiled again on every
- * one; an entry is compiled once per key (`runtimeCacheKey`) and every later
- * link only compiles the program. Empty when the link should compile the
- * runtime itself, as it always did: the wasi profile, which the cache does not
- * take, and a cache root that is not there or cannot be made private, so a
- * `--link` that works without the cache works without it, and an entry
- * the compile left nothing to fill. Null when the runtime did not compile,
+ * The entries a link takes from the runtime cache: the runtime's, and the
+ * compiled `runtime/sqlite/` for a program that calls SQLite. Either is empty
+ * when the link compiles those units itself.
+ */
+class CachedObjects {
+  runtime: string
+  sqlite: string
+  constructor(runtime: string, sqlite: string) {
+    this.runtime = runtime
+    this.sqlite = sqlite
+  }
+}
+
+/** `NISH_SQLITE_CFLAGS`, which adds to SQLite's options; empty when unset. */
+const sqliteCflags = (): string => {
+  const flags = getenv("NISH_SQLITE_CFLAGS")
+  return flags === null ? "" : flags
+}
+
+/**
+ * The runtime cache: the directories holding the runtime compiled for this
+ * recipe and, when `sqlite` says the program calls it, `runtime/sqlite/`
+ * compiled for it (keyed on `sqliteLines`, the run key's `sqliteFingerprint`,
+ * or on one computed here when that is empty), each compiled into its entry first when no link has needed
+ * it before. Nearly all of a link was the runtime's translation units,
+ * compiled again on every one; an entry is compiled once per key
+ * (`runtimeCacheKey`) and every later link only compiles the program. A
+ * directory is empty when the link should compile those units itself, as it
+ * always did: the wasi profile, which the cache does not take, and a cache
+ * root that is not there or cannot be made private, so a `--link` that works without the cache works without it, and an
+ * entry the compile left nothing to fill. SQLite's entry is apart from the
+ * runtime's (`sqliteCacheKey`), so the nine objects every link reads are not
+ * compiled again when it changes. Null when either did not compile,
  * which is reported here as the link's failure, naming the IR in `outputs`:
  * empty under `run`, whose IR is in a scratch directory that is about to go.
  *
@@ -1856,24 +1932,27 @@ const cachedRuntime = (
   cpu: string,
   debugInfo: boolean,
   threads: boolean,
+  sqlite: boolean,
+  sqliteLines: string,
   json: boolean
-): string | null => {
+): CachedObjects | null => {
+  const none = new CachedObjects("", "")
   const cacheRoot = runtimeCacheRoot()
   if (!(profile === "debug" || profile === "speed" || profile === "size") || cacheRoot.length === 0) {
-    return ""
+    return none
   }
   if (!makeDirectory(cacheRoot)) {
-    return ""
+    return none
   }
   const privateRoot: string[] = ["chmod", "700", cacheRoot]
   if (spawnSyncTo(privateRoot, "/dev/null", "/dev/null") !== 0) {
-    return ""
+    return none
   }
   // `chmod` succeeds for root on any directory, so the owner is asked as the
   // run cache asks it (CLI-7): a root another user made, or a link at its
   // path, is not this user's, and its objects are not linked.
   if (distrustOf(cacheRoot, false, true).length > 0) {
-    return ""
+    return none
   }
   const cc = cCompiler()
   const probe = `${cacheRoot}/tmp-${hexOfI64(monotonicNanos(), 16)}.cc`
@@ -1884,9 +1963,84 @@ const cachedRuntime = (
   spawnSync(forget)
   const runtimeDir = realpathSync(`${root}/runtime`)
   if (answered !== 0 || version === null || runtimeDir === null) {
-    return ""
+    return none
   }
   const key = runtimeCacheKey(root, runtimeDir, profile, cpu, debugInfo, threads, cc, version)
+  const recipe: string[] = [`${root}/runtime/runtime.c`, "--runtime-objects"]
+  const runtime = cachedEntry(
+    root,
+    cacheRoot,
+    key,
+    recipe,
+    runtimeUnits(),
+    "the runtime",
+    outputs,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    json
+  )
+  if (runtime === null) {
+    return null
+  }
+  if (!sqlite || runtime.length === 0) {
+    return new CachedObjects(runtime, "")
+  }
+  const sqliteDir = realpathSync(`${root}/runtime/sqlite`)
+  if (sqliteDir === null) {
+    return new CachedObjects(runtime, "")
+  }
+  const sqliteKey = sqliteCacheKey(
+    root,
+    sqliteDir,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    cc,
+    version,
+    sqliteLines.length > 0 ? sqliteLines : sqliteFingerprint(root, sqliteCflags())
+  )
+  const sqliteRecipe: string[] = ["--sqlite-objects"]
+  const objects = cachedEntry(
+    root,
+    cacheRoot,
+    sqliteKey,
+    sqliteRecipe,
+    sqliteUnits(root),
+    "runtime/sqlite/",
+    outputs,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    json
+  )
+  return objects === null ? null : new CachedObjects(runtime, objects)
+}
+
+/**
+ * The entry of the runtime cache that `key` names, filled first when it holds
+ * no such key: `scripts/build.sh` run with `recipe`, a scratch directory and
+ * the recipe flags compiles `units` into the scratch directory, and their
+ * objects are moved in. Empty when the compile left nothing to move, and null
+ * when it failed, which is reported here, naming `what` did not compile.
+ */
+const cachedEntry = (
+  root: string,
+  cacheRoot: string,
+  key: string,
+  recipe: string[],
+  units: string[],
+  what: string,
+  outputs: string[],
+  profile: string,
+  cpu: string,
+  debugInfo: boolean,
+  threads: boolean,
+  json: boolean
+): string | null => {
   const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
   const keyFile = `${cacheEntry}/key`
   const stored = readFileSyncOrNull(keyFile)
@@ -1898,21 +2052,25 @@ const cachedRuntime = (
     return ""
   }
   const script = `${root}/scripts/build.sh`
-  const argv: string[] = ["bash", script, `${root}/runtime/runtime.c`, "--runtime-objects", work]
+  const argv: string[] = ["bash", script]
+  for (const arg of recipe) {
+    argv.push(arg)
+  }
+  argv.push(work)
   pushRecipeFlags(argv, profile, cpu, debugInfo, threads)
   const status = spawnSync(argv)
   // A compiler that answers 0 and writes no object (`CC=true`, which turns a
   // link into a no-op) leaves nothing to move, and the entry then gets no key:
-  // the link compiles the runtime itself, as it would with no cache at all.
+  // the link compiles the units itself, as it would with no cache at all.
   let entry = ""
   if (status !== 0) {
     const why = status < 0 ? "could not run bash" : `exit ${status}`
     const where = outputs.length > 0 ? `; the IR is in ${outputs.join(", ")}` : ""
-    reportToolchainFailure(`--link: ${script} failed (${why}) compiling the runtime${where}`, json)
+    reportToolchainFailure(`--link: ${script} failed (${why}) compiling ${what}${where}`, json)
   } else {
     writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--"]
-    for (const unit of runtimeUnits()) {
+    for (const unit of units) {
       move.push(`${work}/${unit.slice(0, unit.length - 2)}.o`)
     }
     move.push(`${cacheEntry}/`)
