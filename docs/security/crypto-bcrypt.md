@@ -32,6 +32,13 @@ Out of scope: `timingSafeEqual` (`std/crypto/ct.ts`, in
 ([secret.md](secret.md)), where the salt comes from (the caller's CSPRNG), and
 how a program stores hashes or rate-limits guesses.
 
+Not yet possible: running a hash in a `std/threads` task. The compiler counts
+a `wipe` as a write the caller can see (`markWipe` in `src/attributes.ts`), so
+a task may not call `wipe`, not even on its own local, and so not `bcryptHash`
+or `bcryptVerify`. The wipes stay: replacing them with a plain zeroing loop would
+let `opt -O2` drop it. The guide sends a server to forked workers until a
+task may wipe what only it holds.
+
 ## Threat model
 
 Two attackers. The first holds a stolen hash and wants the password: bcrypt's
