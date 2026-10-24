@@ -595,9 +595,11 @@ const parse = (argv) => {
     } else if (a === "--compiler") {
       o.compiler = path.resolve(next())
     } else if (a === "--run-timeout") {
-      const seconds = Number(next())
-      if (!(seconds > 0)) {
-        throw new Error(`--run-timeout takes a positive number of seconds, not ${seconds}`)
+      const raw = next()
+      const seconds = Number(raw)
+      // Node clamps a timeout past 2^31 - 1 ms to 1 ms, and throws on Infinity.
+      if (!(seconds > 0 && seconds * 1000 <= 2 ** 31 - 1)) {
+        throw new Error(`--run-timeout takes a positive number of seconds up to 2147483, not ${raw}`)
       }
       runTimeoutMs = seconds * 1000
     } else {
