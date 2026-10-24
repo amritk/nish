@@ -101,9 +101,10 @@ function bytesOf(s: string): u8[] -> @bytesOf
   stackSites=0 stackLocals=0
   local +0:9 out: u8[] (const)
   local +1:12 k: i32 (let)
-function cpuMicros(): i64 -> @cpuMicros
+function cpuMicros(at: i32): i64 -> @cpuMicros
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via calloc
+  escaping: at
   calls: bcopy calloc free getrusage nish_panic_overflow word
   stackSites=1 stackLocals=1
   local +0:9 p: CPtr | null (const)
@@ -113,9 +114,7 @@ function cpuMicros(): i64 -> @cpuMicros
   callee +6:3 bcopy -> @bcopy
   callee +7:3 free -> @free
   callee +8:10 word -> @word
-  callee +8:37 word -> @word
-  callee +8:54 word -> @word
-  callee +8:82 word -> @word
+  callee +8:38 word -> @word
 function word(b: u8[], at: i32): i64 -> @word
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_panic_overflow
@@ -372,21 +371,25 @@ function main(): i32 -> @nish_main [exported entry]
   callee +1:17 new Bench -> @Bench.constructor
   callee +3:8 Bench.run -> @Bench.run
   callee +3:69 Bench.run -> @Bench.run
-  local +6:9 cpu0: i64 (const)
-  callee +6:21 cpuMicros -> @cpuMicros
-  local +7:9 t0: i64 (const)
-  local +8:9 ok: boolean (const)
-  callee +8:23 Bench.run -> @Bench.run
-  local +9:9 ns: i64 (const)
-  local +10:9 cpu: i64 (const)
-  callee +10:20 cpuMicros -> @cpuMicros
-  callee +11:35 Bench.run -> @Bench.run
-  local +14:9 fold: Fold (const)
-  local +18:9 conn: PgConnection (const)
-  callee +18:16 PgPool.connection -> @nish.PgPool.connection
-  callee +19:3 PgConnection.terminate -> @nish.PgConnection.terminate
-  callee +20:3 Bench.flush -> @Bench.flush
-  callee +22:3 PgPool.dispose -> @nish.PgPool.dispose
+  local +6:9 user0: i64 (const)
+  callee +6:22 cpuMicros -> @cpuMicros
+  local +7:9 sys0: i64 (const)
+  callee +7:21 cpuMicros -> @cpuMicros
+  local +8:9 t0: i64 (const)
+  local +9:9 ok: boolean (const)
+  callee +9:23 Bench.run -> @Bench.run
+  local +10:9 ns: i64 (const)
+  local +11:9 user: i64 (const)
+  callee +11:21 cpuMicros -> @cpuMicros
+  local +12:9 sys: i64 (const)
+  callee +12:20 cpuMicros -> @cpuMicros
+  callee +13:35 Bench.run -> @Bench.run
+  local +16:9 fold: Fold (const)
+  local +20:9 conn: PgConnection (const)
+  callee +20:16 PgPool.connection -> @nish.PgPool.connection
+  callee +21:3 PgConnection.terminate -> @nish.PgConnection.terminate
+  callee +22:3 Bench.flush -> @Bench.flush
+  callee +24:3 PgPool.dispose -> @nish.PgPool.dispose
 module std/secret.ts [package nish]
 struct Secret<u8[]> (class) size=8 align=8 exported
   field value: u8[] index=0 offset=0
