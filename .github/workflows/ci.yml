@@ -861,7 +861,9 @@ jobs:
       # hold, and the run prints the path of its reproducer. About 40 s on 4
       # threads (941 programs, both sides built); the generated programs run
       # first, so a budget that runs out on a slow runner drops corpus cases,
-      # which the suite links anyway.
+      # which the suite links anyway. It runs on every row on purpose: the rows
+      # are one per architecture, and an elision can be sound on one target's
+      # code and not on the other's.
       - name: Every proof-backed elision changes nothing a program prints
         run: |
           node tests/differential/soundness.js --compiler build/self/compile --corpus tests/cases \
