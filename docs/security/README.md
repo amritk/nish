@@ -59,6 +59,7 @@ the record that found it. The notes below the table name each such finding.
 | Percent-decoding and query strings | [url.md](url.md) | `std/net/url.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹² |
 | `nish:secret` checker rules | [secret.md](secret.md) | `src/secret.ts`; `Compilation.checkSecrets` in `src/compilation.ts`; the field rule's `src/structs.ts`, `src/members.ts`, `src/interop-header.ts`, `src/attributes.ts`, `src/codes.ts` and `src/types.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 |
 | HTTP router | [router.md](router.md) | `std/net/router.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹³ |
+| bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁴ |
 | **Total** ⁸ | | | **3 / 10 / 17 / 94** | **0 / 0 / 3 / 13** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
@@ -164,6 +165,10 @@ the record that found it. The notes below the table name each such finding.
     matched as bytes, and ROUTE-9 (Low), the path matched before it is
     decoded, are accepted, with the reason in their record, and are not
     counted, as SC-17 is not.
+14. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
+    reason in their record, and are not counted: each is the reference's
+    behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
+    does. BCRYPT-5 is a property checked and found to hold, not a finding.
 
 ## Open findings
 

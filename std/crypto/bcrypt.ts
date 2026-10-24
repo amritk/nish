@@ -46,7 +46,7 @@
  * words, the hexadecimal digits of π, are its `BF_init_state`. Closest
  * upstream for each part: `bcryptInitState` is `BF_init_state`;
  * `bcryptEncrypt` and the rounds in `bcryptBody` are `BF_ENCRYPT`/`BF_ROUND`;
- * `bcryptBody` is `BF_body`; `bcryptSetKey` is `BF_set_key`; `bcryptDecode`
+ * `bcryptBody` is `BF_body`; `bcryptSetKey` is `BF_set_key`; `bcryptDecodeSalt`
  * and `bcryptEncode` are `BF_decode` and `BF_encode`; `bcryptExposed` is the
  * part of `BF_crypt` after the setting is parsed, and `bcryptParse` that
  * parse. The state is one flat `u32[]` with P first (words 0–17) and the

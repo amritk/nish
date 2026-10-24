@@ -15,6 +15,9 @@ const ED25519_MODULES = /^define [^\n]*@nish\.(Ed25519|ed25519)/m
 /** The modules that define HMAC, HKDF, SHA-2, the TLS schedule and record layer, or QUIC packet protection. */
 const HELD_DERIVE_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha|Tls|tls|quic)/m
 
+/** The module that defines bcrypt. */
+const BCRYPT_MODULES = /^define [^\n]*@nish\.bcrypt/m
+
 /** The modules that define AES or ChaCha20-Poly1305. */
 const AEAD_MODULES = /^define [^\n]*@nish\.(Aes|aes|ghash|chacha20|poly1305)/m
 
@@ -190,6 +193,21 @@ export const wipeChecks = [
       ["nish.ed25519Encode", 1],
       ["nish.ed25519PublicKeyExposed", 26],
       ["nish.ed25519SignExposed", 38],
+    ],
+  },
+  // `nish/crypto/bcrypt` wipes the Blowfish state and what the key reaches
+  // (docs/security/crypto-bcrypt.md). The roots: `bcryptExposed` 6 (the
+  // state, the expanded key, the block, the digest and its 23-byte head, and
+  // the 128-byte key stream of `bcryptSetKey`, which `opt` inlines), and
+  // `bcryptHash` and `bcryptVerify` 6 each, through `bcryptRun`.
+  {
+    name: "crypto: the wipes survive opt -O2 (bcrypt's Blowfish state, expanded key, key stream, block and digest in bcryptExposed)",
+    program: "tests/link/crypto_bcrypt/main.ts",
+    modules: BCRYPT_MODULES,
+    roots: [
+      ["nish.bcryptExposed", 6],
+      ["nish.bcryptHash", 6],
+      ["nish.bcryptVerify", 6],
     ],
   },
 ]
