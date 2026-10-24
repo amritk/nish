@@ -1,2 +1,173 @@
 PASS  starts needing input
-postgres: 1 passed, 0 failed, 0 skipped
+PASS  startup message: protocol 3.0, user, database, UTF8, ISO dates in UTC
+PASS  startup message: no database, an application name and options
+PASS  trust: AuthenticationOk, BackendKeyData, ReadyForQuery
+PASS  the backend's process id
+PASS  idle
+PASS  no failure
+PASS  a ready connection may send
+PASS  a starting one may not
+PASS  a length under 4 is a framing failure
+PASS  a failed connection stays failed
+PASS  a message over maxMessage is refused before it is read
+PASS  inputSize under 64 is raised to 64
+PASS  receive copies only what fits
+PASS  a message larger than the buffer grows it
+PASS  and is read whole
+PASS  a byte at a time
+PASS  a row before authentication
+PASS  authentication once started
+PASS  BackendKeyData once ready
+PASS  ReadyForQuery with no group in flight
+PASS  a row with no group in flight
+PASS  an unknown message
+PASS  ReadyForQuery for a group not yet synced
+PASS  a notification is ignored
+PASS  an error without its terminator
+PASS  a ParameterStatus without its value
+PASS  an authentication request under 4 bytes
+PASS  AuthenticationOk with data
+PASS  BackendKeyData of 4 bytes
+PASS  ReadyForQuery with a status other than I, T, E
+PASS  ParseComplete with a body
+PASS  a tag without its NUL
+PASS  EmptyQueryResponse with a body
+PASS  NoData with a body
+PASS  ParameterDescription short of its count
+PASS  a column longer than its row
+PASS  a row with bytes after its columns
+PASS  a column length of -2
+PASS  a RowDescription field cut short
+PASS  a row over maxColumns
+PASS  MD5 is refused
+PASS  cleartext is refused
+PASS  SASL without SCRAM-SHA-256
+PASS  a SASL list without its end
+PASS  SASLContinue before SASL
+PASS  SASL offering SCRAM-SHA-256
+PASS  SASLInitialResponse: the mechanism, then client-first-message
+PASS  a server nonce that is not ours
+PASS  a server nonce that adds nothing
+PASS  a server nonce with a space
+PASS  no salt
+PASS  a salt that is not base64
+PASS  iterations under minIterations
+PASS  iterations over maxIterations
+PASS  iterations that would overflow
+PASS  iterations that are not digits
+PASS  AuthenticationOk before the server proved the password
+PASS  a failed connection holds no password
+PASS  an error during startup fails the connection
+PASS  its code
+PASS  its message
+PASS  FATAL once ready fails it too
+PASS  an ERROR ends the statement, then the group
+PASS  the non-localised severity, code, message, detail, hint, constraint, position
+PASS  the group failed
+PASS  in a failed transaction
+PASS  nothing in flight
+PASS  a notice without V takes the localised severity
+PASS  a notice does not end the group
+PASS  whose statements did not fail
+PASS  a client_encoding other than UTF8
+PASS  the end of the stream
+PASS  is a failure
+PASS  reported once
+PASS  the first cause stays
+PASS  dispose may be called twice
+PASS  Terminate
+PASS  Parse and Describe
+PASS  their bytes
+PASS  a group is open
+PASS  Bind
+PASS  no sync while a bind is open
+PASS  no prepare while a bind is open
+PASS  Bind with every parameter kind, then Execute
+PASS  Sync
+PASS  its bytes
+PASS  no sync without a group
+PASS  Close
+PASS  its bytes
+PASS  a NUL in a name is refused
+PASS  a NUL in SQL is refused
+PASS  a NUL in a closed name is refused
+PASS  a NUL in a bound name is refused
+PASS  and nothing is written
+PASS  the open group may take more
+PASS  maxInFlight groups sent: no more
+PASS  prepare is refused
+PASS  bindStart is refused
+PASS  a group done
+PASS  frees a place
+PASS  before ready, nothing may be prepared
+PASS  a field is 18 bytes after its name
+PASS  RowDescription
+PASS  two columns
+PASS  the first is int4
+PASS  the second bool
+PASS  a row
+PASS  int
+PASS  bool
+PASS  columnText
+PASS  colLength
+PASS  colStart points into the input buffer
+PASS  a row with a NULL
+PASS  isNull
+PASS  columnText of NULL
+PASS  int of NULL is 0
+PASS  and sets failed
+PASS  a row wider than the column arrays grows them
+PASS  its last column
+PASS  a tag
+PASS  tagIs a whole word
+PASS  not a prefix of one
+PASS  tagRows
+PASS  a tag without a count
+PASS  tagIs of two words
+PASS  EmptyQueryResponse is the empty tag
+PASS  NoData
+PASS  no columns
+PASS  ParseComplete, BindComplete, CloseComplete, ParameterDescription say nothing
+PASS  a notice
+PASS  counted
+PASS  int
+PASS  int: negative
+PASS  int: the most negative i64
+PASS  int: the largest i64
+PASS  int: one past the largest
+PASS  int: one past the most negative
+PASS  int: empty
+PASS  int: a sign alone
+PASS  int: a letter
+PASS  int: a plus sign
+PASS  int: a window past the buffer
+PASS  bool: t
+PASS  bool: f
+PASS  bool: anything else
+PASS  timestamptz
+PASS  timestamptz, one fraction digit
+PASS  timestamp, no fraction, no offset
+PASS  an offset other than +00
+PASS  infinity
+PASS  BC
+PASS  year 0000
+PASS  a year past 9999
+PASS  seven fraction digits
+PASS  a dot without digits
+PASS  a T where the space goes
+PASS  no room in out
+PASS  an empty array
+PASS  plain, NULL, quoted, escaped
+PASS  null in any case
+PASS  a quoted NULL is text
+PASS  an element longer than out
+PASS  not braced
+PASS  nested
+PASS  dimensions
+PASS  an empty element
+PASS  an unclosed quote
+PASS  text after a quote
+PASS  a space unquoted
+PASS  a window too short
+PASS  stays bad
+postgres: 172 passed, 0 failed, 0 skipped
