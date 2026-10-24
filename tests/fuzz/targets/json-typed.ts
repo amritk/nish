@@ -10,11 +10,16 @@
  * fresh value that encodes to the same text. A refusal is `jsonDecode`'s
  * negative code; a panic, or a round trip that disagrees, is a crash.
  *
+ * The writer is strict: an `f64` field that decoded as an infinity
+ * (`1e999`) has no JSON spelling, and the default writer's `null` for it
+ * (std/json.ts) is not a number the decoder takes back. Strict, it is
+ * `JSON_WRITE_NON_FINITE`, the round trip's one allowed refusal.
+ *
  * `maxMapKeys` is held to 64: the colliding-keys cost behind it is JSON-13
  * (docs/security/json.md), open and owned elsewhere, and a long run would
  * otherwise rediscover it as a timeout rather than find anything new.
  */
-import { JsonWriter } from "nish/json"
+import { JSON_WRITE_NON_FINITE, JsonWriter } from "nish/json"
 import { JsonLimits } from "nish/json-tokenizer"
 import { JSON_DECODE_OK, JsonDecoder, JsonNumber, jsonDecode, jsonEncode } from "nish/json-typed"
 
@@ -96,6 +101,7 @@ const decoder = (src: u8[], off: i32, len: i32, mode: i32): JsonDecoder => {
 /** A writer over `size` bytes, after encoding `value` into it. */
 const encode = <T>(value: T, size: i32): JsonWriter => {
   const w: JsonWriter = new JsonWriter(new Array<u8>(size), 0)
+  w.setStrict(true)
   jsonEncode(w, value)
   return w
 }
@@ -103,6 +109,9 @@ const encode = <T>(value: T, size: i32): JsonWriter => {
 /** The round trip of a decoded value: encoded, decoded into `fresh`, encoded again. */
 const roundTrip = <T>(value: T, fresh: T, size: i32, mode: i32): void => {
   const w: JsonWriter = encode(value, size)
+  if (w.failed === JSON_WRITE_NON_FINITE) {
+    return
+  }
   if (w.failed !== 0) {
     panic(`json-typed: a decoded value did not encode (${w.failed})`)
   }
