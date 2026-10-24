@@ -5296,6 +5296,30 @@ before code that may panic when those bytes matter.
   class, and its name may be written only as the type of a parameter that
   borrows one `` (`_type_position`, `_field`, `_return`, `_result`,
   `_nullable`, `_type_argument`, `_exported_param`).
+- **Not after its close, and not kept past a lend.** A `using` binding's scope
+  is its block, which ends where the close is emitted, so a handle named after
+  its block — after it, in the loop's next iteration, in a `do` loop's
+  condition, in a `for` loop's update, in a later `case`, in the `else`, later
+  in a constructor — names nothing: `` Unknown builtin `f.read` `` or
+  `` Unknown identifier `f` `` (`_use_after_close`, `_use_after_close_loop`,
+  `_use_after_close_do_while`, `_use_after_close_for_update`,
+  `_use_after_close_switch`, `_use_after_close_else`, `_use_after_close_ctor`).
+  A `using` written straight into a `case` clause is refused by the clause rule
+  (`_use_after_close_switch_clause`). A lent handle cannot be kept by its
+  callee. The value rule refuses a local (`let saved = f`,
+  `_use_after_close_keep`), an alias (`_alias`), an array (`_array`) and a
+  `scope()` task (`_scope_task`); the type rule refuses a return (`_return`)
+  and a type argument (`_type_argument`), among them a `Map` or a `Channel` of
+  the class (`_use_after_close_keep_map`, `_use_after_close_keep_channel`);
+  both refuse a field of another class, set in a method, through `new` or as
+  `h.l = this` (`_use_after_close_keep_field`, `_walk_ctor_param`,
+  `_use_after_close_keep_this`). Some shapes are refused by a general
+  rule first: a closure by the arrow-capture rule (`_closure_capture`), and a
+  module binding by the absence of a top-level `let` and the rule that a
+  module constant is never assigned (`_use_after_close_keep_module`,
+  `_use_after_close_keep_module_expr`). In its own constructor `this` is half
+  built, and is neither lent, called, stored nor aliased (`_ctor_this_lend`,
+  `_ctor_this_receiver`, `_ctor_this_store`, `_ctor_this_alias`).
 
 **Two things stay C contracts, as a buffer's count does.** The class's methods
 pass the field only to functions that use it and return, and that neither close
