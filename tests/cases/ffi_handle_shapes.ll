@@ -1,6 +1,7 @@
 %struct.Sure = type { i8* }
 %struct.Quiet = type { i8* }
 %struct.Maybe = type { i8* }
+%struct.Lying = type { i8* }
 %struct.nish_result.i32.i32 = type { i1, i32, i32 }
 
 declare i8* @sure_open()
@@ -8,6 +9,7 @@ declare i32 @sure_close(i8*)
 declare void @quiet_close(i8*)
 declare i8* @maybe_open(i32)
 declare i32 @maybe_close(i8*)
+declare i8* @lying_open(i32)
 declare i32 @peek(i8*)
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
@@ -49,6 +51,14 @@ entry:
   %0 = call i8* @maybe_open(i32 %fail)
   %1 = getelementptr inbounds %struct.Maybe, %struct.Maybe* %this, i32 0, i32 0
   store i8* %0, i8** %1, align 8, !tbaa !8
+  ret void
+}
+
+define internal void @Lying.constructor(%struct.Lying* noundef nonnull noalias align 8 dereferenceable(8) nocapture %this, i32 noundef %fail) #0 {
+entry:
+  %0 = call i8* @lying_open(i32 %fail)
+  %1 = getelementptr inbounds %struct.Lying, %struct.Lying* %this, i32 0, i32 0
+  store i8* %0, i8** %1, align 8, !tbaa !10
   ret void
 }
 
@@ -147,6 +157,26 @@ entry:
   %1 = getelementptr inbounds %struct.Maybe, %struct.Maybe* %0, i32 0, i32 0
   %2 = load i8*, i8** %1, align 8, !tbaa !8
   %3 = call i32 @maybe_close(i8* %2)
+  ret i32 %fail
+}
+
+define noundef i32 @lyingEither(i32 noundef %fail) #0 {
+entry:
+  %l.addr = alloca %struct.Lying*, align 8
+  %Lying.obj = alloca %struct.Lying, align 8
+  call void @Lying.constructor(%struct.Lying* %Lying.obj, i32 %fail)
+  store %struct.Lying* %Lying.obj, %struct.Lying** %l.addr, align 8
+  %0 = load %struct.Lying*, %struct.Lying** %l.addr, align 8
+  %1 = getelementptr inbounds %struct.Lying, %struct.Lying* %0, i32 0, i32 0
+  %2 = load i8*, i8** %1, align 8, !tbaa !10
+  %3 = icmp eq i8* %2, null
+  br i1 %3, label %handle.closed, label %handle.close
+
+handle.close:
+  %4 = call i32 @sure_close(i8* %2)
+  br label %handle.closed
+
+handle.closed:
   ret i32 %fail
 }
 
@@ -315,3 +345,5 @@ attributes #3 = { nounwind willreturn readnone }
 !6 = !{!5, !2, i64 0}
 !7 = !{!"Maybe", !2, i64 0}
 !8 = !{!7, !2, i64 0}
+!9 = !{!"Lying", !2, i64 0}
+!10 = !{!9, !2, i64 0}

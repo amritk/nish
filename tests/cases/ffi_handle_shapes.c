@@ -56,6 +56,9 @@ void *maybe_open(int32_t fail) {
   return sure_open();
 }
 
+/* Typed `CPtr` on the Nish side, so only the dispose's own test guards it. */
+void *lying_open(int32_t fail) { return maybe_open(fail); }
+
 int32_t maybe_close(void *p) {
   if (p == NULL) {
     printf(" c-null");
@@ -81,6 +84,7 @@ static void settle(const char *name, int32_t result) {
 int32_t sureEarly(int32_t k);
 int32_t quietEarly(int32_t k);
 int32_t maybeEither(int32_t fail);
+int32_t lyingEither(int32_t fail);
 int32_t beforeLoop(int32_t n);
 int32_t bodyOrReturn(int32_t fail);
 
@@ -91,6 +95,8 @@ int main(void) {
   settle("quietEarly 0", quietEarly(0));
   settle("maybeEither 0", maybeEither(0));
   settle("maybeEither 2", maybeEither(2));
+  settle("lyingEither 0", lyingEither(0));
+  settle("lyingEither 3", lyingEither(3));
   settle("beforeLoop 5", beforeLoop(5));
   settle("beforeLoop 0", beforeLoop(0));
   settle("bodyOrReturn 0", bodyOrReturn(0));

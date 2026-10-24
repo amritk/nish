@@ -4,6 +4,8 @@
  o1 v1 | quietEarly 0 10
  o1 c1 | maybeEither 0 0
  o-null c-null | maybeEither 2 2
+ o1 c1 | lyingEither 0 0
+ o-null | lyingEither 3 3
  o1 c1 | beforeLoop 5 20
  o1 c1 | beforeLoop 0 0
  o1 c1 | bodyOrReturn 0 20

@@ -404,8 +404,11 @@ export const main = (): i32 => {
 A handle is never copied, stored or returned: you call its methods, or lend
 it to a parameter of its own type. Several declarators in one `using` open
 one at a time, so an `orReturn()` in a later initialiser closes the ones
-before it, and they close in reverse order beside an `arena()` or a lock; a
-`return` waits for a `scope()`'s tasks before it computes its value. A panic or `process.exit` ends
+before it. Falling off the end, `break` and `continue` close them in reverse
+order beside an `arena()`, a `scope()` or a lock. A `return` or an
+`orReturn()` first waits for every `scope()`'s tasks, then computes its value,
+then closes the handles and gives back the locks, innermost first, and only
+then releases the arenas. A panic or `process.exit` ends
 the process without the close; the operating system takes the descriptor
 back, but a bounds panic does not flush what C still buffers, so call
 `fflush` on a `FILE *` you wrote before code that may panic. The rules are in

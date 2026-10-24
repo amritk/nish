@@ -860,7 +860,7 @@ const closeHandle = (emitter: Emitter, info: StructInfo, object: string): void =
   const param = emitter.llvmAbi(close.paramTypes[0], false)
   const result = emitter.llvmAbi(close.returnType, false)
   const call = `call ${result} @${close.name}(${param} ${pointer})`
-  if (!info.handleTested || !emitter.table.isNullable(field.type)) {
+  if (!info.handleTested) {
     emitDropped(emitter, call, result)
     return
   }
