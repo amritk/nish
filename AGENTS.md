@@ -302,13 +302,13 @@ what is blocking and what you need — and keep watching.
 
 ## House rules
 
-- **CI's `test` shards must be green and undegraded**, and every new construct ships with a golden
-  `.ll`, an `llvm-as` pass, a native round trip with expected stdout, at least
-  one negative test, its `docs/LANGUAGE.md` rule, cookbook entry and
-  user-guide page, and a conventional commit message. There is no changesets
-  flow here: the commit subject and body are the changelog entry, and
-  `scripts/changelog-gen.mjs` writes `CHANGELOG.md` from them when a release
-  is cut, so the file is never edited by hand.
+- **CI's `test` shards must be green and undegraded**, and every new
+  construct ships with a golden `.ll`, an `llvm-as` pass, a native round trip
+  with expected stdout, at least one negative test, its `docs/LANGUAGE.md`
+  rule, cookbook entry and user-guide page, and a conventional commit message.
+  There is no changesets flow here: the commit subject and body are the
+  changelog entry, and `scripts/changelog-gen.mjs` writes `CHANGELOG.md` from
+  them when a release is cut, so the file is never edited by hand.
 - **The [user guide](./docs/guide/index.md) moves with the language.** A
   change a user of Nish sees — a construct, a builtin or `nish:` module, a
   `std/` module, a CLI flag or exit code, an install step, a diagnostic a

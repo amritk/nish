@@ -5,7 +5,7 @@ stages:
   - id: r3-split
     title: R3a — the core and the Node adapter, behind the prelude unchanged
     goal: Move every host-agnostic export of runtime/shim.mjs into runtime/core/*.mjs behind runtime/core.mjs, every host-bound one into runtime/node.mjs, and turn shim.mjs and nish.mjs into thin layers so every existing prelude and frozen-rewrite check passes unmodified
-    verification: npm run check, npm run lint and an undegraded npm test green; node tests/run.js runtime-hosts passes; the rule-6 guard in Verification prints nothing
+    verification: npm run check and npm run lint green locally; every CI test shard green and undegraded; node tests/run.js runtime-hosts passes; the rule-6 guard in Verification prints nothing
     status: pending
     todos:
       - id: r3-core-modules
@@ -29,7 +29,7 @@ stages:
   - id: r3-browser
     title: R3b — the browser adapter, the package entry points and their types
     goal: Publish nish/runtime (the core, with declarations) and nish/runtime/node and /browser, with the core and the browser adapter proven to load and run in a context that has only web globals
-    verification: npm run check, npm run lint and an undegraded npm test green; node tests/run.js runtime-hosts passes, including the web-globals-only check; npm pack --dry-run lists the new files; the rule-6 guard prints nothing
+    verification: npm run check and npm run lint green locally; every CI test shard green and undegraded; node tests/run.js runtime-hosts passes, including the web-globals-only check; npm pack --dry-run lists the new files; the rule-6 guard prints nothing
     status: pending
     todos:
       - id: r3b-browser-adapter
@@ -50,7 +50,7 @@ stages:
   - id: r4-skeleton
     title: R4a — the --emit-ts driver, the edit composer, and the live differential
     goal: Ship `--emit-ts <dir>`, writing every root-package module and every std module it reaches as TypeScript at the same relative path plus entry.ts, with imports, specifiers, the entry and the refusals done, row hooks stubbed, and the live differential running every corpus program against its native binary under a generated known list
-    verification: npm run check, npm run lint, node tests/run.js emit-ts, node tests/run.js wasi (read its skip line), node tests/run.js performance and an undegraded npm test green; the checked goldens regenerated and read; the rule-6 guard prints nothing
+    verification: npm run check, npm run lint, node tests/run.js emit-ts, node tests/run.js wasi (read its skip line) and node tests/run.js performance green locally; every CI test shard green and undegraded; the checked goldens regenerated and read; the rule-6 guard prints nothing
     status: pending
     todos:
       - id: r4a-flag
@@ -80,7 +80,7 @@ stages:
   - id: r4-numbers
     title: R4b — the number rows
     goal: Translate §3.1 — i32 and the unsigned widths, i64 and u64 as bigint, integer division, signed shift, the conversions and the Math helpers — so every number-row program leaves the known list
-    verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no number-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; an undegraded npm test before the PR; the rule-6 guard prints nothing
+    verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no number-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; every CI test shard green and undegraded; the rule-6 guard prints nothing
     status: pending
     todos:
       - id: r4b-i32
@@ -101,7 +101,7 @@ stages:
   - id: r4-strings
     title: R4c — the string rows
     goal: Translate §3.2 — the UTF-8 offset methods, the checked slice, String.fromBytes and the parsers — so every string-row program leaves the known list
-    verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no string-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; an undegraded npm test before the PR; the rule-6 guard prints nothing
+    verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no string-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; every CI test shard green and undegraded; the rule-6 guard prints nothing
     status: pending
     todos:
       - id: r4c-offsets
@@ -116,7 +116,7 @@ stages:
   - id: r4-records
     title: R4d — the array and record rows
     goal: Translate §3.3 — record copies in, stores into a slot, zero-filled arrays, set, and every unproven index, pop and store through a checking helper — so every array-row program leaves the known list
-    verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no array-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; an undegraded npm test before the PR; the rule-6 guard prints nothing
+    verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no array-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; every CI test shard green and undegraded; the rule-6 guard prints nothing
     status: pending
     todos:
       - id: r4d-copies
@@ -131,7 +131,7 @@ stages:
   - id: r4-control
     title: R4e — control flow, Result and enums
     goal: Translate §3.4 and the enum row of §3.5 — orReturn hoisted to its statement, Result's names imported, enum as a const object and a type — so every control-row program leaves the known list
-    verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no control-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; an undegraded npm test before the PR; the rule-6 guard prints nothing
+    verification: node tests/run.js emit-ts green with tests/differential/emit-ts-known.txt regenerated and holding no control-row entry; npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green; every CI test shard green and undegraded; the rule-6 guard prints nothing
     status: pending
     todos:
       - id: r4e-or-return
@@ -146,7 +146,7 @@ stages:
   - id: r4-oracle
     title: R4f — the oracle closed, tsc --strict over the output, fuzz over --emit-ts, the docs
     goal: Hold the emitted corpus to tsc --strict, run the fuzz differential through --emit-ts, pin the known list to the libm, FFI and refused rows, and bring wp33, the guide, ARCHITECTURE and AI.md up to what was built
-    verification: node tests/run.js emit-ts green with the strict typecheck and the known-list pin; node tests/differential/fuzz.js --emit-ts --count 50 agrees; npm run check, npm run lint, node docs/check-links.mjs and an undegraded npm test green; the rule-6 guard prints nothing
+    verification: node tests/run.js emit-ts green with the strict typecheck and the known-list pin; node tests/differential/fuzz.js --emit-ts --count 50 agrees; npm run check, npm run lint and node docs/check-links.mjs green locally; every CI test shard green and undegraded; the rule-6 guard prints nothing
     status: pending
     todos:
       - id: r4f-tsc-strict
@@ -673,11 +673,10 @@ Every stage, before the PR and after the merge of `main` before it merges:
 ```bash
 bash scripts/fetch-seed.sh --force        # src/ stages
 npm run check && npm run lint             # read the exit status, never a piped tail
-node tests/run.js runtime-hosts           # R3 stages
+node tests/run.js runtime-hosts           # R3 stages; the full suite is CI's four test shards
 node tests/run.js emit-ts                 # R4 stages
 node tests/run.js wasi && node tests/run.js performance   # every stage touching src/; read the wasi skip line
 node tests/self/goldens.js --update && git diff --stat tests/self/goldens   # src/ stages; read the diff
-npm test > build/npm-test.log 2>&1; echo $?   # undegraded: read the skip count and the DEGRADED banner
 # §1 rule 6 — must print nothing:
 git diff --diff-filter=MDR --name-only origin/main...HEAD -- '*.ll' bench/instructions.json
 ```
