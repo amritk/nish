@@ -1689,7 +1689,9 @@ export class Compilation {
     const manifestDir = this.manifestDirAbove(entryPath)
     const dir = manifestDir !== null ? manifestDir : dirname(normalizePath(entryPath))
     this.capabilityLockPath = joinPath([dir, capabilityLockName()])
-    const text: string | null = this.opts.updateCapabilityLock ? null : readFileSyncOrNull(this.capabilityLockPath)
+    const text: string | null = this.opts.updateCapabilityLock
+      ? null
+      : readFileSyncOrNull(this.capabilityLockPath)
     if (!this.opts.updateCapabilityLock && text === null) {
       return
     }
@@ -1739,7 +1741,14 @@ export class Compilation {
   }
 
   /** Dependency `name`'s capability `c`, which the lockfile does not record, refused as `reportDependencyRefusal` refuses a grant. */
-  reportLockGrowth(source: SourceFile, site: Node, name: string, caller: string, c: i32, hops: string[]): void {
+  reportLockGrowth(
+    source: SourceFile,
+    site: Node,
+    name: string,
+    caller: string,
+    c: i32,
+    hops: string[]
+  ): void {
     this.sink.report(
       source,
       site.start,
