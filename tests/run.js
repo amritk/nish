@@ -5001,7 +5001,14 @@ const LINK_SERIAL = new Map([])
  *   net_interop_server writes only when started by hand. Every socket a
  *   program's checks open is bound to port 0, which the kernel picks free; the
  *   literal ports in tests/link are a server's CLI argument or bytes in a
- *   replayed trace.
+ *   replayed trace. One port is held by nobody for a moment: net_prefork's
+ *   `freePort` binds port 0, reads the number, closes it and hands it to the
+ *   supervisor it spawns, which binds it again. A program in flight beside it
+ *   could take that number with its own port 0 bind in between. It stays in
+ *   the pool rather than LINK_SERIAL because the kernel would have to pick
+ *   that one number out of the ephemeral range within a spawn's time, and if
+ *   it did, the supervisor's bind fails and net_prefork's checks fail loudly,
+ *   never a wrong pass. Three full runs at two widths never saw it.
  */
 const runLinkProgram = async (name) => {
   const steps = []
@@ -5242,7 +5249,7 @@ const runLinkProgram = async (name) => {
 
   // The programs in flight share the repository root as their working
   // directory, and nothing in it: each writes only a directory of its own and
-  // binds port 0 (see above).
+  // binds port 0 (see above, with net_prefork's one rebind).
   const run = await runNative(`link/${name}`, exe, [])
   if (run.death !== null) {
     expect(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
