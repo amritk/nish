@@ -1212,6 +1212,10 @@ export class Compilation {
       checked.push(unit.checker.program)
     }
     spellCSymbolsApart(checked, this.opts.strictExports)
+    this.rejectForeignShadows()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     this.rejectCLibrarySymbols()
     if (this.sink.hasErrors()) {
       return false
@@ -2144,10 +2148,10 @@ export class Compilation {
    * A `declare function` is not a package's symbol but C's, so it keeps its
    * name in every package and two packages can make one key of it. That is
    * accepted when the two declarations agree on their types, because a foreign
-   * signature's facts are read off those types and so are the same facts;
-   * otherwise it is refused (NL3039), as is a defined function of the root
-   * package whose symbol is the declared C name (NL3040), which the fact table
-   * would otherwise hand the C function's facts.
+   * signature's facts are read off those types and so are the same facts, and
+   * otherwise refused (NL3039). A definition whose symbol is the declared C
+   * name is refused too (NL3040), but by `rejectForeignShadows`, once
+   * `spellCSymbolsApart` has given every definition its final symbol.
    *
    * A constructor or method of a class in `clashed` is skipped: `declaredStructs`
    * has already refused the second class, and the member the two share is a
@@ -2159,8 +2163,12 @@ export class Compilation {
     const owners = new StringMap()
     const ownerSigs: (FunctionSig | null)[] = []
     const ownerModules: ModuleUnit[] = []
+    const declared = new StringMap()
+    const declaredSigs: FunctionSig[] = []
+    const declaredModules: ModuleUnit[] = []
     const entry = this.entry()
-    if (entry.checker.program.entryMain !== null) {
+    const hasWrapper = entry.checker.program.entryMain !== null
+    if (hasWrapper) {
       owners.set("main", ownerSigs.length)
       ownerSigs.push(null)
       ownerModules.push(entry)
@@ -2210,6 +2218,24 @@ export class Compilation {
         if (owner !== null && clashed.has(owner.name)) {
           continue
         }
+        if (sig.foreign() && !(sig.name === "main" && hasWrapper)) {
+          // C's symbol, in a table of its own: a template of the name mints
+          // only `name$T` symbols, and a definition is measured against it by
+          // `rejectForeignShadows` once its own symbol is final.
+          const seen = declared.get(sig.name, -1)
+          if (seen < 0) {
+            declared.set(sig.name, declaredSigs.length)
+            declaredSigs.push(sig)
+            declaredModules.push(unit)
+          } else if (
+            seen < declaredSigs.length &&
+            seen < declaredModules.length &&
+            !sameSignature(sig, declaredSigs[seen])
+          ) {
+            this.reportForeignMismatch(unit, sig, declaredSigs[seen], declaredModules[seen])
+          }
+          continue // agreeing: one C function declared twice, one symbol and the same facts under it
+        }
         const at = owners.get(sig.name, -1)
         if (at < 0) {
           owners.set(sig.name, ownerSigs.length)
@@ -2219,34 +2245,6 @@ export class Compilation {
         }
         const previousSig = ownerSigs[at]
         const previousModule = ownerModules[at]
-        if (previousSig !== null && (sig.foreign() || previousSig.foreign())) {
-          if (sig.foreign() && previousSig.foreign()) {
-            if (!sameSignature(sig, previousSig)) {
-              this.reportForeignMismatch(unit, sig, previousSig, previousModule)
-            }
-            continue // agreeing: one C function declared twice, one symbol and the same facts under it
-          }
-          // At the definition, which is the one to rename: the declaration
-          // may be in a package the reader did not write.
-          const defined = sig.foreign() ? previousSig : sig
-          const definer = sig.foreign() ? previousModule : unit
-          const declarer = sig.foreign() ? unit : previousModule
-          const at3 = nameNode(defined)
-          this.sink.report(
-            definer.source,
-            at3.start,
-            at3.end,
-            `Function \`${sig.name}\` is defined in ${definer.name} and declared as a C function in ${declarer.name}; a \`declare function\` binds the C symbol of its name in every package, so rename the defined function`
-          )
-          if (sig.foreign()) {
-            // A later declaration is measured against this one, so a third
-            // that agrees with it is not a second report at the definition.
-            owners.set(sig.name, ownerSigs.length)
-            ownerSigs.push(sig)
-            ownerModules.push(unit)
-          }
-          continue
-        }
         let message = ""
         if (previousSig === null) {
           message = `Function \`main\` in ${unit.name} collides with the entry wrapper \`@main\` that ${previousModule.name} needs; rename it`
@@ -2284,6 +2282,50 @@ export class Compilation {
       at.start,
       at.end,
       `C function \`${sig.name}\` is declared as ${signatureText(this.table, sig)} in ${unit.name} and as ${signatureText(this.table, previousSig)} in ${previousModule.name}; C has one namespace, so every \`declare function\` of one name must agree on its parameter and return types`
+    )
+  }
+
+  /**
+   * NL3040: a defined function whose symbol is a name some module declares as
+   * a C function, which the link would bind both to and the fact table would
+   * key both under. Only the root package's functions can be one, as every
+   * other package's carry its prefix. It runs after `spellCSymbolsApart`, so
+   * it reads the symbol that is emitted: a private `abs` is `abs$` and meets
+   * nothing, where an exported `abs` or a private `myc` beside a
+   * `declare function myc` keeps the C name and is refused.
+   */
+  rejectForeignShadows(): void {
+    const declared = new StringMap()
+    const declaredModules: ModuleUnit[] = []
+    for (const unit of this.modules) {
+      for (const sig of unit.checker.program.functions) {
+        if (sig.foreign() && sig.definedIn(unit.source) && !declared.has(sig.name)) {
+          declared.set(sig.name, declaredModules.length)
+          declaredModules.push(unit)
+        }
+      }
+    }
+    for (const unit of this.modules) {
+      for (const sig of unit.checker.program.functions) {
+        if (sig.foreign() || !sig.definedIn(unit.source)) {
+          continue
+        }
+        const at = declared.get(sig.name, -1)
+        if (at >= 0 && at < declaredModules.length) {
+          this.reportForeignShadow(unit, sig, declaredModules[at])
+        }
+      }
+    }
+  }
+
+  /** NL3040's report, at the definition: the declaration may be in a package the reader did not write. */
+  reportForeignShadow(unit: ModuleUnit, sig: FunctionSig, declarer: ModuleUnit): void {
+    const at = nameNode(sig)
+    this.sink.report(
+      unit.source,
+      at.start,
+      at.end,
+      `Function \`${sig.name}\` is defined in ${unit.name} and declared as a C function in ${declarer.name}; a \`declare function\` binds the C symbol of its name in every package, so rename the defined function`
     )
   }
 
