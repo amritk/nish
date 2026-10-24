@@ -9862,6 +9862,35 @@ if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includ
   }
 }
 
+// The bcrypt vectors of tests/link/crypto_bcrypt as a `--profile wasi` module
+// under Node's WASI: the module is pure, so it builds for wasm32 and answers
+// every vector there as natively.
+if (!only || ["crypto_bcrypt", "bcrypt", "wasi"].some((name) => name.includes(only))) {
+  if (WASI_SYSROOT && has("wasm-ld")) {
+    const dir = path.join(buildDir, "wasi_crypto_bcrypt")
+    const wasm = path.join(dir, "app.wasm")
+    const built = spawnSync(
+      NISH,
+      [path.join(linkDir, "crypto_bcrypt", "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      { cwd: root, encoding: "utf8" }
+    )
+    const ran =
+      built.status === 0
+        ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
+        : built
+    const want = fs.readFileSync(path.join(linkDir, "crypto_bcrypt", "expected.out"), "utf8")
+    check(
+      `link/crypto_bcrypt: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      built.status === 0 && ran.status === 0 && ran.stdout === want,
+      shown(ran)
+    )
+  } else {
+    skip(
+      `skipped: link/crypto_bcrypt: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the bcrypt vectors is not run`
+    )
+  }
+}
+
 // The wipes of key material in `std/` survive `-O2`: one check per group of
 // roots in the area files of `tests/wipes/` (`tests/wipes/index.js` says what a
 // group is and how a root's wipes are counted).
