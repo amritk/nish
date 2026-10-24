@@ -88,14 +88,8 @@ const stringStaticHelper = (member: string): string => {
   return ""
 }
 
-/** Whether `node`'s value is an Nish string, as the checker typed it; a node it typed none of is a miss (`Walk.missType`). */
-const typedString = (walk: Walk, node: Node): boolean => {
-  const type = node.id >= 0 && node.id < walk.program.nodeTypes.length ? walk.program.nodeTypes[node.id] : -1
-  if (type < 0) {
-    walk.missType()
-  }
-  return type === T_STRING
-}
+/** Whether `node`'s value is an Nish string, as the checker typed it; a node it typed none of is a miss (`Walk.typeAt`). */
+const typedString = (walk: Walk, node: Node): boolean => walk.typeAt(node) === T_STRING
 
 /** `helper(args)` with its import asked for: `args` is the call's argument list as it will be written. */
 const stringHelperCall = (walk: Walk, helper: string, args: string): string =>

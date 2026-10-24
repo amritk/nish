@@ -143,11 +143,8 @@ const kindName = (type: i32): string => {
 
 const isBig = (type: i32): boolean => type === T_I64 || type === T_U64
 
-/** `node`'s type in the checked program, or -1 when the node has none recorded. */
-const typeOf = (walk: Walk, node: Node): i32 => {
-  const types = walk.program.nodeTypes
-  return node.id >= 0 && node.id < types.length ? types[node.id] : -1
-}
+/** `node`'s type in the checked program, or -1, a miss in an untyped body (`Walk.typeAt`). */
+const typeOf = (walk: Walk, node: Node): i32 => walk.typeAt(node)
 
 /** Whether the operation at `site` may skip its overflow check: proven, or `--wrapping`. */
 const unchecked = (walk: Walk, site: Node): boolean => {
@@ -390,9 +387,6 @@ const binaryRow = (walk: Walk, node: Node, operands: Operands): string | null =>
  * proof to: the operation, the compound assignment or the `++`.
  */
 const operation = (walk: Walk, site: Node, op: string, type: i32, a: string, b: string): string | null => {
-  if (type < 0 && WIDTH_OPERATORS.indexOf(` ${op} `) >= 0) {
-    walk.missType()
-  }
   if (type === T_F32) {
     return op === "+" || op === "-" || op === "*" || op === "/" || op === "%"
       ? `Math.fround(${a} ${op} ${b})`
@@ -418,9 +412,6 @@ const operation = (walk: Walk, site: Node, op: string, type: i32, a: string, b: 
   }
   return null
 }
-
-/** The operators some integer or f32 type writes other than JavaScript does, padded for `indexOf`. */
-const WIDTH_OPERATORS: string = " + - * / % << >> >>> & | ^ "
 
 /** The helper suffix of `+ - *`: `Add`, `Sub` or `Mul`. */
 const opName = (op: string): string => {
@@ -483,9 +474,6 @@ const zeroLiteral = (text: string): boolean => {
 
 const negation = (walk: Walk, node: Node, type: i32, x: string): string | null => {
   const op = node.text
-  if (type < 0 && (op === "-" || op === "~")) {
-    walk.missType()
-  }
   if (!isInteger(type)) {
     return null
   }
@@ -520,9 +508,6 @@ const negation = (walk: Walk, node: Node, type: i32, x: string): string | null =
  */
 const stepped = (walk: Walk, node: Node, name: string, postfix: boolean, bare: boolean): string | null => {
   const type = typeOf(walk, node.children[0])
-  if (type < 0) {
-    walk.missType()
-  }
   if (!isInteger(type) && type !== T_F32) {
     return null
   }
@@ -622,9 +607,6 @@ const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   } else if (method === "sign" && isBig(type)) {
     replacement = "signI64"
   } else if (method === "abs") {
-    if (type < 0) {
-      walk.missType()
-    }
     if (type === T_I64) {
       replacement = "absI64"
     } else if (type === T_I32) {

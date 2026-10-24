@@ -26,6 +26,7 @@ import N_CLASS from "./nodes" -> const N_CLASS
 import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
 import N_EMPTY from "./nodes" -> const N_EMPTY
 import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
+import N_FIELD from "./nodes" -> const N_FIELD
 import N_FOR from "./nodes" -> const N_FOR
 import N_FOR_OF from "./nodes" -> const N_FOR_OF
 import N_FUNCTION from "./nodes" -> const N_FUNCTION
@@ -102,6 +103,7 @@ struct Walk (class) size=200 align=8 exported
   constructor -> @Walk.constructor
   method stub -> @Walk.stub
   method missType -> @Walk.missType
+  method typeAt -> @Walk.typeAt
   method stubName -> @Walk.stubName
   method helperName -> @Walk.helperName
   method canHoist -> @Walk.canHoist
@@ -123,7 +125,7 @@ function Walk.constructor(this: Walk, program: CheckedProgram, table: TypeTable,
   sharedWrite: via StringSet.add
   escaping: nodeCount program source table
   calls: FunctionSig.definedIn StringMap.get StringSet.add StringSet.constructor StringSet.has Walk.stub nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
-  pointer this: size=200 writesThrough=true captured=false passedTo=Walk.stub#0 Walk.stub#0 Walk.stub#0 Walk.stub#0
+  pointer this: size=200 writesThrough=true captured=false passedTo=Walk.stub#0 Walk.stub#0 Walk.stub#0 Walk.stub#0 Walk.stub#0
   pointer program: size=656 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   pointer source: size=24 writesThrough=true captured=true passedTo=FunctionSig.definedIn#1
@@ -152,10 +154,11 @@ function Walk.constructor(this: Walk, program: CheckedProgram, table: TypeTable,
   local +74:16 template: TemplateInfo (const)
   callee +75:42 StringSet.has -> @StringSet.has
   callee +76:9 Walk.stub -> @Walk.stub
-  local +81:16 template: StructTemplateInfo (const)
-  local +83:20 member: Node (const)
-  callee +85:13 Walk.stub -> @Walk.stub
-  callee +87:13 Walk.stub -> @Walk.stub
+  local +82:16 template: StructTemplateInfo (const)
+  local +84:20 member: Node (const)
+  callee +86:13 Walk.stub -> @Walk.stub
+  callee +88:13 Walk.stub -> @Walk.stub
+  callee +90:13 Walk.stub -> @Walk.stub
 function Walk.stub(this: Walk, decl: Node, nodeCount: i32, name: string): void -> @Walk.stub [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -169,6 +172,16 @@ function Walk.missType(this: Walk): void -> @Walk.missType [exported method]
   sharedWrite: +0:7
   pointer this: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+function Walk.typeAt(this: Walk, node: Node): i32 -> @Walk.typeAt [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.missType
+  calls: Walk.missType nish_panic_index
+  pointer this: size=200 writesThrough=true captured=false passedTo=Walk.missType#0
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 types: i32[] (const)
+  local +1:11 type: i32 (const)
+  callee +3:7 Walk.missType -> @Walk.missType
 function Walk.stubName(this: Walk, id: i32): string -> @Walk.stubName [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
@@ -299,14 +312,16 @@ function hasEffect(node: Node): boolean -> @hasEffect
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)
 function mayPanic(walk: Walk, node: Node): boolean -> @mayPanic
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: TypeTable.baseOf checksOverflow isInteger nish_panic_index nish_str_eq
-  pointer walk: size=200 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.typeAt
+  calls: TypeTable.baseOf Walk.typeAt checksOverflow isInteger nish_panic_index nish_str_eq
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.typeAt#0
   pointer node: size=40 writesThrough=false captured=false passedTo=checksOverflow#2
   stackSites=0 stackLocals=0
   local +0:9 program: CheckedProgram (const)
   local +2:11 op: string (const)
   local +4:13 left: i32 (const)
+  callee +4:20 Walk.typeAt -> @Walk.typeAt
   callee +5:27 isInteger -> @isInteger
   callee +5:37 TypeTable.baseOf -> @TypeTable.baseOf
   callee +9:26 checksOverflow -> @checksOverflow
@@ -394,10 +409,11 @@ function stubText(walk: Walk, node: Node): string -> @stubText
   pointer walk: size=200 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=bodyIndex#0
   stackSites=0 stackLocals=0
-  local +0:9 at: i32 (const)
-  callee +0:14 bodyIndex -> @bodyIndex
-  local +4:9 body: Node (const)
-  local +5:9 text: string (const)
+  local +0:9 text: string (const)
+  local +3:11 init: Node (const)
+  local +6:9 at: i32 (const)
+  callee +6:14 bodyIndex -> @bodyIndex
+  local +10:9 body: Node (const)
 function sameAnswer(aChanged: boolean, a: string, bChanged: boolean, b: string): boolean -> @sameAnswer
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -417,41 +433,41 @@ function changedText(walk: Walk, node: Node, out: Operands, slot: i32): void -> 
   callee -2:35 stubText -> @stubText
   callee +2:7 changedText -> @changedText
   local +4:13 chose: boolean (const)
-  callee +6:9 Walk.refuse -> @Walk.refuse
-  callee +8:16 stubText -> @stubText
-  callee +20:16 Walk.stubName -> @Walk.stubName
-  local +23:13 at: i32 (const)
-  callee +23:18 bodyIndex -> @bodyIndex
-  local +24:11 k: i32 (let)
-  callee +27:11 observeWidths -> @observeWidths
-  callee +42:5 changedAcrossInstances -> @changedAcrossInstances
-  local +45:9 callee: string (const)
-  callee +45:18 observe -> @observe
-  local +46:9 here: boolean (const)
-  local +47:9 effectsBefore: boolean (const)
-  local +48:9 localsBefore: boolean (const)
-  local +49:9 operands: Operands (const)
-  callee +49:20 new Operands -> @Operands.constructor
-  local +50:7 i: i32 (let)
-  callee +55:7 statementText -> @statementText
-  callee +57:32 hoistChild -> @hoistChild
-  callee +58:7 changedText -> @changedText
-  callee +59:11 readsState -> @readsState
-  callee +62:11 readsLocal -> @readsLocal
-  callee +77:47 inOptionalChain -> @inOptionalChain
-  callee +77:90 writes -> @writes
-  local +78:9 hoisted: i32 (const)
-  local +79:9 choiceBefore: boolean (const)
-  local +83:7 rewritten: string | null (let)
-  callee +83:19 numbersRow -> @numbersRow
-  callee +85:17 stringsRow -> @stringsRow
-  callee +88:17 recordsRow -> @recordsRow
-  callee +91:17 controlRow -> @controlRow
-  callee +95:48 Walk.spanOf -> @Walk.spanOf
-  callee +104:14 hasEffect -> @hasEffect
-  callee +104:33 mayPanic -> @mayPanic
-  callee +108:23 Walk.spanOf -> @Walk.spanOf
-  callee +115:23 splice -> @splice
+  callee +9:9 Walk.refuse -> @Walk.refuse
+  callee +11:16 stubText -> @stubText
+  callee +23:16 Walk.stubName -> @Walk.stubName
+  local +26:13 at: i32 (const)
+  callee +26:18 bodyIndex -> @bodyIndex
+  local +27:11 k: i32 (let)
+  callee +30:11 observeWidths -> @observeWidths
+  callee +45:5 changedAcrossInstances -> @changedAcrossInstances
+  local +48:9 callee: string (const)
+  callee +48:18 observe -> @observe
+  local +49:9 here: boolean (const)
+  local +50:9 effectsBefore: boolean (const)
+  local +51:9 localsBefore: boolean (const)
+  local +52:9 operands: Operands (const)
+  callee +52:20 new Operands -> @Operands.constructor
+  local +53:7 i: i32 (let)
+  callee +58:7 statementText -> @statementText
+  callee +60:32 hoistChild -> @hoistChild
+  callee +61:7 changedText -> @changedText
+  callee +62:11 readsState -> @readsState
+  callee +65:11 readsLocal -> @readsLocal
+  callee +80:47 inOptionalChain -> @inOptionalChain
+  callee +80:90 writes -> @writes
+  local +81:9 hoisted: i32 (const)
+  local +82:9 choiceBefore: boolean (const)
+  local +86:7 rewritten: string | null (let)
+  callee +86:19 numbersRow -> @numbersRow
+  callee +88:17 stringsRow -> @stringsRow
+  callee +91:17 recordsRow -> @recordsRow
+  callee +94:17 controlRow -> @controlRow
+  callee +98:48 Walk.spanOf -> @Walk.spanOf
+  callee +107:14 hasEffect -> @hasEffect
+  callee +107:33 mayPanic -> @mayPanic
+  callee +111:23 Walk.spanOf -> @Walk.spanOf
+  callee +118:23 splice -> @splice
 function changedAcrossInstances(walk: Walk, node: Node, out: Operands, slot: i32): void -> @changedAcrossInstances
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

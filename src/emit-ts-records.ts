@@ -102,6 +102,16 @@ const COPY_AT_RUN: i32 = 2
 const recordReference = (walk: Walk, type: i32): boolean =>
   type >= 0 && walk.table.isNullable(type) && inlineRecord(walk.program, walk.table.refOf(type))
 
+/**
+ * The type of `node`, whose slot a value is copied into, or -1. An untyped
+ * body's -1 is no miss here (`Walk.typeAt`): `slotCopy` answers it, as a copy
+ * choice where a record of the module is held inline and as no copy where none is.
+ */
+const slotTypeRaw = (walk: Walk, node: Node): i32 => {
+  const types = walk.program.nodeTypes
+  return node.id >= 0 && node.id < types.length ? types[node.id] : -1
+}
+
 /** How a value put into a slot of type `slot` is copied in. */
 const slotCopy = (walk: Walk, slot: i32): i32 => {
   if (walk.inInstance) {
@@ -255,7 +265,7 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
   const left = operands.at(0)
   let args = idxArguments(left)
   if (node.text === "=") {
-    const record = slotCopy(walk, walk.program.nodeTypes[target.id]) !== COPY_NONE
+    const record = slotCopy(walk, slotTypeRaw(walk, target)) !== COPY_NONE
     // An instance under unchecked indexing writes a plain `a[i]`, but its
     // slot can hold a record inline, which `storeIdx` writes field by field.
     if (record && args === "" && walk.inInstance) {
@@ -311,15 +321,15 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
   }
   if (method === "push" && args.length === 1) {
     const arg = operands.at(1)
-    const copy = copied(walk, elementOf(walk, walk.program.nodeTypes[callee.children[0].id]), args[0], arg)
+    const copy = copied(walk, elementOf(walk, slotTypeRaw(walk, callee.children[0])), args[0], arg)
     return copy === arg ? null : `${written}(${copy})`
   }
   if (
     method === "set" &&
     args.length > 0 &&
     args.length <= 2 &&
-    walk.program.nodeTypes[args[0].id] > T_CPTR &&
-    walk.program.nodeTypes[args[0].id] === walk.program.nodeTypes[callee.children[0].id]
+    walk.typeAt(args[0]) > T_CPTR &&
+    walk.typeAt(args[0]) === walk.typeAt(callee.children[0])
   ) {
     return `${walk.helperName("arraySetAt")}(${receiver}, ${operands.at(1)})`
   }
@@ -328,7 +338,7 @@ const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | nul
 
 /** An array literal rebuilt with a copy for each element that could be a record, or `null`. */
 const literalRow = (walk: Walk, node: Node, operands: Operands): string | null => {
-  const slot = elementOf(walk, walk.program.nodeTypes[node.id])
+  const slot = elementOf(walk, slotTypeRaw(walk, node))
   const parts: string[] = []
   let copies = false
   let i = 0

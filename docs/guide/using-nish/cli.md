@@ -254,10 +254,10 @@ integer, an `f32`, a builtin call such as `toU32`, arithmetic whose width
 wraps, a string's `.length` or methods), it is written with a body that throws
 instead, and a warning (`portability:`, NL8012) names it and its line when it
 is the program's own; the standard library's are written without one. The
-fifth refusal (NL4014) is a generic of your own whose body otherwise translates
-but fills `new Array<T>(n)` with `T`'s zero, or copies an element into an array
-slot in a module that keeps records inline: which code those need depends on a
-`T` no call names. Call it, or write a function per element type. The same
+fifth refusal (NL4014) is a generic of your own whose body fills
+`new Array<T>(n)` with `T`'s zero, or copies an element into an array slot in a
+module that keeps records inline: which code those need depends on a `T` no
+call names, so it is refused rather than stubbed. Call it, or write a function per element type. The same
 body in the standard library is a stub, and the program is written.
 
 The `nish:unsafe` functions are imports from `nish/runtime` too:

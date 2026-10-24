@@ -76,6 +76,7 @@ import {
   N_CONSTRUCTOR,
   N_EMPTY,
   N_EXPR_STMT,
+  N_FIELD,
   N_FOR,
   N_FOR_OF,
   N_FUNCTION,
@@ -341,15 +342,18 @@ export class Walk {
         this.stub(template.decl, nodeCount, template.sourceName)
       }
     }
-    // A class template no type argument list reached: every method of it, and
-    // its constructor, whose stub throws before any field could be read.
+    // A class template no type argument list reached: every method of it, its
+    // constructor, whose stub throws before any field could be read, and every
+    // field initializer, whose stub throws in its place.
     for (const template of program.structTemplateList) {
       if (template.origin === source && template.count === 0 && template.decl.kind === N_CLASS) {
         for (const member of template.decl.children[3].children) {
           if (member.kind === N_METHOD) {
-            this.stub(member, nodeCount, `${template.sourceName}.${member.text}`)
+            this.stub(member, nodeCount, `${template.sourceName}.${member.children[0].text}`)
           } else if (member.kind === N_CONSTRUCTOR) {
             this.stub(member, nodeCount, `${template.sourceName}.constructor`)
+          } else if (member.kind === N_FIELD && member.children[2].kind !== N_EMPTY) {
+            this.stub(member, nodeCount, `${template.sourceName}.${member.children[0].text}`)
           }
         }
       }
@@ -370,6 +374,21 @@ export class Walk {
     if (this.untyped) {
       this.typeMiss = true
     }
+  }
+
+  /**
+   * `node`'s type in the checked program, or -1 when the checker recorded none,
+   * which in an untyped body is a miss (`missType`): every row reads a type
+   * through here, so none can take the -1 for an answer without the body
+   * becoming a stub.
+   */
+  typeAt(node: Node): i32 {
+    const types = this.program.nodeTypes
+    const type = node.id >= 0 && node.id < types.length ? types[node.id] : -1
+    if (type < 0) {
+      this.missType()
+    }
+    return type
   }
 
   /** The name `stub` was given for the declaration with node id `id`. */
@@ -649,7 +668,7 @@ const mayPanic = (walk: Walk, node: Node): boolean => {
   if (node.kind === N_BINARY) {
     const op = node.text
     if (op === "/" || op === "%" || op === "/=" || op === "%=") {
-      const left = program.nodeTypes[node.children[0].id]
+      const left = walk.typeAt(node.children[0])
       return left >= 0 && isInteger(walk.table.baseOf(left)) && !program.nodeProvenIndex[node.id]
     }
   }
@@ -783,8 +802,14 @@ const needsTypes = (node: Node): boolean => {
   return false
 }
 
-/** The index of the body of `node`, a function, method or constructor; -1 where it has none, as a `declare`d one. */
+/**
+ * The index of the body of `node`, a function, method or constructor, or of a
+ * field's initializer; -1 where it has none, as a `declare`d one.
+ */
 const bodyIndex = (node: Node): i32 => {
+  if (node.kind === N_FIELD) {
+    return node.children[2].kind !== N_EMPTY ? 2 : -1
+  }
   const at = node.kind === N_CONSTRUCTOR ? 1 : 3
   return node.children.length > at && node.children[at].kind === N_BLOCK ? at : -1
 }
@@ -806,12 +831,17 @@ const observeWidths = (walk: Walk, node: Node): void => {
  * empty string where there is no body, as a `declare`d one has none.
  */
 const stubText = (walk: Walk, node: Node): string => {
+  const text = walk.source.text
+  if (node.kind === N_FIELD) {
+    // A field's initializer: a thrown error is a `never`, which any field type takes.
+    const init = node.children[2]
+    return `${text.substring(node.start, init.start)}(() => {\n    throw new Error("--emit-ts: a generic no instance reaches")\n  })()${text.substring(init.end, node.end)}`
+  }
   const at = bodyIndex(node)
   if (at < 0) {
     return ""
   }
   const body = node.children[at]
-  const text = walk.source.text
   return `${text.substring(node.start, body.start)}{\n    throw new Error("--emit-ts: a generic no instance reaches")\n  }${text.substring(body.end, node.end)}`
 }
 
@@ -841,7 +871,10 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
       changedText(walk, node, out, slot)
       walk.untyped = false
       const chose = walk.choiceNodes.length > choices
-      if (chose && walk.warnStubs && !walk.typeMiss) {
+      // A copy or a zero in the program's own code is refused even where the
+      // body also missed a type: almost every body misses one, and a stub
+      // would hide the element type the reader has to name.
+      if (chose && walk.warnStubs) {
         walk.refuse(walk.choiceNodes[choices], UNTYPED_REFUSAL)
       } else if (chose || walk.typeMiss) {
         stub = stubText(walk, node)

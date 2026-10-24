@@ -1,23 +1,24 @@
-// A generic nothing calls has no native body and no types. A body no type
-// changes is written as it is: `xs[0]` still goes through `idx`, the rewrite
-// that needs no type, and `push` copies nothing, because no record of this
-// program is held inline. A body some type would change is written to throw:
-// `wide`'s `i64` is a `bigint`, `xs.length - 1` wraps at a width no instance
-// says, `s.length` counts UTF-8 bytes only where `s` is known to be a string,
-// and `Counter`'s constructor adds at a width no instance says.
+// A generic nothing calls has no native body and no types, so a body is
+// written as it is only where no row asks for a type: `both`'s array literal
+// copies nothing, because no record of this program is held inline. Every
+// other body asks for one and is written to throw: whether `xs` in `xs[0]` and
+// `xs.push(v)` is a string, whether `item` and `n` are 64-bit, `wide`'s `i64`,
+// which is a `bigint`, `s.length`, which counts UTF-8 bytes only where `s` is
+// known to be a string, and `Tally`'s `0`, a `bigint` beside its `u64` field,
+// in the initializer and the compare.
 import { idx } from "nish/runtime"
-import type { i64, i32 } from "nish/runtime"
+import type { i64, i32, u64 } from "nish/runtime"
 const first = <T>(xs: T[]): T => {
-  return idx(xs, 0)
-}
+    throw new Error("--emit-ts: a generic no instance reaches")
+  }
 
 const wide = <T>(xs: T[]): i64 => {
     throw new Error("--emit-ts: a generic no instance reaches")
   }
 
 const put = <T>(xs: T[], v: T): void => {
-  xs.push(v)
-}
+    throw new Error("--emit-ts: a generic no instance reaches")
+  }
 
 const size = <T>(s: string, x: T): i32 => {
     throw new Error("--emit-ts: a generic no instance reaches")
@@ -26,7 +27,7 @@ const size = <T>(s: string, x: T): i32 => {
 class Box<T> {
   item: T
   constructor(item: T) {
-    this.item = item
+    throw new Error("--emit-ts: a generic no instance reaches")
   }
   both(): T[] {
     return [this.item, this.item]
@@ -36,6 +37,15 @@ class Box<T> {
 class Counter<T> {
   n: i32
   constructor(n: i32) {
+    throw new Error("--emit-ts: a generic no instance reaches")
+  }
+}
+
+class Tally<T> {
+  n: u64 = (() => {
+    throw new Error("--emit-ts: a generic no instance reaches")
+  })()
+  empty(): boolean {
     throw new Error("--emit-ts: a generic no instance reaches")
   }
 }

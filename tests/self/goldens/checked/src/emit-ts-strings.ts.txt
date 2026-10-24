@@ -21,14 +21,13 @@ function stringStaticHelper(member: string): string -> @stringStaticHelper
   calls: nish_str_eq
   stackSites=0 stackLocals=0
 function typedString(walk: Walk, node: Node): boolean -> @typedString
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.missType
-  calls: Walk.missType nish_panic_index
-  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.missType#0
-  pointer node: size=40 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.typeAt
+  calls: Walk.typeAt
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.typeAt#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=Walk.typeAt#1
   stackSites=0 stackLocals=0
-  local +0:9 type: i32 (const)
-  callee +2:5 Walk.missType -> @Walk.missType
+  callee +0:58 Walk.typeAt -> @Walk.typeAt
 function stringHelperCall(walk: Walk, helper: string, args: string): string -> @stringHelperCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.helperName

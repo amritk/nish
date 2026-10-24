@@ -1,10 +1,11 @@
-// A generic nothing calls has no native body and no types. A body no type
-// changes is written as it is: `xs[0]` still goes through `idx`, the rewrite
-// that needs no type, and `push` copies nothing, because no record of this
-// program is held inline. A body some type would change is written to throw:
-// `wide`'s `i64` is a `bigint`, `xs.length - 1` wraps at a width no instance
-// says, `s.length` counts UTF-8 bytes only where `s` is known to be a string,
-// and `Counter`'s constructor adds at a width no instance says.
+// A generic nothing calls has no native body and no types, so a body is
+// written as it is only where no row asks for a type: `both`'s array literal
+// copies nothing, because no record of this program is held inline. Every
+// other body asks for one and is written to throw: whether `xs` in `xs[0]` and
+// `xs.push(v)` is a string, whether `item` and `n` are 64-bit, `wide`'s `i64`,
+// which is a `bigint`, `s.length`, which counts UTF-8 bytes only where `s` is
+// known to be a string, and `Tally`'s `0`, a `bigint` beside its `u64` field,
+// in the initializer and the compare.
 const first = <T>(xs: T[]): T => {
   return xs[0]
 }
@@ -35,6 +36,13 @@ class Counter<T> {
   n: i32
   constructor(n: i32) {
     this.n = n + 1
+  }
+}
+
+class Tally<T> {
+  n: u64 = 0
+  empty(): boolean {
+    return this.n === 0
   }
 }
 

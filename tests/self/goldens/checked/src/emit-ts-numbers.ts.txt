@@ -34,10 +34,9 @@ import T_U8 from "./types" -> const T_U8
 import isInteger from "./types" -> function @isInteger
 import isUnsigned from "./types" -> function @isUnsigned
 const COMPOUND_REFUSAL: string = "--emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const"
-const WIDTH_OPERATORS: string = " + - * / % << >> >>> & | ^ "
 function numbersRow(walk: Walk, node: Node, operands: Operands): string | null -> @numbersRow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via binaryRow
+  sharedWrite: via wideLiteral
   calls: arrayLength binaryRow callRow statementRow typedConstant unaryRow wideLiteral
   pointer walk: size=200 writesThrough=true captured=false passedTo=wideLiteral#0 binaryRow#0 unaryRow#0 callRow#0 statementRow#0 typedConstant#0 arrayLength#0
   pointer node: size=40 writesThrough=true captured=true passedTo=wideLiteral#1 binaryRow#1 unaryRow#1 callRow#1 statementRow#1 typedConstant#1 arrayLength#1
@@ -58,12 +57,13 @@ function isBig(type: i32): boolean -> @isBig
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function typeOf(walk: Walk, node: Node): i32 -> @typeOf
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
-  pointer walk: size=200 writesThrough=false captured=false
-  pointer node: size=40 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.typeAt
+  calls: Walk.typeAt
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.typeAt#0
+  pointer node: size=40 writesThrough=false captured=false passedTo=Walk.typeAt#1
   stackSites=0 stackLocals=0
-  local +0:9 types: i32[] (const)
+  callee +0:49 Walk.typeAt -> @Walk.typeAt
 function unchecked(walk: Walk, site: Node): boolean -> @unchecked
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
@@ -84,9 +84,10 @@ function helper(walk: Walk, name: string, args: string): string -> @helper
   stackSites=0 stackLocals=0
   callee +0:71 Walk.helperName -> @Walk.helperName
 function wideLiteral(walk: Walk, node: Node): string | null -> @wideLiteral
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via typeOf
   calls: bigLiteral hasFraction isBig nish_str_concat typeOf
-  pointer walk: size=200 writesThrough=false captured=false passedTo=typeOf#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=typeOf#0
   pointer node: size=40 writesThrough=false captured=false passedTo=typeOf#1
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -107,7 +108,7 @@ function bigLiteral(text: string): string -> @bigLiteral
   callee +0:7 hasFraction -> @hasFraction
 function typedConstant(walk: Walk, node: Node, operands: Operands): string | null -> @typedConstant
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via foldedText
+  sharedWrite: via typeOf
   calls: Operands.at between foldedText nish_panic_index nish_str_concat nish_str_eq spelledType typeOf
   pointer walk: size=200 writesThrough=true captured=false passedTo=typeOf#0 foldedText#0 between#0 between#0 between#0
   pointer node: size=40 writesThrough=false captured=false
@@ -136,7 +137,7 @@ function foldedText(walk: Walk, node: Node, type: i32): string | null -> @folded
   sharedWrite: via foldedText
   escaping: type
   calls: between bigLiteral foldedText isBig isCompound negation nish_panic_index nish_str_concat nish_str_eq operation
-  pointer walk: size=200 writesThrough=true captured=false passedTo=foldedText#0 between#0 between#0 foldedText#0 negation#0 foldedText#0 foldedText#0 operation#0 between#0
+  pointer walk: size=200 writesThrough=false captured=false passedTo=foldedText#0 between#0 between#0 foldedText#0 negation#0 foldedText#0 foldedText#0 operation#0 between#0
   pointer node: size=40 writesThrough=false captured=false passedTo=negation#1 operation#1
   stackSites=0 stackLocals=0
   callee +0:12 isBig -> @isBig
@@ -200,7 +201,7 @@ function rewrittenTarget(target: Node, text: string): boolean -> @rewrittenTarge
   stackSites=0 stackLocals=0
 function binaryRow(walk: Walk, node: Node, operands: Operands): string | null -> @binaryRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via operation
+  sharedWrite: via typeOf
   calls: Operands.at Walk.helperName Walk.refuse elementArguments idxArguments isCompound nish_panic_index nish_str_concat nish_str_eq nish_str_new operation repeatable rewrittenTarget typeOf
   pointer walk: size=200 writesThrough=true captured=false passedTo=typeOf#0 operation#0 typeOf#0 Walk.refuse#0 Walk.helperName#0 operation#0 typeOf#0
   pointer node: size=40 writesThrough=true captured=true passedTo=typeOf#1 operation#1 Walk.refuse#1 operation#1 typeOf#1
@@ -230,20 +231,19 @@ function binaryRow(walk: Walk, node: Node, operands: Operands): string | null ->
   callee +35:56 Operands.at -> @Operands.at
   callee +35:72 Operands.at -> @Operands.at
 function operation(walk: Walk, site: Node, op: string, type: i32, a: string, b: string): string | null -> @operation
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.missType
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via helper
   escaping: a b op type
-  calls: Walk.missType arithmetic helper isInteger nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from shift wrapTo
-  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.missType#0 helper#0 helper#0 arithmetic#0 shift#0
+  calls: arithmetic helper isInteger nish_str_concat nish_str_eq shift wrapTo
+  pointer walk: size=200 writesThrough=false captured=false passedTo=helper#0 helper#0 arithmetic#0 shift#0
   pointer site: size=40 writesThrough=false captured=false passedTo=arithmetic#1
   stackSites=0 stackLocals=0
-  callee +0:5 Walk.missType -> @Walk.missType
-  callee +7:8 isInteger -> @isInteger
-  callee +11:12 helper -> @helper
-  callee +14:12 helper -> @helper
-  callee +17:12 arithmetic -> @arithmetic
-  callee +20:12 shift -> @shift
-  callee +23:12 wrapTo -> @wrapTo
+  callee +0:8 isInteger -> @isInteger
+  callee +4:12 helper -> @helper
+  callee +7:12 helper -> @helper
+  callee +10:12 arithmetic -> @arithmetic
+  callee +13:12 shift -> @shift
+  callee +16:12 wrapTo -> @wrapTo
 function opName(op: string): string -> @opName
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
@@ -300,48 +300,46 @@ function zeroLiteral(text: string): boolean -> @zeroLiteral
   local +4:11 c: i32 (const)
 function negation(walk: Walk, node: Node, type: i32, x: string): string | null -> @negation
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.missType
+  sharedWrite: via helper
   escaping: type x
-  calls: Walk.missType helper isBig isInteger isSigned isUnsigned nish_panic_index nish_str_concat nish_str_eq unchecked wrapTo zeroLiteral
-  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.missType#0 unchecked#0 helper#0
+  calls: helper isBig isInteger isSigned isUnsigned nish_panic_index nish_str_concat nish_str_eq unchecked wrapTo zeroLiteral
+  pointer walk: size=200 writesThrough=false captured=false passedTo=unchecked#0 helper#0
   pointer node: size=40 writesThrough=false captured=false passedTo=unchecked#1
   stackSites=0 stackLocals=0
   local +0:9 op: string (const)
-  callee +2:5 Walk.missType -> @Walk.missType
-  callee +4:8 isInteger -> @isInteger
-  callee +8:9 isUnsigned -> @isUnsigned
-  callee +9:14 wrapTo -> @wrapTo
-  local +16:9 zero: string (const)
-  callee +16:16 isBig -> @isBig
-  local +17:9 signed: boolean (const)
-  callee +17:18 isSigned -> @isSigned
-  local +19:9 literal: boolean (const)
-  callee +22:12 zeroLiteral -> @zeroLiteral
-  callee +24:18 unchecked -> @unchecked
-  callee +25:12 helper -> @helper
-  callee +27:10 wrapTo -> @wrapTo
+  callee +1:8 isInteger -> @isInteger
+  callee +5:9 isUnsigned -> @isUnsigned
+  callee +6:14 wrapTo -> @wrapTo
+  local +13:9 zero: string (const)
+  callee +13:16 isBig -> @isBig
+  local +14:9 signed: boolean (const)
+  callee +14:18 isSigned -> @isSigned
+  local +16:9 literal: boolean (const)
+  callee +19:12 zeroLiteral -> @zeroLiteral
+  callee +21:18 unchecked -> @unchecked
+  callee +22:12 helper -> @helper
+  callee +24:10 wrapTo -> @wrapTo
 function stepped(walk: Walk, node: Node, name: string, postfix: boolean, bare: boolean): string | null -> @stepped
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.missType
+  sharedWrite: via typeOf
   escaping: name
-  calls: Walk.missType isBig isInteger isSigned nish_panic_index nish_str_concat nish_str_eq operation typeOf unchecked wrapTo
-  pointer walk: size=200 writesThrough=true captured=false passedTo=typeOf#0 Walk.missType#0 unchecked#0 operation#0
+  calls: isBig isInteger isSigned nish_panic_index nish_str_concat nish_str_eq operation typeOf unchecked wrapTo
+  pointer walk: size=200 writesThrough=true captured=false passedTo=typeOf#0 unchecked#0 operation#0
   pointer node: size=40 writesThrough=false captured=false passedTo=unchecked#1 operation#1
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
   callee +0:16 typeOf -> @typeOf
-  callee +2:5 Walk.missType -> @Walk.missType
-  callee +4:8 isInteger -> @isInteger
-  local +7:9 signed: boolean (const)
-  callee +7:18 isSigned -> @isSigned
-  callee +8:43 unchecked -> @unchecked
-  local +11:9 one: string (const)
-  callee +11:15 isBig -> @isBig
-  local +12:9 up: boolean (const)
-  local +13:9 value: string | null (const)
-  callee +13:17 operation -> @operation
-  local +20:9 assigned: string (const)
-  callee +28:10 wrapTo -> @wrapTo
+  callee +1:8 isInteger -> @isInteger
+  local +4:9 signed: boolean (const)
+  callee +4:18 isSigned -> @isSigned
+  callee +5:43 unchecked -> @unchecked
+  local +8:9 one: string (const)
+  callee +8:15 isBig -> @isBig
+  local +9:9 up: boolean (const)
+  local +10:9 value: string | null (const)
+  callee +10:17 operation -> @operation
+  local +17:9 assigned: string (const)
+  callee +25:10 wrapTo -> @wrapTo
 function statementRow(walk: Walk, node: Node): string | null -> @statementRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via stepped
@@ -364,8 +362,8 @@ function between(walk: Walk, from: i32, to: i32): string -> @between
 function callRow(walk: Walk, node: Node, operands: Operands): string | null -> @callRow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via conversion
-  calls: Operands.at Walk.helperName Walk.missType arrayOffsets between conversion indexArguments isBig nish_panic_index nish_str_concat nish_str_eq printed typeOf
-  pointer walk: size=200 writesThrough=true captured=false passedTo=conversion#0 typeOf#0 indexArguments#0 arrayOffsets#0 indexArguments#0 printed#0 typeOf#0 Walk.missType#0 between#0 between#0 Walk.helperName#0 between#0 between#0
+  calls: Operands.at Walk.helperName arrayOffsets between conversion indexArguments isBig nish_panic_index nish_str_concat nish_str_eq printed typeOf
+  pointer walk: size=200 writesThrough=true captured=false passedTo=conversion#0 typeOf#0 indexArguments#0 arrayOffsets#0 indexArguments#0 printed#0 typeOf#0 between#0 between#0 Walk.helperName#0 between#0 between#0
   pointer node: size=40 writesThrough=false captured=false passedTo=indexArguments#1 arrayOffsets#1 indexArguments#1 printed#1 typeOf#1
   pointer operands: size=40 writesThrough=true captured=false passedTo=conversion#3 indexArguments#2 indexArguments#2 printed#2 Operands.at#0 Operands.at#0 Operands.at#0
   stackSites=0 stackLocals=0
@@ -383,15 +381,14 @@ function callRow(walk: Walk, node: Node, operands: Operands): string | null -> @
   local +29:9 method: string (const)
   local +30:7 replacement: string (let)
   callee +37:35 isBig -> @isBig
-  callee +41:7 Walk.missType -> @Walk.missType
-  callee +47:18 Operands.at -> @Operands.at
-  callee +47:35 between -> @between
-  callee +47:75 Operands.at -> @Operands.at
-  callee +47:92 between -> @between
-  callee +53:13 Walk.helperName -> @Walk.helperName
-  callee +53:44 between -> @between
-  callee +53:84 Operands.at -> @Operands.at
-  callee +53:101 between -> @between
+  callee +44:18 Operands.at -> @Operands.at
+  callee +44:35 between -> @between
+  callee +44:75 Operands.at -> @Operands.at
+  callee +44:92 between -> @between
+  callee +50:13 Walk.helperName -> @Walk.helperName
+  callee +50:44 between -> @between
+  callee +50:84 Operands.at -> @Operands.at
+  callee +50:101 between -> @between
 function arrayOffsets(walk: Walk, node: Node): boolean -> @arrayOffsets
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_eq
@@ -403,7 +400,7 @@ function indexArguments(walk: Walk, node: Node, operands: Operands, first: i32):
   sharedWrite: +0:5
   escaping: first
   calls: Operands.at Walk.helperName isBig nish_panic_index nish_str_concat nish_str_from_i32 typeOf wrappedFrom
-  pointer walk: size=200 writesThrough=false captured=false passedTo=typeOf#0 Walk.helperName#0 wrappedFrom#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=typeOf#0 Walk.helperName#0 wrappedFrom#0
   pointer node: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=true captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
@@ -416,10 +413,11 @@ function indexArguments(walk: Walk, node: Node, operands: Operands, first: i32):
   callee +0:72 Operands.at -> @Operands.at
   callee +2:25 wrappedFrom -> @wrappedFrom
 function wrappedFrom(walk: Walk, args: Node, i: i32, from: i32, end: i32): string -> @wrappedFrom
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via typeOf
   escaping: end from i
   calls: between isBig nish_panic_index nish_str_concat typeOf wrappedFrom
-  pointer walk: size=200 writesThrough=false captured=false passedTo=between#0 typeOf#0 wrappedFrom#0 between#0 between#0 wrappedFrom#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=between#0 typeOf#0 wrappedFrom#0 between#0 between#0 wrappedFrom#0
   pointer args: size=40 writesThrough=false captured=false passedTo=wrappedFrom#1 wrappedFrom#1
   stackSites=0 stackLocals=0
   callee +0:12 between -> @between
@@ -434,7 +432,7 @@ function arrayLength(walk: Walk, node: Node, operands: Operands): void -> @array
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Operands.at isBig nish_panic_index nish_str_concat nish_str_eq typeOf
-  pointer walk: size=200 writesThrough=false captured=false passedTo=typeOf#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=typeOf#0
   pointer node: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=true captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
@@ -443,9 +441,10 @@ function arrayLength(walk: Walk, node: Node, operands: Operands): void -> @array
   callee -4:44 typeOf -> @typeOf
   callee +0:33 Operands.at -> @Operands.at
 function printed(walk: Walk, node: Node, operands: Operands): string | null -> @printed
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via typeOf
   calls: Operands.at between isBig nish_str_concat nish_str_eq typeOf
-  pointer walk: size=200 writesThrough=false captured=false passedTo=typeOf#0 between#0 between#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=typeOf#0 between#0 between#0
   pointer node: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0
   stackSites=0 stackLocals=0
@@ -468,10 +467,10 @@ function exactWidth(width: string): boolean -> @exactWidth
   stackSites=0 stackLocals=0
 function conversion(walk: Walk, name: string, args: Node, operands: Operands): string | null -> @conversion
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via helper
+  sharedWrite: via typeOf
   escaping: name
   calls: Operands.at conversionWidth exactWidth helper kindName nish_str_concat nish_str_eq typeOf
-  pointer walk: size=200 writesThrough=false captured=false passedTo=typeOf#0 helper#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=typeOf#0 helper#0
   pointer args: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
