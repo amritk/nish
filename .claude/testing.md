@@ -527,6 +527,38 @@ node tests/diagnostic-coverage.js --update              # rewrite the .err pins
 Take the counts from the summary line the tool prints rather than from here —
 they move, and they have.
 
+## Fuzzing
+
+The parsers that take untrusted bytes (JSON, percent-decoding, regex) have
+libFuzzer targets in `tests/fuzz/targets/`. `tests/fuzz/README.md` is the full
+guide. It covers the target interface, adding a target, regressions and the
+corpus, CI's jobs, and "Reading a crash". The rules a change has to keep:
+
+- **One recipe**: `bash scripts/fuzz.sh --build|--run|--replay|--smoke`. It
+  compiles the target with `build/nish` (built from this checkout, so the std
+  under test is this one), and links it with `tests/fuzz/harness.c` and the
+  runtime under `-fsanitize=fuzzer,address,undefined -DNISH_FUZZ_ABORT`. A
+  `panic`, a failed check, a sanitizer report, an input over a second and an
+  out-of-memory are all crashes. The sanitizer runtimes come from
+  `libclang-rt-18-dev`.
+- **The interface**: `export const fuzzOne = (data: u8[]): void`, one per
+  file. It never keeps `data` or arena objects across calls. A refusal is a
+  return code, and a disagreement between two ways of computing the same
+  answer is a `panic`.
+- **Every crash is a finding.** The minimized input goes in
+  `tests/fuzz/regressions/<name>/`, shown crashing on the commit before the
+  fix. The fix gets a test in the suite as well, and a row in the area's
+  `docs/security/` record. A target that was wrong is fixed in the target,
+  and the PR says so.
+- **`npm test`** has two sections. `fuzz` builds every target and replays its
+  corpus and regressions. `runtime_sanitize` runs `tests/runtime-test.c` under
+  ASan and UBSan, single-threaded and `-DNISH_THREADS`. Both skip, with a
+  reason, when clang cannot link the sanitizers. Read the skip line.
+- **CI**: `fuzz-smoke` (`ci.yml`, every PR) runs `fuzz.sh --smoke` for 60
+  seconds a target from `-seed=1`, then `runtime_sanitize`, and fails on a
+  skip. `fuzz.yml` (Saturdays and on dispatch) fuzzes each target for 30
+  minutes and uploads crashes and the grown corpus as `fuzz-<name>`.
+
 ## Example case
 
 ```
