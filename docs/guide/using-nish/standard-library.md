@@ -44,12 +44,12 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
-| [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and `nish/term-pixels` are its pure parts |
+| [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url, bcrypt |
-| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router |
+| [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router, a PostgreSQL client |
 | [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing |
 
 ## `nish/testing`
@@ -1196,6 +1196,60 @@ milliseconds (10 by default) before it paints; `repaint_delay 2` and
 compositor's frame callback, so it follows the monitor's refresh rate by
 itself.
 
+## `nish/term-pixels`
+
+`nish/term-pixels` is the part of [`nish/term-io`](terminal.md) that turns
+pixels into terminal output. It is pure, with no capability and no I/O, so a
+program that wants to write its own loop, or test what it draws, can use it
+alone.
+
+- **`Framebuffer(width, height)`** is a grid of `0xRRGGBB` pixels, black when
+  made, with `set`, `get`, `fill`, `clear` and `resize`. A pixel set off the
+  edge is not drawn. `scaleFramebuffer(src, divisor, dst)` shrinks one by a
+  whole divisor.
+- **`GRAPHICS_ASCII`, `GRAPHICS_HALFBLOCK`, `GRAPHICS_SIXEL` and
+  `GRAPHICS_KITTY`** (0 to 3) name the backends, from worst to best, so a
+  terminal's backend and a cap combine with `Math.min`.
+- **`fitFramebuffer(fbW, fbH, cols, rows, cellW, cellH, backend)`** answers
+  the `PixelRect` to draw in: the cells the picture covers, centred in a
+  `cols × rows` area with the aspect ratio kept, and its size in the backend's
+  pixels. A cell size of 0 means "unknown" and takes a usual one.
+- **The four encoders** draw a framebuffer into a rect, sampling it
+  nearest-neighbour; none of them clears the letterbox around it:
+  - `kittyFrame(fb, rect, imageId, out)` writes kitty graphics commands into a
+    `PixelBytes`. Each frame resends the same image id, which the terminal
+    swaps in whole; `kittyDelete(imageId)` frees it at the end.
+  - `sixelFrame(fb, rect, dither, out)` writes one Sixel image in a fixed
+    palette of `SIXEL_REGISTERS` colours, ordered-dithered when `dither` is
+    true.
+  - `drawHalfBlocks(fb, canvas, rect)` draws onto a [`Canvas`](#nishterm), two
+    pixels to a cell.
+  - `drawAscii(fb, screen, rect, colors)` draws onto a `Screen`, one
+    luminance character to a cell.
+
+A `PixelBytes` keeps the kitty and Sixel encoders' output and working arrays,
+grown once to the largest frame, so a program that keeps one encodes frame
+after frame without allocating. `out.text()` is the bytes to write and
+`out.reset()` empties it for the next frame.
+
+```ts nish:ok
+import { GRAPHICS_KITTY, Framebuffer, PixelBytes, fitFramebuffer, kittyFrame } from "nish/term-pixels";
+
+export const main = (): i32 => {
+  const fb = new Framebuffer(64, 32);
+  fb.fill(0x203040);
+  fb.set(10, 5, 0xffcc00);
+  // A 64×32 picture in 40×20 cells of 10×20 pixels.
+  const rect = fitFramebuffer(fb.width, fb.height, 40, 20, 10, 20, GRAPHICS_KITTY);
+  console.log(`cells ${rect.col},${rect.row} ${rect.cols}x${rect.rows}, ${rect.width}x${rect.height} px`);
+  // cells 0,5 40x10, 400x200 px: letterboxed top and bottom
+  const out = new PixelBytes(0);
+  kittyFrame(fb, rect, 1, out);
+  console.log(`${out.length > 0}`); // true: out.text() is ready to write
+  return 0;
+};
+```
+
 ## `nish/base64`
 
 `nish/base64` writes standard base64 (RFC 4648 §4): the alphabet
@@ -1507,7 +1561,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
 | `nish/crypto/bcrypt` | `bcryptHash(password, salt, cost)` and `bcryptVerify(password, hash)`: bcrypt password hashes that other implementations read, with the password a `Secret<u8[]>`; see [Password hashing](password-hashing.md) |
-| `nish/crypto/base64url` | `base64urlEncode` and a strict `base64urlDecode`, unpadded |
+| `nish/crypto/base64url` | `base64urlEncode` and a strict `base64urlDecode`, unpadded; `base64StdPadEncode` and a strict `base64StdPadDecode`, padded, in the standard alphabet, constant-time (`nish/base64` encodes the same alphabet for pixels, without the constant-time guarantee) |
 | `nish/crypto/chacha20poly1305` | `chacha20Poly1305Seal` and `chacha20Poly1305Open` |
 | `nish/crypto/aes` | `aesKey` for AES-128 and AES-256, `aesGcmSeal` and `aesGcmOpen` |
 | `nish/crypto/x25519` | X25519 key exchange |
@@ -1607,6 +1661,10 @@ start-up still takes grows with it: the tables sized from the cap, such as an
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
 shows it.
+
+`nish/net/postgres` is a PostgreSQL client that leaves the socket to your
+loop: prepared statements, pipelined groups, SCRAM-SHA-256, and rows read in
+place from the receive buffer; [PostgreSQL](postgres.md) shows it.
 
 `nish/net/prefork` runs a server on every core: `preforkWorkers(process.argv)`
 starts the program once per worker, each on its own `SO_REUSEPORT` listener,

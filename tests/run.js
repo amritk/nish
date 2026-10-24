@@ -1869,7 +1869,8 @@ if (!only || "term".includes(only)) {
 // under script(1): the guide's program (the `runTerminal` block of
 // docs/guide/using-nish/terminal.md) quits on `q` and on kitty's Ctrl-C and
 // refuses a pipe on either side; a panic mid-frame leaves the restore string
-// as the last bytes and the termios as it was; over a slow modelled link the
+// as the last bytes and the termios as it was, mouse and focus reports among
+// what it turns off when they are on; over a slow modelled link the
 // tier falls, no more than one frame is ever in flight, a key still reaches
 // `update` within a frame of the lowest rate, no terminal reply reaches
 // `update`, and a cell size answered late is learned; closing waits out the
@@ -1877,8 +1878,9 @@ if (!only || "term".includes(only)) {
 // state's watermark holds while an answer is in and lapses after a second
 // without one; a present loop of each backend draws with that backend and
 // keeps its memory while one that leaks 0.27 MB a frame does not; and
-// examples/term-probe.ts reports what it found. Linux only: the relay finds
-// the program through /proc.
+// examples/term-probe.ts reports what it found, from a silent terminal within
+// the probe's timeout, and what NO_COLOR and NISH_TERM_FPS forced. Linux only:
+// the relay finds the program through /proc.
 if (!only || "term".includes(only) || "term-io".includes(only)) {
   const ioDir = path.join(buildDir, "term-io")
   if (process.platform !== "linux" || !has("script")) {
@@ -1886,7 +1888,7 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
   } else {
     fs.rmSync(ioDir, { recursive: true, force: true })
     fs.mkdirSync(ioDir, { recursive: true })
-    const { relay } = await import("./term-io/relay.mjs")
+    const { relay, KITTY_REPLY } = await import("./term-io/relay.mjs")
     const guidePage = path.join(root, "docs", "guide", "using-nish", "terminal.md")
     const guideSrc = [...fs.readFileSync(guidePage, "utf8").matchAll(/```ts nish:ok\n([\s\S]*?)```/g)]
       .map((m) => m[1])
@@ -1936,9 +1938,18 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
       }
     }
     if (probeExe !== null) {
-      const r = await relay(probeExe, "", { dir: at("probe"), timeoutMs: 20000 })
-      const lines = r.out.split("\n")
-      const statsLines = lines.filter((l) => /^\ds frames \d+ tier \d+ backend kitty /.test(l))
+      // A terminal that answers nothing: the probe gives up after 250 ms and
+      // the first frame follows, with CI's slack; a missing timeout hangs.
+      const silent = await relay(probeExe, "", { dir: at("probe-silent"), reply: null, timeoutMs: 20000 })
+      const [r, noColor, fps, fpsCapped] = await Promise.all([
+        relay(probeExe, "", { dir: at("probe"), timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-no-color"), env: { NO_COLOR: "1" }, timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-fps"), env: { NISH_TERM_FPS: "20" }, timeoutMs: 20000 }),
+        relay(probeExe, "", { dir: at("probe-fps-capped"), env: { NISH_TERM_FPS: "500" }, timeoutMs: 20000 }),
+      ])
+      const stats = (run, backend = "\\w+") =>
+        run.out.split("\n").filter((l) => new RegExp(`^\\ds frames \\d+ tier \\d+ backend ${backend} `).test(l))
+      const statsLines = stats(r, "kitty")
       check(
         "term-io: examples/term-probe.ts prints the caps it found under kitty field by field and a stats line a second for 5 s",
         r.status === 0 &&
@@ -1949,6 +1960,42 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
           statsLines.length === 5,
         `${said(r)}\nstats lines ${JSON.stringify(statsLines)}`
       )
+      check(
+        "term-io: examples/term-probe.ts under a silent terminal reports answered false and 5 stats lines, its first frame within 1500 ms of the start",
+        silent.status === 0 &&
+          silent.sameStty &&
+          silent.out.includes("answered false\n") &&
+          stats(silent).length === 5 &&
+          silent.firstFrameMs >= 0 &&
+          silent.firstFrameMs < 1500,
+        `${said(silent)}\nfirst frame at ${Math.round(silent.firstFrameMs)} ms, stats lines ${JSON.stringify(stats(silent))}`
+      )
+      check(
+        "term-io: examples/term-probe.ts under NO_COLOR reports 16 colours and the override that forced them",
+        noColor.status === 0 &&
+          noColor.out.includes("colors 16\n") &&
+          /^overrides .*NO_COLOR: 16 colours/m.test(noColor.out) &&
+          stats(noColor).length === 5,
+        said(noColor)
+      )
+      const fpsLines = stats(fps)
+      check(
+        "term-io: examples/term-probe.ts under NISH_TERM_FPS=20 holds tier 20 throughout and reports the override",
+        fps.status === 0 &&
+          /^overrides .*NISH_TERM_FPS=20: 20 frames a second/m.test(fps.out) &&
+          fpsLines.length === 5 &&
+          fpsLines.every((l) => / tier 20 /.test(l)),
+        `${said(fps)}\nstats lines ${JSON.stringify(fpsLines)}`
+      )
+      const cappedLines = stats(fpsCapped)
+      check(
+        "term-io: examples/term-probe.ts under NISH_TERM_FPS=500 holds the 240 cap and reports it in the override",
+        fpsCapped.status === 0 &&
+          /^overrides .*NISH_TERM_FPS=500: 240 frames a second/m.test(fpsCapped.out) &&
+          cappedLines.length === 5 &&
+          cappedLines.every((l) => / tier 240 /.test(l)),
+        `${said(fpsCapped)}\nstats lines ${JSON.stringify(cappedLines)}`
+      )
     }
     if (loopExe !== null) {
       const panic = await relay(loopExe, "panic", { dir: at("panic") })
@@ -1956,7 +2003,7 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
         "\x18\x1b[?2026l\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b[<u\x1b[?2004l\x1b[0m\x1b[?25h\x1b[?1049l"
       const afterPanic = panic.out.slice(panic.out.lastIndexOf("<panic>") + "<panic>".length)
       check(
-        "term-io: a panic in the tenth render leaves the restore string as the last bytes, in reverse of turning on, and the termios as it was",
+        "term-io: a panic in the tenth render leaves the restore string as the last bytes and the termios as it was",
         panic.status === 1 &&
           panic.err.includes("index out of range: 10 >= 3") &&
           panic.out.includes("<panic>") &&
@@ -1964,25 +2011,45 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
           panic.sameStty,
         `${said(panic)}\nafter <panic>: ${JSON.stringify(afterPanic)}\nwant: ${JSON.stringify(restore)}`
       )
+      // With mouse and focus reports on, the restore string turns them off
+      // too: pixel mouse (1016) first, then SGR (1006) and the mode, before
+      // paste and focus. A terminal that answers the cell size only after the
+      // probe has 1016 turned on late, and the restore string must follow it.
+      const cellSize = "\x1b[6;20;10t\x1b[4;480;800t"
+      const mouseRestore =
+        "\x18\x1b[?2026l\x1b_Ga=d,d=I,i=1,q=2\x1b\\\x1b[<u\x1b[?1016l\x1b[?1006l\x1b[?1003l\x1b[?2004l\x1b[?1004l\x1b[0m\x1b[?25h\x1b[?1049l"
+      for (const [when, options] of [
+        ["in the probe", {}],
+        ["after the probe", { reply: KITTY_REPLY.replace(cellSize, ""), keys: [{ afterFrames: 3, bytes: "\x1b[6;20;10t" }] }],
+      ]) {
+        const r = await relay(loopExe, "panic-mouse", { dir: at(`panic-mouse-${when.replaceAll(" ", "-")}`), ...options })
+        const after = r.out.slice(r.out.lastIndexOf("<panic>") + "<panic>".length)
+        check(
+          `term-io: a panic with mouse and focus reports on, the cell size answered ${when}, turns them off`,
+          r.status === 1 && r.out.includes("<panic>") && after === mouseRestore && r.sameStty,
+          `${said(r)}\nafter <panic>: ${JSON.stringify(after)}\nwant: ${JSON.stringify(mouseRestore)}`
+        )
+      }
 
       const throttle = await relay(loopExe, "throttle", {
         dir: at("throttle"),
         link: { rttMs: 60, bytesPerSec: 300000 },
         keys: [
           { afterFrames: 30, bytes: "k" },
-          { afterFrames: 45, bytes: "q" },
+          { afterFrames: 90, bytes: "q" },
         ],
         timeoutMs: 60000,
       })
       const tier = /tier (\d+) (\d+)/.exec(throttle.out)
       const keyNs = /key (\d+)/.exec(throttle.out)
       const peak = /peak (\d+) B\/s cost (\S+) ms/.exec(throttle.out)
+      const final = /final (\d+) B\/s/.exec(throttle.out)
       const latencyMs =
         keyNs === null || throttle.keySentNs.length === 0
           ? -1
           : Number(BigInt(keyNs[1]) - throttle.keySentNs[0]) / 1e6
       const linkMs = (throttle.maxFrameBytes * 1000) / 300000
-      const measured = `peak ${peak?.[1]} B/s, peak cost ${peak?.[2]} ms, largest frame ${throttle.maxFrameBytes} bytes (${Math.round(linkMs)} ms on the link)`
+      const measured = `final ${final?.[1]} B/s, peak ${peak?.[1]} B/s, peak cost ${peak?.[2]} ms, largest frame ${throttle.maxFrameBytes} bytes (${Math.round(linkMs)} ms on the link)`
       // The limit is `RateOptions.maxUnacked`, 1 unless a program asks for 2;
       // the relay counts it, as the program cannot see past its own gate.
       check(
@@ -1995,14 +2062,18 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
           latencyMs < 250,
         `${said(throttle)}\ntier ${tier?.slice(1)}, relay saw ${throttle.maxUnacked} unacknowledged, key latency ${latencyMs} ms, ${measured}`
       )
-      // The peak is the first, half-megabyte frames' estimate: once the tier
-      // falls the frames are 1.5 kB, the round trip is most of each answer's
-      // wait, and term-rate's estimate drifts down towards bytes over the round
-      // trip. A send time taken after the write, which blocks while the link
-      // drains, leaves the transmission out and reads several times the rate.
+      // The estimate on the last frame, once the tier has fallen and the frames
+      // have been 1.5 kB for about 12 s (so `q` comes after 90 frames, not
+      // sooner): the round trip is most of each answer's wait, so an
+      // estimator that divides bytes by the whole trip drifts down towards
+      // bytes over the round trip, far under the link. term-rate keeps what
+      // the large frames measured until a sample replaces it or the trips
+      // contradict it. A send time taken after the write, which blocks while
+      // the link drains, leaves the transmission out and reads several times
+      // the rate.
       check(
-        "term-io: over a 300 kB/s link the bandwidth measured on its large frames is within 0.5×–2× of the link's",
-        peak !== null && Number(peak[1]) >= 150000 && Number(peak[1]) <= 600000,
+        "term-io: over a 300 kB/s link the bandwidth estimate on the last, small frames is within 0.5×–2× of the link's",
+        final !== null && Number(final[1]) >= 150000 && Number(final[1]) <= 600000,
         `${said(throttle)}\n${measured}`
       )
       // A write the link holds back for over a second is not the frame's cost.
@@ -2015,7 +2086,6 @@ if (!only || "term".includes(only) || "term-io".includes(only)) {
       // Answers the program did not wait for: the probe's, after its timeout,
       // and a second DA1 and cell size mid-run. None reaches `update`; a cell
       // size the probe missed is learned.
-      const { KITTY_REPLY } = await import("./term-io/relay.mjs")
       for (const [name, silent, extra] of [
         ["after the probe timed out", true, KITTY_REPLY],
         ["after DA1", false, "\x1b[?62;52;c\x1b[6;20;10t\x1bP>|kitty(0.49.2)\x1b\\\x1b[?2026;2$y"],

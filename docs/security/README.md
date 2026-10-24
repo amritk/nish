@@ -65,8 +65,9 @@ the record that found it. The notes below the table name each such finding.
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
 | SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁶ |
-| bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁷ |
-| **Total** ⁸ | | | **3 / 10 / 25 / 112** | **0 / 0 / 0 / 11** |
+| PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 ¹⁷ |
+| bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
+| **Total** ⁸ | | | **3 / 10 / 25 / 114** | **0 / 0 / 0 / 11** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -193,7 +194,14 @@ the record that found it. The notes below the table name each such finding.
     granted `ffi`, a function argument blamed on its template, nothing
     confined at run time), are accepted, with the reason in their record,
     and are not counted.
-17. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
+17. PG-1 to PG-8 are the shapes a hostile server's bytes can take, checked
+    and found to hold, and are not findings. PG-9 (Medium), no TLS, PG-10
+    (Low), no way to require SCRAM, and PG-11 (Low), MD5 and cleartext
+    refused, are accepted, with the reason in their record, and are not
+    counted. PG-12 (Low), ClientKey left in a hasher, and PG-13 (Low), an
+    unbounded send buffer, were found by the module's first review and fixed
+    before it merged.
+18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
     does. BCRYPT-5 is a property checked and found to hold, not a finding.

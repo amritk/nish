@@ -39,24 +39,39 @@
  * **What is measured.** Four running averages (exponentially weighted, so
  * recent frames count most and none is stored): the round trip from a frame's
  * send to its acknowledgement (weight 1/8, as TCP smooths its round trip, so
- * one late answer moves it little); the bytes a second the link delivered, the
- * smoothed bytes of an acknowledged frame over the smoothed time the link spent
- * on it (weight 1/4 each, averaged apart so that answers arriving in a burst,
- * each taking almost no time, do not read as unbounded bandwidth); the cost to build a frame and the bytes in one (weight 1/4 each, so a change
- * of scene shows within a few frames). The link's time on a frame starts at the send
- * plus the base latency, which an idle link spends on every frame and which
- * says nothing about bandwidth, or at the previous acknowledgement when the
- * frame was sent before it and that came later (the link was busy until then). The base
- * latency is the least, over answers to frames sent onto an idle link, of the
- * round trip less the frame's bytes at the measured bandwidth; it creeps up
- * 1/256 of the gap per answer so a changed route shows in time. Before the
- * bandwidth is known it is the probe's round trip (`probeRttMs`: the status
- * query alone is a few bytes, so its round trip is the latency) or else the
- * first answer's, whose bytes' time comes off once a later answer measures the
- * bandwidth. With frames of one size sent one at a time onto an idle link the
- * latency and the bytes cannot be told apart; the split is then a guess, but
- * their sum, the frame's round trip, is measured, and that is what the trip
- * load uses.
+ * one late answer moves it little); the bytes a second the link delivered;
+ * the cost to build a frame and the bytes in one (weight 1/4 each, so a
+ * change of scene shows within a few frames).
+ * The bandwidth and the latency are kept apart, so neither can take the
+ * other's share of a round trip. A frame sent before the previous answer, and
+ * answered more than the latency after it, kept the link busy from that answer
+ * to its own: its bytes over that time measure the bandwidth. A frame sent
+ * onto an idle link makes a trip, kept with the last 16 and the probe's:
+ * against the quickest kept trip, one twice its bytes or half, 2 ms or more
+ * apart, measures the bandwidth from the difference, which the latency is no
+ * part of.
+ * Both kinds smooth the bytes and the time apart (weight 1/4 each), so answers
+ * arriving in a burst, each taking almost no time, do not read as unbounded
+ * bandwidth; answers under 2 ms apart measure nothing this way. A sample
+ * counts for the decisions for 5 seconds with no newer one, so a link that
+ * narrows is not held to its old rate; the bandwidth reported keeps it until
+ * a newer sample, which starts the average afresh, replaces it, or three
+ * trips in a row take over twice what it and the quickest trip kept when
+ * it was taken predict. The figure
+ * is at least the most of the last 16 answers' bytes over their whole round
+ * trips, since the bytes took no longer than that, so a link that widens shows on its first quick answer; but that
+ * bound counts the latency as bytes' time, so alone it never makes the
+ * bandwidth known to the decisions. The base latency is the least, over the
+ * kept trips, of the round trip less the trip's bytes at the bandwidth: the
+ * probe's round trip (`probeRttMs`: the status query alone is a few bytes, so
+ * its round trip is the latency) counts from the start, the frames' once the
+ * bandwidth is known. The kept trips roll over, so a changed route shows
+ * within 16 trips. With frames of one size sent one at a time onto
+ * an idle link and no probe the latency and the bytes cannot be told apart:
+ * the bandwidth is then not known, its load counts as 0, and the trip load
+ * governs on the frame's measured round trip: a cut is taken to shorten none
+ * of it and a restore to lengthen all of it, so detail is neither cut for a
+ * gain nor restored at a cost that may not be there.
  * Acknowledgements match sent frames oldest first. A frame due while the
  * unacknowledged limit is reached is dropped and counted; one not answered
  * within `rateAckTimeoutMs` plus four round trips is given up and counted as
@@ -157,6 +172,21 @@ const rateMaxLevel: i32 = 4
 
 /** The least time the link is taken to spend on a frame, so one fast answer cannot read as unbounded bandwidth. */
 const rateMinBusyMs: f64 = 0.5
+
+/** How many trips, from the probe and from frames sent onto an idle link, the latency is the least of. */
+const rateTripCount: i32 = 16
+
+/** Two trips measure the bandwidth from their difference only when it is at least this many milliseconds. */
+const rateSplitMs: f64 = 2.0
+
+/** How long a bandwidth sample counts with no newer one, in milliseconds, so a link that narrows is not held to its old rate. */
+const rateFreshMs: f64 = 5000.0
+
+/** A trip over this many times what an aged bandwidth sample predicts contradicts it. */
+const rateStaleFactor: f64 = 2.0
+
+/** How many trips in a row must contradict an aged sample before it goes, so one slow answer does not. */
+const rateStaleTrips: i32 = 3
 
 /** How long, past four round trips, an unanswered frame is waited for, in milliseconds. */
 const rateAckTimeoutMs: f64 = 2000.0
@@ -305,16 +335,29 @@ export class RateController {
   lastAckMs: f64
   /** The smoothed round trip, in milliseconds. */
   rttMs: f64
-  /** The link's latency without bytes: the least round trip less the link's time on its bytes, creeping up. */
+  /** The link's latency without bytes: the least, over the kept trips, of the round trip less the bytes' time. */
   baseRttMs: f64
-  /** The bytes of the first answered frame while `haveRate` waits, to take its latency once the bandwidth is known. */
-  heldBytes: f64
+  /** The latency as last worked out while the bandwidth was known, held once its samples age out. */
+  heldLatencyMs: f64
+  /** The round trips of the probe and of the latest frames sent onto an idle link, `rateTripCount` at most. */
+  tripMs: f64[]
+  /** Their byte counts, 0 for the probe. */
+  tripBytes: f64[]
+  /** The bytes a second each of the latest answers proves at least, its bytes over its round trip. */
+  floorPerSec: f64[]
   /** The smoothed bytes of an answered frame, for the bandwidth. */
   ackBytes: f64
   /** The smoothed time the link spent on an answered frame, in milliseconds, for the bandwidth. */
   ackBusyMs: f64
-  /** The bytes a second delivered: `ackBytes` over `ackBusyMs`. */
+  /**
+   * The bytes a second delivered: `ackBytes` over `ackBusyMs`, at least the most of `floorPerSec`, which alone is a lower
+   * bound. Samples older than `rateFreshMs` still count here while trips agree with them, but no decision uses them.
+   */
   bytesPerSec: f64
+  /** When the bandwidth was last sampled, by a frame that waited behind another or by two trips. */
+  rateAtMs: f64
+  /** The quickest kept trip, or the round trip with none kept, when the bandwidth was last sampled: at least the latency then. */
+  rateQuickMs: f64
   /** When frames were last given up on, while `stale` waits for their late answers. */
   staleSinceMs: f64
   /** The smoothed frame cost, in milliseconds. */
@@ -341,13 +384,24 @@ export class RateController {
   lost: i32
   /** Frames given up on whose answers may still come: the next answers are theirs, and no frame is drawn meanwhile. */
   stale: i32
+  /** Where the next trip goes in `tripMs` once it is full. */
+  tripNext: i32
+  /** How many trips in a row have contradicted the aged bandwidth sample. */
+  contradicted: i32
+  /** Where the next goes in `floorPerSec` once it is full. */
+  floorNext: i32
   /** Whether a frame has been asked for, so the pacer's clock runs. */
   paced: boolean
   /** Whether a round trip, from the probe or an answer, is known. */
   haveRtt: boolean
   /** Whether a frame has been acknowledged, so decisions can start. */
   haveAck: boolean
-  /** Whether the bandwidth is known: not after a first answer with no probe, which cannot tell latency from bytes. */
+  /**
+   * Whether the bandwidth is known, so decisions may use it: sampled by a
+   * frame that waited behind another or two trips of different sizes, within
+   * `rateFreshMs`. The answers' bytes over their round trips are only a lower
+   * bound and never make it known.
+   */
   haveRate: boolean
   /** Whether a frame has been sent, so cost and size are known. */
   haveFrame: boolean
@@ -396,15 +450,29 @@ export class RateController {
     this.sentBytes = []
     this.head = 0
     this.lastAckMs = -1.0
-    this.haveRtt = options.probeRttMs > 0.0
+    // A probe time that is not a finite number says nothing.
+    this.haveRtt = options.probeRttMs > 0.0 && rateFinite(options.probeRttMs)
     this.rttMs = this.haveRtt ? options.probeRttMs : 0.0
     this.baseRttMs = this.rttMs
     this.haveAck = false
     this.haveRate = false
-    this.heldBytes = 0.0
+    this.tripMs = []
+    this.tripBytes = []
+    this.tripNext = 0
+    this.contradicted = 0
+    this.floorPerSec = []
+    this.floorNext = 0
+    if (this.haveRtt) {
+      // The probe is a few bytes, so its round trip is the latency.
+      this.tripMs.push(this.rttMs)
+      this.tripBytes.push(toF64(0))
+    }
     this.ackBytes = 0.0
     this.ackBusyMs = 0.0
     this.bytesPerSec = 0.0
+    this.rateAtMs = 0.0
+    this.rateQuickMs = 0.0
+    this.heldLatencyMs = 0.0
     this.stale = 0
     this.staleSinceMs = 0.0
     this.costMs = 0.0
@@ -506,49 +574,188 @@ export class RateController {
     if (!rateFinite(nowMs)) {
       return
     }
-    // A clock that stepped back would make the round trip negative.
-    const rtt: f64 = nowMs > sent ? nowMs - sent : 0.0
-    const firstRtt: boolean = !this.haveRtt
-    if (firstRtt) {
-      this.baseRttMs = rtt
-    }
-    this.rttMs = rateSmooth(this.rttMs, rtt, 0.125, firstRtt)
-    this.haveRtt = true
     this.haveAck = true
+    // A clock that stepped back, or an answer read in the millisecond its frame went, times nothing.
+    if (!(nowMs > sent)) {
+      return
+    }
+    const rtt: f64 = nowMs - sent
+    this.rttMs = rateSmooth(this.rttMs, rtt, 0.125, !this.haveRtt)
+    this.haveRtt = true
     const previous: f64 = this.lastAckMs
-    const queued: boolean = previous >= 0.0 && sent < previous
     this.lastAckMs = nowMs
-    if (!queued && this.haveRate) {
-      // Nothing was ahead of this frame, so its round trip less its bytes' time is the latency.
-      const left: f64 = rtt - (bytes * 1000.0) / this.bytesPerSec
-      const latency: f64 = left > 0.0 ? left : 0.0
-      const base: f64 = this.baseRttMs
-      this.baseRttMs = latency < base ? latency : base + (latency - base) / 256.0
+    if (previous >= 0.0 && previous > sent + this.baseRttMs) {
+      // The link was still busy with the frame ahead when this one reached it, so the gap between their answers is
+      // this frame's bytes alone, whatever the latency. Bytes and time are smoothed apart, not their ratio.
+      // Answers read in a burst arrive together, too close to time, and measure nothing this way.
+      const took: f64 = nowMs - previous
+      if (bytes > 0.0 && took >= rateSplitMs) {
+        this.measureRate(bytes, took)
+      }
+    } else {
+      this.measureTrip(rtt, bytes)
     }
-    if (firstRtt && !queued) {
-      this.heldBytes = bytes
-      return
+    if (!this.haveRate && this.ackBusyMs > 0.0 && bytes > 0.0) {
+      // The aged sample still reported is kept while trips take what it predicts: the quickest trip when it was taken,
+      // which holds the whole latency and perhaps some bytes, so the prediction errs long, plus these bytes' time.
+      const expected: f64 = this.rateQuickMs + (bytes * this.ackBusyMs) / this.ackBytes
+      this.contradicted = rtt > rateStaleFactor * expected ? this.contradicted + 1 : 0
+      if (this.contradicted >= rateStaleTrips) {
+        this.ackBytes = 0.0
+        this.ackBusyMs = 0.0
+        this.contradicted = 0
+        this.updateRate()
+      }
     }
-    if (bytes <= 0.0) {
-      // An empty frame says nothing about bandwidth, and would read as none.
-      return
+    if (bytes > 0.0 && rtt > rateMinBusyMs) {
+      // Whatever the latency and however late the answer was read, the bytes took no longer than the whole trip.
+      if (toI32(this.floorPerSec.length) < rateTripCount) {
+        this.floorPerSec.push((bytes * 1000.0) / rtt)
+      } else {
+        this.floorPerSec[this.floorNext] = (bytes * 1000.0) / rtt
+        this.floorNext = (this.floorNext + 1) % rateTripCount
+      }
+      this.updateRate()
     }
-    // Bytes and time are smoothed apart, not their ratio: answers that arrive in a burst
-    // spent almost no time each, and averaging their rates would read as unbounded bandwidth.
-    // The link took the frame up once the latency had passed, or once the answer ahead of it came if that was later:
-    // a frame sent after the one ahead of it but before its answer did not wait the whole gap between the answers.
-    const reached: f64 = sent + this.baseRttMs
-    const took: f64 = nowMs - (queued && previous > reached ? previous : reached)
-    const busy: f64 = took > rateMinBusyMs ? took : rateMinBusyMs
-    this.ackBytes = rateSmooth(this.ackBytes, bytes, 0.25, !this.haveRate)
-    this.ackBusyMs = rateSmooth(this.ackBusyMs, busy, 0.25, !this.haveRate)
-    this.bytesPerSec = (this.ackBytes * 1000.0) / this.ackBusyMs
-    if (!this.haveRate && this.heldBytes > 0.0) {
-      // The first answer's round trip was taken whole as the latency; now its bytes' time comes off.
-      const held: f64 = this.baseRttMs - (this.heldBytes * 1000.0) / this.bytesPerSec
-      this.baseRttMs = held > 0.0 ? held : 0.0
+    this.baseRttMs = this.leastLatency()
+  }
+
+  /**
+   * A frame of `bytes` sent onto an idle link came back in `rtt`: its latency
+   * plus its bytes' time, which cannot be told apart alone. Against the
+   * quickest trip kept, a frame at least twice the size (or twice as small)
+   * whose round trip differs by `rateSplitMs` or more does tell them apart:
+   * the extra bytes took the extra time, and the latency drops out. Frames of
+   * one size measure nothing here, so small frames cannot drag the bandwidth
+   * down to their round trip.
+   */
+  measureTrip(rtt: f64, bytes: f64): void {
+    let quickest: i32 = -1
+    for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
+      if (quickest < 0 || this.tripMs[i] < this.tripMs[quickest]) {
+        quickest = i
+      }
     }
-    this.haveRate = true
+    if (quickest >= 0) {
+      const otherMs: f64 = this.tripMs[quickest]
+      const otherBytes: f64 = this.tripBytes[quickest]
+      const big: boolean = bytes > otherBytes
+      const moreBytes: f64 = big ? bytes - otherBytes : otherBytes - bytes
+      const moreMs: f64 = big ? rtt - otherMs : otherMs - rtt
+      const least: f64 = big ? otherBytes : bytes
+      if (moreBytes >= least && moreMs >= rateSplitMs) {
+        this.measureRate(moreBytes, moreMs)
+      }
+    }
+    if (toI32(this.tripMs.length) < rateTripCount) {
+      this.tripMs.push(rtt)
+      this.tripBytes.push(bytes)
+    } else {
+      this.tripMs[this.tripNext] = rtt
+      this.tripBytes[this.tripNext] = bytes
+      this.tripNext = (this.tripNext + 1) % rateTripCount
+    }
+  }
+
+  /** The link spent `busyMs` on `bytes`: one sample of the bandwidth. */
+  measureRate(bytes: f64, busyMs: f64): void {
+    // A sample after the last aged out starts afresh, so a link that narrowed meanwhile is not averaged with its old rate.
+    const first: boolean = this.ackBusyMs <= 0.0 || !this.haveRate
+    this.rateAtMs = this.lastAckMs
+    let quickest: f64 = this.rttMs
+    for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
+      if (i === 0 || this.tripMs[i] < quickest) {
+        quickest = this.tripMs[i]
+      }
+    }
+    this.rateQuickMs = quickest
+    this.ackBytes = rateSmooth(this.ackBytes, bytes, 0.25, first)
+    this.ackBusyMs = rateSmooth(this.ackBusyMs, busyMs, 0.25, first)
+    this.updateRate()
+  }
+
+  /**
+   * The bandwidth: the smoothed samples, but never under what the latest
+   * answers prove, so a link that widens, or whose answers are read late, is
+   * not taken for a narrow one. Only samples make it known, and only while
+   * the latest is within `rateFreshMs` of the latest answer: an answer's
+   * bytes over its whole round trip count the latency as bytes' time, and on
+   * a far link that reads the bandwidth several times too low.
+   */
+  updateRate(): void {
+    let rate: f64 = this.ackBusyMs > 0.0 ? (this.ackBytes * 1000.0) / this.ackBusyMs : 0.0
+    this.haveRate = rate > 0.0 && this.lastAckMs - this.rateAtMs <= rateFreshMs
+    for (let i: i32 = 0; i < toI32(this.floorPerSec.length); i++) {
+      if (this.floorPerSec[i] > rate) {
+        rate = this.floorPerSec[i]
+      }
+    }
+    this.bytesPerSec = rate
+  }
+
+  /**
+   * Stop deciding on the bandwidth once no sample is newer than `rateFreshMs`
+   * at `nowMs`. The figure stays in `bytesPerSec` until a sample replaces it or a trip contradicts it.
+   */
+  ageRate(nowMs: f64): void {
+    if (this.haveRate && nowMs - this.rateAtMs > rateFreshMs) {
+      this.heldLatencyMs = this.baseRttMs
+      this.haveRate = false
+      this.baseRttMs = this.leastLatency()
+    }
+  }
+
+  /**
+   * The latency: the least, over the kept trips, of the round trip less its
+   * bytes' time at the measured bandwidth. While the bandwidth is not known
+   * only an empty trip, the probe's, says anything; with none it is the
+   * latency held from when the bandwidth was last known, or 0 before that: a
+   * lower bound, which is what telling a waited frame from a trip needs, and
+   * one that a probe trip rolled out of the kept trips does not drop to 0, or
+   * every frame sent before the answer ahead of it would look waited. The bandwidth never comes from the latency on an idle link, so
+   * neither can drag the other down.
+   */
+  leastLatency(): f64 {
+    let least: f64 = -1.0
+    for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
+      const bytes: f64 = this.tripBytes[i]
+      if (bytes <= 0.0 || this.haveRate) {
+        const left: f64 = bytes > 0.0 ? this.tripMs[i] - (bytes * 1000.0) / this.bytesPerSec : this.tripMs[i]
+        const latency: f64 = left > 0.0 ? left : 0.0
+        if (least < 0.0 || latency < least) {
+          least = latency
+        }
+      }
+    }
+    if (least < 0.0) {
+      return this.heldLatencyMs
+    }
+    return least > 0.0 ? least : 0.0
+  }
+
+  /**
+   * The part of a round trip of `rtt` that a detail change scaling the bytes
+   * by `scale` leaves alone: the latency once the bandwidth is known. While it
+   * is not, the guess is the cautious one each way: less detail shortens no
+   * more than the round trip's excess over the quickest trip kept, which is
+   * at least the latency, so detail is not cut for a gain that may not be
+   * there; more lengthens all of it, so detail is not restored on a link that
+   * may not carry it.
+   */
+  fixedPart(rtt: f64, scale: f64): f64 {
+    if (!this.haveRate) {
+      if (scale >= 1.0) {
+        return 0.0
+      }
+      let quickest: f64 = rtt
+      for (let i: i32 = 0; i < toI32(this.tripMs.length); i++) {
+        if (this.tripMs[i] < quickest) {
+          quickest = this.tripMs[i]
+        }
+      }
+      return quickest
+    }
+    return this.baseRttMs < rtt ? this.baseRttMs : rtt
   }
 
   /**
@@ -574,7 +781,7 @@ export class RateController {
       if (this.unacked() > 0 && nowMs - this.sentMs[this.head] > rtt) {
         rtt = nowMs - this.sentMs[this.head]
       }
-      const base: f64 = this.baseRttMs < rtt ? this.baseRttMs : rtt
+      const base: f64 = this.fixedPart(rtt, scale)
       const trip: f64 =
         (rate * (base + (rtt - base) * scale)) / (rateBudget * 1000.0 * toF64(this.maxUnacked))
       worst = trip > worst ? trip : worst
@@ -609,7 +816,8 @@ export class RateController {
       const scale: f64 = rateLevelScale(this.level, level)
       this.costMs = this.costMs * scale
       this.frameBytes = this.frameBytes * scale
-      this.rttMs = this.baseRttMs + (this.rttMs - this.baseRttMs) * scale
+      const base: f64 = this.fixedPart(this.rttMs, scale)
+      this.rttMs = base + (this.rttMs - base) * scale
       this.level = level
     }
     if (fps !== this.tier) {
@@ -684,6 +892,7 @@ export class RateController {
       this.stale = this.stale + 1
       this.staleSinceMs = nowMs
     }
+    this.ageRate(nowMs)
     if (this.fixedFps === 0 && this.haveAck) {
       this.decide(nowMs)
     }

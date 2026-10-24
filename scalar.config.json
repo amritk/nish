@@ -98,6 +98,7 @@
             "filepath": "docs/guide/using-nish/password-hashing.md"
           },
           "/http-router": { "type": "page", "title": "HTTP routing", "filepath": "docs/guide/using-nish/http-router.md" },
+          "/postgres": { "type": "page", "title": "PostgreSQL", "filepath": "docs/guide/using-nish/postgres.md" },
           "/to-typescript": { "type": "page", "title": "Back to TypeScript", "filepath": "docs/guide/using-nish/to-typescript.md" }
         }
       }

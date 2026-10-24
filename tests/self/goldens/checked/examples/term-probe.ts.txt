@@ -1745,31 +1745,33 @@ function termIoParam(e: TermEvent, i: i32): i32 -> @nish.termIoParam
   stackSites=0 stackLocals=0
 function Terminal.constructor(this: Terminal, options: TerminalOptions, caps: TermCaps, cols: i32, rows: i32, held: TermEvent[]): void -> @nish.Terminal.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
-  sharedWrite: via nish.Screen.constructor
+  sharedWrite: +0:7
   escaping: caps cols held options rows
-  calls: llvm.fptosi.sat.i32.f64 nish.Canvas.constructor nish.Framebuffer.constructor nish.KeyDecoder.constructor nish.KeyState.constructor nish.PixelBytes.constructor nish.PixelRect.constructor nish.RateController.constructor nish.RateOptions.constructor nish.Screen.constructor nish.termIoCellPx nish.termIoGetenv nish.termIoGraphics nish_alloc_struct nish_panic nish_parse_number
+  calls: llvm.fptosi.sat.i32.f64 nish.Canvas.constructor nish.Framebuffer.constructor nish.KeyDecoder.constructor nish.KeyState.constructor nish.PixelBytes.constructor nish.PixelRect.constructor nish.RateController.constructor nish.RateOptions.constructor nish.Screen.constructor nish.termIoCellPx nish.termIoGetenv nish.termIoGraphics nish_alloc_struct nish_panic nish_parse_number nish_str_concat nish_str_eq nish_str_from_i32
   pointer this: size=208 writesThrough=true captured=false
   pointer options: size=56 writesThrough=true captured=true
   pointer caps: size=72 writesThrough=true captured=true
   pointer held: size=0 writesThrough=true captured=true
   stackSites=1 stackLocals=1
-  callee +0:19 new Screen -> @nish.Screen.constructor
-  callee +2:19 new Canvas -> @nish.Canvas.constructor
-  local +3:11 fbW: i32 (const)
-  local +5:11 fbH: i32 (const)
-  callee +6:24 new Framebuffer -> @nish.Framebuffer.constructor
-  callee +7:19 new Framebuffer -> @nish.Framebuffer.constructor
-  callee +8:19 new PixelBytes -> @nish.PixelBytes.constructor
-  callee +9:20 new KeyDecoder -> @nish.KeyDecoder.constructor
-  callee +10:17 new KeyState -> @nish.KeyState.constructor
-  local +13:11 rateOptions: RateOptions (const)
-  callee +13:38 new RateOptions -> @nish.RateOptions.constructor
-  callee +21:35 termIoGetenv -> @nish.termIoGetenv
-  callee +22:17 new RateController -> @nish.RateController.constructor
-  callee +30:17 new PixelRect -> @nish.PixelRect.constructor
-  callee +34:21 termIoGraphics -> @nish.termIoGraphics
-  callee +36:24 termIoCellPx -> @nish.termIoCellPx
-  callee +37:25 termIoCellPx -> @nish.termIoCellPx
+  callee -26:19 new Screen -> @nish.Screen.constructor
+  callee -24:19 new Canvas -> @nish.Canvas.constructor
+  local -23:11 fbW: i32 (const)
+  local -21:11 fbH: i32 (const)
+  callee -20:24 new Framebuffer -> @nish.Framebuffer.constructor
+  callee -19:19 new Framebuffer -> @nish.Framebuffer.constructor
+  callee -18:19 new PixelBytes -> @nish.PixelBytes.constructor
+  callee -17:20 new KeyDecoder -> @nish.KeyDecoder.constructor
+  callee -16:17 new KeyState -> @nish.KeyState.constructor
+  local -13:11 rateOptions: RateOptions (const)
+  callee -13:38 new RateOptions -> @nish.RateOptions.constructor
+  callee -5:35 termIoGetenv -> @nish.termIoGetenv
+  callee -4:17 new RateController -> @nish.RateController.constructor
+  local -1:13 forced: string (const)
+  callee -1:47 termIoGetenv -> @nish.termIoGetenv
+  callee +9:17 new PixelRect -> @nish.PixelRect.constructor
+  callee +13:21 termIoGraphics -> @nish.termIoGraphics
+  callee +15:24 termIoCellPx -> @nish.termIoCellPx
+  callee +16:25 termIoCellPx -> @nish.termIoCellPx
 function Terminal.restoreString(this: Terminal): string -> @nish.Terminal.restoreString [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.kittyDelete nish.leaveAltScreen nish.resetStyle nish.showCursor nish_str_concat nish_str_from_i32
@@ -1870,7 +1872,7 @@ function Terminal.ackPush(this: Terminal, nowMs: f64): void -> @nish.Terminal.ac
   pointer this: size=208 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Terminal.acked(this: Terminal, count: i32, nowMs: f64): void -> @nish.Terminal.acked [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: nowMs
   calls: nish.KeyState.delivered nish.RateController.ackReceived nish.Terminal.dropLost nish_panic_index nish_panic_overflow
@@ -2165,6 +2167,11 @@ const rateSettleMs: f64 = 1000
 const rateLocalRttMs: f64 = 5
 const rateMaxLevel: i32 = 4
 const rateMinBusyMs: f64 = 0.5
+const rateTripCount: i32 = 16
+const rateSplitMs: f64 = 2
+const rateFreshMs: f64 = 5000
+const rateStaleFactor: f64 = 2
+const rateStaleTrips: i32 = 3
 const rateAckTimeoutMs: f64 = 2000
 struct RateOptions (class) size=40 align=8 exported
   field probeRttMs: f64 index=0 offset=0 initialized
@@ -2193,7 +2200,7 @@ struct TermStats (class) size=48 align=8 exported
   field unacked: i32 index=6 offset=36 initialized
   field lost: i32 index=7 offset=40 initialized
   constructor -> @nish.TermStats.constructor
-struct RateController (class) size=208 align=8 exported
+struct RateController (class) size=256 align=8 exported
   field tiers: i32[] index=0 offset=0
   field pacer: FixedStep index=1 offset=8
   field changedMs: f64 index=2 offset=16
@@ -2204,36 +2211,50 @@ struct RateController (class) size=208 align=8 exported
   field lastAckMs: f64 index=7 offset=56
   field rttMs: f64 index=8 offset=64
   field baseRttMs: f64 index=9 offset=72
-  field heldBytes: f64 index=10 offset=80
-  field ackBytes: f64 index=11 offset=88
-  field ackBusyMs: f64 index=12 offset=96
-  field bytesPerSec: f64 index=13 offset=104
-  field staleSinceMs: f64 index=14 offset=112
-  field costMs: f64 index=15 offset=120
-  field frameBytes: f64 index=16 offset=128
-  field current: RateDecision index=17 offset=136
-  field measured: TermStats index=18 offset=144
-  field floorFps: i32 index=19 offset=152
-  field minTier: i32 index=20 offset=156
-  field prefer: i32 index=21 offset=160
-  field maxUnacked: i32 index=22 offset=164
-  field fixedFps: i32 index=23 offset=168
-  field tier: i32 index=24 offset=172
-  field level: i32 index=25 offset=176
-  field head: i32 index=26 offset=180
-  field dropped: i32 index=27 offset=184
-  field lost: i32 index=28 offset=188
-  field stale: i32 index=29 offset=192
-  field paced: boolean index=30 offset=196
-  field haveRtt: boolean index=31 offset=197
-  field haveAck: boolean index=32 offset=198
-  field haveRate: boolean index=33 offset=199
-  field haveFrame: boolean index=34 offset=200
+  field heldLatencyMs: f64 index=10 offset=80
+  field tripMs: f64[] index=11 offset=88
+  field tripBytes: f64[] index=12 offset=96
+  field floorPerSec: f64[] index=13 offset=104
+  field ackBytes: f64 index=14 offset=112
+  field ackBusyMs: f64 index=15 offset=120
+  field bytesPerSec: f64 index=16 offset=128
+  field rateAtMs: f64 index=17 offset=136
+  field rateQuickMs: f64 index=18 offset=144
+  field staleSinceMs: f64 index=19 offset=152
+  field costMs: f64 index=20 offset=160
+  field frameBytes: f64 index=21 offset=168
+  field current: RateDecision index=22 offset=176
+  field measured: TermStats index=23 offset=184
+  field floorFps: i32 index=24 offset=192
+  field minTier: i32 index=25 offset=196
+  field prefer: i32 index=26 offset=200
+  field maxUnacked: i32 index=27 offset=204
+  field fixedFps: i32 index=28 offset=208
+  field tier: i32 index=29 offset=212
+  field level: i32 index=30 offset=216
+  field head: i32 index=31 offset=220
+  field dropped: i32 index=32 offset=224
+  field lost: i32 index=33 offset=228
+  field stale: i32 index=34 offset=232
+  field tripNext: i32 index=35 offset=236
+  field contradicted: i32 index=36 offset=240
+  field floorNext: i32 index=37 offset=244
+  field paced: boolean index=38 offset=248
+  field haveRtt: boolean index=39 offset=249
+  field haveAck: boolean index=40 offset=250
+  field haveRate: boolean index=41 offset=251
+  field haveFrame: boolean index=42 offset=252
   constructor -> @nish.RateController.constructor
   method unacked -> @nish.RateController.unacked
   method mayDraw -> @nish.RateController.mayDraw
   method frameSent -> @nish.RateController.frameSent
   method ackReceived -> @nish.RateController.ackReceived
+  method measureTrip -> @nish.RateController.measureTrip
+  method measureRate -> @nish.RateController.measureRate
+  method updateRate -> @nish.RateController.updateRate
+  method ageRate -> @nish.RateController.ageRate
+  method leastLatency -> @nish.RateController.leastLatency
+  method fixedPart -> @nish.RateController.fixedPart
   method load -> @nish.RateController.load
   method slowerTier -> @nish.RateController.slowerTier
   method fasterTier -> @nish.RateController.fasterTier
@@ -2279,8 +2300,8 @@ function TermStats.constructor(this: TermStats): void -> @nish.TermStats.constru
 function RateController.constructor(this: RateController, options: RateOptions): void -> @nish.RateController.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.RateController.publish
-  calls: nish.FixedStep.constructor nish.RateController.publish nish.RateDecision.constructor nish.TermStats.constructor nish_alloc_struct nish_array_grow nish_panic_index
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.RateController.publish#0
+  calls: nish.FixedStep.constructor nish.RateController.publish nish.RateDecision.constructor nish.TermStats.constructor nish.rateFinite nish_alloc_struct nish_array_grow nish_panic_index
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.publish#0
   pointer options: size=40 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:11 fixed: i32 (const)
@@ -2295,20 +2316,21 @@ function RateController.constructor(this: RateController, options: RateOptions):
   local +23:16 t: i32 (const)
   local +28:11 floored: i32 (const)
   callee +31:18 new FixedStep -> @nish.FixedStep.constructor
-  callee +56:20 new RateDecision -> @nish.RateDecision.constructor
-  callee +57:21 new TermStats -> @nish.TermStats.constructor
-  callee +58:5 RateController.publish -> @nish.RateController.publish
+  callee +41:48 rateFinite -> @nish.rateFinite
+  callee +70:20 new RateDecision -> @nish.RateDecision.constructor
+  callee +71:21 new TermStats -> @nish.TermStats.constructor
+  callee +72:5 RateController.publish -> @nish.RateController.publish
 function RateController.unacked(this: RateController): i32 -> @nish.RateController.unacked [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function RateController.mayDraw(this: RateController, nowMs: f64): boolean -> @nish.RateController.mayDraw [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
   calls: nish.FixedStep.advance nish.RateController.unacked nish.rateFinite nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.RateController.unacked#0
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.unacked#0
   stackSites=0 stackLocals=0
   callee -7:10 rateFinite -> @nish.rateFinite
   local -4:9 due: boolean (let)
@@ -2320,7 +2342,7 @@ function RateController.frameSent(this: RateController, bytes: i32, costNs: f64,
   sharedWrite: +0:9
   escaping: bytes costNs nowMs
   calls: nish.rateFinite nish.rateSmooth nish_array_grow nish_panic_index nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false
+  pointer this: size=256 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee -8:10 rateFinite -> @nish.rateFinite
   local -5:11 size: i32 (const)
@@ -2332,35 +2354,91 @@ function RateController.frameSent(this: RateController, bytes: i32, costNs: f64,
   callee +13:21 rateSmooth -> @nish.rateSmooth
   callee +14:25 rateSmooth -> @nish.rateSmooth
 function RateController.ackReceived(this: RateController, nowMs: f64): void -> @nish.RateController.ackReceived [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
-  calls: nish.RateController.unacked nish.rateFinite nish.rateSmooth nish_panic_index nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.RateController.unacked#0
+  calls: nish.RateController.leastLatency nish.RateController.measureRate nish.RateController.measureTrip nish.RateController.unacked nish.RateController.updateRate nish.rateFinite nish.rateSmooth nish_array_grow nish_panic_index nish_panic_overflow
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.unacked#0 nish.RateController.measureRate#0 nish.RateController.measureTrip#0 nish.RateController.updateRate#0 nish.RateController.updateRate#0 nish.RateController.leastLatency#0
   stackSites=0 stackLocals=0
   callee +3:9 RateController.unacked -> @nish.RateController.unacked
   local +6:11 sent: f64 (const)
   local +7:11 bytes: f64 (const)
   callee +9:10 rateFinite -> @nish.rateFinite
-  local +13:11 rtt: f64 (const)
-  local +14:11 firstRtt: boolean (const)
+  local +17:11 rtt: f64 (const)
   callee +18:18 rateSmooth -> @nish.rateSmooth
-  local +21:11 previous: f64 (const)
-  local +22:11 queued: boolean (const)
-  local +26:13 left: f64 (const)
-  local +27:13 latency: f64 (const)
-  local +28:13 base: f64 (const)
-  local +43:11 reached: f64 (const)
-  local +44:11 took: f64 (const)
-  local +45:11 busy: f64 (const)
-  callee +46:21 rateSmooth -> @nish.rateSmooth
-  callee +47:22 rateSmooth -> @nish.rateSmooth
-  local +51:13 held: f64 (const)
+  local +20:11 previous: f64 (const)
+  local +26:13 took: f64 (const)
+  callee +28:9 RateController.measureRate -> @nish.RateController.measureRate
+  callee +31:7 RateController.measureTrip -> @nish.RateController.measureTrip
+  local +36:13 expected: f64 (const)
+  callee +42:9 RateController.updateRate -> @nish.RateController.updateRate
+  callee +53:7 RateController.updateRate -> @nish.RateController.updateRate
+  callee +55:22 RateController.leastLatency -> @nish.RateController.leastLatency
+function RateController.measureTrip(this: RateController, rtt: f64, bytes: f64): void -> @nish.RateController.measureTrip [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: bytes rtt
+  calls: nish.RateController.measureRate nish_array_grow nish_panic_index nish_panic_overflow
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.measureRate#0
+  stackSites=0 stackLocals=0
+  local -18:9 quickest: i32 (let)
+  local -17:14 i: i32 (let)
+  local -11:13 otherMs: f64 (const)
+  local -10:13 otherBytes: f64 (const)
+  local -9:13 big: boolean (const)
+  local -8:13 moreBytes: f64 (const)
+  local -7:13 moreMs: f64 (const)
+  local -6:13 least: f64 (const)
+  callee -4:9 RateController.measureRate -> @nish.RateController.measureRate
+function RateController.measureRate(this: RateController, bytes: f64, busyMs: f64): void -> @nish.RateController.measureRate [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: busyMs bytes
+  calls: nish.RateController.updateRate nish.rateSmooth
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.updateRate#0
+  stackSites=0 stackLocals=0
+  local -1:11 first: boolean (const)
+  local +1:9 quickest: f64 (let)
+  local +2:14 i: i32 (let)
+  callee +8:21 rateSmooth -> @nish.rateSmooth
+  callee +9:22 rateSmooth -> @nish.rateSmooth
+  callee +10:5 RateController.updateRate -> @nish.RateController.updateRate
+function RateController.updateRate(this: RateController): void -> @nish.RateController.updateRate [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer this: size=256 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:9 rate: f64 (let)
+  local +1:14 i: i32 (let)
+function RateController.ageRate(this: RateController, nowMs: f64): void -> @nish.RateController.ageRate [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.RateController.leastLatency
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.leastLatency#0
+  stackSites=0 stackLocals=0
+  callee +2:24 RateController.leastLatency -> @nish.RateController.leastLatency
+function RateController.leastLatency(this: RateController): f64 -> @nish.RateController.leastLatency [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer this: size=256 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 least: f64 (let)
+  local +1:14 i: i32 (let)
+  local +2:13 bytes: f64 (const)
+  local +4:15 left: f64 (const)
+  local +5:15 latency: f64 (const)
+function RateController.fixedPart(this: RateController, rtt: f64, scale: f64): f64 -> @nish.RateController.fixedPart [exported method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: rtt
+  pointer this: size=256 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 quickest: f64 (let)
+  local +1:16 i: i32 (let)
 function RateController.load(this: RateController, fps: i32, level: i32, nowMs: f64): f64 -> @nish.RateController.load [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: level
-  calls: nish.RateController.unacked nish.rateLevelScale nish_panic_index
-  pointer this: size=208 writesThrough=false captured=false passedTo=nish.RateController.unacked#0
+  calls: nish.RateController.fixedPart nish.RateController.unacked nish.rateLevelScale nish_panic_index
+  pointer this: size=256 writesThrough=false captured=false passedTo=nish.RateController.unacked#0 nish.RateController.fixedPart#0
   stackSites=0 stackLocals=0
   local +0:11 scale: f64 (const)
   callee +0:24 rateLevelScale -> @nish.rateLevelScale
@@ -2370,17 +2448,18 @@ function RateController.load(this: RateController, fps: i32, level: i32, nowMs: 
   local +11:11 rtt: f64 (let)
   callee +12:11 RateController.unacked -> @nish.RateController.unacked
   local +15:13 base: f64 (const)
+  callee +15:25 RateController.fixedPart -> @nish.RateController.fixedPart
   local +16:13 trip: f64 (const)
 function RateController.slowerTier(this: RateController, fps: i32, least: i32): i32 -> @nish.RateController.slowerTier [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: least
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:16 t: i32 (const)
 function RateController.fasterTier(this: RateController, fps: i32): i32 -> @nish.RateController.fasterTier [exported method]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: fps
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 faster: i32 (let)
   local +1:16 t: i32 (const)
@@ -2388,17 +2467,19 @@ function RateController.moveTo(this: RateController, fps: i32, level: i32, nowMs
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: fps level nowMs
-  calls: nish.rateLevelScale
-  pointer this: size=208 writesThrough=true captured=false
+  calls: nish.RateController.fixedPart nish.rateLevelScale
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.fixedPart#0
   stackSites=0 stackLocals=0
   local -1:13 scale: f64 (const)
   callee -1:26 rateLevelScale -> @nish.rateLevelScale
+  local +2:13 base: f64 (const)
+  callee +2:25 RateController.fixedPart -> @nish.RateController.fixedPart
 function RateController.stepDown(this: RateController, nowMs: f64): void -> @nish.RateController.stepDown [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.RateController.moveTo
   escaping: nowMs
   calls: nish.RateController.load nish.RateController.moveTo nish.RateController.slowerTier nish_panic_index nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.RateController.slowerTier#0 nish.RateController.load#0 nish.RateController.slowerTier#0 nish.RateController.moveTo#0 nish.RateController.load#0 nish.RateController.load#0 nish.RateController.moveTo#0 nish.RateController.slowerTier#0 nish.RateController.load#0 nish.RateController.slowerTier#0 nish.RateController.moveTo#0
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.slowerTier#0 nish.RateController.load#0 nish.RateController.slowerTier#0 nish.RateController.moveTo#0 nish.RateController.load#0 nish.RateController.load#0 nish.RateController.moveTo#0 nish.RateController.slowerTier#0 nish.RateController.load#0 nish.RateController.slowerTier#0 nish.RateController.moveTo#0
   stackSites=0 stackLocals=0
   local +0:11 least: i32 (const)
   local +3:11 fps: i32 (let)
@@ -2418,28 +2499,29 @@ function RateController.stepDown(this: RateController, nowMs: f64): void -> @nis
 function RateController.stepUp(this: RateController): i32 -> @nish.RateController.stepUp [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.RateController.fasterTier nish_panic_index nish_panic_overflow
-  pointer this: size=208 writesThrough=false captured=false passedTo=nish.RateController.fasterTier#0
+  pointer this: size=256 writesThrough=false captured=false passedTo=nish.RateController.fasterTier#0
   stackSites=0 stackLocals=0
   callee +0:14 RateController.fasterTier -> @nish.RateController.fasterTier
 function RateController.tick(this: RateController, nowMs: f64): void -> @nish.RateController.tick [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
-  calls: nish.RateController.decide nish.RateController.publish nish.RateController.unacked nish.rateFinite nish_panic_index nish_panic_overflow
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.RateController.publish#0 nish.RateController.unacked#0 nish.RateController.decide#0 nish.RateController.publish#0
+  calls: nish.RateController.ageRate nish.RateController.decide nish.RateController.publish nish.RateController.unacked nish.rateFinite nish_panic_index nish_panic_overflow
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.publish#0 nish.RateController.unacked#0 nish.RateController.ageRate#0 nish.RateController.decide#0 nish.RateController.publish#0
   stackSites=0 stackLocals=0
   callee -7:10 rateFinite -> @nish.rateFinite
   callee -6:7 RateController.publish -> @nish.RateController.publish
   local -3:11 wait: f64 (const)
   callee +2:12 RateController.unacked -> @nish.RateController.unacked
-  callee +9:7 RateController.decide -> @nish.RateController.decide
-  callee +11:5 RateController.publish -> @nish.RateController.publish
+  callee +8:5 RateController.ageRate -> @nish.RateController.ageRate
+  callee +10:7 RateController.decide -> @nish.RateController.decide
+  callee +12:5 RateController.publish -> @nish.RateController.publish
 function RateController.decide(this: RateController, nowMs: f64): void -> @nish.RateController.decide [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: nowMs
   calls: nish.RateController.load nish.RateController.moveTo nish.RateController.stepDown nish.RateController.stepUp
-  pointer this: size=208 writesThrough=true captured=false passedTo=nish.RateController.load#0 nish.RateController.stepDown#0 nish.RateController.stepUp#0 nish.RateController.load#0 nish.RateController.moveTo#0
+  pointer this: size=256 writesThrough=true captured=false passedTo=nish.RateController.load#0 nish.RateController.stepDown#0 nish.RateController.stepUp#0 nish.RateController.load#0 nish.RateController.moveTo#0
   stackSites=0 stackLocals=0
   local -2:11 settled: boolean (const)
   callee -1:9 RateController.load -> @nish.RateController.load
@@ -2452,18 +2534,18 @@ function RateController.publish(this: RateController): void -> @nish.RateControl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish.RateController.unacked nish_panic_overflow
-  pointer this: size=208 writesThrough=false captured=false passedTo=nish.RateController.unacked#0
+  pointer this: size=256 writesThrough=false captured=false passedTo=nish.RateController.unacked#0
   stackSites=0 stackLocals=0
   local -1:11 d: RateDecision (const)
   local +4:11 s: TermStats (const)
   callee +11:17 RateController.unacked -> @nish.RateController.unacked
 function RateController.decision(this: RateController): RateDecision -> @nish.RateController.decision [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=16
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function RateController.stats(this: RateController): TermStats -> @nish.RateController.stats [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=48
-  pointer this: size=208 writesThrough=false captured=false
+  pointer this: size=256 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function rateWhole(x: f64): i32 -> @nish.rateWhole
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false

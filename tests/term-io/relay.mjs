@@ -54,9 +54,10 @@ const rssKb = (pid) => {
  *   lingerMs     how long the terminal stays open after the program exits,
  *                in cooked mode, so an answer that comes late is echoed (0)
  *   timeoutMs    when to kill the run (20 s)
- * Answers `{ out, err, status, frames, maxUnacked, maxFrameBytes, keySentNs, rss, sameStty, timedOut }`:
+ * Answers `{ out, err, status, frames, firstFrameMs, maxUnacked, maxFrameBytes, keySentNs, rss, sameStty, timedOut }`:
  * `out` the last megabyte or more of the program's stdout with `\r` removed, `err` its stderr, `status`
- * its exit status, `keySentNs` the monotonic time each key was written,
+ * its exit status, `firstFrameMs` the time from the start to the first frame's
+ * `CSI 5 n` (-1 for none), `keySentNs` the monotonic time each key was written,
  * `rss` `[{ frames, kb }]`, `sameStty` whether `stty -g` read the same after.
  */
 export const relay = (exe, mode, options) => {
@@ -88,6 +89,7 @@ export const relay = (exe, mode, options) => {
   let tail = ""
   let replied = false
   let frames = 0
+  let firstFrameMs = -1
   let acks = 0
   let maxUnacked = 0
   let frameBytes = 0
@@ -111,6 +113,7 @@ export const relay = (exe, mode, options) => {
     return pid
   }
   const onFrame = (bytes) => {
+    if (frames === 0) firstFrameMs = performance.now() - start
     frames++
     maxFrameBytes = Math.max(maxFrameBytes, bytes)
     maxUnacked = Math.max(maxUnacked, frames - acks)
@@ -195,6 +198,7 @@ export const relay = (exe, mode, options) => {
         err: read("err"),
         status: read("status").trim() === "" ? -1 : Number(read("status").trim()),
         frames,
+        firstFrameMs,
         maxUnacked,
         maxFrameBytes,
         keySentNs,

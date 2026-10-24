@@ -6,11 +6,13 @@
 //              tier of the first and the last frame, the monotonic time
 //              `update` first saw `k`, the replies `update` was handed (none
 //              should be), the cell width the terminal learned, the highest
-//              bandwidth the controller measured and the highest frame cost
-//              it was handed
+//              bandwidth the controller measured, its estimate on the last
+//              frame and the highest frame cost it was handed
 //   panic      `runTerminal` that writes `<panic>` and fails a bounds check
 //              in its tenth `render`, so the bytes after the mark are the
 //              runtime's restore string
+//   panic-mouse  the same with all-motion mouse reports (1003) and
+//                focus reports on, so the restore string turns them off too
 //   watermark  one frame, then `KeyState.watermarked` once its answer is in
 //              and again after 1.2 s without frames
 //   rss        `openTerminal` and 250 frames of a 480×270 framebuffer, each
@@ -32,6 +34,7 @@ class Run {
   replies: i32 = 0;
   cellWidthPx: i32 = 0;
   peakBytesPerSec: f64 = 0.0;
+  finalBytesPerSec: f64 = 0.0;
   peakCostMs: f64 = 0.0;
 }
 
@@ -72,6 +75,7 @@ const render = (run: Run, frame: Frame): void => {
   if (frame.stats.bytesPerSec > run.peakBytesPerSec) {
     run.peakBytesPerSec = frame.stats.bytesPerSec;
   }
+  run.finalBytesPerSec = frame.stats.bytesPerSec;
   if (frame.stats.frameCostMs > run.peakCostMs) {
     run.peakCostMs = frame.stats.frameCostMs;
   }
@@ -105,10 +109,14 @@ const waitForQ = (term: Terminal, events: TermEvent[]): void => {
   }
 };
 
-const runLoop = (panics: boolean): number => {
+const runLoop = (panics: boolean, mouse: boolean): number => {
   const options = defaultTerminalOptions();
   options.framebufferWidth = 480;
   options.framebufferHeight = 270;
+  if (mouse) {
+    options.mouse = 1003;
+    options.focus = true;
+  }
   const run = new Run();
   run.panics = panics;
   const ran = runTerminal(options, run, update, render);
@@ -121,6 +129,7 @@ const runLoop = (panics: boolean): number => {
   console.log(`replies ${run.replies}`);
   console.log(`cell ${run.cellWidthPx}`);
   console.log(`peak ${Math.round(run.peakBytesPerSec)} B/s cost ${run.peakCostMs} ms`);
+  console.log(`final ${Math.round(run.finalBytesPerSec)} B/s`);
   return 0;
 };
 
@@ -186,8 +195,8 @@ const rss = (leaks: boolean): number => {
 
 export const main = (): number => {
   const mode = process.argv.length > 1 ? process.argv[1] : "";
-  if (mode === "throttle" || mode === "panic") {
-    return runLoop(mode === "panic");
+  if (mode === "throttle" || mode === "panic" || mode === "panic-mouse") {
+    return runLoop(mode !== "throttle", mode === "panic-mouse");
   }
   if (mode === "watermark") {
     return watermark();
