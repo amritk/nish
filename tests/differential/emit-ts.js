@@ -12,10 +12,9 @@
  *   3. compared byte for byte.
  *
  * Unlike `run.js`, nothing here is frozen: the TypeScript is written by the
- * compiler under test on every run, which is the point. The rows that rewrite
- * what Node runs differently arrive a stage at a time, so most programs do not
- * agree yet, and `emit-ts-known.txt` lists each one that does not under the
- * ledger row whose stage will fix it (`ROWS`), with the evidence in a comment.
+ * compiler under test on every run, which is the point. Most programs agree;
+ * `emit-ts-known.txt` lists each one that does not under the ledger row that
+ * accounts for it (`ROWS`), with the evidence in a comment.
  * The row is read off the evidence by `rowOf`, a heuristic, so a program may
  * move rows as earlier ones land. The list is generated, never edited:
  *

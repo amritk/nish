@@ -221,7 +221,7 @@ Some constructs JavaScript spells differently are rewritten too:
 The flag also turns on `--warn-portability`. Those warnings name the places
 where your program can answer differently under Node.
 
-Four kinds of module cannot be written. In each case `nish` exits 1 and
+Five kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
 ```text
@@ -245,17 +245,20 @@ record held inline in one call and a `P | null` reference in another, or an
 `i32` and an `i64` element in `new Array<T>(n)`, whose zeros differ. Write a
 function per element type.
 
-A generic nothing calls is written too, as it is: the native build compiles
-no body for it, so its arithmetic is left as written and only the rewrites
-that need no type, such as the bounds check on `a[i]`, are made. One whose
-text would need the types it lacks, a 64-bit integer or a builtin call such as
-`toU32`, is written with a body that throws instead, and a warning
-(`portability:`, NL8012) names it and its line when it is the program's own;
-the standard library's are written without one. The fifth
-refusal (NL4014) is one whose body fills `new Array<T>(n)` with `T`'s zero, or
-copies an element into an array slot in a program that keeps records inline:
-which code those need depends on a `T` no call names. Call it, or write a
-function per element type.
+A generic nothing calls is written too: a function or method, or the methods
+and constructor of a class no type argument list names. The native build
+compiles no body for it, so there are no types to translate by. Where no type
+would change its text, it is written as it is, with only the rewrites that
+need no type, such as the bounds check on `a[i]`. Where a type would (a 64-bit
+integer, an `f32`, a builtin call such as `toU32`, arithmetic whose width
+wraps, a string's `.length` or methods), it is written with a body that throws
+instead, and a warning (`portability:`, NL8012) names it and its line when it
+is the program's own; the standard library's are written without one. The
+fifth refusal (NL4014) is a generic of your own whose body otherwise translates
+but fills `new Array<T>(n)` with `T`'s zero, or copies an element into an array
+slot in a module that keeps records inline: which code those need depends on a
+`T` no call names. Call it, or write a function per element type. The same
+body in the standard library is a stub, and the program is written.
 
 The `nish:unsafe` functions are imports from `nish/runtime` too:
 `uncheckedGet`, `uncheckedSet` and the `wrapping*` arithmetic run under Node,

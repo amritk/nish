@@ -10368,7 +10368,7 @@ by the caller.
   is the `: string` on an unannotated `const` bound to a string literal.
 - **The flag turns `--warn-portability` on**: those warnings name the sites
   where the TypeScript reading answers differently.
-- **Four kinds of module are refused, and then nothing is written** (exit 1):
+- **Five kinds of module are refused, and then nothing is written** (exit 1):
   one that declares C functions, whose bodies are not in the program
   (NL4010, `tests/cases/reject_emit_ts_ffi`), and one that imports `nish:net`
   or calls a `nish:net` function, `signalFd` or `readSignal`, imported or by
@@ -10384,18 +10384,23 @@ by the caller.
   one instance and by reference in another (`P` and `P | null`), or element
   types with different zeros in `new Array<T>(n)` (`i32` and `i64`) (NL4013,
   `reject_emit_ts_instances`). Write a function per element type.
-  A generic no instance reaches has no types and no native body, and is
-  written as it is, through the rewrites that need no type (`a[i]` is still
-  checked, arithmetic is left as written, since nothing can call it), or,
-  where its text would need the types it lacks (a 64-bit integer, which is a
-  `bigint` there, or a builtin call), with a body that throws. Such a stub in
-  the program's own modules is a portability warning naming the function at
-  its declaration (NL8012, `tests/emit-ts/records/generic-uncalled.ts`); the
+  A generic no instance reaches (a function, a method, or the methods and
+  constructor of a class no type argument list names) has no types and no
+  native body. Where no type would change its text it is written as it is,
+  through the rewrites that need no type (`a[i]` is still checked); where a
+  type would (a 64-bit integer, which is a `bigint` there, `f32`, a builtin
+  call, arithmetic whose width wraps, a string's `.length` or methods, a
+  `Result`'s), it is written with a body that throws. Such a stub in the
+  program's own modules is a portability warning naming it at its
+  declaration (NL8012, `tests/emit-ts/records/generic-uncalled.ts`); the
   standard library's (`insertAt` of `nish/collections`) are written without
-  one. The fifth refusal is one whose body copies an element into an array slot, in a
-  program that holds records inline, or fills `new Array<T>(n)` with `T`'s
+  one. The fifth refusal is such a generic in the program's own modules whose
+  body otherwise translates but copies an element into an array slot, in a
+  module that holds records inline, or fills `new Array<T>(n)` with `T`'s
   zero, which only an instance would decide (NL4014,
-  `tests/emit-ts/refused/uncalled-zero.ts`, `uncalled-copy.ts`).
+  `tests/emit-ts/refused/uncalled-zero.ts`, `uncalled-copy.ts`,
+  `uncalled-ctor-zero.ts`); in the standard library the same body is a stub,
+  without a warning, and the program is written.
   Every refusal in the program is reported before it exits.
 - **It answers in place of the other outputs.** `--link`, `--emit-ast`,
   `--emit-checked` and the `--emit-header`/`--emit-dts`/`--emit-napi`/

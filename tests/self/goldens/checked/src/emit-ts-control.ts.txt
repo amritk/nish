@@ -23,7 +23,7 @@ import Node from "./nodes" -> struct Node
 import StringBuilder from "./strings" -> struct StringBuilder
 function controlRow(walk: Walk, node: Node, operands: Operands): string | null -> @controlRow [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via hoistOrReturn
+  sharedWrite: via isOrReturn
   calls: arenaMember enumText hoistOrReturn isOrReturn lazyArgument typeRef wrapBody
   pointer walk: size=200 writesThrough=true captured=false passedTo=isOrReturn#0 hoistOrReturn#0 lazyArgument#0 wrapBody#0 enumText#0 typeRef#0 arenaMember#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isOrReturn#1 hoistOrReturn#1 lazyArgument#1 wrapBody#1 enumText#1 typeRef#1 arenaMember#1
@@ -38,12 +38,15 @@ function controlRow(walk: Walk, node: Node, operands: Operands): string | null -
   callee +11:12 typeRef -> @typeRef
   callee +14:12 arenaMember -> @arenaMember
 function isOrReturn(walk: Walk, call: Node): boolean -> @isOrReturn
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_str_eq
-  pointer walk: size=200 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.missType
+  calls: Walk.missType nish_panic_index nish_str_eq
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.missType#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
+  local +1:9 named: boolean (const)
+  callee +8:5 Walk.missType -> @Walk.missType
 function hoistOrReturn(walk: Walk, call: Node, operands: Operands): string | null -> @hoistOrReturn
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.fail
@@ -67,20 +70,21 @@ function hoistOrReturn(walk: Walk, call: Node, operands: Operands): string | nul
   callee +17:42 Walk.helperName -> @Walk.helperName
 function lazyArgument(walk: Walk, call: Node, operands: Operands): string | null -> @lazyArgument
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Walk.helperName
-  calls: Operands.at Walk.helperName nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_new
-  pointer walk: size=200 writesThrough=false captured=false passedTo=Walk.helperName#0
+  sharedWrite: via Walk.missType
+  calls: Operands.at Walk.helperName Walk.missType nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_new
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.missType#0 Walk.helperName#0
   pointer call: size=40 writesThrough=false captured=false
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0 Operands.at#0
   stackSites=0 stackLocals=0
   local +0:9 callee: Node (const)
   local +10:9 kind: i32 (const)
-  local +21:9 written: string (const)
-  callee +21:19 Operands.at -> @Operands.at
-  local +22:9 suffix: string (const)
-  local +26:9 helper: string (const)
-  callee +26:18 Walk.helperName -> @Walk.helperName
-  callee +27:87 Operands.at -> @Operands.at
+  callee +22:3 Walk.missType -> @Walk.missType
+  local +23:9 written: string (const)
+  callee +23:19 Operands.at -> @Operands.at
+  local +24:9 suffix: string (const)
+  local +28:9 helper: string (const)
+  callee +28:18 Walk.helperName -> @Walk.helperName
+  callee +29:87 Operands.at -> @Operands.at
 function wrapBody(walk: Walk, node: Node, operands: Operands): string | null -> @wrapBody
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -99,9 +103,10 @@ function wrapBody(walk: Walk, node: Node, operands: Operands): string | null -> 
   local -2:9 wrapped: string (const)
   callee +3:10 splice -> @splice
 function callsOrReturn(walk: Walk, node: Node): boolean -> @callsOrReturn
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via isOrReturn
   calls: callsOrReturn isOrReturn
-  pointer walk: size=200 writesThrough=false captured=false passedTo=isOrReturn#0 callsOrReturn#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=isOrReturn#0 callsOrReturn#0
   pointer node: size=40 writesThrough=false captured=false passedTo=isOrReturn#1
   stackSites=0 stackLocals=0
   callee +0:31 isOrReturn -> @isOrReturn

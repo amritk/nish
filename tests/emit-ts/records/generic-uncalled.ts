@@ -1,12 +1,12 @@
-// A generic nothing calls has no native body and no types, and is written as
-// it is: `xs[k]` still goes through `idx`, the rewrite that needs no type, and
-// the arithmetic stays as written, since no instance says its width. `push`
-// copies nothing here, because no record of this program is held inline.
-// `wide` would need its types, an `i64` being a `bigint` and `toI64` a builtin
-// the checker resolves, so its body is written to throw.
-const last = <T>(xs: T[]): T => {
-  const k = xs.length - 1
-  return xs[k]
+// A generic nothing calls has no native body and no types. A body no type
+// changes is written as it is: `xs[0]` still goes through `idx`, the rewrite
+// that needs no type, and `push` copies nothing, because no record of this
+// program is held inline. A body some type would change is written to throw:
+// `wide`'s `i64` is a `bigint`, `xs.length - 1` wraps at a width no instance
+// says, `s.length` counts UTF-8 bytes only where `s` is known to be a string,
+// and `Counter`'s constructor adds at a width no instance says.
+const first = <T>(xs: T[]): T => {
+  return xs[0]
 }
 
 const wide = <T>(xs: T[]): i64 => {
@@ -17,6 +17,10 @@ const put = <T>(xs: T[], v: T): void => {
   xs.push(v)
 }
 
+const size = <T>(s: string, x: T): i32 => {
+  return s.length
+}
+
 class Box<T> {
   item: T
   constructor(item: T) {
@@ -24,6 +28,13 @@ class Box<T> {
   }
   both(): T[] {
     return [this.item, this.item]
+  }
+}
+
+class Counter<T> {
+  n: i32
+  constructor(n: i32) {
+    this.n = n + 1
   }
 }
 

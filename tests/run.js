@@ -4833,6 +4833,7 @@ if (!only || "emit-ts".includes(only)) {
     ["NL4013", "reject_emit_ts_instances_zero_string", 5],
     ["NL4014", "refused/uncalled-zero", 4],
     ["NL4014", "refused/uncalled-copy", 9],
+    ["NL4014", "refused/uncalled-ctor-zero", 6],
   ]) {
     // A `refused/` name is a program under tests/emit-ts, which has no `.out`
     // and so is no fixture.
@@ -4853,19 +4854,21 @@ if (!only || "emit-ts".includes(only)) {
     )
   }
 
-  // A stub is warned about only where it is the reader's (NL8012): `wide` in
-  // the program's own module, by name and line, with exit 0 and the file
-  // written; `std/collections.ts`'s stubbed `insertAt` under identity/maps
-  // stays silent.
+  // A stub is warned about only where it is the reader's (NL8012): in the
+  // program's own module, each by name and line, with exit 0 and the files
+  // written; the standard library's stubs, `insertAt` under identity/maps and
+  // `nish/threads`' under records/threads-inline, stay silent.
+  const stubWarning = (name, line) => [
+    `"line":${line},`,
+    `"code":"NL8012","message":"\`${name}\` is never instantiated, and its body needs the checker's types to translate: --emit-ts writes it as a stub that throws"`,
+  ]
   for (const [name, expected] of [
     [
       "records/generic-uncalled",
-      [
-        '"line":12,"column":1,',
-        '"code":"NL8012","message":"`wide` is never instantiated, and its body needs the checker\'s types to translate: --emit-ts writes it as a stub that throws"',
-      ],
+      [stubWarning("wide", 12), stubWarning("size", 20), stubWarning("Counter.constructor", 36), stubWarning("Bag.pick", 46)],
     ],
-    ["identity/maps", null],
+    ["identity/maps", []],
+    ["records/threads-inline", []],
   ]) {
     const dir = path.join(work, `stub-${name.replace("/", "-")}`)
     const r = spawnSync(NISH, [path.join(fixtures, `${name}.ts`), "--json", "--emit-ts", dir], {
@@ -4880,10 +4883,11 @@ if (!only || "emit-ts".includes(only)) {
         .join("")
     )
     check(
-      `emit-ts: ${name} writes a throwing stub and ${expected === null ? "warns about none of the standard library's" : "warns about it under NL8012"}`,
+      `emit-ts: ${name} writes a throwing stub and ${expected.length === 0 ? "warns about none of the standard library's" : `warns about each of its ${expected.length} under NL8012`}`,
       r.status === 0 &&
         stubbed &&
-        (expected === null ? stubs.length === 0 : stubs.length === 1 && expected.every((part) => stubs[0].includes(part))),
+        stubs.length === expected.length &&
+        expected.every((parts, i) => parts.every((part) => stubs[i].includes(part))),
       `exit ${r.status}\n${r.stdout}${r.stderr}`
     )
   }

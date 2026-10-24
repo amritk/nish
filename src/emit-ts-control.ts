@@ -87,13 +87,16 @@ export const controlRow = (walk: Walk, node: Node, operands: Operands): string |
 /** Whether `call` is `x.orReturn()` on a `Result`: no arguments, and bound to no method of the program. */
 const isOrReturn = (walk: Walk, call: Node): boolean => {
   const callee = call.children[0]
-  return (
+  const named =
     callee.kind === N_MEMBER &&
     callee.text === "orReturn" &&
     call.children.length > 1 &&
-    call.children[1].children.length === 0 &&
-    walk.program.nodeCallees[call.id] === null
-  )
+    call.children[1].children.length === 0
+  if (named && walk.untyped) {
+    // An untyped body binds no call, so whether this is a `Result`'s is unknown.
+    walk.missType()
+  }
+  return named && walk.program.nodeCallees[call.id] === null
 }
 
 /** `t.value`, with `t`'s binding and its `Err` return hoisted before the statement; or `null` where nothing may hoist. */
@@ -142,6 +145,8 @@ const lazyArgument = (walk: Walk, call: Node, operands: Operands): string | null
   ) {
     return null
   }
+  // An untyped body binds no call, so whether this is a `Result`'s is unknown.
+  walk.missType()
   const written = operands.at(0)
   const suffix = `.${callee.text}`
   if (!written.endsWith(suffix)) {

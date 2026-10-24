@@ -21,11 +21,14 @@ function stringStaticHelper(member: string): string -> @stringStaticHelper
   calls: nish_str_eq
   stackSites=0 stackLocals=0
 function typedString(walk: Walk, node: Node): boolean -> @typedString
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
-  pointer walk: size=200 writesThrough=false captured=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Walk.missType
+  calls: Walk.missType nish_panic_index
+  pointer walk: size=200 writesThrough=true captured=false passedTo=Walk.missType#0
   pointer node: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+  local +0:9 type: i32 (const)
+  callee +2:5 Walk.missType -> @Walk.missType
 function stringHelperCall(walk: Walk, helper: string, args: string): string -> @stringHelperCall
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Walk.helperName
@@ -46,9 +49,9 @@ function methodReceiverText(walk: Walk, member: Node, memberText: string): strin
   callee +2:42 Walk.spanOf -> @Walk.spanOf
 function stringLengthRewrite(walk: Walk, node: Node, operands: Operands): string | null -> @stringLengthRewrite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via stringHelperCall
+  sharedWrite: via typedString
   calls: Operands.at isOptionalChain nish_panic_index nish_str_eq stringHelperCall typedString
-  pointer walk: size=200 writesThrough=false captured=false passedTo=typedString#0 stringHelperCall#0
+  pointer walk: size=200 writesThrough=true captured=false passedTo=typedString#0 stringHelperCall#0
   pointer node: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0
   pointer operands: size=40 writesThrough=false captured=false passedTo=Operands.at#0
   stackSites=0 stackLocals=0
@@ -58,7 +61,7 @@ function stringLengthRewrite(walk: Walk, node: Node, operands: Operands): string
   callee +3:81 Operands.at -> @Operands.at
 function stringCallRewrite(walk: Walk, node: Node, operands: Operands): string | null -> @stringCallRewrite
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via stringHelperCall
+  sharedWrite: via typedString
   calls: Operands.at isOptionalChain methodReceiverText nish_panic_index nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from stringHelperCall stringStaticHelper typedString
   pointer walk: size=200 writesThrough=true captured=false passedTo=typedString#0 stringHelperCall#0 stringHelperCall#0 typedString#0 methodReceiverText#0 stringHelperCall#0
   pointer node: size=40 writesThrough=true captured=true passedTo=isOptionalChain#0

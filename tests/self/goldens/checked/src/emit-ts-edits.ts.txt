@@ -23,6 +23,7 @@ import N_BINARY from "./nodes" -> const N_BINARY
 import N_BLOCK from "./nodes" -> const N_BLOCK
 import N_CALL from "./nodes" -> const N_CALL
 import N_CLASS from "./nodes" -> const N_CLASS
+import N_CONSTRUCTOR from "./nodes" -> const N_CONSTRUCTOR
 import N_EMPTY from "./nodes" -> const N_EMPTY
 import N_EXPR_STMT from "./nodes" -> const N_EXPR_STMT
 import N_FOR from "./nodes" -> const N_FOR
@@ -76,29 +77,31 @@ struct Walk (class) size=200 align=8 exported
   field repeat: boolean index=9 offset=58
   field instanceChoice: boolean index=10 offset=59
   field warnStubs: boolean index=11 offset=60
-  field choiceNodes: Node[] index=12 offset=64
-  field choiceTexts: string[] index=13 offset=72
-  field helpers: StringSet index=14 offset=80
-  field widths: StringSet index=15 offset=88
-  field names: StringSet index=16 offset=96
-  field typeNames: StringSet index=17 offset=104
-  field specifierFrom: string[] index=18 offset=112
-  field specifierTo: string[] index=19 offset=120
-  field refusedAt: Node[] index=20 offset=128
-  field refusals: string[] index=21 offset=136
-  field stubIds: i32[] index=22 offset=144
-  field stubNames: string[] index=23 offset=152
-  field stubbedAt: Node[] index=24 offset=160
-  field stubWarnings: string[] index=25 offset=168
-  field failure: string index=26 offset=176
-  field preludes: string[] index=27 offset=184
-  field temps: i32 index=28 offset=192
-  field hoistHere: boolean index=29 offset=196
-  field hoistable: boolean index=30 offset=197
-  field effects: boolean index=31 offset=198
-  field localsRead: boolean index=32 offset=199
+  field typeMiss: boolean index=12 offset=61
+  field choiceNodes: Node[] index=13 offset=64
+  field choiceTexts: string[] index=14 offset=72
+  field helpers: StringSet index=15 offset=80
+  field widths: StringSet index=16 offset=88
+  field names: StringSet index=17 offset=96
+  field typeNames: StringSet index=18 offset=104
+  field specifierFrom: string[] index=19 offset=112
+  field specifierTo: string[] index=20 offset=120
+  field refusedAt: Node[] index=21 offset=128
+  field refusals: string[] index=22 offset=136
+  field stubIds: i32[] index=23 offset=144
+  field stubNames: string[] index=24 offset=152
+  field stubbedAt: Node[] index=25 offset=160
+  field stubWarnings: string[] index=26 offset=168
+  field failure: string index=27 offset=176
+  field preludes: string[] index=28 offset=184
+  field temps: i32 index=29 offset=192
+  field hoistHere: boolean index=30 offset=196
+  field hoistable: boolean index=31 offset=197
+  field effects: boolean index=32 offset=198
+  field localsRead: boolean index=33 offset=199
   constructor -> @Walk.constructor
   method stub -> @Walk.stub
+  method missType -> @Walk.missType
   method stubName -> @Walk.stubName
   method helperName -> @Walk.helperName
   method canHoist -> @Walk.canHoist
@@ -120,7 +123,7 @@ function Walk.constructor(this: Walk, program: CheckedProgram, table: TypeTable,
   sharedWrite: via StringSet.add
   escaping: nodeCount program source table
   calls: FunctionSig.definedIn StringMap.get StringSet.add StringSet.constructor StringSet.has Walk.stub nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32
-  pointer this: size=200 writesThrough=true captured=false passedTo=Walk.stub#0 Walk.stub#0 Walk.stub#0
+  pointer this: size=200 writesThrough=true captured=false passedTo=Walk.stub#0 Walk.stub#0 Walk.stub#0 Walk.stub#0
   pointer program: size=656 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   pointer source: size=24 writesThrough=true captured=true passedTo=FunctionSig.definedIn#1
@@ -137,21 +140,22 @@ function Walk.constructor(this: Walk, program: CheckedProgram, table: TypeTable,
   local +29:16 imp: ImportBinding (const)
   callee +30:11 StringMap.get -> @StringMap.get
   callee +31:9 StringSet.add -> @StringSet.add
-  local +52:16 sig: FunctionSig (const)
-  local +53:13 instance: Instantiation | null (const)
-  callee +54:32 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local +60:16 template: TemplateInfo (const)
-  callee +62:9 Walk.stub -> @Walk.stub
-  local +67:11 called: StringSet (const)
-  callee +67:20 new StringSet -> @StringSet.constructor
-  local +68:16 template: TemplateInfo (const)
-  callee +70:9 StringSet.add -> @StringSet.add
-  local +73:16 template: TemplateInfo (const)
-  callee +74:42 StringSet.has -> @StringSet.has
-  callee +75:9 Walk.stub -> @Walk.stub
-  local +80:16 template: StructTemplateInfo (const)
-  local +82:20 member: Node (const)
-  callee +84:13 Walk.stub -> @Walk.stub
+  local +53:16 sig: FunctionSig (const)
+  local +54:13 instance: Instantiation | null (const)
+  callee +55:32 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +61:16 template: TemplateInfo (const)
+  callee +63:9 Walk.stub -> @Walk.stub
+  local +68:11 called: StringSet (const)
+  callee +68:20 new StringSet -> @StringSet.constructor
+  local +69:16 template: TemplateInfo (const)
+  callee +71:9 StringSet.add -> @StringSet.add
+  local +74:16 template: TemplateInfo (const)
+  callee +75:42 StringSet.has -> @StringSet.has
+  callee +76:9 Walk.stub -> @Walk.stub
+  local +81:16 template: StructTemplateInfo (const)
+  local +83:20 member: Node (const)
+  callee +85:13 Walk.stub -> @Walk.stub
+  callee +87:13 Walk.stub -> @Walk.stub
 function Walk.stub(this: Walk, decl: Node, nodeCount: i32, name: string): void -> @Walk.stub [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -159,6 +163,11 @@ function Walk.stub(this: Walk, decl: Node, nodeCount: i32, name: string): void -
   calls: nish_array_grow nish_panic_index
   pointer this: size=200 writesThrough=false captured=false
   pointer decl: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function Walk.missType(this: Walk): void -> @Walk.missType [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  pointer this: size=200 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Walk.stubName(this: Walk, id: i32): string -> @Walk.stubName [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -362,6 +371,12 @@ function needsTypes(node: Node): boolean -> @needsTypes
   callee +1:36 isBuiltinFunction -> @isBuiltinFunction
   local +5:14 child: Node (const)
   callee +6:9 needsTypes -> @needsTypes
+function bodyIndex(node: Node): i32 -> @bodyIndex
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index
+  pointer node: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 at: i32 (const)
 function observeWidths(walk: Walk, node: Node): void -> @observeWidths
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringSet.add
@@ -374,63 +389,69 @@ function observeWidths(walk: Walk, node: Node): void -> @observeWidths
   local +3:14 child: Node (const)
   callee +4:5 observeWidths -> @observeWidths
 function stubText(walk: Walk, node: Node): string -> @stubText
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_concat nish_str_new
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: bodyIndex nish_panic_index nish_str_concat nish_str_new
   pointer walk: size=200 writesThrough=false captured=false
-  pointer node: size=40 writesThrough=false captured=false
+  pointer node: size=40 writesThrough=false captured=false passedTo=bodyIndex#0
   stackSites=0 stackLocals=0
-  local +0:9 body: Node (const)
-  local +1:9 text: string (const)
+  local +0:9 at: i32 (const)
+  callee +0:14 bodyIndex -> @bodyIndex
+  local +4:9 body: Node (const)
+  local +5:9 text: string (const)
 function sameAnswer(aChanged: boolean, a: string, bChanged: boolean, b: string): boolean -> @sameAnswer
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
 function changedText(walk: Walk, node: Node, out: Operands, slot: i32): void -> @changedText
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:9
+  sharedWrite: +0:7
   escaping: node slot
-  calls: Operands.constructor Walk.refuse Walk.spanOf Walk.stubName changedAcrossInstances changedText controlRow hasEffect hoistChild inOptionalChain mayPanic needsTypes nish_array_grow nish_panic_index nish_str_concat nish_str_eq numbersRow observe observeWidths readsLocal readsState recordsRow splice statementText stringsRow stubText writes
-  pointer walk: size=200 writesThrough=true captured=false passedTo=stubText#0 Walk.stubName#0 observeWidths#0 changedText#0 Walk.refuse#0 changedAcrossInstances#0 observe#0 statementText#0 changedText#0 readsState#0 readsLocal#0 numbersRow#0 stringsRow#0 recordsRow#0 controlRow#0 Walk.spanOf#0 mayPanic#0 Walk.spanOf#0 splice#0
-  pointer node: size=40 writesThrough=true captured=true passedTo=needsTypes#0 stubText#1 changedText#1 changedAcrossInstances#1 observe#1 Operands.constructor#1 hoistChild#0 readsState#1 readsLocal#1 inOptionalChain#0 writes#0 numbersRow#1 stringsRow#1 recordsRow#1 controlRow#1 Walk.spanOf#1 hasEffect#0 mayPanic#1 Walk.spanOf#1 splice#1
+  calls: Operands.constructor Walk.refuse Walk.spanOf Walk.stubName bodyIndex changedAcrossInstances changedText controlRow hasEffect hoistChild inOptionalChain mayPanic needsTypes nish_array_grow nish_panic_index nish_str_concat nish_str_eq numbersRow observe observeWidths readsLocal readsState recordsRow splice statementText stringsRow stubText writes
+  pointer walk: size=200 writesThrough=true captured=false passedTo=stubText#0 changedText#0 Walk.refuse#0 stubText#0 Walk.stubName#0 observeWidths#0 changedAcrossInstances#0 observe#0 statementText#0 changedText#0 readsState#0 readsLocal#0 numbersRow#0 stringsRow#0 recordsRow#0 controlRow#0 Walk.spanOf#0 mayPanic#0 Walk.spanOf#0 splice#0
+  pointer node: size=40 writesThrough=true captured=true passedTo=needsTypes#0 stubText#1 changedText#1 stubText#1 bodyIndex#0 changedAcrossInstances#1 observe#1 Operands.constructor#1 hoistChild#0 readsState#1 readsLocal#1 inOptionalChain#0 writes#0 numbersRow#1 stringsRow#1 recordsRow#1 controlRow#1 Walk.spanOf#1 hasEffect#0 mayPanic#1 Walk.spanOf#1 splice#1
   pointer out: size=40 writesThrough=false captured=false passedTo=changedText#2 changedAcrossInstances#2
   stackSites=1 stackLocals=1
-  local -3:11 stub: string (const)
-  callee -3:18 needsTypes -> @needsTypes
-  callee -3:37 stubText -> @stubText
-  callee +2:16 Walk.stubName -> @Walk.stubName
-  local +5:11 k: i32 (let)
-  callee +8:11 observeWidths -> @observeWidths
-  local +16:11 choices: i32 (const)
-  callee +18:5 changedText -> @changedText
-  callee +21:7 Walk.refuse -> @Walk.refuse
-  callee +35:5 changedAcrossInstances -> @changedAcrossInstances
-  local +38:9 callee: string (const)
-  callee +38:18 observe -> @observe
-  local +39:9 here: boolean (const)
-  local +40:9 effectsBefore: boolean (const)
-  local +41:9 localsBefore: boolean (const)
-  local +42:9 operands: Operands (const)
-  callee +42:20 new Operands -> @Operands.constructor
-  local +43:7 i: i32 (let)
-  callee +48:7 statementText -> @statementText
-  callee +50:32 hoistChild -> @hoistChild
-  callee +51:7 changedText -> @changedText
-  callee +52:11 readsState -> @readsState
-  callee +55:11 readsLocal -> @readsLocal
-  callee +70:47 inOptionalChain -> @inOptionalChain
-  callee +70:90 writes -> @writes
-  local +71:9 hoisted: i32 (const)
-  local +72:9 choiceBefore: boolean (const)
-  local +76:7 rewritten: string | null (let)
-  callee +76:19 numbersRow -> @numbersRow
-  callee +78:17 stringsRow -> @stringsRow
-  callee +81:17 recordsRow -> @recordsRow
-  callee +84:17 controlRow -> @controlRow
-  callee +88:48 Walk.spanOf -> @Walk.spanOf
-  callee +97:14 hasEffect -> @hasEffect
-  callee +97:33 mayPanic -> @mayPanic
-  callee +101:23 Walk.spanOf -> @Walk.spanOf
-  callee +108:23 splice -> @splice
+  local -3:11 choices: i32 (const)
+  local -2:9 stub: string (let)
+  callee -2:16 needsTypes -> @needsTypes
+  callee -2:35 stubText -> @stubText
+  callee +2:7 changedText -> @changedText
+  local +4:13 chose: boolean (const)
+  callee +6:9 Walk.refuse -> @Walk.refuse
+  callee +8:16 stubText -> @stubText
+  callee +20:16 Walk.stubName -> @Walk.stubName
+  local +23:13 at: i32 (const)
+  callee +23:18 bodyIndex -> @bodyIndex
+  local +24:11 k: i32 (let)
+  callee +27:11 observeWidths -> @observeWidths
+  callee +42:5 changedAcrossInstances -> @changedAcrossInstances
+  local +45:9 callee: string (const)
+  callee +45:18 observe -> @observe
+  local +46:9 here: boolean (const)
+  local +47:9 effectsBefore: boolean (const)
+  local +48:9 localsBefore: boolean (const)
+  local +49:9 operands: Operands (const)
+  callee +49:20 new Operands -> @Operands.constructor
+  local +50:7 i: i32 (let)
+  callee +55:7 statementText -> @statementText
+  callee +57:32 hoistChild -> @hoistChild
+  callee +58:7 changedText -> @changedText
+  callee +59:11 readsState -> @readsState
+  callee +62:11 readsLocal -> @readsLocal
+  callee +77:47 inOptionalChain -> @inOptionalChain
+  callee +77:90 writes -> @writes
+  local +78:9 hoisted: i32 (const)
+  local +79:9 choiceBefore: boolean (const)
+  local +83:7 rewritten: string | null (let)
+  callee +83:19 numbersRow -> @numbersRow
+  callee +85:17 stringsRow -> @stringsRow
+  callee +88:17 recordsRow -> @recordsRow
+  callee +91:17 controlRow -> @controlRow
+  callee +95:48 Walk.spanOf -> @Walk.spanOf
+  callee +104:14 hasEffect -> @hasEffect
+  callee +104:33 mayPanic -> @mayPanic
+  callee +108:23 Walk.spanOf -> @Walk.spanOf
+  callee +115:23 splice -> @splice
 function changedAcrossInstances(walk: Walk, node: Node, out: Operands, slot: i32): void -> @changedAcrossInstances
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

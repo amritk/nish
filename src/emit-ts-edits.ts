@@ -73,6 +73,7 @@ import {
   N_BLOCK,
   N_CALL,
   N_CLASS,
+  N_CONSTRUCTOR,
   N_EMPTY,
   N_EXPR_STMT,
   N_FOR,
@@ -170,17 +171,19 @@ export class Walk {
   instanceNext: i32[]
   instances: Instantiation[]
   /**
-   * Per node id, whether the node is a generic function or method that no
-   * instance reaches: the native build compiles no body for it, and the
-   * checker typed none, so it is walked `untyped`, or written with a throwing
-   * body where its text would need those types (`needsTypes`).
+   * Per node id, whether the node is a generic function or method, or the
+   * constructor of a generic class, that no instance reaches: the native build
+   * compiles no body for it, and the checker typed none, so it is walked
+   * `untyped`, and written with a throwing body where its text would need those
+   * types (`needsTypes`, or a row that asked for one: `typeMiss`).
    */
   stubbed: boolean[]
   /**
    * A body no instance reaches is being walked. Its nodes have no types, so
    * the rows that need none rewrite it as they would any code and the rest
    * leave it as written; a copy or a zero that an element type would decide
-   * is refused (NL4014), since no instance says which.
+   * is refused (NL4014) in the program's own modules, since no instance says
+   * which, and written as a stub in the standard library's.
    */
   untyped: boolean
   /** An instance's tables are installed, so a template node is walked as itself. */
@@ -194,11 +197,19 @@ export class Walk {
    */
   instanceChoice: boolean
   /**
-   * Whether a stub written with a throwing body is warned about: the driver's
-   * answer, true for the program's own modules and false for the standard
-   * library's, whose stubs (`insertAt` and the like) are not the reader's to change.
+   * Whether a stub written with a throwing body is warned about, and a copy
+   * or zero an untyped body would choose is refused: the driver's answer, true
+   * for the program's own modules and false for the standard library's, whose
+   * bodies (`insertAt`, `Channel.send` and the like) are not the reader's to
+   * change and are written as stubs without a word.
    */
   warnStubs: boolean
+  /**
+   * A row asked for the type of a node in the untyped body being walked and
+   * found none, where a type would decide its text: the body is written as a
+   * stub, since the text JavaScript's meaning gives it may not be native's.
+   */
+  typeMiss: boolean
   /**
    * The nodes inside the instance being walked whose text the records row
    * chose from the instance's types, each with that text, in walk order: where
@@ -292,6 +303,7 @@ export class Walk {
     this.stubIds = []
     this.stubNames = []
     this.warnStubs = false
+    this.typeMiss = false
     this.stubbedAt = []
     this.stubWarnings = []
     this.failure = ""
@@ -329,13 +341,15 @@ export class Walk {
         this.stub(template.decl, nodeCount, template.sourceName)
       }
     }
-    // A class template no type argument list reached: every method of it. Its
-    // constructor is kept, so the fields it assigns stay definitely assigned.
+    // A class template no type argument list reached: every method of it, and
+    // its constructor, whose stub throws before any field could be read.
     for (const template of program.structTemplateList) {
       if (template.origin === source && template.count === 0 && template.decl.kind === N_CLASS) {
         for (const member of template.decl.children[3].children) {
           if (member.kind === N_METHOD) {
             this.stub(member, nodeCount, `${template.sourceName}.${member.text}`)
+          } else if (member.kind === N_CONSTRUCTOR) {
+            this.stub(member, nodeCount, `${template.sourceName}.constructor`)
           }
         }
       }
@@ -348,6 +362,13 @@ export class Walk {
       this.stubbed[decl.id] = true
       this.stubIds.push(decl.id)
       this.stubNames.push(name)
+    }
+  }
+
+  /** Record that a row needed `node`'s type in an untyped body and found none (`typeMiss`). */
+  missType(): void {
+    if (this.untyped) {
+      this.typeMiss = true
     }
   }
 
@@ -736,12 +757,16 @@ const statementText = (walk: Walk, stmt: Node, out: Operands, slot: i32): void =
 
 /**
  * Whether the text of `node`, a body no instance reaches, would need the types
- * the checker never gave it: a 64-bit integer, which is a `bigint` here and
- * mixes with no `number`, or a builtin call, whose rewrite the checker's
- * resolution of it decides.
+ * the checker never gave it, as its spelling shows: a 64-bit integer, which is
+ * a `bigint` here and mixes with no `number`, an f32, whose literals round, or
+ * a builtin call, whose rewrite the checker's resolution of it decides. What
+ * the spelling cannot show, a row reports as it walks (`typeMiss`).
  */
 const needsTypes = (node: Node): boolean => {
-  if ((node.kind === N_TYPE_REF || node.kind === N_IDENT) && (node.text === "i64" || node.text === "u64")) {
+  if (
+    (node.kind === N_TYPE_REF || node.kind === N_IDENT) &&
+    (node.text === "i64" || node.text === "u64" || node.text === "f32")
+  ) {
     return true
   }
   if (node.kind === N_CALL && node.children.length > 0) {
@@ -758,6 +783,12 @@ const needsTypes = (node: Node): boolean => {
   return false
 }
 
+/** The index of the body of `node`, a function, method or constructor; -1 where it has none, as a `declare`d one. */
+const bodyIndex = (node: Node): i32 => {
+  const at = node.kind === N_CONSTRUCTOR ? 1 : 3
+  return node.children.length > at && node.children[at].kind === N_BLOCK ? at : -1
+}
+
 /** The width types the signature of a stub names, which its text keeps. */
 const observeWidths = (walk: Walk, node: Node): void => {
   if (node.kind === N_TYPE_REF && listedWord(WIDTH_TYPES, node.text)) {
@@ -769,15 +800,17 @@ const observeWidths = (walk: Walk, node: Node): void => {
 }
 
 /**
- * A body no instance reaches whose text would need types (`needsTypes`),
+ * A body no instance reaches whose text would need types (`needsTypes`,
+ * `typeMiss`), or that in the standard library would choose a copy or a zero,
  * written to throw: the native build compiles none, so nothing calls it. The
  * empty string where there is no body, as a `declare`d one has none.
  */
 const stubText = (walk: Walk, node: Node): string => {
-  if (node.children.length < 4 || node.children[3].kind !== N_BLOCK) {
+  const at = bodyIndex(node)
+  if (at < 0) {
     return ""
   }
-  const body = node.children[3]
+  const body = node.children[at]
   const text = walk.source.text
   return `${text.substring(node.start, body.start)}{\n    throw new Error("--emit-ts: a generic no instance reaches")\n  }${text.substring(body.end, node.end)}`
 }
@@ -800,7 +833,25 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
     node.id < walk.stubbed.length &&
     walk.stubbed[node.id]
   ) {
-    const stub = needsTypes(node) ? stubText(walk, node) : ""
+    const choices = walk.choiceNodes.length
+    let stub = needsTypes(node) ? stubText(walk, node) : ""
+    if (stub.length === 0) {
+      walk.untyped = true
+      walk.typeMiss = false
+      changedText(walk, node, out, slot)
+      walk.untyped = false
+      const chose = walk.choiceNodes.length > choices
+      if (chose && walk.warnStubs && !walk.typeMiss) {
+        walk.refuse(walk.choiceNodes[choices], UNTYPED_REFUSAL)
+      } else if (chose || walk.typeMiss) {
+        stub = stubText(walk, node)
+      }
+      walk.typeMiss = false
+      while (walk.choiceNodes.length > choices) {
+        walk.choiceNodes.pop()
+        walk.choiceTexts.pop()
+      }
+    }
     if (stub.length > 0) {
       if (walk.warnStubs) {
         walk.stubbedAt.push(node)
@@ -808,27 +859,16 @@ const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => 
           `\`${walk.stubName(node.id)}\` is never instantiated, and its body needs the checker's types to translate: --emit-ts writes it as a stub that throws`
         )
       }
+      const at = bodyIndex(node)
       let k = 0
       while (k < node.children.length) {
-        if (k !== 3) {
+        if (k !== at) {
           observeWidths(walk, node.children[k])
         }
         k = k + 1
       }
       out.texts[slot] = stub
       out.changed[slot] = true
-      return
-    }
-    const choices = walk.choiceNodes.length
-    walk.untyped = true
-    changedText(walk, node, out, slot)
-    walk.untyped = false
-    if (walk.choiceNodes.length > choices) {
-      walk.refuse(walk.choiceNodes[choices], UNTYPED_REFUSAL)
-    }
-    while (walk.choiceNodes.length > choices) {
-      walk.choiceNodes.pop()
-      walk.choiceTexts.pop()
     }
     return
   }
