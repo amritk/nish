@@ -645,19 +645,19 @@ const bcryptXorKey = (st: u32[], expanded: u32[]): void => {
   }
 }
 
-/** P XORed with the salt words, repeated: the second half of a cost round. */
-const bcryptXorSalt = (st: u32[], s0: u32, s1: u32, s2: u32, s3: u32): void => {
-  if (st.length < 18) {
+/** The 18 P words at `at` XORed with the salt words, repeated: the second half of a cost round. */
+const bcryptXorSalt = (st: u32[], at: i32, s0: u32, s1: u32, s2: u32, s3: u32): void => {
+  if (at < 0 || at + 17 >= toI32(st.length)) {
     return
   }
   for (let i: i32 = 0; i + 3 < 16; i += 4) {
-    st[i] ^= s0
-    st[i + 1] ^= s1
-    st[i + 2] ^= s2
-    st[i + 3] ^= s3
+    st[at + i] ^= s0
+    st[at + i + 1] ^= s1
+    st[at + i + 2] ^= s2
+    st[at + i + 3] ^= s3
   }
-  st[16] ^= s0
-  st[17] ^= s1
+  st[at + 16] ^= s0
+  st[at + 17] ^= s1
 }
 
 /**
@@ -695,7 +695,7 @@ const bcryptExposed = (password: u8[], setting: BcryptSetting): u8[] => {
   while (rounds !== 0) {
     bcryptXorKey(st, expanded)
     bcryptBody(st)
-    bcryptXorSalt(st, s0, s1, s2, s3)
+    bcryptXorSalt(st, 0, s0, s1, s2, s3)
     bcryptBody(st)
     rounds -= 1
   }
@@ -721,19 +721,22 @@ const bcryptMagic = (st: u32[], lr: u32[], dst: u8[], at: i32, l: u32, r: u32): 
   for (let k: i32 = 0; k < 64; k++) {
     bcryptEncrypt(st, lr)
   }
+  bcryptPutBlock(dst, at, lr[0], lr[1])
+}
+
+/** The block `l`, `r` into `dst` at `at` as eight big-endian bytes; nothing when it does not fit. */
+const bcryptPutBlock = (dst: u8[], at: i32, l: u32, r: u32): void => {
   if (at < 0 || at + 7 >= toI32(dst.length)) {
     return
   }
-  const l2: u32 = lr[0]
-  const r2: u32 = lr[1]
-  dst[at] = toU8(l2 >>> 24)
-  dst[at + 1] = toU8((l2 >>> 16) & 0xff)
-  dst[at + 2] = toU8((l2 >>> 8) & 0xff)
-  dst[at + 3] = toU8(l2 & 0xff)
-  dst[at + 4] = toU8(r2 >>> 24)
-  dst[at + 5] = toU8((r2 >>> 16) & 0xff)
-  dst[at + 6] = toU8((r2 >>> 8) & 0xff)
-  dst[at + 7] = toU8(r2 & 0xff)
+  dst[at] = toU8(l >>> 24)
+  dst[at + 1] = toU8((l >>> 16) & 0xff)
+  dst[at + 2] = toU8((l >>> 8) & 0xff)
+  dst[at + 3] = toU8(l & 0xff)
+  dst[at + 4] = toU8(r >>> 24)
+  dst[at + 5] = toU8((r >>> 16) & 0xff)
+  dst[at + 6] = toU8((r >>> 8) & 0xff)
+  dst[at + 7] = toU8(r & 0xff)
 }
 
 /** The 60 bytes of the hash: the 29-byte setting, then the digest the password gives under it. */
@@ -819,6 +822,10 @@ const bcryptBytesOf = (hash: string): u8[] => {
 // waiting on one chain's latency.
 // ---------------------------------------------------------------------------
 
+/** Where the four expanded keys of 18 start in the batch state, after the four Blowfish states. */
+const BCRYPT_BATCH_KEYS: i32 = 4168
+/** Where the four safety words start, after the keys. */
+const BCRYPT_BATCH_SAFETY: i32 = 4240
 /** Words in the batch state: four Blowfish states, four expanded keys of 18 and four safety words. */
 const BCRYPT_BATCH_WORDS: i32 = 4244
 
@@ -836,8 +843,8 @@ const bcryptInit4 = (st: u32[], batch: BcryptBatch): i32 => {
   }
   const safety: u32[] = batch.safety
   for (let k: i32 = 0; k < 4; k++) {
-    bcryptInitState(st, k * 1042)
-    st[4240 + k] = k < toI32(safety.length) ? safety[k] : 0
+    bcryptInitState(st, k * BCRYPT_STATE_WORDS)
+    st[BCRYPT_BATCH_SAFETY + k] = k < toI32(safety.length) ? safety[k] : 0
   }
   return 0
 }
@@ -870,9 +877,9 @@ const bcryptLoadLane = (st: u32[], password: Secret<u8[]>, lane: i32): i32 => {
   if (lane < 0 || lane > 3) {
     return 0
   }
-  const at: i32 = lane * 1042
-  const kept: i32 = lane * 18 + 4168
-  const flag: i32 = st[4240 + lane] !== 0 ? 32 : 0
+  const at: i32 = lane * BCRYPT_STATE_WORDS
+  const kept: i32 = lane * 18 + BCRYPT_BATCH_KEYS
+  const flag: i32 = st[BCRYPT_BATCH_SAFETY + lane] !== 0 ? 32 : 0
   for (let k: i32 = 0; k < 18; k++) {
     const word: u32 = exposeWith(password, k | flag, bcryptKeyWord)
     st[at + k] ^= word
@@ -1069,23 +1076,15 @@ const bcryptXorSalt4 = (st: u32[], salts: u32[]): void => {
     return
   }
   for (let k: i32 = 0; k < 4; k++) {
-    bcryptXorSalt4Lane(st, k * 1042, salts[k * 4], salts[k * 4 + 1], salts[k * 4 + 2], salts[k * 4 + 3])
+    bcryptXorSalt(
+      st,
+      k * BCRYPT_STATE_WORDS,
+      salts[k * 4],
+      salts[k * 4 + 1],
+      salts[k * 4 + 2],
+      salts[k * 4 + 3]
+    )
   }
-}
-
-/** One lane of `bcryptXorSalt4`: the 18 P words at `at`. */
-const bcryptXorSalt4Lane = (st: u32[], at: i32, s0: u32, s1: u32, s2: u32, s3: u32): void => {
-  if (at < 0 || at + 17 >= toI32(st.length)) {
-    return
-  }
-  for (let i: i32 = 0; i + 3 < 16; i += 4) {
-    st[at + i] ^= s0
-    st[at + i + 1] ^= s1
-    st[at + i + 2] ^= s2
-    st[at + i + 3] ^= s3
-  }
-  st[at + 16] ^= s0
-  st[at + 17] ^= s1
 }
 
 /**
@@ -1156,20 +1155,7 @@ const bcryptMagic4 = (st: u32[], lr: u32[], dst: u8[], at: i32, l: u32, r: u32):
     bcryptEncrypt4(st, lr)
   }
   for (let k: i32 = 0; k < 4; k++) {
-    const to: i32 = 24 * k + at
-    if (to < 0 || to + 7 >= toI32(dst.length)) {
-      continue
-    }
-    const l2: u32 = lr[2 * k]
-    const r2: u32 = lr[2 * k + 1]
-    dst[to] = toU8(l2 >>> 24)
-    dst[to + 1] = toU8((l2 >>> 16) & 0xff)
-    dst[to + 2] = toU8((l2 >>> 8) & 0xff)
-    dst[to + 3] = toU8(l2 & 0xff)
-    dst[to + 4] = toU8(r2 >>> 24)
-    dst[to + 5] = toU8((r2 >>> 16) & 0xff)
-    dst[to + 6] = toU8((r2 >>> 8) & 0xff)
-    dst[to + 7] = toU8(r2 & 0xff)
+    bcryptPutBlock(dst, 24 * k + at, lr[2 * k], lr[2 * k + 1])
   }
 }
 
@@ -1270,24 +1256,27 @@ export const bcryptHash4 = (
   }
   const mask: i32 = bcryptMaskOf(p1, p2, p3)
   const hashes: string[] = ["", "", "", ""]
+  if (mask === 1) {
+    const one: Result<string, string> = bcryptHash(p0, bcryptSaltOf(salts, 0), cost)
+    if (one.isErr()) {
+      return Err(one.error)
+    }
+    hashes[0] = one.value
+    return Ok(hashes)
+  }
   const prefixes: u8[][] = []
   const batch: BcryptBatch = { salts: new Array<u32>(16), safety: new Array<u32>(4), cost: cost }
   for (let k: i32 = 0; k < 4; k++) {
+    if ((mask & (1 << k)) === 0) {
+      prefixes.push([])
+      continue
+    }
     const salt: u8[] = bcryptSaltOf(salts, k)
     const words: u32[] = bcryptSaltWords(salt)
     for (let j: i32 = 0; j < 4; j++) {
       batch.salts[4 * k + j] = words[j]
     }
     prefixes.push(bcryptSettingOf(salt, cost))
-  }
-  if (mask === 1) {
-    const setting: BcryptSetting = {
-      salt: bcryptSaltWords(bcryptSaltOf(salts, 0)),
-      cost: cost,
-      safety: toU32(0),
-    }
-    hashes[0] = String.fromBytes(bcryptRun(p0, prefixes[0], setting), 0, BCRYPT_HASH_LENGTH)
-    return Ok(hashes)
   }
   const digests: u8[] = bcryptRun4(p0, p1, p2, p3, mask, batch)
   for (let k: i32 = 0; k < 4; k++) {
