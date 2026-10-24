@@ -1,0 +1,1 @@
+`nishsqlite_exec`: argument 2 (sql) holds a NUL byte, which C would read as the end of the string

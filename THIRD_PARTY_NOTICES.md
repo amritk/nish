@@ -10,7 +10,7 @@ the tree.
 
 ## What the npm package ships
 
-Three of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
+Nine of these files ship. The first is `runtime/runtime.c`, whose shortest round-trip
 formatter is adapted from Ryu. The package carries `runtime/LICENSE-ryu` beside
 it, because `package.json`'s `files` names the whole `runtime/` directory, and
 the release tarball and the platform packages copy that directory too. Ryu is
@@ -39,6 +39,40 @@ same file's inversion of the signing nonce is ported from libsecp256k1, under
 MIT too, so the package carries `std/crypto/LICENSE-libsecp256k1` beside it as
 well, and such a program carries libsecp256k1's notice beside fiat-crypto's.
 
+The fourth is `std/json-tokenizer.ts`, whose decimal-to-double conversion
+(`jsonTokEiselLemire`) and table of powers of five are adapted from fast_float,
+and the fifth is `scripts/gen-json-pow5.mjs`, which regenerates that table and
+ships because `package.json`'s `files` names `scripts/`. The package carries
+`std/LICENSE-fast-float` beside them. fast_float is offered under Apache-2.0,
+MIT or the Boost Software License 1.0, and this repository takes the Boost
+licence, as it does Ryu's, so as with Ryu a program built with `nish/json` needs
+no notice of its own.
+
+The sixth is `std/math.ts`, whose `Math.tan`, `Math.atan2` and `Math.hypot`
+are ported from fdlibm, as FreeBSD's msun carries it. The package carries
+`std/LICENSE-fdlibm` beside it, for the same reason. fdlibm's licence grants
+use, copying and distribution "provided that this notice is preserved", which
+the file's header does; it asks nothing of object code, so a program calling
+those functions needs no notice of its own.
+
+The seventh and eighth are `runtime/sqlite/sqlite3.c` and
+`runtime/sqlite/sqlite3.h`, the [SQLite](https://sqlite.org/) amalgamation,
+vendored unchanged and linked into a program whose IR calls SQLite
+([`runtime/sqlite/README.md`](runtime/sqlite/README.md)). SQLite is in the
+public domain and has no licence to keep: in place of a notice each file
+carries upstream's blessing, and the package carries upstream's
+`runtime/sqlite/LICENSE.md`, which says so, beside them. Neither the files nor
+a program built from them owes a notice.
+
+The ninth is `std/crypto/bcrypt.ts`, whose Blowfish key schedule, rounds,
+base64 and setting parser are adapted from Solar Designer's crypt_blowfish, and
+whose 1042 initial words are its `BF_init_state`. The package carries
+`std/crypto/LICENSE-crypt_blowfish` beside it, for the same reason.
+crypt_blowfish is placed in the public domain, with a fallback licence that
+permits redistribution and use with or without modification and asks for
+nothing, so neither the source nor a program built with `nish/crypto/bcrypt`
+owes a notice; the file keeps it anyway, as upstream asks for credit.
+
 Nothing else here ships. `package.json`'s `files` names neither `bench/`,
 `tests/`, `examples/` nor `docs/cookbook/`.
 
@@ -58,6 +92,17 @@ Boost Software License, Version 1.0 (upstream also offers Apache-2.0).
 Adapted from Ryu (https://github.com/ulfjack/ryu), ryu/d2s.c and ryu/common.h. Copyright 2018 Ulf Adams. Used under the Boost Software License, Version 1.0; see runtime/LICENSE-ryu.
 ```
 
+### `runtime/sqlite/LICENSE.md`
+
+[SQLite](https://sqlite.org/), in the public domain
+([sqlite.org/copyright.html](https://sqlite.org/copyright.html)). The authors
+disclaim copyright, so there is no copyright line: the blessing below stands
+where a notice would, and it is what the check matches.
+
+```notice
+The author disclaims copyright to this source code. In place of a legal notice, here is a blessing: May you do good and not evil. May you find forgiveness for yourself and forgive others. May you share freely, never taking more than you give.
+```
+
 ### `bench/LICENSE-benchmarksgame.md`
 
 The [Computer Language Benchmarks Game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/),
@@ -66,6 +111,16 @@ licence. Each file also names the program it comes from and its contributors.
 
 ```notice
 Copyright (c) 2004-2008 Brent Fulgham, 2005-2025 Isaac Gouy. Revised BSD licence; see bench/LICENSE-benchmarksgame.md.
+```
+
+### `bench/sqlite/LICENSE.md`
+
+The [twelve-dollar server challenge](https://github.com/arjaythedev/twelve-dollar-server-challenge),
+Copyright (c) 2026 arjaythedev and the challenge contributors, under the MIT
+licence: its schema, and the seed generator the SQLite benchmark ports.
+
+```notice
+Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see bench/sqlite/LICENSE.md.
 ```
 
 ### `bench/awfy/LICENSE.md`
@@ -137,6 +192,17 @@ and `fiat-c/src/p256_scalar_32.c` at commit
 Ported from fiat-crypto (https://github.com/mit-plv/fiat-crypto), fiat-c/src/p256_32.c and fiat-c/src/p256_scalar_32.c. Copyright (c) 2015-2020 the fiat-crypto authors (see the AUTHORS file). Used under the MIT licence; see std/crypto/LICENSE-fiat-crypto.
 ```
 
+### `std/crypto/LICENSE-crypt_blowfish`
+
+[crypt_blowfish](https://www.openwall.com/crypt/) 1.3, written by Solar
+Designer in 1998-2014 and placed in the public domain, with a permissive
+licence as the fallback where that disclaimer does not hold. The licence text
+is the notice at the top of upstream's `crypt_blowfish.c`, verbatim.
+
+```notice
+Adapted from crypt_blowfish (https://www.openwall.com/crypt/), crypt_blowfish.c. Written by Solar Designer, 1998-2014, and placed in the public domain, with a permissive licence as the fallback; see std/crypto/LICENSE-crypt_blowfish.
+```
+
 ### `std/crypto/LICENSE-libsecp256k1`
 
 [libsecp256k1](https://github.com/bitcoin-core/secp256k1), Copyright (c) 2013
@@ -147,6 +213,30 @@ under the MIT licence. The port reads `src/modinv32_impl.h` and
 
 ```notice
 Ported from libsecp256k1 (https://github.com/bitcoin-core/secp256k1), src/modinv32_impl.h. Copyright (c) 2020 Peter Dettman. Used under the MIT licence; see std/crypto/LICENSE-libsecp256k1.
+```
+
+### `std/LICENSE-fast-float`
+
+[fast_float](https://github.com/fastfloat/fast_float), Copyright (c) 2021 The
+fast_float authors, under the Boost Software License, Version 1.0 (upstream
+also offers Apache-2.0 and MIT). The adaptation reads
+`include/fast_float/decimal_to_binary.h` and `script/table_generation.py` at
+commit `0de7a21da582b6c84b0546772a96549882905d2b`; the licence text is that
+commit's `LICENSE-BOOST`, verbatim.
+
+```notice
+Adapted from fast_float (https://github.com/fastfloat/fast_float), include/fast_float/decimal_to_binary.h and script/table_generation.py. Copyright 2021 The fast_float authors. Used under the Boost Software License, Version 1.0; see std/LICENSE-fast-float.
+```
+
+### `std/LICENSE-fdlibm`
+
+[fdlibm](https://www.netlib.org/fdlibm/), Copyright (C) 1993 Sun Microsystems,
+Inc., under its own permissive notice. The port reads FreeBSD msun's
+`lib/msun/src` copies; the licence text is the notice those files carry,
+verbatim.
+
+```notice
+Ported from fdlibm (https://www.netlib.org/fdlibm/), as FreeBSD msun carries it, lib/msun/src/k_tan.c, s_tan.c, e_rem_pio2.c, k_rem_pio2.c, e_atan2.c, s_atan.c and e_hypot.c. Copyright (C) 1993 by Sun Microsystems, Inc. Used under the fdlibm licence; see std/LICENSE-fdlibm.
 ```
 
 ### `tests/json-suite/LICENSE-jsontestsuite`
@@ -218,11 +308,16 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 | File | Derived from | Licence | Licence text |
 | --- | --- | --- | --- |
 | `runtime/runtime.c` | Ryu, `ryu/d2s.c` `d2d()` and `ryu/common.h`: `nish_pow5bits`, `nish_log10pow2`, `nish_log10pow5`, `nish_mulshift`, `nish_pow5factor` and `nish_shortest_digits`; the tables are regenerated by `scripts/gen-pow5-tables.py` | BSL-1.0 | `runtime/LICENSE-ryu` |
+| `runtime/sqlite/sqlite3.c` | the SQLite 3.54.1 amalgamation, `sqlite3.c`, unchanged | public domain | `runtime/sqlite/LICENSE.md` |
+| `runtime/sqlite/sqlite3.h` | the SQLite 3.54.1 amalgamation, `sqlite3.h`, unchanged | public domain | `runtime/sqlite/LICENSE.md` |
 | `bench/nbody.ts` | Benchmarks Game n-body, Node.js #6 (Isaac Gouy, modified by Andrey Filatkin) | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/nbody.c` | the same, through `bench/nbody.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/nbody.go` | the same, through `bench/nbody.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/nbody.rs` | the same, through `bench/nbody.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `examples/nbody.ts` | the same | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `bench/sqlite/schema.sql` | the twelve-dollar server challenge's `schema.sql`, unchanged | MIT | `bench/sqlite/LICENSE.md` |
+| `bench/sqlite/twin.c` | the seed: a port of the challenge's `seed/generate.mjs` (mulberry32 and seed 42, the table sizes, the author skew, the `ADJECTIVES` and `NOUNS` lists, part of the word list), and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
+| `bench/sqlite/main.ts` | the challenge's table sizes, `USERS` and `POSTS`, and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
 | `bench/spectral.ts` | Benchmarks Game spectral-norm, Node.js #1 (Ian Osgood, modified by Isaac Gouy) | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/spectral.go` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
@@ -231,12 +326,16 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 | `bench/simd-s3a/mat-vec-scalar.c` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-checked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
 | `bench/simd-s3a/mat-vec-unchecked.ts` | the same, through `bench/spectral.ts` | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |
+| `std/math.ts` | fdlibm (FreeBSD msun) `k_tan.c` `__kernel_tan`, `s_tan.c` `tan`, `e_rem_pio2.c`'s Cody-Waite reduction (its refinement thresholds widened to 2^-15 and 2^-48 of the argument), `e_atan2.c` `__ieee754_atan2`, `s_atan.c` `atan`, `e_hypot.c` `__ieee754_hypot` and `k_rem_pio2.c`'s `ipio2` table; the integer Payne-Hanek reduction `tanLarge`, the double-double quotient in `atan2` and the rescale in `hypot` are not derived from it | fdlibm | `std/LICENSE-fdlibm` |
 | `std/crypto/aes.ts` | BearSSL `src/hash/ghash_ctmul64.c` `bmul64()`, narrowed to 32-bit operands as `ghashMul32`; the rest of the module is not derived from it | MIT | `std/crypto/LICENSE-bearssl` |
 | `tests/cases/ct_asm_aes.ts` | the same, through `std/crypto/aes.ts` (a verbatim copy of `ghashMul32` for the disassembly check) | MIT | `std/crypto/LICENSE-bearssl` |
+| `std/crypto/bcrypt.ts` | crypt_blowfish 1.3, `crypt_blowfish.c`: `BF_init_state` as `bcryptInitState`, `BF_ENCRYPT`/`BF_ROUND` as `bcryptEncrypt` and the rounds of `bcryptBody`, `BF_body` as `bcryptBody`, `BF_set_key` as `bcryptSetKey`, `BF_decode`/`BF_encode` as `bcryptDecodeSalt`/`bcryptEncode`, and `BF_crypt` as `bcryptParse` and `bcryptExposed` | public domain, fallback permissive | `std/crypto/LICENSE-crypt_blowfish` |
 | `std/crypto/p256.ts` | fiat-crypto, `fiat-c/src/p256_32.c` (`mul`, `square`, `add`, `sub`, `nonzero`, `selectznz`, `set_one` and the `addcarryx`, `subborrowx`, `mulx` and `cmovznz` helpers) and `fiat-c/src/p256_scalar_32.c` (`mul`, `add`, `set_one`), as the `p256Fiat*` functions | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256FiatMul`, `p256FiatSquare`, `p256FiatScalarMul`, `p256FiatCmovznzU32` and helpers, for the assembly check | MIT | `std/crypto/LICENSE-fiat-crypto` |
 | `std/crypto/p256.ts` | libsecp256k1 v0.6.0, `src/modinv32_impl.h` (`secp256k1_modinv32_divsteps_30`, `_update_de_30`, `_update_fg_30`, `_normalize_30` and `secp256k1_modinv32`) and the signed-30 conversions of `src/scalar_8x32_impl.h`, as `p256Divsteps30`, `p256UpdateDe30`, `p256UpdateFg30`, `p256Normalize30`, `p256ScalarInverse`, `p256ToSigned30` and `p256FromSigned30` | MIT | `std/crypto/LICENSE-libsecp256k1` |
 | `tests/cases/ct_asm_p256.ts` | the same: copies of `std/crypto/p256.ts`'s `p256Divsteps30`, `p256UpdateDe30` and `p256UpdateFg30`, for the assembly check | MIT | `std/crypto/LICENSE-libsecp256k1` |
+| `std/json-tokenizer.ts` | fast_float `include/fast_float/decimal_to_binary.h` (`compute_float` and `compute_product_approximation` for binary64), as `jsonTokEiselLemire`, and `power_of_five_128`, as `jsonTokPowerOfFive`; the table is regenerated by `scripts/gen-json-pow5.mjs` | BSL-1.0 | `std/LICENSE-fast-float` |
+| `scripts/gen-json-pow5.mjs` | fast_float `script/table_generation.py`, written again with BigInt | BSL-1.0 | `std/LICENSE-fast-float` |
 | `tests/link/crypto_wycheproof/aes_gcm.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 213 cases with a 128- or 256-bit key and a 128-bit tag, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/ecdh_secp256r1.ts` | Wycheproof `testvectors_v1/ecdh_secp256r1_ecpoint_test.json` at `3fa63dd`: all 355 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof/ecdsa_secp256r1_sha256.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all 484 cases and the 113 group keys of `ecdsa_secp256r1_sha256_test.json`, all 262 cases of `ecdsa_secp256r1_sha256_p1363_test.json`, all 554 cases and the 111 group keys of `ecdsa_secp256r1_sha512_test.json` and all 332 cases of `ecdsa_secp256r1_sha512_p1363_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
@@ -255,7 +354,10 @@ Test cases from V8 (https://chromium.googlesource.com/v8/v8), test/mjsunit/json*
 These are named here so that nobody has to audit them again. They need no
 notice, and each is marked public domain where its constants appear:
 
-- FNV-1a (`src/map.ts`, `src/emit-map.ts`, `std/collections.ts`).
+- FNV-1a (`src/map.ts`).
+- SipHash-1-3, Aumasson and Bernstein's, whose reference implementation is
+  CC0 (`src/emit-map.ts`, `std/collections.ts`, and the test reference in
+  `tests/cases/map_hash_kat.c`, written from the paper).
 - MurmurHash3's `fmix32` and `fmix64` finalisers (`src/emit-map.ts`,
   `std/collections.ts`, and `fmix32` in `std/random.ts`).
 - xorshift64* in `nish_random` (`runtime/runtime.c`).

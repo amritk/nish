@@ -6422,3 +6422,38 @@ export const walkWithRanges = (
   }
   return walk
 }
+
+/** Every entry of `table` false: the answer a proof that was never tried gives. */
+const forgetTable = (table: boolean[]): void => {
+  for (let i = 0; i < table.length; i++) {
+    table[i] = false
+  }
+}
+
+/**
+ * `--no-elision` (`Options.noElision`): take back every proof the check
+ * committed over `program`, its instantiations' included, so the attribute
+ * walk and the emitter see a program nothing was proven about — every index,
+ * clamp, range and overflow keeps its check and every lookup its own probe.
+ * Cleared in place, because a lifted arrow shares its outer body's tables.
+ */
+export const forgetProofs = (program: CheckedProgram): void => {
+  forgetTable(program.nodeProvenIndex)
+  forgetTable(program.nodeProvenClamp)
+  forgetTable(program.nodeProvenRange)
+  forgetTable(program.nodeProvenNoOverflow)
+  forgetTable(program.nodeDisjointCopy)
+  program.fusion.ids = []
+  program.fusion.roles = []
+  program.fusion.partners = []
+  for (const info of program.instantiationList) {
+    forgetTable(info.nodeProvenIndex)
+    forgetTable(info.nodeProvenClamp)
+    forgetTable(info.nodeProvenRange)
+    forgetTable(info.nodeProvenNoOverflow)
+    forgetTable(info.nodeDisjointCopy)
+    info.fusion.ids = []
+    info.fusion.roles = []
+    info.fusion.partners = []
+  }
+}

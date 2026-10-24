@@ -70,6 +70,7 @@ import { N_CONSTRUCTOR, Node } from "./nodes"
 import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
+import { forgetProofs } from "./bounds"
 import { reportUncheckedIndexSites } from "./unsafe-migrate"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import { arenaJson } from "./arena-report"
@@ -82,7 +83,15 @@ import {
   everyCapabilityName,
   optInCapabilities,
 } from "./capabilities"
-import { functionIndex, witnessChain } from "./capability-report"
+import {
+  dependencyMasks,
+  dependencyPackages,
+  dependencyWitness,
+  functionIndex,
+  gatedCapabilities,
+  witnessChain,
+} from "./capability-report"
+import { capabilityLockName, capabilityLockText, readCapabilityLock } from "./capability-lock"
 import {
   PACKAGE_ROOT_SEGMENT,
   packageDirOf,
@@ -168,7 +177,7 @@ import {
 } from "./parallel"
 import { RuntimeTable } from "./runtime"
 import { exposeMessages, FreshResults, secretNeedMessage } from "./secret"
-import { splitByte } from "./strings"
+import { jsonQuote, splitByte } from "./strings"
 import { TypeTable } from "./types"
 import { columnOf, lineOf } from "./lexer"
 import { validate } from "./validator"
@@ -421,6 +430,20 @@ export class Compilation {
    */
   manifestAllow: i32
   manifestDeny: i32
+  /**
+   * WP40: the root package's `"nish".capabilities.dependencies` grants, read
+   * by `readCapabilityPolicy`: each named dependency and the gated
+   * capabilities granted it, as a mask, side by side.
+   */
+  grantNames: string[]
+  grantMasks: i32[]
+  /**
+   * WP40: the capability lockfile's path and, under `--update-capability-lock`,
+   * the text `checkCapabilityLock` computed for it, which the driver writes
+   * once the build has passed (`src/capability-lock.ts`).
+   */
+  capabilityLockPath: string
+  capabilityLockText: string
 
   constructor(opts: Options) {
     this.opts = opts
@@ -441,6 +464,10 @@ export class Compilation {
     this.panicScope = []
     this.manifestAllow = -1
     this.manifestDeny = 0
+    this.grantNames = []
+    this.grantMasks = []
+    this.capabilityLockPath = ""
+    this.capabilityLockText = ""
     this.validationErrors = 0
     this.dumpOnly = false
   }
@@ -1212,6 +1239,10 @@ export class Compilation {
       checked.push(unit.checker.program)
     }
     spellCSymbolsApart(checked, this.opts.strictExports)
+    this.rejectForeignShadows()
+    if (this.sink.hasErrors()) {
+      return false
+    }
     this.rejectCLibrarySymbols()
     if (this.sink.hasErrors()) {
       return false
@@ -1230,8 +1261,16 @@ export class Compilation {
     // Which array fields live inside their objects (`src/inline-arrays.ts`).
     // Every body has to be checked to know, and everything after this reads
     // the layout it settles: the ranges, the attribute facts, the emitter.
-    layoutInlineArrays(contexts, mode)
-    proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
+    // `--no-elision` lays nothing inline, proves no call site and takes back
+    // what the check proved, before anything reads it (`Options.noElision`).
+    if (this.opts.noElision) {
+      for (const program of programs) {
+        forgetProofs(program)
+      }
+    } else {
+      layoutInlineArrays(contexts, mode)
+      proveCallSiteRanges(contexts, mode, this.opts.rangeReference)
+    }
     this.reportArenaLoops()
     this.denyRetention()
     this.reportDeprecatedFlags()
@@ -1252,6 +1291,11 @@ export class Compilation {
       }
     }
     this.refuseCapabilities()
+    this.refuseDependencyCapabilities()
+    if (this.sink.hasErrors()) {
+      return false
+    }
+    this.checkCapabilityLock()
     if (this.sink.hasErrors()) {
       return false
     }
@@ -1349,6 +1393,12 @@ export class Compilation {
    * `package.json` writes it, so that a typo never quietly widens the policy:
    * the wrong shape (NL3032), a name that is no capability (NL3033), `unsafe`
    * under `allow` (NL3034), and a capability under both (NL3035).
+   *
+   * WP40: its `dependencies` grants (docs/wp40-dependency-capabilities.md) as
+   * `grantNames` and `grantMasks`, refused the same way: the wrong shape
+   * (NL3041), a name that is no capability (NL3033) and one that is not gated
+   * (NL3042). A grant may name `unsafe`, and may name a package the program
+   * does not load.
    */
   readCapabilityPolicy(source: SourceFile | null, nish: NishManifest | null): void {
     if (source === null || nish === null) {
@@ -1383,6 +1433,54 @@ export class Compilation {
     }
     this.manifestAllow = policy.allowGiven ? allow : -1
     this.manifestDeny = deny
+    if (policy.grantsProblem.length > 0) {
+      this.sink.report(
+        source,
+        policy.grantsProblemStart,
+        policy.grantsProblemEnd,
+        `${policy.grantsProblem}: the root package's \`${PACKAGE_CONDITION}.capabilities.dependencies\` is an object that names each dependency once, with an array of the capabilities granted it`
+      )
+      return
+    }
+    let k = 0
+    while (k < policy.grantees.length && k < policy.grants.length) {
+      this.grantNames.push(policy.grantees[k])
+      this.grantMasks.push(this.grantMask(source, policy.grants[k]))
+      k = k + 1
+    }
+  }
+
+  /** One dependency's grant as a mask, refusing each entry that names no capability or one that is not gated. */
+  grantMask(source: SourceFile, list: ManifestList): i32 {
+    const names = everyCapabilityName()
+    const gated = gatedCapabilities()
+    let mask = 0
+    let k = 0
+    while (k < list.entries.length && k < list.offsets.length) {
+      const entry = list.entries[k]
+      const at = list.offsets[k]
+      const end = k < list.ends.length ? list.ends[k] : at + 1
+      const index = capabilityIndex(entry)
+      if (index < 0) {
+        this.sink.report(
+          source,
+          at,
+          end,
+          `\`${entry}\` is no capability: a policy names capabilities as \`--emit-capabilities\` reports them, one of ${names}`
+        )
+      } else if ((gated & (1 << index)) === 0) {
+        this.sink.report(
+          source,
+          at,
+          end,
+          `\`${entry}\` is not a gated capability: a dependency is granted only \`ffi\`, \`net\`, \`process.spawn\` and \`unsafe\`, and reaches every other capability without a grant`
+        )
+      } else {
+        mask = mask | (1 << index)
+      }
+      k = k + 1
+    }
+    return mask
   }
 
   /** One `allow` or `deny` list of the root package's policy as a mask, refusing each entry that names no capability. */
@@ -1500,6 +1598,162 @@ export class Compilation {
       site.start,
       site.end,
       `\`${sig.sourceName}\` reaches \`${capabilityName(c)}\`, which the capability policy does not grant (${this.refusedBy(c)}); the chain that reaches it: ${hops.join(", ")}`
+    )
+  }
+
+  /**
+   * WP40: refuse a dependency's gated capabilities -- `ffi`, `net`,
+   * `process.spawn` and `unsafe` -- that the root package's
+   * `"nish".capabilities.dependencies` does not grant it
+   * (docs/wp40-dependency-capabilities.md). A dependency's set is the union
+   * over every function its modules define, exported or not, so what it
+   * reaches through the standard library or another dependency is its own;
+   * the standard library itself is never refused. One error per dependency
+   * and capability, spanned at the first call of the witness chain from the
+   * dependency's first function, in source order, that reaches it; the sink
+   * prints them by position, like every diagnostic. No flag grants anything here, and a
+   * grant never widens the root's own policy, which `refuseCapabilities` has
+   * already applied.
+   */
+  refuseDependencyCapabilities(): void {
+    const reach = dependencyPackages(this)
+    if (reach.names.length === 0) {
+      return
+    }
+    const facts = this.analyze()
+    const index = functionIndex(this, facts)
+    dependencyMasks(reach, index)
+    const gated = gatedCapabilities()
+    let p = 0
+    while (p < reach.names.length && p < reach.masks.length) {
+      const name = reach.names[p]
+      const g = this.grantNames.indexOf(name)
+      const granted = g >= 0 && g < this.grantMasks.length ? this.grantMasks[g] : 0
+      const refused = reach.masks[p] & gated & ~granted
+      let c = 0
+      while (c < CAPABILITY_COUNT) {
+        if ((refused & (1 << c)) !== 0) {
+          const chain = dependencyWitness(index, facts, reach, p, c)
+          const source: SourceFile | null = chain.length > 0 ? chain[0].source : null
+          const site: Node | null = chain.length > 0 ? chain[0].site : null
+          if (source !== null && site !== null) {
+            const hops: string[] = []
+            for (const hop of chain) {
+              hops.push(`${hop.at} calls ${hop.calls}`)
+            }
+            this.reportDependencyRefusal(source, site, name, chain[0].caller, c, hops)
+          }
+        }
+        c = c + 1
+      }
+      p = p + 1
+    }
+  }
+
+  /** The refusal of dependency `name`'s capability `c`, a method of its own for the reason `reportRefusal` is. */
+  reportDependencyRefusal(
+    source: SourceFile,
+    site: Node,
+    name: string,
+    caller: string,
+    c: i32,
+    hops: string[]
+  ): void {
+    const cap = capabilityName(c)
+    this.sink.report(
+      source,
+      site.start,
+      site.end,
+      `the dependency \`${name}\` reaches \`${cap}\` through \`${caller}\`, which the root package does not grant it; grant it with "${PACKAGE_CONDITION}": { "capabilities": { "dependencies": { ${jsonQuote(name)}: ["${cap}"] } } } — the chain that reaches it: ${hops.join(", ")}`
+    )
+  }
+
+  /**
+   * WP40: hold each dependency to the capability lockfile beside the root
+   * package's `package.json` (the entry's own directory when there is none),
+   * or, under `--update-capability-lock`, compute the file instead of reading
+   * it. Only growth is refused: a capability a dependency's row does not
+   * record, or anything at all reached by a dependency with no row, one error
+   * per dependency and capability, in the order and at the witness
+   * `refuseDependencyCapabilities` uses. A row that records more than the
+   * dependency reaches, or a package the program no longer loads, is
+   * accepted. With no file there is nothing to hold the build to. A file that
+   * is not the shape is refused where it breaks (NL3043), and no row of it
+   * is read.
+   */
+  checkCapabilityLock(): void {
+    if (this.modules.length === 0) {
+      return
+    }
+    const entryPath = this.entry().path
+    const manifestDir = this.manifestDirAbove(entryPath)
+    const dir = manifestDir !== null ? manifestDir : dirname(normalizePath(entryPath))
+    this.capabilityLockPath = joinPath([dir, capabilityLockName()])
+    const text: string | null = this.opts.updateCapabilityLock
+      ? null
+      : readFileSyncOrNull(this.capabilityLockPath)
+    if (!this.opts.updateCapabilityLock && text === null) {
+      return
+    }
+    const reach = dependencyPackages(this)
+    const facts = this.analyze()
+    const index = functionIndex(this, facts)
+    dependencyMasks(reach, index)
+    if (text === null) {
+      this.capabilityLockText = capabilityLockText(reach.names, reach.masks)
+      return
+    }
+    const source = new SourceFile(this.capabilityLockPath, text)
+    const lock = readCapabilityLock(text)
+    if (lock.problem.length > 0) {
+      this.sink.report(
+        source,
+        lock.problemStart,
+        lock.problemEnd,
+        `${lock.problem}: the capability lockfile is one object, \`{ "version": 1, "packages": { ... } }\`, that names each dependency once with an array of the capabilities it reaches; rewrite it with \`--update-capability-lock\``
+      )
+      return
+    }
+    let p = 0
+    while (p < reach.names.length && p < reach.masks.length) {
+      const name = reach.names[p]
+      const row = lock.names.indexOf(name)
+      const recorded = row >= 0 && row < lock.masks.length ? lock.masks[row] : 0
+      const grown = reach.masks[p] & ~recorded
+      let c = 0
+      while (c < CAPABILITY_COUNT) {
+        if ((grown & (1 << c)) !== 0) {
+          const chain = dependencyWitness(index, facts, reach, p, c)
+          const at: SourceFile | null = chain.length > 0 ? chain[0].source : null
+          const site: Node | null = chain.length > 0 ? chain[0].site : null
+          if (at !== null && site !== null) {
+            const hops: string[] = []
+            for (const hop of chain) {
+              hops.push(`${hop.at} calls ${hop.calls}`)
+            }
+            this.reportLockGrowth(at, site, name, chain[0].caller, c, hops)
+          }
+        }
+        c = c + 1
+      }
+      p = p + 1
+    }
+  }
+
+  /** Dependency `name`'s capability `c`, which the lockfile does not record, refused as `reportDependencyRefusal` refuses a grant. */
+  reportLockGrowth(
+    source: SourceFile,
+    site: Node,
+    name: string,
+    caller: string,
+    c: i32,
+    hops: string[]
+  ): void {
+    this.sink.report(
+      source,
+      site.start,
+      site.end,
+      `the dependency \`${name}\` reaches \`${capabilityName(c)}\` through \`${caller}\`, which \`${capabilityLockName()}\` does not record for it; review the chain, then record it with \`--update-capability-lock\` — the chain that reaches it: ${hops.join(", ")}`
     )
   }
 
@@ -2141,6 +2395,14 @@ export class Compilation {
    * before packages did, and for it the rule, the message and the emitted
    * symbol are all exactly what they were.
    *
+   * A `declare function` is not a package's symbol but C's, so it keeps its
+   * name in every package and two packages can make one key of it. That is
+   * accepted when the two declarations agree on their types, because a foreign
+   * signature's facts are read off those types and so are the same facts, and
+   * otherwise refused (NL3039). A definition whose symbol is the declared C
+   * name is refused too (NL3040), but by `rejectForeignShadows`, once
+   * `spellCSymbolsApart` has given every definition its final symbol.
+   *
    * A constructor or method of a class in `clashed` is skipped: `declaredStructs`
    * has already refused the second class, and the member the two share is a
    * consequence of that one mistake rather than a second one. The bare name is
@@ -2151,8 +2413,12 @@ export class Compilation {
     const owners = new StringMap()
     const ownerSigs: (FunctionSig | null)[] = []
     const ownerModules: ModuleUnit[] = []
+    const declared = new StringMap()
+    const declaredSigs: FunctionSig[] = []
+    const declaredModules: ModuleUnit[] = []
     const entry = this.entry()
-    if (entry.checker.program.entryMain !== null) {
+    const hasWrapper = entry.checker.program.entryMain !== null
+    if (hasWrapper) {
       owners.set("main", ownerSigs.length)
       ownerSigs.push(null)
       ownerModules.push(entry)
@@ -2202,6 +2468,24 @@ export class Compilation {
         if (owner !== null && clashed.has(owner.name)) {
           continue
         }
+        if (sig.foreign() && !(sig.name === "main" && hasWrapper)) {
+          // C's symbol, in a table of its own: a template of the name mints
+          // only `name$T` symbols, and a definition is measured against it by
+          // `rejectForeignShadows` once its own symbol is final.
+          const seen = declared.get(sig.name, -1)
+          if (seen < 0) {
+            declared.set(sig.name, declaredSigs.length)
+            declaredSigs.push(sig)
+            declaredModules.push(unit)
+          } else if (
+            seen < declaredSigs.length &&
+            seen < declaredModules.length &&
+            !sameSignature(sig, declaredSigs[seen])
+          ) {
+            this.reportForeignMismatch(unit, sig, declaredSigs[seen], declaredModules[seen])
+          }
+          continue // agreeing: one C function declared twice, one symbol and the same facts under it
+        }
         const at = owners.get(sig.name, -1)
         if (at < 0) {
           owners.set(sig.name, ownerSigs.length)
@@ -2229,6 +2513,70 @@ export class Compilation {
         this.sink.report(unit.source, at2.start, at2.end, message)
       }
     }
+  }
+
+  /**
+   * NL3039: two `declare function`s of one C name whose types differ. Its own
+   * method so the two rendered signatures are released when it returns rather
+   * than kept for the rest of `rejectSymbolClashes`'s loop.
+   */
+  reportForeignMismatch(
+    unit: ModuleUnit,
+    sig: FunctionSig,
+    previousSig: FunctionSig,
+    previousModule: ModuleUnit
+  ): void {
+    const at = nameNode(sig)
+    this.sink.report(
+      unit.source,
+      at.start,
+      at.end,
+      `C function \`${sig.name}\` is declared as ${signatureText(this.table, sig)} in ${unit.name} and as ${signatureText(this.table, previousSig)} in ${previousModule.name}; C has one namespace, so every \`declare function\` of one name must agree on its parameter and return types`
+    )
+  }
+
+  /**
+   * NL3040: a defined function whose symbol is a name some module declares as
+   * a C function, which the link would bind both to and the fact table would
+   * key both under. Only the root package's functions can be one, as every
+   * other package's carry its prefix. It runs after `spellCSymbolsApart`, so
+   * it reads the symbol that is emitted: a private `abs` is `abs$` and meets
+   * nothing, where an exported `abs` or a private `myc` beside a
+   * `declare function myc` keeps the C name and is refused.
+   */
+  rejectForeignShadows(): void {
+    const declared = new StringMap()
+    const declaredModules: ModuleUnit[] = []
+    for (const unit of this.modules) {
+      for (const sig of unit.checker.program.functions) {
+        if (sig.foreign() && sig.definedIn(unit.source) && !declared.has(sig.name)) {
+          declared.set(sig.name, declaredModules.length)
+          declaredModules.push(unit)
+        }
+      }
+    }
+    for (const unit of this.modules) {
+      for (const sig of unit.checker.program.functions) {
+        if (sig.foreign() || !sig.definedIn(unit.source)) {
+          continue
+        }
+        const at = declared.get(sig.name, -1)
+        if (at >= 0 && at < declaredModules.length) {
+          this.reportForeignShadow(unit, sig, declaredModules[at])
+        }
+      }
+    }
+  }
+
+  /** NL3040's report, at the definition: the declaration may be in a package the reader did not write. */
+  reportForeignShadow(unit: ModuleUnit, sig: FunctionSig, declarer: ModuleUnit): void {
+    const at = nameNode(sig)
+    this.sink.report(
+      unit.source,
+      at.start,
+      at.end,
+      `Function \`${sig.name}\` is defined in ${unit.name} and declared as a C function in ${declarer.name}; a \`declare function\` binds the C symbol of its name in every package, so rename the defined function`
+    )
   }
 
   /**
@@ -2342,7 +2690,8 @@ export class Compilation {
   /**
    * WP32: the modules that write no `.ll` and are copied into each module that
    * uses them instead: `std/collections.ts`, once a module names `Map` or
-   * `Set`, and `std/secret.ts`, once one imports `nish:secret`. Each is
+   * `Set`, `std/secret.ts`, once one imports `nish:secret`, and `std/math.ts`,
+   * once one calls `Math.atan2`, `Math.tan` or `Math.hypot`. Each is
    * checked like any module; what a module uses of it is emitted into that
    * module (docs/wp32-map.md §4.1).
    */
@@ -2351,7 +2700,7 @@ export class Compilation {
     let i = 0
     while (i < this.modules.length && i < units.length) {
       const program = this.modules[i].checker.program
-      if (program.isCollections() || program.isSecretLibrary()) {
+      if (program.isCollections() || program.isSecretLibrary() || program.isMathLibrary()) {
         out.push(units[i])
       }
       i = i + 1
@@ -2359,7 +2708,7 @@ export class Compilation {
     return out
   }
 
-  /** Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts`, `std/map.ts` and `std/secret.ts`. */
+  /** Whether `unit` writes a `.ll` of its own: every module but `std/collections.ts`, `std/map.ts`, `std/math.ts` and `std/secret.ts`. */
   writesOutput(unit: ModuleUnit): boolean {
     return !unit.checker.program.writesNoOutput()
   }
@@ -2616,6 +2965,33 @@ const clashMessage = (
     return `Function ${where}; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name`
   }
   return `Function ${where}; a function name must be unique within its own package whether or not it is exported, because the whole-program attribute analysis is keyed by the package-scoped symbol`
+}
+
+/**
+ * Whether two `declare function`s of one C name declare the same C function:
+ * the same parameter and return types, which the shared `TypeTable` makes a
+ * comparison of ids. Parameter names are not part of it, as they are not part
+ * of the C prototype.
+ */
+const sameSignature = (a: FunctionSig, b: FunctionSig): boolean => {
+  if (a.returnType !== b.returnType || a.paramTypes.length !== b.paramTypes.length) {
+    return false
+  }
+  for (let i = 0; i < a.paramTypes.length; i++) {
+    if (a.paramTypes[i] !== b.paramTypes[i]) {
+      return false
+    }
+  }
+  return true
+}
+
+/** A signature as its types, `(i32, u8[]) => i32`, for a message that sets two side by side. */
+const signatureText = (table: TypeTable, sig: FunctionSig): string => {
+  const params: string[] = []
+  for (const type of sig.paramTypes) {
+    params.push(table.typeName(type))
+  }
+  return `(${params.join(", ")}) => ${table.typeName(sig.returnType)}`
 }
 
 /**

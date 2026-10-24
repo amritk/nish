@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 705
+export const RULE_COUNT: i32 = 715
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -119,6 +119,8 @@ const diagnosticRules = (): string[] => [
   "NL2472",
   "`, which is no module of this program: an entry is the path of a module the program compiles, relative to the `package.json` that lists it, and one that names nothing would leave the module it meant outside the scope without a word",
   "NL3031",
+  "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type",
+  "NL4013",
   "` through a guard, whose chains are only the base of a further field or element read or store: a value that is not a number, a `boolean`, an enum or a `string`, which the read copies, would outlive the block that holds the lock",
   "NL2467",
   "`, and a `spawn` without a destination stores nothing: a task's answer is kept only by `s.spawn(entry, arg, dst, at)`, which stores it in `dst[at]` when the scope joins, so make the task answer `void` or give it a destination",
@@ -275,6 +277,8 @@ const diagnosticRules = (): string[] => [
   "NL2449",
   "` that can reach the end of its block neither wiped nor returned: a `Secret` leaves the function that made it returned or wiped, on every path, so `wipe(",
   "NL2441",
+  "` is not a gated capability: a dependency is granted only `ffi`, `net`, `process.spawn` and `unsafe`, and reaches every other capability without a grant",
+  "NL3042",
   "; a function name must be unique across the program whether or not it is exported, because the whole-program attribute analysis is keyed by symbol name",
   "NL3026",
   "`: a value is stored in the table as it is, so it may not be `void`, nor an interface, whose record would be copied in rather than shared (use a class)",
@@ -363,12 +367,16 @@ const diagnosticRules = (): string[] => [
   "NL2565",
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
   "NL4011",
+  "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",
+  "NL3043",
   "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)",
   "NL4010",
   "` was moved into another `Secret` local and cannot be read again: one key has one owner, which is the one that wipes it",
   "NL2446",
   " | null` is not supported: only class, interface, array, and string types can be nullable (a scalar has no null value)",
   "NL2010",
+  ".capabilities.dependencies` is an object that names each dependency once, with an array of the capabilities granted it",
+  "NL3041",
   ", which can only initialise a `const`, be the left operand of `??`, or be compared with `undefined` by `===` or `!==`",
   "NL2369",
   "` cannot declare `static readonly json`: a handle is never serialised, and its options would name the pointer it owns",
@@ -407,6 +415,8 @@ const diagnosticRules = (): string[] => [
   "NL2300",
   "`super(...)` is only valid as the first statement of the constructor of a class that `extends` another class",
   "NL2155",
+  "; C has one namespace, so every `declare function` of one name must agree on its parameter and return types",
+  "NL3039",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the i64 value instead",
   "NL2055",
   "Enums cannot be exported: an enum names a type inside one module (declare it in every module that needs it)",
@@ -427,6 +437,8 @@ const diagnosticRules = (): string[] => [
   "NL2278",
   "A `case` clause cannot declare a variable directly; wrap the clause body in a block (`case 1: { ... }`)",
   "NL2165",
+  "; a `declare function` binds the C symbol of its name in every package, so rename the defined function",
+  "NL3040",
   "`: a `Map` has size, get, set, has, delete and clear, and a `Set` has size, add, has, delete and clear",
   "NL2359",
   "; a function name must be unique across the program, and an instantiation is named after its template",
@@ -501,6 +513,8 @@ const diagnosticRules = (): string[] => [
   "NL3009",
   "` cannot take a union as a type argument: in this version a union is the type of a local, ",
   "NL2533",
+  "` does not record for it; review the chain, then record it with `--update-capability-lock`",
+  "NL2577",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ",
   "NL2054",
   "` is rebuilt from its own value on every iteration of this loop, so every pass copies all ",
@@ -723,6 +737,8 @@ const diagnosticRules = (): string[] => [
   "NL2001",
   ", and a declared C function returns a scalar or `CPtr` only",
   "NL2321",
+  "`, which the root package does not grant it; grant it with ",
+  "NL2576",
   "A union needs two different variants: this one names only `",
   "NL2527",
   "` cannot declare methods (interfaces describe layout only)",
@@ -927,6 +943,8 @@ const diagnosticRules = (): string[] => [
   "NL2069",
   "` is a builtin value and cannot be called",
   "NL2314",
+  "`Math.imul` expects an i32 or a u32, got ",
+  "NL2574",
   "An enum member name must be an identifier",
   "NL2287",
   "Computed property names are forbidden in ",
@@ -1069,6 +1087,8 @@ const diagnosticRules = (): string[] => [
   "NL2127",
   "`for...of` requires an array, got ",
   "NL2136",
+  "`Math.sign` expects a number, got ",
+  "NL2575",
   "Abstract classes are not supported",
   "NL2168",
   "Array index must be a number, got ",
@@ -1418,10 +1438,10 @@ const diagnosticRules = (): string[] => [
 /**
  * The WP33 portability rules (docs/wp33-round-trip.md section 5.2), matched by
  * substring against a `portability` message and against nothing else. A
- * retired row keeps its entry, as every retired rule does: NL8011's fragment
- * matches nothing now that no pass prints it, and its number stays reserved so
- * the band has no gap. `tests/wordings/unreachable.txt` names the retired rows
- * and why each went.
+ * retired row keeps its entry, as every retired rule does: NL8010's and
+ * NL8011's fragments match nothing now that no pass prints them, and their
+ * numbers stay reserved so the band has no gap. `tests/wordings/unreachable.txt`
+ * names the retired rows and why each went.
  */
 const portabilityRules = (): string[] => [
   "overwrites the element a reference still reads, and TypeScript replaces the object instead",

@@ -1,0 +1,1 @@
+reject_ffi_handle_use_after_close_switch_clause.ts:32:7: error: A `case` clause cannot declare a variable directly; wrap the clause body in a block

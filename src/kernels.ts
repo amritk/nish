@@ -21,7 +21,8 @@
 // for a window of bytes each in its position's set that starts every match
 // search, lowered to `nish_regex_scan`. Its callers hand it a `from` in
 // `[0, length]`, a depth of 1 to 8, a window of 1 to 4 positions inside it and
-// a mask array 32 bytes a position, the contract `runtime/nish.h` states.
+// a mask array of 288 bytes a position (a 32-byte nibble mask and a 256-byte
+// table), the contract `runtime/nish.h` states.
 //
 // WP38 S5: four private functions of `std/crypto/aes.ts` — the key schedule,
 // one block, GCTR over a run of bytes and GHASH over a run of bytes — have a
@@ -48,9 +49,19 @@
 // A wasm32 build never takes the branch, because it has no instructions to
 // branch to: the call is emitted as written there, and the module references
 // no `nish_aes_` symbol at all.
+//
+// WP38 S6a: `nish/bytes` has five walks lowered S1's way, the call replaced
+// outright (`bytesWalkOf`). Four are byte-class runs — JSON's blanks, the
+// digits, the bytes a JSON string holds as themselves, and the bytes a JSON
+// writer copies without an escape — each a kernel in
+// `runtime/runtime-bytes.c` with a scalar path of its own; the fifth,
+// `copyBytes`'s, is one `llvm.memmove`. Each public function clamps or checks
+// its range before its one call, so a kernel is handed only the
+// `0 <= from <= to <= length` its contract in `runtime/nish.h` asks for, and
+// the copy only ranges that lie inside their arrays.
 
 import { CheckedProgram, FunctionSig } from "./program"
-import { isCryptoAesModule, isRegexModule, isTextModule } from "./std-modules"
+import { isBytesModule, isCryptoAesModule, isRegexModule, isTextModule } from "./std-modules"
 import { T_VOID } from "./types"
 
 /** The runtime symbol the walker's call becomes. */
@@ -140,4 +151,61 @@ export const aesKernelOf = (seam: i32): string => {
     return "nish_aes_ctr"
   }
   return "nish_aes_ghash"
+}
+
+/** A call that is none of `nish/bytes`'s walks. */
+export const BYTES_WALK_NONE: i32 = 0
+/** `skipBlankWalk(b, from, to)`: `nish_bytes_skip_blank`. */
+const BYTES_WALK_BLANK: i32 = 1
+/** `skipDigitsWalk(b, from, to)`: `nish_bytes_skip_digits`. */
+const BYTES_WALK_DIGITS: i32 = 2
+/** `skipJsonTextWalk(b, from, to)`: `nish_bytes_skip_json_text`. */
+const BYTES_WALK_JSON_TEXT: i32 = 3
+/** `copyBytesWalk(dst, at, src, from, count)`: one `llvm.memmove`. */
+export const BYTES_WALK_COPY: i32 = 4
+/** `skipJsonPlainWalk(b, from, to)`: `nish_bytes_skip_json_plain`. */
+const BYTES_WALK_JSON_PLAIN: i32 = 5
+
+/**
+ * Which of `nish/bytes`'s walks a call in `program` to `sig` is, or
+ * `BYTES_WALK_NONE`. The walks are private, so a call to one can only be
+ * written in that module, and, as for `isIndexOfAnyWalk`, a root-package file
+ * that happens to sit at `std/bytes.ts` is an ordinary module.
+ */
+export const bytesWalkOf = (program: CheckedProgram, sig: FunctionSig): i32 => {
+  if (sig.owner !== null || sig.instance !== null) {
+    return BYTES_WALK_NONE
+  }
+  // The name first, as `isAesSeam` tests it: the module test builds a path.
+  const name = sig.sourceName
+  let walk: i32 = BYTES_WALK_NONE
+  if (name === "skipBlankWalk") {
+    walk = BYTES_WALK_BLANK
+  } else if (name === "skipDigitsWalk") {
+    walk = BYTES_WALK_DIGITS
+  } else if (name === "skipJsonTextWalk") {
+    walk = BYTES_WALK_JSON_TEXT
+  } else if (name === "copyBytesWalk") {
+    walk = BYTES_WALK_COPY
+  } else if (name === "skipJsonPlainWalk") {
+    walk = BYTES_WALK_JSON_PLAIN
+  }
+  if (walk === BYTES_WALK_NONE || !isBytesModule(program.packageName, program.source.path)) {
+    return BYTES_WALK_NONE
+  }
+  return walk
+}
+
+/** The runtime kernel a byte-class walk's call becomes; never asked for `BYTES_WALK_COPY`. */
+export const bytesKernelOf = (walk: i32): string => {
+  if (walk === BYTES_WALK_BLANK) {
+    return "nish_bytes_skip_blank"
+  }
+  if (walk === BYTES_WALK_DIGITS) {
+    return "nish_bytes_skip_digits"
+  }
+  if (walk === BYTES_WALK_JSON_PLAIN) {
+    return "nish_bytes_skip_json_plain"
+  }
+  return "nish_bytes_skip_json_text"
 }

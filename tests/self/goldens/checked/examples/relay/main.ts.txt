@@ -288,6 +288,14 @@ function exposeWith<u8[], u8[], u8[], hmacSha512>(s: Secret<u8[]>, arg: u8[], f:
   pointer arg: size=0 writesThrough=false captured=false passedTo=nish.hmacSha512#1
   stackSites=0 stackLocals=0
   callee +0:93 hmacSha512 -> @nish.hmacSha512
+function exposeWith<u8[], Pbkdf2Request, u8[] | null, pbkdf2HmacSha256Exposed>(s: Secret<u8[]>, arg: Pbkdf2Request, f: void): u8[] | null -> @nish.exposeWith$arr.u8$$Pbkdf2Request$opt.arr.u8$fn.28.nish.pbkdf2HmacSha256Exposed [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.pbkdf2HmacSha256Exposed
+  calls: nish.pbkdf2HmacSha256Exposed
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=16 writesThrough=false captured=false passedTo=nish.pbkdf2HmacSha256Exposed#1
+  stackSites=0 stackLocals=0
+  callee +0:93 pbkdf2HmacSha256Exposed -> @nish.pbkdf2HmacSha256Exposed
 function expose<u8[], i32, quicPacketBytesLength>(s: Secret<u8[]>, f: void): i32 -> @nish.expose$arr.u8$i32$fn.26.nish.quicPacketBytesLength [exported instance]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.quicPacketBytesLength
@@ -3370,8 +3378,7 @@ function aesKeyInto(key: u8[], out: AesKey): boolean -> @nish.aesKeyInto [export
   callee +4:13 aesLoad64 -> @nish.aesLoad64
   callee +5:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function aesEncryptBlock(key: AesKey, block: u8[]): u8[] | null -> @nish.aesEncryptBlock [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesEncryptOne
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesEncryptOne nish.aesKeyUsable nish_panic
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesEncryptOne#0
   pointer block: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
@@ -3380,8 +3387,7 @@ function aesEncryptBlock(key: AesKey, block: u8[]): u8[] | null -> @nish.aesEncr
   local +3:9 out: u8[] (const)
   callee +4:3 aesEncryptOne -> @nish.aesEncryptOne
 function aesHeaderMask(key: AesKey, sample: u8[]): u8[] | null -> @nish.aesHeaderMask [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesEncryptOne
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesCopyPrefix nish.aesEncryptOne nish.aesKeyUsable nish_panic
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesEncryptOne#0
   pointer sample: size=0 writesThrough=false captured=false passedTo=nish.aesEncryptOne#1
@@ -3493,8 +3499,7 @@ function ghashLengths(y: u64[], key: AesKey, aadLength: i32, textLength: i32): v
   stackSites=0 stackLocals=0
   callee +2:3 ghashMultiply -> @nish.ghashMultiply
 function aesGcmJ0(key: AesKey, iv: u8[]): u8[] -> @nish.aesGcmJ0
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.wipe$arr.u64
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.aesCopyPrefix nish.aesStore64 nish.ghashLengths nish.ghashUpdate nish.wipe$arr.u64 nish_panic nish_panic_index
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.ghashUpdate#1 nish.ghashLengths#1
   pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesCopyPrefix#1 nish.ghashUpdate#2
@@ -3577,7 +3582,7 @@ function aesGcmTagMask(tagHi: u64, tagLo: u64, gotHi: u64, gotLo: u64): u64 -> @
   stackSites=0 stackLocals=0
 function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | null -> @nish.aesGcmSeal [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesGcmJ0
+  sharedWrite: via nish.wipe$arr.u8
   calls: nish.aesGcmCtr nish.aesGcmJ0 nish.aesGcmLengthFits nish.aesGcmTag nish.aesKeyUsable nish.aesStore64 nish.wipe$arr.u8 nish_panic nish_panic_index nish_panic_overflow
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesGcmJ0#0 nish.aesGcmCtr#0 nish.aesGcmTag#1
   pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesGcmJ0#1
@@ -3599,7 +3604,7 @@ function aesGcmSeal(key: AesKey, iv: u8[], aad: u8[], plaintext: u8[]): u8[] | n
   callee +14:3 wipe<u8[]> -> @nish.wipe$arr.u8
 function aesGcmOpen(key: AesKey, iv: u8[], aad: u8[], sealed: u8[]): u8[] | null -> @nish.aesGcmOpen [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.aesGcmJ0
+  sharedWrite: via nish.aesGcmCtr
   calls: nish.aesGcmCtr nish.aesGcmJ0 nish.aesGcmLengthFits nish.aesGcmTag nish.aesGcmTagMask nish.aesKeyUsable nish.aesLoad64 nish.wipe$arr.u64 nish.wipe$arr.u8 nish_panic nish_panic_index
   pointer key: size=24 writesThrough=false captured=false passedTo=nish.aesKeyUsable#0 nish.aesGcmJ0#0 nish.aesGcmTag#1 nish.aesGcmCtr#0
   pointer iv: size=0 writesThrough=false captured=false passedTo=nish.aesGcmJ0#1
@@ -4111,10 +4116,12 @@ import Sha512 from "nish/crypto/sha512" -> struct Sha512
 import timingSafeEqual from "nish/crypto/ct" -> function @nish.timingSafeEqual
 import Secret from "nish:secret" -> generic class Secret
 import exposeWith from "nish:secret" -> generic function exposeWith
+import secret from "nish:secret" -> generic function secret
 import wipe from "nish:secret" -> generic function wipe
 const HMAC_IPAD: i32 = 54
 const HMAC_OPAD: i32 = 92
 const HMAC_FROM: i32 = 0
+const PBKDF2_INDEX: i32 = 4
 struct HmacSha256 (class) size=16 align=8 exported
   field inner: Sha256 index=0 offset=0
   field outer: Sha256 index=1 offset=8
@@ -4157,6 +4164,10 @@ struct HmacSha384Scratch (class) size=40 align=8 exported
   method update -> @nish.HmacSha384Scratch.update
   method finishInto -> @nish.HmacSha384Scratch.finishInto
   method wipe -> @nish.HmacSha384Scratch.wipe
+struct Pbkdf2Request (interface) size=16 align=8
+  field salt: u8[] index=0 offset=0
+  field iterations: i32 index=1 offset=8
+  field length: i32 index=2 offset=12
 function hmacPadInto(out: u8[], key: u8[], off: i32, len: i32, pad: i32): void -> @nish.hmacPadInto
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -4662,6 +4673,75 @@ function HmacSha384Scratch.wipe(this: HmacSha384Scratch): void -> @nish.HmacSha3
   stackSites=0 stackLocals=0
   callee +0:5 hmacWipeSha384 -> @nish.hmacWipeSha384
   callee +1:5 hmacWipeSha384 -> @nish.hmacWipeSha384
+function pbkdf2Finish(keyedOuter: Sha256, work: Sha256, out: u8[]): void -> @nish.pbkdf2Finish
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.Sha256.digest nish.Sha256.update nish.hmacCopySha256 nish.wipe$arr.u8 nish_arena_mark nish_arena_release
+  pointer keyedOuter: size=40 writesThrough=false captured=false passedTo=nish.hmacCopySha256#0
+  pointer work: size=40 writesThrough=true captured=false passedTo=nish.Sha256.digest#0 nish.hmacCopySha256#1 nish.Sha256.update#0 nish.Sha256.digest#0
+  pointer out: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -6:9 innerDigest: u8[] (const)
+  callee -6:29 Sha256.digest -> @nish.Sha256.digest
+  callee -5:3 hmacCopySha256 -> @nish.hmacCopySha256
+  callee -4:3 Sha256.update -> @nish.Sha256.update
+  callee -3:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  local -2:9 tag: u8[] (const)
+  callee -2:21 Sha256.digest -> @nish.Sha256.digest
+  local -1:12 i: i32 (let)
+  callee +2:3 wipe<u8[]> -> @nish.wipe$arr.u8
+function pbkdf2HmacSha256Exposed(password: u8[], request: Pbkdf2Request): u8[] | null -> @nish.pbkdf2HmacSha256Exposed
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.hmacKeySha256
+  calls: nish.Sha256.constructor nish.Sha256.update nish.hmacCopySha256 nish.hmacKeySha256 nish.hmacWipeSha256 nish.pbkdf2Finish nish.wipe$arr.u8 nish_panic nish_panic_index nish_panic_overflow
+  pointer password: size=0 writesThrough=false captured=false passedTo=nish.hmacKeySha256#2
+  pointer request: size=16 writesThrough=false captured=false
+  stackSites=3 stackLocals=3
+  local +0:9 salt: u8[] (const)
+  local +1:9 iterations: i32 (const)
+  local +2:9 length: i32 (const)
+  local +10:9 keyedInner: Sha256 (const)
+  callee +10:22 new Sha256 -> @nish.Sha256.constructor
+  local +11:9 keyedOuter: Sha256 (const)
+  callee +11:22 new Sha256 -> @nish.Sha256.constructor
+  callee +12:3 hmacKeySha256 -> @nish.hmacKeySha256
+  local +13:9 work: Sha256 (const)
+  callee +13:16 new Sha256 -> @nish.Sha256.constructor
+  local +14:9 u: u8[] (const)
+  local +15:9 t: u8[] (const)
+  local +16:9 index: u8[] (const)
+  local +17:9 dk: u8[] (const)
+  local +20:7 block: i32 (let)
+  local +21:7 done: i32 (let)
+  callee +28:5 hmacCopySha256 -> @nish.hmacCopySha256
+  callee +29:5 Sha256.update -> @nish.Sha256.update
+  callee +30:5 Sha256.update -> @nish.Sha256.update
+  callee +31:5 pbkdf2Finish -> @nish.pbkdf2Finish
+  local +32:14 j: i32 (let)
+  local +36:14 c: i32 (let)
+  callee +37:7 hmacCopySha256 -> @nish.hmacCopySha256
+  callee +38:7 Sha256.update -> @nish.Sha256.update
+  callee +39:7 pbkdf2Finish -> @nish.pbkdf2Finish
+  local +40:16 j: i32 (let)
+  local +44:11 take: i32 (const)
+  local +45:14 j: i32 (let)
+  callee +51:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +52:3 wipe<u8[]> -> @nish.wipe$arr.u8
+  callee +53:3 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee +54:3 hmacWipeSha256 -> @nish.hmacWipeSha256
+  callee +55:3 hmacWipeSha256 -> @nish.hmacWipeSha256
+function pbkdf2HmacSha256(password: Secret<u8[]>, salt: u8[], iterations: i32, length: i32): Secret<u8[]> | null -> @nish.pbkdf2HmacSha256 [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.exposeWith$arr.u8$$Pbkdf2Request$opt.arr.u8$fn.28.nish.pbkdf2HmacSha256Exposed
+  escaping: iterations length salt
+  calls: nish.exposeWith$arr.u8$$Pbkdf2Request$opt.arr.u8$fn.28.nish.pbkdf2HmacSha256Exposed nish.secret$arr.u8
+  pointer password: size=8 writesThrough=false captured=false passedTo=nish.exposeWith$arr.u8$$Pbkdf2Request$opt.arr.u8$fn.28.nish.pbkdf2HmacSha256Exposed#0
+  pointer salt: size=0 writesThrough=true captured=true
+  stackSites=1 stackLocals=1
+  local +0:9 request: Pbkdf2Request (const)
+  local +1:9 dk: u8[] | null (const)
+  callee +1:27 exposeWith<u8[], Pbkdf2Request, u8[] | null, pbkdf2HmacSha256Exposed> -> @nish.exposeWith$arr.u8$$Pbkdf2Request$opt.arr.u8$fn.28.nish.pbkdf2HmacSha256Exposed
+  callee +5:10 secret<u8[]> -> @nish.secret$arr.u8
 module std/crypto/sha256.ts [package nish]
 const SHA256_SIZE: i32 = 32 [exported]
 const SHA256_BLOCK: i32 = 64 [exported]
@@ -6358,8 +6438,7 @@ function poly1305Absorb(h: u64[], r: u64[], buf: u8[], at: i32, len: i32, zeroPa
   callee +11:7 poly1305Block -> @nish.poly1305Block
   callee +14:7 poly1305Block -> @nish.poly1305Block
 function poly1305(key: u8[], msg: u8[]): u8[] | null -> @nish.poly1305 [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.wipe$arr.u64
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish.poly1305Absorb nish.poly1305Clamp nish.poly1305Finish nish.wipe$arr.u64 nish_panic
   pointer key: size=0 writesThrough=false captured=false passedTo=nish.poly1305Clamp#0 nish.poly1305Finish#1
   pointer msg: size=0 writesThrough=false captured=false passedTo=nish.poly1305Absorb#2
@@ -6385,8 +6464,7 @@ function poly1305KeyGen(key: u8[], nonce: u8[]): u8[] | null -> @nish.poly1305Ke
   callee +1:25 chacha20Poly1305Setup -> @nish.chacha20Poly1305Setup
   callee +2:3 wipe<u32[]> -> @nish.wipe$arr.u32
 function chacha20Poly1305Tag(polyKey: u8[], aad: u8[], ct: u8[], at: i32, len: i32): u8[] -> @nish.chacha20Poly1305Tag
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.wipe$arr.u64
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: at len
   calls: nish.poly1305Absorb nish.poly1305Block nish.poly1305Clamp nish.poly1305Finish nish.wipe$arr.u64 nish_panic
   pointer polyKey: size=0 writesThrough=false captured=false passedTo=nish.poly1305Clamp#0 nish.poly1305Finish#1
@@ -18870,9 +18948,10 @@ struct QuicListener (class) size=192 align=8 exported
   method opens -> @nish.QuicListener.opens
   method takeReset -> @nish.QuicListener.takeReset
   method statelessReset -> @nish.QuicListener.statelessReset
-struct QuicFlight (class) size=8 align=4 exported
+struct QuicFlight (class) size=12 align=4 exported
   field count: i32 index=0 offset=0 initialized
   field segment: i32 index=1 offset=4 initialized
+  field ecn: i32 index=2 offset=8 initialized
 function QuicListenerAnswer.constructor(this: QuicListenerAnswer, room: i32): void -> @nish.QuicListenerAnswer.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: room
@@ -19265,18 +19344,20 @@ function quicListenerTakeFlight(conn: QuicConnection, now: i64, buf: u8[], at: i
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   escaping: now
-  calls: nish.QuicConnection.takeDatagramInto nish.QuicRecovery.onPaced nish.QuicRecovery.pacerDelay nish.quicListenerQuantum nish_panic_overflow
+  calls: nish.QuicConnection.takeDatagramInto nish.QuicRecovery.ecnCodepoint nish.QuicRecovery.onPaced nish.QuicRecovery.pacerDelay nish.quicListenerQuantum nish_panic_overflow
   pointer conn: size=592 writesThrough=true captured=false passedTo=nish.quicListenerQuantum#0 nish.QuicConnection.takeDatagramInto#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.QuicConnection.takeDatagramInto#1
-  pointer flight: size=8 writesThrough=true captured=false
+  pointer flight: size=12 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-  local +2:7 length: i32 (let)
-  callee +3:7 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
-  callee +3:37 quicListenerQuantum -> @nish.quicListenerQuantum
-  callee +9:5 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
-  local +11:11 n: i32 (const)
-  callee +11:20 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
-  callee +15:5 QuicRecovery.onPaced -> @nish.QuicRecovery.onPaced
+  local +3:7 length: i32 (let)
+  callee +4:7 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
+  callee +4:37 quicListenerQuantum -> @nish.quicListenerQuantum
+  callee +10:5 QuicRecovery.pacerDelay -> @nish.QuicRecovery.pacerDelay
+  local +13:11 next: i32 (const)
+  callee +13:41 QuicRecovery.ecnCodepoint -> @nish.QuicRecovery.ecnCodepoint
+  local +17:11 n: i32 (const)
+  callee +17:20 QuicConnection.takeDatagramInto -> @nish.QuicConnection.takeDatagramInto
+  callee +21:5 QuicRecovery.onPaced -> @nish.QuicRecovery.onPaced
 function quicListenerReceiveSegments(conn: QuicConnection, buf: u8[], off: i32, len: i32, segment: i32, now: i64): i32 -> @nish.quicListenerReceiveSegments [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.QuicConnection.receiveWindow

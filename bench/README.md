@@ -51,6 +51,7 @@ Build products go to `build/bench/`.
 | `strbuild` | template literals with a number hole, `+` on immutable strings, the arena allocator | | 131072 pieces | `806394` (final length) |
 | `vec3` | a `Vec3` class with methods called in a tight loop, no allocation in the loop | `--number-mode f64` | 5e7 iterations | position and energy |
 | `result` | a fallible function returning `Result<number, number>` and one taking it, both by value in a register (WP17); the accumulator feeds the next input, so the loop carries a dependency | | 2e8 calls | `15873` |
+| `math` | ten kernels, each its own row (`math/<kernel>`, the kernel named on the command line): `Math.atan2`, `tan` and `hypot` (Nish's from `std/math.ts`, a port of fdlibm; libm in C and Rust, Go's own `math` package in the Go column), `Math.sign` on `i32` and `f64`, `Math.imul`, and float `Math.round`, `min` and `max` with JavaScript's -0 and NaN, and `f32ToBits`; inputs walk a 4096-entry table seeded with NaN, ±0, ±Infinity and the round-half edges, and every result is folded through its f32 bits | `--number-mode f64` | 2e7 libm calls, 1.6e8 for the rest | one line per kernel |
 
 Every size is chosen so the C version runs for at least a quarter of a second
 on the reference machine (a 2.1 GHz Xeon virtual machine): fib(35) and a
@@ -475,6 +476,16 @@ from one host to the next is pinned instead:
   (0.0008%).
   The program's own code is the same on every host already: `--profile speed`
   does not pass `-march`.
+- **The hash key.** A string-keyed `Map` or `Set` seeds its SipHash key from
+  `getentropy` before `main`, and each key lays the same strings out
+  differently. Unpinned, map-presize counted from 70,038,447 to 70,286,417
+  (+0.35%) between two runs of one binary, and five counts of map-wordcount,
+  map-presize and map-vs-stringmap spread by 168,476, 121,100 and 669,844.
+  Each counted run preloads `bench/fixed-key.c`, a `getentropy` that returns
+  fixed bytes, as `./fixed-key.so` from the program's directory. All
+  twenty-two then count with a spread of 0. Loading it costs about 13
+  thousand instructions a run. Only this harness builds or names it: a
+  shipped binary still seeds from the system.
 
 **Measured determinism, at `4fed2b7`.** Three counts of each program in one run,
 and a second run of the whole set, agree to the instruction for thirteen of the
@@ -927,6 +938,28 @@ the count, in one process, and fails if the checksum differs from the one
 pinned in the driver. Every build of `std/crypto/p256.ts`, window or table,
 must keep printing it.
 
+## bcrypt
+
+`crypto/bcrypt/run.mjs` times one cost-10 hash of `nish/crypto/bcrypt` against
+libxcrypt's `crypt_r` (`$2b$`) and OpenBSD's `bcrypt.c`, which it fetches from
+the OpenBSD tree into `build/bench/bcrypt/` and builds with `gcc -O2` and
+`clang -O2` behind a small shim for what OpenBSD's libc adds. It is not a
+`crypto/` family (it has no `family.json`) and is not in this suite's tables;
+[docs/security/crypto-bcrypt.md](../docs/security/crypto-bcrypt.md#speed)
+carries its figures.
+
+```bash
+npm run build
+node bench/crypto/bcrypt/run.mjs                    # 8 hashes a round, 5 rounds, cost 10
+node bench/crypto/bcrypt/run.mjs --rounds 9 --cost 12
+```
+
+Each program hashes "U*U" under an all-zero salt and prints its last hash; the
+runner fails unless every program prints the same one. The programs run in
+interleaved rounds, a round's figure is the child's user CPU time over its
+hashes, and each row is the median of the rounds with their spread, the noise
+band. A missing compiler, libxcrypt or network leaves its row out with a note.
+
 ## TLS handshake
 
 `tls-handshake.mjs` times what one TLS 1.3 handshake costs the server, in CPU:
@@ -1155,6 +1188,143 @@ other non-2xx row, when its row count differs from the requests h2load says
 it completed, or when more than 5 % of rows have no status. Results gathered
 before the error are still written and reported.
 
+## SQLite
+
+`sqlite/run.mjs` measures what [`nish/sqlite`](../docs/guide/using-nish/sqlite.md)
+adds to a call of SQLite. It runs the same loop twice: through the module
+(`sqlite/main.ts`) and through SQLite's own C API (`sqlite/twin.c`). The
+database and the queries are those of the twelve-dollar server challenge. It is
+not in this suite's tables.
+
+```bash
+npm run build
+node bench/sqlite/run.mjs --validate     # small counts: both sides must read the same rows and checksums
+node bench/sqlite/run.mjs --rounds 12    # timed; the first run also builds the seed
+```
+
+**The database.** `sqlite/schema.sql` is the challenge's schema. `twin seed`
+fills it from one fixed generator with 50,000 users, 500,000 posts and
+2,000,000 likes, in WAL mode. It is made once in `build/bench/sqlite/` and made
+again only when `schema.sql`, `twin.c`, `sqlite3.c`, the compiler or its flags
+change. Nothing is downloaded.
+
+**The workloads.** Each call binds, steps, reads every column and resets, on a
+statement prepared once. Text is copied into one reused buffer, with
+`columnInto` on the Nish side and `memcpy` on the C side.
+
+| Workload | Calls in a timed run | What one call does |
+| --- | --- | --- |
+| `lookup` | 200,000 | Reads one post by a random id, with its author and its like count. |
+| `feed` | 10,000 | Reads the 20 newest posts: 20 rows of five columns. |
+| `insert` | 20,000 | Runs `INSERT … RETURNING id, created_at` in autocommit. |
+| `insert-txn` | 100,000 | Makes the same calls inside one transaction, which separates the cost of a call from the cost of its commit. |
+
+The inserts run with `synchronous=NORMAL`. Every value read is folded into a
+checksum inside the timed loop on both sides, so the optimiser cannot drop a
+read. Each side's fold keeps its sum in a local variable across a column's
+bytes.
+
+**The builds.**
+
+- **Nish:** `main.ts` is built with `--link`, which uses the speed profile. The
+  binary is then copied byte for byte.
+- **C:** `twin.c` is compiled against the same vendored
+  `runtime/sqlite/sqlite3.c`, with the flags `scripts/build.sh` gives SQLite in
+  that link:
+  - `-O3 -DNDEBUG` with `-fno-plt` and the section and unwind flags;
+  - the same `SQLITE_*` options, `SQLITE_THREADSAFE=0` among them;
+  - `sqlite3.c` as a native object of its own, as the link builds it;
+  - on Linux, the link's flags: `--gc-sections`, `--as-needed`, `-O2`, no
+    build id, stripped, and `lld` when there is one.
+
+`NISH_SQLITE_CFLAGS` changes how the build compiles SQLite and the twin would
+not have it, so `run.mjs` refuses to run while it is set. Both sides open the
+database with the same flags and PRAGMAs.
+
+**The protocol.**
+
+- A warm-up round runs first and is not counted. Then come `--rounds` rounds,
+  rounded up to a multiple of 3.
+- Each round runs every workload on the build, its copy and the C twin. The
+  order rotates by round, so over a multiple of 3 rounds each binary goes
+  first, second and third equally often.
+- A run times its own loop. Every run of a workload must print the same row
+  count and checksum.
+- The report is ns per call: min, median and interquartile range over the
+  rounds.
+- Nish − C is the build less the twin, so it includes the adapter's checks as
+  well as the module's calls. The noise band is the build against its
+  byte-identical copy.
+- **The verdict statistic is the median, for every workload.** A median
+  difference is claimed only when it is larger than the median's noise band
+  and than the IQR of both the build and the twin; anything smaller is one
+  this machine cannot see. The min is reported but is not judged.
+
+**The figures.** Twelve rounds on a four-core Intel Xeon virtual machine that
+reports 2.10 GHz, with Ubuntu clang 18.1.3 and SQLite 3.54.1. All figures are
+ns per call.
+
+| Workload | Nish min / median (IQR) | Copy min / median (IQR) | C min / median (IQR) | Nish − C, min / median | Noise band, min / median |
+| --- | --- | --- | --- | --- | --- |
+| `lookup` | 4,783 / 5,117 (148) | 4,798 / 5,002 (174) | 4,739 / 4,957 (242) | +44 / +160 (3.2 %) | 16 / 115 |
+| `feed` | 15,002 / 15,391 (283) | 15,088 / 15,247 (388) | 14,520 / 14,800 (232) | +481 / +591 (4.0 %) | 87 / 144 |
+| `insert` | 13,866 / 14,213 (831) | 13,863 / 14,172 (583) | 13,588 / 14,078 (588) | +278 / +136 (1.0 %) | 4 / 41 |
+| `insert-txn` | 4,134 / 4,196 (66) | 4,204 / 4,350 (383) | 4,027 / 4,294 (284) | +107 / −98 (−2.3 %) | 69 / 154 |
+
+**What the figures say.**
+
+- **`lookup`:** +160 ns is outside its band of 115 but inside C's IQR of 242,
+  so it is not measurable. Another session put it at −17 ns.
+- **`feed`:** a cost. +591 ns is outside the band (144) and both IQRs (283
+  and 232). The figure moves between sessions more than the band does: three
+  sessions on the same adapter code measured +877, +266 and +591 ns, and the
+  +266 session could not see it at all (band 550). So the cost is under 1 µs
+  per call, about 2 to 6 % of it. One call makes 21 steps, reads 100 columns
+  and resets once, each through a checked adapter call. Each read checks its
+  handle and asks SQLite whether a row is current, which is what lets a read
+  with no current row answer 0, as the module documents. `columnInto` also
+  asks the column's type, because it copies a blob as bytes and anything else
+  as text. Which of these the cost is in is not measured here.
+- **`insert`:** not measurable, because the commit's cost dominates. +136 ns is
+  outside the band (41) but well inside both IQRs (831 and 588). Each call
+  commits through the WAL, and that cost, and how it moves as the WAL file
+  grows and is checkpointed, varies by more than the difference.
+  `insert-txn`, which takes the commit out, is the figure for the module's
+  cost on an insert.
+- **`insert-txn`:** not measurable. −98 ns is inside its band (154).
+- **Under callgrind,** the build runs 4.2 % more instructions per `feed` call
+  than C: about 194,100 against 186,300, so 7,800 more. The per-call figure is
+  the difference of two runs, so start-up cancels. From `build/bench/sqlite/`:
+
+  ```bash
+  for n in 100 600; do
+    valgrind --tool=callgrind ./nish feed feed.db $n   # and the same for ./twin
+  done
+  # per call = (instructions at 600 − instructions at 100) / 500
+  ```
+
+  4.2 % agrees with the 2 to 6 % the clock measures. The 2.10 GHz the machine
+  reports does not: about 186,000 instructions in about 15 µs would need some
+  6 instructions a cycle on both sides, so the core runs faster than that.
+  Compare the fractions, not cycles. Both binaries are stripped, so callgrind
+  cannot say which functions the extra instructions are in.
+
+**Before the adapter fix.** The same protocol, before this measurement's fixes,
+put `feed` at +1,319 ns median (9.0 %), against a noise band of 244 ns. Two
+causes made up the difference:
+
+- **The benchmark's text fold.** It stored `this.sum` on every byte, so the
+  optimiser reloaded the buffer on every byte too. About 7.1M of the 9.7M
+  instructions that separated the two sides were the fold, not the module.
+- **The adapter.** `columnInto` asked SQLite for the column count and the data
+  count separately. It now asks once when a row is current.
+
+Where Nish ran faster than C before (`insert-txn` by 85 ns median in the first
+measurement after the fix, outside a band of 11), the cause was never found;
+the layout of the two binaries is a hypothesis, not a finding. With the
+rotation made equal and the link flags matched, no Nish-faster result has been
+measurable.
+
 ## YAML against @amritk/yaml
 
 `yaml-compare/` times nish/yaml against @amritk/yaml, a YAML parser written in
@@ -1348,8 +1518,46 @@ These scans still step one byte at a time:
 - `plainColonAt`, the search for an implicit key's `: `.
 - `skipInlineSpaces` and the indentation counts.
 
+## Math accuracy
+
+How far `Math.tan`, `Math.atan2` and `Math.hypot` (fdlibm ports in
+[std/math.ts](../std/math.ts)) land from the exact result. Not run in CI: the
+reference is mpmath, which CI does not install. What CI holds instead is
+[tests/cases/math_ulp_samples.ts](../tests/cases/math_ulp_samples.ts), a few
+hundred operands per function with their correctly rounded results, drawn by
+`python3 bench/math-ulp/ulp.py --samples`.
+
+```bash
+npm run build
+build/nish bench/math-ulp/operands.ts --link build/math-ulp
+build/math-ulp > build/math-ulp.out          # 2,800,536 lines
+pip install mpmath                           # 1.4.1 measured
+python3 bench/math-ulp/ulp.py build/math-ulp.out
+```
+
+`operands.ts` prints each operand and the shipped answer as 64-bit patterns:
+every special value paired every way, then log-uniform operands over every
+exponent and draws aimed at each reduction branch (`tan` beside multiples of
+pi/2, through Cody-Waite and past 2^20 * pi/2 into Payne-Hanek, Kahan's hard
+case; `atan2` with close and far-apart exponents; `hypot` where the squares
+overflow or underflow). `ulp.py` measures every finite nonzero answer against
+mpmath at 200 bits and more, and holds every special answer (a NaN, zero or
+infinite operand or result) to Node's `Math` bit for bit through
+`bench/math-ulp/ref.mjs`. It exits 1 on any special mismatch.
+
+| function | max error | special mismatches |
+| --- | ---: | ---: |
+| `tan` | 0.8253 ulp | 0 |
+| `atan2` | 0.8367 ulp | 0 |
+| `hypot` | 0.9270 ulp | 0 |
+
+Measured on x86-64 with Node 22.23.4 as the special-value reference, mpmath
+1.4.1, about 40 s on four cores.
+
 ## Other files
 
+- `math-ulp/`: the operands and the mpmath measure behind `std/math.ts`'s
+  accuracy figures ("Math accuracy" above).
 - `sum.ts`, `ffi.mjs`: the WP8 FFI batching benchmark (`node bench/ffi.mjs`),
   not part of this suite.
 - `substr.ts`: what proving a `substring` bound is worth (WP15 §8 `NL9009`),

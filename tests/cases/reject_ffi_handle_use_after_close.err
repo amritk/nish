@@ -1,0 +1,2 @@
+reject_ffi_handle_use_after_close.ts:33:14: error: Unknown builtin `f.read`
+reject_ffi_handle_use_after_close.ts:42:16: error: Unknown identifier `f`

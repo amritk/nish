@@ -4,6 +4,7 @@ entry: docs/cookbook/builtin-term.ts
 import isTerminal from "nish:term" -> builtin isTerminal
 import readStdin from "nish:term" -> builtin readStdin
 import setRawMode from "nish:term" -> builtin setRawMode
+import setTerminalRestore from "nish:term" -> builtin setTerminalRestore
 import terminalSize from "nish:term" -> builtin terminalSize
 import waitStdin from "nish:term" -> builtin waitStdin
 function nextKeys(buf: u8[], frameMs: i32): i32 -> @nextKeys [exported]
@@ -21,4 +22,9 @@ function enterRaw(): i32 -> @enterRaw [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_set_raw_mode
   calls: nish_set_raw_mode
+  stackSites=0 stackLocals=0
+function leaveAltScreen(): i32 -> @leaveAltScreen [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_set_terminal_restore
+  calls: nish_set_terminal_restore
   stackSites=0 stackLocals=0

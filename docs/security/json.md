@@ -22,14 +22,14 @@ one verdict, alone, after a `reset` and inside a window padded with bytes that
 would change the verdict if a read strayed. Every limit has its own code, and
 each is checked before the work it bounds. A reused tokenizer keeps the arena
 flat. One finding is open, one is accepted, and JSON-3 is fixed by the typed
-layer, all Low; the typed layer's own findings follow in its section, JSON-13
-(Medium) mitigated and open.
+layer, all Low; the typed layer's own findings follow in its section, where
+JSON-13 (Medium) is fixed.
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `isIntegral`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen`, `jsonTokDigitsExceed` |
+| `std/json-tokenizer.ts` | `JsonLimits`; `JsonTokenizer`: `reset`, `next`, `skipValue`, `stringInto`, `stringLength`, `keyEquals`, `isInteger`, `numberI64`, `isU64`, `numberU64`, `isIntegral`, `numberF64`, and the scanners behind `next` (`value`, `key`, `open`, `close`, `literal`, `number`, `string`, `escapeCodePoint`, `integerScan`, `unsignedScan`, `numberSlow`); the helpers `jsonTokByteAt`, `jsonTokSkipBlank`, `jsonTokSkipDigits`, `jsonTokSkipPlain`, `jsonTokIsPlain`, `jsonTokHex4`, `jsonTokUtf8Length`, `jsonTokUtf8Width`, `jsonTokUtf8Byte`, `jsonTokEscapeLength`, `jsonTokPowerOfTen`, `jsonTokW64`, `jsonTokMulHigh`, `jsonTokLeadingZeros`, `jsonTokEiselLemire`, `jsonTokPowerOfFive`, `jsonTokDigitsExceed` |
 
 Out of scope: `std/json.ts`'s `jsonField` and `jsonFields`, which read the
 compiler's own `--json` lines and validate nothing by design, and its writer
@@ -84,7 +84,7 @@ constructor, so 100,000 openers cost the same as 129: "DEPTH: a bomb of
 128 levels fit the default". There is no recursion anywhere in the module, and
 `skipValue` loops over `next`.
 
-**Huge numbers** (`:703`, `number`; `:1037`, `numberF64`; `:1007`,
+**Huge numbers** (`:769`, `number`; `:1179`, `numberF64`; `:1079`,
 `integerScan`): a number longer than `maxNumberBytes` (256 by default) is
 refused with `JSON_TOK_ERR_NUMBER_LIMIT` ("NUMBER_LIMIT: 257 do not"); within
 it, an exponent stops being added up at 100,000 and the text goes to
@@ -92,10 +92,24 @@ it, an exponent stops being added up at 100,000 and the text goes to
 an exponent past the cap"). `numberI64` answers only when `isInteger` holds,
 whose overflow test accumulates negatively and so reaches −2^63 exactly
 ("isInteger(9223372036854775808)", "numberI64(-9223372036854775808)").
-`numberF64` is correctly rounded: Clinger's fast path for at most 15
-significant digits and a decimal exponent within ±22, `strtod` otherwise
-("numberF64(9007199254740993) rounds to even", "numberF64(5e-324), the
-smallest subnormal", and the Node check's bitwise comparison over the corpus).
+`numberF64` is correctly rounded: Clinger's fast path for a significand of
+at most 2^53 and a decimal exponent within ±22, Eisel–Lemire (`:1414`,
+`jsonTokEiselLemire`) for any other of at most 19 significant digits, and
+`strtod` past 19 digits or the exponent cap ("numberF64(9007199254740993)
+rounds to even", "numberF64(5e-324), the smallest subnormal", "numberF64 of 20
+digits goes to parseFloat", "numberF64 just above half the smallest
+subnormal", "numberF64(1.7976931348623159e308) rounds up to an infinity", and
+the JSONTestSuite check's bitwise comparison). Eisel–Lemire's run time is
+bounded per number whatever the text: two reads of the power-of-five table,
+at most two 64×64-bit products built from four 32-bit limb products each, and
+a fixed number of shifts, with no loop and no fallback, since for 19 digits
+Mushtak and Lemire prove the extended product always decides the rounding.
+Its table index is `2 × (q + 342)` for a `q` already tested to lie in
+[−342, 308], so at most 1301, and `jsonTokPowerOfFive` answers 0 rather than
+reading anything past it. The table is generated, not transcribed: "json: the
+power-of-five table in std/json-tokenizer.ts is what
+scripts/gen-json-pow5.mjs generates" fails on a changed byte. Nothing new is
+unbounded: the slow path is the `parseFloat` call it always was.
 `numberU64` (at `2d9a369f`: `:1110`, and `:1122`, `unsignedScan`) answers
 only when `isU64` holds: digits alone, with no minus sign, `-0` included, and
 at most 20 of them. RFC 8259 allows no leading zero, so up to 19 digits is
@@ -222,7 +236,8 @@ The checks in `tests/run.js` that hold the above:
   scanners read is proven, with no check left in the hot loops.
 - `link/std_json_tokenizer: nish/json-tokenizer loads under the Node prelude and tokenizes as it does natively`
   and `link/std_json_tokenizer: the same node.ts, built natively, prints the line the Node run is held to`:
-  the module runs under `runtime/nish.mjs`, through `parseFloat`, `numberI64`, `numberU64` and `isIntegral`.
+  the module runs under `runtime/nish.mjs`, through `numberF64`'s three paths, `numberI64`, `numberU64` and `isIntegral`.
+- `json: the power-of-five table in std/json-tokenizer.ts is what scripts/gen-json-pow5.mjs generates`.
 - `third-party-licence: ${noticesDoc} lists ${rows.length} files, and each exists and carries the notice of its licence`,
   for the vendored corpus.
 
@@ -243,8 +258,8 @@ taken as a type it is not. The recursion is the data's, so the tokenizer's
 depth limit bounds it, and an encoding of an object that holds itself stops at
 the writer's depth limit. Nothing an input holds panics. Six findings are
 accepted, all Low, and JSON-13 (Medium), the map keys a body can make
-collide, is mitigated by a limit on the keys of one decoding and open for a
-seeded hash.
+collide, is fixed by a keyed string hash, with the limit on the keys of one
+decoding kept.
 
 ### Scope
 
@@ -273,7 +288,7 @@ chooses the class, the limits and `ignoreUnknown`.
 | JSON-6 | Low | `std/json-typed.ts:467` (`string`) | A string that changes is a new arena string on every decode, so a server decoding a stream of distinct bodies into one object grows the arena by the strings it keeps, bounded by the bodies' size under `maxTotalBytes`. The bytes a string is decoded through are reclaimed at the call. | **Accepted.** Strings are immutable; a server that wants the arena flat releases per request what it decoded. |
 | JSON-7 | Low | `src/emit-json.ts:753` (`emitJsonDecodeBody`), `:1237` (`emitJsonStopIfFailed`) | Decoding recurses one native frame per level of nesting, bounded only by the caller's `JsonLimits.maxDepth` (128 by default): a caller that raises it into the hundreds of thousands can overflow the stack on a deep enough body. And the writer refuses past 64 levels, so a value decoded at 65 to 128 levels does not encode back (`JSON_WRITE_TOO_DEEP`). | **Accepted.** The default is safe and the limit is the program's; docs/LANGUAGE.md ("Typed JSON") and the guide say to keep it to a few thousand, and name the 64-level writer limit. |
 | JSON-12 | Low | `src/emit-json.ts:1158` (`emitJsonDecodeMapBody`) | A `Map` field is emptied and filled anew on every decode, so its keys are new strings and its values new objects, arrays or maps each time: a server decoding a stream of bodies into one object grows the arena by the entries it keeps, bounded by the bodies' size under `maxTotalBytes`, as JSON-6's strings are. | **Accepted.** Reusing an entry would need its key found before the entry is kept or dropped, and would keep the old order where the input gives a new one; docs/LANGUAGE.md ("Typed JSON") says a map's entries are made anew. |
-| JSON-13 | Medium | `src/emit-json.ts:1158` (`emitJsonDecodeMapBody`), `std/json-typed.ts:255` (`mapRoom`); the hash in `std/collections.ts` and `src/emit-map.ts` | A `Map<string, V>` field takes its keys from the body, and the global `Map` hashes a string with unseeded FNV-1a and probes linearly, so a body can choose keys that all land on one probe chain and make each insert walk every key before it. Measured in review at `a336c929`, before any limit: a 278 KB body of 20,000 colliding keys decoded in 657 ms, against 2.4 ms for 20,000 ordinary keys (274x). | **Mitigated; open for the real fix.** The maps of one decoding take at most `maxMapKeys` keys between them, 4,096 unless the program sets it, counted when a map makes room for a key, the keys of a map inside another included; the next is refused with `JSON_DECODE_MAP_LIMIT` before it is read (`mapRoom`), and `reset` starts the count again. With a total of N keys over maps of k₁, k₂, … keys, the probes cost at most the sum of kᵢ²/2, which is at most N²/2, so the whole decoding is bounded whatever the keys and however many maps hold them. The fix is a seeded string hash in `src/emit-map.ts` and `std/collections.ts`, outside the typed layer; until it lands, a program that raises `maxMapKeys` raises this bound with it. |
+| JSON-13 | Medium | `src/emit-json.ts:1208` (`emitJsonDecodeMapBody`), `std/json-typed.ts:360` (`mapRoom`); the hash in `src/emit-map.ts:177` (`emitStringHash`), `src/emit-map.ts:305` (`seedHashKey`) and `std/collections.ts:68` (`hashKey`) | A `Map<string, V>` field takes its keys from the body, and the global `Map` hashes a string with unseeded FNV-1a and probes linearly, so a body can choose keys that all land on one probe chain and make each insert walk every key before it. Measured in review at `a336c929`, before any limit: a 278 KB body of 20,000 colliding keys decoded in 657 ms, against 2.4 ms for 20,000 ordinary keys (274x). | **Fixed.** Every `Map` and `Set` hashes a string with SipHash-1-3 under a 128-bit key the process draws from `getentropy` before `main`, so which keys share a bucket is not something a body can work out: the 4,096 keys of `tests/cases/map_hash_collide.ts`, which share one FNV-1a hash, took 8,386,560 key compares to insert under FNV-1a and take none now ("map_hash_collide: 4096 keys with one FNV-1a hash insert with under 16 key compares (8,386,560 unkeyed)", "map_hash_collide: the hash key is filled before main, and differently in two runs"), and under the key 00..0f the emitted hash and its 32-bit fold agree with a reference SipHash-1-3 checked against SipHash-2-4's published vector ("map_hash_kat: the string hash is SipHash-1-3 folded to 32 bits, as the reference computes it under key 00..0f"). Each module that hashes a string registers a constructor that fills `nish_hash_key` unless another already has, and panics before `main` when the entropy source fails rather than run unkeyed. The limit stays: `maxMapKeys` still bounds one decoding's keys, now as a bound on memory and not the only bound on time. What the key cannot reach: on wasm32 the bytes are whatever the host answers WASI's `random_get` with, and the constructor runs from `_start` or, in a reactor module, from `_initialize`, so an embedder that supplies predictable bytes, or calls an export without `_initialize`, leaves the hash keyed with what it supplied, or with zero. A reactor export that runs before `_initialize` and builds a table hashes it under the zero key, and once `_initialize` fills the key, lookups in that table miss. |
 | JSON-14 | Low | `std/json-typed.ts` (`jsonEncodeNumber`), at `18f35868` | A `JsonNumber` is written with `w.raw`, its bytes as they are. What decoding and `setText` put there is one JSON number, checked by the tokenizer, but `bytes` and `count` are fields a program can assign, and bytes it assigns are written unchecked, as anything handed to `w.raw` is. A `count` past `bytes.length` is no overread: `text()` panics on the range, as `String.fromBytes` does, and `jsonEncode` stops with the writer's `JSON_WRITE_BAD_WINDOW` (-7). | **Accepted.** The program is trusted, and the input cannot reach those fields except through `number` and `setText`; docs/LANGUAGE.md ("Typed JSON") names the two ways to set one. |
 
 The layer closes the tokenizer's JSON-3: a duplicate of a field is
@@ -366,6 +381,13 @@ reset clears the count", "map limit: 4,096 keys by default", "map limit: and
 not 4,097"); at `0` and below a map takes no key and `{}` still decodes ("map
 limit: 0 refuses a map's first key", "map limit: -1 still takes {}"); and
 `mapRoom` answers the same under Node (`check("link/std_json_typed: JsonDecoder's readers run under Node and print the expected lines")`).
+**A map's string hash is keyed** (JSON-13): 4,096 keys sharing one FNV-1a
+hash insert with no key compare, against 8,386,560 under FNV-1a, and two runs
+draw two keys ("map_hash_collide: 4096 keys with one FNV-1a hash insert with
+under 16 key compares (8,386,560 unkeyed)", "map_hash_collide: the hash key is
+filled before main, and differently in two runs"); and the hash is SipHash-1-3
+bit for bit ("map_hash_kat: the string hash is SipHash-1-3 folded to 32 bits,
+as the reference computes it under key 00..0f").
 An enum read that fails stores and pushes nothing, so a failed `5.5`, `2^31`
 or `"x"` does not leave the member `0` behind ("enum: and the field keeps
 High, not Low, after 5.5", "enum array: nothing is pushed for 5.5"), and a

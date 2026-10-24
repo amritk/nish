@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "packages": {
+    "pkg_gone": ["process.spawn"],
+    "pkg_http": ["net"]
+  }
+}

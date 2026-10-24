@@ -1,0 +1,1 @@
+declare i64 @labs(i64)

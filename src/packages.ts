@@ -14,6 +14,14 @@
 // fact table is keyed by the qualified symbol — so a name is never a key
 // again, a package-scoped symbol is.
 //
+// **A `declare function` keeps its bare name** in every package
+// (`qualifySymbols` in `src/checker.ts`): it is not a symbol the package
+// defines but the C function of that name, and C has one namespace. Two
+// declarations of it share one key in the fact table, which is sound only
+// because a foreign signature's facts are read off its parameter types, so
+// `Compilation.rejectSymbolClashes` lets them share it when the types agree
+// and refuses them when they do not.
+//
 // **The root package's prefix is empty**, which is the whole of why this stage
 // moves no IR: a program compiled today is one package, so every symbol it
 // emits is spelled exactly as it was, every golden is byte-identical, and

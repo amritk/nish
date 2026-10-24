@@ -104,7 +104,7 @@ import {
   Node,
 } from "./nodes"
 import { StringSet } from "./map"
-import { COLLECTIONS_SPECIFIER } from "./std-modules"
+import { COLLECTIONS_SPECIFIER, MATH_SPECIFIER } from "./std-modules"
 import {
   AliasInfo,
   CheckedProgram,
@@ -248,6 +248,7 @@ export class Checker {
     // Here rather than in pass 1 because it is an import, and the module it
     // names has to be loaded with the rest.
     this.importCollections()
+    this.importMath()
     this.ctx.errored = false
   }
 
@@ -387,6 +388,36 @@ export class Checker {
   }
 
   /**
+   * `Math.atan2`, `Math.tan` and `Math.hypot` are `std/math.ts`'s, not libm's:
+   * a module that calls one is given an import of it from `nish/math`, under
+   * the dotted spelling as its local name, which no declaration can take.
+   * `checkMath` records that function as the call's callee, and from there it
+   * is an ordinary call into a library copied like `nish/collections`. A
+   * module that calls none of the three loads nothing. The gate is the scan
+   * itself, not the source text, so `Math\n  .tan(x)` is found too.
+   */
+  importMath(): void {
+    if (this.program.isMathLibrary()) {
+      return
+    }
+    const calls: Node[] = []
+    scanMathCalls(this.program.file, calls)
+    for (const call of calls) {
+      const name = call.children[0].text
+      const local = `Math.${name}`
+      let bound = false
+      for (const imp of this.program.imports) {
+        if (imp.localName === local) {
+          bound = true
+        }
+      }
+      if (!bound) {
+        this.program.imports.push(new ImportBinding(MATH_SPECIFIER, `${name}F64`, local, call, call))
+      }
+    }
+  }
+
+  /**
    * WP21 S1: put every symbol this module declares inside its package.
    *
    * One place, and after every signature exists, so a free function, a method
@@ -398,6 +429,13 @@ export class Checker {
    * `main` needs no exception: only the entry module may declare it, and the
    * entry module is the root package by construction (`Compilation` derives
    * every other module's package by comparing it with the entry's own).
+   *
+   * A `declare function` is the exception that is not a symbol of the package
+   * at all: it names a C function, and C has one namespace, so it keeps the
+   * name as written wherever it is declared (`docs/LANGUAGE.md` "Calling C").
+   * The fact table it shares a key in holds the same facts for every
+   * declaration that agrees, and `Compilation.rejectSymbolClashes` refuses two
+   * that do not.
    */
   qualifySymbols(): void {
     const prefix = this.program.symbolPrefix
@@ -415,7 +453,7 @@ export class Checker {
       // signature annotation that names `Box<i32>` runs before it, and a
       // `new Box<i32>(v)` in a body runs long after. Qualifying it again would
       // spell the package twice.
-      if (sig.instance === null && sig.definedIn(this.program.source)) {
+      if (sig.instance === null && !sig.foreign() && sig.definedIn(this.program.source)) {
         sig.name = `${prefix}${sig.name}`
       }
     }
@@ -3050,6 +3088,24 @@ class CollectionNames {
     } else if (name === "Set" && this.set === null) {
       this.set = at
     }
+  }
+}
+
+/** The `Math.atan2`, `Math.tan` and `Math.hypot` calls under `node`, in source order (`importMath`). */
+const scanMathCalls = (node: Node, calls: Node[]): void => {
+  if (node.kind === N_CALL && node.children[0].kind === N_MEMBER) {
+    const callee = node.children[0]
+    const name = callee.text
+    if (
+      callee.children[0].kind === N_IDENT &&
+      callee.children[0].text === "Math" &&
+      (name === "atan2" || name === "tan" || name === "hypot")
+    ) {
+      calls.push(node)
+    }
+  }
+  for (const child of node.children) {
+    scanMathCalls(child, calls)
   }
 }
 

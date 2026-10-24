@@ -1,0 +1,62 @@
+# CodeQL over the C runtime, runtime/*.c (docs/security/runtime.md, "Static
+# analysis").
+#
+# The runtime is the one part of the project written in C, so it is the part a
+# memory-safety analyser can say something about that the compiler's own tests
+# do not. Nothing else is analysed here: src/ and std/ are Nish, which CodeQL
+# does not read.
+#
+# The build is manual: each translation unit compiled by itself with clang,
+# the way scripts/build.sh compiles it beside a program, but with no program
+# to link, so every file is seen whole. The query suite is
+# security-and-quality. Its alerts go to the repository's code-scanning page;
+# the first run's were triaged into runtime.md, and a new alert is triaged the
+# same way: fixed with a test, or recorded with the reason it is not a defect.
+#
+# Every action is pinned to a commit, with the tag it was beside it.
+name: codeql
+
+on:
+  push:
+    branches: [main]
+    paths: ["runtime/**", ".github/workflows/codeql.yml"]
+  pull_request:
+    paths: ["runtime/**", ".github/workflows/codeql.yml"]
+  schedule:
+    # Wednesdays, 05:17 UTC: off the hour, and a new query pack is picked up
+    # without a runtime change.
+    - cron: "17 5 * * 3"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-and-quality
+
+      - name: Build the runtime, one translation unit at a time
+        run: |
+          out="$(mktemp -d)"
+          for f in runtime/*.c; do
+            case "$f" in
+              # The freestanding wasm32 half: no libc, wasm builtins.
+              runtime/runtime-wasm.c) clang --target=wasm32 -ffreestanding -nostdlib -c -O1 -std=c11 "$f" -o "$out/runtime-wasm.c.o" ;;
+              *) clang -c -O1 -std=c11 "$f" -o "$out/$(basename "$f").o" ;;
+            esac
+          done
+
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: runtime

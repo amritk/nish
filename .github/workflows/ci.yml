@@ -23,9 +23,9 @@
 #       a release carries a seed it can use and there is no row otherwise; the
 #       `cmpSince` note in .github/seed-targets.json says which releases those
 #       are and why it is not all of them.
-# simd-arm64: runtime/runtime-simd.c's and runtime/runtime-aes.c's agreement
-#       tests on an AArch64 runner, where their native runs are the NEON and
-#       the ARMv8 AES and PMULL paths no x86-64 job can run, and the `aes
+# simd-arm64: runtime/runtime-simd.c's, runtime/runtime-bytes.c's and
+#       runtime/runtime-aes.c's agreement tests on an AArch64 runner, where
+#       their native runs are the NEON and the ARMv8 AES and PMULL paths no x86-64 job can run, and the `aes
 #       kernel` section, std/crypto/aes.ts lowered onto those AES kernels.
 # runtime-net: runtime/runtime-net.c's Darwin branch (kqueue, SO_NOSIGPIPE,
 #       errno translated to Linux's numbers) on a macOS runner: the runtime
@@ -274,7 +274,10 @@ jobs:
           # counted skips, "no WASI sysroot", and nothing here would notice a
           # runtime that stops building against wasi-libc, as runtime-os.c did
           # when it called a `realpath` wasi-libc does not have (#396).
-          pkgs="clang-18 lld-18 llvm-18 valgrind wasi-libc libclang-rt-18-dev-wasm32"
+          # libclang-rt-18-dev is the native sanitizer and libFuzzer runtimes
+          # the `runtime_sanitize` and `fuzz` sections link; without it they
+          # are counted skips.
+          pkgs="clang-18 lld-18 llvm-18 valgrind wasi-libc libclang-rt-18-dev-wasm32 libclang-rt-18-dev"
           for attempt in 1 2 3; do
             if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
               --download-only $pkgs; then
@@ -391,15 +394,16 @@ jobs:
       # section again, which built stage1 anew each time: three minutes of
       # shard 1, the longest of the four.
 
-      # WP38 S1: the `simd` section (shard 1) passes when the kernel's paths
+      # WP38 S1 and S6a: the `simd` section (shard 1) passes when a kernel's paths
       # agree, which they also do when the AVX2 path did not run at all. These
-      # runners have AVX2, so here the driver the suite built must name it, as
+      # runners have AVX2, so here the drivers the suite built must name it, as
       # the `simd-arm64` job's line must name the NEON path.
       - name: The AVX2 path ran
         if: matrix.shard == 1
         run: |
           set -o pipefail
           build/test/simd/index-of-any | grep -E '^index-of-any: [0-9]+ cases agree across scalar base avx2;'
+          build/test/simd/byte-runs | grep -E '^byte-runs: [0-9]+ cases agree across scalar base avx2 \(plain: scalar base\);'
 
       # WP38 S5: likewise for runtime/runtime-aes.c, whose `simd` section passes
       # with the reference alone on a CPU without AES-NI. These runners have it
@@ -482,6 +486,13 @@ jobs:
       - name: Diagnostic codes (registry up to date)
         if: matrix.shard == 1
         run: node scripts/gen-diagnostic-codes.mjs --check
+
+      # Every std/net, std/crypto and runtime C file is in a security record's
+      # scope or on docs/security/README.md's "Not yet audited" list, which only
+      # shrinks: new attacker-facing code ships with its record (CLAUDE.md).
+      - name: Security records cover the attacker-facing surface
+        if: matrix.shard == 1
+        run: node scripts/security-scope.mjs
 
       # The other half of WP19 G2.4 -- every code provoked by a program, not
       # only every diagnostic given a code -- is not a step here: it is inside
@@ -782,7 +793,7 @@ jobs:
     # than a job with no rows, which is why the `if` is on the job.
     if: needs.seeds.outputs.cmp != '[]'
     runs-on: ${{ matrix.seed.runner }}
-    timeout-minutes: 15
+    timeout-minutes: 20
     strategy:
       # x86_64 and aarch64 have different registers and different calling
       # conventions, so one row failing must not cancel the row that would say
@@ -802,11 +813,12 @@ jobs:
       # (`buildCandidate` in tests/nish-cmp.js, the arrangement G3 puts in
       # scripts/bootstrap.sh), so this job wants the toolchain for the same
       # reason `bootstrap` does rather than only to read IR.
-      - name: Install LLVM 18 + lld
+      # The sanitizer runtimes are for the soundness step's ASan builds.
+      - name: Install LLVM 18 + lld + the sanitizer runtimes
         timeout-minutes: 5
         run: |
           sudo apt-get $APT_OPTS update
-          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 libclang-rt-18-dev
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as llvm-nm llvm-tli-checker opt ld.lld wasm-ld lld; do
@@ -852,6 +864,27 @@ jobs:
         run: |
           NISH_BOOTSTRAP="$SEED" node tests/differential/fuzz.js --stage1 --seed 20261001 --count 200 \
             --candidate build/self/compile
+
+      # The soundness differential: the same candidate compiles every runnable
+      # case, the fuzz corpus and 600 fixed-seed programs from proofgen.js (built
+      # around the accesses the elision reasons about, each in an in-bounds and
+      # a one-past variant) a second time with `--no-elision`, every
+      # proof-backed elision off, and both builds must print and exit the same
+      # at -O2. A generated program must also panic exactly when its one-past
+      # variant says, and with `--asan` its default build runs again under
+      # AddressSanitizer (tests/differential/asan.js) and must end the same
+      # way. A failure prints its reproducer's path, the command that reruns
+      # it, and a minimised `min.ts`. About 2 minutes on 4 threads (1342
+      # programs, both sides built, the 600 generated ones under ASan too); the
+      # generated programs run first, so a budget that runs out on a slow
+      # runner drops corpus cases, which the suite links anyway. It runs on
+      # every row on purpose: the rows are one per architecture, and an elision
+      # can be sound on one target's code and not on the other's. The weekly
+      # randomised pass is .github/workflows/soundness-fuzz.yml.
+      - name: Every proof-backed elision changes nothing a program prints
+        run: |
+          node tests/differential/soundness.js --compiler build/self/compile --corpus tests/cases \
+            --corpus tests/differential/corpus --gen --seed 20261024 --count 600 --asan --budget 360
 
       # Reached only when the comparison agreed, which is the point: this line
       # is a claim about a run that happened. The summary line carries its own
@@ -945,7 +978,8 @@ jobs:
           summary="$(tail -n 1 "$RUNNER_TEMP/nish-runner.log" 2>/dev/null || echo 'the runner produced no summary')"
           echo "::notice::tests/nish/run.ts over tests/cases: $summary"
 
-  # WP38 S1: runtime/runtime-simd.c's NEON path, run on the hardware it is for,
+  # WP38 S1 and S6a: runtime/runtime-simd.c's and runtime/runtime-bytes.c's NEON
+  # paths, run on the hardware they are for,
   # and WP38 S5's runtime/runtime-aes.c on the ARMv8 AES and PMULL instructions.
   #
   # The kernel has a base path per architecture, and every other job here is
@@ -996,6 +1030,7 @@ jobs:
           set -o pipefail
           node tests/run.js simd | tee "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: native arm64: [0-9]+ cases agree across scalar base;' "$RUNNER_TEMP/simd.log"
+          grep -E '^PASS  simd: byte-runs native arm64: [0-9]+ cases agree across scalar base \(plain: scalar base\);' "$RUNNER_TEMP/simd.log"
           grep -E '^PASS  simd: aes-gcm native arm64: [0-9]+ cases agree across armv8-aes-pmull;' "$RUNNER_TEMP/simd.log"
 
       # WP38 S5's lowering on AArch64: the compiler's branch to the ARMv8 AES and
@@ -1129,6 +1164,80 @@ jobs:
               echo
             } >> "$GITHUB_STEP_SUMMARY"
           done
+
+  # Every fuzz target in tests/fuzz/targets/ built under
+  # -fsanitize=fuzzer,address,undefined, replayed over its seed corpus and
+  # regressions, then fuzzed for 30 seconds from a fixed -seed. The run is
+  # bounded by wall clock, so how far it gets varies from push to push
+  # (tests/fuzz/README.md). Plus the runtime unit test
+  # under ASan and UBSan. Long campaigns are fuzz.yml's, weekly.
+  fuzz-smoke:
+    name: fuzz-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld + the sanitizer runtimes
+        timeout-minutes: 5
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 libclang-rt-18-dev
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        run: bash scripts/fetch-seed.sh
+
+      # build/nish: a target must be compiled with this checkout's std, which
+      # a compiler finds beside itself.
+      - name: Build the compiler
+        timeout-minutes: 10
+        run: npm run build
+
+      # Five targets at 60 seconds each, under ten minutes with the builds.
+      # A crash leaves its input in build/fuzz/artifacts/<target>/, uploaded
+      # below; `bash scripts/fuzz.sh --replay <target>` after copying it into
+      # tests/fuzz/regressions/<target>/ reproduces it.
+      - name: Fuzz smoke
+        timeout-minutes: 12
+        env:
+          FUZZ_SMOKE_SECONDS: "30"
+          FUZZ_SEED: "1"
+        run: bash scripts/fuzz.sh --smoke
+
+      # The step needs checks that passed and no SKIP line: a runner image
+      # without the sanitizer runtimes fails it rather than leaving it green.
+      - name: The runtime unit test under ASan and UBSan
+        if: ${{ !cancelled() }}
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          node tests/run.js runtime_sanitize | tee "$RUNNER_TEMP/runtime-sanitize.log"
+          grep -E '^[1-9][0-9]* passed, 0 failed' "$RUNNER_TEMP/runtime-sanitize.log"
+          if grep -E '^SKIP  ' "$RUNNER_TEMP/runtime-sanitize.log"; then exit 1; fi
+
+      - name: Upload crash inputs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-smoke-artifacts
+          path: build/fuzz/artifacts/
+          if-no-files-found: ignore
 
   lint:
     name: lint

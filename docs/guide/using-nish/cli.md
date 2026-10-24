@@ -74,8 +74,9 @@ Without `run`, `nish` compiles the entry file and every module it imports.
 likely to add to it:
 
 - **`--profile speed|size|debug|wasi`** — `speed` (the default) is `-O3` with
-  link-time optimisation and a stripped binary; `size` optimises for bytes;
-  `debug` links fastest and keeps symbols; `wasi` builds a `wasm32-wasi`
+  link-time optimisation (its code generation spread over every core when
+  the link goes through lld) and a stripped binary; `size` optimises for
+  bytes; `debug` links fastest and keeps symbols; `wasi` builds a `wasm32-wasi`
   module instead of a native binary.
 - **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64
   CPUs with AVX2 (Intel Haswell, AMD Excavator and later), which can make
@@ -96,6 +97,55 @@ likely to add to it:
 The sidecars that let C, Node and WebAssembly call your code —
 `--emit-header`, `--emit-napi`, `--emit-dts` — have a page of their own:
 [Calling Nish from other languages](interop.md).
+
+### SQLite is linked when your program calls it
+
+`nish` ships [SQLite](https://sqlite.org/) 3.54.1 as source, and `--link`
+compiles it into a program that calls a SQLite C function (`sqlite3_open`, or
+any other `sqlite3_*`). You need no SQLite library on your system, and a
+program that does not call SQLite gets none of it.
+
+```ts nish:ok
+declare function sqlite3_libversion(): string;
+
+export const main = (): i32 => {
+  console.log(sqlite3_libversion());
+  return 0;
+};
+```
+
+```console
+$ nish run version.ts
+3.54.1
+```
+
+- **The first link that uses it is slower.** SQLite is about 9.6 MB of C. The
+  first link compiles it once, which takes about 1.5 s under `debug` (and
+  `nish run`) and about 18 s under `speed`. `nish` keeps the result in the
+  runtime cache, so every later link takes about as long as one without
+  SQLite.
+- **One thread, unless you build with `--threads`.** SQLite is compiled with
+  `SQLITE_THREADSAFE=0`, and with `=2` under `--threads`: multi-thread mode,
+  where no mutex guards a connection, so open one per thread and never share it.
+- **The defaults are most of SQLite's
+  [recommended options](https://sqlite.org/compile.html#recommended_compile_time_options).**
+  Two are left out. `SQLITE_OMIT_DECLTYPE` would remove
+  `sqlite3_column_decltype`, which reports a column's declared type.
+  `SQLITE_OMIT_AUTOINIT` would make any call before `sqlite3_initialize()`
+  undefined behaviour.
+- **`NISH_SQLITE_CFLAGS` adds compile-time options.** Its words are added to
+  SQLite's compile line, and a `-D` or `-U` for an option `nish` already sets
+  replaces it. For example, `NISH_SQLITE_CFLAGS="-DSQLITE_ENABLE_FTS5"` adds
+  full-text search. The cache keeps a separate copy for each value. Only the
+  first line is read, and it is split on whitespace: quotes are not removed,
+  so a word cannot hold a space. A relative `-I` path is taken from
+  `runtime/sqlite/`, where SQLite is compiled, so give an absolute one.
+- **`--profile napi` links it with hidden visibility.** The addon uses SQLite
+  but does not export its functions to Node or to other addons.
+- **`--profile wasi` links it.** There SQLite locks a database with lock
+  files and has no WAL mode across processes. `scripts/build.sh --profile
+  wasm`, which links no C library, refuses a module that calls SQLite with
+  exit 2.
 
 ## Writing TypeScript: `--emit-ts`
 
@@ -142,17 +192,35 @@ Some constructs JavaScript spells differently are rewritten too:
 - **`Arena.used()`** and its siblings become `nish/runtime`'s `arenaUsed`,
   `arenaMark`, `arenaRelease` and `arenaReset`, and a `Result` annotation
   imports `Result` from it.
+- **An element read `a[i]`** whose index the compiler cannot prove in range
+  becomes `idx(a, i)`, and a store `a[i] = v` becomes `setIdx(a, i, v)`.
+  Both panic out of range as the native check does, where JavaScript would
+  read `undefined` or grow the array. A compound store `a[i] += v` checks
+  the index again after `v` runs, at a proven index too, since `v` can
+  shrink the array.
+- **`new Array<T>(n)`** becomes `newArray(n, zero)`, filled with `T`'s zero
+  (`0`, `0n`, `false`, or `null` for a nullable `T`) where JavaScript would
+  leave holes. An `i64` or `u64` length goes through `Number`.
+- **A record an array holds inline** is copied as it goes in:
+  `xs.push(p)` pushes `{ ...p }`, and `xs[i] = p` writes `p`'s fields into
+  the record already in the slot, so a later change to `p` leaves `xs`
+  alone, as it does natively. A `(P | null)[]` holds references and copies
+  nothing.
+- **`dst.set(src, at)`** between two arrays of one type becomes
+  `arraySet(dst, src, at)`, the copy a plain JavaScript array lacks, which
+  panics past the end as the native one does.
 
 The flag also turns on `--warn-portability`. Those warnings name the places
 where your program can answer differently under Node.
 
-Three kinds of module cannot be written. In each case `nish` exits 1 and
+Four kinds of module cannot be written. In each case `nish` exits 1 and
 writes no file:
 
 ```text
 app.ts:4:1: error: --emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)
 app.ts:4:1: error: --emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)
 app.ts:6:3: error: --emit-ts cannot write this compound assignment, whose target it would read twice and which holds a call, a step or an element read: hoist the index into a const
+app.ts:9:1: error: --emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type
 ```
 
 The second is reported at each `nish:net` import and at each call to a
@@ -163,6 +231,12 @@ The third is reported at an `x op= e` that Node needs written as
 holds a call, a `++`, or another array read: `hist[data[0]] += 10`. Read the
 index into a `const` first, `const at = data[0]`, then `hist[at] += 10`.
 
+The fourth is reported at a generic function that TypeScript writes once
+for all the types it is called at, when those types need different code: a
+record held inline in one call and a `P | null` reference in another, or an
+`i32` and an `i64` element in `new Array<T>(n)`, whose zeros differ. Write a
+function per element type.
+
 Not every builtin has a runtime export yet. The `nish:unsafe` functions
 (`uncheckedGet`, `wrappingAdd`, `readCString` and the rest) are written as
 imports from `nish/runtime` that Node cannot resolve, so a program that uses
@@ -170,7 +244,7 @@ them does not run under Node yet.
 
 The `nish:term` functions are written as imports from `nish/runtime` too, and
 they resolve. Under Node, `isTerminal` and `terminalSize` answer, and
-`readStdin`, `waitStdin` and `setRawMode` throw, naming themselves, as they do
+`readStdin`, `waitStdin`, `setRawMode` and `setTerminalRestore` throw, naming themselves, as they do
 when a program is [run under Node](terminal.md#where-it-runs).
 
 `--emit-ts` writes a directory instead of IR, so it exits 2 if you also
@@ -270,9 +344,16 @@ no escape codes. Diagnostics are never coloured. These variables change that:
 | `FORCE_COLOR` or `CLICOLOR_FORCE`, neither empty nor one of those | colour even when piped, unless an agent is running `nish` |
 | `CLICOLOR` set to one of those, or `TERM=dumb` | no colour, unless one of the two above forces it |
 
-The palette uses 256 colours when `TERM` names a 256-colour terminal,
-`COLORTERM` is set or `FORCE_COLOR` is `2` or `3`, and the 16 basic ones
-otherwise.
+The colours are your terminal's own: the basic ANSI colours, bold and faint,
+which your theme defines, so the help takes on whatever palette you chose (a
+terminal with no theme shows its built-in defaults). On a terminal whose
+`TERM` terminfo entry declares no colours at all (`tput colors` prints fewer
+than 8, as it does for `TERM=vt100`), the help marks headings and flags in
+bold and placeholders with an underline instead, which a monochrome terminal
+still shows. Forced colour (`FORCE_COLOR`, `CLICOLOR_FORCE`) is always the
+theme's, whatever `TERM` says, because what reads it is a pager or an editor
+that paints the escapes itself. Your own tools can print a help that behaves the same way with
+[`nish/cli`](standard-library.md#nishcli).
 
 **Coding agents get a plain help with an extra section.** When `nish` runs
 under an agent — `CLAUDECODE` or `GEMINI_CLI` is set to anything but empty
@@ -312,6 +393,39 @@ unchanged.
   `nish run --capabilities hello.ts` prints
   `capabilities: none (deterministic)` before the program's own output. See
   [Capabilities](../../LANGUAGE.md#capabilities).
+- **A dependency needs your grant** for `unsafe`, `ffi`, `net` and
+  `process.spawn`. A package under `node_modules` that reaches one of them,
+  itself or through anything it calls, stops the build until your
+  `package.json` names it:
+
+  ```json
+  { "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } }
+  ```
+
+  Without it the build stops with exit code 1, and the error names the
+  grant to add and the calls that reach the capability:
+
+  ```text
+  node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which the root package does not grant it; grant it with "nish": { "capabilities": { "dependencies": { "pkg_http": ["net"] } } } — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+  ```
+
+  Only your own `package.json` grants: `--allow` does not, and neither does
+  the dependency's. The standard library needs no grant. See
+  [A dependency's capabilities](../../LANGUAGE.md#a-dependencys-capabilities).
+- **`--update-capability-lock`** writes `nish-capabilities.lock.json` beside
+  your `package.json`: every capability each dependency reaches, granted or
+  not. Commit it. While it exists, an upgrade that makes a dependency reach
+  something new stops the build with exit code 1, naming the dependency, the
+  capability and the calls, until you read the chain and run the flag again:
+
+  ```text
+  node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it; review the chain, then record it with `--update-capability-lock` — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+  ```
+
+  A dependency that reaches less than its row records is fine. A build the
+  grants refuse writes no lockfile. `nish run` takes the flag; `--fix` and
+  `--emit-ast` do not. See
+  [The capability lockfile](../../LANGUAGE.md#the-capability-lockfile).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](../../LANGUAGE.md#the-no-panic-scope)).

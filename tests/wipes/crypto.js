@@ -15,6 +15,9 @@ const ED25519_MODULES = /^define [^\n]*@nish\.(Ed25519|ed25519)/m
 /** The modules that define HMAC, HKDF, SHA-2, the TLS schedule and record layer, or QUIC packet protection. */
 const HELD_DERIVE_MODULES = /^define [^\n]*@nish\.(Hmac|hmac|Hkdf|hkdf|Sha|sha|Tls|tls|quic)/m
 
+/** The module that defines bcrypt. */
+const BCRYPT_MODULES = /^define [^\n]*@nish\.bcrypt/m
+
 /** The modules that define AES or ChaCha20-Poly1305. */
 const AEAD_MODULES = /^define [^\n]*@nish\.(Aes|aes|ghash|chacha20|poly1305)/m
 
@@ -61,6 +64,20 @@ export const wipeChecks = [
       ["nish.hkdfExtractInto", 50],
       ["nish.hkdfExpandInto", 49],
       ["nish.hkdfExpandLabelInto", 49],
+    ],
+  },
+  // `pbkdf2HmacSha256` in `nish/crypto/hmac` (#868). `std_pbkdf2` imports
+  // it alone. The roots: `pbkdf2Finish` 2 (the inner digest and the tag), and
+  // the derivation 21 (keying both hashers, the HMAC constructor's 6; the
+  // first U and the loop's, `pbkdf2Finish` twice; U and T after the loop; and
+  // the working hasher and both keyed ones, three arrays each).
+  {
+    name: "crypto_pbkdf2: the wipes survive opt -O2 (PBKDF2's U_j, T_i, digests and keyed hashers)",
+    program: "tests/link/std_pbkdf2/main.ts",
+    modules: HMAC_HKDF_MODULES,
+    roots: [
+      ["nish.pbkdf2Finish", 2],
+      ["nish.pbkdf2HmacSha256", 21],
     ],
   },
   // `nish/crypto/aes` and `nish/crypto/chacha20poly1305` (#430).
@@ -190,6 +207,21 @@ export const wipeChecks = [
       ["nish.ed25519Encode", 1],
       ["nish.ed25519PublicKeyExposed", 26],
       ["nish.ed25519SignExposed", 38],
+    ],
+  },
+  // `nish/crypto/bcrypt` wipes the Blowfish state and what the key reaches
+  // (docs/security/crypto-bcrypt.md). The roots: `bcryptExposed` 5 (the
+  // state, the expanded key, the block, the digest, and the 128-byte key
+  // stream of `bcryptSetKey`, which `opt` inlines), and `bcryptHash` and
+  // `bcryptVerify` 5 each, through `bcryptRun`.
+  {
+    name: "crypto: the wipes survive opt -O2 (bcrypt's Blowfish state, expanded key, key stream, block and digest in bcryptExposed)",
+    program: "tests/link/crypto_bcrypt/main.ts",
+    modules: BCRYPT_MODULES,
+    roots: [
+      ["nish.bcryptExposed", 5],
+      ["nish.bcryptHash", 5],
+      ["nish.bcryptVerify", 5],
     ],
   },
 ]

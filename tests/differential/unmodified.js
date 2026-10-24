@@ -43,8 +43,6 @@ const work = path.join(root, "build", "test", "unmodified")
  */
 const KNOWN = new Map([
   ["f64_libm", "glibc libm vs V8 fdlibm: 1-ulp differences in sin/cos/log/pow"],
-  ["f64_minmax_nan", "llvm.minnum/maxnum answer the non-NaN operand; Math.min/max answer NaN"],
-  ["f64_round_negzero", "Math.round(-0.3) is +0 natively and -0 in JS, and x/0 differs on the integer side"],
   ["f64_i32_mixed", "explicit `i32` locals wrap natively; unmodified Node has only doubles"],
   [
     "rng_entry_panic_f64",
