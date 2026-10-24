@@ -217,12 +217,16 @@ export const main = (): i32 => {
   const wrong: u8[][] = [pw[0], bytesOf("password124"), pw[2], pw[3]];
   const goHash: string[] = [vectors[0], "$2a$10$ZSfEoPvlcsj2XfvsSeK25em4NZ9Jm7ntGqXuLgQfHEeZPYB8899wq", vectors[2], vectors[3]];
   t.eqStr("verify4: a wrong password is false in its lane only", verify(wrong, 0, goHash), "true false true true");
-  // Random hashes at three costs and all three prefixes, checked lane by lane.
-  for (let round: i32 = 0; round < 3; round += 1) {
+  // Random hashes at mixed costs and all three prefixes, checked lane by lane.
+  // Every round mixes costs, so verify groups lanes: 3+1 with lane 0 in the
+  // three, 1+3 with the three not holding lane 0, three groups with a pair of
+  // lanes 1 and 3, and two pairs.
+  const mixed: i32[] = [c4, c5, c4, c4, c4, c5, c5, c5, c5, c4, c6, c4, c4, c4, c5, c5];
+  for (let round: i32 = 0; round < 4; round += 1) {
     const rp: u8[][] = [randomPassword(state), randomPassword(state), randomPassword(state), randomPassword(state)];
     const hashes: string[] = [];
     for (let k: i32 = 0; k < 4; k += 1) {
-      const cost: i32 = k % 2 === 0 ? c4 : (round === 2 ? c6 : c4);
+      const cost: i32 = mixed[4 * round + k];
       const h: string = single(rp[k], randomBytes(state, 16), cost);
       hashes.push(k === 1 ? `$2y$${h.substring(4)}` : (k === 3 ? `$2a$${h.substring(4)}` : h));
     }
@@ -238,6 +242,14 @@ export const main = (): i32 => {
   const bad: string[] = [vectors[0], vectors[1], "$2x$05$/OK.fbVrR/bpIqNJ5ianF.CE5elHaaO4EbggVDjb8P19RukzXSM3e", vectors[3]];
   t.eqStr("a malformed lane is an Err naming it", verify(pw, 0, bad), "Err: bcrypt: lane 2: not a $2a$, $2b$ or $2y$ hash");
   t.eqStr("and is not read when the lane is null", verify(pw, 4, bad), "true true false true");
+  const short: string[] = [vectors[0].substring(0, 59), vectors[1], vectors[2], vectors[3]];
+  t.eqStr("a short lane 0 is an Err naming it", verify(pw, 0, short), "Err: bcrypt: lane 0: a hash is 60 characters");
+  const digest: string[] = [vectors[0], `${vectors[1].substring(0, 59)}!`, vectors[2], vectors[3]];
+  t.eqStr("a bad digest character in lane 1 is an Err naming it", verify(pw, 0, digest), "Err: bcrypt: lane 1: the digest is not bcrypt base64");
+  const salt: string[] = [vectors[0], vectors[1], vectors[2], `${vectors[3].substring(0, 10)}!${vectors[3].substring(11)}`];
+  t.eqStr("a bad salt character in lane 3 is an Err naming it", verify(pw, 0, salt), "Err: bcrypt: lane 3: the salt is not bcrypt base64");
+  const long: string[] = [vectors[0], vectors[1], vectors[2], `${vectors[3]}.`];
+  t.eqStr("a long lane 3 is an Err naming it", verify(pw, 0, long), "Err: bcrypt: lane 3: a hash is 60 characters");
   t.eqStr("a batch is four hashes", verify(pw, 0, [vectors[0], vectors[1], vectors[2]]), "Err: bcrypt: a batch is four hashes");
   return t.done();
 };
