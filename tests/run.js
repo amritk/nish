@@ -19325,8 +19325,9 @@ if (!only || "sqlite-link".includes(only)) {
         fs.readdirSync(sqEntry).sort().join(",") === "key,sqlite3.o",
       entries().join(", ") + (sqEntry.length > 0 ? ` / ${fs.readdirSync(sqEntry).join(", ")}` : "")
     )
-    // The cache holds what runtime/sqlite/ holds: a unit added there and not
-    // to `sqliteUnits` (src/run-cache.ts) would compile and never be linked.
+    // The cache holds what runtime/sqlite/ holds: `sqliteUnits`
+    // (src/run-cache.ts) reads the directory, so a unit added there compiles,
+    // lands in the entry and is linked.
     const vendored = fs
       .readdirSync(path.join(root, "runtime", "sqlite"))
       .filter((f) => f.endsWith(".c"))
@@ -19341,6 +19342,38 @@ if (!only || "sqlite-link".includes(only)) {
           .sort()
           .join(",") === vendored.join(","),
       vendored.join(", ")
+    )
+
+    // What ships of runtime/sqlite/: its units, its headers and its notice.
+    // The README's SHA3-256 lines name the two vendored files' bytes, and each
+    // of release.yml's presence gates names every shipped file.
+    const sqliteSrc = path.join(root, "runtime", "sqlite")
+    const shippedSqlite = fs
+      .readdirSync(sqliteSrc)
+      .filter((f) => /\.[ch]$|^LICENSE/.test(f))
+      .map((f) => `runtime/sqlite/${f}`)
+    const readme = fs.readFileSync(path.join(sqliteSrc, "README.md"), "utf8")
+    const hashes = ["sqlite3.c", "sqlite3.h"].map((f) => [
+      f,
+      crypto.createHash("sha3-256").update(fs.readFileSync(path.join(sqliteSrc, f))).digest("hex"),
+    ])
+    const unrecorded = hashes.filter(([f, h]) => !new RegExp(`SHA3-256 of \`${f.replace(".", "\\.")}\`.*${h}`).test(readme))
+    check(
+      "sqlite-link: runtime/sqlite/README.md records the SHA3-256 of sqlite3.c and sqlite3.h as they are",
+      unrecorded.length === 0,
+      unrecorded.map(([f, h]) => `${f}: ${h}`).join("\n")
+    )
+    const gates = fs
+      .readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
+      .split("\n")
+      .filter((l) => /^\s*for f in \S+ /.test(l))
+    const ungated = gates.flatMap((line) =>
+      shippedSqlite.filter((f) => !line.split(/\s+/).includes(f)).map((f) => `${f} in: ${line.trim().slice(0, 80)}`)
+    )
+    check(
+      `sqlite-link: each of release.yml's ${gates.length} presence gates names every shipped file of runtime/sqlite/ (${shippedSqlite.join(", ")})`,
+      gates.length === 3 && shippedSqlite.length >= 3 && ungated.length === 0,
+      gates.length !== 3 ? `expected 3 gates, found ${gates.length}` : ungated.join("\n")
     )
 
     const second = link(program, "second")
@@ -19508,6 +19541,66 @@ if (!only || "sqlite-link".includes(only)) {
       )
     }
 
+    // A unit and a header added to runtime/sqlite/, in a copied package so the
+    // checkout's directory is never edited: each changes the SQLite entry's key,
+    // the new object lands in the new entry, and a cached link still runs.
+    const sqCopy = path.join(sqDir, "package")
+    fs.mkdirSync(path.join(sqCopy, "bin"), { recursive: true })
+    fs.copyFileSync(NISH, path.join(sqCopy, "bin", "nish"))
+    fs.chmodSync(path.join(sqCopy, "bin", "nish"), 0o755)
+    for (const dir of ["scripts", "runtime", "std"]) {
+      fs.cpSync(path.join(root, dir), path.join(sqCopy, dir), { recursive: true })
+    }
+    const linkSqCopy = (out) =>
+      spawnSync(path.join(sqCopy, "bin", "nish"), [program, "--link", path.join(sqDir, out), "--profile", "debug"], {
+        cwd: root,
+        encoding: "utf8",
+        env: env(),
+      })
+    const copyBase = linkSqCopy("copy-base")
+    compiledC()
+    const baseEntries = sqliteEntries()
+    fs.writeFileSync(
+      path.join(sqCopy, "runtime", "sqlite", "nish_throwaway.h"),
+      "int nish_throwaway_unit(void);\n"
+    )
+    const withHeader = linkSqCopy("copy-header")
+    const headerC = compiledC()
+    const headerEntries = sqliteEntries().filter((e) => !baseEntries.includes(e))
+    check(
+      "sqlite-link: a header added to runtime/sqlite/ changes the SQLite entry's key, and the link recompiles SQLite into a new entry",
+      copyBase.status === 0 &&
+        withHeader.status === 0 &&
+        runOut("copy-header").stdout === "3.54.1 3054001 0\n" &&
+        headerC.join(",") === "sqlite3.c" &&
+        headerEntries.length === 1,
+      `${copyBase.stderr}${withHeader.stderr}compiled: ${headerC.join(", ")}; new entries: ${headerEntries.join(", ")}`
+    )
+    fs.writeFileSync(
+      path.join(sqCopy, "runtime", "sqlite", "nish_throwaway.c"),
+      '#include "nish_throwaway.h"\n\nint nish_throwaway_unit(void) { return 7; }\n'
+    )
+    const withUnit = linkSqCopy("copy-unit")
+    const unitC = compiledC()
+    const unitEntries = sqliteEntries().filter((e) => !baseEntries.includes(e) && !headerEntries.includes(e))
+    const unitEntry = unitEntries.length === 1 ? path.join(cacheRoot, unitEntries[0]) : ""
+    const reused = linkSqCopy("copy-unit-again")
+    const reusedC = compiledC()
+    check(
+      "sqlite-link: a unit added to runtime/sqlite/ compiles into a new SQLite entry beside sqlite3.o, and a second link reuses it",
+      withUnit.status === 0 &&
+        runOut("copy-unit").stdout === "3.54.1 3054001 0\n" &&
+        unitC.join(",") === "nish_throwaway.c,sqlite3.c" &&
+        unitEntry.length > 0 &&
+        fs.readdirSync(unitEntry).sort().join(",") === "key,nish_throwaway.o,sqlite3.o" &&
+        reused.status === 0 &&
+        runOut("copy-unit-again").stdout === "3.54.1 3054001 0\n" &&
+        reusedC.length === 0 &&
+        sqliteEntries().length === baseEntries.length + 2,
+      `${withUnit.stderr}${reused.stderr}compiled: ${unitC.join(", ")}, then ${reusedC.join(", ")}; new entries: ${unitEntries.join(", ")}` +
+        (unitEntry.length > 0 ? ` / ${fs.readdirSync(unitEntry).join(", ")}` : "")
+    )
+
     // A Node addon links SQLite too, and keeps its API to itself: a Node that
     // links a system libsqlite3 exports the same names.
     const nodeInclude =
@@ -19539,15 +19632,22 @@ if (!only || "sqlite-link".includes(only)) {
               { encoding: "utf8" }
             )
           : null
-      const dynamic = b.status === 0 && has("llvm-nm") ? spawnSync("llvm-nm", ["-D", addon], { encoding: "utf8" }) : null
       check(
-        "sqlite-link: a napi addon whose module calls SQLite links it, answers from Node and exports no `sqlite3_` symbol",
-        loaded !== null &&
-          loaded.status === 0 &&
-          loaded.stdout.startsWith("3054001 ") &&
-          (dynamic === null || (dynamic.status === 0 && !dynamic.stdout.includes("sqlite3_"))),
-        b.stderr + (loaded ? loaded.stdout + loaded.stderr : "") + (dynamic ? dynamic.stdout.slice(0, 2000) : "")
+        "sqlite-link: a napi addon whose module calls SQLite links it and answers from Node",
+        loaded !== null && loaded.status === 0 && loaded.stdout.startsWith("3054001 "),
+        b.stderr + (loaded ? loaded.stdout + loaded.stderr : "")
       )
+      const nm = ["llvm-nm", "llvm-nm-18"].find(has)
+      if (nm === undefined) {
+        skip("sqlite-link: no llvm-nm on PATH, so the addon's dynamic symbols are not read")
+      } else {
+        const dynamic = spawnSync(nm, ["-D", addon], { encoding: "utf8" })
+        check(
+          "sqlite-link: the napi addon exports no `sqlite3_` symbol",
+          b.status === 0 && dynamic.status === 0 && !dynamic.stdout.includes("sqlite3_"),
+          b.stderr + dynamic.stderr + dynamic.stdout.slice(0, 2000)
+        )
+      }
     }
   }
 }
@@ -20333,9 +20433,11 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "runtime/runtime-term.c",
       // The vendored SQLite, which build.sh compiles for a program that calls
       // it, and the notice that names its dedication to the public domain.
-      "runtime/sqlite/sqlite3.c",
-      "runtime/sqlite/sqlite3.h",
-      "runtime/sqlite/LICENSE.md",
+      // Read from the directory, so a unit added there is held to shipping too.
+      ...fs
+        .readdirSync(path.join(root, "runtime", "sqlite"))
+        .filter((f) => /\.[ch]$|^LICENSE/.test(f))
+        .map((f) => `runtime/sqlite/${f}`),
       "runtime/nish.h",
       "runtime/nish.d.ts",
       "runtime/nish.mjs",

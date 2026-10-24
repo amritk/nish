@@ -73,10 +73,14 @@
 # also compiles and links every runtime/sqlite/*.c, the vendored amalgamation
 # (runtime/sqlite/README.md). Any other program compiles none of it. sqlite3.c
 # is compiled to native code at the profile's level, even where the profile
-# compiles to LTO bitcode. The options are SQLite's recommended set, with
-# THREADSAFE=0 (=2 under --threads); NISH_SQLITE_CFLAGS is appended to them,
-# and a -D or -U in it for one of their names replaces it. Every profile but
-# wasm links it; wasm has no libc to build it on and is refused with exit 2.
+# compiles to LTO bitcode. The options are most of SQLite's recommended set
+# (see the defaults below), with THREADSAFE=0 (=2 under --threads).
+# NISH_SQLITE_CFLAGS is appended to them: its first line, split on whitespace
+# with no quoting, and a relative -I in it names a directory below
+# runtime/sqlite/, where each unit is compiled. A -D or -U in it for one of
+# their names replaces it. The napi profile compiles SQLite -fPIC and
+# -fvisibility=hidden, so an addon does not export its symbols. Every profile
+# but wasm links it; wasm has no libc to build it on and is refused with exit 2.
 # On wasi, SQLite locks with dot files and has no WAL shared memory.
 #
 # The runtime compiled once (the debug, speed and size profiles only; `nish
@@ -220,8 +224,11 @@ done
 # that declares a function of SQLite's C API (`sqlite3_*`) or of the adapter
 # beside it (`nish_sqlite_*`) gets every runtime/sqlite/*.c compiled and
 # linked. Any other program compiles none of it, so its link line and binary
-# stay as they were. The test reads `declare` lines rather than any
-# `@sqlite3_` in the file, because a string constant may name one. A caller
+# stay as they were. The test reads `declare` lines, and only before the first
+# `"` on one, rather than any `@sqlite3_` in the file, because a string
+# constant or a quoted name may hold one. It is one rule with `callsSqlite` in
+# src/run-cache.ts, which decides whether a link asks the runtime cache for
+# SQLite's objects; change both or neither. A caller
 # that names a runtime/sqlite/*.c input itself is left alone, as `halves`
 # leaves a runtime half: naming one object twice is a duplicate-symbol error.
 # A tree without the directory still links every program that does not call it.
@@ -395,14 +402,21 @@ case "$CC" in /*) ;; */*) CC="$(pwd)/$CC" ;; esac
 
 # SQLite's compile-time options (https://sqlite.org/compile.html): the set the
 # SQLite project recommends for a program that needs none of the legacy
-# behaviours. Double-quoted strings are identifiers only. There are no memory
+# behaviours, less two of it. SQLITE_OMIT_DECLTYPE is left out because it
+# removes sqlite3_column_decltype, which a binding reads to tell a column's
+# declared type. SQLITE_OMIT_AUTOINIT is left out because it makes a call
+# before sqlite3_initialize() undefined behaviour, and the check it saves is
+# a branch in a few entry points. Double-quoted strings are identifiers only. There are no memory
 # statistics, no progress callback, no shared cache and no loadable extensions.
 # Expression depth is bounded by the stack, not a counter. A program has one
 # thread unless it was built with --threads. SQLite takes no mutex for one
 # thread (THREADSAFE=0) and serialises each connection for several (=2). wasi
 # has no threads, so it gets 0 whatever the module says. NISH_SQLITE_CFLAGS is
-# appended. A -D or -U in it for one of these names replaces the default, so
-# the compile does not warn about a macro defined twice.
+# appended: `read` takes its first line and splits it on whitespace, so a
+# word cannot hold a space and a quote is an ordinary character. A relative
+# path in it (-Iinclude) resolves against runtime/sqlite/, the directory every
+# unit is compiled from. A -D or -U in it for one of these names replaces the
+# default, so the compile does not warn about a macro defined twice.
 if [ "$threads" = 1 ] && [ "$profile" != wasi ]; then sqlite_threadsafe=2; else sqlite_threadsafe=0; fi
 sqlite_extra=()
 read -r -a sqlite_extra <<< "${NISH_SQLITE_CFLAGS:-}"

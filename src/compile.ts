@@ -91,6 +91,7 @@ import {
   runtimeUnits,
   sha256Hex,
   sqliteCacheKey,
+  sqliteFingerprint,
   sqliteUnits,
 } from "./run-cache"
 
@@ -1194,6 +1195,7 @@ export const main = (): number => {
     opts.debugInfo,
     opts.threads,
     anyCallsSqlite(emitted),
+    "",
     json,
     false
   )
@@ -1572,18 +1574,9 @@ const runProgram = (
   }
   const file = runBinaryName(name)
   const sqlite = anyCallsSqlite(emitted)
-  const key = runCacheKey(
-    emitted,
-    file,
-    pkg.root,
-    profile,
-    cpu,
-    debugInfo,
-    threads,
-    cCompiler(),
-    sqlite,
-    sqliteCflags()
-  )
+  // Hashed once, for this key and for the SQLite entry's below it.
+  const sqliteLines = sqlite ? sqliteFingerprint(pkg.root, sqliteCflags()) : ""
+  const key = runCacheKey(emitted, file, pkg.root, profile, cpu, debugInfo, threads, cCompiler(), sqliteLines)
   const cacheEntry = `${cacheRoot}/${sha256Hex(key)}`
   const binary = `${cacheEntry}/${file}`
   const keyFile = `${cacheEntry}/key`
@@ -1601,6 +1594,7 @@ const runProgram = (
       debugInfo,
       threads,
       sqlite,
+      sqliteLines,
       json
     )
     if (status !== 0) {
@@ -1688,6 +1682,7 @@ const buildIntoCache = (
   debugInfo: boolean,
   threads: boolean,
   sqlite: boolean,
+  sqliteLines: string,
   json: boolean
 ): number => {
   const problem = missingToolchain("run")
@@ -1721,7 +1716,7 @@ const buildIntoCache = (
     outputs.push(file)
   }
   const built = `${work}/${name}`
-  let status = linkProgram(outputs, pkg, built, profile, cpu, debugInfo, threads, sqlite, json, true)
+  let status = linkProgram(outputs, pkg, built, profile, cpu, debugInfo, threads, sqlite, sqliteLines, json, true)
   if (status === 0) {
     writeFileSync(keyFile, "")
     const move: string[] = ["mv", "-f", "--", built, `${cacheEntry}/${name}`]
@@ -1758,6 +1753,7 @@ const linkProgram = (
   debugInfo: boolean,
   threads: boolean,
   sqlite: boolean,
+  sqliteLines: string,
   json: boolean,
   quiet: boolean
 ): number => {
@@ -1773,7 +1769,17 @@ const linkProgram = (
     return 1
   }
   const script = `${root}/scripts/build.sh`
-  const cached = cachedRuntime(root, quiet ? [] : outputs, profile, cpu, debugInfo, threads, sqlite, json)
+  const cached = cachedRuntime(
+    root,
+    quiet ? [] : outputs,
+    profile,
+    cpu,
+    debugInfo,
+    threads,
+    sqlite,
+    sqliteLines,
+    json
+  )
   if (cached === null) {
     return 3
   }
@@ -1876,7 +1882,8 @@ const sqliteCflags = (): string => {
 /**
  * The runtime cache: the directories holding the runtime compiled for this
  * recipe and, when `sqlite` says the program calls it, `runtime/sqlite/`
- * compiled for it, each compiled into its entry first when no link has needed
+ * compiled for it (keyed on `sqliteLines`, the run key's `sqliteFingerprint`,
+ * or on one computed here when that is empty), each compiled into its entry first when no link has needed
  * it before. Nearly all of a link was the runtime's translation units,
  * compiled again on every one; an entry is compiled once per key
  * (`runtimeCacheKey`) and every later link only compiles the program. A
@@ -1914,6 +1921,7 @@ const cachedRuntime = (
   debugInfo: boolean,
   threads: boolean,
   sqlite: boolean,
+  sqliteLines: string,
   json: boolean
 ): CachedObjects | null => {
   const none = new CachedObjects("", "")
@@ -1980,7 +1988,7 @@ const cachedRuntime = (
     threads,
     cc,
     version,
-    sqliteCflags()
+    sqliteLines.length > 0 ? sqliteLines : sqliteFingerprint(root, sqliteCflags())
   )
   const sqliteRecipe: string[] = ["--sqlite-objects"]
   const objects = cachedEntry(
@@ -1988,7 +1996,7 @@ const cachedRuntime = (
     cacheRoot,
     sqliteKey,
     sqliteRecipe,
-    sqliteUnits(),
+    sqliteUnits(root),
     "runtime/sqlite/",
     outputs,
     profile,

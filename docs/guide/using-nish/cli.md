@@ -126,10 +126,21 @@ $ nish run version.ts
 - **One thread, unless you build with `--threads`.** SQLite is compiled with
   `SQLITE_THREADSAFE=0`, and with `=2` under `--threads`, so each connection is
   used by one thread at a time.
+- **The defaults are most of SQLite's
+  [recommended options](https://sqlite.org/compile.html#recommended_compile_time_options).**
+  Two are left out. `SQLITE_OMIT_DECLTYPE` would remove
+  `sqlite3_column_decltype`, which reports a column's declared type.
+  `SQLITE_OMIT_AUTOINIT` would make any call before `sqlite3_initialize()`
+  undefined behaviour.
 - **`NISH_SQLITE_CFLAGS` adds compile-time options.** Its words are added to
   SQLite's compile line, and a `-D` or `-U` for an option `nish` already sets
   replaces it. For example, `NISH_SQLITE_CFLAGS="-DSQLITE_ENABLE_FTS5"` adds
-  full-text search. The cache keeps a separate copy for each value.
+  full-text search. The cache keeps a separate copy for each value. Only the
+  first line is read, and it is split on whitespace: quotes are not removed,
+  so a word cannot hold a space. A relative `-I` path is taken from
+  `runtime/sqlite/`, where SQLite is compiled, so give an absolute one.
+- **`--profile napi` links it with hidden visibility.** The addon uses SQLite
+  but does not export its functions to Node or to other addons.
 - **`--profile wasi` links it.** There SQLite locks a database with lock
   files and has no WAL mode across processes. `scripts/build.sh --profile
   wasm`, which links no C library, refuses a module that calls SQLite with

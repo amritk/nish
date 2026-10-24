@@ -84,32 +84,63 @@ export const runtimeUnits = (): string[] => [
 ]
 
 /**
- * The translation units of `runtime/sqlite/`, the vendored SQLite, which
- * `scripts/build.sh` compiles and links only for a program whose IR calls it
- * (`callsSqlite`). The script compiles every `runtime/sqlite/*.c`, so this
- * list moves with that directory. One list for the keys below and for the
- * objects a SQLite entry holds.
+ * The files of `runtime/sqlite/` a link reads, sorted by bytes: every `.c`,
+ * which `scripts/build.sh` compiles (`for unit in "$sqlite_dir"/*.c`), and
+ * every `.h` they can include. Read from the directory rather than listed
+ * here, so a file added beside the amalgamation is compiled, keyed and cached
+ * with no second list to keep in step; a dotfile is skipped, as the script's
+ * glob skips it. Empty when the directory cannot be read.
  */
-export const sqliteUnits = (): string[] => ["sqlite3.c"]
+const sqliteFiles = (root: string): string[] => {
+  const files: string[] = []
+  const names = readdirSync(`${root}/runtime/sqlite`)
+  if (names !== null) {
+    for (const name of names) {
+      if (!name.startsWith(".") && (name.endsWith(".c") || name.endsWith(".h"))) {
+        files.push(name)
+      }
+    }
+  }
+  return files
+}
+
+/**
+ * The translation units of `runtime/sqlite/` (`sqliteFiles`, the `.c` ones),
+ * which `scripts/build.sh` compiles and links only for a program whose IR
+ * calls SQLite (`callsSqlite`): the objects a SQLite entry holds.
+ */
+export const sqliteUnits = (root: string): string[] => {
+  const units: string[] = []
+  for (const name of sqliteFiles(root)) {
+    if (name.endsWith(".c")) {
+      units.push(name)
+    }
+  }
+  return units
+}
 
 /**
  * Whether a module declares a function of SQLite's (`sqlite3_`) or of its
- * adapter's (`nish_sqlite_`): the test `scripts/build.sh` makes of each `.ll`
- * to decide whether to compile `runtime/sqlite/`, made here so a link asks the
- * cache for those objects exactly when the script would link them. A
- * declaration's first `@` is its name, so a mention of the prefix anywhere
- * else in the line, or in a string, a comment or a definition, does not count.
+ * adapter's (`nish_sqlite_`), so a link asks the cache for those objects
+ * exactly when `scripts/build.sh` would link them. The rule is the script's
+ * `grep -Eq '^declare [^"]*@(sqlite3|nish_sqlite)_'`, and the two move
+ * together: a line that starts `declare ` and names either prefix after an `@`
+ * that no `"` comes before. A mention in a string, a comment, a definition or
+ * a quoted name does not count.
  */
 const callsSqlite = (ir: string): boolean => {
-  let at = ir.indexOf("\ndeclare ")
+  let at = ir.startsWith("declare ") ? 0 : ir.indexOf("\ndeclare ")
   while (at >= 0) {
     const next = ir.indexOf("\n", at + 1)
     const end = next < 0 ? ir.length : next
-    const name = ir.indexOf("@", at)
-    if (name >= 0 && name < end) {
+    const quote = ir.indexOf('"', at)
+    const stop = quote >= 0 && quote < end ? quote : end
+    let name = ir.indexOf("@", at)
+    while (name >= 0 && name < stop) {
       if (ir.slice(name, name + 9) === "@sqlite3_" || ir.slice(name, name + 13) === "@nish_sqlite_") {
         return true
       }
+      name = ir.indexOf("@", name + 1)
     }
     at = next < 0 ? -1 : ir.indexOf("\ndeclare ", next)
   }
@@ -298,18 +329,21 @@ const addRecipeFingerprints = (key: StringBuilder, root: string): void => {
 }
 
 /**
- * One line per file of `runtime/sqlite/` a link reads, and the flags it
- * appends to SQLite's options (`NISH_SQLITE_CFLAGS`), which change the objects
- * as much as an edit to their source does. Carried only by the keys of a link
- * that compiles them, so a program that does not call SQLite keeps the key it
+ * The lines both keys of a SQLite link carry: one per file of
+ * `runtime/sqlite/` (`sqliteFiles`), and the flags it appends to SQLite's
+ * options (`NISH_SQLITE_CFLAGS`), which change the objects as much as an edit
+ * to their source does. Computed once per link and handed to `runCacheKey`
+ * and `sqliteCacheKey` both, because the amalgamation is megabytes to hash. A
+ * program that does not call SQLite carries none of them, and keeps the key it
  * had before the directory existed.
  */
-const addSqliteFingerprints = (key: StringBuilder, root: string, sqliteFlags: string): void => {
-  addUnitFingerprints(key, `${root}/runtime`, "sqlite/", sqliteUnits(), 0)
-  key.add(`sqlite/sqlite3.h ${fileFingerprint(`${root}/runtime/sqlite/sqlite3.h`)}\n`)
+export const sqliteFingerprint = (root: string, sqliteFlags: string): string => {
+  const key = new StringBuilder()
+  addUnitFingerprints(key, `${root}/runtime`, "sqlite/", sqliteFiles(root), 0)
   key.add(`sqlite-cflags ${sqliteFlags.length}\n`)
   key.add(sqliteFlags)
   key.add("\n")
+  return key.toText()
 }
 
 /**
@@ -352,9 +386,8 @@ const profileLine = (profile: string, cpu: string, debugInfo: boolean, threads: 
  * the script will run (`CC`, or `clang`), since a different compiler is a
  * different binary. `cpu` is the `--cpu` level, empty for the baseline, which
  * the profile line names only when it is set, so a baseline key is the bytes
- * it was before the flag existed. `sqlite` is whether a module calls SQLite
- * (`anyCallsSqlite`); only then does the key carry `sqliteFlags`, which is
- * `NISH_SQLITE_CFLAGS`, and the files of `runtime/sqlite/`.
+ * it was before the flag existed. `sqlite` is `sqliteFingerprint` when a module
+ * calls SQLite (`anyCallsSqlite`), and empty when none does.
  */
 export const runCacheKey = (
   modules: EmittedModule[],
@@ -365,8 +398,7 @@ export const runCacheKey = (
   debugInfo: boolean,
   threads: boolean,
   cc: string,
-  sqlite: boolean,
-  sqliteFlags: string
+  sqlite: string
 ): string => {
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
@@ -374,9 +406,7 @@ export const runCacheKey = (
   key.add(profileLine(profile, cpu, debugInfo, threads))
   key.add(`cc ${cc}\n`)
   addRecipeFingerprints(key, root)
-  if (sqlite) {
-    addSqliteFingerprints(key, root, sqliteFlags)
-  }
+  key.add(sqlite)
   for (const module of modules) {
     key.add(`module ${module.stem} ${module.ir.length}\n`)
     key.add(module.ir)
@@ -424,8 +454,8 @@ export const runtimeCacheKey = (
  * apart from the runtime's because most programs never ask for one, and the
  * nine objects every link reads should not be compiled again when the
  * amalgamation changes. `sqliteDir` is the directory's real path, which `-g`
- * writes into the objects. `sqliteFlags` is `NISH_SQLITE_CFLAGS`, which
- * `scripts/build.sh` appends to SQLite's options.
+ * writes into the objects. `sqlite` is `sqliteFingerprint`, the same text
+ * the run's own key carries.
  */
 export const sqliteCacheKey = (
   root: string,
@@ -436,7 +466,7 @@ export const sqliteCacheKey = (
   threads: boolean,
   cc: string,
   ccVersion: string,
-  sqliteFlags: string
+  sqlite: string
 ): string => {
   const key = new StringBuilder()
   key.add(`${CLI} ${VERSION}\n`)
@@ -447,6 +477,6 @@ export const sqliteCacheKey = (
   key.add(ccVersion)
   key.add(`sqlite-dir ${sqliteDir}\n`)
   key.add(`build.sh ${fileFingerprint(`${root}/scripts/build.sh`)}\n`)
-  addSqliteFingerprints(key, root, sqliteFlags)
+  key.add(sqlite)
   return key.toText()
 }
