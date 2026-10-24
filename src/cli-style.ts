@@ -59,6 +59,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--capabilities", "", "print what the program can reach, on stderr")
   menu.row("--allow", "<cap>[,<cap>...]", "refuse a program that reaches more")
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
+  menu.row("--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches")
   menu.row("--emit-capabilities", "<file.json>", "write the capability report")
 
   menu.section("Interop")

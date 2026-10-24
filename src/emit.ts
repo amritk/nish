@@ -794,6 +794,12 @@ export class Emitter {
     if (debug !== null) {
       debug.beginFunction(fn, userMain, true, "main", false)
     }
+    // WP37: the check comes first, before anything the program runs, so a C
+    // library that skipped `.preinit_array` never runs the program unconfined.
+    if (this.sandboxed()) {
+      this.emitSandboxApply()
+      fn.emit(`call void ${this.useRuntime("nish_sandbox_check")}()`)
+    }
     const freeArena = this.useRuntime("nish_free_arena")
     if (this.program.usesArgv) {
       fn.emit(`call void ${this.useRuntime("nish_argv_init")}(i32 %argc, i8** %argv)`)
@@ -807,6 +813,34 @@ export class Emitter {
     fn.emit(`call void ${freeArena}()`)
     fn.emit(`ret i32 ${code}`)
     return fn
+  }
+
+  /** Whether `--sandbox` asks for a wrapper call: never on wasm, which has no kernel to confine it. */
+  sandboxed(): boolean {
+    return this.opts.sandbox !== 0 && !isWasmBuild(this.opts)
+  }
+
+  /**
+   * WP37 §3: `nish_sandbox` runs from `.preinit_array`, ahead of every
+   * constructor a linked C object brings, so foreign start-up code is confined
+   * too. `@llvm.used` keeps the entry from being dropped, since nothing calls
+   * it by name.
+   */
+  emitSandboxApply(): void {
+    const sandbox = this.useRuntime("nish_sandbox")
+    this.module.addGlobal(
+      `@.sandbox.preinit = internal constant void ()* @.sandbox.apply, section ".preinit_array", align 8`
+    )
+    this.module.addGlobal(
+      `@llvm.used = appending global [1 x i8*] [i8* bitcast (void ()** @.sandbox.preinit to i8*)], section "llvm.metadata"`
+    )
+    const apply = new IRFunction(".sandbox.apply", [], "void")
+    apply.linkage = "internal"
+    apply.emit(
+      `call void ${sandbox}(i32 ${this.opts.sandboxCapabilities}, i32 ${this.opts.sandbox}, i8* null, i8* null)`
+    )
+    apply.emit("ret void")
+    this.module.addFunction(apply)
   }
 
   // ---- Imports ------------------------------------------------------------

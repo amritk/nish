@@ -944,6 +944,50 @@ const checkCapabilityPolicy = (t: Suite, cli: Cli, env: boolean): void => {
   t.eqStr("and leaves the program's stdout alone", ran.stdout, "true\n6\n3.5\n");
 };
 
+/**
+ * WP37, `--sandbox` (docs/wp37-os-sandbox.md §2): a mode other than the two is
+ * a usage error, and so is the flag on a line that writes no program to
+ * confine; a directory scope stays refused, word for word, until the stage
+ * that enforces it. What the flag emits and what the binary does are checked
+ * in `tests/run.js`'s `sandbox` section.
+ */
+const checkSandboxUsage = (t: Suite, cli: Cli): void => {
+  const source = "tests/cases/sandbox_hello.ts";
+  const usage: string[] = [
+    "--sandbox=best_effort",
+    "unknown sandbox mode `best_effort`; write `--sandbox` or `--sandbox=best-effort`",
+    "--emit-ast",
+    "`--sandbox` cannot be used with --emit-ast, which writes no program to confine",
+    "--emit-checked",
+    "`--sandbox` cannot be used with --emit-checked, which writes no program to confine",
+    "--fix",
+    "`--sandbox` cannot be used with --fix",
+  ];
+  let k = 0;
+  while (k + 1 < usage.length) {
+    const flag = usage[k];
+    const refused = cli.plain("sandbox_usage", [source, "--sandbox", flag]);
+    t.eqI32(`\`--sandbox ${flag}\` is a usage error, exit 2`, refused.status, 2);
+    t.contains("and says why on stderr", refused.stderr, usage[k + 1]);
+    t.eqStr("and nothing on stdout", trim(refused.stdout), "");
+    k = k + 2;
+  }
+  const napi = cli.plain("sandbox_napi", [source, "--sandbox", "--emit-napi", `${WORK}/sandbox_napi.c`]);
+  t.eqI32("`--sandbox --emit-napi` is a usage error, exit 2", napi.status, 2);
+  t.contains("and says an addon has no `main`", napi.stderr, "`--sandbox` cannot be used with --emit-napi: an addon has no `main`");
+  writeFileSync(`${WORK}/sandbox_no_main.ts`, "export const answer = (): i32 => 42;\n");
+  const noMain = cli.plain("sandbox_no_main", [`${WORK}/sandbox_no_main.ts`, "--sandbox", "-o", `${WORK}/sandbox_no_main.ll`]);
+  t.eqI32("`--sandbox` on an entry with no `main` is a usage error, exit 2", noMain.status, 2);
+  t.contains("and says there is no `main` to confine from", noMain.stderr, "confines a program from its `main`");
+  const scoped = cli.plain("sandbox_scope", [source, "--allow", "fs.read=/tmp", "--sandbox"]);
+  t.eqI32("a directory scope beside `--sandbox` is still a usage error, exit 2", scoped.status, 2);
+  t.contains(
+    "with the refusal it has without the flag, word for word",
+    scoped.stderr,
+    "`--allow fs.read=/tmp` scopes a capability to a directory, which the compiler cannot prove and nothing enforces: grant `fs.read` whole, or leave it out"
+  );
+};
+
 /** The first line of a captured stream, without its newline. */
 const firstLine = (text: string): string => {
   const lines = splitLines(text);
@@ -2050,6 +2094,7 @@ export const main = (): number => {
   checkArenaReport(t, cli);
   checkCapabilities(t, cli, env);
   checkCapabilityPolicy(t, cli, env);
+  checkSandboxUsage(t, cli);
   checkMissingInput(t, cli);
   checkToolchain(t, cli, env);
   checkInternalError(t, cli, env);

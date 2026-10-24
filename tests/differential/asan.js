@@ -70,6 +70,7 @@ const RUNTIME_UNITS = [
   "-aes",
   "-term",
   "-bytes",
+  "-sandbox",
 ].map((suffix) => path.join(runtimeDir, `runtime${suffix}.c`))
 
 /** The attribute group the instrumented IR adds to every definition. */

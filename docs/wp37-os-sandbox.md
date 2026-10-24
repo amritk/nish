@@ -1,6 +1,9 @@
 # WP37: The OS sandbox — holding a running process to its capabilities
 
-**Status: proposed.** Nothing here is built. Every `file:line` anchor, figure
+**Status: stage 1 built** — `--sandbox` and `--sandbox=best-effort`, the
+wrapper calls and `runtime/runtime-sandbox.c`, recorded in
+[`security/sandbox.md`](security/sandbox.md); the directory scopes and open
+question 13 are stage 2. Every `file:line` anchor, figure
 and code number in this note is true of `main` at `c8a00d6`; a later edit that
 moves an anchor names the commit its own anchors are at.
 

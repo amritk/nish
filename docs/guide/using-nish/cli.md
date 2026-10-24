@@ -382,8 +382,8 @@ index out of range, or `128 + n` for a signal.
 
 ## Asking what a program can do
 
-A few flags report on a program rather than build it; each leaves the IR
-unchanged.
+A few flags report on a program rather than build it; each but `--sandbox`
+leaves the IR unchanged.
 
 - **`--capabilities`** prints, on stderr, what the program can reach — files,
   processes, the network, the environment, the clock and so on — and
@@ -412,6 +412,10 @@ unchanged.
   Only your own `package.json` grants: `--allow` does not, and neither does
   the dependency's. The standard library needs no grant. See
   [A dependency's capabilities](../../LANGUAGE.md#a-dependencys-capabilities).
+- **`--sandbox`** goes one step further on Linux: the built program asks the
+  kernel, before `main` runs, to refuse the files, processes and sockets its
+  `main` does not reach — C code it links included. It adds a few lines to the
+  IR. See [The sandbox](sandbox.md).
 - **`--deny-panics`** turns every panic the compiler cannot prove away into an
   error, and `--emit-panics <file.json>` lists them all
   ([The no-panic scope](../../LANGUAGE.md#the-no-panic-scope)).

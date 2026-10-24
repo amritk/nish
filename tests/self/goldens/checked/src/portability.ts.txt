@@ -49,7 +49,7 @@ function PortabilityWalk.constructor(this: PortabilityWalk, program: CheckedProg
   pointer this: size=48 writesThrough=true captured=false
   pointer program: size=656 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
-  pointer opts: size=160 writesThrough=true captured=true
+  pointer opts: size=168 writesThrough=true captured=true
   pointer parents: size=8 writesThrough=true captured=true
   pointer sig: size=136 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
@@ -66,7 +66,7 @@ function portabilityFindings(unit: AnalysisUnit, table: TypeTable, opts: Options
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance FunctionSig.body FunctionSig.definedIn PortabilityWalk.constructor StringSet.add StringSet.constructor nish_alloc_struct nish_array_grow nish_str_concat nish_str_eq nish_str_from_i32 walkPortability
   pointer unit: size=16 writesThrough=false captured=false
   pointer table: size=96 writesThrough=true captured=true passedTo=PortabilityWalk.constructor#2
-  pointer opts: size=160 writesThrough=true captured=true passedTo=PortabilityWalk.constructor#3
+  pointer opts: size=168 writesThrough=true captured=true passedTo=PortabilityWalk.constructor#3
   stackSites=1 stackLocals=1
   local +0:9 program: CheckedProgram (const)
   local +1:9 out: PortabilityFinding[] (const)
