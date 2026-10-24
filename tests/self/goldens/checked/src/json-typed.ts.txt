@@ -67,7 +67,7 @@ function noteJsonOptions(ctx: CheckContext, owner: StructInfo, decl: Node): void
   sharedWrite: +0:3
   escaping: decl
   calls: CheckContext.error nish_panic_index nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer owner: size=168 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -102,7 +102,7 @@ function jsonNotLiteral(ctx: CheckContext, info: StructInfo, node: Node, where: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=168 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -112,7 +112,7 @@ function jsonOptionField(ctx: CheckContext, info: StructInfo, node: Node, option
   sharedWrite: via CheckContext.error
   escaping: name
   calls: CheckContext.error StructInfo.field nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=168 writesThrough=false captured=false passedTo=StructInfo.field#0
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -123,7 +123,7 @@ function jsonDuplicate(ctx: CheckContext, info: StructInfo, node: Node, detail: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via CheckContext.error
   calls: CheckContext.error nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer info: size=168 writesThrough=false captured=false
   pointer node: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
@@ -132,7 +132,7 @@ function jsonReadRename(ctx: CheckContext, info: StructInfo, value: Node): void 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: CheckContext.error StringSet.add StringSet.constructor jsonDuplicate jsonIsOtherLiteral jsonIsStringLiteral jsonIsUtf8 jsonNotLiteral jsonOptionField jsonStringLiteral nish_panic_index nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0 CheckContext.error#0 jsonNotLiteral#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0 CheckContext.error#0 jsonNotLiteral#0
   pointer info: size=168 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonOptionField#1 jsonDuplicate#1 jsonNotLiteral#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=1 stackLocals=1
@@ -158,7 +158,7 @@ function jsonReadOptional(ctx: CheckContext, info: StructInfo, value: Node): voi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: CheckContext.error jsonDuplicate jsonIsStringLiteral jsonNotLiteral jsonOptionField jsonStringLiteral nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=jsonNotLiteral#0 jsonNotLiteral#0 jsonOptionField#0 jsonDuplicate#0 CheckContext.error#0
   pointer info: size=168 writesThrough=false captured=false passedTo=jsonNotLiteral#1 jsonNotLiteral#1 jsonOptionField#1 jsonDuplicate#1
   pointer value: size=40 writesThrough=false captured=false passedTo=jsonNotLiteral#2
   stackSites=0 stackLocals=0
@@ -175,7 +175,7 @@ function checkJsonOptions(ctx: CheckContext, info: StructInfo): void -> @checkJs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: CheckContext.error CheckedProgram.isJsonTyped StringSet.add StringSet.constructor TypeTable.typeName jsonDuplicate jsonNotLiteral jsonOptionsShapeMessage jsonReadOptional jsonReadRename nish_panic_index nish_str_concat nish_str_eq
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0 jsonNotLiteral#0 CheckContext.error#0 jsonDuplicate#0 jsonReadRename#0 jsonReadOptional#0 jsonDuplicate#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 jsonNotLiteral#0 CheckContext.error#0 jsonDuplicate#0 jsonReadRename#0 jsonReadOptional#0 jsonDuplicate#0
   pointer info: size=168 writesThrough=true captured=false passedTo=jsonNotLiteral#1 jsonDuplicate#1 jsonReadRename#1 jsonReadOptional#1 jsonDuplicate#1
   stackSites=2 stackLocals=2
   callee -1:67 CheckedProgram.isJsonTyped -> @CheckedProgram.isJsonTyped

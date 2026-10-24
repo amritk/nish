@@ -12,6 +12,9 @@ struct Quiet (class) size=8 align=8
 struct Maybe (class) size=8 align=8
   field h: CPtr | null index=0 offset=0 readonly
   constructor -> @Maybe.constructor
+struct Lying (class) size=8 align=8
+  field h: CPtr index=0 offset=0 readonly
+  constructor -> @Lying.constructor
 function sure_open(): CPtr -> @sure_open
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
@@ -29,6 +32,10 @@ function maybe_open(fail: i32): CPtr | null -> @maybe_open
   sharedWrite: foreign
   stackSites=0 stackLocals=0
 function maybe_close(p: CPtr | null): i32 -> @maybe_close
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: foreign
+  stackSites=0 stackLocals=0
+function lying_open(fail: i32): CPtr -> @lying_open
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   stackSites=0 stackLocals=0
@@ -72,6 +79,14 @@ function Maybe.constructor(this: Maybe, fail: i32): void -> @Maybe.constructor [
   pointer this: size=8 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:14 maybe_open -> @maybe_open
+function Lying.constructor(this: Lying, fail: i32): void -> @Lying.constructor [constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: via lying_open
+  escaping: fail
+  calls: lying_open
+  pointer this: size=8 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:14 lying_open -> @lying_open
 function pathFor(fail: i32): Result<i32, i32> -> @pathFor
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=12
   escaping: fail
@@ -102,6 +117,14 @@ function maybeEither(fail: i32): i32 -> @maybeEither [exported]
   stackSites=1 stackLocals=1
   local +0:9 m: Maybe (const)
   callee +0:13 new Maybe -> @Maybe.constructor
+function lyingEither(fail: i32): i32 -> @lyingEither [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via Lying.constructor
+  escaping: fail
+  calls: Lying.constructor sure_close
+  stackSites=1 stackLocals=1
+  local +0:9 l: Lying (const)
+  callee +0:13 new Lying -> @Lying.constructor
 function beforeLoop(n: i32): i32 -> @beforeLoop [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Sure.constructor

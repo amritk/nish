@@ -332,60 +332,17 @@ buys is the output: no GC, no runtime, and the sizes under
 ## Command line
 
 ```
-nish <entry.ts> [more.ts ...] [options]
-nish run [options] <file.ts> [args ...]
-       nish --version | --help
-  -o, --output <file.ll>     output path for a single module (default: <input>.ll)
-  -o, --output <dir>/        output directory: one <dir>/<module>.ll per module
-  --link <exe>               build a native binary from every module + runtime/runtime.c
-                             (entry module must declare `export const main`)
-  --profile speed|size|debug|wasi
-                             build profile for --link (default: speed; wasi: a wasm32-wasi module)
-  --cpu x86-64-v3            link module and runtime for x86-64-v3 (AVX2, BMI2, FMA); the one level
-  --fix                      apply every machine-applicable fix to the named files, then report
-                             what is left (writes no IR)
-  --no-strict-exports        every function is an external symbol (default: non-exported
-                             functions get `internal` linkage)
-  --number-mode i32|f64      lowering of `number` (default: i32)
-  --plain                    no performance attributes or alignment hints
-  --runtime-decls            always emit the runtime ABI prelude (arena + strings)
-  --emit-header <file.h>     also write a C header for the callable functions
-  --emit-dts <file.d.ts>     also write TypeScript declarations for the wasm exports, plus
-                             <file>.mjs, a loader that marshals typed arrays
-  --emit-napi <shim.c>       also write an N-API shim (build with --profile napi)
-  --emit-napi-async <shim.c> the same shim plus a promise-returning form of each export, run off
-                             the event loop
-  --emit-panics <file.json>  also write every panic site, per function, proven or not
-  --deny-panics              refuse every panic site of the entry package a proof does not remove
-  --deny-retention           refuse arena memory the entry package keeps after nothing can reach it
-  --emit-arena <file.json>   also write every allocation site and where its memory goes
-  --emit-capabilities <file.json>
-                             also write the capabilities (fs, net, clock, ...) each function reaches
-  --capabilities             print the program's capabilities in one line on stderr
-  --allow <cap>[,<cap>...]   refuse a program whose entry reaches a capability not listed
-  --deny <cap>[,<cap>...]    refuse a program whose entry reaches a listed capability
-  --unchecked-indexing       deprecated: drop the bounds checks of the entry package's modules
-                             (use uncheckedGet/uncheckedSet from nish:unsafe)
-  --target <triple>|host     emit `target datalayout`/`target triple` for that machine
-                             (x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin,
-                             aarch64-apple-darwin, wasm32-unknown-unknown, wasm32-wasi); default: target-neutral IR
-  --wrapping                 deprecated: signed add/sub/mul of the entry package's modules wrap
-                             (default: an operation not proven to fit is checked and panics on
-                             overflow; use wrappingAdd/wrappingSub/wrappingMul from nish:unsafe)
-  --no-stack-alloc           keep every allocation in the arena (disables escape-analysed allocas)
-  --threads                  give every thread its own arena and random seed; the runtime is
-                             built to match by --link (importing nish/threads turns it on)
-  --no-warn-performance      do not report the `performance` diagnostics (they are on by default,
-                             print on stderr, and never change the exit code)
-  --warn-portability         report the `portability` diagnostics: where the program's TypeScript
-                             reading answers differently (off by default; never changes the exit code)
-  -g                         emit DWARF debug info (!dbg locations, variables); kept by --link
-  --json                     print diagnostics as one JSON object per line on stdout (no excerpt)
-  --emit-ast                 print the syntax tree of every module to stdout instead of IR
-  --emit-checked             print the checker's tables (signatures, locals, structs, facts) instead of IR
-  -v, --version              print the nish version and exit
-  -h, --help                 print the usage on stdout and exit 0
+usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
+       nish run [flags] <file.ts> [args ...]  build, cache and run it
+       nish -v, --version | -h, --help
 ```
+
+`nish --help` prints every flag, grouped by what it is for (Build, Check,
+Capabilities, Interop, Inspect, Code generation), then the exit codes and a
+few examples; it is coloured on a terminal and plain when piped, under
+`NO_COLOR` or when a coding agent runs it. An unknown flag is refused in one
+line that points at `--help`. [The CLI](docs/guide/using-nish/cli.md) walks
+through the flags you will reach for.
 
 Exit codes: `0` success, `1` compile error (`file:line:col: error: ...` plus
 a caret excerpt), `2` usage error, `3` toolchain error, `70` internal
@@ -457,7 +414,7 @@ dynamically linked (`npm run size-report`):
 | `wasm` | 279 | Freestanding `wasm32` module, every function exported, stripped. |
 | `wasi` | 42,228 (`argv.ts`) | `wasm32-wasi` command module: the runtime linked against wasi-libc, `_start` runs `main`; needs a WASI sysroot ([INSTALL.md](docs/INSTALL.md#wasi-optional-for---profile-wasi)). |
 
-`hello.ts` with `--link` is 4,712 bytes. The runtime is eight translation units
+`hello.ts` with `--link` is 4,712 bytes. The runtime is nine translation units
 with a measured ceiling each, so that the core does not grow every time the
 language reaches further into the operating system, and section GC drops
 whatever a program does not call: `runtime.c` is the 3,606 bytes every program
@@ -466,10 +423,10 @@ JavaScript-exact number formatting, string parsing, `Math.random`,
 `process.argv`, array growth, the panic paths), `runtime-os.c` the 1,530 bytes
 that wrap a system call (exit, files, directories, subprocesses, the
 environment, the clock), and `runtime-parallel.c`, `runtime-cross.c`,
-`runtime-host.c`, `runtime-net.c`, `runtime-simd.c` and `runtime-aes.c` hold
-threads, the copies that cross between their arenas, the host calls (wall
-clock, entropy, signals), `nish:net`'s sockets, the vector text search and
-AES-GCM — see
+`runtime-host.c`, `runtime-net.c`, `runtime-simd.c`, `runtime-aes.c` and
+`runtime-term.c` hold threads, the copies that cross between their arenas, the
+host calls (wall clock, entropy, signals), `nish:net`'s sockets, the vector
+text search, AES-GCM and `nish:term`'s stdin and terminal — see
 [docs/wp7-runtime.md](docs/wp7-runtime.md#runtime-additions-and-budget) for the
 budgets and the reasoning. `Math.*` calls are LLVM intrinsics, so pure functions
 stay `readnone`.

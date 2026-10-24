@@ -546,7 +546,7 @@ static void nish_task_run(nish_job *j) {
 static void nish_par_oom(void) {
   nish_panic_claim();
   (void)!write(2, "nish: out of memory\n", 20);
-  _exit(1);
+  nish_fatal_exit();
 }
 
 void nish_scope_spawn(void *scope, nish_task_fn run, nish_task_fn finish, const void *payload, int64_t size) {

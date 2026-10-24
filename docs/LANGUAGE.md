@@ -6211,6 +6211,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
 ```ts
@@ -7616,6 +7617,160 @@ A loop has no reading either: the one a Node program has is Node's own, which
 it returns to between callbacks, and `pollWait` is a program that never
 returns to it.
 
+### `nish:term`: terminal input
+
+What a program needs to run a full-screen terminal interface: read a key the
+moment it is pressed, wait for one with a timeout that doubles as a frame
+clock, and ask the terminal whether it is one, how big it is, and to stop
+echoing and line-editing. None of it needs the `net` capability that a
+`pollAdd(0)` and `netRead(0, …)` would carry; the five functions carry
+[`tty`](#capabilities) instead. They are C in `runtime/runtime-term.c`, a
+translation unit of its own with its own `.text*` ceiling, which section GC
+leaves out of a program that calls none of them. Each is exported by
+`nish:term` and is a global too, as every `nish:` export is. Linux and Darwin
+only, and WASI as below.
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `readStdin(buf: u8[], off: i32, len: i32): i32` | at most `len` bytes of stdin into `buf[off, off + len)`, **without waiting**: the count, `0` at the end of the stream, or `-11` when nothing is waiting. A `len` of `0` answers `0` too, so ask for at least one byte. The range is [checked](#bounds), and the buffer is a writable `u8[]` | write | `term_calls`, `term_import`; `reject_term_read_arity`, `reject_term_read_i32_buffer`, `reject_term_read_readonly` |
+| `waitStdin(timeoutMs: i32): boolean` | wait until stdin is readable, or `timeoutMs` milliseconds pass: `true` when it is readable — its end and an error included, so the read after it answers at once, with `0` or a negative errno that is not `-11`, which a loop treats as the end — and `false` when the time ran out first or a signal ended the wait early — not a Ctrl-Z and `fg` once `setRawMode(true)` has caught SIGTSTP, after which the wait goes on for what is left of the timeout. Before raw mode the system's default stop decides: Linux goes on with what is left, Darwin ends the wait. A negative timeout waits for ever. Not `willreturn` | write | `term_calls`, `term_import`, `term_pty`; `reject_term_wait_string` |
+| `isTerminal(fd: i32): boolean` | whether the descriptor is a terminal (`isatty`) | write | `term_calls`, `term_pty`; `reject_term_is_terminal_arity` |
+| `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stderr when stdout is not one; `[-errno, 0]` when neither is, **`[-25, 0]` for "not a terminal"**, and `[0, 0]` for a terminal no one set a size for. Read it again on each frame to follow a resize | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
+| `setRawMode(on: boolean): i32` | puts stdin's terminal in raw mode (`true`) or back as it was (`false`): `0`, `-25` when stdin is not a terminal, or the host's `-errno` when the terminal refuses. Asking for the mode it is already in changes nothing and answers `0`, so `setRawMode(false)` is always safe | write | `term_calls`, `term_pty`; `reject_term_raw_number`, `reject_term_unknown_export` |
+
+**Errors are numbers**, in `nish:net`'s shape: `>= 0` is success and a negative
+number the failure's errno, negated. The two a program branches on are the
+same number on every platform: `-11`, nothing is waiting, and `-25`, not a
+terminal. Any other is the host's own.
+
+**stdin is never made non-blocking.** `O_NONBLOCK` belongs to the open file
+description, which a shell shares with every program it starts, so a program
+that set it and then crashed would leave the shell's own stdin non-blocking.
+`readStdin` asks `select` with a timeout of `0` before it reads instead, and so
+does `waitStdin`: Darwin's `poll` does not support devices, and answers a
+terminal at once whether a key is waiting or not.
+
+**The loop.** `waitStdin` is the frame clock: a game waits up to one frame for a
+key, reads what came, advances the world and draws, so the wait costs nothing
+when a key arrives early and the frame rate holds when none does.
+
+```ts
+import { readStdin, setRawMode, waitStdin } from "nish:term";
+
+export const main = (): number => {
+  setRawMode(true);
+  const keys: u8[] = new Array<u8>(16);
+  let running = true;
+  while (running) {
+    if (waitStdin(16)) {
+      const n = readStdin(keys, 0, keys.length);
+      if (n === 0 || (n < 0 && n !== -11)) {
+        running = false; // stdin ended, or reading it failed
+      }
+      for (let i = 0; i < n && i < keys.length; i++) {
+        if (keys[i] === 113) {
+          running = false; // q
+        }
+      }
+    }
+    // advance and draw one frame
+  }
+  setRawMode(false);
+  return 0;
+};
+```
+
+#### Raw mode
+
+Raw mode is `cfmakeraw`'s input side without its output side. Echo, line
+editing, CR-to-NL translation, flow control (Ctrl-S, Ctrl-Q) and parity
+stripping are off, bytes are 8 bits wide, and a read answers as soon as one byte
+is there, so a key arrives as its bytes — an arrow as the three of `ESC [ A`.
+Two things stay as they were:
+
+- **`ISIG` stays on.** Ctrl-C is still SIGINT and ends the program, Ctrl-\ is
+  still SIGQUIT and Ctrl-Z still stops it; none of them arrives as a byte (3,
+  28, 26). A program that wants Ctrl-C as a key asks for SIGINT through
+  [`signalFd`](#the-host-the-wall-clock-entropy-file-times-and-signals) and
+  handles it in its loop. Keeping it means a program that is stuck in a loop
+  can always be ended from the keyboard.
+- **`OPOST` stays on**, so `"\n"` still moves to the start of the next line and
+  output needs no `"\r\n"`.
+
+**The terminal is always put back.** Each `setRawMode(true)` that enters raw
+mode saves the termios that was there, and it comes back on
+`setRawMode(false)`; when `main` returns or `process.exit` is called (an
+`atexit` handler); on every panic, a failed check included, whose path ends in
+`_exit` and so is given its own hook; and on every signal whose default action
+ends the program, SIGKILL aside: SIGINT, SIGTERM, SIGQUIT and SIGHUP, SIGPIPE
+from a reader that went away, SIGALRM, SIGUSR1, SIGUSR2, SIGPROF, SIGVTALRM,
+SIGXCPU, SIGXFSZ and SIGSYS, and the faults a program dies of, SIGILL, SIGTRAP,
+SIGABRT, SIGFPE, SIGBUS and SIGSEGV (a stack overflow, or a fault in C code a
+program links). For each a handler is installed only when the program left it
+at its default action: it restores the terminal, puts the default back and
+raises the signal again, so the program still dies of it and its parent sees
+that (exit status 143 for SIGTERM in `term_pty`). The handlers run on a 64 KiB
+alternate stack of the thread that entered raw mode, or on the one that thread
+already had, so a stack overflow there restores the terminal too. The mode is
+marked raw once the switch is made, so a signal that ends the program while
+`TCSAFLUSH` drains the output, or while SIGTTOU holds it stopped in the
+background, leaves the terminal as it was. A program that
+took SIGTERM or SIGINT through `signalFd` keeps it, and puts the terminal back
+itself, or by returning. SIGKILL leaves raw mode behind, and so does a stack
+overflow on a thread other than the one that called `setRawMode(true)`; `stty
+sane` undoes either. SIGTSTP, Ctrl-Z, is caught the same way when it is at its
+default, because no shell can be counted on to: bash puts its own termios back
+while a job is stopped but does not give the job its raw mode back on `fg`, and
+a shell without that bookkeeping puts back nothing. The handler restores the
+terminal, stops the program, and once `fg` or `bg` continues it puts the handler
+back and enters raw mode again, so the terminal is as it was while the program
+is stopped and raw after `fg`; no `setRawMode` on another thread runs between
+the two. A program continued in the background stops again, by SIGTTOU, until
+`fg`. A `waitStdin` the stop interrupts goes on waiting until its timeout,
+measured from when it began. Any other blocking call goes on where the system
+restarts it after a handler (`SA_RESTART`), and ends early where it never
+does, as a `pollWait` does after any signal. A stop by SIGSTOP, which no program can catch,
+leaves the terminal raw at a shell that puts nothing back.
+Job control also stops a program started in the background
+(`app &`) when it calls `setRawMode(true)`, by SIGTTOU, as it stops any program
+that sets the terminal, and the program enters raw mode on `fg`. Two threads that call `setRawMode` at
+once take turns, so the termios saved is the one from before either.
+
+The `term` block of `tests/run.js` runs `term_pty` under `script(1)`, which
+gives it a pseudo-terminal: it is a terminal on both descriptors with a size,
+enters raw mode twice and leaves twice, each `0`, and after it returns in raw
+mode, panics in raw mode, and is killed by SIGTERM, and then by SIGSEGV, while
+it waits in raw mode, `stty -g` reads what it read before. Where `script` is
+missing or makes no terminal, that check is a counted skip that says which.
+
+#### Where there is no terminal
+
+| Host | `readStdin` | `waitStdin` | `isTerminal` | `terminalSize` | `setRawMode` |
+| --- | --- | --- | --- | --- | --- |
+| Linux, Darwin | as above | as above | `isatty` | the ioctl | as above |
+| A pipe or a file | as above | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
+| `--profile wasi` | **waits** for its bytes | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
+| `--target wasm32`, freestanding | refused | refused | refused | refused | refused |
+| Node ([prelude](RUN_UNDER_NODE.md)) | throws | throws | `tty.isatty` | Node's `columns` and `rows` | throws |
+| A browser (`nish/runtime/browser`) | throws | throws | `false` | `[-25, 0]` | throws |
+
+WASI has `read` and `poll` on stdin and no terminal interface. There
+`readStdin` reads without asking `poll` first, because Node's WASI answers a
+zero-timeout poll of stdin with "nothing waiting" while bytes are, so it waits
+for its bytes: call `waitStdin` first, as the loop above does. For the same
+reason a `waitStdin` there waits at least 10 ms: Node's WASI counts a shorter
+wait from before it looks at stdin, and on a busy machine answers "nothing
+waiting" before it has looked. The checker
+accepts the five there, unlike `nish:net`'s, and refuses them on a
+freestanding `--target wasm32` build, whose runtime has no stdin
+(`reject_term_wasm`). Under Node,
+stdin is read only by the event loop, which a program that owns its loop never
+returns to, and Node's own raw mode turns Ctrl-C into a byte, so the three
+that would need either throw, each naming itself. The `term` and `term_wasi`
+blocks of `tests/run.js` feed `term_calls` and `term_import` over a pipe —
+four bytes after a delay, a pipe held open and never written, and a thousand
+bytes — natively and under WASI, and expect the same lines from both.
+
 ### Arrays and strings as receivers
 
 | Member | Semantics | Test |
@@ -7638,7 +7793,9 @@ returns to it.
 | `String.fromBytes(bytes: u8[], start: number, end: number): string` | the bytes of `bytes[start..end)` as one string: one range check, one allocation and one `memcpy` (`nish_str_new`), where a loop of `String.fromCharCode` and a `join` allocates once per byte. `bytes` is a `u8[]` reached any way an array is (a local, a field, a call, a ternary, a literal), `readonly` or not, since the call only reads it; anything else, a wider element or a `u8[] \| null` included, is `` `String.fromBytes` expects an argument of type u8[], got i32[] `` (NL2268). Both ends are required (NL2060) and are numbers (NL2058). The range is `s.slice`'s, `0 <= start <= end <= bytes.length`, checked once after all three arguments are evaluated, so an argument that grows or shrinks the array is checked against what it left; anything else **panics** with `slice out of range: [start, end) of length len` and exits 1; `--unchecked-indexing` drops the check. As with `fromCharCode`, nothing validates the bytes as UTF-8: a multi-byte character copied whole is that character, and a range that cuts one is bytes that are not a valid string. Under Node, where `String.fromBytes` is the prelude's (`runtime/nish.mjs`), each byte is one UTF-16 unit, as `fromCharCode` makes it, so ASCII agrees and a byte above 127 does not (a C row, [wp33-round-trip.md](wp33-round-trip.md) §3.2). `src/` does not call it until the release that ships it (the rolling freeze) | `str_from_bytes`, `str_from_bytes_ways`, `str_from_bytes_order`, `str_from_bytes_lifetime`, `str_from_bytes_arrow`, `str_from_bytes_oob`, `str_from_bytes_unchecked`; `reject_str_from_bytes_type`, `reject_str_from_bytes_elems`, `reject_str_from_bytes_start`, `reject_str_from_bytes_index`, `reject_str_from_bytes_arity`, `reject_str_from_bytes_arena`, `reject_deny_panics_from_bytes` |
 
 Every offset above is a **byte** offset, like `s.length`: a lexer walks bytes,
-and a code-point index would need a decode per access. Cutting a multi-byte
+and a code-point index would need a decode per access (`codePointLength` in
+`nish/text` counts code points natively, and under Node for any string that is
+not built from bytes). Cutting a multi-byte
 character in half is therefore possible and produces bytes that are not a
 valid string (docs/wp13-differential.md notes what Node then does with them).
 
@@ -8748,6 +8905,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `net` | every `nish:net` export (`caps_net`) |
 | `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
+| `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
 
 Everything else is none: printing (`console.*`, `write`, `writeError`),
@@ -8765,8 +8923,11 @@ string, array, `Map` and `Set` surface, and `nish/threads` (`caps_pure`). A
   writes memory the runtime shares (`tests/link/caps_parallel`,
   `reject_caps_parallel_clock`).
 - A program is **deterministic** when it reaches none of `clock`, `entropy`,
-  `env`, `ffi`, `fs.read`, `fs.write`, `net` and `process.spawn`: the same argv
-  and stdin then give the same output. `exit` and `signal` keep a program
+  `env`, `ffi`, `fs.read`, `fs.write`, `net`, `process.spawn` and `tty`: the
+  same argv and stdin then give the same output. `tty` is among them although
+  stdin is an input a deterministic program may read, because `nish:term` reads
+  it against the clock (`waitStdin`'s timeout, `readStdin`'s "nothing yet")
+  and asks the terminal itself. `exit` and `signal` keep a program
   deterministic (`caps_exit`, `caps_signal`).
 - `--emit-capabilities <file.json>` writes the report: version, entry,
   `deterministic`, the program's set, then each package, module and exported

@@ -61,6 +61,7 @@
 import { astText } from "./ast-text"
 import { capabilitySummary, writeCapabilityReport } from "./capability-report"
 import { CLI, VERSION } from "./branding"
+import { agentDriven, helpHint, helpText, styleFor } from "./cli-style"
 import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
 import { Compilation, EmittedModule, isDeprecationWarning } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
@@ -90,8 +91,29 @@ import {
   sha256Hex,
 } from "./run-cache"
 
-const usageText = (): string =>
-  `usage: ${CLI} <file.ts> [more.ts ...] [-o, --output <file.ll>|<dir>/] [--link <exe>] [--fix] [--profile speed|size|debug|wasi] [--cpu x86-64-v3] [--number-mode i32|f64] [--plain] [--no-strict-exports] [--unchecked-indexing] [--wrapping] [--no-stack-alloc] [--threads] [--no-warn-performance] [--warn-portability] [--runtime-decls] [--target <triple>|host] [-g] [--json] [--emit-ast] [--emit-checked] [--emit-header <file.h>] [--emit-dts <file.d.ts>] [--emit-ts <dir>] [--emit-napi <shim.c>] [--emit-napi-async <shim.c>] [--emit-panics <file.json>] [--deny-panics] [--deny-retention] [--emit-arena <file.json>] [--emit-capabilities <file.json>] [--capabilities] [--allow <cap>[,<cap>...]] [--deny <cap>[,<cap>...]]\n       ${CLI} run [flags] <file.ts> [args ...]\n       ${CLI} -v, --version | -h, --help`
+/**
+ * The help, painted for the stream it goes to: `--help` answers on stdout and
+ * a usage error on stderr, and either may be a terminal while the other is a
+ * pipe. `src/cli-style.ts` holds the text and the colour policy. An agent's
+ * help also names the rules card shipped with the package, by the path it can
+ * read, so the package is looked for only then, and through `findPackage`: the
+ * owner checks a compile runs keep a card in a package this user may not trust
+ * from being handed to an agent as its rules. Those checks are processes, and
+ * a person's help never pays for them.
+ */
+const usageText = (fd: i32): string => {
+  const agent = agentDriven()
+  let guide = ""
+  if (agent) {
+    guide = "docs/AI.md in the nish package (its root was not found or was refused)"
+    const root = findPackage().root
+    if (root.length > 0) {
+      const card = realpathSync(`${root}/docs/AI.md`)
+      guide = card !== null ? card : `docs/AI.md in the nish package (not in ${root})`
+    }
+  }
+  return helpText(styleFor(fd, agent), guide)
+}
 
 /**
  * The link recipes `scripts/build.sh` knows, in the order stage0 lists them
@@ -429,7 +451,7 @@ const capabilityListMask = (flag: string, list: string): i32 => {
 
 export const main = (): number => {
   if (process.argv.length < 2) {
-    console.error(usageText())
+    console.error(usageText(2))
     return 2
   }
   const opts = new Options()
@@ -665,7 +687,7 @@ export const main = (): number => {
       // defined wrap is `--wrapping`, and the refusal says so rather than
       // letting an old build script mean something it no longer can.
       console.error(
-        `compile: \`--nsw\` is gone: signed overflow is checked and panics; write an operation meant to wrap as \`wrappingAdd\`, \`wrappingSub\` or \`wrappingMul\` from \`nish:unsafe\` (or use the deprecated --wrapping)\n${usageText()}`
+        `compile: \`--nsw\` is gone: signed overflow is checked and panics; write an operation meant to wrap as \`wrappingAdd\`, \`wrappingSub\` or \`wrappingMul\` from \`nish:unsafe\` (or use the deprecated --wrapping); ${helpHint()}`
       )
       return 2
     } else if (value === "--wrapping") {
@@ -698,11 +720,11 @@ export const main = (): number => {
       productFlag = productFlag.length === 0 ? value : productFlag
       emitAst = true
     } else if (value === "-h" || value === "--help") {
-      // A request that succeeded, not a refusal: stdout and exit 0. stage0
-      // answers it the same way (`usageText` in stage0's `src/index.ts`), so a script
-      // that asks either compiler for its help sees the same shape; an actual
-      // usage error still prints the usage on stderr and returns 2 below.
-      console.log(usageText())
+      // A request that succeeded, not a refusal: stdout and exit 0, so a
+      // script can ask for the help without reading the run as a failure. A
+      // bare `nish` and a command line with no input print the usage on
+      // stderr and return 2; an unknown flag returns 2 with one line.
+      console.log(usageText(1))
       return 0
     } else if (value === "-v" || value === "--version") {
       // The line stage0 prints. stage1 cannot read `package.json`, so the
@@ -711,7 +733,7 @@ export const main = (): number => {
       console.log(`${CLI} ${VERSION}`)
       return 0
     } else if (value.startsWith("-")) {
-      console.error(`compile: unknown flag \`${value}\`\n${usageText()}`)
+      console.error(`compile: unknown flag \`${value}\`; ${helpHint()}`)
       return 2
     } else {
       // Every positional is a root, as it is for stage0: a program whose
@@ -728,7 +750,7 @@ export const main = (): number => {
     arg = arg + 1
   }
   if (roots.length === 0) {
-    console.error(usageText())
+    console.error(usageText(2))
     return 2
   }
   // After the loop, because `--profile` and `--target` may follow `--cpu`.
@@ -908,7 +930,8 @@ export const main = (): number => {
   // Where `nish/<module>` is resolved from and `scripts/build.sh` is run
   // from, worked out once here because this is the only place `process.argv`
   // is legal, and only now that the command line is known to compile
-  // something, because the owner checks are processes (`findPackage`). A
+  // something, because the owner checks are processes (`findPackage`; an
+  // agent's help is the one other caller, in `usageText`). A
   // compiler with no package beside it is still handed a root, the one it
   // would have had, so that `Compilation` does not fall back to the working
   // directory and compile a `std/` the checkout it was run in supplied
@@ -1799,7 +1822,7 @@ const pushRecipeFlags = (
 /**
  * The runtime cache: the directory holding the runtime compiled for this
  * recipe, compiled into it first when no link has needed it before. Nearly all
- * of a link was the runtime's eight translation units, compiled again on every
+ * of a link was the runtime's translation units, compiled again on every
  * one; an entry is compiled once per key (`runtimeCacheKey`) and every later
  * link only compiles the program. Empty when the link should compile the
  * runtime itself, as it always did: the wasi profile, which the cache does not
@@ -1819,9 +1842,9 @@ const pushRecipeFlags = (
  *
  * A hit is the stored key equal to this one, byte for byte (CLI-8). A miss
  * compiles into a scratch directory of the entry's own, empties the entry's
- * key, moves the eight objects in with one `mv` -- a `rename` each, inside one
+ * key, moves the nine objects in with one `mv` -- a `rename` each, inside one
  * directory -- and writes the key last, so a key on disk always stands beside
- * eight whole objects of its own recipe (CLI-5). Two misses at once each compile
+ * nine whole objects of its own recipe (CLI-5). Two misses at once each compile
  * their own and move them over the other's; both sets are the same recipe's,
  * and an object is only ever replaced whole, so a link that reads one while
  * another lands reads a whole object either way.

@@ -98,7 +98,15 @@ clocks. The command lines above stay as they are.
   program that owns its loop never returns to
   ([`nish:net`](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)). A
   `nish:net` import does not resolve under Node at all, nor does any other
-  `nish:` import but the two below; the globals are what the prelude can answer
+  `nish:` import but the three below; the globals are what the prelude can answer
+- `isTerminal`, `terminalSize` — `tty.isatty(fd)`, and the `columns` and
+  `rows` Node keeps for stdout, or for stderr when stdout is not a terminal,
+  `[-25, 0]` when neither is: the native answers
+  ([`nish:term`](LANGUAGE.md#nishterm-terminal-input))
+- `readStdin`, `waitStdin`, `setRawMode` — installed only to **throw**, each
+  naming itself: Node reads stdin only to its event loop, as it does a socket,
+  and its own raw mode turns Ctrl-C into a byte where the native one keeps it a
+  signal. All five are globals, and the `nish:term` import resolves to them
 - `getenv` — `process.env[name] ?? null`, because Node answers `undefined`
   where the language has only `null`
 - `realpathSync` — `fs.realpathSync` in a `try`, because Node throws where the
@@ -149,7 +157,16 @@ no prelude can reach it. They are language decisions
   rewriter is for.
 - **`s.length` is UTF-16 units under Node** and UTF-8 bytes natively, and so is
   every offset `charCodeAt`, `substring` and `indexOf` take or return. ASCII
-  agrees; `"héllo".length` is `5` under Node and `6` natively.
+  agrees; `"héllo".length` is `5` under Node and `6` natively. To count
+  characters, `codePointLength` from `nish/text` answers `5` on both. It
+  answers differently for text built from bytes, which is one unit per byte
+  here (above): `String.fromBytes` of `é`'s two bytes, or `nish/json`'s decoding
+  of `"\u00e9"`, counts `1` natively and `2` under Node. It also answers
+  differently for text that is not well-formed: a byte that is not UTF-8, such
+  as `String.fromCharCode(0x80)`, counts nothing natively and one unit under
+  Node, and the two halves of a surrogate pair joined at run time are two lone
+  surrogates natively and one pair under Node
+  (`tests/link/std_text_code_points_native` pins both hosts' answers).
 - **`a[i]` is unchecked.** Out of range is `undefined` here and an exit-1 panic
   natively, and `pop()` on an empty array likewise. Only a program that goes out
   of range can tell the difference.

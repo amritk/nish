@@ -4,12 +4,14 @@ Everything Nish does goes through one command, `nish`. It has two shapes:
 `nish run`, which compiles a program and runs it at once, and the plain
 `nish <files>`, which writes LLVM IR, a native binary or the files another
 language needs to call your code. This page covers the flags you will reach
-for; `nish --help` prints the whole list on stdout and exits 0.
+for; `nish --help` prints the whole list on stdout and exits 0, grouped by what
+the flags are for (Build, Check, Capabilities, Interop, Inspect, Code
+generation) and followed by the exit codes and a few examples.
 
 ```
-nish run [flags] <file.ts> [args ...]    compile, cache and run
-nish <entry.ts> [more.ts ...] [flags]    compile: IR, a binary, sidecars
-nish --version | --help
+usage: nish <file.ts> [more.ts ...] [flags]   compile to LLVM IR
+       nish run [flags] <file.ts> [args ...]  build, cache and run it
+       nish -v, --version | -h, --help
 ```
 
 ## Running a program: `nish run`
@@ -144,6 +146,11 @@ Not every builtin has a runtime export yet. The `nish:unsafe` functions
 imports from `nish/runtime` that Node cannot resolve, so a program that uses
 them does not run under Node yet.
 
+The `nish:term` functions are written as imports from `nish/runtime` too, and
+they resolve. Under Node, `isTerminal` and `terminalSize` answer, and
+`readStdin`, `waitStdin` and `setRawMode` throw, naming themselves, as they do
+when a program is [run under Node](terminal.md#where-it-runs).
+
 `--emit-ts` writes a directory instead of IR, so it exits 2 if you also
 pass `-o`, `--link`, `--emit-ast`, `--emit-checked`, `--emit-header`,
 `--emit-dts`, `--emit-napi` or `--emit-napi-async`, or give it an empty
@@ -227,6 +234,34 @@ It never edits a standard-library module or anything under `node_modules`,
 and it writes no IR, so `-o` and `--link` are usage errors beside it. **It
 rewrites your files in place with no backup**, so run it on a tree you have
 committed.
+
+## Colour, and when an agent runs `nish`
+
+`nish --help` is coloured when it prints to a terminal and plain when it is
+piped or redirected, so `nish --help | less` and `nish --help > flags.txt` hold
+no escape codes. Diagnostics are never coloured. These variables change that:
+
+| Variable | Effect |
+| --- | --- |
+| `NO_COLOR`, not empty | never colour; it wins over everything below |
+| `FORCE_COLOR` set to `0`, `false`, `no` or `off`, in any case | never colour, even on a terminal |
+| `FORCE_COLOR` or `CLICOLOR_FORCE`, neither empty nor one of those | colour even when piped, unless an agent is running `nish` |
+| `CLICOLOR` set to one of those, or `TERM=dumb` | no colour, unless one of the two above forces it |
+
+The palette uses 256 colours when `TERM` names a 256-colour terminal,
+`COLORTERM` is set or `FORCE_COLOR` is `2` or `3`, and the 16 basic ones
+otherwise.
+
+**Coding agents get a plain help with an extra section.** When `nish` runs
+under an agent — `CLAUDECODE` or `GEMINI_CLI` is set to anything but empty
+or a no (`0`, `false`, `no`, `off`), or you set `NISH_AGENT` the same way
+(`NISH_AGENT=1`) — the help has no colour, even on a terminal or with
+`FORCE_COLOR` set, and ends with an **Agents** section: the absolute path of
+`docs/AI.md` (the language as rules, traps first) in the installed package,
+and the flags an agent's loop needs —
+`--json`, `--fix` and `nish run`. `NISH_AGENT=0` (or `false`, `no`, `off`) turns this off
+when one of those variables is set for some other reason. If the package's
+`docs/AI.md` cannot be found, the section names it without a path.
 
 ## Exit codes
 

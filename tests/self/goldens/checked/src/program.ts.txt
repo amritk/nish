@@ -564,7 +564,7 @@ function TemplateInfo.constructor(this: TemplateInfo, sourceName: string, decl: 
   pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
-  pointer home: size=280 writesThrough=true captured=true
+  pointer home: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:24 new ConstraintList -> @ConstraintList.constructor
 function StructTemplateInfo.constructor(this: StructTemplateInfo, sourceName: string, kind: i32, decl: Node, origin: SourceFile, home: CheckContext): void -> @StructTemplateInfo.constructor [exported constructor]
@@ -574,7 +574,7 @@ function StructTemplateInfo.constructor(this: StructTemplateInfo, sourceName: st
   pointer this: size=64 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
-  pointer home: size=280 writesThrough=true captured=true
+  pointer home: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
   callee +0:24 new ConstraintList -> @ConstraintList.constructor
 function StructInstantiation.constructor(this: StructInstantiation, template: StructTemplateInfo, typeArgs: i32[], info: StructInfo, bindings: StringMap): void -> @StructInstantiation.constructor [exported constructor]
@@ -672,7 +672,7 @@ function AliasInfo.constructor(this: AliasInfo, name: string, decl: Node, origin
   pointer this: size=40 writesThrough=true captured=false
   pointer decl: size=40 writesThrough=true captured=true
   pointer origin: size=24 writesThrough=true captured=true
-  pointer home: size=280 writesThrough=true captured=true
+  pointer home: size=288 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function EnumInfo.constructor(this: EnumInfo, name: string, decl: Node, origin: SourceFile, type: i32, symbol: string, exported: boolean): void -> @EnumInfo.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
