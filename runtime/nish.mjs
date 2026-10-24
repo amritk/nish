@@ -136,12 +136,14 @@ for (const name of [
 
 // `nish:term`. Whether a descriptor is a terminal and how big stdout's is have
 // Node's answers; reading stdin, waiting for it and raw mode throw, each naming
-// itself, for the net functions' reason.
+// itself, for the net functions' reason, and restore bytes throw for their own
+// (core/host.mjs).
 provide("isTerminal", shim.isTerminal);
 provide("terminalSize", shim.terminalSize);
 for (const name of ["readStdin", "waitStdin", "setRawMode"]) {
   provide(name, () => shim.noTermReading(name));
 }
+provide("setTerminalRestore", shim.setTerminalRestore);
 
 // `crypto.getRandomValues(bytes)` (WP34 N3). Node has the global, but it
 // takes only a typed array and a `u8[]` is a plain `Array` here, so the one
@@ -191,6 +193,7 @@ provide("toU32", (x) => shim.convert(x, "f64", "u32"));
 provide("toU64", (x) => shim.convert(x, "f64", "u64"));
 provide("f64ToBits", shim.f64ToBits);
 provide("bitsToF64", shim.bitsToF64);
+provide("f32ToBits", shim.f32ToBits);
 
 // Constant time (WP34 N6). Pure functions of their operands, so the answers
 // agree with a native run; the timing does not, and is not claimed here.
@@ -291,7 +294,7 @@ provide("arena", shim.arena);
 // way, and the import is what the compiler requires a program to write.
 const UNSAFE_EXPORTS = ["uncheckedGet", "uncheckedSet", "wrappingAdd", "wrappingSub", "wrappingMul"];
 const unsafeSource = UNSAFE_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
-const TERM_EXPORTS = ["readStdin", "waitStdin", "isTerminal", "terminalSize", "setRawMode"];
+const TERM_EXPORTS = ["readStdin", "waitStdin", "isTerminal", "terminalSize", "setRawMode", "setTerminalRestore"];
 const termSource = TERM_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
 registerHooks({
   resolve: (specifier, context, next) => {
