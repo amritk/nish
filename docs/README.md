@@ -60,7 +60,7 @@ reference: where one disagrees with LANGUAGE.md, LANGUAGE.md wins.
 | [wp30-bytes-interop.md](wp30-bytes-interop.md) | Landed. `u8[]` and the other unsigned arrays across the wasm and N-API boundaries as typed arrays. |
 | [wp31-ranged-integers.md](wp31-ranged-integers.md) | Landed in 0.13.0. `integer<Lo, Hi>`: the type, the proofs, the host boundary and DWARF. |
 | [wp32-map.md](wp32-map.md) | Landed, one item open. The global `Map` and `Set` written in Nish: the layout prototypes, the decisions, and the measurement against Node. |
-| [wp33-round-trip.md](wp33-round-trip.md) | In progress. TypeScript into Nish and back out: the portability class, the typed-array rows and `nish --fix` built; the runtime split and `--emit ts` next. |
+| [wp33-round-trip.md](wp33-round-trip.md) | In progress. TypeScript into Nish and back out: the portability class, the typed-array rows, `nish --fix`, the runtime split and `--emit-ts` built; R5's review tier and R6 next. |
 | [wp34-hosting-cs.md](wp34-hosting-cs.md) | In progress. Hosting a game's servers on a Nish network stack: the compiler items, the crypto lanes, TLS 1.3, the HTTP/1.1 server and WebSocket, HTTP/2, QUIC, HTTP/3, WebTransport and the relay (A1) built, with the interop job; the key wipes (#430) and the cs side of the relay next. |
 | [wp35-capabilities.md](wp35-capabilities.md) | Landed. The capability report: what every function, module and package can reach, with a witness chain. |
 | [wp36-capability-policy.md](wp36-capability-policy.md) | Landed. Refusing at compile time what `--allow`, `--deny` or the root manifest does not grant, and the bridge to an OS sandbox. |

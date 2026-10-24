@@ -12,7 +12,9 @@
 // - Answer the node's whole text otherwise. `operands.at(i)` is child `i` as
 //   it will be written, so a rewrite composes with the rows below it.
 // - A rewrite that calls a `nish/runtime` export asks for it with
-//   `walk.useHelper(name)`; the driver writes the import line.
+//   `walk.helperName(name)` and writes the name it answers, which is
+//   `__nish_<name>` where the module spells `name` itself; the driver writes
+//   the import line.
 // - Read types through `walk.program`: inside a generic body the composer has
 //   installed one instance's tables, and it holds every instance to the same
 //   answer.
@@ -23,6 +25,9 @@
 //   `const t = x;` and `if (t.isErr()) return Err(t.error);` go before the
 //   statement and the call becomes `t.value`. Several in one statement hoist
 //   left to right, which is the order they run in.
+// - `x.expect(m)` and `x.unwrapOr(d)` whose argument is more than a name or a
+//   literal become `expectLazy(x, () => m)` and `unwrapOrLazy`, because the
+//   native program evaluates it on the `Err` path only (#182).
 // - Any other `orReturn` stays a call, which the runtime's `orReturn` throws
 //   from; the function, method or arrow around it then gets its body wrapped
 //   in a `try` whose `catch` hands the throw to `caught`, which answers the
@@ -44,10 +49,15 @@ import {
   N_BLOCK,
   N_CALL,
   N_ENUM,
+  N_FALSE,
   N_FUNCTION,
   N_IDENT,
   N_MEMBER,
   N_METHOD,
+  N_NULL,
+  N_NUMBER,
+  N_STRING,
+  N_TRUE,
   N_TYPE_REF,
   Node,
 } from "./nodes"
@@ -57,7 +67,7 @@ import { StringBuilder } from "./strings"
 export const controlRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const kind = node.kind
   if (kind === N_CALL) {
-    return isOrReturn(walk, node) ? hoistOrReturn(walk, node, operands) : null
+    return isOrReturn(walk, node) ? hoistOrReturn(walk, node, operands) : lazyArgument(walk, node, operands)
   }
   if (kind === N_FUNCTION || kind === N_METHOD || kind === N_ARROW) {
     return wrapBody(walk, node, operands)
@@ -66,7 +76,7 @@ export const controlRow = (walk: Walk, node: Node, operands: Operands): string |
     return enumText(walk, node)
   }
   if (kind === N_TYPE_REF) {
-    return typeRef(walk, node)
+    return typeRef(walk, node, operands)
   }
   if (kind === N_MEMBER) {
     return arenaMember(walk, node)
@@ -77,13 +87,16 @@ export const controlRow = (walk: Walk, node: Node, operands: Operands): string |
 /** Whether `call` is `x.orReturn()` on a `Result`: no arguments, and bound to no method of the program. */
 const isOrReturn = (walk: Walk, call: Node): boolean => {
   const callee = call.children[0]
-  return (
+  const named =
     callee.kind === N_MEMBER &&
     callee.text === "orReturn" &&
     call.children.length > 1 &&
-    call.children[1].children.length === 0 &&
-    walk.program.nodeCallees[call.id] === null
-  )
+    call.children[1].children.length === 0
+  if (named && walk.untyped) {
+    // An untyped body binds no call, so whether this is a `Result`'s is unknown.
+    walk.missType()
+  }
+  return named && walk.program.nodeCallees[call.id] === null
 }
 
 /** `t.value`, with `t`'s binding and its `Err` return hoisted before the statement; or `null` where nothing may hoist. */
@@ -105,9 +118,42 @@ const hoistOrReturn = (walk: Walk, call: Node, operands: Operands): string | nul
   }
   const t = walk.temporary()
   walk.hoist(`const ${t} = ${callee.substring(0, callee.length - suffix.length)};`)
-  walk.hoist(`if (${t}.isErr()) return Err(${t}.error);`)
-  walk.useHelper("Err")
+  walk.hoist(`if (${t}.isErr()) return ${walk.helperName("Err")}(${t}.error);`)
   return `${t}.value`
+}
+
+/** `r.expect(m)` or `r.unwrapOr(d)` as `expectLazy(r, () => m)`, where `m` is more than a name or a literal; or `null`. */
+const lazyArgument = (walk: Walk, call: Node, operands: Operands): string | null => {
+  const callee = call.children[0]
+  if (
+    callee.kind !== N_MEMBER ||
+    (callee.text !== "expect" && callee.text !== "unwrapOr") ||
+    call.children.length < 2 ||
+    call.children[1].children.length !== 1 ||
+    walk.program.nodeCallees[call.id] !== null
+  ) {
+    return null
+  }
+  const kind = call.children[1].children[0].kind
+  if (
+    kind === N_IDENT ||
+    kind === N_NUMBER ||
+    kind === N_STRING ||
+    kind === N_TRUE ||
+    kind === N_FALSE ||
+    kind === N_NULL
+  ) {
+    return null
+  }
+  // An untyped body binds no call, so whether this is a `Result`'s is unknown.
+  walk.missType()
+  const written = operands.at(0)
+  const suffix = `.${callee.text}`
+  if (!written.endsWith(suffix)) {
+    return null
+  }
+  const helper = walk.helperName(callee.text === "expect" ? "expectLazy" : "unwrapOrLazy")
+  return `${helper}(${written.substring(0, written.length - suffix.length)}, () => (${operands.at(1)}))`
 }
 
 /** `node` with its body inside a `try` that turns an `orReturn` throw into the `Err` it returns, when the body still calls one. */
@@ -122,8 +168,7 @@ const wrapBody = (walk: Walk, node: Node, operands: Operands): string | null => 
     return null
   }
   const e = walk.temporary()
-  const handler = ` catch (${e}) { return caught(${e}) } }`
-  walk.useHelper("caught")
+  const handler = ` catch (${e}) { return ${walk.helperName("caught")}(${e}) } }`
   const wrapped =
     node.children[3].kind === N_BLOCK ? `{ try ${body}${handler}` : `{ try { return ${body} }${handler}`
   operands.texts[3] = wrapped
@@ -183,11 +228,11 @@ const enumText = (walk: Walk, node: Node): string | null => {
 }
 
 /** `E.A` as a type, which is a value of the `const` object now: `(typeof E.A)`. A `Result` asks for its import. */
-const typeRef = (walk: Walk, node: Node): string | null => {
+const typeRef = (walk: Walk, node: Node, operands: Operands): string | null => {
   const name = node.text
   if (name === "Result") {
-    walk.useHelper("Result")
-    return null
+    const local = walk.helperName("Result")
+    return local === name ? null : `${local}${splice(walk, node, operands).substring(name.length)}`
   }
   const dot = name.indexOf(".")
   if (dot < 0 || walk.program.enumNamed(name.substring(0, dot)) === null) {
@@ -206,11 +251,13 @@ const arenaMember = (walk: Walk, node: Node): string | null => {
   ) {
     return null
   }
-  const helper = arenaHelper(node.text)
-  if (helper !== null) {
-    walk.useHelper(helper)
+  // An untyped body binds no local, so an `Arena` of its own looks global.
+  if (walk.untyped) {
+    walk.missType()
+    return null
   }
-  return helper
+  const helper = arenaHelper(node.text)
+  return helper === null ? null : walk.helperName(helper)
 }
 
 /** The runtime's free function for the `Arena` static `member`, or `null`. */

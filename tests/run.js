@@ -58,7 +58,7 @@ import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
-import { NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
+import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
 import { urlFuzzVerdict } from "./link/std_url/verdict.js"
@@ -4885,25 +4885,88 @@ if (!only || "emit-ts".includes(only)) {
   )
 
   // The refusals: a finding about the program, exit 1, under its code, with
-  // not one file written -- the output is all or nothing.
-  for (const [code, name] of [
+  // not one file written -- the output is all or nothing. A line, where given,
+  // is where the finding points: NL4013 at the node whose instances differ,
+  // NL4014 at the copy or zero, not the whole generic.
+  for (const [code, name, line] of [
     ["NL4010", "reject_emit_ts_ffi"],
     ["NL4011", "reject_emit_ts_net"],
     ["NL4011", "reject_emit_ts_net_global"],
     ["NL4011", "reject_emit_ts_signal"],
     ["NL4012", "reject_emit_ts_compound"],
-    ["NL4013", "reject_emit_ts_instances"],
-    ["NL4013", "reject_emit_ts_instances_zero"],
-    ["NL4013", "reject_emit_ts_instances_zero_string"],
+    ["NL4013", "reject_emit_ts_instances", 10],
+    ["NL4013", "reject_emit_ts_instances_zero", 5],
+    ["NL4013", "reject_emit_ts_instances_zero_string", 5],
+    ["NL4014", "refused/uncalled-zero", 4],
+    ["NL4014", "refused/uncalled-copy", 9],
+    ["NL4014", "refused/uncalled-ctor-zero", 6],
+    ["NL4014", "refused/uncalled-field-zero", 7],
+    ["NL4014", "refused/uncalled-wide-zero", 5],
   ]) {
-    const dir = path.join(work, name)
-    const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
+    // A `refused/` name is a program under tests/emit-ts, which has no `.out`
+    // and so is no fixture.
+    const dir = path.join(work, name.replace("/", "-"))
+    const src = name.includes("/") ? path.join(fixtures, `${name}.ts`) : path.join(casesDir, `${name}.ts`)
+    const r = spawnSync(NISH, [src, "--json", "--emit-ts", dir], {
       cwd: root,
       encoding: "utf8",
     })
     check(
-      `emit-ts: ${name} is refused with ${code}, exit 1, and nothing written`,
-      r.status === 1 && r.stdout.includes(`"code":"${code}"`) && !fs.existsSync(dir),
+      `emit-ts: ${name} is refused with ${code}${line === undefined ? "" : ` at line ${line}`}, exit 1, and nothing written`,
+      r.status === 1 &&
+        r.stdout
+          .split("\n")
+          .some((l) => l.includes(`"code":"${code}"`) && (line === undefined || l.includes(`"line":${line},`))) &&
+        !fs.existsSync(dir),
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    )
+  }
+
+  // A stub is warned about only where it is the reader's (NL8012): in the
+  // program's own module, each by name and line, with exit 0 and the files
+  // written; the standard library's stubs, `insertAt` under identity/maps and
+  // `nish/threads`' under records/threads-inline, stay silent.
+  const stubWarning = (name, line) => [
+    `"line":${line},`,
+    `"code":"NL8012","message":"\`${name}\` is never instantiated, and its body needs the checker's types to translate: --emit-ts writes it as a stub that throws"`,
+  ]
+  for (const [name, expected] of [
+    [
+      "records/generic-uncalled",
+      [
+        stubWarning("first", 10),
+        stubWarning("wide", 14),
+        stubWarning("put", 18),
+        stubWarning("size", 22),
+        stubWarning("Box.constructor", 28),
+        stubWarning("Counter.constructor", 38),
+        stubWarning("Tally.n", 44),
+        stubWarning("Tally.empty", 45),
+        stubWarning("Bag.pick", 55),
+        stubWarning("drain", 70),
+      ],
+    ],
+    ["identity/maps", []],
+    ["records/threads-inline", []],
+  ]) {
+    const dir = path.join(work, `stub-${name.replace("/", "-")}`)
+    const r = spawnSync(NISH, [path.join(fixtures, `${name}.ts`), "--json", "--emit-ts", dir], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const stubs = r.stdout.split("\n").filter((l) => l.includes('"code":"NL8012"'))
+    const stubbed = fs.existsSync(dir) && /a generic no instance reaches/.test(
+      fs.readdirSync(dir, { recursive: true })
+        .filter((f) => f.endsWith(".ts"))
+        .map((f) => fs.readFileSync(path.join(dir, f), "utf8"))
+        .join("")
+    )
+    check(
+      `emit-ts: ${name} writes a throwing stub and ${expected.length === 0 ? "warns about none of the standard library's" : `warns about each of its ${expected.length} under NL8012`}`,
+      r.status === 0 &&
+        stubbed &&
+        stubs.length === expected.length &&
+        expected.every((parts, i) => parts.every((part) => stubs[i].includes(part))),
       `exit ${r.status}\n${r.stdout}${r.stderr}`
     )
   }
@@ -4922,6 +4985,67 @@ if (!only || "emit-ts".includes(only)) {
     corpus.status === 0 && tally !== null,
     corpus.stdout + corpus.stderr
   )
+
+  // What the corpus run just wrote, every program at once, under `tsc
+  // --strict` (tests/emit-ts/tsconfig.json): the output is TypeScript a user
+  // type-checks, not only text Node strips, and the runtime's `.d.ts` files are
+  // read with it. There is no allow-list; an error is a translation to fix.
+  const tsc = spawnSync(
+    process.execPath,
+    [path.join(root, "node_modules", "typescript", "bin", "tsc"), "-p", path.join(root, "tests", "emit-ts", "tsconfig.json")],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  )
+  const tscErrors = (tsc.stdout.match(/error TS\d+/g) ?? []).length
+  check(
+    `emit-ts: the emitted corpus type-checks under tsc --strict${tscErrors > 0 ? ` (${tscErrors} errors)` : ""}`,
+    tally !== null && tsc.status === 0,
+    tsc.stdout.split("\n").slice(0, 40).join("\n") + tsc.stderr
+  )
+
+  // The known list is a ratchet, not a parking lot (wp33 §4.2): a program may
+  // stay on it only under a row that names what TypeScript under Node cannot
+  // say — libm's last bit, C behind `declare`, a refusal, the host, or a range
+  // check `--emit-ts` writes nothing for — and a host line only for an API in
+  // emit-ts.js's fixed HOST list, whose evidence the differential matched.
+  const knownLines = fs
+    .readFileSync(path.join(root, "tests", "differential", "emit-ts-known.txt"), "utf8")
+    .split("\n")
+    .filter((l) => l.trim().length > 0 && !l.trim().startsWith("#"))
+  const hostApis = emitTsHost.map((entry) => entry[0])
+  /** What is wrong with each of `lines`, one string per line the pin refuses. */
+  const knownStrays = (lines) => {
+    const strays = []
+    for (const line of lines) {
+      const [name, row] = line.split("#")[0].trim().split(/\s+/)
+      const api = /\[([^\]]+)\]\s*$/.exec(line)
+      if (!emitTsAcceptedRows.includes(row)) {
+        strays.push(`${name}: row "${row}" is not one of ${emitTsAcceptedRows.join(", ")}`)
+      } else if (row === "host" && (api === null || !hostApis.includes(api[1]))) {
+        strays.push(`${name}: host entry names ${api === null ? "no API" : `"${api[1]}"`}, not one of ${hostApis.join(", ")}`)
+      }
+    }
+    return strays
+  }
+  const strays = knownStrays(knownLines)
+  check(
+    `emit-ts: the known list holds only accepted rows (${knownLines.length} entries)`,
+    strays.length === 0,
+    strays.join("\n")
+  )
+  // The pin's own mutation test: each kind of line it must refuse, added to
+  // the real list, is refused, and is the only line that is.
+  for (const [what, bad] of [
+    ["a row still to land", "cases_x numbers # 3c3"],
+    ["a host row with no API", "cases_x host # exit 1"],
+    ["a host API outside HOST", "cases_x host # exit 1 [fetch]"],
+  ]) {
+    const caught = knownStrays([...knownLines, bad])
+    check(
+      `emit-ts: the known-list pin refuses ${what}`,
+      caught.length === strays.length + 1 && caught[caught.length - 1].startsWith("cases_x: "),
+      caught.join("\n")
+    )
+  }
 }
 
 // ---- The `deprecation` diagnostic class (NL7xxx) -----------------------------------

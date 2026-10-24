@@ -48,6 +48,20 @@ const NO_HOST = {
 
 let host = NO_HOST;
 
+/**
+ * What `exit(code)` throws: `code` is the 8-bit status a native exit would
+ * leave. The browser host throws it, since a page cannot end itself; it is
+ * exported here and from `nish/runtime/browser` so a caller tells it apart with `instanceof`, which a thrown
+ * object that only carries the name does not pass.
+ */
+export class NishExit extends Error {
+  constructor(code) {
+    super(`the program exited with ${code}`);
+    this.name = "NishExit";
+    this.code = code & 0xff;
+  }
+}
+
 /** Make `next` the host every later call goes through. */
 export function installHost(next) {
   host = next;

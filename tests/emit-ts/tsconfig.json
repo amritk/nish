@@ -1,0 +1,15 @@
+{
+  "//": "The --emit-ts corpus under tsc --strict: tests/run.js's emit-ts section emits every program the differential runs and type-checks them all with `tsc -p` here. `nish/runtime` resolves as the package's own export, not through `paths`, as it does for a user.",
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "lib": ["es2022", "esnext.disposable"],
+    "types": ["node"],
+    "skipLibCheck": false
+  },
+  "include": ["../../build/test/emit-ts-differential/*/ts/**/*.ts"]
+}

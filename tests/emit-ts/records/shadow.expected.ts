@@ -19,7 +19,7 @@ export const main = (): i32 => {
   setIdx(xs, ((xs.length - 1) | 0), checkedAdd(xs[0], idx));
   console.log(xs[2]);
   console.log(drop(xs));
-  const ys = __nish_newArray(newArray(idx), 0);
+  const ys = __nish_newArray<i32>(newArray(idx), 0);
   console.log(ys.length);
   console.log(pop(idx));
   return 0;
