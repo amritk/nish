@@ -239,6 +239,17 @@ own source until the seed compiles it, which is the next release.
     commit message, its conventional subject and its body: `scripts/changelog-gen.mjs`
     writes `CHANGELOG.md` from the commits when a release is cut, so the
     file is never edited by hand.
+11. **Security record.** Code an attacker's bytes reach — a `std/net` or
+    `std/crypto` module, a `runtime/*.c` file, a builtin or `nish:` module
+    that reads the network, the terminal or another process's output — ships
+    with its record in [`docs/security/`](security/README.md#writing-a-record)
+    in the same pull request: its Scope table names the files and functions,
+    every finding is fixed with a test that fails before the fix or recorded
+    as open or accepted, and the index's Areas row and totals move with it.
+    `node scripts/security-scope.mjs` (in `npm test` and CI) refuses a
+    `std/net`, `std/crypto` or `runtime/*.c` file that no record's scope
+    names, unless the index lists it under "Not yet audited", and that list
+    only shrinks.
 
 ## ABI contracts and the tests that guard them
 
