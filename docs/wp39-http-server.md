@@ -45,7 +45,7 @@ names here, and this note says which of them each stage takes.
 | One handler for all three versions | **None.** Each carrier has its own event API, so a program that serves all three versions answers each one separately. `tests/link/net_interop_server` does exactly that (`app.ts`, `h2.ts`, `server.ts`) | — |
 | JSON | A reader (`jsonField`) and a writer into a caller-owned `u8[]` (`JsonWriter`, E3), both in `std/json.ts` | `tests/link/std_json`, `tests/link/std_json_writer` |
 | TechEmpower `json` and `plaintext` | `bench/techempower/` (E5): one core, one `pollWait` loop on `Http1Server`, with `Server` and a cached `Date` (`HttpDate`, E4) | `tests/link/tfb_entry`; [BENCHMARKS.md](BENCHMARKS.md#techempower-json-and-plaintext) |
-| Databases | **None.** No Postgres client; the TLS client role (N13) is unbuilt | — |
+| Databases | `std/net/postgres.ts` (E6, protocol only): startup, SCRAM-SHA-256, prepared statements and pipelined groups, rows read in place. No pool or carrier yet; no TLS, since the client role (N13) is unbuilt | `tests/link/std_postgres`, `tests/link/std_postgres_replay` |
 | Crypto speed | ChaCha20-Poly1305 is portable and fast. AES-GCM is bitsliced (K3) and slow, yet it is what Chrome and curl list first on AES-capable machines, and the server takes the client's first suite (`chooseSuite`, `std/net/tls.ts`). No session tickets, so every connection pays a full handshake | WP34 K3, S1 |
 
 ## 2. Part A: the TechEmpower entry
@@ -141,6 +141,13 @@ noise band and faster outside it at four levels, so it stays on
 port, through #719's prefork supervisor (`std/net/prefork.ts`) once it lands.
 
 ### E6. A Postgres client (L, std lane)
+
+**Protocol built.** `std/net/postgres.ts`, with its record in
+[`docs/security/postgres.md`](security/postgres.md). MD5 is refused rather than
+built: a cleartext connection would carry a hash anyone who sees it can replay,
+and PostgreSQL has defaulted to SCRAM-SHA-256 since 14, so `nish/crypto/md5` is
+not written. Text results only. The pool, a carrier and the CI job against a
+service container are still to do.
 
 `std/net/postgres` is sans-IO, like every other `nish/net` module: it takes
 bytes and answers bytes. A carrier puts it on a socket from `tcpConnect`

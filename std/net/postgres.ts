@@ -7,7 +7,9 @@
  *     const config = new PgConfig();
  *     config.user = "app";
  *     config.database = "app";
- *     const conn = new PgConnection(config, password, randomBytes(18));
+ *     const nonce = new Array<u8>(18);
+ *     crypto.getRandomValues(nonce);
+ *     const conn = new PgConnection(config, password, nonce);
  *     // write conn.outputBuffer()[conn.outputStart() .. conn.outputEnd()), then conn.sent(n)
  *     // read into conn.inputBuffer() at conn.inputEnd(), up to conn.inputRoom() bytes, then conn.received(n)
  *     let event: i32 = conn.next();
@@ -666,7 +668,8 @@ export class PgConnection {
   /**
    * A connection that has queued its startup message. `password` is copied,
    * so the caller may wipe its own; `nonce` must be at least 18 bytes from a
-   * cryptographic random source (`randomBytes`), and is fixed only in a test.
+   * cryptographic random source (`crypto.getRandomValues`), and is fixed only
+   * in a test.
    */
   constructor(config: PgConfig, password: Secret<u8[]>, nonce: u8[]) {
     if (toI32(nonce.length) < PG_NONCE_BYTES) {
