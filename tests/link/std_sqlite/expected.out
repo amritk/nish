@@ -5,6 +5,27 @@ PASS  open: a missing directory is CANTOPEN
 PASS  open: its message
 PASS  open: READONLY
 PASS  close: READONLY
+PASS  pragma: journal_mode=WAL answers wal
+PASS  finalize: the pragma
+PASS  pragma: synchronous=NORMAL
+PASS  exec: a table in the file
+PASS  exec: a row in the file
+PASS  close: the file
+PASS  exec: the reuse table
+PASS  reset and rebind: 1,000 inserts
+PASS  bindI64: a key already there
+PASS  step: ON CONFLICT DO NOTHING
+PASS  changes: DO NOTHING changed nothing
+PASS  finalize: the reused INSERT
+PASS  columnI64: every fourth row is b
+PASS  columnI64: their keys
+PASS  finalize: the count
+PASS  step: Arena.used() after 100,000 rows is what it was after the first
+PASS  step: the rows end in DONE
+PASS  columnI64: 100,000 rows
+PASS  columnInto: their text
+PASS  columnF64: their halves
+PASS  finalize: 100,000 rows
 PASS  exec: CREATE
 PASS  exec: a syntax error is ERROR
 PASS  exec: its message
@@ -95,4 +116,4 @@ PASS  prepare: after close is MISUSE
 PASS  error: after close
 PASS  lastInsertRowid: after close is 0
 PASS  changes: after close is 0
-std_sqlite: 97 passed, 0 failed, 0 skipped
+std_sqlite: 118 passed, 0 failed, 0 skipped

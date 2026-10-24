@@ -1,7 +1,8 @@
-// `nish/sqlite` end to end on an in-memory database: every call of the module,
-// each once where it succeeds and once where it fails, and the failure's code
-// and message. The table and the statements are made here, so the messages are
-// SQLite's own and pin the extended codes the adapter opens connections with.
+// `nish/sqlite` end to end: every call of the module, each once where it
+// succeeds and once where it fails, and the failure's code and message, on an
+// in-memory database; a file database in WAL mode; one statement reused 1,000
+// times; and 100,000 rows read with the arena flat. The messages are SQLite's
+// own and pin the extended codes the adapter opens connections with.
 import { Suite } from "nish/testing";
 import {
   OPEN_CREATE,
@@ -204,6 +205,95 @@ const reads = (t: Suite, db: Database): void => {
   t.eqI64("changes: after close is 0", db.changes(), toI64(0));
 };
 
+/** A file database, so the pragmas answer what a file connection does. */
+const files = (t: Suite): void => {
+  const opened = openDatabase("build/std_sqlite_wal.db", OPEN_READWRITE | OPEN_CREATE);
+  if (opened.isErr()) {
+    t.fail("open: a file", opened.error.message);
+    return;
+  }
+  const db = opened.value;
+  const mode = db.prepare("PRAGMA journal_mode=WAL");
+  if (mode.isOk() && mode.value.step().isOk()) {
+    const answer = mode.value.columnText(0);
+    t.eqStr("pragma: journal_mode=WAL answers wal", answer === null ? "<null>" : answer, "wal");
+    t.ok("finalize: the pragma", mode.value.finalize().isOk());
+  } else {
+    t.fail("pragma: journal_mode=WAL answers wal", "it did not run");
+  }
+  t.ok("pragma: synchronous=NORMAL", db.exec("PRAGMA synchronous=NORMAL").isOk());
+  t.ok("exec: a table in the file", db.exec("DROP TABLE IF EXISTS f; CREATE TABLE f (x)").isOk());
+  t.ok("exec: a row in the file", db.exec("INSERT INTO f VALUES (1)").isOk());
+  t.ok("close: the file", db.close().isOk());
+};
+
+/** One statement prepared once and run 1,000 times, rebound each time. */
+const reuses = (t: Suite, db: Database): void => {
+  t.ok("exec: the reuse table", db.exec("CREATE TABLE r (k INTEGER PRIMARY KEY, v TEXT)").isOk());
+  const p = db.prepare("INSERT INTO r (k, v) VALUES (?1, ?2) ON CONFLICT DO NOTHING");
+  if (p.isErr()) {
+    t.fail("prepare: the reused INSERT", p.error.message);
+    return;
+  }
+  const ins = p.value;
+  const text: u8[] = [97, 98, 99, 100];
+  let failures: i32 = 0;
+  for (let i: i32 = 0; i < 1000; i++) {
+    const bound = ins.bindI64(1, toI64(i)).isOk() && ins.bindTextBytes(2, text, i % 4, 1).isOk();
+    const stepped = ins.step();
+    if (!bound || stepped.isErr() || stepped.value || ins.reset().isErr()) {
+      failures += 1;
+    }
+  }
+  t.eqI32("reset and rebind: 1,000 inserts", failures, 0);
+  t.ok("bindI64: a key already there", ins.bindI64(1, toI64(7)).isOk());
+  t.ok("step: ON CONFLICT DO NOTHING", ins.step().isOk());
+  t.eqI64("changes: DO NOTHING changed nothing", db.changes(), toI64(0));
+  t.ok("finalize: the reused INSERT", ins.finalize().isOk());
+  const count = db.prepare("SELECT count(*), sum(k) FROM r WHERE v = 'b'");
+  if (count.isOk() && count.value.step().isOk()) {
+    t.eqI64("columnI64: every fourth row is b", count.value.columnI64(0), toI64(250));
+    t.eqI64("columnI64: their keys", count.value.columnI64(1), toI64(124750));
+    t.ok("finalize: the count", count.value.finalize().isOk());
+  } else {
+    t.fail("columnI64: every fourth row is b", "the count did not run");
+  }
+};
+
+/** 100,000 rows stepped and read into one buffer leave `Arena.used()` where the first row did. */
+const flat = (t: Suite, db: Database): void => {
+  const p = db.prepare(
+    "WITH RECURSIVE n(i) AS (VALUES (1) UNION ALL SELECT i + 1 FROM n WHERE i < 100000) SELECT i, 'row ' || i, i * 0.5 FROM n"
+  );
+  if (p.isErr()) {
+    t.fail("prepare: 100,000 rows", p.error.message);
+    return;
+  }
+  const q = p.value;
+  const buf: u8[] = new Array<u8>(32);
+  let sum: i64 = 0;
+  let bytes: i64 = 0;
+  let half: f64 = 0;
+  let r = q.step();
+  const after: i64 = Arena.used();
+  while (r.isOk() && r.value) {
+    sum += q.columnI64(0);
+    const got = q.columnInto(1, buf, 0);
+    if (got.isOk()) {
+      bytes += toI64(got.value);
+    }
+    half += q.columnF64(2);
+    r = q.step();
+  }
+  t.eqI64("step: Arena.used() after 100,000 rows is what it was after the first", Arena.used() - after, toI64(0));
+  t.ok("step: the rows end in DONE", r.isOk());
+  const ids: i64 = 5000050000;
+  t.eqI64("columnI64: 100,000 rows", sum, ids);
+  t.eqI64("columnInto: their text", bytes, toI64(888895));
+  t.eqF64("columnF64: their halves", half, toF64(2500025000));
+  t.ok("finalize: 100,000 rows", q.finalize().isOk());
+};
+
 export const main = (): i32 => {
   const t = new Suite("std_sqlite");
   opens(t);
@@ -213,6 +303,9 @@ export const main = (): i32 => {
     return t.done();
   }
   const db = opened.value;
+  files(t);
+  reuses(t, db);
+  flat(t, db);
   execs(t, db);
   binds(t, db);
   reads(t, db);
