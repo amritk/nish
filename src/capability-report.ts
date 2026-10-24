@@ -360,15 +360,6 @@ export const dependencyWitness = (
   return []
 }
 
-/** A witness chain's hops as a refusal names them, `<at> calls <callee>` each. */
-export const chainHops = (chain: WitnessHop[]): string[] => {
-  const hops: string[] = []
-  for (const hop of chain) {
-    hops.push(`${hop.at} calls ${hop.calls}`)
-  }
-  return hops
-}
-
 /**
  * Write the whole report for a compilation that has checked to `file`. It runs
  * the attribute fixpoint if nothing has yet (`analyze` is memoised, so the emit
