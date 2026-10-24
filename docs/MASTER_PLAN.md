@@ -98,7 +98,7 @@ Design rules that every WP must respect:
   | `runtime-net.c` | 2,303 | 2,304 |
   | `runtime-simd.c` | 2,337 (2026-10-23) | 2,560 |
   | `runtime-aes.c` | 2,532 (2026-10-11) | 2,560 |
-  | `runtime-term.c` | 1,419 (2026-10-23) | 1,536 |
+  | `runtime-term.c` | 1,825 (2026-10-24) | 2,048 |
   | `runtime-bytes.c` | 1,303 (2026-10-23) | 1,536 |
 
   `-ffunction-sections -Wl,--gc-sections` means a binary pays only for the

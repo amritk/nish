@@ -1693,7 +1693,115 @@ if (!only || "term".includes(only)) {
     }
   }
 
-  // Under Node the two questions answer and the three readers fail loudly.
+  // `setTerminalRestore` under a pseudo-terminal: each mode of term_restore
+  // keeps `<old>`, is refused past the cap, enters raw mode and swaps in
+  // `BYTES`, prints `last <mode>` and leaves by returning, a panic, SIGTERM
+  // or SIGSEGV; `cleared` clears its bytes first. The line the script
+  // echoes next follows the program's output directly, so what lies between
+  // `last <mode>` and it is exactly what the runtime wrote on the way out:
+  // `BYTES`, once, nothing for `cleared` and all 4,096 bytes for `full`.
+  // `<old>` never appears, and `<bye>` once per run that keeps it, so nothing
+  // went out early or twice. On Linux one more `exit` runs with a preloaded
+  // `tcsetattr` that writes `<tcsetattr>` before it sets the termios, so
+  // the bytes before the mark are the ones written before the restore.
+  const restoreExe = has("script") ? buildCaseIn(termDir, "term_restore") : null
+  if (restoreExe !== null) {
+    const sh = path.join(termDir, "restore.sh")
+    let shim = ""
+    if (process.platform === "linux") {
+      const c = path.join(termDir, "order.c")
+      fs.writeFileSync(
+        c,
+        [
+          "#define _GNU_SOURCE",
+          "#include <dlfcn.h>",
+          "#include <termios.h>",
+          "#include <unistd.h>",
+          "int tcsetattr(int fd, int when, const struct termios *t) {",
+          "  static int (*real)(int, int, const struct termios *);",
+          '  if (!real) real = (int (*)(int, int, const struct termios *))dlsym(RTLD_NEXT, "tcsetattr");',
+          '  write(1, "<tcsetattr>", 11);',
+          "  return real(fd, when, t);",
+          "}",
+          "",
+        ].join("\n")
+      )
+      shim = path.join(termDir, "order.so")
+      const cc = spawnSync("clang", ["-shared", "-fPIC", "-o", shim, c, "-ldl"], { encoding: "utf8" })
+      if (!check("term_restore: the preloaded tcsetattr builds", cc.status === 0, shown(cc))) shim = ""
+    }
+    fs.writeFileSync(
+      sh,
+      [
+        'E="$1"; D="$2"; S="$3"',
+        'if [ -t 0 ]; then echo pty; else echo "no pty"; exit 0; fi',
+        'same() { stty -g | cmp -s - "$D/before" && echo same || echo changed; }',
+        'stty -g > "$D/before"',
+        '"$E" exit',
+        'echo "end exit $? stty $(same)"',
+        '"$E" cleared',
+        'echo "end cleared $? stty $(same)"',
+        '"$E" panic 2>/dev/null',
+        'echo "end panic $? stty $(same)"',
+        '"$E" full',
+        'echo "end full $? stty $(same)"',
+        'if [ -n "$S" ]; then LD_PRELOAD="$S" "$E" exit; echo "end order $? stty $(same)"; fi',
+        // The shell's own "Terminated" goes to its stderr, which is the pty.
+        "exec 2>/dev/null",
+        "for sig in TERM SEGV; do",
+        '  : > "$D/ready"',
+        '  "$E" hold </dev/tty 2> "$D/ready" & pid=$!',
+        "  i=0; while [ $i -lt 100 ] && ! grep -q ready \"$D/ready\"; do sleep 0.1; i=$((i + 1)); done",
+        '  kill -$sig $pid; wait $pid',
+        '  echo "end $sig $? stty $(same)"',
+        "done",
+        "",
+      ].join("\n")
+    )
+    const argv =
+      process.platform === "darwin"
+        ? ["-q", "/dev/null", "sh", sh, restoreExe, termDir, shim]
+        : ["-qec", 'sh "$NISH_PTY_SH" "$NISH_PTY_EXE" "$NISH_PTY_DIR" "$NISH_PTY_SO"', "/dev/null"]
+    const r = spawnSync("script", argv, {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        NISH_PTY_SH: sh,
+        NISH_PTY_EXE: restoreExe,
+        NISH_PTY_DIR: termDir,
+        NISH_PTY_SO: shim,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 30000,
+    })
+    const out = String(r.stdout).replaceAll("\r", "")
+    if (!out.split("\n").includes("pty")) {
+      skip(`term_restore: \`script\` gave no pseudo-terminal here (${shown(r).replaceAll("\n", " ")})`)
+    } else {
+      const bytes = "\u001b[?25h<bye>"
+      const want = [
+        `last exit\n${bytes}end exit 0 stty same\n`,
+        "last cleared\nend cleared 0 stty same\n",
+        `last panic\n${bytes}end panic 1 stty same\n`,
+        `full 0\nlast full\n${"a".repeat(4096)}end full 0 stty same\n`,
+        `last hold\n${bytes}end TERM 143 stty same\n`,
+        `last hold\n${bytes}end SEGV 139 stty same\n`,
+      ]
+      if (shim !== "") want.push(`last exit\n${bytes}<tcsetattr>end order 0 stty same\n`)
+      const runs = shim === "" ? 6 : 7
+      check(
+        "term_restore: under a pseudo-terminal the restore bytes are what follows the last output, once, on returning, a panic, SIGTERM and SIGSEGV, before the termios on Linux, all 4,096 at the cap, none once cleared, and the terminal is as it was",
+        want.every((part) => out.includes(part)) &&
+          out.split("set 0 -7 0 0\n").length === runs + 1 &&
+          out.split("<bye>").length === runs - 1 &&
+          !out.includes("<old>"),
+        `want every part of ${JSON.stringify(want)}\n${shown(r)}`
+      )
+    }
+  }
+
+  // Under Node the two questions answer and the four others fail loudly.
   const answered = runCaseUnderPrelude("caps_tty", [])
   check(
     "caps_tty: under the prelude terminalSize answers -25 off a terminal, as natively",
@@ -1705,6 +1813,14 @@ if (!only || "term".includes(only)) {
     "term_calls: under the prelude readStdin fails loudly rather than answering",
     loud.status !== 0 && loud.stderr.includes("`readStdin` has no synchronous reading under Node"),
     shown(loud)
+  )
+  const restoreLoud = runCaseUnderPrelude("term_restore", [])
+  check(
+    "term_restore: under the prelude setTerminalRestore fails loudly rather than answering",
+    restoreLoud.status !== 0 &&
+      restoreLoud.stdout === "" &&
+      restoreLoud.stderr.includes("`setTerminalRestore` has no reading under Node"),
+    shown(restoreLoud)
   )
 }
 
@@ -1727,6 +1843,7 @@ if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
       ["term_calls", "printf abcd", "4\ntrue\nfalse\nfalse\n2 -25 0\n-25\n0\n"],
       ["term_import", "head -c 1000 /dev/zero", "-25\n1000\n"],
       ["term_wait0", "printf abcd", "true\n"],
+      ["term_restore", "true", "-25 0 -25 -7\n"],
     ]) {
       const wasm = path.join(wasiDir, `${name}.wasm`)
       const built = spawnSync(
@@ -1752,6 +1869,8 @@ if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
       check(
         name === "term_wait0"
           ? `${name}: under the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) waitStdin(0) sees bytes already piped`
+          : name === "term_restore"
+          ? `${name}: under the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) setTerminalRestore answers -25, 0 for "" and -7 past the cap, as natively off a terminal`
           : `${name}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) reads piped stdin and answers -25 for the terminal, as natively`,
         built.status === 0 && ran.status === 0 && ran.stdout === want,
         shown(ran)
@@ -1759,7 +1878,7 @@ if (!only || "term_wasi".includes(only) || "wasi".includes(only)) {
     }
   } else {
     skip(
-      `skipped: term_calls, term_import, term_wait0: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the stdin readers are not run`
+      `skipped: term_calls, term_import, term_wait0, term_restore: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi builds of the stdin readers are not run`
     )
   }
 }
