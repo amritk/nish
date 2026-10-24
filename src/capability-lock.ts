@@ -406,18 +406,22 @@ export const readCapabilityLock = (text: string): CapabilityLock => {
 export const capabilityLockText = (names: string[], masks: i32[]): string => {
   const out = new StringBuilder()
   out.add(`{\n  "version": ${LOCK_VERSION},\n  "packages": {`)
-  for (let p = 0; p < names.length; p++) {
+  let p = 0
+  for (const name of names) {
     out.add(p === 0 ? "\n    " : ",\n    ")
-    out.add(jsonQuote(names[p]))
+    out.add(jsonQuote(name))
     out.add(": [")
     const caps: string[] = p < masks.length ? capabilityNames(masks[p]) : []
-    for (let c = 0; c < caps.length; c++) {
+    let c = 0
+    for (const cap of caps) {
       if (c > 0) {
         out.add(", ")
       }
-      out.add(jsonQuote(caps[c]))
+      out.add(jsonQuote(cap))
+      c++
     }
     out.add("]")
+    p++
   }
   out.add(names.length > 0 ? "\n  }\n}\n" : "}\n}\n")
   return out.toText()
