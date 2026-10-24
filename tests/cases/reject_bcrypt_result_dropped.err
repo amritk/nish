@@ -1,0 +1,1 @@
+`Result<boolean, string>` must be handled, not discarded
