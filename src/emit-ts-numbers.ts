@@ -143,11 +143,8 @@ const kindName = (type: i32): string => {
 
 const isBig = (type: i32): boolean => type === T_I64 || type === T_U64
 
-/** `node`'s type in the checked program, or -1 when the node has none recorded. */
-const typeOf = (walk: Walk, node: Node): i32 => {
-  const types = walk.program.nodeTypes
-  return node.id >= 0 && node.id < types.length ? types[node.id] : -1
-}
+/** `node`'s type in the checked program, or -1, a miss in an untyped body (`Walk.typeAt`). */
+const typeOf = (walk: Walk, node: Node): i32 => walk.typeAt(node)
 
 /** Whether the operation at `site` may skip its overflow check: proven, or `--wrapping`. */
 const unchecked = (walk: Walk, site: Node): boolean => {

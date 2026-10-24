@@ -25,6 +25,10 @@ export declare const Result: { prototype: ResultMethods<unknown, unknown> };
 export declare function Ok<T, E>(value: T): Result<T, E>;
 export declare function Ok<E>(): Result<void, E>;
 export declare function Err<T, E>(error: E): Result<T, E>;
+/** `r.expect(message())`, with `message` called on the `Err` path only. */
+export declare function expectLazy<T, E>(r: Result<T, E>, message: () => string): T;
+/** `r.unwrapOr(fallback())`, with `fallback` called on the `Err` path only. */
+export declare function unwrapOrLazy<T, E>(r: Result<T, E>, fallback: () => T): T;
 /** The `catch` of a body that calls `orReturn`: the `Err` to return, or `thrown` thrown again. */
 export declare function caught<T, E>(thrown: unknown): Result<T, E>;
 

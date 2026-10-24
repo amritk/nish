@@ -155,7 +155,11 @@ own source until the seed compiles it, which is the next release.
    measured reason. Taking JavaScript's meaning is never worth a cost to the
    native build: where it is slower, Nish's meaning stays and the difference
    is a C row. The classes and the ledger of every C row are in
-   [wp33-round-trip.md](wp33-round-trip.md) §2, §3 and §6.
+   [wp33-round-trip.md](wp33-round-trip.md) §2, §3 and §6. A B or C construct
+   ships its `--emit-ts` translation (`src/emit-ts*.ts`) and a fixture under
+   `tests/emit-ts/`, so `node tests/run.js emit-ts` runs it both ways; one
+   that cannot be written yet is refused with an `NL40xx` code, never
+   written with JavaScript's meaning.
 2. **Parser and validator.** New syntax needs a node kind in `src/nodes.ts`
    (with its child layout written beside it) and a production in
    `src/parser.ts`. If the construct can *never* be compiled, add a rule to
