@@ -23,6 +23,20 @@
 #define NISH_TLS
 #endif
 
+/* Built under AddressSanitizer (tests/run.js `runtime_sanitize`): the one
+   assertion that measures the process's memory rather than the runtime's
+   answers is left out, since ASan's own bookkeeping moves it. */
+#if defined(__SANITIZE_ADDRESS__)
+#define NISH_TEST_ASAN 1
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define NISH_TEST_ASAN 1
+#endif
+#endif
+#ifndef NISH_TEST_ASAN
+#define NISH_TEST_ASAN 0
+#endif
+
 typedef struct { uint64_t len; char data[]; } nish_str;
 extern NISH_TLS struct nish_arena { char *buf; size_t off; size_t cap; void *chunks; } nish_arena;
 void *nish_alloc_struct(size_t);
@@ -637,7 +651,12 @@ static void test_pool(void) {
   pool_dirty_entries = 0;
   for (int r = 0; r < 300; r++) nish_parallel_range(pool_alloc_body, &self, PAR_N, 1);
   assert(pool_dirty_entries == 0);
+  /* AddressSanitizer's shadow memory and quarantine grow the peak with every
+     allocation whether or not the arena keeps it, so under `runtime_sanitize`
+     the bound measures ASan rather than the arena. */
+#if !NISH_TEST_ASAN
   assert(pool_peak_rss_kb() - rss_before < 64 * 1024);
+#endif
 
   /* More tasks than workers, at every size the pool can have: each runs once
      and each answer is stored in spawn order. */
@@ -2085,6 +2104,11 @@ int main(void) {
   expect_str(((nish_str **)nish_argv->data)[2], "héllo", "argv[2]");
   assert(((nish_str **)nish_argv->data)[2]->len == 6); /* bytes, not code points */
   expect_str(((nish_str **)nish_argv->data)[3], "42", "argv[3]");
+  /* A program builds it once; this test builds it twice, so it frees the
+     first copy itself rather than leave LeakSanitizer (`runtime_sanitize`) a
+     block nothing points at. */
+  for (uint64_t i = 0; i < nish_argv->len; i++) free(((nish_str **)nish_argv->data)[i]);
+  free(nish_argv);
   nish_argv_init(0, argv);
   assert(nish_argv->len == 0);
 

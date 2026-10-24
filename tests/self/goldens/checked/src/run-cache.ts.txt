@@ -26,6 +26,41 @@ function runtimeCacheRoot(): string -> @runtimeCacheRoot [exported]
 function runtimeUnits(): string[] -> @runtimeUnits [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
+function sqliteFiles(root: string): string[] -> @sqliteFiles
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_readdir
+  calls: nish_array_grow nish_readdir nish_str_at nish_str_concat
+  stackSites=0 stackLocals=0
+  local +0:9 files: string[] (const)
+  local +1:9 names: string[] | null (const)
+  local +3:16 name: string (const)
+function sqliteUnits(root: string): string[] -> @sqliteUnits [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via sqliteFiles
+  escaping: root
+  calls: nish_array_grow nish_str_at sqliteFiles
+  stackSites=0 stackLocals=0
+  local +0:9 units: string[] (const)
+  local +1:14 name: string (const)
+  callee +1:22 sqliteFiles -> @sqliteFiles
+function callsSqlite(ir: string): boolean -> @callsSqlite
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_arena_release nish_panic_overflow nish_panic_slice nish_str_at nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:7 at: i32 (let)
+  local +2:11 next: i32 (const)
+  local +3:11 line: string (const)
+  local +4:11 quote: i32 (const)
+  local +5:11 stop: i32 (const)
+  local +6:9 name: i32 (let)
+  local +8:13 rest: i32 (const)
+function anyCallsSqlite(modules: EmittedModule[]): boolean -> @anyCallsSqlite [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: callsSqlite
+  pointer modules: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 module: EmittedModule (const)
+  callee +1:9 callsSqlite -> @callsSqlite
 function runBinaryName(name: string): string -> @runBinaryName [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: name
@@ -105,36 +140,62 @@ function fileFingerprint(path: string): string -> @fileFingerprint
   stackSites=0 stackLocals=0
   local +0:9 text: string | null (const)
   callee +1:32 sha256Hex -> @sha256Hex
+function runtimeHeaderLine(root: string): string -> @runtimeHeaderLine
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fileFingerprint
+  calls: fileFingerprint nish_str_concat
+  stackSites=0 stackLocals=0
+  callee +0:24 fileFingerprint -> @fileFingerprint
 function addRecipeFingerprints(key: StringBuilder, root: string): void -> @addRecipeFingerprints
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
   escaping: root
-  calls: StringBuilder.add addUnitFingerprints fileFingerprint nish_str_concat runtimeUnits
+  calls: StringBuilder.add addUnitFingerprints fileFingerprint nish_str_concat runtimeHeaderLine runtimeUnits
   pointer key: size=8 writesThrough=false captured=false passedTo=StringBuilder.add#0 addUnitFingerprints#0 StringBuilder.add#0
   stackSites=0 stackLocals=0
   callee +0:3 StringBuilder.add -> @StringBuilder.add
   callee +0:23 fileFingerprint -> @fileFingerprint
   callee +1:3 addUnitFingerprints -> @addUnitFingerprints
-  callee +1:34 runtimeUnits -> @runtimeUnits
+  callee +1:51 runtimeUnits -> @runtimeUnits
   callee +2:3 StringBuilder.add -> @StringBuilder.add
-  callee +2:32 fileFingerprint -> @fileFingerprint
-function addUnitFingerprints(key: StringBuilder, root: string, units: string[], at: i32): void -> @addUnitFingerprints
+  callee +2:11 runtimeHeaderLine -> @runtimeHeaderLine
+function sqliteFingerprint(root: string, sqliteFlags: string): string -> @sqliteFingerprint [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via addUnitFingerprints
+  escaping: root sqliteFlags
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addUnitFingerprints nish_str_concat nish_str_from_i32 runtimeHeaderLine sqliteFiles
+  stackSites=1 stackLocals=1
+  local +0:9 key: StringBuilder (const)
+  callee +0:15 new StringBuilder -> @StringBuilder.constructor
+  callee +1:3 addUnitFingerprints -> @addUnitFingerprints
+  callee +1:58 sqliteFiles -> @sqliteFiles
+  callee +2:3 StringBuilder.add -> @StringBuilder.add
+  callee +2:11 runtimeHeaderLine -> @runtimeHeaderLine
+  callee +3:3 StringBuilder.add -> @StringBuilder.add
+  callee +4:3 StringBuilder.add -> @StringBuilder.add
+  callee +5:3 StringBuilder.add -> @StringBuilder.add
+  callee +6:10 StringBuilder.toText -> @StringBuilder.toText
+function addUnitFingerprints(key: StringBuilder, runtime: string, dir: string, units: string[], at: i32): void -> @addUnitFingerprints
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
-  escaping: at root
+  escaping: at dir runtime
   calls: StringBuilder.add addUnitFingerprints fileFingerprint nish_str_concat
   pointer key: size=8 writesThrough=false captured=false passedTo=StringBuilder.add#0 addUnitFingerprints#0
-  pointer units: size=0 writesThrough=false captured=false passedTo=addUnitFingerprints#2
+  pointer units: size=0 writesThrough=false captured=false passedTo=addUnitFingerprints#3
   stackSites=0 stackLocals=0
   local +0:9 unit: string (const)
   callee +1:3 StringBuilder.add -> @StringBuilder.add
   callee +1:22 fileFingerprint -> @fileFingerprint
   callee +2:3 addUnitFingerprints -> @addUnitFingerprints
-function runCacheKey(modules: EmittedModule[], name: string, root: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, cc: string): string -> @runCacheKey [exported]
+function profileLine(profile: string, cpu: string, debugInfo: boolean, threads: boolean): string -> @profileLine
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat
+  stackSites=0 stackLocals=0
+function runCacheKey(modules: EmittedModule[], name: string, root: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, cc: string, sqlite: string): string -> @runCacheKey [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
-  escaping: root
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addRecipeFingerprints nish_str_concat nish_str_from_i32
+  escaping: cpu debugInfo profile root sqlite threads
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addRecipeFingerprints nish_str_concat nish_str_from_i32 profileLine
   pointer modules: size=0 writesThrough=false captured=false
   stackSites=1 stackLocals=1
   local +0:9 key: StringBuilder (const)
@@ -142,26 +203,49 @@ function runCacheKey(modules: EmittedModule[], name: string, root: string, profi
   callee +1:3 StringBuilder.add -> @StringBuilder.add
   callee +2:3 StringBuilder.add -> @StringBuilder.add
   callee +3:3 StringBuilder.add -> @StringBuilder.add
+  callee +3:11 profileLine -> @profileLine
+  callee +4:3 StringBuilder.add -> @StringBuilder.add
+  callee +5:3 addRecipeFingerprints -> @addRecipeFingerprints
   callee +6:3 StringBuilder.add -> @StringBuilder.add
-  callee +7:3 addRecipeFingerprints -> @addRecipeFingerprints
-  local +8:14 module: EmittedModule (const)
+  local +7:14 module: EmittedModule (const)
+  callee +8:5 StringBuilder.add -> @StringBuilder.add
   callee +9:5 StringBuilder.add -> @StringBuilder.add
-  callee +10:5 StringBuilder.add -> @StringBuilder.add
-  callee +12:10 StringBuilder.toText -> @StringBuilder.toText
+  callee +11:10 StringBuilder.toText -> @StringBuilder.toText
 function runtimeCacheKey(root: string, runtimeDir: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, cc: string, ccVersion: string): string -> @runtimeCacheKey [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via StringBuilder.add
-  escaping: ccVersion root
-  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addRecipeFingerprints nish_str_concat nish_str_from_i32
+  escaping: ccVersion cpu debugInfo profile root threads
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText addRecipeFingerprints nish_str_concat nish_str_from_i32 profileLine
   stackSites=1 stackLocals=1
   local +0:9 key: StringBuilder (const)
   callee +0:15 new StringBuilder -> @StringBuilder.constructor
   callee +1:3 StringBuilder.add -> @StringBuilder.add
   callee +2:3 StringBuilder.add -> @StringBuilder.add
   callee +3:3 StringBuilder.add -> @StringBuilder.add
+  callee +3:11 profileLine -> @profileLine
+  callee +4:3 StringBuilder.add -> @StringBuilder.add
+  callee +5:3 StringBuilder.add -> @StringBuilder.add
+  callee +6:3 StringBuilder.add -> @StringBuilder.add
+  callee +7:3 StringBuilder.add -> @StringBuilder.add
+  callee +8:3 addRecipeFingerprints -> @addRecipeFingerprints
+  callee +9:10 StringBuilder.toText -> @StringBuilder.toText
+function sqliteCacheKey(root: string, sqliteDir: string, profile: string, cpu: string, debugInfo: boolean, threads: boolean, cc: string, ccVersion: string, sqlite: string): string -> @sqliteCacheKey [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via fileFingerprint
+  escaping: ccVersion cpu debugInfo profile sqlite threads
+  calls: StringBuilder.add StringBuilder.constructor StringBuilder.toText fileFingerprint nish_str_concat nish_str_from_i32 profileLine
+  stackSites=1 stackLocals=1
+  local +0:9 key: StringBuilder (const)
+  callee +0:15 new StringBuilder -> @StringBuilder.constructor
+  callee +1:3 StringBuilder.add -> @StringBuilder.add
+  callee +2:3 StringBuilder.add -> @StringBuilder.add
+  callee +3:3 StringBuilder.add -> @StringBuilder.add
+  callee +3:11 profileLine -> @profileLine
+  callee +4:3 StringBuilder.add -> @StringBuilder.add
+  callee +5:3 StringBuilder.add -> @StringBuilder.add
   callee +6:3 StringBuilder.add -> @StringBuilder.add
   callee +7:3 StringBuilder.add -> @StringBuilder.add
   callee +8:3 StringBuilder.add -> @StringBuilder.add
+  callee +8:23 fileFingerprint -> @fileFingerprint
   callee +9:3 StringBuilder.add -> @StringBuilder.add
-  callee +10:3 addRecipeFingerprints -> @addRecipeFingerprints
-  callee +11:10 StringBuilder.toText -> @StringBuilder.toText
+  callee +10:10 StringBuilder.toText -> @StringBuilder.toText

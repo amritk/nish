@@ -1496,7 +1496,15 @@ and no `pollModify`. A slot borrows its output buffer only while it writes, so
 an idle connection costs a few KiB, not `outputSize`. An `Http1Server` builds
 a slot's connection on the first accept into it and keeps it for the next, so
 a pool sized for 16,384 connections costs some 16 KiB until they come;
-`bench/http.mjs` load-tests that loop on one core. `TlsTcpServer`,
+`bench/http.mjs` load-tests that loop on one core. Call `expire(now)` on an
+`Http1Server` or `Http1TlsServer` from your loop, with `monotonicNanos()`, now
+and then: it closes a slot that has moved no byte for `idleTimeout`
+milliseconds, and one whose request head has been arriving for longer than
+`headTimeout` (30 s by default), so a client that trickles its head a byte at
+a time cannot hold a slot. Over TLS the head's clock starts with the first
+bytes after the handshake, so a client that finishes its handshake and then
+sends nothing is closed after `headTimeout` too. Both are `Http1Config`
+fields, and a value of 0 or less stops start-up. `TlsTcpServer`,
 `Http1TlsServer`, `Http2TlsServer` and `Http3Server` build a slot the same
 way, on the first connection accepted into it (an `Http2TlsServer` builds slot
 0 in its constructor), so a pool's size is a ceiling on its connections. What
