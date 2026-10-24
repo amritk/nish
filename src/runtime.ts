@@ -619,6 +619,39 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `nish:term`, runtime/runtime-term.c. Each is a write: stdin's queue and
+    // the terminal's mode are kernel state, so no two calls fold into one.
+    // `waitStdin` may wait forever, `setRawMode(true)` waits for the
+    // terminal's output to drain (`TCSAFLUSH`), and `readStdin`'s `read`
+    // follows a readiness check that a second reader of the same terminal can
+    // race, so those three get `nounwind` alone. `isTerminal` is one `isatty`
+    // and `terminalSize` at most two `ioctl`s and a fresh two-element `i32[]`
+    // (the shape `waitPid` answers), so both return.
+    this.add(
+      mayNotReturn(
+        "nish_read_stdin",
+        `declare noundef i32 @nish_read_stdin(${NET_BUFFER}, i64 noundef, i64 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn("nish_wait_stdin", "declare zeroext i1 @nish_wait_stdin(i32 noundef)", EFFECT_WRITE)
+    )
+    this.add(plain("nish_is_terminal", "declare zeroext i1 @nish_is_terminal(i32 noundef)", EFFECT_WRITE))
+    this.add(
+      plain(
+        "nish_terminal_size",
+        "declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size()",
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_set_raw_mode",
+        "declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext)",
+        EFFECT_WRITE
+      )
+    )
     // WP34 N5, runtime/runtime-net.c, `nish:net`. Every one is a write: each
     // changes the kernel's state of a socket, which is not memory LLVM
     // tracks, so two calls must never fold into one, and the ones handed a

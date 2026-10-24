@@ -30,9 +30,11 @@
  * The kinds are `YAML_SCALAR`, `YAML_MAP`, `YAML_SEQ`, `YAML_ALIAS` and
  * `YAML_PAIR`. A map's children are its pairs, in source order; a pair's `key`
  * and `value` are nodes. A seq's children are its items. An alias's `target`
- * is the node its anchor named. Merge keys (`<<`) are not applied: a map holds
- * the pairs it was written with, and a `<<` key is only exempt from the
- * duplicate-key check.
+ * is the node its anchor named. A map holds the pairs it was written with, and
+ * merge keys (`<<`) are not copied into it: a `<<` key is exempt from the
+ * duplicate-key check, its value must be a map, an alias to one or a sequence
+ * of those, and `pathNode` and `pathPair` look a key a map lacks up in the maps
+ * it merges.
  *
  * **Diagnostics** carry a `YAML_ERR_*` code, whether they are a warning, a
  * message, a byte range and the document they belong to, sorted by where they
@@ -220,7 +222,10 @@ export class YamlOptions {
   maxDepth: i32 = 1000
   /** Whether a map that repeats a key is reported (`DUPLICATE_KEY`). */
   uniqueKeys: boolean = true
-  /** Whether a plain `<<` key is a merge key, exempt from `uniqueKeys`. Merge keys are not applied. */
+  /**
+   * Whether a plain `<<` key is a merge key: exempt from `uniqueKeys`, checked
+   * to name maps, and followed by paths. The nodes are not changed either way.
+   */
   merge: boolean = true
   /** Whether the stream keeps the byte range of every comment (`commentCount`). */
   keepComments: boolean = false
@@ -285,6 +290,12 @@ export class YamlStream {
   /** Per comment kept: its range, from the `#`. */
   commentStarts: i32[]
   commentEnds: i32[]
+  /**
+   * Per node: the path step whose merge search last went through it, as
+   * `mergeStep` numbers them; grown to the node count by the first search, so
+   * a search marks a map searched in one store.
+   */
+  mergeStamps: i32[]
   /** Per node: its `YAML_*` kind, style and core-schema type (`YAML_UNRESOLVED` until read). */
   kinds: u8[]
   styles: u8[]
@@ -297,6 +308,10 @@ export class YamlStream {
   kidTop: i32 = 0
   errors: i32 = 0
   warnings: i32 = 0
+  /** How many path steps have searched merge keys; the stamp of the latest. */
+  mergeStep: i32 = 0
+  /** Whether a plain `<<` key is a merge key, as `YamlOptions.merge` said; paths follow merge keys while it is. */
+  merge: boolean = true
 
   constructor(text: string) {
     this.source = text
@@ -331,6 +346,7 @@ export class YamlStream {
     this.docEnds = []
     this.commentStarts = []
     this.commentEnds = []
+    this.mergeStamps = []
   }
 
   // ---- Documents ---------------------------------------------------------------
@@ -1509,7 +1525,6 @@ class YamlParser {
   markerAt: i32 = -1
   flowIndentReported: boolean = false
   uniqueKeys: boolean = true
-  merge: boolean = true
   keepComments: boolean = false
   firstOnly: boolean = false
   yamlDirective: boolean = false
@@ -1530,7 +1545,7 @@ class YamlParser {
     this.len = toI32(text.length)
     this.maxDepth = options.maxDepth
     this.uniqueKeys = options.uniqueKeys
-    this.merge = options.merge
+    this.stream.merge = options.merge
     this.keepComments = options.keepComments
     this.firstOnly = options.firstDocumentOnly
   }
@@ -2403,11 +2418,16 @@ class YamlParser {
         i += 1
       }
       const c: i32 = this.at(i)
-      if (yamlIsBreak(c)) {
-        scan = this.nextLineStart(i)
+      // A line of blanks is an empty line, tabs included, though a tab cannot indent.
+      let blank: i32 = i
+      while (yamlIsBlank(this.at(blank))) {
+        blank += 1
+      }
+      if (yamlIsBreak(this.at(blank))) {
+        scan = this.nextLineStart(blank)
         continue
       }
-      if (c < 0) {
+      if (this.at(blank) < 0) {
         break
       }
       const indent: i32 = i - scan
@@ -2484,13 +2504,14 @@ class YamlParser {
       }
       this.pos += 1
     }
+    // An empty scalar ends at its header, not at the line after it.
+    let valueEnd: i32 = this.pos
     this.checkBlockHeaderEnd()
     this.finishLine()
     const bodyStart: i32 = this.pos
     let contentIndent: i32 =
       explicitIndent > 0 ? (parentIndent > 0 ? parentIndent : toI32(0)) + explicitIndent : -1
     let leadingBlank: i32 = -1
-    let valueEnd: i32 = this.pos
     while (this.pos < this.len) {
       const lineStart: i32 = this.pos
       let i: i32 = lineStart
@@ -3196,17 +3217,68 @@ class YamlParser {
     const pair: i32 = stream.newNode(YAML_PAIR, YAML_PLAIN, stream.start(key), end)
     yamlPut(stream.firsts, pair, key)
     yamlPut(stream.counts, pair, value)
+    if (this.isMergeKey(key)) {
+      this.checkMerge(key, value)
+    }
     return pair
+  }
+
+  /**
+   * Internal: reports the value of merge key `key` unless it is a map, an alias
+   * to one or a sequence of those; an empty value is reported on the key, a
+   * sequence on each item that is not, and an alias to a sequence on the alias.
+   * An alias with no target is already reported.
+   */
+  checkMerge(key: i32, value: i32): void {
+    const stream: YamlStream = this.stream
+    if (value < 0) {
+      this.badMerge(stream.start(key), stream.end(key))
+      return
+    }
+    const onAlias: boolean = stream.kind(value) === YAML_ALIAS
+    const seq: i32 = onAlias ? stream.target(value) : value
+    if (seq >= 0 && stream.kind(seq) === YAML_SEQ) {
+      const count: i32 = stream.count(seq)
+      let i: i32 = 0
+      while (i < count) {
+        const item: i32 = stream.child(seq, i)
+        if (!this.mergesMap(item)) {
+          if (onAlias) {
+            this.badMerge(stream.start(value), stream.end(value))
+            return
+          }
+          this.badMerge(stream.start(item), stream.end(item))
+        }
+        i += 1
+      }
+    } else if (!this.mergesMap(value)) {
+      this.badMerge(stream.start(value), stream.end(value))
+    }
+  }
+
+  /** Internal: whether `n` is a map, an alias to one or an alias with no target, which merges nothing and is reported as such. */
+  mergesMap(n: i32): boolean {
+    const stream: YamlStream = this.stream
+    if (stream.kind(n) === YAML_ALIAS) {
+      const target: i32 = stream.target(n)
+      return target < 0 || stream.kind(target) === YAML_MAP
+    }
+    return stream.kind(n) === YAML_MAP
+  }
+
+  /** Internal: reports a merge value that names no map over `start` to `end`. */
+  badMerge(start: i32, end: i32): void {
+    this.error(
+      YAML_ERR_BAD_MERGE,
+      "Merge key value must be a map, an alias to a map or a sequence of those",
+      start,
+      end
+    )
   }
 
   /** Internal: whether `key` is a `<<` merge key, which the duplicate check skips when merging is on. */
   isMergeKey(key: i32): boolean {
-    const stream: YamlStream = this.stream
-    if (!this.merge || stream.kind(key) !== YAML_SCALAR || stream.style(key) !== YAML_PLAIN) {
-      return false
-    }
-    const start: i32 = stream.start(key)
-    return stream.end(key) === start + 2 && this.at(start) === YAML_LT && this.at(start + 1) === YAML_LT
+    return yamlIsMergeKey(this.stream, key)
   }
 
   /**
@@ -4203,6 +4275,25 @@ class YamlKeySet {
   }
 }
 
+/** Whether map key `key` of `stream` is a merge key: a plain `<<`, untagged or `!!merge`, while the stream merges. */
+const yamlIsMergeKey = (stream: YamlStream, key: i32): boolean => {
+  if (!stream.merge || key < 0) {
+    return false
+  }
+  const start: i32 = stream.start(key)
+  if (
+    stream.end(key) !== start + 2 ||
+    yamlByte(stream.source, start) !== YAML_LT ||
+    yamlByte(stream.source, start + 1) !== YAML_LT ||
+    stream.kind(key) !== YAML_SCALAR ||
+    stream.style(key) !== YAML_PLAIN
+  ) {
+    return false
+  }
+  const tag: string = stream.tag(key)
+  return tag === "" || tag === "merge"
+}
+
 // ---- Key text -------------------------------------------------------------------
 
 /** How many bytes `keyText` writes for a collection key before it cuts the rest to `…`. */
@@ -4384,6 +4475,107 @@ class YamlPathWalker {
     return index
   }
 
+  /** Internal: the last pair of map `map` whose key `step` matches, as when a duplicate is let through; `-1` for none. */
+  ownPair(map: i32, step: string): i32 {
+    const stream: YamlStream = this.stream
+    let i: i32 = stream.count(map) - 1
+    while (i >= 0) {
+      const pair: i32 = stream.child(map, i)
+      if (this.keyIs(stream.key(pair), step)) {
+        return pair
+      }
+      i -= 1
+    }
+    return -1
+  }
+
+  /**
+   * Internal: the pair `step` matches in the maps the merge keys of map `map`
+   * name, in the order they are written, each searched as `ownPair` and then
+   * through its own merge keys, so the first map listed wins. A merge key's
+   * value is a map, an alias to one or a sequence of those; anything else
+   * merges nothing. A map already searched is skipped (two merges sharing a
+   * map search it once), and the search goes `YAML_ALIAS_HOPS` merges deep at
+   * most. No YAML source can form a merge cycle, since an anchor binds only
+   * once its node ends, so both guards are defensive: they bound the work, not
+   * a loop.
+   */
+  mergedPair(map: i32, step: string, depth: i32): i32 {
+    const stream: YamlStream = this.stream
+    const count: i32 = stream.count(map)
+    let i: i32 = 0
+    while (i < count && depth < YAML_ALIAS_HOPS) {
+      const pair: i32 = stream.child(map, i)
+      if (yamlIsMergeKey(stream, stream.key(pair))) {
+        const value: i32 = this.follow(stream.value(pair))
+        if (value >= 0 && stream.kind(value) === YAML_SEQ) {
+          const items: i32 = stream.count(value)
+          let j: i32 = 0
+          while (j < items) {
+            const found: i32 = this.mergedFrom(this.follow(stream.child(value, j)), step, depth)
+            if (found >= 0) {
+              return found
+            }
+            j += 1
+          }
+        } else {
+          const found: i32 = this.mergedFrom(value, step, depth)
+          if (found >= 0) {
+            return found
+          }
+        }
+      }
+      i += 1
+    }
+    return -1
+  }
+
+  /** Internal: `mergedPair`'s search of one merged node `from`, which merges nothing unless it is a map not yet searched. */
+  mergedFrom(from: i32, step: string, depth: i32): i32 {
+    const stream: YamlStream = this.stream
+    if (from < 0 || stream.kind(from) !== YAML_MAP) {
+      return -1
+    }
+    if (!this.markSeen(from)) {
+      return -1
+    }
+    const own: i32 = this.ownPair(from, step)
+    return own >= 0 ? own : this.mergedPair(from, step, depth + 1)
+  }
+
+  /**
+   * Internal: starts a step's merge search: a new `mergeStep` stamp, with
+   * `mergeStamps` grown to every node. The stamps are cleared only when the
+   * count wraps, so a step costs what it searches, not the document's size.
+   */
+  startMerge(): void {
+    const stream: YamlStream = this.stream
+    const stamps: i32[] = stream.mergeStamps
+    while (toI32(stamps.length) < stream.top) {
+      stamps.push(0)
+    }
+    if (stream.mergeStep === 2147483647) {
+      let k: i32 = 0
+      while (k < toI32(stamps.length)) {
+        stamps[k] = 0
+        k += 1
+      }
+      stream.mergeStep = 0
+    }
+    stream.mergeStep += 1
+  }
+
+  /** Internal: marks map `map` searched by this step; `false` when it already was. */
+  markSeen(map: i32): boolean {
+    const stream: YamlStream = this.stream
+    const stamps: i32[] = stream.mergeStamps
+    if (map < 0 || map >= toI32(stamps.length) || stamps[map] === stream.mergeStep) {
+      return false
+    }
+    stamps[map] = stream.mergeStep
+    return true
+  }
+
   /** Internal: walks `path` down from `root`, as far as it matches. */
   walk(root: i32, path: string[]): void {
     const stream: YamlStream = this.stream
@@ -4399,23 +4591,20 @@ class YamlPathWalker {
       const step: string = path[this.matched]
       const kind: i32 = stream.kind(at)
       if (kind === YAML_MAP) {
-        // The last pair with the key wins, as it does when a duplicate is let through.
-        let i: i32 = stream.count(at) - 1
-        while (i >= 0) {
-          const pair: i32 = stream.child(at, i)
-          if (this.keyIs(stream.key(pair), step)) {
-            // An empty value (`a:`) matches the step and reaches no node, which ends the walk.
-            this.pair = pair
-            this.node = stream.value(pair)
-            this.matched += 1
-            if (this.node < 0) {
-              return
-            }
-            break
-          }
-          i -= 1
+        let pair: i32 = this.ownPair(at, step)
+        if (pair < 0 && stream.merge) {
+          this.startMerge()
+          this.markSeen(at)
+          pair = this.mergedPair(at, step, toI32(0))
         }
-        if (i < 0) {
+        if (pair < 0) {
+          return
+        }
+        // An empty value (`a:`) matches the step and reaches no node, which ends the walk.
+        this.pair = pair
+        this.node = stream.value(pair)
+        this.matched += 1
+        if (this.node < 0) {
           return
         }
       } else if (kind === YAML_SEQ) {
@@ -4435,8 +4624,11 @@ class YamlPathWalker {
 /**
  * The node `path` names below `root` of `stream`: each step a map key (matched
  * by `keyText`; of duplicate keys, the last) or a sequence index (`"0"`, no
- * leading zero), through aliases. When a step does not match, the node the last
- * matching step reached; `root` itself for an empty path. A step onto an empty
+ * leading zero), through aliases. While the stream merges (`YamlOptions.merge`),
+ * a key a map does not hold is looked for in the maps its `<<` keys name, in
+ * order: the map's own keys win, then the first merged map that has it, and the
+ * pair found is the one inside that map. When a step does not match, the node
+ * the last matching step reached; `root` itself for an empty path. A step onto an empty
  * value (`a:`) matches and reaches no node, so the answer is then `-1`.
  */
 export const pathNode = (stream: YamlStream, root: i32, path: string[]): i32 => {

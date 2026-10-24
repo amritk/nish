@@ -72,6 +72,12 @@ if (!declaration(builtins, "isBuiltinFunction", "builtins.ts").includes("isNetEx
   )
 }
 const unsafeExports = comparedNames(declaration(modules, "isUnsafeExport", "nish-modules.ts"))
+const termExports = comparedNames(declaration(modules, "isTermExport", "nish-modules.ts"))
+if (!declaration(builtins, "isBuiltinFunction", "builtins.ts").includes("isTermExport(name)")) {
+  problems.push(
+    "builtins.ts: `isBuiltinFunction` no longer admits `isTermExport(name)`; read its new shape here"
+  )
+}
 if (!declaration(builtins, "isBuiltinFunction", "builtins.ts").includes("isUnsafeExport(name)")) {
   problems.push(
     "builtins.ts: `isBuiltinFunction` no longer admits `isUnsafeExport(name)`; read its new shape here"
@@ -107,6 +113,7 @@ const accepted = new Set([
   ...plain,
   ...netExports,
   ...unsafeExports,
+  ...termExports,
   ...dotted,
   ...properties,
   ...constructors,
@@ -129,13 +136,20 @@ for (const list of exportLists) {
 }
 
 // The table: each row once, `isNetExport(name)` standing for every `nish:net`
-// export and `isUnsafeExport(name)` for every `nish:unsafe` one.
+// export, `isUnsafeExport(name)` for every `nish:unsafe` one and
+// `isTermExport(name)` for every `nish:term` one.
 const capability = declaration(table, "builtinCapability", "capabilities.ts")
 const rows = comparedNames(capability)
 const viaNet = capability.includes("isNetExport(name)")
 const viaUnsafe = capability.includes("isUnsafeExport(name)")
+const viaTerm = capability.includes("isTermExport(name)")
 const labelled = new Map()
-for (const row of [...rows, ...(viaNet ? netExports : []), ...(viaUnsafe ? unsafeExports : [])]) {
+for (const row of [
+  ...rows,
+  ...(viaNet ? netExports : []),
+  ...(viaUnsafe ? unsafeExports : []),
+  ...(viaTerm ? termExports : []),
+]) {
   labelled.set(row, (labelled.get(row) ?? 0) + 1)
 }
 for (const name of [...accepted].sort()) {

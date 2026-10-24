@@ -126,6 +126,7 @@ import validate from "./validator" -> function @validate
 import buildModeOf from "./visibility" -> function @buildModeOf
 import buildsWasmModule from "./visibility" -> function @buildsWasmModule
 import hostVisible from "./visibility" -> function @hostVisible
+import isFreestandingWasmBuild from "./visibility" -> function @isFreestandingWasmBuild
 import isWasmBuild from "./visibility" -> function @isWasmBuild
 import CheckContext from "./context" -> struct CheckContext
 import NUMBER_MODE_F64 from "./context" -> const NUMBER_MODE_F64
@@ -380,7 +381,7 @@ function Compilation.discover(this: Compilation, path: string, name: string, pac
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: name packageOverride path
-  calls: CheckContext.errorAtSpecifier Checker.constructor Checker.declareNames Compilation.discover Compilation.identityOf Compilation.packageOf Compilation.resolveSpecifier DiagnosticSink.add DiagnosticSink.count DiagnosticSink.reportFix ModuleUnit.constructor Parser.constructor Parser.parseSourceFile SourceFile.constructor StringMap.get StringMap.has StringMap.set dirname fsSpecifierFix isBuiltinSpecifier isWasmBuild nish_alloc_struct nish_array_grow nish_panic_overflow nish_read_file_or_null nish_str_at nish_str_concat nish_str_eq packageDirOf stdModuleNames threadsModuleName validate
+  calls: CheckContext.errorAtSpecifier Checker.constructor Checker.declareNames Compilation.discover Compilation.identityOf Compilation.packageOf Compilation.resolveSpecifier DiagnosticSink.add DiagnosticSink.count DiagnosticSink.reportFix ModuleUnit.constructor Parser.constructor Parser.parseSourceFile SourceFile.constructor StringMap.get StringMap.has StringMap.set dirname fsSpecifierFix isBuiltinSpecifier isFreestandingWasmBuild isWasmBuild nish_alloc_struct nish_array_grow nish_panic_overflow nish_read_file_or_null nish_str_at nish_str_concat nish_str_eq packageDirOf stdModuleNames threadsModuleName validate
   pointer this: size=128 writesThrough=true captured=false passedTo=Compilation.identityOf#0 Compilation.packageOf#0 Compilation.resolveSpecifier#0 Compilation.identityOf#0 Compilation.discover#0
   stackSites=1 stackLocals=1
   local -11:11 identity: string (const)
@@ -404,42 +405,43 @@ function Compilation.discover(this: Compilation, path: string, name: string, pac
   local +29:11 checker: Checker (const)
   callee +29:21 new Checker -> @Checker.constructor
   callee +42:24 isWasmBuild -> @isWasmBuild
-  local +43:11 unit: ModuleUnit (const)
-  callee +43:18 new ModuleUnit -> @ModuleUnit.constructor
-  callee +50:41 threadsModuleName -> @threadsModuleName
-  callee +53:5 StringMap.set -> @StringMap.set
-  local +62:11 beforeValidation: i32 (const)
-  callee +62:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +63:5 validate -> @validate
-  local +64:11 failedValidation: boolean (const)
-  callee +64:30 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +65:54 DiagnosticSink.count -> @DiagnosticSink.count
-  local +75:11 beforeNames: i32 (const)
-  callee +75:25 DiagnosticSink.count -> @DiagnosticSink.count
-  callee +76:5 Checker.declareNames -> @Checker.declareNames
-  callee +88:29 DiagnosticSink.count -> @DiagnosticSink.count
-  local +89:11 signaturesFailed: boolean (const)
-  local +90:11 dir: string (const)
-  callee +90:17 dirname -> @dirname
-  local +91:9 ok: boolean (let)
-  local +97:9 failedDecl: Node | null (let)
-  local +98:16 imp: ImportBinding (const)
-  callee +100:11 isBuiltinSpecifier -> @isBuiltinSpecifier
-  callee +103:11 StringMap.has -> @StringMap.has
-  local +110:13 found: ResolvedModule (const)
-  callee +110:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
-  local +114:15 fix: Edit[] (const)
-  callee +116:13 fsSpecifierFix -> @fsSpecifierFix
-  callee +119:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
-  callee +121:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  local +127:13 target: string (const)
-  callee +129:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
-  callee +132:91 stdModuleNames -> @stdModuleNames
-  local +144:13 targetIdentity: string (const)
-  callee +144:30 Compilation.identityOf -> @Compilation.identityOf
-  callee +147:12 Compilation.discover -> @Compilation.discover
-  callee +150:9 StringMap.set -> @StringMap.set
-  callee +150:42 StringMap.get -> @StringMap.get
+  callee +43:36 isFreestandingWasmBuild -> @isFreestandingWasmBuild
+  local +44:11 unit: ModuleUnit (const)
+  callee +44:18 new ModuleUnit -> @ModuleUnit.constructor
+  callee +51:41 threadsModuleName -> @threadsModuleName
+  callee +54:5 StringMap.set -> @StringMap.set
+  local +63:11 beforeValidation: i32 (const)
+  callee +63:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +64:5 validate -> @validate
+  local +65:11 failedValidation: boolean (const)
+  callee +65:30 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +66:54 DiagnosticSink.count -> @DiagnosticSink.count
+  local +76:11 beforeNames: i32 (const)
+  callee +76:25 DiagnosticSink.count -> @DiagnosticSink.count
+  callee +77:5 Checker.declareNames -> @Checker.declareNames
+  callee +89:29 DiagnosticSink.count -> @DiagnosticSink.count
+  local +90:11 signaturesFailed: boolean (const)
+  local +91:11 dir: string (const)
+  callee +91:17 dirname -> @dirname
+  local +92:9 ok: boolean (let)
+  local +98:9 failedDecl: Node | null (let)
+  local +99:16 imp: ImportBinding (const)
+  callee +101:11 isBuiltinSpecifier -> @isBuiltinSpecifier
+  callee +104:11 StringMap.has -> @StringMap.has
+  local +111:13 found: ResolvedModule (const)
+  callee +111:21 Compilation.resolveSpecifier -> @Compilation.resolveSpecifier
+  local +115:15 fix: Edit[] (const)
+  callee +117:13 fsSpecifierFix -> @fsSpecifierFix
+  callee +120:11 DiagnosticSink.reportFix -> @DiagnosticSink.reportFix
+  callee +122:11 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  local +128:13 target: string (const)
+  callee +130:9 CheckContext.errorAtSpecifier -> @CheckContext.errorAtSpecifier
+  callee +133:91 stdModuleNames -> @stdModuleNames
+  local +145:13 targetIdentity: string (const)
+  callee +145:30 Compilation.identityOf -> @Compilation.identityOf
+  callee +148:12 Compilation.discover -> @Compilation.discover
+  callee +151:9 StringMap.set -> @StringMap.set
+  callee +151:42 StringMap.get -> @StringMap.get
 function Compilation.resolveSpecifier(this: Compilation, dir: string, specifier: string): ResolvedModule -> @Compilation.resolveSpecifier [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=32
   sharedWrite: via Compilation.resolveBareSpecifier
@@ -1319,7 +1321,7 @@ function clashMessage(table: TypeTable, sig: FunctionSig, previous: FunctionSig,
 function fsSpecifierFix(ctx: CheckContext, imports: ImportBinding[], imp: ImportBinding): Edit[] -> @fsSpecifierFix
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.edit exportsAllOf isQuote nish_array_grow nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=CheckContext.edit#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=CheckContext.edit#0
   pointer imports: size=0 writesThrough=false captured=false passedTo=exportsAllOf#1
   pointer imp: size=88 writesThrough=false captured=false
   stackSites=0 stackLocals=0

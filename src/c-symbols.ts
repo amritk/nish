@@ -157,6 +157,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "atanpi" ||
   name === "atanpif" ||
   name === "atanpil" ||
+  name === "atexit" ||
   name === "atof" ||
   name === "atoi" ||
   name === "atol" ||
@@ -450,7 +451,9 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "ilogbf" ||
   name === "ilogbl" ||
   name === "inet_pton" ||
+  name === "ioctl" ||
   name === "isascii" ||
+  name === "isatty" ||
   name === "isdigit" ||
   name === "kevent" ||
   name === "kill" ||
@@ -558,6 +561,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "perror" ||
   name === "pipe" ||
   name === "pipe2" ||
+  name === "poll" ||
   name === "popen" ||
   name === "posix_memalign" ||
   name === "posix_spawn_file_actions_addopen" ||
@@ -600,6 +604,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "pwrite" ||
   name === "qsort" ||
   name === "qsort_r" ||
+  name === "raise" ||
   name === "read" ||
   name === "readdir" ||
   name === "readlink" ||
@@ -647,6 +652,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "scanf" ||
   name === "sched_getaffinity" ||
   name === "sched_yield" ||
+  name === "select" ||
   name === "send" ||
   name === "sendmsg" ||
   name === "setbuf" ||
@@ -661,7 +667,11 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "setvbuf" ||
   name === "shutdown" ||
   name === "sigaction" ||
+  name === "sigaddset" ||
+  name === "sigaltstack" ||
   name === "sigemptyset" ||
+  name === "signal" ||
+  name === "sigprocmask" ||
   name === "sin" ||
   name === "sincos" ||
   name === "sincosf" ||
@@ -736,6 +746,8 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "tanpi" ||
   name === "tanpif" ||
   name === "tanpil" ||
+  name === "tcgetattr" ||
+  name === "tcsetattr" ||
   name === "tgamma" ||
   name === "tgammaf" ||
   name === "tgammal" ||

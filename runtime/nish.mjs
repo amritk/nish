@@ -134,6 +134,15 @@ for (const name of [
   provide(name, () => shim.noNetReading(name));
 }
 
+// `nish:term`. Whether a descriptor is a terminal and how big stdout's is have
+// Node's answers; reading stdin, waiting for it and raw mode throw, each naming
+// itself, for the net functions' reason.
+provide("isTerminal", shim.isTerminal);
+provide("terminalSize", shim.terminalSize);
+for (const name of ["readStdin", "waitStdin", "setRawMode"]) {
+  provide(name, () => shim.noTermReading(name));
+}
+
 // `crypto.getRandomValues(bytes)` (WP34 N3). Node has the global, but it
 // takes only a typed array and a `u8[]` is a plain `Array` here, so the one
 // method is replaced on Node's own `crypto` object by one that fills a plain
@@ -278,11 +287,13 @@ provide("arena", shim.arena);
 // `nish:secret` is answered here as well, because the standard library imports
 // it (`std/crypto/p256.ts` and its neighbours): its names are
 // `runtime/shim.mjs`'s, where a `Secret` is a plain wrapper and `wipe`
-// zero-fills it. `nish:unsafe` is answered by a module that hands back the
-// globals installed above: its functions are globals of this module either
+// zero-fills it. `nish:unsafe` and `nish:term` are each answered by a module
+// that hands back the globals installed above: its functions are globals of this module either
 // way, and the import is what the compiler requires a program to write.
 const UNSAFE_EXPORTS = ["uncheckedGet", "uncheckedSet", "wrappingAdd", "wrappingSub", "wrappingMul"];
 const unsafeSource = UNSAFE_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
+const TERM_EXPORTS = ["readStdin", "waitStdin", "isTerminal", "terminalSize", "setRawMode"];
+const termSource = TERM_EXPORTS.map((name) => `export const ${name} = globalThis.${name};`).join("\n");
 registerHooks({
   resolve: (specifier, context, next) => {
     if (specifier === "nish:secret") {
@@ -290,6 +301,9 @@ registerHooks({
     }
     if (specifier === "nish:unsafe") {
       return { url: `data:text/javascript,${encodeURIComponent(unsafeSource)}`, shortCircuit: true };
+    }
+    if (specifier === "nish:term") {
+      return { url: `data:text/javascript,${encodeURIComponent(termSource)}`, shortCircuit: true };
     }
     return specifier.startsWith("nish/")
       ? next(new URL(`../std/${specifier.slice("nish/".length)}.ts`, import.meta.url).href, context)

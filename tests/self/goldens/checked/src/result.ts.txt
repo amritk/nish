@@ -74,7 +74,7 @@ function checkResultConstructor(ctx: CheckContext, call: Node, scope: Scope, wan
   sharedWrite: via CheckContext.errorType
   escaping: want
   calls: CheckContext.error CheckContext.errorType TypeTable.assignable TypeTable.errOf TypeTable.isEntered TypeTable.isResult TypeTable.okOf TypeTable.typeName checkBuiltinArity checkExpression nish_panic_index nish_str_concat nish_str_eq
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 CheckContext.errorType#0 checkBuiltinArity#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 checkBuiltinArity#1 checkBuiltinArity#1
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
   stackSites=0 stackLocals=0
@@ -101,7 +101,7 @@ function checkResultConstructor(ctx: CheckContext, call: Node, scope: Scope, wan
 function narrowHint(ctx: CheckContext, receiverExpr: Node, payload: string): string -> @narrowHint
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: CheckContext.textOf nish_str_concat nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=CheckContext.textOf#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=CheckContext.textOf#0
   pointer receiverExpr: size=40 writesThrough=false captured=false passedTo=CheckContext.textOf#1
   stackSites=0 stackLocals=0
   local +0:9 test: string (const)
@@ -113,7 +113,7 @@ function checkResultProperty(ctx: CheckContext, expr: Node, receiver: i32): i32 
   sharedWrite: via CheckContext.errorAtProperty
   escaping: receiver
   calls: CheckContext.errorAtProperty TypeTable.errOf TypeTable.okOf TypeTable.stateOf TypeTable.typeName narrowHint nish_panic_index nish_str_concat nish_str_eq
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 narrowHint#0 CheckContext.errorAtProperty#0 narrowHint#0 CheckContext.errorAtProperty#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorAtProperty#0 CheckContext.errorAtProperty#0 narrowHint#0 CheckContext.errorAtProperty#0 narrowHint#0 CheckContext.errorAtProperty#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1 CheckContext.errorAtProperty#1
   stackSites=0 stackLocals=0
   local +0:9 receiverExpr: Node (const)
@@ -135,7 +135,7 @@ function requireStatement(ctx: CheckContext, call: Node, method: string, receive
   sharedWrite: via CheckContext.error
   escaping: receiver
   calls: CheckContext.error TypeTable.typeName nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.error#1
   stackSites=0 stackLocals=0
   local +0:9 statement: Node | null (const)
@@ -146,7 +146,7 @@ function checkOrReturn(ctx: CheckContext, call: Node, receiver: i32): i32 -> @ch
   sharedWrite: via CheckContext.errorType
   escaping: receiver
   calls: CheckContext.errorType TypeTable.assignable TypeTable.errOf TypeTable.isResult TypeTable.okOf TypeTable.typeName nish_str_concat requireStatement
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 requireStatement#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.errorType#0 requireStatement#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 CheckContext.errorType#1 requireStatement#1
   stackSites=0 stackLocals=0
   local +0:9 current: FunctionSig | null (const)
@@ -170,7 +170,7 @@ function checkUnwrapOr(ctx: CheckContext, call: Node, args: Node, receiver: i32,
   sharedWrite: via CheckContext.errorType
   escaping: receiver
   calls: CheckContext.error CheckContext.errorType TypeTable.assignable TypeTable.isEntered TypeTable.okOf TypeTable.typeName checkBuiltinArity checkExpression nish_panic_index nish_str_concat
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=CheckContext.errorType#0 checkBuiltinArity#0 checkExpression#0 CheckContext.error#0
   pointer call: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 checkBuiltinArity#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
@@ -193,7 +193,7 @@ function checkExpect(ctx: CheckContext, call: Node, args: Node, receiver: i32, s
   sharedWrite: via checkBuiltinArity
   escaping: receiver
   calls: CheckContext.error TypeTable.okOf TypeTable.typeName checkBuiltinArity checkExpression nish_panic_index nish_str_concat requireStatement
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 requireStatement#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkExpression#0 CheckContext.error#0 requireStatement#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 requireStatement#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3
   pointer scope: size=56 writesThrough=true captured=true passedTo=checkExpression#2
@@ -211,7 +211,7 @@ function checkResultMethod(ctx: CheckContext, call: Node, access: Node, args: No
   sharedWrite: via checkBuiltinArity
   escaping: receiver
   calls: CheckContext.errorAtProperty TypeTable.typeName checkBuiltinArity checkExpect checkOrReturn checkUnwrapOr nish_str_concat nish_str_eq
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkBuiltinArity#0 checkOrReturn#0 checkUnwrapOr#0 checkExpect#0 CheckContext.errorAtProperty#0
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=checkBuiltinArity#0 checkBuiltinArity#0 checkOrReturn#0 checkUnwrapOr#0 checkExpect#0 CheckContext.errorAtProperty#0
   pointer call: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#1 checkBuiltinArity#1 checkOrReturn#1 checkUnwrapOr#1 checkExpect#1
   pointer access: size=40 writesThrough=false captured=false passedTo=CheckContext.errorAtProperty#1
   pointer args: size=40 writesThrough=false captured=false passedTo=checkBuiltinArity#3 checkBuiltinArity#3 checkUnwrapOr#2 checkExpect#2
@@ -249,7 +249,7 @@ function rejectDiscardedResult(ctx: CheckContext, expr: Node, type: i32, scope: 
   sharedWrite: via isParameterValue
   escaping: type
   calls: CheckContext.error CheckContext.textOf TypeTable.isResult TypeTable.typeName isParameterValue nish_str_concat nish_str_eq
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=isParameterValue#0 CheckContext.error#0 CheckContext.textOf#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=isParameterValue#0 CheckContext.error#0 CheckContext.textOf#0
   pointer expr: size=40 writesThrough=true captured=true passedTo=isParameterValue#1 CheckContext.error#1 CheckContext.textOf#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=isParameterValue#2
   stackSites=0 stackLocals=0
@@ -262,7 +262,7 @@ function checkResultLocalsHandled(ctx: CheckContext, body: Node): void -> @check
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via collectResultLocals
   calls: CheckContext.error TypeTable.typeName collectResultLocals markResultReads nish_array_grow nish_panic_index nish_str_concat rejectUnreadOverwrites
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.error#0 rejectUnreadOverwrites#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=CheckContext.error#0 rejectUnreadOverwrites#0
   pointer body: size=40 writesThrough=true captured=true passedTo=collectResultLocals#2 markResultReads#1 rejectUnreadOverwrites#1
   stackSites=3 stackLocals=3
   local +0:9 declarations: Node[] (const)
@@ -279,7 +279,7 @@ function rejectUnreadOverwrites(ctx: CheckContext, node: Node, declarations: Nod
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: CheckContext.error TypeTable.typeName declarationIndex nish_panic_index nish_str_concat nish_str_eq rejectUnreadOverwrites
-  pointer ctx: size=280 writesThrough=true captured=false passedTo=rejectUnreadOverwrites#0 rejectUnreadOverwrites#0 CheckContext.error#0 rejectUnreadOverwrites#0
+  pointer ctx: size=288 writesThrough=true captured=false passedTo=rejectUnreadOverwrites#0 rejectUnreadOverwrites#0 CheckContext.error#0 rejectUnreadOverwrites#0
   pointer node: size=40 writesThrough=false captured=false
   pointer declarations: size=0 writesThrough=false captured=false passedTo=rejectUnreadOverwrites#2 declarationIndex#1 declarationIndex#1 rejectUnreadOverwrites#2 declarationIndex#1 rejectUnreadOverwrites#2
   pointer unread: size=0 writesThrough=true captured=false passedTo=rejectUnreadOverwrites#3 rejectUnreadOverwrites#3 rejectUnreadOverwrites#3

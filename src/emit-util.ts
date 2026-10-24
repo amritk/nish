@@ -11,7 +11,7 @@
 // collector is a wrong attribute, not a missed optimisation), and a single
 // definition of "is this a `push`" is the cheapest way to keep them agreeing.
 
-import { isNetWrittenLetter, netSignature } from "./nish-modules"
+import { bufferSignature, isNetWrittenLetter } from "./nish-modules"
 import { CheckedProgram, inlineElementStruct } from "./program"
 import {
   FLAG_OPTIONAL,
@@ -177,7 +177,8 @@ export const isArrayWriteMethod = (name: string): boolean =>
  * a `nish:net` call (WP34 N5) is its signature, whose `w` arguments are
  * `netAddress`'s `out`, `tcpAccept`'s `peer`, `netRead`'s `buf` and
  * `udpRecvFrom`'s `buf` and `from`, and whose `m` arguments are
- * `udpRecvFrom`'s `meta` and `pollWait`'s `ready`; `uncheckedSet` is `w`, for its
+ * `udpRecvFrom`'s `meta` and `pollWait`'s `ready`; `readStdin` is `netRead`'s
+ * letters less the descriptor (`bufferSignature`); `uncheckedSet` is `w`, for its
  * receiver. A user function that shares a builtin's name wins it, as it wins
  * every identifier builtin, and writes nothing here. The parameter classification, the fact
  * collector and a scope's region rule ask this, each for the reason it asks
@@ -196,7 +197,7 @@ export const builtinArgumentLetters = (program: CheckedProgram, call: Node): str
     // `uncheckedSet(xs, i, v)` (`nish:unsafe`) writes an element of `xs`, as
     // `xs[i] = v` does; the index and the value are numbers.
     const name = builtinNameOf(program, call)
-    return name === "secureZero" || name === "uncheckedSet" ? "w" : netSignature(name)
+    return name === "secureZero" || name === "uncheckedSet" ? "w" : bufferSignature(name)
   }
   const fills =
     dottedName(callee) === "crypto.getRandomValues" && !receiverIsValue(program, callee.children[0])

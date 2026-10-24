@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "entry": "caps_tty.ts",
+  "deterministic": false,
+  "capabilities": ["tty"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["tty"],
+      "modules": [
+        {
+          "path": "caps_tty.ts",
+          "capabilities": ["tty"],
+          "functions": [
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["tty"],
+              "witnesses": {
+                "tty": [
+                  { "function": "main", "at": "caps_tty.ts:7:15", "calls": "columns" },
+                  { "function": "columns", "at": "caps_tty.ts:4:28", "calls": "terminalSize" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_tty.ts:7:3", "allowed": true },
+                { "kind": "call", "at": "caps_tty.ts:7:15", "callee": "columns", "via": "index" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

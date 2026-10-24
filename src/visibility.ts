@@ -79,6 +79,14 @@ export const isWasmBuild = (opts: Options): boolean =>
   opts.profile === "wasi" || opts.target.startsWith("wasm")
 
 /**
+ * A wasm build with no WASI under it: a wasm triple that names no `wasi`, and
+ * not the `wasi` profile. Its runtime is `runtime-wasm.c`, which has no stdin,
+ * so the checker refuses `nish:term` here and nowhere else.
+ */
+export const isFreestandingWasmBuild = (opts: Options): boolean =>
+  isWasmBuild(opts) && opts.profile !== "wasi" && opts.target.indexOf("wasi") < 0
+
+/**
  * Whether the build's output becomes a wasm module, whose linear memory
  * `wasm-ld` exports as `memory` (#643). A wasm build is one, and so is an
  * `--emit-dts` compile: its IR is for the host, but the loader it writes is

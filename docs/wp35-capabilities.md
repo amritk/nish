@@ -23,14 +23,15 @@ one *is* the `ffi` capability.
 
 ## 1. The set
 
-Eleven capabilities, each a bit of an `i32` mask in alphabetical order
+Twelve capabilities, each a bit of an `i32` mask in alphabetical order
 (`src/capabilities.ts`): `clock`, `entropy`, `env`, `exit`, `ffi`, `fs.read`,
-`fs.write`, `net`, `process.spawn`, `signal`, `unsafe`. Printing, argv,
+`fs.write`, `net`, `process.spawn`, `signal`, `tty`, `unsafe`. Printing, argv,
 `process.platform` and `process.arch`, `panic`, arena control and pure
 computation are ambient: none of them can make a program's answer differ
 between runs, or each is a constant of the build. A program is
 **deterministic** when it reaches none of `clock`, `entropy`, `env`, `ffi`,
-`fs.read`, `fs.write`, `net` and `process.spawn`. `exit` and `signal` keep it
+`fs.read`, `fs.write`, `net`, `process.spawn` and `tty` (`nish:term`, which
+reads stdin against the clock and asks the terminal). `exit` and `signal` keep it
 deterministic, since a chosen status is computed from the input and a run
 nobody signals is the same run every time.
 

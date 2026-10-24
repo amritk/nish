@@ -34,12 +34,12 @@ import { privateAbi } from "./emit-result"
 import { internalErrorFor } from "./ice"
 import { paramValue } from "./ir"
 import {
+  bufferSignature,
   isNetExport,
   NET_INT,
   NET_RANGE,
   NET_STRING,
   netRangeBuffer,
-  netSignature,
   netSymbol,
 } from "./nish-modules"
 import { N_IDENT, Node } from "./nodes"
@@ -994,6 +994,29 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "panic") {
     return emitPanic(emitter, expr)
   }
+  // `nish:term`, runtime-term.c. `readStdin` is `netRead` less the descriptor,
+  // so it takes the same range check and the same call shape; the other four
+  // are one call each, whose `i1`, `i32` or fresh `[columns, rows]` header is
+  // the language's answer as it is.
+  if (name === "readStdin") {
+    return emitNetCall(emitter, expr, name)
+  }
+  if (name === "waitStdin") {
+    const timeout = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("nish_wait_stdin")}(i32 ${timeout})`)
+  }
+  if (name === "isTerminal") {
+    const fd = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(`call zeroext i1 ${emitter.useRuntime("nish_is_terminal")}(i32 ${fd})`)
+  }
+  if (name === "terminalSize") {
+    emitter.declareType(ARRAY_TYPE)
+    return emitter.fn.emitValue(`call ${ARRAY_STRUCT}* ${emitter.useRuntime("nish_terminal_size")}()`)
+  }
+  if (name === "setRawMode") {
+    const on = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_raw_mode")}(i1 zeroext ${on})`)
+  }
   if (isNetExport(name)) {
     return emitNetCall(emitter, expr, name)
   }
@@ -1178,6 +1201,30 @@ export const identifierBuiltinCalleesNamed = (
     panicTailCallees(out)
     return out
   }
+  // `readStdin` checks its range as `netRead` does; the rest are one call each.
+  if (name === "readStdin") {
+    out.push("nish_read_stdin")
+    if (!uncheckedIndexing) {
+      out.push("nish_panic_slice")
+    }
+    return out
+  }
+  if (name === "waitStdin") {
+    out.push("nish_wait_stdin")
+    return out
+  }
+  if (name === "isTerminal") {
+    out.push("nish_is_terminal")
+    return out
+  }
+  if (name === "terminalSize") {
+    out.push("nish_terminal_size")
+    return out
+  }
+  if (name === "setRawMode") {
+    out.push("nish_set_raw_mode")
+    return out
+  }
   // WP34 N5: one symbol each, and the slice panic behind the range check of
   // `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` unless
   // `--unchecked-indexing` dropped it.
@@ -1216,14 +1263,15 @@ export const identifierBuiltinCalleesNamed = (
 // ---- WP34 N5: `nish:net` -------------------------------------------------------------------
 
 /**
- * One call into runtime-net.c, its arguments emitted left to right as every
- * call's are and passed as `netSignature` spells them: an `i32` as itself, a
+ * One call into runtime-net.c (or runtime-term.c, for `readStdin`), its
+ * arguments emitted left to right as every call's are and passed as
+ * `bufferSignature` spells them: an `i32` as itself, a
  * string as its `i8*`, a `u8[]` (or `meta`'s `i32[]`) as its header, whose
  * `len` and `data` the runtime reads, and an offset or a length (`n`) widened
  * to an `i64` as an index is. The answer is the runtime's `i32` in either
  * number mode.
  *
- * `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` take the range `[off,
+ * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom` and `readStdin` take the range `[off,
  * off + len)` of the buffer before their first `n`, checked here the way
  * `dst.set(src, at)` checks the range it writes, through the same panic and
  * with the same words: `0 <= off <= off + len <= buf.length`. Both are
@@ -1234,7 +1282,7 @@ export const identifierBuiltinCalleesNamed = (
  */
 const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
   const fn = emitter.fn
-  const params = netSignature(name)
+  const params = bufferSignature(name)
   const args = expr.children[1].children
   const values: string[] = []
   const parts: string[] = []

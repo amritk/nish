@@ -89,7 +89,7 @@ function RangeBody.constructor(this: RangeBody, ctx: CheckContext, sig: Function
   escaping: body callees ctx instance sig
   calls: StoreScan.constructor nish_alloc_struct nish_array_grow
   pointer this: size=120 writesThrough=true captured=false
-  pointer ctx: size=280 writesThrough=true captured=true passedTo=StoreScan.constructor#1
+  pointer ctx: size=288 writesThrough=true captured=true passedTo=StoreScan.constructor#1
   pointer sig: size=136 writesThrough=true captured=true
   pointer body: size=40 writesThrough=true captured=true
   pointer instance: size=184 writesThrough=true captured=true
@@ -101,7 +101,7 @@ function RangeBody.constructor(this: RangeBody, ctx: CheckContext, sig: Function
 function returnsRange(ctx: CheckContext, sig: FunctionSig): boolean -> @returnsRange
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.baseOf TypeTable.isResult TypeTable.okOf
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer sig: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 table: TypeTable (const)
@@ -428,7 +428,7 @@ function StoreScan.constructor(this: StoreScan, ctx: CheckContext, tables: Range
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: ctx known tables
   pointer this: size=88 writesThrough=true captured=false
-  pointer ctx: size=280 writesThrough=true captured=true
+  pointer ctx: size=288 writesThrough=true captured=true
   pointer tables: size=64 writesThrough=true captured=true
   pointer known: size=0 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -493,7 +493,7 @@ function noteStore(program: CheckedProgram, ctx: CheckContext, target: Node, sca
   sharedWrite: +0:7
   calls: nish_array_grow nish_str_eq recordStoreType unwrapBoundsParens
   pointer program: size=656 writesThrough=false captured=false passedTo=recordStoreType#0
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer target: size=40 writesThrough=true captured=true passedTo=unwrapBoundsParens#0
   pointer scan: size=88 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -523,7 +523,7 @@ function retractWarnings(ctx: CheckContext, proved: Node[]): void -> @retractWar
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: answeredBy nish_array_grow
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=answeredBy#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=answeredBy#0
   pointer proved: size=0 writesThrough=false captured=false passedTo=answeredBy#2
   stackSites=0 stackLocals=0
   local -7:9 sink: DiagnosticSink (const)
@@ -533,7 +533,7 @@ function retractWarnings(ctx: CheckContext, proved: Node[]): void -> @retractWar
 function answeredBy(ctx: CheckContext, warning: Diagnostic, proved: Node[]): boolean -> @answeredBy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index nish_str_index_of nish_str_index_of_from
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer warning: size=48 writesThrough=false captured=false
   pointer proved: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0

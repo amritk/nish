@@ -2,6 +2,8 @@
  * The numeric half of the core (docs/RUN_UNDER_NODE.md): the integer widths,
  * their wrapping arithmetic and conversions, and the text-to-number readers.
  */
+import { panic } from "./host.mjs";
+
 const I32_MIN = -2147483648;
 const I32_MAX = 2147483647;
 const I64_MIN = -(1n << 63n);
@@ -83,6 +85,94 @@ export function ctEq(a, b) {
   // `ctEq` has two operands, so the second one stands in for the third.
   if (ctWide("ctEq", a, b, b)) return wrapU64(a ^ b) === 0n ? U64_ONES : 0n;
   return (a ^ b) === 0 ? 0xffffffff : 0;
+}
+
+// ---- Checked arithmetic (wp33 R4) ----------------------------------------------------
+//
+// What `--emit-ts` writes for a signed `+ - *` and unary minus the compiler
+// neither proved in range nor was told to wrap (`--wrapping`): the exact
+// answer, or the panic `nish_panic_overflow` prints, in its words. An i32 is
+// exact in a double until it leaves the range, and `Math.imul` is the
+// wrapped product, so a product that differs from the double one overflowed.
+// A `bigint` operand is an i64.
+
+export function checkedAdd(a, b) {
+  return typeof a === "bigint" ? checkI64(a + b, "add") : checkI32(a + b, "add");
+}
+export function checkedSub(a, b) {
+  return typeof a === "bigint" ? checkI64(a - b, "subtract") : checkI32(a - b, "subtract");
+}
+export function checkedMul(a, b) {
+  if (typeof a === "bigint") return checkI64(a * b, "multiply");
+  const r = Math.imul(a, b);
+  if (r !== a * b) panic("attempt to multiply with overflow");
+  return r;
+}
+export function checkedNeg(a) {
+  return typeof a === "bigint" ? checkI64(-a, "negate") : checkI32(0 - a, "negate");
+}
+function checkI32(r, op) {
+  if (r > I32_MAX || r < I32_MIN) panic(`attempt to ${op} with overflow`);
+  return r;
+}
+function checkI64(r, op) {
+  if (r > I64_MAX || r < I64_MIN) panic(`attempt to ${op} with overflow`);
+  return r;
+}
+
+// `wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe`: the
+// two's-complement answer at the operands' width, i32 or i64, whatever
+// `--wrapping` says.
+export function wrappingAdd(a, b) {
+  return typeof a === "bigint" ? BigInt.asIntN(64, a + b) : (a + b) | 0;
+}
+export function wrappingSub(a, b) {
+  return typeof a === "bigint" ? BigInt.asIntN(64, a - b) : (a - b) | 0;
+}
+export function wrappingMul(a, b) {
+  return typeof a === "bigint" ? BigInt.asIntN(64, a * b) : Math.imul(a, b);
+}
+
+/**
+ * Integer `/` and `%` at every width: `sdiv`/`udiv` and `srem`/`urem`, which
+ * truncate, and the two panics the compiler guards them with. Only a signed
+ * operand can be the minimum, so the overflow test needs no width. A double
+ * quotient of two 32-bit integers truncates exactly, and `+ 0` turns the `-0`
+ * of `-1 / 2` or `-4 % 2` into the integer zero.
+ */
+export function idiv(a, b) {
+  divCheck(a, b);
+  return typeof a === "bigint" ? a / b : Math.trunc(a / b) + 0;
+}
+export function irem(a, b) {
+  divCheck(a, b);
+  return typeof a === "bigint" ? a % b : (a % b) + 0;
+}
+function divCheck(a, b) {
+  if (b === 0 || b === 0n) panic("attempt to divide by zero");
+  if ((a === I32_MIN && b === -1) || (a === I64_MIN && b === -1n)) panic("attempt to divide with overflow");
+}
+
+/**
+ * `Math.min`/`Math.max` on a float: `llvm.minnum`/`maxnum`, where a NaN
+ * operand gives the other one; Math's answer NaN is only for two NaNs.
+ */
+export function minF64(a, b) {
+  return Number.isNaN(a) ? b : Number.isNaN(b) ? a : Math.min(a, b);
+}
+export function maxF64(a, b) {
+  return Number.isNaN(a) ? b : Number.isNaN(b) ? a : Math.max(a, b);
+}
+
+/**
+ * `Math.round` as the compiler lowers it: `floor(x)`, plus one when the
+ * fraction is at least a half. `-0.3` floors to `-1` and rounds to `+0`,
+ * where Math's answer is `-0`; NaN, the infinities and `-0` come back as they
+ * went in.
+ */
+export function roundF64(x) {
+  const f = Math.floor(x);
+  return x - f >= 0.5 ? f + 1 : f;
 }
 
 /** Wrap a BigInt to the i64 range: every i64 `+ - * /` and unary minus goes through here. */
@@ -229,4 +319,12 @@ export function number(x) {
   const m = WHOLE.exec(x);
   if (m) return literalValue(m);
   return BLANK.test(x) ? 0 : NaN;
+}
+
+/** A method's arguments with each `bigint` from the `first` on made a number: the offsets and indices `--emit-ts` cannot wrap one by one. */
+export function offsets(first, args) {
+  for (let i = first; i < args.length; i++) {
+    if (typeof args[i] === "bigint") args[i] = Number(args[i]);
+  }
+  return args;
 }

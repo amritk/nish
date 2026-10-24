@@ -12,9 +12,7 @@
 
 cases/argv_echo numbers  # differ: stdout line 1 differs
 cases/arr_bounds_break_for records  # differ: exit 1 vs 0
-cases/arr_bounds_break_for_string records  # differ: exit 1 vs 0
 cases/arr_bounds_break_while records  # differ: exit 1 vs 0
-cases/arr_bounds_break_while_string records  # differ: exit 1 vs 0
 cases/arr_bounds_cond_assign records  # differ: exit 1 vs 0
 cases/arr_bounds_cond_effect records  # differ: exit 1 vs 0
 cases/arr_bounds_continue_do records  # differ: exit 1 vs 0
@@ -32,14 +30,12 @@ cases/arr_bounds_offset_other records  # differ: exit 1 vs 0
 cases/arr_bounds_offset_reach records  # differ: exit 1 vs 0
 cases/arr_bounds_offset_wrap records  # differ: exit 1 vs 0
 cases/arr_bounds_panic records  # differ: exit 1 vs 0
-cases/arr_bounds_range records  # differ: stdout line 1 differs
+cases/arr_bounds_range numbers  # differ: exit 0 vs 1
 cases/arr_bounds_range_call records  # differ: exit 1 vs 0
 cases/arr_bounds_range_kept records  # differ: stdout line 1 differs
 cases/arr_bounds_range_negative records  # differ: exit 1 vs 0
 cases/arr_bounds_range_new records  # differ: exit 1 vs 0
 cases/arr_bounds_range_past records  # differ: exit 1 vs 0
-cases/arr_bounds_range_wrap records  # differ: stdout line 1 differs
-cases/arr_bounds_ranged numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
 cases/arr_bounds_returned records  # differ: stdout line 1 differs
 cases/arr_bounds_returned_kept records  # differ: stdout line 1 differs
 cases/arr_bounds_returned_least records  # differ: exit 1 vs 0
@@ -57,8 +53,6 @@ cases/arr_bounds_returned_through_return records  # differ: exit 1 vs 0
 cases/arr_bounds_returned_through_store records  # differ: exit 1 vs 0
 cases/arr_bounds_shrink_panic records  # differ: exit 1 vs 0
 cases/arr_bounds_store_rhs records  # differ: exit 1 vs 0
-cases/arr_bounds_unsigned_guard numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
-cases/arr_bounds_unsigned_guard_f64 numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
 cases/arr_header_hoist_record_store records  # differ: exit 1 vs 0
 cases/arr_header_hoist_record_view records  # differ: exit 1 vs 0
 cases/arr_nested records  # differ: stdout line 4 differs
@@ -66,13 +60,11 @@ cases/arr_new_zeroed records  # differ: stdout line 2 differs
 cases/arr_path_alias_shrink records  # differ: exit 1 vs 0
 cases/arr_path_alias_store records  # differ: exit 1 vs 0
 cases/arr_path_callee_pop records  # differ: exit 1 vs 0
-cases/arr_path_callee_string records  # differ: exit 1 vs 0
 cases/arr_path_cond_call records  # differ: exit 1 vs 0
 cases/arr_path_cond_generic records  # differ: exit 1 vs 0
 cases/arr_path_cond_or records  # differ: exit 1 vs 0
 cases/arr_path_cond_root records  # differ: exit 1 vs 0
 cases/arr_path_cond_store records  # differ: exit 1 vs 0
-cases/arr_path_cond_string records  # differ: exit 1 vs 0
 cases/arr_path_cond_ternary records  # differ: exit 1 vs 0
 cases/arr_path_cond_while records  # differ: exit 1 vs 0
 cases/arr_path_continue_do records  # differ: exit 1 vs 0
@@ -96,12 +88,8 @@ cases/arr_range_call_rebind_callee records  # differ: exit 1 vs 0
 cases/arr_range_call_two_sites records  # differ: exit 1 vs 0
 cases/arr_range_call_wrap records  # differ: exit 1 vs 0
 cases/arr_typed_push_pop records  # differ: exit 0 vs 1: TypeError: a.push is not a function
-cases/arr_typed_views numbers  # differ: exit 0 vs 1: TypeError: Cannot mix BigInt and other types, use explicit conversions
-cases/arr_u8 numbers  # differ: stdout line 3 differs
-cases/attr_panic_charcodeat records  # differ: stderr line 1 differs
-cases/bit_shift_narrow numbers  # differ: stdout line 1 differs
-cases/bytes_offset_float numbers  # differ: exit 0 vs 1: ReferenceError: toF32 is not defined
-cases/bytes_offset_u64 numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
+cases/bytes_offset_float records  # differ: exit 0 vs 1: TypeError: a.set is not a function
+cases/bytes_offset_u64 records  # differ: exit 0 vs 1: TypeError: a.set is not a function
 cases/bytes_set_disjoint records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
 cases/bytes_set_end records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
 cases/bytes_set_float_panic strings  # differ: stdout line 1 differs
@@ -110,27 +98,17 @@ cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
 cases/caps_net refused  # refused: NL4011 under --emit-ts
 cases/caps_process_wait numbers  # differ: exit 0 vs 1: throw new Error(
 cases/caps_signal refused  # refused: NL4011 under --emit-ts
-cases/cls_field_bitwise_assign numbers  # differ: stdout line 2 differs
 cases/cls_inline_array records  # differ: exit 0 vs 1
-cases/conv_f64_bits numbers  # differ: stdout line 1 differs
 cases/ct_asm_p256 numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 cases/ct_asm_x25519 records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
-cases/ct_u64 numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
 cases/ctor_empty_init_tag control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/dbg_utf8 numbers  # differ: exit 0 vs 254
-cases/deny_panics_clean numbers  # differ: stdout line 3 differs
-cases/deny_panics_overflow_proven numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
 cases/deny_panics_overflow_wrapping numbers  # differ: stdout line 1 differs
-cases/deny_panics_overflow_wrapping_add numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'wrappingAdd'
+cases/deny_panics_overflow_wrapping_add numbers  # differ: stdout line 1 differs
 cases/deny_panics_unsafe records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
-cases/div_checked numbers  # differ: stdout line 1 differs
-cases/div_overflow_panic numbers  # differ: exit 1 vs 0
-cases/div_zero_panic numbers  # differ: exit 1 vs 0
 cases/enum_loop_for_update control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/enum_loop_held_several control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/enum_loop_join_gap control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/enum_narrowing control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/f32_to_bits numbers  # differ: exit 0 vs 1: ReferenceError: toF32 is not defined
 cases/ffi_buffer_call_sites ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_count_proved ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_declared ffi  # refused: NL4010 under --emit-ts
@@ -157,10 +135,6 @@ cases/map_iter_nested control  # differ: exit 0 vs 1: ReferenceError: Arena is n
 cases/map_iter_or_return numbers  # differ: exit 0 vs 1: Propagate { error: 'negative -3' }
 cases/map_iter_return control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/map_key_enum control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
-cases/map_key_u64 numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
-cases/math_clz32 numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
-cases/math_imul numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
-cases/math_sign numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
 cases/mem_arena_builtins control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/mem_callee_scope control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/mem_callee_scope_control control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
@@ -184,8 +158,6 @@ cases/mem_using_arena control  # differ: exit 0 vs 1: ReferenceError: Arena is n
 cases/mem_using_arena_or_return control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/mem_using_arena_tail control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/mem_wait_pid_scope numbers  # differ: exit 0 vs 1: throw new Error(
-cases/neg_literal_i64_min numbers  # differ: stdout line 1 differs
-cases/neg_literal_unsigned numbers  # differ: stdout line 1 differs
 cases/net_dual_stack refused  # refused: NL4011 under --emit-ts
 cases/net_loop_calls refused  # refused: NL4011 under --emit-ts
 cases/net_loop_two refused  # refused: NL4011 under --emit-ts
@@ -209,33 +181,18 @@ cases/os_signal refused  # refused: NL4011 under --emit-ts
 cases/os_signal_import refused  # refused: NL4011 under --emit-ts
 cases/os_spawn numbers  # differ: exit 0 vs 1: throw new Error(
 cases/os_wait numbers  # differ: exit 0 vs 1: throw new Error(
-cases/ovf_matrix numbers  # differ: exit 0 vs 1: TypeError: Cannot mix BigInt and other types, use explicit conversions
-cases/ovf_repro numbers  # differ: exit 1 vs 0
+cases/ovf_matrix numbers  # differ: exit 0 vs 1
 cases/ovf_repro_wrapping numbers  # differ: stdout line 1 differs
-cases/owner_checks numbers  # differ: stdout line 7 differs
-cases/panics_array_length numbers  # differ: stdout line 1 differs
 cases/panics_call_cycle numbers  # differ: stdout line 1 differs
-cases/panics_divide numbers  # differ: stdout line 1 differs
 cases/panics_io_exit numbers  # differ: exit 0 vs 1: DOMException [TypeMismatchError]: The data argument must be an integer-type TypedArray
-cases/panics_overflow numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'wrappingAdd'
-cases/panics_overflow_proven numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
+cases/panics_overflow numbers  # differ: stdout line 1 differs
 cases/panics_overflow_via records  # differ: stdout line 1 differs
-cases/panics_overflow_wrapping numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'wrappingAdd'
+cases/panics_overflow_wrapping numbers  # differ: stdout line 1 differs
 cases/panics_slice records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
 cases/perf_arena_control control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
 cases/perf_arena_loop control  # differ: exit 0 vs 1: ReferenceError: Arena is not defined
-cases/perf_bounds_toi32_user records  # differ: exit 1 vs 0
 cases/perf_rng_counter numbers  # differ: exit 1 vs 0
-cases/perf_rng_getbyte numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/perf_rng_quiet numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/port_array_zero_fill records  # differ: stdout line 1 differs
-cases/port_num_div numbers  # differ: stdout line 1 differs
-cases/port_num_negzero numbers  # differ: stdout line 1 differs
-cases/port_num_ushr numbers  # differ: stdout line 1 differs
-cases/port_num_ushr_count numbers  # differ: stdout line 2 differs
-cases/port_num_wide numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
-cases/port_num_wrap numbers  # differ: stdout line 1 differs
-cases/port_num_wrap_wrapping numbers  # differ: stdout line 2 differs
+cases/port_array_zero_fill numbers  # differ: exit 0 vs 1: TypeError: Cannot convert undefined to a BigInt
 cases/port_rec_alias_copy numbers  # differ: stdout line 1 differs
 cases/port_rec_alias_store numbers  # differ: stdout line 1 differs
 cases/port_rec_literal_twice numbers  # differ: stdout line 1 differs
@@ -246,38 +203,23 @@ cases/port_record_alias_ctor_write numbers  # differ: stdout line 1 differs
 cases/port_record_alias_helper_bump numbers  # differ: stdout line 1 differs
 cases/port_record_alias_helper_copy numbers  # differ: stdout line 1 differs
 cases/port_record_alias_helper_write numbers  # differ: stdout line 1 differs
-cases/port_str_length_printed numbers  # differ: stdout line 1 differs
-cases/port_str_needle_step_printed numbers  # differ: stdout line 1 differs
-cases/port_str_nonascii_charcode numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_argument numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_helper_return numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_index numbers  # differ: stdout line 1 differs
-cases/port_utf8_offset_loop_bound numbers  # differ: stdout line 1 differs
-cases/res_by_value_payloads numbers  # differ: exit 0 vs 1: ReferenceError: toF32 is not defined
 cases/rng_entry_bitwise_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_panic_f64 numbers  # differ: exit 1 vs 0
 cases/rng_entry_push_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_range_panic numbers  # differ: exit 1 vs 0
-cases/secret_field numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/secret_field_wipe_o2 numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/secret_field_wipe_o2_plain numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/secret_flow numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/secret_inferred numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
+cases/secret_field_wipe_o2 numbers  # differ: stdout line 1 differs
+cases/secret_field_wipe_o2_plain numbers  # differ: stdout line 1 differs
 cases/secret_wipe records  # differ: exit 0 vs 1: TypeError: copy.set is not a function
-cases/secret_wipe_o2 numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/secret_wipe_o2_inferred numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/secret_wipe_o2_inferred_plain numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/secret_wipe_o2_plain numbers  # differ: exit 0 vs 1: ReferenceError: toU8 is not defined
-cases/str_from_bytes strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_from_bytes_arrow strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_from_bytes_lifetime strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_from_bytes_ways strings  # differ: exit 0 vs 1: TypeError: String.fromBytes is not a function
-cases/str_index_of_from_port numbers  # differ: stdout line 1 differs
-cases/str_slice_panic strings  # differ: exit 1 vs 0
-cases/str_surrogate_lone records  # differ: stdout line 1 differs
-cases/str_surrogate_pair numbers  # differ: stdout line 1 differs
-cases/u_div_zero_panic numbers  # differ: exit 1 vs 0
+cases/secret_wipe_o2 numbers  # differ: stdout line 1 differs
+cases/secret_wipe_o2_inferred numbers  # differ: stdout line 1 differs
+cases/secret_wipe_o2_inferred_plain numbers  # differ: stdout line 1 differs
+cases/secret_wipe_o2_plain numbers  # differ: stdout line 1 differs
+cases/str_surrogate_lone numbers  # differ: stdout line 1 differs
+cases/str_surrogate_pair numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Bad character escape sequence, expected 4 hex characters
+cases/term_calls numbers  # differ: exit 0 vs 1: throw new Error(
+cases/term_import numbers  # differ: exit 0 vs 1: throw new Error(
+cases/term_pty numbers  # differ: exit 0 vs 1: throw new Error(
 cases/union_arena control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/union_forms control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/union_narrowing control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
@@ -297,47 +239,10 @@ cases/union_switch_narrowed control  # differ: exit 0 vs 1: SyntaxError [ERR_UNS
 cases/union_switch_secret control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/union_types control  # differ: exit 0 vs 1: SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]: TypeScript enum is not supported in strip-only mode
 cases/unsafe_get_set records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
-cases/unsafe_wrapping numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'wrappingAdd'
-corpus/argv_words numbers  # differ: exit 29 vs 105
-corpus/arr_2d numbers  # differ: exit 1 vs 0
-corpus/arr_bounds_edge records  # differ: stdout line 4 differs
+corpus/argv_words numbers  # differ: exit 29 vs 106
 corpus/arr_oob_exit records  # differ: exit 1 vs 0
 corpus/arr_oob_negative records  # differ: exit 1 vs 0
 corpus/arr_push_growth records  # differ: stdout line 13 differs
-corpus/bit_fnv1a numbers  # differ: stdout line 2 differs
-corpus/bit_i64 numbers  # differ: stdout line 32 differs
-corpus/bit_shifts numbers  # differ: stdout line 3 differs
-corpus/bool_logic numbers  # differ: stdout line 18 differs
-corpus/const_module numbers  # differ: stdout line 2 differs
-corpus/conv_bit_patterns numbers  # differ: stdout line 1 differs
-corpus/conversions_roundtrip numbers  # differ: exit 0 vs 1: TypeError: Cannot mix BigInt and other types, use explicit conversions
-corpus/digits numbers  # differ: stdout line 1 differs
-corpus/f32_round numbers  # differ: exit 0 vs 1: ReferenceError: toF32 is not defined
-corpus/f64_format numbers  # differ: stdout line 8 differs
-corpus/f64_i32_mixed numbers  # differ: exit 1 vs 0
+corpus/bit_compound_target refused  # refused: NL4012 under --emit-ts
 corpus/f64_libm libm  # differ: stdout line 33 differs
-corpus/f64_math numbers  # differ: stdout line 32 differs
-corpus/f64_round_negzero numbers  # differ: stdout line 1 differs
-corpus/i64_arith numbers  # differ: exit 0 vs 1: TypeError: Cannot mix BigInt and other types, use explicit conversions
-corpus/int_abs_minmax numbers  # differ: stdout line 1 differs
-corpus/int_compound numbers  # differ: stdout line 1 differs
-corpus/int_div_overflow numbers  # differ: exit 1 vs 0
-corpus/int_div_zero numbers  # differ: exit 1 vs 0
-corpus/int_divmod numbers  # differ: stdout line 1 differs
-corpus/int_incdec numbers  # differ: stdout line 2 differs
-corpus/int_literal_edges numbers  # differ: stdout line 5 differs
-corpus/int_wrap numbers  # differ: stdout line 1 differs
-corpus/io_roundtrip numbers  # differ: stdout line 1 differs
-corpus/modules_basic numbers  # differ: exit 1 vs 5
-corpus/parse_argv_sum numbers  # differ: exit 1 vs 27
-corpus/prng_lcg numbers  # differ: stdout line 1 differs
-corpus/recursion numbers  # differ: stdout line 29 differs
-corpus/str_large numbers  # differ: exit 1 vs 0
-corpus/str_methods strings  # differ: stdout line 5 differs
-corpus/str_nul_escapes numbers  # differ: stdout line 8 differs
-corpus/str_slice strings  # differ: stdout line 2 differs
-corpus/str_template numbers  # differ: stdout line 15 differs
-corpus/str_unicode numbers  # differ: stdout line 2 differs
-corpus/u_convert_shift numbers  # differ: exit 0 vs 1: ReferenceError: toU32 is not defined
-corpus/u_div_cmp numbers  # differ: exit 0 vs 1: ReferenceError: toU64 is not defined
-corpus/u_wrap numbers  # differ: stdout line 1 differs
+corpus/parse_argv_sum numbers  # differ: stdout line 1 differs

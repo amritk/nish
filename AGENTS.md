@@ -71,7 +71,7 @@ itself.
 
 | Ask | Command | Answer |
 | --- | --- | --- |
-| what the CLI accepts | `nish --help` | usage text on **stdout**, exit **0**. A usage *error* prints the same text on stderr with exit 2, so the stream and the code tell a request apart from a refusal |
+| what the CLI accepts | `nish --help` | usage text on **stdout**, exit **0**. A usage *error* is on stderr with exit 2: the same text for no inputs, one line naming the flag and `nish --help` for an unknown flag. The stream and the code tell a request apart from a refusal |
 | what is wrong with a program | `nish --json <files>` | one JSON object per line on **stdout**, which carries nothing else — the `wrote <file>` progress line and the human report are on stderr — exit unchanged |
 | fix what can be fixed mechanically | `nish --fix <files>` | the named files rewritten in place, then the remaining diagnostics as a plain run reports them, and its exit code |
 | the version | `nish --version` | `nish <semver>` on stdout, exit 0 |
@@ -319,14 +319,14 @@ what is blocking and what you need — and keep watching.
 - **Never emit an LLVM attribute you cannot cite a checker proof for.** Write
   the reason in `src/attributes.ts` beside the code.
 - **A struct layout change touches `src/runtime.ts` and `runtime.c` in the same
-  commit** and extends a layout test. The C runtime is eight translation units
+  commit** and extends a layout test. The C runtime is nine translation units
   with a budget each — `runtime.c` for the core, `runtime-os.c` for the
   syscall wrappers, `runtime-parallel.c` for threads, `runtime-cross.c` for
   the copies between their arenas, `runtime-host.c` for the clock, entropy,
   file times and signals, `runtime-net.c` for the sockets of `nish:net`,
-  `runtime-simd.c` for the vector text search and `runtime-aes.c` for
-  AES-GCM — so keep each inside its own
-  (`node tests/run.js budget`) and report the size of whichever you changed in
+  `runtime-simd.c` for the vector text search, `runtime-aes.c` for
+  AES-GCM and `runtime-term.c` for stdin and the terminal — so keep each
+  inside its own (`node tests/run.js budget`) and report the size of whichever you changed in
   the PR. An addition that does not fit goes in a new unit with its own
   ceiling rather than a raised one, and a new unit is named in the five places
   `.claude/architecture.md` lists, `scripts/build.sh` first.

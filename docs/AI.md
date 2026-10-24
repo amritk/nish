@@ -40,7 +40,8 @@ nish program.ts -o out.ll         # emit LLVM IR
 nish program.ts --link prog       # build a native binary (needs clang)
 nish run program.ts a b           # build into a cache, then run it with `a b`
                                   # (the C runtime is cached too: ~/.cache/nish/runtime)
-nish --help                       # the full flag list, stdout, exit 0
+nish --help                       # the full flag list, stdout, exit 0; plain text
+                                  # under an agent (NISH_AGENT=1, CLAUDECODE, GEMINI_CLI)
 ```
 
 `--json` is the surface to automate against. One flat object per line on
@@ -2104,7 +2105,10 @@ method there is. `substring` **clamps** an out-of-range offset the
 way JavaScript does; `slice` instead **panics** unless
 `0 <= start <= end <= s.length`, and is the faster of the two when you have
 already established the range. Every offset is a **byte** offset, so cutting a multi-byte character
-in half is possible.
+in half is possible. To count characters rather than bytes, `codePointLength(s)`
+from `nish/text` counts code points natively and, for text written in the
+source, under Node alike; under Node a string built from bytes (`String.fromBytes`,
+a `\u` escape `nish/json` decodes) is one unit per byte, and counts its bytes.
 
 **Process.** `process.exit(code)`, `process.argv` (a read-only `string[]`;
 `argv[0]` is the program path, one index earlier than Node),

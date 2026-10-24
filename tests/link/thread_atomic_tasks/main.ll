@@ -107,7 +107,7 @@ entry:
   ret void
 }
 
-define internal void @raise(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %a, i32 noundef %v) #1 {
+define internal void @raise$(%struct.AtomicI32* noundef nonnull align 8 dereferenceable(4) nocapture %a, i32 noundef %v) #1 {
 entry:
   %seen.addr = alloca i32, align 4
   %was.addr = alloca i32, align 4
@@ -199,7 +199,7 @@ ovf.ok.1:
   %36 = getelementptr inbounds %struct.Counters, %struct.Counters* %35, i32 0, i32 3
   %37 = load %struct.AtomicI32*, %struct.AtomicI32** %36, align 8, !tbaa !9
   %38 = load i32, i32* %v.addr, align 4
-  call void @raise(%struct.AtomicI32* %37, i32 %38)
+  call void @raise$(%struct.AtomicI32* %37, i32 %38)
   br label %for.inc
 
 for.inc:

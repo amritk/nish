@@ -20,7 +20,7 @@
 // error. `tests/capabilities.js` enumerates every name the checker accepts and
 // fails the suite when one has no row here, before any program calls it.
 
-import { isNetExport, isUnsafeExport } from "./nish-modules"
+import { isNetExport, isTermExport, isUnsafeExport } from "./nish-modules"
 
 /** A deliberate "none": the builtin has a row, and the row says it reaches nothing. */
 export const CAP_NONE: i32 = -1
@@ -43,15 +43,23 @@ const CAP_NET: i32 = 7
 const CAP_PROCESS_SPAWN: i32 = 8
 const CAP_SIGNAL: i32 = 9
 /**
+ * A `nish:term` call: the terminal the program runs in. Reading stdin is an
+ * input a deterministic program may have, but these read it against the
+ * clock (`waitStdin`'s timeout, `readStdin`'s "nothing yet") and ask the
+ * terminal itself, so the label is a nondeterministic one of its own rather
+ * than none.
+ */
+const CAP_TTY: i32 = 10
+/**
  * A call to a `nish:unsafe` export: not a capability of the world, but the
  * one way a program gives up a check, so a policy can deny it
  * (docs/wp36-capability-policy.md). The import is its opt-in, which is why an
  * allowlist never refuses it.
  */
-const CAP_UNSAFE: i32 = 10
+const CAP_UNSAFE: i32 = 11
 
 /** How many capabilities there are, and so how long a per-capability array is. */
-export const CAPABILITY_COUNT: i32 = 11
+export const CAPABILITY_COUNT: i32 = 12
 
 /**
  * The capabilities a deterministic program reaches none of: the inputs that
@@ -67,6 +75,7 @@ const nondeterministic = (): i32 =>
   (1 << CAP_FS_WRITE) |
   (1 << CAP_NET) |
   (1 << CAP_PROCESS_SPAWN) |
+  (1 << CAP_TTY) |
   (1 << CAP_FFI)
 
 /** The name of the capability with index `index`, as every report spells it. */
@@ -101,7 +110,10 @@ export const capabilityName = (index: i32): string => {
   if (index === 9) {
     return "signal"
   }
-  return index === 10 ? "unsafe" : ""
+  if (index === 10) {
+    return "tty"
+  }
+  return index === 11 ? "unsafe" : ""
 }
 
 /** Every capability at once: what a missing allowlist allows. */
@@ -277,6 +289,11 @@ export const builtinCapability = (name: string): i32 => {
   }
   if (name === "signalFd" || name === "readSignal") {
     return CAP_SIGNAL
+  }
+  // `setRawMode` changes the terminal's state for every process sharing it,
+  // and the four reads ask it; one label for the module, as `net` is.
+  if (isTermExport(name)) {
+    return CAP_TTY
   }
   if (name === "process.exit") {
     return CAP_EXIT

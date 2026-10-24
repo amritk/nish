@@ -187,7 +187,7 @@ function flowBitOf(ctx: CheckContext, f: LoopFlow, k: i32, type: i32): i32 -> @f
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k type
   calls: TypeTable.memberValue nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer f: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 members: i32[] (const)
@@ -198,7 +198,7 @@ function flowRead(ctx: CheckContext, f: LoopFlow, scope: Scope): i32[] -> @flowR
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via heldMembers
   calls: Scope.exhausted Scope.typeOf TypeTable.hasVariant TypeTable.isNullable TypeTable.isUnion TypeTable.stripNull TypeTable.variantsOf flowBitOf flowNormal heldMembers nish_array_grow nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=heldMembers#0 flowBitOf#0 flowBitOf#0 flowBitOf#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=heldMembers#0 flowBitOf#0 flowBitOf#0 flowBitOf#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowBitOf#1 flowBitOf#1 flowBitOf#1 flowNormal#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=heldMembers#1 Scope.exhausted#0 Scope.typeOf#0
   stackSites=0 stackLocals=0
@@ -229,7 +229,7 @@ function flowImpose(ctx: CheckContext, f: LoopFlow, scope: Scope, s: i32[]): voi
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:13
   calls: Scope.hold Scope.narrow TypeTable.stripNull TypeTable.tagsOf flowDead flowRead holdKept narrowToVariants nish_array_grow nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowRead#0 holdKept#0 narrowToVariants#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowRead#0 holdKept#0 narrowToVariants#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowRead#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=flowRead#2 Scope.narrow#0 Scope.hold#0 holdKept#1 Scope.narrow#0 narrowToVariants#1
   pointer s: size=0 writesThrough=false captured=false passedTo=flowDead#0
@@ -260,7 +260,7 @@ function flowImpose(ctx: CheckContext, f: LoopFlow, scope: Scope, s: i32[]): voi
 function flowConstEnum(ctx: CheckContext, f: LoopFlow, node: Node): i32 -> @flowConstEnum
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.enumNamed EnumInfo.hasMember Scope.lookup isOptionalChain nish_panic_index nish_str_eq unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer f: size=192 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
@@ -275,7 +275,7 @@ function flowConstEnum(ctx: CheckContext, f: LoopFlow, node: Node): i32 -> @flow
 function flowConstValue(ctx: CheckContext, node: Node): i32 -> @flowConstValue
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.enumNamed EnumInfo.memberValue nish_panic_index unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 bare: Node (const)
@@ -296,7 +296,7 @@ function flowWant(ctx: CheckContext, f: LoopFlow, k: i32): i32 -> @flowWant
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
   calls: TypeTable.stripNull TypeTable.tagEnumOf nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer f: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:35 TypeTable.tagEnumOf -> @TypeTable.tagEnumOf
@@ -351,7 +351,7 @@ function flowMemberBit(ctx: CheckContext, f: LoopFlow, k: i32, type: i32): i32 -
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k type
   calls: TypeTable.enumBase TypeTable.isEnumMemberType TypeTable.memberValue flowDomainBit flowWant
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowWant#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowWant#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowWant#1 flowDomainBit#0
   stackSites=0 stackLocals=0
   callee +0:8 TypeTable.isEnumMemberType -> @TypeTable.isEnumMemberType
@@ -362,7 +362,7 @@ function flowMemberBit(ctx: CheckContext, f: LoopFlow, k: i32, type: i32): i32 -
 function flowStructOf(ctx: CheckContext, f: LoopFlow, node: Node, depth: i32): StructInfo | null -> @flowStructOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: CheckedProgram.struct Scope.lookup StructInfo.field TypeTable.isStruct TypeTable.nameOf TypeTable.stripNull flowStructOf isOptionalChain nish_panic_index nish_str_eq unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowStructOf#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowStructOf#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowStructOf#1
   pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
@@ -386,7 +386,7 @@ function flowKnown(ctx: CheckContext, f: LoopFlow, k: i32, node: Node, s: i32[],
   sharedWrite: via flowKnown
   escaping: k
   calls: CheckContext.signature Scope.lookup StructInfo.field StructInfo.method TypeTable.enumBase TypeTable.isEnumMemberType TypeTable.memberValue TypeTable.stripNull TypeTable.tagEnumOf TypeTable.tagNameOf flowCond flowConstDecl flowConstEnum flowConstValue flowDomainBit flowDomainOf flowIndex flowKnown flowMemberBit flowStructOf flowWant isOptionalChain nish_panic_index nish_str_eq unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowWant#0 flowConstEnum#0 flowConstValue#0 flowKnown#0 flowCond#0 flowKnown#0 flowCond#0 flowKnown#0 flowKnown#0 CheckContext.signature#0 flowStructOf#0 flowMemberBit#0 flowStructOf#0 flowMemberBit#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowWant#0 flowConstEnum#0 flowConstValue#0 flowKnown#0 flowCond#0 flowKnown#0 flowCond#0 flowKnown#0 flowKnown#0 CheckContext.signature#0 flowStructOf#0 flowMemberBit#0 flowStructOf#0 flowMemberBit#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowWant#1 flowConstEnum#1 flowDomainBit#0 flowKnown#1 flowCond#1 flowKnown#1 flowCond#1 flowKnown#1 flowIndex#0 flowDomainOf#0 flowConstDecl#0 flowKnown#1 flowDomainBit#0 flowDomainBit#0 flowStructOf#1 flowMemberBit#1 flowIndex#0 flowDomainOf#0 flowStructOf#1 flowMemberBit#1
   pointer node: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer s: size=0 writesThrough=true captured=true passedTo=flowCond#3 flowCond#3 flowKnown#4
@@ -453,7 +453,7 @@ function flowNarrowTo(ctx: CheckContext, f: LoopFlow, k: i32, other: Node, s: i3
   sharedWrite: via flowKnown
   escaping: k s
   calls: flowCount flowKnown flowSet flowToSpace nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowKnown#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowKnown#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowKnown#1 flowToSpace#0
   pointer other: size=40 writesThrough=true captured=true passedTo=flowKnown#3
   pointer s: size=0 writesThrough=true captured=true passedTo=flowKnown#4 flowSet#0 flowSet#0
@@ -471,7 +471,7 @@ function flowEquality(ctx: CheckContext, f: LoopFlow, test: Node, s: i32[], when
   sharedWrite: via flowSet
   escaping: s whenTrue
   calls: Scope.lookup TypeTable.isEnum TypeTable.isUnion TypeTable.stripNull TypeTable.tagNameOf flowConstEnum flowIndex flowNarrowTo flowSet flowTestedRead isOptionalChain nish_panic_index nish_str_eq unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowNarrowTo#0 flowNarrowTo#0 flowConstEnum#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowNarrowTo#0 flowNarrowTo#0 flowConstEnum#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowIndex#0 flowIndex#0 flowNarrowTo#1 flowIndex#0 flowNarrowTo#1 flowConstEnum#1
   pointer test: size=40 writesThrough=false captured=false
   pointer s: size=0 writesThrough=true captured=true passedTo=flowSet#0 flowNarrowTo#4 flowNarrowTo#4
@@ -513,7 +513,7 @@ function flowCond(ctx: CheckContext, f: LoopFlow, cond: Node, s: i32[], whenTrue
   sharedWrite: via flowCond
   escaping: s whenTrue
   calls: flowCond flowDead flowEquality flowJoin nish_panic_index nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowCond#0 flowCond#0 flowCond#0 flowCond#0 flowCond#0 flowEquality#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowCond#0 flowCond#0 flowCond#0 flowCond#0 flowCond#0 flowEquality#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowCond#1 flowCond#1 flowCond#1 flowCond#1 flowCond#1 flowJoin#0 flowEquality#1
   pointer cond: size=40 writesThrough=false captured=false passedTo=flowEquality#2
   pointer s: size=0 writesThrough=true captured=true passedTo=flowDead#0 flowCond#3 flowCond#3 flowCond#3 flowCond#3 flowEquality#3
@@ -537,7 +537,7 @@ function flowValueBits(ctx: CheckContext, f: LoopFlow, k: i32, value: Node, s: i
   sharedWrite: via flowKnown
   escaping: k
   calls: flowKnown flowToSpace nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowKnown#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowKnown#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowKnown#1 flowToSpace#0
   pointer value: size=40 writesThrough=true captured=true passedTo=flowKnown#3
   pointer s: size=0 writesThrough=true captured=true passedTo=flowKnown#4
@@ -550,7 +550,7 @@ function flowExec(ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] -
   sharedWrite: +0:9
   escaping: s
   calls: flowCond flowDead flowExec flowIndex flowJoin flowNested flowSet flowSwitch flowValueBits nish_panic_index nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowExec#0 flowValueBits#0 flowExec#0 flowCond#0 flowCond#0 flowExec#0 flowNested#0 flowSwitch#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowExec#0 flowValueBits#0 flowExec#0 flowCond#0 flowCond#0 flowExec#0 flowNested#0 flowSwitch#0
   pointer f: size=192 writesThrough=true captured=false passedTo=flowExec#1 flowIndex#0 flowValueBits#1 flowJoin#0 flowJoin#0 flowExec#1 flowCond#1 flowCond#1 flowJoin#0 flowExec#1 flowJoin#0 flowNested#1 flowSwitch#1
   pointer node: size=40 writesThrough=true captured=true passedTo=flowNested#2 flowSwitch#2
   pointer s: size=0 writesThrough=true captured=true passedTo=flowDead#0 flowValueBits#4 flowSet#0 flowJoin#2 flowJoin#2 flowCond#3 flowCond#3 flowNested#3 flowSwitch#3
@@ -589,7 +589,7 @@ function flowExec(ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[] -
 function flowSubject(ctx: CheckContext, f: LoopFlow, subject: Node, s: i32[]): i32 -> @flowSubject
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.stripNull TypeTable.tagNameOf flowIndex isOptionalChain nish_panic_index nish_str_eq unwrapParens
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer f: size=192 writesThrough=false captured=false passedTo=flowIndex#0 flowIndex#0
   pointer subject: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   pointer s: size=0 writesThrough=false captured=false
@@ -607,7 +607,7 @@ function flowLabelBits(ctx: CheckContext, f: LoopFlow, k: i32, label: Node): i32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: k
   calls: TypeTable.stripNull TypeTable.tagEnumOf flowBitsValued flowConstEnum flowConstValue nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowConstEnum#0 flowConstValue#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowConstEnum#0 flowConstValue#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowConstEnum#1 flowBitsValued#0
   pointer label: size=40 writesThrough=true captured=true passedTo=flowConstEnum#2 flowConstValue#1
   stackSites=0 stackLocals=0
@@ -622,7 +622,7 @@ function flowSwitch(ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
   sharedWrite: +0:3
   escaping: s
   calls: flowDead flowExec flowJoin flowLabelBits flowSet flowSubject nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowSubject#0 flowLabelBits#0 flowLabelBits#0 flowExec#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowSubject#0 flowLabelBits#0 flowLabelBits#0 flowExec#0
   pointer f: size=192 writesThrough=true captured=false passedTo=flowSubject#1 flowLabelBits#1 flowLabelBits#1 flowExec#1 flowJoin#0 flowJoin#0 flowJoin#0
   pointer node: size=40 writesThrough=false captured=false
   pointer s: size=0 writesThrough=true captured=true passedTo=flowDead#0 flowSubject#3 flowSet#0 flowSet#0 flowSet#0 flowJoin#2
@@ -661,7 +661,7 @@ function flowNested(ctx: CheckContext, f: LoopFlow, node: Node, s: i32[]): i32[]
   sharedWrite: +0:3
   escaping: node s
   calls: flowDead flowFixpoint flowKindOf
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowFixpoint#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowFixpoint#0
   pointer f: size=192 writesThrough=true captured=false passedTo=flowFixpoint#1
   pointer node: size=40 writesThrough=true captured=true passedTo=flowKindOf#0
   pointer s: size=0 writesThrough=true captured=true passedTo=flowDead#0 flowFixpoint#2
@@ -682,7 +682,7 @@ function flowFixpoint(ctx: CheckContext, f: LoopFlow, before: i32[]): void -> @f
   sharedWrite: +0:5
   escaping: before
   calls: flowCond flowCopy flowExec flowJoin flowStatementOf flowWithin nish_panic_index nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowExec#0 flowCond#0 flowExec#0 flowExec#0 flowCond#0 flowCond#0 flowCond#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowExec#0 flowCond#0 flowExec#0 flowExec#0 flowCond#0 flowCond#0 flowCond#0
   pointer f: size=192 writesThrough=true captured=false passedTo=flowExec#1 flowCond#1 flowExec#1 flowJoin#0 flowJoin#0 flowExec#1 flowJoin#0 flowCond#1 flowJoin#0 flowCond#1 flowJoin#0 flowJoin#0 flowCond#1 flowJoin#0
   pointer before: size=0 writesThrough=true captured=true passedTo=flowExec#3
   stackSites=1 stackLocals=0
@@ -735,7 +735,7 @@ function flowBegin(ctx: CheckContext, stmt: Node, scope: Scope, kind: string): L
   sharedWrite: via flowScanNode
   escaping: kind
   calls: DiagnosticSink.count FlowScan.constructor LoopFlow.constructor Scope.lookup TypeTable.isEnum TypeTable.isNullable TypeTable.isUnion TypeTable.memberValue TypeTable.stripNull TypeTable.tagEnumOf TypeTable.tagsOf TypeTable.variantsOf enumMembersOf flowFixpoint flowRead flowScanNode nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=enumMembersOf#0 enumMembersOf#0 flowRead#0 flowFixpoint#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=enumMembersOf#0 enumMembersOf#0 flowRead#0 flowFixpoint#0
   pointer stmt: size=40 writesThrough=true captured=true passedTo=LoopFlow.constructor#1 flowScanNode#0
   pointer scope: size=56 writesThrough=true captured=true passedTo=LoopFlow.constructor#3 Scope.lookup#0 flowRead#2
   stackSites=1 stackLocals=1
@@ -782,7 +782,7 @@ function flowHead(ctx: CheckContext, f: LoopFlow, widenFrom: Scope, target: Scop
   sharedWrite: +0:5
   escaping: f
   calls: flowCopy flowDead flowImpose flowMeet flowRead nish_array_grow
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowRead#0 flowImpose#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowRead#0 flowImpose#0
   pointer f: size=192 writesThrough=true captured=true passedTo=flowRead#1 flowImpose#1
   pointer widenFrom: size=56 writesThrough=false captured=false passedTo=flowRead#2
   pointer target: size=56 writesThrough=false captured=false passedTo=flowImpose#2
@@ -796,13 +796,13 @@ function flowHead(ctx: CheckContext, f: LoopFlow, widenFrom: Scope, target: Scop
 function flowTop(ctx: CheckContext): LoopFlow | null -> @flowTop
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function flowNoteBreak(ctx: CheckContext, scope: Scope): void -> @flowNoteBreak [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: flowJoin flowRead flowTop
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowTop#0 flowRead#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowTop#0 flowRead#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=flowRead#2
   stackSites=0 stackLocals=0
   local -2:9 f: LoopFlow | null (const)
@@ -813,7 +813,7 @@ function flowNoteBack(ctx: CheckContext, scope: Scope): void -> @flowNoteBack [e
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: flowJoin flowRead flowTop
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowTop#0 flowRead#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowTop#0 flowRead#0
   pointer scope: size=56 writesThrough=false captured=false passedTo=flowRead#2
   stackSites=0 stackLocals=0
   local -2:9 f: LoopFlow | null (const)
@@ -824,7 +824,7 @@ function flowFail(ctx: CheckContext, f: LoopFlow, what: string): void -> @flowFa
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat nish_str_from_i32
-  pointer ctx: size=280 writesThrough=false captured=false
+  pointer ctx: size=288 writesThrough=false captured=false
   pointer f: size=192 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:5 internalErrorFor -> @internalErrorFor
@@ -832,7 +832,7 @@ function flowDoCondition(ctx: CheckContext, f: LoopFlow, scope: Scope): void -> 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via flowFail
   calls: DiagnosticSink.count flowFail flowImpose flowMeet flowWithin
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowFail#0 flowImpose#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowFail#0 flowImpose#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowFail#1 flowImpose#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=flowImpose#2
   stackSites=0 stackLocals=0
@@ -850,7 +850,7 @@ function flowForUpdate(ctx: CheckContext, f: LoopFlow, scope: Scope): void -> @f
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via flowFail
   calls: DiagnosticSink.count flowFail flowImpose flowMeet flowWithin
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowFail#0 flowImpose#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowFail#0 flowImpose#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowFail#1 flowImpose#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=flowImpose#2
   stackSites=0 stackLocals=0
@@ -863,7 +863,7 @@ function flowUpdated(ctx: CheckContext, f: LoopFlow, scope: Scope): void -> @flo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via flowRead
   calls: DiagnosticSink.count flowDead flowFail flowMeet flowRead flowWithin
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowRead#0 flowFail#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowRead#0 flowFail#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowRead#1 flowFail#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=flowRead#2
   stackSites=0 stackLocals=0
@@ -877,7 +877,7 @@ function flowEnd(ctx: CheckContext, f: LoopFlow, scope: Scope): void -> @flowEnd
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: DiagnosticSink.count flowDead flowFail flowForUpdated flowImpose flowMeet flowTop flowWithin nish_panic_index nish_str_eq
-  pointer ctx: size=280 writesThrough=false captured=false passedTo=flowTop#0 flowImpose#0 flowFail#0 flowFail#0 flowImpose#0
+  pointer ctx: size=288 writesThrough=false captured=false passedTo=flowTop#0 flowImpose#0 flowFail#0 flowFail#0 flowImpose#0
   pointer f: size=192 writesThrough=false captured=false passedTo=flowImpose#1 flowForUpdated#0 flowFail#1 flowFail#1 flowImpose#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=flowImpose#2 flowImpose#2
   stackSites=0 stackLocals=0
