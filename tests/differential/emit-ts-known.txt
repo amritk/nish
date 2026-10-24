@@ -11,100 +11,21 @@
 # the corpus no longer has. A build, emit or timeout failure is never listed.
 
 cases/argv_echo numbers  # differ: stdout line 1 differs
-cases/arr_bounds_break_for records  # differ: exit 1 vs 0
-cases/arr_bounds_break_while records  # differ: exit 1 vs 0
-cases/arr_bounds_cond_assign records  # differ: exit 1 vs 0
-cases/arr_bounds_cond_effect records  # differ: exit 1 vs 0
-cases/arr_bounds_continue_do records  # differ: exit 1 vs 0
-cases/arr_bounds_continue_for records  # differ: exit 1 vs 0
-cases/arr_bounds_continue_nested records  # differ: exit 1 vs 0
-cases/arr_bounds_continue_switch records  # differ: exit 1 vs 0
-cases/arr_bounds_generic_instances records  # differ: exit 1 vs 0
-cases/arr_bounds_generic_instances_iface records  # differ: exit 1 vs 0
-cases/arr_bounds_generic_instances_method records  # differ: exit 1 vs 0
-cases/arr_bounds_generic_instances_prim records  # differ: exit 1 vs 0
 cases/arr_bounds_lazy_expect records  # differ: exit 1 vs 0
 cases/arr_bounds_lazy_unwrap_or records  # differ: exit 1 vs 0
-cases/arr_bounds_offset_floor records  # differ: exit 1 vs 0
-cases/arr_bounds_offset_other records  # differ: exit 1 vs 0
-cases/arr_bounds_offset_reach records  # differ: exit 1 vs 0
-cases/arr_bounds_offset_wrap records  # differ: exit 1 vs 0
-cases/arr_bounds_panic records  # differ: exit 1 vs 0
-cases/arr_bounds_range numbers  # differ: exit 0 vs 1
-cases/arr_bounds_range_call records  # differ: exit 1 vs 0
-cases/arr_bounds_range_kept records  # differ: stdout line 1 differs
-cases/arr_bounds_range_negative records  # differ: exit 1 vs 0
-cases/arr_bounds_range_new records  # differ: exit 1 vs 0
-cases/arr_bounds_range_past records  # differ: exit 1 vs 0
-cases/arr_bounds_returned records  # differ: stdout line 1 differs
-cases/arr_bounds_returned_kept records  # differ: stdout line 1 differs
-cases/arr_bounds_returned_least records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_passed records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_pop records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_rebind records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_shadow records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_shadow_param records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_stored records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_through_cycle records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_through_deep records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_through_memo records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_through_param records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_through_return records  # differ: exit 1 vs 0
-cases/arr_bounds_returned_through_store records  # differ: exit 1 vs 0
-cases/arr_bounds_shrink_panic records  # differ: exit 1 vs 0
-cases/arr_bounds_store_rhs records  # differ: exit 1 vs 0
-cases/arr_header_hoist_record_store records  # differ: exit 1 vs 0
-cases/arr_header_hoist_record_view records  # differ: exit 1 vs 0
-cases/arr_nested records  # differ: stdout line 4 differs
-cases/arr_new_zeroed records  # differ: stdout line 2 differs
-cases/arr_path_alias_shrink records  # differ: exit 1 vs 0
-cases/arr_path_alias_store records  # differ: exit 1 vs 0
-cases/arr_path_callee_pop records  # differ: exit 1 vs 0
-cases/arr_path_cond_call records  # differ: exit 1 vs 0
-cases/arr_path_cond_generic records  # differ: exit 1 vs 0
-cases/arr_path_cond_or records  # differ: exit 1 vs 0
-cases/arr_path_cond_root records  # differ: exit 1 vs 0
-cases/arr_path_cond_store records  # differ: exit 1 vs 0
-cases/arr_path_cond_ternary records  # differ: exit 1 vs 0
-cases/arr_path_cond_while records  # differ: exit 1 vs 0
-cases/arr_path_continue_do records  # differ: exit 1 vs 0
-cases/arr_path_continue_for records  # differ: exit 1 vs 0
-cases/arr_path_nullable records  # differ: exit 1 vs 0
-cases/arr_path_reassign records  # differ: exit 1 vs 0
-cases/arr_path_record_store records  # differ: exit 1 vs 0
-cases/arr_path_root records  # differ: exit 1 vs 0
-cases/arr_path_store_rhs records  # differ: exit 1 vs 0
-cases/arr_path_store_rhs_compound records  # differ: exit 1 vs 0
-cases/arr_path_store_rhs_field records  # differ: stderr line 1 differs
-cases/arr_range_call_arg_rebind records  # differ: exit 1 vs 0
-cases/arr_range_call_arrow records  # differ: exit 1 vs 0
-cases/arr_range_call_callee_pop records  # differ: exit 1 vs 0
-cases/arr_range_call_generic records  # differ: exit 1 vs 0
-cases/arr_range_call_grow records  # differ: exit 1 vs 0
-cases/arr_range_call_loop records  # differ: stdout line 1 differs
-cases/arr_range_call_no_proof records  # differ: exit 1 vs 0
-cases/arr_range_call_rebind records  # differ: exit 1 vs 0
-cases/arr_range_call_rebind_callee records  # differ: exit 1 vs 0
-cases/arr_range_call_two_sites records  # differ: exit 1 vs 0
-cases/arr_range_call_wrap records  # differ: exit 1 vs 0
-cases/arr_typed_push_pop records  # differ: exit 0 vs 1: TypeError: a.push is not a function
-cases/bytes_offset_float records  # differ: exit 0 vs 1: TypeError: a.set is not a function
-cases/bytes_offset_u64 records  # differ: exit 0 vs 1: TypeError: a.set is not a function
-cases/bytes_set_disjoint records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
-cases/bytes_set_end records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
-cases/bytes_set_float_panic strings  # differ: stdout line 1 differs
-cases/bytes_set_self records  # differ: exit 0 vs 1: TypeError: a.set is not a function
+cases/arr_path_store_rhs_compound records  # differ: stderr line 1 differs
+cases/bytes_offset_u64 numbers  # differ: exit 0 vs 1: TypeError: Cannot convert a BigInt value to a number
+cases/bytes_set_float_panic strings  # differ: stderr line 1 differs
 cases/caps_ffi ffi  # refused: NL4010 under --emit-ts
 cases/caps_ffi_handle ffi  # refused: NL4010 under --emit-ts
 cases/caps_net refused  # refused: NL4011 under --emit-ts
 cases/caps_process_wait numbers  # differ: exit 0 vs 1: throw new Error(
 cases/caps_signal refused  # refused: NL4011 under --emit-ts
-cases/cls_inline_array records  # differ: exit 0 vs 1
-cases/ct_asm_p256 numbers  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
-cases/ct_asm_x25519 records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
+cases/cls_inline_array numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
+cases/cls_inline_array_passed numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
+cases/ct_asm_x25519 strings  # differ: node passed 30000 ms
 cases/deny_panics_overflow_wrapping numbers  # differ: stdout line 1 differs
 cases/deny_panics_overflow_wrapping_add numbers  # differ: stdout line 1 differs
-cases/deny_panics_unsafe records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 cases/ffi_buffer_call_sites ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_count_proved ffi  # refused: NL4010 under --emit-ts
 cases/ffi_buffer_declared ffi  # refused: NL4010 under --emit-ts
@@ -129,10 +50,8 @@ cases/mem_join_parts_scope numbers  # differ: stdout line 1 differs
 cases/mem_loop_scope numbers  # differ: stdout line 1 differs
 cases/mem_loop_scope_chunk numbers  # differ: stdout line 1 differs
 cases/mem_loop_scope_control numbers  # differ: stdout line 1 differs
-cases/mem_nullable numbers  # differ: stdout line 10 differs
-cases/mem_return_array_scope records  # differ: exit 0 vs 1: TypeError: Cannot read properties of undefined (reading 'length')
-cases/mem_scope_dynamic_array numbers  # differ: stdout line 1 differs
-cases/mem_stack_array_literal records  # differ: stdout line 2 differs
+cases/mem_return_array_scope numbers  # differ: stdout line 1 differs
+cases/mem_scope_dynamic_array numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
 cases/mem_using_arena_tail numbers  # differ: stdout line 1 differs
 cases/mem_wait_pid_scope numbers  # differ: exit 0 vs 1: throw new Error(
 cases/net_dual_stack refused  # refused: NL4011 under --emit-ts
@@ -160,25 +79,14 @@ cases/os_spawn numbers  # differ: exit 0 vs 1: throw new Error(
 cases/os_wait numbers  # differ: exit 0 vs 1: throw new Error(
 cases/ovf_matrix numbers  # differ: exit 0 vs 1
 cases/ovf_repro_wrapping numbers  # differ: stdout line 1 differs
-cases/panics_call_cycle numbers  # differ: stdout line 1 differs
+cases/panics_call_cycle records  # differ: exit 0 vs 1
 cases/panics_io_exit numbers  # differ: exit 0 vs 1: DOMException [TypeMismatchError]: The data argument must be an integer-type TypedArray
 cases/panics_overflow numbers  # differ: stdout line 1 differs
-cases/panics_overflow_via records  # differ: stdout line 1 differs
+cases/panics_overflow_via records  # differ: exit 0 vs 1
 cases/panics_overflow_wrapping numbers  # differ: stdout line 1 differs
-cases/panics_slice records  # differ: exit 0 vs 1: TypeError: dst.set is not a function
 cases/perf_arena_control numbers  # differ: stdout line 4 differs
 cases/perf_rng_counter numbers  # differ: exit 1 vs 0
-cases/port_array_zero_fill numbers  # differ: exit 0 vs 1: TypeError: Cannot convert undefined to a BigInt
-cases/port_rec_alias_copy numbers  # differ: stdout line 1 differs
-cases/port_rec_alias_store numbers  # differ: stdout line 1 differs
-cases/port_rec_literal_twice numbers  # differ: stdout line 1 differs
-cases/port_rec_push_then_write numbers  # differ: stdout line 1 differs
-cases/port_rec_slot_store_live_ref numbers  # differ: stdout line 1 differs
-cases/port_record_alias_const numbers  # differ: stdout line 1 differs
-cases/port_record_alias_ctor_write numbers  # differ: stdout line 1 differs
-cases/port_record_alias_helper_bump numbers  # differ: stdout line 1 differs
-cases/port_record_alias_helper_copy numbers  # differ: stdout line 1 differs
-cases/port_record_alias_helper_write numbers  # differ: stdout line 1 differs
+cases/rng_entries numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
 cases/rng_entry_bitwise_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_panic_f64 numbers  # differ: exit 1 vs 0
@@ -186,21 +94,18 @@ cases/rng_entry_push_panic numbers  # differ: exit 1 vs 0
 cases/rng_entry_range_panic numbers  # differ: exit 1 vs 0
 cases/secret_field_wipe_o2 numbers  # differ: stdout line 1 differs
 cases/secret_field_wipe_o2_plain numbers  # differ: stdout line 1 differs
-cases/secret_wipe records  # differ: exit 0 vs 1: TypeError: copy.set is not a function
+cases/secret_wipe numbers  # differ: stdout line 3 differs
 cases/secret_wipe_o2 numbers  # differ: stdout line 1 differs
 cases/secret_wipe_o2_inferred numbers  # differ: stdout line 1 differs
 cases/secret_wipe_o2_inferred_plain numbers  # differ: stdout line 1 differs
 cases/secret_wipe_o2_plain numbers  # differ: stdout line 1 differs
 cases/str_surrogate_lone numbers  # differ: stdout line 1 differs
-cases/str_surrogate_pair numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Bad character escape sequence, expected 4 hex characters
 cases/term_calls numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_import numbers  # differ: exit 0 vs 1: throw new Error(
 cases/term_pty numbers  # differ: exit 0 vs 1: throw new Error(
-cases/unsafe_get_set records  # differ: exit 0 vs 1: SyntaxError: The requested module 'nish/runtime' does not provide an export named 'uncheckedGet'
 corpus/argv_words numbers  # differ: exit 29 vs 106
-corpus/arr_oob_exit records  # differ: exit 1 vs 0
-corpus/arr_oob_negative records  # differ: exit 1 vs 0
-corpus/arr_push_growth records  # differ: stdout line 13 differs
+corpus/arr_bounds_edge numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
 corpus/bit_compound_target refused  # refused: NL4012 under --emit-ts
 corpus/f64_libm libm  # differ: stdout line 33 differs
+corpus/int_compound numbers  # differ: exit 0 vs 1: SyntaxError [ERR_INVALID_TYPESCRIPT_SYNTAX]: Invalid assignment target
 corpus/parse_argv_sum numbers  # differ: stdout line 1 differs

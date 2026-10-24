@@ -1,11 +1,13 @@
 // `a[b[i]]` with neither index proven: both reads are checked, the inner
 // one first, and a store and a compound store through a checked slot keep
 // the order of evaluation. The indices come from an array, so no caller
-// proves them.
+// proves them. A compound store hoists its element-read index into a const,
+// since --emit-ts will not read such a target twice.
 const pick = (a: i32[], b: i32[], i: i32): i32 => a[b[i]];
 
 const bump = (a: i32[], b: i32[], i: i32): i32 => {
-  a[b[i]] += 10;
+  const k = b[i];
+  a[k] += 10;
   a[i] -= 1;
   a[b[i]] = a[i] * 2;
   return a[b[i]];

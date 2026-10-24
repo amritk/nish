@@ -206,7 +206,7 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
 }
 
 /** The rewrite of a builtin array method call — `pop`, `push` of a record, `set` — or `null`. */
-const callRow = (walk: Walk, node: Node, operands: Operands): string | null => {
+const recordCallRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   const callee = node.children[0]
   if (callee.kind !== N_MEMBER || walk.program.nodeCallees[node.id] !== null) {
     return null
@@ -366,7 +366,7 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
     case N_BINARY:
       return storeRow(walk, node, operands)
     case N_CALL:
-      return callRow(walk, node, operands)
+      return recordCallRow(walk, node, operands)
     case N_ARRAY:
       return literalRow(walk, node, operands)
     case N_NEW:

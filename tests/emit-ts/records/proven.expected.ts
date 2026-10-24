@@ -1,11 +1,11 @@
 // An index the loop proves in range keeps its plain `a[i]`; the one a
 // parameter supplies, from an element no caller proves, is checked.
-import { idx } from "nish/runtime"
+import { checkedAdd, idx } from "nish/runtime"
 import type { i32 } from "nish/runtime"
 const sum = (xs: i32[]): i32 => {
   let t = 0;
   for (let i = 0; i < xs.length; i++) {
-    t += xs[i];
+    t = checkedAdd(t, xs[i]);
   }
   return t;
 };
