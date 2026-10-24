@@ -143,6 +143,36 @@ for — which catches a truncated download, a tarball built for another
 architecture, and an asset whose name does not match what is inside it — and
 only then swapped in. If any of that fails the install you had is untouched.
 
+**Every download is checked before it is unpacked.** install.sh compares the
+tarball's SHA-256 with the release's `SHA256SUMS` (or with the digest pinned
+for releases that predate it) and refuses a mismatch. For releases after
+0.20.0 it also checks the release's **build provenance attestation** when a
+signed-in GitHub CLI is present whose `gh attestation verify` takes the
+options below. The attestation
+is a Sigstore-signed statement, made by `actions/attest-build-provenance` in
+the release workflow, that every file in `SHA256SUMS` was built by
+`.github/workflows/release.yml` at the release's tag on a GitHub-hosted
+runner. A failed verification refuses the install; with no `gh`, a signed-out
+one or one too old for those options, the check is skipped with a note saying so, and the
+SHA-256 still applies. The same command by hand, on a tarball you downloaded:
+
+```bash
+gh attestation verify nish-<version>-<asset>.tar.gz \
+  --repo amritk/nish \
+  --signer-workflow amritk/nish/.github/workflows/release.yml \
+  --source-ref refs/tags/v<version> \
+  --deny-self-hosted-runners
+```
+
+It works on any file the release attaches, the npm tarballs included. Each
+release also attaches `nish-<version>.spdx.json`, an SPDX 2.3 software bill of
+materials: every attached file with its SHA-256, the clang, linker, Node.js
+and seed compiler that built each tarball (recorded by the build row itself),
+and the vendored code from
+[THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) that each of them contains.
+How these fit the rest of the release's defences is
+[docs/security/supply-chain.md](security/supply-chain.md).
+
 The npm route installs the **native** compiler, and it is a download rather than a
 build: nothing is compiled on your machine. The package declares one
 `nish-<os>-<arch>` package per supported platform as an `optionalDependencies`

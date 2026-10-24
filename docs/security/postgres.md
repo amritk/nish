@@ -8,7 +8,7 @@ wiped, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the database layer starts
 from evidence.
 
-Anchors are function names in `std/net/postgres.ts` at `d375301`, the last
+Anchors are function names in `std/net/postgres.ts` at `6484470`, the last
 commit to change it on the head that merges this record.
 
 **Result.** Every message is framed once, by its length, and a length under 4
@@ -16,8 +16,9 @@ or over `maxMessage` fails the connection before its body is read; every
 field inside a message is bounded by that message's end, so no backend bytes,
 however malformed, make the client read past them or panic. A message the
 protocol does not allow at that point, COPY among them, fails the connection.
-A server can make the client hold at most one message of `maxMessage` bytes
-and one row of `maxColumns` columns, and compute at most `maxIterations`
+A server can make the client hold about 3 × `maxMessage` bytes (the message
+in its input buffer, and the copies kept as `lastError` and `lastNotice`) and
+one row of `maxColumns` columns, and compute at most `maxIterations`
 SCRAM iterations; a program can queue at most `maxOutput` bytes unsent. Every
 recorded exchange cut at every byte offset, and 4000 seeded mutants of them,
 end on a defined failure code without a panic. The server's SCRAM signature is compared in constant time
@@ -30,11 +31,29 @@ were fixed in review. Three properties a reader might assume are not provided, b
 design, and are recorded as accepted: no TLS (PG-9), no way to require SCRAM
 of a server (PG-10), and MD5 and cleartext refused (PG-11).
 
+`PgPool` reaches a server only through its connections: each pooled
+connection is a `PgConnection` under the same caps, so a server can make the
+pool hold at most `size` times what it can make one connection hold — about
+3 × `maxMessage` bytes and one row of `maxColumns` columns per slot, at most
+1024 slots. The pool's own state is bounded by the program (at most 1024
+connections, a queue of at most 2^20 requests, 1024 groups in flight per
+connection, 256 registered statements), with a `PG_POOL_FULL` answer in place
+of growth. A server does reach the queue in one way: a connection that fails
+before it is ready, while no other is, takes the oldest waiting request with
+it as `PG_LOST`, so a server that refuses or drops every connection drains
+the queue one request per connect, which the program must be ready to see.
+A connection that fails reports each request it took as `PG_LOST` and is made
+again on its next use. The pool holds one copy of the password until
+`dispose`, and each connection its own until its proof is computed. A fresh
+nonce for each `connect` and the sockets' lifetimes are the program's (see
+Limits). It landed with this record extended, as the rule of #893 asks of
+attacker-facing code.
+
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls, `bindEnd`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; the helpers `pgCopyBytes`, `pgBytesOf`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys` |
+| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls, `bindEnd`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; the helpers `pgCopyBytes`, `pgBytesOf`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys` |
 
 Out of scope: the socket and loop the program owns (`nish:net`); the HMAC,
 SHA-256, base64 and constant-time primitives the SCRAM exchange calls, which
@@ -103,6 +122,13 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `sent` | a count past the bytes queued | — |
 | `pgFind` | a range outside the buffer; every caller passes one inside a framed message, so no input reaches it | the fuzz below, which never reaches it |
 | `pgScramKeys`, `scramFinal` | an HMAC shorter than 32 bytes, keys not 64 bytes; `hmacSha256` always answers 32 | — |
+| `PgPool` constructor | a size outside 1..1024 ("a PgPool size out of range") | `link/std_postgres_pool_size_panic` (1025 slots, after 1024 are taken) |
+| `PgPool` constructor | a queue outside 1..2^20 ("a PgPool queueSize out of range") | `link/std_postgres_pool_queue_panic` (a queue of 0, after 2^20 is taken) |
+| `PgPool` constructor | `maxInFlight` over 1024, which sizes each slot's ring | `link/std_postgres_pool_inflight_panic` (1025, after 1024 is taken) |
+| `PgPool.connect` | a slot that wants no connection, or one outside 0..size − 1 | `link/std_postgres_pool_connect_panic` (the slot just connected, after the wanted one is taken) and `link/std_postgres_pool_connect_range_panic` (slot 2 of 2) |
+| `PgPool.connect` | after `dispose` | `link/std_postgres_pool_connect_dispose_panic` (a wanted slot, after `dispose`) |
+| `PgPool.connection` | a slot outside 0..size − 1 or with no connection made | `link/std_postgres_pool_connection_panic` (slot 1, after slot 0's is read) and `link/std_postgres_pool_connection_range_panic` (slot 2 of 2) |
+| `PgPool.next` | a slot outside 0..size − 1, by `connection`, which it calls first | `link/std_postgres_pool_next_panic` (slot 2 of 2, after slot 0 answers) |
 
 The builder calls do not panic: `param*` and `bindEnd` with no bind open
 answer false and write nothing ("paramText without a bind is refused" and the
@@ -115,8 +141,24 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
 - **A server that skips authentication is believed.** An `AuthenticationOk`
   in place of a SASL request is taken; there is no `require_auth`
   equivalent (PG-10).
-- **`maxInFlight` has no upper bound.** It is the program's own cap on groups
-  sent and unanswered; the bytes they hold are bounded by `maxOutput`.
+- **`maxInFlight` has no upper bound on a lone connection.** It is the
+  program's own cap on groups sent and unanswered; the bytes they hold are
+  bounded by `maxOutput`. A pool refuses one over 1024, since each slot holds
+  a ring of that many tickets.
+- **A fresh nonce for each connect is the program's.** `PgPool.connect`
+  takes the nonce it is given; the pool checks its length (18 bytes or
+  more), not its freshness. A program that reuses one weakens SCRAM's
+  replay protection; `crypto.getRandomValues` for each call is the rule.
+- **The sockets are the program's.** The pool never opens or closes one.
+  The program closes a slot's socket on `PG_FAILED`, calls `closed()` when
+  a read answers 0 or an error other than `AGAIN`, or a write fails, and at
+  the end sends `terminate()` and closes each socket itself: `dispose`
+  wipes the passwords but neither sends `Terminate` nor closes a socket.
+  The carrier's `reset` check pins the read error.
+- **A pool neither times out nor retries.** A request waits in the queue
+  until a connection takes it; one lost with its connection (`PG_LOST`) is
+  the program's to run again, since the pool cannot know whether the server
+  committed it. The carrier owns every clock.
 - **Named statements are not tracked.** A second `prepare("x")` before the
   first is closed is sent, and the server answers the group with `42P05`;
   the caller keeps names unique.
@@ -240,3 +282,35 @@ was", and a tag's count past an i64 is -1 and "leaves text.failed alone".
 
 **Terminate**: "Terminate drops an open bind", so a half-built Bind is never
 sent.
+
+**The pool**: `link/std_postgres_pool` drives a `PgPool` against scripted
+servers. Its bounds: "a full queue refuses" "and holds what it had", "256
+register; the 257th is refused", "a NUL in a name is refused", "a NUL in SQL
+is refused". Its scheduling: "a full connection takes no more", "in FIFO
+order", "the next to the one with fewer in flight". Its failures: "a
+connection that fails loses each request it took, oldest first", "a
+connection that fails starting, none ready, takes the oldest request with
+it", "a request being built when its connection fails is lost", "it answers
+nothing after PG_FAILED", "two slots fail starting, none ready: the first
+takes the oldest". Its isolation: an error in the second of three groups on
+one connection fails only that group ("the error is its own"). Its password:
+"dispose wipes the pool's password" "and its connections'". It passes as
+`link/std_postgres_pool: exits with 0 and stdout matches expected.out`.
+
+**Against a live server**: `tests/postgres/live/run.mjs` runs the pool and
+`tests/postgres/carrier.ts` against PostgreSQL 18, in CI's `postgres-live`
+job against a `postgres:18` service. It checks that a wrong password is
+refused with `28P01` — the client refuses MD5 and cleartext, so the server
+got that far only through SCRAM; that 100 pipelined requests over four
+connections, every one of which carries groups, four of which violate a
+unique key, fail only those four, whose connections recover, and that the
+rows the other 96 inserted are committed while the failed groups' are not
+(read back with a fresh connection); that a backend
+ended by `pg_terminate_backend` is reported lost and made again; that a
+division by zero fails only its own group in a pipeline; and that the conduit
+article list decodes, escapes and truncates as its golden says. The carrier
+serves HTTP while a query sleeps, and with nothing listening on its database
+port reports the request lost and the slot failed rather than waiting. Its
+`reset` check points it at a server that resets the connection on the
+startup message: the read answers ECONNRESET (-104), and the carrier ends
+the connection there rather than leave the readable socket to spin.

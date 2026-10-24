@@ -215,7 +215,9 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          # Exact: tests/differential/emit-ts-known.txt quotes Node's own
+          # messages as evidence, and is regenerated under this version.
+          node-version: 22.23.4
           cache: npm
 
       # The crypto bench's Go twins (bench/crypto/*/go) build with
@@ -440,6 +442,19 @@ jobs:
         if: matrix.shard == 1
         run: |
           grep -E '^PASS  cpu level: a --cpu x86-64-v3 link of hello prints what the baseline link prints' "$RUNNER_TEMP/test.log"
+
+      # The `hardening` section reads the headers of what `--link` and `nish run`
+      # produce, and skips where no clang or readelf is installed. A runner
+      # without them would take the skip and stay green, so the lines that say
+      # each profile's link, and the reader's own negative case, were read are
+      # required here (docs/security/runtime.md, RT-HARDEN).
+      - name: Every profile's link is hardened, read from its headers
+        if: matrix.shard == 1
+        run: |
+          for what in "a --profile debug link" "a --profile speed link" "a --profile size link" "a nish run binary"; do
+            grep -F "PASS  hardening: $what of hello is PIE, full RELRO, a non-executable stack and control-flow protected" "$RUNNER_TEMP/test.log"
+          done
+          grep -F "PASS  hardening: a link with every protection off is reported" "$RUNNER_TEMP/test.log"
 
       #
       # `build/nish` is what the steps after the suite drive: stage1, one
@@ -733,6 +748,19 @@ jobs:
           "$SEED" --version
           NISH_BOOTSTRAP="$SEED" bash scripts/bootstrap.sh --verify
 
+      # The compiler a release ships is stage2, linked by this checkout's
+      # scripts/build.sh: its headers must say PIE, full RELRO and a stack that
+      # does not execute, with control-flow protection on ELF. On Linux the C
+      # runtime's stack protector and _FORTIFY_SOURCE show as the imports they
+      # add (docs/security/runtime.md, RT-HARDEN).
+      - name: The self-hosted compiler is hardened
+        run: |
+          if [ "$(uname)" = Linux ]; then
+            node scripts/check-hardening.mjs build/nish --imports __stack_chk_fail,__memcpy_chk
+          else
+            node scripts/check-hardening.mjs build/nish
+          fi
+
       # The command line's contract, asked of the compiler that outlives stage0.
       # `tests/nish/cli.ts` is a Nish program reading the compiler's own output —
       # the streams, the exit-code bands, one flat `--json` object per diagnostic —
@@ -863,6 +891,16 @@ jobs:
           SEED: ${{ steps.download.outputs.path }}
         run: |
           NISH_BOOTSTRAP="$SEED" node tests/differential/fuzz.js --stage1 --seed 20261001 --count 200 \
+            --candidate build/self/compile
+
+      # The same programs held to the other round trip (WP33 R4): each built
+      # natively and written out with `--emit-ts` by the same HEAD compiler,
+      # and both runs required to print and exit alike. A generated program
+      # reaches no row `emit-ts-known.txt` may list, so every verdict but an
+      # agreement is red. About 13 s for the 200.
+      - name: HEAD's native build and its --emit-ts output agree on random programs
+        run: |
+          node tests/differential/fuzz.js --emit-ts --seed 20261001 --count 200 \
             --candidate build/self/compile
 
       # The soundness differential: the same candidate compiles every runnable
@@ -1238,6 +1276,70 @@ jobs:
           name: fuzz-smoke-artifacts
           path: build/fuzz/artifacts/
           if-no-files-found: ignore
+
+  # nish/net/postgres's pool and carrier against a real PostgreSQL 18:
+  # tests/postgres/live/run.mjs prints a line a check and a summary that names
+  # its skips, which must be none. The service's role and password are a
+  # throwaway the job alone reaches; they match the names the expected
+  # outputs print, the same as the cluster run.mjs starts locally.
+  postgres-live:
+    name: postgres-live
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18@sha256:edb0c08dc33befd0262ab3b5cf1c4f3f8cfd8b09e88c05b45adee29d6761ddb6
+        env:
+          POSTGRES_USER: nish_live
+          POSTGRES_PASSWORD: nish-live
+          POSTGRES_DB: nish_live
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nish_live"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install LLVM 18 + lld
+        timeout-minutes: 5
+        run: |
+          sudo apt-get $APT_OPTS update
+          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18
+          bin="$RUNNER_TEMP/llvm-bin"
+          mkdir -p "$bin"
+          for tool in clang clang++ llc llvm-as opt ld.lld wasm-ld lld; do
+            ln -sf "/usr/bin/$tool-18" "$bin/$tool"
+          done
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        timeout-minutes: 5
+        run: npm ci
+
+      - name: Fetch the seed
+        timeout-minutes: 5
+        run: bash scripts/fetch-seed.sh
+
+      - name: Build the compiler
+        timeout-minutes: 10
+        run: npm run build
+
+      - name: The live PostgreSQL suite
+        timeout-minutes: 5
+        env:
+          PG_TEST_URL: postgres://nish_live:nish-live@127.0.0.1:5432/nish_live
+        run: |
+          set -o pipefail
+          node tests/postgres/live/run.mjs | tee "$RUNNER_TEMP/postgres-live.log"
+          grep -E '^[1-9][0-9]* passed, 0 failed, 0 skipped$' "$RUNNER_TEMP/postgres-live.log"
 
   lint:
     name: lint

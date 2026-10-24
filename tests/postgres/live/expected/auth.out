@@ -1,0 +1,7 @@
+right password: the row names the user
+right password: request 0 answered
+right password: password wiped: true
+wrong password: request 0 lost
+wrong password: connection failed: 7 28P01 FATAL: password authentication failed for user "nish_live"
+wrong password: password wiped: true
+exit 0

@@ -102,12 +102,94 @@ verified safely, so ask that user to reset their password.
 ## Keeping a server responsive
 
 A cost-10 hash holds one core for about 50 ms, so a server that hashes on the
-thread running its event loop stops answering everyone else while it does. The
-module does no I/O and calls no C, so it builds for WebAssembly too.
+thread running its event loop stops answering everyone else while it does,
+and a burst of sign-ups queues behind one another. Hand the hashing to
+[`std/threads`](threads.md) tasks instead: each runs on a core of its own, and
+the thread that opened the scope waits for the slowest hash rather than for
+all of them in turn. Here three sign-ups that arrived together are hashed side
+by side, given a free core for each:
 
-For now, a hash cannot run inside a [`std/threads`](threads.md) task:
-`bcryptHash` and `bcryptVerify` wipe their state before returning, and a task
-may not call a function that wipes. Until the compiler allows that, spread the
-load across processes instead. Each worker of a forking server hashes on its
-own core, so a slow hash stalls only that worker
-([A server on every core](networking.md#a-server-on-every-core-nishnetprefork)).
+```ts nish:ok
+import { bcryptHash } from "nish/crypto/bcrypt";
+import { Secret, secret, wipe } from "nish:secret";
+import { scope } from "nish/threads";
+
+const bytesOf = (text: string): u8[] => {
+  const out: u8[] = [];
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    out.push(toU8(text.charCodeAt(i)));
+  }
+  return out;
+};
+
+// A fresh salt for each password, drawn on the calling thread.
+const freshSalts = (n: i32): u8[] => {
+  const salts: u8[] = new Array<u8>(16 * n);
+  crypto.getRandomValues(salts);
+  return salts;
+};
+
+// One password's hash under the salt at `at`: the task's whole job.
+const hashAt = (password: Secret<u8[]>, salts: u8[], at: i32): string => {
+  const salt: u8[] = new Array<u8>(16);
+  for (let i: i32 = 0; i < 16; i++) {
+    salt[i] = salts[at + i];
+  }
+  const made = bcryptHash(password, salt, 10);
+  return made.isErr() ? "" : made.value;
+};
+
+export const main = (): i32 => {
+  // Three sign-ups arrived together; each hash takes a core for about 50 ms.
+  const alice: Secret<u8[]> = secret(bytesOf("correct horse"));
+  const bob: Secret<u8[]> = secret(bytesOf("battery staple"));
+  const carol: Secret<u8[]> = secret(bytesOf("tr0ub4dor&3"));
+  const salts: u8[] = freshSalts(3);
+  const stored: string[] = ["", "", ""];
+  {
+    using s = scope();
+    s.spawn((p: Secret<u8[]>): string => hashAt(p, salts, 0), alice, stored, 0); // this thread
+    s.spawn((p: Secret<u8[]>): string => hashAt(p, salts, 16), bob, stored, 1); // a worker
+    s.spawn((p: Secret<u8[]>): string => hashAt(p, salts, 32), carol, stored, 2); // another
+  }
+  wipe(alice);
+  wipe(bob);
+  wipe(carol);
+  for (const hash of stored) {
+    console.log(`${hash.substring(0, 7)} ${hash.length}`); // $2b$10$ 60
+  }
+  return 0;
+};
+```
+
+Draw the salts before the scope, on the calling thread: a task may not call
+`crypto.getRandomValues`, since it writes through the runtime. A task may
+call `bcryptHash` and `bcryptVerify`, and each arrow task reads the salts as a
+`const` and takes its password as the task's argument. The passwords stay
+`Secret`s throughout, and the server wipes them once the scope has joined,
+when no task can still read them.
+
+The scope still joins on the thread that opened it, and runs one of the tasks
+there, so that thread is busy for about one hash, not three. On a server, open
+the scope on a thread other than the one running the event loop, or accept
+that pause of one hash for each burst. The module does no I/O and calls no C, so
+it builds for WebAssembly too, where the tasks run one after another.
+
+## Four at once on one thread
+
+`bcryptHash4(p0, p1, p2, p3, salts, cost)` and
+`bcryptVerify4(p0, p1, p2, p3, hashes)` take up to four passwords and run
+their hashes interleaved on the calling thread: four take about the time of
+1.2 single hashes on one core, since the four chains of table lookups overlap
+where one would leave the core waiting. Lane 0 is always given and a `null`
+lane is skipped. Each lane answers what `bcryptHash` or `bcryptVerify` would
+(a skipped lane answers `""` or `false`), `salts` is the four 16-byte salts
+end to end, and a verify of hashes with different costs runs each cost as its
+own group. A malformed hash in any given lane makes the whole verify an `Err`
+that names the lane, before anything is hashed.
+
+A task cannot call the batch yet: it makes its state as a `Secret` and wipes
+it, and the compiler does not yet count that as the task's own scratch
+([BCRYPT-9](../../security/crypto-bcrypt.md#findings)). On a server with
+spare cores, hash singly on tasks as above; on one core, or a server whose
+other cores are busy, batch the logins that arrive together.

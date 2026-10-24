@@ -49,9 +49,14 @@ Every job that compiles anything compiles with `src/`, built from the seed:
 there is no other compiler in the repository. The jobs that compared two
 implementations — `batch-parity`, `parity-select`, `parity-changed`, the
 nightly `parity.yml` and `release.yml`'s `ddc` job — were deleted with stage0's
-`src/` in WP19 R6 ([below](#the-parity-run-retired)).
+`src/` in WP19 R6 ([below](#the-parity-run-retired)). Diverse
+double-compiling came back as a monthly job in `rebuild.yml`, which builds the
+line of releases from the `ddc-0.6.0` tag
+([security/supply-chain.md](security/supply-chain.md), SC-29).
 
-The other workflows: `release.yml` and `release-pr.yml`
+The other workflows: `rebuild.yml`, which builds the latest release again
+from its tag every week and compares it with what was published (SC-28);
+`release.yml` and `release-pr.yml`
 ([wp12-release.md](wp12-release.md#release-procedure)); `pr-title.yml`, which
 checks a pull request title with `changelog-gen.mjs --check-subject`; and
 `ct-timing.yml`, a weekly dudect-style timing test of the constant-time crypto

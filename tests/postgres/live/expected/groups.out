@@ -1,0 +1,9 @@
+group 7: 23505, 0 rows
+group 32: 23505, 0 rows
+group 57: 23505, 0 rows
+group 82: 23505, 0 rows
+100 of 100 groups done exactly once
+96 groups answered their probe
+4 connections, 4 of them carried groups, at most 16 in flight on one
+committed: 96 rows, 0 from the failed groups, 4772 summed
+exit 0

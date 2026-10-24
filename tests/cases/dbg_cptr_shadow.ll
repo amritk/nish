@@ -41,11 +41,11 @@ if.end:
   ret i32 %6, !dbg !43
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
 
 !llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!2, !3}
+!llvm.module.flags = !{!2, !3, !45, !46, !47, !48, !49}
 !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "nish <version>", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/dbg_cptr_shadow.ts", directory: ".")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
@@ -91,3 +91,8 @@ attributes #1 = { nounwind }
 !42 = !DILocation(line: 30, column: 8, scope: !24)
 !43 = !DILocation(line: 31, column: 3, scope: !24)
 !44 = !DILocation(line: 31, column: 10, scope: !24)
+!45 = !{i32 8, !"cf-protection-branch", i32 1}
+!46 = !{i32 8, !"cf-protection-return", i32 1}
+!47 = !{i32 8, !"branch-target-enforcement", i32 1}
+!48 = !{i32 8, !"sign-return-address", i32 1}
+!49 = !{i32 4, !"probe-stack", !"inline-asm"}

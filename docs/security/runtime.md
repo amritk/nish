@@ -145,6 +145,91 @@ A finding is any of these, reachable through a runtime entry point:
 | `waitpid` is not interrupted into leaving a child behind | every handler the runtime installs is `SA_RESTART`: the signal pipe's for SIGINT and SIGTERM in `runtime-host.c`, and `nish:term`'s in `runtime-term.c` (`nish_term_catch`) | by reading; nothing automated |
 | Every runtime unit stays inside its `.text*` ceiling | measured after #387: `runtime.c` 3,583 / 3,584 (3,708 / 3,840 threaded), `runtime-os.c` 1,530 / 1,536, `runtime-host.c` 764 / 768, `runtime-net.c` 2,087 / 2,304, `runtime-parallel.c` 286 / 320 (905 / 1,024 threaded); after WP34 N12 (RT-19), `runtime-os.c` 2,383 / 2,560 and `runtime-parallel.c` threaded 2,522 / 2,560 | the budget checks in `tests/run.js` |
 
+## Binary hardening (RT-HARDEN)
+
+Every native binary the toolchain links carries the platform's exploit
+mitigations: what `nish --link` and `nish run` build, and the released `nish`,
+which `scripts/bootstrap.sh` links through the same `scripts/build.sh`. The
+anchors are by name, not line: the hardening block in `scripts/build.sh`
+(after the `--cpu` line), `HARDENING_FLAGS` and `HARDENING_ATTRS` in
+`src/target.ts`, and their use in `src/ir.ts` and `src/emit.ts`. It closes no
+finding; it raises the cost of exploiting a memory-safety bug that the
+findings above did not find.
+
+| Protection | Flag | What it closes | Where |
+| --- | --- | --- | --- |
+| Position independence | clang's default PIE, checked | a fixed load address for return-oriented code | ELF and Mach-O |
+| Full RELRO | `-Wl,-z,relro,-z,now` | overwriting a GOT entry after start-up: the table is read-only once relocated | ELF |
+| Non-executable stack | `-Wl,-z,noexecstack` | code injected onto the stack, even when one object lacks the `.note.GNU-stack` note | ELF (Mach-O's stack is non-executable unless `MH_ALLOW_STACK_EXECUTION`, which is checked) |
+| Stack-clash probes | `-fstack-clash-protection`; in the IR, `"probe-stack"="inline-asm"` on every definition and the `probe-stack` module flag | a frame larger than the guard page stepping over it into another mapping | ELF |
+| Control-flow protection | `-fcf-protection=full` on x86-64, `-mbranch-protection=standard` on arm64; in the IR, the `cf-protection-*`, `branch-target-enforcement` and `sign-return-address` module flags | an indirect jump or call to anything but a function entry (IBT, BTI), and a return to an overwritten address (shadow stack, PAC), where the CPU and kernel enforce it | ELF and Mach-O |
+| Stack protector | `-fstack-protector-strong` | a linear overflow of a C runtime frame's buffer reaching its return address | the C runtime only |
+| `_FORTIFY_SOURCE=3` | `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3`, not in `debug` | a `memcpy`, `memset` or `snprintf` in the C runtime past an object whose size the compiler knows | the C runtime only |
+
+The IR flags are what make the program's own code agree: on a `.ll` input clang
+takes no stack-protector or code-generation flag from its command line, and the
+linker marks a binary with IBT, SHSTK or BTI only when every object asks for it.
+Nish code needs no stack protector or FORTIFY: an array access is
+bounds-checked, and the compiler emits no `memcpy` it has not sized.
+
+**Cost.** Measured with `bench/run.mjs`'s programs before and after, each
+linked by `scripts/build.sh` from the same IR less the hardening, on x86-64
+Linux with clang 18, 11 interleaved rounds (21 where the first pass was
+unclear), the median of each, the first round dropped. Size grows by 328 to
+1,136 bytes per binary under `speed`, 328 to 944 under `size`, and about
+6.6 KB (5%) under `debug`. Time, under `speed`: 12 of 14 programs moved within
+the noise band (a copy of the same binary moved up to ±1.5%, 4% on `lexer`);
+`cursor` is 6.1% and `aes-gcm` 3.6% slower, and a build without only
+`-fcf-protection` brings both back inside the band, so CET is the cost there
+(`endbr64` at each entry, `.plt.sec`, and the layout they shift). A build
+without the stack protector and FORTIFY measured the same as the full set.
+`fib`'s −9.9% (`speed`) and +16.4% (`size`), and `getbyte`'s +9.5% (`size`),
+are placement: their hot loops are the same instructions at a new address.
+Instructions retired (`bench/run.mjs --instructions`, cachegrind, `speed`):
+`strbuild` runs 53,754,318 against 53,229,282 for the same build without
+`-fstack-protector-strong` (+0.99%), the guard on the runtime's string
+builders. The same guard on `str_from_digits` (a 21-byte digit buffer, run
+once per integer formatted) adds about 166,000 instructions to the map
+benchmarks that format each key: `map-wordcount` +0.11%, `map-presize`
++0.24%. Those three baselines in `bench/instructions.json` move with this
+change.
+The landing pads also end the `speed` link's LTO partitions on x86-64 and
+arm64 (`scripts/build.sh`): a partition boundary turns the internal functions
+called across it into external ones, each opening with `endbr64`, and `fib`
+ran 492,835,930 instructions with two to eight partitions against 462,974,845
+with one (+6.5%; `Permute` +3.9%, `Towers` +3.2%). One partition costs link
+time instead: 11.5 s against 8.3 s for `tests/link/net_relay_f64` on four
+cores, compile included.
+
+**What it does not cover.**
+
+- `build/nish-test`, the stage-1 compiler `scripts/bootstrap.sh` links with
+  the seed's own `scripts/build.sh`, is hardened only once a release carries
+  this change. The programs it links, and stage 2, are hardened now.
+- The `wasm` and `wasi` profiles: linear memory has no stack to protect in
+  this way, and the module flags are not emitted for a wasm triple.
+- Mach-O gets no stack-clash probes (clang ignores the flag there) and no
+  RELRO flag: dyld applies the binary's fixups itself, so what ELF's
+  `-z relro -z now` asks for is dyld's to give. The check reads `MH_PIE` and
+  the stack flag alone.
+- The x86 feature note is an AND over every object linked, the C library's
+  start files included. A distribution whose `crt1.o` lacks it gives a binary
+  without the note, and so without IBT and the shadow stack, whatever Nish
+  compiled. `scripts/check-hardening.mjs` reports that; on AArch64 it falls
+  back to finding `bti` and `paciasp` in the code.
+- Enforcement is the CPU's and the kernel's. CET runs only where the kernel
+  enables user shadow stacks for the binary; the marking costs nothing where
+  it does not.
+
+Tests: "hardening: a --profile debug link of hello is PIE, full RELRO, a
+non-executable stack and control-flow protected", the same for
+`--profile speed`, `--profile size` and "a nish run binary" (templated as
+`` `hardening: ${what} of hello is PIE, full RELRO, a non-executable stack and control-flow protected` ``),
+and "hardening: a link with every protection off is reported for PIE, RELRO,
+binding, the stack, CET and the import", in `tests/run.js`; CI's `bootstrap`
+job runs `scripts/check-hardening.mjs` on `build/nish`, and its `test` job
+reads the four positive checks from the log.
+
 ## Static analysis
 
 `.github/workflows/codeql.yml` runs CodeQL's `security-and-quality` suite over

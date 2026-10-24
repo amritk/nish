@@ -3,7 +3,7 @@ declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 noca
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #0
 declare void @nish_aes_ctr(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #0
 declare void @nish_aes_ghash(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef) #0
-attributes #5 = { nounwind willreturn memory(inaccessiblemem: readwrite) }
+attributes #5 = { nounwind willreturn memory(inaccessiblemem: readwrite) "probe-stack"="inline-asm" }
 %23 = call i32 @nish_aes_hw()
 %24 = icmp ne i32 %23, 0
 br i1 %24, label %aes.kernel, label %aes.walker

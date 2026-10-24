@@ -237,7 +237,10 @@ where stage0 and stage1 emitted identical IR for every module of `src/` (the
 diverse-double-compiling half of the argument). R6 deleted stage0, so the
 `ddc` job went with it. The tags already cut are never moved or deleted: they
 are the only commits at which that property can be demonstrated again
-([wp19-stage0-retirement.md](wp19-stage0-retirement.md), G6).
+([wp19-stage0-retirement.md](wp19-stage0-retirement.md), G6). `rebuild.yml`
+builds forward from `ddc-0.6.0` to the latest release each month
+(`scripts/ddc-chain.sh`, [security/supply-chain.md](security/supply-chain.md),
+SC-29), and every week it builds the latest release again from its tag (SC-28).
 
 ## The npm name
 

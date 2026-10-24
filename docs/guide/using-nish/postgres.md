@@ -229,11 +229,89 @@ the program can queue unsent. A cap out of range — `maxMessage` or
 an empty `user`, a startup parameter holding a NUL, or a nonce shorter than 18
 bytes is a mistake in the program, and the constructor panics.
 
+## A pool
+
+`PgPool` holds up to `size` connections to one server and a queue of requests
+waiting for one. It is sans-IO like the connection: it says which slot needs a
+socket, and your loop makes it and moves its bytes.
+
+```ts
+const pool = new PgPool(config, password, 4, 256); // 4 connections, 256 waiting requests
+wipe(password); // the pool keeps its own copy until dispose()
+pool.register("by_id", "select name from users where id = $1", [20]);
+const fds: i32[] = [-1, -1, -1, -1]; // slot s's socket
+const ticket: i32 = pool.request(); // PG_POOL_FULL when 256 wait
+
+// Each turn of the loop: send what waits, then connect what is wanted.
+for (let slot: i32 = pool.dispatch(); slot >= 0; slot = pool.dispatch()) {
+  const conn = pool.connection(slot); // pool.ticket names the request
+  conn.bindStart("by_id");
+  conn.paramInt(toI64(42));
+  conn.bindEnd();
+  pool.send(); // ends the group: send(), not sync()
+}
+for (let slot: i32 = pool.wanted(); slot >= 0; slot = pool.wanted()) {
+  const nonce = new Array<u8>(18);
+  crypto.getRandomValues(nonce); // a fresh nonce for each connect
+  pool.connect(slot, nonce);
+  fds[slot] = tcpConnect(addr); // then pollAdd it under a token naming slot
+}
+// Then, for each slot s whose socket fds[s] was readable, read it and take
+// its events as for one connection, with pool.next(s) and pool.ticket.
+```
+
+- **Requests.** `request()` queues a request and answers its ticket.
+  `dispatch()` hands the oldest one to the ready connection with the fewest
+  groups in flight, never more than `PgConfig.maxInFlight` on one; build its
+  group on `connection(slot)` and end it with `send()`. Until it is sent,
+  `dispatch()` answers `PG_POOL_NONE`: a request handed out and never sent
+  holds the pool. `send()` answers `false` when nothing was handed out, when
+  a bind is still open (finish it and call again), and when no message of the
+  group was written. Then a live connection drops the request, and a failed
+  one keeps it and reports it `PG_LOST` with the rest. A connection is made only when
+  the waiting requests outgrow the ones there are, one for every
+  `maxInFlight` of them, up to `size`; each `dispatch()` that finds no room
+  wants at most one more.
+- **Statements.** A statement given to `register` is prepared on each
+  connection in the same write as its first request, so a request binds it by
+  name at once. Register them all before the first `connect`; after it,
+  `register` answers `false`, as it does for a name or SQL holding a NUL and
+  past 256 statements.
+- **Events.** `next(slot)` answers what `PgConnection.next()` does, with
+  `ticket` naming the request. An error fails only its own request's group:
+  the other requests on the connection are answered.
+- **Failures.** When a connection fails, `next(slot)` answers `PG_LOST` for
+  each request it took with it, oldest first, then `PG_FAILED`: close the
+  socket. After it, `next(slot)` answers `PG_NEED_MORE` until the slot is
+  connected again, when a request next needs it. A connection that fails
+  before it is ready, while no other is, takes the oldest waiting request
+  with it, so a server that cannot be reached empties the queue rather than
+  holds it. When a socket's connect fails, its read answers 0 or an error
+  other than -11, or its write fails, call `connection(slot).closed()`.
+- **Sockets.** The sockets are the program's: it closes one on `PG_FAILED`,
+  and at the end. `dispose()` neither sends `Terminate` nor closes a socket;
+  call `terminate()` on each connection, flush it and close its socket
+  first.
+- **The password.** `dispose()` wipes the pool's copy and every
+  connection's; `passwordWiped()` says whether it is gone.
+
+The constructor panics on a `size` outside 1 to 1024, on a `queueSize`
+outside 1 to 2^20, and on a `maxInFlight` over 1024, as well as on what
+`PgConnection` panics on. `connect` panics on a slot that wants no connection,
+and after `dispose()`; `connection` and `next` on a slot outside 0 to
+`size - 1` or one that never had a connection.
+
+[`tests/postgres/carrier.ts`](../../../tests/postgres/carrier.ts) is a whole
+program: one `pollWait` loop holding the pool's sockets beside an HTTP server,
+which answers requests while a query is in flight.
+
 ## What it does not do
 
 TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query
-cancellation, binary-format results and the simple query protocol. A pool is a
-program's own: an array of connections and the loop above.
+cancellation, binary-format results and the simple query protocol. A pool
+neither reads a clock nor retries: a request waits in its queue until a
+connection takes it, and one lost with its connection is the program's to run
+again.
 
 It does not insist on authentication: a server that answers
 `AuthenticationOk` without asking for a password is believed, as

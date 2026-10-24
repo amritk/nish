@@ -58,7 +58,7 @@ import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
-import { NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
+import { ACCEPTED_ROWS as emitTsAcceptedRows, HOST as emitTsHost, NODE_FLAGS as emitTsNodeFlags } from "./differential/emit-ts.js"
 import { selfCheckDeclarations as fuzzDeclarations } from "./differential/fuzz.js"
 import { CT_TARGETS, ctSpecs, ctViolations, functionBody } from "./ct-asm.js"
 import { urlFuzzVerdict } from "./link/std_url/verdict.js"
@@ -68,8 +68,10 @@ import { runWipeChecks } from "./wipes/index.js"
 import { runFfiBufferChecks } from "./ffi-buffer.js"
 import { runFfiHandleChecks } from "./ffi-handle.js"
 import { runFfiStringChecks } from "./ffi-string.js"
+import { hardeningProblems } from "../scripts/check-hardening.mjs"
 import {
   packageRootOf,
+  selfCheckHardening,
   selfCheckNotes,
   selfCheckRoots,
   selfCheckVersions,
@@ -2844,6 +2846,7 @@ const SPEED_LINK = new Map([
   ["crypto_aes_wipes", "tests/wipes counts its wipes after -O2"],
   ["crypto_aes_wipes_f64", "the f64 twin of crypto_aes_wipes"],
   ["crypto_bcrypt", "tests/wipes counts its wipes after -O2"],
+  ["crypto_bcrypt_batch", "tests/wipes counts its wipes after -O2"],
   ["crypto_ed25519", "the ed25519Reduce wipes survive opt -O2"],
   ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
   ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
@@ -4885,25 +4888,88 @@ if (!only || "emit-ts".includes(only)) {
   )
 
   // The refusals: a finding about the program, exit 1, under its code, with
-  // not one file written -- the output is all or nothing.
-  for (const [code, name] of [
+  // not one file written -- the output is all or nothing. A line, where given,
+  // is where the finding points: NL4013 at the node whose instances differ,
+  // NL4014 at the copy or zero, not the whole generic.
+  for (const [code, name, line] of [
     ["NL4010", "reject_emit_ts_ffi"],
     ["NL4011", "reject_emit_ts_net"],
     ["NL4011", "reject_emit_ts_net_global"],
     ["NL4011", "reject_emit_ts_signal"],
     ["NL4012", "reject_emit_ts_compound"],
-    ["NL4013", "reject_emit_ts_instances"],
-    ["NL4013", "reject_emit_ts_instances_zero"],
-    ["NL4013", "reject_emit_ts_instances_zero_string"],
+    ["NL4013", "reject_emit_ts_instances", 10],
+    ["NL4013", "reject_emit_ts_instances_zero", 5],
+    ["NL4013", "reject_emit_ts_instances_zero_string", 5],
+    ["NL4014", "refused/uncalled-zero", 4],
+    ["NL4014", "refused/uncalled-copy", 9],
+    ["NL4014", "refused/uncalled-ctor-zero", 6],
+    ["NL4014", "refused/uncalled-field-zero", 7],
+    ["NL4014", "refused/uncalled-wide-zero", 5],
   ]) {
-    const dir = path.join(work, name)
-    const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
+    // A `refused/` name is a program under tests/emit-ts, which has no `.out`
+    // and so is no fixture.
+    const dir = path.join(work, name.replace("/", "-"))
+    const src = name.includes("/") ? path.join(fixtures, `${name}.ts`) : path.join(casesDir, `${name}.ts`)
+    const r = spawnSync(NISH, [src, "--json", "--emit-ts", dir], {
       cwd: root,
       encoding: "utf8",
     })
     check(
-      `emit-ts: ${name} is refused with ${code}, exit 1, and nothing written`,
-      r.status === 1 && r.stdout.includes(`"code":"${code}"`) && !fs.existsSync(dir),
+      `emit-ts: ${name} is refused with ${code}${line === undefined ? "" : ` at line ${line}`}, exit 1, and nothing written`,
+      r.status === 1 &&
+        r.stdout
+          .split("\n")
+          .some((l) => l.includes(`"code":"${code}"`) && (line === undefined || l.includes(`"line":${line},`))) &&
+        !fs.existsSync(dir),
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    )
+  }
+
+  // A stub is warned about only where it is the reader's (NL8012): in the
+  // program's own module, each by name and line, with exit 0 and the files
+  // written; the standard library's stubs, `insertAt` under identity/maps and
+  // `nish/threads`' under records/threads-inline, stay silent.
+  const stubWarning = (name, line) => [
+    `"line":${line},`,
+    `"code":"NL8012","message":"\`${name}\` is never instantiated, and its body needs the checker's types to translate: --emit-ts writes it as a stub that throws"`,
+  ]
+  for (const [name, expected] of [
+    [
+      "records/generic-uncalled",
+      [
+        stubWarning("first", 10),
+        stubWarning("wide", 14),
+        stubWarning("put", 18),
+        stubWarning("size", 22),
+        stubWarning("Box.constructor", 28),
+        stubWarning("Counter.constructor", 38),
+        stubWarning("Tally.n", 44),
+        stubWarning("Tally.empty", 45),
+        stubWarning("Bag.pick", 55),
+        stubWarning("drain", 70),
+      ],
+    ],
+    ["identity/maps", []],
+    ["records/threads-inline", []],
+  ]) {
+    const dir = path.join(work, `stub-${name.replace("/", "-")}`)
+    const r = spawnSync(NISH, [path.join(fixtures, `${name}.ts`), "--json", "--emit-ts", dir], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const stubs = r.stdout.split("\n").filter((l) => l.includes('"code":"NL8012"'))
+    const stubbed = fs.existsSync(dir) && /a generic no instance reaches/.test(
+      fs.readdirSync(dir, { recursive: true })
+        .filter((f) => f.endsWith(".ts"))
+        .map((f) => fs.readFileSync(path.join(dir, f), "utf8"))
+        .join("")
+    )
+    check(
+      `emit-ts: ${name} writes a throwing stub and ${expected.length === 0 ? "warns about none of the standard library's" : `warns about each of its ${expected.length} under NL8012`}`,
+      r.status === 0 &&
+        stubbed &&
+        stubs.length === expected.length &&
+        expected.every((parts, i) => parts.every((part) => stubs[i].includes(part))),
       `exit ${r.status}\n${r.stdout}${r.stderr}`
     )
   }
@@ -4922,6 +4988,67 @@ if (!only || "emit-ts".includes(only)) {
     corpus.status === 0 && tally !== null,
     corpus.stdout + corpus.stderr
   )
+
+  // What the corpus run just wrote, every program at once, under `tsc
+  // --strict` (tests/emit-ts/tsconfig.json): the output is TypeScript a user
+  // type-checks, not only text Node strips, and the runtime's `.d.ts` files are
+  // read with it. There is no allow-list; an error is a translation to fix.
+  const tsc = spawnSync(
+    process.execPath,
+    [path.join(root, "node_modules", "typescript", "bin", "tsc"), "-p", path.join(root, "tests", "emit-ts", "tsconfig.json")],
+    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+  )
+  const tscErrors = (tsc.stdout.match(/error TS\d+/g) ?? []).length
+  check(
+    `emit-ts: the emitted corpus type-checks under tsc --strict${tscErrors > 0 ? ` (${tscErrors} errors)` : ""}`,
+    tally !== null && tsc.status === 0,
+    tsc.stdout.split("\n").slice(0, 40).join("\n") + tsc.stderr
+  )
+
+  // The known list is a ratchet, not a parking lot (wp33 §4.2): a program may
+  // stay on it only under a row that names what TypeScript under Node cannot
+  // say — libm's last bit, C behind `declare`, a refusal, the host, or a range
+  // check `--emit-ts` writes nothing for — and a host line only for an API in
+  // emit-ts.js's fixed HOST list, whose evidence the differential matched.
+  const knownLines = fs
+    .readFileSync(path.join(root, "tests", "differential", "emit-ts-known.txt"), "utf8")
+    .split("\n")
+    .filter((l) => l.trim().length > 0 && !l.trim().startsWith("#"))
+  const hostApis = emitTsHost.map((entry) => entry[0])
+  /** What is wrong with each of `lines`, one string per line the pin refuses. */
+  const knownStrays = (lines) => {
+    const strays = []
+    for (const line of lines) {
+      const [name, row] = line.split("#")[0].trim().split(/\s+/)
+      const api = /\[([^\]]+)\]\s*$/.exec(line)
+      if (!emitTsAcceptedRows.includes(row)) {
+        strays.push(`${name}: row "${row}" is not one of ${emitTsAcceptedRows.join(", ")}`)
+      } else if (row === "host" && (api === null || !hostApis.includes(api[1]))) {
+        strays.push(`${name}: host entry names ${api === null ? "no API" : `"${api[1]}"`}, not one of ${hostApis.join(", ")}`)
+      }
+    }
+    return strays
+  }
+  const strays = knownStrays(knownLines)
+  check(
+    `emit-ts: the known list holds only accepted rows (${knownLines.length} entries)`,
+    strays.length === 0,
+    strays.join("\n")
+  )
+  // The pin's own mutation test: each kind of line it must refuse, added to
+  // the real list, is refused, and is the only line that is.
+  for (const [what, bad] of [
+    ["a row still to land", "cases_x numbers # 3c3"],
+    ["a host row with no API", "cases_x host # exit 1"],
+    ["a host API outside HOST", "cases_x host # exit 1 [fetch]"],
+  ]) {
+    const caught = knownStrays([...knownLines, bad])
+    check(
+      `emit-ts: the known-list pin refuses ${what}`,
+      caught.length === strays.length + 1 && caught[caught.length - 1].startsWith("cases_x: "),
+      caught.join("\n")
+    )
+  }
 }
 
 // ---- The `deprecation` diagnostic class (NL7xxx) -----------------------------------
@@ -6537,6 +6664,13 @@ if (DEALT_SECTIONS.selfHosting.selected && SHARD === sectionShard("selfHosting")
     "nish-cmp: its own producer-version normalisation is right (stand-in inputs, not the corpus)",
     selfCheckVersions() === null,
     String(selfCheckVersions())
+  )
+  // The one rewrite a declaration may apply to the candidate: the binary
+  // hardening's module flags and attribute, removed and nothing else.
+  check(
+    "nish-cmp: its hardening undo removes the hardening and nothing else (stand-in inputs, not the corpus)",
+    selfCheckHardening() === null,
+    String(selfCheckHardening())
   )
   // And the lookup that decides whether a declared difference is excused: its
   // words may be in CHANGELOG.md or in the section scripts/changelog-gen.mjs
@@ -10734,31 +10868,35 @@ if (!only || ["bcrypt differential", "crypto_bcrypt"].some((name) => name.includ
   }
 }
 
-// The bcrypt vectors of tests/link/crypto_bcrypt as a `--profile wasi` module
-// under Node's WASI: the module is pure, so it builds for wasm32 and answers
-// every vector there as natively.
-if (!only || ["crypto_bcrypt", "bcrypt", "wasi"].some((name) => name.includes(only))) {
+// The bcrypt vectors of tests/link/crypto_bcrypt, and the four-lane batch of
+// tests/link/crypto_bcrypt_batch, as `--profile wasi` modules under Node's
+// WASI: both are pure, so they build for wasm32 and answer every case there as
+// natively.
+for (const program of ["crypto_bcrypt", "crypto_bcrypt_batch"]) {
+  if (only && ![program, "bcrypt", "wasi"].some((name) => name.includes(only))) {
+    continue
+  }
   if (WASI_SYSROOT && has("wasm-ld")) {
-    const dir = path.join(buildDir, "wasi_crypto_bcrypt")
+    const dir = path.join(buildDir, `wasi_${program}`)
     const wasm = path.join(dir, "app.wasm")
     const built = spawnSync(
       NISH,
-      [path.join(linkDir, "crypto_bcrypt", "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
+      [path.join(linkDir, program, "main.ts"), "-o", `${dir}${path.sep}`, "--link", wasm, "--profile", "wasi"],
       { cwd: root, encoding: "utf8" }
     )
     const ran =
       built.status === 0
         ? spawnSync("node", ["--no-warnings", "examples/wasi-host.mjs", wasm], { cwd: root, encoding: "utf8" })
         : built
-    const want = fs.readFileSync(path.join(linkDir, "crypto_bcrypt", "expected.out"), "utf8")
+    const want = fs.readFileSync(path.join(linkDir, program, "expected.out"), "utf8")
     check(
-      `link/crypto_bcrypt: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
+      `link/${program}: the \`--profile wasi\` build (sysroot ${WASI_SYSROOT}) prints expected.out under Node's WASI`,
       built.status === 0 && ran.status === 0 && ran.stdout === want,
       shown(ran)
     )
   } else {
     skip(
-      `skipped: link/crypto_bcrypt: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of the bcrypt vectors is not run`
+      `skipped: link/${program}: no WASI sysroot${has("wasm-ld") ? "" : " and no wasm-ld"} (set WASI_SYSROOT): the wasi build of ${program === "crypto_bcrypt" ? "the bcrypt vectors" : "the bcrypt batch"} is not run`
     )
   }
 }
@@ -14093,10 +14231,12 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
   const getByte = compileRng("perf_rng_getbyte", "perf_rng_getbyte_report.ll")
   const getByteIr =
     getByte.status === 0 ? fs.readFileSync(path.join(buildDir, "perf_rng_getbyte_report.ll"), "utf8") : ""
+  // Every native group also carries the stack-clash probe, which says nothing
+  // about what the function reads, so the comparison sets it aside.
   const groupOf = (fn) => {
     const define = new RegExp(`^define [^\\n]*@${fn}\\([^\\n]*\\) (#\\d+) \\{$`, "m").exec(getByteIr)
     const group = define === null ? null : new RegExp(`^attributes ${define[1]} = (.*)$`, "m").exec(getByteIr)
-    return group === null ? "" : group[1]
+    return group === null ? "" : group[1].replace(' "probe-stack"="inline-asm"', "")
   }
   check(
     "performance: wp31 §12's getByte, sumCalled and sumInline are all { nounwind willreturn readonly }, with no check left",
@@ -18562,7 +18702,10 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
   const getbyteFile = path.join("bench", "getbyte.ts")
   const getbyte = benchIr(getbyteFile, "getbyte", [])
   const getbyteU = benchIr(getbyteFile, "getbyte_unchecked", ["--unchecked-indexing"])
-  const readonlyGroup = /^attributes (#\d+) = \{ nounwind willreturn readonly \}$/m.exec(getbyte.ir)
+  const readonlyGroup =
+    /^attributes (#\d+) = \{ nounwind willreturn readonly(?: "probe-stack"="inline-asm")? \}$/m.exec(
+      getbyte.ir
+    )
   check(
     "bench: bench/getbyte.ts is one module with and without --unchecked-indexing, with no check in it, and getByte, sumInline and sumCalled are { nounwind willreturn readonly } (WP31 §10 step 3)",
     getbyte.ir !== "" &&
@@ -21006,10 +21149,16 @@ if (!only || "runtime-cache".includes(only)) {
 
     // A build.sh stopped by a signal stops the compiles it started. The C
     // compiler here records its pid and sleeps, so every job is still running
-    // when the script is sent TERM; afterwards none of them may be.
+    // when the script is sent TERM; afterwards none of them may be. The
+    // `-dumpmachine` build.sh asks to pick its control-flow flag is not a
+    // compile, and answers at once, as a real driver's does.
     const sleeper = path.join(tools, "cc-sleeps")
     const sleeperPids = path.join(rcDir, "sleeper-pids")
-    fs.writeFileSync(sleeper, `#!/bin/sh\necho $$ > '${sleeperPids}'/$$\nexec sleep 60\n`, { mode: 0o755 })
+    fs.writeFileSync(
+      sleeper,
+      `#!/bin/sh\n[ "$1" = -dumpmachine ] && exit 0\necho $$ > '${sleeperPids}'/$$\nexec sleep 60\n`,
+      { mode: 0o755 }
+    )
     for (const [mode, args] of [
       [
         "--runtime-objects",
@@ -21657,11 +21806,12 @@ if (!only || "cpu-level".includes(only)) {
         const dir = path.join(cache, "nish", kind)
         return fs.existsSync(dir) ? fs.readdirSync(dir).length : 0
       }
-      // Each clang line a link made, but the `--version` probes the driver asks.
+      // Each clang line a link made, but the `--version` probes the driver asks
+      // and the `-dumpmachine` scripts/build.sh asks to pick its control-flow flag.
       const ccLines = () => {
         const lines = fs.existsSync(ccLog) ? fs.readFileSync(ccLog, "utf8").split("\n") : []
         fs.rmSync(ccLog, { force: true })
-        return lines.filter((l) => l.length > 0 && l !== "--version")
+        return lines.filter((l) => l.length > 0 && l !== "--version" && l !== "-dumpmachine")
       }
       const base = nish(["examples/hello.ts", "--link", path.join(cpuDir, "hello-base")], env)
       const baseLines = ccLines()
@@ -21717,6 +21867,87 @@ if (!only || "cpu-level".includes(only)) {
           `${runBase.stderr}${runLevel.stderr}${entries("run")} run entries`
         )
       }
+    }
+  }
+}
+
+// ---- Binary hardening -----------------------------------------------------------------
+// scripts/build.sh links every native program with full RELRO, a non-executable
+// stack and control-flow protection, and compiles the runtime with the stack
+// protector (docs/security/runtime.md, RT-HARDEN). The flags are only the
+// cause: scripts/check-hardening.mjs reads the effect from the binary's own
+// headers, for a link in each native profile and for a `nish run` binary.
+// Only a debug link is sure to import __stack_chk_fail; in speed and size the
+// optimiser leaves hello no runtime function with a protected frame.
+if (!only || "hardening".includes(only)) {
+  const hardDir = path.join(buildDir, "hardening")
+  fs.rmSync(hardDir, { recursive: true, force: true })
+  fs.mkdirSync(hardDir, { recursive: true })
+  if (!HAS_CLANG || process.platform === "win32") {
+    skip("hardening: no clang to link with")
+  } else {
+    const env = { ...process.env, XDG_CACHE_HOME: path.join(hardDir, "cache") }
+    const linked = ["debug", "speed", "size"].map((profile) => {
+      const exe = path.join(hardDir, `hello-${profile}`)
+      const r = spawnSync(NISH, ["examples/hello.ts", "--link", exe, "--profile", profile], {
+        cwd: root,
+        encoding: "utf8",
+        env,
+      })
+      return {
+        what: `a --profile ${profile} link`,
+        exe,
+        r,
+        imports: profile === "debug" ? ["__stack_chk_fail"] : [],
+      }
+    })
+    const ran = spawnSync(NISH, ["run", "examples/hello.ts"], { cwd: root, encoding: "utf8", env })
+    const runDir = path.join(hardDir, "cache", "nish", "run")
+    const runEntries = fs.existsSync(runDir) ? fs.readdirSync(runDir) : []
+    const runExe =
+      runEntries.length === 1
+        ? fs
+            .readdirSync(path.join(runDir, runEntries[0]))
+            .map((name) => path.join(runDir, runEntries[0], name))
+            .find((file) => path.basename(file) !== "key" && (fs.statSync(file).mode & 0o111) !== 0)
+        : undefined
+    linked.push({ what: "a nish run binary", exe: runExe ?? "", r: ran, imports: [] })
+    for (const { what, exe, r, imports } of linked) {
+      const result = r.status === 0 && exe !== "" ? hardeningProblems(exe, imports) : null
+      if (result !== null && result.skip !== null) {
+        skip(`hardening: ${what} (${result.skip})`)
+        continue
+      }
+      check(
+        `hardening: ${what} of hello is PIE, full RELRO, a non-executable stack and control-flow protected`,
+        result !== null && result.problems.length === 0,
+        result === null ? `${r.status}: ${r.stderr} ${exe}` : result.problems.join("\n")
+      )
+    }
+    // And the reading can fail: a program linked with each protection turned
+    // off is reported on every count, so a pass above is not a reader that
+    // cannot see.
+    if (process.platform === "linux") {
+      const bareC = path.join(hardDir, "bare.c")
+      const bare = path.join(hardDir, "bare")
+      fs.writeFileSync(bareC, "int main(void) { return 0; }\n")
+      const cc = spawnSync(
+        "clang",
+        [bareC, "-o", bare, "-no-pie", "-fcf-protection=none", "-Wl,-z,norelro,-z,lazy,-z,execstack"],
+        { encoding: "utf8" }
+      )
+      const result = cc.status === 0 ? hardeningProblems(bare, ["__stack_chk_fail"]) : null
+      const said = result === null ? [] : result.problems
+      check(
+        "hardening: a link with every protection off is reported for PIE, RELRO, binding, the stack, CET and the import",
+        result !== null &&
+          (result.skip !== null ||
+            (said.length === 6 &&
+              ["DYN", "GNU_RELRO", "bind now", "executable", "feature", "__stack_chk_fail"].every((word) =>
+                said.some((problem) => problem.includes(word))
+              ))),
+        result === null ? cc.stderr : said.join("\n")
+      )
     }
   }
 }

@@ -13,8 +13,8 @@ you are using:
 | **The rewriter** ([wp13-differential.md](wp13-differential.md)) | Rewrote every expression from the types stage0's checker recorded. **Frozen**: it was deleted with stage0, and `tests/differential/goldens/rewrites.txt` keeps its output for the corpus ([wp19-stage0-retirement.md](wp19-stage0-retirement.md)) | Both modes, minus [`known-failures.txt`](../tests/differential/known-failures.txt) |
 
 The rewriter was the testing oracle: it was exact because it could see the type
-of every expression and turn `a + b` into `(a + b) | 0`. Its proposed successor
-is `--emit ts` ([wp33-round-trip.md](wp33-round-trip.md) §4), which writes the
+of every expression and turn `a + b` into `(a + b) | 0`. Its successor
+is `--emit-ts <dir>` ([wp33-round-trip.md](wp33-round-trip.md) §4), which writes the
 same translation out as TypeScript a person can keep. The prelude is the thing
 you would actually hand to someone, and it is weaker because a prelude can only
 replace *globals* — never operators, never the object model.
