@@ -239,34 +239,25 @@ socket, and your loop makes it and moves its bytes.
 const pool = new PgPool(config, password, 4, 256); // 4 connections, 256 waiting requests
 wipe(password); // the pool keeps its own copy until dispose()
 pool.register("by_id", "select name from users where id = $1", [20]);
-
+const fds: i32[] = [-1, -1, -1, -1]; // slot s's socket
 const ticket: i32 = pool.request(); // PG_POOL_FULL when 256 wait
-// In the loop:
-let slot: i32 = pool.dispatch(); // the oldest request, on the least busy ready connection
-while (slot >= 0) {
-  const conn = pool.connection(slot);
-  conn.bindStart("by_id"); // pool.ticket names the request
+
+// Each turn of the loop: send what waits, then connect what is wanted.
+for (let slot: i32 = pool.dispatch(); slot >= 0; slot = pool.dispatch()) {
+  const conn = pool.connection(slot); // pool.ticket names the request
+  conn.bindStart("by_id");
   conn.paramInt(toI64(42));
   conn.bindEnd();
   pool.send(); // ends the group: send(), not sync()
-  slot = pool.dispatch();
 }
-slot = pool.wanted(); // a slot that needs a socket
-while (slot >= 0) {
-  pool.connect(slot, nonce); // a fresh 18-byte nonce each time
-  // tcpConnect, pollAdd, and remember which socket is slot's
-  slot = pool.wanted();
+for (let slot: i32 = pool.wanted(); slot >= 0; slot = pool.wanted()) {
+  const nonce = new Array<u8>(18);
+  crypto.getRandomValues(nonce); // a fresh nonce for each connect
+  pool.connect(slot, nonce);
+  fds[slot] = tcpConnect(addr); // then pollAdd it under a token naming slot
 }
-// For each slot s whose socket was readable:
-const conn = pool.connection(s);
-const got: i32 = netRead(fd, conn.inputBuffer(), conn.inputEnd(), conn.inputRoom());
-if (got > 0) conn.received(got);
-else if (got !== -11) conn.closed(); // 0, or a socket error such as ECONNRESET
-let event: i32 = pool.next(s); // PG_ROW, PG_GROUP_DONE, ...: pool.ticket says whose
-while (event !== PG_NEED_MORE) {
-  // ... PG_FAILED: pollRemove and netClose the socket ...
-  event = pool.next(s);
-}
+// Then, for each slot s whose socket fds[s] was readable, read it and take
+// its events as for one connection, with pool.next(s) and pool.ticket.
 ```
 
 - **Requests.** `request()` queues a request and answers its ticket.
@@ -276,7 +267,8 @@ while (event !== PG_NEED_MORE) {
   `dispatch()` answers `PG_POOL_NONE`: a request handed out and never sent
   holds the pool. `send()` answers `false` when nothing was handed out, when
   a bind is still open (finish it and call again), and when no message of the
-  group was written, which drops the request. A connection is made only when
+  group was written. Then a live connection drops the request, and a failed
+  one keeps it and reports it `PG_LOST` with the rest. A connection is made only when
   the waiting requests outgrow the ones there are, one for every
   `maxInFlight` of them, up to `size`; each `dispatch()` that finds no room
   wants at most one more.

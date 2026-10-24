@@ -226,8 +226,10 @@ export const main = (): i32 => {
         } else if ((ready[2 * k + 1] & 5) !== 0) {
           const got: i32 = netRead(socket.fd, conn.inputBuffer(), conn.inputEnd(), conn.inputRoom())
           if (got < 0 && got !== AGAIN) {
-            console.log(`slot ${s} read failed: ${got}`)
+            // The failure is printed after closed(), so the log pins the close
+            // on this turn, not a later read of 0.
             conn.closed()
+            console.log(`slot ${s} read failed: ${got}, failure ${conn.failure}`)
           } else if (got === 0) {
             conn.closed()
           } else if (got > 0) {

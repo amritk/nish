@@ -16,8 +16,9 @@ or over `maxMessage` fails the connection before its body is read; every
 field inside a message is bounded by that message's end, so no backend bytes,
 however malformed, make the client read past them or panic. A message the
 protocol does not allow at that point, COPY among them, fails the connection.
-A server can make the client hold at most one message of `maxMessage` bytes
-and one row of `maxColumns` columns, and compute at most `maxIterations`
+A server can make the client hold about 3 × `maxMessage` bytes (the message
+in its input buffer, and the copies kept as `lastError` and `lastNotice`) and
+one row of `maxColumns` columns, and compute at most `maxIterations`
 SCRAM iterations; a program can queue at most `maxOutput` bytes unsent. Every
 recorded exchange cut at every byte offset, and 4000 seeded mutants of them,
 end on a defined failure code without a panic. The server's SCRAM signature is compared in constant time
@@ -32,9 +33,9 @@ of a server (PG-10), and MD5 and cleartext refused (PG-11).
 
 `PgPool` reaches a server only through its connections: each pooled
 connection is a `PgConnection` under the same caps, so a server can make the
-pool hold at most `size` times what it can make one connection hold — one
-message of `maxMessage` bytes and one row of `maxColumns` columns per slot, at
-most 1024 slots. The pool's own state is bounded by the program (at most 1024
+pool hold at most `size` times what it can make one connection hold — about
+3 × `maxMessage` bytes and one row of `maxColumns` columns per slot, at most
+1024 slots. The pool's own state is bounded by the program (at most 1024
 connections, a queue of at most 2^20 requests, 1024 groups in flight per
 connection, 256 registered statements), with a `PG_POOL_FULL` answer in place
 of growth. A server does reach the queue in one way: a connection that fails
@@ -124,10 +125,10 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `PgPool` constructor | a size outside 1..1024 ("a PgPool size out of range") | `link/std_postgres_pool_size_panic` (1025 slots, after 1024 are taken) |
 | `PgPool` constructor | a queue outside 1..2^20 ("a PgPool queueSize out of range") | `link/std_postgres_pool_queue_panic` (a queue of 0, after 2^20 is taken) |
 | `PgPool` constructor | `maxInFlight` over 1024, which sizes each slot's ring | `link/std_postgres_pool_inflight_panic` (1025, after 1024 is taken) |
-| `PgPool.connect` | a slot that wants no connection | `link/std_postgres_pool_connect_panic` (the slot just connected, after the wanted one is taken) |
+| `PgPool.connect` | a slot that wants no connection, or one outside 0..size − 1 | `link/std_postgres_pool_connect_panic` (the slot just connected, after the wanted one is taken) and `link/std_postgres_pool_connect_range_panic` (slot 2 of 2) |
 | `PgPool.connect` | after `dispose` | `link/std_postgres_pool_connect_dispose_panic` (a wanted slot, after `dispose`) |
-| `PgPool.connection` | a slot outside 0..size − 1 or with no connection made | `link/std_postgres_pool_connection_panic` (slot 1, after slot 0's is read) |
-| `PgPool.next` | as `connection`, which it calls first | the same condition; not tested apart |
+| `PgPool.connection` | a slot outside 0..size − 1 or with no connection made | `link/std_postgres_pool_connection_panic` (slot 1, after slot 0's is read) and `link/std_postgres_pool_connection_range_panic` (slot 2 of 2) |
+| `PgPool.next` | a slot outside 0..size − 1, by `connection`, which it calls first | `link/std_postgres_pool_next_panic` (slot 2 of 2, after slot 0 answers) |
 
 The builder calls do not panic: `param*` and `bindEnd` with no bind open
 answer false and write nothing ("paramText without a bind is refused" and the

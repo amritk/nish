@@ -146,6 +146,9 @@ class Driver {
           }
         } else if ((this.ready[2 * k + 1] & READABLE) !== 0) {
           const got: i32 = netRead(socket.fd, conn.inputBuffer(), conn.inputEnd(), conn.inputRoom())
+          // A read error ends the connection as a close does. No server here
+          // resets a socket; run.mjs's `reset` check pins the same branch in
+          // the carrier.
           if (got === 0 || (got < 0 && got !== AGAIN)) {
             conn.closed()
           } else if (got > 0) {

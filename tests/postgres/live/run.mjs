@@ -131,7 +131,9 @@ const startCluster = async () => {
 
 const fromUrl = (text) => {
   const url = new URL(text);
-  if (!["127.0.0.1", "localhost", ""].includes(url.hostname)) {
+  // URL keeps an IPv6 host's brackets and lowercases only special schemes'.
+  const host = url.hostname.toLowerCase();
+  if (!["127.0.0.1", "localhost", "[::1]", ""].includes(host)) {
     throw new Error(
       `$PG_TEST_URL names ${url.hostname}; the live programs connect to 127.0.0.1 only`,
     );
@@ -147,7 +149,10 @@ const fromUrl = (text) => {
 
 /**
  * The statements of a SQL file: `--` and block comments dropped, split on
- * each `;` outside a quoted string or identifier.
+ * each `;` outside a quoted string or identifier. It reads only what
+ * schema.sql and fixture.sql hold: no dollar quotes, no `E''` escapes, no
+ * nested block comments, and a block comment between two tokens joins them
+ * into one (`a`, an empty comment, `b` reads as `ab`).
  */
 const statements = (file) => {
   const text = readFileSync(join(HERE, file), "utf8");
@@ -202,13 +207,17 @@ const live = (exe, db, scenario, sql = []) => {
   return { out: r.stdout ?? "", status: r.status, err: r.stderr ?? "" };
 };
 
-/** Resolves once `out()` holds `line`, or after `ms` with false. */
-const waitFor = (out, line, ms) =>
+/** Resolves once `out()` holds `line`, or with false after `ms` or once `child` exits without it. */
+const waitFor = (child, out, line, ms) =>
   new Promise((resolve) => {
     const start = Date.now();
+    let gone = child.exitCode !== null || child.signalCode !== null;
+    child.once("exit", () => {
+      gone = true;
+    });
     const poll = () => {
       if (out().split("\n").includes(line)) resolve(true);
-      else if (Date.now() - start > ms) resolve(false);
+      else if (gone || Date.now() - start > ms) resolve(false);
       else setTimeout(poll, 10);
     };
     poll();
@@ -230,7 +239,7 @@ const carrier = async (exe, db) => {
     out += d;
   });
   const exited = new Promise((resolve) => child.on("exit", resolve));
-  if (!(await waitFor(() => out, "query sent", 30_000))) {
+  if (!(await waitFor(child, () => out, "query sent", 30_000))) {
     child.kill();
     await exited;
     return { ok: false, detail: `no "query sent" line: stdout ${JSON.stringify(out)}` };
@@ -296,8 +305,10 @@ const reset = async (exe) => {
   clearTimeout(timer);
   await new Promise((resolve) => server.close(resolve));
   // -104 is ECONNRESET; Linux reports it to one read, and the next reads 0.
+  // `failure 9` (PG_ERR_CLOSED) is printed after the carrier's closed(), so it
+  // pins the close to the failed read rather than to that later 0.
   const want =
-    "listening\nslot 0 read failed: -104\nrequest 0 lost\nslot 0 failed: 9\n";
+    "listening\nslot 0 read failed: -104, failure 9\nrequest 0 lost\nslot 0 failed: 9\n";
   return {
     ok: status === 1 && out === want,
     detail: `status ${status}, stdout ${JSON.stringify(out)}`,
