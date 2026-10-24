@@ -1,0 +1,5 @@
+inserted 3
+3 edsger edsger
+2 grace grace
+1 ada ada
+true 1555 UNIQUE constraint failed: t.id

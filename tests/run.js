@@ -8389,8 +8389,11 @@ if (!only || "thread_mutex_counter".includes(only) || "wasi".includes(only)) {
 // `sqlite_memory` builds the vendored SQLite for wasm32 against wasi-libc
 // (scripts/build.sh's wasi `sqlite_objects`) and opens an in-memory database
 // with it, so a wasi compile of the amalgamation that breaks fails here.
+// `std_sqlite_wasi` runs `nish/sqlite` itself there: prepare, bind, step,
+// `columnInto` and a constraint error, as docs/LANGUAGE.md says it does.
 for (const name of [
   "sqlite_memory",
+  "std_sqlite_wasi",
   "thread_atomic_tasks",
   "par_atomic",
   "thread_channel_pipeline",
