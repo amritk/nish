@@ -574,6 +574,11 @@ export const manifestNoPanic = (manifest: string, at: i32): ManifestList => {
  * the opening of the NL3032 message when the field is not that shape, with the
  * span it is reported at, and the lists are then empty: a policy the reader
  * cannot follow is refused rather than half applied.
+ *
+ * Its `dependencies` (docs/wp40-dependency-capabilities.md) are the grants:
+ * each package it names, decoded, beside the list of capabilities granted it.
+ * `grantsProblem` is the opening of the NL3041 message when that object is not
+ * the shape, and no grant is then read.
  */
 export class CapabilityManifest {
   problem: string
@@ -583,6 +588,11 @@ export class CapabilityManifest {
   allowGiven: boolean
   allow: ManifestList
   deny: ManifestList
+  grantsProblem: string
+  grantsProblemStart: i32
+  grantsProblemEnd: i32
+  grantees: string[]
+  grants: ManifestList[]
 
   constructor() {
     this.problem = ""
@@ -591,6 +601,73 @@ export class CapabilityManifest {
     this.allowGiven = false
     this.allow = new ManifestList()
     this.deny = new ManifestList()
+    this.grantsProblem = ""
+    this.grantsProblemStart = 0
+    this.grantsProblemEnd = 0
+    this.grantees = []
+    this.grants = []
+  }
+}
+
+/** Refuse `out`'s grants for their shape, NL3041's opening and the span of what broke them, keeping none. */
+const manifestGrantsProblem = (out: CapabilityManifest, problem: string, start: i32, end: i32): void => {
+  out.grantsProblem = problem
+  out.grantsProblemStart = start
+  out.grantsProblemEnd = manifestSpanEnd(start, end)
+  out.grantees = []
+  out.grants = []
+}
+
+/**
+ * The `dependencies` object that opens at `manifest[at]` into `out`: each key
+ * a package, decoded and written once, and each value an array of strings.
+ * The names in a list are judged by `Compilation.readCapabilityPolicy`; a
+ * package the program does not load is no error, since a grant is only ever
+ * read for a package that is there.
+ */
+const manifestReadGrants = (manifest: string, at: i32, out: CapabilityManifest): void => {
+  const members = manifestMembers(manifest, at)
+  if (members.broken >= 0) {
+    manifestGrantsProblem(out, "`dependencies` is not an object", at, manifestEndOfValue(manifest, at))
+    return
+  }
+  const repeated = manifestRepeatedMember(members)
+  if (repeated >= 0 && repeated < members.keyAt.length && repeated < members.keyEnd.length) {
+    manifestGrantsProblem(
+      out,
+      `\`${members.keys[repeated]}\` is named twice`,
+      members.keyAt[repeated],
+      members.keyEnd[repeated]
+    )
+    return
+  }
+  let k = 0
+  while (k < members.keys.length && k < members.valueAt.length && k < members.valueEnd.length) {
+    const name = members.keys[k]
+    const valueAt = members.valueAt[k]
+    if (valueAt < 0 || valueAt >= manifest.length || manifest.charCodeAt(valueAt) !== OPEN_BRACKET) {
+      manifestGrantsProblem(out, `the grant of \`${name}\` is not an array`, valueAt, members.valueEnd[k])
+      return
+    }
+    const list = new ManifestList()
+    manifestReadList(manifest, valueAt, list)
+    let e = 0
+    while (e < list.entries.length && e < list.offsets.length && e < list.ends.length) {
+      const entryAt = list.offsets[e]
+      if (entryAt < 0 || entryAt >= manifest.length || manifest.charCodeAt(entryAt) !== QUOTE) {
+        manifestGrantsProblem(
+          out,
+          `\`${list.entries[e]}\` in the grant of \`${name}\` is not a string`,
+          entryAt,
+          list.ends[e]
+        )
+        return
+      }
+      e = e + 1
+    }
+    out.grantees.push(name)
+    out.grants.push(list)
+    k = k + 1
   }
 }
 
@@ -605,9 +682,10 @@ const manifestPolicyProblem = (problem: string, start: i32, end: i32): Capabilit
 
 /**
  * The root package's capability policy, from the position `manifestNish`
- * found `capabilities` at (-1 for none): an object whose only keys are `allow`
- * and `deny`, each written once and each an array. Keys are decoded, as
- * `manifestNish` decodes them.
+ * found `capabilities` at (-1 for none): an object whose only keys are `allow`,
+ * `deny` and `dependencies`, each written once, the first two arrays and the
+ * third an object (`manifestReadGrants`). Keys are decoded, as `manifestNish`
+ * decodes them.
  */
 export const manifestCapabilities = (manifest: string, at: i32): CapabilityManifest => {
   const out = new CapabilityManifest()
@@ -636,6 +714,11 @@ export const manifestCapabilities = (manifest: string, at: i32): CapabilityManif
   ) {
     const key = members.keys[k]
     const valueAt = members.valueAt[k]
+    if (key === "dependencies") {
+      manifestReadGrants(manifest, valueAt, out)
+      k = k + 1
+      continue
+    }
     if (key !== "allow" && key !== "deny") {
       return manifestPolicyProblem(
         `\`${key}\` is no key of \`capabilities\``,
