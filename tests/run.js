@@ -5550,7 +5550,12 @@ const MODULE_JOBS = Math.max(1, Math.floor(defaultJobs() / LINK_JOBS))
  * what it measures (a wall-clock bound, a resident size), not when it shares a
  * file or a port: no program does (see `runLinkProgram`).
  */
-const LINK_SERIAL = new Map([])
+const LINK_SERIAL = new Map([
+  [
+    "net_relay_soak",
+    "bounds its resident growth per checkpoint interval, and pooled programs beside it change that (#927)",
+  ],
+])
 
 /**
  * One link program from its compile to its last native run, with what it found
