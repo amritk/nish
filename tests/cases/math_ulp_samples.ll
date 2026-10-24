@@ -36,47 +36,76 @@ if.then:
   ret i1 true
 
 if.end:
-  %3 = fcmp olt double %want, 0x0000000000000000
-  br i1 %3, label %cond.true, label %cond.false
+  %3 = fcmp oeq double %want, 0x0000000000000000
+  br i1 %3, label %if.then.1, label %if.end.1
+
+if.then.1:
+  %4 = icmp sgt i32 %side, 0
+  br i1 %4, label %cond.true, label %cond.false
 
 cond.true:
-  %4 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 0, i32 %side)
-  %5 = extractvalue { i32, i1 } %4, 0
-  %6 = extractvalue { i32, i1 } %4, 1
-  br i1 %6, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
+  %5 = fcmp oeq double %r, 0x0000000000000001
   br label %cond.end
 
 cond.false:
-  br label %cond.end
-
-cond.end:
-  %7 = phi i32 [ %5, %ovf.ok ], [ %side, %cond.false ]
-  store i32 %7, i32* %step.addr, align 4
-  %8 = icmp ne i32 %side, 0
-  br i1 %8, label %land.rhs, label %land.end
+  %6 = icmp slt i32 %side, 0
+  br i1 %6, label %land.rhs, label %land.end
 
 land.rhs:
-  %9 = bitcast double %r to i64
-  %10 = bitcast double %want to i64
-  %11 = load i32, i32* %step.addr, align 4
-  %12 = sext i32 %11 to i64
-  %13 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %10, i64 %12)
-  %14 = extractvalue { i64, i1 } %13, 0
-  %15 = extractvalue { i64, i1 } %13, 1
-  br i1 %15, label %ovf.fail, label %ovf.ok.1
-
-ovf.ok.1:
-  %16 = icmp eq i64 %9, %14
+  %7 = fneg double 0x0000000000000001
+  %8 = fcmp oeq double %r, %7
   br label %land.end
 
 land.end:
-  %17 = phi i1 [ false, %cond.end ], [ %16, %ovf.ok.1 ]
-  ret i1 %17
+  %9 = phi i1 [ false, %cond.false ], [ %8, %land.rhs ]
+  br label %cond.end
+
+cond.end:
+  %10 = phi i1 [ %5, %cond.true ], [ %9, %land.end ]
+  ret i1 %10
+
+if.end.1:
+  %11 = fcmp olt double %want, 0x0000000000000000
+  br i1 %11, label %cond.true.1, label %cond.false.1
+
+cond.true.1:
+  %12 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 0, i32 %side)
+  %13 = extractvalue { i32, i1 } %12, 0
+  %14 = extractvalue { i32, i1 } %12, 1
+  br i1 %14, label %ovf.fail, label %ovf.ok
+
+ovf.ok:
+  br label %cond.end.1
+
+cond.false.1:
+  br label %cond.end.1
+
+cond.end.1:
+  %15 = phi i32 [ %13, %ovf.ok ], [ %side, %cond.false.1 ]
+  store i32 %15, i32* %step.addr, align 4
+  %16 = icmp ne i32 %side, 0
+  br i1 %16, label %land.rhs.1, label %land.end.1
+
+land.rhs.1:
+  %17 = bitcast double %r to i64
+  %18 = bitcast double %want to i64
+  %19 = load i32, i32* %step.addr, align 4
+  %20 = sext i32 %19 to i64
+  %21 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %18, i64 %20)
+  %22 = extractvalue { i64, i1 } %21, 0
+  %23 = extractvalue { i64, i1 } %21, 1
+  br i1 %23, label %ovf.fail, label %ovf.ok.1
+
+ovf.ok.1:
+  %24 = icmp eq i64 %17, %22
+  br label %land.end.1
+
+land.end.1:
+  %25 = phi i1 [ false, %cond.end.1 ], [ %24, %ovf.ok.1 ]
+  ret i1 %25
 
 ovf.fail:
-  %ovf.op = phi i32 [ 3, %cond.true ], [ 0, %land.rhs ]
+  %ovf.op = phi i32 [ 3, %cond.true.1 ], [ 0, %land.rhs.1 ]
   call void @nish_panic_overflow(i32 %ovf.op)
   unreachable
 }

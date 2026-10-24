@@ -307,9 +307,10 @@ jobs:
       # one of those modules says the library is whole.
       #
       # The nested `std/crypto/` modules are on all three lists too, and so are
-      # the licence texts two of them are ported under (BearSSL's beside
-      # aes.ts, fiat-crypto's beside p256.ts): a copy that ships takes its
-      # notice with it. tests/run.js holds every module in std/, nested or not,
+      # the licence texts std/ code is ported under (fast_float's beside
+      # json-tokenizer.ts, fdlibm's beside math.ts, BearSSL's beside aes.ts,
+      # fiat-crypto's and libsecp256k1's beside p256.ts): a copy that ships
+      # takes its notice with it. tests/run.js holds every module in std/, nested or not,
       # to each gate.
       - name: The tarball carries a whole compiler
         env:

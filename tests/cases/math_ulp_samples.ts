@@ -12,10 +12,13 @@
 
 // Whether r is `want`, or the double next to it toward the exact value. A step of
 // one in the bit pattern moves away from zero, so `side` turns into a step by
-// `want`'s sign.
+// `want`'s sign; a zero's neighbours are the smallest subnormals of either sign.
 const near = (r: f64, want: f64, side: i32): boolean => {
   if (f64ToBits(r) === f64ToBits(want)) {
     return true;
+  }
+  if (want === 0.0) {
+    return side > 0 ? r === 5e-324 : side < 0 && r === -5e-324;
   }
   const step: i32 = want < 0.0 ? -side : side;
   return side !== 0 && f64ToBits(r) === f64ToBits(want) + toI64(step);
