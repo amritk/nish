@@ -66,7 +66,7 @@ static NISH_TLS char nishsqlite_open_message[256];
 
 static inline nishsqlite_slot *slot_of(nishsqlite_table *t, int32_t h) {
   int32_t i = h & NISH_SQLITE_INDEX;
-  if (h <= 0 || i >= t->len) return NULL;
+  if (h <= 0 || i == 0 || i >= t->len) return NULL;
   nishsqlite_slot *s = &t->at[i];
   if (s->p == NULL || s->gen != (h >> 16)) return NULL;
   return s;

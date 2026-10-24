@@ -124,7 +124,7 @@ statement has finished. Columns count from 0.
 | `columnType(c)` | `SQLITE_INTEGER`, `SQLITE_FLOAT`, `SQLITE_TEXT`, `SQLITE_BLOB` or `SQLITE_NULL` |
 | `columnI64(c)` | the column as an integer, 0 for `NULL` |
 | `columnF64(c)` | the column as a floating-point number, 0 for `NULL` |
-| `columnText(c)` | the column as a new string, `null` for `NULL` |
+| `columnText(c)` | the column as a new string, `null` for `NULL`; it stops at a NUL byte |
 | `columnBytes(c)` | the length `columnInto` would copy |
 | `columnInto(c, buf, at)` | the column copied into `buf` at `at`, answering its length |
 
@@ -215,8 +215,8 @@ export const main = (): i32 => {
   reports a program that imports it with `ffi`, and `--deny ffi` refuses it. The files
   SQLite opens are opened by C, so the `fs.read` and `fs.write` capabilities
   do not see them.
-- **It runs natively and under `--profile wasi`**, but not under Node or the
-  `wasm` profile.
+- **It runs natively, in a `--profile napi` addon and under `--profile
+  wasi`**, but not as TypeScript run by Node or under the `wasm` profile.
 - **Build settings** — the SQLite version, the compile-time options and how to
   add your own — are in
   [SQLite is linked when your program calls it](cli.md#sqlite-is-linked-when-your-program-calls-it).

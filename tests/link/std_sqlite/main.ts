@@ -143,13 +143,19 @@ const reads = (t: Suite, db: Database): void => {
   const buf: u8[] = [0, 0, 0, 0, 0, 0, 0, 0];
   let rows: i32 = 0;
   let sum: i64 = 0;
-  let r = q.step();
-  while (r.isOk() && r.value) {
+  // The loop keeps a flag, not the last `Result`: a pass's arena is rewound
+  // when it ends, so a `Result` stepped inside it does not outlive the loop.
+  let done = false;
+  for (;;) {
+    const r = q.step();
+    if (r.isErr() || !r.value) {
+      done = r.isOk();
+      break;
+    }
     rows += 1;
     sum += q.columnI64(0);
-    r = q.step();
   }
-  t.ok("step: the rows end in DONE", r.isOk());
+  t.ok("step: the rows end in DONE", done);
   t.eqI32("step: three rows", rows, 3);
   t.eqI64("columnI64: the ids", sum, toI64(22));
   t.ok("reset: to read again", q.reset().isOk());
@@ -193,6 +199,15 @@ const reads = (t: Suite, db: Database): void => {
   t.eqI32("columnBytes: an empty blob", q.columnBytes(3), 0);
   const nothing = q.columnInto(3, buf, 8);
   t.ok("columnInto: an empty blob at the end", nothing.isOk() && nothing.value === 0);
+  const nul = db.prepare("SELECT ?1").expect("prepare a NUL");
+  const anb = new Array<u8>(3);
+  anb[0] = 97;
+  anb[2] = 98;
+  nul.bindTextBytes(1, anb, 0, 3).expect("bind a NUL");
+  nul.step().expect("step a NUL");
+  t.eqI32("columnBytes: a NUL inside text is counted", nul.columnBytes(0), 3);
+  const cut = nul.columnText(0);
+  t.eqStr("columnText: stops at a NUL", cut === null ? "<null>" : cut, "a");
   t.ok("close: with a statement open", db.close().isOk());
   t.ok("close: twice is MISUSE", db.close().isErr());
   t.eqI32("columnCount: after close is 0", q.columnCount(), 0);
@@ -200,6 +215,8 @@ const reads = (t: Suite, db: Database): void => {
   t.ok("finalize: after close is MISUSE", q.finalize().isErr());
   t.ok("exec: after close is MISUSE", db.exec("SELECT 1").isErr());
   t.ok("prepare: after close is MISUSE", db.prepare("SELECT 1").isErr());
+  // Generation 1 of slot 0, which no connection is ever given.
+  t.ok("exec: a handle naming slot 0 is MISUSE", new Database(65536).exec("SELECT 1").isErr());
   t.eqStr("error: after close", db.error(SQLITE_MISUSE).message, "bad parameter or other API misuse");
   t.eqI64("lastInsertRowid: after close is 0", db.lastInsertRowid(), toI64(0));
   t.eqI64("changes: after close is 0", db.changes(), toI64(0));
@@ -274,19 +291,23 @@ const flat = (t: Suite, db: Database): void => {
   let sum: i64 = 0;
   let bytes: i64 = 0;
   let half: f64 = 0;
-  let r = q.step();
+  let done = false;
   const after: i64 = Arena.used();
-  while (r.isOk() && r.value) {
+  for (;;) {
+    const r = q.step();
+    if (r.isErr() || !r.value) {
+      done = r.isOk();
+      break;
+    }
     sum += q.columnI64(0);
     const got = q.columnInto(1, buf, 0);
     if (got.isOk()) {
       bytes += toI64(got.value);
     }
     half += q.columnF64(2);
-    r = q.step();
   }
   t.eqI64("step: Arena.used() after 100,000 rows is what it was after the first", Arena.used() - after, toI64(0));
-  t.ok("step: the rows end in DONE", r.isOk());
+  t.ok("step: the rows end in DONE", done);
   const ids: i64 = 5000050000;
   t.eqI64("columnI64: 100,000 rows", sum, ids);
   t.eqI64("columnInto: their text", bytes, toI64(888895));

@@ -106,6 +106,8 @@ PASS  columnText: the bytes bound as text
 PASS  columnType: an empty blob is BLOB
 PASS  columnBytes: an empty blob
 PASS  columnInto: an empty blob at the end
+PASS  columnBytes: a NUL inside text is counted
+PASS  columnText: stops at a NUL
 PASS  close: with a statement open
 PASS  close: twice is MISUSE
 PASS  columnCount: after close is 0
@@ -113,7 +115,8 @@ PASS  step: a statement closed with its database is MISUSE
 PASS  finalize: after close is MISUSE
 PASS  exec: after close is MISUSE
 PASS  prepare: after close is MISUSE
+PASS  exec: a handle naming slot 0 is MISUSE
 PASS  error: after close
 PASS  lastInsertRowid: after close is 0
 PASS  changes: after close is 0
-std_sqlite: 118 passed, 0 failed, 0 skipped
+std_sqlite: 121 passed, 0 failed, 0 skipped

@@ -366,7 +366,7 @@ export class Statement {
     return nishsqlite_column_bytes(this.handle, c)
   }
 
-  /** Column `c` as a new string; `null` for NULL or a column that is not there. Allocates. */
+  /** Column `c` as a new string, cut at its first NUL; `null` for NULL or a column that is not there. Allocates. */
   columnText(c: i32): string | null {
     return nishsqlite_column_text(this.handle, c)
   }

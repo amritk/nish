@@ -4769,7 +4769,7 @@ export const main = (): i32 => {
   `columnF64` and `columnInto` answer scalars; `columnInto(c, buf, at)` copies
   a text or blob column into the caller's `u8[]`, and answers its length,
   copying only when all of it fits. `columnText(c)` is the call that makes a
-  string. Parameters count from 1 and columns from 0, as in SQLite.
+  string, and it stops at the first NUL byte. Parameters count from 1 and columns from 0, as in SQLite.
 - **`exec(sql)`** runs every statement of `sql` and discards any rows, and
   `begin()`, `commit()` and `rollback()` are `exec` of `BEGIN`, `COMMIT` and
   `ROLLBACK`; pragmas, such as `journal_mode=WAL`, are SQL too. A binding is
@@ -4783,8 +4783,9 @@ export const main = (): i32 => {
   program that imports it is reported with [`ffi`](#capabilities) and
   `--deny ffi` refuses it, naming the call. The files SQLite opens are opened
   by C, which the `fs.read` and `fs.write` capabilities do not see. It links
-  wherever SQLite does: natively and under `--profile wasi`, not under the
-  `wasm` profile or Node (`tests/link/std_sqlite*`).
+  wherever SQLite does: natively, in a `--profile napi` addon and under
+  `--profile wasi`, but not under the `wasm` profile or as TypeScript run by
+  Node (`tests/link/std_sqlite*`).
 
 ### Interfaces and object literals
 
