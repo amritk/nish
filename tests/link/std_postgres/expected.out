@@ -14,12 +14,16 @@ PASS  inputSize under 64 is raised to 64
 PASS  receive copies only what fits
 PASS  a message larger than the buffer grows it
 PASS  and is read whole
+PASS  a message a little over the buffer
+PASS  doubles it
+PASS  and is read whole after it
 PASS  a byte at a time
 PASS  a row before authentication
 PASS  authentication once started
 PASS  BackendKeyData once ready
 PASS  ReadyForQuery with no group in flight
 PASS  a row with no group in flight
+PASS  an ERROR with no group in flight
 PASS  an unknown message
 PASS  ReadyForQuery for a group not yet synced
 PASS  a notification is ignored
@@ -83,6 +87,7 @@ PASS  reported once
 PASS  the first cause stays
 PASS  dispose may be called twice
 PASS  Terminate
+PASS  Terminate drops an open bind
 PASS  Parse and Describe
 PASS  their bytes
 PASS  a group is open
@@ -131,6 +136,10 @@ PASS  not a prefix of one
 PASS  tagRows
 PASS  a tag without a count
 PASS  tagIs of two words
+PASS  a count past an i64
+PASS  leaves text.failed alone
+PASS  a count while text.failed is set
+PASS  keeps it set
 PASS  EmptyQueryResponse is the empty tag
 PASS  NoData
 PASS  no columns
@@ -158,6 +167,7 @@ PASS  an offset other than +00
 PASS  infinity
 PASS  BC
 PASS  year 0000
+PASS  leaves out as it was
 PASS  a year past 9999
 PASS  seven fraction digits
 PASS  a dot without digits
@@ -177,4 +187,4 @@ PASS  text after a quote
 PASS  a space unquoted
 PASS  a window too short
 PASS  stays bad
-postgres: 179 passed, 0 failed, 0 skipped
+postgres: 189 passed, 0 failed, 0 skipped

@@ -454,7 +454,7 @@ export class PgText {
     if (p + 3 === end && toI32(b[p]) === 43 && toI32(b[p + 1]) === 48 && toI32(b[p + 2]) === 48) {
       p = end
     }
-    if (p !== end) {
+    if (p !== end || pgBytesAre(b, start, 4, "0000")) {
       this.failed = true
       return -1
     }
@@ -467,10 +467,6 @@ export class PgText {
     out[at + 21] = toU8(((millis / 10) % 10) + 48)
     out[at + 22] = toU8((millis % 10) + 48)
     out[at + 23] = toU8(90)
-    if (pgBytesAre(out, at, 4, "0000")) {
-      this.failed = true
-      return -1
-    }
     return 24
   }
 }
@@ -749,6 +745,9 @@ export class PgConnection {
 
   /** Copies what fits of `src[start, start + length)` into the input buffer; answers how much. */
   receive(src: u8[], start: i32, length: i32): i32 {
+    if (start < 0 || length < 0 || length > toI32(src.length) - start) {
+      panic("nish/net/postgres: receive() outside its source")
+    }
     const room: i32 = this.inputRoom()
     const n: i32 = length < room ? length : room
     for (let i: i32 = 0; i < n; i++) {
@@ -826,8 +825,12 @@ export class PgConnection {
       }
       if (avail - 1 < length) {
         this.compact()
-        if (toI32(this.input.length) < length + 1) {
-          const grown: u8[] = new Array<u8>(length + 1)
+        const size: i32 = toI32(this.input.length)
+        if (size < length + 1) {
+          // Doubled, up to one message of maxMessage, so that a run of growing messages copies each byte a bounded number of times.
+          const cap: i32 = this.config.maxMessage + 1
+          const doubled: i32 = size < cap / 2 ? size * 2 : cap
+          const grown: u8[] = new Array<u8>(doubled > length + 1 ? doubled : length + 1)
           grown.set(this.input, 0)
           this.input = grown
         }
@@ -887,6 +890,9 @@ export class PgConnection {
       this.lastError = error
       if (state < PG_STATE_READY || error.severity === "FATAL" || error.severity === "PANIC") {
         return this.fail(PG_ERR_SERVER)
+      }
+      if (this.inFlight === 0) {
+        return this.fail(PG_ERR_UNEXPECTED)
       }
       this.errorInGroup = true
       return PG_ERROR
@@ -1577,8 +1583,12 @@ export class PgConnection {
     return true
   }
 
-  /** Terminate: tells the server the connection is ending; close the socket once it is sent. */
+  /** Terminate: tells the server the connection is ending; close the socket once it is sent. A bind still open is dropped unsent. */
   terminate(): void {
+    if (this.bindAt >= 0) {
+      this.outEnd = this.bindAt
+      this.bindAt = -1
+    }
     const at: i32 = this.startMessage(PG_FE_TERMINATE)
     this.endMessage(at)
   }
@@ -1634,7 +1644,7 @@ export class PgConnection {
     return n === this.tagLength || toI32(this.input[this.tagStart + n]) === 32
   }
 
-  /** The row count the tag ends with (`INSERT 0 3` is 3, `SELECT 5` is 5), or -1 when it has none. */
+  /** The row count the tag ends with (`INSERT 0 3` is 3, `SELECT 5` is 5), or -1 when it has none or it does not fit an i64. */
   tagRows(): i64 {
     const end: i32 = this.tagStart + this.tagLength
     let p: i32 = end
@@ -1644,7 +1654,12 @@ export class PgConnection {
     if (p === end || p === this.tagStart || toI32(this.input[p - 1]) !== 32) {
       return -1
     }
+    // Read without touching `text.failed`, which belongs to the program's own decoding.
+    const failed: boolean = this.text.failed
+    this.text.failed = false
     const rows: i64 = this.text.int(this.input, p, end - p)
-    return rows
+    const overflowed: boolean = this.text.failed
+    this.text.failed = failed
+    return overflowed ? -1 : rows
   }
 }

@@ -59,10 +59,10 @@ was tried. PG-9 to PG-11 are accepted. PG-12 is open.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| PG-1 | High if it failed | `next`, `received`, `compact` | A message's length must not make the client read past its buffer or hold more than `maxMessage`. | **Holds.** A length under 4 is `PG_ERR_FRAME`, one over `maxMessage` is `PG_ERR_TOO_BIG` before its body is read, and the input buffer grows to one message at most. A message split into 1-byte pieces frames the same as one whole. |
+| PG-1 | High if it failed | `next`, `received`, `receive`, `compact` | A message's length must not make the client read past its buffer or hold more than `maxMessage`. | **Holds.** A length under 4 is `PG_ERR_FRAME`, one over `maxMessage` is `PG_ERR_TOO_BIG` before its body is read, and the input buffer grows by doubling to one message at most. `receive` panics on a window outside its source, as `received` does on a count past `inputRoom()`. A message split into 1-byte pieces frames the same as one whole. |
 | PG-2 | High if it failed | `dispatch`, `readRow`, `readDescription`, `readError` | A field inside a message must not be read past the message's end: a column longer than its row, a length of `-2`, a string without its NUL, a count short of its fields. | **Holds.** Each is `PG_ERR_FRAME`; a row with bytes after its last column is too. |
 | PG-3 | Medium if it failed | `readRow`, `readDescription`, `reserveColumns` | A row or description must not make the client allocate without bound. | **Holds.** Over `maxColumns` (1664, PostgreSQL's own) is `PG_ERR_TOO_BIG` before the column arrays grow. |
-| PG-4 | Medium if it failed | `dispatch`, `authenticate` | A message at the wrong point — a row before authentication, `BackendKeyData` once ready, `ReadyForQuery` for no group, COPY, an unknown type — must not be acted on. | **Holds.** Each is `PG_ERR_UNEXPECTED`. A `NotificationResponse` is read and dropped. |
+| PG-4 | Medium if it failed | `dispatch`, `authenticate` | A message at the wrong point — a row before authentication, `BackendKeyData` once ready, `ReadyForQuery` or an `ErrorResponse` for no group, COPY, an unknown type — must not be acted on. | **Holds.** Each is `PG_ERR_UNEXPECTED`. A `NotificationResponse` is read and dropped. |
 | PG-5 | High if it failed | `scramContinue` | The server's SCRAM nonce must extend the client's, so an old exchange cannot be replayed into a new one. | **Holds.** A nonce that does not start with ours, adds nothing, or holds a byte outside `!`..`~` is `PG_ERR_SCRAM`. |
 | PG-6 | High if it failed | `scramFinal`, `authenticate` | The client must not believe a server that does not know the password. | **Holds.** The `v=` signature must be 32 bytes and equal the one computed with the proof, by `timingSafeEqual`; a mismatch is `PG_ERR_SERVER_SIGNATURE`. An `AuthenticationOk` before the server's final message is `PG_ERR_SCRAM`. |
 | PG-7 | Medium if it failed | `scramContinue` | The iteration count must not make the client spin, nor overflow while it is read. | **Holds.** Outside `minIterations`..`maxIterations` (4096 to 100000) is `PG_ERR_SCRAM`, and the digits stop being read once the count passes `maxIterations`. |
@@ -88,7 +88,9 @@ expected.out`.
 **Framing** (PG-1): "a length under 4 is a framing failure", "a failed
 connection stays failed", "a message over maxMessage is refused before it is
 read", "a message larger than the buffer grows it", "and is read whole", "a
-byte at a time", and every recording "in 1-byte pieces".
+message a little over the buffer", "doubles it", "a byte at a time", every
+recording "in 1-byte pieces", and `link/std_postgres_receive_panic: exits
+with 1 and stdout matches expected.out` for `receive`.
 
 **Fields inside a message** (PG-2): "an error without its terminator", "a
 ParameterStatus without its value", "an authentication request under 4
@@ -104,7 +106,8 @@ more", "prepare is refused", "bindStart is refused" for the client's own cap.
 
 **Order** (PG-4): "a row before authentication", "authentication once
 started", "BackendKeyData once ready", "ReadyForQuery with no group in
-flight", "a row with no group in flight", "an unknown message",
+flight", "a row with no group in flight", "an ERROR with no group in
+flight", "an unknown message",
 "ReadyForQuery for a group not yet synced", "a notification is ignored".
 
 **SCRAM** (PG-5 to PG-7): "a server nonce that is not ours", "a server nonce
@@ -137,3 +140,9 @@ nothing is written".
 **Server errors**: "an error during startup fails the connection", "FATAL
 once ready fails it too", "an ERROR ends the statement, then the group", and
 the recorded `no-database` exchange.
+
+**Decoders never write what they refuse**: "year 0000" "leaves out as it
+was", and a tag's count past an i64 is -1 and "leaves text.failed alone".
+
+**Terminate**: "Terminate drops an open bind", so a half-built Bind is never
+sent.

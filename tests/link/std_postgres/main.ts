@@ -252,6 +252,12 @@ const framing = (t: Suite): void => {
   t.eqI32("receive copies only what fits", tiny.receive(long, 0, toI32(long.length)), 64);
   t.eqStr("a message larger than the buffer grows it", feed(tiny, slice(long, 64, toI32(long.length))), "");
   t.eqI32("and is read whole", tiny.serverVersion.length, 300);
+  const doubling = open(small);
+  const mid: u8[] = cat(auth(0, []), msg("S", z(`server_version|${nines(50)}|`)));
+  doubling.receive(mid, 0, 64);
+  t.eqI32("a message a little over the buffer", doubling.next(), PG_NEED_MORE);
+  t.eqI32("doubles it", doubling.inputRoom(), 128 - 55);
+  t.eqStr("and is read whole after it", feed(doubling, slice(mid, 64, toI32(mid.length))), "");
 
   const pieces = open(config());
   const whole: u8[] = STARTUP_DONE();
@@ -271,6 +277,7 @@ const unexpected = (t: Suite): void => {
   t.eqStr("BackendKeyData once ready", feed(ready(config()), msg("K", key)), `failed:${PG_ERR_UNEXPECTED}`);
   t.eqStr("ReadyForQuery with no group in flight", feed(ready(config()), msg("Z", z("I"))), `failed:${PG_ERR_UNEXPECTED}`);
   t.eqStr("a row with no group in flight", feed(ready(config()), row(["1"], [])), `failed:${PG_ERR_UNEXPECTED}`);
+  t.eqStr("an ERROR with no group in flight", feed(ready(config()), msg("E", z("VERROR|C42601|Mbad||"))), `failed:${PG_ERR_UNEXPECTED}`);
   t.eqStr("an unknown message", feed(inGroup(), msg("W", [])), `failed:${PG_ERR_UNEXPECTED}`);
   const open1 = ready(config());
   open1.prepare("", "select 1", none());
@@ -449,6 +456,13 @@ const lifecycle = (t: Suite): void => {
   t.pass("dispose may be called twice");
   conn.terminate();
   t.eqStr("Terminate", drain(conn), "X|||<4>");
+  const binding = ready(config());
+  binding.prepare("q", "select $1", none());
+  drain(binding);
+  binding.bindStart("q");
+  binding.paramInt(toI64(1));
+  binding.terminate();
+  t.eqStr("Terminate drops an open bind", drain(binding), "X|||<4>");
 };
 
 const builders = (t: Suite): void => {
@@ -549,6 +563,15 @@ const results = (t: Suite): void => {
   feed(conn, msg("C", z("CREATE TABLE|")));
   t.ok("a tag without a count", conn.tagRows() === toI64(-1));
   t.ok("tagIs of two words", conn.tagIs("CREATE TABLE"));
+  feed(conn, msg("C", z("SELECT 99999999999999999999|")));
+  conn.text.reset();
+  t.ok("a count past an i64", conn.tagRows() === toI64(-1));
+  t.ok("leaves text.failed alone", !conn.text.failed);
+  conn.text.failed = true;
+  feed(conn, msg("C", z("SELECT 5|")));
+  t.ok("a count while text.failed is set", conn.tagRows() === toI64(5));
+  t.ok("keeps it set", conn.text.failed);
+  conn.text.reset();
   feed(conn, msg("I", []));
   t.ok("EmptyQueryResponse is the empty tag", conn.tagIs("") && !conn.tagIs("SELECT"));
   t.eqStr("NoData", feed(conn, msg("n", [])), `${PG_DESCRIBED}`);
@@ -601,6 +624,10 @@ const timestamps = (t: Suite): void => {
   t.eqStr("infinity", ts(p, "infinity", 0), "failed");
   t.eqStr("BC", ts(p, "0044-03-15 12:00:00+00 BC", 0), "failed");
   t.eqStr("year 0000", ts(p, "0000-01-01 00:00:00", 0), "failed");
+  const untouched: u8[] = z("unchanged");
+  p.reset();
+  p.timestamp(z("0000-01-01 00:00:00"), 0, 19, untouched, 0);
+  t.eqStr("leaves out as it was", String.fromBytes(untouched, 0, 9), "unchanged");
   t.eqStr("a year past 9999", ts(p, "10000-01-01 00:00:00", 0), "failed");
   t.eqStr("seven fraction digits", ts(p, "2024-01-02 03:04:05.1234567", 0), "failed");
   t.eqStr("a dot without digits", ts(p, "2024-01-02 03:04:05.+00", 0), "failed");
