@@ -3,7 +3,9 @@
 // and a buffer that is `nocapture` but not `readonly`. It and `waitStdin` are
 // not `willreturn`, since a wait can last for ever; `isTerminal` and
 // `terminalSize` are, and the size is a fresh `i32[]` from the arena.
-import { isTerminal, readStdin, setRawMode, terminalSize, waitStdin } from "nish:term"
+// `setTerminalRestore` hands its string to the runtime as a borrowed
+// `readonly nocapture` pointer, which the runtime copies.
+import { isTerminal, readStdin, setRawMode, setTerminalRestore, terminalSize, waitStdin } from "nish:term"
 
 export const nextKeys = (buf: u8[], frameMs: i32): i32 =>
   waitStdin(frameMs) ? readStdin(buf, 0, buf.length) : -11
@@ -11,3 +13,5 @@ export const nextKeys = (buf: u8[], frameMs: i32): i32 =>
 export const columns = (): i32 => (isTerminal(1) ? terminalSize()[0] : 80)
 
 export const enterRaw = (): i32 => setRawMode(true)
+
+export const leaveAltScreen = (): i32 => setTerminalRestore("\u001b[?1049l\u001b[?25h")

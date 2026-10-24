@@ -63,4 +63,4 @@ function builtinCapability(name: string): i32 -> @builtinCapability [exported]
   stackSites=0 stackLocals=0
   callee +0:7 isUnsafeExport -> @isUnsafeExport
   callee +29:7 isNetExport -> @isNetExport
-  callee +53:7 isTermExport -> @isTermExport
+  callee +54:7 isTermExport -> @isTermExport

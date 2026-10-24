@@ -1,0 +1,44 @@
+theme:
+^[[1;35mgreet^[[0m ^[[2m1.2.0^[[0m  ^[[2msay hello^[[0m
+
+^[[1;35musage:^[[0m ^[[1;35mgreet^[[0m ^[[36m<name> [flags]^[[0m   ^[[2mgreet someone^[[0m
+       ^[[1;35mgreet^[[0m ^[[36m--version^[[0m
+
+^[[1;35mFlags^[[0m
+  ^[[36m--shout^[[0m               ^[[2min capitals^[[0m
+  ^[[36m--times^[[0m ^[[33m<n>^[[0m           ^[[2msay it n times^[[0m
+  ^[[36m--a-flag-past-the-column^[[0m ^[[33m<x>^[[0m  ^[[2mtwo spaces^[[0m
+
+^[[1;35mNotes^[[0m
+  ^[[2mone line of prose^[[0m
+  ^[[33m/etc/greet.conf^[[0m
+mono:
+^[[1mgreet^[[0m 1.2.0  say hello
+
+^[[1musage:^[[0m ^[[1mgreet^[[0m ^[[1m<name> [flags]^[[0m   greet someone
+       ^[[1mgreet^[[0m ^[[1m--version^[[0m
+
+^[[1mFlags^[[0m
+  ^[[1m--shout^[[0m               in capitals
+  ^[[1m--times^[[0m ^[[4m<n>^[[0m           say it n times
+  ^[[1m--a-flag-past-the-column^[[0m ^[[4m<x>^[[0m  two spaces
+
+^[[1mNotes^[[0m
+  one line of prose
+  ^[[4m/etc/greet.conf^[[0m
+plain:
+greet 1.2.0  say hello
+
+usage: greet <name> [flags]   greet someone
+       greet --version
+
+Flags
+  --shout               in capitals
+  --times <n>           say it n times
+  --a-flag-past-the-column <x>  two spaces
+
+Notes
+  one line of prose
+  /etc/greet.conf
+off paints nothing: true
+mono dim is plain: true

@@ -239,6 +239,17 @@ own source until the seed compiles it, which is the next release.
     commit message, its conventional subject and its body: `scripts/changelog-gen.mjs`
     writes `CHANGELOG.md` from the commits when a release is cut, so the
     file is never edited by hand.
+11. **Security record.** Code an attacker's bytes reach — a `std/net` or
+    `std/crypto` module, a `runtime/*.c` file, a builtin or `nish:` module
+    that reads the network, the terminal or another process's output — ships
+    with its record in [`docs/security/`](security/README.md#writing-a-record)
+    in the same pull request: its Scope table names the files and functions,
+    every finding is fixed with a test that fails before the fix or recorded
+    as open or accepted, and the index's Areas row and totals move with it.
+    `node scripts/security-scope.mjs` (in `npm test` and CI) refuses a
+    `std/net`, `std/crypto` or `runtime/*.c` file that no record's scope
+    names, unless the index lists it under "Not yet audited", and that list
+    only shrinks.
 
 ## ABI contracts and the tests that guard them
 
@@ -667,10 +678,10 @@ intrinsics become libm calls for non-constant arguments).
 | Profile | Flags | Equivalent |
 | --- | --- | --- |
 | `debug` | clang defaults, `-lm` | the "before" number; symbols kept |
-| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s` | Rust `--release` |
-| `size` | `speed` plus `-Oz -fno-stack-protector -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
+| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, plus `-Wl,--lto-partitions=<cores>` under lld | Rust `--release` |
+| `size` | `speed` (one LTO partition) plus `-Oz -fno-stack-protector -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
 | `wasm` | `--target=wasm32-unknown-unknown -Oz -nostdlib -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections` | freestanding module for modules that do not use the C runtime |
-| `napi` | `speed` plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
+| `napi` | `speed` (one LTO partition) plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
 | `wasi` | `--target=wasm32-wasi --sysroot=<WASI sysroot> -Oz -DNDEBUG -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,--strip-all`, plus `-nodefaultlibs -lc <libclang_rt.builtins-wasm32.a>` when clang has no wasm32 compiler-rt of its own | a WASI command module (`_start` runs `main`; `node examples/wasi-host.mjs`, `wasmtime`); see [wp7-runtime.md](wp7-runtime.md#wasi-target) |
 
 Platform notes: on macOS the script uses ld64's `-dead_strip` / `-x` instead
@@ -678,7 +689,15 @@ of `--gc-sections` / `-s`, skips `-fuse-ld=lld` and `-fno-plt`; on Linux it
 prefers `lld` because GNU `ld` needs the gold plugin for LTO. `-flto`
 matters more here than for C: LLVM sees the Nish module and the runtime
 as one unit, so `nish_str_len` inlines into a load and unreferenced runtime
-functions vanish. `CC` overrides the compiler; `NODE_INCLUDE` overrides the
+functions vanish. Under lld the `speed` link splits LTO code generation
+into one partition per core (`nproc`, else `getconf _NPROCESSORS_ONLN`,
+else `sysctl -n hw.ncpu`) and runs them in parallel; the program is still
+optimised as one module, so the instructions it runs stay within a few of
+`bench/instructions.json`, and on a 4-core machine the link of
+`tests/link/net_relay_f64` takes about 0.7x the time. The bytes depend on
+the partition count, so they are the same for every link on one machine.
+ld64 and the GNU ld fallback have no such flag and link in one partition.
+`CC` overrides the compiler; `NODE_INCLUDE` overrides the
 Node header directory for `napi`.
 
 Profile-guided optimisation (WP9): `--pgo-generate` adds

@@ -5,7 +5,7 @@ stages:
   - id: s7-other-holder-golden
     title: S7's missing negative golden
     goal: Pin that a guard on one array's length does not prove an offset access into another, the one negative case of S7's row that #561 left without a golden
-    verification: npm test runs the new case natively and under Node with its expected panic; the differential and checked goldens regenerated and read
+    verification: node tests/run.js <case> runs the new case natively and under Node with its expected panic; every CI test shard green and undegraded; the differential and checked goldens regenerated and read
     status: pending
     todos:
       - id: s7-golden-case
@@ -17,7 +17,7 @@ stages:
   - id: s3a-measure
     title: S3a — S3's bar kernels, measured without a surface
     goal: Record in docs/wp38-simd.md §2.3 whether a portable 128-bit vector kernel beats a fair scalar Nish kernel by 1.5x, on a numeric kernel and on a byte scan
-    verification: node bench/simd-s3a.mjs --self --runs 15 prints every column with one checksum per kernel; npm run lint and node docs/check-links.mjs pass; npm test compiles the new bench/*.ts
+    verification: node bench/simd-s3a.mjs --self --runs 15 prints every column with one checksum per kernel; npm run lint and node docs/check-links.mjs pass; every CI test shard green and undegraded, which compiles the new bench/*.ts
     status: pending
     todos:
       - id: s3a-numeric-kernels
@@ -38,7 +38,7 @@ stages:
   - id: s2-cpu-flag
     title: S2 — the --cpu x86-64-v3 flag
     goal: Ship `--cpu x86-64-v3` for the module and the runtime alike, every other value refused, with tests/ct-asm.js and tests/ct-asm-runtime.js reading x86-64 at that level
-    verification: npm run check, an undegraded npm test, node tests/run.js wasi and node tests/run.js performance green; the ct_asm checks pass at the baseline and at x86-64-v3; the checked goldens regenerated and read
+    verification: npm run check, npm run lint, node tests/run.js wasi and node tests/run.js performance green locally; every CI test shard green and undegraded; the ct_asm checks pass at the baseline and at x86-64-v3; the checked goldens regenerated and read
     status: pending
     todos:
       - id: s2-parse-flag
@@ -228,16 +228,16 @@ Each check name gains the level, so a record citing one still greps to it. #638 
 ## Verification
 
 - **S7 golden:**
-  - `npm test`, with the new case's native and Node runs read
+  - `node tests/run.js <case>`, with the new case's native and Node runs read
   - `node tests/differential/goldens.js --update` and `node tests/self/goldens.js --update`, with each diff read
 
 - **S3a:**
   - `node bench/simd-s3a.mjs --self --runs 15`
   - `npm run lint`
   - `node docs/check-links.mjs`
-  - `npm test`
 - **S2:**
   - first, `bash scripts/fetch-seed.sh --force` and `npm run build`
-  - then `npm run check` and `npm test`, undegraded, with the skip count read
+  - then `npm run check` and `npm run lint`
   - then `node tests/run.js wasi` (with `WASI_SYSROOT` set; read its skip line) and `node tests/run.js performance`
   - finally `node tests/self/goldens.js --update`, with the diff read before it is committed
+- **Every stage:** every CI `test` shard green and undegraded on the PR's head, per [CLAUDE.md](../../CLAUDE.md#definition-of-done).
