@@ -1333,7 +1333,7 @@ a printed checksum.
 | **S5** | (a): AES-GCM as a runtime kernel. `std/crypto/aes.ts`'s key schedule, single block, GCTR and GHASH go to AES-NI and PCLMULQDQ, or ARMv8 AES and PMULL, chosen at run time. The bitsliced code stays as the fallback, the Node reading and the wasm path | AES-128-GCM seal on 16 KiB is **at least 5x faster** on x86-64 with AES-NI than [S5's baseline](#s5-aes-gcm-the-baseline): a minimum of 76.04 ms for 4 MiB, so a minimum at or under 15.208 ms, which is 275.8 MB/s or more. The fallback path is not slower than that baseline, outside the noise band (3.0% at the minimum, 11.1% at the median), on any of `bench/aes-gcm.ts`'s nine workloads. **Baseline measured at `ce9d394`**, before anything is built. A curl `--http2` transfer spends 77% to 81% of the server's instructions in `std/crypto/aes.ts` on the AES suites. So S5's stop rule, which ends the stage with nothing built if real clients do not negotiate AES or AES is a negligible share of the server's CPU, does not apply. **Bar met, at `0db1292`** ([§2.3](#s5-aes-gcm-the-result)): re-run on another Xeon beside the kernel in the same interleaved rounds, AES-128-GCM seal on 16 KiB went from 42.76 ms to 1.11 ms at the minimum, 98.1 to 3,765 MB/s, **38.5x** (33.1x at the median); the bitsliced fallback, run as `NISH_AES=soft`, meets the bar at the median, 11.1%, on all nine workloads (its worst AES figure +1.4%). In those three samples, at the minimum the pre-registered 3.0% band does not hold on that machine, where a binary's minimum moves by up to 27.5% against its own copy, and read against the copy in the same rounds every AES workload's fallback minimum is within that spread (two ChaCha20-Poly1305 minima, code the change does not touch, sit just past it in one sample). **The bar holds at the minimum too, against `ce9d394` itself, at `b515c1b`** ([§2.3](#s5-aes-gcm-the-result)): a fourth sample, 48 rounds on a host where the byte-identical copy stayed within 1.4% at the minimum, puts every workload's fallback minimum within +3.0% of `ce9d394`'s (worst +0.8%) and every median within 11.1% (worst +2.0%). That is the raw comparison the bar names. The untouched ChaCha20-Poly1305 rows ran 3.4% to 5.8% faster than `ce9d394` in the same sample, and corrected for that drift `aesHeaderMask`'s minimum could be 4% to 7% slower, so the drift-corrected minimum is open ([§2.3](#s5-aes-gcm-the-result)). |
 | **S6a** | (a): byte-class run kernels on `u8[]` for `JsonTokenizer` and `JsonWriter`: the first index at or after `from`, below `limit`, whose byte is *not* a blank, a digit, or a plain string byte, each class fixed in its kernel, with no set to splat (§7, S6) | On `bench/json-compare` against the `06645ecf` record ([§2.4](#24-jsontokenizer-after-json-parity-the-gap-s6-is-aimed-at)), tokenize on twitter.json and citm_catalog.json are **at least 1.2x** faster at the minimum, and serialize on citm_catalog.json is faster outside its band. No corpus or workload is slower outside its band, and `bench/json-tokenizer`'s 242-byte body is not slower: short runs pay no call. The scalar, 16-byte and 32-byte paths agree on a fuzzed corpus that puts every class boundary at every offset of a block. JSONTestSuite's verdicts, the conformance corpus, the fuzz checksum and #582's mutation-pinned boundaries are unchanged. The unit stays within its ceiling. **Tokenize bar met; serialize not reached by S6a**, recorded at `96899c1` ([BENCHMARKS.md](BENCHMARKS.md#json-against-other-languages), 14 rounds). Against `06645ecf`'s minimums, tokenize on twitter went from 1,247,246 to 737,985 ns (**1.69x**) and on citm from 2,397,781 to 1,468,015 ns (**1.63x**). Against simdjson On-Demand in the same rounds, Nish is now 1.55x behind on twitter (2.20x before S6a) and 1.24x behind on citm (1.59x before), and it trails simdjson by 1.10x on canada. Serialize on citm is 675,503 ns against `06645ecf`'s 870,432, but that gain came before S6a: S6a left `JsonWriter` unchanged, and serialize did not move outside its band against the previous record. The follow-up put `JsonWriter`'s byte writers on a fourth class, `skipJsonPlain`, and found the serialize condition **not reached by the escape scan on citm**: 95.8% of its strings are under the kernel's 16-byte block, so skipping the check for the rest has a ceiling of 1.0139x, inside serialize's 1.4% band by only 0.01 points, and a free check would reach only 1.137x. The next serialize lead is number writing, 37.4% of serialize's instructions, 21.1% in the digit-write loop; see *JsonWriter's byte writers*. In the A/B against the S6b head, canada ran 0.931x, outside the band; see *S6a, the byte-class kernels: what was built*. The host was noisier during this record: every other implementation's minimum rose by 5% to 7% against the previous one, and Nish's bands against its own copy reached 6.6% on citm and 7.3% on typed decode. Measured again after the writer follow-up against main's merge base `3dca351`, with the three class paths' instructions as main's: `bench/json-tokenizer`'s 242-byte body ran 0.99x at the minimum, inside its 0.6% band (the branch against its byte-identical copy); on `bench/json-compare` serialize ran 0.988x, inside its 1.4% band, and two rows ran past theirs, tokenize on citm 0.994x against 0.5% (by 0.1 points) and typed-reuse 0.955x against 4.2% (by 0.3 points). Both run machine code identical to main's, and in typed-reuse the branch's byte-identical copy ran within 0.3% of the base, so the copy band is the evidence for reading them as noise, not a regression. The paths' agreement (`tests/simd/byte-runs.c`), JSONTestSuite, the conformance corpus and the mutation-pinned boundaries pass, and the unit is at 1,303 of 1,536 bytes (1,525 after the writer follow-up, with the three class paths' instructions unchanged). |
 | **S6b** | Eisel–Lemire in `numberF64`, in Nish: a 128-bit product of the significand and a table of powers of five, with `parseFloat` kept for more than 19 significant digits. Not a vector; it is here because it is most of canada's gap (§2.4) | Tokenize on canada.json is **at least 1.5x** faster than the `06645ecf` record at the minimum, and twitter and citm are not slower outside their bands. Every `numberF64` answer is bit-for-bit `parseFloat`'s on canada.json, on every JSONTestSuite number, and on at least 10^8 random doubles printed shortest and at 17 digits, and under Node. **Met.** canada 18.0 → 6.5 ms, 2.78x against the branch it was built on and 3.4x against the record; citm 1.17x faster, twitter unchanged. Bit-for-bit on canada's 978,519 numbers, JSONTestSuite and 10^8 random doubles at both widths (2×10^8 strings), natively and under Node, which runs the same Nish code. |
-| **S6c** | (a): the block classifier (S1b) re-aimed at `JsonTokenizer`: masks of quotes, backslashes, structural bytes and blanks per 64-byte block, the in-string mask by prefix XOR, and the tokenizer walking set bits | Only after S6a and S6b. Tokenize on twitter.json and citm_catalog.json is **at least 1.5x** faster than the record S6b leaves, and typed decode of citm_catalog.json is faster outside its band. Every error code and `errorAt` offset is unchanged on every JSONTestSuite `n_` file and the conformance corpus. A document's index costs at most one bit a byte plus one block, reused across documents. **Accepted (§8, Q5); gate measured: not reachable** (2026-10-24). With the index free of cost, callgrind leaves twitter at 1.37x and citm at 1.22x; see *S6c, the callgrind gate* below. Nothing is built. |
+| **S6c** | (a): the block classifier (S1b) re-aimed at `JsonTokenizer`: masks of quotes, backslashes, structural bytes and blanks per 64-byte block, the in-string mask by prefix XOR, and the tokenizer walking set bits | Only after S6a and S6b. Tokenize on twitter.json and citm_catalog.json is **at least 1.5x** faster than the record S6b leaves, and typed decode of citm_catalog.json is faster outside its band. Every error code and `errorAt` offset is unchanged on every JSONTestSuite `n_` file and the conformance corpus. A document's index costs at most one bit a byte plus one block, reused across documents. **Accepted (§8, Q5); gate measured: not reachable** (2026-10-24). With the index priced by a prototype, callgrind leaves twitter at 1.37x and citm at 1.22x; see *S6c, the callgrind gate* below. Nothing is built. |
 | **S7** | (d), a loop shape: the range analysis credits an offset index `i + k` from a test `i + c < n`, with `0 <= k <= c` and `n` an array's length, so the access keeps no bounds check. No surface | §3.2.1's four-accumulator dot product, with checked indexing and no `nish:unsafe`, reaches the speed of its `uncheckedGet` form within the noise band, and its optimised IR holds the `<4 x float>` accumulator. An access the test does not bound keeps its check, with a negative golden each for `k > c`, a negative `k`, and a test against another array's length. **Met by #561** (Q9): at `5403a55` the guarded kernel compiles to the same `--profile speed` binary as its `uncheckedGet` form, with the `<4 x float>` accumulator; #561's own entry measured it 3.1x faster than before, against a 2.4% band (§3.2.1, and below). |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
@@ -2022,7 +2022,10 @@ on citm, short of 1.5x on both, so the stage stops here with nothing built.
   removable only when its next mark is the closing quote: no escape, so
   twitter's 312 strings with an escape (12.5% of its string bytes) and citm's
   one stay scalar. `string`'s loop lines split by the share of calls, its
-  kernel calls by the share of bytes. The instructions callgrind gives no
+  kernel calls by the share of bytes. `string`'s limit test after the loop
+  (`if (i > limit)`) is removable on the same strings: the walker's string
+  fast path does it, and its 8 instructions a mark count it, so it is not
+  counted again among the kept work. The instructions callgrind gives no
   line (line 0) split in proportion to each function's removable and kept
   cost.
 
@@ -2030,20 +2033,21 @@ on citm, short of 1.5x on both, so the stage stops here with nothing built.
   | --- | ---: | ---: | ---: | ---: |
   | *Removable* | | | | |
   | Blank runs between tokens (`jsonTokSkipBlank` and its kernel calls) | 1,621,911 | 13.1% | 4,546,822 | 17.8% |
-  | Strings whose next mark is the closing quote (`string`'s limit setup and loop, `jsonTokSkipPlain`, the kernel call) | 2,653,085 | 21.4% | 2,004,523 | 7.9% |
+  | Strings whose next mark is the closing quote (`string`'s limit setup, loop and limit test, `jsonTokSkipPlain`, the kernel call) | 2,686,398 | 21.7% | 2,057,725 | 8.1% |
   | The bounds test on each token's first byte in `next`, `value` and `key` | 473,533 | 3.8% | 1,439,390 | 5.6% |
-  | Their share of line 0 | 486,349 | 3.9% | 1,121,663 | 4.4% |
-  | **Removable** | **5,234,878** | **42.2%** | **9,112,398** | **35.8%** |
+  | Their share of line 0 | 499,189 | 4.0% | 1,142,168 | 4.5% |
+  | **Removable** | **5,281,031** | **42.6%** | **9,186,105** | **36.0%** |
   | *Kept* | | | | |
   | `stringInto` and its `memcpy` | 2,405,454 | 19.4% | 2,046,683 | 8.0% |
-  | `next`, `value` and `key`: the grammar switch, `number`'s scan, `open`, `emit` | 1,475,105 | 11.9% | 5,232,735 | 20.5% |
-  | `string` per string (entry, limit test, emit), and all of every string with an escape | 870,544 | 7.0% | 612,368 | 2.4% |
+  | `next`, `value` and `key`: the grammar switch (`next`'s switch on what it wants, `value`'s and `key`'s tests of the first byte) | 757,526 | 6.1% | 1,739,696 | 6.8% |
+  | `next`, `value` and `key`: the rest (entry, `number`'s scan, `open`, `emit`, the inlined `top` and `close`) | 717,579 | 5.8% | 3,493,039 | 13.7% |
+  | `string` per string (entry, emit), and all of every string with an escape | 837,231 | 6.8% | 559,166 | 2.2% |
   | `numberF64` (S6b) | 396,611 | 3.2% | 4,140,040 | 16.2% |
   | `literal` | 391,655 | 3.2% | 97,251 | 0.4% |
   | The depth stack (`top`, `close`) | 204,588 | 1.7% | 757,908 | 3.0% |
   | The loop harness and the fold (`tokenizeOnce`) | 953,786 | 7.7% | 2,260,956 | 8.9% |
-  | Their share of line 0 | 465,584 | 3.8% | 1,221,802 | 4.8% |
-  | **Kept** | **7,163,327** | **57.8%** | **16,369,743** | **64.2%** |
+  | Their share of line 0 | 452,744 | 3.7% | 1,201,297 | 4.7% |
+  | **Kept** | **7,117,174** | **57.4%** | **16,296,036** | **64.0%** |
 
 - **The kernel.** A throwaway C prototype of the design's kernel, not
   committed: AVX2 nibble lookups for blanks and structural bytes, the
@@ -2067,26 +2071,38 @@ on citm, short of 1.5x on both, so the stage stops here with nothing built.
   | | twitter | citm |
   | --- | ---: | ---: |
   | Total | 12,290,415 | 25,632,165 |
-  | Kept | 7,101,048 | 16,466,120 |
+  | Kept | 7,055,297 | 16,391,978 |
   | Walker (8 a mark) | 596,680 | 1,300,720 |
   | Kernel | 1,299,916 | 3,277,635 |
   | **Ceiling** | **1.37x** | **1.22x** |
-  | The record's time at that ceiling | 540,269 ns | 1,205,267 ns |
+  | The record's time at that ceiling | 537,522 ns | 1,201,021 ns |
   | The bar | 491,990 ns | 978,677 ns |
-  | With the index and the walker free | 1.73x | 1.56x |
-  | Walker at 4 / 16 a mark | 1.41x / 1.28x | 1.26x / 1.15x |
+  | With the index and the walker free | 1.74x | 1.56x |
+  | With the kernel free | 1.61x | 1.45x |
+  | Walker at 4 / 16 a mark | 1.42x / 1.29x | 1.26x / 1.15x |
   | If the first-byte bounds test stays | 1.30x | 1.14x |
-  Instructions are a ceiling on wall time, not a prediction: the kept work
-  does not get faster, and the walker's branch on each mark's kind is a new
-  place to mispredict.
-- **What would have to move.** Reaching 1.5x needs a further 804,034
-  instructions out of twitter's kept work (11.3% of it) and 3,956,365 out of
-  citm's (24.0%), with the index priced as above. On twitter that is a third
-  of `stringInto` and its `memcpy`; on citm it is three quarters of the
-  grammar switch in `next`, `value` and `key`, or nearly all of `numberF64`.
-  None of these is index work. Each is its own stage, and S6c is worth
-  re-measuring only once one of them lands.
-  S6c is worth re-measuring only once one of them lands.
+  | If the grammar switch went too | 1.499x | 1.33x |
+
+  The verdict is on instruction counts, as the gate defines it, not on wall
+  time. The two can part either way: the removed work is branchy (blank
+  loops, a call per string, the first-byte switch) and takes its
+  mispredicts with it, and the kernel's instructions are wide, so time could
+  improve more than the count does; the walker's branch on each mark's kind
+  is a new place to mispredict, so it could improve less. How firm the
+  verdict is differs by file. citm stays under the bar even with the kernel
+  free (1.45x), and even with the grammar switch gone as well (1.33x),
+  though the walker keeps it: it still dispatches on each mark's kind. twitter's
+  verdict rests on the kernel's cost: it reaches 1.5x only with the kernel at
+  or under 541,633 instructions a pass, against the 1,299,916 measured, and
+  1.61x with the kernel free.
+- **What would have to move.** Reaching 1.5x needs a further 758,283
+  instructions out of twitter's kept work (10.7% of it) and 3,882,223 out of
+  citm's (23.7%), with the index priced as above. On twitter that is a third
+  of `stringInto` and its `memcpy`, or all of the grammar switch; on citm it
+  is three quarters of `next`, `value` and `key` together (more than twice
+  the switch alone), or nearly all of `numberF64`. None of these is index
+  work. Each is its own stage, and S6c is worth re-measuring only once one of
+  them lands.
 
 **What S6 does not do.** It does not move the default target (§5), add
 `nish:simd` (S3 stays on its own bar), or touch `std/json`'s older reader,
