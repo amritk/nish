@@ -4791,10 +4791,8 @@ export const main = (): i32 => {
 - **It reaches `ffi`.** The module calls C through `declare function`, so a
   program that imports it is reported with [`ffi`](#capabilities) and
   `--deny ffi` refuses it, naming the call. The files SQLite opens are opened
-  by C, which the `fs.read` and `fs.write` capabilities do not see. It links
-  wherever SQLite does: natively, in a `--profile napi` addon and under
-  `--profile wasi`, but not under the `wasm` profile or as TypeScript run by
-  Node (`tests/link/std_sqlite*`).
+  by C, which the `fs.read` and `fs.write` capabilities do not see. It is
+  tested natively and under `--profile wasi` (`tests/link/std_sqlite*`).
 
 ### Interfaces and object literals
 

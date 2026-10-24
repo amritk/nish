@@ -9,10 +9,11 @@
  * or negative. Freeing a slot moves its generation on, and a handle whose
  * generation is not the slot's answers SQLITE_MISUSE, so a statement used
  * after `finalize`, or after its database's `close`, is refused rather than
- * reaching a freed pointer. Freed slots are reused oldest first, so a stale
- * handle could name a live slot again only after 32,767 reuses of every free
- * slot in turn. That is the generation's width, and it is the one way a stale
- * handle can alias.
+ * reaching a freed pointer. A slot whose generation reaches 32,767, the
+ * generation's width, is retired rather than restarted at 1, so no handle
+ * ever names a slot twice and a stale handle can never alias a live one. A
+ * table that has retired or filled all 65,535 of its slots answers
+ * SQLITE_NOMEM, which takes some two billion opens or prepares.
  *
  * The tables are thread-local under --threads (`NISH_TLS`, ../nish.h). A
  * connection and its statements belong to the thread that opened them: a
@@ -108,13 +109,16 @@ static int32_t slot_take(nishsqlite_table *t, void *p, int32_t owner) {
   return (t->at[i].gen << 16) | i;
 }
 
-/* Frees the slot `h` names and moves its generation on, so `h` names nothing. */
+/* Frees the slot `h` names and moves its generation on, so `h` names nothing.
+ * A slot at the last generation is retired: it stays empty and off the free
+ * list, so its handles are never handed out again. */
 static void slot_give(nishsqlite_table *t, int32_t h) {
   int32_t i = h & NISH_SQLITE_INDEX;
   nishsqlite_slot *s = &t->at[i];
   s->p = NULL;
-  s->gen = s->gen == NISH_SQLITE_GEN_MAX ? 1 : s->gen + 1;
   s->next = 0;
+  if (s->gen == NISH_SQLITE_GEN_MAX) return;
+  s->gen++;
   if (t->tail != 0) t->at[t->tail].next = i;
   else t->head = i;
   t->tail = i;
@@ -154,7 +158,9 @@ const char *nishsqlite_open_errmsg(void) { return nishsqlite_open_message; }
 
 /* Finalizes every statement of the connection, frees their handles, then
  * closes it. close_v2 rather than close, so a connection something else still
- * holds (none can, today) is closed when that ends instead of staying open. */
+ * holds (none can, today) is closed when that ends instead of staying open.
+ * The handle is freed only once the close succeeds, so a close that fails
+ * leaves the connection usable and its message readable. */
 int32_t nishsqlite_close(int32_t h) {
   sqlite3 *db = db_of(h);
   if (db == NULL) return SQLITE_MISUSE;
@@ -165,8 +171,9 @@ int32_t nishsqlite_close(int32_t h) {
       slot_give(t, (t->at[i].gen << 16) | i);
     }
   }
-  slot_give(&nishsqlite_dbs, h);
-  return sqlite3_close_v2(db);
+  int rc = sqlite3_close_v2(db);
+  if (rc == SQLITE_OK) slot_give(&nishsqlite_dbs, h);
+  return rc;
 }
 
 int32_t nishsqlite_exec(int32_t h, const char *sql) {
@@ -279,7 +286,15 @@ int32_t nishsqlite_bind_bytes(int32_t h, int32_t i, const uint8_t *buf, uint64_t
 
 /* These answer what SQLite does for a column that is not there, 0 and
  * SQLITE_NULL, for a handle that names no statement too: a read cannot fail,
- * and the step before it already answered whether the statement is good. */
+ * and the step before it already answered whether the statement is good. A
+ * column that is not there is answered here, before SQLite, which would
+ * otherwise record SQLITE_RANGE as the connection's last error. */
+
+/* The statement `h` names, when it has a column `c`; NULL otherwise. */
+static inline sqlite3_stmt *column_of(int32_t h, int32_t c) {
+  sqlite3_stmt *st = stmt_of(h);
+  return st && c >= 0 && c < sqlite3_column_count(st) ? st : NULL;
+}
 
 int32_t nishsqlite_column_count(int32_t h) {
   sqlite3_stmt *st = stmt_of(h);
@@ -287,24 +302,24 @@ int32_t nishsqlite_column_count(int32_t h) {
 }
 
 int32_t nishsqlite_column_type(int32_t h, int32_t c) {
-  sqlite3_stmt *st = stmt_of(h);
+  sqlite3_stmt *st = column_of(h, c);
   return st ? sqlite3_column_type(st, c) : SQLITE_NULL;
 }
 
 int64_t nishsqlite_column_i64(int32_t h, int32_t c) {
-  sqlite3_stmt *st = stmt_of(h);
+  sqlite3_stmt *st = column_of(h, c);
   return st ? sqlite3_column_int64(st, c) : 0;
 }
 
 double nishsqlite_column_f64(int32_t h, int32_t c) {
-  sqlite3_stmt *st = stmt_of(h);
+  sqlite3_stmt *st = column_of(h, c);
   return st ? sqlite3_column_double(st, c) : 0.0;
 }
 
 /* The column's length in bytes as `nishsqlite_column_into` would copy it:
  * a blob's bytes, or anything else as text. */
 int32_t nishsqlite_column_bytes(int32_t h, int32_t c) {
-  sqlite3_stmt *st = stmt_of(h);
+  sqlite3_stmt *st = column_of(h, c);
   if (st == NULL) return 0;
   if (sqlite3_column_type(st, c) != SQLITE_BLOB) sqlite3_column_text(st, c);
   return sqlite3_column_bytes(st, c);
@@ -312,7 +327,7 @@ int32_t nishsqlite_column_bytes(int32_t h, int32_t c) {
 
 /* The column as text, for a `string` result; NULL for SQL NULL. */
 const char *nishsqlite_column_text(int32_t h, int32_t c) {
-  sqlite3_stmt *st = stmt_of(h);
+  sqlite3_stmt *st = column_of(h, c);
   return st ? (const char *)sqlite3_column_text(st, c) : NULL;
 }
 
@@ -320,13 +335,16 @@ const char *nishsqlite_column_text(int32_t h, int32_t c) {
  * `at`, `n` the buffer's length, and answers the column's length. It copies
  * only when all of it fits, so a length past `n - at` says how much room the
  * read needs and nothing was written. SQLITE_MISUSE for a bad handle or an
- * `at` outside `0..n`, SQLITE_RANGE for a column that is not there, negated. */
+ * `at` outside `0..n`, SQLITE_RANGE for a column that is not there, and
+ * SQLITE_NOMEM when SQLite cannot convert a value to text, all negated. Only
+ * a NULL or a blob has no pointer and is still read: an empty blob has none. */
 int32_t nishsqlite_column_into(int32_t h, int32_t c, uint8_t *buf, uint64_t n, int32_t at) {
   sqlite3_stmt *st = stmt_of(h);
   if (st == NULL || at < 0 || (uint64_t)at > n) return -SQLITE_MISUSE;
   if (c < 0 || c >= sqlite3_column_count(st)) return -SQLITE_RANGE;
-  const void *p = sqlite3_column_type(st, c) == SQLITE_BLOB ? sqlite3_column_blob(st, c)
-                                                            : (const void *)sqlite3_column_text(st, c);
+  int type = sqlite3_column_type(st, c);
+  const void *p = type == SQLITE_BLOB ? sqlite3_column_blob(st, c) : (const void *)sqlite3_column_text(st, c);
+  if (p == NULL && type != SQLITE_NULL && type != SQLITE_BLOB) return -SQLITE_NOMEM;
   int32_t len = sqlite3_column_bytes(st, c);
   if (p != NULL && (uint64_t)len <= n - (uint64_t)at) memcpy(buf + at, p, (size_t)len);
   return len;

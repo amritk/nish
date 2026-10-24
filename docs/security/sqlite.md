@@ -32,7 +32,35 @@ handle, `(generation << 16) | index` into a thread-local table, and every
 adapter looks it up before it touches SQLite: an index past the table, an empty
 slot or a stale generation is `SQLITE_MISUSE`, so a handle used after `close`
 or `finalize`, or forged, reaches no freed or foreign object. Slot 0 is never
-handed out, so the zero handle names nothing.
+handed out, so the zero handle names nothing. A freed slot's generation moves
+on, and a slot whose generation reaches 32,767, the field's width, is retired
+rather than restarted, so no handle is ever handed out twice and a stale one
+can never come to name a live object. A table whose 65,535 slots are all live
+or retired answers `SQLITE_NOMEM`. Tests: `tests/link/std_sqlite` (a handle
+after `close` and after `finalize`, a forged handle).
+
+The tables are per thread: a handle passed to another thread names nothing
+there and answers `SQLITE_MISUSE`. A thread's tables are not freed when it
+exits, so connections a thread leaves open stay allocated with their files
+open; that is a leak, not a use after free, since no other thread can name
+them.
+
+Errors carry the connection's message only when SQLite set it. A code the
+adapter answers without SQLite — `SQLITE_MISUSE`, `SQLITE_RANGE`, and
+`SQLITE_NOMEM` from a full table or a value SQLite could not convert to text
+in `columnInto` — takes `sqlite3_errstr`'s message for the code instead of the
+connection's, which is still that of some earlier call. A read of a column that
+is not there is answered before SQLite and leaves the connection's message as
+it was. `close` frees the handle only when `sqlite3_close_v2` succeeds, so a
+close that fails leaves the connection and its message readable; its
+statements are already finalized. Open: `columnText` reads a value SQLite
+fails to convert under memory pressure as `null`, the same as SQL `NULL`.
+
+SQL text, file names and `bindText`'s string reach C as `const char *`, where
+a NUL byte would end them early. The FFI checks each one before the call and
+stops the program with the `ffi-nul` panic rather than passing a shortened
+string (`tests/cases/panics_ffi_nul`); `bindTextBytes` and `bindBlob` take a
+length and pass NUL bytes through.
 
 The adapter bounds every buffer it is given with the buffer's length: a bind of
 `buf[off, off + len)` outside `0..n` is `SQLITE_MISUSE` and binds nothing, and
@@ -113,7 +141,7 @@ In `tests/run.js`, section `sqlite-link`:
 - "sqlite-link: runtime/sqlite/README.md records the SHA3-256 of sqlite3.c and sqlite3.h as they are"
   — the vendored files are the ones the README's hashes name, so an edit to
   either fails it.
-- "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles sqlite3.c alone again, into a new entry, and replaces the default"
+- "sqlite-link: NISH_SQLITE_CFLAGS=-DSQLITE_THREADSAFE=1 compiles runtime/sqlite/ alone again, into a new entry, and replaces the default"
   — a builder's option replaces the default rather than joining it.
 - "sqlite-link: a program that does not call SQLite compiles no C, adds no entry and links no SQLite symbol"
   — a program that never names SQLite carries none of its code.

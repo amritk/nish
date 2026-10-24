@@ -87,7 +87,12 @@ the order of the `?`s), as in SQLite.
 
 SQLite copies what it is given, so the string or array can change after the
 call. `reset()` keeps the bindings; `clearBindings()` sets them all back to
-`NULL`.
+`NULL`. A parameter index the statement does not have (they count from 1) answers
+`SQLITE_RANGE`; an `off` and `len` that do not fit inside `buf` answer
+`SQLITE_MISUSE`. A `string` passed to `bindText`, `exec`, `prepare` or
+`openDatabase` that holds a NUL byte stops the program with the
+[`ffi-nul` panic](../../LANGUAGE.md#panic-sites) rather than cutting the SQL
+short; bind text with NUL bytes in it through `bindTextBytes`.
 
 ```ts nish:ok
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
@@ -137,7 +142,10 @@ Reading a row allocates nothing unless you ask for a string. `columnText` makes
 a new string each time; `columnInto` copies the bytes into an array you own,
 so a loop over many rows can reuse one buffer. It copies only when the whole
 column fits: an answer larger than `buf.length - at` means nothing was written,
-and says how much room the column needs.
+and says how much room the column needs. `columnInto` with `at` outside
+`0..buf.length` answers `Err(SQLITE_MISUSE)`, and a column index past the
+last answers `Err(SQLITE_RANGE)`; the other reads answer 0, `SQLITE_NULL` or
+`null` for a column that is not there.
 
 ```ts nish:ok
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
@@ -214,14 +222,16 @@ export const main = (): i32 => {
 
 ## Threads, capabilities and where it runs
 
-- **A connection belongs to the thread that opened it.** Its statements do too.
-  Open one connection per thread that needs the database.
+- **A connection belongs to the thread that opened it.** Its statements do too:
+  the handles live in tables kept per thread, so a handle passed to another
+  thread names nothing there. Open one connection per thread that needs the
+  database, and close it before the thread ends: a thread's open connections
+  are not closed when it exits, and stay allocated.
 - **It uses `ffi`.** The module calls SQLite's C code, so `--capabilities`
   reports a program that imports it with `ffi`, and `--deny ffi` refuses it. The files
   SQLite opens are opened by C, so the `fs.read` and `fs.write` capabilities
   do not see them.
-- **It runs natively, in a `--profile napi` addon and under `--profile
-  wasi`**, but not as TypeScript run by Node or under the `wasm` profile.
+- **It runs natively and under `--profile wasi`.**
 - **Build settings** — the SQLite version, the compile-time options and how to
   add your own — are in
   [SQLite is linked when your program calls it](cli.md#sqlite-is-linked-when-your-program-calls-it).

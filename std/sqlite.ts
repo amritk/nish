@@ -180,12 +180,13 @@ const done = (rc: i32): Result<void, i32> => {
 
 /**
  * The message for `code`: the connection's own, unless the code is one the
- * adapter answers before SQLite runs (`MISUSE`, `RANGE`), where the
- * connection's message is still that of some earlier failure.
+ * adapter can answer without SQLite (`MISUSE`, `RANGE`, `NOMEM` for a full
+ * handle table or a failed conversion), where the connection's message may
+ * still be that of some earlier failure.
  */
 const messageFor = (code: i32, connection: string): string => {
   const primary: i32 = code & 0xff
-  if (primary === SQLITE_MISUSE || primary === SQLITE_RANGE) {
+  if (primary === SQLITE_MISUSE || primary === SQLITE_RANGE || primary === SQLITE_NOMEM) {
     return sqlite3_errstr(code)
   }
   return connection

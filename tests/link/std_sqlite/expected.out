@@ -3,6 +3,9 @@ PASS  open: CREATE alone is MISUSE
 PASS  open: its message
 PASS  open: a missing directory is CANTOPEN
 PASS  open: its message
+PASS  open: READONLY of a missing file is CANTOPEN
+PASS  open: its message
+PASS  open: READONLY makes no file
 PASS  open: READONLY
 PASS  close: READONLY
 PASS  pragma: journal_mode=WAL answers wal
@@ -11,6 +14,10 @@ PASS  pragma: synchronous=NORMAL
 PASS  exec: a table in the file
 PASS  exec: a row in the file
 PASS  close: the file
+PASS  pragma: WAL outlives the connection
+PASS  finalize: the second pragma
+PASS  close: the file again
+PASS  the file database is removed
 PASS  exec: the reuse table
 PASS  reset and rebind: 1,000 inserts
 PASS  bindI64: a key already there
@@ -20,7 +27,7 @@ PASS  finalize: the reused INSERT
 PASS  columnI64: every fourth row is b
 PASS  columnI64: their keys
 PASS  finalize: the count
-PASS  step: Arena.used() after 100,000 rows is what it was after the first
+PASS  step: no pass of 100,000 bumps the arena
 PASS  step: the rows end in DONE
 PASS  columnI64: 100,000 rows
 PASS  columnInto: their text
@@ -86,6 +93,7 @@ PASS  columnType: past the end is NULL
 PASS  columnF64
 PASS  columnF64: past the end is 0
 PASS  columnI64: past the end is 0
+PASS  column: a read past the end leaves the connection's message
 PASS  columnBytes
 PASS  columnBytes: NULL is 0
 PASS  columnText
@@ -97,12 +105,16 @@ PASS  columnInto: and writes nothing
 PASS  columnInto: past the end is RANGE
 PASS  columnInto: an offset past the buffer is MISUSE
 PASS  step: the second row
+PASS  columnText: bound by bindText
+PASS  columnType: bound by bindF64 is FLOAT
+PASS  columnF64: bound by bindF64
 PASS  columnType: BLOB
 PASS  columnInto: blob
 PASS  columnInto: blob byte 0
 PASS  columnInto: blob byte 1
 PASS  step: the third row
 PASS  columnText: the bytes bound as text
+PASS  columnType: bound by bindNull is NULL
 PASS  columnType: an empty blob is BLOB
 PASS  columnBytes: an empty blob
 PASS  columnInto: an empty blob at the end
@@ -119,4 +131,4 @@ PASS  exec: a handle naming slot 0 is MISUSE
 PASS  error: after close
 PASS  lastInsertRowid: after close is 0
 PASS  changes: after close is 0
-std_sqlite: 121 passed, 0 failed, 0 skipped
+std_sqlite: 133 passed, 0 failed, 0 skipped

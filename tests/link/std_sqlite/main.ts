@@ -21,6 +21,8 @@ import {
   openDatabase,
   sqliteVersion,
 } from "nish/sqlite";
+import { readFileBytesSync } from "nish:fs";
+import { spawnSync } from "nish:process";
 
 const opens = (t: Suite): void => {
   t.ok("version", sqliteVersion().startsWith("3."));
@@ -38,6 +40,16 @@ const opens = (t: Suite): void => {
   } else {
     t.fail("open: a missing directory is CANTOPEN", "it opened");
   }
+  const absent = "build/std_sqlite_absent.db";
+  spawnSync(["rm", "-f", absent]);
+  const gone = openDatabase(absent, OPEN_READONLY);
+  if (gone.isErr()) {
+    t.eqI32("open: READONLY of a missing file is CANTOPEN", gone.error.code, 14);
+    t.eqStr("open: its message", gone.error.message, "unable to open database file");
+  } else {
+    t.fail("open: READONLY of a missing file is CANTOPEN", "it opened");
+  }
+  t.ok("open: READONLY makes no file", readFileBytesSync(absent) === null);
   const ro = openDatabase(":memory:", OPEN_READONLY);
   if (ro.isOk()) {
     t.pass("open: READONLY");
@@ -119,16 +131,23 @@ const binds = (t: Suite, db: Database): void => {
   t.ok("bindBlob: a window past the end is MISUSE", win.isErr() && win.error === SQLITE_MISUSE);
   const neg = ins.bindTextBytes(1, bytes, -1, 1);
   t.ok("bindTextBytes: a negative offset is MISUSE", neg.isErr() && neg.error === SQLITE_MISUSE);
-  t.ok("bindText: index 0 is RANGE", ins.bindText(0, "x").isErr());
-  t.ok("bindF64: index 0 is RANGE", ins.bindF64(0, toF64(1)).isErr());
-  t.ok("bindNull: index 0 is RANGE", ins.bindNull(0).isErr());
+  const text0 = ins.bindText(0, "x");
+  t.ok("bindText: index 0 is RANGE", text0.isErr() && text0.error === SQLITE_RANGE);
+  const f640 = ins.bindF64(0, toF64(1));
+  t.ok("bindF64: index 0 is RANGE", f640.isErr() && f640.error === SQLITE_RANGE);
+  const null0 = ins.bindNull(0);
+  t.ok("bindNull: index 0 is RANGE", null0.isErr() && null0.error === SQLITE_RANGE);
   t.ok("finalize", ins.finalize().isOk());
-  t.ok("finalize: twice is MISUSE", ins.finalize().isErr());
+  const twice = ins.finalize();
+  t.ok("finalize: twice is MISUSE", twice.isErr() && twice.error === SQLITE_MISUSE);
   const stale = ins.bindI64(1, toI64(1));
   t.ok("bindI64: after finalize is MISUSE", stale.isErr() && stale.error === SQLITE_MISUSE);
-  t.ok("step: after finalize is MISUSE", ins.step().isErr());
-  t.ok("reset: after finalize is MISUSE", ins.reset().isErr());
-  t.ok("clearBindings: after finalize is MISUSE", ins.clearBindings().isErr());
+  const stepStale = ins.step();
+  t.ok("step: after finalize is MISUSE", stepStale.isErr() && stepStale.error === SQLITE_MISUSE);
+  const resetStale = ins.reset();
+  t.ok("reset: after finalize is MISUSE", resetStale.isErr() && resetStale.error === SQLITE_MISUSE);
+  const clearStale = ins.clearBindings();
+  t.ok("clearBindings: after finalize is MISUSE", clearStale.isErr() && clearStale.error === SQLITE_MISUSE);
   t.eqStr("error: after finalize", ins.error(SQLITE_MISUSE).message, "bad parameter or other API misuse");
 };
 
@@ -166,10 +185,12 @@ const reads = (t: Suite, db: Database): void => {
   t.eqI32("columnType: TEXT", q.columnType(1), SQLITE_TEXT);
   t.eqI32("columnType: FLOAT", q.columnType(2), SQLITE_FLOAT);
   t.eqI32("columnType: NULL", q.columnType(3), SQLITE_NULL);
+  const said = db.error(SQLITE_ERROR).message;
   t.eqI32("columnType: past the end is NULL", q.columnType(9), SQLITE_NULL);
   t.eqF64("columnF64", q.columnF64(2), toF64(3) / toF64(2));
   t.eqF64("columnF64: past the end is 0", q.columnF64(9), toF64(0));
   t.eqI64("columnI64: past the end is 0", q.columnI64(9), toI64(0));
+  t.eqStr("column: a read past the end leaves the connection's message", db.error(SQLITE_ERROR).message, said);
   t.eqI32("columnBytes", q.columnBytes(1), 3);
   t.eqI32("columnBytes: NULL is 0", q.columnBytes(3), 0);
   const name = q.columnText(1);
@@ -187,6 +208,10 @@ const reads = (t: Suite, db: Database): void => {
   t.ok("columnInto: an offset past the buffer is MISUSE", at.isErr() && at.error === SQLITE_MISUSE);
   const second = q.step();
   t.ok("step: the second row", second.isOk() && second.value);
+  const bob = q.columnText(1);
+  t.eqStr("columnText: bound by bindText", bob === null ? "<null>" : bob, "bob");
+  t.eqI32("columnType: bound by bindF64 is FLOAT", q.columnType(2), SQLITE_FLOAT);
+  t.eqF64("columnF64: bound by bindF64", q.columnF64(2), toF64(9) / toF64(4));
   t.eqI32("columnType: BLOB", q.columnType(3), SQLITE_BLOB);
   const blob = q.columnInto(3, buf, 0);
   t.ok("columnInto: blob", blob.isOk() && blob.value === 2);
@@ -196,6 +221,7 @@ const reads = (t: Suite, db: Database): void => {
   t.ok("step: the third row", third.isOk() && third.value);
   const bound = q.columnText(1);
   t.eqStr("columnText: the bytes bound as text", bound === null ? "<null>" : bound, "hi!");
+  t.eqI32("columnType: bound by bindNull is NULL", q.columnType(2), SQLITE_NULL);
   t.eqI32("columnType: an empty blob is BLOB", q.columnType(3), SQLITE_BLOB);
   t.eqI32("columnBytes: an empty blob", q.columnBytes(3), 0);
   const nothing = q.columnInto(3, buf, 8);
@@ -225,7 +251,9 @@ const reads = (t: Suite, db: Database): void => {
 
 /** A file database, so the pragmas answer what a file connection does. */
 const files = (t: Suite): void => {
-  const opened = openDatabase("build/std_sqlite_wal.db", OPEN_READWRITE | OPEN_CREATE);
+  const path = "build/std_sqlite_wal.db";
+  spawnSync(["rm", "-f", path, `${path}-wal`, `${path}-shm`]);
+  const opened = openDatabase(path, OPEN_READWRITE | OPEN_CREATE);
   if (opened.isErr()) {
     t.fail("open: a file", opened.error.message);
     return;
@@ -243,6 +271,22 @@ const files = (t: Suite): void => {
   t.ok("exec: a table in the file", db.exec("DROP TABLE IF EXISTS f; CREATE TABLE f (x)").isOk());
   t.ok("exec: a row in the file", db.exec("INSERT INTO f VALUES (1)").isOk());
   t.ok("close: the file", db.close().isOk());
+  const again = openDatabase(path, OPEN_READWRITE);
+  if (again.isErr()) {
+    t.fail("open: the file again", again.error.message);
+  } else {
+    const kept = again.value.prepare("PRAGMA journal_mode");
+    if (kept.isOk() && kept.value.step().isOk()) {
+      const answer = kept.value.columnText(0);
+      t.eqStr("pragma: WAL outlives the connection", answer === null ? "<null>" : answer, "wal");
+      t.ok("finalize: the second pragma", kept.value.finalize().isOk());
+    } else {
+      t.fail("pragma: WAL outlives the connection", "it did not run");
+    }
+    t.ok("close: the file again", again.value.close().isOk());
+  }
+  spawnSync(["rm", "-f", path, `${path}-wal`, `${path}-shm`]);
+  t.ok("the file database is removed", readFileBytesSync(path) === null);
 };
 
 /** One statement prepared once and run 1,000 times, rebound each time. */
@@ -278,7 +322,7 @@ const reuses = (t: Suite, db: Database): void => {
   }
 };
 
-/** 100,000 rows stepped and read into one buffer leave `Arena.used()` where the first row did. */
+/** 100,000 rows stepped and read into one buffer, and no pass bumps `Arena.used()`. */
 const flat = (t: Suite, db: Database): void => {
   const p = db.prepare(
     "WITH RECURSIVE n(i) AS (VALUES (1) UNION ALL SELECT i + 1 FROM n WHERE i < 100000) SELECT i, 'row ' || i, i * 0.5 FROM n"
@@ -293,8 +337,11 @@ const flat = (t: Suite, db: Database): void => {
   let bytes: i64 = 0;
   let half: f64 = 0;
   let done = false;
-  const after: i64 = Arena.used();
+  // Each pass rewinds its own arena when it ends, so the measure is taken
+  // inside the pass: what its step and reads bumped before the rewind.
+  let grew: i32 = 0;
   for (;;) {
+    const before: i64 = Arena.used();
     const r = q.step();
     if (r.isErr() || !r.value) {
       done = r.isOk();
@@ -306,8 +353,11 @@ const flat = (t: Suite, db: Database): void => {
       bytes += toI64(got.value);
     }
     half += q.columnF64(2);
+    if (Arena.used() !== before) {
+      grew += 1;
+    }
   }
-  t.eqI64("step: Arena.used() after 100,000 rows is what it was after the first", Arena.used() - after, toI64(0));
+  t.eqI32("step: no pass of 100,000 bumps the arena", grew, 0);
   t.ok("step: the rows end in DONE", done);
   const ids: i64 = 5000050000;
   t.eqI64("columnI64: 100,000 rows", sum, ids);
