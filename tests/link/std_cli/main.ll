@@ -34,10 +34,14 @@
 @.str.28 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 @.str.29 = private unnamed_addr constant { i64, [20 x i8] } { i64 19, [20 x i8] c"mono dim is plain: \00" }, align 8
 @.str.30 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"z\00" }, align 8
+@.str.31 = private unnamed_addr constant { i64, [24 x i8] } { i64 23, [24 x i8] c"-----------------------\00" }, align 8
+@.str.32 = private unnamed_addr constant { i64, [7 x i8] } { i64 6, [7 x i8] c"<name>\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @nish.HelpMenu.constructor(%struct.HelpMenu* noundef nonnull noalias align 8 dereferenceable(40) nocapture, %struct.Style* noundef nonnull align 8 dereferenceable(2), i8* noundef nonnull noalias readonly align 8, i32 noundef, i32 noundef) #1
 declare void @nish.HelpMenu.header(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.HelpMenu.title(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8) #0
+declare void @nish.HelpMenu.line(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #1
 declare void @nish.HelpMenu.usage(%struct.HelpMenu* noundef nonnull align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.HelpMenu.section(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8) #0
 declare void @nish.HelpMenu.row(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8, i8* noundef nonnull noalias readonly align 8) #0
@@ -132,6 +136,9 @@ entry:
   %Style.obj = alloca %struct.Style, align 8
   %mono.addr = alloca %struct.Style*, align 8
   %Style.obj.1 = alloca %struct.Style, align 8
+  %theme.addr = alloca %struct.Style*, align 8
+  %ruled.addr = alloca %struct.HelpMenu*, align 8
+  %HelpMenu.obj = alloca %struct.HelpMenu, align 8
   %arena.mark = call i64 @nish_arena_mark()
   call void @nish_print(i8* bitcast ({ i64, [7 x i8] }* @.str.21 to i8*))
   %0 = call i8* @nish_alloc_struct(i64 2)
@@ -189,6 +196,33 @@ land.end:
   %33 = select i1 %32, i8* bitcast ({ i64, [5 x i8] }* @.str.27 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.28 to i8*)
   %34 = call i8* @nish_str_concat(i8* bitcast ({ i64, [20 x i8] }* @.str.29 to i8*), i8* %33)
   call void @nish_print(i8* %34)
+  %35 = call i8* @nish_alloc_struct(i64 2)
+  %36 = bitcast i8* %35 to %struct.Style*
+  call void @nish.Style.constructor(%struct.Style* %36, i1 true, i1 true)
+  store %struct.Style* %36, %struct.Style** %theme.addr, align 8
+  %37 = load %struct.Style*, %struct.Style** %theme.addr, align 8
+  call void @nish.HelpMenu.constructor(%struct.HelpMenu* %HelpMenu.obj, %struct.Style* %37, i8* bitcast ({ i64, [6 x i8] }* @.str.2 to i8*), i32 24, i32 30)
+  store %struct.HelpMenu* %HelpMenu.obj, %struct.HelpMenu** %ruled.addr, align 8
+  %38 = load %struct.HelpMenu*, %struct.HelpMenu** %ruled.addr, align 8
+  call void @nish.HelpMenu.title(%struct.HelpMenu* %38, i8* bitcast ({ i64, [6 x i8] }* @.str.3 to i8*), i8* bitcast ({ i64, [10 x i8] }* @.str.4 to i8*))
+  %39 = load %struct.HelpMenu*, %struct.HelpMenu** %ruled.addr, align 8
+  %40 = load %struct.Style*, %struct.Style** %theme.addr, align 8
+  %41 = call i64 @nish_arena_mark()
+  %42 = call i8* @nish.Style.dim(%struct.Style* %40, i8* bitcast ({ i64, [24 x i8] }* @.str.31 to i8*))
+  %43 = call i8* @nish_arena_keep(i64 %41, i8* %42)
+  call void @nish.HelpMenu.line(%struct.HelpMenu* %39, i8* %43)
+  %44 = load %struct.HelpMenu*, %struct.HelpMenu** %ruled.addr, align 8
+  call void @nish.HelpMenu.line(%struct.HelpMenu* %44, i8* bitcast ({ i64, [1 x i8] }* @.str.8 to i8*))
+  %45 = load %struct.HelpMenu*, %struct.HelpMenu** %ruled.addr, align 8
+  call void @nish.HelpMenu.usage(%struct.HelpMenu* %45, i8* bitcast ({ i64, [7 x i8] }* @.str.32 to i8*), i8* bitcast ({ i64, [14 x i8] }* @.str.6 to i8*))
+  %46 = load %struct.HelpMenu*, %struct.HelpMenu** %ruled.addr, align 8
+  %47 = call i64 @nish_arena_mark()
+  %48 = call i8* @nish.HelpMenu.text(%struct.HelpMenu* %46)
+  %49 = call i8* @nish_arena_keep(i64 %47, i8* %48)
+  %50 = call i64 @nish_arena_mark()
+  %51 = call i8* @visible(i8* %49)
+  %52 = call i8* @nish_arena_keep(i64 %50, i8* %51)
+  call void @nish_print(i8* %52)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

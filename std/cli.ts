@@ -273,9 +273,25 @@ export class HelpMenu {
 
   /** The opening line, the program's name, `version` and a one-line `summary`, and a blank after it. */
   header(version: string, summary: string): void {
+    this.title(version, summary)
+    this.lines.push("")
+  }
+
+  /**
+   * The opening line alone, without `header`'s blank after it, for a menu that
+   * puts something under its title (`line`) before the blank.
+   */
+  title(version: string, summary: string): void {
     const style = this.style
     this.lines.push(`${style.name(this.program)} ${style.dim(version)}  ${style.dim(summary)}`)
-    this.lines.push("")
+  }
+
+  /**
+   * A line exactly as given, painted (or not) by the caller with the menu's
+   * `style`: a rule, a banner, a blank. Its width is the caller's to keep.
+   */
+  line(text: string): void {
+    this.lines.push(text)
   }
 
   /**

@@ -454,10 +454,27 @@ const capabilityListMask = (flag: string, list: string): i32 => {
   return mask
 }
 
+/** The words one guess away from `nish break`, which get a riddle rather than a missing file. */
+const nearMiss = (word: string): boolean =>
+  word === "brick" || word === "bricks" || word === "breakout" || word === "game" || word === "play"
+
 export const main = (): number => {
   if (process.argv.length < 2) {
     console.error(usageText(2))
     return 2
+  }
+  // `nish break` is left out of the help, the guide and `llms.txt` on
+  // purpose. Its only pointers are the wall under the help's title and the
+  // riddle the near-miss words get. The brick breaker it will play is not in
+  // yet, so it answers with a placeholder. A file named `break` in the working
+  // directory wins, as any other file would.
+  if (process.argv.length === 2 && process.argv[1] === "break" && realpathSync("break") === null) {
+    console.log("you found the wall. the ball is still being made; come back soon.")
+    return 0
+  }
+  if (process.argv.length === 2 && nearMiss(process.argv[1]) && realpathSync(process.argv[1]) === null) {
+    console.error(`no file named ${process.argv[1]}. every loop needs one, though.`)
+    return 1
   }
   const opts = new Options()
   opts.unlabelledBuiltin = simulatedUnlabelledBuiltin()

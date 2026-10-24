@@ -19576,6 +19576,40 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     agentForced.stdout === agentHelp.stdout,
     JSON.stringify(agentForced.stdout.slice(0, 200))
   )
+  // `nish break` is in no list of the help, on purpose: the rule of bricks
+  // under the title, one knocked out, is its mark, and the near-miss words get
+  // a riddle. Both run from a directory with no file of those names, since a
+  // file named `break` there is compiled like any other.
+  const wall = help.stdout.split("\n")[1]
+  check(
+    "--help: the rule under the title is a wall with one brick out, and names nothing",
+    /^▀▀▀▀( ▀▀▀▀)* {6}▀▀▀▀( ▀▀▀▀)*$/.test(wall) && !help.stdout.includes("break"),
+    wall
+  )
+  const secretDir = path.join(wp12Dir, "secret")
+  fs.mkdirSync(secretDir, { recursive: true })
+  const inSecret = (args) =>
+    spawnSync(NISH, args, { cwd: secretDir, encoding: "utf8", env: { ...process.env, ...plainEnv } })
+  const riddle = inSecret(["brick"])
+  check(
+    "nish brick, with no such file: the riddle, exit 1",
+    riddle.status === 1 && riddle.stderr.trim() === "no file named brick. every loop needs one, though.",
+    riddle.stderr
+  )
+  const secret = inSecret(["break"])
+  check(
+    "nish break, with no such file: the placeholder, exit 0",
+    secret.status === 0 && secret.stdout.startsWith("you found the wall.") && secret.stderr === "",
+    secret.stdout + secret.stderr
+  )
+  fs.writeFileSync(path.join(secretDir, "break"), "export const main = (): i32 => 0\n")
+  const realFile = inSecret(["break", "-o", path.join(secretDir, "break.ll")])
+  const ownFile = inSecret(["break"])
+  check(
+    "nish break, with a file named break: that file is compiled like any other",
+    realFile.status === 0 && fs.existsSync(path.join(secretDir, "break.ll")) && !ownFile.stdout.includes("wall"),
+    realFile.stderr + ownFile.stdout + ownFile.stderr
+  )
   // An unknown flag is refused in one line that points at the help, and that
   // line is a diagnostic, so it is plain even when colour is forced.
   const badFlag = run(["--bogus", entry], { ...plainEnv, FORCE_COLOR: "1" })

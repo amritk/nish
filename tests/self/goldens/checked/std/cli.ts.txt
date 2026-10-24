@@ -23,6 +23,8 @@ struct HelpMenu (class) size=40 align=8 exported
   field usages: i32 index=5 offset=32
   constructor -> @HelpMenu.constructor
   method header -> @HelpMenu.header
+  method title -> @HelpMenu.title
+  method line -> @HelpMenu.line
   method usage -> @HelpMenu.usage
   method section -> @HelpMenu.section
   method row -> @HelpMenu.row
@@ -181,6 +183,14 @@ function HelpMenu.header(this: HelpMenu, version: string, summary: string): void
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: summary version
+  calls: HelpMenu.title nish_array_grow
+  pointer this: size=40 writesThrough=false captured=false passedTo=HelpMenu.title#0
+  stackSites=0 stackLocals=0
+  callee -1:5 HelpMenu.title -> @HelpMenu.title
+function HelpMenu.title(this: HelpMenu, version: string, summary: string): void -> @HelpMenu.title [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: summary version
   calls: Style.dim Style.name nish_array_grow nish_str_concat
   pointer this: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -188,6 +198,13 @@ function HelpMenu.header(this: HelpMenu, version: string, summary: string): void
   callee +0:24 Style.name -> @Style.name
   callee +0:52 Style.dim -> @Style.dim
   callee +0:75 Style.dim -> @Style.dim
+function HelpMenu.line(this: HelpMenu, text: string): void -> @HelpMenu.line [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: text
+  calls: nish_array_grow
+  pointer this: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function HelpMenu.usage(this: HelpMenu, shape: string, description: string): void -> @HelpMenu.usage [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

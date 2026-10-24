@@ -973,7 +973,10 @@ row's description starts at and the column a usage line's starts at. Add
 lines in order: `header(version, summary)`, `usage(shape, description)` (the
 first one says `usage:`, the rest line up under it), `section(title)`,
 `row(flag, placeholder, description)`, `note(text)` for a line of prose and
-`value(text)` for a path or value to copy. An empty placeholder or
+`value(text)` for a path or value to copy. `title(version, summary)` is
+`header` without its blank line after, and `line(text)` adds a line exactly
+as given, so a menu can put a rule or a banner under its title (paint it with
+the same `Style`, and keep it to the menu's width). An empty placeholder or
 description is left out. A flag too long for its column keeps two spaces
 before its description. `text()` answers the whole menu. Columns are counted
 in bytes, so they line up for ASCII text.
