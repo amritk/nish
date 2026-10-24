@@ -88,10 +88,11 @@ cond.end:
   ret i32 %27
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!18, !19, !20, !21, !22}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -110,3 +111,8 @@ attributes #2 = { alwaysinline nounwind willreturn allocsize(0) }
 !15 = !{!14, !13, i64 0}
 !16 = !{!"element ptr", !6, i64 0}
 !17 = !{!16, !16, i64 0}
+!18 = !{i32 8, !"cf-protection-branch", i32 1}
+!19 = !{i32 8, !"cf-protection-return", i32 1}
+!20 = !{i32 8, !"branch-target-enforcement", i32 1}
+!21 = !{i32 8, !"sign-return-address", i32 1}
+!22 = !{i32 4, !"probe-stack", !"inline-asm"}

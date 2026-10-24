@@ -154,3 +154,34 @@ export const targetHeader = (target: Target): string[] => {
   lines.push(`target triple = "${target.triple}"`)
   return lines
 }
+
+/**
+ * The `!llvm.module.flags` entries that harden a native module, written as
+ * clang 18 writes them for `-fcf-protection=full`, `-mbranch-protection=standard`
+ * and `-fstack-clash-protection`. `scripts/build.sh` compiles the runtime with
+ * those flags; the program's IR has to say the same, because the linker keeps
+ * the IBT/SHSTK or BTI/PAC property note only when every object has it, and an
+ * LTO link merges these entries by taking the smaller value. The module stays
+ * target-neutral, so it carries both machines' entries and each backend reads
+ * its own: x86-64 the `cf-protection` pair, arm64 the branch-protection pair.
+ * `guarded-control-stack` is left out — whether a binary may opt into arm64's
+ * shadow stack is the runtime's and libc's to say, not each program's.
+ * A wasm32 module has no machine stack to protect and gets none.
+ */
+export const hardeningModuleFlags = (): string[] => [
+  '!{i32 8, !"cf-protection-branch", i32 1}',
+  '!{i32 8, !"cf-protection-return", i32 1}',
+  '!{i32 8, !"branch-target-enforcement", i32 1}',
+  '!{i32 8, !"sign-return-address", i32 1}',
+  '!{i32 4, !"probe-stack", !"inline-asm"}',
+]
+
+/**
+ * The function attribute every native definition carries. The `probe-stack`
+ * module flag is enough for arm64, but x86-64 probes a frame only when its
+ * function says so, and a frame here can pass a page: `src/escape.ts` puts
+ * arrays of up to 4096 bytes on the stack, several to a function. Probing each
+ * page as the frame grows is what keeps a large frame from stepping over the
+ * guard page below a thread's stack.
+ */
+export const HARDENING_ATTRS: string = '"probe-stack"="inline-asm"'

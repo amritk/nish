@@ -320,6 +320,19 @@ const malformed = (t: Suite): void => {
   pushI16(minus, 1);
   pushI32(minus, -2);
   t.eqStr("a column length of -2", feed(inGroup(), msg("D", minus)), frame);
+  const top: u8[] = [];
+  pushI16(top, 1);
+  pushI32(top, -2147483647 - 1);
+  // Past the row whether the length is read signed or unsigned; "a row with a
+  // NULL" below pins the signed read, as -1 read unsigned is a frame error.
+  t.eqStr("a column length of -2^31, past the row either way", feed(inGroup(), msg("D", cat(top, z("abc")))), frame);
+  const high: u8[] = [];
+  pushI16(high, 1);
+  pushI32(high, 16777216 + 3);
+  t.eqStr("a column length whose high byte is set", feed(inGroup(), msg("D", cat(high, z("abc")))), frame);
+  const huge: u8[] = [toU8(83)];
+  pushI32(huge, -2147483647 - 1);
+  t.eqStr("a message length with its top bit set", feed(open(config()), huge), frame);
   const desc: u8[] = [];
   pushI16(desc, 1);
   t.eqStr("a RowDescription field cut short", feed(inGroup(), msg("T", cat(desc, z("id|abc")))), frame);
@@ -589,6 +602,10 @@ const results = (t: Suite): void => {
   t.eqStr("columnText", conn.columnText(0), "-17");
   t.eqI32("colLength", conn.colLength(0), 3);
   t.eqI32("colStart points into the input buffer", toI32(conn.inputBuffer()[conn.colStart(1)]), 116);
+  const long: string = nines(258);
+  t.eqStr("a column of 258 bytes, its length in two bytes", feed(conn, row([long, "t"], [])), `${PG_ROW}`);
+  t.eqI32("its length", conn.colLength(0), 258);
+  t.ok("the next column follows it", conn.bool(1));
   t.eqStr("a row with a NULL", feed(conn, row(["", "f"], [true, false])), `${PG_ROW}`);
   t.ok("isNull", conn.isNull(0) && !conn.isNull(1));
   t.eqStr("columnText of NULL", conn.columnText(0), "");
@@ -847,6 +864,13 @@ const timestamps = (t: Suite): void => {
   t.eqStr("seven fraction digits", ts(p, "2024-01-02 03:04:05.1234567", 0), "failed");
   t.eqStr("a dot without digits", ts(p, "2024-01-02 03:04:05.+00", 0), "failed");
   t.eqStr("a T where the space goes", ts(p, "2024-01-02T03:04:05", 0), "failed");
+  t.eqStr("year 0001", ts(p, "0001-01-01 00:00:00", 0), "0001-01-01T00:00:00.000Z");
+  t.eqStr("year 1000", ts(p, "1000-01-01 00:00:00", 0), "1000-01-01T00:00:00.000Z");
+  t.eqStr("a letter in a digit's place", ts(p, "2024-0a-02 03:04:05", 0), "failed");
+  t.eqStr("a colon in a digit's place", ts(p, "2024-01-02 03:0::05", 0), "failed");
+  t.eqStr("a digit in a separator's place", ts(p, "2024-01-02 03:04505", 0), "failed");
+  t.eqStr("a separator moved one place", ts(p, "202-401-02 03:04:05", 0), "failed");
+  t.eqStr("the space and a dash swapped", ts(p, "2024 01-02-03:04:05", 0), "failed");
   t.eqStr("no room in out", ts(p, "2024-01-02 03:04:05", 7), "failed");
 };
 

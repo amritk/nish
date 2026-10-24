@@ -211,13 +211,13 @@ ovf.fail:
   unreachable
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind noreturn cold }
-attributes #3 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 !llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!2, !3}
+!llvm.module.flags = !{!2, !3, !131, !132, !133, !134, !135}
 !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "nish <version>", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/dbg_locals.ts", directory: ".")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
@@ -349,3 +349,8 @@ attributes #3 = { nounwind willreturn readnone }
 !128 = !DILocation(line: 35, column: 16, scope: !85)
 !129 = !DILocation(line: 37, column: 3, scope: !85)
 !130 = !DILocation(line: 37, column: 10, scope: !85)
+!131 = !{i32 8, !"cf-protection-branch", i32 1}
+!132 = !{i32 8, !"cf-protection-return", i32 1}
+!133 = !{i32 8, !"branch-target-enforcement", i32 1}
+!134 = !{i32 8, !"sign-return-address", i32 1}
+!135 = !{i32 4, !"probe-stack", !"inline-asm"}
