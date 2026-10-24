@@ -61,6 +61,7 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--deny", "<cap>[,<cap>...]", "refuse a program that reaches these")
   menu.row("--sandbox[=best-effort]", "", "confine a Linux binary to what main reaches")
   menu.row("--emit-capabilities", "<file.json>", "write the capability report")
+  menu.row("--update-capability-lock", "", "record what each dependency reaches")
 
   menu.section("Interop")
   menu.row("--emit-header", "<file.h>", "a C header for the exports")

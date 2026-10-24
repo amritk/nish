@@ -114,7 +114,6 @@ const RUNTIME_C = [
   "runtime/runtime-aes.c",
   "runtime/runtime-term.c",
   "runtime/runtime-bytes.c",
-  "runtime/runtime-sandbox.c",
 ]
 const DRIVER_C = path.join(root, "tests", "driver.c")
 
@@ -246,8 +245,8 @@ const discover = (dir) => {
 /** Spawn without blocking: `{ status, signal, stdout, stderr, timedOut }`, the output as Buffers. */
 const run = (cmd, args, opts = {}) =>
   new Promise((resolve) => {
-    // `timeout` stays out of spawn's options: there Node arms its own timer,
-    // which sends SIGTERM first and can leave `timedOut` unset.
+    // The bound is this timer's alone: handed to spawn too, Node's own SIGTERM
+    // races the SIGKILL below and a hang reads as `SIGTERM`, not `timeout`.
     const { timeout, ...spawnOpts } = opts
     const child = spawn(cmd, args, {
       cwd: root,

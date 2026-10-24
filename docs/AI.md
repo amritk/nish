@@ -2566,6 +2566,20 @@ most 100 pairs. (No block, as for `nish/text`; `tests/link/std_url` is its
 program, and the user guide's [standard-library
 page](guide/using-nish/standard-library.md#nishneturl) its walk-through.)
 
+**Draw to the whole terminal** (a game, a dashboard) — there is no curses and
+no `process.stdout.on("resize")`: `runTerminal(options, state, update, render)`
+from `nish/term-io` opens the terminal, probes what it can draw, steps
+`update(state, input)` at `options.stepsPerSecond` and calls
+`render(state, frame)` only when the link to the terminal has room, then
+leaves the terminal as it was, even on a panic. Draw cells on `frame.screen`
+or pixels on `frame.framebuffer` (sized by `options.framebufferWidth` and
+`framebufferHeight`) and never pick a backend: kitty graphics, Sixel, half
+blocks or ASCII is chosen from the probe and the measured link. It answers
+`Err` with one sentence on a pipe, so test the `Result`; it reaches `tty`.
+`NISH_TERM_GRAPHICS` and `NISH_TERM_FPS` override what it picked. (No block,
+as for `nish/text`; `examples/term-probe.ts` is its program, and the user
+guide's [terminal page](guide/using-nish/terminal.md) its walk-through.)
+
 **Shared behaviour over several shapes** — there is no inheritance and no
 dispatch. Give each class the interface's fields **first**, `implements` it,
 and write a free function over the interface:

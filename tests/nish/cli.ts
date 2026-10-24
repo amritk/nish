@@ -127,6 +127,7 @@ const advertisedFlags = (): string[] => [
   "--capabilities",
   "--allow",
   "--deny",
+  "--update-capability-lock",
   "run [flags] <file.ts> [args ...]",
 ];
 
@@ -863,6 +864,18 @@ const checkCapabilityPolicy = (t: Suite, cli: Cli, env: boolean): void => {
   t.eqI32("--deny with --emit-ast exits 2", ast.status, 2);
   const fix = cli.plain("policy_fix", [source, "--allow", "fs.read", "--fix"]);
   t.eqI32("--allow with --fix exits 2", fix.status, 2);
+  // WP40: the lockfile flag is refused beside `--fix` as the policy flags are,
+  // and a dependency reaching what its lockfile row does not record is NL2577.
+  const lockFix = cli.plain("lock_fix", [source, "--update-capability-lock", "--fix"]);
+  t.eqI32("--update-capability-lock with --fix exits 2", lockFix.status, 2);
+  const grown = cli.plain("lock_growth", ["tests/link/caps_lock_growth/main.ts", "--json", "-o", `${WORK}/lock_growth/`]);
+  if (t.eqI32("a dependency that outgrows its lockfile row exits 1", grown.status, 1)) {
+    const objects = cliObjectLines(grown.stdout);
+    if (t.eqI32("with one object under --json", toI32(objects.length), 1)) {
+      t.eqStr("whose code is the lockfile's", cliField(objects[0], "code"), "NL2577");
+      t.contains("and whose message names the capability", cliField(objects[0], "message"), "reaches `net`");
+    }
+  }
 
   const plainIr = `${WORK}/policy_plain.ll`;
   const grantedIr = `${WORK}/policy_granted.ll`;

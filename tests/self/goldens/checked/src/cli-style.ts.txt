@@ -41,39 +41,40 @@ function helpText(style: Style, guide: string): string -> @helpText [exported]
   callee +26:3 HelpMenu.row -> @HelpMenu.row
   callee +27:3 HelpMenu.row -> @HelpMenu.row
   callee +28:3 HelpMenu.row -> @HelpMenu.row
-  callee +30:3 HelpMenu.section -> @HelpMenu.section
-  callee +31:3 HelpMenu.row -> @HelpMenu.row
+  callee +29:3 HelpMenu.row -> @HelpMenu.row
+  callee +31:3 HelpMenu.section -> @HelpMenu.section
   callee +32:3 HelpMenu.row -> @HelpMenu.row
   callee +33:3 HelpMenu.row -> @HelpMenu.row
   callee +34:3 HelpMenu.row -> @HelpMenu.row
   callee +35:3 HelpMenu.row -> @HelpMenu.row
-  callee +37:3 HelpMenu.section -> @HelpMenu.section
-  callee +38:3 HelpMenu.row -> @HelpMenu.row
+  callee +36:3 HelpMenu.row -> @HelpMenu.row
+  callee +38:3 HelpMenu.section -> @HelpMenu.section
   callee +39:3 HelpMenu.row -> @HelpMenu.row
   callee +40:3 HelpMenu.row -> @HelpMenu.row
   callee +41:3 HelpMenu.row -> @HelpMenu.row
-  callee +43:3 HelpMenu.section -> @HelpMenu.section
-  callee +44:3 HelpMenu.row -> @HelpMenu.row
+  callee +42:3 HelpMenu.row -> @HelpMenu.row
+  callee +44:3 HelpMenu.section -> @HelpMenu.section
   callee +45:3 HelpMenu.row -> @HelpMenu.row
   callee +46:3 HelpMenu.row -> @HelpMenu.row
   callee +47:3 HelpMenu.row -> @HelpMenu.row
   callee +48:3 HelpMenu.row -> @HelpMenu.row
   callee +49:3 HelpMenu.row -> @HelpMenu.row
   callee +50:3 HelpMenu.row -> @HelpMenu.row
-  callee +53:5 HelpMenu.section -> @HelpMenu.section
-  callee +54:5 HelpMenu.note -> @HelpMenu.note
-  callee +55:5 HelpMenu.value -> @HelpMenu.value
-  callee +56:5 HelpMenu.row -> @HelpMenu.row
+  callee +51:3 HelpMenu.row -> @HelpMenu.row
+  callee +54:5 HelpMenu.section -> @HelpMenu.section
+  callee +55:5 HelpMenu.note -> @HelpMenu.note
+  callee +56:5 HelpMenu.value -> @HelpMenu.value
   callee +57:5 HelpMenu.row -> @HelpMenu.row
   callee +58:5 HelpMenu.row -> @HelpMenu.row
-  callee +61:3 HelpMenu.section -> @HelpMenu.section
-  callee +62:3 HelpMenu.note -> @HelpMenu.note
-  callee +64:3 HelpMenu.section -> @HelpMenu.section
-  callee +65:3 HelpMenu.row -> @HelpMenu.row
+  callee +59:5 HelpMenu.row -> @HelpMenu.row
+  callee +62:3 HelpMenu.section -> @HelpMenu.section
+  callee +63:3 HelpMenu.note -> @HelpMenu.note
+  callee +65:3 HelpMenu.section -> @HelpMenu.section
   callee +66:3 HelpMenu.row -> @HelpMenu.row
   callee +67:3 HelpMenu.row -> @HelpMenu.row
   callee +68:3 HelpMenu.row -> @HelpMenu.row
-  callee +69:10 HelpMenu.text -> @HelpMenu.text
+  callee +69:3 HelpMenu.row -> @HelpMenu.row
+  callee +70:10 HelpMenu.text -> @HelpMenu.text
 function helpHint(): string -> @helpHint [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_concat

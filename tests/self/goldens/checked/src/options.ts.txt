@@ -36,6 +36,7 @@ struct Options (class) size=168 align=8 exported
   field denyCapabilities: i32 index=30 offset=152
   field sandbox: i32 index=31 offset=156
   field sandboxCapabilities: i32 index=32 offset=160
+  field updateCapabilityLock: boolean index=33 offset=164
   constructor -> @Options.constructor
   method recordsPanics -> @Options.recordsPanics
 function Options.constructor(this: Options): void -> @Options.constructor [exported constructor]

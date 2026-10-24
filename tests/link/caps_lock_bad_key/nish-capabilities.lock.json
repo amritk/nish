@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "packages": {
+    "pkg_http": ["net"]
+  },
+  "comment": "reviewed"
+}

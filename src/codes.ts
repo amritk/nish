@@ -49,7 +49,7 @@ export const INTERNAL: string = "NL0003"
  * @public Number of rules that carry a code. Nothing in the compiler reads it;
  * `scripts/gen-diagnostic-codes.mjs --check` holds it to the tables' length.
  */
-export const RULE_COUNT: i32 = 714
+export const RULE_COUNT: i32 = 716
 
 /**
  * Fragment, code, fragment, code -- flat because the language has no tuple, and
@@ -367,6 +367,8 @@ const diagnosticRules = (): string[] => [
   "NL2565",
   "--emit-ts cannot yet write signalFd, readSignal or nish:net, whose translation is not local to its statement (wp33 §3.5)",
   "NL4011",
+  "that names each dependency once with an array of the capabilities it reaches; rewrite it with `--update-capability-lock`",
+  "NL3043",
   "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)",
   "NL4010",
   "` was moved into another `Secret` local and cannot be read again: one key has one owner, which is the one that wipes it",
@@ -511,6 +513,8 @@ const diagnosticRules = (): string[] => [
   "NL3009",
   "` cannot take a union as a type argument: in this version a union is the type of a local, ",
   "NL2533",
+  "` does not record for it; review the chain, then record it with `--update-capability-lock`",
+  "NL2577",
   "` exceeds 2^53 and cannot be written exactly (the parser already rounded it); compute the ",
   "NL2054",
   "` is rebuilt from its own value on every iteration of this loop, so every pass copies all ",
@@ -732,7 +736,7 @@ const diagnosticRules = (): string[] => [
   " (an override keeps the signature; there is no overloading)",
   "NL2001",
   " has no Landlock and no seccomp, so build without --sandbox",
-  "NL3043",
+  "NL3044",
   ", and a declared C function returns a scalar or `CPtr` only",
   "NL2321",
   "`, which the root package does not grant it; grant it with ",

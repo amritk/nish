@@ -22704,6 +22704,20 @@ tests/link/caps_dep_net_refused/node_modules/pkg_http/src/index.ts:6:10: error: 
 `tests/run.js` compiles the program and holds the block above to what the
 compiler prints.
 
+The capability lockfile is judged on the same report too, after both policies
+(`docs/LANGUAGE.md` -> The capability policy -> The capability lockfile), and
+it changes no byte of the IR either. `tests/link/caps_lock_growth` grants
+`pkg_http` its `net`, but its `nish-capabilities.lock.json` records an empty
+row for it, so the build is refused where the dependency refusal above is, with
+the same chain:
+
+<!-- capabilities-refusal caps_lock_growth -->
+```text
+tests/link/caps_lock_growth/node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it; review the chain, then record it with `--update-capability-lock` — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+  6 |   return netAddress(addr, "127.0.0.1", port) >= 0 && tcpConnect(addr) >= 0;
+    |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
 ### `--sandbox`: a call before `main`, and one in it
 
 `--sandbox` is the one capability flag that lowers (`docs/LANGUAGE.md` ->

@@ -9263,6 +9263,51 @@ node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reache
   JSON, and a grant to a package the program does not load is no error
   (`caps_dep_manifest_unsafe`, `_escaped_name`, `_unloaded`).
 
+##### The capability lockfile
+
+`--update-capability-lock` writes `nish-capabilities.lock.json` beside the
+nearest `package.json` above the entry (beside the entry when there is none),
+recording every capability each dependency reaches, gated or not. While the
+file exists, every build is held to it:
+
+```json
+{
+  "version": 1,
+  "packages": {
+    "pkg_http": ["net"]
+  }
+}
+```
+
+A dependency that reaches a capability its row does not record is refused
+(NL2577), in the dependency, with the same witness chain as NL2576:
+
+```text
+node_modules/pkg_http/src/index.ts:6:10: error: the dependency `pkg_http` reaches `net` through `dial`, which `nish-capabilities.lock.json` does not record for it; review the chain, then record it with `--update-capability-lock` — the chain that reaches it: node_modules/pkg_http/src/index.ts:6:10 calls netAddress
+```
+
+- Only growth is an error. A row that records more than the dependency
+  reaches, or a row for a package the program no longer loads, is accepted
+  (`tests/link/caps_lock_shrink`, `caps_lock_stale`); a dependency with no row
+  is held to an empty one (`caps_lock_no_row`, `caps_lock_no_row_pure`). One
+  error per package and capability, in NL2576's order (`caps_lock_growth`).
+- The comparison runs after both policies: a build the root's policy or the
+  dependency grants refuse is refused by them, and `--update-capability-lock`
+  on it writes nothing (`caps_lock_refused`). The flag skips the comparison and
+  rewrites the file, even a malformed one.
+- The file is byte-stable: packages sorted, capabilities in the fixed order of
+  the report, two-space indentation, one trailing newline, `[]` for a package
+  that reaches nothing. Neither the standard library nor the root package has
+  a row.
+- It is read strictly: text that is not JSON, a `version` other than `1`, a key
+  other than `version` and `packages`, a name that is no capability, and a key
+  or capability written twice are NL3043, spanned in the lockfile
+  (`caps_lock_bad_json`, `_version`, `_key`, `_capability`, `_repeated`).
+- The lockfile changes no byte of the IR. `nish run` takes the flag, and checks
+  the program against the file before it looks in its cache, so the file is not
+  part of the cache key and a cache hit is held to it too. `--fix` and
+  `--emit-ast` refuse the flag.
+
 #### The sandbox
 
 `--sandbox` holds a running native program to the capabilities its `main`
@@ -9333,8 +9378,8 @@ entry:
   both, naming what it could not withhold (without Landlock, files are not
   confined at all). Neither mode refuses a kernel without `IOCTL_DEV` (ABI 5)
   or the signal and socket scopes (ABI 6); best-effort names them.
-- **Targets.** A darwin target, given or the host's, is refused (NL3043,
-  `tests/wordings/nl3043_sandbox_darwin`). The wasm targets accept the flag
+- **Targets.** A darwin target, given or the host's, is refused (NL3044,
+  `tests/wordings/nl3044_sandbox_darwin`). The wasm targets accept the flag
   and emit no call, since the host already holds a module to its imports;
   `--profile wasm` refuses IR built with `--sandbox` for the host. A `.ll`
   built with `--sandbox` and linked on a platform other than Linux refuses to

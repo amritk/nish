@@ -232,6 +232,11 @@ export class Options {
    * through. Set by `Compilation.emit` from the facts it computes anyway.
    */
   sandboxCapabilities: i32
+  /**
+   * WP40: `--update-capability-lock` computes the capability lockfile instead
+   * of holding the build to it (`Compilation.checkCapabilityLock`).
+   */
+  updateCapabilityLock: boolean
 
   constructor() {
     this.numberMode = NUMBER_MODE_I32
@@ -267,6 +272,7 @@ export class Options {
     this.denyCapabilities = 0
     this.sandbox = 0
     this.sandboxCapabilities = 0
+    this.updateCapabilityLock = false
   }
 
   /**

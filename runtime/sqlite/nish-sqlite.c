@@ -345,8 +345,11 @@ const char *nishsqlite_column_text(int32_t h, int32_t c) {
 int32_t nishsqlite_column_into(int32_t h, int32_t c, uint8_t *buf, uint64_t n, int32_t at) {
   sqlite3_stmt *st = stmt_of(h);
   if (st == NULL || at < 0 || (uint64_t)at > n) return -SQLITE_MISUSE;
-  if (c < 0 || c >= sqlite3_column_count(st)) return -SQLITE_RANGE;
-  if (sqlite3_data_count(st) == 0) return 0;
+  /* With a row current sqlite3_data_count is the column count, so the row's
+   * path asks SQLite once where it would ask twice. */
+  int32_t cols = sqlite3_data_count(st);
+  if (cols == 0) return c < 0 || c >= sqlite3_column_count(st) ? -SQLITE_RANGE : 0;
+  if (c < 0 || c >= cols) return -SQLITE_RANGE;
   int type = sqlite3_column_type(st, c);
   const void *p = type == SQLITE_BLOB ? sqlite3_column_blob(st, c) : (const void *)sqlite3_column_text(st, c);
   if (p == NULL && type != SQLITE_NULL && type != SQLITE_BLOB) return -SQLITE_NOMEM;
