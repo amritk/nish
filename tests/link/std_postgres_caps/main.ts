@@ -1,7 +1,11 @@
-// Pins what `nish/net/postgres` reaches: no capability at all. The module is
-// sans-IO and the program owns the socket, so building a connection, framing
-// its startup message and reading from it compile under `args`, which denies
-// every capability; the nonce is the program's to draw. The whole
+// Pins that a program using `nish/net/postgres` needs no capability: the
+// module is sans-IO and the program owns the socket, so building a
+// connection, framing its startup message and reading from it compile under
+// `args`, which denies every capability; the nonce is the program's to draw.
+// This program reaches only the constructor, `outputEnd`, `next` and
+// `dispose`; the rest of the module is held to the same deny list by
+// `link/std_postgres`, whose `args` carry it, and by `link/std_postgres_replay`,
+// whose `args` allow only `fs.read`, for its recordings. The whole
 // `--emit-capabilities` report is not pinned: it names each of the module's
 // panic sites by line, so it would move with every edit to it.
 import { PG_NEED_MORE, PgConfig, PgConnection } from "nish/net/postgres";

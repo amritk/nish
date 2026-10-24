@@ -25,6 +25,8 @@ PASS  ReadyForQuery with no group in flight
 PASS  a row with no group in flight
 PASS  an ERROR with no group in flight
 PASS  an unknown message
+PASS  a CopyInResponse
+PASS  a CopyOutResponse
 PASS  ReadyForQuery for a group not yet synced
 PASS  a notification is ignored
 PASS  an error without its terminator
@@ -45,6 +47,8 @@ PASS  a RowDescription field cut short
 PASS  a row over maxColumns
 PASS  MD5 is refused
 PASS  cleartext is refused
+PASS  GSS is refused
+PASS  SSPI is refused
 PASS  SASL without SCRAM-SHA-256
 PASS  a SASL list without its end
 PASS  SASLContinue before SASL
@@ -181,6 +185,11 @@ PASS  unsent bytes count against maxOutput
 PASS  a send past half the buffer moves the rest to its start
 PASS  all of it
 PASS  whose last bytes are the Describe
+PASS  a message that ends the buffer exactly
+PASS  keeps the sent bytes before it
+PASS  Sync after it
+PASS  moves the unsent bytes to the start too
+PASS  rather than double the buffer
 PASS  an open Bind is not yet sendable
 PASS  a parameter that would pass maxOutput is refused
 PASS  a smaller one fits
@@ -251,4 +260,4 @@ PASS  text after a quote
 PASS  a space unquoted
 PASS  a window too short
 PASS  stays bad
-postgres: 253 passed, 0 failed, 0 skipped
+postgres: 262 passed, 0 failed, 0 skipped

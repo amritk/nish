@@ -411,8 +411,10 @@ Signed `+ - *` became a checked panic after this record was written
 branch, on a secret when the operands are secret. So the constant-time code
 does its arithmetic where nothing is checked: secret sums and products in
 `u32` or `u64`, which wrap by definition and have the bits the old signed
-arithmetic had wherever it did not overflow — `base64urlRangeMask` and
-`x509RangeMask`, the character maps beside them, and x25519's limbs through
+arithmetic had wherever it did not overflow — `base64urlRangeMask`, which
+both base64 alphabets' character maps in `std/crypto/base64url.ts` share
+(x509's own copy, `x509RangeMask`, went when its padded base64 moved there),
+those maps, and x25519's limbs through
 `f25519Add64`, `f25519Sub64` and `f25519Mul64`, whose bounds the module
 already proves in its comments — and the public offsets of the loads and
 stores the fixtures read (`at + k`) in `u32` too, so that a fixture compiled

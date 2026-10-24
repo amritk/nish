@@ -176,7 +176,9 @@ room. Send what is queued and call `sent(n)`, and the room comes back.
 
 In a group that fails, `PG_DESCRIBED` still comes once for each `prepare` the
 server parsed before the error: count them to know which statements exist (a
-named one outlives its group) and which to prepare again.
+named one outlives its group) and which to prepare again. The connection does
+not track names: a second `prepare("x")` while `x` exists fails its group with
+SQLSTATE `42P05`, so keep names unique or `closeStatement` first.
 
 ## Authentication
 
@@ -213,7 +215,7 @@ otherwise the server refuses it.
 | `7` | `PG_ERR_SERVER` | a `FATAL` error, or any error before `PG_READY`; `lastError` has it |
 | `8` | `PG_ERR_ENCODING` | a `client_encoding` other than `UTF8` |
 | `9` | `PG_ERR_CLOSED` | you called `closed()`: the stream ended |
-| `10` | `PG_ERR_SETTING` | a `DateStyle` that does not begin `ISO`, or a `TimeZone` other than `UTC`, at startup or after a `SET` |
+| `10` | `PG_ERR_SETTING` | a `DateStyle` that is not `ISO` alone or `ISO` then a comma (`ISO, MDY`), or a `TimeZone` other than `UTC`, at startup or after a `SET` |
 
 The connection asks for `DateStyle=ISO` and `TimeZone=UTC` at startup, so that
 `conn.text.timestamp` reads the time the server means; a session that changes
@@ -232,3 +234,9 @@ bytes is a mistake in the program, and the constructor panics.
 TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query
 cancellation, binary-format results and the simple query protocol. A pool is a
 program's own: an array of connections and the loop above.
+
+It does not insist on authentication: a server that answers
+`AuthenticationOk` without asking for a password is believed, as
+`libpq` does without `require_auth`. `conn.text.timestamp` checks a
+timestamp's shape and year but not its month, day or time, which it takes on
+the server's word.

@@ -184,7 +184,8 @@ const PG_NONCE_BYTES: i32 = 18
 // take: kept free under `maxOutput` by every other builder call, so that
 // `bindEnd()` and `sync()` are never refused for room.
 const PG_TAIL: i32 = 17
-// The largest `maxMessage` and `maxOutput`: a buffer doubles up to one past them.
+// The largest `maxMessage` and `maxOutput`. The input buffer doubles up to one
+// past them; the output buffer doubles only while twice its size fits in an i32.
 const PG_MAX_CAP: i32 = 1073741823
 // The largest `maxIterations`: the count is read digit by digit, times ten, in an i32.
 const PG_MAX_ITERATIONS: i32 = 214748363
@@ -1454,6 +1455,17 @@ export class PgConnection {
     return true
   }
 
+  /**
+   * Makes room for the `size` bytes of a tail message (`bindEnd`, `sync`,
+   * `terminate`) the way `room` does for the rest, so that the buffer is not
+   * grown past `maxOutput` while sent bytes still fill its start.
+   */
+  private tailRoom(size: i32): void {
+    if (this.outStart > 0 && this.outEnd + size > toI32(this.out.length)) {
+      this.compactOutput()
+    }
+  }
+
   /** Moves the unsent output to the start of the buffer, the open bind's offsets with it. */
   private compactOutput(): void {
     const shift: i32 = this.outStart
@@ -1475,7 +1487,7 @@ export class PgConnection {
     if (want <= size) {
       return
     }
-    const grown: u8[] = new Array<u8>(want < 2 * size ? 2 * size : want)
+    const grown: u8[] = new Array<u8>(size <= PG_MAX_CAP && want < 2 * size ? 2 * size : want)
     grown.set(this.out, 0)
     this.out = grown
   }
@@ -1752,10 +1764,11 @@ export class PgConnection {
    * room, which the calls before it kept.
    */
   bindEnd(): boolean {
-    const at: i32 = this.bindAt
-    if (at < 0) {
+    if (this.bindAt < 0) {
       return false
     }
+    this.tailRoom(PG_TAIL)
+    const at: i32 = this.bindAt
     setU16BE(this.out, this.paramCountAt, toU16(this.paramCount))
     this.putI16(PG_ZERO)
     this.endMessage(at)
@@ -1773,6 +1786,7 @@ export class PgConnection {
       return false
     }
     this.groupOpen = false
+    this.tailRoom(5)
     const at: i32 = this.startMessage(PG_FE_SYNC)
     this.endMessage(at)
     return true
@@ -1784,6 +1798,7 @@ export class PgConnection {
       this.outEnd = this.bindAt
       this.bindAt = -1
     }
+    this.tailRoom(5)
     const at: i32 = this.startMessage(PG_FE_TERMINATE)
     this.endMessage(at)
   }

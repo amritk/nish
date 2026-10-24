@@ -280,6 +280,8 @@ const unexpected = (t: Suite): void => {
   t.eqStr("a row with no group in flight", feed(ready(config()), row(["1"], [])), `failed:${PG_ERR_UNEXPECTED}`);
   t.eqStr("an ERROR with no group in flight", feed(ready(config()), msg("E", z("VERROR|C42601|Mbad||"))), `failed:${PG_ERR_UNEXPECTED}`);
   t.eqStr("an unknown message", feed(inGroup(), msg("W", [])), `failed:${PG_ERR_UNEXPECTED}`);
+  t.eqStr("a CopyInResponse", feed(inGroup(), msg("G", [0, 0, 0])), `failed:${PG_ERR_UNEXPECTED}`);
+  t.eqStr("a CopyOutResponse", feed(inGroup(), msg("H", [0, 0, 0])), `failed:${PG_ERR_UNEXPECTED}`);
   const open1 = ready(config());
   open1.prepare("", "select 1", none());
   drain(open1);
@@ -356,6 +358,8 @@ const final = (serverFinal: string): string => {
 const auths = (t: Suite): void => {
   t.eqStr("MD5 is refused", feed(open(config()), auth(5, z("salt"))), `failed:${PG_ERR_AUTH_UNSUPPORTED}`);
   t.eqStr("cleartext is refused", feed(open(config()), auth(3, [])), `failed:${PG_ERR_AUTH_UNSUPPORTED}`);
+  t.eqStr("GSS is refused", feed(open(config()), auth(7, [])), `failed:${PG_ERR_AUTH_UNSUPPORTED}`);
+  t.eqStr("SSPI is refused", feed(open(config()), auth(9, [])), `failed:${PG_ERR_AUTH_UNSUPPORTED}`);
   t.eqStr(
     "SASL without SCRAM-SHA-256",
     feed(open(config()), auth(10, z("SCRAM-SHA-256-PLUS||"))),
@@ -671,6 +675,15 @@ const output = (t: Suite): void => {
   t.eqI32("a send past half the buffer moves the rest to its start", conn.outputStart(), 0);
   t.eqI32("all of it", conn.outputEnd(), 237);
   t.ok("whose last bytes are the Describe", same(conn.outputBuffer(), 230, [toU8(68), toU8(0), toU8(0), toU8(0), toU8(6), toU8(83), toU8(0)]));
+
+  drain(conn);
+  conn.prepare("", repeat("t", 991), none());
+  conn.sent(300);
+  t.ok("a message that ends the buffer exactly", conn.prepare("", "t", none()));
+  t.eqI32("keeps the sent bytes before it", conn.outputEnd(), 1024);
+  t.ok("Sync after it", conn.sync());
+  t.eqI32("moves the unsent bytes to the start too", conn.outputStart(), 0);
+  t.eqI32("rather than double the buffer", toI32(conn.outputBuffer().length), 1024);
 
   const binding = ready(c);
   binding.prepare("q", "select $1", none());

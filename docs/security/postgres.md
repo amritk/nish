@@ -80,7 +80,7 @@ first review of this module and fixed before it merged.
 | PG-10 | Low | `authenticate` | A server may answer `AuthenticationOk` at once (`trust`), and the client takes it: a program cannot insist on SCRAM, so an attacker that can answer as the server skips authentication. | **Accepted.** Without TLS the attacker of PG-9 wins anyway; a `requireAuth` setting belongs with TLS. |
 | PG-11 | Low | `authenticate` | MD5 and cleartext passwords are refused with `PG_ERR_AUTH_UNSUPPORTED`, so a role whose password is MD5-hashed cannot connect. | **Accepted.** Without TLS cleartext sends the password as it is, and an MD5 response is a hash anyone who sees it can replay; SCRAM-SHA-256 is PostgreSQL's default since 14. `nish/crypto/md5` is therefore not written. |
 | PG-12 | Low | `pgScramKeys`, `pgSha256Wiped` | `sha256(clientKey)`, the one-shot that made StoredKey, left a hasher whose state and block had absorbed ClientKey, which is password-equivalent for that server. | **Fixed.** StoredKey is computed by `pgSha256Wiped`, a hasher of its own whose `state`, `block` and `schedule` are wiped before it returns, as `HmacSha256.digest` does for its two. Not observable from outside (the hasher is a local); the wipes are read in the source. |
-| PG-13 | Low | the builders, `sent`, the output reservation | The output buffer doubled without a cap and was compacted only once fully drained, so a program that queued faster than it sent grew it without bound, toward an `i32` offset's end. The program is trusted, so this is Low. | **Fixed.** `maxOutput` (1 MiB by default) caps the bytes queued unsent: a builder call that would pass it answers false and writes nothing, the room for `Sync` and `Terminate` is kept free under it, and the sent prefix is moved off the front once more than half the buffer is gone. "a prepare that would pass maxOutput is refused", "a parameter that would pass maxOutput is refused", "unsent bytes count against maxOutput", "a send past half the buffer moves the rest to its start". |
+| PG-13 | Low | the builders, `sent`, the output reservation | The output buffer doubled without a cap and was compacted only once fully drained, so a program that queued faster than it sent grew it without bound, toward an `i32` offset's end. The program is trusted, so this is Low. | **Fixed.** `maxOutput` (1 MiB by default) caps the bytes queued unsent: a builder call that would pass it answers false and writes nothing, the room for `Sync` and `Terminate` is kept free under it, and the sent prefix is moved off the front once more than half the buffer is gone, or before any message, `bindEnd`'s, `Sync` and `Terminate` included, that would otherwise grow the buffer past its end; the buffer doubles only while twice its length fits in an `i32`. "a prepare that would pass maxOutput is refused", "a parameter that would pass maxOutput is refused", "unsent bytes count against maxOutput", "a send past half the buffer moves the rest to its start", "rather than double the buffer". |
 
 `keys`, the 64 bytes `pgScramKeys` answers, the proof taken from it and the
 server signature kept for the final message are none of them secret (the
@@ -94,7 +94,10 @@ A panic is for the program's own mistakes, never for a server's bytes:
 
 | Where | When | Test |
 | --- | --- | --- |
-| constructor | a nonce shorter than 18 bytes, an empty `user`, a startup parameter with a NUL, or a cap out of range (`maxMessage` or `maxOutput` under 1024 or over 2^30 − 1, `maxColumns` outside 1..65535, `maxInFlight` under 1, `minIterations` under 1 or over `maxIterations`, `maxIterations` over 214,748,363) | `link/std_postgres_config_panic` (`maxOutput` of 1023, after 1024 is taken) |
+| constructor | a nonce shorter than 18 bytes | `link/std_postgres_nonce_panic` (17 bytes, after 18 are taken) |
+| constructor | an empty `user` | `link/std_postgres_user_panic` (after a one-letter user is taken) |
+| constructor | a startup parameter with a NUL | `link/std_postgres_nul_panic` (a NUL in `database`, after one without is taken) |
+| constructor | a cap out of range: `maxMessage` or `maxOutput` under 1024 or over 2^30 − 1, `maxColumns` outside 1..65535, `maxInFlight` under 1, `minIterations` under 1 or over `maxIterations`, `maxIterations` over 214,748,363 | `link/std_postgres_config_panic` covers `maxOutput` of 1023, after 1024 is taken; the other bounds share its condition and are not tested one by one |
 | `received` | a count past `inputRoom()` | — |
 | `receive` | a window outside its source | `link/std_postgres_receive_panic` |
 | `sent` | a count past the bytes queued | — |
@@ -104,6 +107,27 @@ A panic is for the program's own mistakes, never for a server's bytes:
 The builder calls do not panic: `param*` and `bindEnd` with no bind open
 answer false and write nothing ("paramText without a bind is refused" and the
 lines after it), as does `paramBytes` on a window outside its array.
+
+## Limits
+
+Edges of the module a caller owns, recorded so that no one assumes otherwise:
+
+- **A server that skips authentication is believed.** An `AuthenticationOk`
+  in place of a SASL request is taken; there is no `require_auth`
+  equivalent (PG-10).
+- **`maxInFlight` has no upper bound.** It is the program's own cap on groups
+  sent and unanswered; the bytes they hold are bounded by `maxOutput`.
+- **Named statements are not tracked.** A second `prepare("x")` before the
+  first is closed is sent, and the server answers the group with `42P05`;
+  the caller keeps names unique.
+- **Timestamps are checked for shape, not range.** `PgText.timestamp`
+  checks the ISO digits and separators, the year (0001–9999) and the offset,
+  but not the month, day or time: `2024-99-99` passes into its RFC 3339
+  output. The values are the server's, and trusted as such.
+- **The output buffer's doubling is bounded by `maxOutput`.** Every message
+  first makes room by moving the unsent bytes to the front (PG-13), so the
+  buffer grows past its length only when the unsent bytes need it, and never
+  past twice `maxOutput` (at most 2^31 − 2, inside an `i32`).
 
 ## Properties verified
 
@@ -115,14 +139,19 @@ byte for byte. Exchanges recorded from PostgreSQL 18 by
 pieces, by `link/std_postgres_replay: exits with 0 and stdout matches
 expected.out`.
 
-**No backend bytes make the client panic or read past them** (PG-1, PG-2):
+**No backend bytes make the client panic** (PG-1, PG-2):
 the replay cuts every recording at every byte offset, feeds what is left and
 calls `closed()`, and pins the failure code each cut ends on ("every
 recording cut at every offset"); then 4000 mutants drawn from a fixed seed
 (xorshift32, a bit flipped, a byte inserted or deleted, or the bytes cut)
 are replayed, each must end `PG_FAILED` with a code from 1 to 10, and the
 count of each code and a checksum over codes and logs are pinned ("fuzz: the
-seed's mutants, by the code they ended with").
+seed's mutants, by the code they ended with"). The end-state check cannot
+fail on its own, since `closed()` always leaves `PG_FAILED`; what fails is a
+panic, which ends the run, or a moved count or checksum. That a field is
+never read past its message's end, rather than merely inside the buffer,
+rests on the targeted negatives under "Fields inside a message" below, not on
+the fuzz.
 
 **Framing** (PG-1): "a length under 4 is a framing failure", "a failed
 connection stays failed", "a message over maxMessage is refused before it is

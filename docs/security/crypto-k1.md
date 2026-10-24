@@ -13,7 +13,7 @@ is `main` at `882857d`.
 | `std/crypto/hmac.ts` | `HmacSha256`, `HmacSha384`, `hmacSha256`, `hmacSha384`, `hmacSha256Verify`, `hmacSha384Verify`, `hmacPadBlock`; added since (#868): `pbkdf2HmacSha256` and the private `pbkdf2HmacSha256Exposed` and `pbkdf2Finish`, see "Addendum: PBKDF2-HMAC-SHA256 (#868)" |
 | `std/crypto/hkdf.ts` | `hkdfExtractSha256/384`, `hkdfExpandSha256/384`, `hkdfSalt`, `hkdfAppend`; added since (#668): `hkdfExpandLabelSha256Held/384Held` and `hkdfExpandLabelHeldInto`, which read a held PRK only inside `exposeWith`, derive into a fresh plain buffer, copy it into the held `dst` (or the caller's plain window) and `wipe` it, counted after `opt -O2` by `tests/wipes/crypto.js` ("crypto: the wipes survive opt -O2 (the plain output of each derivation into a held Secret in HKDF, the TLS schedule and record layer, and QUIC)"); test `crypto_held_derive` |
 | `std/crypto/ct.ts` | `timingSafeEqual`, `timingSafeEqualAt` |
-| `std/crypto/base64url.ts` | `base64urlEncode`, `base64urlDecode`, and the maps `base64urlRangeMask`, `base64urlCharOf`, `base64urlSextetOf` |
+| `std/crypto/base64url.ts` | `base64urlEncode`, `base64urlDecode`, and the maps `base64urlRangeMask`, `base64urlCharOf`, `base64urlSextetOf`; the padded standard alphabet that PEM and SCRAM use, `base64Encode` and `base64Decode`, and its maps `base64CharOf`, `base64SextetOf` (moved here from `std/crypto/x509.ts`) |
 
 Callers outside this stage (`std/crypto/p256.ts`, `std/crypto/x509.ts`) were
 read only to see which entry points they reach. They use `sha256()`,
