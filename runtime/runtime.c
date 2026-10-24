@@ -41,6 +41,25 @@ int __main_argc_argv(int argc, char **argv) { return nish_c_main(argc, argv); }
 
 #define NISH_COLD __attribute__((noreturn, cold, noinline))
 
+/* ---- AddressSanitizer build (`-DNISH_ASAN`, tests/differential/asan.js)
+   A bump arena hides every overflow from ASan: one 64 KB malloc holds many
+   blocks, so a read past one block lands in the next and nothing is poisoned.
+   Under `NISH_ASAN` each arena block is a malloc of its own (`nish_asan_alloc`,
+   which asan.js also points compiled code's inline bump at), so a read one past
+   it hits ASan's redzone; the bytes the 8-byte rounding adds, an array's spare
+   capacity and an array's block left behind by growth are poisoned by hand.
+   Off, the macro is empty and the file compiles to the same object code it
+   always did. What it cannot see: a `pop` leaves the popped element
+   addressable below `cap` (the pop is inline IR), and a string's NUL is one
+   addressable byte past its `length`. `nish_arena_used` reads differently
+   under ASan, since every block is a chunk of its own. */
+#ifdef NISH_ASAN
+#include <sanitizer/asan_interface.h>
+#define NISH_POISON(p, n) __asan_poison_memory_region((p), (n))
+#else
+#define NISH_POISON(p, n) ((void)0)
+#endif
+
 /* ---- Thread-local state (WP20 T0)
    The arena and the RNG seed are the only mutable process-wide objects here,
    and both are a data race the moment a second thread runs compiled code. With
@@ -117,16 +136,23 @@ static inline void nish_panic_claim(void) {}
 #endif
 
 /* How a panic that skips atexit ends: `_exit(1)`, after `nish_fatal_hook` when
-   it is set. `setRawMode(true)` (runtime-term.c) sets the hook to its restore,
-   and without it a failed bounds check would leave the shell in raw mode. Each
+   it is set. `setRawMode(true)` and `setTerminalRestore` (runtime-term.c) set
+   the hook to the terminal's restore, and without it a failed bounds check
+   would leave the shell in raw mode. Each
    panic path calls this where it called `_exit(1)`, so a call site costs no
    more than it did; `exit(1)` paths need nothing, since the restore is also an
-   atexit handler. */
+   atexit handler. Built with `-DNISH_FUZZ_ABORT` (scripts/fuzz.sh), this and
+   `nish_panic` end in `abort()` instead, so libFuzzer records a panic, a failed
+   bounds or division check and an out-of-memory as a crash; the default build
+   compiles neither. */
 __attribute__((noreturn)) void nish_fatal_exit(void);
 void (*nish_fatal_hook)(void);
 void nish_fatal_exit(void) {
   void (*hook)(void) = __atomic_load_n(&nish_fatal_hook, __ATOMIC_ACQUIRE);
   if (hook) hook();
+#ifdef NISH_FUZZ_ABORT
+  abort();
+#endif
   _exit(1);
 }
 
@@ -150,7 +176,13 @@ static NISH_COLD void nish_oom(void) { nish_die("nish: out of memory\n"); }
 
 /* Slow path (size 8-byte rounded): push a chunk (>= 64 KB), bump from it. */
 void *nish_arena_grow(uint64_t size) {
+#ifdef NISH_ASAN
+  /* An exact chunk leaves off == cap, so the inline bump never fits again and
+     every block comes through here: one malloc, one redzone, per block. */
+  uint64_t cap = size;
+#else
   uint64_t cap = size > 65536 ? size : 65536;
+#endif
   /* A 64-bit request cannot always be asked for: wasm32's `size_t` is 32 bits,
      and malloc would silently take the low half of a chunk nobody can address. */
   if (cap > (uint64_t)(SIZE_MAX - sizeof(nish_chunk))) nish_oom();
@@ -165,8 +197,22 @@ void *nish_arena_grow(uint64_t size) {
   return nish_arena.buf;
 }
 
+#ifdef NISH_ASAN
+/* An instrumented program's every arena block: an exact chunk, so the inline
+   bump never fits again, with the bytes the rounding adds poisoned. */
+void *nish_asan_alloc(uint64_t size) {
+  uint64_t rounded = (size + 7) & ~(uint64_t)7;
+  char *p = nish_arena_grow(rounded);
+  NISH_POISON(p + size, rounded - size);
+  return p;
+}
+#endif
+
 /* Bump allocation, 8-byte rounded/aligned, uninitialised; the compiler inlines it. */
 void *nish_alloc_struct(uint64_t size) {
+#ifdef NISH_ASAN
+  return nish_asan_alloc(size);
+#endif
   size = (size + 7) & ~(uint64_t)7;
   if (nish_arena.off + size <= nish_arena.cap) {
     void *p = nish_arena.buf + nish_arena.off;
@@ -176,12 +222,91 @@ void *nish_alloc_struct(uint64_t size) {
   return nish_arena_grow(size);
 }
 
+#ifdef NISH_ASAN
+/* The capacity a normal build would give each array `nish_array_grow` grew.
+   `cap` stays `len + 1`, since the push writes `data[len]` inline and spare
+   capacity would be addressable, but growing one slot at a time copies the
+   whole array on every push. So a block is allocated at the capacity a normal
+   build would choose, its tail poisoned, and each later grow of the same array
+   unpoisons one more slot in place until that capacity is used up. The block
+   then moves at exactly the push where a normal build reallocates, so a
+   pointer kept across that push reads poison.
+   The table is keyed by the grown block and loses an entry only when that
+   block dies: the grow that moves it, or `nish_free_until` freeing its chunk
+   (every ASan block is a chunk of its own). It is one table for every thread,
+   behind a spin lock, so an array grown on one thread and pushed on another
+   still hits. A miss is therefore an array no grow has moved yet, whose `cap`
+   is the one a normal build gave it, so the block never moves late. Open
+   addressing, linear probes, a tombstone for a dead entry, rebuilt at half
+   full. */
+#define NISH_GROWN_DEAD ((char *)1)
+static struct nish_grown { char *data; const void *owner; uint64_t native; } *nish_grown;
+static uint64_t nish_grown_cap, nish_grown_used, nish_grown_live; /* used = live + tombstones */
+static int nish_grown_lock;
+
+static void nish_grown_enter(void) {
+  while (__atomic_exchange_n(&nish_grown_lock, 1, __ATOMIC_ACQUIRE)) {}
+}
+static void nish_grown_leave(void) { __atomic_store_n(&nish_grown_lock, 0, __ATOMIC_RELEASE); }
+
+static uint64_t nish_grown_hash(const char *data) {
+  return ((uintptr_t)data * 0x9E3779B97F4A7C15ull >> 32) & (nish_grown_cap - 1);
+}
+
+static struct nish_grown *nish_grown_find(const char *data) {
+  if (!nish_grown_cap || !data) return 0;
+  for (uint64_t i = nish_grown_hash(data);; i = (i + 1) & (nish_grown_cap - 1)) {
+    if (nish_grown[i].data == data) return &nish_grown[i];
+    if (!nish_grown[i].data) return 0;
+  }
+}
+
+static void nish_grown_drop(const char *data) {
+  struct nish_grown *g = nish_grown_find(data);
+  if (g) g->data = NISH_GROWN_DEAD, nish_grown_live--;
+}
+
+static void nish_grown_put(char *data, const void *owner, uint64_t native) {
+  if ((nish_grown_used + 1) * 2 > nish_grown_cap) {
+    struct nish_grown *old = nish_grown;
+    uint64_t n = nish_grown_cap, cap = 64;
+    while (cap < (nish_grown_live + 1) * 4) cap *= 2;
+    nish_grown = calloc(cap, sizeof *nish_grown);
+    if (!nish_grown) nish_oom();
+    nish_grown_cap = cap, nish_grown_used = nish_grown_live = 0;
+    for (uint64_t i = 0; i < n; i++)
+      if (old[i].data > NISH_GROWN_DEAD) nish_grown_put(old[i].data, old[i].owner, old[i].native);
+    free(old);
+  }
+  uint64_t i = nish_grown_hash(data);
+  while (nish_grown[i].data > NISH_GROWN_DEAD) i = (i + 1) & (nish_grown_cap - 1);
+  if (!nish_grown[i].data) nish_grown_used++;
+  nish_grown[i] = (struct nish_grown){ data, owner, native };
+  nish_grown_live++;
+}
+#endif
+#ifdef NISH_ASAN
+void nish_free_arena(void);
+#endif
 static void nish_free_until(nish_chunk *c, const nish_chunk *end) {
+#ifdef NISH_ASAN
+  /* A freed block's address comes back from malloc: forget the grown ones. */
+  if (nish_grown_live) {
+    nish_grown_enter();
+    for (nish_chunk *d = c; d != end; d = d->next) nish_grown_drop((char *)(d + 1));
+    nish_grown_leave();
+  }
+#endif
   while (c != end) { nish_chunk *n = c->next; free(c); c = n; }
 }
 
 /* O(1) recycle: keep the newest chunk, free the rest. */
 void nish_reset_arena(void) {
+#ifdef NISH_ASAN
+  /* Free everything, so a value read after the reset is a use after free. */
+  nish_free_arena();
+  return;
+#endif
   nish_chunk *keep = nish_arena.chunks;
   if (!keep) return;
   nish_free_until(keep->next, 0);
@@ -363,6 +488,9 @@ void nish_print(const nish_str *s) { nish_write(s, 1, 1); }
 __attribute__((noreturn)) void nish_panic(const nish_str *s) {
   nish_panic_claim();
   nish_write(s, 2, 1);
+#ifdef NISH_FUZZ_ABORT
+  abort();
+#endif
   exit(1);
 }
 
@@ -1234,10 +1362,18 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
    this first. */
 nish_array *nish_argv;
 
+/* The key of every `Map` and `Set` string hash (docs/security/json.md, JSON-13):
+   SipHash-1-3's 128 bits, zero until the constructor each module that hashes
+   a string registers fills it from `getentropy` before `main`. Data, not code,
+   so it costs this file's `.text` budget nothing, and not NISH_TLS, for the
+   reason `nish_argv` is not: it is written once before any thread exists, and
+   a table one thread fills is probed by another under the same key. */
+uint64_t nish_hash_key[2];
+
 void nish_argv_init(int32_t argc, char **argv) {
   nish_array *a = malloc(sizeof *a + argc * sizeof(nish_str *));
-  nish_str **d = (nish_str **)(a + 1);
   if (!a) nish_oom();
+  nish_str **d = (nish_str **)(a + 1);
   *a = (nish_array){ argc, argc, (char *)d };
   nish_argv = a;
   while (argc-- > 0) {
@@ -1288,13 +1424,46 @@ double nish_parse_number(const nish_str *s, int32_t mode) {
  * line, every one of those rows runs fewer instructions than it did before, and
  * the call costs nothing on a path that runs once per doubling. */
 __attribute__((noinline)) void nish_array_grow(nish_array *a, uint64_t elem_size) {
+#ifdef NISH_ASAN
+  /* One more slot, not double (see `nish_grown`): in place while a normal build
+     would still have room, moved where it would reallocate. */
+  uint64_t native = a->cap, cap = a->len + 1;
+  nish_grown_enter();
+  struct nish_grown *g = nish_grown_find(a->data);
+  if (g && g->owner == a) native = g->native;
+  else g = 0;
+  if (g && cap <= native) {
+    nish_grown_leave();
+    __asan_unpoison_memory_region(a->data + a->len * elem_size, elem_size);
+    a->cap = cap;
+    return;
+  }
+  uint64_t room = native ? native * 2 : 4;
+  if (room > NISH_ARRAY_MAX) room = NISH_ARRAY_MAX;
+#else
   uint64_t cap = a->cap ? a->cap * 2 : 4;
+#endif
   if (cap > NISH_ARRAY_MAX) {
     if (a->len >= NISH_ARRAY_MAX) nish_oom();
     cap = NISH_ARRAY_MAX;
   }
+#ifdef NISH_ASAN
+  if (room < cap) room = cap;
+  char *data = nish_alloc_struct(room * elem_size);
+  NISH_POISON(data + cap * elem_size, (room - cap) * elem_size);
+#else
   char *data = nish_alloc_struct(cap * elem_size);
+#endif
   if (a->len) memcpy(data, a->data, a->len * elem_size);
+#ifdef NISH_ASAN
+  /* The old block is dead: a pointer kept across the push now reads poison.
+     Only a heap block, as a literal's may be on the stack or a constant. */
+  const char *kind = a->cap ? __asan_locate_address(a->data, 0, 0, 0, 0) : 0;
+  if (kind && !strcmp(kind, "heap")) NISH_POISON(a->data, (g ? native : a->cap) * elem_size);
+  if (g) nish_grown_drop(a->data);
+  nish_grown_put(data, a, room);
+  nish_grown_leave();
+#endif
   a->data = data;
   a->cap = cap;
 }

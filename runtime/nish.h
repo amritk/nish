@@ -162,12 +162,15 @@ int64_t nish_str_index_of_any(const nish_str *s, const nish_str *set, int64_t fr
    newline, carriage return) and `skip_digits` over 0-9. `skip_json_text` steps
    over printable ASCII other than `"` and `\`, and over every well-formed
    UTF-8 sequence (RFC 3629) that ends at or before `to`; a malformed or cut-off
-   sequence stops the run at its lead byte. They live in runtime/runtime-bytes.c
-   and choose their path as `nish_str_index_of_any` does. Variable-time: never
-   call them on a secret. */
+   sequence stops the run at its lead byte. `skip_json_plain` steps over every
+   byte from 0x20 up other than `"` and `\` -- what a JSON writer copies without
+   an escape -- with no UTF-8 check. They live in runtime/runtime-bytes.c and
+   choose their path as `nish_str_index_of_any` does. Variable-time: never call
+   them on a secret. */
 int64_t nish_bytes_skip_blank(const uint8_t *p, int64_t from, int64_t to);
 int64_t nish_bytes_skip_digits(const uint8_t *p, int64_t from, int64_t to);
 int64_t nish_bytes_skip_json_text(const uint8_t *p, int64_t from, int64_t to);
+int64_t nish_bytes_skip_json_plain(const uint8_t *p, int64_t from, int64_t to);
 /* `console.log(s)`: one write(2) of the bytes plus a newline to stdout. */
 void nish_print(const nish_str *s);
 /* `console.error` and the newline-free `write` / `writeError`: fd 1 or 2. */
@@ -186,7 +189,9 @@ void nish_panic_claim(void);
 #endif
 /* How a panic that skips atexit ends: `_exit(1)`, after `nish_fatal_hook`
    when it is set (runtime.c). The hook is the terminal's restore while
-   `setRawMode(true)` holds (runtime-term.c), and null otherwise. */
+   `setRawMode(true)` holds or `setTerminalRestore` bytes wait
+   (runtime-term.c), and null otherwise. Under `-DNISH_FUZZ_ABORT`
+   (scripts/fuzz.sh) it and `nish_panic` call `abort()`. */
 __attribute__((noreturn)) void nish_fatal_exit(void);
 extern void (*nish_fatal_hook)(void);
 /* Number to string, as `${n}` does: decimal for integers, shortest round-trip (JS Number#toString) for f64. */
@@ -281,7 +286,10 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
  * `nish_array_grow`, `nish_alloc_array` and `nish_str_concat` fail as an
  * allocation does (`nish: out of memory`, exit 1; a trap on wasm) rather than
  * make one, because under --number-mode i32 its `length` would read back
- * negative (docs/security/codegen.md K1-6, docs/security/runtime.md RT-2). */
+ * negative (docs/security/codegen.md K1-6, docs/security/runtime.md RT-2).
+ * A host that hands an array in keeps the same bound: the N-API shim refuses a
+ * longer typed array, and a C host must not pass a `len` past it
+ * (docs/security/bytes.md, BYTES-1). */
 /* The cold paths compiled code calls: `push` when len == cap, a failed bounds
  * check. `nish_array_grow` moves `cap * elem_size` bytes into a fresh arena
  * block and writes `data`/`cap`, so for a record element type it relocates the
@@ -347,6 +355,13 @@ void nish_panic_slice(int64_t start, int64_t end, int64_t len);
  * without an entry point cannot read `process.argv` (compile error). */
 extern nish_array *nish_argv;
 void nish_argv_init(int32_t argc, char **argv);
+
+/* The 128-bit SipHash-1-3 key of every `Map` and `Set` string hash
+ * (docs/security/json.md, JSON-13). A constructor the compiled module
+ * registers fills it from `getentropy` before `main`, once per process, and
+ * sets bit 0 of word 0 so a filled key is never all zero; nothing writes it
+ * afterwards. A host must not change it while any table exists. */
+extern uint64_t nish_hash_key[2];
 
 /* ---- Directories and subprocesses (WP14 D4) -----------------------------
  * The calls a self-hosted driver needs to find its inputs and link its own
@@ -586,12 +601,18 @@ int32_t nish_poll_wait(int32_t loop, nish_array *ready, int32_t timeout_ms);
  * the saved termios comes back on `false`, at exit, on a panic and on every
  * signal left at its default that ends the program, SIGKILL aside (the list is
  * runtime-term.c's). -11 and -25 are those
- * numbers on WASI too, where the three TTY calls answer "not a terminal". */
+ * numbers on WASI too, where the three TTY calls answer "not a terminal".
+ * `nish_set_terminal_restore(bytes)`: keeps up to `NISH_TERM_RESTORE_MAX`
+ * bytes to write to stdout, once, at exit, on a panic and on each of those
+ * signals, before the termios comes back; "" keeps none. 0, -7 past the cap,
+ * -25 when stdout is not a terminal (always, for bytes, on WASI). */
+#define NISH_TERM_RESTORE_MAX 4096
 int32_t nish_read_stdin(nish_array *buf, int64_t off, int64_t len);
 bool nish_wait_stdin(int32_t timeout_ms);
 bool nish_is_terminal(int32_t fd);
 nish_array *nish_terminal_size(void);
 int32_t nish_set_raw_mode(bool on);
+int32_t nish_set_terminal_restore(const nish_str *bytes);
 
 /* String to number (WP7), ASCII whitespace only. mode 0 is `parseFloat`
  * (longest JS decimal literal or `Infinity`, else NaN), mode 1 is `Number`

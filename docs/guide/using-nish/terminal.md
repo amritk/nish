@@ -1,14 +1,232 @@
-# Terminal input
+# Terminal programs
 
-`nish:term` lets a program read keys the moment they are pressed. That is what
-a full-screen terminal program needs: an editor, a menu, or a game that has to
-redraw many times a second. It has five functions:
+A full-screen terminal program — a game, an editor, a dashboard — reads keys
+the moment they are pressed and redraws many times a second. Nish gives it two
+layers:
+
+- [`nish/term-io`](#a-frame-loop), in the standard library, is the whole
+  loop. It opens the terminal, finds out what it can draw, runs your program
+  at a fixed step, sends as many frames as the terminal and the link to it
+  can take, and leaves the terminal as it found it however the program ends.
+- [`nish:term`](#nishterm-underneath) is what it is built on: six functions
+  that read stdin without waiting, set raw mode and say how big the terminal
+  is.
+
+Start with the first. Reach for the second when you want a loop of your own.
+
+## A frame loop
+
+`runTerminal(options, state, update, render)` runs a program. `update` is
+called a fixed number of times a second (`options.stepsPerSecond`, 60) with
+the events since the last step, and answers `false` to stop. `render` is
+called whenever a frame may go out, and draws into the frame's `screen` (text
+cells) and `framebuffer` (pixels, when the options ask for one). This program
+bounces a square across the screen until you press `q`:
+
+```ts nish:ok
+import { ACTION_PRESS, ATTR_NONE, COLOR_DEFAULT, EVENT_KEY, KEY_CHAR } from "nish/term";
+import { Frame, TermInput, defaultTerminalOptions, runTerminal } from "nish/term-io";
+
+class Ball {
+  x: i32 = 0;
+  dx: i32 = 1;
+}
+
+const update = (b: Ball, input: TermInput): boolean => {
+  for (const e of input.events) {
+    if (e.type === EVENT_KEY && e.action === ACTION_PRESS && e.key === KEY_CHAR && e.code === 113) {
+      return false; // q
+    }
+  }
+  if (b.x + b.dx < 0 || b.x + b.dx > 80) {
+    b.dx = -b.dx;
+  }
+  b.x = b.x + b.dx;
+  return true;
+};
+
+const render = (b: Ball, frame: Frame): void => {
+  frame.framebuffer.fill(0x102040);
+  for (let y = 40; y < 50; y++) {
+    for (let x = b.x; x < b.x + 10; x++) {
+      frame.framebuffer.set(x, y, 0xffcc00);
+    }
+  }
+  frame.screen.clear(COLOR_DEFAULT);
+  frame.screen.text(0, 0, `${frame.stats.tier} fps`, COLOR_DEFAULT, COLOR_DEFAULT, ATTR_NONE);
+};
+
+export const main = (): i32 => {
+  const options = defaultTerminalOptions();
+  options.framebufferWidth = 90;
+  options.framebufferHeight = 90;
+  const ran = runTerminal(options, new Ball(), update, render);
+  if (ran.isErr()) {
+    writeError(`${ran.error}\n`);
+    return 1;
+  }
+  return 0;
+};
+```
+
+The state is yours: any class, passed to both functions. Because `update`
+runs at a fixed step and `render` only when a frame can go out, the square
+moves at the same speed on a fast terminal and on a slow one; the slow one
+just shows fewer of its positions. `frame.alpha` says how far the clock is
+past the last step, to draw between two positions.
+
+The framebuffer is drawn as large as the screen allows with its shape kept,
+centred, and over the text cells it covers: text under the image is hidden.
+So the example's framebuffer is square, and its label goes at the left edge,
+in the columns the image leaves free. A cell is about twice as tall as it is
+wide, so those columns exist only when the screen has more than twice as many
+columns as rows: a 100×60 terminal has none, and the label is under the image.
+
+`input.events` holds `nish/term`'s `TermEvent`s: keys (with releases, on a
+terminal that has the kitty keyboard protocol), mouse reports when
+`options.mouse` asks for them, pastes, focus changes, and `EVENT_RESIZE` when
+the window changes size, with the screen already resized. `input.isDown(key,
+code)` asks whether a key is held, for movement that lasts as long as the
+key.
+
+The program also stops on Ctrl-C, and the terminal is put back. Without the
+kitty keyboard protocol Ctrl-C is a signal, as it is [in raw
+mode](#raw-mode). With it, Ctrl-C arrives as a key, `KEY_CHAR` with code `99`
+and `MOD_CTRL`, and `options.quitOnCtrlC` (true) makes it stop the loop; set
+it to `false` and that key reaches `update` instead. `KEY_CTRL_C`, the byte
+`3`, never arrives under `runTerminal`.
+
+`runTerminal` answers `Err` with one sentence when it cannot start, and the
+program above prints it, or `Err("stdin ended")` when stdin closes while the
+program runs, after putting the terminal back. A pipe on either side is the
+usual reason it cannot start:
+
+```
+$ ./ball < /dev/null
+stdin is not a terminal (a pipe or CI?)
+```
+
+For a loop of your own, `openTerminal(options)` answers the `Terminal` that
+`runTerminal` drives: `readEvents(waitMs, events)` waits for input and
+decodes it, `present()` sends the screen and framebuffer, `stats()` says how
+the link is doing, and `close()` puts the terminal back (a second `close` does
+nothing).
+
+Under `runTerminal` every reply the terminal sends is taken before `update`
+sees the input, including the answers to a query your program writes itself,
+such as a cursor position report (`CSI 6 n`) or the background colour (OSC
+11): `update` never receives an `EVENT_REPLY`. `readEvents` takes them the
+same way, so under `openTerminal` too the answer is not yours to read. A
+program that needs one asks before it opens the terminal or after it closes
+it, in [raw mode](#raw-mode), and decodes the answer with `nish/term`'s
+`KeyDecoder`.
+
+## Opening and closing
+
+Opening the terminal turns raw mode on, switches to the alternate screen,
+hides the cursor and asks the terminal what it can do (below). Then it turns
+on what the options ask for and the terminal has: the kitty keyboard protocol,
+mouse reports, bracketed paste and focus reports. Before each of those reaches
+the terminal, the bytes that undo everything so far are handed to the runtime
+([`setTerminalRestore`](#leaving-the-screen-as-you-found-it)). So a panic in `render`, a Ctrl-C, or a `kill` leaves the terminal as it
+was, with the cursor back and the screen you started from.
+
+## What it detects, and what it falls back to
+
+The questions go out in one write and the answers come back in a few
+milliseconds; a terminal that answers nothing is given up on after a quarter
+of a second. A key you press while it asks is kept and given to the program
+first. What it finds:
+
+| What | Where it comes from | Without it |
+| --- | --- | --- |
+| Pixels: kitty graphics | the terminal answers a kitty graphics query | sixel |
+| Pixels: sixel | the terminal lists sixel (`4`) in its DA1 answer and reports 256 or more sixel colour registers | half blocks, two pixels to a cell (`▀`) |
+| Pixels: half blocks | any terminal but `TERM=dumb` and the Linux console | ASCII shading |
+| True colour | `COLORTERM=truecolor` or `24bit`, or the terminal reads a 24-bit colour back | text cells in the 256-colour palette; ASCII image shading in 256 colours with `256color` in `TERM`, else 16 |
+| Key releases, Ctrl-C as a key | the kitty keyboard protocol | a key counts as released `options.releaseGapMs` after its last repeat |
+| Tear-free frames | synchronized output (mode 2026) | frames are drawn as they arrive |
+| Mouse in pixels | mode 1016, and the terminal reports its cell size | mouse in cells |
+
+`frame.caps` holds what was found, and `frame.stats.backend` the pixel
+backend in force: `GRAPHICS_ASCII` (0), `GRAPHICS_HALFBLOCK` (1),
+`GRAPHICS_SIXEL` (2) or `GRAPHICS_KITTY` (3), imported from
+`nish/term-pixels`, the same numbers as
+`nish/term-rate`'s `BACKEND_CAP_*`. The Linux console (`TERM=linux`) gets no
+true colour and ASCII, whatever it answers.
+
+Without true colour, text cells are drawn in the 256-colour palette — on the
+Linux console and under `NO_COLOR` too. Only the ASCII backend's shading of
+the image drops to 16 colours there, or wherever `TERM` lacks `256color`.
+
+## How the frame rate adapts
+
+Each frame is followed by a status query, and the terminal's answer says the
+frame has been read. From those answers `nish/term-rate` measures the round
+trip, the bytes a second the link carries and what a frame costs to build, and
+picks a frame rate from 60, 30, 20, 15, 10 and 5 that fits all three with
+room to spare. At most one frame is unanswered at a time, so a slow link
+shows fewer frames instead of a growing backlog, and a key you press is never
+queued behind seconds of drawing. Below `options.minFps` (10), it draws with
+less detail instead: a cheaper pixel backend, a coarser framebuffer, 256
+colours. `options.prefer = DETAIL_FIRST` cuts the rate first; `RATE_FIRST`
+and `DETAIL_FIRST` come from `nish/term-rate`.
+
+It starts at 30 frames a second, or 15 when an `SSH_*` variable says the
+session is remote and the probe's first answer took 5 ms or more, or never
+came; it settles within a few seconds. `frame.stats` shows the numbers;
+`options.overlay` draws them in a corner, one of `nish/term-rate`'s
+`CORNER_TOP_LEFT`, `CORNER_TOP_RIGHT`, `CORNER_BOTTOM_LEFT` and
+`CORNER_BOTTOM_RIGHT`, or `-1`, the default, for none.
+
+**Under SSH and multiplexers the measure is only as good as the answer.**
+tmux and GNU screen answer the status query themselves, so inside them the
+round trip is the multiplexer's, not the terminal's at the end of the link,
+and the rate can come out higher than the outer terminal keeps up with. mosh
+answers on the remote host, so it reads as a fast local link and its own
+limit (about 50 frames a second) does the pacing. Under tmux, kitty graphics
+and sixel work only where tmux passes them through. If a program looks wrong
+there, fix the rate or the backend with the overrides below.
+
+## Overriding it
+
+| Setting | Effect |
+| --- | --- |
+| `options.fixedFps` | a fixed frame rate; the measuring stops choosing |
+| `options.minFps`, `options.maxFps`, `options.allow120` | the range the rate is chosen in (10 to 60; 120 only when allowed) |
+| `options.prefer` | `RATE_FIRST` (cut detail below `minFps`) or `DETAIL_FIRST` (cut the rate first), from `nish/term-rate` |
+| `options.mouse`, `paste`, `focus`, `kittyKeyboard`, `quitOnCtrlC` | what is turned on: mouse `1000` clicks, `1002` drags, `1003` all motion, `0` none |
+| `NO_COLOR` set to anything | no true colour: text in the 256-colour palette, ASCII shading in 16 colours; nothing else changed |
+| `NISH_TERM_GRAPHICS` | `kitty`, `sixel`, `halfblock` or `ascii` instead of what was detected; a pixel backend the terminal did not answer for is refused under a multiplexer, on the Linux console, or when nothing answered |
+| `NISH_TERM_FPS` | a fixed frame rate, over everything else |
+
+The variables are the user's: they let someone running your program fix it
+for their terminal without a rebuild. What each one changed is listed in
+`frame.caps.overrides`, joined by `; `, so a bug report shows it, for example
+`NO_COLOR: 16 colours; NISH_TERM_FPS=20: 20 frames a second`.
+
+## Reporting a terminal that draws wrong
+
+[`examples/term-probe.ts`](../../../examples/term-probe.ts)
+prints everything the probe found, one field a line, and then a line of
+frame-rate measurements every second for five seconds. Run it in the terminal
+that draws wrong and put its output in the bug report:
+
+```
+nish run examples/term-probe.ts
+```
+
+## `nish:term`, underneath
+
+`nish:term` lets a program read keys the moment they are pressed. It has six
+functions:
 
 - `readStdin` reads the bytes that are waiting on stdin;
 - `waitStdin` waits for some to arrive, or for a timeout to pass;
 - `isTerminal` asks whether a descriptor is a terminal;
 - `terminalSize` asks how big the terminal is;
-- `setRawMode` turns off echo and line editing, and turns them back on.
+- `setRawMode` turns off echo and line editing, and turns them back on;
+- `setTerminalRestore` sets the bytes the program leaves the terminal with.
 
 The rules are in the reference, under
 [`nish:term`](../../LANGUAGE.md#nishterm-terminal-input). It reads the
@@ -25,13 +243,14 @@ them says where they come from. A program that calls any of them carries the
 
 The functions that can fail answer a number, in the same shape as
 [`nish:net`](networking.md#errors-are-numbers): zero or more is success, and
-a negative number is a failure. Two of the failures are the same number on
+a negative number is a failure. Three of the failures are the same number on
 every platform, so a program can branch on them:
 
 | Answer | Meaning |
 | --- | --- |
+| `-7` | `setTerminalRestore`: more than 4,096 bytes, checked before the terminal is |
 | `-11` | `readStdin`: nothing is waiting yet |
-| `-25` | not a terminal: a pipe or a file — stdin for `setRawMode`, stdout and stderr both for `terminalSize` |
+| `-25` | not a terminal: a pipe or a file — stdin for `setRawMode`, stdout for `setTerminalRestore`, stdout and stderr both for `terminalSize` |
 
 `terminalSize()` answers a pair, `[columns, rows]`. When there is no terminal
 the first number is the error and the second is `0`, so `[-25, 0]` means "not
@@ -133,6 +352,36 @@ export const main = (): i32 => {
 It also works with a pipe, `printf 'hiq' | ./echo`. `setRawMode(true)` answers
 `-25` there and changes nothing, and the loop reads the piped bytes as keys.
 
+## Leaving the screen as you found it
+
+A full-screen program changes more than the mode: it switches to the
+alternate screen, hides the cursor, maybe turns on mouse reporting. Those are
+escapes it writes itself, and the escapes that undo them have to go out
+however the program ends. `setTerminalRestore(bytes)` hands them to the
+runtime, which writes them once, on the same paths that put raw mode back:
+returning from `main`, `process.exit`, a panic or a crash, Ctrl-C or `kill`.
+It writes them first, then restores the terminal settings.
+
+```ts nish:ok
+import { write } from "nish:io";
+import { setRawMode, setTerminalRestore } from "nish:term";
+
+export const main = (): i32 => {
+  setRawMode(true);
+  // The alternate screen, with the cursor hidden; then the bytes that undo both.
+  write("\u001b[?1049h\u001b[?25l");
+  setTerminalRestore("\u001b[?25h\u001b[?1049l");
+  console.log("drawn on the alternate screen");
+  return 0;
+};
+```
+
+Each call replaces the bytes from the last one, so set them again whenever
+the program turns another mode on, and `setTerminalRestore("")` once it has
+undone them all itself. It answers `0`, `-25` when stdout is not a terminal
+(nothing is kept then), and `-7` for more than 4096 bytes. Ctrl-Z and
+`setRawMode(false)` do not end the program, so they leave the bytes unwritten.
+
 ## The size of the terminal
 
 `terminalSize()` answers a new pair each time you call it. Call it again on
@@ -157,7 +406,7 @@ export const main = (): i32 => {
 `nish:term` works on Linux and macOS. Under WebAssembly (`--profile wasi`)
 there is no terminal: `readStdin` waits for its bytes instead of answering
 `-11`, so call `waitStdin` first, as the loop above does; there it waits at
-least 10 ms, even for `waitStdin(0)`. The other three answer "not a terminal". A freestanding `--target wasm32` build has no stdin
-at all, so the compiler refuses all five there. When a program is run under
-Node, `isTerminal` and `terminalSize` work, and the other three throw; in a
+least 10 ms, even for `waitStdin(0)`. The other four answer "not a terminal". A freestanding `--target wasm32` build has no stdin
+at all, so the compiler refuses all six there. When a program is run under
+Node, `isTerminal` and `terminalSize` work, and the other four throw; in a
 browser the two answer "not a terminal".

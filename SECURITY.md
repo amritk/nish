@@ -87,8 +87,17 @@ The full model for each area is in its record. In summary:
   names, profiles and `-march` targets other than the baseline `clang -O2` the
   check reads, and `wasm32`, where the engine recompiles the module
   ([`docs/LANGUAGE.md`](docs/LANGUAGE.md#constant-time-ctselect-and-cteq)).
-- **Secrets left in memory.** Nothing is wiped yet (ECC-2, X509-7), so an
-  attacker who can already read the process's memory is not in the model.
+- **Secret copies no store can reach.** `nish/crypto` and `nish/net` hold
+  private keys and secret intermediates as a `Secret` from `nish:secret` and
+  zero them with `wipe`, a volatile store `opt -O2` keeps
+  ([`docs/security/secret.md`](docs/security/secret.md); ECC-2, X509-7 and
+  QUIC-1 are closed by it). What no store in the language can name is not
+  wiped: a value the compiler keeps in a register or spills to the stack, the
+  AES-NI and PMULL vector registers (AEAD-4), a buffer a `push` outgrew, an
+  immutable string such as a key's PEM text, arena memory a `release` or
+  `reset` frees without zeroing, and anything a caller copies out. An
+  attacker who can already read the process's memory may find those copies,
+  and is not in the model.
 - **`curl … | sh`**, which runs `install.sh` itself unverified (SC-17,
   accepted). Read `install.sh` and run it from a checkout if that matters
   to you.
@@ -102,18 +111,9 @@ allocation) on attacker input. Low: hardening and documentation drift.
 
 The first audit (#363) went over the repository area by area. Each record
 says what was checked, how, what was found, its severity and what became of
-it, and names the test that pins each property. The index has every area's
-counts and every finding still open:
-**[`docs/security/README.md`](docs/security/README.md)**.
-
-| Area | Record |
-| --- | --- |
-| ChaCha20-Poly1305 and AES-GCM | [`docs/security/crypto-aead.md`](docs/security/crypto-aead.md) |
-| P-256 ECDSA and X25519 | [`docs/security/crypto-ecc.md`](docs/security/crypto-ecc.md) |
-| SHA-2, HMAC, HKDF, constant-time compare, base64url | [`docs/security/crypto-k1.md`](docs/security/crypto-k1.md) |
-| DER, PEM and X.509 | [`docs/security/crypto-x509.md`](docs/security/crypto-x509.md) |
-| The constant-time checks | [`docs/security/ct-verification.md`](docs/security/ct-verification.md) |
-| Bounds-check elimination, emitted attributes, thread rules | [`docs/security/codegen.md`](docs/security/codegen.md) |
-| The C runtime | [`docs/security/runtime.md`](docs/security/runtime.md) |
-| `nish`, `nish run` and its cache | [`docs/security/cli.md`](docs/security/cli.md) |
-| Install, launcher, seed fetch, release workflows | [`docs/security/supply-chain.md`](docs/security/supply-chain.md) |
+it, and names the test that pins each property. The index lists every
+area's record, its counts and every finding still open:
+**[`docs/security/README.md`](docs/security/README.md)**. A new
+attacker-facing module lands with its record, and
+`node scripts/security-scope.mjs` (run by CI) refuses a `std/net`,
+`std/crypto` or `runtime/*.c` file that no record's scope names.

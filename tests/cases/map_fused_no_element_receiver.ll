@@ -7,10 +7,14 @@
 @.str.2 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"array length out of range\00" }, align 8
 @.str.3 = private unnamed_addr constant { i64, [28 x i8] } { i64 27, [28 x i8] c"Map: no entry at this index\00" }, align 8
 @.str.4 = private unnamed_addr constant { i64, [26 x i8] } { i64 25, [26 x i8] c"Map maximum size exceeded\00" }, align 8
-@.str.5 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
+@nish_hash_key = external global [2 x i64], align 8
+@.str.5 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"Map: the system's entropy source failed\00" }, align 8
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.hash.seed, i8* null }]
+@.str.6 = private unnamed_addr constant { i64, [40 x i8] } { i64 39, [40 x i8] c"collections: a probe ran out of buckets\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
+declare i32 @getentropy(i8* noundef, i64 noundef)
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #3
 declare void @nish_free_arena() #2
 declare noundef i64 @nish_arena_mark() #2
@@ -29,6 +33,27 @@ declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.ssub.with.overflow.i32(i32, i32) #1
 declare { i32, i1 } @llvm.smul.with.overflow.i32(i32, i32) #1
 declare { i64, i1 } @llvm.ssub.with.overflow.i64(i64, i64) #1
+
+define internal void @nish.hash.seed() nounwind {
+entry:
+  %k = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  %filled = icmp ne i64 %k, 0
+  br i1 %filled, label %done, label %fill
+fill:
+  %got = call i32 @getentropy(i8* bitcast ([2 x i64]* @nish_hash_key to i8*), i64 16)
+  %failed = icmp ne i32 %got, 0
+  br i1 %failed, label %fail, label %mark
+fail:
+  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.5 to i8*))
+  unreachable
+mark:
+  %w = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  %set = or i64 %w, 1
+  store i64 %set, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  br label %done
+done:
+  ret void
+}
 
 define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #6 {
 entry:
@@ -1087,7 +1112,11 @@ define internal noundef i64 @nish.probeTable$str(%struct.nish_array* noundef non
 entry:
   %h.addr = alloca i32, align 4
   %hash.i = alloca i64, align 8
-  %hash.h = alloca i32, align 4
+  %hash.v0 = alloca i64, align 8
+  %hash.v1 = alloca i64, align 8
+  %hash.v2 = alloca i64, align 8
+  %hash.v3 = alloca i64, align 8
+  %hash.b = alloca i64, align 8
   %fingerprint.addr = alloca i32, align 4
   %bucket.addr = alloca i32, align 4
   %word.addr = alloca i32, align 4
@@ -1095,173 +1124,377 @@ entry:
   %0 = bitcast i8* %key to i64*
   %1 = load i64, i64* %0, align 8
   %2 = getelementptr inbounds i8, i8* %key, i64 8
+  %3 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 0), align 8
+  %4 = load i64, i64* getelementptr inbounds ([2 x i64], [2 x i64]* @nish_hash_key, i64 0, i64 1), align 8
+  %5 = xor i64 %3, 8317987319222330741
+  store i64 %5, i64* %hash.v0, align 8
+  %6 = xor i64 %4, 7237128888997146477
+  store i64 %6, i64* %hash.v1, align 8
+  %7 = xor i64 %3, 7816392313619706465
+  store i64 %7, i64* %hash.v2, align 8
+  %8 = xor i64 %4, 8387220255154660723
+  store i64 %8, i64* %hash.v3, align 8
+  %9 = and i64 %1, -8
   store i64 0, i64* %hash.i, align 8
-  store i32 -2128831035, i32* %hash.h, align 4
   br label %hash.test
 
 hash.test:
-  %3 = load i64, i64* %hash.i, align 8
-  %4 = icmp ult i64 %3, %1
-  br i1 %4, label %hash.byte, label %hash.done
+  %10 = load i64, i64* %hash.i, align 8
+  %11 = icmp ult i64 %10, %9
+  br i1 %11, label %hash.word, label %hash.tail
 
-hash.byte:
-  %5 = getelementptr inbounds i8, i8* %2, i64 %3
-  %6 = load i8, i8* %5
-  %7 = zext i8 %6 to i32
-  %8 = load i32, i32* %hash.h, align 4
-  %9 = xor i32 %8, %7
-  %10 = mul i32 %9, 16777619
-  store i32 %10, i32* %hash.h, align 4
-  %11 = add i64 %3, 1
-  store i64 %11, i64* %hash.i, align 8
+hash.word:
+  %12 = getelementptr inbounds i8, i8* %2, i64 %10
+  %13 = bitcast i8* %12 to i64*
+  %14 = load i64, i64* %13, align 1
+  %15 = load i64, i64* %hash.v3, align 8
+  %16 = xor i64 %15, %14
+  store i64 %16, i64* %hash.v3, align 8
+  %17 = load i64, i64* %hash.v0, align 8
+  %18 = load i64, i64* %hash.v1, align 8
+  %19 = load i64, i64* %hash.v2, align 8
+  %20 = load i64, i64* %hash.v3, align 8
+  %21 = add i64 %17, %18
+  %22 = shl i64 %18, 13
+  %23 = lshr i64 %18, 51
+  %24 = or i64 %22, %23
+  %25 = xor i64 %24, %21
+  %26 = shl i64 %21, 32
+  %27 = lshr i64 %21, 32
+  %28 = or i64 %26, %27
+  %29 = add i64 %19, %20
+  %30 = shl i64 %20, 16
+  %31 = lshr i64 %20, 48
+  %32 = or i64 %30, %31
+  %33 = xor i64 %32, %29
+  %34 = add i64 %28, %33
+  %35 = shl i64 %33, 21
+  %36 = lshr i64 %33, 43
+  %37 = or i64 %35, %36
+  %38 = xor i64 %37, %34
+  %39 = add i64 %29, %25
+  %40 = shl i64 %25, 17
+  %41 = lshr i64 %25, 47
+  %42 = or i64 %40, %41
+  %43 = xor i64 %42, %39
+  %44 = shl i64 %39, 32
+  %45 = lshr i64 %39, 32
+  %46 = or i64 %44, %45
+  store i64 %34, i64* %hash.v0, align 8
+  store i64 %43, i64* %hash.v1, align 8
+  store i64 %46, i64* %hash.v2, align 8
+  store i64 %38, i64* %hash.v3, align 8
+  %47 = xor i64 %34, %14
+  store i64 %47, i64* %hash.v0, align 8
+  %48 = add i64 %10, 8
+  store i64 %48, i64* %hash.i, align 8
   br label %hash.test
 
+hash.tail:
+  %49 = shl i64 %1, 56
+  store i64 %49, i64* %hash.b, align 8
+  br label %hash.more
+
+hash.more:
+  %50 = load i64, i64* %hash.i, align 8
+  %51 = icmp ult i64 %50, %1
+  br i1 %51, label %hash.byte, label %hash.done
+
+hash.byte:
+  %52 = getelementptr inbounds i8, i8* %2, i64 %50
+  %53 = load i8, i8* %52
+  %54 = zext i8 %53 to i64
+  %55 = sub i64 %50, %9
+  %56 = shl i64 %55, 3
+  %57 = load i64, i64* %hash.b, align 8
+  %58 = shl i64 %54, %56
+  %59 = or i64 %57, %58
+  store i64 %59, i64* %hash.b, align 8
+  %60 = add i64 %50, 1
+  store i64 %60, i64* %hash.i, align 8
+  br label %hash.more
+
 hash.done:
-  %12 = load i32, i32* %hash.h, align 4
-  %13 = icmp eq i32 %12, 0
-  %14 = select i1 %13, i32 1, i32 %12
-  store i32 %14, i32* %h.addr, align 4
-  %15 = load i32, i32* %h.addr, align 4
-  %16 = lshr i32 %15, 24
-  store i32 %16, i32* %fingerprint.addr, align 4
-  %17 = load i32, i32* %h.addr, align 4
-  %18 = call i32 @nish.homeBucket(i32 %17, i32 %mask)
-  store i32 %18, i32* %bucket.addr, align 4
-  %19 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0
-  %20 = load i64, i64* %19, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %21 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
-  %22 = load i8*, i8** %21, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %23 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0
-  %24 = load i64, i64* %23, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2
-  %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %27 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 0
-  %28 = load i64, i64* %27, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %29 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 2
-  %30 = load i8*, i8** %29, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %61 = load i64, i64* %hash.b, align 8
+  %62 = load i64, i64* %hash.v3, align 8
+  %63 = xor i64 %62, %61
+  store i64 %63, i64* %hash.v3, align 8
+  %64 = load i64, i64* %hash.v0, align 8
+  %65 = load i64, i64* %hash.v1, align 8
+  %66 = load i64, i64* %hash.v2, align 8
+  %67 = load i64, i64* %hash.v3, align 8
+  %68 = add i64 %64, %65
+  %69 = shl i64 %65, 13
+  %70 = lshr i64 %65, 51
+  %71 = or i64 %69, %70
+  %72 = xor i64 %71, %68
+  %73 = shl i64 %68, 32
+  %74 = lshr i64 %68, 32
+  %75 = or i64 %73, %74
+  %76 = add i64 %66, %67
+  %77 = shl i64 %67, 16
+  %78 = lshr i64 %67, 48
+  %79 = or i64 %77, %78
+  %80 = xor i64 %79, %76
+  %81 = add i64 %75, %80
+  %82 = shl i64 %80, 21
+  %83 = lshr i64 %80, 43
+  %84 = or i64 %82, %83
+  %85 = xor i64 %84, %81
+  %86 = add i64 %76, %72
+  %87 = shl i64 %72, 17
+  %88 = lshr i64 %72, 47
+  %89 = or i64 %87, %88
+  %90 = xor i64 %89, %86
+  %91 = shl i64 %86, 32
+  %92 = lshr i64 %86, 32
+  %93 = or i64 %91, %92
+  store i64 %81, i64* %hash.v0, align 8
+  store i64 %90, i64* %hash.v1, align 8
+  store i64 %93, i64* %hash.v2, align 8
+  store i64 %85, i64* %hash.v3, align 8
+  %94 = xor i64 %81, %61
+  store i64 %94, i64* %hash.v0, align 8
+  %95 = load i64, i64* %hash.v2, align 8
+  %96 = xor i64 %95, 255
+  store i64 %96, i64* %hash.v2, align 8
+  %97 = load i64, i64* %hash.v0, align 8
+  %98 = load i64, i64* %hash.v1, align 8
+  %99 = load i64, i64* %hash.v2, align 8
+  %100 = load i64, i64* %hash.v3, align 8
+  %101 = add i64 %97, %98
+  %102 = shl i64 %98, 13
+  %103 = lshr i64 %98, 51
+  %104 = or i64 %102, %103
+  %105 = xor i64 %104, %101
+  %106 = shl i64 %101, 32
+  %107 = lshr i64 %101, 32
+  %108 = or i64 %106, %107
+  %109 = add i64 %99, %100
+  %110 = shl i64 %100, 16
+  %111 = lshr i64 %100, 48
+  %112 = or i64 %110, %111
+  %113 = xor i64 %112, %109
+  %114 = add i64 %108, %113
+  %115 = shl i64 %113, 21
+  %116 = lshr i64 %113, 43
+  %117 = or i64 %115, %116
+  %118 = xor i64 %117, %114
+  %119 = add i64 %109, %105
+  %120 = shl i64 %105, 17
+  %121 = lshr i64 %105, 47
+  %122 = or i64 %120, %121
+  %123 = xor i64 %122, %119
+  %124 = shl i64 %119, 32
+  %125 = lshr i64 %119, 32
+  %126 = or i64 %124, %125
+  %127 = add i64 %114, %123
+  %128 = shl i64 %123, 13
+  %129 = lshr i64 %123, 51
+  %130 = or i64 %128, %129
+  %131 = xor i64 %130, %127
+  %132 = shl i64 %127, 32
+  %133 = lshr i64 %127, 32
+  %134 = or i64 %132, %133
+  %135 = add i64 %126, %118
+  %136 = shl i64 %118, 16
+  %137 = lshr i64 %118, 48
+  %138 = or i64 %136, %137
+  %139 = xor i64 %138, %135
+  %140 = add i64 %134, %139
+  %141 = shl i64 %139, 21
+  %142 = lshr i64 %139, 43
+  %143 = or i64 %141, %142
+  %144 = xor i64 %143, %140
+  %145 = add i64 %135, %131
+  %146 = shl i64 %131, 17
+  %147 = lshr i64 %131, 47
+  %148 = or i64 %146, %147
+  %149 = xor i64 %148, %145
+  %150 = shl i64 %145, 32
+  %151 = lshr i64 %145, 32
+  %152 = or i64 %150, %151
+  %153 = add i64 %140, %149
+  %154 = shl i64 %149, 13
+  %155 = lshr i64 %149, 51
+  %156 = or i64 %154, %155
+  %157 = xor i64 %156, %153
+  %158 = shl i64 %153, 32
+  %159 = lshr i64 %153, 32
+  %160 = or i64 %158, %159
+  %161 = add i64 %152, %144
+  %162 = shl i64 %144, 16
+  %163 = lshr i64 %144, 48
+  %164 = or i64 %162, %163
+  %165 = xor i64 %164, %161
+  %166 = add i64 %160, %165
+  %167 = shl i64 %165, 21
+  %168 = lshr i64 %165, 43
+  %169 = or i64 %167, %168
+  %170 = xor i64 %169, %166
+  %171 = add i64 %161, %157
+  %172 = shl i64 %157, 17
+  %173 = lshr i64 %157, 47
+  %174 = or i64 %172, %173
+  %175 = xor i64 %174, %171
+  %176 = shl i64 %171, 32
+  %177 = lshr i64 %171, 32
+  %178 = or i64 %176, %177
+  store i64 %166, i64* %hash.v0, align 8
+  store i64 %175, i64* %hash.v1, align 8
+  store i64 %178, i64* %hash.v2, align 8
+  store i64 %170, i64* %hash.v3, align 8
+  %179 = xor i64 %166, %175
+  %180 = xor i64 %178, %170
+  %181 = xor i64 %179, %180
+  %182 = trunc i64 %181 to i32
+  %183 = lshr i64 %181, 32
+  %184 = trunc i64 %183 to i32
+  %185 = xor i32 %182, %184
+  %186 = icmp eq i32 %185, 0
+  %187 = select i1 %186, i32 1, i32 %185
+  store i32 %187, i32* %h.addr, align 4
+  %188 = load i32, i32* %h.addr, align 4
+  %189 = lshr i32 %188, 24
+  store i32 %189, i32* %fingerprint.addr, align 4
+  %190 = load i32, i32* %h.addr, align 4
+  %191 = call i32 @nish.homeBucket(i32 %190, i32 %mask)
+  store i32 %191, i32* %bucket.addr, align 4
+  %192 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 0
+  %193 = load i64, i64* %192, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %194 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %slots, i64 0, i32 2
+  %195 = load i8*, i8** %194, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %196 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 0
+  %197 = load i64, i64* %196, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %198 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %hashes, i64 0, i32 2
+  %199 = load i8*, i8** %198, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %200 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 0
+  %201 = load i64, i64* %200, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %202 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %keys, i64 0, i32 2
+  %203 = load i8*, i8** %202, align 8, !alias.scope !3, !noalias !4, !tbaa !11
   br label %while.cond
 
 while.cond:
-  %31 = load i32, i32* %bucket.addr, align 4
-  %32 = icmp sge i32 %31, 0
-  br i1 %32, label %land.rhs, label %land.end
+  %204 = load i32, i32* %bucket.addr, align 4
+  %205 = icmp sge i32 %204, 0
+  br i1 %205, label %land.rhs, label %land.end
 
 land.rhs:
-  %33 = load i32, i32* %bucket.addr, align 4
-  %34 = sitofp i64 %20 to double
-  %35 = call i32 @llvm.fptosi.sat.i32.f64(double %34)
-  %36 = icmp slt i32 %33, %35
+  %206 = load i32, i32* %bucket.addr, align 4
+  %207 = sitofp i64 %193 to double
+  %208 = call i32 @llvm.fptosi.sat.i32.f64(double %207)
+  %209 = icmp slt i32 %206, %208
   br label %land.end
 
 land.end:
-  %37 = phi i1 [ false, %while.cond ], [ %36, %land.rhs ]
-  br i1 %37, label %while.body, label %while.end
+  %210 = phi i1 [ false, %while.cond ], [ %209, %land.rhs ]
+  br i1 %210, label %while.body, label %while.end
 
 while.body:
-  %38 = load i32, i32* %bucket.addr, align 4
-  %39 = sext i32 %38 to i64
-  %40 = bitcast i8* %22 to i32*
-  %41 = getelementptr inbounds i32, i32* %40, i64 %39
-  %42 = load i32, i32* %41, align 4, !alias.scope !4, !noalias !3, !tbaa !16
-  store i32 %42, i32* %word.addr, align 4
-  %43 = load i32, i32* %word.addr, align 4
-  %44 = icmp eq i32 %43, 0
-  br i1 %44, label %if.then, label %if.end
+  %211 = load i32, i32* %bucket.addr, align 4
+  %212 = sext i32 %211 to i64
+  %213 = bitcast i8* %195 to i32*
+  %214 = getelementptr inbounds i32, i32* %213, i64 %212
+  %215 = load i32, i32* %214, align 4, !alias.scope !4, !noalias !3, !tbaa !16
+  store i32 %215, i32* %word.addr, align 4
+  %216 = load i32, i32* %word.addr, align 4
+  %217 = icmp eq i32 %216, 0
+  br i1 %217, label %if.then, label %if.end
 
 if.then:
-  %45 = load i32, i32* %bucket.addr, align 4
-  %46 = load i32, i32* %h.addr, align 4
-  %47 = tail call i64 @nish.absentAt(i32 %45, i32 %46)
-  ret i64 %47
+  %218 = load i32, i32* %bucket.addr, align 4
+  %219 = load i32, i32* %h.addr, align 4
+  %220 = tail call i64 @nish.absentAt(i32 %218, i32 %219)
+  ret i64 %220
 
 if.end:
-  %48 = load i32, i32* %word.addr, align 4
-  %49 = lshr i32 %48, 24
-  %50 = load i32, i32* %fingerprint.addr, align 4
-  %51 = icmp eq i32 %49, %50
-  br i1 %51, label %if.then.1, label %if.end.1
+  %221 = load i32, i32* %word.addr, align 4
+  %222 = lshr i32 %221, 24
+  %223 = load i32, i32* %fingerprint.addr, align 4
+  %224 = icmp eq i32 %222, %223
+  br i1 %224, label %if.then.1, label %if.end.1
 
 if.then.1:
-  %52 = load i32, i32* %word.addr, align 4
-  %53 = and i32 %52, 16777215
-  %54 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %53, i32 1)
-  %55 = extractvalue { i32, i1 } %54, 0
-  %56 = extractvalue { i32, i1 } %54, 1
-  br i1 %56, label %ovf.fail, label %ovf.ok
+  %225 = load i32, i32* %word.addr, align 4
+  %226 = and i32 %225, 16777215
+  %227 = call { i32, i1 } @llvm.ssub.with.overflow.i32(i32 %226, i32 1)
+  %228 = extractvalue { i32, i1 } %227, 0
+  %229 = extractvalue { i32, i1 } %227, 1
+  br i1 %229, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
-  store i32 %55, i32* %at.addr, align 4
-  %57 = load i32, i32* %at.addr, align 4
-  %58 = icmp sge i32 %57, 0
-  br i1 %58, label %land.rhs.4, label %land.end.4
+  store i32 %228, i32* %at.addr, align 4
+  %230 = load i32, i32* %at.addr, align 4
+  %231 = icmp sge i32 %230, 0
+  br i1 %231, label %land.rhs.4, label %land.end.4
 
 land.rhs.4:
-  %59 = load i32, i32* %at.addr, align 4
-  %60 = sitofp i64 %24 to double
-  %61 = call i32 @llvm.fptosi.sat.i32.f64(double %60)
-  %62 = icmp slt i32 %59, %61
+  %232 = load i32, i32* %at.addr, align 4
+  %233 = sitofp i64 %197 to double
+  %234 = call i32 @llvm.fptosi.sat.i32.f64(double %233)
+  %235 = icmp slt i32 %232, %234
   br label %land.end.4
 
 land.end.4:
-  %63 = phi i1 [ false, %ovf.ok ], [ %62, %land.rhs.4 ]
-  br i1 %63, label %land.rhs.3, label %land.end.3
+  %236 = phi i1 [ false, %ovf.ok ], [ %235, %land.rhs.4 ]
+  br i1 %236, label %land.rhs.3, label %land.end.3
 
 land.rhs.3:
-  %64 = load i32, i32* %at.addr, align 4
-  %65 = sext i32 %64 to i64
-  %66 = bitcast i8* %26 to i32*
-  %67 = getelementptr inbounds i32, i32* %66, i64 %65
-  %68 = load i32, i32* %67, align 4, !alias.scope !4, !noalias !3, !tbaa !16
-  %69 = load i32, i32* %h.addr, align 4
-  %70 = icmp eq i32 %68, %69
+  %237 = load i32, i32* %at.addr, align 4
+  %238 = sext i32 %237 to i64
+  %239 = bitcast i8* %199 to i32*
+  %240 = getelementptr inbounds i32, i32* %239, i64 %238
+  %241 = load i32, i32* %240, align 4, !alias.scope !4, !noalias !3, !tbaa !16
+  %242 = load i32, i32* %h.addr, align 4
+  %243 = icmp eq i32 %241, %242
   br label %land.end.3
 
 land.end.3:
-  %71 = phi i1 [ false, %land.end.4 ], [ %70, %land.rhs.3 ]
-  br i1 %71, label %land.rhs.2, label %land.end.2
+  %244 = phi i1 [ false, %land.end.4 ], [ %243, %land.rhs.3 ]
+  br i1 %244, label %land.rhs.2, label %land.end.2
 
 land.rhs.2:
-  %72 = load i32, i32* %at.addr, align 4
-  %73 = sitofp i64 %28 to double
-  %74 = call i32 @llvm.fptosi.sat.i32.f64(double %73)
-  %75 = icmp slt i32 %72, %74
+  %245 = load i32, i32* %at.addr, align 4
+  %246 = sitofp i64 %201 to double
+  %247 = call i32 @llvm.fptosi.sat.i32.f64(double %246)
+  %248 = icmp slt i32 %245, %247
   br label %land.end.2
 
 land.end.2:
-  %76 = phi i1 [ false, %land.end.3 ], [ %75, %land.rhs.2 ]
-  br i1 %76, label %land.rhs.1, label %land.end.1
+  %249 = phi i1 [ false, %land.end.3 ], [ %248, %land.rhs.2 ]
+  br i1 %249, label %land.rhs.1, label %land.end.1
 
 land.rhs.1:
-  %77 = load i32, i32* %at.addr, align 4
-  %78 = sext i32 %77 to i64
-  %79 = bitcast i8* %30 to i8**
-  %80 = getelementptr inbounds i8*, i8** %79, i64 %78
-  %81 = load i8*, i8** %80, align 8, !alias.scope !4, !noalias !3, !tbaa !13
-  %82 = call zeroext i1 @nish_str_eq(i8* %81, i8* %key)
+  %250 = load i32, i32* %at.addr, align 4
+  %251 = sext i32 %250 to i64
+  %252 = bitcast i8* %203 to i8**
+  %253 = getelementptr inbounds i8*, i8** %252, i64 %251
+  %254 = load i8*, i8** %253, align 8, !alias.scope !4, !noalias !3, !tbaa !13
+  %255 = call zeroext i1 @nish_str_eq(i8* %254, i8* %key)
   br label %land.end.1
 
 land.end.1:
-  %83 = phi i1 [ false, %land.end.2 ], [ %82, %land.rhs.1 ]
-  br i1 %83, label %if.then.2, label %if.end.2
+  %256 = phi i1 [ false, %land.end.2 ], [ %255, %land.rhs.1 ]
+  br i1 %256, label %if.then.2, label %if.end.2
 
 if.then.2:
-  %84 = load i32, i32* %bucket.addr, align 4
-  %85 = load i32, i32* %at.addr, align 4
-  %86 = tail call i64 @nish.foundAt(i32 %84, i32 %85)
-  ret i64 %86
+  %257 = load i32, i32* %bucket.addr, align 4
+  %258 = load i32, i32* %at.addr, align 4
+  %259 = tail call i64 @nish.foundAt(i32 %257, i32 %258)
+  ret i64 %259
 
 if.end.2:
   br label %if.end.1
 
 if.end.1:
-  %87 = load i32, i32* %bucket.addr, align 4
-  %88 = add nsw i32 %87, 1
-  %89 = and i32 %88, %mask
-  store i32 %89, i32* %bucket.addr, align 4
+  %260 = load i32, i32* %bucket.addr, align 4
+  %261 = add nsw i32 %260, 1
+  %262 = and i32 %261, %mask
+  store i32 %262, i32* %bucket.addr, align 4
   br label %while.cond
 
 while.end:
-  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.5 to i8*))
+  call void @nish_panic(i8* bitcast ({ i64, [40 x i8] }* @.str.6 to i8*))
   unreachable
 
 ovf.fail:

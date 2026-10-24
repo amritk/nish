@@ -6,6 +6,7 @@
     "std/*.ts",
     "tests/nish/*.ts",
     "tests/self/*.ts",
+    "tests/fuzz/targets/*.ts",
     "tests/**/*.{js,mjs}",
     "scripts/**/*.{js,mjs}",
     "bin/*.js",
@@ -31,6 +32,6 @@
     "tests/differential/arrow-parity/**"
   ],
   "ignoreDependencies": ["cookbook-pkg", "elysia", "hono"],
-  "ignoreBinaries": ["clang", "llc", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace", "h2load", "script"],
+  "ignoreBinaries": ["clang", "ld.lld", "llc", "llvm-as", "llvm-dwarfdump", "llvm-link", "llvm-nm", "opt", "size", "nish", "unshare", "wrk", "taskset", "strace", "h2load", "script"],
   "ignoreExportsUsedInFile": false
 }

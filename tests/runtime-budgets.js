@@ -413,9 +413,18 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-term.c`
  * -- the terminal half, `nish:term`: `readStdin`, `waitStdin`, `isTerminal`,
- * `terminalSize` and `setRawMode`, with the restore that the exit, a panic and
- * every signal whose default ends the program run while raw mode holds, and the
- * SIGTSTP handler that gives the terminal back on Ctrl-Z and raw mode on `fg`.
+ * `terminalSize`, `setRawMode` and `setTerminalRestore`, with the restore that the
+ * exit, a panic and every signal whose default ends the program run while raw
+ * mode holds or restore bytes wait, and the SIGTSTP handler that gives the
+ * terminal back on Ctrl-Z and raw mode on `fg`.
+ *
+ * Raised to 2,048 on 2026-10-24 by `setTerminalRestore`, measured **1,825 bytes**:
+ * `nish_set_terminal_restore` 238, `nish_term_finish` 94 (the one `write` loop of
+ * the bytes, inlined into it), the handlers' setup split out of `setRawMode` as
+ * `nish_term_arm` for both callers (+16), the restore's keeping the panic hook
+ * while bytes wait (+10), and every signal blocked while the bytes go out, in the
+ * ending handlers' mask and around the atexit and panic write (+48). Raised in place rather than split into a file of its
+ * own because the bytes go out from this file's static handlers, under its lock.
  *
  * Measured **1,419 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
  * `.text`, 333 of them the SIGTSTP handler and the lock it shares with
@@ -429,17 +438,22 @@ const RUNTIME_AES_TEXT_BUDGET = 2560
  * measured ceiling, never a raised one. The budget is the next 256-byte boundary
  * above the measurement, as every ceiling here was set.
  */
-const RUNTIME_TERM_TEXT_BUDGET = 1536
+const RUNTIME_TERM_TEXT_BUDGET = 2048
 /**
  * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/runtime-bytes.c`
  * -- the byte-class runs of `nish/bytes` (WP38 S6a): `nish_bytes_skip_blank`,
- * `nish_bytes_skip_digits` and `nish_bytes_skip_json_text`, their scalar, SSE2 and AVX2
- * paths, the UTF-8 step the JSON text class takes, and the resolver with its CPUID
- * question and `NISH_SIMD` pin.
+ * `nish_bytes_skip_digits`, `nish_bytes_skip_json_text` and `nish_bytes_skip_json_plain`,
+ * their scalar, SSE2 and AVX2 paths, the UTF-8 step the JSON text class takes, and the
+ * resolver with its CPUID question and `NISH_SIMD` pin.
  *
- * Measured **1,303 bytes** on 2026-10-23 with clang 18.1.3 on linux-x64, all of it
+ * Measured **1,525 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64, all of it
  * `.text`: the scalar path 137, the SSE2 path 265, the AVX2 path 368, the UTF-8 step
- * 238 and its resume 29, the resolver 204 and the three entry points 62. A tenth
+ * 238 and its resume 26, the plain class's scalar path 49 and SSE2 path 110, the
+ * resolver 249 and the four entry points 83. It was 1,303 with three classes; the
+ * fourth, the writer's plain bytes, added 222: its own paths 159, its entry point 21
+ * and the resolver's second pointer 45 (the resolver 204 to 249), less 3 from the
+ * UTF-8 resume (29 to 26, layout). The three class paths' instructions are as they
+ * were. A tenth
  * translation unit rather than more of `runtime-simd.c`: folded in, the two measured
  * 1,960 bytes against that file's ceiling of 768, and the rule is a new file with its
  * own measured ceiling, never a raised one. Apart, a program that searches text carries
@@ -447,6 +461,21 @@ const RUNTIME_TERM_TEXT_BUDGET = 1536
  * 256-byte boundary above the measurement, as every ceiling here was set.
  */
 const RUNTIME_BYTES_TEXT_BUDGET = 1536
+/**
+ * Ceiling on the sum of the `.text*` sections of `clang -Oz -c runtime/sqlite/nish-sqlite.c`
+ * -- the adapter `nish/sqlite` calls: the thread-local connection and statement tables
+ * that turn SQLite's pointers into `i32` handles, and the `nishsqlite_*` entry points
+ * over them (open, close, exec, prepare, step, reset, bind, column reads and the copy of
+ * a column into a caller's buffer). SQLite itself, `sqlite3.c`, is not counted: it is
+ * vendored, linked only into a program that imports `nish/sqlite`, and its size is
+ * upstream's.
+ *
+ * Measured **1,831 bytes** on 2026-10-24 with clang 18.1.3 on linux-x64, all of it
+ * `.text`. Its own translation unit, linked only with SQLite, so a program that does not
+ * import the module carries none of it. The budget is the next 256-byte boundary above
+ * the measurement, as every ceiling here was set.
+ */
+const RUNTIME_SQLITE_TEXT_BUDGET = 2048
 
 /**
  * Ceiling on what `new Http1Server(config, listener, 16384)` takes from the arena
@@ -580,6 +609,7 @@ export const RUNTIME_BUDGETS = [
   ["runtime/runtime-aes.c", RUNTIME_AES_TEXT_BUDGET, "RUNTIME_AES_TEXT_BUDGET", []],
   ["runtime/runtime-term.c", RUNTIME_TERM_TEXT_BUDGET, "RUNTIME_TERM_TEXT_BUDGET", []],
   ["runtime/runtime-bytes.c", RUNTIME_BYTES_TEXT_BUDGET, "RUNTIME_BYTES_TEXT_BUDGET", []],
+  ["runtime/sqlite/nish-sqlite.c", RUNTIME_SQLITE_TEXT_BUDGET, "RUNTIME_SQLITE_TEXT_BUDGET", []],
 ].map(([src, budget, constant, flags]) => ({ src, budget, constant, flags }))
 
 /**

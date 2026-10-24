@@ -2566,6 +2566,20 @@ most 100 pairs. (No block, as for `nish/text`; `tests/link/std_url` is its
 program, and the user guide's [standard-library
 page](guide/using-nish/standard-library.md#nishneturl) its walk-through.)
 
+**Draw to the whole terminal** (a game, a dashboard) — there is no curses and
+no `process.stdout.on("resize")`: `runTerminal(options, state, update, render)`
+from `nish/term-io` opens the terminal, probes what it can draw, steps
+`update(state, input)` at `options.stepsPerSecond` and calls
+`render(state, frame)` only when the link to the terminal has room, then
+leaves the terminal as it was, even on a panic. Draw cells on `frame.screen`
+or pixels on `frame.framebuffer` (sized by `options.framebufferWidth` and
+`framebufferHeight`) and never pick a backend: kitty graphics, Sixel, half
+blocks or ASCII is chosen from the probe and the measured link. It answers
+`Err` with one sentence on a pipe, so test the `Result`; it reaches `tty`.
+`NISH_TERM_GRAPHICS` and `NISH_TERM_FPS` override what it picked. (No block,
+as for `nish/text`; `examples/term-probe.ts` is its program, and the user
+guide's [terminal page](guide/using-nish/terminal.md) its walk-through.)
+
 **Shared behaviour over several shapes** — there is no inheritance and no
 dispatch. Give each class the interface's fields **first**, `implements` it,
 and write a free function over the interface:
@@ -2733,10 +2747,12 @@ Run it. `nish file.ts --json` is one command and it is the only proof.
    prove is an error
    naming the guard ([Proving it cannot panic](#proving-it-cannot-panic)); an
    `uncheckedGet` or `uncheckedSet` behind its `nish:unsafe` import is allowed.
-11. If you are adding to this repository: `npm run check` and `npm test` green,
-   and a new construct ships a golden `.ll`, an `llvm-as` pass, a native round
-   trip, a negative test, its `LANGUAGE.md` rule and cookbook entry, and a
-   conventional commit message, which is its changelog entry.
+11. If you are adding to this repository: `npm run check` and the touched
+   `node tests/run.js` sections green locally, every CI `test` shard green
+   ([CLAUDE.md](../CLAUDE.md#definition-of-done)), and a new construct ships a
+   golden `.ll`, an `llvm-as` pass, a native round trip, a negative test, its
+   `LANGUAGE.md` rule and cookbook entry, and a conventional commit message,
+   which is its changelog entry.
 
 Every `ts nish:ok` and `ts nish:err` block on this page is compiled by
 `npm test`, so an example that has gone stale is a failing test rather than a

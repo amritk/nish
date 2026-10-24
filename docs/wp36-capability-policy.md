@@ -32,8 +32,8 @@ exactly what `hostVisible` (`src/visibility.ts`) calls host-visible, so no
 build mode lets a denied capability through: `main` alone in a closed build
 (`--link` or `nish run`, with no sidecar, `declare function` or wasm target);
 `main` and every exported function of every module in an open one; every
-function under `--no-strict-exports` in an open build. Per-dependency policy
-is out of scope (§6).
+function under `--no-strict-exports` in an open build. A dependency's own
+gated capabilities are WP40's grants (§6), checked beside this policy.
 
 **`unsafe` can be denied and never allowed.** WP36 wired WP35's reserved bit
 (§4), so `--deny unsafe` refuses a program that reaches a `nish:unsafe` export
@@ -75,6 +75,13 @@ unknown key such as `capabilites`), NL3032 (the shape of `capabilities`, or
 `allow`/`deny` written twice), NL3033 (no such capability), NL3034 (`unsafe`
 under `allow`), NL3035 (a capability under both).
 
+Since WP40 `capabilities` also takes a `dependencies` object, mapping a
+dependency's package name to the gated capabilities the root grants it
+([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)). It is
+read as strictly: NL3041 (its shape, a grant that is not an array of strings,
+a package named twice), NL3033 (no such capability), NL3042 (a capability that
+is not gated). A grant never widens `allow` or `deny`.
+
 ## 4. The `unsafe` bit
 
 `builtinCapability` answers `CAP_UNSAFE` for `uncheckedGet`, `uncheckedSet`,
@@ -103,5 +110,9 @@ compile anyway, so a policy costs only the walk over the refused bits.
   refused here.
 - Directory scopes (`fs.read=<dir>`), refused as §2 says until WP37
   ([wp37-os-sandbox.md](wp37-os-sandbox.md#2-the-flags)).
-- Per-dependency policies, and argument-level checks such as a literal path.
+- Per-dependency policies: WP40's grants
+  ([wp40-dependency-capabilities.md](wp40-dependency-capabilities.md)), which
+  refuse a dependency's `unsafe`, `ffi`, `net` and `process.spawn` unless the
+  root package grants them.
+- Argument-level checks such as a literal path.
 - What C behind `ffi` does: that is `ffi`, and nothing finer.

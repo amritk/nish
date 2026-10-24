@@ -1,9 +1,11 @@
 // The program `tests/run.js` links to read the C library calls a program's
-// own code reaches (`src/c-symbols.ts`): every `Math` builtin and `%`, on
-// `f64` and on `f32`, over values that depend on `process.argv` so that
+// own code reaches (`src/c-symbols.ts`): every `Math` builtin LLVM can lower
+// to a libm call, and `%`, on `f64` and on `f32`, over values that depend on `process.argv` so that
 // nothing folds. `Math.sin` and `Math.cos` take different arguments, so LLVM
 // keeps each call rather than merging the two into `sincos`; `sincos` comes
-// from the pair below that shares one.
+// from the pair below that shares one. The rest call no C library: `tan`,
+// `atan2` and `hypot` are `std/math.ts`'s own code, `sign`, `imul` and
+// `clz32` are a few instructions, and `random` is the runtime's.
 export const main = (): i32 => {
   const n: f64 = toF64(process.argv.length) + 0.25;
   const m: f32 = toF32(n);
