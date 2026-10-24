@@ -11319,7 +11319,7 @@ if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
   // One function's body, from its `define` to the closing brace.
   const bodies = (ir) => {
     const body = (name) => {
-      const at = ir.search(new RegExp(`^define [^\\n]*@[\\w.$]*${name}\\(`, "m"))
+      const at = ir.search(new RegExp(`^define [^\\n]*@${name}\\(`, "m"))
       return at < 0 ? "" : ir.slice(at, ir.indexOf("\n}\n", at) + 2)
     }
     return { sum: body("sum"), norm: body("norm"), width: body("width") }
@@ -11336,7 +11336,7 @@ if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
   const arena = /nish_arena_(mark|release)|@nish_arena\b/
   // The runtime prelude's declarations keep their attributes: they state the
   // runtime's contract, not a proof about this program.
-  const attributes = /\b(noalias|nocapture|willreturn|dereferenceable)\b|!tbaa/
+  const attributes = /\b(noalias|nocapture|willreturn|readonly|dereferenceable)\b|!tbaa/
   const own = (fns) => Object.values(fns).join("")
   for (const [what, ok, detail] of [
     ["a proven index has no `nish_panic_index`", !a.sum.includes("nish_panic_index"), a.sum],
@@ -11374,20 +11374,85 @@ if (!only || "no_elision".includes(only) || only.startsWith("no_elision")) {
     return link.status === 0 ? spawnSync(exe, [], { encoding: "utf8" }).stdout : `link: ${link.stderr}`
   })
   check("no_elision: both builds print `6 25 14`", runs[0] === "6 25 14\n" && runs[1] === runs[0], runs.join("\n---\n"))
-  // The flag changes the IR and must change nothing a program prints: a
-  // sample spread across the corpus, through the differential itself.
-  const sample = spawnSync(
-    process.execPath,
+  // The `ffi-length` check a `toU64(buf.length)` count proves is written
+  // only by the reference.
+  const ffi = path.join(dir, "ffi.ts")
+  fs.writeFileSync(
+    ffi,
     [
-      path.join(root, "tests", "differential", "soundness.js"),
-      ...["--corpus", path.join(root, "tests", "cases"), "--sample", "40", "--compiler", NISH],
-    ],
-    { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }
+      "declare function strnlen(s: readonly u8[], n: u64): u64",
+      "export const find = (xs: readonly u8[]): u64 => strnlen(xs, toU64(xs.length))",
+      "",
+    ].join("\n")
   )
+  const ffiIr = [[], ["--no-elision"]].map((extra) => {
+    const out = path.join(dir, `ffi${extra.length ? "-reference" : ""}.ll`)
+    const r = spawnSync(NISH, [ffi, "-o", out, ...extra], { cwd: root, encoding: "utf8" })
+    return r.status === 0 ? fs.readFileSync(out, "utf8") : `compile: ${r.stderr}`
+  })
+  check(
+    "no_elision: a proven FFI count has no `ffi.length` check",
+    ffiIr[0].includes("@strnlen(") && !ffiIr[0].includes("ffi.length"),
+    ffiIr[0]
+  )
+  check("no_elision: the reference checks the count", ffiIr[1].includes("ffi.length"), ffiIr[1])
+  // The runner, as CI runs it, through the differential itself.
+  const soundness = (args) =>
+    spawnSync(process.execPath, [path.join(root, "tests", "differential", "soundness.js"), ...args], {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    })
+  const summary = (r) => {
+    const counts = {}
+    for (const [, k, v] of String(r.stdout).matchAll(/\b(\w+)=(\d+)\b/g)) {
+      counts[k] = Number(v)
+    }
+    return counts
+  }
+  // The flag changes the IR and must change nothing a program prints: a
+  // sample spread across the corpus. Every one of the sample is to be
+  // compared, and every one built two different programs: a runner that
+  // handed the flag to both sides, or to neither, compares nothing.
+  const sample = soundness(["--corpus", path.join(root, "tests", "cases"), "--sample", "40", "--compiler", NISH])
+  const counts = summary(sample)
   check(
     "no_elision: a sample of tests/cases prints the same with and without --no-elision",
-    sample.status === 0,
+    sample.status === 0 && counts.agree === 40 && counts.elided === 40,
     `exit ${sample.status}\n${sample.stdout.slice(-4000)}\n${sample.stderr.slice(-2000)}`
+  )
+  // And it sees a difference that is only in stderr: a compiler that builds
+  // the reference from a program whose panic says something else. Both exit 1
+  // and print the same stdout.
+  const pair = path.join(dir, "pair")
+  for (const [side, word] of [
+    ["default", "one"],
+    ["reference", "two"],
+  ]) {
+    fs.mkdirSync(path.join(pair, side), { recursive: true })
+    fs.writeFileSync(
+      path.join(pair, side, "panics.ts"),
+      `export const main = (): void => { console.log("a"); panic("${word}") }\n`
+    )
+  }
+  const swap = path.join(dir, "swap.mjs")
+  fs.writeFileSync(
+    swap,
+    [
+      "#!/usr/bin/env node",
+      'import { spawnSync } from "node:child_process"',
+      "const args = process.argv.slice(2)",
+      `const swapped = args.includes("--no-elision") ? args.map((a) => a.replace(${JSON.stringify(`${path.sep}default${path.sep}`)}, ${JSON.stringify(`${path.sep}reference${path.sep}`)})) : args`,
+      `process.exitCode = spawnSync(${JSON.stringify(NISH)}, swapped, { stdio: "inherit" }).status ?? 1`,
+      "",
+    ].join("\n")
+  )
+  fs.chmodSync(swap, 0o755)
+  const differs = soundness(["--corpus", path.join(pair, "default"), "--compiler", swap])
+  check(
+    "no_elision: a panic only stderr tells apart is a difference",
+    differs.status === 1 && differs.stdout.includes("panic: default one, --no-elision two"),
+    `exit ${differs.status}\n${differs.stdout}\n${differs.stderr}`
   )
 }
 

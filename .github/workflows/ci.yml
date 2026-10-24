@@ -858,8 +858,10 @@ jobs:
       # case, the fuzz corpus and 200 fixed-seed programs a second time with
       # `--no-elision`, every proof-backed elision off, and both builds must
       # print and exit the same at -O2. A difference is a proof that does not
-      # hold, and the run prints the path of its reproducer. About 35 s on 4
-      # threads; the budget bounds it if a runner is slow.
+      # hold, and the run prints the path of its reproducer. About 40 s on 4
+      # threads (941 programs, both sides built); the generated programs run
+      # first, so a budget that runs out on a slow runner drops corpus cases,
+      # which the suite links anyway.
       - name: Every proof-backed elision changes nothing a program prints
         run: |
           node tests/differential/soundness.js --compiler build/self/compile --corpus tests/cases \

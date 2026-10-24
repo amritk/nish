@@ -57,15 +57,26 @@
  * Every run gets an empty stdin and a working directory of its own (a stand-in
  * for the repository root, as `tests/differential/lib.js` gives each side), so
  * a program that reads its input from stdin sees end of file on both sides and
- * one that writes a file cannot see the other's. A program whose default build
- * answers differently on a second run is nondeterministic -- a clock, a pid, a
- * socket -- and is reported as skipped rather than compared.
+ * one that writes a file cannot see the other's. A difference is checked by
+ * running each side a second time: a side that answers differently then is
+ * nondeterministic -- a clock, a pid, a socket -- and is reported as that
+ * rather than as a difference.
  *
  * A failure saves its source, both IR directories and both runs under
  * `build/test/differential/soundness/<name>/` and prints that path.
  *
- * Exit status: 0 when every compared program agreed, 1 on a difference or a
- * stale `KNOWN` entry, 2 when nothing could be compared.
+ * A program whose two builds fail to build alike is `broken`, which fails the
+ * run: a corpus program that builds nowhere is the runner's mistake or the
+ * compiler's. A build or run that outlives its bound is a `timeout`, and one
+ * whose either side answers differently on a second run is
+ * `nondeterministic`; both are counted and listed, and fail nothing. The
+ * summary line counts every verdict, and `elided`, the programs whose two
+ * builds' IR differs: none at all means the flag changed nothing, and the run
+ * answers 2, since every agreement compared a build with itself.
+ *
+ * Exit status: 0 when every compared program agreed, 1 on a difference, a
+ * broken program or a stale `KNOWN` entry, 2 when nothing could be compared
+ * or no build differed from its reference.
  */
 import { spawn, spawnSync } from "node:child_process"
 import fs from "node:fs"
@@ -103,6 +114,9 @@ const DRIVER_C = path.join(root, "tests", "driver.c")
 
 /** One run of a binary, killed if it outlives this; the suite's bound is 120 s. */
 const RUN_TIMEOUT_MS = 30_000
+
+/** One compile or link: the reference compile proves nothing, so it is slower, and a slow runner is no finding. */
+const BUILD_TIMEOUT_MS = 180_000
 
 const work = path.join(buildDir, "soundness")
 
@@ -289,15 +303,23 @@ const scratchRoot = (dir) => {
   return dir
 }
 
+/** What `build` answers when a compile or link outlived `BUILD_TIMEOUT_MS`. */
+const TIMED_OUT = "timeout"
+
 /**
- * Compile `prog`, as the reference when `reference`, into `<dir>/ir/` and link it to `<dir>/app`:
+ * Compile `prog`, as the reference when `reference` (a boolean), into `<dir>/ir/` and link it to `<dir>/app`:
  * `null`, or what went wrong.
  */
 const build = async (compiler, prog, dir, reference) => {
   const ir = path.join(dir, "ir")
   fs.mkdirSync(ir, { recursive: true })
   const flags = reference ? [...prog.args.filter((a) => !GATES.includes(a)), "--no-elision"] : prog.args
-  const cc = await run(compiler, [prog.entry, "-o", `${ir}${path.sep}`, ...flags])
+  const cc = await run(compiler, [prog.entry, "-o", `${ir}${path.sep}`, ...flags], {
+    timeout: BUILD_TIMEOUT_MS,
+  })
+  if (cc.timedOut) {
+    return TIMED_OUT
+  }
   if (cc.status !== 0) {
     return `compile: exit ${cc.status}\n${cc.stderr}`
   }
@@ -313,17 +335,24 @@ const build = async (compiler, prog, dir, reference) => {
     .filter((f) => f.endsWith(".ll"))
     .map((f) => path.join(ir, f))
   const driver = prog.driver === null ? [] : [prog.driver === DRIVER_C ? driverObject : prog.driver]
-  const link = await run("clang", [
-    "-Wno-override-module",
-    "-O2",
-    ...(threads ? ["-pthread"] : []),
-    ...lls,
-    ...driver,
-    ...runtime,
-    "-lm",
-    "-o",
-    path.join(dir, "app"),
-  ])
+  const link = await run(
+    "clang",
+    [
+      "-Wno-override-module",
+      "-O2",
+      ...(threads ? ["-pthread"] : []),
+      ...lls,
+      ...driver,
+      ...runtime,
+      "-lm",
+      "-o",
+      path.join(dir, "app"),
+    ],
+    { timeout: BUILD_TIMEOUT_MS }
+  )
+  if (link.timedOut) {
+    return TIMED_OUT
+  }
   return link.status === 0 ? null : `link: exit ${link.status}\n${link.stderr}`
 }
 
@@ -342,16 +371,41 @@ const ending = (r) => {
   return r.signal ?? `exit ${r.status}`
 }
 
-/** The panic line a run printed, or null: the runtime's panics all say `panicked`. */
+/**
+ * The runtime's own panic lines (`runtime/runtime.c`): an index or slice out of
+ * range, checked arithmetic, out of memory, and a foreign buffer's count
+ * (`emitForeignBuffers` in `src/emit-strings.ts`).
+ */
+const RUNTIME_PANIC =
+  /^(index out of range: |slice out of range: |attempt to |nish: out of memory$|`[^`]+`: argument \d+ \(.*\) counts more bytes than )/
+
+/**
+ * The panic line a run printed, or null: a runtime panic's line, else, for a
+ * run that exited 1, the last line on stderr, which is where `panic(message)`
+ * and `expect` write theirs.
+ */
 const panicOf = (r) => {
-  const line = String(r.stderr)
+  const lines = String(r.stderr)
     .split("\n")
-    .find((l) => /panicked|attempt to|index out of bounds/.test(l))
-  return line === undefined ? null : line.trim()
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+  const runtime = lines.find((l) => RUNTIME_PANIC.test(l))
+  if (runtime !== undefined) {
+    return runtime
+  }
+  return r.status === 1 && lines.length > 0 ? lines[lines.length - 1] : null
 }
 
+/**
+ * Two runs mean the same: stdout, stderr and how they ended. Every panic exits
+ * 1, so stderr is what tells one panic from another, or from a clean `exit 1`.
+ */
 const same = (a, b) =>
-  a.status === b.status && a.signal === b.signal && a.timedOut === b.timedOut && a.stdout.equals(b.stdout)
+  a.status === b.status &&
+  a.signal === b.signal &&
+  a.timedOut === b.timedOut &&
+  a.stdout.equals(b.stdout) &&
+  a.stderr.equals(b.stderr)
 
 /** What differs between the default run `a` and the reference run `b`, a line each. */
 const describe = (a, b) => {
@@ -373,14 +427,36 @@ const describe = (a, b) => {
       `stdout line ${at + 1}: default ${JSON.stringify(la[at])}, --no-elision ${JSON.stringify(lb[at])}`
     )
   }
+  if (lines.length === 0 && !a.stderr.equals(b.stderr)) {
+    const la = String(a.stderr).split("\n")
+    const lb = String(b.stderr).split("\n")
+    const at = la.findIndex((l, k) => l !== lb[k])
+    lines.push(
+      `stderr line ${at + 1}: default ${JSON.stringify(la[at])}, --no-elision ${JSON.stringify(lb[at])}`
+    )
+  }
   return lines.join("\n")
 }
 
+/** The IR of one side, every module in name order, for telling the two builds apart. */
+const irText = (dir) => {
+  const ir = path.join(dir, "ir")
+  return fs
+    .readdirSync(ir)
+    .filter((f) => f.endsWith(".ll"))
+    .sort()
+    .map((f) => fs.readFileSync(path.join(ir, f), "utf8"))
+    .join("\n")
+}
+
 /**
- * Build both sides of `prog`, run them, compare: `{ name, verdict, detail, dir }`
- * with `verdict` one of agree | differ | nondeterministic | broken. A program
- * that will not build on one side only is a difference too: the flag is meant
- * to change nothing the checker accepts.
+ * Build both sides of `prog`, run them, compare: `{ name, verdict, detail, dir,
+ * elided }` with `verdict` one of agree | differ | nondeterministic | broken |
+ * timeout, and `elided` whether the two builds' IR differs. A program that will
+ * not build on one side only is a difference too: the flag is meant to change
+ * nothing the checker accepts. A build or a run that outlives its bound is a
+ * `timeout`, the runner's limit rather than a finding: the reference proves
+ * nothing, so it may be the slower side by design.
  */
 const compare = async (compiler, prog) => {
   const dir = path.join(work, prog.name.replace(/[\\/]/g, "_"))
@@ -388,9 +464,18 @@ const compare = async (compiler, prog) => {
   const def = path.join(dir, "default")
   const ref = path.join(dir, "no-elision")
   const [defErr, refErr] = await Promise.all([
-    build(compiler, prog, def, []),
-    build(compiler, prog, ref, ["--no-elision"]),
+    build(compiler, prog, def, false),
+    build(compiler, prog, ref, true),
   ])
+  if (defErr === TIMED_OUT || refErr === TIMED_OUT) {
+    return {
+      name: prog.name,
+      verdict: "timeout",
+      detail: `the ${defErr === TIMED_OUT ? "default" : "--no-elision"} build outlived ${BUILD_TIMEOUT_MS / 1000} s`,
+      dir,
+      elided: false,
+    }
+  }
   if (defErr !== null || refErr !== null) {
     const both = defErr !== null && refErr !== null
     return {
@@ -400,21 +485,40 @@ const compare = async (compiler, prog) => {
         ? defErr
         : `builds only ${defErr === null ? "by default" : "with --no-elision"}: ${defErr ?? refErr}`,
       dir,
+      elided: false,
     }
   }
+  const elided = irText(def) !== irText(ref)
   const a = await execute(prog, def, "1")
   const b = await execute(prog, ref, "1")
   if (same(a, b)) {
-    return { name: prog.name, verdict: "agree", detail: "", dir }
+    return { name: prog.name, verdict: "agree", detail: "", dir, elided }
   }
-  // Asked only of a difference, so an agreeing program costs two runs.
-  const again = await execute(prog, def, "2")
-  if (!same(a, again)) {
+  if (a.timedOut || b.timedOut) {
     return {
       name: prog.name,
-      verdict: "nondeterministic",
-      detail: `default run twice: ${describe(a, again)}`,
+      verdict: "timeout",
+      detail: `the ${a.timedOut ? "default" : "--no-elision"} run outlived ${RUN_TIMEOUT_MS / 1000} s`,
       dir,
+      elided,
+    }
+  }
+  // Asked only of a difference, so an agreeing program costs two runs. Each
+  // side runs again: a side that answers differently the second time is
+  // nondeterministic, and its difference says nothing about a proof.
+  const [againA, againB] = [await execute(prog, def, "2"), await execute(prog, ref, "2")]
+  for (const [tag, first, again] of [
+    ["default", a, againA],
+    ["--no-elision", b, againB],
+  ]) {
+    if (!same(first, again)) {
+      return {
+        name: prog.name,
+        verdict: "nondeterministic",
+        detail: `${tag} run twice: ${describe(first, again)}`,
+        dir,
+        elided,
+      }
     }
   }
   for (const [tag, r] of [
@@ -425,7 +529,7 @@ const compare = async (compiler, prog) => {
     fs.writeFileSync(path.join(dir, `${tag}.stderr`), r.stderr)
   }
   fs.copyFileSync(prog.entry, path.join(dir, path.basename(prog.entry)))
-  return { name: prog.name, verdict: "differ", detail: describe(a, b), dir }
+  return { name: prog.name, verdict: "differ", detail: describe(a, b), dir, elided }
 }
 
 /** Evenly spaced picks, `n` of `list`, first and order kept. */
@@ -503,13 +607,10 @@ const main = async () => {
     console.error(`soundness: no compiler at ${o.compiler}: run \`npm run build\` or pass --compiler`)
     return 2
   }
+  // The generated programs first: they are the ones no other job runs, so a
+  // budget that runs out drops corpus cases, which the suite links anyway.
   const programs = []
   const skipped = []
-  for (const dir of o.corpora) {
-    const found = discover(dir)
-    programs.push(...(o.sample === null ? found.programs : sample(found.programs, o.sample)))
-    skipped.push(...found.skipped)
-  }
   if (o.seed !== null) {
     const dir = path.join(work, "generated")
     fs.mkdirSync(dir, { recursive: true })
@@ -526,6 +627,11 @@ const main = async () => {
         driver: null,
       })
     }
+  }
+  for (const dir of o.corpora) {
+    const found = discover(dir)
+    programs.push(...(o.sample === null ? found.programs : sample(found.programs, o.sample)))
+    skipped.push(...found.skipped)
   }
   const chosen = o.only === null ? programs : programs.filter((p) => p.name.includes(o.only))
   console.log(
@@ -554,6 +660,7 @@ const main = async () => {
 
   const known = new Map(KNOWN.map((k) => [k.name, k.why]))
   const count = (v) => results.filter((r) => r.verdict === v).length
+  const elided = results.filter((r) => r.elided).length
   const differ = results.filter((r) => r.verdict === "differ")
   const failures = differ.filter((r) => !known.has(r.name))
   const stale = KNOWN.filter((k) => results.some((r) => r.name === k.name && r.verdict === "agree"))
@@ -585,14 +692,24 @@ const main = async () => {
     )
   }
   console.log(
-    `\nsoundness: agree=${count("agree")} differ=${differ.length} known=${differ.length - failures.length} ` +
-      `nondeterministic=${count("nondeterministic")} broken=${count("broken")} skipped=${skipped.length} ` +
+    `\nsoundness: agree=${count("agree")} elided=${elided} differ=${differ.length} ` +
+      `known=${differ.length - failures.length} nondeterministic=${count("nondeterministic")} ` +
+      `broken=${count("broken")} timeout=${count("timeout")} skipped=${skipped.length} ` +
       `unreached=${unreached.length} (${((Date.now() - started) / 1000).toFixed(1)} s)`
   )
-  if (results.length === 0 || count("agree") === 0) {
+  if (failures.length + stale.length + count("broken") > 0) {
+    return 1
+  }
+  if (count("agree") === 0) {
     return 2
   }
-  return failures.length + stale.length === 0 ? 0 : 1
+  // Two builds that never differ compared the reference with itself: the
+  // flag, or this runner's use of it, is broken, and every agree above is empty.
+  if (elided === 0) {
+    console.log("soundness: no program's two builds differed: the comparison compared nothing")
+    return 2
+  }
+  return 0
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

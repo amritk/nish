@@ -2337,7 +2337,7 @@ function callsAnyOf(result: EscapeResult | null, names: StringSet): boolean -> @
 function analyzeFunctions(units: AnalysisUnit[], table: TypeTable, opts: Options, runtime: RuntimeTable): FactsTable -> @analyzeFunctions [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=24
   sharedWrite: +0:5
-  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance EscapeSet.constructor EscapeSet.get EscapeSet.set FactsTable.get FunctionFacts.scopesAnyPass FunctionSig.definedIn StringSet.add StringSet.size analyzeInstanceEscapes callsAnyCallee callsAnyOf collectRound decideLoopScopes markFreshElements nish_array_grow propagate propagateCapabilities scopeParallelBodies settleCalleeScopes
+  calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance EscapeSet.constructor EscapeSet.get EscapeSet.set FactsTable.get FunctionFacts.scopesAnyPass FunctionSig.definedIn StringSet.add StringSet.size analyzeInstanceEscapes callsAnyCallee callsAnyOf collectRound decideLoopScopes markFreshElements nish_array_grow propagate propagateCapabilities scopeParallelBodies settleCalleeScopes someCalleeNetAllocates
   pointer units: size=0 writesThrough=false captured=false passedTo=collectRound#0 collectRound#0 scopeParallelBodies#0
   pointer table: size=96 writesThrough=true captured=true passedTo=collectRound#1 analyzeInstanceEscapes#1 analyzeInstanceEscapes#1 collectRound#1 decideLoopScopes#1
   pointer opts: size=160 writesThrough=true captured=true passedTo=collectRound#2 analyzeInstanceEscapes#4 analyzeInstanceEscapes#4 collectRound#2
@@ -2383,11 +2383,14 @@ function analyzeFunctions(units: AnalysisUnit[], table: TypeTable, opts: Options
   callee +19:7 decideLoopScopes -> @decideLoopScopes
   callee +21:9 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
   local +30:16 f: FunctionFacts (const)
-  local +32:18 scope: LoopScope (const)
-  local +37:14 f: FunctionFacts (const)
-  callee +42:7 StringSet.add -> @StringSet.add
-  callee +44:25 FunctionFacts.scopesAnyPass -> @FunctionFacts.scopesAnyPass
-  callee +45:7 StringSet.add -> @StringSet.add
+  local +33:18 scope: LoopScope (const)
+  local +37:9 changed: boolean (let)
+  local +40:18 f: FunctionFacts (const)
+  callee +41:32 someCalleeNetAllocates -> @someCalleeNetAllocates
+  local +48:14 f: FunctionFacts (const)
+  callee +53:7 StringSet.add -> @StringSet.add
+  callee +55:25 FunctionFacts.scopesAnyPass -> @FunctionFacts.scopesAnyPass
+  callee +56:7 StringSet.add -> @StringSet.add
 function scopeParallelBodies(units: AnalysisUnit[], facts: FactsTable): void -> @scopeParallelBodies
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
@@ -2481,16 +2484,16 @@ function collectRound(units: AnalysisUnit[], table: TypeTable, opts: Options, es
   stackSites=0 stackLocals=0
   local +0:9 facts: FactsTable (const)
   callee +0:17 new FactsTable -> @FactsTable.constructor
-  local +1:14 unit: AnalysisUnit (const)
-  local +2:16 sig: FunctionSig (const)
-  callee +3:12 FunctionSig.definedIn -> @FunctionSig.definedIn
-  local +6:11 memory: EscapeResult | null (let)
-  callee +8:18 EscapeSet.get -> @EscapeSet.get
-  local +13:13 instance: Instantiation | null (const)
-  callee +15:9 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
-  callee +17:7 FactsTable.set -> @FactsTable.set
-  callee +17:27 collectFacts -> @collectFacts
-  callee +19:9 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
+  local +2:14 unit: AnalysisUnit (const)
+  local +3:16 sig: FunctionSig (const)
+  callee +4:12 FunctionSig.definedIn -> @FunctionSig.definedIn
+  local +7:11 memory: EscapeResult | null (let)
+  callee +9:18 EscapeSet.get -> @EscapeSet.get
+  local +14:13 instance: Instantiation | null (const)
+  callee +16:9 CheckedProgram.enterInstance -> @CheckedProgram.enterInstance
+  callee +18:7 FactsTable.set -> @FactsTable.set
+  callee +18:27 collectFacts -> @collectFacts
+  callee +20:9 CheckedProgram.leaveInstance -> @CheckedProgram.leaveInstance
 function callsAnything(node: Node): boolean -> @callsAnything
   facts: effect=read willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: callsAnything

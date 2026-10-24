@@ -142,7 +142,16 @@ export class Options {
    * - the inferred arena scopes: a function's mark and release, a loop's, and
    *   the call-site reclaim (`analyzeFunctions` in `src/attributes.ts`,
    *   `reclaimsReturnedString` in `src/escape.ts`). A `using` arena the
-   *   program writes is its meaning and stays.
+   *   program writes is its meaning and stays;
+   * - the `ffi-length` check a `toU64(buf.length)` count proves
+   *   (`foreignBufferCountProven`), so every buffer count is held to its `len`.
+   *
+   * Kept, because neither is a proof about a value: a `tail` marker
+   * (`marksTailCall` in `src/escape.ts`), which only asks that no stack slot or
+   * arena scope outlive the call, and with both off here none can; and the
+   * `unreachable` default of a `switch` over every member of a union
+   * (`switchCoverage`), which the type system answers and the function's
+   * missing `return` after it already rests on.
    *
    * `-O2` still runs on both sides.
    */
