@@ -1,0 +1,74 @@
+PASS  its size
+PASS  no slot is wanted at start-up
+PASS  nothing waits
+PASS  the pool holds its copy of the password
+PASS  a pool of one, with a queue of one
+PASS  a statement registers
+PASS  a NUL in a name is refused
+PASS  a NUL in SQL is refused
+PASS  once a connection is made, none may register
+PASS  256 register; the 257th is refused
+PASS  the first ticket
+PASS  the second
+PASS  the third
+PASS  a full queue refuses
+PASS  and holds what it had
+PASS  nothing waits: no slot
+PASS  and none is wanted
+PASS  no connection yet: no slot
+PASS  but the first is wanted
+PASS  asked again, still only the first
+PASS  its startup message waits to be sent
+PASS  starting, it takes no request
+PASS  and no other slot is wanted for one request
+PASS  it is ready
+PASS  the request goes to it
+PASS  its ticket
+PASS  it no longer waits
+PASS  while one is being built, no other is handed out
+PASS  sent
+PASS  as Bind, Execute, Sync
+PASS  the next goes to the same slot: the other has no connection
+PASS  two in flight on it
+PASS  the pool makes no second connection while the first has room
+PASS  16 in flight
+PASS  a full connection takes no more
+PASS  so the second slot is wanted
+PASS  the waiting request goes to the new one
+PASS  in FIFO order
+PASS  the next to the one with fewer in flight
+PASS  the first group done frees slot 0 a place
+PASS  the next answer is the second request's
+PASS  nothing dispatched: nothing to send
+PASS  dispatched
+PASS  a bind still open is not sent
+PASS  finished, it is
+PASS  and not twice
+PASS  a request with nothing written is dropped
+PASS  so a request after it is handed out
+PASS  and the answers are the sent requests', in order
+PASS  the connection is made
+PASS  and wanted no longer
+PASS  it holds its own copy of the password
+PASS  the first group prepares both, then binds
+PASS  the second only binds
+PASS  the pool's own Describe answers are not reported
+PASS  a registered statement the server refuses fails the request it led
+PASS  and the next request prepares it again, not the one before it
+PASS  a notice is the request's in flight
+PASS  a connection that fails loses each request it took, oldest first
+PASS  the cause stays on its connection
+PASS  it answers PG_FAILED after
+PASS  the next request finds no connection
+PASS  so the slot is wanted again
+PASS  and rebuilt
+PASS  the request goes to it
+PASS  the waiting ticket
+PASS  a connection that fails starting, none ready, takes the oldest request with it
+PASS  one is left
+PASS  a request being built when its connection fails is lost
+PASS  and need not be sent
+PASS  dispose wipes the pool's password
+PASS  and its connections'
+PASS  and may be called twice
+postgres pool: 73 passed, 0 failed, 0 skipped
