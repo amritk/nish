@@ -239,6 +239,17 @@ own source until the seed compiles it, which is the next release.
     commit message, its conventional subject and its body: `scripts/changelog-gen.mjs`
     writes `CHANGELOG.md` from the commits when a release is cut, so the
     file is never edited by hand.
+11. **Security record.** Code an attacker's bytes reach — a `std/net` or
+    `std/crypto` module, a `runtime/*.c` file, a builtin or `nish:` module
+    that reads the network, the terminal or another process's output — ships
+    with its record in [`docs/security/`](security/README.md#writing-a-record)
+    in the same pull request: its Scope table names the files and functions,
+    every finding is fixed with a test that fails before the fix or recorded
+    as open or accepted, and the index's Areas row and totals move with it.
+    `node scripts/security-scope.mjs` (in `npm test` and CI) refuses a
+    `std/net`, `std/crypto` or `runtime/*.c` file that no record's scope
+    names, unless the index lists it under "Not yet audited", and that list
+    only shrinks.
 
 ## ABI contracts and the tests that guard them
 
@@ -777,7 +788,7 @@ the skip count is the number to read, not only the exit code.
   saturating conversions) and there is no live rewriter any more — so a corpus
   program with no frozen rewrite is named in a register rather than skipped
   in silence. Programs listed in `tests/differential/known-failures.txt`
-  (libm 1-ulp differences, `minnum`/`maxnum` with NaN, `Math.round(-0)`, the
+  (libm 1-ulp differences, the
   division panics, raw `Arena.used()` prints) are reported but do not fail.
   `tests/differential/fuzz.js --stage1` generates random integer/boolean
   programs from a printed seed, compiles each with the released compiler and

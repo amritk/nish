@@ -41,6 +41,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText` and `copyBytes` for the runs a parser skips and the bytes it copies |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
+| [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and the keys it reads decoded |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
@@ -175,12 +176,21 @@ in JavaScript. `regexEscape(text)` makes a pattern that matches `text`
 exactly. The flags are `i` (ASCII letters), `m` and `s`; there is no `g`,
 since `findAll` and `replaceAll` are the global forms.
 
-Matching never backtracks, so a pattern cannot make it slow: `(a+)+$` against
-a long run of `a`s takes as long as `a+$`. The price is that backreferences
-(`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused when the pattern is
-compiled. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
+Matching never backtracks, so a pattern cannot make one search slow:
+`(a+)+$` against a long run of `a`s takes as long as `a+$`. The price is
+that backreferences (`\1`) and lookaround (`(?=…)`, `(?<=…)`) are refused
+when the pattern is compiled. So is a pattern past the engine's limits: a
+repeat count over 1,000, more than 1,024 capturing groups, more than 10,000
+ranges in one class, or more than 100,000 instructions once its repeats are
+written out. Offsets are UTF-8 bytes, as `s.length` is, and `\w`, `\d` and
 `\b` are ASCII, as they are in JavaScript. The `i` flag folds only ASCII
 letters, where JavaScript's folds every letter: `é` does not match `É`.
+
+Finding every match is one search per match, so `findAll`, `count`,
+`replaceAll` and `split` are quadratic when a long branch is preferred to a
+short one that wins: `<[^>]*>|<` over a run of `<`s reads the rest of the
+text at each. Bound the long branch (`<[^<>]*>|<`) or put the short one
+first.
 
 A search runs a lazy DFA, a table of states built as the text needs them,
 and falls back to a slower engine only to fill in groups or when a pattern
@@ -904,6 +914,77 @@ makes its own may use it freely; one shared between tasks would be a write
 they all see, and is refused. See [Random numbers](../../LANGUAGE.md#random-numbers-rng-in-nishrandom)
 in the reference.
 
+## `nish/cli`
+
+`nish/cli` builds a command-line tool's `--help`: a header, usage lines,
+sections of flags with their placeholders and descriptions lined up in
+columns, and notes. It is what `nish --help` itself is built with.
+
+```ts nish:ok
+import { HelpMenu, agentDriven, styleFor } from "nish/cli";
+
+export const main = (): i32 => {
+  const menu = new HelpMenu(styleFor(1, agentDriven()), "greet", 24, 30);
+  menu.header("1.2.0", "say hello");
+  menu.usage("<name> [flags]", "greet someone");
+  menu.section("Flags");
+  menu.row("--shout", "", "in capitals");
+  menu.row("--times", "<n>", "say it n times");
+  console.log(menu.text());
+  return 0;
+};
+```
+
+Piped or redirected, that prints:
+
+```text
+greet 1.2.0  say hello
+
+usage: greet <name> [flags]   greet someone
+
+Flags
+  --shout               in capitals
+  --times <n>           say it n times
+```
+
+**A `HelpMenu`** is made with a `Style`, the program's name, the column a
+row's description starts at and the column a usage line's starts at. Add
+lines in order: `header(version, summary)`, `usage(shape, description)` (the
+first one says `usage:`, the rest line up under it), `section(title)`,
+`row(flag, placeholder, description)`, `note(text)` for a line of prose and
+`value(text)` for a path or value to copy. An empty placeholder or
+description is left out. A flag too long for its column keeps two spaces
+before its description. `text()` answers the whole menu. Columns are counted
+in bytes, so they line up for ASCII text.
+
+**The colours are your terminal's own.** A `Style` paints headings in bold
+magenta, flags in cyan, placeholders in yellow and descriptions faint, using
+the basic ANSI colours your terminal theme defines, never a fixed shade, so
+the menu takes on whatever palette the reader chose. A terminal that declares
+no colours (`tput colors` below 8, as for `TERM=vt100`) gets the same
+structure in bold and underline instead; forced colour is always the
+theme's.
+
+**`styleFor(fd, agent)`** decides for descriptor `fd` (1 for stdout, 2 for
+stderr) whether to paint at all, the same way `nish --help` does: colour on a
+terminal, plain text in a pipe or a file, `NO_COLOR` always off,
+`FORCE_COLOR` or `CLICOLOR_FORCE` on even when piped, and `TERM=dumb` or
+`CLICOLOR=0` off ([the CLI page](cli.md#colour-and-when-an-agent-runs-nish)
+has the full table). `agentDriven()` says whether a coding agent is running
+the program: `NISH_AGENT` decides when it is set, a no (`0`, `false`, `no`,
+`off`) for no and anything else for yes, and otherwise `CLAUDECODE` or
+`GEMINI_CLI` set to anything but empty or a no means yes. With `agent` true
+`styleFor` is always plain: the escapes would only cost the agent tokens.
+
+`HelpMenu` and `Style` reach no
+[capability](../../LANGUAGE.md#capabilities). `styleFor` and `agentDriven`
+reach `env`, and `styleFor` reaches `process.spawn` too: unless colour is
+forced or refused first, it asks a shell whether the descriptor is a terminal
+and how many colours it has. To keep a
+program free of both, make the style yourself: `new Style(on, colour)`, where
+`on` turns painting on and `colour` picks the theme's colours over the
+monochrome failsafe.
+
 ## `nish/term`
 
 `nish/term` is for a program that draws the whole terminal, many times a
@@ -948,7 +1029,8 @@ before. An empty answer means nothing changed. On a 200 × 60 screen,
 rewriting every cell flushes in about 0.1 ms, and one changed cell in about
 0.03 ms. After `resize(width, height)` the next flush redraws everything, and
 so does one after `invalidate()`: call that when something else has written
-to the terminal.
+to the terminal. A side is at most 4,096 cells and a screen at most 1,048,576,
+with rows dropped to fit, so any size a terminal reports is safe to pass.
 
 **A `Canvas`** puts pixels on a screen, two to a cell, one above the other.
 It draws with the half-block character "▀": the foreground is the top pixel's
@@ -981,7 +1063,9 @@ A read can stop in the middle of an arrow key's
 `feed`. The ESC key sends a lone ESC, which is also how an arrow key begins.
 So the decoder holds an ESC until either the rest of a sequence arrives or
 the timeout you gave the constructor passes. While `waiting()` is true, call
-`poll(nowMs)` once the timeout is up to collect the `KEY_ESCAPE`.
+`poll(nowMs)` once the timeout is up to collect the `KEY_ESCAPE`. An `ESC [`
+followed by more than 32 parameter bytes is no key, so the decoder gives the
+ESC up as `KEY_ESCAPE` at once rather than holding what follows.
 
 ```ts nish:ok
 import { KEY_LEFT, KeyDecoder } from "nish/term";

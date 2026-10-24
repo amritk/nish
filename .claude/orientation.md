@@ -62,7 +62,7 @@ change to the compiler is a change to `src/`.
 ```
 src/               the compiler, in Nish — see .claude/selfhost.md
   compile.ts        CLI: flags, output planning, exit codes, `nish run`
-  cli-style.ts      `--help`: its text, colour and the agent's section
+  cli-style.ts      `--help`: its text and the agent's section (colour: std/cli.ts)
   run-cache.ts      `nish run`'s cache: entry location, key, hash
   compilation.ts    one program: load, check, emit, sidecars
   lexer.ts parser.ts nodes.ts validator.ts types.ts diagnostics.ts codes.ts
@@ -89,7 +89,7 @@ npm ci                      # install (typescript and biome are dev dependencies
 bash scripts/fetch-seed.sh  # the last release into build/seed/ (or set NISH_BOOTSTRAP)
 npm run build               # build/nish to keep; npm test builds its own
 npm run check               # ambient tsc --noEmit over src/, std/, tests/nish
-npm test                    # the whole suite; builds its own stage1 from the seed
+npm test                    # the whole suite; builds its own stage1 from the seed (CI runs it in four shards)
 node tests/run.js <sub>     # only checks whose name contains <sub>
 node tests/run.js self      # the WP14 self-hosting section alone
 npm run test:update         # write missing .ll goldens (the whole suite)
@@ -119,7 +119,8 @@ takes `src/` to the fixed point with `scripts/bootstrap.sh --verify`.
 
 ## Definition of done
 
-[`CLAUDE.md`](../CLAUDE.md#definition-of-done) states it, and the checklist is
+[`CLAUDE.md`](../CLAUDE.md#definition-of-done) states it — targeted local
+runs, and CI's `test` shards as the full-suite gate — and the checklist is
 `docs/ARCHITECTURE.md` → "How to add a construct".
 
 ## Where to read next

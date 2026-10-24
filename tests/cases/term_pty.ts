@@ -14,7 +14,8 @@
 // what is waiting, such as that Ctrl-D if no `hold` before it read it, then
 // waits two seconds once and prints what it answered: stopped for longer than
 // that, it answers `false` as soon as `fg` continues it, because the retry
-// asks for what is left, which is nothing.
+// asks for what is left, which is nothing. `flip` enters and leaves raw mode
+// until a signal ends it, so a SIGTERM can land inside the switch.
 const probe = (): number => {
   const size = terminalSize();
   console.log(`${isTerminal(0)} ${isTerminal(1)} ${size[0] >= 0} ${size[1] >= 0}`);
@@ -41,6 +42,12 @@ export const main = (): number => {
     while (readStdin(buf, 0, 16) > 0) {}
     console.log("ready");
     console.log(`timed ${waitStdin(2000)}`);
+  }
+  if (mode === "flip") {
+    console.log("ready");
+    while (setRawMode(false) === 0) {
+      setRawMode(true);
+    }
   }
   if (mode === "hold") {
     console.log("ready");

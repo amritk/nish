@@ -531,7 +531,8 @@ doubles alone would be 24 (`tests/cases/f32_struct`).
 - **The f64-only `Math` functions stay f64-only.** `Math.sqrt(x)` on an `f32`
   is `` `Math.sqrt` requires an f64 argument, got f32 ``
   (`tests/cases/reject_f32_math_sqrt`); `Math.abs`, `Math.min` and `Math.max`
-  do work, through `llvm.fabs.f32` / `llvm.minnum.f32` / `llvm.maxnum.f32`.
+  do work, through `llvm.fabs.f32` and the float compare-and-select `min` and
+  `max` lower to, and so does `Math.sign`.
 - **`Float32Array` is `f32[]`**, one more typed-array alias with no second
   layout, so a Node host's `Float32Array` crosses the boundary the way an
   `Int32Array` already does.
@@ -3802,6 +3803,14 @@ element's arena, which a task does not share, and each rule is reported at the
   `` `bump` writes memory its caller can see at main.ts:10:3, and `spawn` runs it beside the scope's other tasks: make scratch only this task uses inside it, because an object handed in as the argument is shared memory even when the `spawn` made it, since where an argument was made is not tracked. Write memory the tasks share only through the guard of a `Mutex`; hand a value the parent needs back as the task's answer, or run it on the thread that called it, `out[0] = bump(c)` ``
   (NL2471; `tests/cases/reject_thread_task_shared_write`, and
   `reject_mutex_task_unguarded` for a task that also writes through a guard).
+  A `wipe` is a write through its argument like any other, so it is shared
+  exactly when its target is: an array the task, or a function it calls,
+  allocated itself is private, and wiping it is allowed
+  (`tests/link/thread_task_wipe`); wiping the task's argument, a captured
+  local, a field, an array a call answered, or a `Secret` made with
+  `secret(...)`, which keeps its value, is NL2471
+  (`reject_thread_wipe_param`, `_capture`, `_field`, `_helper`,
+  `_call_result`). The wipe itself is unchanged, one volatile `llvm.memset`.
   A lookup in a shared `Map` or `Set` — `get`, `has`, `size` — is a read, so
   tasks of one scope may look keys up in the same table
   (`tests/link/thread_scope_task_map_reads`). A mutator — `set`, `add`,
@@ -5296,6 +5305,30 @@ before code that may panic when those bytes matter.
   class, and its name may be written only as the type of a parameter that
   borrows one `` (`_type_position`, `_field`, `_return`, `_result`,
   `_nullable`, `_type_argument`, `_exported_param`).
+- **Not after its close, and not kept past a lend.** A `using` binding's scope
+  is its block, which ends where the close is emitted, so a handle named after
+  its block — after it, in the loop's next iteration, in a `do` loop's
+  condition, in a `for` loop's update, in a later `case`, in the `else`, later
+  in a constructor — names nothing: `` Unknown builtin `f.read` `` or
+  `` Unknown identifier `f` `` (`_use_after_close`, `_use_after_close_loop`,
+  `_use_after_close_do_while`, `_use_after_close_for_update`,
+  `_use_after_close_switch`, `_use_after_close_else`, `_use_after_close_ctor`).
+  A `using` written straight into a `case` clause is refused by the clause rule
+  (`_use_after_close_switch_clause`). A lent handle cannot be kept by its
+  callee. The value rule refuses a local (`let saved = f`,
+  `_use_after_close_keep`), an alias (`_alias`), an array (`_array`) and a
+  `scope()` task (`_scope_task`); the type rule refuses a return (`_return`)
+  and a type argument (`_type_argument`), among them a `Map` or a `Channel` of
+  the class (`_use_after_close_keep_map`, `_use_after_close_keep_channel`);
+  both refuse a field of another class, set in a method, through `new` or as
+  `h.l = this` (`_use_after_close_keep_field`, `_walk_ctor_param`,
+  `_use_after_close_keep_this`). Some shapes are refused by a general
+  rule first: a closure by the arrow-capture rule (`_closure_capture`), and a
+  module binding by the absence of a top-level `let` and the rule that a
+  module constant is never assigned (`_use_after_close_keep_module`,
+  `_use_after_close_keep_module_expr`). In its own constructor `this` is half
+  built, and is neither lent, called, stored nor aliased (`_ctor_this_lend`,
+  `_ctor_this_receiver`, `_ctor_this_store`, `_ctor_this_alias`).
 
 **Two things stay C contracts, as a buffer's count does.** The class's methods
 pass the field only to functions that use it and return, and that neither close
@@ -6290,7 +6323,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
-| `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
+| `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
 ```ts
@@ -6351,11 +6384,15 @@ shortest round-trip digits for `f64` (`0.1`, `1e+21`, `1e-7`, `NaN`,
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `Math.sqrt/floor/ceil/trunc/sin/cos/exp/log(x: f64): f64` | LLVM intrinsics (`llvm.sqrt.f64`, ...) | none | `math_intrinsics`; `reject_math_i32` (`` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) ``) |
+| `Math.tan(x: f64): f64` | a call to `std/math.ts`'s `tanF64`, fdlibm's, copied into the module as `internal @nish.tanF64`, so no target calls libm; exact near every multiple of π/2 and within one ulp | none | `math_tan`, `math_std_edges` |
+| `Math.atan2(y: f64, x: f64): f64`, `Math.hypot(x: f64, y: f64): f64` | calls to `std/math.ts`'s `atan2F64` and `hypotF64`, copied in like `tan`; ECMAScript's special cases (`atan2(0, -0)` is π, `atan2(-0, -0)` is −π, `hypot(Infinity, NaN)` is `Infinity`). `Math.hypot` takes exactly two arguments, not JavaScript's any number | none | `math_atan2`, `math_hypot`; `reject_math_atan2_f32` (`` `Math.atan2` requires an f64 argument, got f32 (use --number-mode f64 or toF64(x)) ``), `reject_math_hypot_arity` (`` `Math.hypot` expects exactly 2 arguments, got 3 ``) |
 | `Math.pow(x: f64, y: f64): f64` | `llvm.pow.f64` plus a `select` for the cases where ECMAScript and C99 differ: `pow(x, NaN)` and `pow(±1, ±Infinity)` are `NaN` (C gives `1`); `pow(x, ±0)` is `1`, `pow(NaN, 0)` is `1`, and every other special case agrees with C | none | `math_intrinsics`; `tests/differential/corpus/f64_pow_spec` |
-| `Math.round(x: f64): f64` | JavaScript's round-half-up (`floor` + compare + `select`): `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0` | none | `math_intrinsics` |
+| `Math.round(x: f64): f64` | JavaScript's round-half-up (`floor` + compare + `select`), then `llvm.copysign.f64` puts `x`'s sign back: `2.5` -> `3`, `-2.5` -> `-2`, `0.49999999999999994` -> `0`, and a value in `[-0.5, 0)` or `-0` itself -> `-0`, as in JavaScript; `NaN` -> `NaN` | none | `math_intrinsics`, `math_round_negzero` |
 | `Math.abs(x: T): T` for any numeric `T` | `llvm.abs.*` (wrapping for `INT_MIN`) / `llvm.fabs.f32` / `llvm.fabs.f64`; on an unsigned type, no instruction at all (the value is its own magnitude) | none | `math_i32`, `math_intrinsics`; `i64`, `f32` and the unsigned widths *(CLI only)* |
-| `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: `llvm.minnum/maxnum.<f32\|f64>`, which a freestanding wasm32 build gets from `runtime/runtime-wasm.c` | none | `math_i32`, `math_intrinsics`, `math_minmax_float`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
+| `Math.min(a: T, b: T): T`, `Math.max(a: T, b: T): T` | exactly two operands of one numeric type; signed integers: `llvm.smin/smax`; unsigned: `llvm.umin/umax`; floats: JavaScript's answer, a NaN operand gives NaN and `-0` is below `+0` (`Math.min(0, -0)` is `-0`). A native build branches as clang compiles the C a programmer writes for it: `fcmp uno` to a quiet NaN, else `fcmp olt`/`ogt` and a `select`, and on `fcmp oeq` the operand whose sign bit is set (`min`) or clear (`max`), the three joined by a `phi`; x86 has no instruction for `llvm.minimum`, whose expansion measured 25–55% slower in `bench/math`. A wasm build keeps `llvm.minimum/maximum.<f32\|f64>`, which are wasm's `f64.min`/`f64.max`, so no libm is linked for them | none | `math_i32`, `math_intrinsics`, `math_minmax_float`, `math_minmax_nan`; `reject_math_min_arity` (`` `Math.min` expects exactly 2 arguments, got 1 ``) |
 | `Math.clz32(x: i32 \| u32): integer<0, 32>` | the leading zero bits of `x`'s 32 bits, JavaScript's answer (an `i32` and a `u32` are the bits ToUint32 gives): `llvm.ctlz.i32` with `i1 false`, so `0` answers `32`. The answer is ranged (`integer<Lo, Hi>`, see [Types](#types)), so `31 - Math.clz32(word & (0 - word))`, the index of a word's lowest set bit, needs no overflow check. Any other operand type is refused rather than converted | none | `math_clz32`; `reject_math_clz32_type` (`` `Math.clz32` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``) |
+| `Math.sign(x: T): T` for any numeric `T` | `-1`, `0` or `1` in `x`'s own type (a ranged `x` answers its base type). A float answers `llvm.copysign(1.0, x)` unless `fcmp ueq x, 0.0`, when it answers `x` itself, so `-0` and `NaN` come back as JavaScript gives them; a signed integer is `zext (x > 0) - zext (x < 0)`, an unsigned one `zext (x != 0)` | none | `math_sign`; `reject_math_sign_type` (`` `Math.sign` expects a number, got string ``) |
+| `Math.imul(a: i32 \| u32, b: i32 \| u32): i32` | the low 32 bits of the product, read signed: one wrapping `mul i32`, with no overflow check, which is JavaScript's answer for any operands an `i32` or a `u32` holds (`Math.imul(0x7fffffff, 2)` is `-2`). Any other operand type is refused rather than converted, for `Math.clz32`'s reason | none | `math_imul`; `reject_math_imul_f64` (`` `Math.imul` expects an i32 or a u32, got f64 (convert with toI32 or toU32) ``) |
 | `Math.random(): f64` | xorshift64\* in the runtime (`nish_random`), 53 random bits in `[0, 1)`, seeded from time and pid | write | `math_random` |
 | `Math.PI: f64`, `Math.E: f64` | constants, also in i32 mode | none | `math_i32`, `math_intrinsics` |
 
@@ -6374,6 +6411,7 @@ argument is typed `f64` by context (`Math.sqrt(2)` works in both modes).
 | `toF32(x): f32` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f64`: `fptrunc` (rounds to nearest); `f32`: identity | `f32_conversions`, `f32_constant` |
 | `toF64(x): f64` | signed integers: `sitofp`; unsigned integers: `uitofp`; `f32`: `fpext` (exact); `f64`: identity | `conversions`, `u_conv_f64`, `f32_conversions` |
 | `f64ToBits(x: f64): i64` | reinterpret the 64 bits, never convert the value: `toI64(1.5)` is `1`, `f64ToBits(1.5)` is `0x3FF8000000000000`. One `bitcast`, so a function that only reinterprets bits stays `readnone` | `conv_f64_bits`; `reject_f64tobits_type`, `reject_f64tobits_arity` |
+| `f32ToBits(x: f32): i32` | the same for an `f32`'s 32 bits, signed as an `i32`: `f32ToBits(1.5)` is `0x3FC00000`, and `f32ToBits(-0)` is `-2147483648`. One `bitcast float to i32`; under Node, `runtime/nish.mjs` supplies it from a `DataView` | `f32_to_bits`; `reject_f32_to_bits_f64` (`` `f32ToBits` expects an argument of type f32, got f64 ``) |
 | `bitsToF64(b: i64): f64` | the inverse. `bitsToF64(f64ToBits(x)) === x` for every `x` except `NaN`, which is not `===` to itself | `conv_f64_bits`; `reject_bitstof64_type` |
 | `Number(x: string \| i32 \| i64 \| f64 \| boolean): f64` | a string is parsed with JavaScript's `Number(s)` rules (below); `i32`/`i64`: `sitofp`; `boolean`: `uitofp` (`true` is `1`); `f64`: identity. A numeric literal argument is typed `f64` (`Number(2.5)` works in i32 mode) | `parse_numbers`; `reject_number_array` (`` `Number` expects a string, number, or boolean, got i32[] ``) |
 | `parseInt(s: string): i32` | base 10 only: ASCII whitespace, an optional sign, then digits (`strtoll`); stops at the first other character. **Deviations from JavaScript:** no `NaN` in an `i32`, so no digits give `0` (`parseInt("abc")`, `parseInt("")`); values beyond the `i32` range saturate exactly like `toI32` (`parseInt("99999999999")` is `2147483647`); a `0x` prefix is not hexadecimal (`parseInt("0x10")` is `0`). Always `i32`, also under `--number-mode f64` (use `Number` there) | `parse_numbers`; `reject_parseint_number` (`` `parseInt` expects a string, got i32 ``) |
@@ -7702,7 +7740,7 @@ What a program needs to run a full-screen terminal interface: read a key the
 moment it is pressed, wait for one with a timeout that doubles as a frame
 clock, and ask the terminal whether it is one, how big it is, and to stop
 echoing and line-editing. None of it needs the `net` capability that a
-`pollAdd(0)` and `netRead(0, …)` would carry; the five functions carry
+`pollAdd(0)` and `netRead(0, …)` would carry; the six functions carry
 [`tty`](#capabilities) instead. They are C in `runtime/runtime-term.c`, a
 translation unit of its own with its own `.text*` ceiling, which section GC
 leaves out of a program that calls none of them. Each is exported by
@@ -7716,6 +7754,7 @@ only, and WASI as below.
 | `isTerminal(fd: i32): boolean` | whether the descriptor is a terminal (`isatty`) | write | `term_calls`, `term_pty`; `reject_term_is_terminal_arity` |
 | `terminalSize(): i32[]` | a fresh `[columns, rows]` of the terminal on stdout, or on stderr when stdout is not one; `[-errno, 0]` when neither is, **`[-25, 0]` for "not a terminal"**, and `[0, 0]` for a terminal no one set a size for. Read it again on each frame to follow a resize | write | `term_calls`, `term_pty`, `mem_terminal_size_scope`; `reject_term_size_arity` |
 | `setRawMode(on: boolean): i32` | puts stdin's terminal in raw mode (`true`) or back as it was (`false`): `0`, `-25` when stdin is not a terminal, or the host's `-errno` when the terminal refuses. Asking for the mode it is already in changes nothing and answers `0`, so `setRawMode(false)` is always safe | write | `term_calls`, `term_pty`; `reject_term_raw_number`, `reject_term_unknown_export` |
+| `setTerminalRestore(bytes: string): i32` | keeps a copy of `bytes` for the runtime to write to the terminal on stdout as the program ends — the escapes that leave an alternate screen, show the cursor or turn mouse reporting off — **replacing** what it kept before; `""` keeps nothing. `0`, `-25` when stdout is not a terminal and `-7` (E2BIG) past `NISH_TERM_RESTORE_MAX`, 4096 bytes, both keeping what was there. When they go out is under [Raw mode](#raw-mode) | write | `term_restore`; `reject_term_restore_arity`, `reject_term_restore_number`, `reject_term_restore_wasm` |
 
 **Errors are numbers**, in `nish:net`'s shape: `>= 0` is success and a negative
 number the failure's errno, negated. The two a program branches on are the
@@ -7815,6 +7854,21 @@ Job control also stops a program started in the background
 that sets the terminal, and the program enters raw mode on `fg`. Two threads that call `setRawMode` at
 once take turns, so the termios saved is the one from before either.
 
+**Restore bytes go out on the same paths.** The bytes `setTerminalRestore`
+kept are written to stdout once, with `write` alone, before the termios comes
+back, when `main` returns or `process.exit` is called, on every panic and on
+each signal above whose default ends the program, raw mode or not: setting
+them installs the same handlers. Ctrl-Z and `setRawMode(false)` do not end the
+program, so they write nothing. A program sets them once it has switched the
+terminal (`"\u001b[?1049h"` written, say) and again with each change, last
+the set that undoes them all; a signal that lands while it does writes the
+old string or the new one, whole. They are written at most once, however
+many of those paths race. Output is not buffered, so all the program printed
+reaches the terminal before them. `term_restore` under `script(1)` checks that
+what follows its last line is exactly its bytes, once, after it returns,
+panics and is killed by SIGTERM and by SIGSEGV, nothing after it cleared them,
+and that `stty -g` reads as before.
+
 The `term` block of `tests/run.js` runs `term_pty` under `script(1)`, which
 gives it a pseudo-terminal: it is a terminal on both descriptors with a size,
 enters raw mode twice and leaves twice, each `0`, and after it returns in raw
@@ -7824,14 +7878,14 @@ missing or makes no terminal, that check is a counted skip that says which.
 
 #### Where there is no terminal
 
-| Host | `readStdin` | `waitStdin` | `isTerminal` | `terminalSize` | `setRawMode` |
-| --- | --- | --- | --- | --- | --- |
-| Linux, Darwin | as above | as above | `isatty` | the ioctl | as above |
-| A pipe or a file | as above | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
-| `--profile wasi` | **waits** for its bytes | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` |
-| `--target wasm32`, freestanding | refused | refused | refused | refused | refused |
-| Node ([prelude](RUN_UNDER_NODE.md)) | throws | throws | `tty.isatty` | Node's `columns` and `rows` | throws |
-| A browser (`nish/runtime/browser`) | throws | throws | `false` | `[-25, 0]` | throws |
+| Host | `readStdin` | `waitStdin` | `isTerminal` | `terminalSize` | `setRawMode` | `setTerminalRestore` |
+| --- | --- | --- | --- | --- | --- | --- |
+| Linux, Darwin | as above | as above | `isatty` | the ioctl | as above | as above |
+| A pipe or a file | as above | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` | `-25`, `0` for `""`, `-7` past the cap |
+| `--profile wasi` | **waits** for its bytes | as above | `false` | `[-25, 0]` | `-25` for `true`, `0` for `false` | `-25`, keeping nothing; `0` for `""`, `-7` past the cap |
+| `--target wasm32`, freestanding | refused | refused | refused | refused | refused | refused |
+| Node ([prelude](RUN_UNDER_NODE.md)) | throws | throws | `tty.isatty` | Node's `columns` and `rows` | throws | throws |
+| A browser (`nish/runtime/browser`) | throws | throws | `false` | `[-25, 0]` | throws | throws |
 
 WASI has `read` and `poll` on stdin and no terminal interface. There
 `readStdin` reads without asking `poll` first, because Node's WASI answers a
@@ -7840,11 +7894,11 @@ for its bytes: call `waitStdin` first, as the loop above does. For the same
 reason a `waitStdin` there waits at least 10 ms: Node's WASI counts a shorter
 wait from before it looks at stdin, and on a busy machine answers "nothing
 waiting" before it has looked. The checker
-accepts the five there, unlike `nish:net`'s, and refuses them on a
+accepts the six there, unlike `nish:net`'s, and refuses them on a
 freestanding `--target wasm32` build, whose runtime has no stdin
 (`reject_term_wasm`). Under Node,
 stdin is read only by the event loop, which a program that owns its loop never
-returns to, and Node's own raw mode turns Ctrl-C into a byte, so the three
+returns to, and Node's own raw mode turns Ctrl-C into a byte, so the four
 that would need either throw, each naming itself. The `term` and `term_wasi`
 blocks of `tests/run.js` feed `term_calls` and `term_import` over a pipe —
 four bytes after a delay, a pipe held open and never written, and a thousand
@@ -9236,11 +9290,11 @@ main.ts:6:36: error: `main` reaches `net`, which the capability policy does not 
   double, which is not the same as the correctly-rounded string of that length:
   `7.120236347223045e-307` prints those sixteen digits and not the seventeen a
   round-and-check search settles for (`tests/cases/f64_shortest_digits`).
-- **`Math.round`** rounds half toward +infinity like JavaScript;
-  `Math.round(-0.3)` is `+0` here and `-0` in JavaScript (both print `0`).
-  **`Math.min`/`Math.max`** on `f64` use `minnum`/`maxnum`: with one NaN
-  operand they return the other operand (JavaScript returns NaN) and
-  `min(0, -0)` may return either zero. Both take exactly two arguments.
+- **`Math.round`** rounds half toward +infinity like JavaScript, and
+  `Math.round(-0.3)` is `-0` in both. **`Math.min`/`Math.max`** on a float
+  answer NaN when either operand is NaN and order `-0` below `+0`, as
+  JavaScript does (`tests/cases/math_minmax_nan`, `math_round_negzero`).
+  Both take exactly two arguments, and so does `Math.hypot`.
 - **`toI32`/`toI64` from `f64` saturate** (NaN -> 0, `toI32(5e10)` ->
   `2147483647`) like a Rust `as` cast, not JavaScript's modulo-2^32
   `ToInt32`. Integer-to-integer conversions wrap (`toI32(5000000000)` ->
@@ -9927,7 +9981,7 @@ by the caller.
   | NL8007 | wrapping (3.1) | `+ - *`, their `op=` forms, `++` and `--` on `u8`/`u16`/`u32`, and on `i32` under `--wrapping`; a ranged integer is left out, because every write into its range is checked | keeps counting past the range |
   | NL8008 | `i32 >>>` (3.1) | `>>>` or `>>>=` whose result is `i32`, unless the count is a constant `k` — a literal, or a `const` that folds to one — with `k & 31` not 0: such a shift is at most 2^31 − 1, so it reads back the same both ways (`-16 >>> 2` is `1073741820` in each), and `x >>> 0` or a count that is not a constant is reported | reads the result back unsigned |
   | NL8009 | 64-bit integers (3.1) | a binding, parameter, field or return type declared `i64` or `u64` | holds a double, which rounds past 2^53 |
-  | NL8010 | libm's NaN and signed zero (3.1) | `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32` | answers NaN from `min` or `max` when either operand is NaN, where this drops the NaN and answers the other; and answers `-0` from `round` for a negative number that rounds to zero (`Math.round(-0.4)`), where this answers `0`. Both round a half towards +∞ (`2.5` to `3`, `-2.5` to `-2`), so that is not a difference |
+  | NL8010 | *retired* | nothing: the row was `Math.min`, `Math.max` or `Math.round` of an `f64` or `f32`, when `min` and `max` dropped a NaN operand and `round` answered `0` for a negative number that rounds to zero. They lower to a NaN test and a sign-bit pick (`llvm.minimum`/`llvm.maximum` on wasm) and a `llvm.copysign.f64` now, which answer NaN and `-0` as JavaScript does, so no site diverges (`tests/cases/port_num_libm` is quiet). The code stays reserved and is never reused | — |
   | NL8011 | *retired* | nothing: the row was `console.log` or `console.error` of a float printing `-0`, and it marks no divergence in the reading the class is defined against. `runtime/nish.mjs` replaces both with shims that print `String(x)`, and `String(-0)` is `0`, which is what the native build prints. The code stays reserved and is never reused | — |
 
   **NL8001, exactly.** A *source* is `s.length`, `s.indexOf(t)`,
@@ -10054,7 +10108,7 @@ by the caller.
   `port_rec_push_never_written_quiet`, `port_rec_slot_store_dead_ref_quiet`,
   `port_rec_pop_ref_quiet`, `port_rec_alias_arrow_quiet`).
 
-  Every row but the retired NL8011 is live, each with a warning case and a
+  Every row but the retired NL8010 and NL8011 is live, each with a warning case and a
   quiet counterpart among `tests/cases/port_*` and a wording pin in
   `tests/wordings/`.
 - **Deprecation warnings are the third diagnostic that is not an error.** One
