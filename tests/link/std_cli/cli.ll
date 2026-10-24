@@ -784,6 +784,34 @@ entry:
 
 define void @nish.HelpMenu.header(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture %this, i8* noundef nonnull noalias readonly align 8 %version, i8* noundef nonnull noalias readonly align 8 %summary) #1 {
 entry:
+  call void @nish.HelpMenu.title(%struct.HelpMenu* %this, i8* %version, i8* %summary)
+  %0 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 4
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !26
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  %5 = load i64, i64* %4, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  %6 = icmp eq i64 %3, %5
+  br i1 %6, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %1, i64 8)
+  br label %push.store
+
+push.store:
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !9, !noalias !10, !tbaa !16
+  %9 = bitcast i8* %8 to i8**
+  %10 = getelementptr inbounds i8*, i8** %9, i64 %3
+  store i8* bitcast ({ i64, [1 x i8] }* @.str.9 to i8*), i8** %10, align 8, !alias.scope !10, !noalias !9, !tbaa !18
+  %11 = add i64 %3, 1
+  store i64 %11, i64* %2, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %12 = trunc i64 %11 to i32
+  ret void
+}
+
+define void @nish.HelpMenu.title(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture %this, i8* noundef nonnull noalias readonly align 8 %version, i8* noundef nonnull noalias readonly align 8 %summary) #1 {
+entry:
   %style.addr = alloca %struct.Style*, align 8
   %0 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 0
   %1 = load %struct.Style*, %struct.Style** %0, align 8, !tbaa !22
@@ -828,28 +856,33 @@ push.store:
   %31 = add i64 %23, 1
   store i64 %31, i64* %22, align 8, !alias.scope !9, !noalias !10, !tbaa !14
   %32 = trunc i64 %31 to i32
-  %33 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 4
-  %34 = load %struct.nish_array*, %struct.nish_array** %33, align 8, !tbaa !26
-  %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 0
-  %36 = load i64, i64* %35, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 1
-  %38 = load i64, i64* %37, align 8, !alias.scope !9, !noalias !10, !tbaa !15
-  %39 = icmp eq i64 %36, %38
-  br i1 %39, label %push.grow.1, label %push.store.1
+  ret void
+}
 
-push.grow.1:
-  call void @nish_array_grow(%struct.nish_array* %34, i64 8)
-  br label %push.store.1
+define void @nish.HelpMenu.line(%struct.HelpMenu* noundef nonnull readonly align 8 dereferenceable(40) nocapture %this, i8* noundef nonnull noalias readonly align 8 %text) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.HelpMenu, %struct.HelpMenu* %this, i32 0, i32 4
+  %1 = load %struct.nish_array*, %struct.nish_array** %0, align 8, !tbaa !26
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  %3 = load i64, i64* %2, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  %5 = load i64, i64* %4, align 8, !alias.scope !9, !noalias !10, !tbaa !15
+  %6 = icmp eq i64 %3, %5
+  br i1 %6, label %push.grow, label %push.store
 
-push.store.1:
-  %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 2
-  %41 = load i8*, i8** %40, align 8, !alias.scope !9, !noalias !10, !tbaa !16
-  %42 = bitcast i8* %41 to i8**
-  %43 = getelementptr inbounds i8*, i8** %42, i64 %36
-  store i8* bitcast ({ i64, [1 x i8] }* @.str.9 to i8*), i8** %43, align 8, !alias.scope !10, !noalias !9, !tbaa !18
-  %44 = add i64 %36, 1
-  store i64 %44, i64* %35, align 8, !alias.scope !9, !noalias !10, !tbaa !14
-  %45 = trunc i64 %44 to i32
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %1, i64 8)
+  br label %push.store
+
+push.store:
+  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  %8 = load i8*, i8** %7, align 8, !alias.scope !9, !noalias !10, !tbaa !16
+  %9 = bitcast i8* %8 to i8**
+  %10 = getelementptr inbounds i8*, i8** %9, i64 %3
+  store i8* %text, i8** %10, align 8, !alias.scope !10, !noalias !9, !tbaa !18
+  %11 = add i64 %3, 1
+  store i64 %11, i64* %2, align 8, !alias.scope !9, !noalias !10, !tbaa !14
+  %12 = trunc i64 %11 to i32
   ret void
 }
 
@@ -1306,15 +1339,16 @@ join.end:
   ret i8* %26
 }
 
-attributes #0 = { nounwind willreturn }
-attributes #1 = { nounwind }
-attributes #2 = { nounwind readonly }
-attributes #3 = { nounwind willreturn cold noinline allocsize(0) }
-attributes #4 = { nounwind willreturn memory(argmem: read) }
-attributes #5 = { nounwind noreturn cold }
-attributes #6 = { nounwind willreturn readnone }
-attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #1 = { nounwind "probe-stack"="inline-asm" }
+attributes #2 = { nounwind readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn memory(argmem: read) "probe-stack"="inline-asm" }
+attributes #5 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #6 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #7 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!28, !29, !30, !31, !32}
 !0 = !{!"nish TBAA"}
 !1 = !{!"omnipotent char", !0, i64 0}
 !2 = !{!"i1", !1, i64 0}
@@ -1343,3 +1377,8 @@ attributes #7 = { alwaysinline nounwind willreturn allocsize(0) }
 !25 = !{!21, !20, i64 20}
 !26 = !{!21, !19, i64 24}
 !27 = !{!21, !20, i64 32}
+!28 = !{i32 8, !"cf-protection-branch", i32 1}
+!29 = !{i32 8, !"cf-protection-return", i32 1}
+!30 = !{i32 8, !"branch-target-enforcement", i32 1}
+!31 = !{i32 8, !"sign-return-address", i32 1}
+!32 = !{i32 4, !"probe-stack", !"inline-asm"}

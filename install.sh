@@ -17,6 +17,9 @@
 # replaced on GitHub after the fact does not match. A later release is checked
 # against the SHA256SUMS file release.yml attaches beside it. A release that
 # has neither is refused rather than trusted (docs/security/supply-chain.md).
+# A release after 0.20.0 also carries a build provenance attestation, which
+# is checked too when the GitHub CLI is there to check it, and skipped with a
+# note when it is not.
 #
 # The other way in is npm -- `npm install -g nish` -- which gets the
 # same binary through per-platform packages. It covers the same platforms and no
@@ -56,6 +59,9 @@ Environment:
 
 Every download is checked against a SHA-256 before it is unpacked or run, and
 one that does not match -- or that has no published digest -- is refused.
+When the GitHub CLI is installed and signed in, a release after 0.20.0 also
+has its build provenance attestation checked with `gh attestation verify`,
+and one that fails is refused. Without gh that check is skipped, with a note.
 
 Upgrading is running this again: it installs over an existing install, and
 says nothing needs doing when the version already matches.
@@ -277,6 +283,36 @@ nish_installed_version() {
   nish_version_of "$1/bin/nish"
 }
 
+# Whether dotted version $1 is newer than $2, comparing the first three
+# numbers and nothing after them, so a pre-release counts as its release.
+nish_newer_than() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    split(a, x, /[^0-9]+/)
+    split(b, y, /[^0-9]+/)
+    for (i = 1; i <= 3; i++) {
+      if (x[i] + 0 != y[i] + 0) { exit !(x[i] + 0 > y[i] + 0) }
+    }
+    exit 1
+  }'
+}
+
+# Why this machine cannot check a build provenance attestation, or nothing when
+# it can. It takes the GitHub CLI, signed in (`gh auth login`, or GH_TOKEN), at
+# a version whose `gh attestation verify` knows every flag the check below
+# passes -- an older one would either fail on a flag it has never heard of or,
+# worse, accept the attestation without pinning what signed it.
+nish_gh_cannot_verify() {
+  command -v gh >/dev/null 2>&1 || { echo "gh is not installed"; return 0; }
+  gh auth status >/dev/null 2>&1 || { echo "gh is not signed in (gh auth login)"; return 0; }
+  nish_gh_help="$(gh attestation verify --help 2>&1)" || nish_gh_help=""
+  for nish_gh_flag in --repo --signer-workflow --source-ref --deny-self-hosted-runners; do
+    case "$nish_gh_help" in
+      *"$nish_gh_flag"*) ;;
+      *) echo "this gh is too old to check one (its attestation verify has no $nish_gh_flag)"; return 0 ;;
+    esac
+  done
+}
+
 # Sourced for the functions alone, by the tests that check them against
 # seed-targets.json and against the defect above. Everything below is the
 # install.
@@ -452,6 +488,35 @@ actual="$(nish_sha256 "$tmp/nish.tar.gz")" ||
 [ "$actual" = "$expected" ] || die "$name.tar.gz does not match its published SHA-256, so it is not installed.
   expected $expected
   got      $actual"
+
+# The SHA-256 above proves the tarball is the one SHA256SUMS names, but both
+# came from the same release, so whoever could replace one could replace the
+# other. A build provenance attestation is the part they cannot forge: it is
+# signed by a short-lived certificate GitHub issues to release.yml's own run,
+# naming the tag it ran on, and it is recorded in a public transparency log.
+# Every release after 0.20.0 carries one (docs/security/supply-chain.md, SC-16).
+#
+# Checking it needs the GitHub CLI, and this script does not require it: curl
+# and tar are still all an install takes. So without a usable `gh` the check is
+# skipped with a note saying so, and with one a failed check refuses the
+# install, the same as a digest that does not match.
+if nish_newer_than "$plain" 0.20.0; then
+  gh_missing="$(nish_gh_cannot_verify)"
+  if [ -n "$gh_missing" ]; then
+    say "note: the build provenance attestation was not checked: $gh_missing."
+    say "  The SHA-256 was. docs/INSTALL.md says how to check the attestation by hand."
+  elif gh attestation verify "$tmp/nish.tar.gz" --repo "$REPO" \
+    --signer-workflow "$REPO/.github/workflows/release.yml" \
+    --source-ref "refs/tags/$version" --deny-self-hosted-runners \
+    >"$tmp/attestation.log" 2>&1; then
+    say "verified: $name.tar.gz was built by $REPO's release workflow at $version"
+  else
+    cat "$tmp/attestation.log" >&2
+    die "$name.tar.gz has no build provenance attestation from $REPO's release
+  workflow at $version that gh will accept, so it is not installed. Its SHA-256
+  matched SHA256SUMS, which only shows the two agree with each other."
+  fi
+fi
 
 # --strip-components=1 because the tarball holds one directory, `$name/`, whose
 # layout is already the one the compiler needs: bin/nish beside runtime/ and

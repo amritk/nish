@@ -943,7 +943,13 @@ must keep printing it.
 `crypto/bcrypt/run.mjs` times one cost-10 hash of `nish/crypto/bcrypt` against
 libxcrypt's `crypt_r` (`$2b$`) and OpenBSD's `bcrypt.c`, which it fetches from
 the OpenBSD tree into `build/bench/bcrypt/` and builds with `gcc -O2` and
-`clang -O2` behind a small shim for what OpenBSD's libc adds. It is not a
+`clang -O2` behind a small shim for what OpenBSD's libc adds. It also times
+`bcryptHash4` with four lanes against the four-lane C of the tigokraft
+submission (`bc_hash_n`, pinned to one commit, MIT), fetched the same way and
+built with `gcc` and `clang` at `-O2 -march=native`, one lane and four; a
+four-lane row is per hash, a batch's time over four. Every lane of a
+four-lane program must print the single hash's output, not lane 0 alone. The
+Nish programs are built for baseline x86-64, without `-march=native`. It is not a
 `crypto/` family (it has no `family.json`) and is not in this suite's tables;
 [docs/security/crypto-bcrypt.md](../docs/security/crypto-bcrypt.md#speed)
 carries its figures.
@@ -1425,6 +1431,13 @@ The calls one query makes, on each side:
   and linked with the link's flags on Linux: `--gc-sections`, `--as-needed`,
   `-O2`, no build id, stripped, and `lld` when there is one. It links the
   system's libpq, 17 or later, through `pg_config`.
+
+The figures below were measured before
+[#916](https://github.com/amritk/nish/pull/916) hardened the speed profile
+(RELRO, PIE, a non-executable stack, stack-clash protection and CET). `--link`
+now builds `main.ts` with them and the twin's flags above do not carry them, so
+a run after #916 compares a hardened client with an unhardened one until the
+twin takes the same flags and the figures are measured again.
 
 **The protocol.**
 

@@ -126,9 +126,10 @@ if.end:
   ret i32 %5
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 
+!llvm.module.flags = !{!13, !14, !15, !16, !17}
 !0 = !{!"nish array"}
 !1 = !{!"header", !0}
 !2 = !{!"elements", !0}
@@ -142,3 +143,8 @@ attributes #1 = { nounwind willreturn }
 !10 = !{!9, !7, i64 0}
 !11 = !{!9, !7, i64 8}
 !12 = !{!9, !8, i64 16}
+!13 = !{i32 8, !"cf-protection-branch", i32 1}
+!14 = !{i32 8, !"cf-protection-return", i32 1}
+!15 = !{i32 8, !"branch-target-enforcement", i32 1}
+!16 = !{i32 8, !"sign-return-address", i32 1}
+!17 = !{i32 4, !"probe-stack", !"inline-asm"}

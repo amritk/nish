@@ -41,7 +41,7 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` for the runs a parser skips and a writer copies |
-| [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers that answers the same under Node |
+| [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
 | [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
@@ -888,11 +888,29 @@ c 1
 
 `new Rng(seed)` makes a generator of pseudo-random numbers from an `i32`
 seed: the same seed always answers the same sequence, natively and under
-Node. `nextI32()` answers the next 32 bits as an `i32`, and `nextF64()` a
-number in [0, 1). Every seed works, 0 included, and nearby seeds answer
+Node. `nextInt(lo, hi)` answers a whole number from `lo` to `hi`, both
+included, each with equal chance; `nextI32()` answers the next 32 bits as an
+`i32`, and `nextF64()` a number in [0, 1). Every seed works, 0 included, and nearby seeds answer
 unrelated sequences, so a task or a parallel body can seed its own from its
 index. It is not for keys or passwords: those come from
 `crypto.getRandomValues`.
+
+```ts nish:ok
+import { Rng } from "nish/random";
+
+export const main = (): i32 => {
+  const r = new Rng(42);
+  const rolls: string[] = [];
+  for (let i: i32 = 0; i < 5; i++) {
+    rolls.push(`${r.nextInt(1, 6)}`);
+  }
+  console.log(rolls.join(" ")); // 1 5 6 6 4, every run
+  return 0;
+};
+```
+
+`nextInt(6, 1)`, with `lo` above `hi`, stops the program with
+`Rng.nextInt: lo is greater than hi`.
 
 ```ts nish:ok
 import { Rng } from "nish/random";
@@ -955,7 +973,10 @@ row's description starts at and the column a usage line's starts at. Add
 lines in order: `header(version, summary)`, `usage(shape, description)` (the
 first one says `usage:`, the rest line up under it), `section(title)`,
 `row(flag, placeholder, description)`, `note(text)` for a line of prose and
-`value(text)` for a path or value to copy. An empty placeholder or
+`value(text)` for a path or value to copy. `title(version, summary)` is
+`header` without its blank line after, and `line(text)` adds a line exactly
+as given, so a menu can put a rule or a banner under its title (paint it with
+the same `Style`, and keep it to the menu's width). An empty placeholder or
 description is left out. A flag too long for its column keeps two spaces
 before its description. `text()` answers the whole menu. Columns are counted
 in bytes, so they line up for ASCII text.
@@ -1563,7 +1584,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/hmac` | `hmacSha256`, `hmacSha384`, `hmacSha512`, their streaming classes, and `hmacSha256Verify` and its siblings, which compare in constant time; and `pbkdf2HmacSha256(password, salt, iterations, dkLen)`, PBKDF2 (RFC 8018), which takes the password as a `Secret<u8[]>`, answers the key as one, and answers `null` for fewer than one iteration or a `dkLen` below one |
 | `nish/crypto/hkdf` | `hkdfExtractSha256`, `hkdfExpandSha256` and their SHA-384 forms; TLS 1.3's `hkdfExpandLabelSha256`; and a `Secret` form of each (`hkdfExtractSha256Secret`, `hkdfExpandLabelSha256Secret`, …), which takes the key as a `Secret<u8[]>`, answers one, and wipes what it derives on the way; and `hkdfExpandLabelSha256Held(dst, prk, label, context)` and its SHA-384 form, which derive into a `Secret` you already hold, as many bytes as it holds, in place — `dst` may be `prk`, a ratchet |
 | `nish/crypto/ct` | `timingSafeEqual(a, b)`, a comparison that reads every byte |
-| `nish/crypto/bcrypt` | `bcryptHash(password, salt, cost)` and `bcryptVerify(password, hash)`: bcrypt password hashes that other implementations read, with the password a `Secret<u8[]>`; see [Password hashing](password-hashing.md) |
+| `nish/crypto/bcrypt` | `bcryptHash(password, salt, cost)` and `bcryptVerify(password, hash)`, and `bcryptHash4`/`bcryptVerify4` for up to four at once: bcrypt password hashes that other implementations read, with the password a `Secret<u8[]>`; see [Password hashing](password-hashing.md) |
 | `nish/crypto/base64url` | `base64urlEncode` and a strict `base64urlDecode`, unpadded; `base64StdPadEncode` and a strict `base64StdPadDecode`, padded, in the standard alphabet, constant-time (`nish/base64` encodes the same alphabet for pixels, without the constant-time guarantee) |
 | `nish/crypto/chacha20poly1305` | `chacha20Poly1305Seal` and `chacha20Poly1305Open` |
 | `nish/crypto/aes` | `aesKey` for AES-128 and AES-256, `aesGcmSeal` and `aesGcmOpen` |

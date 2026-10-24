@@ -33,7 +33,10 @@ const USAGE_COLUMN: i32 = 46
  */
 export const helpText = (style: Style, guide: string): string => {
   const menu = new HelpMenu(style, CLI, DESCRIPTION_COLUMN, USAGE_COLUMN)
-  menu.header(VERSION, "a static subset of TypeScript, compiled ahead of time")
+  const tagline = "a static subset of TypeScript, compiled ahead of time"
+  menu.title(VERSION, tagline)
+  menu.line(wall(style, CLI.length + VERSION.length + tagline.length + 3))
+  menu.line("")
   menu.usage("<file.ts> [more.ts ...] [flags]", "compile to LLVM IR")
   menu.usage("run [flags] <file.ts> [args ...]", "build, cache and run it")
   menu.usage("-v, --version | -h, --help", "")
@@ -102,6 +105,21 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row(`${CLI} --fix src/*.ts`, "", "rewrite what the compiler can fix")
   menu.row(`NO_COLOR=1 ${CLI} --help`, "", "this text, without colour")
   return menu.text()
+}
+
+/**
+ * The rule under the help's title, as wide as the title: a course of bricks,
+ * dim like the other quiet text, with one knocked out. It is the only mark of
+ * `nish break` in the help (`src/compile.ts`, `main`), and it is meant to pass
+ * for decoration.
+ */
+const wall = (style: Style, width: i32): string => {
+  const count: i32 = ((width + 1) / 5) | 0
+  const bricks: string[] = []
+  for (let i: i32 = 0; i < count; i++) {
+    bricks.push(i === count - 4 ? "    " : "▀▀▀▀")
+  }
+  return style.dim(bricks.join(" "))
 }
 
 /**

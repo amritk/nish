@@ -105,9 +105,9 @@ function DebugInfo.constructor(this: DebugInfo, module: IRModule, program: Check
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via IRModule.reserveMetadata
   escaping: module program table
-  calls: DebugInfo.fileOf IRModule.addMetadata IRModule.addNamedMetadata IRModule.reserveMetadata IRModule.setMetadata StringMap.constructor nish_alloc_struct nish_str_concat quote
+  calls: DebugInfo.fileOf IRModule.addModuleFlag IRModule.addNamedMetadata IRModule.reserveMetadata IRModule.setMetadata StringMap.constructor nish_alloc_struct nish_str_concat quote
   pointer this: size=96 writesThrough=true captured=false passedTo=DebugInfo.fileOf#0
-  pointer module: size=80 writesThrough=true captured=true passedTo=IRModule.reserveMetadata#0 IRModule.setMetadata#0 IRModule.addNamedMetadata#0 IRModule.addMetadata#0 IRModule.addMetadata#0 IRModule.addNamedMetadata#0
+  pointer module: size=96 writesThrough=true captured=true passedTo=IRModule.reserveMetadata#0 IRModule.setMetadata#0 IRModule.addNamedMetadata#0 IRModule.addModuleFlag#0 IRModule.addModuleFlag#0
   pointer program: size=656 writesThrough=true captured=true
   pointer table: size=96 writesThrough=true captured=true
   stackSites=0 stackLocals=0
@@ -118,11 +118,8 @@ function DebugInfo.constructor(this: DebugInfo, module: IRModule, program: Check
   callee +14:5 IRModule.setMetadata -> @IRModule.setMetadata
   callee +16:87 quote -> @quote
   callee +18:5 IRModule.addNamedMetadata -> @IRModule.addNamedMetadata
-  local +19:11 dwarf: string (const)
-  callee +19:19 IRModule.addMetadata -> @IRModule.addMetadata
-  local +20:11 version: string (const)
-  callee +20:21 IRModule.addMetadata -> @IRModule.addMetadata
-  callee +21:5 IRModule.addNamedMetadata -> @IRModule.addNamedMetadata
+  callee +19:5 IRModule.addModuleFlag -> @IRModule.addModuleFlag
+  callee +20:5 IRModule.addModuleFlag -> @IRModule.addModuleFlag
 function DebugInfo.fileOf(this: DebugInfo, source: SourceFile): string -> @DebugInfo.fileOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

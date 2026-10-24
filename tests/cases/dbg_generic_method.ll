@@ -64,14 +64,14 @@ entry:
   ret i32 %1, !dbg !57
 }
 
-attributes #0 = { nounwind }
-attributes #1 = { nounwind willreturn }
-attributes #2 = { nounwind willreturn readonly }
-attributes #3 = { nounwind noreturn cold }
-attributes #4 = { nounwind willreturn readnone }
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 !llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!2, !3}
+!llvm.module.flags = !{!2, !3, !59, !60, !61, !62, !63}
 !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "nish <version>", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/dbg_generic_method.ts", directory: ".")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
@@ -131,3 +131,8 @@ attributes #4 = { nounwind willreturn readnone }
 !56 = !DILocalVariable(name: "kept", scope: !50, file: !1, line: 14, type: !4)
 !57 = !DILocation(line: 15, column: 5, scope: !50)
 !58 = !DILocation(line: 15, column: 12, scope: !50)
+!59 = !{i32 8, !"cf-protection-branch", i32 1}
+!60 = !{i32 8, !"cf-protection-return", i32 1}
+!61 = !{i32 8, !"branch-target-enforcement", i32 1}
+!62 = !{i32 8, !"sign-return-address", i32 1}
+!63 = !{i32 4, !"probe-stack", !"inline-asm"}

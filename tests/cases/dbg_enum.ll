@@ -29,10 +29,10 @@ entry:
   ret i32 %0, !dbg !30
 }
 
-attributes #0 = { nounwind willreturn readnone }
+attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 !llvm.dbg.cu = !{!0}
-!llvm.module.flags = !{!2, !3}
+!llvm.module.flags = !{!2, !3, !33, !34, !35, !36, !37}
 !0 = distinct !DICompileUnit(language: DW_LANG_C99, file: !1, producer: "nish <version>", isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)
 !1 = !DIFile(filename: "<root>/tests/cases/dbg_enum.ts", directory: ".")
 !2 = !{i32 7, !"Dwarf Version", i32 5}
@@ -66,3 +66,8 @@ attributes #0 = { nounwind willreturn readnone }
 !30 = !DILocation(line: 29, column: 3, scope: !28)
 !31 = !DILocation(line: 29, column: 10, scope: !28)
 !32 = !DILocation(line: 29, column: 17, scope: !28)
+!33 = !{i32 8, !"cf-protection-branch", i32 1}
+!34 = !{i32 8, !"cf-protection-return", i32 1}
+!35 = !{i32 8, !"branch-target-enforcement", i32 1}
+!36 = !{i32 8, !"sign-return-address", i32 1}
+!37 = !{i32 4, !"probe-stack", !"inline-asm"}
