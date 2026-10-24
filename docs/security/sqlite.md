@@ -12,7 +12,8 @@ are named by the "SQLite's compile-time options" section of
 `scripts/build.sh`.
 
 **Result.** SQLite 3.54.1, byte for byte as upstream publishes it; no line of
-it is patched. Nothing was found to fix or left open.
+it is patched. The review of the adapter found two Low findings: one is
+fixed, one is open ([Findings](#findings)).
 
 ## Scope
 
@@ -50,11 +51,12 @@ adapter answers without SQLite — `SQLITE_MISUSE`, `SQLITE_RANGE`, and
 `SQLITE_NOMEM` from a full table or a value SQLite could not convert to text
 in `columnInto` — takes `sqlite3_errstr`'s message for the code instead of the
 connection's, which is still that of some earlier call. A read of a column that
-is not there is answered before SQLite and leaves the connection's message as
-it was. `close` frees the handle only when `sqlite3_close_v2` succeeds, so a
+is not there, or of any column when no row is current (before the first
+`step`, or after the last), is answered before SQLite and leaves the
+connection's message as it was. `close` frees the handle only when `sqlite3_close_v2` succeeds, so a
 close that fails leaves the connection and its message readable; its
-statements are already finalized. Open: `columnText` reads a value SQLite
-fails to convert under memory pressure as `null`, the same as SQL `NULL`.
+statements are already finalized. `columnText` reads a value SQLite fails
+to convert under memory pressure as `null`, the same as SQL `NULL` (SQL-2).
 
 SQL text, file names and `bindText`'s string reach C as `const char *`, where
 a NUL byte would end them early. The FFI checks each one before the call and
@@ -69,6 +71,13 @@ answering the length it needs and writing nothing. Text and blobs are bound
 `SQLITE_TRANSIENT`, so SQLite copies them and no Nish array is read after the
 call returns. Tests: `tests/link/std_sqlite` (stale and forged handles, windows
 out of range, a buffer too small).
+
+## Findings
+
+| ID | Severity | Where | Finding | Status |
+| --- | --- | --- | --- | --- |
+| SQL-1 | Low | `runtime/sqlite/nish-sqlite.c` (`slot_give`) | A freed slot's 15-bit generation wrapped back to 1, so after 32,767 reuses of one slot a stale handle named the live object then in it: a statement or connection the holder never opened. | **Fixed.** A slot whose generation reaches 32,767 is retired, never handed out again. |
+| SQL-2 | Low | `std/sqlite.ts` (`columnText`) | `sqlite3_column_text` answers NULL both for SQL `NULL` and when converting the value to text runs out of memory, and `columnText` reads either as `null`. A program can take a value it failed to read for an empty column. `columnInto` tells the two apart and answers `SQLITE_NOMEM`. | **Open.** Telling them apart in `columnText` needs a `Result` answer, a change to the API. |
 
 ## Trust model
 

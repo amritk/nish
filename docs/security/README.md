@@ -63,8 +63,8 @@ the record that found it. The notes below the table name each such finding.
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
-| SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
-| **Total** ⁸ | | | **3 / 10 / 20 / 107** | **0 / 0 / 3 / 13** |
+| SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
+| **Total** ⁸ | | | **3 / 10 / 20 / 108** | **0 / 0 / 3 / 14** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation

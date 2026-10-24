@@ -145,7 +145,9 @@ column fits: an answer larger than `buf.length - at` means nothing was written,
 and says how much room the column needs. `columnInto` with `at` outside
 `0..buf.length` answers `Err(SQLITE_MISUSE)`, and a column index past the
 last answers `Err(SQLITE_RANGE)`; the other reads answer 0, `SQLITE_NULL` or
-`null` for a column that is not there.
+`null` for a column that is not there. With no current row, before the first
+`step` or after the last, every read answers as for `NULL`: `columnInto`
+answers `Ok(0)`.
 
 ```ts nish:ok
 import { OPEN_CREATE, OPEN_READWRITE, openDatabase } from "nish/sqlite";
@@ -219,6 +221,19 @@ export const main = (): i32 => {
   return 0;
 };
 ```
+
+Some answers are not errors, or not the error you might expect:
+
+- **A read with no current row is not an error.** Before the first `step`, or
+  after `step` answers `false`, `columnInto` answers `Ok(0)` and writes
+  nothing, and the other reads answer 0, `SQLITE_NULL` or `null`, as for a
+  `NULL` column. Only a column index the statement does not have is
+  `Err(SQLITE_RANGE)`.
+- **Too many open handles is "out of memory".** A thread holds at most 65,535
+  open connections and 65,535 open statements, and a slot reused 32,767 times
+  is retired, which takes some two billion opens or prepares. When no slot is left, `openDatabase` and `prepare` fail with
+  `SQLITE_NOMEM` and the message `out of memory`. Close and finalize what you
+  are done with.
 
 ## Threads, capabilities and where it runs
 

@@ -160,6 +160,11 @@ const reads = (t: Suite, db: Database): void => {
   const q = p.value;
   t.eqI32("columnCount", q.columnCount(), 4);
   const buf: u8[] = [0, 0, 0, 0, 0, 0, 0, 0];
+  const idle = db.error(SQLITE_ERROR).message;
+  t.eqI64("columnI64: before the first step is 0", q.columnI64(0), toI64(0));
+  const early = q.columnInto(1, buf, 0);
+  t.ok("columnInto: before the first step answers 0", early.isOk() && early.value === 0);
+  t.eqStr("column: a read with no row leaves the connection's message", db.error(SQLITE_ERROR).message, idle);
   let rows: i32 = 0;
   let sum: i64 = 0;
   // The loop keeps a flag, not the last `Result`: a pass's arena is rewound
@@ -210,9 +215,12 @@ const reads = (t: Suite, db: Database): void => {
   t.ok("step: the second row", second.isOk() && second.value);
   const bob = q.columnText(1);
   t.eqStr("columnText: bound by bindText", bob === null ? "<null>" : bob, "bob");
+  t.eqI32("columnType: bound by bindText is TEXT", q.columnType(1), SQLITE_TEXT);
   t.eqI32("columnType: bound by bindF64 is FLOAT", q.columnType(2), SQLITE_FLOAT);
   t.eqF64("columnF64: bound by bindF64", q.columnF64(2), toF64(9) / toF64(4));
   t.eqI32("columnType: BLOB", q.columnType(3), SQLITE_BLOB);
+  buf[0] = 7;
+  buf[1] = 7;
   const blob = q.columnInto(3, buf, 0);
   t.ok("columnInto: blob", blob.isOk() && blob.value === 2);
   t.eqI32("columnInto: blob byte 0", toI32(buf[0]), 0);
@@ -221,6 +229,7 @@ const reads = (t: Suite, db: Database): void => {
   t.ok("step: the third row", third.isOk() && third.value);
   const bound = q.columnText(1);
   t.eqStr("columnText: the bytes bound as text", bound === null ? "<null>" : bound, "hi!");
+  t.eqI32("columnType: bound by bindTextBytes is TEXT", q.columnType(1), SQLITE_TEXT);
   t.eqI32("columnType: bound by bindNull is NULL", q.columnType(2), SQLITE_NULL);
   t.eqI32("columnType: an empty blob is BLOB", q.columnType(3), SQLITE_BLOB);
   t.eqI32("columnBytes: an empty blob", q.columnBytes(3), 0);
@@ -300,14 +309,22 @@ const reuses = (t: Suite, db: Database): void => {
   const ins = p.value;
   const text: u8[] = [97, 98, 99, 100];
   let failures: i32 = 0;
+  // Measured inside each pass, as in `flat`: a pass's arena is rewound when
+  // it ends.
+  let grew: i32 = 0;
   for (let i: i32 = 0; i < 1000; i++) {
+    const before: i64 = Arena.used();
     const bound = ins.bindI64(1, toI64(i)).isOk() && ins.bindTextBytes(2, text, i % 4, 1).isOk();
     const stepped = ins.step();
     if (!bound || stepped.isErr() || stepped.value || ins.reset().isErr()) {
       failures += 1;
     }
+    if (Arena.used() !== before) {
+      grew += 1;
+    }
   }
   t.eqI32("reset and rebind: 1,000 inserts", failures, 0);
+  t.eqI32("reset and rebind: no pass of 1,000 bumps the arena", grew, 0);
   t.ok("bindI64: a key already there", ins.bindI64(1, toI64(7)).isOk());
   t.ok("step: ON CONFLICT DO NOTHING", ins.step().isOk());
   t.eqI64("changes: DO NOTHING changed nothing", db.changes(), toI64(0));

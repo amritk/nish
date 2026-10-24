@@ -287,13 +287,15 @@ int32_t nishsqlite_bind_bytes(int32_t h, int32_t i, const uint8_t *buf, uint64_t
 /* These answer what SQLite does for a column that is not there, 0 and
  * SQLITE_NULL, for a handle that names no statement too: a read cannot fail,
  * and the step before it already answered whether the statement is good. A
- * column that is not there is answered here, before SQLite, which would
+ * column that is not there, or any column when no row is current (before the
+ * first step, or after the last), is answered here, before SQLite, which would
  * otherwise record SQLITE_RANGE as the connection's last error. */
 
-/* The statement `h` names, when it has a column `c`; NULL otherwise. */
+/* The statement `h` names, when its current row has a column `c`; NULL
+ * otherwise. sqlite3_data_count is 0 when no row is current. */
 static inline sqlite3_stmt *column_of(int32_t h, int32_t c) {
   sqlite3_stmt *st = stmt_of(h);
-  return st && c >= 0 && c < sqlite3_column_count(st) ? st : NULL;
+  return st && c >= 0 && c < sqlite3_data_count(st) ? st : NULL;
 }
 
 int32_t nishsqlite_column_count(int32_t h) {
@@ -337,11 +339,14 @@ const char *nishsqlite_column_text(int32_t h, int32_t c) {
  * read needs and nothing was written. SQLITE_MISUSE for a bad handle or an
  * `at` outside `0..n`, SQLITE_RANGE for a column that is not there, and
  * SQLITE_NOMEM when SQLite cannot convert a value to text, all negated. Only
- * a NULL or a blob has no pointer and is still read: an empty blob has none. */
+ * a NULL or a blob has no pointer and is still read: an empty blob has none.
+ * A column of the statement read when no row is current answers 0 and writes
+ * nothing, as a NULL does, without asking SQLite. */
 int32_t nishsqlite_column_into(int32_t h, int32_t c, uint8_t *buf, uint64_t n, int32_t at) {
   sqlite3_stmt *st = stmt_of(h);
   if (st == NULL || at < 0 || (uint64_t)at > n) return -SQLITE_MISUSE;
   if (c < 0 || c >= sqlite3_column_count(st)) return -SQLITE_RANGE;
+  if (sqlite3_data_count(st) == 0) return 0;
   int type = sqlite3_column_type(st, c);
   const void *p = type == SQLITE_BLOB ? sqlite3_column_blob(st, c) : (const void *)sqlite3_column_text(st, c);
   if (p == NULL && type != SQLITE_NULL && type != SQLITE_BLOB) return -SQLITE_NOMEM;

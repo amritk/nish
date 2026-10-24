@@ -20,6 +20,7 @@ PASS  close: the file again
 PASS  the file database is removed
 PASS  exec: the reuse table
 PASS  reset and rebind: 1,000 inserts
+PASS  reset and rebind: no pass of 1,000 bumps the arena
 PASS  bindI64: a key already there
 PASS  step: ON CONFLICT DO NOTHING
 PASS  changes: DO NOTHING changed nothing
@@ -80,6 +81,9 @@ PASS  reset: after finalize is MISUSE
 PASS  clearBindings: after finalize is MISUSE
 PASS  error: after finalize
 PASS  columnCount
+PASS  columnI64: before the first step is 0
+PASS  columnInto: before the first step answers 0
+PASS  column: a read with no row leaves the connection's message
 PASS  step: the rows end in DONE
 PASS  step: three rows
 PASS  columnI64: the ids
@@ -106,6 +110,7 @@ PASS  columnInto: past the end is RANGE
 PASS  columnInto: an offset past the buffer is MISUSE
 PASS  step: the second row
 PASS  columnText: bound by bindText
+PASS  columnType: bound by bindText is TEXT
 PASS  columnType: bound by bindF64 is FLOAT
 PASS  columnF64: bound by bindF64
 PASS  columnType: BLOB
@@ -114,6 +119,7 @@ PASS  columnInto: blob byte 0
 PASS  columnInto: blob byte 1
 PASS  step: the third row
 PASS  columnText: the bytes bound as text
+PASS  columnType: bound by bindTextBytes is TEXT
 PASS  columnType: bound by bindNull is NULL
 PASS  columnType: an empty blob is BLOB
 PASS  columnBytes: an empty blob
@@ -131,4 +137,4 @@ PASS  exec: a handle naming slot 0 is MISUSE
 PASS  error: after close
 PASS  lastInsertRowid: after close is 0
 PASS  changes: after close is 0
-std_sqlite: 133 passed, 0 failed, 0 skipped
+std_sqlite: 139 passed, 0 failed, 0 skipped
