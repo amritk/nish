@@ -63,9 +63,9 @@ the record that found it. The notes below the table name each such finding.
 | `nish:term` and `std/term` | [term.md](term.md) | `runtime/runtime-term.c`, `std/term.ts`; the `nish:term` builtins' checker rules in `src/` | 0 / 0 / 1 / 4 | 0 / 0 / 0 / 0 |
 | `nish/bytes` runs and `copyBytes` | [bytes.md](bytes.md) | `runtime/runtime-bytes.c`, `std/bytes.ts`; their lowering in `src/kernels.ts` and `src/emit-arrays.ts`; the N-API array argument in `src/interop-napi.ts` | 0 / 0 / 0 / 2 | 0 / 0 / 0 / 0 |
 | Browser host | [runtime-browser.md](runtime-browser.md) | `runtime/browser.mjs`, `runtime/browser.d.ts`, `runtime/core/host.mjs` | 0 / 0 / 1 / 1 | 0 / 0 / 0 / 0 ¹⁵ |
-| SQLite amalgamation | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| SQLite amalgamation and `nish/sqlite` | [sqlite.md](sqlite.md) | `runtime/sqlite/sqlite3.c`, `runtime/sqlite/sqlite3.h`, `runtime/sqlite/nish-sqlite.c`, `std/sqlite.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 |
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁶ |
-| **Total** ⁸ | | | **3 / 10 / 25 / 111** | **0 / 0 / 0 / 10** |
+| **Total** ⁸ | | | **3 / 10 / 25 / 112** | **0 / 0 / 0 / 11** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -230,6 +230,7 @@ only.
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | JSON-2 | Low | `std/json-tokenizer.ts` (`reset`, `JSON_TOK_END_CEILING`) | A window ending within 64 bytes of 2^31 − 1 is refused so that no offset can overflow; no test reaches it, since it takes a 2 GiB array | — |
 | SC-16 | Low | `.github/workflows/release.yml` | Immutable releases are on from v0.16.0 (`immutable: true`), so its assets and `SHA256SUMS` are fixed once published. Build provenance attestations, the stronger answer, are not: they need `id-token` and `attestations: write` on `release.yml` | #389 |
+| SQL-2 | Low | `std/sqlite.ts` (`columnText`) | `sqlite3_column_text` answers NULL both for SQL `NULL` and when converting the value to text runs out of memory, and `columnText` reads either as `null`. A program can take a value it failed to read for an empty column. `columnInto` tells the two apart and answers `SQLITE_NOMEM`. | — |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in
