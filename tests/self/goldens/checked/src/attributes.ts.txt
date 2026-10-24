@@ -2242,7 +2242,7 @@ function markWipe(facts: FunctionFacts): void -> @markWipe
   pointer facts: size=408 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +3:3 StringSet.add -> @StringSet.add
-  local +5:11 pp: PointerParamFacts (const)
+  local +6:11 pp: PointerParamFacts (const)
 function markLock(facts: FunctionFacts): void -> @markLock
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -2647,7 +2647,7 @@ function writesShared(f: FunctionFacts, calleeFacts: FunctionFacts | null, rt: R
   pointer rt: size=40 writesThrough=false captured=false passedTo=RuntimeFunction.sharedWrite#0
   stackSites=0 stackLocals=0
   callee +0:12 StringSet.has -> @StringSet.has
-  callee +8:25 RuntimeFunction.sharedWrite -> @RuntimeFunction.sharedWrite
+  callee +11:25 RuntimeFunction.sharedWrite -> @RuntimeFunction.sharedWrite
 function writesArgument(g: FunctionFacts | null, index: i32): boolean -> @writesArgument
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: index

@@ -8,7 +8,7 @@
     "./package.json": "./package.json",
     "./runtime": { "types": "./runtime/core.d.ts", "default": "./runtime/core.mjs" },
     "./runtime/node": { "types": "./runtime/host.d.ts", "default": "./runtime/node.mjs" },
-    "./runtime/browser": { "types": "./runtime/host.d.ts", "default": "./runtime/browser.mjs" },
+    "./runtime/browser": { "types": "./runtime/browser.d.ts", "default": "./runtime/browser.mjs" },
     "./runtime/*": "./runtime/*",
     "./scripts/*": "./scripts/*",
     "./*": "./std/*.ts"
