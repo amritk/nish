@@ -41,6 +41,11 @@
  * **Sending.** `flush` writes each touched slot's datagrams with
  * `quicListenerTakeFlight`, a paced flight at a time in one `udpSendTo` with
  * GSO where the platform has it and one datagram at a time where it does not.
+ * Each flight goes with the ECN codepoint its connection marked it with
+ * (`QuicFlight.ecn`, RFC 9000 §13.4), so the peer's ACK_ECN counts are
+ * validated and a CE mark shrinks the window. Where the platform sends no
+ * ECN (Darwin, whose `udpSendTo` answers -95 to a marked send), the first
+ * marked send goes again unmarked and no slot marks after it.
  * The pacer counts the microseconds `clock` gives it, so on a path whose
  * round trip is under a millisecond it neither waits for the next
  * millisecond to earn credit nor holds a slot back for a whole one; without
@@ -122,8 +127,8 @@ export const H3_SERVER_ANSWER_INTERVAL: i64 = 100
 /** The address form `nish:net` reads and writes. */
 const H3_SERVER_ADDRESS: i32 = 18
 
-/** What `udpSendTo` answers where the platform has no segmentation offload. */
-const H3_SERVER_NO_GSO: i32 = -95
+/** What `udpSendTo` answers where the platform has no segmentation offload, or sends no ECN. */
+const H3_SERVER_UNSUPPORTED: i32 = -95
 
 /** The largest datagram read: a GRO receive of up to 64 KB. */
 const H3_SERVER_RECEIVE_SIZE: i32 = 65536
@@ -484,6 +489,8 @@ export class Http3Server {
   refused: i32 = 0
   limited: i32 = 0
   sendErrors: i32 = 0
+  /** Whether the platform sends ECN marks: true until a marked send answers -95, and every slot's `ecnMarking` with it. */
+  ecn: boolean = true
   /**
    * The stream buffers every slot's connection borrows from, made by the
    * constructor for the stream table `quicConfig` gives every slot: `null`
@@ -578,6 +585,7 @@ export class Http3Server {
   build(): void {
     crypto.getRandomValues(this.entropy)
     const quic = new QuicConnection(this.quicConfig, this.entropy)
+    quic.ecnMarking = this.ecn
     this.quics.push(quic)
     const pools: QuicStreamPools | null = this.streamPools
     if (pools !== null && pools.data.size === quic.streams.bufferSize && quic.streams.slots.length > 0) {
@@ -751,7 +759,7 @@ export class Http3Server {
     if (this.listener.handleWindow(buf, at, len, address, now, answer) !== QUIC_LISTEN_ACCEPT) {
       const reply: i32 = toI32(answer.reply.length)
       if (reply > 0) {
-        this.send(answer.reply, H3_SERVER_ZERO, reply, address, H3_SERVER_ZERO)
+        this.send(answer.reply, H3_SERVER_ZERO, reply, address, H3_SERVER_ZERO, H3_SERVER_ZERO)
       }
       return
     }
@@ -904,13 +912,24 @@ export class Http3Server {
     }
   }
 
-  /** Sends `buf[at .. at + len)` to `to`, cut into `segment`-byte datagrams when it is above 0; answers whether it went. */
-  send(buf: u8[], at: i32, len: i32, to: u8[], segment: i32): boolean {
-    const sent: i32 = udpSendTo(this.fd, buf, at, len, to, segment, H3_SERVER_ZERO)
+  /**
+   * Sends `buf[at .. at + len)` to `to` with the ECN codepoint `ecn`, cut
+   * into `segment`-byte datagrams when it is above 0; answers whether it went.
+   */
+  send(buf: u8[], at: i32, len: i32, to: u8[], segment: i32, ecn: i32): boolean {
+    let mark: i32 = ecn
+    let sent: i32 = udpSendTo(this.fd, buf, at, len, to, segment, mark)
+    if (sent === H3_SERVER_UNSUPPORTED && mark !== 0) {
+      // No ECN here: this send goes unmarked and no slot marks again. The
+      // packets just counted as marked fail their connection's validation.
+      this.unmark()
+      mark = H3_SERVER_ZERO
+      sent = udpSendTo(this.fd, buf, at, len, to, segment, mark)
+    }
     if (sent >= 0) {
       return true
     }
-    if (sent !== H3_SERVER_NO_GSO || segment <= 0) {
+    if (sent !== H3_SERVER_UNSUPPORTED || segment <= 0) {
       this.sendErrors = h3Count(this.sendErrors)
       return false
     }
@@ -918,13 +937,21 @@ export class Http3Server {
     let p: i32 = at
     while (p < at + len) {
       const n: i32 = at + len - p < segment ? at + len - p : segment
-      if (udpSendTo(this.fd, buf, p, n, to, H3_SERVER_ZERO, H3_SERVER_ZERO) < 0) {
+      if (udpSendTo(this.fd, buf, p, n, to, H3_SERVER_ZERO, mark) < 0) {
         this.sendErrors = h3Count(this.sendErrors)
         return false
       }
       p = p + n
     }
     return true
+  }
+
+  /** The platform sends no ECN: no slot's connection marks from now on. */
+  unmark(): void {
+    this.ecn = false
+    for (let slot: i32 = 0; slot < toI32(this.quics.length); slot++) {
+      this.quics[slot].ecnMarking = false
+    }
   }
 
   /**
@@ -972,7 +999,7 @@ export class Http3Server {
         break
       }
       const segment: i32 = this.flight.count > 1 ? this.flight.segment : H3_SERVER_ZERO
-      if (!this.send(this.tx, H3_SERVER_ZERO, n, to, segment)) {
+      if (!this.send(this.tx, H3_SERVER_ZERO, n, to, segment, this.flight.ecn)) {
         break
       }
       retried = false
@@ -981,7 +1008,7 @@ export class Http3Server {
       // The CONNECTION_CLOSE goes whatever the pacer says: nothing follows it.
       const n: i32 = quic.takeDatagramInto(this.tx, H3_SERVER_ZERO, now)
       if (n > 0) {
-        this.send(this.tx, H3_SERVER_ZERO, n, to, H3_SERVER_ZERO)
+        this.send(this.tx, H3_SERVER_ZERO, n, to, H3_SERVER_ZERO, quic.datagramEcn)
       }
       this.release(slot)
       return

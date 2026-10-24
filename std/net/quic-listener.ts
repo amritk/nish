@@ -68,7 +68,7 @@
  * of in one burst that overruns a queue on the path.
  *
  *     let out: u8[] | null = quicListenerTakePaced(conn, now);
- *     while (out !== null) { … send it … ; out = quicListenerTakePaced(conn, now); }
+ *     while (out !== null) { … send it with conn.datagramEcn … ; out = quicListenerTakePaced(conn, now); }
  *     … and wake at the earlier of conn.deadline() and quicListenerPaceTime(conn, now)
  *
  * A carrier that sends whole flights with `quicListenerTakeFlight`, below,
@@ -90,9 +90,16 @@
  * side, `quicListenerReceiveSegments` hands a connection the datagrams of
  * one GRO receive, segment by segment, in place.
  *
+ * **ECN** (RFC 9000 §13.4). A carrier whose platform sends the ECN bits it
+ * is given sets the connection's `ecnMarking` and sends each datagram with
+ * the codepoint the connection marked it with: `conn.datagramEcn` after a
+ * `takeDatagramInto` or `quicListenerTakePaced`, `flight.ecn` for a flight.
+ * One send carries one codepoint, so a flight ends before a datagram the
+ * connection would mark otherwise. The listener's own answers go unmarked.
+ *
  *     const flight = new QuicFlight();
  *     const n: i32 = quicListenerTakeFlight(conn, now, buf, 0, toI32(buf.length), flight);
- *     if (n > 0) { udpSendTo(fd, buf, 0, n, peer, flight.count > 1 ? flight.segment : 0, 0); }
+ *     if (n > 0) { udpSendTo(fd, buf, 0, n, peer, flight.count > 1 ? flight.segment : 0, flight.ecn); }
  *
  * **Sans-IO and deterministic.** The caller gives the time, the client's
  * address and, once, `QUIC_LISTENER_ENTROPY_SIZE` random bytes: every
@@ -928,6 +935,8 @@ export class QuicFlight {
   count: i32 = 0
   /** Every datagram's size but the last's, which may be shorter: the `UDP_SEGMENT` to send with. */
   segment: i32 = 0
+  /** The ECN codepoint every datagram of the flight was marked with: the one to send with. */
+  ecn: i32 = 0
 }
 
 /**
@@ -941,8 +950,8 @@ export class QuicFlight {
  * `quicListenerTakePaced` does, so the flight is the pacer's whole credit
  * and no more. It stops at the first datagram shorter than
  * `QUIC_CONN_DATAGRAM_SIZE`, which can only be the last of a segmented send,
- * at `QUIC_LISTENER_FLIGHT_MAX` datagrams, and when `cap` has no room for
- * another.
+ * at `QUIC_LISTENER_FLIGHT_MAX` datagrams, when `cap` has no room for
+ * another, and before a datagram whose ECN codepoint would not be the first's.
  */
 export const quicListenerTakeFlight = (
   conn: QuicConnection,
@@ -954,6 +963,7 @@ export const quicListenerTakeFlight = (
 ): i32 => {
   flight.count = 0
   flight.segment = 0
+  flight.ecn = 0
   let length: i32 = 0
   if (conn.recovery.pacerDelay(now, quicListenerQuantum(conn)) > 0) {
     return length
@@ -963,6 +973,11 @@ export const quicListenerTakeFlight = (
     length + QUIC_CONN_DATAGRAM_SIZE <= cap &&
     conn.recovery.pacerDelay(now, QUIC_CONN_DATAGRAM_SIZE) <= 0
   ) {
+    // The codepoint `takeDatagramInto` would mark the next datagram with: one send carries one.
+    const next: i32 = conn.ecnMarking ? conn.recovery.ecnCodepoint() : 0
+    if (flight.count > 0 && next !== flight.ecn) {
+      return length
+    }
     const n: i32 = conn.takeDatagramInto(buf, at + length, now)
     if (n <= 0) {
       return length
@@ -970,6 +985,7 @@ export const quicListenerTakeFlight = (
     conn.recovery.onPaced(now, n)
     if (flight.count === 0) {
       flight.segment = n
+      flight.ecn = conn.datagramEcn
     }
     flight.count = flight.count + 1
     length = length + n
