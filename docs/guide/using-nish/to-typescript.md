@@ -77,17 +77,23 @@ answers:
 
 ```sh
 nish app.ts --emit-ts out/
-node --experimental-strip-types out/entry.ts
+node out/entry.ts
 ```
 
-Node 22.6 or newer runs it, and Node has to find the `nish` package from
+Node 22.18 or newer runs it, the floor the `nish` package supports, and Node has to find the `nish` package from
 `out/`. Your modules keep their paths, each standard-library module the
 program imports is written under `out/nish/`, and every `nish:` import,
-`nish:secret` included, becomes `nish/runtime`.
+`nish:secret` included, becomes `nish/runtime`. Its `wipe` zero-fills the array under
+Node but cannot erase a copy the engine made, so a key that must be erased
+stays in the native build ([the record](../../security/secret.md), SECRET-6).
 [The CLI page](cli.md#writing-typescript---emit-ts) lists every rewrite and
-the four kinds of module that are refused (C functions, NL4010; signals and
+the kinds of module that are refused (C functions, NL4010; signals and
 `nish:net`, NL4011; a compound assignment whose index would run twice,
-NL4012; a generic whose instances need different code, NL4013).
+NL4012; a generic whose instances need different code, NL4013, or that no
+instance reaches and whose body copies or zero-fills an element, NL4014).
+A generic of your own that nothing calls, and whose body needs types to
+translate, is written as a stub that throws, with a `portability:` warning
+(NL8012) that names it and its line.
 
 The output is faithful: it means what the native build means, helpers
 included. `i32` arithmetic that can overflow is `checkedAdd` and its
@@ -106,7 +112,7 @@ difference is one of these:
 | host | A call Node has no synchronous reading of: `spawn`, `waitPid`, `readStdin`, `waitStdin` and `setRawMode` throw, naming themselves, and so does `setTerminalRestore`. The arena counters (`arenaUsed`, `arenaMark`) count nothing, since Node has a collector and no arena. A lone surrogate in a string is three bytes natively and U+FFFD's three under Node. |
 | range | A ranged integer (`integer<0, 255>`) is a `number`, and its range is not checked, so a value that would panic natively leaving its range runs on. |
 | libm | `Math.atan2`, `Math.hypot` and their siblings are the engine's, which can differ from the native libm in the last bit. |
-| refused | The program is refused with NL4010 to NL4013 and nothing is written. |
+| refused | The program is refused with NL4010 to NL4014 and nothing is written. |
 
 Anything else is a bug in the translation. The repository's test suite runs
 every test program both ways and holds the list of the ones that differ, each

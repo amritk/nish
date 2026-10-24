@@ -10,7 +10,7 @@ import child_process from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import tty from "node:tty";
-import { getRandomValues, installHost } from "./core/host.mjs";
+import { installHost } from "./core/host.mjs";
 
 function ioFail(verb, path) {
   fs.writeSync(2, `nish: cannot ${verb} ${path}\n`);
@@ -374,25 +374,13 @@ for (const stream of [process.stdout, process.stderr]) {
   stream._handle?.setBlocking?.(true);
 }
 
-// `process.argv[0]` is the program on both sides: the executable natively,
-// the entry script here, which is one index later than Node's own `argv`. The
-// output reads the global itself, so it is replaced before the program loads.
-const ARGV = process.argv.slice(1);
-process.argv = ARGV;
-
-// `crypto.getRandomValues(bytes)` (WP34 N3): the output calls Node's global,
-// which takes only a typed array, with the plain array a `u8[]` is here; the
-// one method is replaced by the core's, which fills either.
-Object.defineProperty(globalThis.crypto, "getRandomValues", {
-  value: getRandomValues,
-  writable: true,
-  configurable: true,
-});
-
 installHost({
   writeOut: (s) => fs.writeSync(1, s),
   writeErr: (s) => fs.writeSync(2, s),
   exit: (code) => process.exit(code),
-  argv: () => ARGV,
+  // Index 0 is the program on both sides: the executable natively, the entry
+  // script here, which is one index later than Node's own `argv`. The global
+  // is left as Node set it; the output reads `argv()` (`src/emit-ts-records.ts`).
+  argv: () => process.argv.slice(1),
   call: (name, args) => CALLS[name](...args),
 });

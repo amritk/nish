@@ -116,7 +116,7 @@ const scratchRoot = (work, side) => {
  * their stages land: R4b's numbers, R4c's strings, R4d's records, R4e's
  * control flow; `libm` is the 1-ulp row that stays; `ffi` a program whose C
  * functions cannot be written (NL4010); `refused` one `--emit-ts` refuses for
- * now (NL4011, NL4012); `host` a program reading what Node cannot express
+ * now (NL4011 to NL4014); `host` a program reading what Node cannot express
  * (`HOST`); `range` a ranged integer leaving its range, a native panic Node
  * does not check (§3.3, class B).
  */
@@ -251,12 +251,51 @@ const rowOf = (native, node, source) => {
   return [/[\u0080-\uffff]/.test(`${ours ?? ""}${theirs ?? ""}`) ? "strings" : "numbers", ""]
 }
 
-/** The text of every module `--emit-ts` wrote under `dir`, the launcher aside. */
-const emittedSource = (dir) =>
+/**
+ * `text` with its comments blanked, its strings and templates kept: a row's
+ * evidence is what the program does, never what a comment says about it. A
+ * template's `${...}` is kept whole with the template, which over-keeps at
+ * worst; a `/` that starts a regular expression is not one Nish admits.
+ */
+export const codeOf = (text) => {
+  let out = ""
+  let i = 0
+  while (i < text.length) {
+    const c = text[i]
+    if (c === "/" && text[i + 1] === "/") {
+      const end = text.indexOf("\n", i)
+      i = end < 0 ? text.length : end
+    } else if (c === "/" && text[i + 1] === "*") {
+      const end = text.indexOf("*/", i + 2)
+      i = end < 0 ? text.length : end + 2
+      out += " "
+    } else if (c === '"' || c === "'" || c === "`") {
+      let j = i + 1
+      while (j < text.length && text[j] !== c) {
+        j += text[j] === "\\" ? 2 : 1
+      }
+      out += text.slice(i, j + 1)
+      i = j + 1
+    } else {
+      out += c
+      i += 1
+    }
+  }
+  return out
+}
+
+/**
+ * The code of every module of the program's own that `--emit-ts` wrote under
+ * `dir`: not the launcher, and not a standard-library module under `nish/`,
+ * whose use of an API is not the program's (a `host` or `range` row is the
+ * program's own reading, wp33 §4.2). Comments are blanked (`codeOf`).
+ */
+export const emittedSource = (dir) =>
   fs
     .readdirSync(dir, { recursive: true })
-    .filter((f) => String(f).endsWith(".ts") && String(f) !== "entry.ts")
-    .map((f) => fs.readFileSync(path.join(dir, String(f)), "utf8"))
+    .map((f) => String(f).split(path.sep).join("/"))
+    .filter((f) => f.endsWith(".ts") && f !== "entry.ts" && !f.startsWith("nish/"))
+    .map((f) => codeOf(fs.readFileSync(path.join(dir, f), "utf8")))
     .join("\n")
 
 /** The first line of a compiler's stderr that says why, for the known list. */
@@ -294,7 +333,7 @@ export const compare = async (prog, compiler, workRoot = WORK) => {
   // refuses it as a usage error.
   const emitArgs = prog.args.filter((arg) => !DUMPS.includes(arg))
   const emitted = await run(compiler, [prog.entry, "--json", "--emit-ts", out, ...emitArgs])
-  const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL40(10|11|12))"/)
+  const coded = emitted.status === 0 ? null : String(emitted.stdout).match(/"code":"(NL40(10|11|12|13|14))"/)
   // The native build is read first, so a program that is both refused and
   // broken natively is an error rather than a listed refusal. The exception is
   // an NL4010 refusal: a module that declares C functions may need C this

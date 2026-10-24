@@ -4576,7 +4576,7 @@ if (!only || "emit-ts".includes(only)) {
   // The refusals: a finding about the program, exit 1, under its code, with
   // not one file written -- the output is all or nothing. A line, where given,
   // is where the finding points: NL4013 at the node whose instances differ,
-  // not the whole generic.
+  // NL4014 at the copy or zero, not the whole generic.
   for (const [code, name, line] of [
     ["NL4010", "reject_emit_ts_ffi"],
     ["NL4011", "reject_emit_ts_net"],
@@ -4586,9 +4586,14 @@ if (!only || "emit-ts".includes(only)) {
     ["NL4013", "reject_emit_ts_instances", 10],
     ["NL4013", "reject_emit_ts_instances_zero", 5],
     ["NL4013", "reject_emit_ts_instances_zero_string", 5],
+    ["NL4014", "refused/uncalled-zero", 4],
+    ["NL4014", "refused/uncalled-copy", 9],
   ]) {
-    const dir = path.join(work, name)
-    const r = spawnSync(NISH, [path.join(casesDir, `${name}.ts`), "--json", "--emit-ts", dir], {
+    // A `refused/` name is a program under tests/emit-ts, which has no `.out`
+    // and so is no fixture.
+    const dir = path.join(work, name.replace("/", "-"))
+    const src = name.includes("/") ? path.join(fixtures, `${name}.ts`) : path.join(casesDir, `${name}.ts`)
+    const r = spawnSync(NISH, [src, "--json", "--emit-ts", dir], {
       cwd: root,
       encoding: "utf8",
     })
@@ -4599,6 +4604,41 @@ if (!only || "emit-ts".includes(only)) {
           .split("\n")
           .some((l) => l.includes(`"code":"${code}"`) && (line === undefined || l.includes(`"line":${line},`))) &&
         !fs.existsSync(dir),
+      `exit ${r.status}\n${r.stdout}${r.stderr}`
+    )
+  }
+
+  // A stub is warned about only where it is the reader's (NL8012): `wide` in
+  // the program's own module, by name and line, with exit 0 and the file
+  // written; `std/collections.ts`'s stubbed `insertAt` under identity/maps
+  // stays silent.
+  for (const [name, expected] of [
+    [
+      "records/generic-uncalled",
+      [
+        '"line":12,"column":1,',
+        '"code":"NL8012","message":"`wide` is never instantiated, and its body needs the checker\'s types to translate: --emit-ts writes it as a stub that throws"',
+      ],
+    ],
+    ["identity/maps", null],
+  ]) {
+    const dir = path.join(work, `stub-${name.replace("/", "-")}`)
+    const r = spawnSync(NISH, [path.join(fixtures, `${name}.ts`), "--json", "--emit-ts", dir], {
+      cwd: root,
+      encoding: "utf8",
+    })
+    const stubs = r.stdout.split("\n").filter((l) => l.includes('"code":"NL8012"'))
+    const stubbed = fs.existsSync(dir) && /a generic no instance reaches/.test(
+      fs.readdirSync(dir, { recursive: true })
+        .filter((f) => f.endsWith(".ts"))
+        .map((f) => fs.readFileSync(path.join(dir, f), "utf8"))
+        .join("")
+    )
+    check(
+      `emit-ts: ${name} writes a throwing stub and ${expected === null ? "warns about none of the standard library's" : "warns about it under NL8012"}`,
+      r.status === 0 &&
+        stubbed &&
+        (expected === null ? stubs.length === 0 : stubs.length === 1 && expected.every((part) => stubs[0].includes(part))),
       `exit ${r.status}\n${r.stdout}${r.stderr}`
     )
   }
@@ -4644,21 +4684,40 @@ if (!only || "emit-ts".includes(only)) {
     .split("\n")
     .filter((l) => l.trim().length > 0 && !l.trim().startsWith("#"))
   const hostApis = emitTsHost.map((entry) => entry[0])
-  const strays = []
-  for (const line of knownLines) {
-    const [name, row] = line.split("#")[0].trim().split(/\s+/)
-    const api = /\[([^\]]+)\]\s*$/.exec(line)
-    if (!emitTsAcceptedRows.includes(row)) {
-      strays.push(`${name}: row "${row}" is not one of ${emitTsAcceptedRows.join(", ")}`)
-    } else if (row === "host" && (api === null || !hostApis.includes(api[1]))) {
-      strays.push(`${name}: host entry names ${api === null ? "no API" : `"${api[1]}"`}, not one of ${hostApis.join(", ")}`)
+  /** What is wrong with each of `lines`, one string per line the pin refuses. */
+  const knownStrays = (lines) => {
+    const strays = []
+    for (const line of lines) {
+      const [name, row] = line.split("#")[0].trim().split(/\s+/)
+      const api = /\[([^\]]+)\]\s*$/.exec(line)
+      if (!emitTsAcceptedRows.includes(row)) {
+        strays.push(`${name}: row "${row}" is not one of ${emitTsAcceptedRows.join(", ")}`)
+      } else if (row === "host" && (api === null || !hostApis.includes(api[1]))) {
+        strays.push(`${name}: host entry names ${api === null ? "no API" : `"${api[1]}"`}, not one of ${hostApis.join(", ")}`)
+      }
     }
+    return strays
   }
+  const strays = knownStrays(knownLines)
   check(
     `emit-ts: the known list holds only accepted rows (${knownLines.length} entries)`,
     strays.length === 0,
     strays.join("\n")
   )
+  // The pin's own mutation test: each kind of line it must refuse, added to
+  // the real list, is refused, and is the only line that is.
+  for (const [what, bad] of [
+    ["a row still to land", "cases_x numbers # 3c3"],
+    ["a host row with no API", "cases_x host # exit 1"],
+    ["a host API outside HOST", "cases_x host # exit 1 [fetch]"],
+  ]) {
+    const caught = knownStrays([...knownLines, bad])
+    check(
+      `emit-ts: the known-list pin refuses ${what}`,
+      caught.length === strays.length + 1 && caught[caught.length - 1].startsWith("cases_x: "),
+      caught.join("\n")
+    )
+  }
 }
 
 // ---- The `deprecation` diagnostic class (NL7xxx) -----------------------------------

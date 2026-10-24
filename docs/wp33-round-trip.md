@@ -223,7 +223,7 @@ parallel calls, whose std bodies are their sequential meaning; ASI.
 
 ```
 nish src/main.ts --emit-ts out/         # one .ts per module, and out/entry.ts
-node out/entry.ts                       # Node 22.6 or newer; a bundler for a browser
+node out/entry.ts                       # Node 22.18 or newer; a bundler for a browser
 ```
 
 Built (R4): `--emit-ts <dir>` takes the directory to write and answers in place
@@ -554,9 +554,9 @@ with declarations. Bun's adapter is deferred (§4.3).
 **R4 is built** (#853, #859, #864, #866, #867). `--emit-ts <dir>` writes the
 program back out (#853), and the number, string, array and record, and control
 rows of §3 are translated (#866, #859, #867, #864). The oracle holds it: the
-live differential agrees on every program but the known list's 62, each under
-a row TypeScript under Node cannot say (§4.5); the emitted corpus type-checks
-under `tsc --strict`; and the random programs of `fuzz.js --emit-ts` agree.
+live differential agrees on every program but those of the known list
+(`tests/differential/emit-ts-known.txt`), each under a row TypeScript under
+Node cannot say (§4.5); the emitted corpus type-checks under `tsc --strict`; and the random programs of `fuzz.js --emit-ts` agree.
 
 **R5's `exact` half is built, ahead of R4.** `fix` rides in `--json` and
 `nish --fix` applies it (#421, #429, #431, #459, #460; §5.1 has the shape and

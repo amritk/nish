@@ -154,12 +154,12 @@ Node runs, one file per module, and no IR:
 
 ```sh
 nish app.ts --emit-ts out/
-node --experimental-strip-types out/entry.ts
+node out/entry.ts
 ```
 
 The output imports its runtime from the `nish` package, as `nish/runtime`, so
 Node has to find `nish` from `out/`, the way it finds any dependency. Node
-22.6 or newer runs it. A program that uses `using` needs Node 24, or
+22.18 or newer runs it, with the type stripping it has on by default. A program that uses `using` needs Node 24, or
 `--js-explicit-resource-management` on Node 22.
 
 Inside `out/`:
@@ -175,8 +175,10 @@ Imports are rewritten so Node can follow them. A `nish:` builtin becomes
 `nish/runtime`, the one package the output imports, `nish:secret` included:
 its `wipe` is the runtime's, and `std/secret.ts` is not written. A `nish/x` or relative
 import becomes a relative path ending in `.ts`. An imported interface or type
-alias is marked `import { type Pair }`. A module that needs none of this is
-written unchanged, byte for byte.
+alias is marked `import { type Pair }`. A module that needs none of this, and
+none of the rewrites below, is written byte for byte; one rewrite that reaches
+an otherwise plain module is `const s = "hi"`, written `const s: string = "hi"`
+so TypeScript does not narrow `s` to the literal.
 
 Some constructs JavaScript spells differently are rewritten too:
 
@@ -241,6 +243,18 @@ The fourth is reported at a generic function that TypeScript writes once
 for all the types it is called at, when those types need different code: a
 record held inline in one call and a `P | null` reference in another, or an
 `i32` and an `i64` element in `new Array<T>(n)`, whose zeros differ. Write a
+function per element type.
+
+A generic nothing calls is written too, as it is: the native build compiles
+no body for it, so its arithmetic is left as written and only the rewrites
+that need no type, such as the bounds check on `a[i]`, are made. One whose
+text would need the types it lacks, a 64-bit integer or a builtin call such as
+`toU32`, is written with a body that throws instead, and a warning
+(`portability:`, NL8012) names it and its line when it is the program's own;
+the standard library's are written without one. The fifth
+refusal (NL4014) is one whose body fills `new Array<T>(n)` with `T`'s zero, or
+copies an element into an array slot in a program that keeps records inline:
+which code those need depends on a `T` no call names. Call it, or write a
 function per element type.
 
 The `nish:unsafe` functions are imports from `nish/runtime` too:

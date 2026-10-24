@@ -108,6 +108,11 @@ const slotCopy = (walk: Walk, slot: i32): i32 => {
     walk.instanceChoice = true
     return hasInlineRecords(walk.program) && !recordReference(walk, slot) ? COPY_AT_RUN : COPY_NONE
   }
+  // No instance says what the slot holds; one that held a record inline would copy it.
+  if (walk.untyped && hasInlineRecords(walk.program)) {
+    walk.instanceChoice = true
+    return COPY_NONE
+  }
   return inlineRecord(walk.program, slot) ? COPY_SPREAD : COPY_NONE
 }
 
@@ -404,6 +409,11 @@ const fillZero = (walk: Walk, type: Node): string => {
   if (alias !== null) {
     return fillZero(walk, alias.decl.children[1])
   }
+  // Any other name may be a parameter no instance binds, whose zero is unknown.
+  if (walk.untyped) {
+    walk.instanceChoice = true
+    return ""
+  }
   const instance = program.activeInstance
   if (instance !== null) {
     walk.instanceChoice = true
@@ -458,6 +468,27 @@ const newRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   return `${walk.helperName("newArray")}<${element}>(${operands.at(2)}, ${zero})`
 }
 
+/**
+ * `process.argv` as the runtime's `argv()`: the program then its arguments, a
+ * fresh copy on each read, which Node's own global is not (it holds `node`
+ * first). A local or constant named `process` is the program's and stays.
+ */
+const processArgv = (walk: Walk, node: Node): string | null => {
+  if (node.text !== "argv" || node.children.length !== 1) {
+    return null
+  }
+  const receiver = node.children[0]
+  if (
+    receiver.kind !== N_IDENT ||
+    receiver.text !== "process" ||
+    walk.program.nodeLocals[receiver.id] !== null ||
+    walk.program.nodeConstants[receiver.id] !== null
+  ) {
+    return null
+  }
+  return `${walk.helperName("argv")}()`
+}
+
 /** The records row's rewrite of `node`, or `null` to leave it to the next row. */
 export const recordsRow = (walk: Walk, node: Node, operands: Operands): string | null => {
   switch (node.kind) {
@@ -474,6 +505,8 @@ export const recordsRow = (walk: Walk, node: Node, operands: Operands): string |
       return literalRow(walk, node, operands)
     case N_NEW:
       return newRow(walk, node, operands)
+    case N_MEMBER:
+      return processArgv(walk, node)
     default:
       return null
   }

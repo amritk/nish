@@ -482,7 +482,7 @@ The supported direction is Node importing Nish:
   `double sumF64(const nish_array *xs);`) next to `runtime/nish.h`, the
   public runtime ABI (arena, strings, arrays, `nish_reset_arena`,
   `nish_arena_mark` / `nish_arena_release` for a host that manages batches).
-- `--emit-ts <dir>` writes the program back out as TypeScript that Node 22.6+
+- `--emit-ts <dir>` writes the program back out as TypeScript that Node 22.18+
   runs with type stripping, one file per module plus an `entry.ts`, importing
   its builtins from `nish/runtime`; overflow and bounds checks stay, as
   helpers (`docs/guide/using-nish/to-typescript.md`).

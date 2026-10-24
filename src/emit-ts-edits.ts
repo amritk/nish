@@ -54,6 +54,7 @@
 // has one for every node it hoists.
 
 import { checksOverflow } from "./bounds"
+import { isBuiltinFunction } from "./builtins"
 import { Edit, SourceFile } from "./diagnostics"
 import { controlRow } from "./emit-ts-control"
 import { numbersRow } from "./emit-ts-numbers"
@@ -141,6 +142,10 @@ export const SIGNAL_REFUSAL: string =
 const INSTANCES_REFUSAL: string =
   "--emit-ts cannot write this generic, whose instances would be written as different TypeScript: an element held inline in one and by reference in another, or two element types with different zeros; write a function per element type"
 
+/** The message NL4014 carries; `src/codes.ts` keys the code on it. */
+const UNTYPED_REFUSAL: string =
+  "--emit-ts cannot write this generic, which no instance reaches: its body copies or zero-fills an element whose type only an instance would say; call it with the element type it is for, or write a function per element type"
+
 /** The message NL4010 carries; `src/codes.ts` keys the code on it. */
 const FOREIGN_REFUSAL: string =
   "--emit-ts cannot write a module that declares C functions; keep it native and import it through --emit-napi (wp33 §4.4)"
@@ -167,9 +172,17 @@ export class Walk {
   /**
    * Per node id, whether the node is a generic function or method that no
    * instance reaches: the native build compiles no body for it, and the
-   * checker typed none, so it is written as one that throws (`stubText`).
+   * checker typed none, so it is walked `untyped`, or written with a throwing
+   * body where its text would need those types (`needsTypes`).
    */
   stubbed: boolean[]
+  /**
+   * A body no instance reaches is being walked. Its nodes have no types, so
+   * the rows that need none rewrite it as they would any code and the rest
+   * leave it as written; a copy or a zero that an element type would decide
+   * is refused (NL4014), since no instance says which.
+   */
+  untyped: boolean
   /** An instance's tables are installed, so a template node is walked as itself. */
   inInstance: boolean
   /** The second or a later instance of one template is being walked: its refusals were already recorded. */
@@ -205,6 +218,18 @@ export class Walk {
   /** The nodes the module is refused at, with the message for each. */
   refusedAt: Node[]
   refusals: string[]
+  /** Each declaration `stub` marked, by node id, and the name it is warned about by. */
+  stubIds: i32[]
+  stubNames: string[]
+  /**
+   * Whether a stub written with a throwing body is warned about: the driver's
+   * answer, true for the program's own modules and false for the standard
+   * library's, whose stubs (`insertAt` and the like) are not the reader's to change.
+   */
+  warnStubs: boolean
+  /** The declarations written with a throwing body while `warnStubs` held, with the warning for each. */
+  stubbedAt: Node[]
+  stubWarnings: string[]
   /** An internal error the walk ran into, or the empty string. */
   failure: string
   /** The statements hoisted out of the current statement so far, in order. */
@@ -235,6 +260,7 @@ export class Walk {
     this.instanceNext = []
     this.instances = []
     this.inInstance = false
+    this.untyped = false
     this.repeat = false
     this.instanceChoice = false
     this.choiceNodes = []
@@ -263,6 +289,11 @@ export class Walk {
     this.specifierTo = []
     this.refusedAt = []
     this.refusals = []
+    this.stubIds = []
+    this.stubNames = []
+    this.warnStubs = false
+    this.stubbedAt = []
+    this.stubWarnings = []
     this.failure = ""
     this.hoistHere = false
     this.hoistable = false
@@ -282,7 +313,7 @@ export class Walk {
     }
     for (const template of program.templateList) {
       if (template.origin === source && template.count === 0) {
-        this.stub(template.decl, nodeCount)
+        this.stub(template.decl, nodeCount, template.sourceName)
       }
     }
     // A generic method is minted per receiver; it is uninstantiated only when
@@ -295,7 +326,7 @@ export class Walk {
     }
     for (const template of program.methodTemplateList) {
       if (template.origin === source && !called.has(`${template.decl.id}`)) {
-        this.stub(template.decl, nodeCount)
+        this.stub(template.decl, nodeCount, template.sourceName)
       }
     }
     // A class template no type argument list reached: every method of it. Its
@@ -304,18 +335,32 @@ export class Walk {
       if (template.origin === source && template.count === 0 && template.decl.kind === N_CLASS) {
         for (const member of template.decl.children[3].children) {
           if (member.kind === N_METHOD) {
-            this.stub(member, nodeCount)
+            this.stub(member, nodeCount, `${template.sourceName}.${member.text}`)
           }
         }
       }
     }
   }
 
-  /** Mark `decl` as written with a throwing body (`stubbed`). */
-  stub(decl: Node, nodeCount: i32): void {
+  /** Mark `decl` as written with a throwing body (`stubbed`), under the name a warning gives it. */
+  stub(decl: Node, nodeCount: i32, name: string): void {
     if (decl.id >= 0 && decl.id < nodeCount) {
       this.stubbed[decl.id] = true
+      this.stubIds.push(decl.id)
+      this.stubNames.push(name)
     }
+  }
+
+  /** The name `stub` was given for the declaration with node id `id`. */
+  stubName(id: i32): string {
+    let i = 0
+    while (i < this.stubIds.length) {
+      if (this.stubIds[i] === id) {
+        return this.stubNames[i]
+      }
+      i = i + 1
+    }
+    return ""
   }
 
   /**
@@ -479,6 +524,12 @@ const observe = (walk: Walk, node: Node): string => {
   return local === ambient ? "" : local
 }
 
+/** Whether `call` is `r.expect(m)` or `r.unwrapOr(d)`, whose argument runs only when `r` is an `Err`. */
+const isLazyCall = (call: Node): boolean => {
+  const callee = call.children[0]
+  return callee.kind === N_MEMBER && (callee.text === "expect" || callee.text === "unwrapOr")
+}
+
 /**
  * Whether child `i` of `node` runs exactly once, in order, whenever `node`
  * does, so that what may hoist at `node` may hoist from the child too. A kind
@@ -495,6 +546,11 @@ const hoistChild = (node: Node, i: i32): boolean => {
   }
   if (kind === N_FOR_OF) {
     return i < 2
+  }
+  // `expect` and `unwrapOr` run their argument on the `Err` path only (#182),
+  // so nothing in it may hoist ahead of the call.
+  if (kind === N_CALL && i > 0 && isLazyCall(node)) {
+    return false
   }
   if (kind === N_CALL || kind === N_MEMBER || kind === N_INDEX) {
     return i === 0 || !inOptionalChain(node)
@@ -679,10 +735,43 @@ const statementText = (walk: Walk, stmt: Node, out: Operands, slot: i32): void =
 }
 
 /**
- * A generic function or method no instance reaches, written with a body that
- * throws: the source's body was never typed, and the native build compiles
- * none, so nothing can call it. The empty string where there is no body, as a
- * `declare`d one has none.
+ * Whether the text of `node`, a body no instance reaches, would need the types
+ * the checker never gave it: a 64-bit integer, which is a `bigint` here and
+ * mixes with no `number`, or a builtin call, whose rewrite the checker's
+ * resolution of it decides.
+ */
+const needsTypes = (node: Node): boolean => {
+  if ((node.kind === N_TYPE_REF || node.kind === N_IDENT) && (node.text === "i64" || node.text === "u64")) {
+    return true
+  }
+  if (node.kind === N_CALL && node.children.length > 0) {
+    const callee = node.children[0]
+    if (callee.kind === N_IDENT && isBuiltinFunction(callee.text)) {
+      return true
+    }
+  }
+  for (const child of node.children) {
+    if (needsTypes(child)) {
+      return true
+    }
+  }
+  return false
+}
+
+/** The width types the signature of a stub names, which its text keeps. */
+const observeWidths = (walk: Walk, node: Node): void => {
+  if (node.kind === N_TYPE_REF && listedWord(WIDTH_TYPES, node.text)) {
+    walk.widths.add(node.text)
+  }
+  for (const child of node.children) {
+    observeWidths(walk, child)
+  }
+}
+
+/**
+ * A body no instance reaches whose text would need types (`needsTypes`),
+ * written to throw: the native build compiles none, so nothing calls it. The
+ * empty string where there is no body, as a `declare`d one has none.
  */
 const stubText = (walk: Walk, node: Node): string => {
   if (node.children.length < 4 || node.children[3].kind !== N_BLOCK) {
@@ -704,13 +793,44 @@ const sameAnswer = (aChanged: boolean, a: string, bChanged: boolean, b: string):
  * nullable string per node.
  */
 const changedText = (walk: Walk, node: Node, out: Operands, slot: i32): void => {
-  if (!walk.inInstance && node.id >= 0 && node.id < walk.stubbed.length && walk.stubbed[node.id]) {
-    const text = stubText(walk, node)
-    if (text.length > 0) {
-      out.texts[slot] = text
+  if (
+    !walk.inInstance &&
+    !walk.untyped &&
+    node.id >= 0 &&
+    node.id < walk.stubbed.length &&
+    walk.stubbed[node.id]
+  ) {
+    const stub = needsTypes(node) ? stubText(walk, node) : ""
+    if (stub.length > 0) {
+      if (walk.warnStubs) {
+        walk.stubbedAt.push(node)
+        walk.stubWarnings.push(
+          `\`${walk.stubName(node.id)}\` is never instantiated, and its body needs the checker's types to translate: --emit-ts writes it as a stub that throws`
+        )
+      }
+      let k = 0
+      while (k < node.children.length) {
+        if (k !== 3) {
+          observeWidths(walk, node.children[k])
+        }
+        k = k + 1
+      }
+      out.texts[slot] = stub
       out.changed[slot] = true
       return
     }
+    const choices = walk.choiceNodes.length
+    walk.untyped = true
+    changedText(walk, node, out, slot)
+    walk.untyped = false
+    if (walk.choiceNodes.length > choices) {
+      walk.refuse(walk.choiceNodes[choices], UNTYPED_REFUSAL)
+    }
+    while (walk.choiceNodes.length > choices) {
+      walk.choiceNodes.pop()
+      walk.choiceTexts.pop()
+    }
+    return
   }
   if (
     !walk.inInstance &&
@@ -978,10 +1098,12 @@ const isPropertyExport = (specifier: string, name: string): boolean => {
  * The bindings after a builtin import whose names are values rather than
  * functions: `argv` from `nish:process` is the command line, and the runtime
  * exports it as the function that reads it. Each such name is imported under
- * `__nish_<local>` (an edit pushed here) and bound by the text this answers,
+ * `__nish_<local>` (an edit pushed here; numbered past a name the module
+ * already holds, and held from then on, so a helper the rows import later
+ * cannot take it) and bound by the text this answers,
  * `const argv = __nish_argv();`, which goes after the import.
  */
-const propertyImports = (stmt: Node, edits: Edit[]): string => {
+const propertyImports = (walk: Walk, stmt: Node, edits: Edit[]): string => {
   if (
     !isBuiltinSpecifier(stmt.text) ||
     stmt.children.length === 0 ||
@@ -999,7 +1121,13 @@ const propertyImports = (stmt: Node, edits: Edit[]): string => {
     if (!isPropertyExport(stmt.text, exported)) {
       continue
     }
-    const alias = `__nish_${spec.text}`
+    let alias = `__nish_${spec.text}`
+    let n = 2
+    while (walk.names.has(alias)) {
+      alias = `__nish${n}_${spec.text}`
+      n = n + 1
+    }
+    walk.names.add(alias)
     edits.push(new Edit(spec.start, spec.end, `${exported} as ${alias}`))
     sb.add(`\nconst ${spec.text} = ${alias}();`)
   }
@@ -1032,7 +1160,7 @@ export const emitModule = (walk: Walk, file: Node, edits: Edit[]): void => {
           }
         }
       }
-      const values = propertyImports(stmt, edits)
+      const values = propertyImports(walk, stmt, edits)
       let k = 0
       while (k < walk.specifierFrom.length) {
         if (walk.specifierFrom[k] === stmt.text) {

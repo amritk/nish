@@ -17,7 +17,10 @@
 // that declares C functions (NL4010), whose bodies are not in the program, one
 // that uses a builtin whose translation would reach past its own statement
 // (NL4011), a compound assignment whose index would run twice (NL4012), and a
-// generic whose instances would be written differently (NL4013).
+// generic whose instances would be written differently (NL4013), or one no
+// instance reaches whose body makes such a choice (NL4014). A generic of the
+// program's own that no instance reaches, written with a throwing body, is
+// written and warned about (NL8012); one of the standard library's is not.
 
 import { CLI } from "./branding"
 import { Compilation, ModuleUnit } from "./compilation"
@@ -252,6 +255,7 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
       continue
     }
     const walk = new Walk(unit.checker.program, unit.checker.ctx.table, unit.source, unit.nodeCount)
+    walk.warnStubs = unit.packageName === ROOT_PACKAGE
     for (const stmt of unit.file.children) {
       if (stmt.kind !== N_IMPORT) {
         continue
@@ -294,6 +298,14 @@ export const emitTypeScript = (compilation: Compilation): EmittedProgram => {
     }
     if (result.refused) {
       continue
+    }
+    // A program's own generic written to throw is a portability warning
+    // (NL8012), so the driver runs this before it prints those.
+    r = 0
+    while (r < walk.stubWarnings.length) {
+      const node = walk.stubbedAt[r]
+      compilation.sink.reportPortability(unit.source, node.start, node.end, walk.stubWarnings[r])
+      r = r + 1
     }
     const header = runtimeImport("import", walk.helpers) + runtimeImport("import type", walk.widths)
     if (header.length > 0) {
