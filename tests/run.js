@@ -54,7 +54,7 @@ import {
   TLS_TCP_START_BYTES,
 } from "./runtime-budgets.js"
 import { linkWith, resolveSeed, seedForOracle, spawnSeed, withoutSeed } from "./self/seed.js"
-import { defaultJobs, pool, run as spawnAsync } from "./pool.js"
+import { defaultJobs, jobsFrom, pool, run as spawnAsync } from "./pool.js"
 import { standsAlone, typeCheckDeclarations, typeCheckProject } from "./typecheck.js"
 import { programs as corpusPrograms } from "./self/corpus.js"
 import { cwdFor } from "./differential/lib.js"
@@ -619,9 +619,12 @@ if (
 // -- a later section reads the `.ll` a case left in `build/test` -- so every
 // case has finished before the next section starts, and the checks are
 // reported in corpus order, which keeps the output the same at any width.
-const only = withoutSeed(process.argv.slice(2).filter((_, i) => i + 2 !== shardAt && i + 1 !== shardAt)).find(
-  (arg) => !arg.startsWith("-")
-)
+// The filter is the first argument that is neither a flag nor the value of
+// one (`--shard 2/4`, `--jobs 4`).
+const jobsAt = process.argv.indexOf("--jobs")
+const only = withoutSeed(
+  process.argv.slice(2).filter((_, i) => ![shardAt, jobsAt].some((at) => i + 2 === at || i + 1 === at))
+).find((arg) => !arg.startsWith("-"))
 const cases = fs
   .readdirSync(casesDir)
   .filter((f) => f.endsWith(".ts"))
@@ -4942,22 +4945,75 @@ const { linkShard, sectionShard } = (() => {
  * runs here. A check in the WP14 section holds ci.yml to it.
  */
 const DELEGATE_IR_CHECKS = process.argv.includes("--delegate-ir-checks") && process.env.GITHUB_ACTIONS === "true"
-let irDelegated = 0
 const linkDealtAway = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) !== SHARD)
+/**
+ * How many link programs are in flight at once: `--jobs N`, `defaultJobs()`
+ * without it. `--jobs 1` is the sequential loop. Whatever the width, every
+ * program's checks are replayed in `linkTests` order, so the output is the same
+ * byte for byte.
+ */
+const LINK_JOBS = jobsFrom(process.argv)
+/**
+ * How many of one program's modules llvm-as and opt read at once. The programs
+ * around it are already filling the cores, so the two pools share
+ * `defaultJobs()` between them rather than each taking all of it: `LINK_JOBS`
+ * programs each forking `defaultJobs()` verifiers would be `defaultJobs()`
+ * squared processes, more than the cores and more than the memory a CI runner
+ * has for that many module graphs. At `--jobs 1` one program gets every core.
+ */
+const MODULE_JOBS = Math.max(1, Math.floor(defaultJobs() / LINK_JOBS))
+/**
+ * The link programs that run alone, one at a time, after the pool has drained,
+ * each with why. A program belongs here when other programs beside it change
+ * what it measures (a wall-clock bound, a resident size), not when it shares a
+ * file or a port: no program does (see `runLinkProgram`).
+ */
+const LINK_SERIAL = new Map([])
 
-for (const name of linkTests) {
-  if (only && !name.includes(only)) {
-    continue
+/**
+ * One link program from its compile to its last native run, with what it found
+ * kept as steps, as section A's `runCase` keeps them, rather than printed:
+ * `{ steps, irDelegated }`. The programs run `LINK_JOBS` at a time and finish in
+ * any order, so nothing here reaches the output or the counters; the loop below
+ * replays each record in `linkTests` order with `reportCase`, and counts
+ * `irDelegated` from the records.
+ *
+ * What two programs in flight could share, and why they do not:
+ * - Their outputs. Every directory written here is named after the program --
+ *   `build/test/link/<name>/`, `build/test/link/<name>.portability/` and
+ *   `build/test/link-panics/<name>/` -- and the names are directory names
+ *   under tests/link, so no two programs ever share one.
+ * - The compiled runtime. Every `--link` takes it from
+ *   `$XDG_CACHE_HOME/nish/runtime`, the suite's own cache, which
+ *   `cachedRuntime` (src/compile.ts) keeps safe for concurrent links (CLI-5):
+ *   a miss compiles into a scratch directory of its own, moves whole objects
+ *   in with `rename` and writes the key last, so two misses at once each
+ *   compile the same recipe and a link reading an object always reads a whole
+ *   one. scripts/build.sh's own scratch (`--runtime-from`) is a `mktemp -d`
+ *   per link.
+ * - The process. Nothing here changes `process.env` or the working
+ *   directory; an environment a native run needs (`envWithThreads`) is a copy
+ *   handed to that one spawn.
+ * - The world the programs run in. The three that write files write their own
+ *   directories (`build/net_relay`, `build/rt_sec_read_cap`,
+ *   `build/rt_sec_wasm_arena`); net_interop_server and net_relay_soak write
+ *   only when started as a server by hand. Every socket a program's checks
+ *   open is bound to port 0, which the kernel picks free; the literal ports in
+ *   tests/link are a server's CLI argument or bytes in a replayed trace.
+ */
+const runLinkProgram = async (name) => {
+  const steps = []
+  const expect = (label, ok, detail) => {
+    steps.push({ kind: "check", label, ok, detail: ok ? undefined : detail })
   }
-  if (linkShard(name) !== SHARD) {
-    continue
-  }
+  const record = { steps, irDelegated: false }
   const dir = path.join(linkDir, name)
   const side = (f) => path.join(dir, f)
   const read = (f) => fs.readFileSync(side(f), "utf8")
   const args = fs.existsSync(side("args")) ? read("args").trim().split(/\s+/).filter(Boolean) : []
   const outDir = path.join(buildDir, "link", name) + path.sep
   const exe = path.join(outDir, "app")
+  // This program's own directory: no other program in flight names it.
   fs.rmSync(outDir, { recursive: true, force: true })
   // WP35: the report is written beside the modules by the same compile, since
   // nothing here compares the IR of a second one.
@@ -4965,47 +5021,50 @@ for (const name of linkTests) {
   const capsArgs =
     !DELEGATE_IR_CHECKS && fs.existsSync(side("expected.caps.json")) ? ["--emit-capabilities", capsJson] : []
   if (DELEGATE_IR_CHECKS && fs.existsSync(side("expected.err"))) {
-    irDelegated++
-    continue
+    record.irDelegated = true
+    return record
   }
-  const r = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...capsArgs], {
+  // The link reads the suite's runtime cache, which concurrent links share
+  // safely (CLI-5; see above).
+  const r = await spawnAsync(NISH, [side("main.ts"), "-o", outDir, "--link", exe, ...args, ...capsArgs], {
     cwd: root,
   })
   const stderr = String(r.stderr)
 
   if (fs.existsSync(side("expected.err"))) {
     const needle = read("expected.err").trim()
-    check(
+    expect(
       `link/${name}: rejected with "${needle}"`,
       r.status === 1 && stderr.includes(needle),
       stderr || "(compiled successfully)"
     )
     if (fs.existsSync(side("expected.json"))) {
-      const json = spawnSync(NISH, [side("main.ts"), "-o", outDir, "--json", ...args], {
+      const json = await spawnAsync(NISH, [side("main.ts"), "-o", outDir, "--json", ...args], {
         cwd: root,
         encoding: "utf8",
       })
       const got = json.stdout.split(`${root}/`).join("").trim()
       const want = read("expected.json").trim()
-      check(
+      expect(
         `link/${name}: --json reports every diagnostic in expected.json, and no other`,
         json.status === 1 && got === want,
         `--- expected\n${want}\n--- actual (exit ${json.status})\n${got}\n${json.stderr}`
       )
     }
-    continue
+    return record
   }
   if (r.status !== 0) {
-    check(`link/${name}: compiles and links`, false, stderr)
-    continue
+    expect(`link/${name}: compiles and links`, false, stderr)
+    return record
   }
   if (DELEGATE_IR_CHECKS) {
-    irDelegated++
+    record.irDelegated = true
   } else {
     // The `--emit-panics` compile below reads nothing this loop writes, so it
     // runs while the modules are checked rather than after them. Nothing between
     // here and its `await` leaves the iteration, so no compile outlives its program.
     const panicsDir = path.join(buildDir, "link-panics", name) + path.sep
+    // Named after the program, like `outDir`.
     fs.rmSync(panicsDir, { recursive: true, force: true })
     const panicsFile = path.join(panicsDir, "panics.json")
     const listing = spawnAsync(NISH, [side("main.ts"), "-o", panicsDir, ...args, "--emit-panics", panicsFile], {
@@ -5019,10 +5078,10 @@ for (const name of linkTests) {
       .sort()
       .map((f) => ({ file: f, ir: fs.readFileSync(path.join(outDir, f), "utf8") }))
     // A program that imports std/net is about a hundred modules, and llvm-as and
-    // opt read each one alone, so they run `defaultJobs()` modules at a time; the
+    // opt read each one alone, so they run `MODULE_JOBS` modules at a time; the
     // checks are still made in module order, so the output is the sequential
     // loop's. One at a time they were a fifth of the runtime-net job's wall clock.
-    const verified = await pool(modules, defaultJobs(), async (m) => ({
+    const verified = await pool(modules, MODULE_JOBS, async (m) => ({
       as: HAS_LLVM_AS ? await spawnAsync("llvm-as", [path.join(outDir, m.file), "-o", "/dev/null"]) : null,
       v: HAS_OPT ? await spawnAsync("opt", ["-passes=verify", "-disable-output", path.join(outDir, m.file)]) : null,
     }))
@@ -5031,10 +5090,10 @@ for (const name of linkTests) {
         const actual = stripHeader(m.ir)
         if (UPDATE_LINK_GOLDENS && read(m.file).trim() !== actual) {
           fs.writeFileSync(side(m.file), `${actual}\n`)
-          console.log(`WROTE link/${name}/${m.file}`)
+          steps.push({ kind: "log", text: `WROTE link/${name}/${m.file}` })
         }
         const expected = read(m.file).trim()
-        check(
+        expect(
           `link/${name}: ${m.file} matches golden`,
           actual === expected,
           `--- expected\n${expected}\n--- actual\n${actual}`
@@ -5042,17 +5101,18 @@ for (const name of linkTests) {
       }
       const { as, v } = verified[i]
       if (as !== null) {
-        check(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
+        expect(`link/${name}: llvm-as accepts ${m.file}`, as.status === 0, String(as.stderr))
       }
       if (v !== null) {
-        check(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
+        expect(`link/${name}: opt -passes=verify accepts ${m.file}`, v.status === 0, String(v.stderr))
       }
     }
 
     if (fs.existsSync(side("expected.portability"))) {
       const warnedDir = path.join(buildDir, "link", `${name}.portability`) + path.sep
+      // Named after the program, like `outDir`.
       fs.rmSync(warnedDir, { recursive: true, force: true })
-      const warned = spawnSync(
+      const warned = await spawnAsync(
         NISH,
         [side("main.ts"), "-o", warnedDir, ...args, "--warn-portability", "--json"],
         {
@@ -5067,12 +5127,12 @@ for (const name of linkTests) {
         .join("\n")
         .split(`${root}/`)
         .join("")
-      check(
+      expect(
         `link/${name}: --warn-portability --json matches expected.portability`,
         warned.status === 0 && got === want,
         `--- expected\n${want}\n--- actual (exit ${warned.status})\n${got}\n${warned.stderr}`
       )
-      check(
+      expect(
         `link/${name}: --warn-portability changes no byte of the IR`,
         modules.every(
           (m) =>
@@ -5108,7 +5168,7 @@ for (const name of linkTests) {
         }
       }
     }
-    check(
+    expect(
       `link/${name}: ${declares} imported declare(s) match their define(s) attribute for attribute`,
       declares > 0 && mismatches.length === 0,
       mismatches.join("\n") || "(no cross-module declares found)"
@@ -5121,7 +5181,7 @@ for (const name of linkTests) {
         .map((l) => l.trim())
         .filter(Boolean)
         .filter((l) => !all.includes(l))
-      check(
+      expect(
         `link/${name}: emitted IR contains every expected.ir line`,
         missing.length === 0,
         missing.map((l) => `missing: ${l}`).join("\n")
@@ -5136,7 +5196,7 @@ for (const name of linkTests) {
     // That compile was started beside the module checks above (`listing`).
     const listed = await listing
     if (listed.status !== 0 || !fs.existsSync(panicsFile)) {
-      check(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
+      expect(`link/${name}: --emit-panics writes the sites`, false, `exit ${listed.status}\n${listed.stderr}`)
     } else {
       const listText = fs.readFileSync(panicsFile, "utf8")
       const ir = fs
@@ -5149,7 +5209,7 @@ for (const name of linkTests) {
       // drift check too; a module of a library that writes no `.ll` of its own
       // stays skipped (`panicOracle`'s `module`).
       const oracle = panicOracle(ir, JSON.parse(listText), side("main.ts"))
-      check(
+      expect(
         `link/${name}: --emit-panics agrees with the IR of every module, the entry's functions all defined`,
         oracle.failures.length === 0 && oracle.own > 0,
         oracle.own > 0
@@ -5159,7 +5219,7 @@ for (const name of linkTests) {
       if (fs.existsSync(side("expected.panics"))) {
         const want = read("expected.panics").trim()
         const got = listText.split(`${root}/`).join("").trim()
-        check(
+        expect(
           `link/${name}: --emit-panics matches expected.panics`,
           got === want,
           `--- expected\n${want}\n--- actual\n${got}`
@@ -5170,7 +5230,7 @@ for (const name of linkTests) {
     if (capsArgs.length > 0) {
       const want = read("expected.caps.json")
       const got = fs.existsSync(capsJson) ? fs.readFileSync(capsJson, "utf8") : ""
-      check(
+      expect(
         `link/${name}: --emit-capabilities matches expected.caps.json byte for byte`,
         got === want,
         `--- expected\n${want}\n--- actual\n${got}`
@@ -5178,14 +5238,17 @@ for (const name of linkTests) {
     }
   }
 
+  // The programs in flight share the repository root as their working
+  // directory, and nothing in it: each writes only a directory of its own and
+  // binds port 0 (see above).
   const run = await runNative(`link/${name}`, exe, [])
   if (run.death !== null) {
-    check(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
-    continue
+    expect(run.death, false, `stdout so far:\n${run.stdout}${run.stderr}`)
+    return record
   }
   const wantCode = Number(read("expected.code").trim())
   const wantOut = fs.existsSync(side("expected.out")) ? read("expected.out").trim() : ""
-  check(
+  expect(
     `link/${name}: exits with ${wantCode} and stdout matches expected.out`,
     run.status === wantCode && String(run.stdout).trim() === wantOut,
     `--- expected exit ${wantCode}, stdout:\n${wantOut}\n--- actual exit ${run.status}, stdout:\n${run.stdout}${run.stderr}`
@@ -5200,7 +5263,7 @@ for (const name of linkTests) {
       const sized = await runNative(`link/${name} (NISH_NUM_THREADS=${threads})`, exe, [], {
         env: envWithThreads(threads),
       })
-      check(
+      expect(
         sized.death ?? `link/${name}: the same exit and stdout under NISH_NUM_THREADS=${threads}`,
         sized.death === null && sized.status === wantCode && String(sized.stdout).trim() === wantOut,
         `--- actual exit ${sized.status}, stdout:\n${sized.stdout}${sized.stderr}`
@@ -5228,12 +5291,39 @@ for (const name of linkTests) {
         }
       }
     }
-    check(
+    expect(
       `link/${name}: every one of ${PANIC_ONCE_RUNS} runs at 2 and 8 threads prints expected.stderr once and exits ${wantCode}`,
       bad.length === 0,
       `--- expected stderr ${JSON.stringify(wantErr)}\n${bad.join("\n")}`
     )
   }
+  return record
+}
+
+// Each program is reported as soon as every program before it has been, so the
+// log moves while the pool runs. A program of `LINK_SERIAL` holds the report
+// at its place until the pool has drained and it has run alone; the programs
+// after it are reported then, in order, with it.
+const linkSelected = linkTests.filter((name) => (!only || name.includes(only)) && linkShard(name) === SHARD)
+const linkRuns = new Array(linkSelected.length).fill(null)
+let linkReported = 0
+let irDelegated = 0
+const reportLink = (record) => {
+  reportCase(record)
+  if (record.irDelegated) {
+    irDelegated++
+  }
+  linkReported++
+}
+await pool(linkSelected, LINK_JOBS, async (name, at) => {
+  linkRuns[at] = LINK_SERIAL.has(name) ? { serial: true } : await runLinkProgram(name)
+  while (linkReported < linkRuns.length && linkRuns[linkReported] !== null && !linkRuns[linkReported].serial) {
+    reportLink(linkRuns[linkReported])
+  }
+})
+while (linkReported < linkRuns.length) {
+  const at = linkReported
+  reportLink(linkRuns[at].serial ? await runLinkProgram(linkSelected[at]) : linkRuns[at])
 }
 
 /** The `.ll` files an output directory holds, in name order. */
