@@ -12,8 +12,8 @@
 //
 // Configured by the environment only: DATABASE_URL, JWT_SECRET, HOST, PORT
 // (the challenge's), and optionally HTTP_WORKERS (2), DB_READ_CONNS (3) and
-// DB_WRITE_CONNS (1) per worker, DB_MAX_IN_FLIGHT (16), DB_READ_BATCH (32) and
-// DB_BATCH_DEPTH (1) batches in flight per connection, BCRYPT_BATCH_MS (160),
+// DB_WRITE_CONNS (1) per worker, DB_READ_BATCH (32) and DB_BATCH_DEPTH (1)
+// groups in flight per connection, BCRYPT_BATCH_MS (160),
 // BCRYPT_PORT (47391) and IDLE_TIMEOUT_MS (75000).
 import { tcpListenFlags } from "nish:net"
 import { getenv } from "nish:process"
@@ -92,7 +92,6 @@ export const main = (): i32 => {
   cfg.port = envInt("PORT", 3000)
   cfg.readConns = envInt("DB_READ_CONNS", 3)
   cfg.writeConns = envInt("DB_WRITE_CONNS", 1)
-  cfg.maxInFlight = envInt("DB_MAX_IN_FLIGHT", 16)
   cfg.readBatch = envInt("DB_READ_BATCH", 32)
   cfg.batchDepth = envInt("DB_BATCH_DEPTH", 1)
   cfg.bcryptPort = envInt("BCRYPT_PORT", 47391)

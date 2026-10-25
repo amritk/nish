@@ -280,4 +280,4 @@ PASS  text after a quote
 PASS  a space unquoted
 PASS  a window too short
 PASS  stays bad
-postgres: 281 passed, 0 failed, 0 skipped
+postgres: 282 passed, 0 failed, 0 skipped

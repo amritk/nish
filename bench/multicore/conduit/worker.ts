@@ -398,7 +398,6 @@ export class WorkerConfig {
   dbName: string = "conduit"
   readConns: i32 = 3
   writeConns: i32 = 1
-  maxInFlight: i32 = 16
   readBatch: i32 = 32
   batchDepth: i32 = 1
   bcryptPort: i32 = 47391
@@ -484,7 +483,9 @@ export class ConduitWorker {
     // is small), and the ISO and UTC spelling the connection reads.
     config.options =
       "-c plan_cache_mode=force_generic_plan -c jit=off -c max_parallel_workers_per_gather=0 -c DateStyle=ISO -c TimeZone=UTC"
-    config.maxInFlight = cfg.maxInFlight
+    // A connection holds `batchDepth` groups at once, so a busy one makes the
+    // pool open the next rather than queue behind it.
+    config.maxInFlight = cfg.batchDepth > 0 ? cfg.batchDepth : 1
     config.inputSize = 65536
     config.maxOutput = 4194304
     const password = secret(bytesOf(cfg.dbPassword))
