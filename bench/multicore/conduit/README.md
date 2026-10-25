@@ -166,3 +166,9 @@ connections).
 | A4 | articles written directly: the fixed text as pre-encoded fragments, only the values escaped (`json-out.ts`) | **892M** | yes |
 | A5 | a token whose header is the one issued is not decoded | **869M** | yes |
 | A6 | the tag array in one byte loop instead of a scan and a copy per element | 887M (more requests too) | no |
+
+Paired against the O5 build (three pairs at 2,000 users), A1 to A5 together
+take the HTTP workers from 64.1–65.2 to **54.4–55.0 µs/request (−16%)**,
+Postgres unchanged (287–294 against 282–294). Instructions halved; the time
+did not, because most of what is left is the kernel's: about one `send` and
+one `recv` for HTTP and one each for Postgres per request.
