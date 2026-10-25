@@ -58,10 +58,7 @@ export const registerStatements = (pool: PgPool): boolean => {
   let ok: boolean = true
   // Article lists: the page, then the capped count, of each filter.
   ok = pool.register("list_all", ARTICLE_LIST + ARTICLE_FROM + ORDER_PAGE, none) && ok
-  // The capped count walks the primary key from its oldest end, whose pages
-  // are all-visible, so it is an index-only scan with no heap fetch; without
-  // the order the planner may read the heap.
-  ok = pool.register("count_all", "SELECT count(*) FROM (SELECT 1 FROM articles a ORDER BY a.id LIMIT 1000) s", none) && ok
+  ok = pool.register("count_all", "SELECT count(*) FROM (SELECT 1 FROM articles a LIMIT 1000) s", none) && ok
   ok =
     pool.register(
       "list_tag",
@@ -113,9 +110,7 @@ export const registerStatements = (pool: PgPool): boolean => {
   ok =
     pool.register(
       "count_feed",
-      // The followees as an array, so the count is one index-only scan of
-      // articles_author_idx over all of them rather than a join.
-      "SELECT count(*) FROM (SELECT 1 FROM articles a WHERE a.author_id = ANY(ARRAY(SELECT fo.followee_id FROM follows fo WHERE fo.follower_id = $1)) ORDER BY a.author_id, a.id DESC LIMIT 1000) s",
+      "SELECT count(*) FROM (SELECT 1 FROM articles a WHERE a.author_id IN (SELECT fo.followee_id FROM follows fo WHERE fo.follower_id = $1) LIMIT 1000) s",
       none
     ) && ok
   // One article, by slug or by id.
