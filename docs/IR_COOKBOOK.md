@@ -20991,14 +20991,14 @@ attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
 sequence that matches JavaScript's round-half-up, then `llvm.copysign.f64`
 so that `Math.round(-0.3)` is `-0`. The floor it takes, and `Math.floor`,
 `Math.ceil` and `Math.trunc`, are calls to the runtime's `@nish_floor`,
-`@nish_ceil` and `@nish_trunc` in a module for x86-64 (the default, with no
-triple, is one) other than a wasm build (#943): the baseline is SSE2, where
+`@nish_ceil` and `@nish_trunc` in a module for x86-64 (with no triple, on an
+x86-64 host) other than a wasm build (#943): the baseline is SSE2, where
 `llvm.floor.f64` is a call of libm's `floor`, and the runtime answers with
 SSE4.1's `roundsd` on a CPU that has it. Which one is a flag
 `@nish_round_init` sets once, from `cpuid`, as a constructor at priority 101
-(`NISH_SIMD=scalar` or `base` pins the SSE2 path, an exact floor through an
-`i64` conversion that needs no libm), so the binary stays a baseline
-binary. Built with `--cpu x86-64-v2` and up, each is the one instruction. An
+(`NISH_SIMD=scalar` pins libm's routine, which the runtime calls on
+a CPU without SSE4.1), so the binary stays a baseline binary. Linked with
+`--cpu x86-64-v3`, the runtime's body is the one instruction. An
 aarch64 or wasm module keeps `llvm.floor.f64` and its kin. The calls are
 `readnone`, like the intrinsics, but LLVM no longer folds a constant
 argument through them; `Math.min`/`max` answer NaN for a NaN

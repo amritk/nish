@@ -286,11 +286,10 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
    takes (#943): each answers as C's `floor`, `ceil` and `trunc` do, -0, the
    infinities and NaN included. A module for x86-64 calls them and registers
    `nish_round_init` in `@llvm.global_ctors`; it asks the CPU for SSE4.1 once
-   before `main`, and `NISH_SIMD=scalar` or `base` keeps the SSE2 path. Before
-   it has run, or on a machine without SSE4.1, each is an exact SSE2 floor
-   through an `int64_t` conversion, with no libm. They
-   live in runtime/runtime-simd.c; runtime-wasm.c has the wasm32 ones for host
-   IR that `scripts/build.sh --profile wasm` links. */
+   before `main`, and `NISH_SIMD=scalar` keeps libm. Before it has
+   run, or on a machine without SSE4.1, each is libm's routine. They live in
+   runtime/runtime-simd.c; runtime-wasm.c has the wasm32 ones for host IR that
+   `scripts/build.sh --profile wasm` links. */
 void nish_round_init(void);
 double nish_floor(double x);
 double nish_ceil(double x);

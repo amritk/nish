@@ -25,6 +25,7 @@
  * instruction gate sets `NISH_SIMD=base` (bench/run.mjs) so that a count does
  * not depend on the host it was measured on.
  */
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -440,21 +441,15 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
    `llvm.floor.f64` to a call of libm's `floor` through the GOT. So a module
    for x86-64 calls these instead (`roundingCallee`, src/emit-builtins.ts) and
    registers `nish_round_init` as a constructor, which asks the CPU once
-   before `main`; the flag is never written after it, so every call reads a
-   constant and LTO keeps it in a register across a loop. The flag starts at
-   0, which is the SSE2 path, so a call that ran before the constructor would
-   still be exact. That path is exact without libm, so the runtime links
-   without `-lm`: below 2^52 a double converts to an i64 and back as its
-   truncation, floor steps one down from it when it lies above, or gives
-   `x` itself when it is whole, which keeps the sign of a zero, ceil is
-   `-floor(-x)` and trunc is whichever of the two moves
-   toward zero; from 2^52 every double is an integer, and NaN and the
-   infinities come back as they went in. `NISH_SIMD=scalar` or `base` pins
-   it, as it pins the baseline paths above: the instruction gate's counts,
-   which then do not depend on the ifunc glibc picks, and the forced
-   fallback a test runs. Built for a machine that has SSE4.1 already
-   (`--cpu x86-64-v2` and up), or for any other, each is the builtin, which
-   is the one instruction there, and the constructor does nothing. The
+   before `main`; the flag is never written after it. The flag starts at 0,
+   which is libm's routine, so a call that ran before the constructor is still
+   exact, and so is every call on a CPU without SSE4.1: there each is a tail
+   jump to libm, the path a module took before. `NISH_SIMD=scalar` pins libm,
+   the forced fallback a test runs. `base` does not: the instruction gate
+   counts under it, and glibc's own `floor` takes `roundsd` there as well, so
+   the count is of the instruction both call. Built for a machine that has
+   SSE4.1 already (`--cpu x86-64-v3`), or for any other, each is the builtin,
+   which is the one instruction there, and the constructor does nothing. The
    immediate is the rounding mode, 1 down, 2 up, 3 toward zero, plus 8, which
    keeps the precision exception quiet as libm's `floor` does. */
 #if defined(NISH_SIMD_SSE2) && !defined(__SSE4_1__)
@@ -462,22 +457,12 @@ static _Bool nish_round_hw;
 
 void nish_round_init(void) {
   unsigned a, b, c, d;
-  nish_round_hw = nish_simd_pin() < 0 && __get_cpuid(1, &a, &b, &c, &d) && (c & bit_SSE4_1);
+  nish_round_hw = nish_simd_pin() != NISH_PATH_SCALAR && __get_cpuid(1, &a, &b, &c, &d) && (c & bit_SSE4_1);
 }
-
-static double nish_floor_sse2(double x) {
-  if (!(__builtin_fabs(x) < 0x1p52)) return x;
-  double t = (double)(int64_t)x;
-  return t > x ? t - 1.0 : t < x ? t : x;
-}
-
-static double nish_ceil_sse2(double x) { return -nish_floor_sse2(-x); }
-
-static double nish_trunc_sse2(double x) { return x < 0 ? nish_ceil_sse2(x) : nish_floor_sse2(x); }
 
 #define NISH_ROUNDING(name, base, mode)                                                                      \
   double name(double x) {                                                                                    \
-    if (!nish_round_hw) return nish_##base##_sse2(x);                                                        \
+    if (!nish_round_hw) return base(x);                                                                      \
     __asm__("roundsd $" #mode ", %0, %0" : "+x"(x));                                                         \
     return x;                                                                                                \
   }

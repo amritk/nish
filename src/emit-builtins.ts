@@ -189,22 +189,20 @@ const f64UnaryIntrinsic = (name: string): string => {
 /**
  * Whether `Math.floor`, `ceil`, `trunc` and `round` call the runtime's
  * `nish_floor` and kin (#943), which run SSE4.1's `roundsd` on a CPU that has
- * it: x86-64 IR, which is the target-neutral IR on an x86-64 host. On the
- * SSE2 baseline LLVM lowers `llvm.floor.f64` to a call of libm's `floor`
- * through the GOT; `runtime/runtime-simd.c` asks the CPU once, in the
- * constructor this registers, and branches on its answer. A wasm module
- * keeps the intrinsic, which is one `f64.floor`, and so does aarch64, which
- * has `frintm`. The IR is the same whatever `--cpu` says: there the runtime's
- * body is the instruction alone.
+ * it: x86-64 IR, where an empty `--target` is the host's. On the SSE2
+ * baseline LLVM lowers `llvm.floor.f64` to a call of libm's `floor` through
+ * the GOT; `runtime/runtime-simd.c` asks the CPU once, in the constructor this
+ * registers, and calls libm when the answer is no. A wasm module keeps the
+ * intrinsic, which is one `f64.floor`, and so does aarch64, which has
+ * `frintm`. `--cpu` is the link's (`scripts/build.sh`), so the IR is the same
+ * whatever it says: under `--cpu x86-64-v3` the runtime's body is the
+ * instruction alone.
  */
 const dispatchesRounding = (opts: Options): boolean => {
   if (buildsWasmModule(opts)) {
     return false
   }
-  if (opts.target.length === 0) {
-    return true
-  }
-  const target = resolveTarget(opts.target)
+  const target = resolveTarget(opts.target.length === 0 ? "host" : opts.target)
   return target !== null && target.triple.startsWith("x86_64")
 }
 
