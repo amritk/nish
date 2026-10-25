@@ -295,10 +295,11 @@ class ConduitReq {
   }
 }
 
-/** A pool slot's socket. */
+/** A pool slot's socket, and the interest the loop last armed it with. */
 class PgSocket {
   fd: i32 = -1
   connected: boolean = false
+  armed: i32 = 0
 }
 
 /** The value of hex digit `c`, or -1. */
@@ -1195,6 +1196,7 @@ export class ConduitWorker {
         pool.connect(s, nonce)
         socket.fd = tcpConnect(this.pgAddress)
         socket.connected = false
+        socket.armed = H1_WANT_WRITE
         if (socket.fd < 0 || pollAdd(this.loop, socket.fd, H1_WANT_WRITE, TOKEN_POOL - (p * POOL_TOKENS + s)) < 0) {
           pool.connection(s).closed()
           this.pgEvents(p, s)
@@ -1209,8 +1211,13 @@ export class ConduitWorker {
             conn.closed()
             this.pgEvents(p, k)
           } else if (socket.fd >= 0) {
+            // Each pollModify is an epoll_ctl; a busy connection asks for the
+            // same interest turn after turn, so it is re-armed only on a change.
             const wants: i32 = conn.outputEnd() > conn.outputStart() ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
-            pollModify(this.loop, socket.fd, wants, TOKEN_POOL - (p * POOL_TOKENS + k))
+            if (wants !== socket.armed) {
+              socket.armed = wants
+              pollModify(this.loop, socket.fd, wants, TOKEN_POOL - (p * POOL_TOKENS + k))
+            }
           }
         }
       }
