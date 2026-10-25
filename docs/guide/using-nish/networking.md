@@ -103,6 +103,10 @@ packets for a stream of tiny writes and costs a round trip for a server that
 answers each request with one small write. The bytes that arrive are the same
 either way; only when they leave changes.
 
+A socket `tcpConnect` opens holds `TCP_NODELAY` already, as libpq and Go set
+it on every client socket: a client sends a whole request and waits on the
+answer, so there is nothing for Nagle to save.
+
 Flag `0` is `tcpListen` exactly, `3` is both, and any other bit answers `-22`.
 A listener without flag `1` cannot open a port a listener with it holds, nor
 the other way round: both answer `-98`.

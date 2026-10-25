@@ -4,7 +4,9 @@
 // call opens a loopback listener with `flags`, connects to it, waits for the
 // connection and answers the accepted descriptor; `net_tcp_nodelay.c` reads
 // the option back from that descriptor with `getsockopt` and prints it. Bit 4
-// and up, and a negative word, are still -22.
+// and up, and a negative word, are still -22. `connecting` answers the socket
+// `tcpConnect` made, which holds `TCP_NODELAY` whatever the listener's flags
+// (#942), the way libpq and Go's net package set it on every client socket.
 import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollWait, tcpAccept, tcpConnect, tcpListenFlags } from "nish:net";
 
 /** The connection a fresh loopback listener opened with `flags` accepts, or the failure. */
@@ -35,4 +37,17 @@ export const opened = (flags: i32): i32 => {
     return 0;
   }
   return fd;
+};
+
+/** The socket `tcpConnect` opened to a fresh flag-0 loopback listener, still connecting or connected, or the failure. */
+export const connecting = (): i32 => {
+  const listener = tcpListenFlags("127.0.0.1", 0, 4, 0);
+  if (listener < 0) {
+    return listener;
+  }
+  const addr: u8[] = new Array<u8>(18);
+  netAddress(addr, "127.0.0.1", netLocalPort(listener));
+  const client = tcpConnect(addr);
+  netClose(listener);
+  return client;
 };

@@ -27,8 +27,6 @@ import PgArrayWalker from "nish/net/postgres" -> struct PgArrayWalker
 import PgConfig from "nish/net/postgres" -> struct PgConfig
 import PgConnection from "nish/net/postgres" -> struct PgConnection
 import PgPool from "nish/net/postgres" -> struct PgPool
-const IPPROTO_TCP: i32 = 6
-const TCP_NODELAY: i32 = 1
 const PK_SQL: string = "SELECT id, username, email, bio, image FROM users WHERE id = $1"
 const LIST_SQL: string = "SELECT a.id, a.slug, a.title, a.description, a.created_at, a.updated_at, ARRAY(SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id WHERE at.article_id = a.id ORDER BY t.name) AS tag_list, (SELECT count(*) FROM favorites f WHERE f.article_id = a.id) AS favorites_count, EXISTS (SELECT 1 FROM favorites f WHERE f.article_id = a.id AND f.user_id = $1) AS favorited, u.username, u.bio, u.image, EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = $1 AND fo.followee_id = a.author_id) AS following FROM articles a JOIN users u ON u.id = a.author_id ORDER BY a.id DESC LIMIT $2 OFFSET $3"
 const INSERT_SQL: string = "INSERT INTO follows (follower_id, followee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING"
@@ -89,11 +87,6 @@ function bcopy(src: CPtr, dst: u8[], n: u64): void -> @bcopy
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: foreign
   pointer dst: size=0 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
-function setsockopt(fd: i32, level: i32, name: i32, value: u8[], length: u64): i32 -> @setsockopt
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: foreign
-  pointer value: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function bytesOf(s: string): u8[] -> @bytesOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
@@ -298,9 +291,9 @@ function Bench.run(this: Bench, mode: i32, n: i32, depth: i32, fold: boolean): b
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: mode
-  calls: Bench.bind Bench.flush Fold.add Fold.row nish.PgConnection.closed nish.PgConnection.inputBuffer nish.PgConnection.inputEnd nish.PgConnection.inputRoom nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.received nish.PgConnection.tagRows nish.PgPool.connect nish.PgPool.connection nish.PgPool.dispatch nish.PgPool.next nish.PgPool.request nish.PgPool.send nish.PgPool.wanted nish_connect_result nish_net_read nish_panic nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_modify nish_poll_wait nish_print nish_random_fill nish_str_concat nish_str_from_i32 nish_tcp_connect setsockopt
+  calls: Bench.bind Bench.flush Fold.add Fold.row nish.PgConnection.closed nish.PgConnection.inputBuffer nish.PgConnection.inputEnd nish.PgConnection.inputRoom nish.PgConnection.outputEnd nish.PgConnection.outputStart nish.PgConnection.received nish.PgConnection.tagRows nish.PgPool.connect nish.PgPool.connection nish.PgPool.dispatch nish.PgPool.next nish.PgPool.request nish.PgPool.send nish.PgPool.wanted nish_connect_result nish_net_read nish_panic_index nish_panic_overflow nish_panic_slice nish_poll_add nish_poll_modify nish_poll_wait nish_print nish_random_fill nish_str_concat nish_str_from_i32 nish_tcp_connect
   pointer this: size=56 writesThrough=true captured=false passedTo=Bench.bind#0 Bench.flush#0
-  stackSites=2 stackLocals=2
+  stackSites=1 stackLocals=1
   local -1:11 pool: PgPool (const)
   local +1:9 requested: i32 (let)
   local +2:9 bound: i32 (let)
@@ -326,25 +319,23 @@ function Bench.run(this: Bench, mode: i32, n: i32, depth: i32, fold: boolean): b
   callee +46:11 PgPool.wanted -> @nish.PgPool.wanted
   local +47:15 nonce: u8[] (const)
   callee +49:9 PgPool.connect -> @nish.PgPool.connect
-  local +53:15 one: u8[] (const)
-  callee +54:29 setsockopt -> @setsockopt
-  local +66:15 conn: PgConnection (const)
-  callee +66:22 PgPool.connection -> @nish.PgPool.connection
-  callee +67:14 Bench.flush -> @Bench.flush
-  callee +68:11 PgConnection.closed -> @nish.PgConnection.closed
-  local +72:15 wants: i32 (const)
-  callee +72:28 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
-  callee +72:47 PgConnection.outputStart -> @nish.PgConnection.outputStart
-  local +78:13 got: i32 (const)
-  local +83:13 conn: PgConnection (const)
-  callee +83:20 PgPool.connection -> @nish.PgPool.connection
-  callee +89:11 PgConnection.closed -> @nish.PgConnection.closed
-  local +92:15 read: i32 (const)
-  callee +92:44 PgConnection.inputBuffer -> @nish.PgConnection.inputBuffer
-  callee +92:64 PgConnection.inputEnd -> @nish.PgConnection.inputEnd
-  callee +92:81 PgConnection.inputRoom -> @nish.PgConnection.inputRoom
-  callee +94:11 PgConnection.closed -> @nish.PgConnection.closed
-  callee +96:11 PgConnection.received -> @nish.PgConnection.received
+  local +59:15 conn: PgConnection (const)
+  callee +59:22 PgPool.connection -> @nish.PgPool.connection
+  callee +60:14 Bench.flush -> @Bench.flush
+  callee +61:11 PgConnection.closed -> @nish.PgConnection.closed
+  local +65:15 wants: i32 (const)
+  callee +65:28 PgConnection.outputEnd -> @nish.PgConnection.outputEnd
+  callee +65:47 PgConnection.outputStart -> @nish.PgConnection.outputStart
+  local +71:13 got: i32 (const)
+  local +76:13 conn: PgConnection (const)
+  callee +76:20 PgPool.connection -> @nish.PgPool.connection
+  callee +82:11 PgConnection.closed -> @nish.PgConnection.closed
+  local +85:15 read: i32 (const)
+  callee +85:44 PgConnection.inputBuffer -> @nish.PgConnection.inputBuffer
+  callee +85:64 PgConnection.inputEnd -> @nish.PgConnection.inputEnd
+  callee +85:81 PgConnection.inputRoom -> @nish.PgConnection.inputRoom
+  callee +87:11 PgConnection.closed -> @nish.PgConnection.closed
+  callee +89:11 PgConnection.received -> @nish.PgConnection.received
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:3
