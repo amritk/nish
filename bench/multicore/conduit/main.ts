@@ -12,8 +12,10 @@
 //
 // Configured by the environment only: DATABASE_URL, JWT_SECRET, HOST, PORT
 // (the challenge's), and optionally HTTP_WORKERS (2), DB_READ_CONNS (3) and
-// DB_WRITE_CONNS (1) per worker, DB_MAX_IN_FLIGHT (16), BCRYPT_BATCH_MS (160),
-// BCRYPT_PORT (47391) and IDLE_TIMEOUT_MS (75000).
+// DB_WRITE_CONNS (1) per worker, DB_MAX_IN_FLIGHT (16), DB_READ_IN_FLIGHT (4)
+// for the read connections, DB_READ_BATCHES (DB_READ_CONNS) coalesced reads of
+// one shape in flight per worker, BCRYPT_BATCH_MS (160), BCRYPT_PORT (47391)
+// and IDLE_TIMEOUT_MS (75000).
 import { tcpListenFlags } from "nish:net"
 import { getenv } from "nish:process"
 import { PREFORK_STOPPED, PreforkConfig, preforkWith } from "nish/net/prefork"
@@ -92,6 +94,8 @@ export const main = (): i32 => {
   cfg.readConns = envInt("DB_READ_CONNS", 3)
   cfg.writeConns = envInt("DB_WRITE_CONNS", 1)
   cfg.maxInFlight = envInt("DB_MAX_IN_FLIGHT", 16)
+  cfg.readInFlight = envInt("DB_READ_IN_FLIGHT", 4)
+  cfg.readBatches = envInt("DB_READ_BATCHES", cfg.readConns)
   cfg.bcryptPort = envInt("BCRYPT_PORT", 47391)
   cfg.idleTimeoutMs = envInt("IDLE_TIMEOUT_MS", 75000)
   const http: i32 = envInt("HTTP_WORKERS", 2)

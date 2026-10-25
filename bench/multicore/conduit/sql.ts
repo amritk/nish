@@ -27,24 +27,37 @@ export const COL_IMAGE: i32 = 10
 export const COL_FOLLOWING: i32 = 11
 /** `ARTICLE_FULL` only. */
 export const COL_BODY: i32 = 12
+/** `article_slugs` only: the 1-based place of the row's slug in the batch. */
+export const COL_ORD: i32 = 13
 
 /**
- * SPEC.md's ARTICLE_LIST_SELECT, `$1` the viewer, without `a.id` and in `COL_`
- * order. A tag's name is a primary-key lookup per tag (an article has one to
- * four): joined to `tags` instead, the generic plan hash-joins a scan of all
- * 200 tags for every article of the page.
+ * SPEC.md's ARTICLE_LIST_SELECT, without `a.id` and in `COL_` order, in three
+ * parts around the two places the viewer's id goes. A tag's name is a
+ * primary-key lookup per tag (an article has one to four): joined to `tags`
+ * instead, the generic plan hash-joins a scan of all 200 tags for every
+ * article of the page.
  */
-const ARTICLE_LIST: string =
+const LIST_FAVORITED: string =
   "SELECT a.slug, a.title, a.description, " +
   "ARRAY(SELECT (SELECT t.name FROM tags t WHERE t.id = at.tag_id) FROM article_tags at WHERE at.article_id = a.id ORDER BY 1) AS tag_list, " +
   "a.created_at, a.updated_at, " +
-  "EXISTS (SELECT 1 FROM favorites f WHERE f.article_id = a.id AND f.user_id = $1) AS favorited, " +
+  "EXISTS (SELECT 1 FROM favorites f WHERE f.article_id = a.id AND f.user_id = "
+const LIST_FOLLOWING: string =
+  ") AS favorited, " +
   "(SELECT count(*) FROM favorites f WHERE f.article_id = a.id) AS favorites_count, " +
   "u.username, u.bio, u.image, " +
-  "EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = $1 AND fo.followee_id = a.author_id) AS following"
+  "EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = "
+const LIST_END: string = " AND fo.followee_id = a.author_id) AS following"
+/** ARTICLE_LIST_SELECT with `$1` the viewer. */
+const ARTICLE_LIST: string = LIST_FAVORITED + "$1" + LIST_FOLLOWING + "$1" + LIST_END
 /** SPEC.md's ARTICLE_FULL_SELECT: the list's columns and `a.body` last. */
 const ARTICLE_FULL: string = ARTICLE_LIST + ", a.body"
 const ARTICLE_FROM: string = " FROM articles a JOIN users u ON u.id = a.author_id"
+/**
+ * A batch of reads by slug: `$1` the slugs and `$2` the viewers, parallel
+ * arrays, one row of `q` for each request in the order they were bound.
+ */
+const BATCH_FROM: string = " FROM unnest($1::text[], $2::int8[]) WITH ORDINALITY AS q(slug, viewer, ord)"
 const SLUGIFY_2: string = "trim(both '-' from lower(regexp_replace($2::text, '[^A-Za-z0-9]+', '-', 'g')))"
 // A scalar subquery, so the volatile currval is read once and the primary key
 // is probed with it, rather than tested against every row.
@@ -128,6 +141,24 @@ export const registerStatements = (pool: PgPool): boolean => {
     ) && ok
   // One article, by slug or by id.
   ok = pool.register("article_slug", ARTICLE_FULL + ARTICLE_FROM + " WHERE a.slug = $2", none) && ok
+  // Many requests' articles by slug in one execution, each row with its
+  // request's place: a slug that matches nothing has no row, so its request
+  // alone answers 404. Coalescing waiting reads into one statement over
+  // arrays, routed back by ordinal, is an idea from the challenge's
+  // rust-tokio-Scooter1337 submission; the SQL is written here.
+  ok =
+    pool.register(
+      "article_slugs",
+      LIST_FAVORITED +
+        "q.viewer" +
+        LIST_FOLLOWING +
+        "q.viewer" +
+        LIST_END +
+        ", a.body, q.ord" +
+        BATCH_FROM +
+        " JOIN articles a ON a.slug = q.slug JOIN users u ON u.id = a.author_id ORDER BY q.ord",
+      none
+    ) && ok
   ok = pool.register("article_id", ARTICLE_FULL + ARTICLE_FROM + " WHERE a.id = $2", none) && ok
   ok =
     pool.register("article_last", ARTICLE_FULL + ARTICLE_FROM + " WHERE a.id = " + LAST_ARTICLE, none) && ok

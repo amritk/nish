@@ -45,6 +45,7 @@ import os from "node:os"
 import path from "node:path"
 
 import { compilerFrom } from "../compiler.mjs"
+import { concurrencyCheck } from "./concurrency.mjs"
 
 const root = path.resolve(import.meta.dirname, "..", "..")
 const here = import.meta.dirname
@@ -320,6 +321,17 @@ if (!flag("--no-conformance") && !idleOnly) {
   console.log(`conformance: ${summary === null ? "no summary" : `${summary[2]}/${summary[1]}`}`)
   if (r.status !== 0 || summary === null || summary[3] !== "0") {
     fail(`conformance failed:\n${r.stdout}${r.stderr}`)
+  }
+  // Reads made together answer as they do alone (concurrency.mjs), on a fresh copy.
+  const fresh = await startServer("conduit_dev")
+  const xacts = () => Number(psql(`SELECT xact_commit FROM pg_stat_database WHERE datname = '${fresh}'`).trim())
+  const c = await concurrencyCheck(base, xacts)
+  await stopServer(fresh)
+  console.log(
+    `concurrency: ${c.requests - c.mismatches.length}/${c.requests} concurrent reads (${c.distinct} distinct) answered as alone, in ${c.transactions} transactions`
+  )
+  if (c.mismatches.length > 0) {
+    fail(`concurrency check failed:\n${c.mismatches.slice(0, 20).join("\n")}`)
   }
 }
 if (conformanceOnly) {
