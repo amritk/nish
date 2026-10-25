@@ -85,6 +85,46 @@ is the same.
 
 ## Results
 
+### Where it stands
+
+The current build, three runs each, think-scale 0.1, full seed, after a
+30 s warm-up (`run.sh --users 2000,4000 --repeat 3 --idle 15000`):
+
+| users | req/s | p95 ms | p99 ms | errors | Postgres µs/req | HTTP µs/req | bcrypt µs/req |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 2,000 | 5,256–5,282 | 2.9–3.4 | 6.0–7.1 | 0 | 274–290 | 53.0–54.6 | 45–49 |
+| 4,000 | 9,960–10,351 | 27–77 | 67–146 | 0 | 233–252 | 33.6–34.0 | 32–36 |
+
+Memory per idle keep-alive connection: **1.13 KiB** of the server's RSS at
+15,000 connections (the kernel's socket buffers aside), against 3.20 KiB before
+`idleInput`.
+
+Against the figures derived from #1 (rust-tokio-Scooter1337: 100,000 users,
+26,279 req/s, 70% of 8 cores in Postgres and 20% in the app):
+
+| per request | #1 (derived) | here, at 10,000 req/s | target |
+| --- | ---: | ---: | --- |
+| Postgres CPU | ≈ 213 µs | 233–252 µs | ≤ 190 µs: **missed** |
+| app CPU | ≈ 61 µs | 34 µs HTTP + ≈ 17 µs bcrypt at the box's login rate | ≤ 61 µs: met |
+| RSS per idle connection | ~1 KiB at 100k | 1.13 KiB | ~1 KiB: met |
+
+The bcrypt figure measured here (32–36 µs) is a 4-core container's: at
+think-scale 0.1 about 10 logins a second arrive, so most batches run one
+lane. At the box's 100,000 users about 27 logins a second fill four lanes,
+about 16 ms of one core a login, which is about 17 µs a request.
+
+**Projection for the 8-vCPU box**, from these per-request costs: a challenge
+user makes 0.263 requests a second (#1's 26,279 req/s over 100,000 users), so
+one costs 0.263 × (240 + 34) µs plus bcrypt's 4.4 µs ≈ 77 µs of CPU a second;
+with 90% of 8 cores usable, as #1 used, that is **about 94,000 users**. The
+assumptions: per-request costs no higher at the box's 26,000 req/s than at the
+10,000 measured here (they fell from 2,000 to 4,000 users, which argues
+lower); the load generator on separate machines, where here it shares the
+four cores; the box's CPU as fast per instruction as this container's; and
+Postgres's latency still inside p95 500 ms and p99 1 s at 90% CPU, which
+nothing here can test. Two HTTP workers stay well inside their cores (34 µs
+at 13,000 req/s each is 44%).
+
 Every row is one run of `run.sh` on a fresh copy of the full seed (100,000
 users, 500,000 articles), think-scale 0.1, 30 s warm-up, 20 s ramp, 60 s
 measured, `HTTP_WORKERS=2 DB_READ_CONNS=3 DB_WRITE_CONNS=1`. "app" is every
