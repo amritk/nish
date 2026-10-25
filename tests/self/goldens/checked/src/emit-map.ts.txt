@@ -75,7 +75,7 @@ function emitMapIntrinsic(emitter: Emitter, sig: FunctionSig, values: string[]):
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitMapRoute
   calls: emitMapRoute hashOf internalErrorFor isMapRoute nish_exit nish_panic_index nish_str_concat nonZero sameKeyOf
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=emitMapRoute#0 nonZero#0 hashOf#0 sameKeyOf#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=emitMapRoute#0 nonZero#0 hashOf#0 sameKeyOf#0
   pointer sig: size=136 writesThrough=false captured=false passedTo=isMapRoute#0 emitMapRoute#1
   pointer values: size=0 writesThrough=true captured=false passedTo=emitMapRoute#2
   stackSites=0 stackLocals=0
@@ -92,7 +92,7 @@ function emitStoredKey(emitter: Emitter, sig: FunctionSig, arg: Node): string ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.emitRawExpression Emitter.llvm IRFunction.emitValue internalErrorFor isFloat nish_exit nish_panic_index nish_str_concat
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.emitRawExpression#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitRawExpression#0 Emitter.llvm#0
   pointer sig: size=136 writesThrough=false captured=false
   pointer arg: size=40 writesThrough=true captured=true passedTo=Emitter.emitRawExpression#1
   stackSites=0 stackLocals=0
@@ -111,7 +111,7 @@ function hashOf(emitter: Emitter, key: i32, value: string): string -> @hashOf
   sharedWrite: via emitStringHash
   escaping: key value
   calls: Emitter.llvm IRFunction.emitValue TypeTable.enumBase TypeTable.isStruct TypeTable.typeName emitStringHash floatBits fmix32 fmix64 intBits internalErrorFor nish_exit nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=emitStringHash#0 fmix64#0 floatBits#0 fmix64#0 floatBits#0 fmix64#0 Emitter.llvm#0 fmix64#0 fmix32#0 fmix32#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=emitStringHash#0 fmix64#0 floatBits#0 fmix64#0 floatBits#0 fmix64#0 Emitter.llvm#0 fmix64#0 fmix32#0 fmix32#0 Emitter.llvm#0
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   callee +2:12 emitStringHash -> @emitStringHash
@@ -138,7 +138,7 @@ function nonZero(emitter: Emitter, h: string): string -> @nonZero
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 zero: string (const)
   callee +0:16 IRFunction.emitValue -> @IRFunction.emitValue
@@ -147,7 +147,7 @@ function emitStringHash(emitter: Emitter, str: string): string -> @emitStringHas
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via seedHashKey
   calls: Emitter.align Emitter.alignSuffix IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock compress hashKeyWord nish_array_grow nish_panic_index nish_str_concat nish_str_from_i32 seedHashKey sipRounds
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=seedHashKey#0 Emitter.alignSuffix#0 Emitter.align#0 Emitter.align#0 Emitter.align#0 compress#0 compress#0 sipRounds#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=seedHashKey#0 Emitter.alignSuffix#0 Emitter.align#0 Emitter.align#0 Emitter.align#0 compress#0 compress#0 sipRounds#0
   stackSites=1 stackLocals=1
   local +0:9 fn: IRFunction (const)
   callee +1:3 seedHashKey -> @seedHashKey
@@ -268,7 +268,7 @@ function compress(emitter: Emitter, slots: string[], m: string, rounds: i32): vo
   sharedWrite: via IRFunction.emitValue
   escaping: rounds
   calls: Emitter.alignSuffix IRFunction.emit IRFunction.emitValue nish_panic_index nish_str_concat sipRounds
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=Emitter.alignSuffix#0 sipRounds#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.alignSuffix#0 sipRounds#0
   pointer slots: size=0 writesThrough=false captured=false passedTo=sipRounds#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -286,7 +286,7 @@ function sipRounds(emitter: Emitter, slots: string[], rounds: i32): string[] -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.alignSuffix IRFunction.emit IRFunction.emitValue nish_panic_index nish_str_concat rotl
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=Emitter.alignSuffix#0 rotl#0 rotl#0 rotl#0 rotl#0 rotl#0 rotl#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.alignSuffix#0 rotl#0 rotl#0 rotl#0 rotl#0 rotl#0 rotl#0
   pointer slots: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -322,7 +322,7 @@ function rotl(emitter: Emitter, x: string, by: i32): string -> @rotl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat nish_str_from_i32
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +1:9 up: string (const)
@@ -333,7 +333,7 @@ function seedHashKey(emitter: Emitter): void -> @seedHashKey
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareGlobal
   calls: Emitter.declare Emitter.declareGlobal Emitter.stringConstant Emitter.useRuntime IRModule.addRawDefinition hashKeyWord isWasmBuild nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=Emitter.declareGlobal#0 Emitter.declare#0 Emitter.useRuntime#0 Emitter.stringConstant#0 Emitter.declareGlobal#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.declareGlobal#0 Emitter.declare#0 Emitter.useRuntime#0 Emitter.stringConstant#0 Emitter.declareGlobal#0
   stackSites=0 stackLocals=0
   callee +0:3 Emitter.declareGlobal -> @Emitter.declareGlobal
   local +1:9 size: string (const)
@@ -351,7 +351,7 @@ function fmix32(emitter: Emitter, x: string): string -> @fmix32
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +1:9 a: string (const)
@@ -370,7 +370,7 @@ function fmix64(emitter: Emitter, x: string): string -> @fmix64
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +1:9 a: string (const)
@@ -396,7 +396,7 @@ function floatBits(emitter: Emitter, value: string): string -> @floatBits
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   local +1:9 plus: string (const)
@@ -411,7 +411,7 @@ function sameKeyOf(emitter: Emitter, key: i32, a: string, b: string): string -> 
   sharedWrite: via IRFunction.emitValue
   escaping: key
   calls: Emitter.llvm Emitter.useRuntime IRFunction.emitValue isFloat nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.llvm#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.useRuntime#0 Emitter.llvm#0 Emitter.llvm#0
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   callee +2:12 IRFunction.emitValue -> @IRFunction.emitValue
@@ -434,7 +434,7 @@ function libraryReach(emitter: Emitter, library: CheckedProgram): FunctionSig[] 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via noteCallees
   calls: FunctionSig.definedIn StringSet.add StringSet.constructor StringSet.has mapIntrinsicOf nish_array_grow noteCallees
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer library: size=656 writesThrough=false captured=false
   stackSites=3 stackLocals=3
   local +0:9 facts: FactsTable (const)
@@ -480,7 +480,7 @@ function emitLibraryCopies(emitter: Emitter, library: CheckedProgram, sigs: Func
   sharedWrite: +0:3
   escaping: library
   calls: CheckedProgram.enterInstance CheckedProgram.leaveInstance DebugInfo.fileOf Emitter.emitFunction IRModule.addFunction
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.emitFunction#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitFunction#0
   pointer library: size=656 writesThrough=true captured=true passedTo=CheckedProgram.enterInstance#0 CheckedProgram.leaveInstance#0
   pointer sigs: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -511,7 +511,7 @@ function emitMaybe(emitter: Emitter, maybe: Node): MaybeParts -> @emitMaybe
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via maybeLocalIndex
   calls: Emitter.emitExpression FusionTable.partnerOf FusionTable.roleOf MaybeParts.constructor emitProbeCall fusedProbeOf internalErrorFor maybeLocalIndex nish_alloc_struct nish_exit nish_panic_index tableMethod unwrapParens valueReaderOf
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=maybeLocalIndex#0 fusedProbeOf#0 tableMethod#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitProbeCall#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=maybeLocalIndex#0 fusedProbeOf#0 tableMethod#0 Emitter.emitExpression#0 Emitter.emitExpression#0 emitProbeCall#0
   pointer maybe: size=40 writesThrough=true captured=true passedTo=unwrapParens#0
   stackSites=0 stackLocals=0
   local +0:9 expr: Node (const)
@@ -539,7 +539,7 @@ function loadMaybeValue(emitter: Emitter, parts: MaybeParts): string -> @loadMay
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.llvm IRFunction.emitValue callValueAt nish_panic_index nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=callValueAt#0 Emitter.llvm#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=callValueAt#0 Emitter.llvm#0
   pointer parts: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 read: FunctionSig | null (const)
@@ -552,7 +552,7 @@ function callValueAt(emitter: Emitter, read: FunctionSig, operands: string): str
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: Emitter.llvmAbi FunctionSig.visibleOutside IRFunction.emitValue TypeTable.resultByValue nish_str_concat privateAbi unpackReturnedResult
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 unpackReturnedResult#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvmAbi#0 unpackReturnedResult#0
   pointer read: size=136 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
   stackSites=0 stackLocals=0
   local +0:9 isPrivate: boolean (const)
@@ -568,7 +568,7 @@ function valueOperand(emitter: Emitter, sig: FunctionSig, index: i32, value: str
   sharedWrite: via packResultObject
   escaping: index value
   calls: Emitter.llvmAbi FunctionSig.visibleOutside TypeTable.resultByValue nish_panic_index nish_str_concat packResultObject privateAbi
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=packResultObject#0 Emitter.llvmAbi#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=packResultObject#0 Emitter.llvmAbi#0
   pointer sig: size=136 writesThrough=false captured=false passedTo=FunctionSig.visibleOutside#0
   stackSites=0 stackLocals=0
   local +0:9 type: i32 (const)
@@ -584,7 +584,7 @@ function emitMaybeLocal(emitter: Emitter, local: Local, decl: Node): void -> @em
   sharedWrite: +0:3
   escaping: local
   calls: DebugInfo.describeValue Emitter.llvm IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock MaybeParts.constructor TypeTable.refOf emitMaybe loadMaybeValue nish_alloc_struct nish_array_grow nish_panic_index nish_str_concat zeroOf
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=emitMaybe#0 loadMaybeValue#0 Emitter.llvm#0 zeroOf#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitMaybe#0 loadMaybeValue#0 Emitter.llvm#0 zeroOf#0
   pointer local: size=64 writesThrough=true captured=true passedTo=DebugInfo.describeValue#2
   pointer decl: size=40 writesThrough=false captured=false passedTo=DebugInfo.describeValue#5
   stackSites=0 stackLocals=0
@@ -619,7 +619,7 @@ function maybeLocalIndex(emitter: Emitter, local: Local): i32 -> @maybeLocalInde
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer local: size=64 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:7 i: i32 (let)
@@ -628,7 +628,7 @@ function zeroOf(emitter: Emitter, type: i32): string -> @zeroOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: TypeTable.isPointer TypeTable.isResult TypeTable.stripNull isFloat
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 isFloat -> @isFloat
   local +7:9 stripped: i32 (const)
@@ -639,7 +639,7 @@ function emitUndefinedTest(emitter: Emitter, expr: Node): string -> @emitUndefin
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitMaybe
   calls: IRFunction.emitValue emitMaybe nish_panic_index nish_str_concat nish_str_eq testsUndefined
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=testsUndefined#0 emitMaybe#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=testsUndefined#0 emitMaybe#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 operand: Node (const)
@@ -650,7 +650,7 @@ function emitUndefinedTest(emitter: Emitter, expr: Node): string -> @emitUndefin
 function isUndefinedTest(emitter: Emitter, expr: Node): boolean -> @isUndefinedTest [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index testsUndefined
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=testsUndefined#0 testsUndefined#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=testsUndefined#0 testsUndefined#0
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 testsUndefined -> @testsUndefined
@@ -658,7 +658,7 @@ function isUndefinedTest(emitter: Emitter, expr: Node): boolean -> @isUndefinedT
 function testsUndefined(emitter: Emitter, operand: Node): boolean -> @testsUndefined
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: TypeTable.isMaybe isUndefined nish_panic_index
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer operand: size=40 writesThrough=false captured=false passedTo=isUndefined#0
   stackSites=0 stackLocals=0
   callee +0:3 isUndefined -> @isUndefined
@@ -667,7 +667,7 @@ function emitCoalesce(emitter: Emitter, expr: Node): string -> @emitCoalesce [ex
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via emitChainCoalesce
   calls: Emitter.emitExpression Emitter.llvm IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable coalescesMaybe emitChainCoalesce emitMaybe emitNullableCoalesce intrinsicType isOptionalChain isPlainOperand isSet loadMaybeValue nish_panic_index nish_str_concat unwrapParens
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=emitChainCoalesce#0 emitNullableCoalesce#0 Emitter.llvm#0 emitMaybe#0 isPlainOperand#0 Emitter.emitExpression#0 isSet#0 loadMaybeValue#0 isSet#0 Emitter.emitExpression#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=emitChainCoalesce#0 emitNullableCoalesce#0 Emitter.llvm#0 emitMaybe#0 isPlainOperand#0 Emitter.emitExpression#0 isSet#0 loadMaybeValue#0 isSet#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=emitChainCoalesce#1 coalescesMaybe#2 emitNullableCoalesce#1 intrinsicType#1
   stackSites=0 stackLocals=0
   callee +0:7 isOptionalChain -> @isOptionalChain
@@ -718,7 +718,7 @@ function emitNullableCoalesce(emitter: Emitter, expr: Node): string -> @emitNull
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.llvm
   calls: Emitter.emitExpression Emitter.llvm IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock intrinsicType isPlainOperand isSet nish_panic_index nish_str_concat
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.emitExpression#0 isSet#0 isPlainOperand#0 Emitter.emitExpression#0 Emitter.emitExpression#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.emitExpression#0 isSet#0 isPlainOperand#0 Emitter.emitExpression#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -752,7 +752,7 @@ function emitChainCoalesce(emitter: Emitter, expr: Node): string -> @emitChainCo
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Emitter.emitExpression Emitter.llvm Emitter.typeOf IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock TypeTable.isNullable internalErrorFor intrinsicType isSet nish_array_grow nish_exit nish_panic_index nish_str_concat optionalLinks unwrapParens
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.emitExpression#0 Emitter.typeOf#0 isSet#0 Emitter.emitExpression#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.emitExpression#0 Emitter.typeOf#0 isSet#0 Emitter.emitExpression#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=intrinsicType#1
   stackSites=0 stackLocals=0
   local -5:9 fn: IRFunction (const)
@@ -797,7 +797,7 @@ function emitChainTest(emitter: Emitter, receiver: Node, value: string): void ->
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: Emitter.llvm Emitter.typeOf IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock internalErrorFor nish_exit nish_panic_index nish_panic_overflow nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.typeOf#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.typeOf#0
   pointer receiver: size=40 writesThrough=false captured=false passedTo=Emitter.typeOf#1
   stackSites=0 stackLocals=0
   local -12:9 fn: IRFunction (const)
@@ -816,20 +816,20 @@ function isSet(emitter: Emitter, ty: string, value: string): string -> @isSet
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emitValue
   calls: IRFunction.emitValue nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:3 IRFunction.emitValue -> @IRFunction.emitValue
 function isPlainOperand(emitter: Emitter, expr: Node): boolean -> @isPlainOperand
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_index
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer expr: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function emitWalk(emitter: Emitter, stmt: Node): void -> @emitWalk [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
   calls: DebugInfo.declareLocal Emitter.align Emitter.alignSuffix Emitter.emitExpression Emitter.emitStatement Emitter.llvm Emitter.setSlot IRBlock.terminated IRFunction.currentBlock IRFunction.emit IRFunction.emitAlloca IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock LoopTarget.constructor StructInfo.method callValueAt internalErrorFor nish_alloc_struct nish_array_grow nish_exit nish_panic_index nish_str_concat unwrapParens
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.align#0 Emitter.setSlot#0 Emitter.align#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.alignSuffix#0 Emitter.alignSuffix#0 callValueAt#0 Emitter.alignSuffix#0 Emitter.emitStatement#0 Emitter.alignSuffix#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.llvm#0 Emitter.align#0 Emitter.setSlot#0 Emitter.align#0 Emitter.llvm#0 Emitter.emitExpression#0 Emitter.alignSuffix#0 Emitter.alignSuffix#0 callValueAt#0 Emitter.alignSuffix#0 Emitter.emitStatement#0 Emitter.alignSuffix#0
   pointer stmt: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -56:9 decl: Node (const)
@@ -922,7 +922,7 @@ function emitWalkExits(emitter: Emitter): void -> @emitWalkExits [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via IRFunction.emit
   calls: IRFunction.emit nish_panic_index
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:12 i: i32 (let)
   local +1:11 close: string (const)
@@ -938,7 +938,7 @@ function tableMethod(emitter: Emitter, owner: StructInfo, name: string): Functio
   sharedWrite: via nish_exit
   escaping: name
   calls: StructInfo.method internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer owner: size=168 writesThrough=false captured=false passedTo=StructInfo.method#0
   stackSites=0 stackLocals=0
   local +0:9 sig: FunctionSig | null (const)
@@ -948,7 +948,7 @@ function fusedProbeOf(emitter: Emitter, id: i32): FusedProbe -> @fusedProbeOf
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_exit
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:12 i: i32 (let)
   callee +5:16 internalErrorFor -> @internalErrorFor
@@ -956,7 +956,7 @@ function emitFusedCall(emitter: Emitter, call: Node): string -> @emitFusedCall [
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via fusedProbeOf
   calls: Emitter.emitExpression FusionTable.partnerOf FusionTable.roleOf emitFoundOrInsert emitFusedProbe emitInsertAt emitSetValueAt fusedProbeOf isMapOwner nish_panic_index
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=fusedProbeOf#0 emitFusedProbe#0 emitFoundOrInsert#0 Emitter.emitExpression#0 fusedProbeOf#0 emitSetValueAt#0 Emitter.emitExpression#0 emitInsertAt#0 Emitter.emitExpression#0 emitInsertAt#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=fusedProbeOf#0 emitFusedProbe#0 emitFoundOrInsert#0 Emitter.emitExpression#0 fusedProbeOf#0 emitSetValueAt#0 Emitter.emitExpression#0 emitInsertAt#0 Emitter.emitExpression#0 emitInsertAt#0
   pointer call: size=40 writesThrough=false captured=false passedTo=emitFusedProbe#1
   stackSites=0 stackLocals=0
   local +0:9 fusion: FusionTable (const)
@@ -982,7 +982,7 @@ function emitFusedProbe(emitter: Emitter, call: Node): FusedProbe -> @emitFusedP
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
   sharedWrite: +0:3
   calls: Emitter.emitExpression emitProbeCall internalErrorFor nish_array_grow nish_exit nish_panic_index ownerOf tableMethod
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.emitExpression#0 emitProbeCall#0 tableMethod#0 ownerOf#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 Emitter.emitExpression#0 emitProbeCall#0 tableMethod#0 ownerOf#0
   pointer call: size=40 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local -13:9 recorded: FunctionSig | null (const)
@@ -999,7 +999,7 @@ function ownerOf(emitter: Emitter, method: FunctionSig): StructInfo -> @ownerOf
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true returnDeref=168
   sharedWrite: via nish_exit
   calls: internalErrorFor nish_arena_mark nish_arena_release nish_exit nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false
+  pointer emitter: size=272 writesThrough=false captured=false
   pointer method: size=136 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 owner: StructInfo | null (const)
@@ -1009,7 +1009,7 @@ function emitProbeCall(emitter: Emitter, id: i32, probe: FunctionSig, receiver: 
   sharedWrite: via Emitter.llvm
   escaping: id key receiver
   calls: Emitter.llvm FusedProbe.constructor IRFunction.emitValue nish_alloc_struct nish_panic_index nish_str_concat ownerOf
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.llvm#0 ownerOf#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 Emitter.llvm#0 ownerOf#0
   pointer probe: size=136 writesThrough=false captured=false passedTo=ownerOf#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -1026,7 +1026,7 @@ function emitFoundOrInsert(emitter: Emitter, probe: FusedProbe, value: string): 
   sharedWrite: via IRFunction.newBlock
   escaping: value
   calls: IRFunction.emit IRFunction.newBlock IRFunction.placeBlock emitInsertAt emitSetValueAt nish_str_concat
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=emitSetValueAt#0 emitInsertAt#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=emitSetValueAt#0 emitInsertAt#0
   pointer probe: size=48 writesThrough=false captured=false passedTo=emitSetValueAt#1 emitInsertAt#1
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
@@ -1049,7 +1049,7 @@ function emitSetValueAt(emitter: Emitter, probe: FusedProbe, value: string): voi
   sharedWrite: via tableMethod
   escaping: value
   calls: Emitter.llvm IRFunction.emit IRFunction.emitValue nish_panic_index nish_str_concat tableMethod valueOperand
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=tableMethod#0 Emitter.llvm#0 valueOperand#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=tableMethod#0 Emitter.llvm#0 valueOperand#0
   pointer probe: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 write: FunctionSig (const)
@@ -1065,7 +1065,7 @@ function emitInsertAt(emitter: Emitter, probe: FusedProbe, value: string): void 
   sharedWrite: via tableMethod
   escaping: value
   calls: Emitter.llvm IRFunction.emit nish_panic_index nish_str_concat tableMethod valueOperand
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=tableMethod#0 Emitter.llvm#0 Emitter.llvm#0 valueOperand#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=tableMethod#0 Emitter.llvm#0 Emitter.llvm#0 valueOperand#0
   pointer probe: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 insert: FunctionSig (const)
@@ -1081,7 +1081,7 @@ function emitMapRoute(emitter: Emitter, sig: FunctionSig, values: string[]): str
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_exit
   calls: Emitter.llvm FunctionSig.visibleOutside IRFunction.currentBlock IRFunction.emit IRFunction.emitValue IRFunction.newBlock IRFunction.placeBlock MaybeParts.constructor TypeTable.resultByValue emitInsertAt emitProbeCall internalErrorFor loadMaybeValue mapIntrinsicOf nish_exit nish_panic_index nish_str_concat privateAbi routeOwnerOf tableMethod unpackReturnedResult
-  pointer emitter: size=280 writesThrough=false captured=false passedTo=Emitter.llvm#0 tableMethod#0 Emitter.llvm#0 unpackReturnedResult#0 emitProbeCall#0 tableMethod#0 Emitter.llvm#0 loadMaybeValue#0 tableMethod#0 emitInsertAt#0
+  pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.llvm#0 tableMethod#0 Emitter.llvm#0 unpackReturnedResult#0 emitProbeCall#0 tableMethod#0 Emitter.llvm#0 loadMaybeValue#0 tableMethod#0 emitInsertAt#0
   pointer sig: size=136 writesThrough=false captured=false passedTo=routeOwnerOf#1 mapIntrinsicOf#0 FunctionSig.visibleOutside#0
   pointer values: size=0 writesThrough=true captured=false
   stackSites=1 stackLocals=0
