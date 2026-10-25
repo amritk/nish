@@ -26,6 +26,48 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.22.0] - 2026-10-25
+
+### Added
+
+- cli: Close the --emit-ts oracle: tsc --strict, the known-list pin, fuzz, and the docs ([#917](https://github.com/amritk/nish/pull/917))
+- runtime: A connection pool and an epoll carrier for nish/net/postgres ([#929](https://github.com/amritk/nish/pull/929))
+- codegen: Harden every native binary the toolchain links ([#916](https://github.com/amritk/nish/pull/916))
+- std: Rng.nextInt answers an unbiased integer in a range ([#939](https://github.com/amritk/nish/pull/939))
+- cli: Leave a wall of bricks in the help, and a door behind it ([#940](https://github.com/amritk/nish/pull/940))
+- net: A Conduit server for the multicore server challenge ([#961](https://github.com/amritk/nish/pull/961))
+
+### Fixed
+
+- checker: A std/threads task may wipe a Secret it made from a fresh value ([#945](https://github.com/amritk/nish/pull/945))
+- crypto: Wipe the hash bcrypt verify recomputes ([#959](https://github.com/amritk/nish/pull/959))
+
+### Performance
+
+- crypto: Hash and verify up to four bcrypt passwords at once, interleaved ([#938](https://github.com/amritk/nish/pull/938))
+- runtime: Measure nish/net/postgres against libpq pipeline mode ([#941](https://github.com/amritk/nish/pull/941))
+
+### Documentation
+
+- wp38: S6c's callgrind gate, and the owner's Q5 decision ([#935](https://github.com/amritk/nish/pull/935))
+- Record two --emit-ts conventions in CLAUDE.md ([#951](https://github.com/amritk/nish/pull/951))
+- wp38: S6d, the per-value cuts that would let S6c reach its bar ([#954](https://github.com/amritk/nish/pull/954))
+- crypto: Name the bcrypt single-path gap as LLVM's xor order ([#957](https://github.com/amritk/nish/pull/957))
+
+### Tests
+
+- self: Fuzz the bounds-check elision with proofgen programs under ASan ([#924](https://github.com/amritk/nish/pull/924))
+- runtime: Say a random hash key miscounts map_fingerprint_miss by one or two ([#934](https://github.com/amritk/nish/pull/934))
+
+### Build
+
+- Regenerate package-lock.json for v0.21.0 ([#936](https://github.com/amritk/nish/pull/936))
+
+### CI
+
+- release: Attest build provenance, attach an SBOM, and rebuild releases from their tags ([#898](https://github.com/amritk/nish/pull/898))
+
+
 ## [0.21.0] - 2026-10-24
 
 ### Breaking changes
@@ -1150,3 +1192,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.19.0]: https://github.com/amritk/nish/releases/tag/v0.19.0
 [0.20.0]: https://github.com/amritk/nish/releases/tag/v0.20.0
 [0.21.0]: https://github.com/amritk/nish/releases/tag/v0.21.0
+[0.22.0]: https://github.com/amritk/nish/releases/tag/v0.22.0
