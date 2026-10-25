@@ -28,10 +28,15 @@ export const COL_FOLLOWING: i32 = 11
 /** `ARTICLE_FULL` only. */
 export const COL_BODY: i32 = 12
 
-/** SPEC.md's ARTICLE_LIST_SELECT, `$1` the viewer, without `a.id` and in `COL_` order. */
+/**
+ * SPEC.md's ARTICLE_LIST_SELECT, `$1` the viewer, without `a.id` and in `COL_`
+ * order. A tag's name is a primary-key lookup per tag (an article has one to
+ * four): joined to `tags` instead, the generic plan hash-joins a scan of all
+ * 200 tags for every article of the page.
+ */
 const ARTICLE_LIST: string =
   "SELECT a.slug, a.title, a.description, " +
-  "ARRAY(SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id WHERE at.article_id = a.id ORDER BY t.name) AS tag_list, " +
+  "ARRAY(SELECT (SELECT t.name FROM tags t WHERE t.id = at.tag_id) FROM article_tags at WHERE at.article_id = a.id ORDER BY 1) AS tag_list, " +
   "a.created_at, a.updated_at, " +
   "EXISTS (SELECT 1 FROM favorites f WHERE f.article_id = a.id AND f.user_id = $1) AS favorited, " +
   "(SELECT count(*) FROM favorites f WHERE f.article_id = a.id) AS favorites_count, " +
