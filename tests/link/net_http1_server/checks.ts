@@ -1037,6 +1037,7 @@ export const serverChecks = (): i32 => {
 
   const g = new Driven(config, get);
   t.eqI32("a request reaches the program", g.event, H1_REQUEST);
+  t.ok("a slot that has spoken only HTTP holds no WebSocket decoder and no pong buffer", g.conn.ws === null && g.conn.pong.length === 0);
   t.eqI32("refused: status 101 through respond", g.conn.respond(toI32(101), none, none, HTTP1_NO_BODY), H1_INVALID);
   t.eqI32("refused: status 99", g.conn.respond(toI32(99), none, none, ZERO), H1_INVALID);
   t.eqI32("refused: status 600", g.conn.respond(toI32(600), none, none, ZERO), H1_INVALID);

@@ -135,6 +135,7 @@ PASS  so is acceptWebSocket
 PASS  and sendFrame and closeWebSocket on a slot that is not a WebSocket
 PASS  an empty connection needs more
 PASS  a request reaches the program
+PASS  a slot that has spoken only HTTP holds no WebSocket decoder and no pong buffer
 PASS  refused: status 101 through respond
 PASS  refused: status 99
 PASS  refused: status 600
@@ -202,4 +203,4 @@ PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input ca
 PASS  an aborted connection is done at once
 PASS  a body event is a window onto the parser's buffer
 PASS  a body cut by the end of the stream ends the connection
-http1 server: 204 passed, 0 failed, 0 skipped
+http1 server: 205 passed, 0 failed, 0 skipped

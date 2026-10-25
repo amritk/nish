@@ -470,8 +470,12 @@ export class Http1Connection {
   date: HttpDate
   /** The request parser: its head (`methodIs`, `targetIs`, `header`, spans) is the last `H1_REQUEST`'s. */
   parser: Http1Parser
-  /** The frame decoder, once the slot has switched to WebSocket. */
-  ws: WsDecoder
+  /**
+   * The frame decoder: made when the slot first switches to WebSocket, so a
+   * slot that only ever speaks HTTP never holds its buffers, then kept for
+   * the slot's later peers.
+   */
+  ws: WsDecoder | null
   /**
    * Bytes to send are `output[outputStart .. outputEnd)`. Empty until the
    * connection first needs room to write: then its own buffer, made once, or
@@ -484,7 +488,7 @@ export class Http1Connection {
   pool: Http1OutputPool | null
   /** `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. */
   data: u8[]
-  /** A ping's payload, kept until its pong fits. */
+  /** A ping's payload, kept until its pong fits: empty until the first ping. */
   pong: u8[]
   /** No fields, for the responses the connection writes itself: made once. */
   noFields: u8[][]
@@ -561,12 +565,12 @@ export class Http1Connection {
     this.parser = new Http1Parser(config.maxTarget, config.maxHeaderBytes, config.maxHeaders, config.maxBody)
     this.parser.keepText = false
     this.parser.maxChunk = config.chunkSize
-    this.ws = new WsDecoder(true, config.maxMessage)
+    this.ws = null
     this.noOutput = []
     this.output = this.noOutput
     this.pool = null
     this.data = this.noOutput
-    this.pong = new Array<u8>(WS_MAX_CONTROL)
+    this.pong = this.noOutput
     this.noFields = []
     // A line must fit whole before the parser can read it, so the buffer
     // holds the longest request line or field line however small a chunk is.
@@ -584,7 +588,10 @@ export class Http1Connection {
   /** Puts the connection back as the constructor left it, for the next peer. It allocates nothing. */
   restart(): void {
     this.parser.restart()
-    this.ws.reset()
+    const ws: WsDecoder | null = this.ws
+    if (ws !== null) {
+      ws.reset()
+    }
     this.outputStart = 0
     this.outputEnd = 0
     this.data = this.noOutput
@@ -622,7 +629,9 @@ export class Http1Connection {
     if (this.writeHeld || this.inputEnded || this.state === H1_S_CLOSING || this.state === H1_S_FAILED) {
       return 0
     }
-    const held: i32 = this.state === H1_S_WEBSOCKET ? this.ws.end - this.ws.start : this.parser.buffered()
+    const ws: WsDecoder | null = this.ws
+    const held: i32 =
+      this.state === H1_S_WEBSOCKET && ws !== null ? ws.end - ws.start : this.parser.buffered()
     const room: i32 = this.inputLimit() - held
     return room > 0 ? room : 0
   }
@@ -640,7 +649,7 @@ export class Http1Connection {
       return 0
     }
     if (this.state === H1_S_WEBSOCKET) {
-      this.ws.feed(buf, off, n)
+      this.decoder().feed(buf, off, n)
     } else {
       this.parser.feed(buf, off, n)
     }
@@ -784,8 +793,9 @@ export class Http1Connection {
         this.response = H1_R_NONE
         if (this.upgraded) {
           const p: Http1Parser = this.parser
-          this.ws.reset()
-          this.ws.feed(p.buf, p.start, p.buffered())
+          const ws: WsDecoder = this.decoder()
+          ws.reset()
+          ws.feed(p.buf, p.start, p.buffered())
           this.state = H1_S_WEBSOCKET
           return this.nextFrame()
         }
@@ -867,35 +877,50 @@ export class Http1Connection {
     return H1_ERROR
   }
 
+  /** The frame decoder, made on the slot's first switch to WebSocket. */
+  decoder(): WsDecoder {
+    const ws: WsDecoder | null = this.ws
+    if (ws !== null) {
+      return ws
+    }
+    const made: WsDecoder = new WsDecoder(true, this.config.maxMessage)
+    this.ws = made
+    return made
+  }
+
   /** `next` once the slot has switched to WebSocket. */
   nextFrame(): i32 {
     while (true) {
       if (this.pongPending && !this.sendPong()) {
         return H1_NEED_MORE
       }
-      const event: i32 = this.ws.next()
+      const ws: WsDecoder = this.decoder()
+      const event: i32 = ws.next()
       if (event === WS_MESSAGE) {
-        this.opcode = this.ws.opcode
-        this.data = this.ws.data
+        this.opcode = ws.opcode
+        this.data = ws.data
         this.dataStart = 0
-        this.dataLength = this.ws.dataLen
+        this.dataLength = ws.dataLen
         return H1_WS_MESSAGE
       }
       if (event === WS_PING) {
-        const n: i32 = this.ws.dataLen
-        for (let k: i32 = 0; k < n && k < toI32(this.pong.length) && k < toI32(this.ws.data.length); k++) {
-          this.pong[k] = this.ws.data[k]
+        const n: i32 = ws.dataLen
+        if (this.pong.length === 0) {
+          this.pong = new Array<u8>(WS_MAX_CONTROL)
+        }
+        for (let k: i32 = 0; k < n && k < toI32(this.pong.length) && k < toI32(ws.data.length); k++) {
+          this.pong[k] = ws.data[k]
         }
         this.pongLength = n
         this.pongPending = true
       } else if (event === WS_CLOSE) {
-        this.status = this.ws.closeCode
-        this.sendClose(this.ws.closeCode)
+        this.status = ws.closeCode
+        this.sendClose(ws.closeCode)
         this.state = H1_S_CLOSING
         return H1_WS_CLOSE
       } else if (event === WS_ERROR) {
-        this.status = this.ws.closeCode
-        this.sendClose(this.ws.closeCode)
+        this.status = ws.closeCode
+        this.sendClose(ws.closeCode)
         this.state = H1_S_FAILED
         return H1_ERROR
       } else if (event === WS_NEED_MORE) {
@@ -935,7 +960,7 @@ export class Http1Connection {
     const payload: u8[] | null = websocketClosePayload(code, "")
     // A code that may not be sent (1005, for a close that had none) is
     // answered with an empty close.
-    const body: u8[] = payload === null ? this.pong : payload
+    const body: u8[] = payload === null ? this.noOutput : payload
     const n: i32 = payload === null ? H1_ZERO : toI32(body.length)
     const end: i32 = websocketWriteFrame(
       this.output,
