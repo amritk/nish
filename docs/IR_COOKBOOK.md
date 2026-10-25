@@ -20996,7 +20996,8 @@ triple, is one) other than a wasm build (#943): the baseline is SSE2, where
 `llvm.floor.f64` is a call of libm's `floor`, and the runtime answers with
 SSE4.1's `roundsd` on a CPU that has it. Which one is a flag
 `@nish_round_init` sets once, from `cpuid`, as a constructor at priority 101
-(`NISH_SIMD=scalar` or `base` pins libm), so the binary stays a baseline
+(`NISH_SIMD=scalar` or `base` pins the SSE2 path, an exact floor through an
+`i64` conversion that needs no libm), so the binary stays a baseline
 binary. Built with `--cpu x86-64-v2` and up, each is the one instruction. An
 aarch64 or wasm module keeps `llvm.floor.f64` and its kin. The calls are
 `readnone`, like the intrinsics, but LLVM no longer folds a constant

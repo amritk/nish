@@ -1,10 +1,11 @@
 // --number-mode f64: Math.round, floor, ceil and trunc at their edges (#943).
 // On x86-64 the four call the runtime's `nish_floor`, `nish_ceil` and
-// `nish_trunc`, which run SSE4.1's `roundsd` when the CPU has it and libm's
-// when it does not; tests/run.js runs this twice, once with `NISH_SIMD=base`
-// pinning libm, and both print what Node prints. `x` is a parameter, so no
-// call folds to a constant. A result is printed beside its reciprocal, which is
-// how a -0 shows: `${-0}` is "0", and `1 / -0` is -Infinity.
+// `nish_trunc`, which run SSE4.1's `roundsd` when the CPU has it and an exact
+// SSE2 sequence when it does not; tests/run.js runs this twice, once with
+// `NISH_SIMD=base` pinning the SSE2 sequence, and both print what Node prints.
+// `x` is a parameter, so no call folds to a constant. A result is printed
+// beside its reciprocal, which is how a -0 shows: `${-0}` is "0", and
+// `1 / -0` is -Infinity.
 function shown(r: number): string {
   return `${r} ${1 / r}`;
 }
