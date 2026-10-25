@@ -783,16 +783,24 @@ const bcryptHashExposed = (password: u8[], job: BcryptJob): u8[] => {
 
 /**
  * Whether the hash rebuilt from the plain password is `job.hash`, for
- * `exposeWith` on the password: a constant-time compare of all 60 bytes. Both
- * byte copies are built and wiped here, so the answer is all that leaves.
+ * `exposeWith` on the password.
  */
 const bcryptVerifyExposed = (password: u8[], job: BcryptJob): boolean => {
   const expected: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
   bcryptHashInto(password, job, expected)
+  return bcryptSameWiped(expected, job.hash)
+}
+
+/**
+ * Whether the 60 bytes of `rebuilt` are `hash`'s: a constant-time compare.
+ * `rebuilt` and the copy of `hash` made here are both wiped, so the answer is
+ * all that leaves.
+ */
+const bcryptSameWiped = (rebuilt: u8[], hash: string): boolean => {
   const given: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
-  bcryptBytesOf(given, job.hash)
-  const same: boolean = timingSafeEqual(expected, given)
-  wipe(expected)
+  bcryptBytesOf(given, hash)
+  const same: boolean = timingSafeEqual(rebuilt, given)
+  wipe(rebuilt)
   wipe(given)
   return same
 }
@@ -1360,11 +1368,12 @@ export const bcryptHash4 = (
   bcryptLoad4(state, p0, p1, p2, p3, batch)
   const all: u8[] = exposeWith(state, batch, bcryptHash4Exposed)
   wipe(state)
-  const out: string[] = []
-  for (let k: i32 = 0; k < 4; k++) {
-    out.push((mask & (1 << k)) !== 0 ? bcryptLaneString(all, k) : "")
+  for (let k: i32 = 0; k < 4 && k < toI32(hashes.length); k++) {
+    if ((mask & (1 << k)) !== 0) {
+      hashes[k] = bcryptLaneString(all, k)
+    }
   }
-  return Ok(out)
+  return Ok(hashes)
 }
 
 /** Lane `k`'s salt from the 64 bytes of `salts` into `words` at 4k as four words, and its 29-byte setting. */
@@ -1493,12 +1502,7 @@ const bcryptLaneOk = (
 const bcryptJoinedOk = (prefix: u8[], digests: u8[], k: i32, hash: string): boolean => {
   const joined: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
   bcryptJoin(joined, 0, prefix, digests, k)
-  const given: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
-  bcryptBytesOf(given, hash)
-  const same: boolean = timingSafeEqual(joined, given)
-  wipe(joined)
-  wipe(given)
-  return same
+  return bcryptSameWiped(joined, hash)
 }
 
 /** One interleaved run for the lanes in `group`, all of one cost, each lane's answer into `ok`. */
@@ -1517,6 +1521,7 @@ const bcryptVerifyGroup = (
   const prefixes: u8[][] = []
   const given: string[] = []
   let cost: i32 = 0
+  // A copy, so no callee is handed the caller's `hashes` (the thread rule).
   for (let k: i32 = 0; k < toI32(hashes.length); k++) {
     given.push(hashes[k])
   }

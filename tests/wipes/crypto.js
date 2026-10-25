@@ -213,10 +213,10 @@ export const wipeChecks = [
   // (docs/security/crypto-bcrypt.md). The roots: `bcryptHashInto` 5 (the
   // state, the expanded key, the block, the digest, and the 128-byte key
   // stream of `bcryptSetKey`, all in `bcryptExposed`, which `opt` inlines),
-  // `bcryptVerifyExposed` 7 (those 5, the rebuilt hash and the given hash's
-  // bytes), and `bcryptHash` 5 and `bcryptVerify` 7 through them. Turning the
-  // wipe of the given hash's bytes into `fill(0)` dropped `bcryptVerifyExposed`
-  // and `bcryptVerify` to 6.
+  // `bcryptVerifyExposed` 7 (those 5, and the rebuilt hash and the given
+  // hash's bytes in the inlined `bcryptSameWiped`), and `bcryptHash` 5 and
+  // `bcryptVerify` 7 through them. Turning either of `bcryptSameWiped`'s two
+  // wipes into `fill(0)` dropped `bcryptVerifyExposed` and `bcryptVerify` to 6.
   {
     name: "crypto: the wipes survive opt -O2 (bcrypt's Blowfish state, expanded key, key stream, block, digest, rebuilt and given hash in bcryptVerifyExposed)",
     program: "tests/link/crypto_bcrypt/main.ts",
@@ -234,15 +234,16 @@ export const wipeChecks = [
   // `bcryptLoad4` 16 (four lane loaders with two `bcryptKeyWord` call sites
   // each), `bcryptHash4Exposed` 4 (`bcryptEks4`'s 3 and its digests),
   // `bcryptVerify4Exposed` 6 (those 4, and each lane's joined hash and given
-  // hash bytes in the inlined `bcryptJoinedOk`), `bcryptHash4` 26 (the
+  // hash bytes in `bcryptJoinedOk`'s inlined `bcryptSameWiped`), `bcryptHash4` 26 (the
   // 4244-word state, `bcryptLoad4`, `bcryptHash4Exposed` and the one-lane
   // path's `bcryptHash`, 5), and `bcryptVerify4` 51 (the state, `bcryptLoad4`
   // and `bcryptVerify4Exposed` through `bcryptVerifyGroup`, 23, and
   // `bcryptLaneOk`'s four `bcryptVerifyOne` sites, 7 each, for a cost a single
   // lane holds). Turning into `fill(0)` the wipe of the digests dropped
   // `bcryptHash4Exposed`, `bcryptVerify4Exposed`, `bcryptHash4` and
-  // `bcryptVerify4` to 3, 5, 25 and 50; of the joined hash, `bcryptVerify4Exposed`
-  // and `bcryptVerify4` to 5 and 50; of the given hash's bytes, to 5 and 46.
+  // `bcryptVerify4` to 3, 5, 25 and 50; either of `bcryptSameWiped`'s two
+  // wipes, `bcryptVerify4Exposed` and `bcryptVerify4` to 5 and 46 (the
+  // group's site and the four `bcryptVerifyOne` sites each lose one).
   {
     name: "crypto: the wipes survive opt -O2 (bcrypt's batch state, key words, block, digests, joined and given hashes in bcryptVerify4Exposed)",
     program: "tests/link/crypto_bcrypt_batch/main.ts",
