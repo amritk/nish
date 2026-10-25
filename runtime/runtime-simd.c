@@ -433,9 +433,11 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
    into libm, whose ifunc lands on SSE4.1 `roundsd` on a machine that has it;
    the call is the cost, not the rounding. Here `roundsd` runs inline once
    `nish_round_hw` says the CPU has SSE4.1, and under LTO the whole helper
-   inlines into its caller. The flag starts at 0, unknown, and an unknown flag
-   takes the libm path, so a call that sets it answers what libm answers, as
-   every call does on a machine without SSE4.1 or under a pinned `NISH_SIMD`.
+   inlines into its caller. A flag of 1 calls libm from the caller, as every
+   call does on a machine without SSE4.1 or under a pinned `NISH_SIMD`, at
+   the cost of one more compare than the baseline's bare call. The flag
+   starts at 0, unknown, and only the call that finds it so goes through
+   `nish_round_first`, which sets it and answers what libm answers.
    Two threads that race on the first call store the same answer. Leaf 1 of
    `cpuid` is asked without first asking the highest leaf: every x86-64 CPU
    has it. A constant operand rounds through `__builtin_*` so LLVM still folds
@@ -445,16 +447,14 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
 #if defined(__x86_64__) && !defined(__SSE4_1__)
 static int nish_round_hw; /* 0 unknown, 1 libm, 2 roundsd */
 
-__attribute__((noinline, cold)) static double nish_round_libm(double x, int mode) {
-  if (__atomic_load_n(&nish_round_hw, __ATOMIC_RELAXED) == 0) {
-    unsigned a, b, c, d;
-    int hw = 0;
-    if (nish_simd_choose() == NISH_PATH_BEST) {
-      __cpuid(1, a, b, c, d);
-      hw = (c & bit_SSE4_1) != 0;
-    }
-    __atomic_store_n(&nish_round_hw, hw + 1, __ATOMIC_RELAXED);
+__attribute__((noinline, cold)) static double nish_round_first(double x, int mode) {
+  unsigned a, b, c, d;
+  int hw = 0;
+  if (nish_simd_choose() == NISH_PATH_BEST) {
+    __cpuid(1, a, b, c, d);
+    hw = (c & bit_SSE4_1) != 0;
   }
+  __atomic_store_n(&nish_round_hw, hw + 1, __ATOMIC_RELAXED);
   return mode == 9 ? __builtin_floor(x) : mode == 10 ? __builtin_ceil(x) : __builtin_trunc(x);
 }
 
@@ -464,13 +464,13 @@ __attribute__((noinline, cold)) static double nish_round_libm(double x, int mode
    destination, so a destination of its own carries a false dependency on that
    register's last writer, which in a loop became a chain through every
    iteration and ran 3.5 times slower. */
-#define NISH_ROUNDER(name, builtin, imm)                                                  \
-  double name(double x) {                                                                 \
-    if (__builtin_constant_p(x)) return builtin(x);                                       \
-    if (__builtin_expect(__atomic_load_n(&nish_round_hw, __ATOMIC_RELAXED) != 2, 0))      \
-      return nish_round_libm(x, imm);                                                     \
-    __asm__("roundsd $" #imm ", %0, %0" : "+x"(x));                                       \
-    return x;                                                                             \
+#define NISH_ROUNDER(name, builtin, imm)                                                      \
+  double name(double x) {                                                                     \
+    if (__builtin_constant_p(x)) return builtin(x);                                           \
+    int hw = __atomic_load_n(&nish_round_hw, __ATOMIC_RELAXED);                               \
+    if (__builtin_expect(hw != 2, 0)) return hw == 1 ? builtin(x) : nish_round_first(x, imm); \
+    __asm__("roundsd $" #imm ", %0, %0" : "+x"(x));                                           \
+    return x;                                                                                 \
   }
 NISH_ROUNDER(nish_floor_f64, __builtin_floor, 9)
 NISH_ROUNDER(nish_ceil_f64, __builtin_ceil, 10)
