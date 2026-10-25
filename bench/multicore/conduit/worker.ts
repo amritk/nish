@@ -1543,7 +1543,7 @@ export class ConduitWorker {
   onRow(r: ConduitReq, conn: PgConnection, w: JsonWriter): void {
     switch (r.route) {
       case R_TAGS:
-        this.column(w, conn, 0)
+        this.tagList(w, conn, 0)
         break
       case R_LIST:
       case R_FEED:
@@ -1676,7 +1676,6 @@ export class ConduitWorker {
 
   /** An article row (`COL_` order) as an Article object. */
   article(w: JsonWriter, conn: PgConnection, full: boolean): void {
-    const b: u8[] = conn.inputBuffer()
     w.beginObject()
     w.key("slug")
     this.column(w, conn, COL_SLUG)
@@ -1690,20 +1689,7 @@ export class ConduitWorker {
     }
     w.key("tagList")
     w.beginArray()
-    const walker: PgArrayWalker = this.walker
-    walker.begin(b, conn.colStart(COL_TAGS), conn.colLength(COL_TAGS))
-    let e: i32 = walker.next()
-    while (e === PG_ARRAY_ELEMENT || e === PG_ARRAY_NULL) {
-      if (e === PG_ARRAY_NULL) {
-        w.nullValue()
-      } else if (walker.escaped) {
-        const n: i32 = walker.copy(this.scratch, 0)
-        w.stringBytes(this.scratch, 0, n < 0 ? 0 : n)
-      } else {
-        w.stringBytes(b, walker.start, walker.length)
-      }
-      e = walker.next()
-    }
+    this.tagList(w, conn, COL_TAGS)
     w.endArray()
     w.key("createdAt")
     this.timestamp(w, conn, COL_CREATED)
@@ -1725,6 +1711,25 @@ export class ConduitWorker {
     w.boolean(conn.bool(COL_FOLLOWING))
     w.endObject()
     w.endObject()
+  }
+
+  /** The elements of the `text[]` column `c`, each a JSON string, walked in place. */
+  tagList(w: JsonWriter, conn: PgConnection, c: i32): void {
+    const b: u8[] = conn.inputBuffer()
+    const walker: PgArrayWalker = this.walker
+    walker.begin(b, conn.colStart(c), conn.colLength(c))
+    let e: i32 = walker.next()
+    while (e === PG_ARRAY_ELEMENT || e === PG_ARRAY_NULL) {
+      if (e === PG_ARRAY_NULL) {
+        w.nullValue()
+      } else if (walker.escaped) {
+        const n: i32 = walker.copy(this.scratch, 0)
+        w.stringBytes(this.scratch, 0, n < 0 ? 0 : n)
+      } else {
+        w.stringBytes(b, walker.start, walker.length)
+      }
+      e = walker.next()
+    }
   }
 
   /** A comment row (id, body, created, updated, username, bio, image[, following]) as a Comment object. */

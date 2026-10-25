@@ -122,7 +122,8 @@ export const registerStatements = (pool: PgPool): boolean => {
   ok = pool.register("article_slug", ARTICLE_FULL + ARTICLE_FROM + " WHERE a.slug = $2", none) && ok
   ok = pool.register("article_id", ARTICLE_FULL + ARTICLE_FROM + " WHERE a.id = $2", none) && ok
   ok = pool.register("article_last", ARTICLE_FULL + ARTICLE_FROM + " WHERE a.id = " + LAST_ARTICLE, none) && ok
-  ok = pool.register("tags", "SELECT name FROM tags ORDER BY name", none) && ok
+  // Every tag in one row, as one array: one DataRow to frame and send, not 200.
+  ok = pool.register("tags", "SELECT ARRAY(SELECT name FROM tags ORDER BY name)", none) && ok
   // Users.
   ok = pool.register("user_id", "SELECT id, username, email, bio, image FROM users WHERE id = $1", none) && ok
   ok = pool.register("login", "SELECT id, username, email, bio, image, password_hash FROM users WHERE email = $1", none) && ok
