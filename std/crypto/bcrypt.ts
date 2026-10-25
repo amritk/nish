@@ -1368,12 +1368,11 @@ export const bcryptHash4 = (
   bcryptLoad4(state, p0, p1, p2, p3, batch)
   const all: u8[] = exposeWith(state, batch, bcryptHash4Exposed)
   wipe(state)
-  for (let k: i32 = 0; k < 4 && k < toI32(hashes.length); k++) {
-    if ((mask & (1 << k)) !== 0) {
-      hashes[k] = bcryptLaneString(all, k)
-    }
+  const out: string[] = []
+  for (let k: i32 = 0; k < 4; k++) {
+    out.push((mask & (1 << k)) !== 0 ? bcryptLaneString(all, k) : "")
   }
-  return Ok(hashes)
+  return Ok(out)
 }
 
 /** Lane `k`'s salt from the 64 bytes of `salts` into `words` at 4k as four words, and its 29-byte setting. */
