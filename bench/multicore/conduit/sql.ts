@@ -51,7 +51,12 @@ const SLUGIFY_2: string = "trim(both '-' from lower(regexp_replace($2::text, '[^
 const LAST_ARTICLE: string = "(SELECT currval(pg_get_serial_sequence('articles', 'id')))"
 const FOLLOWING_1: string = "EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = $1 AND fo.followee_id = "
 
-/** The FROM of a list page: the articles `where` keeps, newest first, cut to `$2` from `$3` before any column is computed. */
+/**
+ * The FROM of a list page: the articles `where` keeps, newest first, cut to
+ * `$2` from `$3` before any column is computed. Computing the metadata after
+ * the page is cut is an idea from the challenge's rust-tokio-Scooter1337
+ * submission; the SQL is written here.
+ */
 const pageFrom = (where: string): string =>
   " FROM (SELECT a2.id, a2.slug, a2.title, a2.description, a2.created_at, a2.updated_at, a2.author_id FROM articles a2 WHERE " +
   where +

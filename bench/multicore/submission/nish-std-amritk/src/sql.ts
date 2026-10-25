@@ -28,10 +28,15 @@ export const COL_FOLLOWING: i32 = 11
 /** `ARTICLE_FULL` only. */
 export const COL_BODY: i32 = 12
 
-/** SPEC.md's ARTICLE_LIST_SELECT, `$1` the viewer, without `a.id` and in `COL_` order. */
+/**
+ * SPEC.md's ARTICLE_LIST_SELECT, `$1` the viewer, without `a.id` and in `COL_`
+ * order. A tag's name is a primary-key lookup per tag (an article has one to
+ * four): joined to `tags` instead, the generic plan hash-joins a scan of all
+ * 200 tags for every article of the page.
+ */
 const ARTICLE_LIST: string =
   "SELECT a.slug, a.title, a.description, " +
-  "ARRAY(SELECT t.name FROM article_tags at JOIN tags t ON t.id = at.tag_id WHERE at.article_id = a.id ORDER BY t.name) AS tag_list, " +
+  "ARRAY(SELECT (SELECT t.name FROM tags t WHERE t.id = at.tag_id) FROM article_tags at WHERE at.article_id = a.id ORDER BY 1) AS tag_list, " +
   "a.created_at, a.updated_at, " +
   "EXISTS (SELECT 1 FROM favorites f WHERE f.article_id = a.id AND f.user_id = $1) AS favorited, " +
   "(SELECT count(*) FROM favorites f WHERE f.article_id = a.id) AS favorites_count, " +
@@ -40,19 +45,32 @@ const ARTICLE_LIST: string =
 /** SPEC.md's ARTICLE_FULL_SELECT: the list's columns and `a.body` last. */
 const ARTICLE_FULL: string = ARTICLE_LIST + ", a.body"
 const ARTICLE_FROM: string = " FROM articles a JOIN users u ON u.id = a.author_id"
-const ORDER_PAGE: string = " ORDER BY a.id DESC LIMIT $2 OFFSET $3"
 const SLUGIFY_2: string = "trim(both '-' from lower(regexp_replace($2::text, '[^A-Za-z0-9]+', '-', 'g')))"
 // A scalar subquery, so the volatile currval is read once and the primary key
 // is probed with it, rather than tested against every row.
 const LAST_ARTICLE: string = "(SELECT currval(pg_get_serial_sequence('articles', 'id')))"
 const FOLLOWING_1: string = "EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = $1 AND fo.followee_id = "
 
+/**
+ * The FROM of a list page: the articles `where` keeps, newest first, cut to
+ * `$2` from `$3` before any column is computed. Computing the metadata after
+ * the page is cut is an idea from the challenge's rust-tokio-Scooter1337
+ * submission; the SQL is written here.
+ */
+const pageFrom = (where: string): string =>
+  " FROM (SELECT a2.id, a2.slug, a2.title, a2.description, a2.created_at, a2.updated_at, a2.author_id FROM articles a2 WHERE " +
+  where +
+  " ORDER BY a2.id DESC LIMIT $2 OFFSET $3) a JOIN users u ON u.id = a.author_id ORDER BY a.id DESC"
+
 /** Registers every statement on `pool`; false when the pool refused one. */
 export const registerStatements = (pool: PgPool): boolean => {
   const none: i32[] = []
   let ok: boolean = true
   // Article lists: the page, then the capped count, of each filter.
-  ok = pool.register("list_all", ARTICLE_LIST + ARTICLE_FROM + ORDER_PAGE, none) && ok
+  // The page is cut in a subquery before the select list runs: with LIMIT and
+  // OFFSET over the whole select, every per-row subquery also ran for each
+  // row the OFFSET skips.
+  ok = pool.register("list_all", ARTICLE_LIST + pageFrom("TRUE"), none) && ok
   ok = pool.register("count_all", "SELECT count(*) FROM (SELECT 1 FROM articles a LIMIT 1000) s", none) && ok
   ok =
     pool.register(
@@ -71,7 +89,7 @@ export const registerStatements = (pool: PgPool): boolean => {
   ok =
     pool.register(
       "list_author",
-      ARTICLE_LIST + ARTICLE_FROM + " WHERE a.author_id = (SELECT au.id FROM users au WHERE au.username = $4)" + ORDER_PAGE,
+      ARTICLE_LIST + pageFrom("a2.author_id = (SELECT au.id FROM users au WHERE au.username = $4)"),
       none
     ) && ok
   ok =
@@ -112,7 +130,8 @@ export const registerStatements = (pool: PgPool): boolean => {
   ok = pool.register("article_slug", ARTICLE_FULL + ARTICLE_FROM + " WHERE a.slug = $2", none) && ok
   ok = pool.register("article_id", ARTICLE_FULL + ARTICLE_FROM + " WHERE a.id = $2", none) && ok
   ok = pool.register("article_last", ARTICLE_FULL + ARTICLE_FROM + " WHERE a.id = " + LAST_ARTICLE, none) && ok
-  ok = pool.register("tags", "SELECT name FROM tags ORDER BY name", none) && ok
+  // Every tag in one row, as one array: one DataRow to frame and send, not 200.
+  ok = pool.register("tags", "SELECT ARRAY(SELECT name FROM tags ORDER BY name)", none) && ok
   // Users.
   ok = pool.register("user_id", "SELECT id, username, email, bio, image FROM users WHERE id = $1", none) && ok
   ok = pool.register("login", "SELECT id, username, email, bio, image, password_hash FROM users WHERE email = $1", none) && ok
@@ -201,15 +220,17 @@ export const registerStatements = (pool: PgPool): boolean => {
       "DELETE FROM favorites f USING articles a WHERE f.user_id = $1 AND f.article_id = a.id AND a.slug = $2",
       none
     ) && ok
-  // Comments.
-  ok = pool.register("article_exists", "SELECT id FROM articles WHERE slug = $1", none) && ok
+  // Comments: the article and its newest comments in one statement, one row
+  // with the comment columns NULL when it has none, and no row when the
+  // article does not exist.
   ok =
     pool.register(
       "comments",
-      "SELECT c.id, c.body, c.created_at, c.updated_at, u.username, u.bio, u.image, " +
+      "SELECT a.id, c.id, c.body, c.created_at, c.updated_at, u.username, u.bio, u.image, " +
         FOLLOWING_1 +
-        "c.author_id) AS following FROM comments c JOIN users u ON u.id = c.author_id " +
-        "WHERE c.article_id = (SELECT id FROM articles WHERE slug = $2) ORDER BY c.created_at DESC, c.id DESC LIMIT 100",
+        "c.author_id) FROM articles a LEFT JOIN LATERAL (SELECT c.id, c.body, c.created_at, c.updated_at, c.author_id " +
+        "FROM comments c WHERE c.article_id = a.id ORDER BY c.created_at DESC, c.id DESC LIMIT 100) c ON true " +
+        "LEFT JOIN users u ON u.id = c.author_id WHERE a.slug = $2 ORDER BY c.created_at DESC, c.id DESC",
       none
     ) && ok
   ok =

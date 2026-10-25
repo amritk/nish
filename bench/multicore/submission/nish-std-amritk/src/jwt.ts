@@ -149,6 +149,8 @@ export class Jwt {
   /** A payload being written, before its encoding. */
   claims: u8[]
   tokenizer: JsonTokenizer
+  /** `JWT_HEADER`'s bytes, which most tokens' first part is. */
+  header: u8[]
   /** What the last `verify` found: the `sub` claim. */
   sub: i64 = 0
 
@@ -158,6 +160,8 @@ export class Jwt {
     this.part = new Array<u8>(JWT_MAX_TOKEN)
     this.sig = new Array<u8>(64)
     this.claims = new Array<u8>(128)
+    this.header = new Array<u8>(JWT_HEADER.length)
+    jwtAscii(JWT_HEADER, this.header, 0)
     const limits = new JsonLimits()
     limits.maxDepth = 4
     this.tokenizer = new JsonTokenizer(this.part, 0, 0, limits)
@@ -229,12 +233,30 @@ export class Jwt {
     if (!timingSafeEqualAt(this.part, 0, this.sig, 0, 32)) {
       return false
     }
-    const headerLen: i32 = jwtDecode(src, off, first - off, this.part)
-    if (headerLen < 0 || !this.headerIsHs256(headerLen)) {
-      return false
+    // Every token this server issues has the one header, whose `alg` is
+    // HS256; any other header is decoded and read.
+    if (!this.isIssuedHeader(src, off, first - off)) {
+      const headerLen: i32 = jwtDecode(src, off, first - off, this.part)
+      if (headerLen < 0 || !this.headerIsHs256(headerLen)) {
+        return false
+      }
     }
     const payloadLen: i32 = jwtDecode(src, first + 1, second - first - 1, this.part)
     return payloadLen >= 0 && this.claimsValid(payloadLen, now)
+  }
+
+  /** Whether `src[off, off + len)` is exactly `JWT_HEADER`. */
+  isIssuedHeader(src: u8[], off: i32, len: i32): boolean {
+    const h: u8[] = this.header
+    if (len !== toI32(h.length)) {
+      return false
+    }
+    for (let k: i32 = 0; k < len; k++) {
+      if (src[off + k] !== h[k]) {
+        return false
+      }
+    }
+    return true
   }
 
   /** Whether the header in `part[0, len)` is an object whose `alg` is exactly `HS256`. */

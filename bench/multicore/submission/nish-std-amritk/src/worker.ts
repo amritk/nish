@@ -65,7 +65,8 @@ import {
   PgPool,
 } from "nish/net/postgres"
 import { BCRYPT_DONE, BCRYPT_MAX_PASSWORD, BCRYPT_OP_HASH, BCRYPT_OP_VERIFY, BcryptClient } from "./bcrypt-service"
-import { Jwt } from "./jwt"
+import { jsonOutBool, jsonOutNull, jsonOutRaw, jsonOutString, jsonOutTextArray, jsonOutWorst } from "./json-out"
+import { Jwt, jwtDigits } from "./jwt"
 import {
   COL_BIO,
   COL_BODY,
@@ -159,6 +160,8 @@ const READABLE: i32 = 5
 /** The ring that maps a pool's tickets to requests: a power of two above the queue and the groups in flight. */
 const TICKET_RING: i32 = 131072
 const QUEUE: i32 = 65536
+/** The most writes one group commits together. */
+const WRITE_BATCH: i32 = 128
 /** The largest response body a writer holds; the output buffer holds it and its head. */
 const RESPONSE_ROOM: i32 = 1048576
 /** How long the worker waits for the bcrypt service to listen before failing the logins that wait, in ns. */
@@ -198,17 +201,24 @@ class ConduitReq {
   ticket: i32 = -1
   inPool: boolean = false
   inBcrypt: boolean = false
-  /** Statements answered in the group, rows of the current one, and rows of the first. */
+  /** Statements of the group answered so far. */
   stmt: i32 = 0
-  rows: i32 = 0
-  firstRows: i32 = 0
   found: boolean = false
   count: i64 = 0
   /** 0, or 23505's 1, or any other SQLSTATE's 2. */
   pgError: i32 = 0
+  /** In a write batch: the next request of the batch, or -1 after the last. */
+  batchNext: i32 = -1
+  /** A write sent alone, after its batch failed. */
+  solo: boolean = false
+  /** A batched write's own answer: its writer and the buffer it writes. */
+  own: u8[]
+  ownWriter: JsonWriter
 
   constructor(index: i32) {
     this.index = index
+    this.own = new Array<u8>(0)
+    this.ownWriter = new JsonWriter(this.own, 0)
     this.text = new Array<u8>(512)
     this.fStart = new Array<i32>(F_COUNT)
     this.fLen = new Array<i32>(F_COUNT)
@@ -245,11 +255,27 @@ class ConduitReq {
     this.inPool = false
     this.inBcrypt = false
     this.stmt = 0
-    this.rows = 0
-    this.firstRows = 0
     this.found = false
     this.count = 0
     this.pgError = 0
+    this.batchNext = -1
+    this.solo = false
+  }
+
+  /**
+   * Makes `own` hold at least `n` bytes and starts `ownWriter` on it again:
+   * a batched write's answer is `{` and one row, so it is sized when the row
+   * comes, before any of it is written.
+   */
+  ownRoom(n: i32): void {
+    if (toI32(this.own.length) < n) {
+      let size: i32 = toI32(this.own.length) < 4096 ? 4096 : toI32(this.own.length)
+      while (size < n) {
+        size = size * 2
+      }
+      this.own = new Array<u8>(size)
+    }
+    this.ownWriter.reset(this.own, 0)
   }
 
   /** Makes room for `n` more bytes of `text`. */
@@ -299,10 +325,11 @@ class ConduitReq {
   }
 }
 
-/** A pool slot's socket. */
+/** A pool slot's socket, and the interest the loop last armed it with. */
 class PgSocket {
   fd: i32 = -1
   connected: boolean = false
+  armed: i32 = 0
 }
 
 /** The value of hex digit `c`, or -1. */
@@ -407,6 +434,10 @@ export class ConduitWorker {
   walker: PgArrayWalker
   stamp: u8[]
   scratch: u8[]
+  /** Where `articleBytes` writes one article, and the fixed text it copies in. */
+  rowBuf: u8[]
+  fragments: u8[][]
+  stringColumns: i32[]
   tokenBuf: u8[]
   bcrypt: BcryptClient
   bcryptAddress: u8[]
@@ -415,6 +446,13 @@ export class ConduitWorker {
   bcryptRetryAt: i64 = 0
   /** Requests answered, for a reader of `/proc`. */
   answered: i64 = 0
+  /** Writes waiting for the next batch, a ring oldest first; and how many batches are in flight. */
+  writeRing: i32[]
+  writeHead: i32 = 0
+  writeCount: i32 = 0
+  writeBatches: i32 = 0
+  /** Per write-pool slot: the request of its batch whose statements are being answered. */
+  writeCursor: i32[]
 
   constructor(cfg: WorkerConfig, listener: i32) {
     this.listener = listener
@@ -422,6 +460,9 @@ export class ConduitWorker {
     http.idleTimeout = cfg.idleTimeoutMs
     http.maxBody = 1048576
     http.outputSize = RESPONSE_ROOM + 4096
+    // Most of the challenge's tens of thousands of connections sit between
+    // requests: they hold no input or head buffer while they do.
+    http.idleInput = true
     this.server = new Http1Server(http, listener, cfg.slots)
     this.loop = pollCreate()
     pollAdd(this.loop, listener, H1_WANT_READ, TOKEN_LISTENER)
@@ -489,9 +530,29 @@ export class ConduitWorker {
     this.walker = new PgArrayWalker()
     this.stamp = new Array<u8>(24)
     this.scratch = new Array<u8>(65536)
+    this.rowBuf = new Array<u8>(RESPONSE_ROOM)
+    this.fragments = [
+      bytesOf('{"slug":'),
+      bytesOf(',"title":'),
+      bytesOf(',"description":'),
+      bytesOf(',"body":'),
+      bytesOf(',"tagList":'),
+      bytesOf(',"createdAt":"'),
+      bytesOf('","updatedAt":"'),
+      bytesOf('","favorited":'),
+      bytesOf(',"favoritesCount":'),
+      bytesOf(',"author":{"username":'),
+      bytesOf(',"bio":'),
+      bytesOf(',"image":'),
+      bytesOf(',"following":'),
+      bytesOf("}}"),
+    ]
+    this.stringColumns = [COL_SLUG, COL_TITLE, COL_DESCRIPTION, COL_BODY, COL_USERNAME, COL_BIO, COL_IMAGE]
     this.tokenBuf = new Array<u8>(512)
     this.bcrypt = new BcryptClient()
     this.bcryptAddress = new Array<u8>(18)
+    this.writeRing = new Array<i32>(QUEUE)
+    this.writeCursor = new Array<i32>(this.pools[POOL_WRITE].size)
     netAddress(this.bcryptAddress, "127.0.0.1", cfg.bcryptPort)
   }
 
@@ -1155,6 +1216,24 @@ export class ConduitWorker {
   /** Queues `r`'s next group on its pool. */
   submit(r: ConduitReq, later: boolean): void {
     const p: i32 = this.poolOf(r)
+    if (p === POOL_WRITE && !r.solo) {
+      // Writes wait for the next batch: `batchWrites` sends them.
+      r.pool = p
+      r.ticket = -1
+      r.inPool = true
+      r.stmt = 0
+      r.found = false
+      r.pgError = 0
+      r.batchNext = -1
+      if (this.writeCount === QUEUE) {
+        r.inPool = false
+        this.fail(r, 503, "busy", later)
+        return
+      }
+      this.writeRing[(this.writeHead + this.writeCount) % QUEUE] = r.index
+      this.writeCount += 1
+      return
+    }
     const ticket: i32 = this.pools[p].request()
     if (ticket === PG_POOL_FULL) {
       this.fail(r, 503, "busy", later)
@@ -1165,27 +1244,35 @@ export class ConduitWorker {
     r.ticket = ticket
     r.inPool = true
     r.stmt = 0
-    r.rows = 0
-    r.firstRows = 0
     r.found = false
     r.pgError = 0
   }
 
   /** Hands waiting requests to connections, makes the connections wanted, and sends what they queued. */
   pump(): void {
+    this.batchWrites()
     for (let p: i32 = 0; p < 2; p++) {
       const pool: PgPool = this.pools[p]
       let s: i32 = pool.dispatch()
       while (s >= 0) {
         const r: i32 = this.tickets[p][pool.ticket % TICKET_RING]
         const conn: PgConnection = pool.connection(s)
-        const built: boolean = r >= 0 && r < toI32(this.reqs.length) && this.bind(this.reqs[r], conn)
+        const built: boolean = r >= 0 && r < toI32(this.reqs.length) && this.bindAll(this.reqs[r], conn)
         if (!pool.send() || !built) {
-          // Nothing was sent, so nothing was written: the request answers 500.
+          // Nothing was sent, so nothing was written: the request, and every
+          // write batched with it, answers 500.
           if (r >= 0 && r < toI32(this.reqs.length) && this.reqs[r].inPool) {
-            const req: ConduitReq = this.reqs[r]
-            req.inPool = false
-            this.fail(req, 500, "statement not sent", true)
+            if (p === POOL_WRITE && !this.reqs[r].solo) {
+              this.writeBatches -= 1
+            }
+            let k: i32 = r
+            while (k >= 0) {
+              const req: ConduitReq = this.reqs[k]
+              k = req.batchNext
+              req.batchNext = -1
+              req.inPool = false
+              this.fail(req, 500, "statement not sent", true)
+            }
           }
         }
         s = pool.dispatch()
@@ -1198,6 +1285,7 @@ export class ConduitWorker {
         pool.connect(s, nonce)
         socket.fd = tcpConnect(this.pgAddress)
         socket.connected = false
+        socket.armed = H1_WANT_WRITE
         if (socket.fd < 0 || pollAdd(this.loop, socket.fd, H1_WANT_WRITE, TOKEN_POOL - (p * POOL_TOKENS + s)) < 0) {
           pool.connection(s).closed()
           this.pgEvents(p, s)
@@ -1212,11 +1300,71 @@ export class ConduitWorker {
             conn.closed()
             this.pgEvents(p, k)
           } else if (socket.fd >= 0) {
+            // Each pollModify is an epoll_ctl; a busy connection asks for the
+            // same interest turn after turn, so it is re-armed only on a change.
             const wants: i32 = conn.outputEnd() > conn.outputStart() ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
-            pollModify(this.loop, socket.fd, wants, TOKEN_POOL - (p * POOL_TOKENS + k))
+            if (wants !== socket.armed) {
+              socket.armed = wants
+              pollModify(this.loop, socket.fd, wants, TOKEN_POOL - (p * POOL_TOKENS + k))
+            }
           }
         }
       }
+    }
+  }
+
+  /**
+   * Group commit: while fewer batches are in flight than there are write
+   * connections, the writes waiting (up to `WRITE_BATCH`) become one request
+   * of the write pool, one group, so one implicit transaction and one commit.
+   * Each write's answer waits for the group's ReadyForQuery. Nothing waits on
+   * a timer: under load the writes that come while a batch is in flight make
+   * the next one, and an idle server sends a write at once.
+   */
+  batchWrites(): void {
+    const pool: PgPool = this.pools[POOL_WRITE]
+    while (this.writeCount > 0 && this.writeBatches < pool.size) {
+      const ticket: i32 = pool.request()
+      if (ticket === PG_POOL_FULL) {
+        return
+      }
+      const take: i32 = this.writeCount < WRITE_BATCH ? this.writeCount : WRITE_BATCH
+      for (let k: i32 = 0; k < take; k++) {
+        const r: ConduitReq = this.reqs[this.writeRing[(this.writeHead + k) % QUEUE]]
+        r.ticket = ticket
+        r.batchNext = k + 1 < take ? this.writeRing[(this.writeHead + k + 1) % QUEUE] : -1
+      }
+      this.tickets[POOL_WRITE][ticket % TICKET_RING] = this.writeRing[this.writeHead]
+      this.writeHead = (this.writeHead + take) % QUEUE
+      this.writeCount -= take
+      this.writeBatches += 1
+    }
+  }
+
+  /** Binds `r`'s group, and every request batched after it, on `conn`. */
+  bindAll(r: ConduitReq, conn: PgConnection): boolean {
+    let ok: boolean = this.bind(r, conn)
+    let next: i32 = r.batchNext
+    while (ok && next >= 0) {
+      const m: ConduitReq = this.reqs[next]
+      ok = this.bind(m, conn)
+      next = m.batchNext
+    }
+    return ok
+  }
+
+  /** How many statements `r`'s group runs, so a batch knows where each request's answers end. */
+  statements(r: ConduitReq): i32 {
+    switch (r.route) {
+      case R_FAVORITE:
+      case R_UNFAVORITE:
+        return 2
+      case R_ARTICLE_CREATE:
+        return r.tags > 0 ? 4 : 2
+      case R_ARTICLE_PUT:
+        return r.phase === 0 ? 1 : 2
+      default:
+        return 1
     }
   }
 
@@ -1302,7 +1450,9 @@ export class ConduitWorker {
         return
       }
       const ticket: i32 = pool.ticket
-      if (ticket >= 0) {
+      if (ticket >= 0 && p === POOL_WRITE) {
+        this.batchEvent(s, conn, ticket, event)
+      } else if (ticket >= 0) {
         const ri: i32 = this.tickets[p][ticket % TICKET_RING]
         if (ri >= 0 && ri < toI32(this.reqs.length) && this.reqs[ri].inPool && this.reqs[ri].pool === p && this.reqs[ri].ticket === ticket) {
           const r: ConduitReq = this.reqs[ri]
@@ -1313,13 +1463,8 @@ export class ConduitWorker {
           }
           if (event === PG_ROW) {
             this.onRow(r, conn, w)
-            r.rows += 1
           } else if (event === PG_COMPLETE) {
-            if (r.stmt === 0) {
-              r.firstRows = r.rows
-            }
             r.stmt += 1
-            r.rows = 0
           } else if (event === PG_ERROR) {
             const code: string = conn.lastError?.code ?? ""
             r.pgError = code === "23505" ? 1 : 2
@@ -1341,6 +1486,80 @@ export class ConduitWorker {
         }
       }
       event = pool.next(s)
+    }
+  }
+
+  /**
+   * One event of a write batch's group. The requests' statements are
+   * answered in the order they were bound, so `writeCursor` walks the batch
+   * as each request's last statement completes. Each request writes its own
+   * answer; all of them go out once the group commits. A group that failed
+   * rolled back every write in it, so each is sent again alone, and one sent
+   * alone answers its error; a group lost with its connection may have
+   * committed, so its writes answer 500 and are not sent again.
+   */
+  batchEvent(s: i32, conn: PgConnection, ticket: i32, event: i32): void {
+    const leader: i32 = this.tickets[POOL_WRITE][ticket % TICKET_RING]
+    if (leader < 0 || leader >= toI32(this.reqs.length) || this.reqs[leader].ticket !== ticket || !this.reqs[leader].inPool) {
+      return
+    }
+    if (this.current[POOL_WRITE][s] !== ticket) {
+      this.current[POOL_WRITE][s] = ticket
+      this.writeCursor[s] = leader
+      const first: ConduitReq = this.reqs[leader]
+      first.ownRoom(64)
+      this.begin(first, first.ownWriter, first.own)
+    }
+    if (event === PG_GROUP_DONE || event === PG_LOST) {
+      this.current[POOL_WRITE][s] = -1
+      this.tickets[POOL_WRITE][ticket % TICKET_RING] = -1
+      if (!this.reqs[leader].solo) {
+        this.writeBatches -= 1
+      }
+      const failed: boolean = event === PG_LOST || conn.groupFailed
+      const alone: boolean = this.reqs[leader].batchNext < 0
+      let k: i32 = leader
+      while (k >= 0) {
+        const m: ConduitReq = this.reqs[k]
+        k = m.batchNext
+        m.batchNext = -1
+        m.inPool = false
+        if (event === PG_LOST) {
+          this.fail(m, 500, "the database connection was lost", true)
+        } else if (!failed && m.pgError === 0) {
+          this.onDone(m, m.ownWriter, m.own)
+        } else if (alone) {
+          this.onFailed(m)
+        } else {
+          m.solo = true
+          this.submit(m, true)
+        }
+      }
+      return
+    }
+    const m: ConduitReq = this.reqs[this.writeCursor[s]]
+    if (event === PG_ROW) {
+      // `{` is all a write's answer holds before its row, so it is sized for the row now.
+      let need: i32 = 1024
+      for (let c: i32 = 0; c < conn.columns; c++) {
+        need += 6 * (conn.colLength(c) > 0 ? conn.colLength(c) : 0) + 16
+      }
+      if (toI32(m.own.length) < need) {
+        m.ownRoom(need)
+        this.begin(m, m.ownWriter, m.own)
+      }
+      this.onRow(m, conn, m.ownWriter)
+    } else if (event === PG_COMPLETE) {
+      m.stmt += 1
+      if (m.stmt >= this.statements(m) && m.batchNext >= 0) {
+        const next: ConduitReq = this.reqs[m.batchNext]
+        this.writeCursor[s] = next.index
+        next.ownRoom(64)
+        this.begin(next, next.ownWriter, next.own)
+      }
+    } else if (event === PG_ERROR) {
+      const code: string = conn.lastError?.code ?? ""
+      m.pgError = code === "23505" ? 1 : 2
     }
   }
 
@@ -1455,9 +1674,6 @@ export class ConduitWorker {
         break
       case R_COMMENTS:
         ok =
-          conn.bindStart("article_exists") &&
-          this.text(conn, r, F_PATH) &&
-          conn.bindEnd() &&
           conn.bindStart("comments") &&
           conn.paramInt(r.viewer) &&
           this.text(conn, r, F_PATH) &&
@@ -1527,7 +1743,6 @@ export class ConduitWorker {
     const route: i32 = r.route
     if (route === R_TAGS) {
       w.key("tags")
-      w.beginArray()
     } else if (route === R_LIST || route === R_FEED) {
       w.key("articles")
       w.beginArray()
@@ -1540,7 +1755,7 @@ export class ConduitWorker {
   onRow(r: ConduitReq, conn: PgConnection, w: JsonWriter): void {
     switch (r.route) {
       case R_TAGS:
-        this.column(w, conn, 0)
+        this.tagList(w, conn, 0)
         break
       case R_LIST:
       case R_FEED:
@@ -1579,15 +1794,17 @@ export class ConduitWorker {
         r.found = true
         break
       case R_COMMENTS:
-        if (r.stmt === 1) {
-          this.comment(w, conn, true)
+        // The article's row; its comment columns are NULL when it has none.
+        r.found = true
+        if (!conn.isNull(1)) {
+          this.comment(w, conn, 1, 8)
         }
         break
       case R_COMMENT_CREATE:
         if (!r.found) {
           r.found = true
           w.key("comment")
-          this.comment(w, conn, false)
+          this.comment(w, conn, 0, -1)
         }
         break
       case R_PROFILE:
@@ -1671,9 +1888,84 @@ export class ConduitWorker {
     }
   }
 
-  /** An article row (`COL_` order) as an Article object. */
+  /**
+   * An article row (`COL_` order) as an Article object: written by
+   * `articleBytes` into `rowBuf` and added as one value, or through the
+   * writer's own calls when that answers -1.
+   */
   article(w: JsonWriter, conn: PgConnection, full: boolean): void {
+    const n: i32 = this.articleBytes(conn, full)
+    if (n >= 0) {
+      w.raw(this.rowBuf, 0, n)
+    } else {
+      this.articleWriter(w, conn, full)
+    }
+  }
+
+  /**
+   * The article row as JSON at `rowBuf[0]`, its fixed text copied from
+   * `fragments` and only its values encoded; answers the length, or -1 when
+   * the row might not fit, a timestamp does not read, or the tag list needs
+   * the walker.
+   */
+  articleBytes(conn: PgConnection, full: boolean): i32 {
     const b: u8[] = conn.inputBuffer()
+    const out: u8[] = this.rowBuf
+    const f: u8[][] = this.fragments
+    let worst: i32 = 512 + 2 * conn.colLength(COL_TAGS)
+    const strings: i32[] = this.stringColumns
+    for (let k: i32 = 0; k < toI32(strings.length); k++) {
+      const c: i32 = strings[k]
+      if (c !== COL_BODY || full) {
+        worst += jsonOutWorst(conn.colLength(c))
+      }
+    }
+    if (worst > toI32(out.length) || conn.isNull(COL_SLUG) || conn.isNull(COL_TITLE) || conn.isNull(COL_DESCRIPTION) || conn.isNull(COL_USERNAME)) {
+      return -1
+    }
+    let o: i32 = jsonOutRaw(out, 0, f[0])
+    o = jsonOutString(out, o, b, conn.colStart(COL_SLUG), conn.colLength(COL_SLUG))
+    o = jsonOutRaw(out, o, f[1])
+    o = jsonOutString(out, o, b, conn.colStart(COL_TITLE), conn.colLength(COL_TITLE))
+    o = jsonOutRaw(out, o, f[2])
+    o = jsonOutString(out, o, b, conn.colStart(COL_DESCRIPTION), conn.colLength(COL_DESCRIPTION))
+    if (full) {
+      if (conn.isNull(COL_BODY)) {
+        return -1
+      }
+      o = jsonOutRaw(out, o, f[3])
+      o = jsonOutString(out, o, b, conn.colStart(COL_BODY), conn.colLength(COL_BODY))
+    }
+    o = jsonOutRaw(out, o, f[4])
+    o = jsonOutTextArray(out, o, b, conn.colStart(COL_TAGS), conn.colLength(COL_TAGS))
+    if (o < 0) {
+      return -1
+    }
+    o = jsonOutRaw(out, o, f[5])
+    if (conn.text.timestamp(b, conn.colStart(COL_CREATED), conn.colLength(COL_CREATED), out, o) !== 24) {
+      return -1
+    }
+    o = jsonOutRaw(out, o + 24, f[6])
+    if (conn.text.timestamp(b, conn.colStart(COL_UPDATED), conn.colLength(COL_UPDATED), out, o) !== 24) {
+      return -1
+    }
+    o = jsonOutRaw(out, o + 24, f[7])
+    o = jsonOutBool(out, o, conn.bool(COL_FAVORITED))
+    o = jsonOutRaw(out, o, f[8])
+    o = jwtDigits(conn.int(COL_FAVORITES), out, o)
+    o = jsonOutRaw(out, o, f[9])
+    o = jsonOutString(out, o, b, conn.colStart(COL_USERNAME), conn.colLength(COL_USERNAME))
+    o = jsonOutRaw(out, o, f[10])
+    o = conn.isNull(COL_BIO) ? jsonOutNull(out, o) : jsonOutString(out, o, b, conn.colStart(COL_BIO), conn.colLength(COL_BIO))
+    o = jsonOutRaw(out, o, f[11])
+    o = conn.isNull(COL_IMAGE) ? jsonOutNull(out, o) : jsonOutString(out, o, b, conn.colStart(COL_IMAGE), conn.colLength(COL_IMAGE))
+    o = jsonOutRaw(out, o, f[12])
+    o = jsonOutBool(out, o, conn.bool(COL_FOLLOWING))
+    return jsonOutRaw(out, o, f[13])
+  }
+
+  /** `article` through the writer's calls, for a row `articleBytes` does not take. */
+  articleWriter(w: JsonWriter, conn: PgConnection, full: boolean): void {
     w.beginObject()
     w.key("slug")
     this.column(w, conn, COL_SLUG)
@@ -1686,22 +1978,7 @@ export class ConduitWorker {
       this.column(w, conn, COL_BODY)
     }
     w.key("tagList")
-    w.beginArray()
-    const walker: PgArrayWalker = this.walker
-    walker.begin(b, conn.colStart(COL_TAGS), conn.colLength(COL_TAGS))
-    let e: i32 = walker.next()
-    while (e === PG_ARRAY_ELEMENT || e === PG_ARRAY_NULL) {
-      if (e === PG_ARRAY_NULL) {
-        w.nullValue()
-      } else if (walker.escaped) {
-        const n: i32 = walker.copy(this.scratch, 0)
-        w.stringBytes(this.scratch, 0, n < 0 ? 0 : n)
-      } else {
-        w.stringBytes(b, walker.start, walker.length)
-      }
-      e = walker.next()
-    }
-    w.endArray()
+    this.tagList(w, conn, COL_TAGS)
     w.key("createdAt")
     this.timestamp(w, conn, COL_CREATED)
     w.key("updatedAt")
@@ -1724,27 +2001,66 @@ export class ConduitWorker {
     w.endObject()
   }
 
-  /** A comment row (id, body, created, updated, username, bio, image[, following]) as a Comment object. */
-  comment(w: JsonWriter, conn: PgConnection, withFollowing: boolean): void {
+  /**
+   * The `text[]` column `c` as a JSON array of strings: in one pass of block
+   * copies when `jsonOutTextArray` takes it, element by element with
+   * `PgArrayWalker` otherwise.
+   */
+  tagList(w: JsonWriter, conn: PgConnection, c: i32): void {
+    const b: u8[] = conn.inputBuffer()
+    const start: i32 = conn.colStart(c)
+    const len: i32 = conn.colLength(c)
+    const out: u8[] = this.scratch
+    if (len >= 2 && 2 * len + 2 <= toI32(out.length)) {
+      const n: i32 = jsonOutTextArray(out, 0, b, start, len)
+      if (n >= 0) {
+        w.raw(out, 0, n)
+        return
+      }
+    }
+    w.beginArray()
+    const walker: PgArrayWalker = this.walker
+    walker.begin(b, start, len)
+    let e: i32 = walker.next()
+    while (e === PG_ARRAY_ELEMENT || e === PG_ARRAY_NULL) {
+      if (e === PG_ARRAY_NULL) {
+        w.nullValue()
+      } else if (walker.escaped) {
+        const n: i32 = walker.copy(out, 0)
+        w.stringBytes(out, 0, n < 0 ? 0 : n)
+      } else {
+        w.stringBytes(b, walker.start, walker.length)
+      }
+      e = walker.next()
+    }
+    w.endArray()
+  }
+
+  /**
+   * The comment columns from `at` on (id, body, created, updated, username,
+   * bio, image) as a Comment object; `following` is column `followingAt`, or
+   * false when that is -1.
+   */
+  comment(w: JsonWriter, conn: PgConnection, at: i32, followingAt: i32): void {
     w.beginObject()
     w.key("id")
-    w.i64(conn.int(0))
+    w.i64(conn.int(at))
     w.key("createdAt")
-    this.timestamp(w, conn, 2)
+    this.timestamp(w, conn, at + 2)
     w.key("updatedAt")
-    this.timestamp(w, conn, 3)
+    this.timestamp(w, conn, at + 3)
     w.key("body")
-    this.column(w, conn, 1)
+    this.column(w, conn, at + 1)
     w.key("author")
     w.beginObject()
     w.key("username")
-    this.column(w, conn, 4)
+    this.column(w, conn, at + 4)
     w.key("bio")
-    this.column(w, conn, 5)
+    this.column(w, conn, at + 5)
     w.key("image")
-    this.column(w, conn, 6)
+    this.column(w, conn, at + 6)
     w.key("following")
-    w.boolean(withFollowing ? conn.bool(7) : false)
+    w.boolean(followingAt >= 0 ? conn.bool(followingAt) : false)
     w.endObject()
     w.endObject()
   }
@@ -1780,18 +2096,19 @@ export class ConduitWorker {
     const route: i32 = r.route
     switch (route) {
       case R_TAGS:
+        w.endObject()
+        this.answer(r, 200, buf, w.end, true)
+        return
       case R_LIST:
       case R_FEED:
         w.endArray()
-        if (route !== R_TAGS) {
-          w.key("articlesCount")
-          w.i64(r.count)
-        }
+        w.key("articlesCount")
+        w.i64(r.count)
         w.endObject()
         this.answer(r, 200, buf, w.end, true)
         return
       case R_COMMENTS:
-        if (r.firstRows === 0) {
+        if (!r.found) {
           this.fail(r, 404, "article not found", true)
           return
         }

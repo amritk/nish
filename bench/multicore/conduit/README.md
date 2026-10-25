@@ -22,18 +22,22 @@ folder the challenge receives is staged at
   (`nish/net/http1-server`'s `Http1Server`), the worker's Postgres
   connections and its bcrypt connection.
 - **Postgres.** Two `PgPool`s per worker, reads (`DB_READ_CONNS`, 3) and
-  writes (`DB_WRITE_CONNS`, 1), each connection with up to 16 pipelined
+  writes (`DB_WRITE_CONNS`, 1), each read connection with up to 16 pipelined
   groups in flight (`DB_MAX_IN_FLIGHT`) and the rest of the requests in the
   pool's FIFO queue. Every statement is registered up front and prepared on a
   connection in the same flight as its first request. Every connection starts
   with `plan_cache_mode=force_generic_plan`, `jit=off` and
   `max_parallel_workers_per_gather=0`, set in the startup packet's `options`
   (session settings, not `ALTER SYSTEM`).
-- **One group per request.** A request is one pipelined group (Bind and
-  Execute for each statement, one Sync), which Postgres runs as one implicit
-  transaction committed at the Sync. The response is sent once the group's
-  ReadyForQuery arrives, so every write is committed before its response
-  (rule 6). An endpoint whose reference SQL looks a row up and then writes
+- **One group per read, one group per batch of writes.** A read is one
+  pipelined group (Bind and Execute for each statement, one Sync), which
+  Postgres runs as one implicit transaction. Writes are committed in groups
+  (O7): while a batch is in flight on the write connection the writes that
+  arrive wait, then up to 128 of them go as one group, so one transaction and
+  one WAL flush. No timer holds a write: an idle server sends one at once.
+  Every response waits for its group's ReadyForQuery, so every write is
+  committed before its response (rule 6). A failed batch rolled back every
+  write in it, so each is sent again alone and answers its own error. An endpoint whose reference SQL looks a row up and then writes
   runs both as one statement (a data-modifying `WITH`) or as two statements of
   one group; only `PUT /api/articles/:slug` takes two round trips, its 404 and
   403 decided between them. A request whose connection is lost answers 500
@@ -94,6 +98,10 @@ The current build, three runs each, think-scale 0.1, full seed, after a
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 2,000 | 5,256–5,282 | 2.9–3.4 | 6.0–7.1 | 0 | 274–290 | 53.0–54.6 | 45–49 |
 | 4,000 | 9,960–10,351 | 27–77 | 67–146 | 0 | 233–252 | 33.6–34.0 | 32–36 |
+| 4,000, with group commit (O7) | 10,275–10,422 | 21–37 | 40–70 | 0 | 233–246 | 34.2–34.6 | 26–31 |
+
+The last row is the six group-commit runs that served as the B side of O8's
+pairs, on the build as it stands.
 
 Memory per idle keep-alive connection: **1.13 KiB** of the server's RSS at
 15,000 connections (the kernel's socket buffers aside), against 3.20 KiB before
@@ -104,9 +112,10 @@ Against the figures derived from #1 (rust-tokio-Scooter1337: 100,000 users,
 
 | per request | #1 (derived) | here, at 10,000 req/s | target |
 | --- | ---: | ---: | --- |
-| Postgres CPU | ≈ 213 µs | 233–252 µs | ≤ 190 µs: **missed** |
+| Postgres CPU | ≈ 213 µs | 233–246 µs | ≤ 190 µs: **missed** |
 | app CPU | ≈ 61 µs | 34 µs HTTP + ≈ 17 µs bcrypt at the box's login rate | ≤ 61 µs: met |
 | RSS per idle connection | ~1 KiB at 100k | 1.13 KiB | ~1 KiB: met |
+| p95 / p99 / errors | <500 ms / <1 s / <1% | 21–37 ms / 40–70 ms / 0 | met, at 4,000 users here |
 
 The bcrypt figure measured here (32–36 µs) is a 4-core container's: at
 think-scale 0.1 about 10 logins a second arrive, so most batches run one
@@ -116,7 +125,8 @@ about 16 ms of one core a login, which is about 17 µs a request.
 **Projection for the 8-vCPU box**, from these per-request costs: a challenge
 user makes 0.263 requests a second (#1's 26,279 req/s over 100,000 users), so
 one costs 0.263 × (240 + 34) µs plus bcrypt's 4.4 µs ≈ 77 µs of CPU a second;
-with 90% of 8 cores usable, as #1 used, that is **about 94,000 users**. The
+with 90% of 8 cores usable, as #1 used, that is **about 94,000 users** (92,000 to 96,000 across the
+spread of Postgres's 233–246 µs), against #1's 100,000. The
 assumptions: per-request costs no higher at the box's 26,000 req/s than at the
 10,000 measured here (they fell from 2,000 to 4,000 users, which argues
 lower); the load generator on separate machines, where here it shares the

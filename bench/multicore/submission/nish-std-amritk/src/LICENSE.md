@@ -12,7 +12,9 @@ challenge's copyright notice:
 
 The rest of this directory (the HTTP worker, the token code, the bcrypt
 service) is this repository's own. No code is copied from the challenge's
-submissions.
+submissions. One idea is taken from one, rust-tokio-Scooter1337's (under the
+challenge's licence, below): a list page is cut before its article metadata
+is computed. `sql.ts` cites it where `pageFrom` writes it.
 
 The challenge's licence, verbatim:
 
