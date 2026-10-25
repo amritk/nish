@@ -536,7 +536,6 @@ const builders = (t: Suite): void => {
   conn.paramTextArray(["a\"b", "c\\d", ""]);
   conn.paramInt(toI64(0));
   t.ok("no sync while a bind is open", !conn.sync());
-  t.ok("no flush while a bind is open", !conn.flush());
   t.ok("no prepare while a bind is open", !conn.prepare("r", "select 2", none()));
   conn.bindEnd();
   t.eqStr(
@@ -545,13 +544,9 @@ const builders = (t: Suite): void => {
     "B|||R|q||||<6>|||<20>-9223372036854775808|||<3>h<195><169><255><255><255><255>" +
       "|||<3>cde|||<18>{\"a\\\"b\",\"c\\\\d\",\"\"}|||<1>0||E|||<9>|||||",
   );
-  t.ok("Flush", conn.flush());
-  t.eqStr("its bytes", drain(conn), "H|||<4>");
-  t.eqI32("the group stays open", conn.inFlight, 1);
   t.ok("Sync", conn.sync());
   t.eqStr("its bytes", drain(conn), "S|||<4>");
   t.ok("no sync without a group", !conn.sync());
-  t.ok("no flush without a group", !conn.flush());
   t.ok("Close", conn.closeStatement("q"));
   t.eqStr("its bytes", drain(conn), "C|||<7>Sq|");
   t.ok("a NUL in a name is refused", !conn.prepare(`a${String.fromCharCode(0)}b`, "select 1", none()));
@@ -678,8 +673,6 @@ const output = (t: Suite): void => {
   t.ok("one byte less fits", conn.prepare("", repeat("x", 991), none()));
   t.eqI32("exactly maxOutput less the tail", conn.outputEnd(), 1024 - 17);
   t.ok("no Bind after it", !conn.bindStart(""));
-  t.ok("nor a Flush", !conn.flush());
-  t.eqI32("which writes nothing", conn.outputEnd(), 1024 - 17);
   t.ok("Sync still fits", conn.sync());
   drain(conn);
 

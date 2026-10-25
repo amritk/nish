@@ -162,10 +162,6 @@ the SQL text:
   `paramTextArray` or `paramNull` per parameter, then `bindEnd()`, runs it.
 - `closeStatement(name)` frees it on the server.
 - `sync()` ends the group.
-- `flush()` asks the server to send what it has answered so far in the open
-  group. It does not wait for the `sync()`. Pipelined groups that batch
-  several callers' statements use it so that each caller's rows go out as
-  soon as they are ready.
 
 The server answers groups in order, and an error skips only the rest of its own
 group. Up to `PgConfig.maxInFlight` groups may wait for their answers at once:
