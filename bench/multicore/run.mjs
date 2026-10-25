@@ -9,7 +9,9 @@
 //   bash bench/multicore/run.sh --users 4000,8000 --think-scale 0.1 --measure 60
 //   bash bench/multicore/run.sh --idle 20000      memory per idle connection only
 //
-// Options: --users a,b,c (2000), --repeat n (1: each load runs n times, each
+// Options: --alt <binary> (another build of the server, run in turn with this
+// one, A then B at each repeat, so both meet the same machine: two sessions on
+// one build differ by up to 4% here), --users a,b,c (2000), --repeat n (1: each load runs n times, each
 // on a fresh database, and the spread of the n is the noise band), --warmup s
 // (30: before each measured run a quarter of its users browse the same fresh
 // database for s seconds, as the challenge's scoring warms up first), --think-scale s (1; the loadgen's own
@@ -72,6 +74,7 @@ const tail = Number(option("--tail", "10"))
 const idle = Number(option("--idle", "10000"))
 const warmup = Number(option("--warmup", "30"))
 const repeat = Number(option("--repeat", "1"))
+const alt = option("--alt", "")
 const idleOnly = flag("--idle") && !flag("--users")
 
 if (!fs.existsSync(path.join(dir, "seeded"))) {
@@ -144,12 +147,12 @@ const base = `http://127.0.0.1:${httpPort}`
 let dbCount = 0
 
 /** A fresh database from `template`, and the server started on it; resolves once GET /api/tags answers. */
-const startServer = async (template) => {
+const startServer = async (template, binary = exe) => {
   dbCount += 1
   const db = `multicore_${process.pid}_${dbCount}`
   psql(`CREATE DATABASE ${db} TEMPLATE ${template} STRATEGY FILE_COPY`)
   const log = fs.openSync(path.join(out, "server.log"), "w")
-  server = spawn(exe, [], {
+  server = spawn(binary, [], {
     stdio: ["ignore", log, log],
     env: {
       ...process.env,
@@ -305,8 +308,17 @@ if (!idleOnly) {
       `HTTP_WORKERS=${process.env.HTTP_WORKERS ?? 2} DB_READ_CONNS=${process.env.DB_READ_CONNS ?? 3} DB_WRITE_CONNS=${process.env.DB_WRITE_CONNS ?? 1}`
   )
   console.log("users\treq/s\tp95 ms\tp99 ms\terrors\tpg µs/req\tapp µs/req\t(http + bcrypt)\tpass")
-  for (const n of users.flatMap((u) => Array(repeat).fill(u))) {
-    const db = await startServer(template)
+  const builds = alt === "" ? [["", exe]] : [["A", exe], ["B", path.resolve(alt)]]
+  const plan = []
+  for (const u of users) {
+    for (let k = 0; k < repeat; k++) {
+      for (const [label, binary] of builds) {
+        plan.push({ n: u, label, binary })
+      }
+    }
+  }
+  for (const { n, label, binary } of plan) {
+    const db = await startServer(template, binary)
     if (warmup > 0) {
       const warm = spawnLoad(Math.max(1, Math.round(n / 4)), Date.now() + 1000, 5, warmup, 0, path.join(out, `warmup-${n}.json`), "w")
       await new Promise((resolve) => warm.once("exit", resolve))
@@ -337,6 +349,7 @@ if (!idleOnly) {
     const appUs = perRequest(used(app0, app1))
     const bcryptUs = bcryptPid < 0 ? 0 : perRequest((app1.get(bcryptPid) ?? 0) - (app0.get(bcryptPid) ?? 0))
     const row = {
+      build: label,
       users: n,
       rps: m.overall.rps,
       p95: m.overall.p95_ms,
@@ -350,7 +363,7 @@ if (!idleOnly) {
     }
     results.push(row)
     console.log(
-      `${n}\t${row.rps.toFixed(0)}\t${row.p95.toFixed(1)}\t${row.p99.toFixed(1)}\t${(100 * row.errors).toFixed(2)}%\t` +
+      `${label}${n}\t${row.rps.toFixed(0)}\t${row.p95.toFixed(1)}\t${row.p99.toFixed(1)}\t${(100 * row.errors).toFixed(2)}%\t` +
         `${pgUs.toFixed(1)}\t${appUs.toFixed(1)}\t(${(appUs - bcryptUs).toFixed(1)} + ${bcryptUs.toFixed(1)})\t` +
         `${row.pass ? "pass" : "FAIL"}${row.lgLimited ? " (load-generator limited)" : ""}`
     )
