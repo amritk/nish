@@ -160,6 +160,8 @@ const READABLE: i32 = 5
 /** The ring that maps a pool's tickets to requests: a power of two above the queue and the groups in flight. */
 const TICKET_RING: i32 = 131072
 const QUEUE: i32 = 65536
+/** The most writes one group commits together. */
+const WRITE_BATCH: i32 = 128
 /** The largest response body a writer holds; the output buffer holds it and its head. */
 const RESPONSE_ROOM: i32 = 1048576
 /** How long the worker waits for the bcrypt service to listen before failing the logins that wait, in ns. */
@@ -205,9 +207,18 @@ class ConduitReq {
   count: i64 = 0
   /** 0, or 23505's 1, or any other SQLSTATE's 2. */
   pgError: i32 = 0
+  /** In a write batch: the next request of the batch, or -1 after the last. */
+  batchNext: i32 = -1
+  /** A write sent alone, after its batch failed. */
+  solo: boolean = false
+  /** A batched write's own answer: its writer and the buffer it writes. */
+  own: u8[]
+  ownWriter: JsonWriter
 
   constructor(index: i32) {
     this.index = index
+    this.own = new Array<u8>(0)
+    this.ownWriter = new JsonWriter(this.own, 0)
     this.text = new Array<u8>(512)
     this.fStart = new Array<i32>(F_COUNT)
     this.fLen = new Array<i32>(F_COUNT)
@@ -247,6 +258,24 @@ class ConduitReq {
     this.found = false
     this.count = 0
     this.pgError = 0
+    this.batchNext = -1
+    this.solo = false
+  }
+
+  /**
+   * Makes `own` hold at least `n` bytes and starts `ownWriter` on it again:
+   * a batched write's answer is `{` and one row, so it is sized when the row
+   * comes, before any of it is written.
+   */
+  ownRoom(n: i32): void {
+    if (toI32(this.own.length) < n) {
+      let size: i32 = toI32(this.own.length) < 4096 ? 4096 : toI32(this.own.length)
+      while (size < n) {
+        size = size * 2
+      }
+      this.own = new Array<u8>(size)
+    }
+    this.ownWriter.reset(this.own, 0)
   }
 
   /** Makes room for `n` more bytes of `text`. */
@@ -417,6 +446,13 @@ export class ConduitWorker {
   bcryptRetryAt: i64 = 0
   /** Requests answered, for a reader of `/proc`. */
   answered: i64 = 0
+  /** Writes waiting for the next batch, a ring oldest first; and how many batches are in flight. */
+  writeRing: i32[]
+  writeHead: i32 = 0
+  writeCount: i32 = 0
+  writeBatches: i32 = 0
+  /** Per write-pool slot: the request of its batch whose statements are being answered. */
+  writeCursor: i32[]
 
   constructor(cfg: WorkerConfig, listener: i32) {
     this.listener = listener
@@ -515,6 +551,8 @@ export class ConduitWorker {
     this.tokenBuf = new Array<u8>(512)
     this.bcrypt = new BcryptClient()
     this.bcryptAddress = new Array<u8>(18)
+    this.writeRing = new Array<i32>(QUEUE)
+    this.writeCursor = new Array<i32>(this.pools[POOL_WRITE].size)
     netAddress(this.bcryptAddress, "127.0.0.1", cfg.bcryptPort)
   }
 
@@ -1178,6 +1216,24 @@ export class ConduitWorker {
   /** Queues `r`'s next group on its pool. */
   submit(r: ConduitReq, later: boolean): void {
     const p: i32 = this.poolOf(r)
+    if (p === POOL_WRITE && !r.solo) {
+      // Writes wait for the next batch: `batchWrites` sends them.
+      r.pool = p
+      r.ticket = -1
+      r.inPool = true
+      r.stmt = 0
+      r.found = false
+      r.pgError = 0
+      r.batchNext = -1
+      if (this.writeCount === QUEUE) {
+        r.inPool = false
+        this.fail(r, 503, "busy", later)
+        return
+      }
+      this.writeRing[(this.writeHead + this.writeCount) % QUEUE] = r.index
+      this.writeCount += 1
+      return
+    }
     const ticket: i32 = this.pools[p].request()
     if (ticket === PG_POOL_FULL) {
       this.fail(r, 503, "busy", later)
@@ -1194,19 +1250,29 @@ export class ConduitWorker {
 
   /** Hands waiting requests to connections, makes the connections wanted, and sends what they queued. */
   pump(): void {
+    this.batchWrites()
     for (let p: i32 = 0; p < 2; p++) {
       const pool: PgPool = this.pools[p]
       let s: i32 = pool.dispatch()
       while (s >= 0) {
         const r: i32 = this.tickets[p][pool.ticket % TICKET_RING]
         const conn: PgConnection = pool.connection(s)
-        const built: boolean = r >= 0 && r < toI32(this.reqs.length) && this.bind(this.reqs[r], conn)
+        const built: boolean = r >= 0 && r < toI32(this.reqs.length) && this.bindAll(this.reqs[r], conn)
         if (!pool.send() || !built) {
-          // Nothing was sent, so nothing was written: the request answers 500.
+          // Nothing was sent, so nothing was written: the request, and every
+          // write batched with it, answers 500.
           if (r >= 0 && r < toI32(this.reqs.length) && this.reqs[r].inPool) {
-            const req: ConduitReq = this.reqs[r]
-            req.inPool = false
-            this.fail(req, 500, "statement not sent", true)
+            if (p === POOL_WRITE && !this.reqs[r].solo) {
+              this.writeBatches -= 1
+            }
+            let k: i32 = r
+            while (k >= 0) {
+              const req: ConduitReq = this.reqs[k]
+              k = req.batchNext
+              req.batchNext = -1
+              req.inPool = false
+              this.fail(req, 500, "statement not sent", true)
+            }
           }
         }
         s = pool.dispatch()
@@ -1244,6 +1310,61 @@ export class ConduitWorker {
           }
         }
       }
+    }
+  }
+
+  /**
+   * Group commit: while fewer batches are in flight than there are write
+   * connections, the writes waiting (up to `WRITE_BATCH`) become one request
+   * of the write pool, one group, so one implicit transaction and one commit.
+   * Each write's answer waits for the group's ReadyForQuery. Nothing waits on
+   * a timer: under load the writes that come while a batch is in flight make
+   * the next one, and an idle server sends a write at once.
+   */
+  batchWrites(): void {
+    const pool: PgPool = this.pools[POOL_WRITE]
+    while (this.writeCount > 0 && this.writeBatches < pool.size) {
+      const ticket: i32 = pool.request()
+      if (ticket === PG_POOL_FULL) {
+        return
+      }
+      const take: i32 = this.writeCount < WRITE_BATCH ? this.writeCount : WRITE_BATCH
+      for (let k: i32 = 0; k < take; k++) {
+        const r: ConduitReq = this.reqs[this.writeRing[(this.writeHead + k) % QUEUE]]
+        r.ticket = ticket
+        r.batchNext = k + 1 < take ? this.writeRing[(this.writeHead + k + 1) % QUEUE] : -1
+      }
+      this.tickets[POOL_WRITE][ticket % TICKET_RING] = this.writeRing[this.writeHead]
+      this.writeHead = (this.writeHead + take) % QUEUE
+      this.writeCount -= take
+      this.writeBatches += 1
+    }
+  }
+
+  /** Binds `r`'s group, and every request batched after it, on `conn`. */
+  bindAll(r: ConduitReq, conn: PgConnection): boolean {
+    let ok: boolean = this.bind(r, conn)
+    let next: i32 = r.batchNext
+    while (ok && next >= 0) {
+      const m: ConduitReq = this.reqs[next]
+      ok = this.bind(m, conn)
+      next = m.batchNext
+    }
+    return ok
+  }
+
+  /** How many statements `r`'s group runs, so a batch knows where each request's answers end. */
+  statements(r: ConduitReq): i32 {
+    switch (r.route) {
+      case R_FAVORITE:
+      case R_UNFAVORITE:
+        return 2
+      case R_ARTICLE_CREATE:
+        return r.tags > 0 ? 4 : 2
+      case R_ARTICLE_PUT:
+        return r.phase === 0 ? 1 : 2
+      default:
+        return 1
     }
   }
 
@@ -1329,7 +1450,9 @@ export class ConduitWorker {
         return
       }
       const ticket: i32 = pool.ticket
-      if (ticket >= 0) {
+      if (ticket >= 0 && p === POOL_WRITE) {
+        this.batchEvent(s, conn, ticket, event)
+      } else if (ticket >= 0) {
         const ri: i32 = this.tickets[p][ticket % TICKET_RING]
         if (ri >= 0 && ri < toI32(this.reqs.length) && this.reqs[ri].inPool && this.reqs[ri].pool === p && this.reqs[ri].ticket === ticket) {
           const r: ConduitReq = this.reqs[ri]
@@ -1363,6 +1486,80 @@ export class ConduitWorker {
         }
       }
       event = pool.next(s)
+    }
+  }
+
+  /**
+   * One event of a write batch's group. The requests' statements are
+   * answered in the order they were bound, so `writeCursor` walks the batch
+   * as each request's last statement completes. Each request writes its own
+   * answer; all of them go out once the group commits. A group that failed
+   * rolled back every write in it, so each is sent again alone, and one sent
+   * alone answers its error; a group lost with its connection may have
+   * committed, so its writes answer 500 and are not sent again.
+   */
+  batchEvent(s: i32, conn: PgConnection, ticket: i32, event: i32): void {
+    const leader: i32 = this.tickets[POOL_WRITE][ticket % TICKET_RING]
+    if (leader < 0 || leader >= toI32(this.reqs.length) || this.reqs[leader].ticket !== ticket || !this.reqs[leader].inPool) {
+      return
+    }
+    if (this.current[POOL_WRITE][s] !== ticket) {
+      this.current[POOL_WRITE][s] = ticket
+      this.writeCursor[s] = leader
+      const first: ConduitReq = this.reqs[leader]
+      first.ownRoom(64)
+      this.begin(first, first.ownWriter, first.own)
+    }
+    if (event === PG_GROUP_DONE || event === PG_LOST) {
+      this.current[POOL_WRITE][s] = -1
+      this.tickets[POOL_WRITE][ticket % TICKET_RING] = -1
+      if (!this.reqs[leader].solo) {
+        this.writeBatches -= 1
+      }
+      const failed: boolean = event === PG_LOST || conn.groupFailed
+      const alone: boolean = this.reqs[leader].batchNext < 0
+      let k: i32 = leader
+      while (k >= 0) {
+        const m: ConduitReq = this.reqs[k]
+        k = m.batchNext
+        m.batchNext = -1
+        m.inPool = false
+        if (event === PG_LOST) {
+          this.fail(m, 500, "the database connection was lost", true)
+        } else if (!failed && m.pgError === 0) {
+          this.onDone(m, m.ownWriter, m.own)
+        } else if (alone) {
+          this.onFailed(m)
+        } else {
+          m.solo = true
+          this.submit(m, true)
+        }
+      }
+      return
+    }
+    const m: ConduitReq = this.reqs[this.writeCursor[s]]
+    if (event === PG_ROW) {
+      // `{` is all a write's answer holds before its row, so it is sized for the row now.
+      let need: i32 = 1024
+      for (let c: i32 = 0; c < conn.columns; c++) {
+        need += 6 * (conn.colLength(c) > 0 ? conn.colLength(c) : 0) + 16
+      }
+      if (toI32(m.own.length) < need) {
+        m.ownRoom(need)
+        this.begin(m, m.ownWriter, m.own)
+      }
+      this.onRow(m, conn, m.ownWriter)
+    } else if (event === PG_COMPLETE) {
+      m.stmt += 1
+      if (m.stmt >= this.statements(m) && m.batchNext >= 0) {
+        const next: ConduitReq = this.reqs[m.batchNext]
+        this.writeCursor[s] = next.index
+        next.ownRoom(64)
+        this.begin(next, next.ownWriter, next.own)
+      }
+    } else if (event === PG_ERROR) {
+      const code: string = conn.lastError?.code ?? ""
+      m.pgError = code === "23505" ? 1 : 2
     }
   }
 
