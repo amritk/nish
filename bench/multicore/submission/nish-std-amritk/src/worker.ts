@@ -17,7 +17,19 @@
 // spans of the request's own byte array; the JSON writers write into one
 // buffer per Postgres connection; nothing is allocated per request once the
 // worker has served its peak.
-import { connectResult, netAddress, netClose, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpConnect } from "nish:net"
+import {
+  connectResult,
+  netAddress,
+  netClose,
+  netRead,
+  netWrite,
+  pollAdd,
+  pollCreate,
+  pollModify,
+  pollRemove,
+  pollWait,
+  tcpConnect,
+} from "nish:net"
 import { monotonicNanos } from "nish:process"
 import { secret, wipe } from "nish:secret"
 import {
@@ -64,8 +76,21 @@ import {
   PgConnection,
   PgPool,
 } from "nish/net/postgres"
-import { BCRYPT_DONE, BCRYPT_MAX_PASSWORD, BCRYPT_OP_HASH, BCRYPT_OP_VERIFY, BcryptClient } from "./bcrypt-service"
-import { jsonOutBool, jsonOutNull, jsonOutRaw, jsonOutString, jsonOutTextArray, jsonOutWorst } from "./json-out"
+import {
+  BCRYPT_DONE,
+  BCRYPT_MAX_PASSWORD,
+  BCRYPT_OP_HASH,
+  BCRYPT_OP_VERIFY,
+  BcryptClient,
+} from "./bcrypt-service"
+import {
+  jsonOutBool,
+  jsonOutNull,
+  jsonOutRaw,
+  jsonOutString,
+  jsonOutTextArray,
+  jsonOutWorst,
+} from "./json-out"
 import { Jwt, jwtDigits } from "./jwt"
 import {
   COL_BIO,
@@ -609,7 +634,12 @@ export class ConduitWorker {
           // `expire` closes a slot without telling the worker: a request it
           // left that is in neither a pool nor the bcrypt service is freed here.
           const old: i32 = this.slotReq[slot]
-          if (old >= 0 && old < toI32(this.reqs.length) && !this.reqs[old].inPool && !this.reqs[old].inBcrypt) {
+          if (
+            old >= 0 &&
+            old < toI32(this.reqs.length) &&
+            !this.reqs[old].inPool &&
+            !this.reqs[old].inBcrypt
+          ) {
             this.release(this.reqs[old])
           }
           this.slotGen[slot] = this.slotGen[slot] + 1
@@ -696,7 +726,10 @@ export class ConduitWorker {
   answer(r: ConduitReq, status: i32, buf: u8[], len: i32, later: boolean): void {
     const slot: i32 = r.slot
     const live: boolean =
-      slot >= 0 && slot < toI32(this.slotGen.length) && this.server.holds(slot) && this.slotGen[slot] === r.gen
+      slot >= 0 &&
+      slot < toI32(this.slotGen.length) &&
+      this.server.holds(slot) &&
+      this.slotGen[slot] === r.gen
     this.release(r)
     if (!live) {
       return
@@ -770,9 +803,7 @@ export class ConduitWorker {
   }
 
   authRequired(route: i32): boolean {
-    return (
-      route !== R_PROFILE && route !== R_LIST && route !== R_ARTICLE_GET && route !== R_COMMENTS
-    )
+    return route !== R_PROFILE && route !== R_LIST && route !== R_ARTICLE_GET && route !== R_COMMENTS
   }
 
   /** Sets `r.route` and its path and query parameters from the request line, or `r.status` when it names nothing. */
@@ -828,28 +859,66 @@ export class ConduitWorker {
       }
     } else if (bytesAre(b, s0s, s0e, "user")) {
       if (segs === 1) {
-        route = get ? R_USER_GET : put ? R_USER_PUT : R_NONE
+        if (get) {
+          route = R_USER_GET
+        } else if (put) {
+          route = R_USER_PUT
+        } else {
+          route = R_NONE
+        }
       }
     } else if (bytesAre(b, s0s, s0e, "profiles")) {
       if (segs === 2 && get) {
         route = R_PROFILE
       } else if (segs === 3 && bytesAre(b, segStart[2], segEnd[2], "follow")) {
-        route = post ? R_FOLLOW : del ? R_UNFOLLOW : R_NONE
+        if (post) {
+          route = R_FOLLOW
+        } else if (del) {
+          route = R_UNFOLLOW
+        } else {
+          route = R_NONE
+        }
       }
       if (route !== R_NONE) {
         this.decodeInto(r, F_PATH, b, segStart[1], segEnd[1], false)
       }
     } else if (bytesAre(b, s0s, s0e, "articles")) {
       if (segs === 1) {
-        route = get ? R_LIST : post ? R_ARTICLE_CREATE : R_NONE
+        if (get) {
+          route = R_LIST
+        } else if (post) {
+          route = R_ARTICLE_CREATE
+        } else {
+          route = R_NONE
+        }
       } else if (segs === 2 && get && bytesAre(b, segStart[1], segEnd[1], "feed")) {
         route = R_FEED
       } else if (segs === 2) {
-        route = get ? R_ARTICLE_GET : put ? R_ARTICLE_PUT : del ? R_ARTICLE_DELETE : R_NONE
+        if (get) {
+          route = R_ARTICLE_GET
+        } else if (put) {
+          route = R_ARTICLE_PUT
+        } else if (del) {
+          route = R_ARTICLE_DELETE
+        } else {
+          route = R_NONE
+        }
       } else if (segs === 3 && bytesAre(b, segStart[2], segEnd[2], "favorite")) {
-        route = post ? R_FAVORITE : del ? R_UNFAVORITE : R_NONE
+        if (post) {
+          route = R_FAVORITE
+        } else if (del) {
+          route = R_UNFAVORITE
+        } else {
+          route = R_NONE
+        }
       } else if (segs === 3 && bytesAre(b, segStart[2], segEnd[2], "comments")) {
-        route = get ? R_COMMENTS : post ? R_COMMENT_CREATE : R_NONE
+        if (get) {
+          route = R_COMMENTS
+        } else if (post) {
+          route = R_COMMENT_CREATE
+        } else {
+          route = R_NONE
+        }
       } else if (segs === 4 && del && bytesAre(b, segStart[2], segEnd[2], "comments")) {
         const id: i64 = decimalOf(b, segStart[3], segEnd[3])
         if (id > 0) {
@@ -963,12 +1032,23 @@ export class ConduitWorker {
   /** The body ended: check it and start the request, or answer what is wrong. */
   onEnd(r: ConduitReq): void {
     if (r.status !== 0) {
-      this.fail(r, r.status, r.status === 401 ? "unauthorized" : r.status === 422 ? "invalid query" : "not found", false)
+      let message: string = "not found"
+      if (r.status === 401) {
+        message = "unauthorized"
+      } else if (r.status === 422) {
+        message = "invalid query"
+      }
+      this.fail(r, r.status, message, false)
       return
     }
     const route: i32 = r.route
     if (route === R_SIGNUP || route === R_LOGIN || route === R_USER_PUT) {
-      const fields: i32 = route === R_SIGNUP ? FIELDS_SIGNUP : route === R_LOGIN ? FIELDS_LOGIN : FIELDS_USER
+      let fields: i32 = FIELDS_USER
+      if (route === R_SIGNUP) {
+        fields = FIELDS_SIGNUP
+      } else if (route === R_LOGIN) {
+        fields = FIELDS_LOGIN
+      }
       const ok: boolean = this.parseBody(r, "user", fields)
       // The raw body held the password; the parsed copy is in `pw`.
       wipe(r.body)
@@ -1009,7 +1089,9 @@ export class ConduitWorker {
       return r.fLen[F_EMAIL] > 0 && r.pwLen > 0
     }
     // PUT: a field given must not be empty, but bio and image may be.
-    return r.fLen[F_USERNAME] !== 0 && r.fLen[F_EMAIL] !== 0 && r.pwLen !== 0 && r.pwLen <= BCRYPT_MAX_PASSWORD
+    return (
+      r.fLen[F_USERNAME] !== 0 && r.fLen[F_EMAIL] !== 0 && r.pwLen !== 0 && r.pwLen <= BCRYPT_MAX_PASSWORD
+    )
   }
 
   articleBodyValid(r: ConduitReq): boolean {
@@ -1286,7 +1368,10 @@ export class ConduitWorker {
         socket.fd = tcpConnect(this.pgAddress)
         socket.connected = false
         socket.armed = H1_WANT_WRITE
-        if (socket.fd < 0 || pollAdd(this.loop, socket.fd, H1_WANT_WRITE, TOKEN_POOL - (p * POOL_TOKENS + s)) < 0) {
+        if (
+          socket.fd < 0 ||
+          pollAdd(this.loop, socket.fd, H1_WANT_WRITE, TOKEN_POOL - (p * POOL_TOKENS + s)) < 0
+        ) {
           pool.connection(s).closed()
           this.pgEvents(p, s)
         }
@@ -1302,7 +1387,8 @@ export class ConduitWorker {
           } else if (socket.fd >= 0) {
             // Each pollModify is an epoll_ctl; a busy connection asks for the
             // same interest turn after turn, so it is re-armed only on a change.
-            const wants: i32 = conn.outputEnd() > conn.outputStart() ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
+            const wants: i32 =
+              conn.outputEnd() > conn.outputStart() ? H1_WANT_READ | H1_WANT_WRITE : H1_WANT_READ
             if (wants !== socket.armed) {
               socket.armed = wants
               pollModify(this.loop, socket.fd, wants, TOKEN_POOL - (p * POOL_TOKENS + k))
@@ -1370,7 +1456,12 @@ export class ConduitWorker {
 
   pgFlush(conn: PgConnection, fd: i32): boolean {
     while (conn.outputEnd() > conn.outputStart()) {
-      const n: i32 = netWrite(fd, conn.outputBuffer(), conn.outputStart(), conn.outputEnd() - conn.outputStart())
+      const n: i32 = netWrite(
+        fd,
+        conn.outputBuffer(),
+        conn.outputStart(),
+        conn.outputEnd() - conn.outputStart()
+      )
       if (n === AGAIN) {
         return true
       }
@@ -1454,7 +1545,13 @@ export class ConduitWorker {
         this.batchEvent(s, conn, ticket, event)
       } else if (ticket >= 0) {
         const ri: i32 = this.tickets[p][ticket % TICKET_RING]
-        if (ri >= 0 && ri < toI32(this.reqs.length) && this.reqs[ri].inPool && this.reqs[ri].pool === p && this.reqs[ri].ticket === ticket) {
+        if (
+          ri >= 0 &&
+          ri < toI32(this.reqs.length) &&
+          this.reqs[ri].inPool &&
+          this.reqs[ri].pool === p &&
+          this.reqs[ri].ticket === ticket
+        ) {
           const r: ConduitReq = this.reqs[ri]
           const w: JsonWriter = this.writers[p][s]
           if (this.current[p][s] !== ticket) {
@@ -1500,7 +1597,12 @@ export class ConduitWorker {
    */
   batchEvent(s: i32, conn: PgConnection, ticket: i32, event: i32): void {
     const leader: i32 = this.tickets[POOL_WRITE][ticket % TICKET_RING]
-    if (leader < 0 || leader >= toI32(this.reqs.length) || this.reqs[leader].ticket !== ticket || !this.reqs[leader].inPool) {
+    if (
+      leader < 0 ||
+      leader >= toI32(this.reqs.length) ||
+      this.reqs[leader].ticket !== ticket ||
+      !this.reqs[leader].inPool
+    ) {
       return
     }
     if (this.current[POOL_WRITE][s] !== ticket) {
@@ -1596,13 +1698,19 @@ export class ConduitWorker {
           conn.bindEnd()
         break
       case R_PROFILE:
-        ok = conn.bindStart("profile") && conn.paramInt(r.viewer) && this.text(conn, r, F_PATH) && conn.bindEnd()
+        ok =
+          conn.bindStart("profile") && conn.paramInt(r.viewer) && this.text(conn, r, F_PATH) && conn.bindEnd()
         break
       case R_FOLLOW:
-        ok = conn.bindStart("follow") && conn.paramInt(r.viewer) && this.text(conn, r, F_PATH) && conn.bindEnd()
+        ok =
+          conn.bindStart("follow") && conn.paramInt(r.viewer) && this.text(conn, r, F_PATH) && conn.bindEnd()
         break
       case R_UNFOLLOW:
-        ok = conn.bindStart("unfollow") && conn.paramInt(r.viewer) && this.text(conn, r, F_PATH) && conn.bindEnd()
+        ok =
+          conn.bindStart("unfollow") &&
+          conn.paramInt(r.viewer) &&
+          this.text(conn, r, F_PATH) &&
+          conn.bindEnd()
         break
       case R_LIST:
         ok = this.bindList(r, conn)
@@ -1619,7 +1727,11 @@ export class ConduitWorker {
           conn.bindEnd()
         break
       case R_ARTICLE_GET:
-        ok = conn.bindStart("article_slug") && conn.paramInt(r.viewer) && this.text(conn, r, F_PATH) && conn.bindEnd()
+        ok =
+          conn.bindStart("article_slug") &&
+          conn.paramInt(r.viewer) &&
+          this.text(conn, r, F_PATH) &&
+          conn.bindEnd()
         break
       case R_ARTICLE_CREATE:
         ok =
@@ -1658,7 +1770,11 @@ export class ConduitWorker {
         }
         break
       case R_ARTICLE_DELETE:
-        ok = conn.bindStart("article_delete") && this.text(conn, r, F_PATH) && conn.paramInt(r.viewer) && conn.bindEnd()
+        ok =
+          conn.bindStart("article_delete") &&
+          this.text(conn, r, F_PATH) &&
+          conn.paramInt(r.viewer) &&
+          conn.bindEnd()
         break
       case R_FAVORITE:
       case R_UNFAVORITE:
@@ -1713,8 +1829,15 @@ export class ConduitWorker {
         conn.bindEnd()
       )
     }
-    const list: string = r.filter === FILTER_TAG ? "list_tag" : r.filter === FILTER_AUTHOR ? "list_author" : "list_favorited"
-    const count: string = r.filter === FILTER_TAG ? "count_tag" : r.filter === FILTER_AUTHOR ? "count_author" : "count_favorited"
+    let list: string = "list_favorited"
+    let count: string = "count_favorited"
+    if (r.filter === FILTER_TAG) {
+      list = "list_tag"
+      count = "count_tag"
+    } else if (r.filter === FILTER_AUTHOR) {
+      list = "list_author"
+      count = "count_author"
+    }
     return (
       conn.bindStart(list) &&
       conn.paramInt(r.viewer) &&
@@ -1920,7 +2043,13 @@ export class ConduitWorker {
         worst += jsonOutWorst(conn.colLength(c))
       }
     }
-    if (worst > toI32(out.length) || conn.isNull(COL_SLUG) || conn.isNull(COL_TITLE) || conn.isNull(COL_DESCRIPTION) || conn.isNull(COL_USERNAME)) {
+    if (
+      worst > toI32(out.length) ||
+      conn.isNull(COL_SLUG) ||
+      conn.isNull(COL_TITLE) ||
+      conn.isNull(COL_DESCRIPTION) ||
+      conn.isNull(COL_USERNAME)
+    ) {
       return -1
     }
     let o: i32 = jsonOutRaw(out, 0, f[0])
@@ -1956,9 +2085,13 @@ export class ConduitWorker {
     o = jsonOutRaw(out, o, f[9])
     o = jsonOutString(out, o, b, conn.colStart(COL_USERNAME), conn.colLength(COL_USERNAME))
     o = jsonOutRaw(out, o, f[10])
-    o = conn.isNull(COL_BIO) ? jsonOutNull(out, o) : jsonOutString(out, o, b, conn.colStart(COL_BIO), conn.colLength(COL_BIO))
+    o = conn.isNull(COL_BIO)
+      ? jsonOutNull(out, o)
+      : jsonOutString(out, o, b, conn.colStart(COL_BIO), conn.colLength(COL_BIO))
     o = jsonOutRaw(out, o, f[11])
-    o = conn.isNull(COL_IMAGE) ? jsonOutNull(out, o) : jsonOutString(out, o, b, conn.colStart(COL_IMAGE), conn.colLength(COL_IMAGE))
+    o = conn.isNull(COL_IMAGE)
+      ? jsonOutNull(out, o)
+      : jsonOutString(out, o, b, conn.colStart(COL_IMAGE), conn.colLength(COL_IMAGE))
     o = jsonOutRaw(out, o, f[12])
     o = jsonOutBool(out, o, conn.bool(COL_FOLLOWING))
     return jsonOutRaw(out, o, f[13])
@@ -2165,7 +2298,15 @@ export class ConduitWorker {
   /** Sends `r`'s password to the bcrypt service: a new hash, or a check against `F_HASH`. */
   toBcrypt(r: ConduitReq, op: i32, later: boolean): void {
     const hashLen: i32 = op === BCRYPT_OP_VERIFY ? r.fLen[F_HASH] : 0
-    const queued: boolean = this.bcrypt.request(op, r.index, r.pw, r.pwLen, r.text, r.fStart[F_HASH], hashLen < 0 ? 0 : hashLen)
+    const queued: boolean = this.bcrypt.request(
+      op,
+      r.index,
+      r.pw,
+      r.pwLen,
+      r.text,
+      r.fStart[F_HASH],
+      hashLen < 0 ? 0 : hashLen
+    )
     wipe(r.pw)
     r.pwLen = -1
     if (!queued) {
@@ -2179,7 +2320,12 @@ export class ConduitWorker {
       if (!this.bcrypt.send()) {
         this.bcryptLost()
       } else {
-        pollModify(this.loop, this.bcrypt.fd, this.bcrypt.outputEnd > this.bcrypt.outputStart ? 3 : 1, TOKEN_BCRYPT)
+        pollModify(
+          this.loop,
+          this.bcrypt.fd,
+          this.bcrypt.outputEnd > this.bcrypt.outputStart ? 3 : 1,
+          TOKEN_BCRYPT
+        )
       }
     }
   }

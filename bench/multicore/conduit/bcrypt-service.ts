@@ -19,7 +19,17 @@
 // verifies against its stored hash, and every hash is cost 10 with a salt
 // from the CSPRNG: nothing is remembered between jobs (the challenge's rules
 // 5 and 7).
-import { netClose, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpAccept } from "nish:net"
+import {
+  netClose,
+  netRead,
+  netWrite,
+  pollAdd,
+  pollCreate,
+  pollModify,
+  pollRemove,
+  pollWait,
+  tcpAccept,
+} from "nish:net"
 import { monotonicNanos } from "nish:process"
 import { Secret, secret, wipe } from "nish:secret"
 import { bcryptHash4, bcryptVerify4 } from "nish/crypto/bcrypt"
@@ -110,6 +120,9 @@ const bcryptLane = (q: BcryptQueue, n: i32, k: i32): Secret<u8[]> | null => {
 }
 
 /** Queues the reply to job `at` of `q` on its peer: `status`, and `hash` when given. */
+/** A check's answer: the password matched, or it did not. */
+const bcryptOutcome = (matched: boolean): i32 => (matched ? BCRYPT_DONE : BCRYPT_MISMATCH)
+
 const bcryptReply = (peers: BcryptPeer[], q: BcryptQueue, at: i32, status: i32, hash: string): void => {
   const p: i32 = q.peer[at]
   if (p < 0 || p >= toI32(peers.length)) {
@@ -205,7 +218,7 @@ const bcryptRunVerify = (peers: BcryptPeer[], q: BcryptQueue, n: i32): void => {
     }
   } else {
     for (let k: i32 = 0; k < n; k++) {
-      const status: i32 = checked.isErr() ? BCRYPT_FAILED : checked.value[k] ? BCRYPT_DONE : BCRYPT_MISMATCH
+      const status: i32 = checked.isErr() ? BCRYPT_FAILED : bcryptOutcome(checked.value[k])
       bcryptReply(peers, q, q.at(k), status, "")
     }
   }
@@ -221,7 +234,7 @@ const bcryptRunVerifyOne = (peers: BcryptPeer[], q: BcryptQueue, at: i32): void 
   const p0: Secret<u8[]> = secret(bcryptCopy(q.password[at], q.passwordLength[at]))
   const checked: Result<boolean[], string> = bcryptVerify4(p0, null, null, null, hashes)
   wipe(p0)
-  const status: i32 = checked.isErr() ? BCRYPT_FAILED : checked.value[0] ? BCRYPT_DONE : BCRYPT_MISMATCH
+  const status: i32 = checked.isErr() ? BCRYPT_FAILED : bcryptOutcome(checked.value[0])
   bcryptReply(peers, q, at, status, "")
 }
 
@@ -229,7 +242,13 @@ const bcryptRunVerifyOne = (peers: BcryptPeer[], q: BcryptQueue, at: i32): void 
  * Takes the whole frames in `peer`'s input onto the queues, wipes them and
  * keeps what is left of a partial one; false when a frame is malformed.
  */
-const bcryptTake = (peers: BcryptPeer[], p: i32, hashes: BcryptQueue, verifies: BcryptQueue, now: i64): boolean => {
+const bcryptTake = (
+  peers: BcryptPeer[],
+  p: i32,
+  hashes: BcryptQueue,
+  verifies: BcryptQueue,
+  now: i64
+): boolean => {
   const peer: BcryptPeer = peers[p]
   const b: u8[] = peer.input
   let at: i32 = 0
@@ -254,7 +273,8 @@ const bcryptTake = (peers: BcryptPeer[], p: i32, hashes: BcryptQueue, verifies: 
       break
     }
     const q: BcryptQueue = op === BCRYPT_OP_HASH ? hashes : verifies
-    const id: i32 = (toI32(b[at + 1]) << 24) | (toI32(b[at + 2]) << 16) | (toI32(b[at + 3]) << 8) | toI32(b[at + 4])
+    const id: i32 =
+      (toI32(b[at + 1]) << 24) | (toI32(b[at + 2]) << 16) | (toI32(b[at + 3]) << 8) | toI32(b[at + 4])
     if (q.count === BCRYPT_QUEUE) {
       const spare: BcryptQueue = new BcryptQueue()
       spare.peer[0] = p
@@ -389,7 +409,12 @@ export const runBcryptService = (listener: i32, windowMs: i32): i32 => {
         if (peer.fd >= 0) {
           let alive: boolean = true
           if ((ready[2 * k + 1] & 5) !== 0) {
-            const got: i32 = netRead(peer.fd, peer.input, peer.inputEnd, toI32(peer.input.length) - peer.inputEnd)
+            const got: i32 = netRead(
+              peer.fd,
+              peer.input,
+              peer.inputEnd,
+              toI32(peer.input.length) - peer.inputEnd
+            )
             if (got === 0 || (got < 0 && got !== BCRYPT_AGAIN)) {
               alive = false
             } else if (got > 0) {
@@ -544,7 +569,8 @@ export class BcryptClient {
     if (this.inputEnd - at < 6 + len || len > BCRYPT_MAX_HASH) {
       return false
     }
-    this.replyId = (toI32(b[at]) << 24) | (toI32(b[at + 1]) << 16) | (toI32(b[at + 2]) << 8) | toI32(b[at + 3])
+    this.replyId =
+      (toI32(b[at]) << 24) | (toI32(b[at + 1]) << 16) | (toI32(b[at + 2]) << 8) | toI32(b[at + 3])
     this.replyStatus = toI32(b[at + 4])
     for (let k: i32 = 0; k < len; k++) {
       this.replyHash[k] = b[at + 6 + k]

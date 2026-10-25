@@ -18,10 +18,16 @@ const files = fs
 
 if (process.argv.includes("--check")) {
   const staged = fs.existsSync(to) ? fs.readdirSync(to).sort() : []
-  const stale = files.filter((f) => !staged.includes(f) || fs.readFileSync(path.join(from, f), "utf8") !== fs.readFileSync(path.join(to, f), "utf8"))
+  const stale = files.filter(
+    (f) =>
+      !staged.includes(f) ||
+      fs.readFileSync(path.join(from, f), "utf8") !== fs.readFileSync(path.join(to, f), "utf8")
+  )
   const extra = staged.filter((f) => !files.includes(f))
   if (stale.length > 0 || extra.length > 0) {
-    console.error(`stage: submission/nish-std-amritk/src differs from conduit/ (${[...stale, ...extra].join(", ")}): run node bench/multicore/stage.mjs`)
+    console.error(
+      `stage: submission/nish-std-amritk/src differs from conduit/ (${[...stale, ...extra].join(", ")}): run node bench/multicore/stage.mjs`
+    )
     process.exit(1)
   }
   process.exit(0)

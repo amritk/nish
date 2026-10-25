@@ -104,7 +104,15 @@ fs.mkdirSync(out, { recursive: true })
 const exe = path.join(out, "conduit")
 run(
   cmd,
-  [...prefix, path.join(here, "conduit", "main.ts"), "--deny-retention", "-o", `${path.join(out, "ir")}/`, "--link", exe],
+  [
+    ...prefix,
+    path.join(here, "conduit", "main.ts"),
+    "--deny-retention",
+    "-o",
+    `${path.join(out, "ir")}/`,
+    "--link",
+    exe,
+  ],
   "nish conduit"
 )
 const tools = path.join(dir, "bin")
@@ -126,13 +134,27 @@ const pgPort = await new Promise((resolve) => {
     s.close(() => resolve(free))
   })
 })
-run(...as(path.join(pgBin, "pg_ctl"), ["-D", data, "-l", path.join(data, "multicore.log"), "-o", `-c port=${pgPort}`, "-w", "start"]), "pg_ctl start")
+run(
+  ...as(path.join(pgBin, "pg_ctl"), [
+    "-D",
+    data,
+    "-l",
+    path.join(data, "multicore.log"),
+    "-o",
+    `-c port=${pgPort}`,
+    "-w",
+    "start",
+  ]),
+  "pg_ctl start"
+)
 let server = null
 const stopAll = () => {
   if (server !== null) {
     try {
       process.kill(server.pid, "SIGTERM")
-    } catch {}
+    } catch {
+      // It has already exited.
+    }
   }
   spawnSync(...as(path.join(pgBin, "pg_ctl"), ["-D", data, "-m", "fast", "-w", "stop"]))
 }
@@ -141,7 +163,24 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, () => process.exit(130))
 }
 const psql = (sql) =>
-  run(...as(path.join(pgBin, "psql"), ["-X", "-q", "-At", "-h", sock, "-p", String(pgPort), "-U", "postgres", "-d", "postgres", "-c", sql]), "psql")
+  run(
+    ...as(path.join(pgBin, "psql"), [
+      "-X",
+      "-q",
+      "-At",
+      "-h",
+      sock,
+      "-p",
+      String(pgPort),
+      "-U",
+      "postgres",
+      "-d",
+      "postgres",
+      "-c",
+      sql,
+    ]),
+    "psql"
+  )
 const hasFull = psql("SELECT count(*) FROM pg_database WHERE datname = 'conduit_seed'").trim() === "1"
 const seed = option("--seed", hasFull ? "full" : "dev")
 if (seed === "full" && !hasFull) {
@@ -154,11 +193,11 @@ const httpPort = Number(process.env.CONDUIT_PORT || "3000")
 const base = `http://127.0.0.1:${httpPort}`
 let dbCount = 0
 
-/** A fresh database from `template`, and the server started on it; resolves once GET /api/tags answers. */
-const startServer = async (template, binary = exe, extra = {}) => {
+/** A fresh database from `source`, and the server started on it; resolves once GET /api/tags answers. */
+const startServer = async (source, binary = exe, extra = {}) => {
   dbCount += 1
   const db = `multicore_${process.pid}_${dbCount}`
-  psql(`CREATE DATABASE ${db} TEMPLATE ${template} STRATEGY FILE_COPY`)
+  psql(`CREATE DATABASE ${db} TEMPLATE ${source} STRATEGY FILE_COPY`)
   const log = fs.openSync(path.join(out, "server.log"), "w")
   server = spawn(binary, [], {
     stdio: ["ignore", log, log],
@@ -206,7 +245,11 @@ const statOf = (pid) => {
     return null
   }
 }
-const allPids = () => fs.readdirSync("/proc").filter((n) => /^\d+$/.test(n)).map(Number)
+const allPids = () =>
+  fs
+    .readdirSync("/proc")
+    .filter((n) => /^\d+$/.test(n))
+    .map(Number)
 const postmaster = () => Number(fs.readFileSync(path.join(data, "postmaster.pid"), "utf8").split("\n")[0])
 /** The CPU ticks of `top` and of every process whose parent is `top`, by pid. */
 const treeTicks = (top) => {
@@ -244,7 +287,9 @@ const rssKiB = (top) => {
 
 if (!flag("--no-conformance") && !idleOnly) {
   const db = await startServer("conduit_dev")
-  const r = spawnSync(path.join(tools, "conformance"), ["-base", base, "-secret", secret, "-q"], { encoding: "utf8" })
+  const r = spawnSync(path.join(tools, "conformance"), ["-base", base, "-secret", secret, "-q"], {
+    encoding: "utf8",
+  })
   await stopServer(db)
   const summary = /(\d+) steps, (\d+) passed, (\d+) failed/.exec(r.stdout + r.stderr)
   console.log(`conformance: ${summary === null ? "no summary" : `${summary[2]}/${summary[1]}`}`)
@@ -305,7 +350,9 @@ const bcryptProcess = (top, workers) => {
         if (fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").includes(worker)) {
           return pid
         }
-      } catch {}
+      } catch {
+        // The process exited between the listing and the read.
+      }
     }
   }
   return -1
@@ -315,11 +362,20 @@ if (!idleOnly) {
   console.log(
     `load: seed ${seed}, think-scale ${thinkScale}, warm-up ${warmup} s, ramp ${ramp} s, measure ${measure} s, ${os.cpus().length} CPUs, ` +
       `HTTP_WORKERS=${process.env.HTTP_WORKERS ?? 2} DB_READ_CONNS=${process.env.DB_READ_CONNS ?? 3} DB_WRITE_CONNS=${process.env.DB_WRITE_CONNS ?? 1}` +
-      (Object.keys(altEnv).length > 0 ? `; B with ${Object.entries(altEnv).map(([k, v]) => `${k}=${v}`).join(" ")}` : "")
+      (Object.keys(altEnv).length > 0
+        ? `; B with ${Object.entries(altEnv)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(" ")}`
+        : "")
   )
   console.log("users\treq/s\tp95 ms\tp99 ms\terrors\tpg µs/req\tapp µs/req\t(http + bcrypt)\tpass")
   const paired = alt !== "" || Object.keys(altEnv).length > 0
-  const builds = paired ? [["A", exe, {}], ["B", alt === "" ? exe : path.resolve(alt), altEnv]] : [["", exe, {}]]
+  const builds = paired
+    ? [
+        ["A", exe, {}],
+        ["B", alt === "" ? exe : path.resolve(alt), altEnv],
+      ]
+    : [["", exe, {}]]
   const plan = []
   for (const u of users) {
     for (let k = 0; k < repeat; k++) {
@@ -331,7 +387,15 @@ if (!idleOnly) {
   for (const { n, label, binary, env } of plan) {
     const db = await startServer(template, binary, env)
     if (warmup > 0) {
-      const warm = spawnLoad(Math.max(1, Math.round(n / 4)), Date.now() + 1000, 5, warmup, 0, path.join(out, `warmup-${n}.json`), "w")
+      const warm = spawnLoad(
+        Math.max(1, Math.round(n / 4)),
+        Date.now() + 1000,
+        5,
+        warmup,
+        0,
+        path.join(out, `warmup-${n}.json`),
+        "w"
+      )
       await new Promise((resolve) => warm.once("exit", resolve))
     }
     const startAt = Date.now() + 3000

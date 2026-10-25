@@ -11,7 +11,15 @@
 // nothing here.
 import { timingSafeEqualAt } from "nish/crypto/ct"
 import { HmacSha256, hmacCopySha256 } from "nish/crypto/hmac"
-import { JSON_TOK_KEY, JSON_TOK_OBJECT_BEGIN, JSON_TOK_OBJECT_END, JSON_TOK_STRING, JSON_TOK_NUMBER, JsonLimits, JsonTokenizer } from "nish/json-tokenizer"
+import {
+  JSON_TOK_KEY,
+  JSON_TOK_OBJECT_BEGIN,
+  JSON_TOK_OBJECT_END,
+  JSON_TOK_STRING,
+  JSON_TOK_NUMBER,
+  JsonLimits,
+  JsonTokenizer,
+} from "nish/json-tokenizer"
 
 /** Thirty days, the lifetime SPEC.md gives a token, in seconds. */
 export const JWT_LIFETIME: i64 = 2592000
@@ -184,11 +192,11 @@ export class Jwt {
    */
   issue(id: i64, now: i64, out: u8[], at: i32): i32 {
     const c: u8[] = this.claims
-    let n: i32 = jwtAscii("{\"sub\":\"", c, 0)
+    let n: i32 = jwtAscii('{"sub":"', c, 0)
     n = jwtDigits(id, c, n)
-    n = jwtAscii("\",\"iat\":", c, n)
+    n = jwtAscii('","iat":', c, n)
     n = jwtDigits(now, c, n)
-    n = jwtAscii(",\"exp\":", c, n)
+    n = jwtAscii(',"exp":', c, n)
     n = jwtDigits(now + JWT_LIFETIME, c, n)
     n = jwtAscii("}", c, n)
     let o: i32 = jwtAscii(JWT_HEADER, out, at)
