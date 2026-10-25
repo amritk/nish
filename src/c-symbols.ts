@@ -317,6 +317,8 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "faccessat" ||
   name === "fadd" ||
   name === "faddl" ||
+  name === "fchmod" ||
+  name === "fchmodat" ||
   name === "fclose" ||
   name === "fcntl" ||
   name === "fdim" ||
@@ -427,6 +429,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "getc_unlocked" ||
   name === "getchar" ||
   name === "getchar_unlocked" ||
+  name === "getcwd" ||
   name === "getentropy" ||
   name === "getenv" ||
   name === "geteuid" ||
