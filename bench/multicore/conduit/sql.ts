@@ -45,19 +45,27 @@ const ARTICLE_LIST: string =
 /** SPEC.md's ARTICLE_FULL_SELECT: the list's columns and `a.body` last. */
 const ARTICLE_FULL: string = ARTICLE_LIST + ", a.body"
 const ARTICLE_FROM: string = " FROM articles a JOIN users u ON u.id = a.author_id"
-const ORDER_PAGE: string = " ORDER BY a.id DESC LIMIT $2 OFFSET $3"
 const SLUGIFY_2: string = "trim(both '-' from lower(regexp_replace($2::text, '[^A-Za-z0-9]+', '-', 'g')))"
 // A scalar subquery, so the volatile currval is read once and the primary key
 // is probed with it, rather than tested against every row.
 const LAST_ARTICLE: string = "(SELECT currval(pg_get_serial_sequence('articles', 'id')))"
 const FOLLOWING_1: string = "EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = $1 AND fo.followee_id = "
 
+/** The FROM of a list page: the articles `where` keeps, newest first, cut to `$2` from `$3` before any column is computed. */
+const pageFrom = (where: string): string =>
+  " FROM (SELECT a2.id, a2.slug, a2.title, a2.description, a2.created_at, a2.updated_at, a2.author_id FROM articles a2 WHERE " +
+  where +
+  " ORDER BY a2.id DESC LIMIT $2 OFFSET $3) a JOIN users u ON u.id = a.author_id ORDER BY a.id DESC"
+
 /** Registers every statement on `pool`; false when the pool refused one. */
 export const registerStatements = (pool: PgPool): boolean => {
   const none: i32[] = []
   let ok: boolean = true
   // Article lists: the page, then the capped count, of each filter.
-  ok = pool.register("list_all", ARTICLE_LIST + ARTICLE_FROM + ORDER_PAGE, none) && ok
+  // The page is cut in a subquery before the select list runs: with LIMIT and
+  // OFFSET over the whole select, every per-row subquery also ran for each
+  // row the OFFSET skips.
+  ok = pool.register("list_all", ARTICLE_LIST + pageFrom("TRUE"), none) && ok
   ok = pool.register("count_all", "SELECT count(*) FROM (SELECT 1 FROM articles a LIMIT 1000) s", none) && ok
   ok =
     pool.register(
@@ -76,7 +84,7 @@ export const registerStatements = (pool: PgPool): boolean => {
   ok =
     pool.register(
       "list_author",
-      ARTICLE_LIST + ARTICLE_FROM + " WHERE a.author_id = (SELECT au.id FROM users au WHERE au.username = $4)" + ORDER_PAGE,
+      ARTICLE_LIST + pageFrom("a2.author_id = (SELECT au.id FROM users au WHERE au.username = $4)"),
       none
     ) && ok
   ok =
