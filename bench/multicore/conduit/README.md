@@ -148,3 +148,21 @@ Statements here are measured by the backend's own CPU per call
 (`/proc/<pid>/stat` of the one backend pgbench drives, prepared statements,
 generic plans, scripts interleaved over three rounds), with the statements
 of one request sent as one pipeline, as the server sends them.
+
+### The HTTP worker's own instructions
+
+App-side changes are measured by instructions, which do not drift with the
+machine: `valgrind --tool=callgrind` on the HTTP worker (one worker, 100 users
+at think-scale 0.1 for 45 s, about 11,600 requests of the mix), the total over
+the run including about 99M of start-up (SCRAM's PBKDF2 for the Postgres
+connections).
+
+| # | Change | Instructions (run) | Kept |
+| --- | --- | ---: | --- |
+| A0 | the server as after O5 | 1,741M | — |
+| A1 | Postgres sockets re-armed only when their interest changes (`strace -c`: 41,062 → 41 `epoll_ctl` in 10 s) | — | yes: HTTP µs/request −2.0 paired |
+| A2 | `nish/net/http1` and `http1-server` move bytes with `copyBytes` instead of byte loops (std) | **1,145M** (−34%) | yes |
+| A3 | `JsonWriter.raw` copies with `copyBytes` (std), and a `text[]` with nothing to escape goes out as its JSON array in one pass of block copies | **1,022M** | yes |
+| A4 | articles written directly: the fixed text as pre-encoded fragments, only the values escaped (`json-out.ts`) | **892M** | yes |
+| A5 | a token whose header is the one issued is not decoded | **869M** | yes |
+| A6 | the tag array in one byte loop instead of a scan and a copy per element | 887M (more requests too) | no |
