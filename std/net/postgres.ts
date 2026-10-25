@@ -182,6 +182,7 @@ const PG_FE_EXECUTE: i32 = 69 // 'E'
 const PG_FE_CLOSE: i32 = 67 // 'C'
 const PG_FE_SYNC: i32 = 83 // 'S'
 const PG_FE_TERMINATE: i32 = 88 // 'X'
+const PG_FE_FLUSH: i32 = 72 // 'H'
 const PG_TARGET_STATEMENT: i32 = 83 // 'S', what Describe and Close name
 const PG_ZERO: i32 = 0
 const PG_COMMA: i32 = 44
@@ -1825,6 +1826,21 @@ export class PgConnection {
     this.groupOpen = false
     this.tailRoom(toI32(5))
     const at: i32 = this.startMessage(PG_FE_SYNC)
+    this.endMessage(at)
+    return true
+  }
+
+  /**
+   * Flush: asks the server to send what it has answered so far in the open
+   * group rather than hold it for the Sync. The server does not answer it.
+   * False, and nothing written, when no group is open, a bind is, or there is
+   * no room.
+   */
+  flush(): boolean {
+    if (!this.groupOpen || !this.canOpen(5)) {
+      return false
+    }
+    const at: i32 = this.startMessage(PG_FE_FLUSH)
     this.endMessage(at)
     return true
   }

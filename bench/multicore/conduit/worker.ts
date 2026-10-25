@@ -1369,11 +1369,14 @@ export class ConduitWorker {
 
   /** Binds `r`'s group, and every request batched after it, on `conn`. */
   bindAll(r: ConduitReq, conn: PgConnection): boolean {
-    let ok: boolean = this.bind(r, conn)
+    // Postgres holds a group's answers until its Sync; a Flush after each
+    // read lets it go out as soon as it is answered.
+    const read: boolean = r.pool === POOL_READ && r.batchNext >= 0
+    let ok: boolean = this.bind(r, conn) && (!read || conn.flush())
     let next: i32 = r.batchNext
     while (ok && next >= 0) {
       const m: ConduitReq = this.reqs[next]
-      ok = this.bind(m, conn)
+      ok = this.bind(m, conn) && (!read || m.batchNext < 0 || conn.flush())
       next = m.batchNext
     }
     return ok

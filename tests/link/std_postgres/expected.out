@@ -117,11 +117,16 @@ PASS  their bytes
 PASS  a group is open
 PASS  Bind
 PASS  no sync while a bind is open
+PASS  no flush while a bind is open
 PASS  no prepare while a bind is open
 PASS  Bind with every parameter kind, then Execute
+PASS  Flush
+PASS  its bytes
+PASS  the group stays open
 PASS  Sync
 PASS  its bytes
 PASS  no sync without a group
+PASS  no flush without a group
 PASS  Close
 PASS  its bytes
 PASS  a NUL in a name is refused
@@ -179,6 +184,8 @@ PASS  and writes nothing
 PASS  one byte less fits
 PASS  exactly maxOutput less the tail
 PASS  no Bind after it
+PASS  nor a Flush
+PASS  which writes nothing
 PASS  Sync still fits
 PASS  516 and 5 bytes queued
 PASS  a partial send under half the buffer keeps its place
@@ -273,4 +280,4 @@ PASS  text after a quote
 PASS  a space unquoted
 PASS  a window too short
 PASS  stays bad
-postgres: 275 passed, 0 failed, 0 skipped
+postgres: 281 passed, 0 failed, 0 skipped
