@@ -65,7 +65,8 @@ import {
   PgPool,
 } from "nish/net/postgres"
 import { BCRYPT_DONE, BCRYPT_MAX_PASSWORD, BCRYPT_OP_HASH, BCRYPT_OP_VERIFY, BcryptClient } from "./bcrypt-service"
-import { Jwt } from "./jwt"
+import { jsonOutBool, jsonOutNull, jsonOutRaw, jsonOutString, jsonOutTextArray, jsonOutWorst } from "./json-out"
+import { Jwt, jwtDigits } from "./jwt"
 import {
   COL_BIO,
   COL_BODY,
@@ -404,6 +405,10 @@ export class ConduitWorker {
   walker: PgArrayWalker
   stamp: u8[]
   scratch: u8[]
+  /** Where `articleBytes` writes one article, and the fixed text it copies in. */
+  rowBuf: u8[]
+  fragments: u8[][]
+  stringColumns: i32[]
   tokenBuf: u8[]
   bcrypt: BcryptClient
   bcryptAddress: u8[]
@@ -489,6 +494,24 @@ export class ConduitWorker {
     this.walker = new PgArrayWalker()
     this.stamp = new Array<u8>(24)
     this.scratch = new Array<u8>(65536)
+    this.rowBuf = new Array<u8>(RESPONSE_ROOM)
+    this.fragments = [
+      bytesOf('{"slug":'),
+      bytesOf(',"title":'),
+      bytesOf(',"description":'),
+      bytesOf(',"body":'),
+      bytesOf(',"tagList":'),
+      bytesOf(',"createdAt":"'),
+      bytesOf('","updatedAt":"'),
+      bytesOf('","favorited":'),
+      bytesOf(',"favoritesCount":'),
+      bytesOf(',"author":{"username":'),
+      bytesOf(',"bio":'),
+      bytesOf(',"image":'),
+      bytesOf(',"following":'),
+      bytesOf("}}"),
+    ]
+    this.stringColumns = [COL_SLUG, COL_TITLE, COL_DESCRIPTION, COL_BODY, COL_USERNAME, COL_BIO, COL_IMAGE]
     this.tokenBuf = new Array<u8>(512)
     this.bcrypt = new BcryptClient()
     this.bcryptAddress = new Array<u8>(18)
@@ -1523,7 +1546,6 @@ export class ConduitWorker {
     const route: i32 = r.route
     if (route === R_TAGS) {
       w.key("tags")
-      w.beginArray()
     } else if (route === R_LIST || route === R_FEED) {
       w.key("articles")
       w.beginArray()
@@ -1669,8 +1691,84 @@ export class ConduitWorker {
     }
   }
 
-  /** An article row (`COL_` order) as an Article object. */
+  /**
+   * An article row (`COL_` order) as an Article object: written by
+   * `articleBytes` into `rowBuf` and added as one value, or through the
+   * writer's own calls when that answers -1.
+   */
   article(w: JsonWriter, conn: PgConnection, full: boolean): void {
+    const n: i32 = this.articleBytes(conn, full)
+    if (n >= 0) {
+      w.raw(this.rowBuf, 0, n)
+    } else {
+      this.articleWriter(w, conn, full)
+    }
+  }
+
+  /**
+   * The article row as JSON at `rowBuf[0]`, its fixed text copied from
+   * `fragments` and only its values encoded; answers the length, or -1 when
+   * the row might not fit, a timestamp does not read, or the tag list needs
+   * the walker.
+   */
+  articleBytes(conn: PgConnection, full: boolean): i32 {
+    const b: u8[] = conn.inputBuffer()
+    const out: u8[] = this.rowBuf
+    const f: u8[][] = this.fragments
+    let worst: i32 = 512 + 2 * conn.colLength(COL_TAGS)
+    const strings: i32[] = this.stringColumns
+    for (let k: i32 = 0; k < toI32(strings.length); k++) {
+      const c: i32 = strings[k]
+      if (c !== COL_BODY || full) {
+        worst += jsonOutWorst(conn.colLength(c))
+      }
+    }
+    if (worst > toI32(out.length) || conn.isNull(COL_SLUG) || conn.isNull(COL_TITLE) || conn.isNull(COL_DESCRIPTION) || conn.isNull(COL_USERNAME)) {
+      return -1
+    }
+    let o: i32 = jsonOutRaw(out, 0, f[0])
+    o = jsonOutString(out, o, b, conn.colStart(COL_SLUG), conn.colLength(COL_SLUG))
+    o = jsonOutRaw(out, o, f[1])
+    o = jsonOutString(out, o, b, conn.colStart(COL_TITLE), conn.colLength(COL_TITLE))
+    o = jsonOutRaw(out, o, f[2])
+    o = jsonOutString(out, o, b, conn.colStart(COL_DESCRIPTION), conn.colLength(COL_DESCRIPTION))
+    if (full) {
+      if (conn.isNull(COL_BODY)) {
+        return -1
+      }
+      o = jsonOutRaw(out, o, f[3])
+      o = jsonOutString(out, o, b, conn.colStart(COL_BODY), conn.colLength(COL_BODY))
+    }
+    o = jsonOutRaw(out, o, f[4])
+    o = jsonOutTextArray(out, o, b, conn.colStart(COL_TAGS), conn.colLength(COL_TAGS))
+    if (o < 0) {
+      return -1
+    }
+    o = jsonOutRaw(out, o, f[5])
+    if (conn.text.timestamp(b, conn.colStart(COL_CREATED), conn.colLength(COL_CREATED), out, o) !== 24) {
+      return -1
+    }
+    o = jsonOutRaw(out, o + 24, f[6])
+    if (conn.text.timestamp(b, conn.colStart(COL_UPDATED), conn.colLength(COL_UPDATED), out, o) !== 24) {
+      return -1
+    }
+    o = jsonOutRaw(out, o + 24, f[7])
+    o = jsonOutBool(out, o, conn.bool(COL_FAVORITED))
+    o = jsonOutRaw(out, o, f[8])
+    o = jwtDigits(conn.int(COL_FAVORITES), out, o)
+    o = jsonOutRaw(out, o, f[9])
+    o = jsonOutString(out, o, b, conn.colStart(COL_USERNAME), conn.colLength(COL_USERNAME))
+    o = jsonOutRaw(out, o, f[10])
+    o = conn.isNull(COL_BIO) ? jsonOutNull(out, o) : jsonOutString(out, o, b, conn.colStart(COL_BIO), conn.colLength(COL_BIO))
+    o = jsonOutRaw(out, o, f[11])
+    o = conn.isNull(COL_IMAGE) ? jsonOutNull(out, o) : jsonOutString(out, o, b, conn.colStart(COL_IMAGE), conn.colLength(COL_IMAGE))
+    o = jsonOutRaw(out, o, f[12])
+    o = jsonOutBool(out, o, conn.bool(COL_FOLLOWING))
+    return jsonOutRaw(out, o, f[13])
+  }
+
+  /** `article` through the writer's calls, for a row `articleBytes` does not take. */
+  articleWriter(w: JsonWriter, conn: PgConnection, full: boolean): void {
     w.beginObject()
     w.key("slug")
     this.column(w, conn, COL_SLUG)
@@ -1683,9 +1781,7 @@ export class ConduitWorker {
       this.column(w, conn, COL_BODY)
     }
     w.key("tagList")
-    w.beginArray()
     this.tagList(w, conn, COL_TAGS)
-    w.endArray()
     w.key("createdAt")
     this.timestamp(w, conn, COL_CREATED)
     w.key("updatedAt")
@@ -1708,23 +1804,39 @@ export class ConduitWorker {
     w.endObject()
   }
 
-  /** The elements of the `text[]` column `c`, each a JSON string, walked in place. */
+  /**
+   * The `text[]` column `c` as a JSON array of strings: in one pass of block
+   * copies when `jsonOutTextArray` takes it, element by element with
+   * `PgArrayWalker` otherwise.
+   */
   tagList(w: JsonWriter, conn: PgConnection, c: i32): void {
     const b: u8[] = conn.inputBuffer()
+    const start: i32 = conn.colStart(c)
+    const len: i32 = conn.colLength(c)
+    const out: u8[] = this.scratch
+    if (len >= 2 && 2 * len + 2 <= toI32(out.length)) {
+      const n: i32 = jsonOutTextArray(out, 0, b, start, len)
+      if (n >= 0) {
+        w.raw(out, 0, n)
+        return
+      }
+    }
+    w.beginArray()
     const walker: PgArrayWalker = this.walker
-    walker.begin(b, conn.colStart(c), conn.colLength(c))
+    walker.begin(b, start, len)
     let e: i32 = walker.next()
     while (e === PG_ARRAY_ELEMENT || e === PG_ARRAY_NULL) {
       if (e === PG_ARRAY_NULL) {
         w.nullValue()
       } else if (walker.escaped) {
-        const n: i32 = walker.copy(this.scratch, 0)
-        w.stringBytes(this.scratch, 0, n < 0 ? 0 : n)
+        const n: i32 = walker.copy(out, 0)
+        w.stringBytes(out, 0, n < 0 ? 0 : n)
       } else {
         w.stringBytes(b, walker.start, walker.length)
       }
       e = walker.next()
     }
+    w.endArray()
   }
 
   /**
@@ -1787,13 +1899,14 @@ export class ConduitWorker {
     const route: i32 = r.route
     switch (route) {
       case R_TAGS:
+        w.endObject()
+        this.answer(r, 200, buf, w.end, true)
+        return
       case R_LIST:
       case R_FEED:
         w.endArray()
-        if (route !== R_TAGS) {
-          w.key("articlesCount")
-          w.i64(r.count)
-        }
+        w.key("articlesCount")
+        w.i64(r.count)
         w.endObject()
         this.answer(r, 200, buf, w.end, true)
         return

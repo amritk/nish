@@ -1,0 +1,15 @@
+PASS  every byte alone encodes as JsonWriter encodes it (the first that does not)
+PASS  and twice between plain runs
+PASS  the empty string
+PASS  UTF-8 passes through and a line feed is \n
+PASS  a plain array becomes its elements
+PASS  an empty array
+PASS  one element
+PASS  a quoted element is refused
+PASS  an unquoted NULL is refused
+PASS  in any case
+PASS  a NULL-like word is an element
+PASS  a control byte is refused
+PASS  no braces is refused
+PASS  true, false and null
+conduit json-out: 14 passed, 0 failed, 0 skipped
