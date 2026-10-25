@@ -64,6 +64,22 @@ folder the challenge receives is staged at
   connection's slot keeps no output buffer while idle (`Http1OutputPool`).
   The build uses `--deny-retention`.
 
+## What it does not defend
+
+This is a benchmark entry, not a std module, so it has no `docs/security/`
+record. What it leaves open:
+
+- **The bcrypt service authenticates nobody.** It listens on
+  `127.0.0.1:BCRYPT_PORT`. Any local process can connect and have hashes
+  computed or checked, which costs CPU but reveals nothing stored.
+- **Not every copy of a password is wiped.** The service wipes its own copies.
+  The worker wipes the 73-byte copy it sends. But the request body still sits
+  in the HTTP parser's input buffer and in the request's `body` buffer (and an
+  old copy of it when that grew) until they are reused, and none of these is
+  wiped.
+- **A `JWT_SECRET` too short or too guessable** is the operator's problem: the
+  key is used as given.
+
 ## How it is measured
 
 `bash bench/multicore/setup.sh` builds a PostgreSQL 18 cluster tuned as the
