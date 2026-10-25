@@ -14,6 +14,10 @@
 #               machine's cores and memory, scram-sha-256 on 127.0.0.1 only
 #   seeded      written last, once make-seed.sh's own check printed OK
 #
+# PG_BENCH_SEED=full also loads the full seed (database conduit_seed, about
+# 2.4 GB, 5 to 10 minutes) beside the dev one, for bench/multicore/run.sh's
+# load; the dev seed stays, as the challenge's conformance runs on it.
+#
 # What it needs, and installs when it can (as root with apt-get):
 #   - PostgreSQL 18's server binaries in $PG_BIN (/usr/lib/postgresql/18/bin)
 #     and libpq 17 or later with its headers (pg_config), from
@@ -31,9 +35,12 @@ CHALLENGE=https://github.com/arjaythedev/multicore-server-challenge
 COMMIT=c3012257f2ee3dd2ccc72ada2eeba2b0d1278e8e
 PG_BIN="${PG_BIN:-/usr/lib/postgresql/18/bin}"
 DIR="${1:-${PG_BENCH_DIR:-${TMPDIR:-/tmp}/nish-bench-postgres}}"
+SEED="${PG_BENCH_SEED:-dev}"
 
 say() { echo "setup: $*"; }
 die() { echo "setup: $*" >&2; exit 1; }
+
+[ "$SEED" = dev ] || [ "$SEED" = full ] || die "PG_BENCH_SEED is dev or full, not $SEED"
 
 if [ ! -x "$PG_BIN/initdb" ] || ! command -v pg_config > /dev/null; then
   if [ "$(id -u)" = 0 ] && command -v apt-get > /dev/null; then
@@ -87,5 +94,10 @@ ${AS[@]+"${AS[@]}"} "$PG_BIN/pg_ctl" -D "$DIR/data" -l "$DIR/data/setup.log" -o 
 say "the --dev seed (make-seed.sh)"
 PATH="$PG_BIN:$PATH" PGHOST="$DIR/sock" PGPORT="$PORT" PGUSER=postgres GOTOOLCHAIN=auto \
   bash "$DIR/challenge/seed/make-seed.sh" --dev
+if [ "$SEED" = full ]; then
+  say "the full seed (make-seed.sh)"
+  PATH="$PG_BIN:$PATH" PGHOST="$DIR/sock" PGPORT="$PORT" PGUSER=postgres GOTOOLCHAIN=auto \
+    bash "$DIR/challenge/seed/make-seed.sh"
+fi
 echo "$COMMIT" > "$DIR/seeded"
 say "done: bench/postgres/run.mjs uses $DIR"
