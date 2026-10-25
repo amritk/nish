@@ -198,10 +198,8 @@ class ConduitReq {
   ticket: i32 = -1
   inPool: boolean = false
   inBcrypt: boolean = false
-  /** Statements answered in the group, rows of the current one, and rows of the first. */
+  /** Statements of the group answered so far. */
   stmt: i32 = 0
-  rows: i32 = 0
-  firstRows: i32 = 0
   found: boolean = false
   count: i64 = 0
   /** 0, or 23505's 1, or any other SQLSTATE's 2. */
@@ -245,8 +243,6 @@ class ConduitReq {
     this.inPool = false
     this.inBcrypt = false
     this.stmt = 0
-    this.rows = 0
-    this.firstRows = 0
     this.found = false
     this.count = 0
     this.pgError = 0
@@ -1168,8 +1164,6 @@ export class ConduitWorker {
     r.ticket = ticket
     r.inPool = true
     r.stmt = 0
-    r.rows = 0
-    r.firstRows = 0
     r.found = false
     r.pgError = 0
   }
@@ -1316,13 +1310,8 @@ export class ConduitWorker {
           }
           if (event === PG_ROW) {
             this.onRow(r, conn, w)
-            r.rows += 1
           } else if (event === PG_COMPLETE) {
-            if (r.stmt === 0) {
-              r.firstRows = r.rows
-            }
             r.stmt += 1
-            r.rows = 0
           } else if (event === PG_ERROR) {
             const code: string = conn.lastError?.code ?? ""
             r.pgError = code === "23505" ? 1 : 2
@@ -1458,9 +1447,6 @@ export class ConduitWorker {
         break
       case R_COMMENTS:
         ok =
-          conn.bindStart("article_exists") &&
-          this.text(conn, r, F_PATH) &&
-          conn.bindEnd() &&
           conn.bindStart("comments") &&
           conn.paramInt(r.viewer) &&
           this.text(conn, r, F_PATH) &&
@@ -1582,15 +1568,17 @@ export class ConduitWorker {
         r.found = true
         break
       case R_COMMENTS:
-        if (r.stmt === 1) {
-          this.comment(w, conn, true)
+        // The article's row; its comment columns are NULL when it has none.
+        r.found = true
+        if (!conn.isNull(1)) {
+          this.comment(w, conn, 1, 8)
         }
         break
       case R_COMMENT_CREATE:
         if (!r.found) {
           r.found = true
           w.key("comment")
-          this.comment(w, conn, false)
+          this.comment(w, conn, 0, -1)
         }
         break
       case R_PROFILE:
@@ -1732,27 +1720,31 @@ export class ConduitWorker {
     }
   }
 
-  /** A comment row (id, body, created, updated, username, bio, image[, following]) as a Comment object. */
-  comment(w: JsonWriter, conn: PgConnection, withFollowing: boolean): void {
+  /**
+   * The comment columns from `at` on (id, body, created, updated, username,
+   * bio, image) as a Comment object; `following` is column `followingAt`, or
+   * false when that is -1.
+   */
+  comment(w: JsonWriter, conn: PgConnection, at: i32, followingAt: i32): void {
     w.beginObject()
     w.key("id")
-    w.i64(conn.int(0))
+    w.i64(conn.int(at))
     w.key("createdAt")
-    this.timestamp(w, conn, 2)
+    this.timestamp(w, conn, at + 2)
     w.key("updatedAt")
-    this.timestamp(w, conn, 3)
+    this.timestamp(w, conn, at + 3)
     w.key("body")
-    this.column(w, conn, 1)
+    this.column(w, conn, at + 1)
     w.key("author")
     w.beginObject()
     w.key("username")
-    this.column(w, conn, 4)
+    this.column(w, conn, at + 4)
     w.key("bio")
-    this.column(w, conn, 5)
+    this.column(w, conn, at + 5)
     w.key("image")
-    this.column(w, conn, 6)
+    this.column(w, conn, at + 6)
     w.key("following")
-    w.boolean(withFollowing ? conn.bool(7) : false)
+    w.boolean(followingAt >= 0 ? conn.bool(followingAt) : false)
     w.endObject()
     w.endObject()
   }
@@ -1799,7 +1791,7 @@ export class ConduitWorker {
         this.answer(r, 200, buf, w.end, true)
         return
       case R_COMMENTS:
-        if (r.firstRows === 0) {
+        if (!r.found) {
           this.fail(r, 404, "article not found", true)
           return
         }

@@ -215,15 +215,17 @@ export const registerStatements = (pool: PgPool): boolean => {
       "DELETE FROM favorites f USING articles a WHERE f.user_id = $1 AND f.article_id = a.id AND a.slug = $2",
       none
     ) && ok
-  // Comments.
-  ok = pool.register("article_exists", "SELECT id FROM articles WHERE slug = $1", none) && ok
+  // Comments: the article and its newest comments in one statement, one row
+  // with the comment columns NULL when it has none, and no row when the
+  // article does not exist.
   ok =
     pool.register(
       "comments",
-      "SELECT c.id, c.body, c.created_at, c.updated_at, u.username, u.bio, u.image, " +
+      "SELECT a.id, c.id, c.body, c.created_at, c.updated_at, u.username, u.bio, u.image, " +
         FOLLOWING_1 +
-        "c.author_id) AS following FROM comments c JOIN users u ON u.id = c.author_id " +
-        "WHERE c.article_id = (SELECT id FROM articles WHERE slug = $2) ORDER BY c.created_at DESC, c.id DESC LIMIT 100",
+        "c.author_id) FROM articles a LEFT JOIN LATERAL (SELECT c.id, c.body, c.created_at, c.updated_at, c.author_id " +
+        "FROM comments c WHERE c.article_id = a.id ORDER BY c.created_at DESC, c.id DESC LIMIT 100) c ON true " +
+        "LEFT JOIN users u ON u.id = c.author_id WHERE a.slug = $2 ORDER BY c.created_at DESC, c.id DESC",
       none
     ) && ok
   ok =
