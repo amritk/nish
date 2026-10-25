@@ -141,3 +141,10 @@ From O4 on, each change runs against the build before it in one session,
 A then B at each of four repeats (`run.sh --alt`), because the machine drifts
 within a session too: the same O3 build gave 274 to 311 µs/request across
 four runs of one session. The figures are the mean of the paired difference.
+| O5 | an article's comments in one statement, a `LEFT JOIN LATERAL` from the article, instead of a lookup and the list | 249–292 against O4's 258–289, −0.2 µs paired | 59–65 | 2.4–3.6 | yes, as a simplification: neutral. By the backend's own CPU under pgbench the pair pipelined in one group costs what the one statement does (117–123 against 115–121 µs a call); sent as two round trips it would have cost 35 µs more |
+| O6 | a list page and its capped count as one statement (the count a `WITH` joined to the page) | — | — | — | no: pipelined, the pair costs the same (343–381 against 360–386 µs a call) and the joined form needs a column offset on every row |
+
+Statements here are measured by the backend's own CPU per call
+(`/proc/<pid>/stat` of the one backend pgbench drives, prepared statements,
+generic plans, scripts interleaved over three rounds), with the statements
+of one request sent as one pipeline, as the server sends them.
