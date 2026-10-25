@@ -275,6 +275,8 @@ export class Emitter {
   tailCallId: i32
   /** The node `emitUncopied` is emitting, whose guarded string read `guardedRead` leaves uncopied; `-1` for none. */
   uncopied: i32
+  /** The index of `@llvm.global_ctors` in the module's globals, or `-1` before the first constructor. */
+  constructorsGlobal: i32
   /** A scoped pass reads `@nish_arena` itself, so the module declares it even if it allocates nothing. */
   readsArenaGlobal: boolean
   /** Enclosing loops, innermost last. */
@@ -339,13 +341,8 @@ export class Emitter {
   /** Typed JSON: the functions this module's calls of `jsonDecode` and `jsonEncode` asked for, and their symbols (`src/emit-json.ts`). */
   jsonParts: JsonPart[]
   jsonPartNames: StringSet
-  /**
-   * The functions `@llvm.global_ctors` runs before `main`, in the order the
-   * module first asked for them, and the index of that global in the module's
-   * globals, or `-1` before the first (`addConstructor`).
-   */
+  /** The functions `@llvm.global_ctors` runs before `main`, in the order the module first asked for them (`addConstructor`). */
   constructors: string[]
-  constructorsGlobal: i32
 
   constructor(
     unit: AnalysisUnit,

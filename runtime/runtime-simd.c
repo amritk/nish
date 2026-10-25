@@ -435,17 +435,20 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
    registers `nish_round_init` as a constructor, which asks the CPU once
    before `main`; the flag is never written after it, so every call reads a
    constant and LTO keeps it in a register across a loop. The flag starts at
-   0, which is libm's path, so a call that ran before the constructor would
-   still be exact. `NISH_SIMD=scalar` or `base` pins libm, as it pins the
-   baseline paths above: the instruction gate's counts and the forced
+   0, which is the SSE2 path, so a call that ran before the constructor would
+   still be exact. That path is exact without libm, so the runtime links
+   without `-lm`: below 2^52 a double converts to an i64 and back as its
+   truncation, `copysign` keeps the sign of a zero, and floor and ceil step
+   one from it; from 2^52 every double is an integer, and NaN and the
+   infinities come back as they went in. `NISH_SIMD=scalar` or `base` pins
+   it, as it pins the baseline paths above: the instruction gate's counts,
+   which then do not depend on the ifunc glibc picks, and the forced
    fallback a test runs. Built for a machine that has SSE4.1 already
    (`--cpu x86-64-v2` and up), or for any other, each is the builtin, which
    is the one instruction there, and the constructor does nothing. The
    immediate is the rounding mode, 1 down, 2 up, 3 toward zero, plus 8, which
    keeps the precision exception quiet as libm's `floor` does. */
 #if defined(NISH_SIMD_SSE2) && !defined(__SSE4_1__)
-#include <math.h>
-
 static _Bool nish_round_hw;
 
 void nish_round_init(void) {
@@ -455,9 +458,24 @@ void nish_round_init(void) {
   nish_round_hw = __get_cpuid(1, &a, &b, &c, &d) && (c & bit_SSE4_1);
 }
 
-#define NISH_ROUNDING(name, libm, mode)                                                                      \
+static double nish_trunc_sse2(double x) {
+  if (!(__builtin_fabs(x) < 0x1p52)) return x;
+  return __builtin_copysign((double)(int64_t)x, x);
+}
+
+static double nish_floor_sse2(double x) {
+  double t = nish_trunc_sse2(x);
+  return t > x ? t - 1.0 : t;
+}
+
+static double nish_ceil_sse2(double x) {
+  double t = nish_trunc_sse2(x);
+  return t < x ? t + 1.0 : t;
+}
+
+#define NISH_ROUNDING(name, base, mode)                                                                      \
   double name(double x) {                                                                                    \
-    if (!nish_round_hw) return libm(x);                                                                      \
+    if (!nish_round_hw) return nish_##base##_sse2(x);                                                        \
     __asm__("roundsd $" #mode ", %0, %0" : "+x"(x));                                                         \
     return x;                                                                                                \
   }

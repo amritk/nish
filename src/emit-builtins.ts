@@ -197,7 +197,7 @@ const f64UnaryIntrinsic = (name: string): string => {
  * has `frintm`. The IR is the same whatever `--cpu` says: there the runtime's
  * body is the instruction alone.
  */
-export const dispatchesRounding = (opts: Options): boolean => {
+const dispatchesRounding = (opts: Options): boolean => {
   if (buildsWasmModule(opts)) {
     return false
   }
