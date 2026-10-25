@@ -277,6 +277,14 @@ export class Emitter {
   uncopied: i32
   /** A scoped pass reads `@nish_arena` itself, so the module declares it even if it allocates nothing. */
   readsArenaGlobal: boolean
+  /**
+   * `floor`, `ceil` and `trunc` call the runtime's `nish_floor_f64` family,
+   * which runs SSE4.1 `roundsd` where the CPU has it, rather than the LLVM
+   * intrinsics (`emitRounding` in src/emit-builtins.ts): true for target-neutral
+   * IR and an x86-64 triple, false for wasm and AArch64, whose baselines
+   * round in one instruction already.
+   */
+  roundsInRuntime: boolean
   /** Enclosing loops, innermost last. */
   loops: LoopTarget[]
   /**
@@ -328,14 +336,6 @@ export class Emitter {
   stringRefs: string[]
   /** DWARF metadata builder (`-g`); `null` without debug info, and then nothing is attached. */
   debug: DebugInfo | null
-  /**
-   * `floor`, `ceil` and `trunc` call the runtime's `nish_floor_f64` family,
-   * which runs SSE4.1 `roundsd` where the CPU has it, rather than the LLVM
-   * intrinsics (`emitRounding` in src/emit-builtins.ts): true for target-neutral
-   * IR and an x86-64 triple, false for wasm and AArch64, whose baselines
-   * round in one instruction already.
-   */
-  roundsInRuntime: boolean
   /**
    * WP32: the libraries whose functions this module's code reaches are emitted
    * into this module as `internal` copies (`src/emit-map.ts`):

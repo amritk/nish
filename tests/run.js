@@ -236,12 +236,14 @@ const keepSpecimen = (key, specimen) => {
  * its cases concurrently, and has to keep them in corpus order, not in the
  * order the links started; {@link linkNative} keeps it straight away.
  */
-const linkLine = (ll, { driver = null, defines = [], libm = false } = {}) => {
+const linkLine = (ll, { driver = null, defines = [] } = {}) => {
   const rt = runtimeObjects(defines)
   if (rt.error !== null) {
     return { error: rt.error, args: null, key: null, specimen: null }
   }
-  const tail = libm ? ["-lm"] : []
+  // -lm: the x86-64 runtime's rounders call libm where the CPU lacks SSE4.1, as
+  // `scripts/build.sh` links every program.
+  const tail = ["-lm"]
   const driverObject = driver === DRIVER_C ? rt.driver : driver
   const args = [
     "-Wno-override-module",
@@ -1014,11 +1016,9 @@ const runCase = async (name) => {
     // runtime is now a prebuilt object, the macro is also what picks *which*
     // object -- and the `runtime objects:` checks below hold that choice up.
     const threads = args.includes("--threads") ? ["-DNISH_THREADS=1"] : []
-    // -lm: Math.sin/cos/exp/log/pow lower to LLVM intrinsics that become libm calls (WP7).
     const line = linkLine(outLl, {
       driver: hasEntry ? null : driver,
       defines: threads,
-      libm: true,
     })
     if (line.error !== null) {
       expect(`${name}: links natively`, false, line.error)
@@ -1189,7 +1189,7 @@ const buildCaseIn = (dir, name) => {
     cwd: root,
     encoding: "utf8",
   })
-  const cc = r.status === 0 ? linkNative(exe, ll, { libm: true }) : r
+  const cc = r.status === 0 ? linkNative(exe, ll) : r
   return check(`${name}: links`, cc.status === 0, String(cc.stderr)) ? exe : null
 }
 
@@ -14141,7 +14141,7 @@ if (!only || "division".includes(only) || only.startsWith("div") || only.startsW
       continue
     }
     const exe = path.join(buildDir, name)
-    const cc = linkNative(exe, ll, { libm: true })
+    const cc = linkNative(exe, ll)
     const run = cc.status === 0 ? spawnSync(exe) : null
     check(
       `${name}: exits 1 with "${needle}" on stderr`,
@@ -15349,7 +15349,7 @@ if (!only || "simd".includes(only)) {
   const strict = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-O2"]
   /** Build `source`, the index-of-any driver unless named, with `flags` into `out`; the compile's result. */
   const build = (flags, out, source = driver) =>
-    spawnSync("clang", [...strict, ...flags, source, "-o", out], { cwd: root, encoding: "utf8" })
+    spawnSync("clang", [...strict, ...flags, source, "-lm", "-o", out], { cwd: root, encoding: "utf8" })
   /** The check on one run of a driver: exit 0 and its summary line, which is also the check's name. The line. */
   const judge = (label, cc, r) => {
     const said = r === null ? "" : String(r.stdout ?? "").trim()
