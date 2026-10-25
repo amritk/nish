@@ -188,15 +188,20 @@ const QUEUE: i32 = 65536
 /** The most writes one group commits together. */
 const WRITE_BATCH: i32 = 128
 /**
- * The most bytes a batch's binds may take, well under `maxOutput` (4 MiB): a
- * bind refused for room would leave the pool's group half built. One write's
- * binds take at most twice its text (tags are bound twice) and 512 bytes.
+ * The most bytes a batch's binds may take, half of `PG_MAX_OUTPUT`. One
+ * write's binds take at most twice its text (tags are bound twice) and 512
+ * bytes, `writeCost`.
  */
 const WRITE_BATCH_BYTES: i32 = 2097152
+/** The connections' `maxOutput`: what may wait unsent on one of them. */
+const PG_MAX_OUTPUT: i32 = 4194304
 /** The largest response body a writer holds; the output buffer holds it and its head. */
 const RESPONSE_ROOM: i32 = 1048576
 /** How long the worker waits for the bcrypt service to listen before failing the logins that wait, in ns. */
 const BCRYPT_PATIENCE: i64 = 5000000000
+
+/** At most the bytes `r`'s binds take: twice its text (tags are bound twice) and 512. */
+const writeCost = (r: ConduitReq): i32 => 2 * r.textEnd + 512
 
 /** One request in progress: its route, its parameters, and where its answer stands. */
 class ConduitReq {
@@ -482,6 +487,8 @@ export class ConduitWorker {
   writeHead: i32 = 0
   writeCount: i32 = 0
   writeBatches: i32 = 0
+  /** The chains of writes `bindAll` held back this pump, by their first request. */
+  deferred: i32[]
   /** Per write-pool slot: the request of its batch whose statements are being answered. */
   writeCursor: i32[]
 
@@ -509,7 +516,7 @@ export class ConduitWorker {
       "-c plan_cache_mode=force_generic_plan -c jit=off -c max_parallel_workers_per_gather=0 -c DateStyle=ISO -c TimeZone=UTC"
     config.maxInFlight = cfg.maxInFlight
     config.inputSize = 65536
-    config.maxOutput = 4194304
+    config.maxOutput = PG_MAX_OUTPUT
     const password = secret(bytesOf(cfg.dbPassword))
     this.pools = [
       new PgPool(config, password, cfg.readConns, QUEUE),
@@ -583,6 +590,7 @@ export class ConduitWorker {
     this.bcrypt = new BcryptClient()
     this.bcryptAddress = new Array<u8>(18)
     this.writeRing = new Array<i32>(QUEUE)
+    this.deferred = []
     this.writeCursor = new Array<i32>(this.pools[POOL_WRITE].size)
     netAddress(this.bcryptAddress, "127.0.0.1", cfg.bcryptPort)
   }
@@ -1368,10 +1376,16 @@ export class ConduitWorker {
           // whatever else it held, and the Sync ends it.
           pool.send()
         }
-        if (!built) {
-          // The request, and every write batched with it, answers 500. When a
-          // later bind was refused at its start, the binds before it were sent
-          // whole and may have run, so none is sent again.
+        const leaderDeferred: boolean =
+          this.deferred.length > 0 && this.deferred[this.deferred.length - 1] === r
+        if (leaderDeferred) {
+          // Nothing of the group was bound, and the pool dropped it.
+          if (!this.reqs[r].solo) {
+            this.writeBatches -= 1
+          }
+        } else if (!built) {
+          // A bind was refused for a reason other than room: the request, and
+          // every write batched with it, answers 500, and none is sent again.
           if (r >= 0 && r < toI32(this.reqs.length) && this.reqs[r].inPool) {
             if (p === POOL_WRITE && !this.reqs[r].solo) {
               this.writeBatches -= 1
@@ -1426,6 +1440,16 @@ export class ConduitWorker {
         }
       }
     }
+    // The writes `bindAll` held back go again once what waited has been sent.
+    while (this.deferred.length > 0) {
+      let k: i32 = this.deferred[this.deferred.length - 1]
+      this.deferred.pop()
+      while (k >= 0) {
+        const m: ConduitReq = this.reqs[k]
+        k = m.batchNext
+        this.submit(m, true)
+      }
+    }
   }
 
   /**
@@ -1446,7 +1470,7 @@ export class ConduitWorker {
       let take: i32 = 0
       let bytes: i32 = 0
       while (take < this.writeCount && take < WRITE_BATCH) {
-        const cost: i32 = 2 * this.reqs[this.writeRing[(this.writeHead + take) % QUEUE]].textEnd + 512
+        const cost: i32 = writeCost(this.reqs[this.writeRing[(this.writeHead + take) % QUEUE]])
         if (take > 0 && bytes + cost > WRITE_BATCH_BYTES) {
           break
         }
@@ -1465,16 +1489,37 @@ export class ConduitWorker {
     }
   }
 
-  /** Binds `r`'s group, and every request batched after it, on `conn`. */
+  /**
+   * Binds `r`'s group, and every request batched after it, on `conn`. A write
+   * whose binds might not fit beside what already waits on the connection is
+   * not bound: the group ends before it, and it and the writes after it wait
+   * in `deferred` for the next pump, so no write's bind is refused for room
+   * (which would fail the group, or send the writes before it while their
+   * requests answered 500). False when nothing could be bound or a bind was
+   * refused.
+   */
   bindAll(r: ConduitReq, conn: PgConnection): boolean {
-    let ok: boolean = this.bind(r, conn)
-    let next: i32 = r.batchNext
-    while (ok && next >= 0) {
-      const m: ConduitReq = this.reqs[next]
-      ok = this.bind(m, conn)
-      next = m.batchNext
+    let prev: i32 = -1
+    let k: i32 = r.index
+    while (k >= 0) {
+      const m: ConduitReq = this.reqs[k]
+      if (
+        m.pool === POOL_WRITE &&
+        conn.outputEnd() - conn.outputStart() + writeCost(m) > PG_MAX_OUTPUT - 1024
+      ) {
+        if (prev >= 0) {
+          this.reqs[prev].batchNext = -1
+        }
+        this.deferred.push(k)
+        return prev >= 0
+      }
+      if (!this.bind(m, conn)) {
+        return false
+      }
+      prev = k
+      k = m.batchNext
     }
-    return ok
+    return true
   }
 
   /** How many statements `r`'s group runs, so a batch knows where each request's answers end. */
