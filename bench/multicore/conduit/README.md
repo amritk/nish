@@ -189,6 +189,8 @@ Statements here are measured by the backend's own CPU per call
 generic plans, scripts interleaved over three rounds), with the statements
 of one request sent as one pipeline, as the server sends them.
 
+| O7 | group commit: writes wait until the write connection has no batch in flight, then up to 128 go as one group, one transaction and one WAL flush; a failed group retries each write alone, a lost one answers 500 (three pairs at 4,000 users) | 234–240 against 240–241, **−3.9 µs (−1.6%)** paired | 34.1–34.2 / 33.9–34.1 | p95 **23–33** against 39–46, p99 **45–67** against 90–129 | yes: the tail halves, since a write no longer waits behind other writes' flushes on its connection. Checked under concurrency: 40 favorites at once all 200 and the count up by 40; 20 sign-ups with three duplicate names, 18 201s and two 422s, one row |
+
 ### The HTTP worker's own instructions
 
 App-side changes are measured by instructions, which do not drift with the
