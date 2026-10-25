@@ -135,3 +135,9 @@ one connection, old and new interleaved. The figures are Postgres
 | O1 | tag names by primary key: `ARRAY(SELECT (SELECT t.name FROM tags t WHERE t.id = at.tag_id) ...)` | **274–287** (−14%) | 62–64 | 3.0–3.4 | yes |
 | O2 | capped counts as index-only scans: the global count `ORDER BY a.id`, the feed's over `= ANY(ARRAY(followees))` | 275–300 | 62–66 | 3.0–4.4 | no: the plans are the same. `EXPLAIN (ANALYZE, BUFFERS)` gives both counts an index-only scan before and after, the global one 6 buffers and no heap fetch either way, the feed's 50 buffers either way (0.545 against 0.535 ms) |
 | O3 | `GET /api/tags` as one `text[]` row (`SELECT ARRAY(SELECT name FROM tags ORDER BY name)`), walked in place | **267–268** (−3% to −6%) | 61 | 2.8–3.0 | yes |
+| O4 | list pages cut in a subquery before the select list: `LIMIT ... OFFSET` over the whole select had computed every per-row subquery for each row the OFFSET skips too | 268–294 against O3's 274–311, **−11 µs (−3.8%)** paired | 62–65 | 3.0–3.8 | yes: pgbench, interleaved, gives the global list 0.264–0.274 ms against 0.546–0.600 |
+
+From O4 on, each change runs against the build before it in one session,
+A then B at each of four repeats (`run.sh --alt`), because the machine drifts
+within a session too: the same O3 build gave 274 to 311 µs/request across
+four runs of one session. The figures are the mean of the paired difference.
