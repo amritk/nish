@@ -1359,14 +1359,19 @@ export class ConduitWorker {
       while (s >= 0) {
         const r: i32 = this.tickets[p][pool.ticket % TICKET_RING]
         const conn: PgConnection = pool.connection(s)
-        const queued: i32 = conn.outputEnd() - conn.outputStart()
         const built: boolean = r >= 0 && r < toI32(this.reqs.length) && this.bindAll(this.reqs[r], conn)
-        const bound: boolean = conn.outputEnd() - conn.outputStart() > queued
-        const sent: boolean = pool.send()
-        if (!sent || !built) {
-          // The group was refused, whole or part of it: the request, and every
-          // write batched with it, answers 500 (part of it may have been sent,
-          // so none is sent again).
+        if (!pool.send() && conn.bindEnd()) {
+          // A bind refused part way left the group open with the bind in it,
+          // which no Sync can end, and the pool would wait on it for good.
+          // Ended with the parameters it has, the bind is one Postgres
+          // refuses: the group fails, its implicit transaction rolls back
+          // whatever else it held, and the Sync ends it.
+          pool.send()
+        }
+        if (!built) {
+          // The request, and every write batched with it, answers 500. When a
+          // later bind was refused at its start, the binds before it were sent
+          // whole and may have run, so none is sent again.
           if (r >= 0 && r < toI32(this.reqs.length) && this.reqs[r].inPool) {
             if (p === POOL_WRITE && !this.reqs[r].solo) {
               this.writeBatches -= 1
@@ -1380,14 +1385,6 @@ export class ConduitWorker {
               this.fail(req, 500, "statement not sent", true)
             }
           }
-        }
-        if (!sent && bound) {
-          // The binds wrote and no Sync could follow: a bind refused part way
-          // left the group open, and the pool would wait on it for good. Only then
-          // is the connection dropped and made again, its other groups lost
-          // with it as on a socket error.
-          conn.closed()
-          this.pgEvents(p, s)
         }
         s = pool.dispatch()
       }
