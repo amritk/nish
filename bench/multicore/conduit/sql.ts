@@ -9,7 +9,7 @@
 // Sync, and a response is sent only after its group's ReadyForQuery.
 //
 // Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License;
-// see bench/multicore/conduit/LICENSE.md.
+// see LICENSE.md beside this file.
 import { PgPool } from "nish/net/postgres"
 
 /** The article columns, in order: what `ARTICLE_LIST` and `ARTICLE_FULL` select. */
