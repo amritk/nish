@@ -85,7 +85,7 @@ record. What it leaves open:
 `bash bench/multicore/setup.sh` builds a PostgreSQL 18 cluster tuned as the
 challenge's `box/pg-conf.sh` tunes the box (for this machine's cores and
 memory, `max_connections = 100`) and loads both seeds at the challenge commit
-setup.sh pins. `bash bench/multicore/run.sh` builds the server, runs the
+`bench/postgres/setup.sh` pins. `bash bench/multicore/run.sh` builds the server, runs the
 challenge's conformance suite against it on a fresh copy of the dev seed, then
 runs the challenge's own load generator (`bench/cmd/loadgen run`, unchanged)
 at fixed user counts on a fresh copy of the full seed, each run after a
@@ -195,6 +195,16 @@ plans (`EXPLAIN (ANALYZE, BUFFERS)` under a generic plan) and by `pgbench` on
 one connection, old and new interleaved. The figures are Postgres
 µs/request, HTTP-worker µs/request and p95, each as the range of the three runs.
 
+From O4 on, each change runs against the build before it in one session,
+A then B at each of four repeats (`run.sh --alt`), because the machine drifts
+within a session too: the same O3 build gave 274 to 311 µs/request across
+four runs of one session. The figures are the mean of the paired difference.
+
+Statements here are measured by the backend's own CPU per call
+(`/proc/<pid>/stat` of the one backend pgbench drives, prepared statements,
+generic plans, scripts interleaved over three rounds), with the statements
+of one request sent as one pipeline, as the server sends them.
+
 | # | Change | Postgres µs/req | HTTP µs/req | p95 ms | Kept |
 | --- | --- | ---: | ---: | ---: | --- |
 | P4 | `Http1Config.idleInput`: idle connections lend their input and head buffers | 322–330 | 61–63 | 4.3–4.6 | yes: 3.20 → **1.13 KiB** per idle connection (15,000 open), HTTP cost within the noise |
@@ -202,19 +212,8 @@ one connection, old and new interleaved. The figures are Postgres
 | O2 | capped counts as index-only scans: the global count `ORDER BY a.id`, the feed's over `= ANY(ARRAY(followees))` | 275–300 | 62–66 | 3.0–4.4 | no: the plans are the same. `EXPLAIN (ANALYZE, BUFFERS)` gives both counts an index-only scan before and after, the global one 6 buffers and no heap fetch either way, the feed's 50 buffers either way (0.545 against 0.535 ms) |
 | O3 | `GET /api/tags` as one `text[]` row (`SELECT ARRAY(SELECT name FROM tags ORDER BY name)`), walked in place | **267–268** (−3% to −6%) | 61 | 2.8–3.0 | yes |
 | O4 | list pages cut in a subquery before the select list: `LIMIT ... OFFSET` over the whole select had computed every per-row subquery for each row the OFFSET skips too | 268–294 against O3's 274–311, **−11 µs (−3.8%)** paired | 62–65 | 3.0–3.8 | yes: pgbench, interleaved, gives the global list 0.264–0.274 ms against 0.546–0.600 |
-
-From O4 on, each change runs against the build before it in one session,
-A then B at each of four repeats (`run.sh --alt`), because the machine drifts
-within a session too: the same O3 build gave 274 to 311 µs/request across
-four runs of one session. The figures are the mean of the paired difference.
 | O5 | an article's comments in one statement, a `LEFT JOIN LATERAL` from the article, instead of a lookup and the list | 249–292 against O4's 258–289, −0.2 µs paired | 59–65 | 2.4–3.6 | yes, as a simplification: neutral. By the backend's own CPU under pgbench the pair pipelined in one group costs what the one statement does (117–123 against 115–121 µs a call); sent as two round trips it would have cost 35 µs more |
 | O6 | a list page and its capped count as one statement (the count a `WITH` joined to the page) | — | — | — | no: pipelined, the pair costs the same (343–381 against 360–386 µs a call) and the joined form needs a column offset on every row |
-
-Statements here are measured by the backend's own CPU per call
-(`/proc/<pid>/stat` of the one backend pgbench drives, prepared statements,
-generic plans, scripts interleaved over three rounds), with the statements
-of one request sent as one pipeline, as the server sends them.
-
 | O7 | group commit: writes wait until the write connection has no batch in flight, then up to 128 go as one group, one transaction and one WAL flush; a failed group retries each write alone, a lost one answers 500 (three pairs at 4,000 users) | 234–240 against 240–241, **−3.9 µs (−1.6%)** paired | 34.1–34.2 / 33.9–34.1 | p95 **23–33** against 39–46, p99 **45–67** against 90–129 | yes: the tail halves, since a write no longer waits behind other writes' flushes on its connection. Checked under concurrency: 40 favorites at once all 200 and the count up by 40; 20 sign-ups with three duplicate names, 18 201s and two 422s, one row |
 | O8 | read batching: up to 32 waiting reads as one pipelined group, one implicit transaction, each answered when its last statement completes (three pairs at 4,000 users against O7) | first build 207–220 against 237–240, but p95 **78–111** against 23–27: `PgPool` opens a connection only once more than `maxInFlight` (16) groups per connection wait, and batching never queued that many, so every read ran on one backend per worker. Neither a Flush after each read nor 8-read batches nor two batches a connection moved p95 (54–133). With the pool's cap at the batch depth, every connection open: 231–245 against 233–246 | 33.5–34.1 / 34.2–34.5 | p95 22–42 against 21–33 | no: inside the spread once the reads are spread over the connections. What it saved was one backend doing a worker's reads, which saturates it |
 

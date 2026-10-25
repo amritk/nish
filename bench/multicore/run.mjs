@@ -148,13 +148,36 @@ run(
   "pg_ctl start"
 )
 let server = null
+/** The run's database while a server runs on it, and the load generators running; a failed run drops and stops them. */
+let liveDb = null
+const loads = new Set()
 const stopAll = () => {
-  if (server !== null) {
-    try {
-      process.kill(server.pid, "SIGTERM")
-    } catch {
-      // It has already exited.
+  for (const child of [server, ...loads]) {
+    if (child !== null) {
+      try {
+        process.kill(child.pid, "SIGTERM")
+      } catch {
+        // It has already exited.
+      }
     }
+  }
+  if (liveDb !== null) {
+    spawnSync(
+      ...as(path.join(pgBin, "psql"), [
+        "-X",
+        "-q",
+        "-h",
+        sock,
+        "-p",
+        String(pgPort),
+        "-U",
+        "postgres",
+        "-d",
+        "postgres",
+        "-c",
+        `DROP DATABASE IF EXISTS ${liveDb} WITH (FORCE)`,
+      ])
+    )
   }
   spawnSync(...as(path.join(pgBin, "pg_ctl"), ["-D", data, "-m", "fast", "-w", "stop"]))
 }
@@ -198,6 +221,7 @@ const startServer = async (source, binary = exe, extra = {}) => {
   dbCount += 1
   const db = `multicore_${process.pid}_${dbCount}`
   psql(`CREATE DATABASE ${db} TEMPLATE ${source} STRATEGY FILE_COPY`)
+  liveDb = db
   const log = fs.openSync(path.join(out, "server.log"), "w")
   server = spawn(binary, [], {
     stdio: ["ignore", log, log],
@@ -232,6 +256,7 @@ const stopServer = async (db) => {
     server = null
   }
   psql(`DROP DATABASE IF EXISTS ${db} WITH (FORCE)`)
+  liveDb = null
 }
 
 // ---- /proc ----------------------------------------------------------------------
@@ -308,8 +333,8 @@ const articles = seed === "full" ? 500000 : 10000
 const results = []
 
 /** The loadgen, run as the challenge's scoring runs it on one box. */
-const spawnLoad = (n, startAt, rampS, measureS, tailS, outFile, tag) =>
-  spawn(
+const spawnLoad = (n, startAt, rampS, measureS, tailS, outFile, tag) => {
+  const child = spawn(
     path.join(tools, "loadgen"),
     [
       "run",
@@ -339,6 +364,10 @@ const spawnLoad = (n, startAt, rampS, measureS, tailS, outFile, tag) =>
     ],
     { stdio: ["ignore", "inherit", "inherit"] }
   )
+  loads.add(child)
+  child.once("exit", () => loads.delete(child))
+  return child
+}
 
 /** The server's bcrypt service: the worker whose prefork index is HTTP_WORKERS. */
 const bcryptProcess = (top, workers) => {
@@ -416,7 +445,15 @@ if (!idleOnly) {
       fail(`loadgen exited ${code}`)
     }
     const merged = path.join(out, `merged-${n}.json`)
-    spawnSync(path.join(tools, "loadgen"), ["merge", "-o", merged, outFile], { encoding: "utf8" })
+    // The merged file's name is shared by every run at `n`: a merge that failed
+    // would leave the last run's figures to be read as this one's.
+    fs.rmSync(merged, { force: true })
+    const merging = spawnSync(path.join(tools, "loadgen"), ["merge", "-o", merged, outFile], {
+      encoding: "utf8",
+    })
+    if (merging.status !== 0) {
+      fail(`loadgen merge exited ${merging.status}: ${merging.stderr}`)
+    }
     const m = JSON.parse(fs.readFileSync(merged, "utf8"))
     const requests = m.overall.count
     const perRequest = (ticks) => (ticks / hz / requests) * 1e6

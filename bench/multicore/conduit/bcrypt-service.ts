@@ -41,7 +41,11 @@ export const BCRYPT_MISMATCH: i32 = 2
 export const BCRYPT_FAILED: i32 = 0
 /** The cost every hash is made with: SPEC.md's. */
 const BCRYPT_COST: i32 = 10
-/** The longest password a frame carries; bcrypt reads no more (SPEC.md refuses a longer one with 422). */
+/**
+ * The longest password a frame carries: bcrypt reads no more. SPEC.md sets no
+ * limit; the server refuses a longer one (422 at sign-up and update, 401 at
+ * login) rather than hash a prefix of it.
+ */
 export const BCRYPT_MAX_PASSWORD: i32 = 72
 /** The longest hash a frame carries. */
 const BCRYPT_MAX_HASH: i32 = 64
@@ -119,12 +123,16 @@ const bcryptLane = (q: BcryptQueue, n: i32, k: i32): Secret<u8[]> | null => {
   return secret(bcryptCopy(q.password[at], q.passwordLength[at]))
 }
 
-/** Queues the reply to job `at` of `q` on its peer: `status`, and `hash` when given. */
 /** A check's answer: the password matched, or it did not. */
 const bcryptOutcome = (matched: boolean): i32 => (matched ? BCRYPT_DONE : BCRYPT_MISMATCH)
 
+/** Queues the reply to job `at` of `q` on its peer: `status`, and `hash` when given. */
 const bcryptReply = (peers: BcryptPeer[], q: BcryptQueue, at: i32, status: i32, hash: string): void => {
-  const p: i32 = q.peer[at]
+  bcryptReplyTo(peers, q.peer[at], q.id[at], status, hash)
+}
+
+/** Queues the reply to job `id` on peer `p`. */
+const bcryptReplyTo = (peers: BcryptPeer[], p: i32, id: i32, status: i32, hash: string): void => {
   if (p < 0 || p >= toI32(peers.length)) {
     return
   }
@@ -135,7 +143,6 @@ const bcryptReply = (peers: BcryptPeer[], q: BcryptQueue, at: i32, status: i32, 
   }
   const o: u8[] = peer.output
   let e: i32 = peer.outputEnd
-  const id: i32 = q.id[at]
   o[e] = toU8((id >> 24) & 255)
   o[e + 1] = toU8((id >> 16) & 255)
   o[e + 2] = toU8((id >> 8) & 255)
@@ -276,10 +283,7 @@ const bcryptTake = (
     const id: i32 =
       (toI32(b[at + 1]) << 24) | (toI32(b[at + 2]) << 16) | (toI32(b[at + 3]) << 8) | toI32(b[at + 4])
     if (q.count === BCRYPT_QUEUE) {
-      const spare: BcryptQueue = new BcryptQueue()
-      spare.peer[0] = p
-      spare.id[0] = id
-      bcryptReply(peers, spare, 0, BCRYPT_FAILED, "")
+      bcryptReplyTo(peers, p, id, BCRYPT_FAILED, "")
     } else {
       const slot: i32 = q.at(q.count)
       q.peer[slot] = p

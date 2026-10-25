@@ -2,7 +2,8 @@
 # The server bench/multicore/run.sh measures against: bench/postgres/setup.sh's
 # PostgreSQL 18 cluster, tuned as the challenge's box/pg-conf.sh tunes the box
 # (max_connections 100, pgtune's web profile for this machine's cores and
-# memory), with the challenge pinned at the commit setup.sh names.
+# memory), with the challenge pinned at the commit
+# bench/postgres/setup.sh names (COMMIT).
 #
 #   bash bench/multicore/setup.sh [--dev] [dir]
 #

@@ -16,6 +16,12 @@ bash build.sh
 DATABASE_URL=postgres://conduit:conduit@127.0.0.1:5432/conduit JWT_SECRET=... HOST=0.0.0.0 PORT=80 bash start.sh
 ```
 
+The server needs Nish 0.22.0: it uses standard-library changes that first
+ship in that release (`PreforkConfig.restart`, `Http1Config.idleInput`,
+`TCP_NODELAY` on `tcpConnect`). Until 0.22.0 is on npm, `install.sh` stops at
+its `npm install`. To try an unreleased build, set `NISH_PACKAGES` to the
+`npm pack` tarballs of the compiler and its platform package.
+
 ## Design and optimizations
 
 - **Processes.** A prefork parent starts two HTTP workers and one bcrypt

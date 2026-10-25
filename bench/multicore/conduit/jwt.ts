@@ -7,8 +7,8 @@
 // The key's pads are absorbed once (`keyed`), and each signature copies the
 // two keyed SHA-256 states and feeds them the message, so a token costs the
 // message's blocks and two finishing blocks, not the key's two again. Every
-// base64url step reads and writes caller-owned arrays: a request allocates
-// nothing here.
+// base64url step reads and writes caller-owned arrays; what a request
+// allocates here is the digests `HmacSha256.digest` returns.
 import { timingSafeEqualAt } from "nish/crypto/ct"
 import { HmacSha256, hmacCopySha256 } from "nish/crypto/hmac"
 import {

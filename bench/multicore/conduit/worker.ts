@@ -187,6 +187,12 @@ const TICKET_RING: i32 = 131072
 const QUEUE: i32 = 65536
 /** The most writes one group commits together. */
 const WRITE_BATCH: i32 = 128
+/**
+ * The most bytes a batch's binds may take, well under `maxOutput` (4 MiB): a
+ * bind refused for room would leave the pool's group half built. One write's
+ * binds take at most twice its text (tags are bound twice) and 512 bytes.
+ */
+const WRITE_BATCH_BYTES: i32 = 2097152
 /** The largest response body a writer holds; the output buffer holds it and its head. */
 const RESPONSE_ROOM: i32 = 1048576
 /** How long the worker waits for the bcrypt service to listen before failing the logins that wait, in ns. */
@@ -709,6 +715,11 @@ export class ConduitWorker {
       this.slotReq[r.slot] = -1
     }
     wipe(r.pw)
+    if (r.bodyLen > 0 && (r.route === R_SIGNUP || r.route === R_LOGIN || r.route === R_USER_PUT)) {
+      // A request answered before its body was parsed (a 401, a 422) still
+      // holds the password in it.
+      wipe(r.body)
+    }
     r.slot = -1
     r.inPool = false
     r.inBcrypt = false
@@ -746,6 +757,15 @@ export class ConduitWorker {
     if (later) {
       this.drive(slot)
     }
+  }
+
+  /** Answers `r` with what `w` wrote into `buf`, or 500 when it did not fit: a cut JSON text is never sent. */
+  answerWritten(r: ConduitReq, status: i32, w: JsonWriter, buf: u8[]): void {
+    if (w.failed !== 0) {
+      this.fail(r, 500, "the response is too large", true)
+      return
+    }
+    this.answer(r, status, buf, w.end, true)
   }
 
   /** Answers `r` with `{"errors":{"body":[message]}}`. */
@@ -1414,7 +1434,16 @@ export class ConduitWorker {
       if (ticket === PG_POOL_FULL) {
         return
       }
-      const take: i32 = this.writeCount < WRITE_BATCH ? this.writeCount : WRITE_BATCH
+      let take: i32 = 0
+      let bytes: i32 = 0
+      while (take < this.writeCount && take < WRITE_BATCH) {
+        const cost: i32 = 2 * this.reqs[this.writeRing[(this.writeHead + take) % QUEUE]].textEnd + 512
+        if (take > 0 && bytes + cost > WRITE_BATCH_BYTES) {
+          break
+        }
+        bytes += cost
+        take += 1
+      }
       for (let k: i32 = 0; k < take; k++) {
         const r: ConduitReq = this.reqs[this.writeRing[(this.writeHead + k) % QUEUE]]
         r.ticket = ticket
@@ -2230,7 +2259,7 @@ export class ConduitWorker {
     switch (route) {
       case R_TAGS:
         w.endObject()
-        this.answer(r, 200, buf, w.end, true)
+        this.answerWritten(r, 200, w, buf)
         return
       case R_LIST:
       case R_FEED:
@@ -2238,7 +2267,7 @@ export class ConduitWorker {
         w.key("articlesCount")
         w.i64(r.count)
         w.endObject()
-        this.answer(r, 200, buf, w.end, true)
+        this.answerWritten(r, 200, w, buf)
         return
       case R_COMMENTS:
         if (!r.found) {
@@ -2247,7 +2276,7 @@ export class ConduitWorker {
         }
         w.endArray()
         w.endObject()
-        this.answer(r, 200, buf, w.end, true)
+        this.answerWritten(r, 200, w, buf)
         return
       case R_LOGIN:
         if (!r.found) {
@@ -2290,7 +2319,7 @@ export class ConduitWorker {
     }
     w.endObject()
     const created: boolean = route === R_SIGNUP || route === R_ARTICLE_CREATE || route === R_COMMENT_CREATE
-    this.answer(r, created ? 201 : 200, buf, w.end, true)
+    this.answerWritten(r, created ? 201 : 200, w, buf)
   }
 
   // ---- bcrypt ---------------------------------------------------------------------
@@ -2427,8 +2456,10 @@ export class ConduitWorker {
         this.fail(r, 401, "invalid credentials", true)
         return
       }
-      const w: JsonWriter = this.plain
-      w.reset(this.plainBuf, 0)
+      // The fields are the user's own, uncapped (a bio of any length), so the
+      // answer is sized from them rather than written into `plainBuf`.
+      r.ownRoom(1024 + 6 * r.textEnd)
+      const w: JsonWriter = r.ownWriter
       w.beginObject()
       w.key("user")
       w.beginObject()
@@ -2445,7 +2476,7 @@ export class ConduitWorker {
       this.field(w, r, F_IMAGE)
       w.endObject()
       w.endObject()
-      this.answer(r, 200, this.plainBuf, w.end, true)
+      this.answerWritten(r, 200, w, r.own)
       return
     }
     if (c.replyStatus !== BCRYPT_DONE) {
