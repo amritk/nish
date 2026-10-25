@@ -5,11 +5,11 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
 declare extern_weak void @nish_panic_overflow(i32 noundef) #2
-declare double @llvm.floor.f64(double) #3
-declare double @llvm.fabs.f64(double) #3
-declare i32 @llvm.smin.i32(i32, i32) #3
-declare i32 @llvm.smax.i32(i32, i32) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare double @nish_floor_f64(double) #3
+declare double @llvm.fabs.f64(double) #4
+declare i32 @llvm.smin.i32(i32, i32) #4
+declare i32 @llvm.smax.i32(i32, i32) #4
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -27,7 +27,7 @@ entry:
   %3 = call i32 @llvm.smax.i32(i32 %2, i32 7)
   store i32 %3, i32* %high.addr, align 4
   %4 = fneg double 0x4004000000000000
-  %5 = call double @llvm.floor.f64(double %4)
+  %5 = call double @nish_floor_f64(double %4)
   store double %5, double* %down.addr, align 8
   %6 = fneg double 0x4004000000000000
   %7 = call double @llvm.fabs.f64(double %6)
@@ -65,7 +65,8 @@ entry:
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
-attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn memory(inaccessiblemem: readwrite) "probe-stack"="inline-asm" }
+attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}

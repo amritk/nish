@@ -11,7 +11,7 @@ declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #0
 declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #0
 declare double @nish_date_now() #0
-declare double @llvm.floor.f64(double) #2
+declare double @nish_floor_f64(double) #2
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -21,7 +21,7 @@ entry:
   store double %0, double* %t.addr, align 8
   %1 = load double, double* %t.addr, align 8
   %2 = load double, double* %t.addr, align 8
-  %3 = call double @llvm.floor.f64(double %2)
+  %3 = call double @nish_floor_f64(double %2)
   %4 = fcmp oeq double %1, %3
   %5 = select i1 %4, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
   call void @nish_print(i8* %5)
@@ -57,7 +57,7 @@ entry:
 
 attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
 attributes #1 = { nounwind "probe-stack"="inline-asm" }
-attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn memory(inaccessiblemem: readwrite) "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!11, !12, !13, !14, !15}
 !0 = !{!"nish array"}

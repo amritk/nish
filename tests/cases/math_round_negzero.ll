@@ -6,12 +6,12 @@ declare void @nish_arena_release(i64 noundef) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #2
-declare double @llvm.floor.f64(double) #0
+declare double @nish_floor_f64(double) #3
 declare double @llvm.copysign.f64(double, double) #0
 
 define noundef double @roundHalf(double noundef %x) #0 {
 entry:
-  %0 = call double @llvm.floor.f64(double %x)
+  %0 = call double @nish_floor_f64(double %x)
   %1 = fsub double %x, %0
   %2 = fcmp oge double %1, 0x3FE0000000000000
   %3 = fadd double %0, 0x3FF0000000000000
@@ -101,6 +101,7 @@ entry:
 attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 attributes #1 = { nounwind "probe-stack"="inline-asm" }
 attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { nounwind willreturn memory(inaccessiblemem: readwrite) "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}
