@@ -1675,7 +1675,9 @@ milliseconds, and one whose request head has been arriving for longer than
 a time cannot hold a slot. Over TLS the head's clock starts with the first
 bytes after the handshake, so a client that finishes its handshake and then
 sends nothing is closed after `headTimeout` too. Both are `Http1Config`
-fields, and a value of 0 or less stops start-up. `TlsTcpServer`,
+fields, and a value of 0 or less stops start-up. Calling `expire` on every
+turn of the loop is cheap: it walks the slots only when one can be due, about
+once per the shorter of the two timeouts, and `expireScans` counts the walks. `TlsTcpServer`,
 `Http1TlsServer`, `Http2TlsServer` and `Http3Server` build a slot the same
 way, on the first connection accepted into it (an `Http2TlsServer` builds slot
 0 in its constructor), so a pool's size is a ceiling on its connections. What

@@ -1245,6 +1245,30 @@ export class Http1Connection {
   expired(now: i64): boolean {
     return this.idle(now) || this.headLate(now)
   }
+
+  /**
+   * The soonest `expired` can turn true, however the connection moves from
+   * here: `lastActive` only grows, and a head clock not yet started starts
+   * no earlier than it.
+   */
+  expiresNoSooner(): i64 {
+    const idle: i64 = toI64(this.config.idleTimeout) * toI64(1000000)
+    const head: i64 = toI64(this.config.headTimeout) * toI64(1000000)
+    const soonest: i64 = this.lastActive + (head < idle ? head : idle)
+    if (this.headTimed && this.headSince + head < soonest) {
+      return this.headSince + head
+    }
+    return soonest
+  }
+}
+
+/**
+ * The soonest any slot accepted after now can expire: no sooner than the
+ * shorter of `idleTimeout` and `headTimeout` from now.
+ */
+const http1ExpireFloor = (config: Http1Config): i64 => {
+  const shorter: i32 = config.headTimeout < config.idleTimeout ? config.headTimeout : config.idleTimeout
+  return monotonicNanos() + toI64(shorter) * toI64(1000000)
 }
 
 // ---- Carriers -------------------------------------------------------------------
@@ -1288,6 +1312,14 @@ export class Http1Server {
   slots: i32 = 1
   /** The listening socket, which the program made with `tcpListen` and still owns. */
   listener: i32 = -1
+  /**
+   * No slot can expire before this (`monotonicNanos`), so `expire` called
+   * sooner walks none: it walks every slot only about once per the shorter
+   * timeout, however many there are.
+   */
+  expireAfter: i64 = 0
+  /** How many calls of `expire` walked every slot, for a program measuring its cost. */
+  expireScans: i32 = 0
 
   /**
    * A pool of `size` slots, at least one, serving `config` on `listener`.
@@ -1538,13 +1570,24 @@ export class Http1Server {
    * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
    */
   expire(now: i64): i32 {
+    if (now < this.expireAfter) {
+      return 0
+    }
+    this.expireScans = this.expireScans + 1
+    let soonest: i64 = http1ExpireFloor(this.config)
     let n: i32 = 0
     for (let k: i32 = 0; k < toI32(this.fds.length) && k < toI32(this.connections.length); k++) {
-      if (this.fds[k] >= 0 && this.connections[k].expired(now)) {
-        this.close(k)
-        n = n + 1
+      if (this.fds[k] >= 0) {
+        const conn = this.connections[k]
+        if (conn.expired(now)) {
+          this.close(k)
+          n = n + 1
+        } else if (conn.expiresNoSooner() < soonest) {
+          soonest = conn.expiresNoSooner()
+        }
       }
     }
+    this.expireAfter = soonest
     return n
   }
 }
@@ -1580,6 +1623,10 @@ export class Http1TlsServer {
   scratch: u8[]
   /** The output buffers the slots borrow while they write. */
   outputs: Http1OutputPool
+  /** No slot can expire before this (`monotonicNanos`): `Http1Server.expireAfter`. */
+  expireAfter: i64 = 0
+  /** How many calls of `expire` walked every slot. */
+  expireScans: i32 = 0
 
   /**
    * A pool of `size` slots, at least one, serving `config` over TLS under
@@ -1816,13 +1863,24 @@ export class Http1TlsServer {
    * head for longer than `headTimeout`, at `now` (`monotonicNanos`); answers how many.
    */
   expire(now: i64): i32 {
+    if (now < this.expireAfter) {
+      return 0
+    }
+    this.expireScans = this.expireScans + 1
+    let soonest: i64 = http1ExpireFloor(this.config)
     let n: i32 = 0
     for (let k: i32 = 0; k < this.tls.size() && k < toI32(this.connections.length); k++) {
-      if (this.tls.holds(k) && this.connections[k].expired(now)) {
-        this.tls.close(k)
-        n = n + 1
+      if (this.tls.holds(k)) {
+        const conn = this.connections[k]
+        if (conn.expired(now)) {
+          this.tls.close(k)
+          n = n + 1
+        } else if (conn.expiresNoSooner() < soonest) {
+          soonest = conn.expiresNoSooner()
+        }
       }
     }
+    this.expireAfter = soonest
     return n
   }
 }

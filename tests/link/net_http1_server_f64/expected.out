@@ -54,6 +54,9 @@ PASS  a client gone in the middle of a response: the write fails and the slot is
 PASS  a slot that has just moved is not idle
 PASS  past idleTimeout it is closed
 PASS  and its client sees the end
+PASS  an expire before any slot can be due walks no slot
+PASS  a slot accepted after a walk is closed past idleTimeout
+PASS  and its client sees the end too
 PASS  a second piece of a head leaves its clock where the first piece started it
 PASS  a head that has just begun is not past headTimeout
 PASS  a head still unfinished past headTimeout closes its slot, though the slot is not idle
@@ -113,6 +116,7 @@ PASS  a client offering no ALPN completes the handshake
 PASS  and is served HTTP/1.1
 PASS  an idle TLS slot is closed past idleTimeout
 PASS  and its client sees the end
+PASS  a TLS expire before any slot can be due walks no slot
 PASS  a second TLS record of a head leaves its clock where it started
 PASS  a TLS head that has just begun is not past headTimeout
 PASS  a TLS head still unfinished past headTimeout closes its slot
@@ -198,4 +202,4 @@ PASS  and an upgraded slot buffers at most 2^30 bytes, what WsDecoder's input ca
 PASS  an aborted connection is done at once
 PASS  a body event is a window onto the parser's buffer
 PASS  a body cut by the end of the stream ends the connection
-http1 server: 200 passed, 0 failed, 0 skipped
+http1 server: 204 passed, 0 failed, 0 skipped

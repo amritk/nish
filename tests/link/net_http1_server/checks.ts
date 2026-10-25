@@ -804,6 +804,17 @@ export const serverChecks = (): i32 => {
   t.eqI32("a slot that has just moved is not idle", lb.plain.expire(monotonicNanos()), ZERO);
   t.eqI32("past idleTimeout it is closed", lb.plain.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
   t.ok("and its client sees the end", lb.awaitEnd(idle) && lb.plain.busy() === 0);
+  // A walk records when the soonest slot can be due, so calls before then
+  // cost nothing however many slots there are, and a slot accepted after the
+  // walk is still closed on time.
+  const walks: i32 = lb.plain.expireScans;
+  lb.plain.expire(monotonicNanos());
+  lb.plain.expire(monotonicNanos());
+  t.eqI32("an expire before any slot can be due walks no slot", lb.plain.expireScans, walks);
+  const late: i32 = lb.connect(false);
+  lb.settle();
+  t.eqI32("a slot accepted after a walk is closed past idleTimeout", lb.plain.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
+  t.ok("and its client sees the end too", lb.awaitEnd(late) && lb.plain.busy() === 0);
 
   // A slowloris client keeps its slot moving, so it is never idle, but its
   // head never ends; a keep-alive client whose exchange is over has no head
@@ -964,6 +975,9 @@ export const serverChecks = (): i32 => {
   lb.settle();
   t.eqI32("an idle TLS slot is closed past idleTimeout", lb.secure.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
   t.ok("and its client sees the end", lb.awaitEnd(n.index) && lb.secure.busy() === 0);
+  const tlsWalks: i32 = lb.secure.expireScans;
+  lb.secure.expire(monotonicNanos());
+  t.eqI32("a TLS expire before any slot can be due walks no slot", lb.secure.expireScans, tlsWalks);
 
   const sl = new TlsClient(lb);
   sl.handshake(noAlpn);
