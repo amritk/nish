@@ -1386,6 +1386,9 @@ export class ConduitWorker {
           conn.paramInt(r.viewer) &&
           conn.paramInt(r.limit) &&
           conn.paramInt(r.offset) &&
+          conn.bindEnd() &&
+          conn.bindStart("count_feed") &&
+          conn.paramInt(r.viewer) &&
           conn.bindEnd()
         break
       case R_ARTICLE_GET:
@@ -1472,20 +1475,28 @@ export class ConduitWorker {
   }
 
   bindList(r: ConduitReq, conn: PgConnection): boolean {
-    const name: string =
-      r.filter === FILTER_TAG
-        ? "list_tag"
-        : r.filter === FILTER_AUTHOR
-          ? "list_author"
-          : r.filter === FILTER_FAVORITED
-            ? "list_favorited"
-            : "list_all"
+    if (r.filter === FILTER_NONE) {
+      return (
+        conn.bindStart("list_all") &&
+        conn.paramInt(r.viewer) &&
+        conn.paramInt(r.limit) &&
+        conn.paramInt(r.offset) &&
+        conn.bindEnd() &&
+        conn.bindStart("count_all") &&
+        conn.bindEnd()
+      )
+    }
+    const list: string = r.filter === FILTER_TAG ? "list_tag" : r.filter === FILTER_AUTHOR ? "list_author" : "list_favorited"
+    const count: string = r.filter === FILTER_TAG ? "count_tag" : r.filter === FILTER_AUTHOR ? "count_author" : "count_favorited"
     return (
-      conn.bindStart(name) &&
+      conn.bindStart(list) &&
       conn.paramInt(r.viewer) &&
       conn.paramInt(r.limit) &&
       conn.paramInt(r.offset) &&
-      (r.filter === FILTER_NONE || this.text(conn, r, F_FILTER)) &&
+      this.text(conn, r, F_FILTER) &&
+      conn.bindEnd() &&
+      conn.bindStart(count) &&
+      this.text(conn, r, F_FILTER) &&
       conn.bindEnd()
     )
   }
@@ -1522,10 +1533,10 @@ export class ConduitWorker {
         break
       case R_LIST:
       case R_FEED:
-        // The capped count, and the article from column 1 (NULL on an empty page).
-        r.count = conn.int(0)
-        if (!conn.isNull(1)) {
-          this.article(w, conn, false, 1)
+        if (r.stmt === 0) {
+          this.article(w, conn, false)
+        } else {
+          r.count = conn.int(0)
         }
         break
       case R_ARTICLE_GET:
@@ -1627,7 +1638,7 @@ export class ConduitWorker {
     if (!r.found) {
       r.found = true
       w.key("article")
-      this.article(w, conn, true, 0)
+      this.article(w, conn, true)
     }
   }
 
@@ -1651,41 +1662,41 @@ export class ConduitWorker {
     }
   }
 
-  /** An article row, its `COL_` columns from column `at`, as an Article object. */
-  article(w: JsonWriter, conn: PgConnection, full: boolean, at: i32): void {
+  /** An article row (`COL_` order) as an Article object. */
+  article(w: JsonWriter, conn: PgConnection, full: boolean): void {
     w.beginObject()
     w.key("slug")
-    this.column(w, conn, at + COL_SLUG)
+    this.column(w, conn, COL_SLUG)
     w.key("title")
-    this.column(w, conn, at + COL_TITLE)
+    this.column(w, conn, COL_TITLE)
     w.key("description")
-    this.column(w, conn, at + COL_DESCRIPTION)
+    this.column(w, conn, COL_DESCRIPTION)
     if (full) {
       w.key("body")
-      this.column(w, conn, at + COL_BODY)
+      this.column(w, conn, COL_BODY)
     }
     w.key("tagList")
     w.beginArray()
-    this.tagList(w, conn, at + COL_TAGS)
+    this.tagList(w, conn, COL_TAGS)
     w.endArray()
     w.key("createdAt")
-    this.timestamp(w, conn, at + COL_CREATED)
+    this.timestamp(w, conn, COL_CREATED)
     w.key("updatedAt")
-    this.timestamp(w, conn, at + COL_UPDATED)
+    this.timestamp(w, conn, COL_UPDATED)
     w.key("favorited")
-    w.boolean(conn.bool(at + COL_FAVORITED))
+    w.boolean(conn.bool(COL_FAVORITED))
     w.key("favoritesCount")
-    w.i64(conn.int(at + COL_FAVORITES))
+    w.i64(conn.int(COL_FAVORITES))
     w.key("author")
     w.beginObject()
     w.key("username")
-    this.column(w, conn, at + COL_USERNAME)
+    this.column(w, conn, COL_USERNAME)
     w.key("bio")
-    this.column(w, conn, at + COL_BIO)
+    this.column(w, conn, COL_BIO)
     w.key("image")
-    this.column(w, conn, at + COL_IMAGE)
+    this.column(w, conn, COL_IMAGE)
     w.key("following")
-    w.boolean(conn.bool(at + COL_FOLLOWING))
+    w.boolean(conn.bool(COL_FOLLOWING))
     w.endObject()
     w.endObject()
   }

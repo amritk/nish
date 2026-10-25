@@ -51,75 +51,74 @@ const SLUGIFY_2: string = "trim(both '-' from lower(regexp_replace($2::text, '[^
 const LAST_ARTICLE: string = "(SELECT currval(pg_get_serial_sequence('articles', 'id')))"
 const FOLLOWING_1: string = "EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = $1 AND fo.followee_id = "
 
-/** The page columns a list's subquery cuts, before the select list runs over them. */
-const PAGE_COLUMNS: string = "SELECT a2.id, a2.slug, a2.title, a2.description, a2.created_at, a2.updated_at, a2.author_id FROM articles a2"
-
-/**
- * One list request as one statement: the capped count of `count`'s rows, then
- * the articles of `page` in `COL_` order from column 1, newest first. The
- * count is joined to the page, so an empty page is one row whose article
- * columns are NULL. `page` is cut to `$2` from `$3` before any column is
- * computed: with LIMIT and OFFSET over the whole select, every per-row
- * subquery also ran for each row the OFFSET skips.
- */
-const listStatement = (count: string, page: string): string =>
-  "WITH c AS (SELECT count(*) AS n FROM (" +
-  count +
-  " LIMIT 1000) s) SELECT c.n, " +
-  ARTICLE_LIST.substring(7) +
-  " FROM c LEFT JOIN (" +
-  page +
-  ") a ON true LEFT JOIN users u ON u.id = a.author_id ORDER BY a.id DESC"
+/** The FROM of a list page: the articles `where` keeps, newest first, cut to `$2` from `$3` before any column is computed. */
+const pageFrom = (where: string): string =>
+  " FROM (SELECT a2.id, a2.slug, a2.title, a2.description, a2.created_at, a2.updated_at, a2.author_id FROM articles a2 WHERE " +
+  where +
+  " ORDER BY a2.id DESC LIMIT $2 OFFSET $3) a JOIN users u ON u.id = a.author_id ORDER BY a.id DESC"
 
 /** Registers every statement on `pool`; false when the pool refused one. */
 export const registerStatements = (pool: PgPool): boolean => {
   const none: i32[] = []
   let ok: boolean = true
-  // Article lists, one statement each: `$1` the viewer, `$2` and `$3` the
-  // limit and offset, `$4` the filter's value.
+  // Article lists: the page, then the capped count, of each filter.
+  // The page is cut in a subquery before the select list runs: with LIMIT and
+  // OFFSET over the whole select, every per-row subquery also ran for each
+  // row the OFFSET skips.
+  ok = pool.register("list_all", ARTICLE_LIST + pageFrom("TRUE"), none) && ok
+  ok = pool.register("count_all", "SELECT count(*) FROM (SELECT 1 FROM articles a LIMIT 1000) s", none) && ok
   ok =
     pool.register(
-      "list_all",
-      listStatement("SELECT 1 FROM articles a", PAGE_COLUMNS + " ORDER BY a2.id DESC LIMIT $2 OFFSET $3"),
+      "list_tag",
+      ARTICLE_LIST +
+        ARTICLE_FROM +
+        " WHERE a.id IN (SELECT at.article_id FROM article_tags at WHERE at.tag_id = (SELECT t.id FROM tags t WHERE t.name = $4) ORDER BY at.article_id DESC LIMIT $2 OFFSET $3) ORDER BY a.id DESC",
       none
     ) && ok
   ok =
     pool.register(
-      "list_tag",
-      listStatement(
-        "SELECT 1 FROM article_tags at WHERE at.tag_id = (SELECT t.id FROM tags t WHERE t.name = $4)",
-        PAGE_COLUMNS +
-          " WHERE a2.id IN (SELECT at.article_id FROM article_tags at WHERE at.tag_id = (SELECT t.id FROM tags t WHERE t.name = $4) ORDER BY at.article_id DESC LIMIT $2 OFFSET $3)"
-      ),
+      "count_tag",
+      "SELECT count(*) FROM (SELECT 1 FROM article_tags at WHERE at.tag_id = (SELECT t.id FROM tags t WHERE t.name = $1) LIMIT 1000) s",
       none
     ) && ok
   ok =
     pool.register(
       "list_author",
-      listStatement(
-        "SELECT 1 FROM articles a WHERE a.author_id = (SELECT u.id FROM users u WHERE u.username = $4)",
-        PAGE_COLUMNS + " WHERE a2.author_id = (SELECT au.id FROM users au WHERE au.username = $4) ORDER BY a2.id DESC LIMIT $2 OFFSET $3"
-      ),
+      ARTICLE_LIST + pageFrom("a2.author_id = (SELECT au.id FROM users au WHERE au.username = $4)"),
+      none
+    ) && ok
+  ok =
+    pool.register(
+      "count_author",
+      "SELECT count(*) FROM (SELECT 1 FROM articles a WHERE a.author_id = (SELECT u.id FROM users u WHERE u.username = $1) LIMIT 1000) s",
       none
     ) && ok
   ok =
     pool.register(
       "list_favorited",
-      listStatement(
-        "SELECT 1 FROM favorites f WHERE f.user_id = (SELECT fu.id FROM users fu WHERE fu.username = $4)",
-        PAGE_COLUMNS +
-          " WHERE a2.id IN (SELECT f.article_id FROM favorites f WHERE f.user_id = (SELECT fu.id FROM users fu WHERE fu.username = $4) ORDER BY f.article_id DESC LIMIT $2 OFFSET $3)"
-      ),
+      ARTICLE_LIST +
+        ARTICLE_FROM +
+        " WHERE a.id IN (SELECT f.article_id FROM favorites f WHERE f.user_id = (SELECT fu.id FROM users fu WHERE fu.username = $4) ORDER BY f.article_id DESC LIMIT $2 OFFSET $3) ORDER BY a.id DESC",
+      none
+    ) && ok
+  ok =
+    pool.register(
+      "count_favorited",
+      "SELECT count(*) FROM (SELECT 1 FROM favorites f WHERE f.user_id = (SELECT fu.id FROM users fu WHERE fu.username = $1) LIMIT 1000) s",
       none
     ) && ok
   ok =
     pool.register(
       "list_feed",
-      listStatement(
-        "SELECT 1 FROM articles a WHERE a.author_id IN (SELECT fo.followee_id FROM follows fo WHERE fo.follower_id = $1)",
-        PAGE_COLUMNS +
-          " WHERE a2.id IN (SELECT x.id FROM follows fo CROSS JOIN LATERAL (SELECT a3.id FROM articles a3 WHERE a3.author_id = fo.followee_id ORDER BY a3.id DESC LIMIT ($2::int + $3::int)) x WHERE fo.follower_id = $1 ORDER BY x.id DESC LIMIT $2 OFFSET $3)"
-      ),
+      ARTICLE_LIST +
+        ARTICLE_FROM +
+        " WHERE a.id IN (SELECT x.id FROM follows fo CROSS JOIN LATERAL (SELECT a2.id FROM articles a2 WHERE a2.author_id = fo.followee_id ORDER BY a2.id DESC LIMIT ($2::int + $3::int)) x WHERE fo.follower_id = $1 ORDER BY x.id DESC LIMIT $2 OFFSET $3) ORDER BY a.id DESC",
+      none
+    ) && ok
+  ok =
+    pool.register(
+      "count_feed",
+      "SELECT count(*) FROM (SELECT 1 FROM articles a WHERE a.author_id IN (SELECT fo.followee_id FROM follows fo WHERE fo.follower_id = $1) LIMIT 1000) s",
       none
     ) && ok
   // One article, by slug or by id.
