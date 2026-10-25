@@ -177,10 +177,17 @@ static int nish_cpu_has_avx2(void) {
    `base` never reads the CPU's feature bits at all. */
 enum { NISH_PATH_SCALAR, NISH_PATH_BASE, NISH_PATH_AVX2 };
 
-static int nish_simd_choose(void) {
+/* The path `NISH_SIMD` pins, or -1 when it pins none. */
+static int nish_simd_pin(void) {
   const char *pin = getenv("NISH_SIMD");
   if (pin != NULL && strcmp(pin, "scalar") == 0) return NISH_PATH_SCALAR;
   if (pin != NULL && strcmp(pin, "base") == 0) return NISH_PATH_BASE;
+  return -1;
+}
+
+static int nish_simd_choose(void) {
+  int pin = nish_simd_pin();
+  if (pin >= 0) return pin;
 #if defined(NISH_SIMD_SSE2)
   if (nish_cpu_has_avx2()) return NISH_PATH_AVX2;
 #endif
@@ -438,8 +445,10 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
    0, which is the SSE2 path, so a call that ran before the constructor would
    still be exact. That path is exact without libm, so the runtime links
    without `-lm`: below 2^52 a double converts to an i64 and back as its
-   truncation, `copysign` keeps the sign of a zero, and floor and ceil step
-   one from it; from 2^52 every double is an integer, and NaN and the
+   truncation, floor steps one down from it when it lies above, or gives
+   `x` itself when it is whole, which keeps the sign of a zero, ceil is
+   `-floor(-x)` and trunc is whichever of the two moves
+   toward zero; from 2^52 every double is an integer, and NaN and the
    infinities come back as they went in. `NISH_SIMD=scalar` or `base` pins
    it, as it pins the baseline paths above: the instruction gate's counts,
    which then do not depend on the ifunc glibc picks, and the forced
@@ -452,26 +461,19 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
 static _Bool nish_round_hw;
 
 void nish_round_init(void) {
-  const char *pin = getenv("NISH_SIMD");
-  if (pin != NULL && (strcmp(pin, "scalar") == 0 || strcmp(pin, "base") == 0)) return;
   unsigned a, b, c, d;
-  nish_round_hw = __get_cpuid(1, &a, &b, &c, &d) && (c & bit_SSE4_1);
-}
-
-static double nish_trunc_sse2(double x) {
-  if (!(__builtin_fabs(x) < 0x1p52)) return x;
-  return __builtin_copysign((double)(int64_t)x, x);
+  nish_round_hw = nish_simd_pin() < 0 && __get_cpuid(1, &a, &b, &c, &d) && (c & bit_SSE4_1);
 }
 
 static double nish_floor_sse2(double x) {
-  double t = nish_trunc_sse2(x);
-  return t > x ? t - 1.0 : t;
+  if (!(__builtin_fabs(x) < 0x1p52)) return x;
+  double t = (double)(int64_t)x;
+  return t > x ? t - 1.0 : t < x ? t : x;
 }
 
-static double nish_ceil_sse2(double x) {
-  double t = nish_trunc_sse2(x);
-  return t < x ? t + 1.0 : t;
-}
+static double nish_ceil_sse2(double x) { return -nish_floor_sse2(-x); }
+
+static double nish_trunc_sse2(double x) { return x < 0 ? nish_ceil_sse2(x) : nish_floor_sse2(x); }
 
 #define NISH_ROUNDING(name, base, mode)                                                                      \
   double name(double x) {                                                                                    \
