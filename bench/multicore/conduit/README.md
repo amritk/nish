@@ -172,3 +172,14 @@ take the HTTP workers from 64.1–65.2 to **54.4–55.0 µs/request (−16%)**,
 Postgres unchanged (287–294 against 282–294). Instructions halved; the time
 did not, because most of what is left is the kernel's: about one `send` and
 one `recv` for HTTP and one each for Postgres per request.
+
+### Topology
+
+Each setting against the default (`HTTP_WORKERS=2 DB_READ_CONNS=3
+DB_WRITE_CONNS=1`, three pairs at 3,000 users, `run.sh --alt-env`). At 3,000
+users the loadgen's own CPU passes 75% of the box, so it flags the runs as
+load-generator limited; the per-request costs are still the server's.
+
+| Setting (B) | Postgres µs/req, A / B | HTTP µs/req, A / B | p99 ms, A / B | Kept |
+| --- | --- | --- | --- | --- |
+| `DB_READ_CONNS=2` | 250–261 / 244–253 | 41.6–42.9 / 41.5–42.9 | 13.0–18.5 / 15.6–21.7 | no: paired differences +0.2, −14.7, −7.3 µs, no clear gain, p99 worse; 3 also leaves the 8-core box more backends |
