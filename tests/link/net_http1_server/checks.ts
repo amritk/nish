@@ -1247,6 +1247,7 @@ export const serverChecks = (): i32 => {
   t.ok("a connection with a request open keeps them", lending.parser.buf.length > 0 && inputs.free.length === 0);
   lending.respond(toI32(204), none, none, HTTP1_NO_BODY);
   lending.end();
+  t.eqI32("answered at its head, the request still ends", lending.next(), H1_END);
   t.eqI32("the next request's first bytes wait", lending.next(), H1_NEED_MORE);
   lending.park();
   t.ok("so do they while a byte of the next request is unread", lending.parser.buf.length > 0 && inputs.free.length === 0);
@@ -1255,6 +1256,7 @@ export const serverChecks = (): i32 => {
   t.eqI32("which is read whole", lending.next(), H1_REQUEST);
   lending.respond(toI32(204), none, none, HTTP1_NO_BODY);
   lending.end();
+  lending.next();
   lending.next();
   lending.park();
   t.ok("and once nothing is open or unread both go back", lending.parser.buf.length === 0 && lending.parser.head.length === 0 && inputs.free.length === 1 && heads.free.length === 1);

@@ -516,15 +516,16 @@ export const TLS_TCP_START_BYTES = 41728
  * the arena before its first connection, linked by `tests/run.js` from
  * `tests/link/net_http1_server/tls-startup.ts` on the default `Http1Config`.
  *
- * Measured **58,296 bytes** on 2026-10-20 with clang 18 on linux-x64:
+ * Measured **58,384 bytes** on 2026-10-25 with clang 18 on linux-x64:
  * `TLS_TCP_START_BYTES`'s pool and the HTTP/1.1 read scratch, `Date` and empty output
- * pool, with no slot's connection built. Built eagerly, a 1,024-slot pool was 31.2 MB
+ * pool, and the two empty pools `Http1Config.idleInput` lends input and head buffers
+ * to (88 bytes, against 58,296 before them), with no slot's connection built. Built eagerly, a 1,024-slot pool was 31.2 MB
  * resident at listening against 4.6 MB now, and 18.1 MB against 4.6 MB at 256 slots
  * (measured as `TLS_TCP_START_BYTES` says). The budget is the next 256-byte boundary
- * above the measurement: the 72 bytes of headroom are intended, and one slot's
+ * above the measurement: the 240 bytes of headroom are intended, and one slot's
  * connection built eagerly again costs far more than they hold.
  */
-export const HTTP1_TLS_SERVER_START_BYTES = 58368
+export const HTTP1_TLS_SERVER_START_BYTES = 58624
 
 /**
  * Ceiling on what `new Http3Server(quicConfig, config, fd, 65536, entropy)` takes from
