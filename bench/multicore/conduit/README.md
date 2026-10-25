@@ -118,3 +118,15 @@ the logins': at think-scale 0.1 about 3 to 11 logins a second arrive, so a
 160 ms window rarely fills four lanes, and one lane costs nearly what four
 do. At the challenge's 100,000 users (about 27 logins a second) the batches
 fill.
+
+### The changes, in order
+
+Each change is three runs at 2,000 users, compared with the three runs before
+it (the noise between two sessions on one build is about ±4% on Postgres
+µs/request, so a change is kept only past that). The figures are Postgres
+µs/request, HTTP-worker µs/request and p95, each as the range of the three runs.
+
+| # | Change | Postgres µs/req | HTTP µs/req | p95 ms | Kept |
+| --- | --- | ---: | ---: | ---: | --- |
+| P4 | `Http1Config.idleInput`: idle connections lend their input and head buffers | 322–330 | 61–63 | 4.3–4.6 | yes: 3.20 → **1.13 KiB** per idle connection (15,000 open), HTTP cost within the noise |
+| O1 | tag names by primary key: `ARRAY(SELECT (SELECT t.name FROM tags t WHERE t.id = at.tag_id) ...)` | **274–287** (−14%) | 62–64 | 3.0–3.4 | yes |
