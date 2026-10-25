@@ -133,6 +133,25 @@ licence: the three `SPEC.md` queries the PostgreSQL benchmark runs.
 Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see bench/postgres/LICENSE.md.
 ```
 
+### `bench/multicore/conduit/LICENSE.md`
+
+The [multicore server challenge](https://github.com/arjaythedev/multicore-server-challenge),
+Copyright (c) 2026 arjaythedev and the challenge contributors, under the MIT
+licence: the `SPEC.md` reference SQL the Conduit server prepares.
+
+```notice
+Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see LICENSE.md beside this file.
+```
+
+### `bench/multicore/submission/nish-std-amritk/src/LICENSE.md`
+
+The same licence, in the challenge submission's copy of the server's source
+(`bench/multicore/stage.mjs` keeps it identical).
+
+```notice
+Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see LICENSE.md beside this file.
+```
+
 ### `bench/awfy/LICENSE.md`
 
 The [Are We Fast Yet](https://github.com/smarr/are-we-fast-yet) benchmarks.
@@ -340,6 +359,8 @@ Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see 
 | `bench/sqlite/main.ts` | the challenge's table sizes, `USERS` and `POSTS`, and the `SPEC.md` queries | MIT | `bench/sqlite/LICENSE.md` |
 | `bench/postgres/main.ts` | the multicore server challenge's `SPEC.md` user by id, article list (`ARTICLE_LIST_SELECT ORDER_PAGE`) and follow insert, and its --dev seed's size, `USERS` | MIT | `bench/postgres/LICENSE.md` |
 | `bench/postgres/twin.c` | the same three `SPEC.md` queries and `USERS` | MIT | `bench/postgres/LICENSE.md` |
+| `bench/multicore/conduit/sql.ts` | the multicore server challenge's `SPEC.md` reference SQL at `c301225`: its statements, `ARTICLE_LIST_SELECT`, `ARTICLE_FULL_SELECT`, `SLUGIFY`, `ORDER_PAGE` and its capped counts | MIT | `bench/multicore/conduit/LICENSE.md` |
+| `bench/multicore/submission/nish-std-amritk/src/sql.ts` | the same, a copy of `bench/multicore/conduit/sql.ts` | MIT | `bench/multicore/submission/nish-std-amritk/src/LICENSE.md` |
 | `tests/postgres/live/schema.sql` | the multicore server challenge's `schema.sql`, unchanged | MIT | `tests/postgres/live/LICENSE.md` |
 | `tests/postgres/live/live.ts` | the `SPEC.md` article list, `ARTICLE_LIST_SELECT ORDER_PAGE` | MIT | `tests/postgres/live/LICENSE.md` |
 | `bench/spectral.ts` | Benchmarks Game spectral-norm, Node.js #1 (Ian Osgood, modified by Isaac Gouy) | BSD-3-Clause | `bench/LICENSE-benchmarksgame.md` |

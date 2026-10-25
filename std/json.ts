@@ -1220,8 +1220,9 @@ export class JsonWriter {
    * `bytes[off .. off + len)`, copied as it is and counted as one value: a
    * fragment the caller encoded already, such as a cached object. Nothing in
    * it is checked, so a fragment that is not one whole JSON value makes a
-   * text that is not JSON either. The bytes are copied front to back, so
-   * `bytes` is not the writer's own buffer at a window the copy overtakes.
+   * text that is not JSON either. The bytes are copied in one move
+   * (`copyBytes`), as if all were read before any was written, so a window
+   * of the writer's own buffer comes out as it was.
    * In an indented text the fragment goes in where a value would, after its
    * line break and indent, but its own bytes are not re-indented: an object
    * fragment stays on one line, where `JSON.stringify` would spread it out.
@@ -1243,11 +1244,7 @@ export class JsonWriter {
       this.failed = JSON_WRITE_FULL
       return
     }
-    for (let k: i32 = 0; k < len && off + k < toI32(bytes.length) && at + k < toI32(buf.length); k += 1) {
-      if (off + k >= 0 && at + k >= 0) {
-        buf[at + k] = bytes[off + k]
-      }
-    }
+    copyBytes(buf, at, bytes, off, len)
     this.end = at + len
     jsonWriterValueDone(this)
   }

@@ -1664,7 +1664,12 @@ that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
 its interest changed, so a keep-alive request costs one `recv` and one `send`
 and no `pollModify`. A slot borrows its output buffer only while it writes, so
-an idle connection costs a few KiB, not `outputSize`. An `Http1Server` builds
+an idle connection costs a few KiB, not `outputSize`. Set
+`Http1Config.idleInput` and a slot lends its input and head buffers back too,
+whenever it has answered a request and holds no byte of the next: a server
+holding tens of thousands of keep-alive connections that each send a request
+now and then keeps those buffers only for the connections mid-request, for two
+pool operations a request. It is off by default. An `Http1Server` builds
 a slot's connection on the first accept into it and keeps it for the next, so
 a pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core. Call `expire(now)` on an
@@ -1675,7 +1680,9 @@ milliseconds, and one whose request head has been arriving for longer than
 a time cannot hold a slot. Over TLS the head's clock starts with the first
 bytes after the handshake, so a client that finishes its handshake and then
 sends nothing is closed after `headTimeout` too. Both are `Http1Config`
-fields, and a value of 0 or less stops start-up. `TlsTcpServer`,
+fields, and a value of 0 or less stops start-up. Calling `expire` on every
+turn of the loop is cheap: it walks the slots only when one can be due, about
+once per the shorter of the two timeouts, and `expireScans` counts the walks. `TlsTcpServer`,
 `Http1TlsServer`, `Http2TlsServer` and `Http3Server` build a slot the same
 way, on the first connection accepted into it (an `Http2TlsServer` builds slot
 0 in its constructor), so a pool's size is a ceiling on its connections. What

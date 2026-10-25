@@ -318,13 +318,24 @@ int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
    descriptor is answered all the same, and the connection is made once the
    loop reports it writable, when `connectResult` says how it went. Any other
    failure closes the socket and is answered instead of it. An `addr` shorter
-   than 18 bytes is -22 before any socket exists. */
+   than 18 bytes is -22 before any socket exists. The socket holds
+   `TCP_NODELAY` before it connects, as libpq and Go's net package set it on
+   every client socket: a client writes whole requests and waits on the
+   answer, and Nagle would hold a small write behind an unacknowledged one
+   for a delayed ACK (#942). A refused option closes the socket and is
+   answered instead of it. */
 int32_t nish_tcp_connect(const nish_array *addr) {
   if (addr->len < NISH_ADDR_BYTES) return -22;
   const unsigned char *p = (const unsigned char *)addr->data;
   int v4 = memcmp(p, nish_mapped_prefix, 12) == 0;
   int fd = nish_net_socket(v4 ? AF_INET : AF_INET6, SOCK_STREAM);
   if (fd < 0) return nish_net_fail();
+  int one = 1;
+  if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one) != 0) {
+    int e = errno;
+    close(fd);
+    return nish_net_err(e);
+  }
   nish_sockaddr s;
   socklen_t n = nish_net_sockaddr(&s, p, (p[16] << 8) | p[17], v4);
   if (connect(fd, &s.sa, n) != 0 && errno != EINPROGRESS) {

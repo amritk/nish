@@ -31,7 +31,7 @@ import {
   tcpConnect,
   tcpListen,
 } from "nish:net";
-import { HTTP1_CHUNKED, HTTP1_NO_BODY } from "nish/net/http1";
+import { HTTP1_CHUNKED, HTTP1_FIRST_HEAD, HTTP1_FIRST_INPUT, HTTP1_NO_BODY } from "nish/net/http1";
 import {
   H1_AGAIN,
   H1_ALPN,
@@ -51,6 +51,7 @@ import {
   H1_WS_MESSAGE,
   Http1Config,
   Http1Connection,
+  Http1OutputPool,
   Http1Server,
   Http1TlsServer,
 } from "nish/net/http1-server";
@@ -804,6 +805,17 @@ export const serverChecks = (): i32 => {
   t.eqI32("a slot that has just moved is not idle", lb.plain.expire(monotonicNanos()), ZERO);
   t.eqI32("past idleTimeout it is closed", lb.plain.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
   t.ok("and its client sees the end", lb.awaitEnd(idle) && lb.plain.busy() === 0);
+  // A walk records when the soonest slot can be due, so calls before then
+  // cost nothing however many slots there are, and a slot accepted after the
+  // walk is still closed on time.
+  const walks: i32 = lb.plain.expireScans;
+  lb.plain.expire(monotonicNanos());
+  lb.plain.expire(monotonicNanos());
+  t.eqI32("an expire before any slot can be due walks no slot", lb.plain.expireScans, walks);
+  const late: i32 = lb.connect(false);
+  lb.settle();
+  t.eqI32("a slot accepted after a walk is closed past idleTimeout", lb.plain.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
+  t.ok("and its client sees the end too", lb.awaitEnd(late) && lb.plain.busy() === 0);
 
   // A slowloris client keeps its slot moving, so it is never idle, but its
   // head never ends; a keep-alive client whose exchange is over has no head
@@ -964,6 +976,9 @@ export const serverChecks = (): i32 => {
   lb.settle();
   t.eqI32("an idle TLS slot is closed past idleTimeout", lb.secure.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
   t.ok("and its client sees the end", lb.awaitEnd(n.index) && lb.secure.busy() === 0);
+  const tlsWalks: i32 = lb.secure.expireScans;
+  lb.secure.expire(monotonicNanos());
+  t.eqI32("a TLS expire before any slot can be due walks no slot", lb.secure.expireScans, tlsWalks);
 
   const sl = new TlsClient(lb);
   sl.handshake(noAlpn);
@@ -1008,7 +1023,35 @@ export const serverChecks = (): i32 => {
     lb.secure.next(ZERO) === H1_ERROR && (lb.secure.flush(ZERO) & 16) !== 0 && lb.secure.fd(ZERO) === -1 && lb.secure.connection(toI32(9)) === lb.secure.connection(ZERO)
   );
   t.eqStr("with nothing gone wrong in the loop", lb.failure, "");
+  t.ok("without idleInput a resting slot keeps its input buffer", lb.plain.connection(ZERO).parser.buf.length > 0 && lb.plain.inputs.made === 0);
   lb.shutdown();
+
+  // With idleInput, a slot that has answered its request and has no byte of
+  // the next lends its input and head buffers to the server's pools, and the
+  // next request takes them back: the pools grow to the slots mid-request,
+  // not to the connections open.
+  const lendConfig: Http1Config = testConfig();
+  lendConfig.idleInput = true;
+  const ll = new H1Loop(lendConfig, tcpConfig([H1_ALPN]), 4, ZERO, ZERO);
+  ll.plain.date.pin(PINNED_MS);
+  const l1: i32 = ll.connect(false);
+  const l2: i32 = ll.connect(false);
+  ll.send(l1, ascii(get));
+  const lent1 = ll.response(l1, false);
+  ll.send(l2, ascii(get));
+  const lent2 = ll.response(l2, false);
+  ll.settle();
+  t.ok("two slots served one after the other share one input and one head buffer", lent1.status === 200 && lent2.status === 200 && ll.plain.inputs.made === 1 && ll.plain.heads.made === 1);
+  t.ok(
+    "and both rest with none of their own",
+    ll.plain.inputs.free.length === 1 && ll.plain.connection(ZERO).parser.buf.length === 0 && ll.plain.connection(toI32(1)).parser.head.length === 0
+  );
+  ll.send(l1, ascii(`${get}${get}`));
+  const again1 = ll.response(l1, false);
+  const again2 = ll.response(l1, false);
+  t.ok("a pipelined pair on a slot that lent its buffers is answered in order", again1.text() === hello.text() && again2.text() === hello.text());
+  t.eqStr("with nothing gone wrong in that loop", ll.failure, "");
+  ll.shutdown();
 
   // --- 7. The connection alone ---------------------------------------------------------------------
   const config: Http1Config = testConfig();
@@ -1023,6 +1066,7 @@ export const serverChecks = (): i32 => {
 
   const g = new Driven(config, get);
   t.eqI32("a request reaches the program", g.event, H1_REQUEST);
+  t.ok("a slot that has spoken only HTTP holds no WebSocket decoder and no pong buffer", g.conn.ws === null && g.conn.pong.length === 0);
   t.eqI32("refused: status 101 through respond", g.conn.respond(toI32(101), none, none, HTTP1_NO_BODY), H1_INVALID);
   t.eqI32("refused: status 99", g.conn.respond(toI32(99), none, none, ZERO), H1_INVALID);
   t.eqI32("refused: status 600", g.conn.respond(toI32(600), none, none, ZERO), H1_INVALID);
@@ -1187,5 +1231,37 @@ export const serverChecks = (): i32 => {
   t.ok("a body event is a window onto the parser's buffer", body.conn.next() === H1_BODY && body.conn.dataLength === 2);
   body.conn.endInput();
   t.ok("a body cut by the end of the stream ends the connection", body.conn.next() === H1_NEED_MORE && body.conn.isDone());
+
+  // park and unpark alone: what a resting connection gives back, and what it keeps.
+  const lending = new Http1Connection(config);
+  lending.date.pin(PINNED_MS);
+  const inputs = new Http1OutputPool(HTTP1_FIRST_INPUT);
+  const heads = new Http1OutputPool(HTTP1_FIRST_HEAD);
+  lending.inputs = inputs;
+  lending.heads = heads;
+  t.ok("a connection never fed holds no input or head buffer", lending.parser.buf.length === 0 && lending.parser.head.length === 0);
+  const twice: u8[] = ascii(`${get}GE`);
+  lending.feed(twice, ZERO, toI32(twice.length));
+  t.ok("its first byte takes one of each from the pools", lending.next() === H1_REQUEST && inputs.made === 1 && heads.made === 1);
+  lending.park();
+  t.ok("a connection with a request open keeps them", lending.parser.buf.length > 0 && inputs.free.length === 0);
+  lending.respond(toI32(204), none, none, HTTP1_NO_BODY);
+  lending.end();
+  t.eqI32("answered at its head, the request still ends", lending.next(), H1_END);
+  t.eqI32("the next request's first bytes wait", lending.next(), H1_NEED_MORE);
+  lending.park();
+  t.ok("so do they while a byte of the next request is unread", lending.parser.buf.length > 0 && inputs.free.length === 0);
+  const rest: u8[] = ascii(get.substring(2));
+  lending.feed(rest, ZERO, toI32(rest.length));
+  t.eqI32("which is read whole", lending.next(), H1_REQUEST);
+  lending.respond(toI32(204), none, none, HTTP1_NO_BODY);
+  lending.end();
+  lending.next();
+  lending.next();
+  lending.park();
+  t.ok("and once nothing is open or unread both go back", lending.parser.buf.length === 0 && lending.parser.head.length === 0 && inputs.free.length === 1 && heads.free.length === 1);
+  const third: u8[] = ascii(get);
+  lending.feed(third, ZERO, toI32(third.length));
+  t.ok("the next byte takes them again, making none", lending.next() === H1_REQUEST && lending.parser.targetIs("/hello") && inputs.made === 1 && inputs.free.length === 0);
   return t.done();
 };

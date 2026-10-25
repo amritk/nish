@@ -6,3 +6,4 @@ flags 4: -22
 flags 6: -22
 flags 8: -22
 flags -1: -22
+tcpConnect: TCP_NODELAY 1

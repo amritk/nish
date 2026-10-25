@@ -28,3 +28,11 @@ function opened(flags: i32): i32 -> @opened [exported]
   calls: nish_net_close nish_tcp_listen_flags
   stackSites=0 stackLocals=0
   local +0:9 fd: i32 (const)
+function connecting(): i32 -> @connecting [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_tcp_listen_flags
+  calls: nish_net_address nish_net_close nish_net_local_port nish_tcp_connect nish_tcp_listen_flags
+  stackSites=1 stackLocals=1
+  local +0:9 listener: i32 (const)
+  local +4:9 addr: u8[] (const)
+  local +6:9 client: i32 (const)

@@ -353,7 +353,7 @@ declare function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
 declare function netShutdown(fd: i32, how: i32): i32;
 /** Close the descriptor. */
 declare function netClose(fd: i32): i32;
-/** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. */
+/** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. It holds `TCP_NODELAY`, so a small write is sent at once. */
 declare function tcpConnect(addr: readonly u8[]): i32;
 /** Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused). */
 declare function connectResult(fd: i32): i32;
@@ -510,7 +510,7 @@ declare module "nish:net" {
   /** Shut the read side (0), the write side (1) or both (2). */
   export function netShutdown(fd: i32, how: i32): i32;
   export function netClose(fd: i32): i32;
-  /** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. */
+  /** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. It holds `TCP_NODELAY`, so a small write is sent at once. */
   export function tcpConnect(addr: readonly u8[]): i32;
   /** Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused). */
   export function connectResult(fd: i32): i32;

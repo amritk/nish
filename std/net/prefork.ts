@@ -84,6 +84,11 @@ export const PREFORK_STOPPED: i32 = -1
  * supervisor could not listen for SIGTERM and so starts none.
  */
 export const PREFORK_SPAWN_FAILED: i32 = -2
+/**
+ * What `preforkWith` answers in the supervisor when `restart` is off and every
+ * worker has exited.
+ */
+export const PREFORK_WORKERS_EXITED: i32 = -3
 
 /** The supervisor's numbers; every one is checked by `preforkWith`. */
 export class PreforkConfig {
@@ -99,6 +104,11 @@ export class PreforkConfig {
   quickExitMs: i32 = 1000
   /** How long the workers get to exit after SIGTERM before SIGKILL. */
   graceMs: i32 = 5000
+  /**
+   * Start a worker that exited again. Off, a worker that exits stays gone,
+   * and the supervisor returns once none is left.
+   */
+  restart: boolean = true
 }
 
 /** True when `s` is one or more ASCII digits and nothing else. */
@@ -177,6 +187,8 @@ class PreforkSlot {
   pid: i32 = 0
   /** The wait before the last restart, 0 after a worker that ran long. */
   delay: i32 = 0
+  /** The worker exited with `restart` off, and is never started again. */
+  gone: boolean = false
 }
 
 /** The supervisor's state while it runs. */
@@ -269,7 +281,9 @@ class PreforkSupervisor {
       const slot: PreforkSlot = this.slots[index]
       this.running = this.running - 1
       slot.pid = 0
-      if (!stopping) {
+      if (!this.config.restart) {
+        slot.gone = true
+      } else if (!stopping) {
         this.backoff(slot, preforkNowMs(), false)
       }
     }
@@ -285,7 +299,7 @@ class PreforkSupervisor {
     const now: i64 = preforkNowMs()
     for (let i: i32 = 0; i < toI32(this.slots.length); i++) {
       const slot: PreforkSlot = this.slots[i]
-      if (slot.pid === 0 && slot.at <= now && !this.start(i)) {
+      if (slot.pid === 0 && !slot.gone && slot.at <= now && !this.start(i)) {
         if (first) {
           return false
         }
@@ -355,7 +369,9 @@ const preforkInvalid = (config: PreforkConfig): string => {
 
 /**
  * In a worker, its index. In the supervisor, run the workers until SIGTERM or
- * SIGINT and answer `PREFORK_STOPPED`, or `PREFORK_SPAWN_FAILED` when a worker's
+ * SIGINT and answer `PREFORK_STOPPED`; with `restart` off, also until every
+ * worker has exited, answering `PREFORK_WORKERS_EXITED`; or
+ * `PREFORK_SPAWN_FAILED` when a worker's
  * first start failed (those already started are stopped first) or no signal
  * listener could be made (no worker is started). Panics on a config
  * `preforkInvalid` names a field of.
@@ -399,6 +415,10 @@ export const preforkWith = (args: string[], config: PreforkConfig): i32 => {
         running = false
       } else {
         supervisor.reap(false)
+        if (!config.restart && supervisor.running === 0) {
+          result = PREFORK_WORKERS_EXITED
+          running = false
+        }
         supervisor.restart(false)
       }
     }

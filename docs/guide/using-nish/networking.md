@@ -103,6 +103,10 @@ packets for a stream of tiny writes and costs a round trip for a server that
 answers each request with one small write. The bytes that arrive are the same
 either way; only when they leave changes.
 
+A socket `tcpConnect` opens holds `TCP_NODELAY` already, as libpq and Go set
+it on every client socket: a client sends a whole request and waits on the
+answer, so there is nothing for Nagle to save.
+
 Flag `0` is `tcpListen` exactly, `3` is both, and any other bit answers `-22`.
 A listener without flag `1` cannot open a port a listener with it holds, nor
 the other way round: both answer `-98`.
@@ -195,6 +199,32 @@ restart that is due). A negative number, a `tickMs` or `backoffMs` of zero,
 or a `backoffCapMs` below `backoffMs` stops the program with a panic naming
 the field. `examples/prefork-server.ts` is a whole HTTP server built this way:
 each answer names the worker that sent it, so a few `curl`s show the spread.
+
+### Workers that are not restarted
+
+Set `restart` to `false` when something else restarts the service, such as
+systemd or a container runtime, and a worker that exits should stay
+down rather than come back on its own. It then stays gone,
+and the others carry on. Once every worker has exited, the supervisor returns
+`-3` (`PREFORK_WORKERS_EXITED`), so the program can exit and let its own
+supervisor decide:
+
+```ts
+import { PREFORK_STOPPED, PreforkConfig, preforkWith } from "nish/net/prefork";
+
+export const main = (): number => {
+  const config = new PreforkConfig();
+  config.restart = false;
+  const worker = preforkWith(process.argv, config);
+  if (worker < 0) {
+    return worker === PREFORK_STOPPED ? 0 : 1;
+  }
+  // ... serve as worker `worker` ...
+  return 0;
+};
+```
+
+SIGTERM and SIGINT still stop the workers that are left, and still give `-1`.
 
 ## Trusting a peer's address
 

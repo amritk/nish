@@ -80,6 +80,7 @@
  *
  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
  */
+import { copyBytes } from "nish/bytes"
 
 /** `next()`: the input so far holds no further event; feed more. */
 export const HTTP1_NEED_MORE: i32 = 0
@@ -234,11 +235,15 @@ export class Http1Parser {
     this.maxHeaderBytes = http1Clamp(maxHeaderBytes)
     this.maxHeaders = http1Clamp(maxHeaders)
     this.maxBody = http1Clamp(maxBody)
-    this.buf = new Array<u8>(1024)
+    // The input and the head are made by the first byte fed and the first
+    // head kept, at HTTP1_FIRST_INPUT and HTTP1_FIRST_HEAD bytes: a parser
+    // that is built and never fed (a pool's spare slot) costs neither, and a
+    // caller that lends them out between requests puts empty ones here.
+    this.buf = []
     this.body = this.buf
     this.names = []
     this.values = []
-    this.head = new Array<u8>(256)
+    this.head = []
     this.spans = new Array<i32>(64)
     this.tally = new Http1ListTally()
     this.restart()
@@ -261,19 +266,9 @@ export class Http1Parser {
     http1Reserve(this, len)
     const buf: u8[] = this.buf
     const at: i32 = this.end
-    // A whole array is one `set`, a memmove; a window is copied byte by byte,
-    // because `set` takes no window of its source.
-    if (off === 0 && len === size) {
-      buf.set(data, at)
-      this.end = at + len
-      return
-    }
-    for (let k: i32 = 0; k < len; k += 1) {
-      const to: i32 = at + k
-      if (to >= 0 && to < toI32(buf.length)) {
-        buf[to] = data[off + k]
-      }
-    }
+    // One move: http1Reserve made room for `len` bytes at `at`, and the
+    // window was checked above.
+    copyBytes(buf, at, data, off, len)
     this.end = at + len
   }
 
@@ -359,6 +354,16 @@ export class Http1Parser {
     return http1HeadIs(this.head, spans[4 * found + 2], spans[4 * found + 3], protocol, true)
   }
 
+  /**
+   * Whether the parser waits for a request line with nothing fed and unread,
+   * so its input and head buffers hold nothing it needs: a caller may lend
+   * them out and leave empty arrays in `buf`, `body` and `head`, which the
+   * next feed and head make or the caller puts back first.
+   */
+  resting(): boolean {
+    return this.state === HTTP1_S_REQUEST_LINE && this.end === this.start
+  }
+
   /** How many bytes were fed and not consumed yet: what a caller bounds its reads by. */
   buffered(): i32 {
     return this.end - this.start
@@ -410,6 +415,11 @@ export class Http1Parser {
   }
 }
 
+/** The input buffer a parser makes on its first feed, the smallest it grows from. */
+export const HTTP1_FIRST_INPUT: i32 = 1024
+/** The head buffer a parser makes for its first head. */
+export const HTTP1_FIRST_HEAD: i32 = 256
+
 /** Makes room for `len` more bytes at `p.end`, moving the live bytes down first. */
 const http1Reserve = (p: Http1Parser, len: i32): void => {
   const old: u8[] = p.buf
@@ -418,7 +428,7 @@ const http1Reserve = (p: Http1Parser, len: i32): void => {
     return
   }
   const live: i32 = p.end - p.start
-  let size: i32 = capacity
+  let size: i32 = capacity < HTTP1_FIRST_INPUT ? HTTP1_FIRST_INPUT : capacity
   while (size - live < len) {
     if (size > 1073741823) {
       panic("Http1Parser: more than 2^31 - 1 bytes buffered")
@@ -429,8 +439,9 @@ const http1Reserve = (p: Http1Parser, len: i32): void => {
   // the live bytes move to the front, and every index into them moves too.
   const buf: u8[] = size === capacity ? old : new Array<u8>(size)
   const from: i32 = p.start
-  for (let k: i32 = 0; k < live && k < toI32(buf.length); k += 1) {
-    buf[k] = old[from + k]
+  if (live > 0) {
+    // One move, overlapping when the buffer is the same one.
+    copyBytes(buf, 0, old, from, live)
   }
   p.buf = buf
   p.lineStart -= from
@@ -601,6 +612,9 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   const at: i32 = p.headLength
   let size: i32 = toI32(p.head.length)
   if (n > size - at) {
+    if (size < HTTP1_FIRST_HEAD) {
+      size = HTTP1_FIRST_HEAD
+    }
     while (size - at < n) {
       if (size > 1073741823) {
         panic("Http1Parser: a head of more than 2^31 - 1 bytes")
@@ -616,9 +630,14 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   }
   const head: u8[] = p.head
   const buf: u8[] = p.buf
-  for (let k: i32 = 0; k < n && at + k < toI32(head.length) && from + k < toI32(buf.length); k += 1) {
-    if (from + k >= 0) {
-      head[at + k] = buf[from + k]
+  if (n > 0 && from >= 0 && from <= toI32(buf.length) - n && at <= toI32(head.length) - n) {
+    // The line lies in `buf` and the head was grown to hold it: one move.
+    copyBytes(head, at, buf, from, n)
+  } else {
+    for (let k: i32 = 0; k < n && at + k < toI32(head.length) && from + k < toI32(buf.length); k += 1) {
+      if (from + k >= 0) {
+        head[at + k] = buf[from + k]
+      }
     }
   }
   p.headLength = at + n
