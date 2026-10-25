@@ -176,7 +176,7 @@ function emitMathRound(emitter: Emitter, expr: Node): string -> @emitMathRound
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.emitExpression
   calls: Emitter.emitExpression IRFunction.emitValue callIntrinsic emitRounding f64Hex firstArgument nish_str_concat
-  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 emitRounding#0 callIntrinsic#0
+  pointer emitter: size=272 writesThrough=true captured=false passedTo=Emitter.emitExpression#0 emitRounding#0 callIntrinsic#0 callIntrinsic#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=firstArgument#0
   stackSites=0 stackLocals=0
   local +0:9 x: string (const)
@@ -189,12 +189,21 @@ function emitMathRound(emitter: Emitter, expr: Node): string -> @emitMathRound
   local +3:9 up: string (const)
   callee +3:14 IRFunction.emitValue -> @IRFunction.emitValue
   callee +3:63 f64Hex -> @f64Hex
-  local +4:9 next: string (const)
-  callee +4:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +4:62 f64Hex -> @f64Hex
-  local +5:9 r: string (const)
-  callee +5:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +6:10 callIntrinsic -> @callIntrinsic
+  local +5:11 mask: string (const)
+  callee +5:18 IRFunction.emitValue -> @IRFunction.emitValue
+  local +6:11 oneBits: string (const)
+  callee +6:21 IRFunction.emitValue -> @IRFunction.emitValue
+  local +7:11 one: string (const)
+  callee +7:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +8:11 sum: string (const)
+  callee +8:17 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +9:12 callIntrinsic -> @callIntrinsic
+  local +11:9 next: string (const)
+  callee +11:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +11:62 f64Hex -> @f64Hex
+  local +12:9 r: string (const)
+  callee +12:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +13:10 callIntrinsic -> @callIntrinsic
 function emitMathSign(emitter: Emitter, expr: Node): string -> @emitMathSign
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.typeOf

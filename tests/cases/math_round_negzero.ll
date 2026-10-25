@@ -14,10 +14,12 @@ entry:
   %0 = call double @nish_floor_f64(double %x)
   %1 = fsub double %x, %0
   %2 = fcmp oge double %1, 0x3FE0000000000000
-  %3 = fadd double %0, 0x3FF0000000000000
-  %4 = select i1 %2, double %3, double %0
-  %5 = call double @llvm.copysign.f64(double %4, double %x)
-  ret double %5
+  %3 = sext i1 %2 to i64
+  %4 = and i64 %3, 4607182418800017408
+  %5 = bitcast i64 %4 to double
+  %6 = fadd double %0, %5
+  %7 = call double @llvm.copysign.f64(double %6, double %x)
+  ret double %7
 }
 
 define noundef i32 @nish_main() #1 {

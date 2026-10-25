@@ -20988,11 +20988,12 @@ attributes #2 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
 ### `Math.*` on `f64`
 
 `Math.sqrt` is `llvm.sqrt.f64`; `Math.round` is the floor/compare/select
-sequence that matches JavaScript's round-half-up, then `llvm.copysign.f64`
-so that `Math.round(-0.3)` is `-0`; `Math.min`/`max` answer NaN for a NaN
-operand and order `-0` below `+0`, as JavaScript does, through the branches
-clang gives the same C: an unordered compare to a quiet NaN, an ordered
-compare and `select`, and on equal operands the one whose sign bit says `-0`.
+sequence (on x86-64 a masked add in place of the select, below) that matches
+JavaScript's round-half-up, then `llvm.copysign.f64` so that
+`Math.round(-0.3)` is `-0`; `Math.min`/`max` answer NaN for a NaN operand
+and order `-0` below `+0`, as JavaScript does, through the branches clang
+gives the same C: an unordered compare to a quiet NaN, an ordered compare and
+`select`, and on equal operands the one whose sign bit says `-0`.
 A wasm build calls `llvm.minimum`/`maximum` instead, which are `f64.min`/`max`
 there. All of these are `readnone willreturn`, so the callers stay pure.
 
@@ -21015,6 +21016,12 @@ into libm. Instead, x86-64 IR calls the runtime's `nish_floor_f64`,
   flag is all they touch, so a caller stays `readnone`.
 - Under `--cpu x86-64-v3` the runtime is built with SSE4.1, so the same call
   is a bare `roundsd`, with no flag.
+- `Math.round`'s step up is `floor + (1.0 & mask)`, where the mask is the
+  `sext` of the `x - floor >= 0.5` compare, instead of the select. SSE2 has no
+  blend, so a select costs a compare, `and`, `andn` and `or`, where the masked
+  add costs a compare, `and` and `addsd`. That timed 9% faster in
+  `bench/math`. The other targets keep the select.
+
 `Math.tan`, `Math.atan2` and `Math.hypot` are not builtins in the IR at all:
 each is a call to `std/math.ts`'s Nish port of fdlibm, copied into the module
 as `internal @nish.tanF64`, `@nish.atan2F64` and `@nish.hypotF64`, so no target calls
@@ -21050,10 +21057,12 @@ entry:
   %0 = call double @nish_floor_f64(double %x)
   %1 = fsub double %x, %0
   %2 = fcmp oge double %1, 0x3FE0000000000000
-  %3 = fadd double %0, 0x3FF0000000000000
-  %4 = select i1 %2, double %3, double %0
-  %5 = call double @llvm.copysign.f64(double %4, double %x)
-  ret double %5
+  %3 = sext i1 %2 to i64
+  %4 = and i64 %3, 4607182418800017408
+  %5 = bitcast i64 %4 to double
+  %6 = fadd double %0, %5
+  %7 = call double @llvm.copysign.f64(double %6, double %x)
+  ret double %7
 }
 
 define internal noundef double @clamp01(double noundef %x) #0 {

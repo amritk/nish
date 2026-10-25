@@ -213,37 +213,39 @@ forof.body:
   %99 = call double @nish_floor_f64(double %98)
   %100 = fsub double %98, %99
   %101 = fcmp oge double %100, 0x3FE0000000000000
-  %102 = fadd double %99, 0x3FF0000000000000
-  %103 = select i1 %101, double %102, double %99
-  %104 = call double @llvm.copysign.f64(double %103, double %98)
-  %105 = call i64 @nish_arena_mark()
-  %106 = call i8* @show(double %104)
-  %107 = call i8* @nish_arena_keep(i64 %105, i8* %106)
-  %108 = call i8* @nish_str_concat(i8* %97, i8* %107)
-  call void @nish_print(i8* %108)
-  %109 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %110 = load i8*, i8** %109, align 8
-  %111 = icmp eq i8* %110, %69
-  br i1 %111, label %pass.rewind, label %pass.free
+  %102 = sext i1 %101 to i64
+  %103 = and i64 %102, 4607182418800017408
+  %104 = bitcast i64 %103 to double
+  %105 = fadd double %99, %104
+  %106 = call double @llvm.copysign.f64(double %105, double %98)
+  %107 = call i64 @nish_arena_mark()
+  %108 = call i8* @show(double %106)
+  %109 = call i8* @nish_arena_keep(i64 %107, i8* %108)
+  %110 = call i8* @nish_str_concat(i8* %97, i8* %109)
+  call void @nish_print(i8* %110)
+  %111 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %112 = load i8*, i8** %111, align 8
+  %113 = icmp eq i8* %112, %69
+  br i1 %113, label %pass.rewind, label %pass.free
 
 pass.rewind:
-  %112 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  store i64 %71, i64* %112, align 8
+  %114 = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  store i64 %71, i64* %114, align 8
   br label %pass.done
 
 pass.free:
-  %113 = ptrtoint i8* %69 to i64
-  %114 = add i64 %113, %71
-  call void @nish_arena_release(i64 %114)
+  %115 = ptrtoint i8* %69 to i64
+  %116 = add i64 %115, %71
+  call void @nish_arena_release(i64 %116)
   br label %pass.done
 
 pass.done:
   br label %forof.inc
 
 forof.inc:
-  %115 = load i64, i64* %forof.idx, align 8
-  %116 = add i64 %115, 1
-  store i64 %116, i64* %forof.idx, align 8
+  %117 = load i64, i64* %forof.idx, align 8
+  %118 = add i64 %117, 1
+  store i64 %118, i64* %forof.idx, align 8
   br label %forof.cond
 
 forof.end:

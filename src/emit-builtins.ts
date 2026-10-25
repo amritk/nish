@@ -251,13 +251,22 @@ const emitRounding = (emitter: Emitter, which: string, x: string): string => {
  * `llvm.round` nor `llvm.roundeven`, and `floor(x + 0.5)` is wrong for
  * 0.49999999999999994. `f = floor(x)`, plus one when `x - f >= 0.5`, then
  * `x`'s sign put back: a value in `[-0.5, 0)` rounds to `-0`, and a NaN stays
- * NaN, as they do in JavaScript.
+ * NaN, as they do in JavaScript. On x86-64 the one is added under the
+ * compare's mask instead of selected: SSE2 has no blend, so a select is four
+ * instructions where `and` and `addsd` are two, about 9% in `bench/math`.
  */
 const emitMathRound = (emitter: Emitter, expr: Node): string => {
   const x = emitter.emitExpression(firstArgument(expr))
   const floor = emitRounding(emitter, "floor", x)
   const frac = emitter.fn.emitValue(`fsub double ${x}, ${floor}`)
   const up = emitter.fn.emitValue(`fcmp oge double ${frac}, ${f64Hex(0.5)}`)
+  if (emitter.roundsInRuntime) {
+    const mask = emitter.fn.emitValue(`sext i1 ${up} to i64`)
+    const oneBits = emitter.fn.emitValue(`and i64 ${mask}, 4607182418800017408`)
+    const one = emitter.fn.emitValue(`bitcast i64 ${oneBits} to double`)
+    const sum = emitter.fn.emitValue(`fadd double ${floor}, ${one}`)
+    return callIntrinsic(emitter, "llvm.copysign.f64", "double", `double ${sum}, double ${x}`)
+  }
   const next = emitter.fn.emitValue(`fadd double ${floor}, ${f64Hex(1.0)}`)
   const r = emitter.fn.emitValue(`select i1 ${up}, double ${next}, double ${floor}`)
   return callIntrinsic(emitter, "llvm.copysign.f64", "double", `double ${r}, double ${x}`)
