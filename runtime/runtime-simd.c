@@ -484,8 +484,8 @@ static double nish_trunc_sse2(double x) { return x < 0 ? nish_ceil_sse2(x) : nis
 #else
 void nish_round_init(void) {}
 
-#define NISH_ROUNDING(name, libm, mode)                                                                      \
-  double name(double x) { return __builtin_##libm(x); }
+#define NISH_ROUNDING(name, base, mode)                                                                      \
+  double name(double x) { return __builtin_##base(x); }
 #endif
 
 NISH_ROUNDING(nish_floor, floor, 9)
