@@ -311,6 +311,7 @@ match `bcryptHash`'s (BCRYPT-9).
 ## Speed
 
 CPU milliseconds per cost-10 hash, single-threaded, on a 4-core x86-64 Xeon
+(machine A)
 (`bench/crypto/bcrypt/run.mjs`: user time of 8 hashes, median and spread of 5
 interleaved rounds; a four-lane row is the time of 8 batches over 32; every
 row prints the same hash):
@@ -327,7 +328,7 @@ row prints the same hash):
 | tigokraft `bc_hash_n`, one lane, `clang -O2 -march=native` | 51.6 (51.4–52.0) |
 | tigokraft `bc_hash_n`, four lanes, `clang -O2 -march=native` | 16.4 (16.2–16.9) |
 
-The single path is 8% behind gcc's builds, 2% ahead of OpenBSD's clang build
+On machine A the single path is 8% behind gcc's builds, 2% ahead of OpenBSD's clang build
 and 2.5% behind tigokraft's one-lane clang build, each outside the noise: no bounds
 check is left in the round (every S-box index is masked to 0–255 and the
 state's length is checked once), and the gap is one XOR on the round's
@@ -369,7 +370,8 @@ block (`st[i]`, `st[i + 1]`) and the C stores its halves through its pointer
 arguments once per call; neither stores inside a round. The critical path is
 the dependent chain from `y` to the next half-round's input, under 1 cycle
 per ALU operation, 5 cycles per L1 load and eliminated register moves. Here
-is one half-round from each listing, with the path marked `*`:
+is one half-round from each listing, with the path marked `*`. The
+instructions are in program order, several to a line; none is changed:
 
 ```text
 ; gcc: (x ^ P) ^ F, x ^ P computed off the path
@@ -400,16 +402,18 @@ byte is one `movzx …, bh` where clang's C takes a `shr` and an `and`. The C
 expansion loops call `Blowfish_encipher` once per block, which Nish's inlined
 loop does not.
 
-One cycle more on a half-round of about 11 is the 8%. A cost-10 hash runs
+The model's one cycle on 11 would be 9%. A cost-10 hash runs
 521 blocks × (1 + 2 × 1024) + 64 × 3 = 1,067,721 Blowfish blocks, which is
-17,083,536 half-rounds. On a 4-core Xeon (nominal 2.1 GHz) the bench measured
+17,083,536 half-rounds. On a second 4-core Xeon (machine B, nominal 2.1 GHz) the bench measured
 71.5 (70.9–73.3) ms for Nish, 66.8 (65.4–68.3) ms for OpenBSD's gcc build and
-72.4 (72.3–73.8) ms for its clang build, Nish 7.0% behind gcc. A dependent
-chain of register XORs and adds, and a chain of `imul`, both clocked that
-machine at about 2.8 GHz while running. At that clock the hashes take 10.9
+72.4 (72.3–73.8) ms for its clang build: Nish 7.0% behind gcc, and level
+with clang inside the noise. The clock is measured, not nominal: a C loop of
+10⁹ dependent `xor` and `add` instructions on one register, written in
+`asm volatile` so the compiler keeps them, and one of 10⁹ dependent `imul`
+(3 cycles each), both ran at about 2.8 GHz of CPU time on machine B. At that clock the hashes take 10.9
 (gcc), 11.7 (Nish) and 11.9 (clang) cycles per half-round, against the 11 and
-12 of the chain model. The table above (52.9 against 48.8 ms, 8%) is a
-different, faster machine.
+12 of the chain model: Nish's measured gap is 0.8 cycles, not a whole one.
+Machine A's figures (52.9 against 48.8 ms, 8%) are from the table above.
 
 The order is made in the IR, not in the backend. In the pre-link `-O3`
 pipeline, Reassociate turns the source's `x ^ (P[n] ^ F(y))` into
@@ -439,8 +443,8 @@ codegen, by emitting a different one. Nish's `opt` and `llc` are the same
 LLVM 18.1.3 as the clang that built the C, and that build ends in the same
 15 of 16. The gap is LLVM 18 against gcc 13, not Nish against C.
 
-To reproduce, run `node bench/crypto/bcrypt/run.mjs` once to build the
-programs, then:
+To reproduce, run `npm run build` and then `node bench/crypto/bcrypt/run.mjs`
+once to build the programs, then:
 
 ```sh
 build/nish build/bench/bcrypt/nish.ts -o build/bench/bcrypt/nish-g-out/ --link build/bench/bcrypt/nish-g -g
@@ -462,7 +466,9 @@ first half-round and in all of gcc's, by an XOR into another register. It
 prints 16 S3 adds and 15, 0 and 15. `perhr` prints 15 half-rounds, 5 loads
 and no stores, stack references, calls or jumps for each. With clang/LLVM
 18.1.3, gcc 13.3.0 and GNU objdump 2.42 on x86-64, the three `dis` listings
-have these sha256s:
+have these sha256s (`dis … | sha256sum`). Branch targets keep their
+`<symbol+offset>` text through `cut -f2-`, so a hash pins the link layout as
+well as the toolchain:
 
 | Listing | sha256 |
 | --- | --- |
