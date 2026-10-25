@@ -1379,7 +1379,8 @@ export class ConduitWorker {
         const leaderDeferred: boolean =
           this.deferred.length > 0 && this.deferred[this.deferred.length - 1] === r
         if (leaderDeferred) {
-          // Nothing of the group was bound, and the pool dropped it.
+          // Nothing of the group was bound: the pool dropped it, or sends only
+          // the statements it prepared, whose events now answer no request.
           if (!this.reqs[r].solo) {
             this.writeBatches -= 1
           }
@@ -1509,6 +1510,13 @@ export class ConduitWorker {
       ) {
         if (prev >= 0) {
           this.reqs[prev].batchNext = -1
+        }
+        // Held back, they belong to no group: the group's own events (sent
+        // with the statements dispatch prepared, or lost) answer none of them.
+        let h: i32 = k
+        while (h >= 0) {
+          this.reqs[h].ticket = -1
+          h = this.reqs[h].batchNext
         }
         this.deferred.push(k)
         return prev >= 0
