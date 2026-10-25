@@ -113,6 +113,7 @@
  * implementation.
  */
 import { Secret } from "nish:secret"
+import { copyBytes } from "nish/bytes"
 import { netClose, netRead, netWrite, tcpAccept } from "nish:net"
 import {
   HTTP1_BODY,
@@ -242,6 +243,11 @@ const http1ServerCheckWindow = (what: string, buf: u8[], off: i32, len: i32): vo
 
 /** Copies `src[off .. off + n)` to `out` at `at`, which the caller has made sure holds it, and answers where it ends. */
 const http1ServerCopy = (out: u8[], at: i32, src: u8[], off: i32, n: i32): i32 => {
+  if (n > 0 && at >= 0 && off >= 0 && at <= toI32(out.length) - n && off <= toI32(src.length) - n) {
+    // Both windows fit, as they do for every caller: one move, not a byte loop.
+    copyBytes(out, at, src, off, n)
+    return at + n
+  }
   for (let k: i32 = 0; k < n && at + k < toI32(out.length) && off + k < toI32(src.length); k++) {
     if (at + k >= 0 && off + k >= 0) {
       out[at + k] = src[off + k]
@@ -796,12 +802,8 @@ export class Http1Connection {
     const output: u8[] = this.output
     const live: i32 = this.outputEnd - this.outputStart
     if (this.outputStart > 0) {
-      for (
-        let k: i32 = 0;
-        k < live && k < toI32(output.length) && this.outputStart + k < toI32(output.length);
-        k++
-      ) {
-        output[k] = output[this.outputStart + k]
+      if (live > 0 && this.outputStart <= toI32(output.length) - live) {
+        copyBytes(output, 0, output, this.outputStart, live)
       }
       this.outputStart = 0
       this.outputEnd = live

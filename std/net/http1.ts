@@ -80,6 +80,7 @@
  *
  * Written from RFC 9112 and RFC 9110, not ported from another implementation.
  */
+import { copyBytes } from "nish/bytes"
 
 /** `next()`: the input so far holds no further event; feed more. */
 export const HTTP1_NEED_MORE: i32 = 0
@@ -265,19 +266,9 @@ export class Http1Parser {
     http1Reserve(this, len)
     const buf: u8[] = this.buf
     const at: i32 = this.end
-    // A whole array is one `set`, a memmove; a window is copied byte by byte,
-    // because `set` takes no window of its source.
-    if (off === 0 && len === size) {
-      buf.set(data, at)
-      this.end = at + len
-      return
-    }
-    for (let k: i32 = 0; k < len; k += 1) {
-      const to: i32 = at + k
-      if (to >= 0 && to < toI32(buf.length)) {
-        buf[to] = data[off + k]
-      }
-    }
+    // One move: http1Reserve made room for `len` bytes at `at`, and the
+    // window was checked above.
+    copyBytes(buf, at, data, off, len)
     this.end = at + len
   }
 
@@ -448,8 +439,9 @@ const http1Reserve = (p: Http1Parser, len: i32): void => {
   // the live bytes move to the front, and every index into them moves too.
   const buf: u8[] = size === capacity ? old : new Array<u8>(size)
   const from: i32 = p.start
-  for (let k: i32 = 0; k < live && k < toI32(buf.length); k += 1) {
-    buf[k] = old[from + k]
+  if (live > 0) {
+    // One move, overlapping when the buffer is the same one.
+    copyBytes(buf, 0, old, from, live)
   }
   p.buf = buf
   p.lineStart -= from
@@ -638,9 +630,14 @@ const http1HeadAppend = (p: Http1Parser, from: i32, to: i32): i32 => {
   }
   const head: u8[] = p.head
   const buf: u8[] = p.buf
-  for (let k: i32 = 0; k < n && at + k < toI32(head.length) && from + k < toI32(buf.length); k += 1) {
-    if (from + k >= 0) {
-      head[at + k] = buf[from + k]
+  if (n > 0 && from >= 0 && from <= toI32(buf.length) - n && at <= toI32(head.length) - n) {
+    // The line lies in `buf` and the head was grown to hold it: one move.
+    copyBytes(head, at, buf, from, n)
+  } else {
+    for (let k: i32 = 0; k < n && at + k < toI32(head.length) && from + k < toI32(buf.length); k += 1) {
+      if (from + k >= 0) {
+        head[at + k] = buf[from + k]
+      }
     }
   }
   p.headLength = at + n
