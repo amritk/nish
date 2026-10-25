@@ -130,3 +130,4 @@ it (the noise between two sessions on one build is about ±4% on Postgres
 | --- | --- | ---: | ---: | ---: | --- |
 | P4 | `Http1Config.idleInput`: idle connections lend their input and head buffers | 322–330 | 61–63 | 4.3–4.6 | yes: 3.20 → **1.13 KiB** per idle connection (15,000 open), HTTP cost within the noise |
 | O1 | tag names by primary key: `ARRAY(SELECT (SELECT t.name FROM tags t WHERE t.id = at.tag_id) ...)` | **274–287** (−14%) | 62–64 | 3.0–3.4 | yes |
+| O2 | capped counts as index-only scans: the global count `ORDER BY a.id`, the feed's over `= ANY(ARRAY(followees))` | 275–300 | 62–66 | 3.0–4.4 | no: within the noise of O1's 274–287 |
