@@ -1334,7 +1334,7 @@ a printed checksum.
 | **S6a** | (a): byte-class run kernels on `u8[]` for `JsonTokenizer` and `JsonWriter`: the first index at or after `from`, below `limit`, whose byte is *not* a blank, a digit, or a plain string byte, each class fixed in its kernel, with no set to splat (§7, S6) | On `bench/json-compare` against the `06645ecf` record ([§2.4](#24-jsontokenizer-after-json-parity-the-gap-s6-is-aimed-at)), tokenize on twitter.json and citm_catalog.json are **at least 1.2x** faster at the minimum, and serialize on citm_catalog.json is faster outside its band. No corpus or workload is slower outside its band, and `bench/json-tokenizer`'s 242-byte body is not slower: short runs pay no call. The scalar, 16-byte and 32-byte paths agree on a fuzzed corpus that puts every class boundary at every offset of a block. JSONTestSuite's verdicts, the conformance corpus, the fuzz checksum and #582's mutation-pinned boundaries are unchanged. The unit stays within its ceiling. **Tokenize bar met; serialize not reached by S6a**, recorded at `96899c1` ([BENCHMARKS.md](BENCHMARKS.md#json-against-other-languages), 14 rounds). Against `06645ecf`'s minimums, tokenize on twitter went from 1,247,246 to 737,985 ns (**1.69x**) and on citm from 2,397,781 to 1,468,015 ns (**1.63x**). Against simdjson On-Demand in the same rounds, Nish is now 1.55x behind on twitter (2.20x before S6a) and 1.24x behind on citm (1.59x before), and it trails simdjson by 1.10x on canada. Serialize on citm is 675,503 ns against `06645ecf`'s 870,432, but that gain came before S6a: S6a left `JsonWriter` unchanged, and serialize did not move outside its band against the previous record. The follow-up put `JsonWriter`'s byte writers on a fourth class, `skipJsonPlain`, and found the serialize condition **not reached by the escape scan on citm**: 95.8% of its strings are under the kernel's 16-byte block, so skipping the check for the rest has a ceiling of 1.0139x, inside serialize's 1.4% band by only 0.01 points, and a free check would reach only 1.137x. The next serialize lead is number writing, 37.4% of serialize's instructions, 21.1% in the digit-write loop; see *JsonWriter's byte writers*. In the A/B against the S6b head, canada ran 0.931x, outside the band; see *S6a, the byte-class kernels: what was built*. The host was noisier during this record: every other implementation's minimum rose by 5% to 7% against the previous one, and Nish's bands against its own copy reached 6.6% on citm and 7.3% on typed decode. Measured again after the writer follow-up against main's merge base `3dca351`, with the three class paths' instructions as main's: `bench/json-tokenizer`'s 242-byte body ran 0.99x at the minimum, inside its 0.6% band (the branch against its byte-identical copy); on `bench/json-compare` serialize ran 0.988x, inside its 1.4% band, and two rows ran past theirs, tokenize on citm 0.994x against 0.5% (by 0.1 points) and typed-reuse 0.955x against 4.2% (by 0.3 points). Both run machine code identical to main's, and in typed-reuse the branch's byte-identical copy ran within 0.3% of the base, so the copy band is the evidence for reading them as noise, not a regression. The paths' agreement (`tests/simd/byte-runs.c`), JSONTestSuite, the conformance corpus and the mutation-pinned boundaries pass, and the unit is at 1,303 of 1,536 bytes (1,525 after the writer follow-up, with the three class paths' instructions unchanged). |
 | **S6b** | Eisel–Lemire in `numberF64`, in Nish: a 128-bit product of the significand and a table of powers of five, with `parseFloat` kept for more than 19 significant digits. Not a vector; it is here because it is most of canada's gap (§2.4) | Tokenize on canada.json is **at least 1.5x** faster than the `06645ecf` record at the minimum, and twitter and citm are not slower outside their bands. Every `numberF64` answer is bit-for-bit `parseFloat`'s on canada.json, on every JSONTestSuite number, and on at least 10^8 random doubles printed shortest and at 17 digits, and under Node. **Met.** canada 18.0 → 6.5 ms, 2.78x against the branch it was built on and 3.4x against the record; citm 1.17x faster, twitter unchanged. Bit-for-bit on canada's 978,519 numbers, JSONTestSuite and 10^8 random doubles at both widths (2×10^8 strings), natively and under Node, which runs the same Nish code. |
 | **S6c** | (a): the block classifier (S1b) re-aimed at `JsonTokenizer`: masks of quotes, backslashes, structural bytes and blanks per 64-byte block, the in-string mask by prefix XOR, and the tokenizer walking set bits | Only after S6a and S6b. Tokenize on twitter.json and citm_catalog.json is **at least 1.5x** faster than the record S6b leaves, and typed decode of citm_catalog.json is faster outside its band. Every error code and `errorAt` offset is unchanged on every JSONTestSuite `n_` file and the conformance corpus. A document's index costs at most one bit a byte plus one block, reused across documents. **Accepted (§8, Q5); gate measured: not reachable** (2026-10-24). With the index priced by a prototype, callgrind leaves twitter at 1.37x and citm at 1.22x; see *S6c, the callgrind gate* below. Nothing is built. |
-| **S6d** | Measurement, nothing built: cuts to the per-value work S6c's index keeps (`numberF64`, the depth stack, `stringInto`'s copy, `next`'s entry), each priced by a throwaway prototype under callgrind, for the combination that would let S6c reach 1.5x | A combination whose measured saving out of kept work, with S6c's index and walker as the gate priced them, puts the gate's ceiling at **1.5x or more on twitter.json and on citm_catalog.json**, by the gate's formula and Total. **Measured: reachable** (2026-10-24, revised 2026-10-25). Eight cuts measured together, an integer path in `numberF64`, the innermost container's kind in a field, `stringInto` copying a string with no escape, and the plain runs of one with an escape, whole, a failed state in `next`'s switch, a dispatch fused on the byte, a direct sign read in `numberF64` and a one-comparison limit in `string`, save 1,077,326 instructions an iteration on twitter and 3,922,329 on citm, credited. That leaves ceilings of **1.561x and 1.504x**, the one set reaching 1.5x on both. Each file's best set: twitter's is that one; citm's leaves out the escape path's run copy, at 1.508x (1.515x on twitter). The first five cuts, measured without the other three, reach only 1.490x and 1.443x, and without the run copy 1.448x and 1.447x. citm's margin, 0.16% of its Total, is inside main's drift since the gate, so the build stage re-measures. See *S6d, the per-value cuts* below. Nothing is built. |
+| **S6d** | Measurement, nothing built: cuts to the per-value work S6c's index keeps (`numberF64`, the depth stack, `stringInto`'s copy, `next`'s entry), each priced by a throwaway prototype under callgrind, for the combination that would let S6c reach 1.5x | A combination whose measured saving out of kept work, with S6c's index and walker as the gate priced them, puts the gate's ceiling at **1.5x or more on twitter.json and on citm_catalog.json**, by the gate's formula and Total. **Measured: not reachable** (2026-10-24, revised 2026-10-25). Seven cuts that save kept work, an integer path in `numberF64`, the innermost container's kind in a field, `stringInto` copying a string with no escape, and the plain runs of one with an escape, whole, a failed state in `next`'s switch, a dispatch fused on the byte and a direct sign read in `numberF64`, save 932,538 instructions an iteration on twitter and 3,720,284 on citm, credited: **1.533x and 1.486x**. citm's best set leaves out the escape path's run copy and stops at **1.490x**, 109,087 instructions short (1.488x on twitter). No set reaches 1.5x on both. A one-comparison limit in `string` saves only setup the index already removes on a string with no escape, so it is not credited. The first five cuts reach 1.490x and 1.443x, and without the run copy 1.448x and 1.447x. See *S6d, the per-value cuts* below. Nothing is built. |
 | **S7** | (d), a loop shape: the range analysis credits an offset index `i + k` from a test `i + c < n`, with `0 <= k <= c` and `n` an array's length, so the access keeps no bounds check. No surface | §3.2.1's four-accumulator dot product, with checked indexing and no `nish:unsafe`, reaches the speed of its `uncheckedGet` form within the noise band, and its optimised IR holds the `<4 x float>` accumulator. An access the test does not bound keeps its check, with a negative golden each for `k > c`, a negative `k`, and a test against another array's length. **Met by #561** (Q9): at `5403a55` the guarded kernel compiles to the same `--profile speed` binary as its `uncheckedGet` form, with the `<4 x float>` accumulator; #561's own entry measured it 3.1x faster than before, against a 2.4% band (§3.2.1, and below). |
 
 **S1b: what the classifier could buy, and what it needs decided.** S1
@@ -2105,18 +2105,15 @@ on citm, short of 1.5x on both, so the stage stops here with nothing built.
   work. Each is its own stage, and S6c is worth re-measuring only once one of
   them lands.
 
-*S6d, the per-value cuts (2026-10-24, revised 2026-10-25): reachable,
-narrowly on citm.* The gate's last point asks for 758,283 instructions an
-iteration out of twitter's kept work and 3,882,223 out of citm's. S6d looks
-for them. It splits the kept work finer, prices each cut by a throwaway
-prototype under callgrind, and puts the best combination into the gate's
-formula. One measured set reaches 1.5x on both files: A, G, C2, C, H2, D, N3
-and E2 below leave twitter at **1.561x** and citm at **1.504x**. citm's
-best set leaves out C2 and reaches 1.508x. citm's margin is 40,106
-instructions with the one set and 92,959 without C2, 0.16% and 0.36% of its
-Total. Main's own count has drifted 0.24% above that Total since the gate,
-so the build stage re-measures each cut on its own branch before it counts
-on it.
+*S6d, the per-value cuts (2026-10-24, revised 2026-10-25): not reachable
+on citm.* The gate's last point asks for 758,283 instructions an iteration
+out of twitter's kept work and 3,882,223 out of citm's. S6d looks for them.
+It splits the kept work finer, prices each cut by a throwaway prototype
+under callgrind, and puts the best combination into the gate's formula.
+twitter reaches 1.5x: A, G, C2, C, H2, D and N3 below leave it at
+**1.533x**. citm does not: its best set, A, G, C, H2, D and N3, leaves it
+at **1.490x**, 109,087 instructions short. No measured set reaches 1.5x on
+both files.
 
 - **The runs.** The gate's method, on main at `4fee600`. Main's tokenize
   loop counts 12,323,582 instructions an iteration on twitter and 25,694,851
@@ -2193,20 +2190,20 @@ on it.
     one part. Line 0, the blank skip and the first-byte bounds test stay
     out, as in the gate. Main's `-g` build counts these lines 6.4% and 5.8%
     above the gate's two rows together. "On the gate's rows" scales each
-    part to that total. The gate drew the line between its two rows with
+    part to that total, rounded so the column sums to it exactly. The gate drew the line between its two rows with
     the first-byte load in the switch row, so the parts are mapped onto
     the rows' sum, not onto each row:
 
     | Part | twitter | a token | on the gate's rows | citm | a token | on the gate's rows |
     | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-    | Dispatch: `next`'s switch on what it wants and its tests of the byte, `value`'s and `key`'s tests of the first byte | 464,226 | 15.7 | 436,155 | 1,537,176 | 18.1 | 1,452,965 |
-    | Entry and the first byte's load in each of the three | 581,744 | 19.7 | 546,566 | 1,605,118 | 18.9 | 1,517,183 |
-    | The calls on: the colon's to `value`, the comma's to `key` or `value`, `string`, `literal` | 281,293 | 9.5 | 264,284 | 514,374 | 6.0 | 486,195 |
-    | `number`'s scan | 109,054 | 51.7 a number | 102,459 | 1,080,757 | 75.1 a number | 1,021,551 |
-    | `open`, inlined | 30,082 | 13.0 an opener | 28,263 | 278,044 | 13.0 an opener | 262,812 |
-    | `emit`, inlined | 29,241 | | 27,473 | 247,175 | | 233,634 |
-    | `top` and `close`, inlined | 74,407 | | 69,907 | 273,279 | | 258,307 |
-    | Together | 1,570,053 | 53.1 | 1,475,105 | 5,535,929 | 65.1 | 5,232,735 |
+    | Dispatch: `next`'s switch on what it wants and its tests of the byte, `value`'s and `key`'s tests of the first byte | 464,226 | 15.7 | 436,154 | 1,537,176 | 18.1 | 1,452,989 |
+    | Entry and the first byte's load in each of the three | 581,744 | 19.7 | 546,565 | 1,605,118 | 18.9 | 1,517,210 |
+    | The calls on: the colon's to `value`, the comma's to `key` or `value`, `string`, `literal` | 281,293 | 9.5 | 264,283 | 514,374 | 6.0 | 486,203 |
+    | `number`'s scan | 109,054 | 51.7 a number | 102,459 | 1,080,757 | 75.1 a number | 1,021,567 |
+    | `open`, inlined | 30,082 | 13.0 an opener | 28,263 | 278,044 | 13.0 an opener | 262,816 |
+    | `emit`, inlined | 29,241 | | 27,473 | 247,175 | | 233,638 |
+    | `top` and `close`, inlined | 74,407 | | 69,908 | 273,279 | | 258,312 |
+    | Together | 1,570,047 | 53.1 | 1,475,105 | 5,535,923 | 65.1 | 5,232,735 |
 
     twitter's 29,573 tokens are 13,345 keys, 4,754 strings, 2,109 numbers,
     4,737 literals, 2,314 openers and 2,314 closers. citm's 85,035 are
@@ -2235,16 +2232,22 @@ on it.
   with an escape, which stay scalar under the index. On citm C2 costs more
   than it saves: its one escaped string pays nothing back for the longer
   loop. H2's is `next`'s entry. D's is `next`'s and `key`'s dispatch, but
-  not all of it is kept work: 40,815 on twitter and 89,995 on citm is the
-  blank test and first-byte bounds test that `key` no longer runs, which
-  the gate already credits to the index. Only the rest, 220,743 and
-  459,217, is credited. N3's is in `numberF64`, kept work. E2's is in
-  `string`: −144,789 on twitter and −191,263 on citm by the `-g` build,
-  about 8 of `string`'s 11 instructions a string for its room and limit.
-  E2 measured on D alone saves the same, 144,788 and 202,047. E2 as built
-  here computes `end - 1 - maxStringBytes`, which overflows when
-  `maxStringBytes` is near the i32 maximum; the build stage keeps the
-  comparison exact.
+  not all of it is kept work. D moves removable lines too, which the gate
+  already credits to the index, and its credit leaves out their net,
+  40,815 on twitter and 89,995 on citm:
+
+  | Removable line D moves | twitter | citm |
+  | --- | ---: | ---: |
+  | `key`'s first-byte bounds test, no longer run | −72,486 | −89,604 |
+  | `next`'s first-byte bounds test, now run for those tokens instead | +69,958 | +67,734 |
+  | `next`'s blank test and skip (`jsonTokSkipBlank`'s lines) | −77,070 | −152,865 |
+  | The blank kernel those skips call | +38,783 | +84,740 |
+  | **Net, not credited** | **−40,815** | **−89,995** |
+
+  So `next`'s first-byte bounds test did move: it took over most of
+  `key`'s, and only the net of the two is left out. The rest of D's
+  saving, 220,743 and 459,217, is credited. N3's is in `numberF64`, kept
+  work.
 
   `numberF64` after A costs about 54 instructions a number on citm, none of
   them per digit: entry 8, the kind test 2, the field loads 3, the sign
@@ -2256,6 +2259,19 @@ on it.
 
   Not credited:
 
+  - **E2**, `string`'s room and limit in one comparison. It saves 144,788
+    on twitter and 202,045 on citm on top of D and N3 (−144,789 and
+    −191,263 in `string` by the `-g` build, about 8 of `string`'s 11
+    instructions a string for its room and limit). That setup runs once a
+    string, and on a string with no escape the gate counts it as removable
+    (`string`'s limit setup, in the strings row): the walker's 8
+    instructions a mark pay for it. Only strings with an escape keep it,
+    312 of twitter's 18,099 strings and 1 of citm's 26,604. Split by the
+    share of calls, as the gate split `string`'s lines, E2's kept share is
+    2,496 on twitter and 8 on citm, too little to move either ceiling, so
+    E2 is left out of every set below. It was also measured as built, with
+    `end - 1 - maxStringBytes`, which overflows when `maxStringBytes` is
+    near the i32 maximum; an exact comparison would save no more.
   - **K**, a key's token consumes the colon after it, so `next` is not
     called for the colon. It saves 146,794 on twitter and 284,559 on citm
     on top of A, G, C2, C and H2, but all of that saving is removable
@@ -2307,28 +2323,28 @@ on it.
   | A, G, C, H2 | 464,794 | 3,256,351 | 1.448x | 1.447x |
   | A, G, C2, C, H2 | 704,936 | 3,203,498 | 1.490x | 1.443x |
   | A, G, C2, C, H2, D | 925,679 | 3,662,715 | 1.531x | 1.481x |
-  | A, G, C2, C, H2, D, N3 | 932,538 | 3,720,284 | 1.533x | 1.486x |
-  | **A, G, C2, C, H2, D, N3, E2** | **1,077,326** | **3,922,329** | **1.561x** | **1.504x** |
-  | A, G, C, H2, D, N3, E2 | 837,184 | 3,975,182 | 1.515x | **1.508x** |
+  | **A, G, C2, C, H2, D, N3** | **932,538** | 3,720,284 | **1.533x** | 1.486x |
+  | **A, G, C, H2, D, N3** | 692,396 | **3,773,136** | 1.488x | **1.490x** |
   | Needed for 1.5x | 758,283 | 3,882,223 | 1.5x | 1.5x |
 
-  The two full rows were built and run whole: 11,205,441 and 21,682,527
-  an iteration, against main's 12,323,582 and 25,694,851, and 11,445,583
-  and 21,629,674 without C2. Every build's checksums match main's.
-  twitter, with the full set: 12,290,415 ÷ (7,055,297 − 1,077,326 +
-  596,680 + 1,299,916) = 12,290,415 ÷ 7,874,567 = 1.561x, 319,043 over.
-  citm, with the full set: 25,632,165 ÷ (16,391,978 − 3,922,329 +
-  1,300,720 + 3,277,635) = 25,632,165 ÷ 17,048,004 = 1.504x, 40,106 over;
-  without C2, ÷ 16,995,151 = 1.508x, 92,959 over.
-- **Verdict: reachable.** One measured set, A, G, C2, C, H2, D, N3 and
-  E2, reaches 1.5x on both files: 1.561x on twitter and 1.504x on citm.
-  Each file's best set: twitter's is that set; citm's leaves out C2, at
-  1.508x (1.515x on twitter, still over). citm's margin is thin: 40,106
-  instructions with the full set, 0.16% of its Total, and 92,959 without
-  C2, 0.36%. Main's count has moved 0.24% above the gate's Total since the
-  gate was measured, so the build stage re-measures the set against the
-  gate on its own branch, and drops C2 if citm's margin goes. E2's
-  overflow is fixed there, not here.
+  The two N3 rows were built and run whole: 11,350,229 and 21,884,572
+  an iteration, against main's 12,323,582 and 25,694,851, and 11,590,371
+  and 21,831,720 without C2. Every build's checksums match main's.
+  twitter, with C2: 12,290,415 ÷ (7,055,297 − 932,538 + 596,680 +
+  1,299,916) = 12,290,415 ÷ 8,019,355 = 1.533x, 174,255 over; without
+  C2, ÷ 8,259,497 = 1.488x, 65,887 short. citm, without C2: 25,632,165 ÷
+  (16,391,978 − 3,773,136 + 1,300,720 + 3,277,635) = 25,632,165 ÷
+  17,197,197 = 1.490x, 109,087 short; with C2, ÷ 17,250,049 = 1.486x,
+  161,939 short. C2 helps twitter and costs citm, so no set between the
+  two does better on citm than the set without it.
+- **Verdict: not reachable.** No measured set reaches 1.5x on both files.
+  twitter's best, A, G, C2, C, H2, D and N3, reaches 1.533x; citm's best,
+  A, G, C, H2, D and N3, stops at 1.490x, 109,087 instructions short,
+  0.43% of its Total. That is more than main's drift since the gate was
+  measured (62,686 instructions, 0.24%), but the verdict is taken on the
+  gate's pinned Total either way. Every cut left out above costs citm or
+  saves only removable work, so S6c's bar is not reachable by per-value
+  cuts in the tokenizer, and there is no set for a build stage to build.
 
 **What S6 does not do.** It does not move the default target (§5), add
 `nish:simd` (S3 stays on its own bar), or touch `std/json`'s older reader,
