@@ -160,9 +160,8 @@ const READABLE: i32 = 5
 /** The ring that maps a pool's tickets to requests: a power of two above the queue and the groups in flight. */
 const TICKET_RING: i32 = 131072
 const QUEUE: i32 = 65536
-/** The most requests one group carries, per pool: writes commit together, reads share a transaction. */
+/** The most writes one group commits together. */
 const WRITE_BATCH: i32 = 128
-const READ_BATCH: i32 = 32
 /** The largest response body a writer holds; the output buffer holds it and its head. */
 const RESPONSE_ROOM: i32 = 1048576
 /** How long the worker waits for the bcrypt service to listen before failing the logins that wait, in ns. */
@@ -400,6 +399,8 @@ export class WorkerConfig {
   readConns: i32 = 3
   writeConns: i32 = 1
   maxInFlight: i32 = 16
+  readBatch: i32 = 32
+  batchDepth: i32 = 1
   bcryptPort: i32 = 47391
   slots: i32 = 200000
   backlog: i32 = 65535
@@ -452,6 +453,9 @@ export class ConduitWorker {
   ringHead: i32[]
   ringCount: i32[]
   batches: i32[]
+  /** The most reads one group carries; and how many batches each connection holds at once. */
+  readBatch: i32
+  batchDepth: i32
   /** Per pool and slot: the request of its group whose statements are being answered, -1 past the last. */
   cursor: i32[][]
   /** Per pool and slot: whether its group is a batch (it counts in `batches`), and whether it has one request. */
@@ -559,6 +563,8 @@ export class ConduitWorker {
     this.ringHead = [0, 0]
     this.ringCount = [0, 0]
     this.batches = [0, 0]
+    this.readBatch = cfg.readBatch > 0 ? cfg.readBatch : 1
+    this.batchDepth = cfg.batchDepth > 0 ? cfg.batchDepth : 1
     this.cursor = []
     this.batched = []
     this.alone = []
@@ -1329,9 +1335,9 @@ export class ConduitWorker {
   }
 
   /**
-   * Group commit: while fewer batches are in flight than `p` has
-   * connections, the requests waiting (up to `WRITE_BATCH` or `READ_BATCH`)
-   * become one request of the pool, one group, so one implicit transaction.
+   * Group commit: while fewer batches are in flight than `p`'s connections
+   * hold (`batchDepth` each), the requests waiting (up to `WRITE_BATCH`, or
+   * `readBatch` reads) become one request of the pool, one group, so one implicit transaction.
    * Writes commit together and each answer waits for the group's
    * ReadyForQuery; reads share a snapshot, and each is answered as soon as
    * its last statement completes. Nothing waits on a timer: under load the
@@ -1340,9 +1346,9 @@ export class ConduitWorker {
    */
   batch(p: i32): void {
     const pool: PgPool = this.pools[p]
-    const most: i32 = p === POOL_WRITE ? WRITE_BATCH : READ_BATCH
+    const most: i32 = p === POOL_WRITE ? WRITE_BATCH : this.readBatch
     const ring: i32[] = this.ring[p]
-    while (this.ringCount[p] > 0 && this.batches[p] < pool.size) {
+    while (this.ringCount[p] > 0 && this.batches[p] < pool.size * this.batchDepth) {
       const ticket: i32 = pool.request()
       if (ticket === PG_POOL_FULL) {
         return
