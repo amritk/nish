@@ -26,7 +26,11 @@
  * the 2^cost rounds run inside `exposeWith`; the Blowfish state (the P-array
  * and the four S-boxes, 1042 words), the expanded key and the key-stream copy
  * are wiped before it returns. `bcryptVerify` rebuilds the whole 60-character
- * hash and compares it with `timingSafeEqual`.
+ * hash and compares it with `timingSafeEqual` inside the same `exposeWith`,
+ * then wipes the rebuilt hash and the given hash's bytes; the batch wipes its
+ * digests and, in `bcryptVerify4`, each lane's rebuilt and given hash. The
+ * hash strings `bcryptHash` and `bcryptHash4` return are public and are not
+ * wiped, nor are the bytes they are made from.
  *
  * **The key is the reference's.** The bytes up to the first NUL, then one NUL,
  * repeated until 72 bytes are taken: a password longer than 72 bytes hashes as
@@ -54,7 +58,8 @@
  *
  * **Pure.** No I/O and no C, so it builds for wasm32. A `std/threads` task
  * may call `bcryptHash`, `bcryptVerify` and the batch: everything they wipe
- * is scratch they made, the batch's state a `Secret` of a fresh array
+ * is an array they made, never the caller's `hashes`, and the batch's state is
+ * a `Secret` of a fresh array
  * (docs/security/crypto-bcrypt.md). A cost-12 hash takes a few hundred
  * milliseconds of one core; a server runs it off its event loop, on a task
  * (docs/guide/using-nish/password-hashing.md).
@@ -149,6 +154,17 @@ interface BcryptSetting {
   safety: u32
 }
 
+/**
+ * The one argument of the callbacks `exposeWith` runs on the password: the
+ * setting, the 29 characters the hash starts with, and for verifying the hash
+ * to compare with ("" when hashing). All of it is only read.
+ */
+interface BcryptJob {
+  setting: BcryptSetting
+  prefix: u8[]
+  hash: string
+}
+
 /** A parsed hash string: its setting and the 29 characters the rebuilt hash starts with. */
 interface BcryptParsed {
   setting: BcryptSetting
@@ -198,9 +214,18 @@ const bcryptSextetOf = (c: i32): i32 => {
  */
 const bcryptEncode = (src: u8[], n: i32): u8[] => {
   const out: u8[] = new Array<u8>((n * 4 + 2) / 3)
+  bcryptEncodeInto(out, 0, src, n)
+  return out
+}
+
+/**
+ * `bcryptEncode` into `out` from `at`, as far as `out` reaches, so a digest's
+ * characters land in an array the caller made and wipes.
+ */
+const bcryptEncodeInto = (out: u8[], at: i32, src: u8[], n: i32): void => {
   let i: i32 = 0
-  let o: i32 = 0
-  while (i + 2 < n && i + 2 < toI32(src.length) && o + 3 < toI32(out.length)) {
+  let o: i32 = at
+  while (i + 2 < n && i + 2 < toI32(src.length) && o >= 0 && o + 3 < toI32(out.length)) {
     const c1: i32 = toI32(src[i])
     const c2: i32 = toI32(src[i + 1])
     const c3: i32 = toI32(src[i + 2])
@@ -222,7 +247,6 @@ const bcryptEncode = (src: u8[], n: i32): u8[] => {
       out[o + 1] = bcryptCharOf((c1 & 0x03) << 4)
     }
   }
-  return out
 }
 
 /** `src` copied into `dst` from `at`, as far as `dst` reaches. */
@@ -660,14 +684,15 @@ const bcryptXorSalt = (st: u32[], at: i32, s0: u32, s1: u32, s2: u32, s3: u32): 
 }
 
 /**
- * The hash itself, for `exposeWith` to run on the plain password: the 31
- * digest characters (`BF_crypt` from the key schedule on). The state, the
- * expanded key and the block are wiped before it returns.
+ * The hash itself, on the plain password: the 31 digest characters (`BF_crypt`
+ * from the key schedule on) into `out` at 29, which the caller made and wipes.
+ * The state, the expanded key, the block and the raw digest are wiped before
+ * it returns.
  */
-const bcryptExposed = (password: u8[], setting: BcryptSetting): u8[] => {
+const bcryptExposed = (password: u8[], setting: BcryptSetting, out: u8[]): void => {
   const salt: u32[] = setting.salt
   if (salt.length < 4) {
-    return new Array<u8>(31)
+    return
   }
   const s0: u32 = salt[0]
   const s1: u32 = salt[1]
@@ -705,12 +730,11 @@ const bcryptExposed = (password: u8[], setting: BcryptSetting): u8[] => {
   bcryptMagic(st, lr, digest, 8, 0x65686f6c, 0x64657253)
   bcryptMagic(st, lr, digest, 16, 0x63727944, 0x6f756274)
   // 23 of the 24 bytes, as the reference encodes them.
-  const out: u8[] = bcryptEncode(digest, 23)
+  bcryptEncodeInto(out, BCRYPT_SETTING_LENGTH, digest, 23)
   wipe(st)
   wipe(expanded)
   wipe(lr)
   wipe(digest)
-  return out
 }
 
 /** One pair of the magic string, encrypted 64 times under `st`, into `dst` at `at` as eight big-endian bytes. */
@@ -738,13 +762,39 @@ const bcryptPutBlock = (dst: u8[], at: i32, l: u32, r: u32): void => {
   dst[at + 7] = toU8(r & 0xff)
 }
 
-/** The 60 bytes of the hash: the 29-byte setting, then the digest the password gives under it. */
-const bcryptRun = (password: Secret<u8[]>, prefix: u8[], setting: BcryptSetting): u8[] => {
-  const digest: u8[] = exposeWith(password, setting, bcryptExposed)
+/**
+ * The 60-byte hash of the plain password under `job`'s setting into `out`,
+ * which the caller made and wipes: the 29-byte setting, then the digest.
+ */
+const bcryptHashInto = (password: u8[], job: BcryptJob, out: u8[]): void => {
+  bcryptPut(out, 0, job.prefix)
+  bcryptExposed(password, job.setting, out)
+}
+
+/**
+ * The 60 bytes of the hash, for `exposeWith` on the password. They are the
+ * hash `bcryptHash` returns, so they are not secret and are not wiped.
+ */
+const bcryptHashExposed = (password: u8[], job: BcryptJob): u8[] => {
   const out: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
-  bcryptPut(out, 0, prefix)
-  bcryptPut(out, BCRYPT_SETTING_LENGTH, digest)
+  bcryptHashInto(password, job, out)
   return out
+}
+
+/**
+ * Whether the hash rebuilt from the plain password is `job.hash`, for
+ * `exposeWith` on the password: a constant-time compare of all 60 bytes. Both
+ * byte copies are built and wiped here, so the answer is all that leaves.
+ */
+const bcryptVerifyExposed = (password: u8[], job: BcryptJob): boolean => {
+  const expected: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
+  bcryptHashInto(password, job, expected)
+  const given: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
+  bcryptBytesOf(given, job.hash)
+  const same: boolean = timingSafeEqual(expected, given)
+  wipe(expected)
+  wipe(given)
+  return same
 }
 
 /**
@@ -761,7 +811,8 @@ export const bcryptHash = (password: Secret<u8[]>, salt: u8[], cost: i32): Resul
     return Err("bcrypt: the cost is outside 4 to 31")
   }
   const setting: BcryptSetting = { salt: bcryptSaltWords(salt), cost: cost, safety: toU32(0) }
-  const out: u8[] = bcryptRun(password, bcryptSettingOf(salt, cost), setting)
+  const job: BcryptJob = { setting: setting, prefix: bcryptSettingOf(salt, cost), hash: "" }
+  const out: u8[] = exposeWith(password, job, bcryptHashExposed)
   return Ok(String.fromBytes(out, 0, BCRYPT_HASH_LENGTH))
 }
 
@@ -776,8 +827,13 @@ export const bcryptVerify = (password: Secret<u8[]>, hash: string): Result<boole
   if (parsed.isErr()) {
     return Err(parsed.error)
   }
-  const expected: u8[] = bcryptRun(password, parsed.value.prefix, parsed.value.setting)
-  return Ok(timingSafeEqual(expected, bcryptBytesOf(hash)))
+  return Ok(bcryptVerifyOne(password, parsed.value, hash))
+}
+
+/** Whether `hash`, parsed as `parsed`, is `password`'s. */
+const bcryptVerifyOne = (password: Secret<u8[]>, parsed: BcryptParsed, hash: string): boolean => {
+  const job: BcryptJob = { setting: parsed.setting, prefix: parsed.prefix, hash: hash }
+  return exposeWith(password, job, bcryptVerifyExposed)
 }
 
 /**
@@ -804,13 +860,11 @@ const bcryptParseHash = (hash: string): Result<BcryptParsed, string> => {
   return parsed
 }
 
-/** The 60 characters of a hash `bcryptParseHash` accepted, as bytes. */
-const bcryptBytesOf = (hash: string): u8[] => {
-  const given: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
+/** The 60 characters of a hash `bcryptParseHash` accepted, as bytes into `given`, which the caller made and wipes. */
+const bcryptBytesOf = (given: u8[], hash: string): void => {
   for (let i: i32 = 0; i < toI32(given.length) && i < toI32(hash.length); i++) {
     given[i] = toU8(hash.charCodeAt(i))
   }
-  return given
 }
 
 // ---------------------------------------------------------------------------
@@ -830,11 +884,19 @@ const BCRYPT_BATCH_SAFETY: i32 = 4240
 /** Words in the batch state: four Blowfish states, four expanded keys of 18 and four safety words. */
 const BCRYPT_BATCH_WORDS: i32 = 4244
 
-/** What the batch kernel reads besides the state: each lane's four salt words (lane k at 4k), each lane's `$2a$` safety word and the shared cost. */
+/**
+ * What the batch kernel reads besides the state: each lane's four salt words
+ * (lane k at 4k), each lane's `$2a$` safety word, the shared cost, the lanes
+ * that run (bit k for lane k), each lane's 29-character setting and, for
+ * verifying, each lane's hash to compare with.
+ */
 interface BcryptBatch {
   salts: u32[]
   safety: u32[]
   cost: i32
+  mask: i32
+  prefixes: u8[][]
+  hashes: string[]
 }
 
 /** The four states set to π and each lane's safety word stored, for `exposeWith` on the fresh batch state. */
@@ -1089,16 +1151,14 @@ const bcryptXorSalt4 = (st: u32[], salts: u32[]): void => {
 }
 
 /**
- * The batch's hash, for `exposeWith` on the batch state with its keys loaded:
- * the salted expansion, 2^cost rounds and the magic string on all four lanes,
- * and the 31 digest characters of lane k at 31k of the 124 returned. The block
- * and digest copies are wiped here; the state is the caller's to wipe.
+ * The batch's hash, on the batch state with its keys loaded: the salted
+ * expansion, 2^cost rounds and the magic string on all four lanes, and the 31
+ * digest characters of lane k into `digests` at 31k, which the caller made and
+ * wipes. The block and digest copies are wiped here.
  */
-const bcryptEks4 = (st: u32[], batch: BcryptBatch): u8[] => {
-  const out: u8[] = new Array<u8>(124)
-  const salts: u32[] = batch.salts
+const bcryptEks4 = (st: u32[], salts: u32[], cost: i32, digests: u8[]): void => {
   if (st.length < 4244 || salts.length < 16) {
-    return out
+    return
   }
   const lr: u32[] = new Array<u32>(8)
   for (let i: i32 = 0; i < 1042; i += 2) {
@@ -1117,7 +1177,7 @@ const bcryptEks4 = (st: u32[], batch: BcryptBatch): u8[] => {
     }
   }
 
-  let rounds: u32 = toU32(1) << toU32(batch.cost)
+  let rounds: u32 = toU32(1) << toU32(cost)
   while (rounds !== 0) {
     bcryptXorKey4(st)
     bcryptBody4(st)
@@ -1135,12 +1195,48 @@ const bcryptEks4 = (st: u32[], batch: BcryptBatch): u8[] => {
     for (let j: i32 = 0; j < 24; j++) {
       one[j] = digest[24 * k + j]
     }
-    bcryptPut(out, 31 * k, bcryptEncode(one, 23))
+    bcryptEncodeInto(digests, 31 * k, one, 23)
   }
   wipe(lr)
   wipe(digest)
   wipe(one)
+}
+
+/**
+ * The four lanes' 60-byte hashes, lane k at 60k, for `exposeWith` on the
+ * loaded batch state; a lane outside `batch.mask` is left zero. They are the
+ * hashes `bcryptHash4` returns, so they are not secret and are not wiped; the
+ * digest characters they are joined from are wiped here.
+ */
+const bcryptHash4Exposed = (st: u32[], batch: BcryptBatch): u8[] => {
+  const out: u8[] = new Array<u8>(4 * BCRYPT_HASH_LENGTH)
+  const digests: u8[] = new Array<u8>(124)
+  bcryptEks4(st, batch.salts, batch.cost, digests)
+  for (let k: i32 = 0; k < 4 && k < toI32(batch.prefixes.length); k++) {
+    if ((batch.mask & (1 << k)) !== 0) {
+      bcryptJoin(out, BCRYPT_HASH_LENGTH * k, batch.prefixes[k], digests, k)
+    }
+  }
+  wipe(digests)
   return out
+}
+
+/**
+ * Bit k set for each running lane whose rebuilt hash is `batch.hashes[k]`, for
+ * `exposeWith` on the loaded batch state. The digest characters are built and
+ * wiped here, so the bits are all that leaves.
+ */
+const bcryptVerify4Exposed = (st: u32[], batch: BcryptBatch): i32 => {
+  const digests: u8[] = new Array<u8>(124)
+  bcryptEks4(st, batch.salts, batch.cost, digests)
+  let same: i32 = 0
+  for (let k: i32 = 0; k < 4 && k < toI32(batch.prefixes.length) && k < toI32(batch.hashes.length); k++) {
+    if ((batch.mask & (1 << k)) !== 0 && bcryptJoinedOk(batch.prefixes[k], digests, k, batch.hashes[k])) {
+      same |= 1 << k
+    }
+  }
+  wipe(digests)
+  return same
 }
 
 /** `bcryptMagic` on all four lanes: lane k's eight bytes into `dst` at `24k + at`. */
@@ -1161,20 +1257,20 @@ const bcryptMagic4 = (st: u32[], lr: u32[], dst: u8[], at: i32, l: u32, r: u32):
 }
 
 /**
- * The 31 digest characters of each lane in `mask` (bit k for lane k), lane k at
- * 31k, from one interleaved run. A lane outside the mask runs on no key and
- * its characters are not read; lane 0 is always given, and a null lane must be
- * outside the mask.
+ * The batch `state` set up for `batch.mask`: the four states set to π, the
+ * safety words stored and each running lane's key loaded. A lane outside the
+ * mask runs on no key and its characters are not read; lane 0 is always
+ * given, and a null lane must be outside the mask.
  */
-const bcryptRun4 = (
+const bcryptLoad4 = (
+  state: Secret<u32[]>,
   p0: Secret<u8[]>,
   p1: Secret<u8[]> | null,
   p2: Secret<u8[]> | null,
   p3: Secret<u8[]> | null,
-  mask: i32,
   batch: BcryptBatch
-): u8[] => {
-  const state: Secret<u32[]> = secret(new Array<u32>(BCRYPT_BATCH_WORDS))
+): void => {
+  const mask: i32 = batch.mask
   exposeWith(state, batch, bcryptInit4)
   if ((mask & 1) !== 0) {
     exposeWith(state, p0, bcryptLoadLane0)
@@ -1188,34 +1284,11 @@ const bcryptRun4 = (
   if (p3 !== null && (mask & 8) !== 0) {
     exposeWith(state, p3, bcryptLoadLane3)
   }
-  const out: u8[] = exposeWith(state, batch, bcryptEks4)
-  wipe(state)
-  return out
 }
 
-/** `bcryptRun` on lane `k` of four optional passwords, when it is the only lane of its cost; 60 zero bytes for a null lane. */
-const bcryptRunLane = (
-  p0: Secret<u8[]>,
-  p1: Secret<u8[]> | null,
-  p2: Secret<u8[]> | null,
-  p3: Secret<u8[]> | null,
-  k: i32,
-  parsed: BcryptParsed
-): u8[] => {
-  if (k === 0) {
-    return bcryptRun(p0, parsed.prefix, parsed.setting)
-  }
-  if (k === 1 && p1 !== null) {
-    return bcryptRun(p1, parsed.prefix, parsed.setting)
-  }
-  if (k === 2 && p2 !== null) {
-    return bcryptRun(p2, parsed.prefix, parsed.setting)
-  }
-  if (k === 3 && p3 !== null) {
-    return bcryptRun(p3, parsed.prefix, parsed.setting)
-  }
-  return new Array<u8>(BCRYPT_HASH_LENGTH)
-}
+/** Lane k's 60-byte hash out of the batch's `all`, as a string. */
+const bcryptLaneString = (all: u8[], k: i32): string =>
+  String.fromBytes(all, BCRYPT_HASH_LENGTH * k, BCRYPT_HASH_LENGTH * (k + 1))
 
 /** Bit k set for each lane given: lane 0 always, lanes 1–3 when not null. */
 const bcryptMaskOf = (p1: Secret<u8[]> | null, p2: Secret<u8[]> | null, p3: Secret<u8[]> | null): i32 => {
@@ -1265,40 +1338,44 @@ export const bcryptHash4 = (
     hashes[0] = one.value
     return Ok(hashes)
   }
+  const words: u32[] = new Array<u32>(16)
   const prefixes: u8[][] = []
-  const batch: BcryptBatch = { salts: new Array<u32>(16), safety: new Array<u32>(4), cost: cost }
   for (let k: i32 = 0; k < 4; k++) {
     if ((mask & (1 << k)) === 0) {
       prefixes.push([])
       continue
     }
-    prefixes.push(bcryptBatchSalt(batch, salts, k, cost))
+    prefixes.push(bcryptBatchSalt(words, salts, k, cost))
   }
-  const digests: u8[] = bcryptRun4(p0, p1, p2, p3, mask, batch)
-  for (let k: i32 = 0; k < 4 && k < toI32(hashes.length) && k < toI32(prefixes.length); k++) {
-    if ((mask & (1 << k)) !== 0) {
-      const hash: string = bcryptLaneHash(prefixes[k], digests, k)
-      if (k < toI32(hashes.length)) {
-        hashes[k] = hash
-      }
-    }
+  const none: string[] = []
+  const batch: BcryptBatch = {
+    salts: words,
+    safety: new Array<u32>(4),
+    cost: cost,
+    mask: mask,
+    prefixes: prefixes,
+    hashes: none,
   }
-  return Ok(hashes)
+  const state: Secret<u32[]> = secret(new Array<u32>(BCRYPT_BATCH_WORDS))
+  bcryptLoad4(state, p0, p1, p2, p3, batch)
+  const all: u8[] = exposeWith(state, batch, bcryptHash4Exposed)
+  wipe(state)
+  const out: string[] = []
+  for (let k: i32 = 0; k < 4; k++) {
+    out.push((mask & (1 << k)) !== 0 ? bcryptLaneString(all, k) : "")
+  }
+  return Ok(out)
 }
 
-/** Lane `k`'s salt from the 64 bytes of `salts` into `batch` as four words, and its 29-byte setting. */
-const bcryptBatchSalt = (batch: BcryptBatch, salts: u8[], k: i32, cost: i32): u8[] => {
+/** Lane `k`'s salt from the 64 bytes of `salts` into `words` at 4k as four words, and its 29-byte setting. */
+const bcryptBatchSalt = (words: u32[], salts: u8[], k: i32, cost: i32): u8[] => {
   const salt: u8[] = bcryptSaltOf(salts, k)
-  const words: u32[] = bcryptSaltWords(salt)
-  for (let j: i32 = 0; j < 4 && j < toI32(words.length) && 4 * k + j < toI32(batch.salts.length); j++) {
-    batch.salts[4 * k + j] = words[j]
+  const four: u32[] = bcryptSaltWords(salt)
+  for (let j: i32 = 0; j < 4 && j < toI32(four.length) && 4 * k + j < toI32(words.length); j++) {
+    words[4 * k + j] = four[j]
   }
   return bcryptSettingOf(salt, cost)
 }
-
-/** Lane `k`'s 60-character hash: its setting, then its digest characters from the batch's 124. */
-const bcryptLaneHash = (prefix: u8[], digests: u8[], k: i32): string =>
-  String.fromBytes(bcryptJoin(prefix, digests, k), 0, BCRYPT_HASH_LENGTH)
 
 /** The 16 salt bytes of lane `k` from the 64 of a batch. */
 const bcryptSaltOf = (salts: u8[], k: i32): u8[] => {
@@ -1309,14 +1386,17 @@ const bcryptSaltOf = (salts: u8[], k: i32): u8[] => {
   return salt
 }
 
-/** The 60 bytes of lane `k`'s hash: its 29-byte setting, then its 31 digest characters from the batch's 124. */
-const bcryptJoin = (prefix: u8[], digests: u8[], k: i32): u8[] => {
-  const out: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
-  bcryptPut(out, 0, prefix)
-  for (let j: i32 = 0; j < 31 && 31 * k + j < toI32(digests.length); j++) {
-    out[BCRYPT_SETTING_LENGTH + j] = digests[31 * k + j]
+/** The 60 bytes of lane `k`'s hash into `out` at `at`: its 29-byte setting, then its 31 digest characters from the batch's 124. */
+const bcryptJoin = (out: u8[], at: i32, prefix: u8[], digests: u8[], k: i32): void => {
+  bcryptPut(out, at, prefix)
+  const o: i32 = at + BCRYPT_SETTING_LENGTH
+  for (
+    let j: i32 = 0;
+    j < 31 && 31 * k + j < toI32(digests.length) && o + j >= 0 && o + j < toI32(out.length);
+    j++
+  ) {
+    out[o + j] = digests[31 * k + j]
   }
-  return out
 }
 
 /**
@@ -1393,11 +1473,33 @@ const bcryptLaneOk = (
   k: i32,
   lane: BcryptParsed,
   hash: string
-): boolean => timingSafeEqual(bcryptRunLane(p0, p1, p2, p3, k, lane), bcryptBytesOf(hash))
+): boolean => {
+  if (k === 0) {
+    return bcryptVerifyOne(p0, lane, hash)
+  }
+  if (k === 1 && p1 !== null) {
+    return bcryptVerifyOne(p1, lane, hash)
+  }
+  if (k === 2 && p2 !== null) {
+    return bcryptVerifyOne(p2, lane, hash)
+  }
+  if (k === 3 && p3 !== null) {
+    return bcryptVerifyOne(p3, lane, hash)
+  }
+  return false
+}
 
 /** Whether lane `k`'s hash joined from `prefix` and the batch's digests is `hash`. */
-const bcryptJoinedOk = (prefix: u8[], digests: u8[], k: i32, hash: string): boolean =>
-  timingSafeEqual(bcryptJoin(prefix, digests, k), bcryptBytesOf(hash))
+const bcryptJoinedOk = (prefix: u8[], digests: u8[], k: i32, hash: string): boolean => {
+  const joined: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
+  bcryptJoin(joined, 0, prefix, digests, k)
+  const given: u8[] = new Array<u8>(BCRYPT_HASH_LENGTH)
+  bcryptBytesOf(given, hash)
+  const same: boolean = timingSafeEqual(joined, given)
+  wipe(joined)
+  wipe(given)
+  return same
+}
 
 /** One interleaved run for the lanes in `group`, all of one cost, each lane's answer into `ok`. */
 const bcryptVerifyGroup = (
@@ -1410,25 +1512,42 @@ const bcryptVerifyGroup = (
   hashes: string[],
   ok: boolean[]
 ): void => {
-  const batch: BcryptBatch = { salts: new Array<u32>(16), safety: new Array<u32>(4), cost: toI32(0) }
-  for (let k: i32 = 0; k < 4 && k < toI32(lanes.length); k++) {
+  const words: u32[] = new Array<u32>(16)
+  const safety: u32[] = new Array<u32>(4)
+  const prefixes: u8[][] = []
+  const given: string[] = []
+  let cost: i32 = 0
+  for (let k: i32 = 0; k < toI32(hashes.length); k++) {
+    given.push(hashes[k])
+  }
+  for (let k: i32 = 0; k < toI32(lanes.length); k++) {
+    prefixes.push(lanes[k].prefix)
+  }
+  for (let k: i32 = 0; k < 4 && k < toI32(lanes.length) && k < toI32(safety.length); k++) {
     if ((group & (1 << k)) !== 0) {
       const setting: BcryptSetting = lanes[k].setting
-      batch.cost = setting.cost
-      batch.safety[k] = setting.safety
+      cost = setting.cost
+      safety[k] = setting.safety
       for (let j: i32 = 0; j < 4 && j < toI32(setting.salt.length); j++) {
-        batch.salts[4 * k + j] = setting.salt[j]
+        words[4 * k + j] = setting.salt[j]
       }
     }
   }
-  const digests: u8[] = bcryptRun4(p0, p1, p2, p3, group, batch)
-  for (
-    let k: i32 = 0;
-    k < 4 && k < toI32(lanes.length) && k < toI32(hashes.length) && k < toI32(ok.length);
-    k++
-  ) {
+  const batch: BcryptBatch = {
+    salts: words,
+    safety: safety,
+    cost: cost,
+    mask: group,
+    prefixes: prefixes,
+    hashes: given,
+  }
+  const state: Secret<u32[]> = secret(new Array<u32>(BCRYPT_BATCH_WORDS))
+  bcryptLoad4(state, p0, p1, p2, p3, batch)
+  const same: i32 = exposeWith(state, batch, bcryptVerify4Exposed)
+  wipe(state)
+  for (let k: i32 = 0; k < 4 && k < toI32(ok.length); k++) {
     if ((group & (1 << k)) !== 0) {
-      ok[k] = bcryptJoinedOk(lanes[k].prefix, digests, k, hashes[k])
+      ok[k] = (same & (1 << k)) !== 0
     }
   }
 }

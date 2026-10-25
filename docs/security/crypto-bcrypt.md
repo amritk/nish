@@ -17,8 +17,10 @@ the module answers every well-formed `$2a$`, `$2b$` and `$2y$` verify as
 hash string that is not 60 characters, or has a digest character outside the
 alphabet, is an `Err` here, where `crypt_r` reports a mismatch). The password is only
 read inside `exposeWith`; the Blowfish state, the expanded key, the key stream,
-the block and the digest are wiped by stores `opt -O2` keeps; the verify
-compares the whole 60-character hash in constant time. Two things are not
+the block and the digest are wiped by stores `opt -O2` keeps, and so are the
+hash the verify rebuilds from the password and the given hash's bytes it
+compares that with; the verify compares the whole 60-character hash in
+constant time. Two things are not
 reached, by the nature of the algorithm or of the language, and are recorded:
 the secret-indexed S-box loads (BCRYPT-6) and registers and spills (BCRYPT-7).
 Nothing was found to fix or left open. Where the implementations a hash
@@ -30,7 +32,8 @@ the wrong length and a digest character outside the alphabet.
 The four-lane batch, `bcryptHash4` and `bcryptVerify4`, gives each lane the
 single path's answer byte for byte, so every row of that table holds for it
 lane by lane. Its state is one `Secret<u32[]>`, wiped by a store `opt -O2`
-keeps; the ways it can differ from four single calls (null lanes, a malformed
+keeps, as are its digests and, in the verify, each lane's rebuilt hash and
+given hash's bytes; the ways it can differ from four single calls (null lanes, a malformed
 lane, lanes of different costs) are set down in [The four-lane
 batch](#the-four-lane-batch).
 
@@ -38,7 +41,7 @@ batch](#the-four-lane-batch).
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/bcrypt.ts` | `bcryptHash`, `bcryptVerify`; `bcryptRun`, `bcryptExposed`, `bcryptSetKey`, `bcryptInitState`, `bcryptEncrypt`, `bcryptBody`, `bcryptXorKey`, `bcryptXorSalt`, `bcryptStore`, `bcryptMagic`, `bcryptPutBlock`; `bcryptParse`, `bcryptDecodeSalt`, `bcryptSaltWords`, `bcryptSettingOf`, `bcryptEncode`, `bcryptPut`, `bcryptCharOf`, `bcryptSextetOf`, `bcryptParseHash`; the batch: `bcryptHash4`, `bcryptVerify4`, `bcryptVerifyGroup`, `bcryptRun4`, `bcryptRunLane`, `bcryptMaskOf`, `bcryptInit4`, `bcryptKeyWord`, `bcryptLoadLane` (and its four `bcryptLoadLane0`–`3`), `bcryptEks4`, `bcryptBody4`, `bcryptEncrypt4`, `bcryptXorKey4`, `bcryptXorSalt4`, `bcryptMagic4`, `bcryptSaltOf`, `bcryptBatchSalt`, `bcryptJoin`, `bcryptLaneHash`, `bcryptLaneOk`, `bcryptJoinedOk`, `bcryptBytesOf` |
+| `std/crypto/bcrypt.ts` | `bcryptHash`, `bcryptVerify`; `bcryptHashInto`, `bcryptHashExposed`, `bcryptVerifyExposed`, `bcryptVerifyOne`, `bcryptExposed`, `bcryptKeySchedule`, `bcryptSetKey`, `bcryptInitState`, `bcryptEncrypt`, `bcryptBody`, `bcryptXorKey`, `bcryptXorSalt`, `bcryptStore`, `bcryptMagic`, `bcryptPutBlock`; `bcryptParse`, `bcryptDecodeSalt`, `bcryptSaltWords`, `bcryptSettingOf`, `bcryptEncode`, `bcryptEncodeInto`, `bcryptPut`, `bcryptCharOf`, `bcryptSextetOf`, `bcryptParseHash`; the batch: `bcryptHash4`, `bcryptVerify4`, `bcryptVerifyGroup`, `bcryptLoad4`, `bcryptHash4Exposed`, `bcryptVerify4Exposed`, `bcryptMaskOf`, `bcryptInit4`, `bcryptKeyWord`, `bcryptLoadLane` (and its four `bcryptLoadLane0`–`3`), `bcryptEks4`, `bcryptBody4`, `bcryptEncrypt4`, `bcryptXorKey4`, `bcryptXorSalt4`, `bcryptMagic4`, `bcryptSaltOf`, `bcryptBatchSalt`, `bcryptJoin`, `bcryptLaneString`, `bcryptLaneOk`, `bcryptJoinedOk`, `bcryptBytesOf` |
 
 Out of scope: `timingSafeEqual` (`std/crypto/ct.ts`, in
 [crypto-k1.md](crypto-k1.md)), the `Secret` rules the checker enforces
@@ -139,10 +142,15 @@ chain's latency. Each lane's hash is the single path's, byte for byte.
 so the four states cannot be four `Secret`s handed to one kernel. They are one
 `Secret<u32[]>` of 4244 words (`BCRYPT_BATCH_WORDS`): lane k's Blowfish state
 at 1042k, its expanded key at 4168 + 18k and its `$2a$` safety word at
-4240 + k. `bcryptRun4` makes it, sets it to π (`bcryptInit4`), loads each
-given lane's key with one `exposeWith` of the state per password
-(`bcryptLoadLane`), runs the expansion, the 2^cost rounds and the magic string
-on all four in one more (`bcryptEks4`), and wipes it.
+4240 + k. `bcryptHash4` and `bcryptVerifyGroup` make it, set it to π
+(`bcryptInit4`), load each given lane's key with one `exposeWith` of the state
+per password (`bcryptLoad4`, through `bcryptLoadLane`), run the expansion, the
+2^cost rounds and the magic string on all four in one more
+(`bcryptHash4Exposed` or `bcryptVerify4Exposed`, through `bcryptEks4`), and
+wipe it. The hash's exposed half returns the four 60-byte hashes, which are
+the strings `bcryptHash4` returns and so are not wiped; the verify's compares
+each lane's rebuilt hash with the given one inside the exposure and wipes
+both, and the digests, before it returns.
 
 **A key word at a time.** While `bcryptLoadLane` has the state exposed it
 cannot also expose the password, so it takes the key one word at a time:
@@ -196,9 +204,9 @@ and none is counted as fixed or open in the index.
 | BCRYPT-4 | Low | `bcryptDecodeSalt` | A hash whose last salt character has the dropped bits set verifies false for its own password. | **Accepted.** It is `crypt_r`'s answer: it rebuilds the string with the bits cleared and compares the whole of it. Accepting it would make a hash string that verifies here and not there. OpenBSD answers the same; Go verifies such a string true, since it keeps the salt characters as given ([Interoperability](#interoperability)). |
 | BCRYPT-5 | Low if it failed | `bcryptVerify`, `bcryptParse` | A hash string of any length or bytes must not panic or read past itself. | **Holds.** The length is checked to be 60 first; every character after that is read at an index below 60 and checked against the alphabet, each refusal an `Err`. |
 | BCRYPT-6 | Low | `bcryptEncrypt` | Each Blowfish round loads four S-box words at indexes taken from the secret state, so the cache lines touched follow the password. | **Accepted.** It is the algorithm: every bcrypt does it, and the expensive key setup that is bcrypt's point is made of these loads. A local attacker sharing a cache with the hashing core could in principle learn about the state; a remote one times a cost-10 hash of ~50 ms, against which the loads' variance is noise. The key schedule (`bcryptSetKey`) does not branch on a password byte's value, but the copy's trip count follows the password's length (up to 72), and the cycle position `p` of the `key[p & 0x7f]` loads restarts at its first NUL (or at 72), so which of the 128-byte key array's two cache lines each load touches follows the length up to that NUL. A local attacker who can watch those lines learns the length (to within the line split), not a byte; C implementations walk a C string the same way. The base64 that encodes the digest (`bcryptCharOf`, `bcryptSextetOf`) is branchless, since the digest is the stored hash when the password is right, and the verify's compare is constant-time. |
-| BCRYPT-7 | Low | `bcryptExposed`, `bcryptKeyWord`, `bcryptLoadLane` | Values the generated code holds in registers, and any it spills to the stack, are not wiped; nor is the caller's own copy of the password before it became a `Secret`. | **Accepted.** No store from the language reaches a register or a spill slot (as AEAD-4 for the AES kernels). Every array holding key material is wiped; the `Secret` the caller passes is the caller's to wipe, and the checker makes it do so. The batch's 19 key words per lane each pass through `bcryptLoadLane`'s `word`, an unwiped `u32` local, on their way from `bcryptKeyWord`'s wiped array into the state: a register, or a spill slot if the code generator spills it, which no wipe reaches; the same reach as a round's working values. |
-| BCRYPT-8 | Low | `bcryptRun4` | A null lane, or a lane of another cost in a `bcryptVerify4` group, runs through the kernel with π and no key, and its digest is computed and dropped. | **Accepted.** Nothing secret is in it, its digest is wiped with the rest of the state's block and digests, and running it costs nothing a lane-count branch inside the kernel would save: the four chains run side by side either way. |
-| BCRYPT-9 | Low | `bcryptRun4`, `bcryptVerify4` | The batch could not run in a `std/threads` task: a task calling `bcryptHash4` was refused, "`hashFour` writes memory its caller can see through `bcryptHash4`". | **Closed: the language limitation is lifted.** A task may now wipe a `Secret` it made with `secret(...)` from a fresh value ([`secret.md`](secret.md), [`LANGUAGE.md`](../LANGUAGE.md) NL2471), and `bcryptVerify4` no longer counts as writing the caller's `hashes`: handing a `string` element to a call writes nothing, since a string has no slot a callee can store into. Before: `tests/link/thread_bcrypt_batch_refused`, refused. After: `tests/link/thread_bcrypt_batch` runs `bcryptHash4` and `bcryptVerify4` on two tasks under `NISH_NUM_THREADS` of 1, 2 and 8, and checks the hashes against `bcryptHash`. The analysis as it stood: `bcryptRun4` makes its state with `secret(new Array…)` and wipes it; the task rule counts that wipe as a shared write: [`threads.md`](../guide/using-nish/threads.md) and [`LANGUAGE.md`](../LANGUAGE.md) (NL2471) say a `wipe` of a `Secret` made with `secret(...)` is a write to memory the caller can see, since the rule does not follow a fresh array through `secret(…)`. The way round it costs more than it buys: a plain `u32[]` state would hold every lane's key schedule and S-boxes outside a `Secret` and outside `expose`, where the checker no longer makes each use go through `exposeWith` nor makes the function wipe it, and a zeroing loop in place of the wipe is a store `opt -O2` may drop. The language change it needs: a `Secret` made by `secret(e)` from a fresh allocation `e` that the function neither returns nor stores is the function's own scratch, as the fresh array is, so its `wipe` and its `exposeWith` writes are local writes. That is the change made. |
+| BCRYPT-7 | Low | `bcryptExposed`, `bcryptHashExposed`, `bcryptKeyWord`, `bcryptLoadLane`, `bcryptHash4Exposed` | Values the generated code holds in registers, and any it spills to the stack, are not wiped; nor is the caller's own copy of the password before it became a `Secret`. | **Accepted.** No store from the language reaches a register or a spill slot (as AEAD-4 for the AES kernels). Every array holding key material is wiped, and so is every array the verify makes: the hash `bcryptVerifyExposed` rebuilds and the given hash's bytes, and in the batch the digests and each lane's joined and given hash (`bcryptJoinedOk`), since a rebuilt hash is a crackable hash of whatever password was tried. The hash paths' 60 bytes (`bcryptHashExposed`, the batch's `all` from `bcryptHash4Exposed`) are not wiped: they are the hash strings `bcryptHash` and `bcryptHash4` return, public by design, and the strings themselves are the caller's. The `Secret` the caller passes is the caller's to wipe, and the checker makes it do so. The batch's 19 key words per lane each pass through `bcryptLoadLane`'s `word`, an unwiped `u32` local, on their way from `bcryptKeyWord`'s wiped array into the state: a register, or a spill slot if the code generator spills it, which no wipe reaches; the same reach as a round's working values. |
+| BCRYPT-8 | Low | `bcryptEks4` | A null lane, or a lane of another cost in a `bcryptVerify4` group, runs through the kernel with π and no key, and its digest is computed and dropped. | **Accepted.** Nothing secret is in it, its digest is wiped with the rest of the state's block and digests, and running it costs nothing a lane-count branch inside the kernel would save: the four chains run side by side either way. |
+| BCRYPT-9 | Low | `bcryptHash4`, `bcryptVerify4` | The batch could not run in a `std/threads` task: a task calling `bcryptHash4` was refused, "`hashFour` writes memory its caller can see through `bcryptHash4`". | **Closed: the language limitation is lifted.** A task may now wipe a `Secret` it made with `secret(...)` from a fresh value ([`secret.md`](secret.md), [`LANGUAGE.md`](../LANGUAGE.md) NL2471), and `bcryptVerify4` no longer counts as writing the caller's `hashes`: handing a `string` element to a call writes nothing, since a string has no slot a callee can store into. Before: `tests/link/thread_bcrypt_batch_refused`, refused. After: `tests/link/thread_bcrypt_batch` runs `bcryptHash4` and `bcryptVerify4` on two tasks under `NISH_NUM_THREADS` of 1, 2 and 8, and checks the hashes against `bcryptHash`. The analysis as it stood: the batch made its state with `secret(new Array…)` and wipes it; the task rule counts that wipe as a shared write: [`threads.md`](../guide/using-nish/threads.md) and [`LANGUAGE.md`](../LANGUAGE.md) (NL2471) say a `wipe` of a `Secret` made with `secret(...)` is a write to memory the caller can see, since the rule does not follow a fresh array through `secret(…)`. The way round it costs more than it buys: a plain `u32[]` state would hold every lane's key schedule and S-boxes outside a `Secret` and outside `expose`, where the checker no longer makes each use go through `exposeWith` nor makes the function wipe it, and a zeroing loop in place of the wipe is a store `opt -O2` may drop. The language change it needs: a `Secret` made by `secret(e)` from a fresh allocation `e` that the function neither returns nor stores is the function's own scratch, as the fresh array is, so its `wipe` and its `exposeWith` writes are local writes. That is the change made. |
 
 ## Properties verified
 
@@ -271,10 +279,12 @@ neither wiped nor returned"`), nor one that drops a verify's answer
 must be handled, not discarded"`).
 
 **The wipes survive `-O2`**: `crypto: the wipes survive opt -O2 (bcrypt's
-Blowfish state, expanded key, key stream, block and digest in bcryptExposed)`
-(`tests/wipes/crypto.js`) counts five volatile wipes reached from
-`bcryptExposed`, `bcryptHash` and `bcryptVerify` after `opt -O2`. Turning the
-state's `wipe` into `fill(0)` drops each count to four.
+Blowfish state, expanded key, key stream, block, digest, rebuilt and given
+hash in bcryptVerifyExposed)` (`tests/wipes/crypto.js`) counts the volatile
+wipes reached after `opt -O2` from `bcryptHashInto` and `bcryptHash` (five:
+`bcryptExposed`'s, inlined) and from `bcryptVerifyExposed` and `bcryptVerify`
+(seven: those five, the rebuilt hash and the given hash's bytes). Turning the
+given bytes' `wipe` into `fill(0)` drops the verify's two to six.
 
 **The batch** (`tests/link/crypto_bcrypt_batch`, whose lines are compared by
 `link/crypto_bcrypt_batch: exits with 0 and stdout matches expected.out`):
@@ -291,12 +301,15 @@ refused", "a malformed lane is an Err naming it", "and is not read when the
 lane is null", "a batch is four hashes".
 
 **The batch's wipes survive `-O2`**: `crypto: the wipes survive opt -O2
-(bcrypt's batch state, key words, block and digests in bcryptRun4)` counts the
-volatile wipes reached from `bcryptKeyWord` (2), `bcryptEks4` (3),
-`bcryptRun4` (20), `bcryptHash4` (25) and `bcryptVerify4` (40);
-`tests/wipes/crypto.js` says where each comes from. Turning `bcryptKeyWord`'s
-`wipe` into `fill(0)` drops `bcryptKeyWord`, `bcryptRun4`, `bcryptHash4` and
-`bcryptVerify4` to 1, 12, 17 and 32.
+(bcrypt's batch state, key words, block, digests, joined and given hashes in
+bcryptVerify4Exposed)` counts the volatile wipes reached from `bcryptKeyWord`
+(2), `bcryptEks4` (3), `bcryptLoad4` (16), `bcryptHash4Exposed` (4),
+`bcryptVerify4Exposed` (6), `bcryptHash4` (26) and `bcryptVerify4` (51);
+`tests/wipes/crypto.js` says where each comes from. Turning the digests'
+`wipe` into `fill(0)` drops `bcryptHash4Exposed`, `bcryptVerify4Exposed`,
+`bcryptHash4` and `bcryptVerify4` to 3, 5, 25 and 50; the joined hash's drops
+`bcryptVerify4Exposed` and `bcryptVerify4` to 5 and 50, and the given
+bytes' to 5 and 46.
 
 **Threads**: `link/thread_bcrypt_task: exits with 0 and stdout matches
 expected.out` hashes two passwords and verifies one on three tasks, natively
