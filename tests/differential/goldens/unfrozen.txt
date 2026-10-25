@@ -264,6 +264,7 @@ cases/math_hypot added after R6: no rewriter to freeze it with
 cases/math_imul added after R6: no rewriter to freeze it with
 cases/math_minmax_nan added after R6: no rewriter to freeze it with
 cases/math_numeric_separators added after R6: no rewriter to freeze it with
+cases/math_round_edges added after R6: no rewriter to freeze it with
 cases/math_round_negzero added after R6: no rewriter to freeze it with
 cases/math_sign added after R6: no rewriter to freeze it with
 cases/math_split_member added after R6: no rewriter to freeze it with

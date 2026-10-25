@@ -18,7 +18,7 @@ function bits(r: f64): i32 -> @bits
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: bits llvm.copysign.f64 llvm.floor.f64 llvm.maximum.f64 llvm.minimum.f64 mix nish.atan2F64 nish.hypotF64 nish.tanF64 nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_eq nish_str_from_i32 special
+  calls: bits llvm.ceil.f64 llvm.copysign.f64 llvm.floor.f64 llvm.maximum.f64 llvm.minimum.f64 llvm.trunc.f64 mix nish.atan2F64 nish.hypotF64 nish.tanF64 nish_arena_mark nish_arena_release nish_array_grow nish_panic_index nish_panic_overflow nish_print nish_str_concat nish_str_eq nish_str_from_i32 special
   stackSites=2 stackLocals=2
   local +0:9 N: i32 (const)
   local +1:9 only: string (const)
@@ -69,19 +69,34 @@ function main(): i32 -> @nish_main [exported entry]
   local +73:9 h: i32 (let)
   local +74:14 i: i32 (let)
   local +75:13 j: i32 (const)
-  local +76:13 k: i32 (const)
-  callee +77:11 mix -> @mix
-  callee +77:18 bits -> @bits
-  local +82:9 h: i32 (let)
-  local +83:14 i: i32 (let)
-  local +84:13 j: i32 (const)
-  local +85:13 k: i32 (const)
-  callee +86:11 mix -> @mix
-  callee +86:18 bits -> @bits
-  local +91:9 h: i32 (let)
-  local +92:14 i: i32 (let)
-  local +93:13 j: i32 (const)
-  callee +94:11 mix -> @mix
+  callee +76:11 mix -> @mix
+  callee +76:18 bits -> @bits
+  local +81:9 h: i32 (let)
+  local +82:14 i: i32 (let)
+  local +83:13 j: i32 (const)
+  callee +84:11 mix -> @mix
+  callee +84:18 bits -> @bits
+  local +89:9 h: i32 (let)
+  local +90:14 i: i32 (let)
+  local +91:13 j: i32 (const)
+  callee +92:11 mix -> @mix
+  callee +92:18 bits -> @bits
+  local +97:9 h: i32 (let)
+  local +98:14 i: i32 (let)
+  local +99:13 j: i32 (const)
+  local +100:13 k: i32 (const)
+  callee +101:11 mix -> @mix
+  callee +101:18 bits -> @bits
+  local +106:9 h: i32 (let)
+  local +107:14 i: i32 (let)
+  local +108:13 j: i32 (const)
+  local +109:13 k: i32 (const)
+  callee +110:11 mix -> @mix
+  callee +110:18 bits -> @bits
+  local +115:9 h: i32 (let)
+  local +116:14 i: i32 (let)
+  local +117:13 j: i32 (const)
+  callee +118:11 mix -> @mix
 module std/math.ts [package nish]
 function hiWord(x: f64): i32 -> @nish.hiWord
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
