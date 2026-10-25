@@ -422,6 +422,9 @@ export class ConduitWorker {
     http.idleTimeout = cfg.idleTimeoutMs
     http.maxBody = 1048576
     http.outputSize = RESPONSE_ROOM + 4096
+    // Most of the challenge's tens of thousands of connections sit between
+    // requests: they hold no input or head buffer while they do.
+    http.idleInput = true
     this.server = new Http1Server(http, listener, cfg.slots)
     this.loop = pollCreate()
     pollAdd(this.loop, listener, H1_WANT_READ, TOKEN_LISTENER)
