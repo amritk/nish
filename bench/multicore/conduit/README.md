@@ -183,3 +183,4 @@ load-generator limited; the per-request costs are still the server's.
 | Setting (B) | Postgres µs/req, A / B | HTTP µs/req, A / B | p99 ms, A / B | Kept |
 | --- | --- | --- | --- | --- |
 | `DB_READ_CONNS=2` | 250–261 / 244–253 | 41.6–42.9 / 41.5–42.9 | 13.0–18.5 / 15.6–21.7 | no: paired differences +0.2, −14.7, −7.3 µs, no clear gain, p99 worse; 3 also leaves the 8-core box more backends |
+| `HTTP_WORKERS=1 DB_READ_CONNS=6 DB_WRITE_CONNS=2` (the same 8 backends) | 262–278 / 253–263 | 42.8–43.9 / **35.6–36.0** | 14.7–113.8 / 11.2–15.7 | not as the default: one loop batches more requests per wakeup and per round trip, −7.5 µs HTTP and about −4.5% Postgres per request here, but one worker saturates its core near 28,000 requests a second at that cost, about #1's whole rate, so the box keeps two; `HTTP_WORKERS=1` stays an option |
