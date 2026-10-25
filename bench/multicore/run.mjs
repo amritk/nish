@@ -11,7 +11,8 @@
 //
 // Options: --alt <binary> (another build of the server, run in turn with this
 // one, A then B at each repeat, so both meet the same machine: two sessions on
-// one build differ by up to 4% here), --users a,b,c (2000), --repeat n (1: each load runs n times, each
+// one build differ by up to 4% here), --alt-env K=V,... (B's settings on top of
+// the environment's; with no --alt, B is this build again), --users a,b,c (2000), --repeat n (1: each load runs n times, each
 // on a fresh database, and the spread of the n is the noise band), --warmup s
 // (30: before each measured run a quarter of its users browse the same fresh
 // database for s seconds, as the challenge's scoring warms up first), --think-scale s (1; the loadgen's own
@@ -75,6 +76,13 @@ const idle = Number(option("--idle", "10000"))
 const warmup = Number(option("--warmup", "30"))
 const repeat = Number(option("--repeat", "1"))
 const alt = option("--alt", "")
+/** `K=V,K=V`: the environment B runs with on top of this one's, for a sweep of one build's settings. */
+const altEnv = Object.fromEntries(
+  option("--alt-env", "")
+    .split(",")
+    .filter((kv) => kv.includes("="))
+    .map((kv) => [kv.slice(0, kv.indexOf("=")), kv.slice(kv.indexOf("=") + 1)])
+)
 const idleOnly = flag("--idle") && !flag("--users")
 
 if (!fs.existsSync(path.join(dir, "seeded"))) {
@@ -147,7 +155,7 @@ const base = `http://127.0.0.1:${httpPort}`
 let dbCount = 0
 
 /** A fresh database from `template`, and the server started on it; resolves once GET /api/tags answers. */
-const startServer = async (template, binary = exe) => {
+const startServer = async (template, binary = exe, extra = {}) => {
   dbCount += 1
   const db = `multicore_${process.pid}_${dbCount}`
   psql(`CREATE DATABASE ${db} TEMPLATE ${template} STRATEGY FILE_COPY`)
@@ -160,6 +168,7 @@ const startServer = async (template, binary = exe) => {
       JWT_SECRET: secret,
       HOST: "127.0.0.1",
       PORT: String(httpPort),
+      ...extra,
     },
   })
   const started = Date.now()
@@ -287,8 +296,8 @@ const spawnLoad = (n, startAt, rampS, measureS, tailS, outFile, tag) =>
   )
 
 /** The server's bcrypt service: the worker whose prefork index is HTTP_WORKERS. */
-const bcryptProcess = (top) => {
-  const worker = `--nish-prefork-worker=${process.env.HTTP_WORKERS ?? 2}`
+const bcryptProcess = (top, workers) => {
+  const worker = `--nish-prefork-worker=${workers}`
   for (const pid of allPids()) {
     const s = statOf(pid)
     if (s !== null && s.ppid === top) {
@@ -305,20 +314,22 @@ const bcryptProcess = (top) => {
 if (!idleOnly) {
   console.log(
     `load: seed ${seed}, think-scale ${thinkScale}, warm-up ${warmup} s, ramp ${ramp} s, measure ${measure} s, ${os.cpus().length} CPUs, ` +
-      `HTTP_WORKERS=${process.env.HTTP_WORKERS ?? 2} DB_READ_CONNS=${process.env.DB_READ_CONNS ?? 3} DB_WRITE_CONNS=${process.env.DB_WRITE_CONNS ?? 1}`
+      `HTTP_WORKERS=${process.env.HTTP_WORKERS ?? 2} DB_READ_CONNS=${process.env.DB_READ_CONNS ?? 3} DB_WRITE_CONNS=${process.env.DB_WRITE_CONNS ?? 1}` +
+      (Object.keys(altEnv).length > 0 ? `; B with ${Object.entries(altEnv).map(([k, v]) => `${k}=${v}`).join(" ")}` : "")
   )
   console.log("users\treq/s\tp95 ms\tp99 ms\terrors\tpg µs/req\tapp µs/req\t(http + bcrypt)\tpass")
-  const builds = alt === "" ? [["", exe]] : [["A", exe], ["B", path.resolve(alt)]]
+  const paired = alt !== "" || Object.keys(altEnv).length > 0
+  const builds = paired ? [["A", exe, {}], ["B", alt === "" ? exe : path.resolve(alt), altEnv]] : [["", exe, {}]]
   const plan = []
   for (const u of users) {
     for (let k = 0; k < repeat; k++) {
-      for (const [label, binary] of builds) {
-        plan.push({ n: u, label, binary })
+      for (const [label, binary, env] of builds) {
+        plan.push({ n: u, label, binary, env })
       }
     }
   }
-  for (const { n, label, binary } of plan) {
-    const db = await startServer(template, binary)
+  for (const { n, label, binary, env } of plan) {
+    const db = await startServer(template, binary, env)
     if (warmup > 0) {
       const warm = spawnLoad(Math.max(1, Math.round(n / 4)), Date.now() + 1000, 5, warmup, 0, path.join(out, `warmup-${n}.json`), "w")
       await new Promise((resolve) => warm.once("exit", resolve))
@@ -334,7 +345,7 @@ if (!idleOnly) {
     await new Promise((resolve) => setTimeout(resolve, measure * 1000))
     const pg1 = treeTicks(postmaster())
     const app1 = treeTicks(server.pid)
-    const bcryptPid = bcryptProcess(server.pid)
+    const bcryptPid = bcryptProcess(server.pid, env.HTTP_WORKERS ?? process.env.HTTP_WORKERS ?? 2)
     const code = await done
     await stopServer(db)
     if (code !== 0) {
