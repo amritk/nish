@@ -42,7 +42,9 @@ const ARTICLE_FULL: string = ARTICLE_LIST + ", a.body"
 const ARTICLE_FROM: string = " FROM articles a JOIN users u ON u.id = a.author_id"
 const ORDER_PAGE: string = " ORDER BY a.id DESC LIMIT $2 OFFSET $3"
 const SLUGIFY_2: string = "trim(both '-' from lower(regexp_replace($2::text, '[^A-Za-z0-9]+', '-', 'g')))"
-const LAST_ARTICLE: string = "currval(pg_get_serial_sequence('articles', 'id'))"
+// A scalar subquery, so the volatile currval is read once and the primary key
+// is probed with it, rather than tested against every row.
+const LAST_ARTICLE: string = "(SELECT currval(pg_get_serial_sequence('articles', 'id')))"
 const FOLLOWING_1: string = "EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = $1 AND fo.followee_id = "
 
 /** Registers every statement on `pool`; false when the pool refused one. */
