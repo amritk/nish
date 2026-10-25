@@ -2181,6 +2181,11 @@ both files.
     | No escape, 64 or more | 570, 90,532 | 35,910 | 18,574 | 0 | 0 | 0 |
     | With an escape | 312, 46,104 | 1,041,369 | 0 | 1, 41 | 970 | 0 |
 
+    The no-escape rows are priced at 63.0 a call (53.0 for an empty
+    string); the escape row is the escape path's lines as measured. So
+    twitter's `stringInto` column sums to 2,160,520, 118 over the measured
+    2,160,402 above; citm's sums exactly.
+
     A cut to the copy has to lower the 63-instruction call (C saves 0.9 a
     string on twitter, 1.0 on citm) or the escape path's byte loop (C2).
     The per-byte work is only in the escape path.
@@ -2343,8 +2348,14 @@ both files.
   0.43% of its Total. That is more than main's drift since the gate was
   measured (62,686 instructions, 0.24%), but the verdict is taken on the
   gate's pinned Total either way. Every cut left out above costs citm or
-  saves only removable work, so S6c's bar is not reachable by per-value
-  cuts in the tokenizer, and there is no set for a build stage to build.
+  saves only removable work, so no set of the cuts measured here reaches
+  S6c's bar, and there is no set for a build stage to build. The largest
+  kept pool left open on citm is the second walk over a number's digits
+  after A: `number`'s scan at 8.5 instructions a digit, then A's loop at
+  6.5, about 1,904,000 over citm's 126,927 digits. citm's 109,087 gap is
+  about 5.7% of it. Every merge of the two walks tried here (B, O, N and
+  N2) cost more, so it stays a lead, and a future attempt would have to
+  crack it.
 
 **What S6 does not do.** It does not move the default target (§5), add
 `nish:simd` (S3 stays on its own bar), or touch `std/json`'s older reader,
