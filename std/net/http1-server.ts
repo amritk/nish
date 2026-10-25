@@ -120,6 +120,8 @@ import {
   HTTP1_CLOSED,
   HTTP1_END,
   HTTP1_ERROR,
+  HTTP1_FIRST_HEAD,
+  HTTP1_FIRST_INPUT,
   HTTP1_HEAD,
   HTTP1_NO_BODY,
   HTTP1_REFUSED,
@@ -352,6 +354,15 @@ export class Http1Config {
    * of its head each `idleTimeout` would hold its slot for good (slowloris).
    */
   headTimeout: i32 = 30000
+  /**
+   * Lend a slot's input and head buffers back to the server between
+   * exchanges: once a response is sent and no byte of the next request has
+   * come, the slot gives both to pools the server's slots share, and takes
+   * them again with the next byte. The memory they hold then follows the
+   * connections mid-request rather than every keep-alive connection open,
+   * for two pool operations a request. Off by default.
+   */
+  idleInput: boolean = false
 }
 
 /** The reason phrase a status is sent with; RFC 9112 §4 lets a client ignore it. */
@@ -486,6 +497,9 @@ export class Http1Connection {
   noOutput: u8[]
   /** Where `output` is borrowed from, for a connection of a pool; null for one that keeps its own. */
   pool: Http1OutputPool | null
+  /** Where the parser's input and head buffers go while the slot rests, with `Http1Config.idleInput`; null otherwise. */
+  inputs: Http1OutputPool | null
+  heads: Http1OutputPool | null
   /** `H1_BODY`'s and `H1_WS_MESSAGE`'s bytes. */
   data: u8[]
   /** A ping's payload, kept until its pong fits: empty until the first ping. */
@@ -569,6 +583,8 @@ export class Http1Connection {
     this.noOutput = []
     this.output = this.noOutput
     this.pool = null
+    this.inputs = null
+    this.heads = null
     this.data = this.noOutput
     this.pong = this.noOutput
     this.noFields = []
@@ -615,6 +631,49 @@ export class Http1Connection {
     this.headTimed = false
     this.headSince = 0
     this.release()
+    this.park()
+  }
+
+  /**
+   * Gives the parser's input and head buffers to `inputs` and `heads` while
+   * the connection rests between exchanges: speaking HTTP, no request open,
+   * nothing fed and unread. Does nothing without the pools or otherwise.
+   */
+  park(): void {
+    const inputs: Http1OutputPool | null = this.inputs
+    const heads: Http1OutputPool | null = this.heads
+    const p: Http1Parser = this.parser
+    if (inputs === null || heads === null || this.state !== H1_S_HTTP || this.requestOpen || !p.resting()) {
+      return
+    }
+    if (toI32(p.buf.length) > 0) {
+      inputs.give(p.buf)
+      p.buf = this.noOutput
+      p.body = this.noOutput
+      p.start = 0
+      p.end = 0
+      p.scan = 0
+      p.lineStart = 0
+      p.lineEnd = 0
+    }
+    if (toI32(p.head.length) > 0) {
+      heads.give(p.head)
+      p.head = this.noOutput
+    }
+  }
+
+  /** Takes back the buffers `park` gave away, before bytes are fed. */
+  unpark(): void {
+    const inputs: Http1OutputPool | null = this.inputs
+    const heads: Http1OutputPool | null = this.heads
+    const p: Http1Parser = this.parser
+    if (inputs !== null && toI32(p.buf.length) === 0) {
+      p.buf = inputs.take()
+      p.body = p.buf
+    }
+    if (heads !== null && toI32(p.head.length) === 0) {
+      p.head = heads.take()
+    }
   }
 
   // ---- Bytes in and out ---------------------------------------------------------
@@ -651,6 +710,7 @@ export class Http1Connection {
     if (this.state === H1_S_WEBSOCKET) {
       this.decoder().feed(buf, off, n)
     } else {
+      this.unpark()
       this.parser.feed(buf, off, n)
     }
     return n
@@ -1322,6 +1382,9 @@ export class Http1Server {
   armed: i32[]
   /** The output buffers the slots borrow while they write. */
   outputs: Http1OutputPool
+  /** The input and head buffers resting slots lend, with `Http1Config.idleInput`. */
+  inputs: Http1OutputPool
+  heads: Http1OutputPool
   /**
    * The slots closed since they were used, a stack whose top `accept` takes
    * before it builds a slot past the high-water mark: finding one costs the
@@ -1362,6 +1425,8 @@ export class Http1Server {
     this.free = []
     this.slots = size < 1 ? 1 : size
     this.outputs = new Http1OutputPool(config.outputSize)
+    this.inputs = new Http1OutputPool(HTTP1_FIRST_INPUT)
+    this.heads = new Http1OutputPool(HTTP1_FIRST_HEAD)
     this.date = new HttpDate()
     this.scratch = new Array<u8>(config.chunkSize)
     this.peer = new Array<u8>(H1_ADDRESS_SIZE)
@@ -1372,6 +1437,10 @@ export class Http1Server {
     const conn: Http1Connection = new Http1Connection(this.config)
     conn.pool = this.outputs
     conn.date = this.date
+    if (this.config.idleInput) {
+      conn.inputs = this.inputs
+      conn.heads = this.heads
+    }
     this.connections.push(conn)
     return conn
   }
@@ -1530,6 +1599,7 @@ export class Http1Server {
     if (conn.isDone()) {
       return H1_DONE
     }
+    conn.park()
     let wants: i32 = 0
     if (conn.inputRoom() > 0) {
       wants = wants | H1_WANT_READ
@@ -1648,6 +1718,9 @@ export class Http1TlsServer {
   scratch: u8[]
   /** The output buffers the slots borrow while they write. */
   outputs: Http1OutputPool
+  /** The input and head buffers resting slots lend, with `Http1Config.idleInput`. */
+  inputs: Http1OutputPool
+  heads: Http1OutputPool
   /** No slot can expire before this (`monotonicNanos`): `Http1Server.expireAfter`. */
   expireAfter: i64 = 0
   /** How many calls of `expire` walked every slot. */
@@ -1665,6 +1738,8 @@ export class Http1TlsServer {
     this.tls = new TlsTcpServer(tlsConfig, listener, size)
     this.connections = []
     this.outputs = new Http1OutputPool(config.outputSize)
+    this.inputs = new Http1OutputPool(HTTP1_FIRST_INPUT)
+    this.heads = new Http1OutputPool(HTTP1_FIRST_HEAD)
     this.date = new HttpDate()
     this.scratch = new Array<u8>(config.chunkSize)
   }
@@ -1685,6 +1760,10 @@ export class Http1TlsServer {
     const conn: Http1Connection = new Http1Connection(this.config)
     conn.pool = this.outputs
     conn.date = this.date
+    if (this.config.idleInput) {
+      conn.inputs = this.inputs
+      conn.heads = this.heads
+    }
     return conn
   }
 
@@ -1848,6 +1927,7 @@ export class Http1TlsServer {
     if (conn.isDone()) {
       return this.tls.shutdown(slot)
     }
+    conn.park()
     const wants: i32 = this.tls.interest(slot)
     return conn.wantsWrite() && (wants & TLS_RECORD_DONE) === 0 ? wants | TLS_RECORD_WANT_WRITE : wants
   }
