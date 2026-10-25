@@ -200,6 +200,32 @@ or a `backoffCapMs` below `backoffMs` stops the program with a panic naming
 the field. `examples/prefork-server.ts` is a whole HTTP server built this way:
 each answer names the worker that sent it, so a few `curl`s show the spread.
 
+### Workers that are not restarted
+
+Set `restart` to `false` when something else restarts the service, such as
+systemd or a container runtime, and a worker that exits should stay
+down rather than come back on its own. It then stays gone,
+and the others carry on. Once every worker has exited, the supervisor returns
+`-3` (`PREFORK_WORKERS_EXITED`), so the program can exit and let its own
+supervisor decide:
+
+```ts
+import { PREFORK_STOPPED, PreforkConfig, preforkWith } from "nish/net/prefork";
+
+export const main = (): number => {
+  const config = new PreforkConfig();
+  config.restart = false;
+  const worker = preforkWith(process.argv, config);
+  if (worker < 0) {
+    return worker === PREFORK_STOPPED ? 0 : 1;
+  }
+  // ... serve as worker `worker` ...
+  return 0;
+};
+```
+
+SIGTERM and SIGINT still stop the workers that are left, and still give `-1`.
+
 ## Trusting a peer's address
 
 A TCP peer's address is proven: the handshake that `tcpAccept` completes needs
