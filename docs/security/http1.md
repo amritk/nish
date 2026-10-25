@@ -25,8 +25,8 @@ memory each WebSocket upgrade leaves behind.
 
 | File | Functions |
 | --- | --- |
-| `std/net/http1.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
-| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
+| `std/net/http1.ts` | `Http1Parser` (`feed`, `next`, `restart`, the span accessors `header`, `headerIndex`, `headerIs`, `methodIs`, `targetIs`, `upgradeIs`, `buffered`, `resting`) and its helpers (`http1TakeLine`, `http1RequestLine`, `http1FieldLine`, `http1EndOfHead`, `http1Tally`, `http1ContentLength`, `http1ChunkSize`, `http1BodyWindow`, `http1HeadAppend`); the writers `http1ResponseHead`, `http1WriteResponseHead`, `http1Chunk`, `http1WriteChunk`, `http1LastChunk` |
+| `std/net/http1-server.ts` | `Http1Connection`: `feed`, `inputRoom`, `next`, `nextRequest`, `nextFrame`, `fail`, `respond`, `write`, `end`, `acceptWebSocket`, `sendFrame`, `closeWebSocket`, `sendPong`, `sendClose`, `restart`, `acquire`, `release`, `park`, `unpark`; `Http1OutputPool` (`take`, `give`); `Http1Server` and `Http1TlsServer`: `accept`, `readable`, `writable`, `next`, `flush`, `send`, `close`, `expire`, `refused`; `Http1Server.rearm`; `HttpDate` (`current`, `pin`, `unpin`) |
 | `std/net/http-fields.ts` | `httpDateWrite` and its helpers (`httpFieldsPutName`, `httpFieldsPutTwo`) — the date alone; the header model is `docs/security/http2.md`'s |
 | `std/net/websocket.ts` | `WsDecoder` (`feed`, `next`, `reset`), `websocketWriteFrame`, `websocketFrame`, `websocketRequestKey`, `websocketUpgradeResponse`, `websocketClosePayload` |
 
@@ -223,6 +223,25 @@ borrowed, not kept: a slot holds a buffer only while it has bytes the socket
 has not taken, so the plain checks run on one buffer and a slot whose client
 stops reading holds one until it drains, then gives it back; fifty
 connections in a row leave the pool's buffers all free (`net_http1_server`).
+
+**Lent input, and what a lent buffer holds** (`net_http1_server`). With
+`Http1Config.idleInput` a slot gives its parser's input and head buffers to
+pools its server's slots share (`Http1Connection.park`, from `Http1Server.flush`
+and `Http1TlsServer.flush` and at `restart`) only while it rests: speaking
+HTTP, no request open, and `Http1Parser.resting()` (waiting for a request line,
+nothing fed and unread). A slot still reading a head, owing a response, holding
+pipelined bytes or upgraded keeps both, and `unpark` takes a buffer back in
+`feed` before any byte is copied in. A lent buffer is not cleared: it holds the
+bytes of the request it last carried, a password in a body included, until the
+next slot to take it overwrites them. Nothing reads them, since a parser reads
+only the window `[start, end)` it was fed and `park` resets that window to
+empty; the bytes stay in the process's memory as they did before the option,
+when each slot kept its own buffer with the same bytes in it. Tests: `two slots
+served one after the other share one input and one head buffer`, `a
+connection with a request open keeps them`, `so do they while a byte of the
+next request is unread`, `and once nothing is open or unread both go back`,
+`a pipelined pair on a slot that lent its buffers is answered in order`, and
+`without idleInput a resting slot keeps its input buffer`.
 
 **ALPN** (`net_http1_server`): a TLS handshake that chose `http/1.1`, or none,
 is served; one that chose `h2` is shut down with `close_notify` before any

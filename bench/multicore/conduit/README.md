@@ -84,3 +84,37 @@ users make the requests of about 10,000; the mix of requests, logins included,
 is the same.
 
 ## Results
+
+Every row is one run of `run.sh` on a fresh copy of the full seed (100,000
+users, 500,000 articles), think-scale 0.1, 30 s warm-up, 20 s ramp, 60 s
+measured, `HTTP_WORKERS=2 DB_READ_CONNS=3 DB_WRITE_CONNS=1`. "app" is every
+server process; it splits into the HTTP workers and the bcrypt service. A
+change is kept only when it moves a figure by more than the spread of the
+three runs before it.
+
+### Baseline: the reference SQL
+
+The SQL of SPEC.md, as `sql.ts` first had it; three runs at each load.
+
+| users | req/s | p95 ms | p99 ms | errors | Postgres µs/req | app µs/req | HTTP | bcrypt |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1,000 | 2,645 | 2.1 | 4.0 | 0 | 335.6 | 136.8 | 76.4 | 60.4 |
+| 1,000 | 2,647 | 2.1 | 3.4 | 0 | 311.4 | 130.7 | 74.2 | 56.5 |
+| 1,000 | 2,641 | 1.9 | 3.3 | 0 | 335.1 | 131.8 | 77.4 | 54.4 |
+| 2,000 | 5,269 | 4.0 | 7.6 | 0 | 312.2 | 106.5 | 60.5 | 46.1 |
+| 2,000 | 5,255 | 3.7 | 6.4 | 0 | 311.6 | 105.4 | 60.8 | 44.6 |
+| 2,000 | 5,269 | 3.6 | 17.5 | 0 | 301.5 | 104.3 | 59.4 | 44.9 |
+| 4,000 | 10,133 | 60.4 | 169.5 | 0 | 250.2 | 70.7 | 38.4 | 32.4 |
+| 4,000 | 10,308 | 34.2 | 79.3 | 0 | 245.4 | 68.5 | 38.5 | 29.9 |
+| 4,000 | 10,300 | 38.8 | 82.8 | 0 | 248.8 | 66.8 | 38.6 | 28.2 |
+
+Noise band: about ±4% on Postgres µs/request (302–312 at 2,000 users), ±1%
+on HTTP µs/request. The cost of a request falls as the load rises, because
+more requests share each wakeup, each `pollWait` and each pipelined round
+trip. At 4,000 users the four cores are full (Postgres about 2.5 of them, the
+load generator most of the rest) and the loadgen flags its own CPU over 75%,
+so those rows are a floor on throughput, not a ceiling. The bcrypt share is
+the logins': at think-scale 0.1 about 3 to 11 logins a second arrive, so a
+160 ms window rarely fills four lanes, and one lane costs nearly what four
+do. At the challenge's 100,000 users (about 27 logins a second) the batches
+fill.
