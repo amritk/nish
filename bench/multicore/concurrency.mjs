@@ -108,7 +108,12 @@ export const concurrencyCheck = async (base, xacts, { copies = 40 } = {}) => {
       )
     }
   }
-  order.forEach((k, at) => compare(k, answers[at], "concurrent"))
-  ;(await serially()).forEach((got, k) => compare(k, got, "serial again"))
+  order.forEach((k, at) => {
+    compare(k, answers[at], "concurrent")
+  })
+  const again = await serially()
+  again.forEach((got, k) => {
+    compare(k, got, "serial again")
+  })
   return { requests: order.length, distinct: reads.length, transactions, mismatches }
 }

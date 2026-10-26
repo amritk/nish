@@ -324,7 +324,8 @@ if (!flag("--no-conformance") && !idleOnly) {
   }
   // Reads made together answer as they do alone (concurrency.mjs), on a fresh copy.
   const fresh = await startServer("conduit_dev")
-  const xacts = () => Number(psql(`SELECT xact_commit FROM pg_stat_database WHERE datname = '${fresh}'`).trim())
+  const xacts = () =>
+    Number(psql(`SELECT xact_commit FROM pg_stat_database WHERE datname = '${fresh}'`).trim())
   const c = await concurrencyCheck(base, xacts)
   await stopServer(fresh)
   console.log(

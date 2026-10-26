@@ -1637,7 +1637,8 @@ export class ConduitWorker {
         let take: i32 = 0
         let bytes: i32 = 0
         while (take < this.readCount[shape] && (take < READ_BATCH || shape === SHAPE_TAGS)) {
-          const cost: i32 = readCost(this.reqs[ring[(head + take) % QUEUE]])
+          // A tags read binds no arrays.
+          const cost: i32 = shape === SHAPE_TAGS ? 0 : readCost(this.reqs[ring[(head + take) % QUEUE]])
           if (take > 0 && bytes + cost > READ_BATCH_BYTES - 8) {
             break
           }

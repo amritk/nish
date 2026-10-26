@@ -135,8 +135,18 @@ The current build, three runs each, think-scale 0.1, full seed, after a
 | 4,000 | 9,960–10,351 | 27–77 | 67–146 | 0 | 233–252 | 33.6–34.0 | 32–36 |
 | 4,000, with group commit (O7) | 10,275–10,422 | 21–37 | 40–70 | 0 | 233–246 | 34.2–34.6 | 26–31 |
 
-The last row is the six group-commit runs that served as the B side of O8's
-pairs, on the build as it stands.
+| 4,000, with coalesced reads (O11), against `main` in the same session | 9,099–9,628 | 87–135 | 137–308 | 0 | **258–268** | 37.5–39.3 | 32.7–33.8 |
+| 4,000, `main` (O7) in that session | 9,230–9,323 | 110–123 | 170–176 | 0 | 279–286 | 37.3–37.7 | 33.4–36.8 |
+
+The third row is the six group-commit runs that served as the B side of O8's
+pairs. The last two are one later session's three pairs, the coalesced build
+against `main` (`run.sh --alt <main> --users 4000 --repeat 3 --idle 0`), where
+the machine gives the same `main` 279–286 µs, about 17% above the earlier
+session's 233–246. Paired, coalescing takes **−17.7, −23.2 and −21.3 µs**, a
+mean of **−20.7 µs (−7.3%)**, outside both builds' spreads (10.4 and 6.8). p95
+is lower on two pairs of three and higher on the first (135 against 118 ms),
+whose p99 is too (308 against 173); the means are p95 108 against 117 ms and
+p99 201 against 173.
 
 Memory per idle keep-alive connection: **1.13 KiB** of the server's RSS at
 15,000 connections (the kernel's socket buffers aside), against 3.20 KiB before
@@ -147,10 +157,10 @@ Against the figures derived from #1 (rust-tokio-Scooter1337: 100,000 users,
 
 | per request | #1 (derived) | here, at 10,000 req/s | target |
 | --- | ---: | ---: | --- |
-| Postgres CPU | ≈ 213 µs | 233–246 µs | ≤ 190 µs: **missed** |
+| Postgres CPU | ≈ 213 µs | 258–268 µs against `main`'s 279–286 in one session; ≈ 216–228 µs on the earlier session's scale | ≤ 190 µs: **missed** |
 | app CPU | ≈ 61 µs | 34 µs HTTP + ≈ 17 µs bcrypt at the box's login rate | ≤ 61 µs: met |
 | RSS per idle connection | ~1 KiB at 100k | 1.13 KiB | ~1 KiB: met |
-| p95 / p99 / errors | <500 ms / <1 s / <1% | 21–37 ms / 40–70 ms / 0 | met, at 4,000 users here |
+| p95 / p99 / errors | <500 ms / <1 s / <1% | 87–135 ms / 137–308 ms / 0 | met, at 4,000 users here |
 
 The bcrypt figure measured here (32–36 µs) is a 4-core container's: at
 think-scale 0.1 about 10 logins a second arrive, so most batches run one
@@ -159,9 +169,14 @@ about 16 ms of one core a login, which is about 17 µs a request.
 
 **Projection for the 8-vCPU box**, from these per-request costs: a challenge
 user makes 0.263 requests a second (#1's 26,279 req/s over 100,000 users), so
-one costs 0.263 × (240 + 34) µs plus bcrypt's 4.4 µs ≈ 77 µs of CPU a second;
-with 90% of 8 cores usable, as #1 used, that is **about 94,000 users** (92,000 to 96,000 across the
-spread of Postgres's 233–246 µs), against #1's 100,000. The
+one costs 0.263 × (Postgres + HTTP) µs plus bcrypt's 4.4 µs of CPU a second,
+and 90% of 8 cores is usable, as #1 used. Before coalescing (O7), on the
+earlier session's 240 + 34 µs, that was about 77 µs and **about 94,000
+users**. With coalesced reads, the paired −7.3% carried over to that scale
+gives about 222 + 34 µs, 72 µs a user, **about 100,000 users** (98,000 to
+103,000 across the spread), #1's figure. On the later session's own
+figures, slower throughout, the same comparison is about 86,500 users (262 +
+38 µs) against `main`'s 81,000 (282 + 37.5 µs). The
 assumptions: per-request costs no higher at the box's 26,000 req/s than at the
 10,000 measured here (they fell from 2,000 to 4,000 users, which argues
 lower); the load generator on separate machines, where here it shares the
