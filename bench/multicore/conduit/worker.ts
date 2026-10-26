@@ -196,7 +196,9 @@ const WRITE_BATCH: i32 = 128
 const SHAPE_NONE: i32 = -1
 const SHAPE_ARTICLE: i32 = 0
 const SHAPE_COMMENTS: i32 = 1
-const SHAPES: i32 = 2
+/** `GET /api/tags`: every request waiting takes the one row of one execution. */
+const SHAPE_TAGS: i32 = 2
+const SHAPES: i32 = 3
 /** The most requests one coalesced read takes, and the most bytes its arrays may take. */
 const READ_BATCH: i32 = 32
 const READ_BATCH_BYTES: i32 = 32768
@@ -1464,6 +1466,9 @@ export class ConduitWorker {
 
   /** The shape `r` is coalesced as, or `SHAPE_NONE` for a read sent alone. */
   shapeOf(r: ConduitReq): i32 {
+    if (r.route === R_TAGS) {
+      return SHAPE_TAGS
+    }
     if (r.fLen[F_PATH] < 0 || readCost(r) > READ_BATCH_BYTES - 8) {
       return SHAPE_NONE
     }
@@ -1631,7 +1636,7 @@ export class ConduitWorker {
         const head: i32 = this.readHead[shape]
         let take: i32 = 0
         let bytes: i32 = 0
-        while (take < this.readCount[shape] && take < READ_BATCH) {
+        while (take < this.readCount[shape] && (take < READ_BATCH || shape === SHAPE_TAGS)) {
           const cost: i32 = readCost(this.reqs[ring[(head + take) % QUEUE]])
           if (take > 0 && bytes + cost > READ_BATCH_BYTES - 8) {
             break
@@ -1653,12 +1658,12 @@ export class ConduitWorker {
   }
 
   /**
-   * Binds a coalesced read: one request alone with its own statement, more as
-   * one statement over two parallel arrays, the slugs as a text array literal
-   * and the viewers as an int8 one.
+   * Binds a coalesced read: one request alone, or every request of a tags
+   * read, with its own statement; more as one statement over two parallel
+   * arrays, the slugs as a text array literal and the viewers as an int8 one.
    */
   bindReads(r: ConduitReq, conn: PgConnection): boolean {
-    if (r.batchNext < 0) {
+    if (r.batchNext < 0 || r.shape === SHAPE_TAGS) {
       return this.bind(r, conn)
     }
     const a: u8[] = this.arrayBuf
@@ -2006,11 +2011,24 @@ export class ConduitWorker {
    * requests' places (`shapeOrd`; a request sent alone has only its own), so
    * `readCursor` walks the batch: a row of a later place answers every
    * request before it, a request with no row answering 404 on its own. A
-   * failed statement sends the requests not yet answered again alone, where
-   * each answers its own error; a lost connection answers them 500.
+   * tags read's one row answers every request in it. A failed statement
+   * sends the requests not yet answered again alone, where each answers its
+   * own error; a lost connection answers them 500.
    */
   readEvent(s: i32, conn: PgConnection, ticket: i32, event: i32): void {
-    if (event === PG_ROW) {
+    if (event === PG_ROW && this.readShape[s] === SHAPE_TAGS) {
+      // Every request but the last answers now; the last answers at the end
+      // of the group, as a request alone does.
+      let k: i32 = this.readCursor[s]
+      while (k >= 0) {
+        this.onRow(this.reqs[k], conn, this.writers[POOL_READ][s])
+        if (this.reqs[k].batchNext < 0) {
+          break
+        }
+        this.readNext(s)
+        k = this.readCursor[s]
+      }
+    } else if (event === PG_ROW) {
       const place: i32 = this.readAlone[s] ? 1 : toI32(conn.int(shapeOrd(this.readShape[s])))
       while (this.readCursor[s] >= 0 && this.readPos[s] < place) {
         this.readNext(s)
