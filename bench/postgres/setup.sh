@@ -15,8 +15,7 @@
 #   seeded      written last, once make-seed.sh's own check printed OK
 #
 # PG_BENCH_SEED=full also loads the full seed (database conduit_seed, about
-# 2.4 GB, 5 to 10 minutes) beside the dev one, for bench/multicore/run.sh's
-# load; the dev seed stays, as the challenge's conformance runs on it.
+# 2.4 GB, 5 to 10 minutes) beside the dev one.
 #
 # What it needs, and installs when it can (as root with apt-get):
 #   - PostgreSQL 18's server binaries in $PG_BIN (/usr/lib/postgresql/18/bin)

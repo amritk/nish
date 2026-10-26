@@ -554,17 +554,12 @@ const DECLARED = []
  * `onlyDropsChecks` stays, held to fabricated pairs on every `npm test`, for
  * the next release that drops a check.
  *
- * The binary hardening adds lines rather than dropping any, and is stated the
- * way `tests/nish-cmp.js` states it: the candidate, less exactly what
- * `withoutHardening` removes, is the reference.
+ * 0.22.1 shipped the binary hardening, which an entry here stated the way
+ * `tests/nish-cmp.js` states it: `explains: (reference, candidate) =>
+ * cmp.withoutHardening(candidate) === reference`. It is empty while the seed
+ * carries every such change.
  */
-const DECLARED_CHECKS = [
-  {
-    changelog: "Harden every native binary",
-    why: 'every native module carries the control-flow and stack-clash module flags, and every definition `"probe-stack"="inline-asm"`',
-    explains: (reference, candidate) => cmp.withoutHardening(candidate) === reference,
-  },
-]
+const DECLARED_CHECKS = []
 
 /** How many times each runtime panic is called, and each check block opened, in an IR text. */
 const panicCounts = (ir) => {
@@ -1172,8 +1167,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // A stale entry fails even a one-program reproduction that does not reach
   // it; the line says which, so it does not read as the program's own fault.
   for (const d of res.stale) {
+    // A `DECLARED_CHECKS` entry has no function or groups, only its changelog words.
+    const where = d.function === undefined ? `"${d.changelog}"` : `@${d.function} ${d.seed} -> ${d.head}`
     console.log(
-      `  STALE: no program differs at @${d.function} ${d.seed} -> ${d.head}; the seed carries the change ` +
+      `  STALE: no program differs at ${where}; the seed carries the change ` +
         "or the generator no longer reaches it, so the declaration goes"
     )
   }
