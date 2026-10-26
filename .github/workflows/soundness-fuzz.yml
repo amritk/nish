@@ -42,7 +42,9 @@ permissions:
 #
 # Every Ubuntu install step first points apt from the Azure mirror at
 # archive.ubuntu.com: the Azure mirror served libllvm18 at about 100 KB/s
-# on #963 and timed the five-minute install out before any test ran.
+# on #963 and timed the five-minute install out before any test ran. The
+# LLVM installs go through .github/actions/apt-install, which also keeps
+# the .debs in the Actions cache and cuts a stalled download at a minute.
 env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
@@ -66,10 +68,12 @@ jobs:
 
       - name: Install LLVM 18 + lld + the sanitizer runtimes
         timeout-minutes: 5
+        uses: ./.github/actions/apt-install
+        with:
+          packages: clang-18 lld-18 llvm-18 libclang-rt-18-dev
+
+      - name: Link the LLVM 18 tools by their plain names
         run: |
-          grep -rlZ azure.archive.ubuntu.com /etc/apt | xargs -0r sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g'
-          sudo apt-get $APT_OPTS update
-          sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 libclang-rt-18-dev
           bin="$RUNNER_TEMP/llvm-bin"
           mkdir -p "$bin"
           for tool in clang clang++ llc llvm-as llvm-nm opt ld.lld wasm-ld lld; do

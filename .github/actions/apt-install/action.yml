@@ -1,0 +1,85 @@
+# Installs Ubuntu packages through the Actions cache, the way ci.yml's `test`
+# job and interop.yml install theirs. The mirrors are the unreliable part: the
+# Azure one has served libllvm18 at about 100 KB/s (#963), never idle long
+# enough for `APT_OPTS`'s thirty seconds, so the calling step's five-minute
+# limit fired before any test ran. The .debs are kept in the cache, keyed by
+# runner image, architecture and package list, so a job normally downloads
+# nothing. On a miss each download attempt is cut at a minute and retried
+# without the Azure mirror, since a retry against a stalled mirror stalls again.
+#
+# The save is a step of its own rather than actions/cache's post step, which
+# saves only when the whole job passes. Jobs that race to save one key lose
+# with a warning and carry on.
+name: Install apt packages through the cache
+description: apt-get install with the .debs restored from and saved to the Actions cache
+
+inputs:
+  packages:
+    description: Space-separated package names for apt-get install
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Apt cache key
+      id: key
+      shell: bash
+      env:
+        PKGS: ${{ inputs.packages }}
+      run: |
+        sum="$(printf '%s' "$PKGS" | sha256sum | cut -c1-12)"
+        prefix="apt-$sum-$ImageOS-$RUNNER_ARCH-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "key=$prefix$ImageVersion" >> "$GITHUB_OUTPUT"
+
+    - name: Restore apt packages
+      id: cache
+      uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ runner.temp }}/apt-archives
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+
+    - name: Install
+      shell: bash
+      env:
+        PKGS: ${{ inputs.packages }}
+      run: |
+        archives="$RUNNER_TEMP/apt-archives"
+        mkdir -p "$archives/partial"
+        # `_apt` cannot reach a directory under the runner's home, so apt would
+        # download as root anyway, with a warning; say so up front.
+        apt_cache="-o Dir::Cache::Archives=$archives -o APT::Sandbox::User=root"
+        grep -rlZ azure.archive.ubuntu.com /etc/apt | xargs -0r sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g'
+        sudo apt-get $APT_OPTS update
+        for attempt in 1 2 3; do
+          if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
+            --download-only $PKGS; then
+            break
+          fi
+          if [ "$attempt" = 3 ]; then
+            echo "::error::apt could not download the packages in three one-minute attempts"
+            exit 1
+          fi
+          echo "::warning::apt download attempt $attempt stalled or failed; retrying without the Azure mirror"
+          # The image's sources name `mirror+file:/etc/apt/apt-mirrors.txt`.
+          # apt reads the list on each run, so no second `update` is needed.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i '/azure\.archive\.ubuntu\.com/d' /etc/apt/apt-mirrors.txt
+            cat /etc/apt/apt-mirrors.txt
+          fi
+        done
+        sudo DEBIAN_FRONTEND=noninteractive apt-get $APT_OPTS $apt_cache install -y --no-install-recommends $PKGS
+        # Drop .debs the mirror no longer offers (left over from an older
+        # image's cache) and hand the directory back to the runner user, so
+        # the save step can read apt's root-owned files.
+        sudo apt-get $apt_cache autoclean
+        sudo rm -rf "$archives/partial" "$archives/lock"
+        sudo chown -R "$(id -u):$(id -g)" "$archives"
+
+    - name: Save apt packages
+      if: steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ runner.temp }}/apt-archives
+        key: ${{ steps.key.outputs.key }}
