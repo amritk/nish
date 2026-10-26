@@ -107,6 +107,7 @@ import {
   COL_TITLE,
   COL_UPDATED,
   COL_USERNAME,
+  COMMENT_ORD,
   registerStatements,
 } from "./sql"
 
@@ -194,12 +195,15 @@ const WRITE_BATCH: i32 = 128
  */
 const SHAPE_NONE: i32 = -1
 const SHAPE_ARTICLE: i32 = 0
-const SHAPES: i32 = 1
+const SHAPE_COMMENTS: i32 = 1
+const SHAPES: i32 = 2
 /** The most requests one coalesced read takes, and the most bytes its arrays may take. */
 const READ_BATCH: i32 = 32
 const READ_BATCH_BYTES: i32 = 32768
 /** The statement a coalesced read of `shape` runs for more than one request. */
-const shapeStatement = (shape: i32): string => "article_slugs"
+const shapeStatement = (shape: i32): string => (shape === SHAPE_ARTICLE ? "article_slugs" : "comment_slugs")
+/** The column of a coalesced read of `shape` that holds the row's request's place. */
+const shapeOrd = (shape: i32): i32 => (shape === SHAPE_ARTICLE ? COL_ORD : COMMENT_ORD)
 /**
  * The most bytes a batch's binds may take, half of `PG_MAX_OUTPUT`. One
  * write's binds take at most twice its text (tags are bound twice) and 512
@@ -1466,6 +1470,9 @@ export class ConduitWorker {
     if (r.route === R_ARTICLE_GET) {
       return SHAPE_ARTICLE
     }
+    if (r.route === R_COMMENTS) {
+      return SHAPE_COMMENTS
+    }
     return SHAPE_NONE
   }
 
@@ -1996,7 +2003,7 @@ export class ConduitWorker {
 
   /**
    * One event of a coalesced read. Its rows come in the order of the
-   * requests' places (`COL_ORD`; a request sent alone has only its own), so
+   * requests' places (`shapeOrd`; a request sent alone has only its own), so
    * `readCursor` walks the batch: a row of a later place answers every
    * request before it, a request with no row answering 404 on its own. A
    * failed statement sends the requests not yet answered again alone, where
@@ -2004,7 +2011,7 @@ export class ConduitWorker {
    */
   readEvent(s: i32, conn: PgConnection, ticket: i32, event: i32): void {
     if (event === PG_ROW) {
-      const place: i32 = this.readAlone[s] ? 1 : toI32(conn.int(COL_ORD))
+      const place: i32 = this.readAlone[s] ? 1 : toI32(conn.int(shapeOrd(this.readShape[s])))
       while (this.readCursor[s] >= 0 && this.readPos[s] < place) {
         this.readNext(s)
       }

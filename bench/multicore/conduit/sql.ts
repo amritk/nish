@@ -29,6 +29,8 @@ export const COL_FOLLOWING: i32 = 11
 export const COL_BODY: i32 = 12
 /** `article_slugs` only: the 1-based place of the row's slug in the batch. */
 export const COL_ORD: i32 = 13
+/** `comment_slugs`'s place column, as `COL_ORD` is `article_slugs`'s. */
+export const COMMENT_ORD: i32 = 9
 
 /**
  * SPEC.md's ARTICLE_LIST_SELECT, without `a.id` and in `COL_` order, in three
@@ -275,6 +277,20 @@ export const registerStatements = (pool: PgPool): boolean => {
         "c.author_id) FROM articles a LEFT JOIN LATERAL (SELECT c.id, c.body, c.created_at, c.updated_at, c.author_id " +
         "FROM comments c WHERE c.article_id = a.id ORDER BY c.created_at DESC, c.id DESC LIMIT 100) c ON true " +
         "LEFT JOIN users u ON u.id = c.author_id WHERE a.slug = $2 ORDER BY c.created_at DESC, c.id DESC",
+      none
+    ) && ok
+  // Many requests' comments in one execution, as `article_slugs` is many
+  // requests' articles: each row has its request's place, and a slug that
+  // matches nothing has no row.
+  ok =
+    pool.register(
+      "comment_slugs",
+      "SELECT a.id, c.id, c.body, c.created_at, c.updated_at, u.username, u.bio, u.image, " +
+        "EXISTS (SELECT 1 FROM follows fo WHERE fo.follower_id = q.viewer AND fo.followee_id = c.author_id), q.ord" +
+        BATCH_FROM +
+        " JOIN articles a ON a.slug = q.slug LEFT JOIN LATERAL (SELECT c.id, c.body, c.created_at, c.updated_at, c.author_id " +
+        "FROM comments c WHERE c.article_id = a.id ORDER BY c.created_at DESC, c.id DESC LIMIT 100) c ON true " +
+        "LEFT JOIN users u ON u.id = c.author_id ORDER BY q.ord, c.created_at DESC, c.id DESC",
       none
     ) && ok
   ok =
