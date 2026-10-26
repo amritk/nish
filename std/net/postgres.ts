@@ -2032,14 +2032,19 @@ export class PgConnection {
     if (this.bindAt < 0) {
       return false
     }
-    this.outEnd = this.bindAt
-    this.bindAt = -1
-    this.arrayAt = -1
+    this.dropBind()
     if (this.bindOpened) {
       this.groupOpen = false
       this.inFlight -= 1
     }
     return true
+  }
+
+  // Drops the open bind's bytes, and the array open in it; the group is left as it is.
+  private dropBind(): void {
+    this.outEnd = this.bindAt
+    this.bindAt = -1
+    this.arrayAt = -1
   }
 
   /** Sync: ends the open group, which the server answers with `PG_GROUP_DONE`. False when no group is open or a bind is; never for room. */
@@ -2057,9 +2062,7 @@ export class PgConnection {
   /** Terminate: tells the server the connection is ending; close the socket once it is sent. A bind still open is dropped unsent. */
   terminate(): void {
     if (this.bindAt >= 0) {
-      this.outEnd = this.bindAt
-      this.bindAt = -1
-      this.arrayAt = -1
+      this.dropBind()
     }
     this.tailRoom(toI32(5))
     const at: i32 = this.startMessage(PG_FE_TERMINATE)
@@ -2585,6 +2588,18 @@ class PgBatchRun {
     this.tags = new Array<i32>(maxRequests)
     this.first = new Array<i32>(maxRequests + 1)
   }
+
+  /** Opens the run for `keys` keys, none of whose rows have been read. */
+  reset(keys: i32): void {
+    this.open = true
+    this.keys = keys
+    this.cur = 0
+    this.curRows = false
+    this.at = 0
+    this.target = -1
+    this.ended = false
+    this.failed = false
+  }
 }
 
 /**
@@ -2852,7 +2867,8 @@ export class PgBatcher {
       let k: i32 = -1
       while (this.table[slot] > 0) {
         const seen: i32 = this.table[slot] - 1
-        if (this.sameKey(this.keyEntries[seen], q)) {
+        const e: i32 = this.keyEntries[seen]
+        if (this.qHashes[e] === this.qHashes[q] && this.sameKey(e, q)) {
           k = seen
           break
         }
@@ -2896,14 +2912,7 @@ export class PgBatcher {
       run.tags[this.keyCounts[k]] = this.qTags[(this.head + i) % ring]
       this.keyCounts[k] += 1
     }
-    run.open = true
-    run.keys = keys
-    run.cur = 0
-    run.curRows = false
-    run.at = 0
-    run.target = -1
-    run.ended = false
-    run.failed = false
+    run.reset(keys)
     this.head = (this.head + taken) % ring
     this.count -= taken
     if (this.count === 0) {
@@ -2986,6 +2995,17 @@ export class PgBatcher {
     run.ended = true
   }
 
+  // Names the current key's next unanswered request as `tag`; false when it has none left.
+  private emit(run: PgBatchRun): boolean {
+    const at: i32 = run.first[run.cur] + run.at
+    if (at >= run.first[run.cur + 1]) {
+      return false
+    }
+    run.at += 1
+    this.tag = run.tags[at]
+    return true
+  }
+
   /**
    * The next event `row`, `end` or `fail` owes on run `r`, with `tag` the
    * request it is about; `PG_BATCH_NONE`, and `tag` -1, when there is none.
@@ -3006,10 +3026,7 @@ export class PgBatcher {
       limit = run.keys
     }
     while (run.cur < limit && run.cur < toI32(run.tags.length)) {
-      const at: i32 = run.first[run.cur] + run.at
-      if (at < run.first[run.cur + 1]) {
-        run.at += 1
-        this.tag = run.tags[at]
+      if (this.emit(run)) {
         if (run.failed) {
           return PG_BATCH_FAILED
         }
@@ -3021,10 +3038,7 @@ export class PgBatcher {
     }
     if (run.target >= 0 && run.cur < toI32(run.tags.length)) {
       run.curRows = true
-      const at: i32 = run.first[run.cur] + run.at
-      if (at < run.first[run.cur + 1]) {
-        run.at += 1
-        this.tag = run.tags[at]
+      if (this.emit(run)) {
         return PG_BATCH_ROW
       }
       run.target = -1
