@@ -146,7 +146,7 @@ only then swapped in. If any of that fails the install you had is untouched.
 **Every download is checked before it is unpacked.** install.sh compares the
 tarball's SHA-256 with the release's `SHA256SUMS` (or with the digest pinned
 for releases that predate it) and refuses a mismatch. For releases after
-0.20.0 it also checks the release's **build provenance attestation** when a
+0.21.0 it also checks the release's **build provenance attestation** when a
 signed-in GitHub CLI is present whose `gh attestation verify` takes the
 options below. The attestation
 is a Sigstore-signed statement, made by `actions/attest-build-provenance` in

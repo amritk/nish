@@ -17,7 +17,7 @@
 # replaced on GitHub after the fact does not match. A later release is checked
 # against the SHA256SUMS file release.yml attaches beside it. A release that
 # has neither is refused rather than trusted (docs/security/supply-chain.md).
-# A release after 0.20.0 also carries a build provenance attestation, which
+# A release after 0.21.0 also carries a build provenance attestation, which
 # is checked too when the GitHub CLI is there to check it, and skipped with a
 # note when it is not.
 #
@@ -59,7 +59,7 @@ Environment:
 
 Every download is checked against a SHA-256 before it is unpacked or run, and
 one that does not match -- or that has no published digest -- is refused.
-When the GitHub CLI is installed and signed in, a release after 0.20.0 also
+When the GitHub CLI is installed and signed in, a release after 0.21.0 also
 has its build provenance attestation checked with `gh attestation verify`,
 and one that fails is refused. Without gh that check is skipped, with a note.
 
@@ -494,13 +494,13 @@ actual="$(nish_sha256 "$tmp/nish.tar.gz")" ||
 # other. A build provenance attestation is the part they cannot forge: it is
 # signed by a short-lived certificate GitHub issues to release.yml's own run,
 # naming the tag it ran on, and it is recorded in a public transparency log.
-# Every release after 0.20.0 carries one (docs/security/supply-chain.md, SC-16).
+# Every release after 0.21.0 carries one (docs/security/supply-chain.md, SC-16).
 #
 # Checking it needs the GitHub CLI, and this script does not require it: curl
 # and tar are still all an install takes. So without a usable `gh` the check is
 # skipped with a note saying so, and with one a failed check refuses the
 # install, the same as a digest that does not match.
-if nish_newer_than "$plain" 0.20.0; then
+if nish_newer_than "$plain" 0.21.0; then
   gh_missing="$(nish_gh_cannot_verify)"
   if [ -n "$gh_missing" ]; then
     say "note: the build provenance attestation was not checked: $gh_missing."
