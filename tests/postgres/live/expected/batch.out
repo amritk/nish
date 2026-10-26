@@ -1,6 +1,4 @@
-users_by_id take 0, 2 waiting
-article_by_slug take 0, 0 waiting
-tags_by_article take 0, 0 waiting
+users_by_id take, 2 waiting
 users_by_id 0: grace
 users_by_id 2: grace
 users_by_id 0 done
@@ -8,7 +6,12 @@ users_by_id 2 done
 users_by_id 1: ada
 users_by_id 1 done
 users_by_id 3 missing
-users_by_id take 0, 0 waiting
+users_by_id take, 0 waiting
+users_by_id 4: brendan
+users_by_id 4 done
+users_by_id 5: ada
+users_by_id 5 done
+article_by_slug take, 0 waiting
 article_by_slug 0: Say "hi" \ back
 article_by_slug 3: Say "hi" \ back
 article_by_slug 0 done
@@ -16,6 +19,7 @@ article_by_slug 3 done
 article_by_slug 1 missing
 article_by_slug 2: Notes
 article_by_slug 2 done
+tags_by_article take, 0 waiting
 tags_by_article 0: a,b
 tags_by_article 3: a,b
 tags_by_article 0: back\slash
@@ -28,8 +32,4 @@ tags_by_article 1: a,b
 tags_by_article 1: engines
 tags_by_article 1 done
 tags_by_article 2 missing
-users_by_id 4: brendan
-users_by_id 4 done
-users_by_id 5: ada
-users_by_id 5 done
 exit 0

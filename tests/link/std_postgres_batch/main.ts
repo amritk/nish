@@ -1,13 +1,15 @@
 // nish/net/postgres's PgBatcher, offline: the statement it prepares, what
 // `take` binds from the queue and when it takes fewer, how rows route by
 // their ordinal to every request for a key, and every ordinal a server could
-// send that names no key still open. The round trip with a real server is in
+// send that names no key still open, and what a server or the network can
+// send once a run is over, through a PgPool as a program would. The round trip with a real server is in
 // tests/postgres/live (the `batch` scenario).
 import {
   PgBatchConfig,
   PgBatcher,
   PgConfig,
   PgConnection,
+  PgPool,
   PG_BATCH_DONE,
   PG_BATCH_FAILED,
   PG_BATCH_INT,
@@ -18,6 +20,8 @@ import {
   PG_COMPLETE,
   PG_ERROR,
   PG_FAILED,
+  PG_GROUP_DONE,
+  PG_LOST,
   PG_NEED_MORE,
   PG_ROW,
 } from "nish/net/postgres";
@@ -289,7 +293,7 @@ const routing = (t: Suite): void => {
   b.addInt(toI64(2), 2);
   b.addInt(toI64(3), 3);
   const again: i32 = b.take(conn);
-  t.eqI32("the run is free again", again, 0);
+  t.eqI32("the run is free again, under its next handle: a use of 16 runs on", again, 16);
   keys(conn);
   t.eqStr(
     "a row for a later key closes those before it",
@@ -351,11 +355,20 @@ const caps = (t: Suite): void => {
   small.addInt(toI64(1000000002), 4);
   small.addInt(toI64(1000000001), 5);
   const f: i32 = small.take(sc);
-  t.eqStr("maxBytes caps a take: {, two keys of ten, a comma and }", keys(sc), "{1000000000,1000000001}");
+  t.eqStr("maxBytes caps a take: {, two keys of ten, a comma and } is 23", keys(sc), "{1000000000,1000000001}");
   t.eqI32("a key already bound costs nothing; the take stops at the first that does not fit", small.waiting(), 2);
   t.eqStr("routed", route(small, f, sc, answer(row("a", "2"))), "1?,3?,2=a,2.");
-  small.take(sc);
+  const g: i32 = small.take(sc);
   t.eqStr("those after it wait for the next take", keys(sc), "{1000000002,1000000001}");
+  route(small, g, sc, answer([]));
+  bc.maxBytes = 22;
+  const short = new PgBatcher(bc);
+  const shc: PgConnection = prepared(short, config());
+  short.addInt(toI64(1000000000), 1);
+  short.addInt(toI64(1000000001), 2);
+  short.take(shc);
+  t.eqStr("one byte short, the second key waits", keys(shc), "{1000000000}");
+  t.eqI32("for the next take", short.waiting(), 1);
 };
 
 const textKeys = (t: Suite): void => {
@@ -364,7 +377,7 @@ const textKeys = (t: Suite): void => {
   t.ok("a slice of a buffer", b.addText(z("<a\"b\\c>"), 1, 5, 1));
   t.ok("an empty key", b.addText(z("x"), 1, 0, 2));
   t.ok("the same key again", b.addText(z("a\"b\\c"), 0, 5, 3));
-  // "Aa" and "BB" share a hash.
+  // "Aa" and "BB" are distinct keys of one length.
   t.ok("Aa", b.addText(z("Aa"), 0, 2, 4));
   t.ok("BB", b.addText(z("BB"), 0, 2, 5));
   t.ok("Aa again", b.addText(z("Aa"), 0, 2, 6));
@@ -383,6 +396,32 @@ const textKeys = (t: Suite): void => {
   t.ok("one byte less fits", tight.addText(z("0123456789012345678"), 0, 18, 1));
   t.ok("a key whose escapes would pass maxBytes is refused", !tight.addText(z("01234567890123456\""), 0, 18, 2));
   t.eqI32("only the one that fits waits", tight.waiting(), 1);
+
+  // The server refuses a text value with a NUL or that is not UTF-8, which would fail every request taken with it.
+  const nul: u8[] = [toU8(97), toU8(0), toU8(98)];
+  t.ok("a key with a NUL is refused", !b.addText(nul, 0, 3, 1));
+  t.ok("the bytes around it are not", b.addText(nul, 2, 1, 1));
+  t.ok("a two-byte character", b.addText([toU8(0xc3), toU8(0xa9)], 0, 2, 1));
+  t.ok("the widest character, U+10FFFF", b.addText([toU8(0xf4), toU8(0x8f), toU8(0xbf), toU8(0xbf)], 0, 4, 1));
+  t.ok("a lone continuation byte is refused", !b.addText([toU8(0x80)], 0, 1, 1));
+  t.ok("an overlong NUL is refused", !b.addText([toU8(0xc0), toU8(0x80)], 0, 2, 1));
+  t.ok("an overlong three-byte form is refused", !b.addText([toU8(0xe0), toU8(0x9f), toU8(0xbf)], 0, 3, 1));
+  t.ok("a surrogate is refused", !b.addText([toU8(0xed), toU8(0xa0), toU8(0x80)], 0, 3, 1));
+  t.ok("past U+10FFFF is refused", !b.addText([toU8(0xf4), toU8(0x90), toU8(0x80), toU8(0x80)], 0, 4, 1));
+  t.ok("a character cut by the window is refused", !b.addText([toU8(0xc3), toU8(0xa9)], 0, 1, 1));
+  t.ok("a bad second continuation byte is refused", !b.addText([toU8(0xe2), toU8(0x82), toU8(0x41)], 0, 3, 1));
+  t.eqI32("only the good ones wait", b.waiting(), 3);
+
+  const ec = texts();
+  ec.maxBytes = 22;
+  const escaped = new PgBatcher(ec);
+  const ecn: PgConnection = prepared(escaped, config());
+  escaped.addText(z("aaaaaaa\""), 0, 8, 1);
+  escaped.addText(z("bbbbb\""), 0, 6, 2);
+  const er: i32 = escaped.take(ecn);
+  t.eqStr("a take counts escapes: {, keys of eleven and nine, a comma and } is 23", keys(ecn), "{\"aaaaaaa\\\"\"}");
+  t.eqI32("so the second waits", escaped.waiting(), 1);
+  route(escaped, er, ecn, answer([]));
 };
 
 const store = (t: Suite): void => {
@@ -424,10 +463,11 @@ const runs = (t: Suite): void => {
   t.eqStr("writes nothing", drain(conn), "");
   t.eqI32("and leaves the request waiting", b.waiting(), 1);
   t.eqStr("the first answer", route(b, r, conn, answer(row("a", "1"))), "1=a,1.");
-  t.eqI32("frees its run", b.take(conn), 0);
+  const reused: i32 = b.take(conn);
+  t.eqI32("frees its run, under a new handle", reused, 2);
   t.eqStr("for the waiting request", keys(conn), "{3}");
   t.eqStr("answers come in the order the runs were sent", route(b, s, conn, answer(row("b", "1"))), "2=b,2.");
-  t.eqStr("the reused run sees only its own requests", route(b, 0, conn, answer(row("c", "1"))), "3=c,3.");
+  t.eqStr("the reused run sees only its own requests", route(b, reused, conn, answer(row("c", "1"))), "3=c,3.");
 
   b.addInt(toI64(5), 50);
   const u: i32 = b.take(conn);
@@ -499,12 +539,114 @@ const failures = (t: Suite): void => {
   keys(conn);
   t.eqStr("an error before any row", route(b, s, conn, failure([])), "1!");
   b.addInt(toI64(1), 1);
-  t.eqI32("frees the run for the next take", b.take(conn), 0);
+  const u: i32 = b.take(conn);
+  t.eqI32("frees the run for the next take", u % 16, 0);
   keys(conn);
-  b.fail(0);
+  b.fail(u);
   const out: string[] = [];
-  events(b, 0, conn, out);
+  events(b, u, conn, out);
   t.eqStr("a lost connection fails the run as an error does", out.join(","), "1!");
+  t.eqI32("none of it was stray", b.stray, 0);
+};
+
+/**
+ * Feeds `bytes` to the pool's slot `s`, run `r`'s answer, as the guide's loop
+ * does: a row to `row`, the tag to `end`, an error or a lost request to `fail`,
+ * each followed by its events, and `group` for the group's end.
+ */
+const poolRoute = (b: PgBatcher, r: i32, p: PgPool, s: i32, bytes: u8[]): string => {
+  const out: string[] = [];
+  const conn: PgConnection = p.connection(s);
+  let fed: i32 = 0;
+  while (true) {
+    fed += conn.receive(bytes, fed, toI32(bytes.length) - fed);
+    const event: i32 = p.next(s);
+    if (event === PG_NEED_MORE) {
+      if (fed === toI32(bytes.length)) {
+        break;
+      }
+    } else if (event === PG_FAILED) {
+      out.push("failed");
+      break;
+    } else if (event === PG_ROW) {
+      if (b.row(r, conn)) {
+        events(b, r, conn, out);
+      } else {
+        out.push("no");
+      }
+    } else if (event === PG_COMPLETE) {
+      b.end(r);
+      events(b, r, conn, out);
+    } else if (event === PG_ERROR || event === PG_LOST) {
+      b.fail(r);
+      events(b, r, conn, out);
+    } else if (event === PG_GROUP_DONE) {
+      out.push("group");
+    }
+  }
+  return out.join(",");
+};
+
+/** A pool of one connection with the batch statement registered, keys 1 and 2 taken on it and sent; then `bytes`, its answer, with what was stray. */
+const pooled = (bytes: u8[], lose: boolean): string => {
+  const b = new PgBatcher(ints());
+  const none: i32[] = [];
+  const password = secret(z("pw"));
+  const p = new PgPool(config(), password, 1, 8);
+  wipe(password);
+  p.register(b.name, b.sql, none);
+  p.request();
+  // No connection yet: the first dispatch asks for one.
+  p.dispatch();
+  const s: i32 = p.wanted();
+  p.connect(s, z("nish-postgres-test"));
+  drain(p.connection(s));
+  poolRoute(b, -1, p, s, STARTUP_DONE());
+  p.dispatch();
+  b.addInt(toI64(1), 1);
+  b.addInt(toI64(2), 2);
+  const r: i32 = b.take(p.connection(s));
+  p.send();
+  drain(p.connection(s));
+  // The pool's own Describe of the registered statement: ParseComplete, no parameters, NoData.
+  const described: u8[] = cat(cat(msg("1", []), msg("t", [toU8(0), toU8(0)])), msg("n", []));
+  let got: string = poolRoute(b, r, p, s, cat(described, bytes));
+  if (lose) {
+    p.connection(s).closed();
+    got = `${got};${poolRoute(b, r, p, s, [])}`;
+  }
+  return `${got} stray ${b.stray} refused ${b.refused}`;
+};
+
+const strays = (t: Suite): void => {
+  const bind: u8[] = msg("2", []);
+  const tag: u8[] = msg("C", z("SELECT 1|"));
+  const ready: u8[] = msg("Z", z("I"));
+  const error: u8[] = msg("E", z("SERROR|VERROR|C40001|Mcould not serialize||"));
+  t.eqStr("an answer as it should be", pooled(cat(cat(cat(bind, row("a", "1")), tag), ready), false), "1=a,1.,2?,group stray 0 refused 0");
+  t.eqStr("a second CommandComplete is stray", pooled(cat(cat(cat(cat(bind, row("a", "1")), tag), tag), ready), false), "1=a,1.,2?,group stray 1 refused 0");
+  t.eqStr("a row after CommandComplete is stray", pooled(cat(cat(cat(bind, tag), row("a", "1")), ready), false), "1?,2?,no,group stray 1 refused 0");
+  t.eqStr("an error after CommandComplete, as a commit at Sync can fail, is stray", pooled(cat(cat(cat(bind, tag), error), ready), false), "1?,2?,group stray 1 refused 0");
+  t.eqStr("a connection lost after CommandComplete, before the group is done", pooled(cat(bind, tag), true), "1?,2?;failed stray 1 refused 0");
+
+  const c = ints();
+  c.runs = 1;
+  const b = new PgBatcher(c);
+  const conn = prepared(b, config());
+  b.addInt(toI64(1), 1);
+  const r: i32 = b.take(conn);
+  keys(conn);
+  route(b, r, conn, answer([]));
+  b.addInt(toI64(2), 2);
+  const s: i32 = b.take(conn);
+  keys(conn);
+  t.ok("the one run is taken again under a new handle", s !== r);
+  b.end(r);
+  b.fail(r);
+  t.ok("a row on the spent handle answers false", !b.row(r, conn));
+  t.eqI32("and next on it answers nothing", b.next(r), PG_BATCH_NONE);
+  t.eqI32("each counted stray", b.stray, 3);
+  t.eqStr("the new execution is untouched", route(b, s, conn, answer(row("x", "1"))), "2=x,2.");
 };
 
 const room = (t: Suite): void => {
@@ -548,6 +690,7 @@ export const main = (): number => {
   runs(t);
   ordinals(t);
   failures(t);
+  strays(t);
   room(t);
   return t.done();
 };

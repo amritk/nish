@@ -236,8 +236,9 @@ An element refused for room answers `false`, writes nothing and leaves the
 array open, so the elements already in it can still be sent: end the array
 and the Bind, and put the rest in the next statement. `arrayEnd()` is never
 refused. When not even the first element fits, `bindCancel()` drops the open
-bind, array and all, unsent, as if `bindStart` had never been called. While an array is open, `sync()`, `prepare`, `closeStatement` and
-`bindStart` answer `false`, as with any open bind. Using an array out of order
+bind, array and all, unsent, as if `bindStart` had never been called. While an
+array is open, `sync()`, `prepare`, `closeStatement` and `bindStart` answer
+`false`, as with any open bind. Using an array out of order
 is a bug, so it panics: an element or `arrayEnd()` with no `arrayStart()`, a
 second `arrayStart()`, or any other `param...` call or `bindEnd()` before
 `arrayEnd()`. So do an `arrayElement` window outside its array and a
@@ -402,15 +403,17 @@ pool.register(articles.name, articles.sql, noTypes); // prepare `sql` under `nam
 
 // Per request: the key is copied in, and the tag comes back with its answers.
 if (!articles.addText(body, slugStart, slugLength, requestId)) {
-  // queueSize requests (or queueBytes of text keys) are waiting: answer 503
+  // The queue is full (queueSize requests, or queueBytes of text keys), the
+  // key is longer than maxBytes allows, or it holds a NUL or is not UTF-8:
+  // answer 503, or 400 for a bad key.
 }
 
 // When the loop has a connection for it:
 const slot = pool.dispatch(); // after pool.request() while articles.waiting() > 0
-const run = articles.take(pool.connection(slot)); // -1: nothing bound
+const run = articles.take(pool.connection(slot)); // a handle, or -1: nothing bound
 pool.send();
 
-// For each of that request's events:
+// For each of that request's events, while run >= 0:
 if (event === PG_ROW) {
   articles.row(run, conn);
 } else if (event === PG_COMPLETE) {
@@ -431,7 +434,7 @@ execution failed (the rows it had may be incomplete). Call it until it answers
 next event: a row's columns are read from the connection, where they last only
 until then.
 
-- **Caps.** `maxRequests` (32) bounds the requests one execution answers;
+- **Caps.** `maxRequests` (32, at most 1024) bounds the requests one execution answers;
   `maxBytes` (32 KiB) the key array's text; `queueSize` (1024) the requests
   waiting, and `queueBytes` (64 KiB) their text keys; `runs` (16) the
   executions in flight at once. A cap out of range, an empty `name` or
@@ -440,15 +443,20 @@ until then.
   first whose key would pass `maxBytes`, or that the connection refuses for
   room under `maxOutput`; the rest stay queued for the next take. It answers
   -1 and writes nothing when nothing waits, every run is in flight, or the
-  connection has no room even for the first key. A key longer than a
-  connection could ever hold stays at the head of the queue, so keep text
-  keys well under `maxBytes` and `maxOutput`: check their length before
-  `addText`.
-- **Lifetimes.** A run is reused once all its events are answered after `end`
-  or `fail`. `row`, `end` and `fail` on a run that is over, or before
-  `next(run)` answered `PG_BATCH_NONE`, panic; so do `addInt` on a text
-  batcher, `addText` on an int8 one or with a window outside its array, and a
-  run outside 0 to `runs - 1`.
+  connection has no room even for the first key. `addText` refuses a key
+  whose escaped text could never fit `maxBytes`, but one past what a
+  connection could ever hold stays at the head of the queue, so keep
+  `maxBytes` under `maxOutput`.
+- **Handles.** `take` answers a handle for the run, not a reused number: a
+  run is free again once all its events are answered after `end` or `fail`,
+  and its next take answers a new handle. A handle that is spent — its run
+  answered, or taken again — makes `row`, `end` and `fail` do nothing and
+  `next` answer `PG_BATCH_NONE`, and counts the call in `stray`; so a server
+  that answers twice, or a connection lost after its answer, cannot touch the
+  run's next batch. Only a caller's mistake panics: `row`, `end` or `fail`
+  before `next(run)` answered `PG_BATCH_NONE`, a negative handle or one no
+  take could answer, `addInt` on a text batcher, and `addText` on an int8 one
+  or with a window outside its array.
 - **Ordinals.** Rows are routed by the ordinal in their last column, which
   comes from the server. `row` refuses one that is NULL, not an integer, past
   the keys, or before the key the last row was for: it answers `false`,

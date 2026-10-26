@@ -839,28 +839,37 @@ const batcher = (name: string, keyType: i32, select: string, orderBy: string, mo
   return new PgBatcher(config)
 }
 
-/** Prints the events `row`, `end` or `fail` left on batcher `b`'s run `r`; the row's first column for each `PG_BATCH_ROW`. */
-const routeBatch = (b: PgBatcher, r: i32, conn: PgConnection): void => {
+/** Appends `line` to `log`, a newline between lines. */
+const logLine = (log: string, line: string): string => (log === "" ? line : `${log}\n${line}`)
+
+/** Logs the events `row`, `end` or `fail` left on batcher `b`'s run `r` onto `log`; the row's first column for each `PG_BATCH_ROW`. */
+const routeBatch = (b: PgBatcher, r: i32, conn: PgConnection, log: string): string => {
+  let out: string = log
   let event: i32 = b.next(r)
   while (event !== PG_BATCH_NONE) {
     if (event === PG_BATCH_ROW) {
-      console.log(`${b.name} ${b.tag}: ${conn.isNull(toI32(0)) ? "NULL" : conn.columnText(toI32(0))}`)
+      out = logLine(out, `${b.name} ${b.tag}: ${conn.isNull(toI32(0)) ? "NULL" : conn.columnText(toI32(0))}`)
     } else if (event === PG_BATCH_DONE) {
-      console.log(`${b.name} ${b.tag} done`)
+      out = logLine(out, `${b.name} ${b.tag} done`)
     } else if (event === PG_BATCH_MISSING) {
-      console.log(`${b.name} ${b.tag} missing`)
+      out = logLine(out, `${b.name} ${b.tag} missing`)
     } else if (event === PG_BATCH_FAILED) {
-      console.log(`${b.name} ${b.tag} failed`)
+      out = logLine(out, `${b.name} ${b.tag} failed`)
     }
     event = b.next(r)
   }
+  return out
 }
 
 /**
  * `batch`: keyed reads through three `PgBatcher`s on one pooled connection,
  * each take one group. Users by id, four requests a take, so six take two;
  * articles by slug; and tags by article, several rows a key in name order.
- * Each has a duplicate key and a key with no row.
+ * Each has a duplicate key and a key with no row. A take's line and its
+ * events are logged under its request and printed batcher by batcher at the
+ * end, so the output does not depend on when the server's answers arrive;
+ * the take line leaves out its run handle, which does (a second take may come
+ * before or after the first run is answered).
  */
 const batch = (port: i32): i32 => {
   const batchers: PgBatcher[] = [
@@ -892,10 +901,17 @@ const batch = (port: i32): i32 => {
     batchers[2].addInt(articleIds[t], t)
   }
   const d = new Driver(pool, port)
-  // Each pool request is one take of one batcher: which, and the run it got.
+  // Each pool request is one take of one batcher: which, the run it got, and
+  // its log. The scenario makes far fewer than `ring` requests, so a slot's
+  // index is its ticket and the slots are in take order.
   const ring: i32 = 64
   const whose: i32[] = new Array<i32>(ring)
   const runs: i32[] = new Array<i32>(ring)
+  const logs: string[] = []
+  for (let at: i32 = 0; at < ring; at++) {
+    whose[at] = -1
+    logs.push("")
+  }
   const asked: boolean[] = new Array<boolean>(batchers.length)
   let open: i32 = 0
   let code: i32 = 0
@@ -923,7 +939,7 @@ const batch = (port: i32): i32 => {
         const b: PgBatcher = batchers[k]
         const r: i32 = b.take(pool.connection(slot))
         runs[t % ring] = r
-        console.log(`${b.name} take ${r}, ${b.waiting()} waiting`)
+        logs[t % ring] = logLine(logs[t % ring], `${b.name} take, ${b.waiting()} waiting`)
       }
       if (!pool.send()) {
         open -= 1
@@ -955,7 +971,7 @@ const batch = (port: i32): i32 => {
           console.log(`${b.name}: a row refused`)
           code = 1
         }
-        routeBatch(b, r, conn)
+        logs[at] = routeBatch(b, r, conn, logs[at])
       }
       if (event === PG_GROUP_DONE) {
         open -= 1
@@ -967,6 +983,13 @@ const batch = (port: i32): i32 => {
     }
   }
   d.close()
+  for (let k: i32 = 0; k < toI32(batchers.length); k++) {
+    for (let at: i32 = 0; at < ring; at++) {
+      if (whose[at] === k && logs[at] !== "") {
+        console.log(logs[at])
+      }
+    }
+  }
   return code
 }
 

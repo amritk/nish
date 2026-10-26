@@ -559,9 +559,10 @@ const PG_BATCH_ROW: i32 = 1 [exported]
 const PG_BATCH_DONE: i32 = 2 [exported]
 const PG_BATCH_MISSING: i32 = 3 [exported]
 const PG_BATCH_FAILED: i32 = 4 [exported]
-const PG_BATCH_MAX_REQUESTS: i32 = 65536
+const PG_BATCH_MAX_REQUESTS: i32 = 1024
 const PG_BATCH_MAX_QUEUE: i32 = 1048576
 const PG_BATCH_MAX_RUNS: i32 = 1024
+const PG_BATCH_USES: i32 = 1048576
 const PG_BATCH_MIN_BYTES: i32 = 22
 struct PgConfig (class) size=64 align=8 exported
   field user: string index=0 offset=0 initialized
@@ -771,7 +772,7 @@ struct PgBatchConfig (class) size=48 align=8 exported
   field queueSize: i32 index=6 offset=36 initialized
   field queueBytes: i32 index=7 offset=40 initialized
   field runs: i32 index=8 offset=44 initialized
-struct PgBatchRun (class) size=40 align=8
+struct PgBatchRun (class) size=48 align=8
   field tags: i32[] index=0 offset=0 readonly
   field first: i32[] index=1 offset=8 readonly
   field keys: i32 index=2 offset=16 initialized
@@ -779,12 +780,14 @@ struct PgBatchRun (class) size=40 align=8
   field curRows: boolean index=4 offset=24 initialized
   field at: i32 index=5 offset=28 initialized
   field target: i32 index=6 offset=32 initialized
-  field open: boolean index=7 offset=36 initialized
-  field ended: boolean index=8 offset=37 initialized
-  field failed: boolean index=9 offset=38 initialized
+  field handle: i32 index=7 offset=36 initialized
+  field uses: i32 index=8 offset=40 initialized
+  field open: boolean index=9 offset=44 initialized
+  field ended: boolean index=10 offset=45 initialized
+  field failed: boolean index=11 offset=46 initialized
   constructor -> @nish.PgBatchRun.constructor
   method reset -> @nish.PgBatchRun.reset
-struct PgBatcher (class) size=152 align=8 exported
+struct PgBatcher (class) size=160 align=8 exported
   field name: string index=0 offset=0 readonly
   field sql: string index=1 offset=8 readonly
   field qTags: i32[] index=2 offset=16 readonly
@@ -802,12 +805,13 @@ struct PgBatcher (class) size=152 align=8 exported
   field runs: PgBatchRun[] index=14 offset=112 readonly
   field tag: i32 index=15 offset=120 initialized
   field refused: i32 index=16 offset=124 initialized
-  field keyType: i32 index=17 offset=128 readonly
-  field maxRequests: i32 index=18 offset=132 readonly
-  field maxBytes: i32 index=19 offset=136 readonly
-  field storeEnd: i32 index=20 offset=140 initialized
-  field head: i32 index=21 offset=144 initialized
-  field count: i32 index=22 offset=148 initialized
+  field stray: i32 index=17 offset=128 initialized
+  field keyType: i32 index=18 offset=132 readonly
+  field maxRequests: i32 index=19 offset=136 readonly
+  field maxBytes: i32 index=20 offset=140 readonly
+  field storeEnd: i32 index=21 offset=144 initialized
+  field head: i32 index=22 offset=148 initialized
+  field count: i32 index=23 offset=152 initialized
   constructor -> @nish.PgBatcher.constructor
   method waiting -> @nish.PgBatcher.waiting
   method addInt -> @nish.PgBatcher.addInt
@@ -889,6 +893,19 @@ function pgHasNul(text: string): boolean -> @nish.pgHasNul
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +1:12 i: i32 (let)
+function pgIsText(b: u8[], from: i32, end: i32): boolean -> @nish.pgIsText
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+  local +11:9 more: i32 (let)
+  local +12:9 low: i32 (let)
+  local +13:9 high: i32 (let)
+  local +36:14 j: i32 (let)
+  local +37:13 d: i32 (const)
 function pgFind(b: u8[], from: i32, end: i32, byte: i32): i32 -> @nish.pgFind
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: end from
@@ -2084,18 +2101,18 @@ function PgBatchRun.constructor(this: PgBatchRun, maxRequests: i32): void -> @ni
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: maxRequests
   calls: nish_panic nish_panic_overflow
-  pointer this: size=40 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBatchRun.reset(this: PgBatchRun, keys: i32): void -> @nish.PgBatchRun.reset [method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: keys
-  pointer this: size=40 writesThrough=true captured=false
+  pointer this: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBatcher.constructor(this: PgBatcher, config: PgBatchConfig): void -> @nish.PgBatcher.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   calls: nish.PgBatchRun.constructor nish.pgHasNul nish_alloc_struct nish_array_grow nish_panic nish_panic_overflow nish_str_concat
-  pointer this: size=152 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
   pointer config: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 keyType: i32 (const)
@@ -2115,14 +2132,14 @@ function PgBatcher.constructor(this: PgBatcher, config: PgBatchConfig): void -> 
   callee +59:22 new PgBatchRun -> @nish.PgBatchRun.constructor
 function PgBatcher.waiting(this: PgBatcher): i32 -> @nish.PgBatcher.waiting [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function PgBatcher.addInt(this: PgBatcher, key: i64, tag: i32): boolean -> @nish.PgBatcher.addInt [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: key tag
   calls: nish.PgBatcher.added nish.PgBatcher.slotToAdd nish.pgDecimalLength nish_panic nish_panic_index
-  pointer this: size=152 writesThrough=true captured=false passedTo=nish.PgBatcher.slotToAdd#0 nish.PgBatcher.added#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.slotToAdd#0 nish.PgBatcher.added#0
   stackSites=0 stackLocals=0
   local -6:11 q: i32 (const)
   callee -6:20 PgBatcher.slotToAdd -> @nish.PgBatcher.slotToAdd
@@ -2133,19 +2150,20 @@ function PgBatcher.addText(this: PgBatcher, bytes: u8[], start: i32, length: i32
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: length start tag
-  calls: nish.PgBatcher.added nish.PgBatcher.slotToAdd nish.copyBytes nish_panic nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false passedTo=nish.PgBatcher.slotToAdd#0 nish.PgBatcher.added#0
-  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
+  calls: nish.PgBatcher.added nish.PgBatcher.slotToAdd nish.copyBytes nish.pgIsText nish_panic nish_panic_div nish_panic_index nish_panic_overflow
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.slotToAdd#0 nish.PgBatcher.added#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.pgIsText#0 nish.copyBytes#2
   stackSites=0 stackLocals=0
-  local -25:11 end: i32 (const)
-  local -24:9 size: i64 (let)
-  local -23:9 h: i32 (let)
-  local -22:14 i: i32 (let)
-  local -21:13 c: i32 (const)
-  local -11:11 q: i32 (const)
-  callee -11:20 PgBatcher.slotToAdd -> @nish.PgBatcher.slotToAdd
-  local -7:9 at: i32 (let)
-  local -4:13 from: i32 (const)
+  local -32:11 end: i32 (const)
+  callee -31:10 pgIsText -> @nish.pgIsText
+  local -26:9 size: i64 (let)
+  local -25:9 h: u32 (let)
+  local -24:14 i: i32 (let)
+  local -23:13 c: u8 (const)
+  local -14:11 q: i32 (const)
+  callee -14:20 PgBatcher.slotToAdd -> @nish.PgBatcher.slotToAdd
+  local -10:9 at: i32 (let)
+  local -7:13 from: i32 (const)
   callee -3:7 copyBytes -> @nish.copyBytes
   local -2:16 i: i32 (let)
   local -1:15 w: i32 (const)
@@ -2154,7 +2172,7 @@ function PgBatcher.addText(this: PgBatcher, bytes: u8[], start: i32, length: i32
 function PgBatcher.slotToAdd(this: PgBatcher): i32 -> @nish.PgBatcher.slotToAdd [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_div nish_panic_overflow
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 size: i32 (const)
 function PgBatcher.added(this: PgBatcher, q: i32, tag: i32, hash: i32, size: i32): void -> @nish.PgBatcher.added [exported method]
@@ -2162,13 +2180,13 @@ function PgBatcher.added(this: PgBatcher, q: i32, tag: i32, hash: i32, size: i32
   sharedWrite: +0:5
   escaping: hash q size tag
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function PgBatcher.sameKey(this: PgBatcher, a: i32, b: i32): boolean -> @nish.PgBatcher.sameKey [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: a b
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 n: i32 (const)
   local +4:11 x: i32 (const)
@@ -2178,7 +2196,7 @@ function PgBatcher.take(this: PgBatcher, conn: PgConnection): i32 -> @nish.PgBat
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   calls: nish.PgBatchRun.reset nish.PgBatcher.bindKey nish.PgBatcher.sameKey nish.PgConnection.arrayEnd nish.PgConnection.arrayStart nish.PgConnection.bindCancel nish.PgConnection.bindEnd nish.PgConnection.bindStart nish_panic_div nish_panic_index nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false passedTo=nish.PgBatcher.sameKey#0 nish.PgBatcher.bindKey#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.sameKey#0 nish.PgBatcher.bindKey#0
   pointer conn: size=184 writesThrough=true captured=false passedTo=nish.PgConnection.bindStart#0 nish.PgConnection.arrayStart#0 nish.PgConnection.bindCancel#0 nish.PgBatcher.bindKey#1 nish.PgConnection.bindCancel#0 nish.PgConnection.arrayEnd#0 nish.PgConnection.bindEnd#0
   stackSites=0 stackLocals=0
   local -41:9 r: i32 (let)
@@ -2213,35 +2231,37 @@ function PgBatcher.bindKey(this: PgBatcher, conn: PgConnection, q: i32): boolean
   sharedWrite: via nish.PgConnection.arrayInt
   escaping: q
   calls: nish.PgConnection.arrayElement nish.PgConnection.arrayInt nish_panic_index
-  pointer this: size=152 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   pointer conn: size=184 writesThrough=true captured=false passedTo=nish.PgConnection.arrayInt#0 nish.PgConnection.arrayElement#0
   stackSites=0 stackLocals=0
   callee +0:14 PgConnection.arrayInt -> @nish.PgConnection.arrayInt
   callee +2:12 PgConnection.arrayElement -> @nish.PgConnection.arrayElement
-function PgBatcher.run(this: PgBatcher, r: i32): PgBatchRun -> @nish.PgBatcher.run [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false returnDeref=40
-  escaping: r
-  calls: nish_panic
-  pointer this: size=152 writesThrough=false captured=false
+function PgBatcher.run(this: PgBatcher, h: i32): PgBatchRun | null -> @nish.PgBatcher.run [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic nish_panic_div nish_panic_index nish_panic_overflow
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function PgBatcher.quietRun(this: PgBatcher, r: i32, what: string): PgBatchRun -> @nish.PgBatcher.quietRun [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false returnDeref=40
-  escaping: r
-  calls: nish.PgBatcher.run nish_arena_mark nish_arena_release nish_panic nish_str_concat
-  pointer this: size=152 writesThrough=false captured=false passedTo=nish.PgBatcher.run#0
+  local +0:11 n: i32 (const)
+  local +4:11 run: PgBatchRun (const)
+function PgBatcher.quietRun(this: PgBatcher, h: i32, what: string): PgBatchRun | null -> @nish.PgBatcher.quietRun [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: h
+  calls: nish.PgBatcher.run nish_arena_mark nish_arena_release nish_panic nish_panic_overflow nish_str_concat
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.run#0
   stackSites=0 stackLocals=0
-  local +0:11 run: PgBatchRun (const)
-  callee +0:29 PgBatcher.run -> @nish.PgBatcher.run
+  local -2:11 run: PgBatchRun | null (const)
+  callee -2:36 PgBatcher.run -> @nish.PgBatcher.run
 function PgBatcher.row(this: PgBatcher, r: i32, conn: PgConnection): boolean -> @nish.PgBatcher.row [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: r
   calls: nish.PgBatcher.quietRun nish.PgConnection.int nish.PgConnection.isNull nish_arena_mark nish_arena_release nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false passedTo=nish.PgBatcher.quietRun#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.quietRun#0
   pointer conn: size=184 writesThrough=false captured=false passedTo=nish.PgConnection.isNull#0 nish.PgConnection.int#0
   stackSites=0 stackLocals=0
-  local -10:11 run: PgBatchRun (const)
-  callee -10:29 PgBatcher.quietRun -> @nish.PgBatcher.quietRun
+  local -13:11 run: PgBatchRun | null (const)
+  callee -13:36 PgBatcher.quietRun -> @nish.PgBatcher.quietRun
   local -6:11 last: i32 (const)
   local -5:9 ordinal: i64 (let)
   local -4:9 bad: boolean (let)
@@ -2250,27 +2270,28 @@ function PgBatcher.row(this: PgBatcher, r: i32, conn: PgConnection): boolean -> 
   callee +1:17 PgConnection.int -> @nish.PgConnection.int
 function PgBatcher.end(this: PgBatcher, r: i32): void -> @nish.PgBatcher.end [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   escaping: r
   calls: nish.PgBatcher.quietRun nish_arena_mark nish_arena_release
-  pointer this: size=152 writesThrough=false captured=false passedTo=nish.PgBatcher.quietRun#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.quietRun#0
   stackSites=0 stackLocals=0
-  callee +0:5 PgBatcher.quietRun -> @nish.PgBatcher.quietRun
+  local -2:11 run: PgBatchRun | null (const)
+  callee -2:36 PgBatcher.quietRun -> @nish.PgBatcher.quietRun
 function PgBatcher.fail(this: PgBatcher, r: i32): void -> @nish.PgBatcher.fail [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
-  sharedWrite: +0:5
+  sharedWrite: +0:7
   escaping: r
   calls: nish.PgBatcher.quietRun nish_arena_mark nish_arena_release
-  pointer this: size=152 writesThrough=false captured=false passedTo=nish.PgBatcher.quietRun#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.quietRun#0
   stackSites=0 stackLocals=0
-  local -1:11 run: PgBatchRun (const)
-  callee -1:29 PgBatcher.quietRun -> @nish.PgBatcher.quietRun
+  local -2:11 run: PgBatchRun | null (const)
+  callee -2:36 PgBatcher.quietRun -> @nish.PgBatcher.quietRun
 function PgBatcher.emit(this: PgBatcher, run: PgBatchRun): boolean -> @nish.PgBatcher.emit [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_index nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false
-  pointer run: size=40 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
+  pointer run: size=48 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:11 at: i32 (const)
 function PgBatcher.next(this: PgBatcher, r: i32): i32 -> @nish.PgBatcher.next [exported method]
@@ -2278,13 +2299,14 @@ function PgBatcher.next(this: PgBatcher, r: i32): i32 -> @nish.PgBatcher.next [e
   sharedWrite: +0:5
   escaping: r
   calls: nish.PgBatcher.emit nish.PgBatcher.run nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false passedTo=nish.PgBatcher.run#0 nish.PgBatcher.emit#0 nish.PgBatcher.emit#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.PgBatcher.run#0 nish.PgBatcher.emit#0 nish.PgBatcher.emit#0
   stackSites=0 stackLocals=0
-  local -1:11 run: PgBatchRun (const)
-  callee -1:29 PgBatcher.run -> @nish.PgBatcher.run
-  local +5:9 limit: i32 (let)
-  callee +12:11 PgBatcher.emit -> @nish.PgBatcher.emit
-  callee +24:11 PgBatcher.emit -> @nish.PgBatcher.emit
+  local -1:11 found: PgBatchRun | null (const)
+  callee -1:38 PgBatcher.run -> @nish.PgBatcher.run
+  local +4:11 run: PgBatchRun (const)
+  local +6:9 limit: i32 (let)
+  callee +13:11 PgBatcher.emit -> @nish.PgBatcher.emit
+  callee +25:11 PgBatcher.emit -> @nish.PgBatcher.emit
 module std/bytes.ts [package nish]
 const BYTES_SPACE: i32 = 32
 const BYTES_TAB: i32 = 9

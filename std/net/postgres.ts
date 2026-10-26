@@ -113,11 +113,13 @@
  * by id, an article by slug — into one execution of a statement over
  * `unnest($1) with ordinality`. `addInt` or `addText` queues a request's key
  * and tag; `take(conn)` binds the oldest waiting, each distinct key once, up
- * to `maxRequests` and `maxBytes`, and answers a run; `row`, `end` and `fail`
- * take that execution's events, routing each row by its ordinal (checked
- * first: a server's ordinal is refused before it routes anything), and
- * `next(run)` answers `PG_BATCH_ROW`, then `PG_BATCH_DONE`, `PG_BATCH_MISSING`
- * or `PG_BATCH_FAILED`, for each request. It reads no clock and allocates
+ * to `maxRequests` and `maxBytes`, and answers a run's handle; `row`, `end`
+ * and `fail` take that execution's events (a handle already answered makes
+ * them a no-op counted in `stray`, so a server's late event cannot panic),
+ * routing each row by its ordinal (checked first: a server's ordinal is
+ * refused before it routes anything), and `next(run)` answers
+ * `PG_BATCH_ROW`, then `PG_BATCH_DONE`, `PG_BATCH_MISSING` or
+ * `PG_BATCH_FAILED`, for each request. It reads no clock and allocates
  * only in its constructor; when to take is the program's.
  *
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
@@ -385,6 +387,61 @@ const pgHasNul = (text: string): boolean => {
     }
   }
   return false
+}
+
+/**
+ * Whether `b[from, end)` is UTF-8 (RFC 3629: shortest forms, no surrogates,
+ * nothing past U+10FFFF) with no NUL: what a `text` value can hold, so that
+ * the server accepts it.
+ */
+const pgIsText = (b: u8[], from: i32, end: i32): boolean => {
+  let i: i32 = from
+  while (i < end && i < toI32(b.length)) {
+    const c: i32 = toI32(b[i])
+    if (c < 0x80) {
+      if (c === 0) {
+        return false
+      }
+      i += 1
+      continue
+    }
+    // The bytes after the lead, and the range of the first: the rest are 0x80-0xBF.
+    let more: i32 = 0
+    let low: i32 = 0x80
+    let high: i32 = 0xbf
+    if (c >= 0xc2 && c <= 0xdf) {
+      more = 1
+    } else if (c >= 0xe0 && c <= 0xef) {
+      more = 2
+      if (c === 0xe0) {
+        low = 0xa0
+      } else if (c === 0xed) {
+        high = 0x9f
+      }
+    } else if (c >= 0xf0 && c <= 0xf4) {
+      more = 3
+      if (c === 0xf0) {
+        low = 0x90
+      } else if (c === 0xf4) {
+        high = 0x8f
+      }
+    } else {
+      return false
+    }
+    if (more > end - i - 1) {
+      return false
+    }
+    for (let j: i32 = 1; j <= more && i + j < toI32(b.length); j++) {
+      const d: i32 = toI32(b[i + j])
+      if (d < low || d > high) {
+        return false
+      }
+      low = 0x80
+      high = 0xbf
+    }
+    i += more + 1
+  }
+  return true
 }
 
 /** The first `byte` in `b[from, end)`, or `end`. */
@@ -2540,9 +2597,12 @@ export const PG_BATCH_MISSING: i32 = 3
 /** `PgBatcher.next(run)`: the request `tag`'s execution failed, and its rows so far may be incomplete. */
 export const PG_BATCH_FAILED: i32 = 4
 
-const PG_BATCH_MAX_REQUESTS: i32 = 65536
+// `take` probes at most maxRequests^2 / 2 slots, so the cap keeps that near 5 * 10^5.
+const PG_BATCH_MAX_REQUESTS: i32 = 1024
 const PG_BATCH_MAX_QUEUE: i32 = 1048576
 const PG_BATCH_MAX_RUNS: i32 = 1024
+// The takes a run's handles count before they wrap: handles stay under 2^30.
+const PG_BATCH_USES: i32 = 1048576
 // The array's `{}` and the longest int8 element, `-9223372036854775808`.
 const PG_BATCH_MIN_BYTES: i32 = 22
 
@@ -2580,6 +2640,9 @@ class PgBatchRun {
   at: i32 = 0
   /** The key whose `PG_BATCH_ROW` events are owed for the connection's current row; -1 for none. */
   target: i32 = -1
+  /** The handle `take` gave for the run's execution, and how many takes it has had, mod `PG_BATCH_USES`. */
+  handle: i32 = -1
+  uses: i32 = 0
   open: boolean = false
   ended: boolean = false
   failed: boolean = false
@@ -2608,17 +2671,23 @@ class PgBatchRun {
  * caller's `tag`, queued by `addInt` or `addText`. When a connection is free,
  * `take(conn)` binds up to `maxRequests` of them, and up to `maxBytes` of
  * keys, as one execution of `sql`, each distinct key once, and answers the
- * execution's run. Each `PG_ROW` of that execution goes to `row(run, conn)`,
- * its `PG_COMPLETE` to `end(run)`, and an error or a lost connection to
- * `fail(run)`; after each, `next(run)` answers events until
+ * execution's run handle. Each `PG_ROW` of that execution goes to
+ * `row(run, conn)`, its `PG_COMPLETE` to `end(run)`, and an error or a lost
+ * connection to `fail(run)`; after each, `next(run)` answers events until
  * `PG_BATCH_NONE`, `tag` naming the request each is about. Every row goes to
  * every request for its key, and every request gets one last event:
  * `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED`.
  *
  * Nothing outlives its execution: a run is free again once the events
- * `end` or `fail` owe are answered, and `row`, `end` and `fail` then panic
- * on it until `take` hands it out again. The ordinal each row carries comes
- * from the server and is checked before it routes anything.
+ * `end` or `fail` owe are answered, and its handle is then spent. What the
+ * server or the network can send after that — a second `PG_COMPLETE`, a row
+ * or an error after one, a lost connection — goes to a spent handle, and
+ * `row`, `end` and `fail` count it in `stray` and do nothing, even once
+ * `take` has given the run out again under a new handle. The ordinal each
+ * row carries comes from the server and is checked before it routes
+ * anything. What panics is only the program's own misuse: a handle `take`
+ * never gave (-1 among them), or `row`, `end` or `fail` before `next(run)`
+ * has answered `PG_BATCH_NONE` for the event before.
  */
 export class PgBatcher {
   /** The prepared statement's name. */
@@ -2647,6 +2716,8 @@ export class PgBatcher {
   tag: i32 = -1
   /** The number of rows refused because their ordinal named no key still open; each failed its execution. */
   refused: i32 = 0
+  /** The number of `row`, `end` and `fail` calls on a spent handle, each ignored. */
+  stray: i32 = 0
   private readonly keyType: i32
   private readonly maxRequests: i32
   private readonly maxBytes: i32
@@ -2741,11 +2812,12 @@ export class PgBatcher {
   }
 
   /**
-   * Queues a request for the text key `bytes[start, start + length)`, UTF-8,
-   * which is copied; false when `queueSize` are waiting, the key would not
-   * fit in `queueBytes` beside those waiting, or it is too long for one
-   * execution's `maxBytes`. Panics on an int8 batcher, or when the window is
-   * not inside `bytes`.
+   * Queues a request for the text key `bytes[start, start + length)`,
+   * which is copied; false when the key is not UTF-8 or holds a NUL (the
+   * server would fail the whole execution over it), `queueSize` are waiting,
+   * the key would not fit in `queueBytes` beside those waiting, or it is too
+   * long for one execution's `maxBytes`. Panics on an int8 batcher, or when
+   * the window is not inside `bytes`.
    */
   addText(bytes: u8[], start: i32, length: i32, tag: i32): boolean {
     if (this.keyType !== PG_BATCH_TEXT) {
@@ -2754,17 +2826,20 @@ export class PgBatcher {
     if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
       panic("nish/net/postgres: PgBatcher.addText outside its source")
     }
-    // The element as `arrayElement` writes it: quoted, `"` and `\` escaped.
     const end: i32 = start + length
+    if (!pgIsText(bytes, start, end)) {
+      return false
+    }
+    // The element as `arrayElement` writes it: quoted, `"` and `\` escaped;
+    // and FNV-1a, whose unsigned multiply wraps by definition.
     let size: i64 = toI64(length) + 2
-    let h: i32 = 0
+    let h: u32 = 2166136261
     for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
-      const c: i32 = toI32(bytes[i])
-      if (c === PG_QUOTE || c === PG_BACKSLASH) {
+      const c: u8 = bytes[i]
+      if (toI32(c) === PG_QUOTE || toI32(c) === PG_BACKSLASH) {
         size += 1
       }
-      // Kept under 2^20 before the multiply, so that no step can overflow.
-      h = (h & 0xfffff) * 31 + c
+      h = (h ^ toU32(c)) * 16777619
     }
     if (size + 2 > toI64(this.maxBytes)) {
       return false
@@ -2777,6 +2852,9 @@ export class PgBatcher {
     if (length > toI32(this.store.length) - at) {
       // The waiting keys are moved to the front, the room the taken ones left after them.
       const from: i32 = this.count > 0 ? this.qStarts[this.head] : at
+      if (from === 0) {
+        return false
+      }
       copyBytes(this.store, 0, this.store, from, at - from)
       for (let i: i32 = 0; i < this.count; i++) {
         const w: i32 = (this.head + i) % toI32(this.qStarts.length)
@@ -2792,7 +2870,7 @@ export class PgBatcher {
     this.storeEnd = at + length
     this.qStarts[q] = at
     this.qLengths[q] = length
-    this.added(q, tag, h, toI32(size))
+    this.added(q, tag, toI32(h >> 1), toI32(size))
     return true
   }
 
@@ -2830,7 +2908,8 @@ export class PgBatcher {
 
   /**
    * Binds the oldest waiting requests on `conn` as one execution of `sql`,
-   * prepared there already, and answers its run; the caller ends the group
+   * prepared there already, and answers its run's handle, which names this
+   * execution and no later one of the same run; the caller ends the group
    * (`sync()`, or `PgPool.send()`). It takes up to `maxRequests` requests,
    * oldest first, and stops at the first whose key would pass `maxBytes` or
    * the connection's `maxOutput`; those not taken stay queued. -1, and
@@ -2913,12 +2992,14 @@ export class PgBatcher {
       this.keyCounts[k] += 1
     }
     run.reset(keys)
+    run.handle = run.uses * toI32(this.runs.length) + r
+    run.uses = (run.uses + 1) % PG_BATCH_USES
     this.head = (this.head + taken) % ring
     this.count -= taken
     if (this.count === 0) {
       this.storeEnd = 0
     }
-    return r
+    return run.handle
   }
 
   /** Writes the queued request `q`'s key as the open array's next element; false when `conn` has no room. */
@@ -2929,18 +3010,25 @@ export class PgBatcher {
     return conn.arrayElement(this.store, this.qStarts[q], this.qLengths[q])
   }
 
-  private run(r: i32): PgBatchRun {
-    if (r < 0 || r >= toI32(this.runs.length)) {
+  /** The run handle `h` names while its execution's events are owed; null once it is spent. Panics on a handle `take` cannot give. */
+  private run(h: i32): PgBatchRun | null {
+    const n: i32 = toI32(this.runs.length)
+    if (h < 0 || h >= n * PG_BATCH_USES) {
       panic("nish/net/postgres: a PgBatcher run out of range")
     }
-    return this.runs[r]
+    const run: PgBatchRun = this.runs[h % n]
+    if (run.handle !== h || !run.open) {
+      return null
+    }
+    return run
   }
 
-  /** The run `r`, which `take` handed out, not ended, and whose events are all answered. */
-  private quietRun(r: i32, what: string): PgBatchRun {
-    const run: PgBatchRun = this.run(r)
-    if (!run.open) {
-      panic(`nish/net/postgres: PgBatcher.${what} on a run that is over`)
+  /** The run handle `h` names, not ended and with its events all answered; null, counted in `stray`, once it is spent. */
+  private quietRun(h: i32, what: string): PgBatchRun | null {
+    const run: PgBatchRun | null = this.run(h)
+    if (run === null) {
+      this.stray += 1
+      return null
     }
     if (run.target >= 0 || run.ended) {
       panic(`nish/net/postgres: PgBatcher.${what} before next(run) answered PG_BATCH_NONE`)
@@ -2955,10 +3043,14 @@ export class PgBatcher {
    * row dropped, when the run has failed; and when the ordinal is NULL, not
    * an integer, or names no key still open (one out of range, or one before
    * the key the last row was for): that counts in `refused` and fails the
-   * run. Panics when the run is over or its events are not all answered.
+   * run; and on a spent handle, which counts in `stray`. Panics on a handle
+   * `take` cannot give, or when the run's events are not all answered.
    */
   row(r: i32, conn: PgConnection): boolean {
-    const run: PgBatchRun = this.quietRun(r, "row")
+    const run: PgBatchRun | null = this.quietRun(r, "row")
+    if (run === null) {
+      return false
+    }
     if (run.failed) {
       return false
     }
@@ -2983,16 +3075,21 @@ export class PgBatcher {
     return true
   }
 
-  /** Ends run `r`'s execution, on its `PG_COMPLETE`: `next(r)` then closes every request left. Panics as `row` does. */
+  /** Ends run `r`'s execution, on its `PG_COMPLETE`: `next(r)` then closes every request left. Ignores a spent handle, and panics, as `row` does. */
   end(r: i32): void {
-    this.quietRun(r, "end").ended = true
+    const run: PgBatchRun | null = this.quietRun(r, "end")
+    if (run !== null) {
+      run.ended = true
+    }
   }
 
-  /** Fails run `r`'s execution, on its `PG_ERROR` or `PG_LOST`: `next(r)` then answers `PG_BATCH_FAILED` for every request left. Panics as `row` does. */
+  /** Fails run `r`'s execution, on its `PG_ERROR` or `PG_LOST`: `next(r)` then answers `PG_BATCH_FAILED` for every request left. Ignores a spent handle, and panics, as `row` does. */
   fail(r: i32): void {
-    const run: PgBatchRun = this.quietRun(r, "fail")
-    run.failed = true
-    run.ended = true
+    const run: PgBatchRun | null = this.quietRun(r, "fail")
+    if (run !== null) {
+      run.failed = true
+      run.ended = true
+    }
   }
 
   // Names the current key's next unanswered request as `tag`; false when it has none left.
@@ -3009,15 +3106,17 @@ export class PgBatcher {
   /**
    * The next event `row`, `end` or `fail` owes on run `r`, with `tag` the
    * request it is about; `PG_BATCH_NONE`, and `tag` -1, when there is none.
-   * Once `end` or `fail` has had all its events the run is over and free
-   * for `take` again.
+   * Once `end` or `fail` has had all its events the run is over, free for
+   * `take` again, and its handle spent: `PG_BATCH_NONE` ever after. Panics
+   * on a handle `take` cannot give.
    */
   next(r: i32): i32 {
-    const run: PgBatchRun = this.run(r)
+    const found: PgBatchRun | null = this.run(r)
     this.tag = -1
-    if (!run.open) {
+    if (found === null) {
       return PG_BATCH_NONE
     }
+    const run: PgBatchRun = found
     // The keys before the row's, or every key once the execution is over, have had all their rows.
     let limit: i32 = run.cur
     if (run.target >= 0) {

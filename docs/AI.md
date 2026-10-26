@@ -2602,10 +2602,12 @@ DataLoader and no `setTimeout` to collect a tick's keys: in `nish/net/postgres`,
 a `PgBatcher` built from a `PgBatchConfig` (`name`, `select` reading the key as
 `q.key`, `keyType` `PG_BATCH_INT` or `PG_BATCH_TEXT`, caps) queues requests with
 `addInt(key, tag)` or `addText(bytes, start, length, tag)` — `false` when its
-queue is full — and `take(conn)` binds the waiting ones, each key once, as one
-execution of its `sql` over `unnest($1) with ordinality`, answering a run or -1.
-Hand that execution's `PG_ROW` to `row(run, conn)`, `PG_COMPLETE` to
-`end(run)`, an error to `fail(run)`, and after each call `next(run)` until
+queue is full, or for a text key with a NUL or not UTF-8 — and `take(conn)`
+binds the waiting ones, each key once, as one execution of its `sql` over
+`unnest($1) with ordinality`, answering a run handle or -1. Hand that
+execution's `PG_ROW` to `row(run, conn)`, `PG_COMPLETE` to `end(run)`, an error
+or `PG_LOST` to `fail(run)` (on a spent handle these do nothing and count in
+`stray`), and after each call `next(run)` until
 `PG_BATCH_NONE`: `PG_BATCH_ROW` (the connection's row answers request `tag`),
 then one of `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED` per
 request. It reads no clock: when to take is the loop's choice. (No block;

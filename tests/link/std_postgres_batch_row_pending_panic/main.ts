@@ -1,5 +1,5 @@
-// row, end or fail on a run that is over panics: its rows are gone, and
-// nothing outlives its execution.
+// row before next(run) has answered the events owed panics rather than lose
+// them, as end and fail do (std_postgres_batch_pending_panic).
 // docs/security/postgres.md, "Panic sites".
 import { PG_READY, PgBatchConfig, PgBatcher, PgConfig, PgConnection } from "nish/net/postgres";
 import { secret, wipe } from "nish:secret";
@@ -49,10 +49,11 @@ export const main = (): i32 => {
   const conn = ready();
   const b = new PgBatcher(ints());
   b.addInt(toI64(1), 1);
+  b.addInt(toI64(2), 2);
   const r: i32 = b.take(conn);
-  b.end(r);
-  console.log(`missing ${b.next(r)} for ${b.tag}, then ${b.next(r)}`);
-  b.end(r);
+  b.fail(r);
+  console.log(`failed ${b.next(r)} for ${b.tag}`);
+  b.row(r, conn);
   console.log("not reached");
   return 0;
 };
