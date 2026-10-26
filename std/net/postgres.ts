@@ -65,8 +65,10 @@
  * walks a one-dimensional `text[]` in place. `columnText(c)` is the one that
  * allocates, a string. An array parameter is a text array literal too:
  * `paramIntArray` writes an `int8[]` from an `i64[]` window, and `arrayStart`,
- * `arrayElement`, `arrayNull` and `arrayEnd` build a `text[]` one element at a
- * time, quoted, into the Bind, so a list needs no string built first.
+ * `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd` build an array one
+ * element at a time into the Bind, so a list needs no string built first. A
+ * program whose element was refused for room can drop the whole bind,
+ * unsent, with `bindCancel`.
  *
  * **Authentication.** SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`).
  * The password arrives as a `Secret<u8[]>`; the connection keeps a copy in a
@@ -106,6 +108,17 @@
  * socket and the slot is built again on its next use. `tests/postgres/carrier.ts`
  * is a whole carrier: one `pollWait` loop holding the pool's sockets beside an
  * HTTP listener.
+ *
+ * **Batching.** `PgBatcher` turns many reads of one row shape by key — a user
+ * by id, an article by slug — into one execution of a statement over
+ * `unnest($1) with ordinality`. `addInt` or `addText` queues a request's key
+ * and tag; `take(conn)` binds the oldest waiting, each distinct key once, up
+ * to `maxRequests` and `maxBytes`, and answers a run; `row`, `end` and `fail`
+ * take that execution's events, routing each row by its ordinal (checked
+ * first: a server's ordinal is refused before it routes anything), and
+ * `next(run)` answers `PG_BATCH_ROW`, then `PG_BATCH_DONE`, `PG_BATCH_MISSING`
+ * or `PG_BATCH_FAILED`, for each request. It reads no clock and allocates
+ * only in its constructor; when to take is the program's.
  *
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
  * and RFC 5802 and RFC 7677; not ported from another implementation.

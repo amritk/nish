@@ -208,7 +208,8 @@ the record that found it. The notes below the table name each such finding.
     refused, are accepted, with the reason in their record, and are not
     counted. PG-12 (Low), ClientKey left in a hasher, and PG-13 (Low), an
     unbounded send buffer, were found by the module's first review and fixed
-    before it merged.
+    before it merged. PG-14, the batcher's check of the ordinal a server
+    routes rows by, holds and is not a finding.
 18. BCRYPT-1 to BCRYPT-4, BCRYPT-6 and BCRYPT-7 (Low) are accepted, with the
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`

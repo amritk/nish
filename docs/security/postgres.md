@@ -9,7 +9,7 @@ rather than after an audit, so that the audit of the database layer starts
 from evidence.
 
 Anchors are function names in `std/net/postgres.ts` at the commit that adds
-array parameters (part of #971), the last to change it.
+the batching helper `PgBatcher` (part of #971), the last to change it.
 
 **Result.** Every message is framed once, by its length, and a length under 4
 or over `maxMessage` fails the connection before its body is read; every
@@ -49,11 +49,24 @@ nonce for each `connect` and the sockets' lifetimes are the program's (see
 Limits). It landed with this record extended, as the rule of #893 asks of
 attacker-facing code.
 
+`PgBatcher` reaches a server only through the connection a program hands it,
+and adds one thing a server says that it acts on: the ordinal in each row's
+last column, which picks the requests the row is routed to. It refuses an
+ordinal that is NULL, not an integer, outside the keys it bound, or before
+the key the last row was for, and fails the run rather than route the row,
+so a server cannot hand one request's rows to another, nor make the helper
+read past its arrays (PG-14). Its state is bounded by its config — at most
+`queueSize` requests and `queueBytes` of text keys waiting, `runs` executions
+of `maxRequests` requests each — all allocated in its constructor, so no
+server answer makes it grow. A key refused for room, by `maxBytes` or by the
+connection's `maxOutput`, is not a panic: the take stops there, cancels the
+bind when nothing was bound, and the request waits.
+
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, the array builder `arrayStart`, `arrayElement`, `arrayNull` and `arrayEnd`, `bindEnd`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys` |
+| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, the array builder `arrayStart`, `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd`, `bindEnd`, `bindCancel`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; `PgBatchConfig`; `PgBatcher` (the constructor, `waiting`, `addInt`, `addText`, `take`, `row`, `end`, `fail`, `next`, and the private helpers they call) and `PgBatchRun`; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys` |
 
 Out of scope: the socket and loop the program owns (`nish:net`); the HMAC,
 SHA-256, base64 and constant-time primitives the SCRAM exchange calls, which
@@ -100,6 +113,7 @@ first review of this module and fixed before it merged.
 | PG-11 | Low | `authenticate` | MD5 and cleartext passwords are refused with `PG_ERR_AUTH_UNSUPPORTED`, so a role whose password is MD5-hashed cannot connect. | **Accepted.** Without TLS cleartext sends the password as it is, and an MD5 response is a hash anyone who sees it can replay; SCRAM-SHA-256 is PostgreSQL's default since 14. `nish/crypto/md5` is therefore not written. |
 | PG-12 | Low | `pgScramKeys`, `pgSha256Wiped` | `sha256(clientKey)`, the one-shot that made StoredKey, left a hasher whose state and block had absorbed ClientKey, which is password-equivalent for that server. | **Fixed.** StoredKey is computed by `pgSha256Wiped`, a hasher of its own whose `state`, `block` and `schedule` are wiped before it returns, as `HmacSha256.digest` does for its two. Not observable from outside (the hasher is a local); the wipes are read in the source. |
 | PG-13 | Low | the builders, `sent`, the output reservation | The output buffer doubled without a cap and was compacted only once fully drained, so a program that queued faster than it sent grew it without bound, toward an `i32` offset's end. The program is trusted, so this is Low. | **Fixed.** `maxOutput` (1 MiB by default) caps the bytes queued unsent: a builder call that would pass it answers false and writes nothing, the room for `Sync` and `Terminate` is kept free under it, and the sent prefix is moved off the front once more than half the buffer is gone, or before any message, `bindEnd`'s, `Sync` and `Terminate` included, that would otherwise grow the buffer past its end; the buffer doubles only while twice its length fits in an `i32`. "a prepare that would pass maxOutput is refused", "a parameter that would pass maxOutput is refused", "unsent bytes count against maxOutput", "a send past half the buffer moves the rest to its start", "rather than double the buffer". |
+| PG-14 | High if it failed | `PgBatcher.row` | A row is routed to requests by the ordinal in its last column, which the server sends. An ordinal past the keys, of 0 or less, NULL, not an integer, or past an int8 would index outside the run's arrays or give one request another's rows; one that goes back would answer a request after its last event. | **Holds.** `row` reads the ordinal with the connection's integer decoder and refuses each of these before it routes anything: it answers false, counts the row in `refused`, and fails the run, so every request still waiting on it gets `PG_BATCH_FAILED`. A run's rows are routed only while it is open, and `take` resets a reused run's keys, so a later batch cannot read an earlier one's. "an ordinal past the keys", "ordinal 0", "a negative ordinal", "a NULL ordinal", "an ordinal that is not an integer", "an ordinal past an int8", "a row of no columns", "an ordinal that goes back", "a later batch cannot read an earlier one's ordinals", "and a bad one does not set it" (the program's `text.failed`). |
 
 `keys`, the 64 bytes `pgScramKeys` answers, the proof taken from it and the
 server signature kept for the final message are none of them secret (the
@@ -136,6 +150,17 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `bindEnd` | an array open ("bindEnd() while an array is open") | `link/std_postgres_array_bindend_panic` (after the array opens) |
 | `arrayElement` | a window outside its source ("arrayElement() outside its source") | `link/std_postgres_array_window_panic` (one byte past the end, after an in-bounds window) |
 | `paramIntArray` | a window outside its array ("paramIntArray() outside its array") | `link/std_postgres_int_array_range_panic` (one value past the end, after an in-bounds window) |
+| `arrayInt` | no array open ("an array element with no arrayStart()") | `link/std_postgres_array_int_panic` (after a parameter is taken with no array) |
+| `paramBytes`, `paramNull`, `paramTextArray`, `paramIntArray` | an array open ("a parameter while an array is open") | `link/std_postgres_array_param_bytes_panic`, `_null_panic`, `_text_array_panic`, `_int_array_panic` (each inside an open array, after the array opens) |
+| `PgBatcher` constructor | a `keyType` other than `PG_BATCH_INT` or `PG_BATCH_TEXT` ("a PgBatchConfig keyType out of range") | `link/std_postgres_batch_config_key_panic` (after a text batcher is made) |
+| `PgBatcher` constructor | an empty `name` or `select`, or a NUL in them or in `orderBy` ("a PgBatchConfig name or query empty or with a NUL") | `link/std_postgres_batch_config_query_panic` (after an ordered batcher is made) |
+| `PgBatcher` constructor | a cap out of range: `maxRequests` outside 1..65536, `maxBytes` under 22 (the widest int8 key in its braces) or over 2^30 − 1, `queueSize` outside 1..2^20, `queueBytes` outside 0..2^30 − 1, `runs` outside 1..1024 ("a PgBatchConfig cap out of range") | `link/std_postgres_batch_config_cap_panic` covers `maxBytes` of 21, after 22 is taken; the other bounds share its condition |
+| `PgBatcher.addInt` | a text batcher | `link/std_postgres_batch_add_int_panic` (after `addText` on it is taken) |
+| `PgBatcher.addText` | an int8 batcher | `link/std_postgres_batch_add_text_panic` (after `addInt` on it is taken) |
+| `PgBatcher.addText` | a window outside its source | `link/std_postgres_batch_add_text_window_panic` (one byte past the end, after the whole source) |
+| `PgBatcher.row`, `end`, `fail`, `next` | a run outside 0..`runs` − 1 | `link/std_postgres_batch_run_range_panic` (`next(2)` of 2 runs, after `next(1)`) |
+| `PgBatcher.row`, `end`, `fail` | a run that is over, its events all answered ("on a run that is over") | `link/std_postgres_batch_over_panic` (a second `end`, after the run's last event) |
+| `PgBatcher.row`, `end`, `fail` | events still owed ("before next(run) answered PG_BATCH_NONE") | `link/std_postgres_batch_pending_panic` (a second `fail` while the second request's event is owed) |
 
 Apart from the array misuse above, the builder calls do not panic: `param*`,
 `arrayStart` and `bindEnd` with no bind open answer false and write nothing

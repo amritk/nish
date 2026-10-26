@@ -2597,6 +2597,22 @@ the array open: end it and send the rest in the next statement. Every other
 guide's [PostgreSQL page](guide/using-nish/postgres.md#array-parameters) its
 walk-through.)
 
+**Batch a server's keyed reads into one PostgreSQL query** — there is no
+DataLoader and no `setTimeout` to collect a tick's keys: in `nish/net/postgres`,
+a `PgBatcher` built from a `PgBatchConfig` (`name`, `select` reading the key as
+`q.key`, `keyType` `PG_BATCH_INT` or `PG_BATCH_TEXT`, caps) queues requests with
+`addInt(key, tag)` or `addText(bytes, start, length, tag)` — `false` when its
+queue is full — and `take(conn)` binds the waiting ones, each key once, as one
+execution of its `sql` over `unnest($1) with ordinality`, answering a run or -1.
+Hand that execution's `PG_ROW` to `row(run, conn)`, `PG_COMPLETE` to
+`end(run)`, an error to `fail(run)`, and after each call `next(run)` until
+`PG_BATCH_NONE`: `PG_BATCH_ROW` (the connection's row answers request `tag`),
+then one of `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED` per
+request. It reads no clock: when to take is the loop's choice. (No block;
+`tests/postgres/live`'s `batch` scenario runs it against a server, and the user
+guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
+its walk-through.)
+
 **Draw to the whole terminal** (a game, a dashboard) — there is no curses and
 no `process.stdout.on("resize")`: `runTerminal(options, state, update, render)`
 from `nish/term-io` opens the terminal, probes what it can draw, steps
