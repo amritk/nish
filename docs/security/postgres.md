@@ -8,8 +8,8 @@ wiped, and the test that pins each property. It is written with the code
 rather than after an audit, so that the audit of the database layer starts
 from evidence.
 
-Anchors are function names in `std/net/postgres.ts` at the commit that merges
-#941, the last to change it.
+Anchors are function names in `std/net/postgres.ts` at the commit that adds
+array parameters (part of #971), the last to change it.
 
 **Result.** Every message is framed once, by its length, and a length under 4
 or over `maxMessage` fails the connection before its body is read; every
@@ -53,7 +53,7 @@ attacker-facing code.
 
 | File | Functions |
 | --- | --- |
-| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls, `bindEnd`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; the helpers `pgCopyBytes`, `pgBytesOf`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys` |
+| `std/net/postgres.ts` | `PgConfig`; `PgError`; `PgPassword`; `PgConnection` (the constructor, `received`, `receive`, `sent`, `closed`, `dispose`, `next`, `compact`, `fail`, `passwordWiped`, `dispatch`, `reserveColumns`, `readRow`, `readDescription`, `readError`, `authenticate`, `scramStart`, `scramContinue`, `scramFinal`, the builders `prepare`, `closeStatement`, `bindStart`, the `param*` calls with `paramIntArray`, the array builder `arrayStart`, `arrayElement`, `arrayNull` and `arrayEnd`, `bindEnd`, `sync`, `terminate`, the output reservation and its compaction, and the row readers); `PgText`; `PgArrayWalker`; `PgPool` (the constructor, `register`, `request`, `waiting`, `dispatch`, `send`, `wanted`, `connect`, `connection`, `next`, `anyReady`, `passwordWiped`, `dispose`) and `PgPoolSlot`; the helpers `pgCopyBytes`, `pgBytesOf`, `pgDecimalLength`, `pgHasNul`, `pgFind`, `pgBytesAre`, `pgSaltedPassword`, `pgSha256Wiped`, `pgScramKeys` |
 
 Out of scope: the socket and loop the program owns (`nish:net`); the HMAC,
 SHA-256, base64 and constant-time primitives the SCRAM exchange calls, which
@@ -129,10 +129,21 @@ A panic is for the program's own mistakes, never for a server's bytes:
 | `PgPool.connect` | after `dispose` | `link/std_postgres_pool_connect_dispose_panic` (a wanted slot, after `dispose`) |
 | `PgPool.connection` | a slot outside 0..size − 1 or with no connection made | `link/std_postgres_pool_connection_panic` (slot 1, after slot 0's is read) and `link/std_postgres_pool_connection_range_panic` (slot 2 of 2) |
 | `PgPool.next` | a slot outside 0..size − 1, by `connection`, which it calls first | `link/std_postgres_pool_next_panic` (slot 2 of 2, after slot 0 answers) |
+| `arrayElement`, `arrayNull` | no array open ("an array element with no arrayStart()") | `link/std_postgres_array_element_panic` (`arrayNull`, after a parameter is taken with no array) |
+| `arrayEnd` | no array open ("arrayEnd() with no arrayStart()") | `link/std_postgres_array_end_panic` (a second `arrayEnd`, after the first) |
+| `arrayStart` | an array already open ("arrayStart() while an array is open") | `link/std_postgres_array_start_panic` (a second `arrayStart`, after the first opens) |
+| `param*` | an array open ("a parameter while an array is open"), which would write a parameter inside it | `link/std_postgres_array_param_panic` (`paramInt` inside an open array) |
+| `bindEnd` | an array open ("bindEnd() while an array is open") | `link/std_postgres_array_bindend_panic` (after the array opens) |
+| `arrayElement` | a window outside its source ("arrayElement() outside its source") | `link/std_postgres_array_window_panic` (one byte past the end, after an in-bounds window) |
+| `paramIntArray` | a window outside its array ("paramIntArray() outside its array") | `link/std_postgres_int_array_range_panic` (one value past the end, after an in-bounds window) |
 
-The builder calls do not panic: `param*` and `bindEnd` with no bind open
-answer false and write nothing ("paramText without a bind is refused" and the
-lines after it), as does `paramBytes` on a window outside its array.
+Apart from the array misuse above, the builder calls do not panic: `param*`,
+`arrayStart` and `bindEnd` with no bind open answer false and write nothing
+("paramText without a bind is refused" and the lines after it, "without a
+bind, arrayStart is refused"), as does `paramBytes` on a window outside its
+array. An open array is the program's state, not the server's, so misusing it
+is a panic rather than a refusal a caller could miss and send a Bind whose
+array never closed.
 
 ## Limits
 
@@ -256,6 +267,22 @@ Execute"), and "a NUL in a name is refused", "a NUL in SQL is refused", "a
 NUL in a closed name is refused", "a NUL in a bound name is refused", "and
 nothing is written".
 
+**Array parameters**: an array goes as one text parameter in PostgreSQL's
+array literal, and every element stays data. `paramIntArray` writes "every
+value in decimal, the most negative too"; the builder writes "NULL unquoted,
+every text element quoted, \" and \\ escaped, UTF-8 as it is", so an element
+of `NULL`, `,`, `{`, `}` or a quote cannot end the element or the array (the
+live `arrays` scenario reads each back through `unnest`). The size is exact
+before a byte is written: "an int8[] that would pass maxOutput is refused"
+("its exact size is asked for: one value less fits"), "an element whose
+escapes pass maxOutput is refused" ("its escapes are counted: one less
+fits"), "an element that would pass maxOutput is refused" "and the refused
+one left nothing behind", and room for the closing `}` is held for each
+element, so "the array still ends". With an array open, "no sync while an
+array is open", "no prepare", "no closeStatement", "no bindStart"; a
+compaction under it leaves "the array's length patched where it moved to";
+and "terminate drops an open array with its bind".
+
 **Server errors**: "an error during startup fails the connection", "FATAL
 once ready fails it too", "an ERROR ends the statement, then the group", and
 the recorded `no-database` exchange. The recorded `pipeline-unique` exchange
@@ -281,7 +308,7 @@ with `fs.read` for its recordings.
 was", and a tag's count past an i64 is -1 and "leaves text.failed alone".
 
 **Terminate**: "Terminate drops an open bind", so a half-built Bind is never
-sent.
+sent, and "terminate drops an open array with its bind".
 
 **The pool**: `link/std_postgres_pool` drives a `PgPool` against scripted
 servers. Its bounds: "a full queue refuses" "and holds what it had", "256
@@ -307,7 +334,11 @@ unique key, fail only those four, whose connections recover, and that the
 rows the other 96 inserted are committed while the failed groups' are not
 (read back with a fresh connection); that a backend
 ended by `pg_terminate_backend` is reported lost and made again; that a
-division by zero fails only its own group in a pipeline; and that the conduit
+division by zero fails only its own group in a pipeline; that text[], int8[]
+and int4[] parameters come back through `unnest` element for element — NULLs,
+quotes, backslashes, braces, commas, the text `NULL`, the empty string,
+multibyte UTF-8, the empty array and the extreme int8 values — with the
+int4[] literal coerced by the server; and that the conduit
 article list decodes, escapes and truncates as its golden says. The carrier
 serves HTTP while a query sleeps, and with nothing listening on its database
 port reports the request lost and the slot failed rather than waiting. Its

@@ -159,7 +159,8 @@ the SQL text:
 - `prepare(name, sql, paramTypes)` parses and describes a statement. The types
   are OIDs, and `0` lets the server infer one.
 - `bindStart(name)`, then one `paramInt`, `paramText`, `paramBytes`,
-  `paramTextArray` or `paramNull` per parameter, then `bindEnd()`, runs it.
+  `paramTextArray`, `paramIntArray`, `paramNull` or array (below) per
+  parameter, then `bindEnd()`, runs it.
 - `closeStatement(name)` frees it on the server.
 - `sync()` ends the group.
 
@@ -173,6 +174,46 @@ outside its array, a name or SQL holding a NUL byte, or a message that would
 put more than `PgConfig.maxOutput` bytes (1 MiB) waiting to be sent — answers
 `false` and writes nothing. `sync()` and `terminate()` are never refused for
 room. Send what is queued and call `sent(n)`, and the room comes back.
+
+### Array parameters
+
+An array parameter lets one statement take a whole batch, as in
+`select ... from unnest($1::text[]) with ordinality as u(x, ord)` or
+`where id = any($1::int8[])`:
+
+- `paramIntArray(values, start, count)` binds `values[start, start + count)`
+  as an `int8[]`; `count` 0 is the empty array.
+- `paramTextArray(items)` binds a `string[]` as a `text[]`.
+- `arrayStart()`, then `arrayElement(bytes, start, length)` (a UTF-8 window)
+  or `arrayNull()` for each element, then `arrayEnd()`, builds one element at
+  a time, straight into the Bind, with no array of the elements first.
+
+```ts
+conn.bindStart("names");
+conn.arrayStart();
+for (let i: i32 = 0; i < count; i++) {
+  if (!conn.arrayElement(body, starts[i], lengths[i])) {
+    break; // no room under maxOutput: end the array, send the rest next time
+  }
+}
+conn.arrayEnd();
+conn.bindEnd();
+```
+
+Every element is quoted, with `"` and `\` escaped, so commas, braces, spaces
+and the word `NULL` arrive as text; only `arrayNull()` is a NULL. The array is
+sent as a text literal, so the server reads it as whatever type the statement
+gives the parameter: the same elements bind to `$1::int4[]` or `$1::varchar[]`.
+
+An element refused for room answers `false`, writes nothing and leaves the
+array open, so the elements already in it can still be sent: end the array
+and the Bind, and put the rest in the next statement. `arrayEnd()` is never
+refused. While an array is open, `sync()`, `prepare`, `closeStatement` and
+`bindStart` answer `false`, as with any open bind. Using an array out of order
+is a bug, so it panics: an element or `arrayEnd()` with no `arrayStart()`, a
+second `arrayStart()`, or any other `param...` call or `bindEnd()` before
+`arrayEnd()`. So do an `arrayElement` window outside its array and a
+`paramIntArray` range outside `values`.
 
 In a group that fails, `PG_DESCRIBED` still comes once for each `prepare` the
 server parsed before the error: count them to know which statements exist (a
