@@ -2999,13 +2999,21 @@ export class PgBatcher {
       return PG_BATCH_NONE
     }
     // The keys before the row's, or every key once the execution is over, have had all their rows.
-    const limit: i32 = run.target >= 0 ? run.target : run.ended ? run.keys : run.cur
+    let limit: i32 = run.cur
+    if (run.target >= 0) {
+      limit = run.target
+    } else if (run.ended) {
+      limit = run.keys
+    }
     while (run.cur < limit && run.cur < toI32(run.tags.length)) {
       const at: i32 = run.first[run.cur] + run.at
       if (at < run.first[run.cur + 1]) {
         run.at += 1
         this.tag = run.tags[at]
-        return run.failed ? PG_BATCH_FAILED : run.curRows ? PG_BATCH_DONE : PG_BATCH_MISSING
+        if (run.failed) {
+          return PG_BATCH_FAILED
+        }
+        return run.curRows ? PG_BATCH_DONE : PG_BATCH_MISSING
       }
       run.cur += 1
       run.at = 0

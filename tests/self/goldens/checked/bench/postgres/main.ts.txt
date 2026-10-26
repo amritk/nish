@@ -2256,9 +2256,9 @@ function PgBatcher.next(this: PgBatcher, r: i32): i32 -> @nish.PgBatcher.next [e
   stackSites=0 stackLocals=0
   local -1:11 run: PgBatchRun (const)
   callee -1:29 PgBatcher.run -> @nish.PgBatcher.run
-  local +5:11 limit: i32 (const)
-  local +7:13 at: i32 (const)
-  local +19:13 at: i32 (const)
+  local +5:9 limit: i32 (let)
+  local +12:13 at: i32 (const)
+  local +27:13 at: i32 (const)
 module std/bytes.ts [package nish]
 const BYTES_SPACE: i32 = 32
 const BYTES_TAB: i32 = 9
