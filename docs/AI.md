@@ -2584,6 +2584,19 @@ most 100 pairs. (No block, as for `nish/text`; `tests/link/std_url` is its
 program, and the user guide's [standard-library
 page](guide/using-nish/standard-library.md#nishneturl) its walk-through.)
 
+**Pass a list to a PostgreSQL statement** — there is no driver that expands
+`IN (...)` and no `pg`'s array serialiser: in `nish/net/postgres`, write
+`= any($1::int8[])` or `unnest($1::text[])` and bind the list as one
+parameter. `paramIntArray(values, start, count)` binds an `i64[]` window;
+`arrayStart()`, `arrayElement(bytes, start, length)` or `arrayNull()` per
+element, then `arrayEnd()`, builds a `text[]` straight into the Bind from
+windows of a buffer. An element refused for room answers `false` and leaves
+the array open: end it and send the rest in the next statement. Every other
+`param...` call and `bindEnd()` panic until `arrayEnd()`. (No block, as for
+`nish/text`; `tests/postgres/live` runs it against a server, and the user
+guide's [PostgreSQL page](guide/using-nish/postgres.md#array-parameters) its
+walk-through.)
+
 **Draw to the whole terminal** (a game, a dashboard) — there is no curses and
 no `process.stdout.on("resize")`: `runTerminal(options, state, update, render)`
 from `nish/term-io` opens the terminal, probes what it can draw, steps

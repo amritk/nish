@@ -63,7 +63,10 @@
  * length in two reused arrays, so a row costs no allocation. `int`, `bool`,
  * `isNull` and `PgText.timestamp` decode a column in place; `PgArrayWalker`
  * walks a one-dimensional `text[]` in place. `columnText(c)` is the one that
- * allocates, a string.
+ * allocates, a string. An array parameter is a text array literal too:
+ * `paramIntArray` writes an `int8[]` from an `i64[]` window, and `arrayStart`,
+ * `arrayElement`, `arrayNull` and `arrayEnd` build a `text[]` one element at a
+ * time, quoted, into the Bind, so a list needs no string built first.
  *
  * **Authentication.** SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`).
  * The password arrives as a `Secret<u8[]>`; the connection keeps a copy in a
@@ -347,6 +350,17 @@ const pgBytesOf = (text: string): u8[] => {
     out.push(toU8(text.charCodeAt(i)))
   }
   return out
+}
+
+/** How many bytes `value` takes in decimal, its sign included. */
+const pgDecimalLength = (value: i64): i32 => {
+  let n: i32 = value < 0 ? 2 : 1
+  let v: i64 = value < 0 ? value : -value
+  while (v <= -10) {
+    v = v / 10
+    n += 1
+  }
+  return n
 }
 
 /** Whether `text` holds a NUL byte, which a protocol string cannot. */
@@ -778,6 +792,9 @@ export class PgConnection {
   private bindAt: i32 = -1
   private paramCountAt: i32 = 0
   private paramCount: i32 = 0
+  // The open array parameter's length word, -1 when none is open, and its elements so far.
+  private arrayAt: i32 = -1
+  private arrayCount: i32 = 0
   private clientNonce: string = ""
   private serverSignature: u8[]
 
@@ -1516,6 +1533,9 @@ export class PgConnection {
       this.bindAt -= shift
       this.paramCountAt -= shift
     }
+    if (this.arrayAt >= 0) {
+      this.arrayAt -= shift
+    }
   }
 
   /** Makes the output buffer at least `want` bytes long. */
@@ -1665,6 +1685,7 @@ export class PgConnection {
    * bind has 65535 parameters already, or there is no room under `maxOutput`.
    */
   private startParam(size: i32): i32 {
+    this.noArrayOpen()
     if (this.bindAt < 0 || this.paramCount === 65535 || size > PG_MAX_CAP || !this.room(4 + size)) {
       return -1
     }
@@ -1676,6 +1697,12 @@ export class PgConnection {
 
   private endParam(at: i32): void {
     setI32BE(this.out, at, this.outEnd - at - 4)
+  }
+
+  private noArrayOpen(): void {
+    if (this.arrayAt >= 0) {
+      panic("nish/net/postgres: a parameter while an array is open")
+    }
   }
 
   // Every `param...` call answers false, and writes nothing, when no bind is
@@ -1695,6 +1722,7 @@ export class PgConnection {
 
   /** A text parameter from `bytes[start, start + length)`, UTF-8; false too when the window is not inside `bytes`. */
   paramBytes(bytes: u8[], start: i32, length: i32): boolean {
+    this.noArrayOpen()
     if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
       return false
     }
@@ -1724,6 +1752,13 @@ export class PgConnection {
     if (at < 0) {
       return false
     }
+    this.putDecimal(value)
+    this.endParam(at)
+    return true
+  }
+
+  /** `value` in decimal, `pgDecimalLength(value)` bytes. */
+  private putDecimal(value: i64): void {
     this.reserve(this.outEnd + 20)
     // The digits are written from the least significant, then reversed; the
     // value is made negative first so that the most negative i64 has its digits.
@@ -1750,6 +1785,33 @@ export class PgConnection {
       lo++
       hi--
     }
+  }
+
+  /**
+   * An `int8[]` parameter from `values[start, start + count)`, in decimal;
+   * panics when the range is not inside `values`.
+   */
+  paramIntArray(values: i64[], start: i32, count: i32): boolean {
+    if (start < 0 || count < 0 || count > toI32(values.length) - start) {
+      panic("nish/net/postgres: paramIntArray() outside its array")
+    }
+    // Its exact size first, so that room is asked for once and a refusal writes nothing.
+    let size: i64 = count > 0 ? toI64(count + 1) : toI64(2)
+    for (let i: i32 = start; i < start + count; i++) {
+      size += toI64(pgDecimalLength(values[i]))
+    }
+    const at: i32 = this.startParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
+    if (at < 0) {
+      return false
+    }
+    this.putByte(PG_LBRACE)
+    for (let i: i32 = start; i < start + count; i++) {
+      if (i > start) {
+        this.putByte(PG_COMMA)
+      }
+      this.putDecimal(values[i])
+    }
+    this.putByte(PG_RBRACE)
     this.endParam(at)
     return true
   }
@@ -1795,6 +1857,105 @@ export class PgConnection {
     return true
   }
 
+  // An array parameter built element by element: `arrayStart()`, then
+  // `arrayElement` or `arrayNull` for each element, then `arrayEnd()`. An
+  // element refused for room writes nothing and leaves the array open, so a
+  // program that batches rows ends the array with the elements it has and
+  // sends the rest in the next statement. While an array is open, every other
+  // `param...` call and `bindEnd()` panic, as do an element or `arrayEnd()`
+  // with none open and a second `arrayStart()`; `sync()`, `prepare`,
+  // `closeStatement` and `bindStart` answer false, the bind being open.
+
+  /** Opens an array parameter, `{}` so far; false as the `param...` calls are. */
+  arrayStart(): boolean {
+    if (this.arrayAt >= 0) {
+      panic("nish/net/postgres: arrayStart() while an array is open")
+    }
+    // Room for `{}`: the `}` is owed, and every element keeps room for it.
+    const at: i32 = this.startParam(toI32(2))
+    if (at < 0) {
+      return false
+    }
+    this.putByte(PG_LBRACE)
+    this.arrayAt = at
+    this.arrayCount = 0
+    return true
+  }
+
+  private arrayOpen(): void {
+    if (this.arrayAt < 0) {
+      panic("nish/net/postgres: an array element with no arrayStart()")
+    }
+  }
+
+  /** Whether the open array has room for an element of `size` bytes, its comma, and the `}` it owes. */
+  private elementRoom(size: i64): boolean {
+    const total: i64 = size + toI64(this.arrayCount > 0 ? 2 : 1)
+    return total <= toI64(PG_MAX_CAP) && this.room(toI32(total))
+  }
+
+  /**
+   * A text element from `bytes[start, start + length)`, UTF-8, quoted with
+   * `"` and `\` escaped; false, and nothing written, when there is no room.
+   * Panics when no array is open or the window is not inside `bytes`.
+   */
+  arrayElement(bytes: u8[], start: i32, length: i32): boolean {
+    this.arrayOpen()
+    if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
+      panic("nish/net/postgres: arrayElement() outside its source")
+    }
+    let size: i64 = toI64(length) + 2
+    for (let i: i32 = start; i < start + length; i++) {
+      const c: i32 = toI32(bytes[i])
+      if (c === 34 || c === 92) {
+        size += 1
+      }
+    }
+    if (!this.elementRoom(size)) {
+      return false
+    }
+    this.elementComma()
+    this.putByte(PG_QUOTE)
+    for (let i: i32 = start; i < start + length; i++) {
+      const c: i32 = toI32(bytes[i])
+      if (c === 34 || c === 92) {
+        this.putByte(PG_BACKSLASH)
+      }
+      this.putByte(c)
+    }
+    this.putByte(PG_QUOTE)
+    return true
+  }
+
+  /** A NULL element; false, and nothing written, when there is no room. Panics when no array is open. */
+  arrayNull(): boolean {
+    this.arrayOpen()
+    if (!this.elementRoom(toI64(4))) {
+      return false
+    }
+    this.elementComma()
+    this.putString("NULL")
+    return true
+  }
+
+  private elementComma(): void {
+    if (this.arrayCount > 0) {
+      this.putByte(PG_COMMA)
+    }
+    this.arrayCount += 1
+  }
+
+  /** Ends the open array parameter; never refused for room, which its elements kept. Panics when no array is open. */
+  arrayEnd(): void {
+    if (this.arrayAt < 0) {
+      panic("nish/net/postgres: arrayEnd() with no arrayStart()")
+    }
+    this.tailRoom(toI32(1))
+    this.putByte(PG_RBRACE)
+    this.endParam(this.arrayAt)
+    this.arrayAt = -1
+  }
+
   /**
    * Ends the Bind (every result column in text) and queues its Execute, for
    * every row. False, and nothing written, when no bind is open; never for
@@ -1803,6 +1964,9 @@ export class PgConnection {
   bindEnd(): boolean {
     if (this.bindAt < 0) {
       return false
+    }
+    if (this.arrayAt >= 0) {
+      panic("nish/net/postgres: bindEnd() while an array is open")
     }
     this.tailRoom(PG_TAIL)
     const at: i32 = this.bindAt
@@ -1834,6 +1998,7 @@ export class PgConnection {
     if (this.bindAt >= 0) {
       this.outEnd = this.bindAt
       this.bindAt = -1
+      this.arrayAt = -1
     }
     this.tailRoom(toI32(5))
     const at: i32 = this.startMessage(PG_FE_TERMINATE)

@@ -1,0 +1,24 @@
+request 0: 1 NULL
+request 0: 2 ["]
+request 0: 3 [\]
+request 0: 4 [,]
+request 0: 5 [{]
+request 0: 6 [}]
+request 0: 7 [ x y ]
+request 0: 8 [NULL]
+request 0: 9 []
+request 0: 10 [é€]
+request 0: 11 NULL
+request 0 done
+request 1 done
+request 2: 1 [7]
+request 2: 2 [-1]
+request 2: 3 [0]
+request 2: 4 [-9223372036854775808]
+request 2: 5 [9223372036854775807]
+request 2 done
+request 3 done
+request 4: integer [-41]
+request 4: integer [43]
+request 4 done
+exit 0

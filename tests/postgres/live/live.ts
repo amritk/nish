@@ -12,6 +12,7 @@
 //   terminate   pg_terminate_backend on a pooled connection from another
 //               pool; the slot is built again on its next request
 //   pipeline    an error in the middle of five pipelined groups
+//   arrays      text[], int8[] and int4[] parameters, unnested by the server
 //   conduit     the Conduit article list, prepared once and run pipelined
 //
 // The `conduit` statement is the multicore server challenge's SPEC.md
@@ -597,6 +598,95 @@ const pipeline = (port: i32): i32 => {
   return 0
 }
 
+/** The text elements `arrays` binds, NULL among them where `ARRAY_NULL` stands. */
+const ARRAY_NULL: string = "<null>"
+const awkward = (): string[] => [ARRAY_NULL, "\"", "\\", ",", "{", "}", " x y ", "NULL", "", "é€", ARRAY_NULL]
+
+/** Builds request `t` of `arrays`: one Bind, its array built the way that request names. */
+const bindArray = (conn: PgConnection, t: i32): void => {
+  if (t === 0 || t === 1) {
+    conn.bindStart("texts")
+    conn.arrayStart()
+    if (t === 0) {
+      for (const item of awkward()) {
+        if (item === ARRAY_NULL) {
+          conn.arrayNull()
+        } else {
+          const b: u8[] = bytesOf(item)
+          conn.arrayElement(b, toI32(0), toI32(b.length))
+        }
+      }
+    }
+    conn.arrayEnd()
+  } else if (t === 2 || t === 3) {
+    const min: i64 = (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8)
+    const values: i64[] = [toI64(7), toI64(-1), toI64(0), min, -(min + toI64(1))]
+    conn.bindStart("ints")
+    conn.paramIntArray(values, toI32(0), t === 2 ? toI32(values.length) : toI32(0))
+  } else {
+    // The literal is text, so the server reads it as the type it inferred: int4 here.
+    conn.bindStart("int4s")
+    conn.arrayStart()
+    const digits: u8[] = bytesOf("-42")
+    conn.arrayElement(digits, toI32(0), toI32(3))
+    conn.arrayElement(digits, toI32(1), toI32(2))
+    conn.arrayEnd()
+  }
+  conn.bindEnd()
+}
+
+/**
+ * `arrays`: array parameters built element by element and from an `i64[]`,
+ * unnested by the server; awkward text, NULLs, the empty array, the extreme
+ * int8s, and a text literal the server reads as `int4[]`.
+ */
+const arrays = (port: i32): i32 => {
+  const pool = makePool(toI32(1), toI32(8), "")
+  pool.register("texts", "select x, ord from unnest($1::text[]) with ordinality as u(x, ord)", noTypes())
+  pool.register("ints", "select x, ord from unnest($1::int8[]) with ordinality as u(x, ord)", noTypes())
+  pool.register("int4s", "select x + 1, pg_typeof(x)::text from unnest($1::int4[]) as u(x)", noTypes())
+  const d = new Driver(pool, port)
+  const requests: i32 = 5
+  for (let t: i32 = 0; t < requests; t++) {
+    pool.request()
+  }
+  let done: i32 = 0
+  while (done < requests) {
+    let slot: i32 = pool.dispatch()
+    while (slot >= 0) {
+      const t: i32 = pool.ticket
+      if (t >= 0 && t < requests) {
+        bindArray(pool.connection(slot), t)
+      }
+      pool.send()
+      slot = pool.dispatch()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log("timed out")
+      return 1
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      if (event === PG_ROW) {
+        const x: string = conn.isNull(toI32(0)) ? "NULL" : `[${conn.columnText(toI32(0))}]`
+        console.log(`request ${pool.ticket}: ${conn.columnText(toI32(1))} ${x}`)
+      } else if (event === PG_ERROR) {
+        console.log(failed(pool.ticket, conn))
+      } else if (event === PG_GROUP_DONE) {
+        console.log(`request ${pool.ticket} done${conn.groupFailed ? ", failed" : ""}`)
+        done += 1
+      } else if (event === PG_LOST || event === PG_FAILED) {
+        console.log(`connection failed: ${conn.failure} ${errorOf(conn)}`)
+        return 1
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  return 0
+}
+
 const HEX: string = "0123456789abcdef"
 
 /** `s` as a JSON string. */
@@ -743,6 +833,8 @@ export const main = (): i32 => {
     return terminate(port)
   } else if (scenario === "pipeline") {
     return pipeline(port)
+  } else if (scenario === "arrays") {
+    return arrays(port)
   } else if (scenario === "conduit") {
     return conduit(port)
   }
