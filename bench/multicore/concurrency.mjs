@@ -7,8 +7,8 @@
 // Postgres refuses, comments, tags) one at a time, then the same reads many
 // times over all at once in a shuffled order, then one at a time again, and
 // compares every answer's status and body byte for byte. It also reports the
-// transactions the database committed for the concurrent reads, so a reader
-// sees that they were coalesced.
+// transactions the database committed for the concurrent reads; run.mjs fails
+// when there are not fewer of them than reads, which is no coalescing at all.
 
 /** Answers `{ requests, transactions, mismatches }`; `xacts()` reads the database's committed transactions. */
 export const concurrencyCheck = async (base, xacts, { copies = 40 } = {}) => {

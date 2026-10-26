@@ -462,10 +462,15 @@ export class WorkerConfig {
   readConns: i32 = 3
   writeConns: i32 = 1
   maxInFlight: i32 = 16
-  /** The read pool's own `maxInFlight`: low enough that a busy worker opens every read connection. */
-  readInFlight: i32 = 16
-  /** Per shape, how many coalesced reads a worker has in flight at once. */
-  readBatches: i32 = 1
+  /**
+   * The read pool's own `maxInFlight`. `PgPool` opens its next connection only once more than this many
+   * groups per open connection wait, so with 4 the second read connection opens past 4 groups in flight
+   * and the third past 8. One hot shape holds at most `readBatches` (3) of them, so the third opens only
+   * when several shapes and the uncoalesced reads are busy at once.
+   */
+  readInFlight: i32 = 4
+  /** Per shape, how many coalesced reads a worker has in flight at once (main.ts: one a read connection). */
+  readBatches: i32 = 3
   bcryptPort: i32 = 47391
   slots: i32 = 200000
   backlog: i32 = 65535

@@ -1,5 +1,7 @@
 // The multicore server challenge, locally: builds bench/multicore/conduit,
-// runs the challenge's conformance suite against it, then drives it with the
+// runs the challenge's conformance suite against it and the concurrency check
+// (concurrency.mjs: reads made together answer as they do alone, and are
+// coalesced), then drives it with the
 // challenge's own load generator (bench/cmd/loadgen, run as it is from the
 // clone setup.sh made) at fixed user counts, and measures what a request
 // costs. bench/multicore/run.sh is the entry point; README.md beside the
@@ -333,6 +335,11 @@ if (!flag("--no-conformance") && !idleOnly) {
   )
   if (c.mismatches.length > 0) {
     fail(`concurrency check failed:\n${c.mismatches.slice(0, 20).join("\n")}`)
+  }
+  if (c.transactions >= c.requests) {
+    fail(
+      `concurrency check: ${c.transactions} transactions for ${c.requests} reads, so nothing was coalesced`
+    )
   }
 }
 if (conformanceOnly) {
