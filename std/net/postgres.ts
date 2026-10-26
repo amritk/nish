@@ -1795,9 +1795,13 @@ export class PgConnection {
     if (start < 0 || count < 0 || count > toI32(values.length) - start) {
       panic("nish/net/postgres: paramIntArray() outside its array")
     }
+    // Each loop is bounded by `values.length` as well as by the window's end,
+    // which the guard above keeps inside it: that names the bound the compiler
+    // proves `values[i]` against, where the guard alone does not reach it.
+    const end: i32 = start + count
     // Its exact size first, so that room is asked for once and a refusal writes nothing.
     let size: i64 = count > 0 ? toI64(count + 1) : toI64(2)
-    for (let i: i32 = start; i < start + count; i++) {
+    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
       size += toI64(pgDecimalLength(values[i]))
     }
     const at: i32 = this.startParam(size > toI64(PG_MAX_CAP) ? PG_MAX_CAP + 1 : toI32(size))
@@ -1805,11 +1809,13 @@ export class PgConnection {
       return false
     }
     this.putByte(PG_LBRACE)
-    for (let i: i32 = start; i < start + count; i++) {
+    for (let i: i32 = start; i < end && i < toI32(values.length); i++) {
+      // Read before the comma's call, which could drop the length fact.
+      const value: i64 = values[i]
       if (i > start) {
         this.putByte(PG_COMMA)
       }
-      this.putDecimal(values[i])
+      this.putDecimal(value)
     }
     this.putByte(PG_RBRACE)
     this.endParam(at)
@@ -1904,8 +1910,10 @@ export class PgConnection {
     if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
       panic("nish/net/postgres: arrayElement() outside its source")
     }
+    // Both loops are bounded by `bytes.length` too, as `paramIntArray`'s are.
+    const end: i32 = start + length
     let escapes: i32 = 0
-    for (let i: i32 = start; i < start + length; i++) {
+    for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
       const c: i32 = toI32(bytes[i])
       if (c === PG_QUOTE || c === PG_BACKSLASH) {
         escapes += 1
@@ -1921,7 +1929,7 @@ export class PgConnection {
       copyBytes(this.out, this.outEnd, bytes, start, length)
       this.outEnd += length
     } else {
-      for (let i: i32 = start; i < start + length; i++) {
+      for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
         const c: i32 = toI32(bytes[i])
         if (c === PG_QUOTE || c === PG_BACKSLASH) {
           this.putByte(PG_BACKSLASH)
