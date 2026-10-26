@@ -472,6 +472,23 @@ export class WorkerConfig {
   idleTimeoutMs: i32 = 75000
 }
 
+/** A pool's connection settings, with up to `maxInFlight` groups in flight on each connection. */
+const pgConfig = (cfg: WorkerConfig, maxInFlight: i32): PgConfig => {
+  const config = new PgConfig()
+  config.user = cfg.dbUser
+  config.database = cfg.dbName
+  config.applicationName = "conduit-nish"
+  // Session settings at startup, for every connection: generic plans for
+  // the prepared statements, no JIT and no parallel workers (one request
+  // is small), and the ISO and UTC spelling the connection reads.
+  config.options =
+    "-c plan_cache_mode=force_generic_plan -c jit=off -c max_parallel_workers_per_gather=0 -c DateStyle=ISO -c TimeZone=UTC"
+  config.maxInFlight = maxInFlight
+  config.inputSize = 65536
+  config.maxOutput = PG_MAX_OUTPUT
+  return config
+}
+
 export class ConduitWorker {
   server: Http1Server
   loop: i32 = -1
@@ -556,33 +573,13 @@ export class ConduitWorker {
     this.loop = pollCreate()
     pollAdd(this.loop, listener, H1_WANT_READ, TOKEN_LISTENER)
     this.jwt = new Jwt(bytesOf(getenv("JWT_SECRET") ?? ""))
-    const config = new PgConfig()
-    config.user = cfg.dbUser
-    config.database = cfg.dbName
-    config.applicationName = "conduit-nish"
-    // Session settings at startup, for every connection: generic plans for
-    // the prepared statements, no JIT and no parallel workers (one request
-    // is small), and the ISO and UTC spelling the connection reads.
-    config.options =
-      "-c plan_cache_mode=force_generic_plan -c jit=off -c max_parallel_workers_per_gather=0 -c DateStyle=ISO -c TimeZone=UTC"
-    config.maxInFlight = cfg.maxInFlight
-    config.inputSize = 65536
-    config.maxOutput = PG_MAX_OUTPUT
     // The read pool opens a connection only once more groups wait than its
     // open connections may have in flight; coalesced, the reads queue few
     // groups, so its cap is its own.
-    const readConfig = new PgConfig()
-    readConfig.user = config.user
-    readConfig.database = config.database
-    readConfig.applicationName = config.applicationName
-    readConfig.options = config.options
-    readConfig.maxInFlight = cfg.readInFlight
-    readConfig.inputSize = config.inputSize
-    readConfig.maxOutput = config.maxOutput
     const password = secret(bytesOf(cfg.dbPassword))
     this.pools = [
-      new PgPool(readConfig, password, cfg.readConns, QUEUE),
-      new PgPool(config, password, cfg.writeConns, QUEUE),
+      new PgPool(pgConfig(cfg, cfg.readInFlight), password, cfg.readConns, QUEUE),
+      new PgPool(pgConfig(cfg, cfg.maxInFlight), password, cfg.writeConns, QUEUE),
     ]
     wipe(password)
     this.sockets = []
@@ -1413,13 +1410,7 @@ export class ConduitWorker {
     const p: i32 = this.poolOf(r)
     if (p === POOL_WRITE && !r.solo) {
       // Writes wait for the next batch: `batchWrites` sends them.
-      r.pool = p
-      r.ticket = -1
-      r.inPool = true
-      r.stmt = 0
-      r.found = false
-      r.pgError = 0
-      r.batchNext = -1
+      this.wait(r, p)
       if (this.writeCount === QUEUE) {
         r.inPool = false
         this.fail(r, 503, "busy", later)
@@ -1433,13 +1424,7 @@ export class ConduitWorker {
     r.shape = shape
     if (shape !== SHAPE_NONE) {
       // Reads of one shape wait for the next coalesced read: `batchReads` sends them.
-      r.pool = p
-      r.ticket = -1
-      r.inPool = true
-      r.stmt = 0
-      r.found = false
-      r.pgError = 0
-      r.batchNext = -1
+      this.wait(r, p)
       if (this.readCount[shape] === QUEUE) {
         r.inPool = false
         r.shape = SHAPE_NONE
@@ -1462,6 +1447,17 @@ export class ConduitWorker {
     r.stmt = 0
     r.found = false
     r.pgError = 0
+  }
+
+  /** Marks `r` as waiting in one of the worker's rings for pool `p`, with no ticket yet. */
+  wait(r: ConduitReq, p: i32): void {
+    r.pool = p
+    r.ticket = -1
+    r.inPool = true
+    r.stmt = 0
+    r.found = false
+    r.pgError = 0
+    r.batchNext = -1
   }
 
   /** The shape `r` is coalesced as, or `SHAPE_NONE` for a read sent alone. */
