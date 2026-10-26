@@ -26,6 +26,17 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-10-26
+
+### Fixed
+
+- cli: Ask no attestation of 0.21.0, and drop unpublished pins from the lockfile ([#964](https://github.com/amritk/nish/pull/964))
+
+### Performance
+
+- bench: Coalesce the Conduit server's same-shape reads into one array-parameter statement ([#963](https://github.com/amritk/nish/pull/963))
+
+
 ## [0.22.0] - 2026-10-25
 
 ### Added
@@ -1193,3 +1204,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.20.0]: https://github.com/amritk/nish/releases/tag/v0.20.0
 [0.21.0]: https://github.com/amritk/nish/releases/tag/v0.21.0
 [0.22.0]: https://github.com/amritk/nish/releases/tag/v0.22.0
+[0.22.1]: https://github.com/amritk/nish/releases/tag/v0.22.1
