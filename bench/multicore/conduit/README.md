@@ -22,9 +22,17 @@ folder the challenge receives is staged at
   (`nish/net/http1-server`'s `Http1Server`), the worker's Postgres
   connections and its bcrypt connection.
 - **Postgres.** Two `PgPool`s per worker, reads (`DB_READ_CONNS`, 3) and
-  writes (`DB_WRITE_CONNS`, 1), each read connection with up to 16 pipelined
-  groups in flight (`DB_MAX_IN_FLIGHT`) and the rest of the requests in the
-  pool's FIFO queue. Every statement is registered up front and prepared on a
+  writes (`DB_WRITE_CONNS`, 1), the write connection with up to 16 pipelined
+  groups in flight (`DB_MAX_IN_FLIGHT`), each read connection with up to 4
+  (`DB_READ_IN_FLIGHT`), and the rest of the requests in the pool's FIFO
+  queue. `PgPool` opens another connection only once more than its starting
+  connections times `maxInFlight` groups wait, so the read pool's lower cap is
+  what lets the coalesced reads reach more than one connection (O8): the
+  second opens past 4 groups in flight and the third past 8. One shape holds
+  at most `DB_READ_BATCHES` (3) groups, so the third connection opens only
+  when several shapes and the uncoalesced reads are in flight together; how
+  many open under the 4,000-user mix has not been counted. Every statement is
+  registered up front and prepared on a
   connection in the same flight as its first request. Every connection starts
   with `plan_cache_mode=force_generic_plan`, `jit=off` and
   `max_parallel_workers_per_gather=0`, set in the startup packet's `options`
@@ -42,6 +50,22 @@ folder the challenge receives is staged at
   one group; only `PUT /api/articles/:slug` takes two round trips, its 404 and
   403 decided between them. A request whose connection is lost answers 500
   and is never sent again: a lost write may have committed.
+- **Coalesced reads** (O9 to O11). `GET /api/articles/:slug`, its
+  `/comments` and `GET /api/tags` are the three read shapes the mix sends most
+  (an article page, 35% of the mix, asks for an article and its comments;
+  the home page and the feed, 37%, each ask for the tags).
+  The requests of one shape that wait in a worker while its read batches are
+  in flight (`DB_READ_BATCHES`, one per read connection) go as one statement:
+  up to 32 slugs and viewers bound as a `text[]` and an `int8[]`,
+  `unnest(...) WITH ORDINALITY` joined to the reference SQL, each row carrying
+  its request's place, so each request is answered from its own rows and
+  answers just as it would alone. The tags read has no parameters, so every
+  request waiting takes the one row of one execution. Nothing is kept past
+  that execution: a request that arrives after it was sent waits for the
+  next (rule 5). One request waiting alone runs the plain statement; a slug
+  Postgres refuses fails the batch, so each of its requests is sent again
+  alone and answers its own error. `concurrency.mjs` checks that every read
+  answers byte for byte what it answers alone.
 - **Rows straight into JSON.** Every result column is read in place from the
   connection's receive buffer (`colStart`, `colLength`) into a `JsonWriter`
   for that connection, with no string made: timestamps through
@@ -77,6 +101,13 @@ record. What it leaves open:
   in the HTTP parser's input buffer and in the request's `body` buffer (and an
   old copy of it when that grew) until they are reused, and none of these is
   wiped.
+- **A slug Postgres refuses spoils its coalesced batch.** A slug with a NUL
+  byte (`%00`) or bytes that are not UTF-8 fails the Bind of the one
+  statement it shares with up to 31 other waiting reads, so the batch fails
+  and every member is sent again alone. The answers stay right (the
+  concurrency check sends both kinds), but a client sending such slugs
+  steadily turns its worker's coalesced reads back into one statement each,
+  plus the failed batch.
 - **A `JWT_SECRET` too short or too guessable** is the operator's problem: the
   key is used as given.
 
@@ -107,31 +138,43 @@ is the same.
 
 ### Where it stands
 
-The current build, three runs each, think-scale 0.1, full seed, after a
-30 s warm-up (`run.sh --users 2000,4000 --repeat 3 --idle 15000`):
+Three runs a row, think-scale 0.1, full seed, after a 30 s warm-up. The
+first three rows are the build before coalescing (O7), from
+`run.sh --users 2000,4000 --repeat 3 --idle 15000`; the last two are one later
+session's pairs, from `run.sh --alt <main> --users 4000 --repeat 3 --idle 0`:
 
 | users | req/s | p95 ms | p99 ms | errors | Postgres µs/req | HTTP µs/req | bcrypt µs/req |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 2,000 | 5,256–5,282 | 2.9–3.4 | 6.0–7.1 | 0 | 274–290 | 53.0–54.6 | 45–49 |
 | 4,000 | 9,960–10,351 | 27–77 | 67–146 | 0 | 233–252 | 33.6–34.0 | 32–36 |
 | 4,000, with group commit (O7) | 10,275–10,422 | 21–37 | 40–70 | 0 | 233–246 | 34.2–34.6 | 26–31 |
+| 4,000, with coalesced reads (O11), against `main` in the same session | 9,099–9,628 | 87–135 | 137–308 | 0 | **258–268** | 37.5–39.3 | 32.7–33.8 |
+| 4,000, `main` (O7) in that session | 9,230–9,323 | 110–123 | 170–176 | 0 | 279–286 | 37.3–37.7 | 33.4–36.8 |
 
-The last row is the six group-commit runs that served as the B side of O8's
-pairs, on the build as it stands.
+The third row is the six group-commit runs that served as the B side of O8's
+pairs. The last two are one later session's three pairs, the coalesced build
+against `main` (`run.sh --alt <main> --users 4000 --repeat 3 --idle 0`), where
+the machine gives the same `main` 279–286 µs, about 17% above the earlier
+session's 233–246. Paired, coalescing takes **−17.7, −23.2 and −21.3 µs**, a
+mean of **−20.7 µs (−7.3%)**, outside both builds' spreads (10.4 and 6.8). p95
+is lower on two pairs of three and higher on the first (135 against 118 ms),
+whose p99 is too (308 against 173); the means are p95 108 against 117 ms and
+p99 201 against 173.
 
 Memory per idle keep-alive connection: **1.13 KiB** of the server's RSS at
-15,000 connections (the kernel's socket buffers aside), against 3.20 KiB before
-`idleInput`.
+15,000 connections, measured on the build before coalescing (the coalesced
+build's session ran `--idle 0`, so it has no figure of its own), the
+kernel's socket buffers aside, against 3.20 KiB before `idleInput`.
 
 Against the figures derived from #1 (rust-tokio-Scooter1337: 100,000 users,
 26,279 req/s, 70% of 8 cores in Postgres and 20% in the app):
 
 | per request | #1 (derived) | here, at 10,000 req/s | target |
 | --- | ---: | ---: | --- |
-| Postgres CPU | ≈ 213 µs | 233–246 µs | ≤ 190 µs: **missed** |
-| app CPU | ≈ 61 µs | 34 µs HTTP + ≈ 17 µs bcrypt at the box's login rate | ≤ 61 µs: met |
-| RSS per idle connection | ~1 KiB at 100k | 1.13 KiB | ~1 KiB: met |
-| p95 / p99 / errors | <500 ms / <1 s / <1% | 21–37 ms / 40–70 ms / 0 | met, at 4,000 users here |
+| Postgres CPU | ≈ 213 µs | 258–268 µs against `main`'s 279–286 in one session; ≈ 216–228 µs on the earlier session's scale | ≤ 190 µs: **missed** |
+| app CPU | ≈ 61 µs | 37.5–39.3 µs HTTP (coalesced build, later session) + ≈ 17 µs bcrypt at the box's login rate | ≤ 61 µs: met |
+| RSS per idle connection | ~1 KiB at 100k | 1.13 KiB (the build before coalescing) | ~1 KiB: met |
+| p95 / p99 / errors | <500 ms / <1 s / <1% | 87–135 ms / 137–308 ms / 0 | met, at 4,000 users here |
 
 The bcrypt figure measured here (32–36 µs) is a 4-core container's: at
 think-scale 0.1 about 10 logins a second arrive, so most batches run one
@@ -140,9 +183,18 @@ about 16 ms of one core a login, which is about 17 µs a request.
 
 **Projection for the 8-vCPU box**, from these per-request costs: a challenge
 user makes 0.263 requests a second (#1's 26,279 req/s over 100,000 users), so
-one costs 0.263 × (240 + 34) µs plus bcrypt's 4.4 µs ≈ 77 µs of CPU a second;
-with 90% of 8 cores usable, as #1 used, that is **about 94,000 users** (92,000 to 96,000 across the
-spread of Postgres's 233–246 µs), against #1's 100,000. The
+one costs 0.263 × (Postgres + HTTP) µs plus bcrypt's 4.4 µs of CPU a second,
+and 90% of 8 cores is usable, as #1 used: users = 7.2 s of CPU a second ÷
+(0.263 × (Postgres + HTTP) + 4.4) µs. On the one session that measured both
+builds, the means of the three pairs give **about 86,500 users** for the
+coalesced build (261.5 + 38.2 µs; 84,500 to 87,800 from its slowest and
+fastest run) against **about 81,400** for `main` (282.3 + 37.5 µs; 80,500 to
+82,300), **+6%**. That session's machine was slower throughout than the earlier
+one, where O7's 240 + 34 µs gave about 94,000 users. Carrying the paired
+−7.3% over to that earlier scale is the assumption-laden figure: Postgres
+222.5 µs (216–228, O7's 233–246 less 7.3%) and HTTP 34.7 µs (O7's 34 plus the
+0.7 µs the coalesced build measured above `main`) give about 100,000 users
+(98,000 to 102,400 across that Postgres range). Both rest on these
 assumptions: per-request costs no higher at the box's 26,000 req/s than at the
 10,000 measured here (they fell from 2,000 to 4,000 users, which argues
 lower); the load generator on separate machines, where here it shares the
@@ -156,7 +208,9 @@ users, 500,000 articles), think-scale 0.1, 30 s warm-up, 20 s ramp, 60 s
 measured, `HTTP_WORKERS=2 DB_READ_CONNS=3 DB_WRITE_CONNS=1`. "app" is every
 server process; it splits into the HTTP workers and the bcrypt service. A
 change is kept only when it moves a figure by more than the spread of the
-three runs before it.
+three runs before it. The one exception is a stack whose parts pay only
+together: O9 (+4.5 µs alone) was kept as the base for O10 and O11, and the
+stack is judged against `main`, in the coalesced-reads row above.
 
 ### Baseline: the reference SQL
 
@@ -216,6 +270,10 @@ of one request sent as one pipeline, as the server sends them.
 | O6 | a list page and its capped count as one statement (the count a `WITH` joined to the page) | — | — | — | no: pipelined, the pair costs the same (343–381 against 360–386 µs a call) and the joined form needs a column offset on every row |
 | O7 | group commit: writes wait until the write connection has no batch in flight, then up to 128 go as one group, one transaction and one WAL flush; a failed group retries each write alone, a lost one answers 500 (three pairs at 4,000 users) | 234–240 against 240–241, **−3.9 µs (−1.6%)** paired | 34.1–34.2 / 33.9–34.1 | p95 **23–33** against 39–46, p99 **45–67** against 90–129 | yes: the tail halves, since a write no longer waits behind other writes' flushes on its connection. Checked under concurrency: 40 favorites at once all 200 and the count up by 40; 20 sign-ups with three duplicate names, 18 201s and two 422s, one row |
 | O8 | read batching: up to 32 waiting reads as one pipelined group, one implicit transaction, each answered when its last statement completes (three pairs at 4,000 users against O7) | first build 207–220 against 237–240, but p95 **78–111** against 23–27: `PgPool` opens a connection only once more than `maxInFlight` (16) groups per connection wait, and batching never queued that many, so every read ran on one backend per worker. Neither a Flush after each read nor 8-read batches nor two batches a connection moved p95 (54–133). With the pool's cap at the batch depth, every connection open: 231–245 against 233–246 | 33.5–34.1 / 34.2–34.5 | p95 22–42 against 21–33 | no: inside the spread once the reads are spread over the connections. What it saved was one backend doing a worker's reads, which saturates it |
+| O9 | coalesced article reads: the `GET /api/articles/:slug` requests waiting in a worker as one `article_slugs` statement over `unnest($1::text[], $2::int8[]) WITH ORDINALITY`, up to 32 a batch, `DB_READ_BATCHES` (3) in flight, the read pool's `maxInFlight` 4 (three pairs at 4,000 users against `main`; this session's machine gives `main` 292–295 µs, not the 233–246 of the rows above) | 291–309 against 292–295, **+4.5 µs** paired (+17.5, −1.7, −2.3) | 42.3–45.1 / 37.9–38.5 | p95 152–246 against 138–149 | kept as the base of O10 and O11, not on its own figures: the batch statement costs 526 µs a call for 5 rows on average (`pg_stat_statements`, one run), 105 a row against 167 for one alone, but article GET is about 5% of the statements' time. The concurrency check: 7,720 concurrent reads, 193 distinct, every one answered as alone |
+| O9b | O9 with `DB_READ_BATCHES=1`, so batches grow larger | — | — | p95 **531** (article GET 819) | no: fails the verdict (p95 ≥ 500 ms). One batch at a time waits behind list pages in the read pool's FIFO, and every article read waiting waits with it |
+| O10 | coalesced comment reads, the same way (`comment_slugs`: the article by slug, `LEFT JOIN LATERAL` its 100 newest comments, the place column `COMMENT_ORD`) (three pairs against O9) | 282–291 against 288–309, **−13 µs (−4.3%)** paired (−27.2, −15.0, +3.2) | 40.8–41.6 / 42.4–45.2 | p95 143–186 against 174–249 | yes, as marginal: the mean of the pairs is outside A's spread (8.5) but inside B's (22). The two shapes together are 35% of requests, which is what makes O9's machinery pay. Concurrency: 7,720 reads in 4,022 transactions, against 5,778 for O9 |
+| O11 | every waiting `GET /api/tags` of a worker answered by one execution of its one-row statement, with no cap on how many (three pairs against O10) | 258–268 against 274–287, **−16 µs (−5.8%)** paired (−10.5, −8.8, −29.1) | 37.3–38.9 / 40.1–41.4 | p95 **82–115** against 134–162, p99 127–174 against 211–239 | yes: outside both spreads (9.9 and 13.9) on every pair, and the tail falls by a third, since 37% of requests (the home page and the feed) ask for the tags first. Concurrency: 7,720 reads in 4,093 transactions |
 
 ### The HTTP worker's own instructions
 
