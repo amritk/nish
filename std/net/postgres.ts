@@ -396,7 +396,7 @@ const pgHasNul = (text: string): boolean => {
  */
 const pgIsText = (b: u8[], from: i32, end: i32): boolean => {
   let i: i32 = from
-  while (i < end && i < toI32(b.length)) {
+  while (i >= 0 && i < end && i < toI32(b.length)) {
     const c: i32 = toI32(b[i])
     if (c < 0x80) {
       if (c === 0) {
