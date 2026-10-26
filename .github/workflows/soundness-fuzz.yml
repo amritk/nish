@@ -39,6 +39,10 @@ permissions:
   contents: read
 
 # ci.yml says why this cache is set for every job, and why it is outside the checkout.
+#
+# Every Ubuntu install step first points apt from the Azure mirror at
+# archive.ubuntu.com: the Azure mirror served libllvm18 at about 100 KB/s
+# on #963 and timed the five-minute install out before any test ran.
 env:
   NODE_COMPILE_CACHE: /tmp/nish-node-compile-cache
   APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30
@@ -63,6 +67,7 @@ jobs:
       - name: Install LLVM 18 + lld + the sanitizer runtimes
         timeout-minutes: 5
         run: |
+          grep -rlZ azure.archive.ubuntu.com /etc/apt | xargs -0r sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g'
           sudo apt-get $APT_OPTS update
           sudo apt-get $APT_OPTS install -y --no-install-recommends clang-18 lld-18 llvm-18 libclang-rt-18-dev
           bin="$RUNNER_TEMP/llvm-bin"

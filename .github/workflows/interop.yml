@@ -68,6 +68,10 @@ concurrency:
   group: interop-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+#
+# Every Ubuntu install step first points apt from the Azure mirror at
+# archive.ubuntu.com: the Azure mirror served libllvm18 at about 100 KB/s
+# on #963 and timed the five-minute install out before any test ran.
 env:
   # The quic-interop-runner at a fixed commit, and the images it drives.
   RUNNER_COMMIT: 740c05a10b61d65e8abd3ad38d60898004d335d9
@@ -194,6 +198,7 @@ jobs:
           mkdir -p "$archives/partial"
           apt_cache="-o Dir::Cache::Archives=$archives -o APT::Sandbox::User=root"
           pkgs="tshark=4.2.2-1.1build3"
+          grep -rlZ azure.archive.ubuntu.com /etc/apt | xargs -0r sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g'
           sudo apt-get $APT_OPTS update
           for attempt in 1 2 3; do
             if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
