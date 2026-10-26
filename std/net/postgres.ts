@@ -789,6 +789,8 @@ export class PgConnection {
   private groupOpen: boolean = false
   /** Whether a statement in the group `PG_GROUP_DONE` just finished failed. */
   groupFailed: boolean = false
+  // Whether the open bind opened its group, which `bindCancel` closes again.
+  private bindOpened: boolean = false
   private bindAt: i32 = -1
   private paramCountAt: i32 = 0
   private paramCount: i32 = 0
@@ -1666,9 +1668,11 @@ export class PgConnection {
    * order, then `bindEnd()`. False as `prepare` is.
    */
   bindStart(name: string): boolean {
+    const opens: boolean = !this.groupOpen
     if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(11 + toI32(name.length))) {
       return false
     }
+    this.bindOpened = opens
     this.bindAt = this.startMessage(PG_FE_BIND)
     this.putByte(PG_ZERO)
     this.putCString(name)
@@ -1864,7 +1868,7 @@ export class PgConnection {
   }
 
   // An array parameter built element by element: `arrayStart()`, then
-  // `arrayElement` or `arrayNull` for each element, then `arrayEnd()`. An
+  // `arrayElement`, `arrayInt` or `arrayNull` for each element, then `arrayEnd()`. An
   // element refused for room writes nothing and leaves the array open, so a
   // program that batches rows ends the array with the elements it has and
   // sends the rest in the next statement. While an array is open, every other
@@ -1959,6 +1963,17 @@ export class PgConnection {
     this.arrayCount += 1
   }
 
+  /** An integer element, in decimal; false, and nothing written, when there is no room. Panics when no array is open. */
+  arrayInt(value: i64): boolean {
+    this.arrayOpen()
+    if (!this.elementRoom(toI64(pgDecimalLength(value)))) {
+      return false
+    }
+    this.elementComma()
+    this.putDecimal(value)
+    return true
+  }
+
   /** Ends the open array parameter; never refused for room, which its elements kept. Panics when no array is open. */
   arrayEnd(): void {
     if (this.arrayAt < 0) {
@@ -1992,6 +2007,25 @@ export class PgConnection {
     this.putByte(PG_ZERO)
     this.putI32(PG_ZERO)
     this.endMessage(execute)
+    return true
+  }
+
+  /**
+   * Drops the open bind, and the array open in it, unsent, so that a program
+   * whose parameter was refused for room can send the group without it; a
+   * group the bind opened is closed again. False when no bind is open.
+   */
+  bindCancel(): boolean {
+    if (this.bindAt < 0) {
+      return false
+    }
+    this.outEnd = this.bindAt
+    this.bindAt = -1
+    this.arrayAt = -1
+    if (this.bindOpened) {
+      this.groupOpen = false
+      this.inFlight -= 1
+    }
     return true
   }
 
@@ -2469,5 +2503,515 @@ export class PgPool {
         conn.dispose()
       }
     }
+  }
+}
+
+// --- Batching ------------------------------------------------------------------
+
+/** `PgBatchConfig.keyType`: the keys are `int8`, given to `PgBatcher.addInt`. */
+export const PG_BATCH_INT: i32 = 0
+/** `PgBatchConfig.keyType`: the keys are `text`, given to `PgBatcher.addText`. */
+export const PG_BATCH_TEXT: i32 = 1
+
+/** `PgBatcher.next(run)`: no event until the next row, `end` or `fail`. */
+export const PG_BATCH_NONE: i32 = 0
+/** `PgBatcher.next(run)`: the connection's current row answers the request `tag`. */
+export const PG_BATCH_ROW: i32 = 1
+/** `PgBatcher.next(run)`: the request `tag` has had all its rows, at least one. */
+export const PG_BATCH_DONE: i32 = 2
+/** `PgBatcher.next(run)`: no row answered the request `tag`'s key. */
+export const PG_BATCH_MISSING: i32 = 3
+/** `PgBatcher.next(run)`: the request `tag`'s execution failed, and its rows so far may be incomplete. */
+export const PG_BATCH_FAILED: i32 = 4
+
+const PG_BATCH_MAX_REQUESTS: i32 = 65536
+const PG_BATCH_MAX_QUEUE: i32 = 1048576
+const PG_BATCH_MAX_RUNS: i32 = 1024
+// The array's `{}` and the longest int8 element, `-9223372036854775808`.
+const PG_BATCH_MIN_BYTES: i32 = 22
+
+/** What a `PgBatcher` sends: one statement shape, its key, and its caps. */
+export class PgBatchConfig {
+  /** The prepared statement's name, which `PgBatcher.sql` is prepared under. */
+  name: string = ""
+  /** The query for one key, `q.key`: `select id, title from articles where slug = q.key`. */
+  select: string = ""
+  /** Columns of `t`, the query's rows, ordering the rows of one key: `t.created_at desc`; "" for none. */
+  orderBy: string = ""
+  /** `PG_BATCH_INT` or `PG_BATCH_TEXT`. */
+  keyType: i32 = 0
+  /** The most requests one execution answers. */
+  maxRequests: i32 = 32
+  /** The most bytes the key array parameter takes, `{}` included. */
+  maxBytes: i32 = 32768
+  /** The most requests waiting. */
+  queueSize: i32 = 1024
+  /** The most bytes of text keys waiting. */
+  queueBytes: i32 = 65536
+  /** The most executions in flight at once. */
+  runs: i32 = 16
+}
+
+/** One execution's requests, grouped by key, and how far its rows have been routed. */
+class PgBatchRun {
+  /** Key `k`'s requests' tags are `tags[first[k], first[k + 1])`, in the order they were added. */
+  readonly tags: i32[]
+  readonly first: i32[]
+  keys: i32 = 0
+  /** The key rows are being read for, whether it has had one, and the next of its requests to answer. */
+  cur: i32 = 0
+  curRows: boolean = false
+  at: i32 = 0
+  /** The key whose `PG_BATCH_ROW` events are owed for the connection's current row; -1 for none. */
+  target: i32 = -1
+  open: boolean = false
+  ended: boolean = false
+  failed: boolean = false
+
+  constructor(maxRequests: i32) {
+    this.tags = new Array<i32>(maxRequests)
+    this.first = new Array<i32>(maxRequests + 1)
+  }
+}
+
+/**
+ * Batches keyed reads of one statement shape, sans-IO like `PgConnection`:
+ * it reads no clock and makes no socket. Each request is a key and the
+ * caller's `tag`, queued by `addInt` or `addText`. When a connection is free,
+ * `take(conn)` binds up to `maxRequests` of them, and up to `maxBytes` of
+ * keys, as one execution of `sql`, each distinct key once, and answers the
+ * execution's run. Each `PG_ROW` of that execution goes to `row(run, conn)`,
+ * its `PG_COMPLETE` to `end(run)`, and an error or a lost connection to
+ * `fail(run)`; after each, `next(run)` answers events until
+ * `PG_BATCH_NONE`, `tag` naming the request each is about. Every row goes to
+ * every request for its key, and every request gets one last event:
+ * `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED`.
+ *
+ * Nothing outlives its execution: a run is free again once the events
+ * `end` or `fail` owe are answered, and `row`, `end` and `fail` then panic
+ * on it until `take` hands it out again. The ordinal each row carries comes
+ * from the server and is checked before it routes anything.
+ */
+export class PgBatcher {
+  /** The prepared statement's name. */
+  readonly name: string
+  /** The statement to prepare under `name` (`PgPool.register` or `PgConnection.prepare`, no parameter types); each row's last column is the ordinal it routes by. */
+  readonly sql: string
+  // The queue, a ring: each request's tag, its key's hash and encoded size,
+  // and the key: an int8, or a window of `store`, where text keys sit in the
+  // order they were added, from the oldest's start to `storeEnd`.
+  private readonly qTags: i32[]
+  private readonly qHashes: i32[]
+  private readonly qSizes: i32[]
+  private readonly qInts: i64[]
+  private readonly qStarts: i32[]
+  private readonly qLengths: i32[]
+  private readonly store: u8[]
+  // `take`'s open-addressed table of the keys it has bound, each a key number
+  // plus one, 0 for an empty slot; and for each key, its slot and its first request.
+  private readonly table: i32[]
+  private readonly keySlots: i32[]
+  private readonly keyEntries: i32[]
+  private readonly keyCounts: i32[]
+  private readonly takenKeys: i32[]
+  private readonly runs: PgBatchRun[]
+  /** The request the last `next(run)` answered about; -1 for none. */
+  tag: i32 = -1
+  /** The number of rows refused because their ordinal named no key still open; each failed its execution. */
+  refused: i32 = 0
+  private readonly keyType: i32
+  private readonly maxRequests: i32
+  private readonly maxBytes: i32
+  private storeEnd: i32 = 0
+  private head: i32 = 0
+  private count: i32 = 0
+
+  /** A batcher for `config`; panics when a name or query is empty or holds a NUL, or a cap is out of range. */
+  constructor(config: PgBatchConfig) {
+    const keyType: i32 = config.keyType
+    if (keyType !== PG_BATCH_INT && keyType !== PG_BATCH_TEXT) {
+      panic("nish/net/postgres: a PgBatchConfig keyType out of range")
+    }
+    if (
+      config.name.length === 0 ||
+      config.select.length === 0 ||
+      pgHasNul(config.name) ||
+      pgHasNul(config.select) ||
+      pgHasNul(config.orderBy)
+    ) {
+      panic("nish/net/postgres: a PgBatchConfig name or query empty or with a NUL")
+    }
+    const maxRequests: i32 = config.maxRequests
+    if (
+      maxRequests < 1 ||
+      maxRequests > PG_BATCH_MAX_REQUESTS ||
+      config.maxBytes < PG_BATCH_MIN_BYTES ||
+      config.maxBytes > PG_MAX_CAP ||
+      config.queueSize < 1 ||
+      config.queueSize > PG_BATCH_MAX_QUEUE ||
+      config.queueBytes < 0 ||
+      config.queueBytes > PG_MAX_CAP ||
+      config.runs < 1 ||
+      config.runs > PG_BATCH_MAX_RUNS
+    ) {
+      panic("nish/net/postgres: a PgBatchConfig cap out of range")
+    }
+    this.keyType = keyType
+    this.maxRequests = maxRequests
+    this.maxBytes = config.maxBytes
+    this.name = config.name
+    const type: string = keyType === PG_BATCH_INT ? "int8" : "text"
+    const order: string = config.orderBy.length > 0 ? `, ${config.orderBy}` : ""
+    this.sql = `select t.*, q.ord from unnest($1::${type}[]) with ordinality as q(key, ord) cross join lateral (${config.select}) as t order by q.ord${order}`
+    const queueSize: i32 = config.queueSize
+    this.qTags = new Array<i32>(queueSize)
+    this.qHashes = new Array<i32>(queueSize)
+    this.qSizes = new Array<i32>(queueSize)
+    const text: boolean = keyType === PG_BATCH_TEXT
+    const intSize: i32 = text ? 0 : queueSize
+    const textSize: i32 = text ? queueSize : 0
+    const storeSize: i32 = text ? config.queueBytes : 0
+    this.qInts = new Array<i64>(intSize)
+    this.qStarts = new Array<i32>(textSize)
+    this.qLengths = new Array<i32>(textSize)
+    this.store = new Array<u8>(storeSize)
+    // At least twice the keys a take can hold, a power of two for the mask.
+    let tableSize: i32 = 2
+    while (tableSize < 2 * maxRequests) {
+      tableSize *= 2
+    }
+    this.table = new Array<i32>(tableSize)
+    this.keySlots = new Array<i32>(maxRequests)
+    this.keyEntries = new Array<i32>(maxRequests)
+    this.keyCounts = new Array<i32>(maxRequests)
+    this.takenKeys = new Array<i32>(maxRequests)
+    this.runs = []
+    for (let r: i32 = 0; r < config.runs; r++) {
+      this.runs.push(new PgBatchRun(maxRequests))
+    }
+  }
+
+  /** The number of requests waiting for `take`. */
+  waiting(): i32 {
+    return this.count
+  }
+
+  /** Queues a request for the int8 `key`; false when `queueSize` are waiting. Panics on a text batcher. */
+  addInt(key: i64, tag: i32): boolean {
+    if (this.keyType !== PG_BATCH_INT) {
+      panic("nish/net/postgres: PgBatcher.addInt on a text batcher")
+    }
+    const q: i32 = this.slotToAdd()
+    if (q < 0) {
+      return false
+    }
+    // Both halves folded to 31 bits, so that no step can overflow.
+    const h: i32 = toI32(key & toI64(0x7fffffff)) ^ toI32((key >> toI64(31)) & toI64(0x7fffffff))
+    this.qInts[q] = key
+    this.added(q, tag, h ^ (h >> 15), pgDecimalLength(key))
+    return true
+  }
+
+  /**
+   * Queues a request for the text key `bytes[start, start + length)`, UTF-8,
+   * which is copied; false when `queueSize` are waiting, the key would not
+   * fit in `queueBytes` beside those waiting, or it is too long for one
+   * execution's `maxBytes`. Panics on an int8 batcher, or when the window is
+   * not inside `bytes`.
+   */
+  addText(bytes: u8[], start: i32, length: i32, tag: i32): boolean {
+    if (this.keyType !== PG_BATCH_TEXT) {
+      panic("nish/net/postgres: PgBatcher.addText on an int8 batcher")
+    }
+    if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
+      panic("nish/net/postgres: PgBatcher.addText outside its source")
+    }
+    // The element as `arrayElement` writes it: quoted, `"` and `\` escaped.
+    const end: i32 = start + length
+    let size: i64 = toI64(length) + 2
+    let h: i32 = 0
+    for (let i: i32 = start; i < end && i < toI32(bytes.length); i++) {
+      const c: i32 = toI32(bytes[i])
+      if (c === PG_QUOTE || c === PG_BACKSLASH) {
+        size += 1
+      }
+      // Kept under 2^20 before the multiply, so that no step can overflow.
+      h = (h & 0xfffff) * 31 + c
+    }
+    if (size + 2 > toI64(this.maxBytes)) {
+      return false
+    }
+    const q: i32 = this.slotToAdd()
+    if (q < 0) {
+      return false
+    }
+    let at: i32 = this.storeEnd
+    if (length > toI32(this.store.length) - at) {
+      // The waiting keys are moved to the front, the room the taken ones left after them.
+      const from: i32 = this.count > 0 ? this.qStarts[this.head] : at
+      copyBytes(this.store, 0, this.store, from, at - from)
+      for (let i: i32 = 0; i < this.count; i++) {
+        const w: i32 = (this.head + i) % toI32(this.qStarts.length)
+        this.qStarts[w] -= from
+      }
+      at -= from
+      this.storeEnd = at
+      if (length > toI32(this.store.length) - at) {
+        return false
+      }
+    }
+    copyBytes(this.store, at, bytes, start, length)
+    this.storeEnd = at + length
+    this.qStarts[q] = at
+    this.qLengths[q] = length
+    this.added(q, tag, h, toI32(size))
+    return true
+  }
+
+  /** The ring slot the next request goes in, or -1 when the queue is full. */
+  private slotToAdd(): i32 {
+    const size: i32 = toI32(this.qTags.length)
+    return this.count === size ? -1 : (this.head + this.count) % size
+  }
+
+  private added(q: i32, tag: i32, hash: i32, size: i32): void {
+    this.qTags[q] = tag
+    this.qHashes[q] = hash
+    this.qSizes[q] = size
+    this.count += 1
+  }
+
+  /** Whether the keys of the queued requests `a` and `b` are equal. */
+  private sameKey(a: i32, b: i32): boolean {
+    if (this.keyType === PG_BATCH_INT) {
+      return this.qInts[a] === this.qInts[b]
+    }
+    const n: i32 = this.qLengths[a]
+    if (n !== this.qLengths[b]) {
+      return false
+    }
+    const x: i32 = this.qStarts[a]
+    const y: i32 = this.qStarts[b]
+    for (let i: i32 = 0; i < n; i++) {
+      if (this.store[x + i] !== this.store[y + i]) {
+        return false
+      }
+    }
+    return true
+  }
+
+  /**
+   * Binds the oldest waiting requests on `conn` as one execution of `sql`,
+   * prepared there already, and answers its run; the caller ends the group
+   * (`sync()`, or `PgPool.send()`). It takes up to `maxRequests` requests,
+   * oldest first, and stops at the first whose key would pass `maxBytes` or
+   * the connection's `maxOutput`; those not taken stay queued. -1, and
+   * nothing written, when none waits, every run is in flight, or `conn`
+   * refused the bind or the first key.
+   */
+  take(conn: PgConnection): i32 {
+    if (this.count === 0) {
+      return -1
+    }
+    let r: i32 = -1
+    for (let i: i32 = 0; i < toI32(this.runs.length); i++) {
+      if (!this.runs[i].open) {
+        r = i
+        break
+      }
+    }
+    if (r < 0 || !conn.bindStart(this.name)) {
+      return -1
+    }
+    if (!conn.arrayStart()) {
+      conn.bindCancel()
+      return -1
+    }
+    const ring: i32 = toI32(this.qTags.length)
+    const mask: i32 = toI32(this.table.length) - 1
+    let keys: i32 = 0
+    let taken: i32 = 0
+    let bytes: i32 = 2
+    while (taken < this.count && taken < this.maxRequests && taken < toI32(this.takenKeys.length)) {
+      const q: i32 = (this.head + taken) % ring
+      // Probe for the key: a slot holding it, or the empty slot it would take.
+      let slot: i32 = this.qHashes[q] & mask
+      let k: i32 = -1
+      while (this.table[slot] > 0) {
+        const seen: i32 = this.table[slot] - 1
+        if (this.sameKey(this.keyEntries[seen], q)) {
+          k = seen
+          break
+        }
+        slot = (slot + 1) & mask
+      }
+      if (k < 0) {
+        const cost: i32 = this.qSizes[q] + (keys > 0 ? 1 : 0)
+        if (cost > this.maxBytes - bytes || !this.bindKey(conn, q)) {
+          break
+        }
+        bytes += cost
+        k = keys
+        keys += 1
+        this.table[slot] = keys
+        this.keySlots[k] = slot
+        this.keyEntries[k] = q
+        this.keyCounts[k] = 0
+      }
+      this.keyCounts[k] += 1
+      this.takenKeys[taken] = k
+      taken += 1
+    }
+    for (let k: i32 = 0; k < keys && k < toI32(this.keySlots.length); k++) {
+      this.table[this.keySlots[k]] = 0
+    }
+    if (taken === 0) {
+      conn.bindCancel()
+      return -1
+    }
+    conn.arrayEnd()
+    conn.bindEnd()
+    // The requests grouped by key, each key's in the order they were added.
+    const run: PgBatchRun = this.runs[r]
+    run.first[0] = 0
+    for (let k: i32 = 0; k < keys && k < toI32(this.keyCounts.length); k++) {
+      run.first[k + 1] = run.first[k] + this.keyCounts[k]
+      this.keyCounts[k] = run.first[k]
+    }
+    for (let i: i32 = 0; i < taken && i < toI32(this.takenKeys.length); i++) {
+      const k: i32 = this.takenKeys[i]
+      run.tags[this.keyCounts[k]] = this.qTags[(this.head + i) % ring]
+      this.keyCounts[k] += 1
+    }
+    run.open = true
+    run.keys = keys
+    run.cur = 0
+    run.curRows = false
+    run.at = 0
+    run.target = -1
+    run.ended = false
+    run.failed = false
+    this.head = (this.head + taken) % ring
+    this.count -= taken
+    if (this.count === 0) {
+      this.storeEnd = 0
+    }
+    return r
+  }
+
+  /** Writes the queued request `q`'s key as the open array's next element; false when `conn` has no room. */
+  private bindKey(conn: PgConnection, q: i32): boolean {
+    if (this.keyType === PG_BATCH_INT) {
+      return conn.arrayInt(this.qInts[q])
+    }
+    return conn.arrayElement(this.store, this.qStarts[q], this.qLengths[q])
+  }
+
+  private run(r: i32): PgBatchRun {
+    if (r < 0 || r >= toI32(this.runs.length)) {
+      panic("nish/net/postgres: a PgBatcher run out of range")
+    }
+    return this.runs[r]
+  }
+
+  /** The run `r`, which `take` handed out, not ended, and whose events are all answered. */
+  private quietRun(r: i32, what: string): PgBatchRun {
+    const run: PgBatchRun = this.run(r)
+    if (!run.open) {
+      panic(`nish/net/postgres: PgBatcher.${what} on a run that is over`)
+    }
+    if (run.target >= 0 || run.ended) {
+      panic(`nish/net/postgres: PgBatcher.${what} before next(run) answered PG_BATCH_NONE`)
+    }
+    return run
+  }
+
+  /**
+   * Routes `conn`'s current row, of run `r`'s execution, by the ordinal in
+   * its last column: `next(r)` then answers `PG_BATCH_ROW` for each request
+   * of its key, after the last events of the keys before it. False, and the
+   * row dropped, when the run has failed; and when the ordinal is NULL, not
+   * an integer, or names no key still open (one out of range, or one before
+   * the key the last row was for): that counts in `refused` and fails the
+   * run. Panics when the run is over or its events are not all answered.
+   */
+  row(r: i32, conn: PgConnection): boolean {
+    const run: PgBatchRun = this.quietRun(r, "row")
+    if (run.failed) {
+      return false
+    }
+    const last: i32 = conn.columns - 1
+    let ordinal: i64 = 0
+    let bad: boolean = last < 0 || conn.isNull(last)
+    if (!bad) {
+      // Read without touching `text.failed`, which belongs to the program's own decoding.
+      const failed: boolean = conn.text.failed
+      conn.text.failed = false
+      ordinal = conn.int(last)
+      bad = conn.text.failed
+      conn.text.failed = failed
+    }
+    // Ordinals count from 1 and come in order: a row may name the current key again, never one before it.
+    if (bad || ordinal < toI64(run.cur) + 1 || ordinal > toI64(run.keys)) {
+      this.refused += 1
+      run.failed = true
+      return false
+    }
+    run.target = toI32(ordinal) - 1
+    return true
+  }
+
+  /** Ends run `r`'s execution, on its `PG_COMPLETE`: `next(r)` then closes every request left. Panics as `row` does. */
+  end(r: i32): void {
+    this.quietRun(r, "end").ended = true
+  }
+
+  /** Fails run `r`'s execution, on its `PG_ERROR` or `PG_LOST`: `next(r)` then answers `PG_BATCH_FAILED` for every request left. Panics as `row` does. */
+  fail(r: i32): void {
+    const run: PgBatchRun = this.quietRun(r, "fail")
+    run.failed = true
+    run.ended = true
+  }
+
+  /**
+   * The next event `row`, `end` or `fail` owes on run `r`, with `tag` the
+   * request it is about; `PG_BATCH_NONE`, and `tag` -1, when there is none.
+   * Once `end` or `fail` has had all its events the run is over and free
+   * for `take` again.
+   */
+  next(r: i32): i32 {
+    const run: PgBatchRun = this.run(r)
+    this.tag = -1
+    if (!run.open) {
+      return PG_BATCH_NONE
+    }
+    // The keys before the row's, or every key once the execution is over, have had all their rows.
+    const limit: i32 = run.target >= 0 ? run.target : run.ended ? run.keys : run.cur
+    while (run.cur < limit && run.cur < toI32(run.tags.length)) {
+      const at: i32 = run.first[run.cur] + run.at
+      if (at < run.first[run.cur + 1]) {
+        run.at += 1
+        this.tag = run.tags[at]
+        return run.failed ? PG_BATCH_FAILED : run.curRows ? PG_BATCH_DONE : PG_BATCH_MISSING
+      }
+      run.cur += 1
+      run.at = 0
+      run.curRows = false
+    }
+    if (run.target >= 0 && run.cur < toI32(run.tags.length)) {
+      run.curRows = true
+      const at: i32 = run.first[run.cur] + run.at
+      if (at < run.first[run.cur + 1]) {
+        run.at += 1
+        this.tag = run.tags[at]
+        return PG_BATCH_ROW
+      }
+      run.target = -1
+      run.at = 0
+    }
+    if (run.ended && run.cur >= run.keys) {
+      run.open = false
+    }
+    return PG_BATCH_NONE
   }
 }
