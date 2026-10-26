@@ -1904,24 +1904,30 @@ export class PgConnection {
     if (start < 0 || length < 0 || length > toI32(bytes.length) - start) {
       panic("nish/net/postgres: arrayElement() outside its source")
     }
-    let size: i64 = toI64(length) + 2
+    let escapes: i32 = 0
     for (let i: i32 = start; i < start + length; i++) {
       const c: i32 = toI32(bytes[i])
-      if (c === 34 || c === 92) {
-        size += 1
+      if (c === PG_QUOTE || c === PG_BACKSLASH) {
+        escapes += 1
       }
     }
-    if (!this.elementRoom(size)) {
+    if (!this.elementRoom(toI64(length) + toI64(escapes) + 2)) {
       return false
     }
     this.elementComma()
     this.putByte(PG_QUOTE)
-    for (let i: i32 = start; i < start + length; i++) {
-      const c: i32 = toI32(bytes[i])
-      if (c === 34 || c === 92) {
-        this.putByte(PG_BACKSLASH)
+    this.reserve(this.outEnd + length + escapes + 1)
+    if (escapes === 0) {
+      copyBytes(this.out, this.outEnd, bytes, start, length)
+      this.outEnd += length
+    } else {
+      for (let i: i32 = start; i < start + length; i++) {
+        const c: i32 = toI32(bytes[i])
+        if (c === PG_QUOTE || c === PG_BACKSLASH) {
+          this.putByte(PG_BACKSLASH)
+        }
+        this.putByte(c)
       }
-      this.putByte(c)
     }
     this.putByte(PG_QUOTE)
     return true

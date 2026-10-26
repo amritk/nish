@@ -1674,24 +1674,26 @@ function PgConnection.elementRoom(this: PgConnection, size: i64): boolean -> @ni
   callee +1:42 PgConnection.room -> @nish.PgConnection.room
 function PgConnection.arrayElement(this: PgConnection, bytes: u8[], start: i32, length: i32): boolean -> @nish.PgConnection.arrayElement [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.PgConnection.elementRoom
-  escaping: start
-  calls: nish.PgConnection.arrayOpen nish.PgConnection.elementComma nish.PgConnection.elementRoom nish.PgConnection.putByte nish_panic nish_panic_index nish_panic_overflow
-  pointer this: size=184 writesThrough=true captured=false passedTo=nish.PgConnection.arrayOpen#0 nish.PgConnection.elementRoom#0 nish.PgConnection.elementComma#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0
-  pointer bytes: size=0 writesThrough=false captured=false
+  sharedWrite: +0:7
+  escaping: length start
+  calls: nish.PgConnection.arrayOpen nish.PgConnection.elementComma nish.PgConnection.elementRoom nish.PgConnection.putByte nish.PgConnection.reserve nish.copyBytes nish_panic nish_panic_index nish_panic_overflow
+  pointer this: size=184 writesThrough=true captured=false passedTo=nish.PgConnection.arrayOpen#0 nish.PgConnection.elementRoom#0 nish.PgConnection.elementComma#0 nish.PgConnection.putByte#0 nish.PgConnection.reserve#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0 nish.PgConnection.putByte#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
   stackSites=0 stackLocals=0
-  callee +0:5 PgConnection.arrayOpen -> @nish.PgConnection.arrayOpen
-  local +4:9 size: i64 (let)
-  local +5:14 i: i32 (let)
-  local +6:13 c: i32 (const)
-  callee +11:10 PgConnection.elementRoom -> @nish.PgConnection.elementRoom
-  callee +14:5 PgConnection.elementComma -> @nish.PgConnection.elementComma
-  callee +15:5 PgConnection.putByte -> @nish.PgConnection.putByte
-  local +16:14 i: i32 (let)
-  local +17:13 c: i32 (const)
-  callee +19:9 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +21:7 PgConnection.putByte -> @nish.PgConnection.putByte
-  callee +23:5 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee -19:5 PgConnection.arrayOpen -> @nish.PgConnection.arrayOpen
+  local -15:9 escapes: i32 (let)
+  local -14:14 i: i32 (let)
+  local -13:13 c: i32 (const)
+  callee -8:10 PgConnection.elementRoom -> @nish.PgConnection.elementRoom
+  callee -5:5 PgConnection.elementComma -> @nish.PgConnection.elementComma
+  callee -4:5 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee -3:5 PgConnection.reserve -> @nish.PgConnection.reserve
+  callee -1:7 copyBytes -> @nish.copyBytes
+  local +2:16 i: i32 (let)
+  local +3:15 c: i32 (const)
+  callee +5:11 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +7:9 PgConnection.putByte -> @nish.PgConnection.putByte
+  callee +10:5 PgConnection.putByte -> @nish.PgConnection.putByte
 function PgConnection.arrayNull(this: PgConnection): boolean -> @nish.PgConnection.arrayNull [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.PgConnection.elementRoom
