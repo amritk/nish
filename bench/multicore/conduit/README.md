@@ -22,9 +22,12 @@ folder the challenge receives is staged at
   (`nish/net/http1-server`'s `Http1Server`), the worker's Postgres
   connections and its bcrypt connection.
 - **Postgres.** Two `PgPool`s per worker, reads (`DB_READ_CONNS`, 3) and
-  writes (`DB_WRITE_CONNS`, 1), each read connection with up to 16 pipelined
-  groups in flight (`DB_MAX_IN_FLIGHT`) and the rest of the requests in the
-  pool's FIFO queue. Every statement is registered up front and prepared on a
+  writes (`DB_WRITE_CONNS`, 1), the write connection with up to 16 pipelined
+  groups in flight (`DB_MAX_IN_FLIGHT`), each read connection with up to 4
+  (`DB_READ_IN_FLIGHT`), and the rest of the requests in the pool's FIFO
+  queue. `PgPool` opens another connection only once more than its starting
+  connections times `maxInFlight` groups wait, so the read pool's lower cap is
+  what spreads the coalesced reads over all three connections (O8). Every statement is registered up front and prepared on a
   connection in the same flight as its first request. Every connection starts
   with `plan_cache_mode=force_generic_plan`, `jit=off` and
   `max_parallel_workers_per_gather=0`, set in the startup packet's `options`
@@ -42,6 +45,22 @@ folder the challenge receives is staged at
   one group; only `PUT /api/articles/:slug` takes two round trips, its 404 and
   403 decided between them. A request whose connection is lost answers 500
   and is never sent again: a lost write may have committed.
+- **Coalesced reads** (O9 to O11). `GET /api/articles/:slug`, its
+  `/comments` and `GET /api/tags` are the three read shapes the mix sends most
+  (an article page, 35% of the mix, asks for an article and its comments;
+  the home page and the feed, 37%, each ask for the tags).
+  The requests of one shape that wait in a worker while its read batches are
+  in flight (`DB_READ_BATCHES`, one per read connection) go as one statement:
+  up to 32 slugs and viewers bound as a `text[]` and an `int8[]`,
+  `unnest(...) WITH ORDINALITY` joined to the reference SQL, each row carrying
+  its request's place, so each request is answered from its own rows and
+  answers just as it would alone. The tags read has no parameters, so every
+  request waiting takes the one row of one execution. Nothing is kept past
+  that execution: a request that arrives after it was sent waits for the
+  next (rule 5). One request waiting alone runs the plain statement; a slug
+  Postgres refuses fails the batch, so each of its requests is sent again
+  alone and answers its own error. `concurrency.mjs` checks that every read
+  answers byte for byte what it answers alone.
 - **Rows straight into JSON.** Every result column is read in place from the
   connection's receive buffer (`colStart`, `colLength`) into a `JsonWriter`
   for that connection, with no string made: timestamps through
@@ -216,6 +235,10 @@ of one request sent as one pipeline, as the server sends them.
 | O6 | a list page and its capped count as one statement (the count a `WITH` joined to the page) | — | — | — | no: pipelined, the pair costs the same (343–381 against 360–386 µs a call) and the joined form needs a column offset on every row |
 | O7 | group commit: writes wait until the write connection has no batch in flight, then up to 128 go as one group, one transaction and one WAL flush; a failed group retries each write alone, a lost one answers 500 (three pairs at 4,000 users) | 234–240 against 240–241, **−3.9 µs (−1.6%)** paired | 34.1–34.2 / 33.9–34.1 | p95 **23–33** against 39–46, p99 **45–67** against 90–129 | yes: the tail halves, since a write no longer waits behind other writes' flushes on its connection. Checked under concurrency: 40 favorites at once all 200 and the count up by 40; 20 sign-ups with three duplicate names, 18 201s and two 422s, one row |
 | O8 | read batching: up to 32 waiting reads as one pipelined group, one implicit transaction, each answered when its last statement completes (three pairs at 4,000 users against O7) | first build 207–220 against 237–240, but p95 **78–111** against 23–27: `PgPool` opens a connection only once more than `maxInFlight` (16) groups per connection wait, and batching never queued that many, so every read ran on one backend per worker. Neither a Flush after each read nor 8-read batches nor two batches a connection moved p95 (54–133). With the pool's cap at the batch depth, every connection open: 231–245 against 233–246 | 33.5–34.1 / 34.2–34.5 | p95 22–42 against 21–33 | no: inside the spread once the reads are spread over the connections. What it saved was one backend doing a worker's reads, which saturates it |
+| O9 | coalesced article reads: the `GET /api/articles/:slug` requests waiting in a worker as one `article_slugs` statement over `unnest($1::text[], $2::int8[]) WITH ORDINALITY`, up to 32 a batch, `DB_READ_BATCHES` (3) in flight, the read pool's `maxInFlight` 4 (three pairs at 4,000 users against `main`; this session's machine gives `main` 292–295 µs, not the 233–246 of the rows above) | 291–309 against 292–295, **+4.5 µs** paired (+17.5, −1.7, −2.3) | 42.3–45.1 / 37.9–38.5 | p95 152–246 against 138–149 | kept as the base of O10 and O11, not on its own figures: the batch statement costs 526 µs a call for 5 rows on average (`pg_stat_statements`, one run), 105 a row against 167 for one alone, but article GET is about 5% of the statements' time. The concurrency check: 7,720 concurrent reads, 193 distinct, every one answered as alone |
+| O9b | O9 with `DB_READ_BATCHES=1`, so batches grow larger | — | — | p95 **531** (article GET 819) | no: fails the verdict (p95 ≥ 500 ms). One batch at a time waits behind list pages in the read pool's FIFO, and every article read waiting waits with it |
+| O10 | coalesced comment reads, the same way (`comment_slugs`: the article by slug, `LEFT JOIN LATERAL` its 100 newest comments, the place column `COMMENT_ORD`) (three pairs against O9) | 282–291 against 288–309, **−13 µs (−4.3%)** paired (−27.2, −15.0, +3.2) | 40.8–41.6 / 42.4–45.2 | p95 143–186 against 174–249 | yes, as marginal: the mean of the pairs is outside A's spread (8.5) but inside B's (22). The two shapes together are 35% of requests, which is what makes O9's machinery pay. Concurrency: 7,720 reads in 4,022 transactions, against 5,778 for O9 |
+| O11 | every waiting `GET /api/tags` of a worker answered by one execution of its one-row statement, with no cap on how many (three pairs against O10) | 258–268 against 274–287, **−16 µs (−5.8%)** paired (−10.5, −8.8, −29.1) | 37.3–38.9 / 40.1–41.4 | p95 **82–115** against 134–162, p99 127–174 against 211–239 | yes: outside both spreads (9.9 and 13.9) on every pair, and the tail falls by a third, since 37% of requests (the home page and the feed) ask for the tags first. Concurrency: 7,720 reads in 4,093 transactions |
 
 ### The HTTP worker's own instructions
 
