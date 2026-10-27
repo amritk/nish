@@ -671,4 +671,6 @@ On `list`, the only workload that decodes timestamps and arrays in bulk, every c
 | `insert` | 33.10 µs (2.04) | −0.74 (−2.2 %) | +0.86 (2.6 %) | −0.98 (−3.0 %) |
 
 Three cells fall outside their band: `pk` at 64 KiB (+0.57, slower), `insert` at 16 KiB (+0.86, slower) and `insert` at 64 KiB (−0.98, faster). `list` at 16 KiB sits at its band. All are inside main's IQR, and the signs disagree between sizes and workloads. `list`, whose system calls the larger buffer halves, is not faster at either size, so the default stays 8 KiB.
+
+**No system call left to remove.** `strace -c` over 2,000 `list` queries counts 1,990 `sendto` (at depth 16, one per answer that frees a slot), and the 16 KiB buffer above brings `recvfrom` and `epoll_wait` to about one each per query; `insert`, at depth 1, counts 2,007 of each. Each run makes two `epoll_ctl` calls in all. The loop already makes one call of each kind per answer, and halving `list`'s reads did not move its CPU. The kernel's remaining 69 to 93 % is the loopback socket's per-byte work and the wakeups themselves, which the client cannot shed without changing how many queries it waits on at once.
 <!-- postgres-profile:end -->
