@@ -1,0 +1,109 @@
+{
+  "version": "0.23.0",
+  "date": "2026-10-27",
+  "tag": "v0.23.0",
+  "range": {
+    "from": "v0.22.1",
+    "to": "3a53579e"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-22-1",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.22.1",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "eef6849"
+      ],
+      "pr": 967,
+      "author": "github-actions[bot]",
+      "date": "2026-10-26"
+    },
+    {
+      "id": "pin-the-conduit-submission-to-nish-0-22",
+      "type": "fix",
+      "scope": "bench",
+      "breaking": false,
+      "title": "pin the Conduit submission to nish 0.22.1",
+      "body": "The multicore-challenge submission still named 0.22.0, which was never\npublished to npm, so its install.sh could not install a compiler. It now\ninstalls 0.22.1, the first published release with the standard-library\nchanges the server uses, and the README no longer says the release is pending.\n\nTests: install.sh on a clean Ubuntu 24.04, build.sh as a normal user, and the\nchallenge's test/run.sh on PostgreSQL 18 with the dev seed: 197/197",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "c434ac7"
+      ],
+      "pr": 968,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-25"
+    },
+    {
+      "id": "remove-the-multicore-conduit-server-now-kept-in",
+      "type": "chore",
+      "scope": "bench",
+      "breaking": false,
+      "title": "remove the multicore Conduit server, now kept in the challenge fork",
+      "body": "The multicore-challenge Conduit server, its staged submission and the harness that built and drove it (bench/multicore) leave this repository: the submission lives only in amritk/multicore-server-challenge, submissions/nish-std-amritk, and is changed there. tests/link/conduit_json_out, which tested the server's JSON writers, goes with it, and THIRD_PARTY_NOTICES.md and bench/postgres/setup.sh drop their pointers. bench/postgres and tests/postgres/live keep the challenge's schema and queries.\n\nThe fuzz run's DECLARED_CHECKS entry for the binary hardening is retired: the 0.22.1 seed carries the change, so the entry covered nothing and failed nish-cmp as stale on main. The STALE line now names a check entry by its changelog words instead of printing `@undefined undefined -> undefined`.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "fuzz.js --stage1 --seed 20261001 --count 200 against the 0.22.1 seed: stale=1 before",
+        "200/200 agree and stale=0 after; nish-cmp.js 1867/1869 agree",
+        "0 undeclared"
+      ],
+      "commits": [
+        "0d80c4c"
+      ],
+      "pr": 970,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-26"
+    },
+    {
+      "id": "int8-and-incremental-text-parameters-for-nish-net",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "int8[] and incremental text[] parameters for nish/net/postgres",
+      "body": "A batching caller can now bind a list as one parameter without first building a string. PgConnection gains paramIntArray(values, start, count), an int8[] taken from a window of an i64[] and sized before anything is written. It also gains an incremental text[] builder that writes straight into the open Bind: arrayStart(), arrayElement(bytes, start, length) or arrayNull() per element, then arrayEnd().\n\nEvery element is quoted, `\"` and `\\` are escaped and UTF-8 passes through, so NULL, commas, braces and quotes inside an element stay data. An element refused for maxOutput writes nothing and leaves the array open: a batcher ends the array with what fits and sends the rest in the next statement. The parameters use the text format, not binary, because the Bind's format codes precede the parameters and the server coerces a text literal to the type it inferred, and existing callers are unchanged.\n\nA misuse panics instead of encoding a malformed Bind: an element or arrayEnd with no array open, a second arrayStart, another param* or bindEnd while an array is open, or a window outside its source.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_postgres",
+        "tests/link/std_postgres_array_*_panic",
+        "tests/link/std_postgres_int_array_range_panic",
+        "tests/postgres/live (arrays)"
+      ],
+      "commits": [
+        "3577475"
+      ],
+      "pr": 972,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-26"
+    },
+    {
+      "id": "a-sans-io-batching-helper-for-nish-net",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a sans-IO batching helper for nish/net/postgres",
+      "body": "A server that answers many concurrent reads can now coalesce them into one statement without writing the batching by hand. PgBatcher implements the DataLoader pattern for one statement shape. The program queues keyed requests with addInt or addText. When a connection is free, take(conn) binds up to maxRequests of them, and up to maxBytes, as one execution over unnest($1::int8[] or text[]) with ordinality, binding each distinct key once. row, end and fail feed the connection's events back, and next(run) answers each request with its rows, PG_BATCH_MISSING when its key produced none, or PG_BATCH_FAILED when the execution failed. A missing key answers alone.\n\nThe helper reads no clock and runs no timer: when to flush is the caller's choice, and the guide shows a caller-side collection window. Its state is allocated in the constructor and reused, and nothing a run hands out outlives the execution that produced it. A handle from an earlier use of a run is counted as stray, not routed.\n\nWhat comes from outside the program is refused, never panicked on. A text key holding a NUL or invalid UTF-8 is refused at addText, so it cannot fail the requests batched with it. An ordinal the server sends out of range, going backwards, NULL or malformed is refused. Events that arrive after a run is over (a second CommandComplete, a row or error after it, a connection lost after the answer) are counted, not acted on. Panics are kept for the program's own misuse.\n\nPgConnection gains arrayInt (an int8 element for the incremental array builder) and bindCancel (drop an open bind unsent when not even its first element fits).",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_postgres_batch",
+        "tests/link/std_postgres_batch_*_panic",
+        "tests/link/std_postgres_array_*_panic",
+        "tests/postgres/live (batch)"
+      ],
+      "commits": [
+        "3a53579"
+      ],
+      "pr": 973,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-26"
+    }
+  ]
+}

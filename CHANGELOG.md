@@ -26,6 +26,26 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-27
+
+### Added
+
+- runtime: Int8[] and incremental text[] parameters for nish/net/postgres ([#972](https://github.com/amritk/nish/pull/972))
+- runtime: A sans-IO batching helper for nish/net/postgres ([#973](https://github.com/amritk/nish/pull/973))
+
+### Fixed
+
+- bench: Pin the Conduit submission to nish 0.22.1 ([#968](https://github.com/amritk/nish/pull/968))
+
+### Build
+
+- Regenerate package-lock.json for v0.22.1 ([#967](https://github.com/amritk/nish/pull/967))
+
+### Internal
+
+- bench: Remove the multicore Conduit server, now kept in the challenge fork ([#970](https://github.com/amritk/nish/pull/970))
+
+
 ## [0.22.1] - 2026-10-26
 
 ### Fixed
@@ -1205,3 +1225,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.21.0]: https://github.com/amritk/nish/releases/tag/v0.21.0
 [0.22.0]: https://github.com/amritk/nish/releases/tag/v0.22.0
 [0.22.1]: https://github.com/amritk/nish/releases/tag/v0.22.1
+[0.23.0]: https://github.com/amritk/nish/releases/tag/v0.23.0
