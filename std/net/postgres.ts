@@ -2597,7 +2597,9 @@ export const PG_BATCH_MISSING: i32 = 3
 /** `PgBatcher.next(run)`: the request `tag`'s execution failed, and its rows so far may be incomplete. */
 export const PG_BATCH_FAILED: i32 = 4
 
-// `take` probes at most maxRequests^2 / 2 slots, so the cap keeps that near 5 * 10^5.
+// `take` probes at most maxRequests^2 / 2 slots, so the cap keeps that near 5 * 10^5;
+// a probe whose hash matches in full compares the key's bytes, so the bytes
+// compared are at most that times the longest key, which `maxBytes` bounds.
 const PG_BATCH_MAX_REQUESTS: i32 = 1024
 const PG_BATCH_MAX_QUEUE: i32 = 1048576
 const PG_BATCH_MAX_RUNS: i32 = 1024
@@ -2714,9 +2716,9 @@ export class PgBatcher {
   private readonly runs: PgBatchRun[]
   /** The request the last `next(run)` answered about; -1 for none. */
   tag: i32 = -1
-  /** The number of rows refused because their ordinal named no key still open; each failed its execution. */
+  /** The number of rows refused because their ordinal named no key still open, stopping at 2^31 - 1; each failed its execution. */
   refused: i32 = 0
-  /** The number of `row`, `end` and `fail` calls on a spent handle, each ignored. */
+  /** The number of `row`, `end` and `fail` calls on a spent handle, each ignored, stopping at 2^31 - 1. */
   stray: i32 = 0
   private readonly keyType: i32
   private readonly maxRequests: i32
@@ -2851,8 +2853,9 @@ export class PgBatcher {
     let at: i32 = this.storeEnd
     if (length > toI32(this.store.length) - at) {
       // The waiting keys are moved to the front, the room the taken ones left after them.
+      // Refused first when even that would not make room, so a full store is not moved for nothing.
       const from: i32 = this.count > 0 ? this.qStarts[this.head] : at
-      if (from === 0) {
+      if (length > toI32(this.store.length) - (at - from)) {
         return false
       }
       copyBytes(this.store, 0, this.store, from, at - from)
@@ -2862,9 +2865,6 @@ export class PgBatcher {
       }
       at -= from
       this.storeEnd = at
-      if (length > toI32(this.store.length) - at) {
-        return false
-      }
     }
     copyBytes(this.store, at, bytes, start, length)
     this.storeEnd = at + length
@@ -3027,7 +3027,9 @@ export class PgBatcher {
   private quietRun(h: i32, what: string): PgBatchRun | null {
     const run: PgBatchRun | null = this.run(h)
     if (run === null) {
-      this.stray += 1
+      if (this.stray < 2147483647) {
+        this.stray += 1
+      }
       return null
     }
     if (run.target >= 0 || run.ended) {
@@ -3067,7 +3069,9 @@ export class PgBatcher {
     }
     // Ordinals count from 1 and come in order: a row may name the current key again, never one before it.
     if (bad || ordinal < toI64(run.cur) + 1 || ordinal > toI64(run.keys)) {
-      this.refused += 1
+      if (this.refused < 2147483647) {
+        this.refused += 1
+      }
       run.failed = true
       return false
     }

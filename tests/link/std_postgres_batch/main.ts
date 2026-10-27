@@ -377,12 +377,14 @@ const textKeys = (t: Suite): void => {
   t.ok("a slice of a buffer", b.addText(z("<a\"b\\c>"), 1, 5, 1));
   t.ok("an empty key", b.addText(z("x"), 1, 0, 2));
   t.ok("the same key again", b.addText(z("a\"b\\c"), 0, 5, 3));
-  // "Aa" and "BB" are distinct keys of one length.
-  t.ok("Aa", b.addText(z("Aa"), 0, 2, 4));
-  t.ok("BB", b.addText(z("BB"), 0, 2, 5));
-  t.ok("Aa again", b.addText(z("Aa"), 0, 2, 6));
+  // "bwfgaa" and "zidhaa" are distinct keys of one length whose 31-bit
+  // FNV-1a hashes are equal, so only their bytes tell them apart; found by
+  // hashing six-letter lowercase strings, in counting order, until two matched.
+  t.ok("bwfgaa", b.addText(z("bwfgaa"), 0, 6, 4));
+  t.ok("zidhaa, whose hash is bwfgaa's", b.addText(z("zidhaa"), 0, 6, 5));
+  t.ok("bwfgaa again", b.addText(z("bwfgaa"), 0, 6, 6));
   const r: i32 = b.take(conn);
-  t.eqStr("text keys quoted and escaped, each once", keys(conn), "{\"a\\\"b\\\\c\",\"\",\"Aa\",\"BB\"}");
+  t.eqStr("text keys quoted and escaped, each once", keys(conn), "{\"a\\\"b\\\\c\",\"\",\"bwfgaa\",\"zidhaa\"}");
   t.eqStr(
     "and routed",
     route(b, r, conn, answer(cat(cat(row("one", "1"), row("two", "2")), row("three", "4")))),
@@ -395,7 +397,9 @@ const textKeys = (t: Suite): void => {
   t.ok("a key that can never fit maxBytes is refused", !tight.addText(z("0123456789012345678"), 0, 19, 1));
   t.ok("one byte less fits", tight.addText(z("0123456789012345678"), 0, 18, 1));
   t.ok("a key whose escapes would pass maxBytes is refused", !tight.addText(z("01234567890123456\""), 0, 18, 2));
-  t.eqI32("only the one that fits waits", tight.waiting(), 1);
+  t.ok("a key whose escapes just fit is not", tight.addText(z("0123456789012345\""), 0, 17, 3));
+  t.ok("nor one whose backslash just fits", tight.addText(z("0123456789012345\\"), 0, 17, 4));
+  t.eqI32("only the ones that fit wait", tight.waiting(), 3);
 
   // The server refuses a text value with a NUL or that is not UTF-8, which would fail every request taken with it.
   const nul: u8[] = [toU8(97), toU8(0), toU8(98)];
@@ -422,6 +426,14 @@ const textKeys = (t: Suite): void => {
   t.eqStr("a take counts escapes: {, keys of eleven and nine, a comma and } is 23", keys(ecn), "{\"aaaaaaa\\\"\"}");
   t.eqI32("so the second waits", escaped.waiting(), 1);
   route(escaped, er, ecn, answer([]));
+  const fit = new PgBatcher(ec);
+  const fcn: PgConnection = prepared(fit, config());
+  fit.addText(z("aaaaaaa\""), 0, 8, 1);
+  fit.addText(z("bbbb\\"), 0, 5, 2);
+  const fr: i32 = fit.take(fcn);
+  t.eqStr("keys of eleven and eight with escapes fit maxBytes exactly: 22", keys(fcn), "{\"aaaaaaa\\\"\",\"bbbb\\\\\"}");
+  t.eqI32("so none waits", fit.waiting(), 0);
+  route(fit, fr, fcn, answer([]));
 };
 
 const store = (t: Suite): void => {
@@ -472,12 +484,26 @@ const runs = (t: Suite): void => {
   b.addInt(toI64(5), 50);
   const u: i32 = b.take(conn);
   keys(conn);
-  t.eqStr(
-    "a later batch cannot read an earlier one's ordinals",
-    route(b, u, conn, answer(row("stale", "2"))),
-    "no,50!",
-  );
+  t.eqStr("an ordinal past a run's one key", route(b, u, conn, answer(row("stale", "2"))), "no,50!");
   t.eqI32("refused", b.refused, 1);
+
+  // The run's first batch has three keys and its second one, so ordinal 3 is valid only for the first.
+  const wc = ints();
+  wc.runs = 1;
+  wc.maxRequests = 3;
+  const w = new PgBatcher(wc);
+  const wcn: PgConnection = prepared(w, config());
+  for (let i: i32 = 1; i <= 3; i++) {
+    w.addInt(toI64(i), i);
+  }
+  const wide: i32 = w.take(wcn);
+  t.eqStr("a run of three keys", keys(wcn), "{1,2,3}");
+  t.eqStr("routes ordinal 3", route(w, wide, wcn, answer(row("c", "3"))), "1?,2?,3=c,3.");
+  w.addInt(toI64(4), 40);
+  const narrow: i32 = w.take(wcn);
+  t.eqStr("the run again, with one key", keys(wcn), "{4}");
+  t.eqStr("a later batch cannot read an earlier one's ordinals", route(w, narrow, wcn, answer(row("stale", "3"))), "no,40!");
+  t.eqI32("refused", w.refused, 1);
 };
 
 /** Routes an answer of `bad`, then a good row, to a fresh run of keys 1 and 2. */
@@ -628,6 +654,8 @@ const strays = (t: Suite): void => {
   t.eqStr("a row after CommandComplete is stray", pooled(cat(cat(cat(bind, tag), row("a", "1")), ready), false), "1?,2?,no,group stray 1 refused 0");
   t.eqStr("an error after CommandComplete, as a commit at Sync can fail, is stray", pooled(cat(cat(cat(bind, tag), error), ready), false), "1?,2?,group stray 1 refused 0");
   t.eqStr("a connection lost after CommandComplete, before the group is done", pooled(cat(bind, tag), true), "1?,2?;failed stray 1 refused 0");
+  t.eqStr("a row after an error is stray", pooled(cat(cat(cat(bind, error), row("a", "1")), ready), false), "1!,2!,no,group stray 1 refused 0");
+  t.eqStr("a CommandComplete after an error is stray", pooled(cat(cat(cat(bind, error), tag), ready), false), "1!,2!,group stray 1 refused 0");
 
   const c = ints();
   c.runs = 1;
@@ -647,6 +675,26 @@ const strays = (t: Suite): void => {
   t.eqI32("and next on it answers nothing", b.next(r), PG_BATCH_NONE);
   t.eqI32("each counted stray", b.stray, 3);
   t.eqStr("the new execution is untouched", route(b, s, conn, answer(row("x", "1"))), "2=x,2.");
+};
+
+/** A take of one key of `length` bytes by a batcher of `maxBytes`, named bySlug, on a connection of maxOutput 1024: its array's start and length, or -1. */
+const fullTake = (maxBytes: i32, length: i32): string => {
+  const c = texts();
+  c.maxBytes = maxBytes;
+  const b = new PgBatcher(c);
+  const pc = config();
+  pc.maxOutput = 1024;
+  const conn = prepared(b, pc);
+  const key: u8[] = new Array<u8>(length);
+  for (let i: i32 = 0; i < length; i++) {
+    key[i] = toU8(98);
+  }
+  b.addText(key, 0, length, 1);
+  if (b.take(conn) < 0) {
+    return "-1";
+  }
+  const got: string = keys(conn);
+  return `${got.slice(0, 5)}${got.slice(toI32(got.length) - 3)} of ${got.length}`;
 };
 
 const room = (t: Suite): void => {
@@ -677,6 +725,10 @@ const room = (t: Suite): void => {
   t.eqI32("both still wait", b.waiting(), 2);
   const types: i32[] = [];
   t.ok("the connection still works", conn.prepare("other", "select 1", types) && conn.sync());
+  // maxBytes + name.length + 32 <= maxOutput: the Bind's head of 11 and the
+  // name, the array's length word of 4, and the 17 kept for the tail.
+  t.eqStr("a full take fits maxOutput at the bound", fullTake(986, 982), "{\"bbbb\"} of 986");
+  t.eqStr("and a byte past it is refused", fullTake(987, 983), "-1");
 };
 
 export const main = (): number => {

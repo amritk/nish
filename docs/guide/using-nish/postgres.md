@@ -445,8 +445,10 @@ until then.
   -1 and writes nothing when nothing waits, every run is in flight, or the
   connection has no room even for the first key. `addText` refuses a key
   whose escaped text could never fit `maxBytes`, but one past what a
-  connection could ever hold stays at the head of the queue, so keep
-  `maxBytes` under `maxOutput`.
+  connection could ever hold stays at the head of the queue. A take that
+  fills `maxBytes` always fits a connection with nothing else unsent when
+  `maxBytes + name.length + 32` is at most its `maxOutput`; leave more for
+  whatever else the group queues.
 - **Handles.** `take` answers a handle for the run, not a reused number: a
   run is free again once all its events are answered after `end` or `fail`,
   and its next take answers a new handle. A handle that is spent — its run

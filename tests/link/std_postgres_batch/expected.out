@@ -44,15 +44,17 @@ PASS  for the next take
 PASS  a slice of a buffer
 PASS  an empty key
 PASS  the same key again
-PASS  Aa
-PASS  BB
-PASS  Aa again
+PASS  bwfgaa
+PASS  zidhaa, whose hash is bwfgaa's
+PASS  bwfgaa again
 PASS  text keys quoted and escaped, each once
 PASS  and routed
 PASS  a key that can never fit maxBytes is refused
 PASS  one byte less fits
 PASS  a key whose escapes would pass maxBytes is refused
-PASS  only the one that fits waits
+PASS  a key whose escapes just fit is not
+PASS  nor one whose backslash just fits
+PASS  only the ones that fit wait
 PASS  a key with a NUL is refused
 PASS  the bytes around it are not
 PASS  a two-byte character
@@ -67,6 +69,8 @@ PASS  a bad second continuation byte is refused
 PASS  only the good ones wait
 PASS  a take counts escapes: {, keys of eleven and nine, a comma and } is 23
 PASS  so the second waits
+PASS  keys of eleven and eight with escapes fit maxBytes exactly: 22
+PASS  so none waits
 PASS  four bytes
 PASS  eight
 PASS  a ninth would pass queueBytes
@@ -85,6 +89,11 @@ PASS  frees its run, under a new handle
 PASS  for the waiting request
 PASS  answers come in the order the runs were sent
 PASS  the reused run sees only its own requests
+PASS  an ordinal past a run's one key
+PASS  refused
+PASS  a run of three keys
+PASS  routes ordinal 3
+PASS  the run again, with one key
 PASS  a later batch cannot read an earlier one's ordinals
 PASS  refused
 PASS  an ordinal past the keys
@@ -109,6 +118,8 @@ PASS  a second CommandComplete is stray
 PASS  a row after CommandComplete is stray
 PASS  an error after CommandComplete, as a commit at Sync can fail, is stray
 PASS  a connection lost after CommandComplete, before the group is done
+PASS  a row after an error is stray
+PASS  a CommandComplete after an error is stray
 PASS  the one run is taken again under a new handle
 PASS  a row on the spent handle answers false
 PASS  and next on it answers nothing
@@ -127,4 +138,6 @@ PASS  cancels its bind and writes nothing
 PASS  so no group is open
 PASS  both still wait
 PASS  the connection still works
-postgres batch: 129 passed, 0 failed, 0 skipped
+PASS  a full take fits maxOutput at the bound
+PASS  and a byte past it is refused
+postgres batch: 142 passed, 0 failed, 0 skipped
