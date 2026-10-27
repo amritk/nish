@@ -14,6 +14,8 @@
 //   pipeline    an error in the middle of five pipelined groups
 //   arrays      text[], int8[] and int4[] parameters, unnested by the server
 //   conduit     the Conduit article list, prepared once and run pipelined
+//   batch       keyed reads through PgBatcher: users by id, articles by slug,
+//               tags by article; duplicate and missing keys, two takes
 //
 // The `conduit` statement is the multicore server challenge's SPEC.md
 // `ARTICLE_LIST_SELECT ORDER_PAGE`,
@@ -24,6 +26,14 @@ import { connectResult, netAddress, netClose, netRead, netWrite, pollAdd, pollCr
 import { secret, wipe } from "nish:secret"
 import {
   PG_ARRAY_ELEMENT,
+  PG_BATCH_DONE,
+  PG_BATCH_FAILED,
+  PG_BATCH_INT,
+  PG_BATCH_MISSING,
+  PG_BATCH_NONE,
+  PG_BATCH_ROW,
+  PG_BATCH_TEXT,
+  PG_COMPLETE,
   PG_ARRAY_END,
   PG_ARRAY_NULL,
   PG_ERROR,
@@ -34,6 +44,8 @@ import {
   PG_POOL_NONE,
   PG_ROW,
   PgArrayWalker,
+  PgBatchConfig,
+  PgBatcher,
   PgConfig,
   PgConnection,
   PgPool,
@@ -816,6 +828,171 @@ const conduit = (port: i32): i32 => {
   return code
 }
 
+/** A batcher of `keyType` named `name`, `select` its query for one key `q.key`, taking at most `most` requests at once. */
+const batcher = (name: string, keyType: i32, select: string, orderBy: string, most: i32): PgBatcher => {
+  const config = new PgBatchConfig()
+  config.name = name
+  config.keyType = keyType
+  config.select = select
+  config.orderBy = orderBy
+  config.maxRequests = most
+  return new PgBatcher(config)
+}
+
+/** Appends `line` to `log`, a newline between lines. */
+const logLine = (log: string, line: string): string => (log === "" ? line : `${log}\n${line}`)
+
+/** Logs the events `row`, `end` or `fail` left on batcher `b`'s run `r` onto `log`; the row's first column for each `PG_BATCH_ROW`. */
+const routeBatch = (b: PgBatcher, r: i32, conn: PgConnection, log: string): string => {
+  let out: string = log
+  let event: i32 = b.next(r)
+  while (event !== PG_BATCH_NONE) {
+    if (event === PG_BATCH_ROW) {
+      out = logLine(out, `${b.name} ${b.tag}: ${conn.isNull(toI32(0)) ? "NULL" : conn.columnText(toI32(0))}`)
+    } else if (event === PG_BATCH_DONE) {
+      out = logLine(out, `${b.name} ${b.tag} done`)
+    } else if (event === PG_BATCH_MISSING) {
+      out = logLine(out, `${b.name} ${b.tag} missing`)
+    } else if (event === PG_BATCH_FAILED) {
+      out = logLine(out, `${b.name} ${b.tag} failed`)
+    }
+    event = b.next(r)
+  }
+  return out
+}
+
+/**
+ * `batch`: keyed reads through three `PgBatcher`s on one pooled connection,
+ * each take one group. Users by id, four requests a take, so six take two;
+ * articles by slug; and tags by article, several rows a key in name order.
+ * Each has a duplicate key and a key with no row. A take's line and its
+ * events are logged under its request and printed batcher by batcher at the
+ * end, so the output does not depend on when the server's answers arrive;
+ * the take line leaves out its run handle, which does (a second take may come
+ * before or after the first run is answered).
+ */
+const batch = (port: i32): i32 => {
+  const batchers: PgBatcher[] = [
+    batcher("users_by_id", PG_BATCH_INT, "select u.username from users u where u.id = q.key", "", toI32(4)),
+    batcher("article_by_slug", PG_BATCH_TEXT, "select a.title from articles a where a.slug = q.key", "", toI32(32)),
+    batcher(
+      "tags_by_article",
+      PG_BATCH_INT,
+      "select tg.name from article_tags at join tags tg on tg.id = at.tag_id where at.article_id = q.key",
+      "t.name",
+      toI32(32)
+    ),
+  ]
+  const pool = makePool(toI32(1), toI32(8), "")
+  for (const b of batchers) {
+    pool.register(b.name, b.sql, noTypes())
+  }
+  const userIds: i64[] = [toI64(3), toI64(1), toI64(3), toI64(9), toI64(2), toI64(1)]
+  for (let t: i32 = 0; t < toI32(userIds.length); t++) {
+    batchers[0].addInt(userIds[t], t)
+  }
+  const slugs: string[] = ["quotes-2", "nope", "notes-1", "quotes-2"]
+  for (let t: i32 = 0; t < toI32(slugs.length); t++) {
+    const b: u8[] = bytesOf(slugs[t])
+    batchers[1].addText(b, toI32(0), toI32(b.length), t)
+  }
+  const articleIds: i64[] = [toI64(2), toI64(1), toI64(3), toI64(2)]
+  for (let t: i32 = 0; t < toI32(articleIds.length); t++) {
+    batchers[2].addInt(articleIds[t], t)
+  }
+  const d = new Driver(pool, port)
+  // Each pool request is one take of one batcher: which, the run it got, and
+  // its log. The scenario makes far fewer than `ring` requests, so a slot's
+  // index is its ticket and the slots are in take order.
+  const ring: i32 = 64
+  const whose: i32[] = new Array<i32>(ring)
+  const runs: i32[] = new Array<i32>(ring)
+  const logs: string[] = []
+  for (let at: i32 = 0; at < ring; at++) {
+    whose[at] = -1
+    logs.push("")
+  }
+  const asked: boolean[] = new Array<boolean>(batchers.length)
+  let open: i32 = 0
+  let code: i32 = 0
+  while (true) {
+    for (let k: i32 = 0; k < toI32(batchers.length) && k < toI32(asked.length); k++) {
+      if (!asked[k] && batchers[k].waiting() > 0) {
+        const ticket: i32 = pool.request()
+        if (ticket >= 0) {
+          whose[ticket % ring] = k
+          runs[ticket % ring] = -1
+          asked[k] = true
+          open += 1
+        }
+      }
+    }
+    if (open === 0) {
+      break
+    }
+    let slot: i32 = pool.dispatch()
+    while (slot >= 0) {
+      const t: i32 = pool.ticket
+      const k: i32 = whose[t % ring]
+      if (k >= 0 && k < toI32(batchers.length) && k < toI32(asked.length)) {
+        asked[k] = false
+        const b: PgBatcher = batchers[k]
+        const r: i32 = b.take(pool.connection(slot))
+        runs[t % ring] = r
+        logs[t % ring] = logLine(logs[t % ring], `${b.name} take, ${b.waiting()} waiting`)
+      }
+      if (!pool.send()) {
+        open -= 1
+      }
+      slot = pool.dispatch()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log("timed out")
+      return 1
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      // The pool's own events, a prepare's, name no request.
+      const at: i32 = pool.ticket >= 0 ? pool.ticket % ring : -1
+      const k: i32 = at >= 0 ? whose[at] : -1
+      const r: i32 = at >= 0 ? runs[at] : -1
+      if (event === PG_ERROR) {
+        console.log(failed(pool.ticket, conn))
+        code = 1
+      }
+      if ((event === PG_ROW || event === PG_COMPLETE || event === PG_ERROR) && r >= 0 && k >= 0 && k < toI32(batchers.length)) {
+        const b: PgBatcher = batchers[k]
+        if (event === PG_COMPLETE) {
+          b.end(r)
+        } else if (event === PG_ERROR) {
+          b.fail(r)
+        } else if (!b.row(r, conn)) {
+          console.log(`${b.name}: a row refused`)
+          code = 1
+        }
+        logs[at] = routeBatch(b, r, conn, logs[at])
+      }
+      if (event === PG_GROUP_DONE) {
+        open -= 1
+      } else if (event === PG_LOST || event === PG_FAILED) {
+        console.log(`connection failed: ${conn.failure} ${errorOf(conn)}`)
+        return 1
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  for (let k: i32 = 0; k < toI32(batchers.length); k++) {
+    for (let at: i32 = 0; at < ring; at++) {
+      if (whose[at] === k && logs[at] !== "") {
+        console.log(logs[at])
+      }
+    }
+  }
+  return code
+}
+
 export const main = (): i32 => {
   if (process.argv.length < 6) {
     console.log("usage: live <scenario> <port> <user> <password> <database> [sql ...]")
@@ -837,6 +1014,8 @@ export const main = (): i32 => {
     return arrays(port)
   } else if (scenario === "conduit") {
     return conduit(port)
+  } else if (scenario === "batch") {
+    return batch(port)
   }
   console.log(`unknown scenario ${scenario}`)
   return 2

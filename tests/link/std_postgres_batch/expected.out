@@ -1,0 +1,143 @@
+PASS  the name
+PASS  an int8 batch
+PASS  a text batch, its rows ordered within a key
+PASS  nothing waits
+PASS  so take has nothing to take
+PASS  and writes nothing
+PASS  nor opens a group
+PASS  a request
+PASS  another
+PASS  two wait
+PASS  a third when queueSize are waiting is refused
+PASS  take answers a run
+PASS  and the queue is empty
+PASS  the keys, as the one parameter
+PASS  and there is room again
+PASS  four requests, one run
+PASS  each key once, in the order first asked
+PASS  the group is in flight
+PASS  every row goes to every request for its key; the key no row answered is missing
+PASS  next on a run that is over
+PASS  names no request
+PASS  nothing in flight
+PASS  the run is free again, under its next handle: a use of 16 runs on
+PASS  a row for a later key closes those before it
+PASS  nothing refused
+PASS  keys that share a hash stay apart
+PASS  and route apart
+PASS  the widest int8 keys
+PASS  no rows at all
+PASS  maxRequests caps a take
+PASS  the rest wait
+PASS  routed
+PASS  the next take starts where it stopped
+PASS  maxRequests counts requests, not keys
+PASS  so one of four waits
+PASS  the three taken
+PASS  the fourth
+PASS  maxBytes caps a take: {, two keys of ten, a comma and } is 23
+PASS  a key already bound costs nothing; the take stops at the first that does not fit
+PASS  routed
+PASS  those after it wait for the next take
+PASS  one byte short, the second key waits
+PASS  for the next take
+PASS  a slice of a buffer
+PASS  an empty key
+PASS  the same key again
+PASS  bwfgaa
+PASS  zidhaa, whose hash is bwfgaa's
+PASS  bwfgaa again
+PASS  text keys quoted and escaped, each once
+PASS  and routed
+PASS  a key that can never fit maxBytes is refused
+PASS  one byte less fits
+PASS  a key whose escapes would pass maxBytes is refused
+PASS  a key whose escapes just fit is not
+PASS  nor one whose backslash just fits
+PASS  only the ones that fit wait
+PASS  a key with a NUL is refused
+PASS  the bytes around it are not
+PASS  a two-byte character
+PASS  the widest character, U+10FFFF
+PASS  a lone continuation byte is refused
+PASS  an overlong NUL is refused
+PASS  an overlong three-byte form is refused
+PASS  a surrogate is refused
+PASS  past U+10FFFF is refused
+PASS  a character cut by the window is refused
+PASS  a bad second continuation byte is refused
+PASS  only the good ones wait
+PASS  a take counts escapes: {, keys of eleven and nine, a comma and } is 23
+PASS  so the second waits
+PASS  keys of eleven and eight with escapes fit maxBytes exactly: 22
+PASS  so none waits
+PASS  four bytes
+PASS  eight
+PASS  a ninth would pass queueBytes
+PASS  the oldest taken
+PASS  its room is reused: the waiting key moves to the front
+PASS  the taken key's run still routes
+PASS  the moved key
+PASS  the key added after the move
+PASS  an empty queue has all its room
+PASS  two runs in flight
+PASS  a third take while both are in flight
+PASS  writes nothing
+PASS  and leaves the request waiting
+PASS  the first answer
+PASS  frees its run, under a new handle
+PASS  for the waiting request
+PASS  answers come in the order the runs were sent
+PASS  the reused run sees only its own requests
+PASS  an ordinal past a run's one key
+PASS  refused
+PASS  a run of three keys
+PASS  routes ordinal 3
+PASS  the run again, with one key
+PASS  a later batch cannot read an earlier one's ordinals
+PASS  refused
+PASS  an ordinal past the keys
+PASS  ordinal 0
+PASS  a negative ordinal
+PASS  a NULL ordinal
+PASS  an ordinal that is not an integer
+PASS  an ordinal past an int8
+PASS  a row of no columns
+PASS  an ordinal that goes back
+PASS  the key the last row named may come again
+PASS  reading a good ordinal keeps the program's text.failed
+PASS  and a bad one does not set it
+PASS  an error after rows fails every request not yet closed
+PASS  an error is not a refusal
+PASS  an error before any row
+PASS  frees the run for the next take
+PASS  a lost connection fails the run as an error does
+PASS  none of it was stray
+PASS  an answer as it should be
+PASS  a second CommandComplete is stray
+PASS  a row after CommandComplete is stray
+PASS  an error after CommandComplete, as a commit at Sync can fail, is stray
+PASS  a connection lost after CommandComplete, before the group is done
+PASS  a row after an error is stray
+PASS  a CommandComplete after an error is stray
+PASS  the one run is taken again under a new handle
+PASS  a row on the spent handle answers false
+PASS  and next on it answers nothing
+PASS  each counted stray
+PASS  the new execution is untouched
+PASS  a key
+PASS  a key larger than the connection's maxOutput
+PASS  a key with no room is left for a later take
+PASS  so it waits
+PASS  a take while maxInFlight groups are in flight
+PASS  writes nothing
+PASS  and opens no group
+PASS  routed
+PASS  a take whose first key has no room
+PASS  cancels its bind and writes nothing
+PASS  so no group is open
+PASS  both still wait
+PASS  the connection still works
+PASS  a full take fits maxOutput at the bound
+PASS  and a byte past it is refused
+postgres batch: 142 passed, 0 failed, 0 skipped

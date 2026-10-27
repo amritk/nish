@@ -991,7 +991,7 @@ const arrayBuilder = (t: Suite): void => {
   const awkward: string[] = ["\"", "\\", ",", "{", "}", " x y ", "NULL", "", "é"];
   for (const item of awkward) {
     const b: u8[] = z(item);
-    t.ok(`an element of ${toI32(item.length)} bytes`, conn.arrayElement(b, 0, toI32(b.length)));
+    t.ok(`an element of ${toI32(b.length)} bytes`, conn.arrayElement(b, 0, toI32(b.length)));
   }
   conn.arrayEnd();
   t.eqStr(
@@ -1065,6 +1065,47 @@ const arrayBuilder = (t: Suite): void => {
   conn.terminate();
   t.eqStr("terminate drops an open array with its bind", drain(conn), "X|||<4>");
   t.ok("and leaves none open", !conn.paramText("x"));
+
+  conn = bound(config());
+  conn.arrayStart();
+  const min: i64 = (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8);
+  t.ok("arrayInt", conn.arrayInt(toI64(7)));
+  conn.arrayNull();
+  conn.arrayInt(min);
+  conn.arrayInt(toI64(0));
+  conn.arrayEnd();
+  t.eqStr("arrayInt writes decimal, unquoted, the most negative too", onlyParam(conn, 0), "1 of 31:{7,NULL,-9223372036854775808,0}");
+
+  // 12 bytes of Bind, the length word and `{` are queued and 17 stay free:
+  // 990 for the elements and the `}` they owe.
+  conn = bound(c);
+  conn.arrayStart();
+  conn.arrayElement(long, 0, 975);
+  t.ok("an int whose digits would pass maxOutput is refused", !conn.arrayInt(toI64(-1000000000) * toI64(10)));
+  t.ok("one digit less fits", conn.arrayInt(toI64(-1000000000)));
+  conn.arrayEnd();
+  t.eqStr("and the refused one left nothing behind", onlyParam(conn, 0).slice(983), "aaa\",-1000000000}");
+
+  conn = ready(config());
+  t.ok("bindCancel with no bind open is refused", !conn.bindCancel());
+  conn.prepare("q", "select $1", none());
+  conn.sync();
+  drain(conn);
+  conn.bindStart("q");
+  conn.arrayStart();
+  conn.arrayInt(toI64(1));
+  t.eqI32("a bind opens a group, beside the prepare's unanswered one", conn.inFlight, 2);
+  t.ok("bindCancel", conn.bindCancel());
+  t.eqStr("drops the bind and its open array, unsent", drain(conn), "");
+  t.eqI32("and closes the group it opened", conn.inFlight, 1);
+  t.ok("so sync has no group to end", !conn.sync());
+  t.ok("a parameter after it is refused: no bind is open", !conn.paramInt(toI64(1)));
+  conn.prepare("r", "select 2", none());
+  conn.bindStart("q");
+  conn.bindCancel();
+  t.eqI32("a bind in a group already open leaves it open", conn.inFlight, 2);
+  t.ok("so sync still ends it", conn.sync());
+  t.eqStr("with only what was queued before the bind", drain(conn).slice(0, 1), "P");
 };
 
 export const main = (): number => {

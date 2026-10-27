@@ -13,13 +13,18 @@ tested against exchanges recorded from PostgreSQL 18.
 
 ## A query
 
-The program below connects to a server on `127.0.0.1:5432`, prepares one
-statement, runs it, and prints each row. The connection asks for nothing a
-round trip does not need: the statement is prepared, bound and executed in one
-write.
+The program below connects to a server on `127.0.0.1:5432` and looks up three
+users by id through a `PgBatcher` ([below](#batching-keyed-reads)): the
+requests for ids 7, 3 and 7 become one execution that asks for each id once,
+and every request gets its rows, or word that there were none. The connection
+asks for nothing a round trip does not need: the statement is prepared, bound
+and executed in one write.
 
 ```ts nish:ok
 import {
+  PG_BATCH_MISSING,
+  PG_BATCH_NONE,
+  PG_BATCH_ROW,
   PG_COMPLETE,
   PG_ERROR,
   PG_FAILED,
@@ -27,6 +32,8 @@ import {
   PG_NEED_MORE,
   PG_READY,
   PG_ROW,
+  PgBatchConfig,
+  PgBatcher,
   PgConfig,
   PgConnection,
 } from "nish/net/postgres";
@@ -51,6 +58,16 @@ export const main = (): i32 => {
   const password = secret(bytesOf("app password"));
   const conn = new PgConnection(config, password, nonce);
   wipe(password);
+
+  const batch = new PgBatchConfig();
+  batch.name = "user_by_id";
+  batch.select = "select u.id, u.name from users u where u.id = q.key";
+  const users = new PgBatcher(batch);
+  users.addInt(toI64(7), 0); // the key, and a tag naming the request
+  users.addInt(toI64(3), 1);
+  users.addInt(toI64(7), 2);
+  const noTypes: i32[] = [];
+  let run: i32 = -1;
 
   const addr = new Array<u8>(18);
   netAddress(addr, "127.0.0.1", 5432);
@@ -84,18 +101,19 @@ export const main = (): i32 => {
     let event = conn.next();
     while (event !== PG_NEED_MORE && running) {
       if (event === PG_READY) {
-        conn.prepare("by_id", "select id, name from users where id > $1", [20]);
-        conn.bindStart("by_id");
-        conn.paramInt(toI64(0));
-        conn.bindEnd();
+        conn.prepare(users.name, users.sql, noTypes);
+        run = users.take(conn); // binds ids 7 and 3 as one execution
         conn.sync();
-      } else if (event === PG_ROW) {
-        console.log(`${conn.int(0)} ${conn.columnText(1)}`);
-      } else if (event === PG_COMPLETE) {
-        console.log(`${conn.tagRows()} rows`);
+      } else if (event === PG_ROW && run >= 0) {
+        users.row(run, conn);
+      } else if (event === PG_COMPLETE && run >= 0) {
+        users.end(run);
       } else if (event === PG_ERROR) {
         const e = conn.lastError;
         console.log(e === null ? "error" : `${e.code}: ${e.message}`);
+        if (run >= 0) {
+          users.fail(run);
+        }
       } else if (event === PG_GROUP_DONE) {
         code = conn.groupFailed ? 1 : 0;
         conn.terminate();
@@ -104,6 +122,14 @@ export const main = (): i32 => {
       } else if (event === PG_FAILED) {
         console.log(`connection failed: ${conn.failure}`);
         running = false;
+      }
+      // What the event owes each request, before the next event moves the row.
+      for (let e = run >= 0 ? users.next(run) : PG_BATCH_NONE; e !== PG_BATCH_NONE; e = users.next(run)) {
+        if (e === PG_BATCH_ROW) {
+          console.log(`request ${users.tag}: ${conn.int(0)} ${conn.columnText(1)}`);
+        } else if (e === PG_BATCH_MISSING) {
+          console.log(`request ${users.tag}: no such user`);
+        }
       }
       if (running) {
         event = conn.next();
@@ -184,9 +210,10 @@ An array parameter lets one statement take a whole batch, as in
 - `paramIntArray(values, start, count)` binds `values[start, start + count)`
   as an `int8[]`; `count` 0 is the empty array.
 - `paramTextArray(items)` binds a `string[]` as a `text[]`.
-- `arrayStart()`, then `arrayElement(bytes, start, length)` (a UTF-8 window)
-  or `arrayNull()` for each element, then `arrayEnd()`, builds one element at
-  a time, straight into the Bind, with no array of the elements first.
+- `arrayStart()`, then `arrayElement(bytes, start, length)` (a UTF-8 window),
+  `arrayInt(value)` (an `i64`, in decimal) or `arrayNull()` for each element,
+  then `arrayEnd()`, builds one element at a time, straight into the Bind,
+  with no array of the elements first.
 
 ```ts
 conn.bindStart("names");
@@ -208,8 +235,10 @@ gives the parameter: the same elements bind to `$1::int4[]` or `$1::varchar[]`.
 An element refused for room answers `false`, writes nothing and leaves the
 array open, so the elements already in it can still be sent: end the array
 and the Bind, and put the rest in the next statement. `arrayEnd()` is never
-refused. While an array is open, `sync()`, `prepare`, `closeStatement` and
-`bindStart` answer `false`, as with any open bind. Using an array out of order
+refused. When not even the first element fits, `bindCancel()` drops the open
+bind, array and all, unsent, as if `bindStart` had never been called. While an
+array is open, `sync()`, `prepare`, `closeStatement` and `bindStart` answer
+`false`, as with any open bind. Using an array out of order
 is a bug, so it panics: an element or `arrayEnd()` with no `arrayStart()`, a
 second `arrayStart()`, or any other `param...` call or `bindEnd()` before
 `arrayEnd()`. So do an `arrayElement` window outside its array and a
@@ -345,6 +374,129 @@ and after `dispose()`; `connection` and `next` on a slot outside 0 to
 [`tests/postgres/carrier.ts`](../../../tests/postgres/carrier.ts) is a whole
 program: one `pollWait` loop holding the pool's sockets beside an HTTP server,
 which answers requests while a query is in flight.
+
+## Batching keyed reads
+
+A server that answers many requests for one row each — a user by id, an
+article by slug — can send them as one execution instead of one each. A
+`PgBatcher` queues those reads, and when a connection is free binds up to
+`maxRequests` of them as one statement over an array of their keys:
+
+```sql
+select t.*, q.ord from unnest($1::int8[]) with ordinality as q(key, ord)
+  cross join lateral (<select>) as t order by q.ord[, <orderBy>]
+```
+
+`<select>` is the query for one key, which it reads as `q.key`:
+`select a.title from articles a where a.slug = q.key`. Each distinct key is
+bound once however many requests ask for it, and each row goes back to every
+one of them.
+
+```ts
+const config = new PgBatchConfig();
+config.name = "article_by_slug";
+config.keyType = PG_BATCH_TEXT; // PG_BATCH_INT (the default) binds int8 keys
+config.select = "select a.id, a.title from articles a where a.slug = q.key";
+config.maxRequests = 64;
+const articles = new PgBatcher(config);
+pool.register(articles.name, articles.sql, noTypes); // prepare `sql` under `name`
+
+// Per request: the key is copied in, and the tag comes back with its answers.
+if (!articles.addText(body, slugStart, slugLength, requestId)) {
+  // The queue is full (queueSize requests, or queueBytes of text keys), the
+  // key is longer than maxBytes allows, or it holds a NUL or is not UTF-8:
+  // answer 503, or 400 for a bad key.
+}
+
+// Each pool request is one take, and its events name it by pool.ticket, so
+// keep the run each ticket got. Tickets count up, so a ring of more slots
+// than requests can be outstanding at once (connections plus queue) holds
+// every live one.
+const RING: i32 = 512;
+const runs: i32[] = new Array<i32>(RING);
+
+// When the loop has a connection for it:
+const slot = pool.dispatch(); // after pool.request() while articles.waiting() > 0
+runs[pool.ticket % RING] = articles.take(pool.connection(slot)); // a handle, or -1: nothing bound
+pool.send();
+
+// For each event: the pool's own name no request (pool.ticket is -1).
+const run: i32 = pool.ticket >= 0 ? runs[pool.ticket % RING] : -1;
+if (run >= 0) {
+  if (event === PG_ROW) {
+    articles.row(run, conn);
+  } else if (event === PG_COMPLETE) {
+    articles.end(run);
+  } else if (event === PG_ERROR || event === PG_LOST) {
+    articles.fail(run);
+  }
+  for (let e = articles.next(run); e !== PG_BATCH_NONE; e = articles.next(run)) {
+    // articles.tag is the request; for PG_BATCH_ROW, conn's current row is its row.
+  }
+}
+```
+
+`next(run)` answers, for each request, a `PG_BATCH_ROW` for each of its rows,
+then one last event: `PG_BATCH_DONE` after at least one row,
+`PG_BATCH_MISSING` when its key had none, or `PG_BATCH_FAILED` when the
+execution failed (the rows it had may be incomplete). Call it until it answers
+`PG_BATCH_NONE` after every `row`, `end` and `fail`, before the connection's
+next event: a row's columns are read from the connection, where they last only
+until then.
+
+- **Caps.** `maxRequests` (32, at most 1024) bounds the requests one execution answers;
+  `maxBytes` (32 KiB) the key array's text; `queueSize` (1024) the requests
+  waiting, and `queueBytes` (64 KiB) their text keys; `runs` (16) the
+  executions in flight at once. A cap out of range, an empty `name` or
+  `select`, or a NUL in them or in `orderBy` panics in the constructor.
+- **Taking fewer.** `take` binds the oldest requests first and stops at the
+  first whose key would pass `maxBytes`, or that the connection refuses for
+  room under `maxOutput`; the rest stay queued for the next take. It answers
+  -1 and writes nothing when nothing waits, every run is in flight, or the
+  connection has no room even for the first key. `addText` refuses a key
+  whose escaped text could never fit `maxBytes`, but one past what a
+  connection could ever hold stays at the head of the queue. A take that
+  fills `maxBytes` always fits a connection with nothing else unsent when
+  `maxBytes + name.length + 32` is at most its `maxOutput`; leave more for
+  whatever else the group queues.
+- **Handles.** `take` answers a handle for the run, not a reused number: a
+  run is free again once all its events are answered after `end` or `fail`,
+  and its next take answers a new handle. A handle that is spent — its run
+  answered, or taken again — makes `row`, `end` and `fail` do nothing and
+  `next` answer `PG_BATCH_NONE`, and counts the call in `stray`; so a server
+  that answers twice, or a connection lost after its answer, cannot touch the
+  run's next batch. Only a caller's mistake panics: `row`, `end` or `fail`
+  before `next(run)` answered `PG_BATCH_NONE`, a negative handle or one no
+  take could answer, `addInt` on a text batcher, and `addText` on an int8 one
+  or with a window outside its array.
+- **Ordinals.** Rows are routed by the ordinal in their last column, which
+  comes from the server. `row` refuses one that is NULL, not an integer, past
+  the keys, or before the key the last row was for: it answers `false`,
+  counts it in `refused`, and fails the run, so a confused server cannot hand
+  one request's rows to another.
+- **One key, one column.** A key is one `int8` or one `text`. A composite key
+  — two columns — is out of its scope: encode it into one text key, or use
+  `paramTextArray` and your own statement.
+
+The batcher reads no clock. It takes what waits whenever it is asked, so a
+loop that calls `take` as soon as a connection is free sends small batches
+when traffic is light and large ones when it is heavy, without waiting. To
+collect for a while first, let your loop decide when to ask: take when
+`waiting()` reaches a size you choose, or when the oldest request has waited
+longer than a window you time with your own clock, whichever comes first.
+
+```ts
+const BATCH_WINDOW_MS: i32 = 2;
+let asked: boolean = false; // a request is queued and its dispatch has not come
+const due = articles.waiting() >= 32 || (articles.waiting() > 0 && nowMs() - oldestAddedMs >= BATCH_WINDOW_MS);
+if (due && !asked && pool.request() >= 0) {
+  asked = true; // and false again on its dispatch, which takes, as above
+}
+// And pass min(timeout, the window left) to pollWait, so the loop wakes for it.
+```
+
+[`tests/postgres/live/live.ts`](../../../tests/postgres/live/live.ts)'s
+`batch` scenario drives three batchers through a pool against a live server.
 
 ## What it does not do
 
