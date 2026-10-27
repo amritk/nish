@@ -408,21 +408,31 @@ if (!articles.addText(body, slugStart, slugLength, requestId)) {
   // answer 503, or 400 for a bad key.
 }
 
+// Each pool request is one take, and its events name it by pool.ticket, so
+// keep the run each ticket got. Tickets count up, so a ring of more slots
+// than requests can be outstanding at once (connections plus queue) holds
+// every live one.
+const RING: i32 = 512;
+const runs: i32[] = new Array<i32>(RING);
+
 // When the loop has a connection for it:
 const slot = pool.dispatch(); // after pool.request() while articles.waiting() > 0
-const run = articles.take(pool.connection(slot)); // a handle, or -1: nothing bound
+runs[pool.ticket % RING] = articles.take(pool.connection(slot)); // a handle, or -1: nothing bound
 pool.send();
 
-// For each of that request's events, while run >= 0:
-if (event === PG_ROW) {
-  articles.row(run, conn);
-} else if (event === PG_COMPLETE) {
-  articles.end(run);
-} else if (event === PG_ERROR || event === PG_LOST) {
-  articles.fail(run);
-}
-for (let e = articles.next(run); e !== PG_BATCH_NONE; e = articles.next(run)) {
-  // articles.tag is the request; for PG_BATCH_ROW, conn's current row is its row.
+// For each event: the pool's own name no request (pool.ticket is -1).
+const run: i32 = pool.ticket >= 0 ? runs[pool.ticket % RING] : -1;
+if (run >= 0) {
+  if (event === PG_ROW) {
+    articles.row(run, conn);
+  } else if (event === PG_COMPLETE) {
+    articles.end(run);
+  } else if (event === PG_ERROR || event === PG_LOST) {
+    articles.fail(run);
+  }
+  for (let e = articles.next(run); e !== PG_BATCH_NONE; e = articles.next(run)) {
+    // articles.tag is the request; for PG_BATCH_ROW, conn's current row is its row.
+  }
 }
 ```
 
@@ -477,8 +487,10 @@ longer than a window you time with your own clock, whichever comes first.
 
 ```ts
 const BATCH_WINDOW_MS: i32 = 2;
-if (articles.waiting() >= 32 || (articles.waiting() > 0 && nowMs() - oldestAddedMs >= BATCH_WINDOW_MS)) {
-  pool.request(); // then take on its dispatch, as above
+let asked: boolean = false; // a request is queued and its dispatch has not come
+const due = articles.waiting() >= 32 || (articles.waiting() > 0 && nowMs() - oldestAddedMs >= BATCH_WINDOW_MS);
+if (due && !asked && pool.request() >= 0) {
+  asked = true; // and false again on its dispatch, which takes, as above
 }
 // And pass min(timeout, the window left) to pollWait, so the loop wakes for it.
 ```

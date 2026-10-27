@@ -2602,7 +2602,8 @@ DataLoader and no `setTimeout` to collect a tick's keys: in `nish/net/postgres`,
 a `PgBatcher` built from a `PgBatchConfig` (`name`, `select` reading the key as
 `q.key`, `keyType` `PG_BATCH_INT` or `PG_BATCH_TEXT`, caps) queues requests with
 `addInt(key, tag)` or `addText(bytes, start, length, tag)` — `false` when its
-queue is full, or for a text key with a NUL or not UTF-8 — and `take(conn)`
+queue is full, or for a text key too long for `maxBytes`, with no room left in
+`queueBytes`, with a NUL or not UTF-8 — and `take(conn)`
 binds the waiting ones, each key once, as one execution of its `sql` over
 `unnest($1) with ordinality`, answering a run handle or -1. Hand that
 execution's `PG_ROW` to `row(run, conn)`, `PG_COMPLETE` to `end(run)`, an error

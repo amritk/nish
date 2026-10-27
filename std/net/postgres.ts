@@ -119,8 +119,10 @@
  * routing each row by its ordinal (checked first: a server's ordinal is
  * refused before it routes anything), and `next(run)` answers
  * `PG_BATCH_ROW`, then `PG_BATCH_DONE`, `PG_BATCH_MISSING` or
- * `PG_BATCH_FAILED`, for each request. It reads no clock and allocates
- * only in its constructor; when to take is the program's.
+ * `PG_BATCH_FAILED`, for each request. It reads no clock, and the batcher
+ * itself allocates only in its constructor (the connection's output buffer a
+ * take writes into may still grow, up to its `maxOutput`); when to take is
+ * the program's.
  *
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
  * and RFC 5802 and RFC 7677; not ported from another implementation.
@@ -2687,9 +2689,11 @@ class PgBatchRun {
  * `row`, `end` and `fail` count it in `stray` and do nothing, even once
  * `take` has given the run out again under a new handle. The ordinal each
  * row carries comes from the server and is checked before it routes
- * anything. What panics is only the program's own misuse: a handle `take`
- * never gave (-1 among them), or `row`, `end` or `fail` before `next(run)`
- * has answered `PG_BATCH_NONE` for the event before.
+ * anything. What panics is only the program's own misuse: a handle out of
+ * the range `take` can give (-1 or any negative, or `runs` * 2^20 or more),
+ * or `row`, `end` or `fail` before `next(run)` has answered `PG_BATCH_NONE`
+ * for the event before. A handle in that range that `take` never gave is
+ * spent like any other: counted in `stray`, not a panic.
  */
 export class PgBatcher {
   /** The prepared statement's name. */
@@ -2716,7 +2720,7 @@ export class PgBatcher {
   private readonly runs: PgBatchRun[]
   /** The request the last `next(run)` answered about; -1 for none. */
   tag: i32 = -1
-  /** The number of rows refused because their ordinal named no key still open, stopping at 2^31 - 1; each failed its execution. */
+  /** The number of runs failed by a bad ordinal (missing, NULL, not an integer, or naming no key still open), stopping at 2^31 - 1: each counts its first refused row, and the rows after it, dropped with the failed run, are not counted. */
   refused: i32 = 0
   /** The number of `row`, `end` and `fail` calls on a spent handle, each ignored, stopping at 2^31 - 1. */
   stray: i32 = 0
