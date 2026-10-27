@@ -613,3 +613,29 @@ What the rows say, read against that band:
 
 Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](../bench/README.md#tls-handshake) describes it, and [WP34 K5](wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline and [its result](wp34-hosting-cs.md#k5-p-256-the-inversion--the-result).
 <!-- tls-handshake:end -->
+
+<!-- postgres-profile:begin -->
+## PostgreSQL client: where the time goes
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/postgres/run.mjs --rounds 12` times the module against libpq ([bench/README.md](../bench/README.md#postgresql) describes it); this section records what a profile of the module's side found, and a change it suggested that did not pay. 2026-10-27, main at 3a53579, four cores, PostgreSQL and libpq 18.6.
+
+**The baseline.** Client CPU per query, median (IQR), with the noise band (the build against its byte-identical copy):
+
+| Workload | Nish | C | Nish − C | Noise band |
+| --- | --- | --- | --- | --- |
+| `pk` | 12.76 µs (0.38) | 15.22 µs (0.71) | −2.47 µs (−16.2 %) | 0.34 µs (2.7 %) |
+| `list` | 53.88 µs (4.57) | 67.92 µs (4.95) | −14.03 µs (−20.7 %) | 1.35 µs (2.5 %) |
+| `insert` | 32.13 µs (1.73) | 34.71 µs (3.36) | −2.59 µs, inside the noise | 0.67 µs (2.1 %) |
+
+**The profile.** `perf record -g` over a `-g` build (200,000 `pk`, 20,000 `list`, 10,000 `insert` queries). The kernel's side of the socket and the scheduler take most of the client's CPU: `finish_task_switch` alone is 37 % of `pk` and 24 % of `list`. In user space on `list`, the bench's own checksum fold over every column's bytes (`main.ts`'s `Fold.bytes`) is about 13 % and its timestamp fold 4.5 %; the module's decoding is `readRow` 2.1 %, `PgArrayWalker.next` 1.7 %, `dispatch` 0.8 %, `memmove` 0.8 % and `PgText.int` 0.8 %, about 7.5 % in all, some 4 µs a query, under `list`'s IQR. On `pk` the module's functions are each under 0.6 %. No decoding change can move the client's CPU by more than this machine's noise, and a binary result format would add work to the timestamp and `text[]` columns `list` reads as text.
+
+**The input buffer.** `strace -c` shows the module's 8 KiB first input buffer taking a `list` answer in two reads, 5,717 `recvfrom` and as many `epoll_wait` for 3,000 queries against libpq's 3,028. A 16 KiB first size, libpq's own, brings it to 3,028; 32 and 64 KiB to about 3,015. Timed against main in 12 interleaved rounds, it does not pay:
+
+| Workload | main | main's copy (the band) | 16 KiB | 64 KiB |
+| --- | --- | --- | --- | --- |
+| `pk` | 12.85 µs (0.88) | +0.30 (2.3 %) | +0.09 (0.7 %) | +0.57 (4.4 %) |
+| `list` | 52.97 µs (6.52) | +2.06 (3.9 %) | +2.02 (3.8 %) | +1.26 (2.4 %) |
+| `insert` | 33.10 µs (2.04) | −0.74 (−2.2 %) | +0.86 (2.6 %) | −0.98 (−3.0 %) |
+
+Every difference is inside the band and the IQRs: halving `list`'s system calls saves less than this machine can see, so the default stays 8 KiB.
+<!-- postgres-profile:end -->

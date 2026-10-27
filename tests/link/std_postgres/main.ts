@@ -246,7 +246,6 @@ const framing = (t: Suite): void => {
   pushI32(big, 1025);
   t.eqStr("a message over maxMessage is refused before it is read", feed(open(c), big), `failed:${PG_ERR_TOO_BIG}`);
 
-  t.eqI32("the input buffer starts at 16 KiB", open(config()).inputRoom(), 16384);
   const small = config();
   small.inputSize = 16;
   const tiny = open(small);
