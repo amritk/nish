@@ -672,5 +672,20 @@ On `list`, the only workload that decodes timestamps and arrays in bulk, every c
 
 Three cells fall outside their band: `pk` at 64 KiB (+0.57, slower), `insert` at 16 KiB (+0.86, slower) and `insert` at 64 KiB (−0.98, faster). `list` at 16 KiB sits at its band. All are inside main's IQR, and the signs disagree between sizes and workloads. `list`, whose system calls the larger buffer halves, is not faster at either size, so the default stays 8 KiB.
 
-**No system call left to remove.** `strace -c` over 2,000 `list` queries counts 1,990 `sendto` (at depth 16, one per answer that frees a slot), and the 16 KiB buffer above brings `recvfrom` and `epoll_wait` to about one each per query; `insert`, at depth 1, counts 2,007 of each. Each run makes two `epoll_ctl` calls in all. The loop already makes one call of each kind per answer, and halving `list`'s reads did not move its CPU. The kernel's remaining 69 to 93 % is the loopback socket's per-byte work and the wakeups themselves, which the client cannot shed without changing how many queries it waits on at once.
+**No system call left to remove.** `strace -c` over 2,000 `list` queries counts 1,990 `sendto` (at depth 16, one per answer that frees a slot), and the 16 KiB buffer above brings `recvfrom` and `epoll_wait` to about one each per query; `insert`, at depth 1, counts 2,007 of each. Each run makes two `epoll_ctl` calls in all. The module already writes a query's Bind, Execute and Sync as one run of bytes that the caller sends in one call, and every query freed in a wakeup goes in that wakeup's one `sendto`, so fewer writes would need the caller to wait on more queries at once, which is not the module's to choose.
+
+**Growing the buffer on demand, and everything together.** A buffer that starts at 8 KiB and doubles, up to 64 KiB, after a read fills it to its end, so only a connection that receives in bulk pays for the room: `strace` counts 2,023 `recvfrom` for 2,000 `list` queries against main's 3,829. Timed with the decoder changes too, in two runs of 12 rounds each after a warm-up round, the order rotating by one each round:
+
+| Workload | Run | main | copy (the band) | growth | growth and the three decoders | the three decoders |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pk` | 1 | 13.40 µs (0.88) | +0.01 | −0.11 | −0.04 | |
+| `pk` | 2 | 12.65 µs (0.59) | +0.12 | +0.51 | +0.55 | +0.44 |
+| `list` | 1 | 55.94 µs (3.83) | −0.22 | −0.64 | −1.48 | |
+| `list` | 2 | 52.38 µs (2.98) | +0.11 | +0.31 | +2.63 | +1.80 |
+| `insert` | 1 | 32.39 µs (1.97) | +0.37 | +0.58 | −1.17 | |
+| `insert` | 2 | 31.26 µs (2.29) | +0.35 | −0.16 | +0.50 | +0.15 |
+
+Run 1 put everything together 1.48 µs under main on `list`, outside that run's 0.22 µs band; run 2, the same binaries, put it 2.63 µs over. The copy's band, 0.1 to 0.4 µs in these runs, is about a tenth of how far the same binary's median moves between runs, so no single run's delta outside it is a result. Across the two runs no change is faster than main on every workload, and none is faster twice, so none ships, the growth included.
+
+`readRow` was not changed: it is 2.2 % of `list` out of line, about 1.2 µs a query for 20 rows, and already reads each column's length without a call. Halving it would save less than the run-to-run spread above.
 <!-- postgres-profile:end -->
