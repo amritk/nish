@@ -238,8 +238,11 @@ export class PgConfig {
   maxMessage: i32 = 1048576
   /** The most groups waiting for their answers at once. */
   maxInFlight: i32 = 16
-  /** The input buffer's first size, in bytes; it grows to a message's length, up to `maxMessage` + 1. */
-  inputSize: i32 = 8192
+  /**
+   * The input buffer's first size, in bytes; it grows to a message's length, up to `maxMessage` + 1.
+   * 16 KiB, libpq's own, takes a page of rows in one read where 8 KiB took two.
+   */
+  inputSize: i32 = 16384
   /** The widest row; past it, `PG_ERR_TOO_BIG`. PostgreSQL's own limit is 1664. */
   maxColumns: i32 = 1664
   /** The fewest SCRAM iterations accepted; 4096 is PostgreSQL's default and RFC 7677's floor. */
