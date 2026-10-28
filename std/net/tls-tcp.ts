@@ -449,7 +449,12 @@ export class TlsTcpServer {
    */
   linger(slot: i32): i32 {
     const conn: TlsRecordServer = this.connections[slot]
-    if (conn.state !== TLS_RECORD_STATE_CLOSED || conn.peerClosed || conn.ended || netShutdown(this.fds[slot], TLS_TCP_SHUT_WRITE) < 0) {
+    if (
+      conn.state !== TLS_RECORD_STATE_CLOSED ||
+      conn.peerClosed ||
+      conn.ended ||
+      netShutdown(this.fds[slot], TLS_TCP_SHUT_WRITE) < 0
+    ) {
       this.lingered[slot] = TLS_TCP_LINGERED
       return TLS_RECORD_DONE
     }
@@ -471,7 +476,8 @@ export class TlsTcpServer {
       if (n === TLS_RECORD_AGAIN) {
         return TLS_RECORD_WANT_READ
       }
-      this.lingered[slot] = n > 0 && this.lingered[slot] + n <= TLS_TCP_LINGER_LIMIT ? this.lingered[slot] + n : TLS_TCP_LINGERED
+      this.lingered[slot] =
+        n > 0 && this.lingered[slot] + n <= TLS_TCP_LINGER_LIMIT ? this.lingered[slot] + n : TLS_TCP_LINGERED
     }
     return TLS_RECORD_DONE
   }
@@ -486,7 +492,9 @@ export class TlsTcpServer {
     if (!this.holds(slot)) {
       return TLS_RECORD_DONE
     }
-    return this.lingered[slot] !== TLS_TCP_LIVE ? this.lingerInterest(slot) : this.connections[slot].interest()
+    return this.lingered[slot] !== TLS_TCP_LIVE
+      ? this.lingerInterest(slot)
+      : this.connections[slot].interest()
   }
 
   /** What `slot`'s CertificateVerify signs, while its `interest` says `TLS_RECORD_SIGN`; `null` otherwise. */

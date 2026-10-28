@@ -37,3 +37,4 @@ PASS  a server of 1024 slots and no connection has made no frame buffer (0)
 PASS  and has made one slot's connection, slot 0's (1)
 PASS  a slot never accepted into is free: no descriptor, H2_ERROR to next, done to flush
 PASS  and names slot 0's connection, making none for itself
+http2 over tls: 39 passed, 0 failed, 0 skipped
