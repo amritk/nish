@@ -852,6 +852,21 @@ export const serverChecks = (): i32 => {
   lb.send(patient, ascii("Host: a\r\n\r\n"));
   t.eqStr("a head finished in pieces within headTimeout is answered", lb.response(patient, false).text(), "hello from nish/net/http1\n");
   t.eqI32("and its slot outlives headTimeout", lb.plain.expire(monotonicNanos() + toI64(750000000)), ZERO);
+  // A kept-alive slot quiet past headTimeout waits for no head: a head clock
+  // it starts later starts no sooner than now, so the slot is not yet due.
+  // Counted from its last move instead, its bound was already past, and every
+  // expire walked every slot while any keep-alive was that quiet.
+  let quietSlot: i32 = -1;
+  for (let k: i32 = 0; k < toI32(lb.plain.connections.length); k++) {
+    if (lb.plain.holds(k)) {
+      quietSlot = k;
+    }
+  }
+  const quietAt: i64 = monotonicNanos() + toI64(750000000);
+  t.ok(
+    "a kept-alive slot quiet past headTimeout is due no sooner than later",
+    quietSlot >= 0 && lb.plain.connection(quietSlot).expiresNoSooner(quietAt) > quietAt
+  );
   lb.plain.expire(monotonicNanos() + toI64(2000000000));
   lb.awaitEnd(patient);
 
@@ -1091,6 +1106,23 @@ export const serverChecks = (): i32 => {
   t.eqI32("the request ends after", g.conn.next(), H1_END);
   t.eqI32("refused: end twice", g.conn.end(), H1_CLOSED);
   t.eqStr("what it sent", sent(g.conn), `HTTP/1.1 200 OK\r\n${PINNED_DATE}Content-Length: 3\r\n\r\nabc`);
+
+  // A head pipelined behind an open exchange starts its clock from the
+  // connection's last move when the exchange ends (`nextRequest`), which can
+  // be before the `now` an `expire` passed while the exchange was open; so
+  // the bound counts that clock from `lastActive`, not `now`.
+  const behind = new Driven(config, "GET /hello HTTP/1.1\r\nHost: a\r\n\r\nGET /hello HTTP/1.1\r\n");
+  const behindMoved: i64 = toI64(1000000000);
+  behind.conn.lastActive = behindMoved;
+  const behindBound: i64 = behind.conn.expiresNoSooner(behindMoved + toI64(400000000));
+  behind.conn.respond(toI32(200), none, none, ZERO);
+  behind.conn.end();
+  behind.conn.next();
+  behind.conn.next();
+  t.ok(
+    "a head pipelined behind an open exchange is due no later than its bound says",
+    behind.conn.headTimed && behind.conn.headSince === behindMoved && behindBound <= behindMoved + toI64(500000000)
+  );
 
   // A 663-byte response left unsent, then a pipelined request: no room for its head.
   const p = new Driven(config, `${get}${get}`);

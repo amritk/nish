@@ -1334,18 +1334,24 @@ export class Http1Connection {
   }
 
   /**
-   * The soonest `expired` can turn true, however the connection moves from
-   * here: `lastActive` only grows, and a head clock not yet started starts
-   * no earlier than it.
+   * The soonest `expired` can turn true at or after `now` (`monotonicNanos`),
+   * however the connection moves from here: `lastActive` only grows, and a
+   * head clock not yet started starts no earlier than `now`, unless an
+   * exchange is open: `nextRequest` starts a pipelined head's clock at
+   * `lastActive` when it ends. Counting a quiet keep-alive's clock from
+   * `lastActive` put it in the past once it was quiet for longer than
+   * `headTimeout`, so each `expire` walked every slot.
    */
-  expiresNoSooner(): i64 {
-    const idle: i64 = toI64(this.config.idleTimeout) * toI64(1000000)
-    const head: i64 = toI64(this.config.headTimeout) * toI64(1000000)
-    const soonest: i64 = this.lastActive + (head < idle ? head : idle)
-    if (this.headTimed && this.headSince + head < soonest) {
-      return this.headSince + head
+  expiresNoSooner(now: i64): i64 {
+    const idle: i64 = this.lastActive + toI64(this.config.idleTimeout) * toI64(1000000)
+    let start: i64 = now
+    if (this.headTimed) {
+      start = this.headSince
+    } else if (this.requestOpen) {
+      start = this.lastActive
     }
-    return soonest
+    const head: i64 = start + toI64(this.config.headTimeout) * toI64(1000000)
+    return head < idle ? head : idle
   }
 }
 
@@ -1679,8 +1685,8 @@ export class Http1Server {
         if (conn.expired(now)) {
           this.close(k)
           n = n + 1
-        } else if (conn.expiresNoSooner() < soonest) {
-          soonest = conn.expiresNoSooner()
+        } else if (conn.expiresNoSooner(now) < soonest) {
+          soonest = conn.expiresNoSooner(now)
         }
       }
     }
@@ -1982,8 +1988,8 @@ export class Http1TlsServer {
         if (conn.expired(now)) {
           this.tls.close(k)
           n = n + 1
-        } else if (conn.expiresNoSooner() < soonest) {
-          soonest = conn.expiresNoSooner()
+        } else if (conn.expiresNoSooner(now) < soonest) {
+          soonest = conn.expiresNoSooner(now)
         }
       }
     }

@@ -609,3 +609,79 @@ What the rows say, read against that band:
 
 Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/tls-handshake.mjs` times the server CPU of one TLS 1.3 handshake, `tests/link/net_interop_server` signing with its P-256 certificate, against a byte-identical copy of the server for the noise band and, with `--baseline REV`, against another rev's server. [bench/README.md](../bench/README.md#tls-handshake) describes it, and [WP34 K5](wp34-hosting-cs.md#k5-p-256-the-inversion--the-baseline) records its figures for the scalar inversion's baseline and [its result](wp34-hosting-cs.md#k5-p-256-the-inversion--the-result).
 <!-- tls-handshake:end -->
+
+<!-- postgres-profile:begin -->
+## PostgreSQL client: where the time goes
+
+Not measured by `bench/run.mjs`, which carries this section over unchanged. `node bench/postgres/run.mjs --rounds 12` times the module against libpq ([bench/README.md](../bench/README.md#postgresql) describes it); this section records what a profile of the module's side found, and the changes it suggested, none of which paid. 2026-10-27, main at 3a53579, four cores, PostgreSQL and libpq 18.6.
+
+**Reading the tables.** A delta is a variant's median client CPU per query minus main's; + is slower. The noise band is main against its byte-identical copy in the same interleaved rounds, and each table is read against its own band: `list`'s measured 1.35 µs in the baseline and in the decoder table, and 2.06 µs in the buffer table, so 2.06 µs is the larger figure seen.
+
+**The baseline.** `run.mjs --rounds 12`: 12 timed rounds after an untimed warm-up, the binaries interleaved within each round in an order that rotates by one each round. Client CPU per query, median (IQR):
+
+| Workload | Nish | C | Nish − C | Noise band |
+| --- | --- | --- | --- | --- |
+| `pk` | 12.76 µs (0.38) | 15.22 µs (0.71) | −2.47 µs (−16.2 %) | 0.34 µs (2.7 %) |
+| `list` | 53.88 µs (4.57) | 67.92 µs (4.95) | −14.03 µs (−20.7 %) | 1.35 µs (2.5 %) |
+| `insert` | 32.13 µs (1.73) | 34.71 µs (3.36) | −2.59 µs (−8.1 %) | 0.67 µs (2.1 %) |
+
+All three differences are outside the band. `run.mjs`'s own verdict also asks for a difference larger than both sides' IQRs, and that holds for `pk` and `list` but not for `insert`, whose −2.59 µs is inside C's 3.36 µs IQR, so the tool prints "inside the noise" for it.
+
+**The profile.** `perf record` at 4,999 Hz over 200,000 `pk`, 20,000 `list` and 10,000 `insert` queries, from a speed build whose IR marks the module's decoders and the bench's fold functions `noinline`, so each shows its own self time. In a plain build `PgText.timestamp` is inlined into the bench's `Fold.timestamp` and the other decoders partly into `Bench.run`. Share of all samples, kernel included:
+
+| | `pk` | `list` | `insert` |
+| --- | --- | --- | --- |
+| Kernel (socket, scheduler) | 91.2 % | 68.7 % | 92.9 % |
+| The module, per query | 2.7 % | 10.5 % | 2.0 % |
+| The bench's checksum fold (`Fold.*`, `Bench.*`) | 3.8 % | 17.9 % | 1.7 % |
+| libc and the rest | 2.3 % | 2.8 % | 2.7 % |
+
+`insert`'s module figure leaves out `sha256Compress` (1.4 %), SCRAM at connect. On `list` the module's functions are `PgText.timestamp` 2.4 %, `readRow` 2.2 %, `PgArrayWalker.next` 2.1 %, `PgText.int` 1.0 %, `dispatch` 0.9 %, `PgConnection.int` 0.4 %, and no other above 0.25 %. The bench's `Fold.bytes`, a byte-at-a-time checksum like `twin.c`'s, is 12.5 % by itself. On `pk` and `insert` no module function is above 0.7 %. Out of line, every decoder pays a call it does not pay in the shipped build, so 10.5 % of `list` (about 5.7 µs) overstates the module's share.
+
+**Decoding, timed in isolation.** Each decoder called 20 million times on input that changes every call, with a printed checksum, pinned to one core; median of 9 runs, per call:
+
+| | main | changed | the change |
+| --- | --- | --- | --- |
+| `PgText.timestamp`, `2024-01-02 03:04:05.123456+00` | 18.8 ns | 20.6 ns | the 14 digits tested straight-line, an OR of `c - 48` and `57 - c`, in place of counting non-digits over 19 bytes |
+| `PgText.int`, 7 digits | 10.3 ns | 9.1 ns | no overflow test per digit when there are at most 18 digits |
+| `PgArrayWalker`, a 4-element `text[]` | 65.4 ns | 46.9 ns | an unquoted byte tested against the five refused bytes only when it is under 35, 92 or over 122 |
+
+A `list` query decodes 20 rows of two timestamps, an int and an array, so all of its timestamp decoding is 40 × 18.8 ns, about 0.75 µs; removing it outright could not clear the 1.35 µs band. The walker change, the largest of the three, saves about 0.4 µs a query at 4 elements an array.
+
+**Decoding, timed end to end.** The three changes and all three together, against main and its copy in 12 interleaved rounds (a fixed order within each round, no warm-up round):
+
+| Workload | main | copy (the band) | timestamp | int | walker | all three |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pk` | 13.54 µs (0.60) | −0.01 | +0.04 | −0.49 | −0.50 | −0.31 |
+| `list` | 57.74 µs (7.37) | +1.35 | +2.33 | +1.21 | +0.59 | +1.42 |
+| `insert` | 32.84 µs (5.32) | +1.29 | +0.20 | −0.01 | −1.47 | −1.14 |
+
+On `list`, the only workload that decodes timestamps and arrays in bulk, every change measured slower than main, and none was faster by more than the band. The `pk` and `insert` cells outside their bands are noise: neither workload reads an array, yet the walker change moves both by the most. Its 18 ns a call is real, but at about 0.4 µs a `list` query it is about a quarter of the band, so no decoding change ships. Binary results were not tried: integer decoding (`PgText.int` and `PgConnection.int`) is about 1.4 % of `list` and under 0.7 % of the others, and the timestamp and `text[]` columns `list` reads would cost more to decode from binary than from text.
+
+**The input buffer.** `strace -c` shows the module's 8 KiB first input buffer taking a `list` answer in two reads, 5,717 `recvfrom` and as many `epoll_wait` for 3,000 queries against libpq's 3,028. A 16 KiB first size, libpq's own, brings it to 3,028; 32 and 64 KiB to about 3,015. Timed against main in 12 interleaved rounds (a fixed order within each round, no warm-up round):
+
+| Workload | main | main's copy (the band) | 16 KiB | 64 KiB |
+| --- | --- | --- | --- | --- |
+| `pk` | 12.85 µs (0.88) | +0.30 (2.3 %) | +0.09 (0.7 %) | +0.57 (4.4 %) |
+| `list` | 52.97 µs (6.52) | +2.06 (3.9 %) | +2.02 (3.8 %) | +1.26 (2.4 %) |
+| `insert` | 33.10 µs (2.04) | −0.74 (−2.2 %) | +0.86 (2.6 %) | −0.98 (−3.0 %) |
+
+Three cells fall outside their band: `pk` at 64 KiB (+0.57, slower), `insert` at 16 KiB (+0.86, slower) and `insert` at 64 KiB (−0.98, faster). `list` at 16 KiB sits at its band. All are inside main's IQR, and the signs disagree between sizes and workloads. `list`, whose system calls the larger buffer halves, is not faster at either size, so the default stays 8 KiB.
+
+**No system call left to remove.** `strace -c` over 2,000 `list` queries counts 1,990 `sendto` (at depth 16, one per answer that frees a slot), and the 16 KiB buffer above brings `recvfrom` and `epoll_wait` to about one each per query; `insert`, at depth 1, counts 2,007 of each. Each run makes two `epoll_ctl` calls in all. The module already writes a query's Bind, Execute and Sync as one run of bytes that the caller sends in one call, and every query freed in a wakeup goes in that wakeup's one `sendto`, so fewer writes would need the caller to wait on more queries at once, which is not the module's to choose.
+
+**Growing the buffer on demand, and everything together.** A buffer that starts at 8 KiB and doubles, up to 64 KiB, after a read fills it to its end, so only a connection that receives in bulk pays for the room: `strace` counts 2,023 `recvfrom` for 2,000 `list` queries against main's 3,829. Timed with the decoder changes too, in two runs of 12 rounds each after a warm-up round, the order rotating by one each round:
+
+| Workload | Run | main | copy (the band) | growth | growth and the three decoders | the three decoders |
+| --- | --- | --- | --- | --- | --- | --- |
+| `pk` | 1 | 13.40 µs (0.88) | +0.01 | −0.11 | −0.04 | |
+| `pk` | 2 | 12.65 µs (0.59) | +0.12 | +0.51 | +0.55 | +0.44 |
+| `list` | 1 | 55.94 µs (3.83) | −0.22 | −0.64 | −1.48 | |
+| `list` | 2 | 52.38 µs (2.98) | +0.11 | +0.31 | +2.63 | +1.80 |
+| `insert` | 1 | 32.39 µs (1.97) | +0.37 | +0.58 | −1.17 | |
+| `insert` | 2 | 31.26 µs (2.29) | +0.35 | −0.16 | +0.50 | +0.15 |
+
+Run 1 put everything together 1.48 µs under main on `list`, outside that run's 0.22 µs band; run 2, the same binaries, put it 2.63 µs over. The copy's band, 0.1 to 0.4 µs in these runs, is about a tenth of how far the same binary's median moves between runs, so no single run's delta outside it is a result. Across the two runs no change is faster than main on every workload, and none is faster twice, so none ships, the growth included.
+
+`readRow` was not changed: it is 2.2 % of `list` out of line, about 1.2 µs a query for 20 rows, and already reads each column's length without a call. Halving it would save less than the run-to-run spread above.
+<!-- postgres-profile:end -->
