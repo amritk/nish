@@ -7,17 +7,20 @@
 // `<the pool's bytes> <that slot's bytes> <one chunk>`, the bytes read from
 // `Arena.used()`, which counts within the current chunk only. The server's
 // 64 KB receive buffer alone outgrows a default chunk, so the program first
-// makes one chunk large enough for the whole pool and empties it with
-// `Arena.reset()`; the last field says whether the pool fit in it, without
-// which its count means nothing.
+// makes one chunk large enough for the whole pool inside a `using a = arena()`
+// block: the arena is empty when that block opens, so leaving it keeps the
+// newest chunk and empties it. The last field says whether the pool fit in
+// it, without which its count means nothing.
 import { QUIC_LISTENER_ENTROPY_SIZE } from "nish/net/quic-listener";
 import { Http3Server } from "nish/net/http3-server";
 import { h3Config, H3Limits, h3QuicConfig } from "../net_http3/peer";
 
 export const main = (): i32 => {
-  const room: u8[] = new Array<u8>(toI32(64 * 1024 * 1024));
-  room[0] = 1;
-  Arena.reset();
+  {
+    using a = arena();
+    const room: u8[] = new Array<u8>(toI32(64 * 1024 * 1024));
+    room[0] = 1;
+  }
   const mark: i64 = Arena.mark();
   const before: i64 = Arena.used();
   const server: Http3Server = new Http3Server(

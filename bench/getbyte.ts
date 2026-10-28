@@ -8,11 +8,10 @@
 // and what is timed is the closed program §2's `opt -O3` result is about.
 // `main` runs both sums 256 times a round, and changes one byte of the table
 // between passes so that no pass is the previous one folded. Every index in
-// `main` is proven by its loop condition, so the two builds differ in nothing
-// but what the flag would take out of the three functions.
+// `main` is proven by its loop condition, so what is timed is the three
+// functions and nothing a check in `main` adds.
 //
 //   build/nish bench/getbyte.ts --link build/getbyte --profile speed
-//   build/nish bench/getbyte.ts --link build/getbyte-unchecked --profile speed --unchecked-indexing
 //
 // wp31 §10 records the protocol and the numbers.
 

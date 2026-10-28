@@ -37,8 +37,8 @@
 //   `type E = (typeof E)[keyof typeof E];`, with the checker's member values,
 //   and a member as a type, `E.A`, becomes `(typeof E.A)`. Nish has numeric
 //   enums only, so there is no string member to write.
-// - `Arena.used()` and its three siblings become the runtime's `arenaUsed`,
-//   `arenaMark`, `arenaRelease` and `arenaReset`.
+// - `Arena.used()` and `Arena.mark()` become the runtime's `arenaUsed` and
+//   `arenaMark`.
 // - A `Result` annotation asks for the runtime's `Result`, so the output
 //   type-checks; `Ok` and `Err` come with the ambient builtins.
 
@@ -265,11 +265,5 @@ const arenaHelper = (member: string): string | null => {
   if (member === "used") {
     return "arenaUsed"
   }
-  if (member === "mark") {
-    return "arenaMark"
-  }
-  if (member === "release") {
-    return "arenaRelease"
-  }
-  return member === "reset" ? "arenaReset" : null
+  return member === "mark" ? "arenaMark" : null
 }

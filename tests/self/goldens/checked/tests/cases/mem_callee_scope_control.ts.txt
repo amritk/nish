@@ -8,19 +8,17 @@ function makeRow(n: i32): i32[] -> @makeRow
   local +0:9 row: i32[] (const)
   local +1:12 i: i32 (let)
 function sumRows(n: i32): i32 -> @sumRows
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_arena_release
-  calls: makeRow nish_arena_mark nish_arena_release nish_panic_overflow
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  calls: makeRow nish_arena_mark nish_arena_release nish_panic nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:7 total: i32 (let)
   local +1:12 i: i32 (let)
   local +2:11 m: i64 (const)
   callee +3:14 makeRow -> @makeRow
 function twice(n: i32): i32 -> @twice
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via sumRows
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: n
-  calls: makeRow nish_panic_overflow sumRows
+  calls: makeRow nish_arena_mark nish_arena_release nish_panic_overflow sumRows
   stackSites=0 stackLocals=0
   callee +0:32 sumRows -> @sumRows
   callee +0:45 makeRow -> @makeRow

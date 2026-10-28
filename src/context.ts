@@ -147,19 +147,6 @@ export class CheckContext {
   source: SourceFile
   numberMode: i32
   /**
-   * `--wrapping` was given, so constant folding wraps at the declared width
-   * instead of refusing an overflow (`src/constants.ts`). The fold has to
-   * agree with the instruction it replaces, which is why an option reaches
-   * pass 2 at all.
-   */
-  wrapping: boolean
-  /**
-   * `--unchecked-indexing` was given, so no bounds check is emitted anywhere
-   * and the WP15 §2 warning about a check that survived has nothing to report.
-   * Read by that rule and by nothing else in the checker.
-   */
-  uncheckedIndexing: boolean
-  /**
    * `--strict-exports`, which is the default. Off, a non-exported function
    * keeps external linkage, and the WP15 §8 walk says so at a call inside a
    * loop; nothing else in the checker reads it, because linkage is the
@@ -314,8 +301,6 @@ export class CheckContext {
     program: CheckedProgram,
     sink: DiagnosticSink,
     numberMode: i32,
-    wrapping: boolean,
-    uncheckedIndexing: boolean,
     strictExports: boolean
   ) {
     this.table = table
@@ -323,8 +308,6 @@ export class CheckContext {
     this.sink = sink
     this.source = program.source
     this.numberMode = numberMode
-    this.wrapping = wrapping
-    this.uncheckedIndexing = uncheckedIndexing
     this.strictExports = strictExports
     this.wasm = false
     this.wasmFreestanding = false

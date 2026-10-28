@@ -1430,17 +1430,6 @@ export class CheckedProgram {
   entryMain: FunctionSig | null
   /** Some function reads `process.argv`, so the `@main` wrapper calls `nish_argv_init`. */
   usesArgv: boolean
-  /**
-   * Whether `--unchecked-indexing` and `--wrapping` reach this module. Each
-   * flag is the command line's answer for the modules of the entry package and
-   * `false` for every other module — a `node_modules` dependency and the
-   * `nish/` standard library — so a flag written for one program cannot take
-   * a check out of code its author did not write (`Compilation.discover`).
-   * Every reader of either flag reads it here, per module, and never off the
-   * options.
-   */
-  uncheckedIndexing: boolean
-  wrapping: boolean
   /** Whether `--number-mode f64` is in force, where a `.length` is an `f64`. */
   f64Mode: boolean
   /**
@@ -1582,7 +1571,7 @@ export class CheckedProgram {
    * This is not a bounds *check*. JavaScript's `substring` clamps each end into
    * `[0, len]`, which `src/emit-strings.ts` writes as an `llvm.smin` /
    * `llvm.smax` pair, and that clamp is the semantics rather than a safety net
-   * — `--unchecked-indexing` does not remove it and must not. What the proof
+   * — and nothing removes it. What the proof
    * buys is that a bound the clamp cannot move needs no clamp, so the emitter
    * writes the value straight through. A literal `0` is in here for every
    * string, because no string has a negative length, which is why the
@@ -1606,9 +1595,8 @@ export class CheckedProgram {
    * instruction with `nsw` — a flag that is then a fact rather than an
    * assumption — and no `llvm.s*.with.overflow` and no branch to
    * `nish_panic_overflow`; the attribute pass leaves that panic out of the
-   * callee set for it. Every node not in here is checked, unless the build
-   * is `--wrapping`, where nothing is. Per instantiation, like the proofs
-   * above it.
+   * callee set for it. Every node not in here is checked. Per
+   * instantiation, like the proofs above it.
    */
   nodeProvenNoOverflow: boolean[]
   /**
@@ -1693,8 +1681,6 @@ export class CheckedProgram {
     this.secretLibrary = isSecretModule(packageName, source.path)
     this.mathLibrary = isMathModule(packageName, source.path)
     this.usesArgv = false
-    this.uncheckedIndexing = false
-    this.wrapping = false
     this.f64Mode = false
     this.unsafeImports = []
     this.unsafeCalls = []

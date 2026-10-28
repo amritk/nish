@@ -98,7 +98,7 @@ const splitMisses = (data: u8[]): i32 => {
   let misses: i32 = 0;
   for (let cut: i32 = 0; cut <= n; cut++) {
     // Each pass's hashers and hex are garbage once compared, so hand them back.
-    const mark = Arena.mark();
+    using a = arena();
     const h512 = new Sha512();
     const h384 = new Sha384();
     h512.update(data, ZERO, cut);
@@ -106,7 +106,6 @@ const splitMisses = (data: u8[]): i32 => {
     h512.update(data, cut, n - cut);
     h384.update(data, cut, n - cut);
     const same = hex(h512.digest()) === want512 && hex(h384.digest()) === want384;
-    Arena.release(mark);
     if (!same) {
       misses++;
     }

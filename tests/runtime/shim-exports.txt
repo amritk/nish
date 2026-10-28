@@ -6,8 +6,6 @@ appendFileSync
 arch
 arena
 arenaMark
-arenaRelease
-arenaReset
 arenaUsed
 argv
 arraySet

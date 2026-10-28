@@ -251,7 +251,7 @@ const chainOutcome = (input: string, cut: boolean, certs: X509Certificate[], iss
   return HARMLESS
 }
 
-// Each corpus runs every input between an `Arena.mark` and its `Arena.release`:
+// Each corpus runs every input in a `using a = arena()` block:
 // what parsing one input allocates is gone before the next, so the corpus runs
 // in the memory of one input rather than of all of them.
 
@@ -262,9 +262,8 @@ const certCorpus = (t: Suite, name: string, cert: X509Certificate, issuer: X509C
   let s: i32 = seed
   for (let i: i32 = 0; i < mutantCount(n, true, DER_EDITS); i++) {
     s = xorshift(s)
-    const mark: i64 = Arena.mark()
+    using a = arena()
     tally.add(certOutcome(mutant(cert.der, i, s, true), i < n, cert, issuer))
-    Arena.release(mark)
   }
   return tally.report(t, name, "read and not the original")
 }
@@ -282,9 +281,8 @@ const signatureCorpus = (t: Suite, name: string, der: u8[], seed: i32): i32 => {
   let s: i32 = seed
   for (let i: i32 = 0; i < mutantCount(n, true, DER_EDITS); i++) {
     s = xorshift(s)
-    const mark: i64 = Arena.mark()
+    using a = arena()
     tally.add(signatureOutcome(mutant(der, i, s, true), i < n, rs))
-    Arena.release(mark)
   }
   return tally.report(t, name, "read as another r || s")
 }
@@ -296,9 +294,8 @@ const keyCorpus = (t: Suite, name: string, der: u8[], label: string, scalar: str
   let s: i32 = seed
   for (let i: i32 = 0; i < mutantCount(n, true, DER_EDITS); i++) {
     s = xorshift(s)
-    const mark: i64 = Arena.mark()
+    using a = arena()
     tally.add(keyOutcome(mutant(der, i, s, true), i < n, label, scalar))
-    Arena.release(mark)
   }
   return tally.report(t, name, "the same key")
 }
@@ -322,9 +319,8 @@ const chainCorpus = (
   let s: i32 = seed
   for (let i: i32 = 0; i < mutantCount(n, false, PEM_EDITS); i++) {
     s = xorshift(s)
-    const mark: i64 = Arena.mark()
+    using a = arena()
     tally.add(chainOutcome(textOf(mutant(pem, i, s, false)), i < n, certs, issuers))
-    Arena.release(mark)
   }
   return tally.report(t, name, "read as the original or not passing for it")
 }
@@ -337,9 +333,8 @@ const keyPemCorpus = (t: Suite, name: string, text: string, scalar: string, seed
   let s: i32 = seed
   for (let i: i32 = 0; i < mutantCount(n, false, PEM_EDITS); i++) {
     s = xorshift(s)
-    const mark: i64 = Arena.mark()
+    using a = arena()
     tally.add(keyPemOutcome(textOf(mutant(pem, i, s, false)), scalar))
-    Arena.release(mark)
   }
   return tally.report(t, name, "the same key")
 }

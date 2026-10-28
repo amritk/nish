@@ -17,9 +17,8 @@ function fill(b: Box, i: i32): string -> @fill
   stackSites=0 stackLocals=0
   local -1:9 s: string (const)
 function sweep(i: i32): string -> @sweep
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_reset_arena
-  calls: nish_reset_arena nish_str_concat nish_str_from_i32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_arena_mark nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function label(i: i32): Result<string, i32> -> @label
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=24
@@ -30,9 +29,9 @@ function plain(i: i32): string -> @plain
   calls: nish_str_concat nish_str_from_i32
   stackSites=0 stackLocals=0
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Box.constructor fill label nish_print plain sweep
+  calls: Box.constructor fill label nish_arena_mark nish_arena_release nish_print plain sweep
   stackSites=1 stackLocals=1
   local +0:9 b: Box (const)
   callee +0:13 new Box -> @Box.constructor

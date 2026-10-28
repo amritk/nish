@@ -2,9 +2,10 @@
 // (nish_str_from_i64) and a template literal. Literals take the i64 type from
 // context: the annotated initializer, the parameter, and the other operand.
 //
-// Compiled with `--wrapping` (see .args) because `sq * 2` overflows i64 and the
-// `.out` pins the wrapped answer; under the default that multiply carries `nsw`
-// and the program would be relying on undefined behaviour.
+// `sq * 2` overflows i64 and the `.out` pins the wrapped answer, so that one
+// multiply is `wrappingMul` from `nish:unsafe`; a checked `*` would panic.
+import { wrappingMul } from "nish:unsafe";
+
 function square(x: i64): i64 {
   return x * x;
 }
@@ -16,7 +17,7 @@ export function test(): number {
   console.log(`${big} * 2 = ${big * 2}`);
   console.log(big > 5);
   console.log(-big);
-  console.log(sq * 2);
+  console.log(wrappingMul(sq, 2));
   const n: number = 7;
   console.log(toI64(n) + 1);
   return toI32(sq % 1000);

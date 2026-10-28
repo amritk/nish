@@ -94,8 +94,6 @@ const isOverflowOpcode = (opcode: string): boolean => opcode === "add" || opcode
  *   `nish_panic_overflow` (`IRFunction.branchOnOverflow`). `panicCode` names
  *   the operator the message reports, which for `-x` (a `sub` from zero) is
  *   negate.
- * - **`--wrapping`** is the plain instruction with no flag: a defined
- *   two's-complement wrap, and no check.
  *
  * An unsigned type never gets here: `u8`..`u64` are defined as wrapping,
  * which is what hashing and bit-packing are written against.
@@ -110,9 +108,6 @@ const emitSignedArith = (
   panicCode: i32
 ): string => {
   const fn = emitter.fn
-  if (emitter.program.wrapping) {
-    return fn.emitValue(`${opcode} ${ty} ${lhs}, ${rhs}`)
-  }
   if (emitter.program.nodeProvenNoOverflow[node.id]) {
     return fn.emitValue(`${opcode} nsw ${ty} ${lhs}, ${rhs}`)
   }
@@ -135,8 +130,7 @@ const overflowCode = (opcode: string): i32 => {
 
 /**
  * `wrappingAdd(a, b)`, `wrappingSub(a, b)` and `wrappingMul(a, b)` from
- * `nish:unsafe`: the instruction with no flag, whatever `--wrapping` says, so
- * the answer is the two's-complement wrap at the operands' width. The checker
+ * `nish:unsafe`: the instruction with no flag, so the answer is the two's-complement wrap at the operands' width. The checker
  * made both operands one type, `i32` or `i64`.
  */
 export const emitWrapping = (emitter: Emitter, expr: Node, opcode: string): string => {

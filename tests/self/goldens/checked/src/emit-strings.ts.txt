@@ -398,16 +398,16 @@ function emitFromBytes(emitter: Emitter, expr: Node): string -> @emitFromBytes [
   callee +2:16 emitIndex -> @emitIndex
   local +3:9 to: string (const)
   callee +3:14 emitIndex -> @emitIndex
-  callee +5:5 emitSliceCheck -> @emitSliceCheck
-  callee +5:39 loadLength -> @loadLength
-  local +7:9 data: string (const)
-  callee +7:16 loadData -> @loadData
-  local +8:9 at: string (const)
-  callee +8:14 IRFunction.emitValue -> @IRFunction.emitValue
-  local +9:9 n: string (const)
-  callee +9:13 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +10:10 newString -> @newString
-function stringConstructCallees(name: string, uncheckedIndexing: boolean, proven: boolean): string[] -> @stringConstructCallees [exported]
+  callee +4:3 emitSliceCheck -> @emitSliceCheck
+  callee +4:37 loadLength -> @loadLength
+  local +5:9 data: string (const)
+  callee +5:16 loadData -> @loadData
+  local +6:9 at: string (const)
+  callee +6:14 IRFunction.emitValue -> @IRFunction.emitValue
+  local +7:9 n: string (const)
+  callee +7:13 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +8:10 newString -> @newString
+function stringConstructCallees(name: string, proven: boolean): string[] -> @stringConstructCallees [exported]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow nish_str_eq
   stackSites=0 stackLocals=0

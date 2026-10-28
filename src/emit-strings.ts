@@ -183,8 +183,6 @@ export const guardKeep = (emitter: Emitter, old: string, value: string): string 
  * `to` is known non-negative. Without an explicit end, `to` *is* `len` and the
  * second compare is a tautology, so only the first is emitted.
  *
- * `--unchecked-indexing` drops it, exactly as it drops `a[i]`'s.
- *
  * `u8[]`'s `dst.set(src, at)` asks the same question of the range it writes,
  * `[at, at + src.length)` of `dst.length`, so it shares this check and this
  * panic; `label` names the two blocks after whichever of them asked.
@@ -197,9 +195,6 @@ export const emitSliceCheck = (
   hasEnd: boolean,
   label: string
 ): void => {
-  if (emitter.program.uncheckedIndexing) {
-    return
-  }
   const fn = emitter.fn
   let inRange = fn.emitValue(`icmp ule i64 ${from}, ${to}`)
   if (hasEnd) {
@@ -440,7 +435,7 @@ export const emitFromCharCode = (emitter: Emitter, expr: Node): string => {
  * `u8[]`'s `set` reads it, and both header fields are read in the header
  * alias domain. The range is `s.slice`'s question asked of an
  * array, `0 <= start <= end <= bytes.length`, so it shares that check and that
- * panic, and `--unchecked-indexing` drops it as it drops theirs. Nothing
+ * panic. Nothing
  * validates the bytes as UTF-8, as nothing validates `fromCharCode`'s.
  */
 export const emitFromBytes = (emitter: Emitter, expr: Node): string => {
@@ -448,9 +443,7 @@ export const emitFromBytes = (emitter: Emitter, expr: Node): string => {
   const bytes = emitter.emitExpression(args[0])
   const from = emitIndex(emitter, args[1])
   const to = emitIndex(emitter, args[2])
-  if (!emitter.program.uncheckedIndexing) {
-    emitSliceCheck(emitter, from, to, loadLength(emitter, bytes), true, "bytes")
-  }
+  emitSliceCheck(emitter, from, to, loadLength(emitter, bytes), true, "bytes")
   const data = loadData(emitter, bytes)
   const at = emitter.fn.emitValue(`getelementptr inbounds i8, i8* ${data}, i64 ${from}`)
   const n = emitter.fn.emitValue(`sub i64 ${to}, ${from}`)
@@ -467,23 +460,17 @@ export const emitFromBytes = (emitter: Emitter, expr: Node): string => {
  * read here because `emitCharCodeAt` reads it: an omitted callee is a
  * `willreturn` LLVM may use to delete the panic (#183).
  */
-export const stringConstructCallees = (
-  name: string,
-  uncheckedIndexing: boolean,
-  proven: boolean
-): string[] => {
+export const stringConstructCallees = (name: string, proven: boolean): string[] => {
   const out: string[] = []
   if (name === "charCodeAt") {
-    if (!uncheckedIndexing && !proven) {
+    if (!proven) {
       out.push("nish_panic_index")
     }
   } else if (name === "substring") {
     out.push("nish_str_new")
   } else if (name === "slice") {
     out.push("nish_str_new")
-    if (!uncheckedIndexing) {
-      out.push("nish_panic_slice")
-    }
+    out.push("nish_panic_slice")
   } else if (name === "indexOf") {
     out.push("nish_str_index_of")
     out.push("nish_str_index_of_from")
@@ -583,8 +570,7 @@ export const emitForeignString = (
  *
  * A buffer whose count is not proven (`foreignBufferCountProven`) is held
  * against its `len` first, never its `cap`, and a larger count panics as
- * `ffi-length`. `--unchecked-indexing` keeps the check: the count is C's to
- * act on, and no index check of the program's covers it.
+ * `ffi-length`.
  */
 export const emitForeignBuffers = (
   emitter: Emitter,

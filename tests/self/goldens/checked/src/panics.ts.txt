@@ -440,8 +440,7 @@ function indexAdvice(program: CheckedProgram, table: TypeTable, node: Node): str
   local +11:9 xs: string (const)
   local +12:9 i: string (const)
   local +13:9 what: string (const)
-  local +17:9 unchecked: string (const)
-  callee +21:34 indexGuardAdvice -> @indexGuardAdvice
+  callee +18:22 indexGuardAdvice -> @indexGuardAdvice
 function sliceAdvice(program: CheckedProgram, node: Node): string -> @sliceAdvice
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: calledName nish_str_concat nish_str_eq

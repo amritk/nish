@@ -20,7 +20,7 @@ export const wycheproofX25519 = (t: Suite): i32 => {
   let zero: i32 = 0;
   let mismatches: i32 = 0;
   for (const c of cases) {
-    const mark = Arena.mark();
+    using a = arena();
     const shared: string = toHex(x25519(fromHex(c.priv), fromHex(c.pub)));
     if (shared !== c.shared) {
       t.fail(`wycheproof x25519 tcId ${c.tcId}`, `answered ${shared}, the file says ${c.shared}`);
@@ -33,7 +33,6 @@ export const wycheproofX25519 = (t: Suite): i32 => {
     if (shared === "0000000000000000000000000000000000000000000000000000000000000000") {
       zero += 1;
     }
-    Arena.release(mark);
   }
   console.log(
     `wycheproof x25519: ${toI32(cases.length)} cases, ${valid} valid and ${acceptable} acceptable answered the file's shared secret, ${zero} of them all zeros`

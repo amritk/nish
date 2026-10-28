@@ -5,8 +5,8 @@
 //
 //   fill    stores the string it built into an object its caller still holds,
 //           so `allocEscapes` is true: those bytes are not garbage.
-//   sweep   calls `Arena.reset()`, which moves the arena under any mark taken
-//           around it (`usesArenaControl`).
+//   sweep   reads the arena's position with `Arena.mark()`, which a mark
+//           taken around it would move (`managesArena`).
 //   label   returns a `Result<string, number>`, a pointer to a two-word object
 //           whose payload was bumped *before* it. Only a plain `string` may be
 //           kept, because only a string is one flat block with no interior
@@ -26,7 +26,9 @@ function fill(b: Box, i: number): string {
 }
 
 function sweep(i: number): string {
-  Arena.reset();
+  if (Arena.mark() === 0) {
+    return "empty";
+  }
   return `r${i}`;
 }
 

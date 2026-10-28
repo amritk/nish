@@ -18,21 +18,6 @@ function tally(log: Log, rounds: i32): i32 -> @tally
   local -3:7 total: i32 (let)
   local -2:12 i: i32 (let)
   callee -1:14 makeList -> @makeList
-function flush(): void -> @flush
-  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish_arena_release
-  calls: nish_arena_mark nish_arena_release
-  stackSites=0 stackLocals=0
-  local +0:9 m: i64 (const)
-function drain(rounds: i32): i32 -> @drain
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via flush
-  calls: flush makeList nish_panic_overflow
-  stackSites=0 stackLocals=0
-  local +0:7 total: i32 (let)
-  local +1:12 i: i32 (let)
-  callee +2:14 makeList -> @makeList
-  callee +3:5 flush -> @flush
 function collect(rounds: i32): i32[] -> @collect
   facts: effect=write willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: makeList nish_array_grow
@@ -48,12 +33,11 @@ function quiet(rounds: i32): i32 -> @quiet
   local +1:12 i: i32 (let)
   callee +2:14 makeList -> @makeList
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: collect drain nish_print nish_str_from_i32 quiet tally
+  calls: collect nish_arena_mark nish_arena_release nish_print nish_str_from_i32 quiet tally
   stackSites=1 stackLocals=1
   local +0:9 log: Log (const)
   callee +1:15 tally -> @tally
-  callee +3:15 drain -> @drain
-  callee +4:15 collect -> @collect
-  callee +5:15 quiet -> @quiet
+  callee +3:15 collect -> @collect
+  callee +4:15 quiet -> @quiet

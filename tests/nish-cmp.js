@@ -2287,12 +2287,6 @@ const DECLARED = [
     why: "`slots[0]` is proven by the checked store `slots[0] = first` before it",
   },
   {
-    program: "tests/cases/opt_wrapping.ts",
-    file: "opt_wrapping.ll",
-    changelog: "A passed bounds check proves the same index on the same array",
-    why: "under --wrapping `xs[i]` keeps its first check, and `xs[i] *= 2` and `xs[i] / 2` after it are proven by it",
-  },
-  {
     program: "tests/cases/perf_alloc_loop.ts",
     file: "perf_alloc_loop.ll",
     changelog: "A passed bounds check proves the same index on the same array",
@@ -2338,7 +2332,7 @@ const DECLARED = [
     program: "tests/differential/corpus/int_compound.ts",
     file: "int_compound.ll",
     changelog: "A passed bounds check proves the same index on the same array",
-    why: "under --wrapping `xs[i] += i` is proven by the checked `xs[i] *= 1000000` before it",
+    why: "`xs[i] += i` is proven by the checked `xs[i] *= 1000000` before it",
   },
   {
     program: "tests/cases/arr_repeat_check_call.ts",
@@ -2646,13 +2640,13 @@ const DECLARED = [
     program: "tests/cases/mem_loop_scope.ts",
     file: "exit",
     changelog: "Arena.release and Arena.reset in favour of using a = arena()",
-    why: "measures the arena inside a `using a = arena()` block instead of between `Arena.mark` and the deprecated `Arena.release`, which the reference compiler refuses because it has no `arena()` builtin",
+    why: "measures the arena inside a `using a = arena()` block instead of between `Arena.mark` and `Arena.release`, since removed, which the reference compiler refuses because it has no `arena()` builtin",
   },
   {
     program: "tests/cases/mem_loop_scope_forof.ts",
     file: "exit",
     changelog: "Arena.release and Arena.reset in favour of using a = arena()",
-    why: "measures the arena inside two `using a = arena()` blocks instead of between `Arena.mark` and the deprecated `Arena.release`, which the reference compiler refuses because it has no `arena()` builtin",
+    why: "measures the arena inside two `using a = arena()` blocks instead of between `Arena.mark` and `Arena.release`, since removed, which the reference compiler refuses because it has no `arena()` builtin",
   },
   {
     program: "tests/link/reject_typed_push_alias/main.ts",
@@ -2767,11 +2761,6 @@ const DECLARED = [
     file: "exit",
     changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
     why: "it imports a `tests/cases/ct_asm_*` copy whose indexing moved to `nish:unsafe`, which the reference compiler refuses as an unknown builtin module",
-  },
-  {
-    program: "tests/link/unsafe_flag_scope/main.ts",
-    changelog: "Add nish:unsafe and scope the unsafe flags to the entry package",
-    why: "a new program compiled with `--unchecked-indexing --wrapping`, which the reference compiler applies to its `node_modules` dependency and to `nish/text` as well, and HEAD to the entry package alone",
   },
   {
     program: "tests/cases/secret_wipe.ts",

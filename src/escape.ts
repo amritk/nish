@@ -192,8 +192,6 @@ export class EscapeResult {
    * itself (`isListingCall`).
    */
   returnsFreshElements: boolean
-  /** Calls `Arena.reset` / `Arena.release` directly. */
-  usesArenaControl: boolean
   /** Calls to pointer-returning user functions, with the flow of each result. */
   callSites: CallSite[]
   /**
@@ -269,7 +267,6 @@ export class EscapeResult {
     this.allocEscapes = false
     this.returnsAllocation = false
     this.returnsFreshElements = false
-    this.usesArenaControl = false
     this.callSites = []
     this.escapeSite = null
     this.fillsParam = -1
@@ -585,10 +582,6 @@ class EscapeAnalysis {
       return
     }
     const name = dottedName(target)
-    if (name === "Arena.reset" || name === "Arena.release") {
-      this.result.usesArenaControl = true
-      return
-    }
     if (name === "console.log") {
       const args = call.children[1]
       const type = args.children.length > 0 ? program.nodeTypes[args.children[0].id] : -1
@@ -1554,15 +1547,12 @@ class EscapeAnalysis {
 /**
  * WP9: may the caller reclaim the arena around a call to `callee`?
  *
- * The proof has three parts, and all three are needed:
+ * The proof has two parts, and both are needed:
  *
  *  - **The callee's garbage is garbage.** `allocEscapes` is false, so nothing
  *    the callee allocated is reachable from anywhere the caller can see except
  *    through the value it returned. The caller holds no other pointer into the
  *    call, because a return value is the only thing a call hands back.
- *  - **The arena did not move under the mark.** `usesArenaControl` is false, so
- *    neither the callee nor anything it calls reset or released the arena
- *    between the mark and the reclaim.
  *  - **The kept value can be moved.** Only a plain `string` qualifies: it is one
  *    flat block with no interior pointers, so relocating its bytes relocates the
  *    whole value. An array header points at a separate data block, a struct or a
@@ -1579,7 +1569,7 @@ export const reclaimsReturnedString = (callee: FunctionSig, facts: FactsTable): 
     return false
   }
   const g = facts.get(callee.name)
-  return g !== null && g.allocates && !g.allocEscapes && g.fillsParam < 0 && !g.usesArenaControl
+  return g !== null && g.allocates && !g.allocEscapes && g.fillsParam < 0
 }
 
 /**
@@ -1616,10 +1606,8 @@ export const reclaimsReturnedString = (callee: FunctionSig, facts: FactsTable): 
  *    looked up: no local of this frame is read after it, and the value it
  *    answers is the callee's own, allocated above the mark a release restored.
  *  - **Nothing observes the bump position in between.** This one is the
- *    scope's alone. `arenaScope` already requires that neither this function
- *    nor anything it calls uses `Arena.release` / `Arena.reset`
- *    (`usesArenaControl`), so what is left is a callee that *reads* the
- *    position — `Arena.mark`, `Arena.used` — and would answer a smaller number
+ *    scope's alone: a callee that *reads* the
+ *    position — `Arena.mark`, `Arena.used` — would answer a smaller number
  *    than it does today. `readsArenaState` is that fact, propagated over the
  *    call graph like the other one, and it is what keeps the sink invisible to
  *    a program rather than merely harmless. A function with no scope releases
@@ -1833,10 +1821,8 @@ export const analyzeEscapes = (
 //    `isOld` proves, because the release runs before the `ret`. A scalar is
 //    computed first and returned after the release; `orReturn` builds a
 //    `Result` and is refused.
-//  - **Arena control.** A function that calls `Arena.mark`, `release` or
-//    `reset` itself, or reaches a callee that releases or resets, takes no
-//    per-pass scope: the mark would not name the top of the pass once the
-//    program rewound under it.
+//  - **Arena control.** A function that calls `Arena.mark` itself takes no
+//    per-pass scope: its author is already managing that memory.
 //
 // **The placement** is the emitter's (`emitPass` in emit.ts): the mark is the
 // first instruction of the body, so it dominates every release inside it; a
@@ -1872,7 +1858,7 @@ const LOOP_OUTER_LOCAL: i32 = 3
 const LOOP_OUTER_PUSH: i32 = 4
 /** The pass returns an allocation (`at`). */
 const LOOP_RETURN: i32 = 5
-/** The function or a callee releases or resets the arena (`name`, `""` for the function itself). */
+/** The function takes an `Arena.mark` of its own. */
 const LOOP_CONTROL: i32 = 6
 /** A callee has no facts to read (`name`). */
 const LOOP_UNSEEN: i32 = 7
@@ -2045,9 +2031,6 @@ class PassWalk {
     if (g.netAllocates) {
       this.allocates = true
     }
-    if (this.block && g.usesArenaControl) {
-      this.refuse(LOOP_CONTROL, node, callee.sourceName)
-    }
     // A task runs, and its answer is stored, when its scope joins: after this
     // block has released, for a scope the block did not declare. A pass may
     // file one on an older scope with what is older than the pass: what the
@@ -2140,11 +2123,6 @@ class PassWalk {
           this.scope.handsBack = true
           this.refuse(LOOP_RETURN, node, "")
         }
-      } else if (this.block && node.children[0].kind === N_MEMBER) {
-        const name = dottedName(node.children[0])
-        if (name === "Arena.release" || name === "Arena.reset") {
-          this.refuse(LOOP_CONTROL, node, name)
-        }
       }
     } else if (node.kind === N_NEW) {
       const ctor = constructorOf(program, this.table, intrinsicType(program, node))
@@ -2202,19 +2180,6 @@ const loopBody = (loop: Node): Node => {
 }
 
 const within = (outer: Node, node: Node): boolean => node.start >= outer.start && node.end <= outer.end
-
-/** The first callee of `f` that releases or resets the arena, by source name, or `""`. */
-const controllingCallee = (facts: FactsTable, f: FunctionFacts): string => {
-  let c = 0
-  while (c < f.callees.size()) {
-    const g = facts.get(f.callees.at(c))
-    if (g !== null && g.usesArenaControl) {
-      return g.sourceName
-    }
-    c = c + 1
-  }
-  return ""
-}
 
 /**
  * Decide the per-pass scope of every loop in `sig`, into `f.loopScopes`, once
@@ -2277,8 +2242,8 @@ const decidePass = (
   scope: LoopScope
 ): void => {
   const walk = new PassWalk(unit, table, facts, scope)
-  if (f.managesArena || f.usesArenaControl) {
-    walk.refuse(LOOP_CONTROL, null, f.managesArena ? "" : controllingCallee(facts, f))
+  if (f.managesArena) {
+    walk.refuse(LOOP_CONTROL, null, "")
     return
   }
   const body = scope.body
@@ -2310,10 +2275,7 @@ const decidePass = (
 // refused, naming the value and where it would escape to, because the release
 // is the program's and would free memory still in use.
 //
-// The block adds three refusals a pass leaves to the whole function. Arena
-// control inside it (`Arena.release`, `Arena.reset`, or a callee that reaches
-// one) is refused at the call, where for a loop it removes every pass's scope.
-// A `spawn` on a scope the block did not declare is refused, because that
+// The block adds two refusals a pass leaves to the whole function. A `spawn` on a scope the block did not declare is refused, because that
 // task runs and stores its answer when its scope joins, after the release.
 // And a store into a field or an element is named as such, ahead of the
 // `escapingNodes` sweep that would also find it, so the message says where
@@ -2499,12 +2461,6 @@ const arenaBlockMessage = (unit: AnalysisUnit, scope: LoopScope, using: Node): s
       "nothing proves that what the block allocated is gone when it releases"
     )
   }
-  if (why === LOOP_CONTROL) {
-    return (
-      `\`${scope.name}\` releases or resets the arena inside ${block}: the block releases to the mark it took ` +
-      "when it opened, which a release or a reset in between has already moved the arena below"
-    )
-  }
   if (why === BLOCK_SPAWN) {
     return (
       `${value} files a task on \`${scope.name}\` inside ${block}, and that scope is declared outside the block: ` +
@@ -2613,8 +2569,7 @@ export class ArenaFinding {
  * then either. The message names the first thing that refused the pass its
  * scope, and what refused the function its own.
  *
- * Silent in a function that calls `Arena.mark`, `Arena.release` or
- * `Arena.reset` itself, because its author is already managing that memory;
+ * Silent in a function that calls `Arena.mark` itself, because its author is already managing that memory;
  * silent when the result is kept (returned, stored, pushed), because then the
  * program asked for one object per pass; silent in a loop whose pass can
  * `return` what it allocated (`LoopScope.handsBack`), because no bracket
@@ -2741,9 +2696,6 @@ const passReason = (unit: AnalysisUnit, loop: LoopScope): string => {
   if (why === LOOP_RETURN) {
     return `line ${line} returns what the pass allocated`
   }
-  if (why === LOOP_CONTROL && loop.name.length > 0) {
-    return `it calls \`${loop.name}\`, which releases or resets the arena`
-  }
   if (why === LOOP_UNSEEN) {
     return `it calls \`${loop.name}\`, whose memory this analysis cannot see`
   }
@@ -2788,33 +2740,24 @@ const noScopeReason = (unit: AnalysisUnit, facts: FactsTable, f: FunctionFacts):
       return `it calls \`${leaky.sourceName}\`, which stores an allocation into memory, where this analysis stops following it`
     }
   }
-  if (f.usesArenaControl) {
-    const control = calleeWhere(facts, f, CALLEE_CONTROL)
-    if (control !== null) {
-      return `it calls \`${control.sourceName}\`, which releases or resets the arena`
-    }
-  }
   return ""
 }
 
 /** What `calleeWhere` looks for. */
 const CALLEE_ESCAPES: i32 = 0
-const CALLEE_CONTROL: i32 = 1
-const CALLEE_GARBAGE: i32 = 2
+const CALLEE_GARBAGE: i32 = 1
 
 /** A callee's allocations are garbage once its result is: it leaves memory behind and lets none of it escape. */
 const leavesGarbage = (g: FunctionFacts): boolean => g.netAllocates && g.contained
 
-/** The first callee that lets an allocation escape, uses arena control, or leaves garbage, by `mode`. */
+/** The first callee that lets an allocation escape or leaves garbage, by `mode`. */
 const calleeWhere = (facts: FactsTable, f: FunctionFacts, mode: i32): FunctionFacts | null => {
   let c = 0
   while (c < f.callees.size()) {
     const g = facts.get(f.callees.at(c))
     if (
       g !== null &&
-      ((mode === CALLEE_ESCAPES && g.allocEscapes) ||
-        (mode === CALLEE_CONTROL && g.usesArenaControl) ||
-        (mode === CALLEE_GARBAGE && leavesGarbage(g)))
+      ((mode === CALLEE_ESCAPES && g.allocEscapes) || (mode === CALLEE_GARBAGE && leavesGarbage(g)))
     ) {
       return g
     }

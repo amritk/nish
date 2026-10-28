@@ -67,11 +67,8 @@ const split = (text) => text.trim().split(/\s+/).filter(Boolean)
 
 /**
  * The flags of a program that the *checker* reads, so a dump comparison runs
- * the program as its own `.args` mean it to be run. Two of them:
- * `--number-mode <mode>`, which decides what `number` is, and `--wrapping`,
- * which the constant folder reads — `tests/cases/const_wrap.ts` is a fold that
- * only succeeds under it, and passing only the first is why that program used
- * to be refused by stage0 and counted as a skip (WP19 G1). Everything else in
+ * the program as its own `.args` mean it to be run. One of them:
+ * `--number-mode <mode>`, which decides what `number` is. Everything else in
  * an `.args` changes the IR and belongs to `ir_oracle.js`.
  */
 const checkerArgs = (file) => {
@@ -80,9 +77,6 @@ const checkerArgs = (file) => {
   const at = flags.indexOf("--number-mode")
   if (at >= 0) {
     out.push("--number-mode", flags[at + 1])
-  }
-  if (flags.includes("--wrapping")) {
-    out.push("--wrapping")
   }
   return out
 }

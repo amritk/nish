@@ -5,8 +5,8 @@
 // `for (const c of s)` cannot express and what `src/lexer.ts` is made of.
 //
 // Every `charCodeAt` in `scan` is proven by the loop condition that guards it,
-// so the default build and the `--unchecked-indexing` build emit the same
-// `@scan`, byte for byte; `tests/cases/str_bounds_proven` pins the shape. The
+// so `@scan` carries no bounds check; `tests/cases/str_bounds_proven` pins the
+// shape. The
 // one check left in the module is `process.argv[1]`, which runs once.
 //
 // The cursor's bound is `s.length`, which no `integer<Lo, Hi>` can state
@@ -16,7 +16,6 @@
 //
 //   cat src/*.ts > build/cursor.txt
 //   build/nish bench/cursor.ts --link build/cursor --profile speed
-//   build/nish bench/cursor.ts --link build/cursor-unchecked --profile speed --unchecked-indexing
 //   build/cursor build/cursor.txt
 //
 // wp31 §10 records the protocol and the numbers.

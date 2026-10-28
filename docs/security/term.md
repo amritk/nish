@@ -72,8 +72,7 @@ or its arguments. A win is:
 **`readStdin` cannot read past its buffer.** `offset < 0`, `count < 0`,
 `offset + count > length` and an overflowing `offset + count` each panic with
 `slice out of range` before `read` is called, and `count == 0` answers 0.
-Checked by a scratch program. `--unchecked-indexing` removes the check, as it
-removes every bounds check, by design. The emitted check is pinned
+Checked by a scratch program. The emitted check is pinned
 ("term_calls: IR matches golden", "term_import: IR matches golden"), but no
 run-time negative test exercises it.
 
