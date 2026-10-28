@@ -74,4 +74,11 @@ PASS  h1 later: a second request
 PASS  h1 later: a body that does not fit behind the first is H1_AGAIN
 PASS  h1 later: nothing more queued
 PASS  h1 later: once sent, gzip fits
-http-compress: 76 passed, 0 failed, 0 skipped
+PASS  h1 half sent: the request is read
+PASS  h1 half sent: the first answer
+PASS  h1 half sent: the first request ends
+PASS  h1 half sent: a second request
+PASS  h1 half sent: a body that does not fit is H1_AGAIN
+PASS  h1 half sent: only the unsent rest is queued
+PASS  h1 half sent: and it is those bytes
+http-compress: 83 passed, 0 failed, 0 skipped

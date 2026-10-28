@@ -103,6 +103,14 @@ PASS  writer: the stream is one gzip member
 PASS  writer: its bytes are the input
 PASS  writer: start begins a new body
 PASS  writer: the new body is its own bytes
+PASS  writer: noise at level 0 into exactly bound
+PASS  writer: noise at level 0 comes back
+PASS  writer: noise at level 1 into exactly bound
+PASS  writer: noise at level 1 comes back
+PASS  writer: noise at level 6 into exactly bound
+PASS  writer: noise at level 6 comes back
+PASS  writer: noise at level 9 into exactly bound
+PASS  writer: noise at level 9 comes back
 PASS  reader: the stream ends
 PASS  reader: every byte comes back in order (400000 of 400000)
 PASS  reader: the limit stops it
@@ -111,4 +119,4 @@ PASS  reader: the error is final
 PASS  reader: input that ends inside the stream
 PASS  reader: a header longer than the input buffer is refused
 PASS  reader: having buffered at most 16 KB of it (16384)
-compress: 113 passed, 0 failed, 0 skipped
+compress: 121 passed, 0 failed, 0 skipped

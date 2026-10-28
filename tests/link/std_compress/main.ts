@@ -786,6 +786,40 @@ export const main = (): number => {
     t.eqI32("writer: start begins a new body", kit.decompress(GZIP, again, 0, e, back, 0, n), 1000)
     t.ok("writer: the new body is its own bytes", same(copyOf(src, 1000), back, 0, 1000))
 
+    // Noise into exactly `bound` at every call, the first window too: no
+    // write, flush or finish runs out of room, at any level, for pieces
+    // small and large.
+    for (const level of [0, 1, 6, 9]) {
+      const loud: u8[] = noise(rng, 300000)
+      const nw = new GzipWriter(level)
+      const noisy: u8[] = []
+      let pos: i32 = 0
+      let k: i32 = 0
+      while (pos < 300000) {
+        let len: i32 = k % 5 === 4 ? rng.nextInt(60000, 200000) : rng.nextInt(1, 1000)
+        if (len > 300000 - pos) {
+          len = 300000 - pos
+        }
+        const room: u8[] = new Array<u8>(nw.bound(len))
+        const end: i32 = k % 7 === 6 ? nw.flush(room, 0) : nw.write(loud, pos, len, room, 0)
+        for (let i: i32 = 0; i < end; i++) {
+          noisy.push(room[i])
+        }
+        if (k % 7 !== 6) {
+          pos += len
+        }
+        k += 1
+      }
+      const last: u8[] = new Array<u8>(nw.bound(toI32(0)))
+      const fe: i32 = nw.finish(last, 0)
+      for (let i: i32 = 0; i < fe; i++) {
+        noisy.push(last[i])
+      }
+      const into: u8[] = new Array<u8>(300000)
+      t.eqI32(`writer: noise at level ${level} into exactly bound`, kit.decompress(GZIP, noisy, 0, toI32(noisy.length), into, 0, 300000), 300000)
+      t.ok(`writer: noise at level ${level} comes back`, same(loud, into, 0, 300000))
+    }
+
     // The reader across random piece sizes, the input ended by endInput.
     const r = new GzipReader(toI64(n))
     let fed: i32 = 0

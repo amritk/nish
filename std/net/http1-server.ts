@@ -1272,7 +1272,10 @@ export class Http1Connection {
       enc.identityFields(names, values)
     }
     // `respond` and the body together, or neither: what `respond` sets is
-    // put back when the body does not fit behind the head.
+    // put back when the body does not fit behind the head. `room` first, so
+    // that what was sent is already moved out of the way and the `outputEnd`
+    // put back is one `respond` did not move.
+    this.room()
     const outputEnd: i32 = this.outputEnd
     const closeAfter: boolean = this.closeAfter
     const r: i32 = this.respond(status, enc.names, enc.values, n)
