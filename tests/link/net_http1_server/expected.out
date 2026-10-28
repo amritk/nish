@@ -63,6 +63,7 @@ PASS  a head still unfinished past headTimeout closes its slot, though the slot 
 PASS  and its client sees the end, while the kept-alive client's slot stays open
 PASS  a head finished in pieces within headTimeout is answered
 PASS  and its slot outlives headTimeout
+PASS  a kept-alive slot quiet past headTimeout is due no sooner than later
 PASS  a request with an unfinished head pipelined behind it is answered
 PASS  and the pipelined head, still unfinished past headTimeout, closes the slot
 PASS  and its client sees the end
@@ -217,4 +218,4 @@ PASS  so do they while a byte of the next request is unread
 PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
-http1 server: 219 passed, 0 failed, 0 skipped
+http1 server: 220 passed, 0 failed, 0 skipped

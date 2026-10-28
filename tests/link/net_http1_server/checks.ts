@@ -852,6 +852,21 @@ export const serverChecks = (): i32 => {
   lb.send(patient, ascii("Host: a\r\n\r\n"));
   t.eqStr("a head finished in pieces within headTimeout is answered", lb.response(patient, false).text(), "hello from nish/net/http1\n");
   t.eqI32("and its slot outlives headTimeout", lb.plain.expire(monotonicNanos() + toI64(750000000)), ZERO);
+  // A kept-alive slot quiet past headTimeout waits for no head: a head clock
+  // it starts later starts no sooner than now, so the slot is not yet due.
+  // Counted from its last move instead, its bound was already past, and every
+  // expire walked every slot while any keep-alive was that quiet.
+  let quietSlot: i32 = -1;
+  for (let k: i32 = 0; k < toI32(lb.plain.connections.length); k++) {
+    if (lb.plain.holds(k)) {
+      quietSlot = k;
+    }
+  }
+  const quietAt: i64 = monotonicNanos() + toI64(750000000);
+  t.ok(
+    "a kept-alive slot quiet past headTimeout is due no sooner than later",
+    quietSlot >= 0 && lb.plain.connection(quietSlot).expiresNoSooner(quietAt) > quietAt
+  );
   lb.plain.expire(monotonicNanos() + toI64(2000000000));
   lb.awaitEnd(patient);
 
