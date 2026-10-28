@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "entry": "caps_process_nice.ts",
+  "deterministic": false,
+  "capabilities": ["process.spawn"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["process.spawn"],
+      "modules": [
+        {
+          "path": "caps_process_nice.ts",
+          "capabilities": ["process.spawn"],
+          "functions": [
+            {
+              "name": "lower",
+              "exported": true,
+              "capabilities": ["process.spawn"],
+              "witnesses": {
+                "process.spawn": [
+                  { "function": "lower", "at": "caps_process_nice.ts:3:33", "calls": "setNice" }
+                ]
+              },
+              "panics": []
+            },
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["process.spawn"],
+              "witnesses": {
+                "process.spawn": [
+                  { "function": "main", "at": "caps_process_nice.ts:7:15", "calls": "setIdlePriority" }
+                ]
+              },
+              "panics": [
+                { "kind": "oom", "at": "caps_process_nice.ts:6:3", "allowed": true }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

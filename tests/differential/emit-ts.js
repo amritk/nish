@@ -142,6 +142,10 @@ export const HOST = [
   // A child is reaped by the event loop, which a synchronous wait never returns to.
   ["spawn", /`spawn` has no synchronous reading under Node/, "stderr"],
   ["waitPid", /`waitPid` has no synchronous reading under Node/, "stderr"],
+  // How the kernel schedules the native process; Node has no reading of
+  // SCHED_IDLE, and `nish/runtime` exports neither call.
+  ["setNice", /\bsetNice\b/, "source"],
+  ["setIdlePriority", /\bsetIdlePriority\b/, "source"],
   // Stdin is read only by the event loop; the restore bytes go out on native exit paths.
   ["readStdin", /`readStdin` has no synchronous reading under Node/, "stderr"],
   ["waitStdin", /`waitStdin` has no synchronous reading under Node/, "stderr"],
