@@ -1020,8 +1020,10 @@ export const serverChecks = (): i32 => {
   h.send(get);
   const refusedResponse = h.response(new ClientReader(false));
   t.ok("but ALPN h2 is shut down with close_notify, before any HTTP/1.1 byte", !refusedResponse.done && h.alerts.join(",") === "1 0" && toI32(h.plain.length) === 0);
-  lb.settle();
-  t.ok("and closed", lb.secure.busy() === 0 && lb.secure.size() === 4);
+  const closedBeforeRefusal: i32 = lb.closed;
+  t.ok("then the end of the stream, not a reset", lb.awaitEnd(h.index) && lb.peers[h.index].failure === 0);
+  lb.hangUp(h.index);
+  t.ok("and closed once the client hangs up", lb.awaitClosed(closedBeforeRefusal + 1) && lb.secure.busy() === 0 && lb.secure.size() === 4);
   t.ok(
     "a free TLS slot answers H1_ERROR to next and done to flush",
     lb.secure.next(ZERO) === H1_ERROR && (lb.secure.flush(ZERO) & 16) !== 0 && lb.secure.fd(ZERO) === -1 && lb.secure.connection(toI32(9)) === lb.secure.connection(ZERO)

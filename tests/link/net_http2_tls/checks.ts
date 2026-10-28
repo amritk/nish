@@ -229,7 +229,9 @@ export const tlsChecks = (): i32 => {
   b.prefaces();
   b.flush();
   t.eqStr("but the slot is shut down with close_notify, before any HTTP/2 byte", `${b.awaitFrames(toI32(1))}|${b.alerts.join(",")}`, "|1 0");
-  t.ok("and closed", lb.awaitClosed(toI32(2)) && lb.server.busy() === 0);
+  t.ok("then the end of the stream, not a reset", lb.awaitEnd(b.index) && lb.peers[b.index].failure === 0);
+  lb.hangUp(b.index);
+  t.ok("and closed once the client hangs up", lb.awaitClosed(toI32(2)) && lb.server.busy() === 0);
 
   // --- 3b. A client that sends its requests and closes its side at once ------------------------
   const h = new H2Client(lb);
