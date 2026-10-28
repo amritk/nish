@@ -195,9 +195,21 @@ const deflateLoad32 = (b: u8[], p: integer<0, 2147483639>): u32 =>
   (toU32(uncheckedGet(b, p + 2)) << 16) |
   (toU32(uncheckedGet(b, p + 3)) << 24)
 
-/** The little-endian 64-bit word at `b[p .. p + 8)`; the caller has checked the range. */
+/**
+ * The little-endian 64-bit word at `b[p .. p + 8)`; the caller has checked the
+ * range. Eight byte loads, not two `deflateLoad32`s: LLVM folds these into
+ * one load, and a word built from two halves keeps `deflateStore64` from
+ * becoming one store.
+ */
 const deflateLoad64 = (b: u8[], p: integer<0, 2147483639>): u64 =>
-  toU64(deflateLoad32(b, p)) | (toU64(deflateLoad32(b, p + 4)) << toU64(32))
+  toU64(uncheckedGet(b, p)) |
+  (toU64(uncheckedGet(b, p + 1)) << toU64(8)) |
+  (toU64(uncheckedGet(b, p + 2)) << toU64(16)) |
+  (toU64(uncheckedGet(b, p + 3)) << toU64(24)) |
+  (toU64(uncheckedGet(b, p + 4)) << toU64(32)) |
+  (toU64(uncheckedGet(b, p + 5)) << toU64(40)) |
+  (toU64(uncheckedGet(b, p + 6)) << toU64(48)) |
+  (toU64(uncheckedGet(b, p + 7)) << toU64(56))
 
 /** Stores `w` little-endian into `b[p .. p + 8)`; the caller has checked the range. */
 const deflateStore64 = (b: u8[], p: integer<0, 2147483639>, w: u64): void => {

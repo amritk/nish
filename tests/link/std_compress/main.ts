@@ -370,6 +370,26 @@ export const main = (): number => {
       at += len
     }
     t.ok("crc32: pieces of random lengths equal the whole", piecewise === whole)
+    // Against the definition, one bit at a time, on both sides of the length
+    // where an update splits into three streams, and from a running CRC.
+    let agree: boolean = true
+    const poly: u32 = 0xedb88320
+    for (const n of [0, 7, 8, 511, 512, 513, 535, 536, 537, 1000, 5221, 65536, 100003]) {
+      for (const from of [0, 3]) {
+        const len: i32 = n > 100003 - from ? 100003 - from : n
+        let r: u32 = 0xffffffff
+        for (let i: i32 = from; i < from + len; i++) {
+          r = r ^ toU32(big[i])
+          for (let k: i32 = 0; k < 8; k++) {
+            r = (r & 1) !== 0 ? (r >>> 1) ^ poly : r >>> 1
+          }
+        }
+        if (crc.update(toU32(0), big, from, len) !== ~r) {
+          agree = false
+        }
+      }
+    }
+    t.ok("crc32: every length, three streams or one, is the bitwise definition", agree)
     t.ok("adler32: pieces of random lengths equal the whole", adler === adler32(big, 0, 100003))
     // Adler-32's sums wrap past 5552 bytes of 0xff without reduction.
     const ones: u8[] = new Array<u8>(20000)

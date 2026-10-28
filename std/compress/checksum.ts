@@ -37,6 +37,9 @@ const CRC32_POLY: i64 = 0xedb88320
 /** The entries of the eight slicing tables, 256 each. */
 const CRC32_TABLE_SIZE: i32 = 2048
 
+/** The shortest input `Crc32.update` splits into three streams: below it, shifting them together costs more than it saves. */
+const CRC32_STREAMS_MIN: i32 = 512
+
 /** zlib's `NMAX`: the most bytes Adler-32's sums take before they must be reduced. */
 const ADLER32_NMAX: i32 = 5552
 
@@ -58,6 +61,63 @@ const checksumLoad64 = (buf: u8[], p: integer<0, 2147483639>): u64 =>
   (toU64(uncheckedGet(buf, p + 6)) << toU64(48)) |
   (toU64(uncheckedGet(buf, p + 7)) << toU64(56))
 
+/**
+ * One slicing-by-8 step: the register `c` advanced over the eight bytes of
+ * `w`. `t` is the 2,048-entry table, which every caller has checked.
+ */
+const crc32Step = (t: u32[], c: u32, w: u64): u32 => {
+  const lo: u32 = c ^ toU32(w)
+  const hi: u32 = toU32(w >> toU64(32))
+  return (
+    uncheckedGet(t, 1792 + toI32(lo & 255)) ^
+    uncheckedGet(t, 1536 + toI32((lo >>> 8) & 255)) ^
+    uncheckedGet(t, 1280 + toI32((lo >>> 16) & 255)) ^
+    uncheckedGet(t, 1024 + toI32(lo >>> 24)) ^
+    uncheckedGet(t, 768 + toI32(hi & 255)) ^
+    uncheckedGet(t, 512 + toI32((hi >>> 8) & 255)) ^
+    uncheckedGet(t, 256 + toI32((hi >>> 16) & 255)) ^
+    uncheckedGet(t, toI32(hi >>> 24))
+  )
+}
+
+/**
+ * `a * b` modulo the CRC-32 polynomial, both reflected (bit 31 is x^0): the
+ * product of two shifts is the shift by their sum.
+ */
+const crc32MulMod = (a: u32, b: u32): u32 => {
+  let m: u32 = 0x80000000
+  let x: u32 = b
+  let p: u32 = 0
+  while (m !== 0) {
+    if ((a & m) !== 0) {
+      p = p ^ x
+    }
+    x = (x & 1) !== 0 ? (x >>> 1) ^ toU32(CRC32_POLY) : x >>> 1
+    m = m >>> 1
+  }
+  return p
+}
+
+/**
+ * The register `c` followed by `n` zero bytes, `n >= 0`: `c` times x^(8n),
+ * from the powers x^(2^k) the bits of `8n` name. With it, a register over
+ * bytes B started from zero joins one over the bytes before B:
+ * `crc(A ‖ B) = shift(crc(A), |B|) ^ crc0(B)`.
+ */
+const crc32Shift = (powers: u32[], c: u32, n: i32): u32 => {
+  let r: u32 = c
+  let bits: i32 = n
+  let k: i32 = 3
+  while (bits > 0 && k < 64) {
+    if ((bits & 1) !== 0) {
+      r = crc32MulMod(powers[k], r)
+    }
+    bits = bits >> 1
+    k += 1
+  }
+  return r
+}
+
 /** Panics unless `buf[off .. off + len)` lies inside `buf`. */
 const checksumWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
   if (off < 0 || len < 0 || off > toI32(buf.length) - len) {
@@ -73,6 +133,8 @@ const checksumWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
 export class Crc32 {
   /** `table[k * 256 + b]`: the CRC of byte `b` followed by `k` zero bytes. */
   readonly table: u32[]
+  /** `powers[k]`: x^(2^k) mod the polynomial, reflected, to shift a register past 2^k zero bits; 64 of them, so `k` never runs out for an `i32` count of bytes. */
+  readonly powers: u32[]
 
   /** Builds the eight tables. */
   constructor() {
@@ -89,6 +151,13 @@ export class Crc32 {
       uncheckedSet(t, i, (prev >>> 8) ^ uncheckedGet(t, toI32(prev & 255)))
     }
     this.table = t
+    const powers: u32[] = new Array<u32>(64)
+    let x: u32 = 0x40000000
+    for (let k: i32 = 0; k < 64; k += 1) {
+      powers[k] = x
+      x = crc32MulMod(x, x)
+    }
+    this.powers = powers
   }
 
   /**
@@ -105,20 +174,28 @@ export class Crc32 {
     let c: u32 = ~crc
     let p: i32 = off
     const end: i32 = off + len
-    const whole: i32 = off + (len - (len & 7))
+    if (len >= CRC32_STREAMS_MIN) {
+      // Three streams over three equal thirds, each a chain of its own, so a
+      // step's table reads overlap the other two's instead of waiting on its
+      // own last: one stream is bound by a load and an XOR tree per eight
+      // bytes, three by the loads alone. Thirds two and three start from a
+      // zero register and are shifted into place after (`crc32Shift`).
+      const third: i32 = (len / 24) * 8
+      let b: u32 = 0
+      let d: u32 = 0
+      const stop: i32 = off + third
+      while (p < stop && p >= 0 && p <= 2147483639 - 2 * third) {
+        c = crc32Step(t, c, checksumLoad64(buf, p))
+        b = crc32Step(t, b, checksumLoad64(buf, p + third))
+        d = crc32Step(t, d, checksumLoad64(buf, p + 2 * third))
+        p += 8
+      }
+      c = crc32Shift(this.powers, c, 2 * third) ^ crc32Shift(this.powers, b, third) ^ d
+      p = off + 3 * third
+    }
+    const whole: i32 = end - (len & 7)
     while (p < whole && p >= 0 && p <= 2147483639) {
-      const w: u64 = checksumLoad64(buf, p)
-      const lo: u32 = c ^ toU32(w)
-      const hi: u32 = toU32(w >> toU64(32))
-      c =
-        uncheckedGet(t, 1792 + toI32(lo & 255)) ^
-        uncheckedGet(t, 1536 + toI32((lo >>> 8) & 255)) ^
-        uncheckedGet(t, 1280 + toI32((lo >>> 16) & 255)) ^
-        uncheckedGet(t, 1024 + toI32(lo >>> 24)) ^
-        uncheckedGet(t, 768 + toI32(hi & 255)) ^
-        uncheckedGet(t, 512 + toI32((hi >>> 8) & 255)) ^
-        uncheckedGet(t, 256 + toI32((hi >>> 16) & 255)) ^
-        uncheckedGet(t, toI32(hi >>> 24))
+      c = crc32Step(t, c, checksumLoad64(buf, p))
       p += 8
     }
     while (p < end) {

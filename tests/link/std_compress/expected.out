@@ -4,6 +4,7 @@ PASS  adler32: the check value of 123456789 is 091e01de
 PASS  adler32: of nothing is 1
 PASS  crc32: of a window
 PASS  crc32: pieces of random lengths equal the whole
+PASS  crc32: every length, three streams or one, is the bitwise definition
 PASS  adler32: pieces of random lengths equal the whole
 PASS  adler32: 20000 bytes of ff against the definition
 PASS  round trip raw: empty, levels 0 to 9
@@ -119,4 +120,4 @@ PASS  reader: the error is final
 PASS  reader: input that ends inside the stream
 PASS  reader: a header longer than the input buffer is refused
 PASS  reader: having buffered at most 16 KB of it (16384)
-compress: 121 passed, 0 failed, 0 skipped
+compress: 122 passed, 0 failed, 0 skipped
