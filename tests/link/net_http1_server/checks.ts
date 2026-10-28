@@ -967,6 +967,10 @@ export const serverChecks = (): i32 => {
   s.response(new ClientReader(false));
   s.response(new ClientReader(false));
   t.ok("Connection: close over TLS ends with close_notify", s.alerts.join(",") === "1 0" && lb.awaitEnd(s.index));
+  t.ok("then the end of the stream, not a reset, while the slot waits for the client to hang up", lb.peers[s.index].failure === 0 && lb.secure.busy() === 1);
+  const closedBeforeHangUp: i32 = lb.closed;
+  lb.hangUp(s.index);
+  t.ok("and once it does, the slot is closed", lb.awaitClosed(closedBeforeHangUp + 1) && lb.secure.busy() === 0);
 
   const n = new TlsClient(lb);
   const noAlpn: string[] = [];

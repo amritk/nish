@@ -218,7 +218,9 @@ export const tlsChecks = (): i32 => {
   t.eqStr("the last stream ends", a.awaitFrames(toI32(1)), 'DATA 5 0 "" end');
   a.awaitFrames(toI32(1));
   t.ok("after the client's GOAWAY the server sends close_notify", a.alerts.join(",") === "1 0");
-  t.ok("and its program closes the slot", lb.awaitClosed(toI32(1)) && lb.awaitEnd(a.index) && lb.server.busy() === 0);
+  t.ok("then the end of the stream, not a reset, while the slot waits for the client to hang up", lb.awaitEnd(a.index) && lb.peers[a.index].failure === 0 && lb.server.busy() === 1);
+  lb.hangUp(a.index);
+  t.ok("and once it does, its program closes the slot", lb.awaitClosed(toI32(1)) && lb.server.busy() === 0);
 
   // --- 3. ALPN that did not choose h2 ---------------------------------------------------------
   const b = new H2Client(lb);

@@ -83,10 +83,12 @@
  * the response it was sent: Chromium's `ERR_CONNECTION_RESET` after an HTTP/2
  * `GOAWAY`, when its SETTINGS acknowledgement crossed the server's close. A
  * lingering slot holds no key and no record buffer, asks only to be read,
- * and gives up past `TLS_TCP_LINGER_LIMIT` bytes; a connection that failed,
- * or whose client's stream had already ended, is done at once. A client that
- * never hangs up keeps its slot, as one that never sends does: how long a
- * slot may wait is the program's (`docs/security/tls.md`, TLS-6 and TLS-4).
+ * and gives up past `TLS_TCP_LINGER_LIMIT` bytes. A connection that failed,
+ * whose client sent its own `close_notify` (it writes nothing after it,
+ * RFC 8446 §6.1) or whose client's stream had already ended, is done at
+ * once. A client that never hangs up keeps its slot, as one that never sends
+ * does: how long a slot may wait is the program's (`docs/security/tls.md`,
+ * TLS-6 and TLS-4).
  *
  * Written from RFC 8446 and docs/LANGUAGE.md's `nish:net`, not ported from
  * another implementation.
@@ -440,13 +442,14 @@ export class TlsTcpServer {
 
   /**
    * `slot`'s connection is over and everything is sent. One the server
-   * closed, whose client's stream is still open, lingers: the socket's write
-   * side is shut, every key wiped and every record buffer given back, and
-   * what the client sends is drained (`drain`). Any other is done.
+   * closed, whose client has neither sent its `close_notify` nor ended its
+   * stream, lingers: the socket's write side is shut, every key wiped and
+   * every record buffer given back, and what the client sends is drained
+   * (`drain`). Any other is done.
    */
   linger(slot: i32): i32 {
     const conn: TlsRecordServer = this.connections[slot]
-    if (conn.state !== TLS_RECORD_STATE_CLOSED || conn.ended || netShutdown(this.fds[slot], TLS_TCP_SHUT_WRITE) < 0) {
+    if (conn.state !== TLS_RECORD_STATE_CLOSED || conn.peerClosed || conn.ended || netShutdown(this.fds[slot], TLS_TCP_SHUT_WRITE) < 0) {
       this.lingered[slot] = TLS_TCP_LINGERED
       return TLS_RECORD_DONE
     }
