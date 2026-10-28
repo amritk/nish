@@ -26,7 +26,7 @@ function fill(b: Box, i: number): string {
 }
 
 function sweep(i: number): string {
-  if (Arena.mark() === 0) {
+  if (Arena.mark() < 0) {
     return "empty";
   }
   return `r${i}`;

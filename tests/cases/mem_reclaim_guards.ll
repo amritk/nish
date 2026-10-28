@@ -67,7 +67,7 @@ entry:
 define internal noundef nonnull align 8 i8* @sweep(i32 noundef %i) #1 {
 entry:
   %0 = call i64 @nish_arena_mark()
-  %1 = icmp eq i64 %0, 0
+  %1 = icmp slt i64 %0, 0
   br i1 %1, label %if.then, label %if.end
 
 if.then:
