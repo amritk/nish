@@ -267,7 +267,7 @@ export function waitPid() {
  * Each throws, naming itself, as `runtime/nish.mjs` does.
  */
 function noSchedulingReading(name) {
-  throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native process`);
+  throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`);
 }
 
 export function setNice() {

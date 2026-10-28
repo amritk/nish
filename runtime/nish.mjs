@@ -108,7 +108,7 @@ provide("totalMemory", shim.totalMemory);
 // of one without the other would differ from the native build on the same host.
 for (const name of ["setNice", "setIdlePriority"]) {
   provide(name, () => {
-    throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native process`);
+    throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`);
   });
 }
 provide("getenv", shim.getenv);
