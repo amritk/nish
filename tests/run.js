@@ -18349,7 +18349,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
     .map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":"))
   check(
     "bench: bench/cursor.ts with its cursor declared integer<0, 2147483647> warns once at each of its three advances (WP31 §10 step 2)",
-    ranged.r.status === 0 && advances.join(",") === "42:13,47:13,51:11",
+    ranged.r.status === 0 && advances.join(",") === "41:13,46:13,50:11",
     ranged.r.stderr
   )
   if (cursor.r.status === 0 && has("clang")) {

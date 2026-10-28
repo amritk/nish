@@ -6,8 +6,8 @@
 //
 // Every `charCodeAt` in `scan` is proven by the loop condition that guards it,
 // so `@scan` carries no bounds check; `tests/cases/str_bounds_proven` pins the
-// shape. The
-// one check left in the module is `process.argv[1]`, which runs once.
+// shape. The one check left in the module is `process.argv[1]`, which runs
+// once.
 //
 // The cursor's bound is `s.length`, which no `integer<Lo, Hi>` can state
 // (wp31 §2). Declaring it `integer<0, …>` anyway turns each advance into a
