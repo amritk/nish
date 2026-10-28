@@ -90,12 +90,12 @@ const httpCodingIs = (buf: u8[], start: i32, end: i32, word: string): boolean =>
   if (end - start !== toI32(word.length)) {
     return false
   }
-  for (let i: i32 = 0; i < end - start; i += 1) {
+  for (let i: i32 = 0; i < end - start && i < toI32(word.length); i += 1) {
     let c: i32 = toI32(buf[start + i])
     if (c >= 65 && c <= 90) {
       c += 32
     }
-    if (c !== word.charCodeAt(i)) {
+    if (c !== toI32(word.charCodeAt(i))) {
       return false
     }
   }
@@ -123,7 +123,7 @@ const httpQValue = (buf: u8[], start: i32, end: i32): i32 => {
     return -1
   }
   let scale: i32 = 100
-  for (let i: i32 = start + 2; i < end; i += 1) {
+  for (let i: i32 = start + 2; i < end && i >= 0 && i < toI32(buf.length); i += 1) {
     const d: i32 = toI32(buf[i]) - 48
     if (d < 0 || d > 9 || (lead === 49 && d !== 0)) {
       return -1
@@ -324,7 +324,7 @@ export class HttpCompressor {
     if (coding !== HTTP_CODING_GZIP || len < this.minLength || len > this.maxLength) {
       return -1
     }
-    const n: i32 = this.gzip.compress(body, off, len, this.output, 0)
+    const n: i32 = this.gzip.compress(body, off, len, this.output, toI32(0))
     if (n < 0 || n >= len) {
       return -1
     }
@@ -344,9 +344,13 @@ export class HttpCompressor {
     while (this.values.length > 0) {
       this.values.pop()
     }
-    for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
-      this.names.push(names[i])
-      this.values.push(values[i])
+    for (let i: i32 = 0; i < toI32(values.length); i += 1) {
+      if (i < toI32(names.length)) {
+        const name: u8[] = names[i]
+        const value: u8[] = values[i]
+        this.names.push(name)
+        this.values.push(value)
+      }
     }
     this.names.push(this.contentEncodingName)
     this.values.push(this.gzipValue)
@@ -373,9 +377,13 @@ export class HttpCompressor {
     while (this.values.length > 0) {
       this.values.pop()
     }
-    for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
-      this.names.push(names[i])
-      this.values.push(values[i])
+    for (let i: i32 = 0; i < toI32(values.length); i += 1) {
+      if (i < toI32(names.length)) {
+        const name: u8[] = names[i]
+        const value: u8[] = values[i]
+        this.names.push(name)
+        this.values.push(value)
+      }
     }
     this.addVary()
   }

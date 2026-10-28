@@ -1293,7 +1293,7 @@ export class Http1Connection {
       this.writeHeld = true
       return H1_AGAIN
     }
-    const w: i32 = packed >= 0 ? this.write(enc.output, 0, n) : this.write(body, off, n)
+    const w: i32 = packed >= 0 ? this.write(enc.output, toI32(0), n) : this.write(body, off, n)
     if (w !== n) {
       panic("Http1Connection.respondEncoded: a body the room was checked for did not fit")
     }

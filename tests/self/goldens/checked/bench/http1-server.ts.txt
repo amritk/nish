@@ -1363,7 +1363,7 @@ function Http1Connection.respondEncoded(this: Http1Connection, status: i32, name
   local -1:13 fits: boolean (const)
   local +12:11 w: i32 (const)
   callee +12:34 Http1Connection.write -> @nish.Http1Connection.write
-  callee +12:65 Http1Connection.write -> @nish.Http1Connection.write
+  callee +12:72 Http1Connection.write -> @nish.Http1Connection.write
   callee +16:12 Http1Connection.end -> @nish.Http1Connection.end
 function Http1Connection.acceptWebSocket(this: Http1Connection, protocol: string): i32 -> @nish.Http1Connection.acceptWebSocket [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -2494,7 +2494,7 @@ function httpCodingIs(buf: u8[], start: i32, end: i32, word: string): boolean ->
   local +0:12 i: i32 (let)
   local +1:9 c: i32 (let)
 function httpQValue(buf: u8[], start: i32, end: i32): i32 -> @nish.httpQValue
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: start
   calls: nish_panic_index nish_panic_overflow
   pointer buf: size=0 writesThrough=false captured=false
@@ -2578,15 +2578,17 @@ function HttpCompressor.compress(this: HttpCompressor, coding: i32, body: u8[], 
   local +0:11 n: i32 (const)
   callee +0:20 GzipCompressor.compress -> @nish.GzipCompressor.compress
 function HttpCompressor.addFields(this: HttpCompressor, names: u8[][], values: u8[][]): void -> @nish.HttpCompressor.addFields [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.HttpCompressor.addVary nish_array_grow nish_panic_index
+  calls: nish.HttpCompressor.addVary nish_array_grow
   pointer this: size=80 writesThrough=false captured=false passedTo=nish.HttpCompressor.addVary#0
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +5:14 i: i32 (let)
-  callee +11:5 HttpCompressor.addVary -> @nish.HttpCompressor.addVary
+  local +7:15 name: u8[] (const)
+  local +8:15 value: u8[] (const)
+  callee +15:5 HttpCompressor.addVary -> @nish.HttpCompressor.addVary
 function HttpCompressor.addVary(this: HttpCompressor): void -> @nish.HttpCompressor.addVary [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -2594,15 +2596,17 @@ function HttpCompressor.addVary(this: HttpCompressor): void -> @nish.HttpCompres
   pointer this: size=80 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function HttpCompressor.identityFields(this: HttpCompressor, names: u8[][], values: u8[][]): void -> @nish.HttpCompressor.identityFields [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.HttpCompressor.addVary nish_array_grow nish_panic_index
+  calls: nish.HttpCompressor.addVary nish_array_grow
   pointer this: size=80 writesThrough=false captured=false passedTo=nish.HttpCompressor.addVary#0
   pointer names: size=0 writesThrough=false captured=false
   pointer values: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +5:14 i: i32 (let)
-  callee +9:5 HttpCompressor.addVary -> @nish.HttpCompressor.addVary
+  local +7:15 name: u8[] (const)
+  local +8:15 value: u8[] (const)
+  callee +13:5 HttpCompressor.addVary -> @nish.HttpCompressor.addVary
 function httpCompressorDefault(): HttpCompressor -> @nish.httpCompressorDefault [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=80
   calls: nish.HttpCompressor.constructor nish_alloc_struct
@@ -2626,167 +2630,167 @@ unsafe call 208:3 uncheckedSet (node 641)
 unsafe call 209:3 uncheckedSet (node 664)
 unsafe call 210:3 uncheckedSet (node 687)
 unsafe call 211:3 uncheckedSet (node 710)
-unsafe call 246:21 uncheckedGet (node 937)
-unsafe call 246:50 uncheckedGet (node 944)
-unsafe call 454:7 uncheckedSet (node 1875)
-unsafe call 455:7 uncheckedSet (node 1882)
-unsafe call 480:7 uncheckedSet (node 2022)
-unsafe call 487:23 uncheckedGet (node 2102)
-unsafe call 488:7 uncheckedSet (node 2112)
-unsafe call 488:32 uncheckedGet (node 2117)
-unsafe call 492:22 uncheckedGet (node 2152)
-unsafe call 493:7 uncheckedSet (node 2158)
-unsafe call 497:22 uncheckedGet (node 2189)
-unsafe call 499:23 uncheckedGet (node 2212)
-unsafe call 500:7 uncheckedSet (node 2218)
-unsafe call 501:7 uncheckedSet (node 2227)
-unsafe call 501:32 uncheckedGet (node 2232)
-unsafe call 502:7 uncheckedSet (node 2238)
-unsafe call 507:5 uncheckedSet (node 2260)
-unsafe call 507:27 uncheckedGet (node 2265)
-unsafe call 508:5 uncheckedSet (node 2271)
-unsafe call 508:27 uncheckedGet (node 2276)
-unsafe call 512:3 uncheckedSet (node 2282)
-unsafe call 512:25 uncheckedGet (node 2287)
-unsafe call 512:49 uncheckedGet (node 2292)
-unsafe call 516:25 uncheckedGet (node 2333)
-unsafe call 516:52 uncheckedGet (node 2338)
-unsafe call 517:7 uncheckedSet (node 2347)
-unsafe call 517:32 uncheckedGet (node 2352)
-unsafe call 518:7 uncheckedSet (node 2358)
-unsafe call 521:7 uncheckedSet (node 2370)
-unsafe call 521:32 uncheckedGet (node 2375)
-unsafe call 524:41 uncheckedGet (node 2392)
-unsafe call 524:68 uncheckedGet (node 2397)
-unsafe call 525:7 uncheckedSet (node 2407)
-unsafe call 525:32 uncheckedGet (node 2412)
-unsafe call 525:59 uncheckedGet (node 2417)
-unsafe call 526:7 uncheckedSet (node 2424)
-unsafe call 529:7 uncheckedSet (node 2436)
-unsafe call 529:32 uncheckedGet (node 2441)
-unsafe call 529:59 uncheckedGet (node 2446)
-unsafe call 534:3 uncheckedSet (node 2457)
-unsafe call 536:5 uncheckedSet (node 2483)
-unsafe call 536:30 uncheckedGet (node 2488)
-unsafe call 536:49 uncheckedGet (node 2492)
-unsafe call 548:25 uncheckedGet (node 2565)
-unsafe call 592:24 uncheckedGet (node 2812)
-unsafe call 874:7 uncheckedSet (node 4217)
-unsafe call 894:7 uncheckedSet (node 4333)
-unsafe call 895:7 uncheckedSet (node 4348)
-unsafe call 896:7 uncheckedSet (node 4371)
-unsafe call 897:7 uncheckedSet (node 4394)
-unsafe call 918:7 uncheckedSet (node 4503)
-unsafe call 1021:21 uncheckedGet (node 5084)
-unsafe call 1022:5 uncheckedSet (node 5090)
-unsafe call 1023:5 uncheckedSet (node 5097)
-unsafe call 1038:9 uncheckedGet (node 5233)
-unsafe call 1038:42 uncheckedGet (node 5240)
-unsafe call 1052:14 uncheckedGet (node 5311)
-unsafe call 1078:5 uncheckedSet (node 5474)
-unsafe call 1078:50 uncheckedGet (node 5484)
-unsafe call 1079:5 uncheckedSet (node 5490)
-unsafe call 1096:5 uncheckedSet (node 5590)
-unsafe call 1098:21 uncheckedGet (node 5617)
-unsafe call 1100:5 uncheckedSet (node 5635)
-unsafe call 1100:32 uncheckedGet (node 5642)
-unsafe call 1103:11 uncheckedGet (node 5661)
-unsafe call 1104:11 uncheckedGet (node 5669)
-unsafe call 1106:5 uncheckedSet (node 5693)
-unsafe call 1106:26 uncheckedGet (node 5698)
-unsafe call 1116:5 uncheckedSet (node 5761)
-unsafe call 1119:5 uncheckedSet (node 5784)
-unsafe call 1119:25 uncheckedGet (node 5789)
-unsafe call 1163:25 uncheckedGet (node 6096)
-unsafe call 1164:9 uncheckedSet (node 6102)
-unsafe call 1165:9 uncheckedSet (node 6109)
-unsafe call 1182:18 uncheckedGet (node 6255)
-unsafe call 1187:9 uncheckedSet (node 6276)
-unsafe call 1189:31 uncheckedGet (node 6301)
-unsafe call 1190:9 uncheckedSet (node 6310)
-unsafe call 1190:30 uncheckedGet (node 6315)
-unsafe call 1192:29 uncheckedGet (node 6332)
-unsafe call 1192:64 uncheckedGet (node 6339)
-unsafe call 1193:9 uncheckedSet (node 6353)
-unsafe call 1193:30 uncheckedGet (node 6358)
-unsafe call 1200:11 uncheckedSet (node 6432)
-unsafe call 1200:57 uncheckedGet (node 6442)
-unsafe call 1201:11 uncheckedSet (node 6448)
-unsafe call 1206:30 uncheckedGet (node 6472)
-unsafe call 1207:9 uncheckedSet (node 6478)
-unsafe call 1209:9 uncheckedSet (node 6489)
-unsafe call 1209:29 uncheckedGet (node 6494)
-unsafe call 1231:31 uncheckedGet (node 6606)
-unsafe call 1239:35 uncheckedGet (node 6683)
-unsafe call 1302:7 uncheckedSet (node 7034)
-unsafe call 1303:7 uncheckedSet (node 7046)
-unsafe call 1304:7 uncheckedSet (node 7060)
-unsafe call 1305:7 uncheckedSet (node 7075)
-unsafe call 1332:33 uncheckedGet (node 7241)
-unsafe call 1332:55 uncheckedGet (node 7246)
-unsafe call 1336:27 uncheckedGet (node 7273)
-unsafe call 1336:55 uncheckedGet (node 7280)
-unsafe call 1344:11 uncheckedSet (node 7324)
-unsafe call 1350:11 uncheckedSet (node 7358)
-unsafe call 1356:9 uncheckedSet (node 7389)
-unsafe call 1359:11 uncheckedSet (node 7409)
-unsafe call 1359:33 uncheckedGet (node 7414)
-unsafe call 1364:11 uncheckedSet (node 7444)
-unsafe call 1371:9 uncheckedSet (node 7478)
-unsafe call 1374:11 uncheckedSet (node 7498)
-unsafe call 1374:33 uncheckedGet (node 7503)
-unsafe call 1419:22 uncheckedGet (node 7815)
-unsafe call 1420:22 uncheckedGet (node 7824)
-unsafe call 1421:22 uncheckedGet (node 7835)
-unsafe call 1423:22 uncheckedGet (node 7851)
-unsafe call 1427:22 uncheckedGet (node 7882)
-unsafe call 1428:22 uncheckedGet (node 7891)
-unsafe call 1430:20 uncheckedGet (node 7908)
-unsafe call 1517:22 uncheckedGet (node 8568)
-unsafe call 1519:32 uncheckedGet (node 8589)
-unsafe call 1520:15 uncheckedGet (node 8603)
-unsafe call 1524:24 uncheckedGet (node 8636)
-unsafe call 1525:32 uncheckedGet (node 8652)
-unsafe call 1526:15 uncheckedGet (node 8668)
-unsafe call 1527:43 uncheckedGet (node 8689)
-unsafe call 1528:15 uncheckedGet (node 8704)
-unsafe call 1531:11 uncheckedSet (node 8722)
-unsafe call 1532:11 uncheckedSet (node 8737)
-unsafe call 1533:11 uncheckedSet (node 8760)
-unsafe call 1534:11 uncheckedSet (node 8783)
-unsafe call 1540:25 uncheckedGet (node 8833)
-unsafe call 1540:56 uncheckedGet (node 8840)
-unsafe call 1541:32 uncheckedGet (node 8864)
-unsafe call 1542:15 uncheckedGet (node 8878)
-unsafe call 1543:39 uncheckedGet (node 8895)
-unsafe call 1544:15 uncheckedGet (node 8910)
-unsafe call 1548:9 uncheckedSet (node 8928)
-unsafe call 1549:9 uncheckedSet (node 8943)
-unsafe call 1550:9 uncheckedSet (node 8966)
-unsafe call 1551:9 uncheckedSet (node 8989)
-unsafe call 1778:7 uncheckedSet (node 10215)
-unsafe call 1783:30 uncheckedGet (node 10260)
-unsafe call 1789:13 uncheckedSet (node 10337)
-unsafe call 1843:24 uncheckedGet (node 10638)
-unsafe call 2043:34 uncheckedGet (node 11689)
-unsafe call 2043:66 uncheckedGet (node 11698)
-unsafe call 2044:35 uncheckedGet (node 11717)
-unsafe call 2044:71 uncheckedGet (node 11728)
-unsafe call 2136:22 uncheckedGet (node 12264)
-unsafe call 2142:11 uncheckedSet (node 12305)
-unsafe call 2144:15 uncheckedGet (node 12323)
-unsafe call 2149:13 uncheckedSet (node 12364)
-unsafe call 2151:17 uncheckedGet (node 12382)
-unsafe call 2156:15 uncheckedSet (node 12423)
-unsafe call 2173:24 uncheckedGet (node 12544)
-unsafe call 2201:13 uncheckedSet (node 12752)
-unsafe call 2201:35 uncheckedGet (node 12757)
-unsafe call 2222:28 uncheckedGet (node 12866)
-unsafe call 2227:20 uncheckedGet (node 12891)
-unsafe call 2263:9 uncheckedSet (node 13061)
-unsafe call 2277:22 uncheckedGet (node 13170)
-unsafe call 2333:13 uncheckedSet (node 13481)
-unsafe call 2333:35 uncheckedGet (node 13486)
+unsafe call 246:21 uncheckedGet (node 943)
+unsafe call 246:50 uncheckedGet (node 950)
+unsafe call 454:7 uncheckedSet (node 1887)
+unsafe call 455:7 uncheckedSet (node 1894)
+unsafe call 480:7 uncheckedSet (node 2034)
+unsafe call 487:23 uncheckedGet (node 2114)
+unsafe call 488:7 uncheckedSet (node 2124)
+unsafe call 488:32 uncheckedGet (node 2129)
+unsafe call 492:22 uncheckedGet (node 2164)
+unsafe call 493:7 uncheckedSet (node 2170)
+unsafe call 497:22 uncheckedGet (node 2201)
+unsafe call 499:23 uncheckedGet (node 2224)
+unsafe call 500:7 uncheckedSet (node 2230)
+unsafe call 501:7 uncheckedSet (node 2239)
+unsafe call 501:32 uncheckedGet (node 2244)
+unsafe call 502:7 uncheckedSet (node 2250)
+unsafe call 507:5 uncheckedSet (node 2272)
+unsafe call 507:27 uncheckedGet (node 2277)
+unsafe call 508:5 uncheckedSet (node 2283)
+unsafe call 508:27 uncheckedGet (node 2288)
+unsafe call 512:3 uncheckedSet (node 2294)
+unsafe call 512:25 uncheckedGet (node 2299)
+unsafe call 512:49 uncheckedGet (node 2304)
+unsafe call 516:25 uncheckedGet (node 2345)
+unsafe call 516:52 uncheckedGet (node 2350)
+unsafe call 517:7 uncheckedSet (node 2359)
+unsafe call 517:32 uncheckedGet (node 2364)
+unsafe call 518:7 uncheckedSet (node 2370)
+unsafe call 521:7 uncheckedSet (node 2382)
+unsafe call 521:32 uncheckedGet (node 2387)
+unsafe call 524:41 uncheckedGet (node 2404)
+unsafe call 524:68 uncheckedGet (node 2409)
+unsafe call 525:7 uncheckedSet (node 2419)
+unsafe call 525:32 uncheckedGet (node 2424)
+unsafe call 525:59 uncheckedGet (node 2429)
+unsafe call 526:7 uncheckedSet (node 2436)
+unsafe call 529:7 uncheckedSet (node 2448)
+unsafe call 529:32 uncheckedGet (node 2453)
+unsafe call 529:59 uncheckedGet (node 2458)
+unsafe call 534:3 uncheckedSet (node 2469)
+unsafe call 536:5 uncheckedSet (node 2495)
+unsafe call 536:30 uncheckedGet (node 2500)
+unsafe call 536:49 uncheckedGet (node 2504)
+unsafe call 548:25 uncheckedGet (node 2577)
+unsafe call 592:24 uncheckedGet (node 2824)
+unsafe call 874:7 uncheckedSet (node 4229)
+unsafe call 894:7 uncheckedSet (node 4345)
+unsafe call 895:7 uncheckedSet (node 4360)
+unsafe call 896:7 uncheckedSet (node 4383)
+unsafe call 897:7 uncheckedSet (node 4406)
+unsafe call 918:7 uncheckedSet (node 4515)
+unsafe call 1021:21 uncheckedGet (node 5102)
+unsafe call 1022:5 uncheckedSet (node 5108)
+unsafe call 1023:5 uncheckedSet (node 5115)
+unsafe call 1038:9 uncheckedGet (node 5251)
+unsafe call 1038:42 uncheckedGet (node 5258)
+unsafe call 1052:14 uncheckedGet (node 5329)
+unsafe call 1078:5 uncheckedSet (node 5492)
+unsafe call 1078:50 uncheckedGet (node 5502)
+unsafe call 1079:5 uncheckedSet (node 5508)
+unsafe call 1096:5 uncheckedSet (node 5608)
+unsafe call 1098:21 uncheckedGet (node 5635)
+unsafe call 1100:5 uncheckedSet (node 5653)
+unsafe call 1100:32 uncheckedGet (node 5660)
+unsafe call 1103:11 uncheckedGet (node 5679)
+unsafe call 1104:11 uncheckedGet (node 5687)
+unsafe call 1106:5 uncheckedSet (node 5711)
+unsafe call 1106:26 uncheckedGet (node 5716)
+unsafe call 1116:5 uncheckedSet (node 5779)
+unsafe call 1119:5 uncheckedSet (node 5802)
+unsafe call 1119:25 uncheckedGet (node 5807)
+unsafe call 1163:25 uncheckedGet (node 6114)
+unsafe call 1164:9 uncheckedSet (node 6120)
+unsafe call 1165:9 uncheckedSet (node 6127)
+unsafe call 1182:18 uncheckedGet (node 6273)
+unsafe call 1187:9 uncheckedSet (node 6294)
+unsafe call 1189:31 uncheckedGet (node 6319)
+unsafe call 1190:9 uncheckedSet (node 6328)
+unsafe call 1190:30 uncheckedGet (node 6333)
+unsafe call 1192:29 uncheckedGet (node 6350)
+unsafe call 1192:64 uncheckedGet (node 6357)
+unsafe call 1193:9 uncheckedSet (node 6371)
+unsafe call 1193:30 uncheckedGet (node 6376)
+unsafe call 1200:11 uncheckedSet (node 6450)
+unsafe call 1200:57 uncheckedGet (node 6460)
+unsafe call 1201:11 uncheckedSet (node 6466)
+unsafe call 1206:30 uncheckedGet (node 6490)
+unsafe call 1207:9 uncheckedSet (node 6496)
+unsafe call 1209:9 uncheckedSet (node 6507)
+unsafe call 1209:29 uncheckedGet (node 6512)
+unsafe call 1231:31 uncheckedGet (node 6624)
+unsafe call 1239:35 uncheckedGet (node 6701)
+unsafe call 1302:7 uncheckedSet (node 7058)
+unsafe call 1303:7 uncheckedSet (node 7070)
+unsafe call 1304:7 uncheckedSet (node 7084)
+unsafe call 1305:7 uncheckedSet (node 7099)
+unsafe call 1332:33 uncheckedGet (node 7265)
+unsafe call 1332:55 uncheckedGet (node 7270)
+unsafe call 1336:27 uncheckedGet (node 7297)
+unsafe call 1336:55 uncheckedGet (node 7304)
+unsafe call 1344:11 uncheckedSet (node 7348)
+unsafe call 1350:11 uncheckedSet (node 7382)
+unsafe call 1356:9 uncheckedSet (node 7413)
+unsafe call 1359:11 uncheckedSet (node 7433)
+unsafe call 1359:33 uncheckedGet (node 7438)
+unsafe call 1364:11 uncheckedSet (node 7468)
+unsafe call 1371:9 uncheckedSet (node 7502)
+unsafe call 1374:11 uncheckedSet (node 7522)
+unsafe call 1374:33 uncheckedGet (node 7527)
+unsafe call 1419:22 uncheckedGet (node 7837)
+unsafe call 1420:22 uncheckedGet (node 7846)
+unsafe call 1421:22 uncheckedGet (node 7857)
+unsafe call 1423:22 uncheckedGet (node 7873)
+unsafe call 1427:22 uncheckedGet (node 7904)
+unsafe call 1428:22 uncheckedGet (node 7913)
+unsafe call 1430:20 uncheckedGet (node 7930)
+unsafe call 1521:22 uncheckedGet (node 8619)
+unsafe call 1523:32 uncheckedGet (node 8640)
+unsafe call 1524:15 uncheckedGet (node 8654)
+unsafe call 1528:24 uncheckedGet (node 8687)
+unsafe call 1529:32 uncheckedGet (node 8703)
+unsafe call 1530:15 uncheckedGet (node 8719)
+unsafe call 1531:43 uncheckedGet (node 8740)
+unsafe call 1532:15 uncheckedGet (node 8755)
+unsafe call 1535:11 uncheckedSet (node 8773)
+unsafe call 1536:11 uncheckedSet (node 8788)
+unsafe call 1537:11 uncheckedSet (node 8811)
+unsafe call 1538:11 uncheckedSet (node 8834)
+unsafe call 1544:25 uncheckedGet (node 8884)
+unsafe call 1544:56 uncheckedGet (node 8891)
+unsafe call 1545:32 uncheckedGet (node 8915)
+unsafe call 1546:15 uncheckedGet (node 8929)
+unsafe call 1547:39 uncheckedGet (node 8946)
+unsafe call 1548:15 uncheckedGet (node 8961)
+unsafe call 1552:9 uncheckedSet (node 8979)
+unsafe call 1553:9 uncheckedSet (node 8994)
+unsafe call 1554:9 uncheckedSet (node 9017)
+unsafe call 1555:9 uncheckedSet (node 9040)
+unsafe call 1782:7 uncheckedSet (node 10278)
+unsafe call 1787:30 uncheckedGet (node 10323)
+unsafe call 1793:13 uncheckedSet (node 10400)
+unsafe call 1847:24 uncheckedGet (node 10701)
+unsafe call 2047:34 uncheckedGet (node 11794)
+unsafe call 2047:66 uncheckedGet (node 11803)
+unsafe call 2048:35 uncheckedGet (node 11822)
+unsafe call 2048:71 uncheckedGet (node 11833)
+unsafe call 2140:22 uncheckedGet (node 12369)
+unsafe call 2146:11 uncheckedSet (node 12410)
+unsafe call 2148:15 uncheckedGet (node 12428)
+unsafe call 2153:13 uncheckedSet (node 12469)
+unsafe call 2155:17 uncheckedGet (node 12487)
+unsafe call 2160:15 uncheckedSet (node 12528)
+unsafe call 2177:24 uncheckedGet (node 12649)
+unsafe call 2205:13 uncheckedSet (node 12857)
+unsafe call 2205:35 uncheckedGet (node 12862)
+unsafe call 2226:28 uncheckedGet (node 12971)
+unsafe call 2231:20 uncheckedGet (node 12996)
+unsafe call 2267:9 uncheckedSet (node 13166)
+unsafe call 2281:22 uncheckedGet (node 13275)
+unsafe call 2337:13 uncheckedSet (node 13586)
+unsafe call 2337:35 uncheckedGet (node 13591)
 const DEFLATE_STORE: i32 = 0 [exported]
 const DEFLATE_FAST: i32 = 1 [exported]
 const DEFLATE_DEFAULT: i32 = 6 [exported]
@@ -2973,8 +2977,8 @@ function deflateStore64(b: u8[], p: integer<0, 2147483639>, w: u64): void -> @ni
   pointer b: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function deflateCtz64(x: u64): i32 -> @nish.deflateCtz64
-  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: llvm.ctlz.i32
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: llvm.ctlz.i32 nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 lo: u32 (const)
   local +4:9 hi: u32 (const)
@@ -3454,23 +3458,24 @@ function Deflater.writeBlock(this: Deflater, src: u8[], start: i32, end: i32, fi
   callee +50:14 Deflater.writeStored -> @nish.Deflater.writeStored
   local +52:11 dynamic: boolean (const)
   local +53:11 bits: i32 (const)
-  local +57:9 o: i32 (let)
-  callee +57:18 Deflater.putBits -> @nish.Deflater.putBits
-  callee +59:11 Deflater.putBits -> @nish.Deflater.putBits
-  local +60:16 i: i32 (let)
-  callee +61:13 Deflater.putBits -> @nish.Deflater.putBits
-  callee +61:46 deflateClOrder -> @nish.deflateClOrder
-  local +63:13 rle: i32[] (const)
-  local +64:13 n: i32 (const)
-  local +65:16 i: i32 (let)
-  local +66:15 e: i32 (const)
-  local +67:15 sym: i32 (const)
-  callee +71:13 Deflater.putBits -> @nish.Deflater.putBits
-  callee +73:15 Deflater.putBits -> @nish.Deflater.putBits
-  callee +75:15 Deflater.putBits -> @nish.Deflater.putBits
+  local +57:9 header: i32 (let)
+  local +61:9 o: i32 (let)
+  callee +61:18 Deflater.putBits -> @nish.Deflater.putBits
+  callee +63:11 Deflater.putBits -> @nish.Deflater.putBits
+  local +64:16 i: i32 (let)
+  callee +65:13 Deflater.putBits -> @nish.Deflater.putBits
+  callee +65:46 deflateClOrder -> @nish.deflateClOrder
+  local +67:13 rle: i32[] (const)
+  local +68:13 n: i32 (const)
+  local +69:16 i: i32 (let)
+  local +70:15 e: i32 (const)
+  local +71:15 sym: i32 (const)
+  callee +75:13 Deflater.putBits -> @nish.Deflater.putBits
   callee +77:15 Deflater.putBits -> @nish.Deflater.putBits
-  callee +80:11 Deflater.writeSymbols -> @nish.Deflater.writeSymbols
-  callee +82:11 Deflater.writeSymbols -> @nish.Deflater.writeSymbols
+  callee +79:15 Deflater.putBits -> @nish.Deflater.putBits
+  callee +81:15 Deflater.putBits -> @nish.Deflater.putBits
+  callee +84:11 Deflater.writeSymbols -> @nish.Deflater.writeSymbols
+  callee +86:11 Deflater.writeSymbols -> @nish.Deflater.writeSymbols
 function Deflater.writeSymbols(this: Deflater, lc: i32[], ll: i32[], dc: i32[], dl: i32[], out: u8[], op: i32): i32 -> @nish.Deflater.writeSymbols [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:11
@@ -3656,9 +3661,9 @@ function Inflater.readDynamic(this: Inflater, src: u8[], end: i32): i32 -> @nish
   local +29:13 sym: i32 (const)
   local +37:13 rep: i32 (let)
   local +38:13 value: i32 (let)
-  callee +47:21 Inflater.take -> @nish.Inflater.take
-  callee +52:21 Inflater.take -> @nish.Inflater.take
-  callee +57:22 Inflater.take -> @nish.Inflater.take
+  callee +47:28 Inflater.take -> @nish.Inflater.take
+  callee +52:28 Inflater.take -> @nish.Inflater.take
+  callee +57:29 Inflater.take -> @nish.Inflater.take
   local +62:18 k: i32 (let)
   local +71:11 rl: i32 (const)
   callee +71:21 Inflater.build -> @nish.Inflater.build

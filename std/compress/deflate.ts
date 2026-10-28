@@ -156,7 +156,7 @@ export const deflateBound = (n: i32): i32 => {
   if (n < 0) {
     return 0
   }
-  return n + 5 * ((n >> 16) + (n >> 14) + 2) + 8
+  return n + ((n >> 16) + (n >> 14) + 2) * 5 + 8
 }
 
 /**
@@ -215,10 +215,10 @@ const deflateStore64 = (b: u8[], p: integer<0, 2147483639>, w: u64): void => {
 const deflateCtz64 = (x: u64): i32 => {
   const lo: u32 = toU32(x)
   if (lo !== 0) {
-    return 31 - Math.clz32(lo & (toU32(0) - lo))
+    return toI32(31) - Math.clz32(lo & (toU32(0) - lo))
   }
   const hi: u32 = toU32(x >> toU64(32))
-  return 63 - Math.clz32(hi & (toU32(0) - hi))
+  return toI32(63) - Math.clz32(hi & (toU32(0) - hi))
 }
 
 /**
@@ -268,7 +268,7 @@ const deflateLengthBase = (s: i32): i32 => {
   if (s === 28) {
     return 258
   }
-  return 3 + ((4 + (s & 3)) << ((s >> 2) - 1))
+  return ((toI32(4) + (s & 3)) << ((s >> 2) - 1)) + 3
 }
 
 /** The extra bits of each length symbol 257 + s (§3.2.5). */
@@ -280,7 +280,7 @@ const deflateDistBase = (d: i32): i32 => {
     return 1 + d
   }
   const extra: i32 = (d >> 1) - 1
-  return 1 + ((2 + (d & 1)) << extra)
+  return ((toI32(2) + (d & 1)) << extra) + 1
 }
 
 /** The extra bits of each distance symbol (§3.2.5). */
@@ -782,7 +782,7 @@ export class Deflater {
         if (dist <= 256) {
           this.distSymbol[dist - 1] = d
         } else {
-          const at: i32 = 256 + ((dist - 1) >> 7)
+          const at: i32 = ((dist - 1) >> 7) + 256
           if (at < 512) {
             this.distSymbol[at] = d
           }
@@ -957,7 +957,7 @@ export class Deflater {
       if ((this.bitCount + 10 + 7) >> 3 > oe - o) {
         return -1
       }
-      o = this.putBits(out, o, 3, 3)
+      o = this.putBits(out, o, toI32(3), toI32(3))
       return this.putBits(out, o, this.fixedLitCodes[256], this.fixedLitLens[256])
     }
     if (this.level === 0) {
@@ -1101,7 +1101,7 @@ export class Deflater {
     const ds: i32 =
       dist <= 256
         ? uncheckedGet(this.distSymbol, dist - 1)
-        : uncheckedGet(this.distSymbol, 256 + ((dist - 1) >> 7))
+        : uncheckedGet(this.distSymbol, ((dist - 1) >> 7) + 256)
     const df: i32[] = this.distFreq
     uncheckedSet(df, ds, uncheckedGet(df, ds) + 1)
   }
@@ -1189,7 +1189,7 @@ export class Deflater {
         const ls: i32 = 257 + uncheckedGet(lsym, best - 3)
         uncheckedSet(lf, ls, uncheckedGet(lf, ls) + 1)
         const ds: i32 =
-          bestDist <= 256 ? uncheckedGet(dsym, bestDist - 1) : uncheckedGet(dsym, 256 + ((bestDist - 1) >> 7))
+          bestDist <= 256 ? uncheckedGet(dsym, bestDist - 1) : uncheckedGet(dsym, ((bestDist - 1) >> 7) + 256)
         uncheckedSet(df, ds, uncheckedGet(df, ds) + 1)
         // Every position the match covers goes into the chains.
         const stop: i32 = p + best
@@ -1296,7 +1296,7 @@ export class Deflater {
       first = false
       const take: i32 = end - p < DEFLATE_STORED_MAX ? end - p : DEFLATE_STORED_MAX
       const last: boolean = p + take === end
-      o = this.putBits(out, o, final && last ? 1 : 0, 3)
+      o = this.putBits(out, o, toI32(final && last ? 1 : 0), toI32(3))
       o = this.alignBits(out, o)
       deflateRoom(out, o, 4)
       uncheckedSet(out, o, toU8(take & 255))
@@ -1341,13 +1341,13 @@ export class Deflater {
       if (l === 0) {
         while (run >= 11) {
           const r: i32 = run < 138 ? run : 138
-          uncheckedSet(rle, n, 18 | ((r - 11) << 8))
+          uncheckedSet(rle, n, ((r - 11) << 8) | 18)
           n += 1
           freq[18] += 1
           run -= r
         }
         if (run >= 3) {
-          uncheckedSet(rle, n, 17 | ((run - 3) << 8))
+          uncheckedSet(rle, n, ((run - 3) << 8) | 17)
           n += 1
           freq[17] += 1
           run = 0
@@ -1361,7 +1361,7 @@ export class Deflater {
         run -= 1
         while (run >= 3) {
           const r: i32 = run < 6 ? run : 6
-          uncheckedSet(rle, n, 16 | ((r - 3) << 8))
+          uncheckedSet(rle, n, ((r - 3) << 8) | 16)
           n += 1
           freq[16] += 1
           run -= r
@@ -1413,7 +1413,7 @@ export class Deflater {
     }
     // The three sizes, exactly. Extra bits are the same in both codes.
     let extra: i32 = 0
-    let dynBits: i32 = 3 + 14 + 3 * hclen
+    let dynBits: i32 = hclen * 3 + 17
     let fixBits: i32 = 3
     for (let s: i32 = 0; s < 286; s += 1) {
       const f: i32 = uncheckedGet(lf, s)
@@ -1444,11 +1444,15 @@ export class Deflater {
     if ((this.bitCount + bits + 7) >> 3 > oe - op) {
       return -1
     }
-    let o: i32 = this.putBits(out, op, (final ? 1 : 0) | ((dynamic ? 2 : 1) << 1), 3)
+    let header: i32 = dynamic ? toI32(4) : toI32(2)
+    if (final) {
+      header += 1
+    }
+    let o: i32 = this.putBits(out, op, header, toI32(3))
     if (dynamic) {
-      o = this.putBits(out, o, (hlit - 257) | ((hdist - 1) << 5) | ((hclen - 4) << 10), 14)
+      o = this.putBits(out, o, (hlit - 257) | ((hdist - 1) << 5) | ((hclen - 4) << 10), toI32(14))
       for (let i: i32 = 0; i < hclen; i += 1) {
-        o = this.putBits(out, o, this.clLens[deflateClOrder(i)], 3)
+        o = this.putBits(out, o, this.clLens[deflateClOrder(i)], toI32(3))
       }
       const rle: i32[] = this.rle
       const n: i32 = this.rleCount
@@ -1460,11 +1464,11 @@ export class Deflater {
         }
         o = this.putBits(out, o, this.clCodes[sym], this.clLens[sym])
         if (sym === 16) {
-          o = this.putBits(out, o, e >> 8, 2)
+          o = this.putBits(out, o, e >> 8, toI32(2))
         } else if (sym === 17) {
-          o = this.putBits(out, o, e >> 8, 3)
+          o = this.putBits(out, o, e >> 8, toI32(3))
         } else if (sym === 18) {
-          o = this.putBits(out, o, e >> 8, 7)
+          o = this.putBits(out, o, e >> 8, toI32(7))
         }
       }
       o = this.writeSymbols(this.litCodes, this.litLens, this.distCodes, this.distLens, out, o)
@@ -1537,7 +1541,7 @@ export class Deflater {
           o += 4
         }
         const d: i32 =
-          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, 256 + ((dist - 1) >> 7))
+          dist <= 256 ? uncheckedGet(dsym, dist - 1) : uncheckedGet(dsym, ((dist - 1) >> 7) + 256)
         bb = bb | (toU64(toU32(uncheckedGet(dc, d))) << toU64(bc))
         bc += uncheckedGet(dl, d)
         bb = bb | (toU64(toU32(dist - uncheckedGet(dbase, d))) << toU64(bc))
@@ -1663,11 +1667,11 @@ export class Inflater {
     }
     // The fixed distance code has 32 five-bit codes, 30 and 31 among them,
     // which decode as errors (§3.2.6).
-    const fl: i32 = this.build(this.fixedLit, this.lens, 0, 288, INF_TABLE_LITLEN)
+    const fl: i32 = this.build(this.fixedLit, this.lens, toI32(0), toI32(288), INF_TABLE_LITLEN)
     for (let d: i32 = 0; d < 32; d += 1) {
       this.lens[d] = 5
     }
-    const fd: i32 = this.build(this.fixedDist, this.lens, 0, 32, INF_TABLE_DIST)
+    const fd: i32 = this.build(this.fixedDist, this.lens, toI32(0), toI32(32), INF_TABLE_DIST)
     if (fl !== 0 || fd !== 0) {
       panic("Inflater: the fixed code did not build")
     }
@@ -1881,9 +1885,9 @@ export class Inflater {
     if (this.bitCount < 14) {
       return INFLATE_NEED_INPUT
     }
-    const hlit: i32 = this.take(5) + 257
-    const hdist: i32 = this.take(5) + 1
-    const hclen: i32 = this.take(4) + 4
+    const hlit: i32 = this.take(toI32(5)) + 257
+    const hdist: i32 = this.take(toI32(5)) + 1
+    const hclen: i32 = this.take(toI32(4)) + 4
     if (hlit > 286 || hdist > 30) {
       return DEFLATE_ERR_HUFFMAN
     }
@@ -1896,9 +1900,9 @@ export class Inflater {
       if (this.bitCount < 3) {
         return INFLATE_NEED_INPUT
       }
-      cl[deflateClOrder(i)] = this.take(3)
+      cl[deflateClOrder(i)] = this.take(toI32(3))
     }
-    const r: i32 = this.build(this.codeLengths, cl, 0, 19, INF_TABLE_CODELEN)
+    const r: i32 = this.build(this.codeLengths, cl, toI32(0), toI32(19), INF_TABLE_CODELEN)
     if (r !== 0) {
       return r
     }
@@ -1936,17 +1940,17 @@ export class Inflater {
             return INFLATE_NEED_INPUT
           }
           value = lens[i - 1]
-          rep = 3 + this.take(2)
+          rep = toI32(3) + this.take(toI32(2))
         } else if (sym === 17) {
           if (this.bitCount < 3) {
             return INFLATE_NEED_INPUT
           }
-          rep = 3 + this.take(3)
+          rep = toI32(3) + this.take(toI32(3))
         } else {
           if (this.bitCount < 7) {
             return INFLATE_NEED_INPUT
           }
-          rep = 11 + this.take(7)
+          rep = toI32(11) + this.take(toI32(7))
         }
         if (i + rep > total) {
           return DEFLATE_ERR_HUFFMAN
@@ -1960,7 +1964,7 @@ export class Inflater {
     if (lens[256] === 0) {
       return DEFLATE_ERR_HUFFMAN
     }
-    const rl: i32 = this.build(this.lit, lens, 0, hlit, INF_TABLE_LITLEN)
+    const rl: i32 = this.build(this.lit, lens, toI32(0), hlit, INF_TABLE_LITLEN)
     if (rl !== 0) {
       return rl
     }
@@ -2029,7 +2033,7 @@ export class Inflater {
           this.inPos = savePos
           return more ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
         }
-        const header: i32 = this.take(3)
+        const header: i32 = this.take(toI32(3))
         const type: i32 = header >> 1
         if (type === 0) {
           this.unread()

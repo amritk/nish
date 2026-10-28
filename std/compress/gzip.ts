@@ -144,7 +144,7 @@ const gzipReadHeader = (crc: Crc32, src: u8[], p: i32, end: i32): i32 => {
   }
   for (let field: i32 = 8; field <= 16; field += 8) {
     if ((flags & field) !== 0) {
-      while (q < end && src[q] !== 0) {
+      while (q >= 0 && q < end && q < toI32(src.length) && src[q] !== 0) {
         q += 1
       }
       if (q >= end) {
@@ -328,7 +328,7 @@ export class GzipWriter {
     // that no match reaches into the last one.
     this.deflater.finish(this.fill)
     this.deflater.reset()
-    this.deflater.begin(0)
+    this.deflater.begin(toI32(0))
     this.pending = 0
     this.fill = 0
     this.checksum = 0
@@ -363,7 +363,7 @@ export class GzipWriter {
       this.window,
       this.pending,
       this.fill,
-      0,
+      toI32(0),
       final,
       out,
       at,
@@ -433,14 +433,14 @@ export class GzipWriter {
     if (this.finished) {
       panic("GzipWriter.flush: the body has been finished")
     }
-    if (toI32(out.length) - at < this.bound(0)) {
+    if (toI32(out.length) - at < this.bound(toI32(0))) {
       return DEFLATE_NO_ROOM
     }
     let o: i32 = this.header(out, at)
     if (this.fill > this.pending) {
       o = this.drain(out, o, false)
     }
-    o = this.deflater.writeStored(this.window, 0, 0, false, out, o, toI32(out.length))
+    o = this.deflater.writeStored(this.window, toI32(0), toI32(0), false, out, o, toI32(out.length))
     return o
   }
 
@@ -454,7 +454,7 @@ export class GzipWriter {
     if (this.finished) {
       panic("GzipWriter.finish: the body has been finished")
     }
-    if (toI32(out.length) - at < this.bound(0)) {
+    if (toI32(out.length) - at < this.bound(toI32(0))) {
       return DEFLATE_NO_ROOM
     }
     let o: i32 = this.header(out, at)

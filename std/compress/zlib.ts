@@ -82,7 +82,7 @@ export class ZlibCompressor {
     }
     const cmf: i32 = 0x78
     let flg: i32 = flevel << 6
-    flg += (31 - ((cmf * 256 + flg) % 31)) % 31
+    flg += (toI32(31) - ((cmf * 256 + flg) % 31)) % 31
     out[at] = toU8(cmf)
     out[at + 1] = toU8(flg)
     const end: i32 = this.deflater.compress(src, off, len, out, at + 2)
