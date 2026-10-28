@@ -1,0 +1,58 @@
+You are implementing one stage of an accepted plan. Work only this stage.
+
+Repo: amritk/nish          Base: main at 3e15e91de20d8bda0e1a67f1b13c920921bd8eec
+Branch: feature/tls-client/x509-path   (already assigned. Commit and push here, nothing else)
+Tracking issue: #993 (the run's ledger). Feature issue: #480.
+
+## Your stage
+feat(crypto): RFC 5280 path validation, hostname verification and a system trust store
+Goal: Validate a server's certificate chain against a trust store and a host name, refusing every bad-certificate class the issue and its comment list
+Owns (do not create or edit files outside these): `std/crypto/x509.ts`, `std/crypto/x509-path.ts`, `docs/security/crypto-x509.md`, `tests/link/crypto_x509*/**`, `tests/fuzz/targets/x509-*.ts`, plus its rows in the shared registries. **Merge-order edge:** merges after pubkey-verify; its `x509-wire-verifiers` todo is done after the lead says pubkey-verify merged. Everything else, and the P-256 half of every test, does not wait.
+The "shared registries" in the plan (src/std-modules.ts stdModuleNames, the one tarball-list line in .github/workflows/release.yml and its count, std/README.md module table, docs/security/README.md Areas/Open-findings rows, docs/guide/using-nish/standard-library.md, tests/run.js, tests/nish-cmp.js) are yours ONLY for this stage's own rows. Never edit any other part of .github/workflows/.
+Verification: npm run check && npm run lint && node scripts/security-scope.mjs && node tests/run.js x509
+Targeted tests: node tests/run.js <filter>   (this stage's filters: x509)
+Generated files (regenerate with the repo's tooling, never edit or hand-merge): tests/self/goldens/checked/** via `node tests/self/goldens.js --update` (read the diff); tests/differential goldens via `node tests/differential/goldens.js --update` if a positive tests/cases/* is added.
+
+MERGE-ORDER NOTE: pubkey-verify (RSA + P-384 verifiers, std/crypto/rsa.ts and p384.ts) is being built in parallel by another session. Do every todo except x509-wire-verifiers now, against main, with RSA/P-384 hops returning X509_PATH_UNSUPPORTED_ALGORITHM. When the lead messages you that pubkey-verify has merged, merge main, do x509-wire-verifiers against the interfaces fixed in the plan's Approach section, add the RSA/P-384 vectors, and push. You may open the PR before that, as a draft titled as below, and mark it ready once the wiring is in.
+
+Todos:
+- [x509-extensions] Parse version, basicConstraints, keyUsage, extendedKeyUsage, subjectAltName, nameConstraints and critical flags into X509Certificate in std/crypto/x509.ts — see Stage x509-path
+- [x509-keys] Record each certificate's key algorithm (P-256, P-384, RSA) and signature algorithm (ECDSA-SHA256/384, RSA PKCS#1 and PSS) — see Stage x509-path
+- [x509-trust] Add X509TrustStore, x509TrustStoreFromPem and x509SystemTrustStore in std/crypto/x509-path.ts — see Stage x509-path
+- [x509-walk] Add x509ValidatePath gating every hop on CA, pathLen, keyCertSign, validity and name chaining before its signature check — see Stage x509-path
+- [x509-hostname] Add RFC 6125 hostname matching against subjectAltName (DNS and IP, single left-most wildcard, no CN fallback) — see Stage x509-path
+- [x509-wire-verifiers] After pubkey-verify merges, merge main and dispatch RSA and P-384 hop signatures to rsa.ts and p384.ts — see Stage x509-path
+- [x509-vectors] Add x509-limbo-style positive and negative chains, including every vector from the issue comment, as tests/link/crypto_x509_path_* — see Tests
+- [x509-record] Extend docs/security/crypto-x509.md (scope, findings, properties), the guide and std/README.md — see Shared registries
+
+Full plan, for context on how your stage fits with the others. Read it, especially "Approach" (the fixed interfaces between stages), "Shared registries", your stage's section and "Tests":
+  git fetch origin feature/tls-client/plan
+  git show origin/feature/tls-client/plan:.claude/plans/tls-client.plan.md
+Do not implement anything from another stage. Other sessions own those stages and some are working in parallel right now.
+
+## Read first
+CLAUDE.md, .claude/orientation.md, .claude/typescript.md, .claude/comments.md, .claude/testing.md, docs/security/README.md (record format), and the "Secret material in std/crypto" rule in CLAUDE.md. Then read the existing code you build on (std/net/tls.ts, std/net/tls/*, std/crypto/x509.ts, std/crypto/p256.ts, docs/security/tls.md, crypto-ecc.md, crypto-x509.md as relevant). The repo's rules there are authoritative where they are stricter than this prompt. This includes the rolling freeze: std/ is compiled by the seed, so use only constructs the last release has.
+
+## Definition of done
+1. The stage's todos are implemented, and nothing outside your Owns (plus your registry rows) changed.
+2. `npm run check`, `npm run lint` (read the exit status, never a piped tail), `node scripts/security-scope.mjs`, and the targeted test filters above all pass. Your edit to src/std-modules.ts is a src/ change, so also run `WASI_SYSROOT=/usr node tests/run.js wasi` and `node tests/run.js performance`, and read their skip lines. Regenerate the goldens.
+3. There is no line-coverage tool for Nish. The bar is every todo pinned by a test that can fail: positive and negative vectors, an expected.out for each new link program, and a tests/nish-cmp.js entry with its "why". Do not add skips, do not loosen a check, and do not touch any lint/check/CI configuration. Run the full `npm test` only once, before opening the PR (the step on long runs below says how). CI's four shards are the full-suite gate.
+4. The security record (scope table, threat model, findings with before/after test or recorded open, properties pinned by tests) and its README Areas row ship in this PR. `node scripts/security-scope.mjs` must pass with your new files scoped. The user guide moves with the language: update the guide pages your stage owns.
+5. Before you open the PR, run /check-iterate and fix what it confirms. If that command is not available in your session, review your own diff against main adversarially yourself and fix what you find. Do not skip it.
+6. Then run /simplify over the same diff and apply what it returns. If that command is not available, re-read your diff for reuse of what the repo already has, leftover scaffolding, and anything at the wrong altitude. This pass never changes behaviour and never widens your Owns.
+7. Open a PR from your branch to main. Title: `feat(crypto): RFC 5280 path validation, hostname verification and a system trust store` (it must pass pr-title.yml's conventional-commit check). Body: what changed and why, the verification commands you ran with their results (pass/fail/skip counts), and the lines `Part of #993` and `Refs #480`. Commit messages follow CLAUDE.md "Commit messages are the changelog". NEVER include session links, model names, "Generated with" footers or Co-Authored-By agent lines anywhere: the repo's hook refuses them.
+8. Do NOT merge your PR, even though the repo's CLAUDE.md says an agent squash-merges its own. In this run the lead merges, in plan order.
+
+## Running tests without burning the session
+Every model call re-reads your whole context, so waiting is what costs you, not testing.
+- The full suite runs twice: before you open the PR, and when the lead says you are next to merge. During review rounds, run the targeted filters for what the round changed, plus check and lint. CI runs the full suite on every push.
+- Commit before you start a long run, so a stop hook that checks for uncommitted work does not wake you while it runs.
+- Start a long run once, in the background, with its output redirected to a file, then end your turn. You are woken when it exits. Never poll it: no `sleep` or `until` loops, no re-armed monitors, no second runner sharing build/. Read the result with grep or tail, not by printing the log.
+- Do not schedule check-ins for yourself. The lead's messages and PR events wake you.
+- Do not merge main into your branch whenever it moves. Merge it when the PR conflicts, or when the lead tells you you are next to merge. Then resolve registry-row conflicts, regenerate the goldens, run the full suite once, and push.
+
+## Rules
+- Push only to your own branch. Never push to main, never touch another feature/tls-client/* branch, never force-push.
+- If CI goes red or a test fails, run /debug and reproduce it before you change anything. A fix for a failure nobody reproduced is a guess, and a guess costs a review round. If that command is not available, follow the same order anyway: reproduce, localise, test one hypothesis at a time, then pin the fix with a test.
+- If your stage turns out to be impossible as written, push what you have, open the PR as a draft, and say exactly what blocked you in the PR body. Do not substitute different work, and do not widen your scope to fix it.
+- Review comments come as a single batch. Address every blocking one in one push, then stop. Non-blocking ones (wording, style, a comment) go in that same push when they are cheap; never push for them alone. Keep the PR body accurate, but do not rewrite it unless a round says it is wrong. Do not reply to argue. If a finding is wrong, say so in one line on that thread and move on.
