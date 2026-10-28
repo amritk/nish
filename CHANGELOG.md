@@ -26,6 +26,22 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.23.1] - 2026-10-28
+
+### Fixed
+
+- std: An idle keep-alive no longer makes every http1 expire walk every slot ([#978](https://github.com/amritk/nish/pull/978))
+
+### Documentation
+
+- Bring the README up to date with the language ([#976](https://github.com/amritk/nish/pull/976))
+- bench: Record where nish/net/postgres's client time goes ([#974](https://github.com/amritk/nish/pull/974))
+
+### Build
+
+- Regenerate package-lock.json for v0.23.0 ([#975](https://github.com/amritk/nish/pull/975))
+
+
 ## [0.23.0] - 2026-10-27
 
 ### Added
@@ -1226,3 +1242,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.22.0]: https://github.com/amritk/nish/releases/tag/v0.22.0
 [0.22.1]: https://github.com/amritk/nish/releases/tag/v0.22.1
 [0.23.0]: https://github.com/amritk/nish/releases/tag/v0.23.0
+[0.23.1]: https://github.com/amritk/nish/releases/tag/v0.23.1
