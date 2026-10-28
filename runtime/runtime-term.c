@@ -145,8 +145,8 @@ static int nish_stdin_ready(int32_t timeout_ms) {
 
 /* `readStdin(buf, off, len)`: at most `len` bytes into `buf` from `off`, the
    count, 0 at the end of the stream and -11 when nothing is waiting. The
-   compiled call has already checked `0 <= off <= off + len <= buf.length`,
-   unless the program was built with `--unchecked-indexing`. A `read` that a
+   compiled call has already checked `0 <= off <= off + len <= buf.length`.
+   A `read` that a
    signal interrupts is asked again; one that would block (a descriptor some
    other program made non-blocking) is -11 too, and so is a readiness check a
    signal interrupts, which would otherwise fall through to a `read` that

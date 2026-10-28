@@ -1,4 +1,6 @@
 // Digit sums, reversal, and palindromes with while loops, / and %.
+import { wrappingAdd, wrappingMul } from "nish:unsafe";
+
 function digitSum(n: number): number {
   let s = 0;
   let r = n;
@@ -13,7 +15,7 @@ function reverse(n: number): number {
   let r = 0;
   let x = n;
   while (x !== 0) {
-    r = r * 10 + (x % 10);
+    r = wrappingAdd(wrappingMul(r, 10), x % 10);
     x /= 10;
   }
   return r;

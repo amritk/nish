@@ -473,36 +473,33 @@ export const sharedWriteMessage = (
 
 /**
  * Whether the allocations of a body with facts `f` can be given back after
- * every element, which is what makes a body that allocates legal. Four things
+ * every element, which is what makes a body that allocates legal. Three things
  * have to hold, and they are the ones the callee-scope rule in
  * `src/attributes.ts` asks for (`settleCalleeScopes`), for the same reasons:
  *
  *   - `contained`: nothing allocated during the call is reachable once it
  *     returns, except through the result;
  *   - `returnsScalar`: and the result is not a pointer, so nothing is;
- *   - `!usesArenaControl`: nothing in the call rewound the arena, so the mark
- *     taken on entry still names where the element started;
  *   - `!readsArenaState`: nothing in the call reads the bump position, whose
  *     answer would depend on which thread's arena the element ran in.
  */
 export const recyclesPerElement = (f: FunctionFacts): boolean =>
-  f.contained && f.returnsScalar && !f.usesArenaControl && !f.readsArenaState
+  f.contained && f.returnsScalar && !f.readsArenaState
 
 /**
  * The body reads or moves the arena. Every thread has an arena of its own, so
  * `Arena.used()` would answer differently depending on which thread ran the
- * element, and a body that rewinds the arena could rewind past what the
- * element scope is about to release.
+ * element.
  */
 export const arenaMessage = (sig: FunctionSig, fn: FunctionSig, facts: FactsTable): string => {
   const own: FunctionFacts | null = facts.get(fn.name)
-  if (own === null || (!own.readsArenaState && !own.usesArenaControl && !own.opensArena)) {
+  if (own === null || (!own.readsArenaState && !own.opensArena)) {
     return ""
   }
   return (
     `\`${fn.sourceName}\` reads or moves the arena, and \`${intrinsicName(sig)}\` runs it on several threads that ` +
-    "each have an arena of their own: a parallel body may not call `Arena.mark`, `Arena.used`, `Arena.release` or " +
-    "`Arena.reset`, nor open a `using a = arena()` block"
+    "each have an arena of their own: a parallel body may not call `Arena.mark` or `Arena.used`, " +
+    "nor open a `using a = arena()` block"
   )
 }
 

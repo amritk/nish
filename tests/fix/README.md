@@ -17,8 +17,7 @@ fix, run by the "Machine-applicable fixes" block of `tests/run.js`
 
 A case is named in kebab-case for the family of rule it fixes — `eq-` for
 loose equality, `expr-` for the expression checker's fixes, `decl-` for the
-declaration and module passes, `unsafe-index-` for the `--unchecked-indexing`
-migration (NL7002) — and a refused shape has `nofix` in its name.
+declaration and module passes — and a refused shape has `nofix` in its name.
 Every fix and every shape that is refused one has a case here: there is no
 line coverage for Nish, so this directory is the coverage gate.
 
@@ -40,9 +39,8 @@ whose own edits overlap — `export { f, f }` asks for `export ` before `f` twic
 — so it is dropped whole every round and the file is left as it was. Each fails
 when its half of `acceptedEdits`'s overlap test is taken out. An edit
 identical to one already accepted is not an overlap but the same change, made
-once: the `unsafe-index-` directory cases' fixes share one import edit, and
-`unsafe-index-rounds` and `unsafe-index-pair` count the single round that
-takes; each needs more rounds when `sameAsAny` is taken out.
+once (`sameAsAny`); no fix makes such a pair since the `--unchecked-indexing`
+migration was removed, so no case pins it.
 `decl-fs-two-names` pinned the first half until #434: two names from a
 missing `fs` are one NL3015 now, not two carrying the same edit.
 
@@ -79,24 +77,6 @@ byte-identical. The runner cannot tell that it was reported at all — the
 seed's fix satisfies its first check alone — so each refused shape's warning
 is pinned, reason and all, by a `tests/wordings` case of its own: a build
 that stops reporting the warning fails every one of those pins.
-
-The `unsafe-index-` cases are that kind: every `argv` passes
-`--unchecked-indexing`, and each fixed shape and each refused one in the
-table in `docs/LANGUAGE.md` ("`nish:unsafe`") has its case.
-`unsafe-index-rounds` pins the convergence its `rewrites` counts: every site's
-fix carries the same import edit, and one round over `main.ts` applies them
-all, after the round that fixes `seed.ts`. `unsafe-index-pair` is #461's
-`a[at[0]] + b[at[1]]`: `uncheckedGet` is a load to the bounds analysis, so
-rewriting `a[at[0]]` leaves `at[1]` proven and both sites land in that one
-round. `unsafe-index-kept` is an access the build without the flag proves
-from a check the migration leaves in place (`names[i]`, whose strings have no
-`nish:unsafe` form): it is not a site, and stays `xs[i]`.
-`unsafe-index-equivalence`'s sources and their `.fixed.ts` are the two link
-cases `tests/link/unsafe-migrate-index-flag` (under the flag) and
-`unsafe-migrate-index-fixed` (without it), which print one `expected.out`.
-Its four modules hold every fixed shape, so each rewrite is compiled and run
-without the flag; the fix runner itself compiles the result with the case's
-`argv`, flag included.
 
 The `expr-truthy-` cases are the truthiness fixes: a condition (NL2188) takes
 `!== 0`, `!== null` or `.length !== 0`, `!x` (NL2263) the same comparison

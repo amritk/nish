@@ -3,7 +3,7 @@
 // pass 2): the functions that exist without a declaration.
 //
 // Two families. **Dotted callees** (`console.log`, `Math.sqrt`,
-// `process.exit`, `Arena.reset`, `String.fromCharCode`) are told from method
+// `process.exit`, `Arena.mark`, `String.fromCharCode`) are told from method
 // calls by whether the receiver is a value; **plain callees** (`toI32`,
 // `parseInt`, `readFileSync`, `panic`) are consulted only when no user
 // function of that name is in scope, so a user definition always wins.
@@ -440,7 +440,7 @@ export const checkNamespaceProperty = (
 
 // ---- Dotted calls -------------------------------------------------------------------
 
-/** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.reset()`, ... */
+/** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.mark()`, ... */
 /**
  * Every dotted builtin, in the order stage0's `src/checker/strings.ts` builds its
  * `builtinCalls` table — `Object.keys` there, so the order is the table's and
@@ -455,7 +455,7 @@ const SUPPORTED_BUILTINS: string =
   "console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, Math.floor, Math.ceil, " +
   "Math.trunc, Math.round, Math.sin, Math.cos, Math.tan, Math.exp, Math.log, Math.pow, Math.atan2, " +
   "Math.hypot, Math.abs, Math.sign, Math.min, Math.max, Math.clz32, Math.imul, Math.random, process.exit, " +
-  "Arena.reset, Arena.mark, Arena.release, Arena.used, Date.now, crypto.getRandomValues"
+  "Arena.mark, Arena.used, Date.now, crypto.getRandomValues"
 
 /** stage0's one sentence for a call whose dotted name is not a builtin. */
 const unknownBuiltin = (ctx: CheckContext, at: Node, name: string): i32 =>
@@ -499,7 +499,7 @@ export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i
     return checkProcess(ctx, call, args, name, member, scope)
   }
   if (namespace === "Arena") {
-    return checkArena(ctx, call, args, name, member, scope)
+    return checkArena(ctx, call, args, name, member)
   }
   if (namespace === "Date") {
     return checkDate(ctx, call, args, name, member)
@@ -723,49 +723,12 @@ const checkProcess = (
   return T_VOID
 }
 
-const checkArena = (
-  ctx: CheckContext,
-  call: Node,
-  args: Node,
-  name: string,
-  member: string,
-  scope: Scope
-): i32 => {
+const checkArena = (ctx: CheckContext, call: Node, args: Node, name: string, member: string): i32 => {
   if (member === "mark" || member === "used") {
     checkBuiltinArity(ctx, call, name, args, 0)
     return T_I64
   }
-  if (member === "reset") {
-    checkBuiltinArity(ctx, call, name, args, 0)
-    requireStatementPosition(ctx, call, name)
-    deprecateArenaControl(ctx, call, name, "resetting the arena while anything allocated in it")
-    return T_VOID
-  }
-  if (member === "release") {
-    if (checkBuiltinArity(ctx, call, name, args, 1)) {
-      checkArgumentType(ctx, args.children[0], scope, name, T_I64)
-    }
-    requireStatementPosition(ctx, call, name)
-    deprecateArenaControl(ctx, call, name, "releasing to a mark while anything allocated after it")
-    return T_VOID
-  }
   return unknownBuiltin(ctx, call.children[0], name)
-}
-
-/**
- * NL7001: `Arena.release` and `Arena.reset` still compile, to the call they
- * always did, and warn. They are the one way left for a program to free memory
- * it still references with no opt-in anywhere in its source, and
- * `using a = arena()` is the same release with the escape check done by the
- * compiler (docs/LANGUAGE.md, "`using a = arena()`").
- */
-const deprecateArenaControl = (ctx: CheckContext, call: Node, name: string, what: string): void => {
-  ctx.deprecation(
-    call,
-    `\`${name}\` is deprecated: ${what} is still referenced is undefined behaviour the compiler does not ` +
-      "check. Bracket the work with `using a = arena()`, which releases on every exit of its block and refuses " +
-      "whatever would outlive it"
-  )
 }
 
 /**
@@ -1295,7 +1258,7 @@ export const terminatesControlFlow = (ctx: CheckContext, expr: Node): boolean =>
  * Whether an expression *is* `process.argv`. The array is built once by the
  * `@main` wrapper and lives outside the arena, so a program may read it any
  * way it likes and may not write it: a store, a `push` or a `pop` would
- * change what every other module sees and would outlive an `Arena.reset`.
+ * change what every other module sees and would outlive the arena it was made in.
  */
 export const isArgvExpression = (ctx: CheckContext, expr: Node, scope: Scope): boolean => {
   // `(process.argv).push(...)` is the same write as `process.argv.push(...)`,

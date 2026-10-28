@@ -13,10 +13,9 @@
 // against the *declaring* module's source even when an importer triggered the
 // fold, so a bad constant is named where it was written.
 //
-// Integer folding follows the language's own arithmetic, whichever it is
-// today (`narrowConstant` below): by default an overflowing constant is refused,
-// because the instruction it replaces carries `nsw`; under `--wrapping` it
-// wraps at the declared width, because the instruction wraps. The arithmetic
+// Integer folding follows the language's own arithmetic (`narrowConstant`
+// below): an overflowing constant is refused, because the instruction it
+// replaces panics on overflow. The arithmetic
 // that computes the fold is done in `u64`, whose wrapping *is* defined, so
 // this module never overflows a signed value of its own to describe one.
 
@@ -615,8 +614,7 @@ const foldInt = (
  * Bring a 64-bit result back into `type`, the way the instruction it replaces
  * would.
  *
- * Under `--wrapping` that instruction wraps, so the fold wraps. By default it
- * carries `nsw`, so signed overflow at run time is undefined — and a compiler
+ * That instruction panics on signed overflow — and a compiler
  * that quietly folded `2147483647 + 1` to `-2147483648` would be handing back
  * the one answer the optimiser is entitled to assume cannot happen. It is
  * refused instead, which is the treatment the two divisor failures already
@@ -637,13 +635,13 @@ const narrowConstant = (
 ): ConstValue => {
   const value = type === T_I64 ? wide : toI64(toI32(wide))
   const overflowed = over || value !== wide
-  if (overflowed && !ctx.wrapping) {
+  if (overflowed) {
     const spelled = ctx.table.typeName(type)
     return reject(
       ctx,
       info,
       expr,
-      `attempt to compute with overflow in a constant: the result does not fit in ${spelled} (use --wrapping for two's-complement arithmetic)`
+      `attempt to compute with overflow in a constant: the result does not fit in ${spelled} (call \`wrappingAdd\`, \`wrappingSub\` or \`wrappingMul\` from \`nish:unsafe\` for two's-complement arithmetic)`
     )
   }
   return intValue(type, value)

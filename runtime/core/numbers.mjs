@@ -90,7 +90,7 @@ export function ctEq(a, b) {
 // ---- Checked arithmetic (wp33 R4) ----------------------------------------------------
 //
 // What `--emit-ts` writes for a signed `+ - *` and unary minus the compiler
-// neither proved in range nor was told to wrap (`--wrapping`): the exact
+// did not prove in range: the exact
 // answer, or the panic `nish_panic_overflow` prints, in its words. An i32 is
 // exact in a double until it leaves the range, and `Math.imul` is the
 // wrapped product, so a product that differs from the double one overflowed.
@@ -121,8 +121,7 @@ function checkI64(r, op) {
 }
 
 // `wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe`: the
-// two's-complement answer at the operands' width, i32 or i64, whatever
-// `--wrapping` says.
+// two's-complement answer at the operands' width, i32 or i64.
 export function wrappingAdd(a, b) {
   return typeof a === "bigint" ? BigInt.asIntN(64, a + b) : (a + b) | 0;
 }

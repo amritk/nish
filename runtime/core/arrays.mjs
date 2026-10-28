@@ -145,8 +145,6 @@ export function newArray(n, zero) {
 // that is when this file grows a second arena to keep count of.
 export function arenaUsed() { return 0n; }
 export function arenaMark() { return 0n; }
-export function arenaRelease() {}
-export function arenaReset() {}
 /** `using a = arena()`: a disposable whose disposal does nothing, because there is no arena to release. */
 export function arena() {
   return { [Symbol.dispose]() {} };

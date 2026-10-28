@@ -326,7 +326,7 @@ function mayPanic(walk: Walk, node: Node): boolean -> @mayPanic
   callee +4:20 Walk.typeAt -> @Walk.typeAt
   callee +5:27 isInteger -> @isInteger
   callee +5:37 TypeTable.baseOf -> @TypeTable.baseOf
-  callee +9:26 checksOverflow -> @checksOverflow
+  callee +8:10 checksOverflow -> @checksOverflow
 function readsLocal(walk: Walk, node: Node, i: i32): boolean -> @readsLocal
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: i

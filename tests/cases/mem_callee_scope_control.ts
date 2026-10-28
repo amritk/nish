@@ -1,7 +1,7 @@
 // A negative of the callee scope: a function that manages the arena itself.
-// `sumRows` releases each row it builds with `Arena.mark()` / `Arena.release(m)`,
-// so the compiler's own mark would be one the program can invalidate, and it
-// gets no scope; `twice` calls it, so neither does `twice`, although its other
+// `sumRows` reads the arena's position with `Arena.mark()` around each row it
+// builds, a position the compiler's own scope would move under it, so it gets
+// no scope; `twice` calls it, so neither does `twice`, although its other
 // callee leaves a row behind. `sumRows` loops over an allocating call and is
 // not warned about either: its author is already managing that memory.
 const makeRow = (n: i32): i32[] => {
@@ -17,7 +17,9 @@ const sumRows = (n: i32): i32 => {
   for (let i = 0; i < n; i++) {
     const m = Arena.mark();
     total += makeRow(i).length;
-    Arena.release(m);
+    if (Arena.mark() < m) {
+      panic("the arena moved back");
+    }
   }
   return total;
 };

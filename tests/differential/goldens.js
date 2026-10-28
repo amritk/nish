@@ -49,8 +49,8 @@
  * SHA-256 of the source file's bytes, truncated to 16 hex characters, taken
  * over **every module the program loads** rather than the entry alone — an
  * edit to `modules_basic/math.ts` has to invalidate `main.ts`'s rewrite. The
- * flags line carries `<name>.args` verbatim, because `--number-mode f64` and
- * `--wrapping` change what the rewrite emits.
+ * flags line carries `<name>.args` verbatim, because `--number-mode f64`
+ * changes what the rewrite emits.
  *
  * Why a content hash and not something cheaper: an mtime is not reproducible
  * across two checkouts of the same commit and a git blob id needs git and a

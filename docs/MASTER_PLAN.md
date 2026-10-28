@@ -153,9 +153,8 @@ table with each message and the idiom to write instead.
 - Signed integer overflow is a checked panic: an operation the bounds walk
   cannot prove fits is `llvm.s*.with.overflow` and a branch to
   `nish_panic_overflow`, and one it can is `nsw` (#426). `wrappingAdd`,
-  `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap at one site, and the
-  deprecated `--wrapping` makes the entry package's operators wrap. `--nsw` is
-  refused. Unsigned overflow wraps. Was "overflow wraps" until WP15 §3 made it
+  `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap at one site, and no
+  flag makes a whole program wrap: `--nsw` and `--wrapping` are refused. Unsigned overflow wraps. Was "overflow wraps" until WP15 §3 made it
   `nsw` undefined behaviour, and that until #426 made it checked.
 - Strings are immutable and shared by pointer; equality is by content.
 - Functions are `nounwind`; there is no `throw` (WP16), and `panic(message)`
@@ -168,8 +167,8 @@ table with each message and the idiom to write instead.
   `internal`, so LLVM may inline, specialise or drop it. `--no-strict-exports`
   makes them all external again (WP15 §3).
 - An out-of-range index panics. `uncheckedGet` and `uncheckedSet` from
-  `nish:unsafe` opt one site out; `--unchecked-indexing` is deprecated
-  (NL9014), and `nish --fix` migrates it (#459).
+  `nish:unsafe` opt one site out; `--unchecked-indexing`, which dropped every
+  check, was removed before 1.0.
 
 ### 3.4 Open decisions
 

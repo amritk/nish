@@ -3,7 +3,7 @@
 // milestone S4).
 //
 // Two families, told apart the same way the checker tells them apart. **Dotted
-// callees** (`console.log`, `Math.sqrt`, `process.exit`, `Arena.reset`,
+// callees** (`console.log`, `Math.sqrt`, `process.exit`, `Arena.mark`,
 // `String.fromCharCode`) are member calls whose receiver is not a value;
 // **plain callees** (`toI32`, `parseInt`, `readFileSync`, `panic`) are
 // consulted only when no user function of that name is in scope.
@@ -460,9 +460,7 @@ export const panicTailCallees = (out: string[]): void => {
  * `value`, of type `from`, entering the range `to` (WP31 §6): one unsigned
  * compare, `sub` then `icmp ult` against the width of the range — the shape of
  * the index check — and a cold block that panics. Nothing is emitted when the
- * source is a range inside this one, or when the range is all of `i32`. The
- * check is the type's meaning, not an index check, so `--unchecked-indexing`
- * leaves it where it is.
+ * source is a range inside this one, or when the range is all of `i32`.
  */
 export const emitRangeEntry = (emitter: Emitter, value: string, from: i32, to: i32): void => {
   const table = emitter.table
@@ -542,7 +540,7 @@ const emitParseCall = (emitter: Emitter, s: string, mode: i32): string =>
 
 // ---- Dotted builtins -------------------------------------------------------------------
 
-/** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.reset()`, ... */
+/** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.mark()`, ... */
 export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): string => {
   if (name === "console.log") {
     return emitConsoleLog(emitter, expr)
@@ -605,15 +603,6 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
     emitter.fn.emit("unreachable")
     return "void"
   }
-  if (name === "Arena.reset") {
-    emitter.fn.emit(`call void ${emitter.useRuntime("nish_reset_arena")}()`)
-    return "void"
-  }
-  if (name === "Arena.release") {
-    const mark = emitter.emitExpression(firstArgument(expr))
-    emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
-    return "void"
-  }
   if (name === "Arena.mark") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
   }
@@ -666,9 +655,7 @@ export const builtinCalleesNamed = (
   }
   if (name === "String.fromBytes") {
     out.push("nish_str_new")
-    if (!program.uncheckedIndexing) {
-      out.push("nish_panic_slice")
-    }
+    out.push("nish_panic_slice")
     return out
   }
   if (name === "Math.pow") {
@@ -720,14 +707,6 @@ export const builtinCalleesNamed = (
   }
   if (name === "process.exit") {
     out.push("nish_exit")
-    return out
-  }
-  if (name === "Arena.reset") {
-    out.push("nish_reset_arena")
-    return out
-  }
-  if (name === "Arena.release") {
-    out.push("nish_arena_release")
     return out
   }
   if (name === "Arena.mark") {
@@ -1053,20 +1032,15 @@ export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   return callee.text === "spawnSync" || callee.text === "spawnSyncTo" || callee.text === "spawn"
 }
 
-export const identifierBuiltinCallees = (
-  program: CheckedProgram,
-  table: TypeTable,
-  call: Node,
-  uncheckedIndexing: boolean
-): string[] => identifierBuiltinCalleesNamed(program, table, call, call.children[0].text, uncheckedIndexing)
+export const identifierBuiltinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] =>
+  identifierBuiltinCalleesNamed(program, table, call, call.children[0].text)
 
 /** The same, under the name a `nish:` import bound — see `builtinCalleesNamed`. */
 export const identifierBuiltinCalleesNamed = (
   program: CheckedProgram,
   table: TypeTable,
   call: Node,
-  name: string,
-  uncheckedIndexing: boolean
+  name: string
 ): string[] => {
   const out: string[] = []
   if (!isBuiltinFunction(name)) {
@@ -1225,9 +1199,7 @@ export const identifierBuiltinCalleesNamed = (
   // `readStdin` checks its range as `netRead` does; the rest are one call each.
   if (name === "readStdin") {
     out.push("nish_read_stdin")
-    if (!uncheckedIndexing) {
-      out.push("nish_panic_slice")
-    }
+    out.push("nish_panic_slice")
     return out
   }
   if (name === "waitStdin") {
@@ -1251,11 +1223,10 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   // WP34 N5: one symbol each, and the slice panic behind the range check of
-  // `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` unless
-  // `--unchecked-indexing` dropped it.
+  // `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`.
   if (isNetExport(name)) {
     out.push(netSymbol(name))
-    if (netRangeBuffer(name) >= 0 && !uncheckedIndexing) {
+    if (netRangeBuffer(name) >= 0) {
       out.push("nish_panic_slice")
     }
     return out
@@ -1302,8 +1273,7 @@ export const identifierBuiltinCalleesNamed = (
  * with the same words: `0 <= off <= off + len <= buf.length`. Both are
  * `i32`s, so their sum cannot wrap an `i64`, and the unsigned compares refuse
  * a negative one. The buffer's length is read after every argument is
- * evaluated, as JavaScript reads it, and `--unchecked-indexing` drops the
- * check with the rest.
+ * evaluated, as JavaScript reads it.
  */
 const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
   const fn = emitter.fn
@@ -1336,7 +1306,7 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
     emitter.declareType(ARRAY_TYPE)
   }
   const at = netRangeBuffer(name)
-  if (at >= 0 && !emitter.program.uncheckedIndexing && values.length === params.length) {
+  if (at >= 0 && values.length === params.length) {
     const end = fn.emitValue(`add i64 ${values[at + 1]}, ${values[at + 2]}`)
     const field = fn.emitValue(
       `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[at]}, i64 0, i32 0`

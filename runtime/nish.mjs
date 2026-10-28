@@ -273,15 +273,12 @@ globalThis.parseFloat = shim.parseFloat;
 // script under Node, which is one index later than Node's own `argv`.
 process.argv = shim.argv();
 
-// There is no arena. `mark`/`release`/`reset` are no-ops rather than errors so
-// that a program which manages memory explicitly still runs; `used()` answers
-// zero, which is the honest number for a host that is not bump-allocating.
+// There is no arena. `mark()` answers zero rather than failing so that a
+// program which reads it still runs; `used()` answers zero too, which is the honest number for a host that is not bump-allocating.
 // Delegated like everything else here rather than written inline, so that the
 // answers cannot drift from the ones the rewritten runner gives.
 provide("Arena", {
   mark: shim.arenaMark,
-  release: shim.arenaRelease,
-  reset: shim.arenaReset,
   used: shim.arenaUsed,
 });
 // `using a = arena()` releases nothing here either: what the block allocated

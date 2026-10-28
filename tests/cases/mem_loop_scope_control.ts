@@ -102,18 +102,20 @@ const firstWide = (rounds: i32): i32 => {
 };
 
 const growth = (which: i32, rounds: i32): string => {
-  const m = Arena.mark();
-  const before = Arena.used();
   let n = 0;
-  if (which === 0) {
-    n = skipOdd(rounds).n;
-  } else if (which === 1) {
-    n = grid(rounds).n;
-  } else {
-    n = countDown(rounds).n;
+  let grown: i64 = 0;
+  {
+    using a = arena();
+    const before = Arena.used();
+    if (which === 0) {
+      n = skipOdd(rounds).n;
+    } else if (which === 1) {
+      n = grid(rounds).n;
+    } else {
+      n = countDown(rounds).n;
+    }
+    grown = Arena.used() - before;
   }
-  const grown = Arena.used() - before;
-  Arena.release(m);
   return `${n} ${grown}`;
 };
 

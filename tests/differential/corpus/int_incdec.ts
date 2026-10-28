@@ -1,4 +1,7 @@
-// Prefix and postfix ++/-- as statements and inside expressions, at the wrap boundary.
+// Prefix and postfix ++/-- as statements and inside expressions; the steps
+// across the wrap boundary are the `nish:unsafe` calls that ask for the wrap.
+import { wrappingAdd, wrappingSub } from "nish:unsafe";
+
 export function main(): number {
   let x = 5;
   const a = x++;
@@ -7,15 +10,17 @@ export function main(): number {
   const d = --x;
   console.log(`${a} ${b} ${c} ${d} ${x}`);
   let m = 2147483647;
-  m++;
+  m = wrappingAdd(m, 1);
   console.log(m);
-  const old = m--;
+  const old = m;
+  m = wrappingSub(m, 1);
   console.log(old);
   console.log(m);
   let n = -2147483647 - 1;
-  n--;
+  n = wrappingSub(n, 1);
   console.log(n);
-  console.log(++n);
+  n = wrappingAdd(n, 1);
+  console.log(n);
   let i = 0;
   let sum = 0;
   while (i++ < 10) {

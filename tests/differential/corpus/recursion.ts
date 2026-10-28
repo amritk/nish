@@ -1,4 +1,6 @@
 // Recursion: fib, ackermann, factorial (wrapping), gcd, mutual recursion, power by squaring.
+import { wrappingMul } from "nish:unsafe";
+
 function fib(n: number): number {
   return n < 2 ? n : fib(n - 1) + fib(n - 2);
 }
@@ -14,7 +16,7 @@ function ackermann(m: number, n: number): number {
 }
 
 function factorial(n: number): number {
-  return n <= 1 ? 1 : n * factorial(n - 1);
+  return n <= 1 ? 1 : wrappingMul(n, factorial(n - 1));
 }
 
 function gcd(a: number, b: number): number {
@@ -34,7 +36,7 @@ function power(base: number, exp: number): number {
     return 1;
   }
   const half = power(base, exp / 2);
-  return exp % 2 === 0 ? half * half : half * half * base;
+  return exp % 2 === 0 ? wrappingMul(half, half) : wrappingMul(wrappingMul(half, half), base);
 }
 
 function sumTo(n: number): number {

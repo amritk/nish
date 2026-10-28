@@ -21,7 +21,7 @@ for.body:
 
 for.inc:
   %6 = load i32, i32* %i.addr, align 4
-  %7 = add i32 %6, 1
+  %7 = add nsw i32 %6, 1
   store i32 %7, i32* %i.addr, align 4
   br label %for.cond
 
