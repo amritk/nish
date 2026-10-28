@@ -67,6 +67,7 @@ the record that found it. The notes below the table name each such finding.
 | A dependency's capabilities | [capabilities.md](capabilities.md) | `src/compilation.ts` (`readCapabilityPolicy`, `refuseDependencyCapabilities`), `src/capability-report.ts` (`dependencyPackages`, `dependencyMasks`, `dependencyWitness`), `src/manifest.ts` (`manifestReadGrants`) | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁶ |
 | PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
+| Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | **Total** ⁸ | | | **3 / 10 / 30 / 118** | **0 / 0 / 0 / 10** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
@@ -218,6 +219,10 @@ the record that found it. The notes below the table name each such finding.
     reason in their record, and are not counted: each is the reference's
     behaviour or the algorithm's, kept so a hash verifies wherever `crypt_r`
     does. BCRYPT-5 is a property checked and found to hold, not a finding.
+19. COMP-8 (Low) and COMP-9 (Medium), a stream of small dynamic blocks
+    rebuilding the decoder's tables and the BREACH class of length leaks, are
+    accepted, with the reason in their record, and are not counted. COMP-1 to
+    COMP-7 and COMP-10 are properties checked and found to hold.
 
 ## Fuzzed
 

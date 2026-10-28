@@ -2,7 +2,7 @@
 // Copyright (c) 2015-2016 Stefan Marr; MIT licence, reproduced in bench/awfy/LICENSE.md.
 
 // The Storage shape from the Are We Fast Yet suite, with its manual
-// `Arena.mark()` / `Arena.release(m)` taken out. `benchmark` has no arena
+// `using a = arena()` block taken out. `benchmark` has no arena
 // allocation of its own: `new Random()` is an entry-block alloca, and the tree
 // is built by the recursive `buildTreeDepth` and thrown away. Every parameter
 // on the way down is an object of numbers (`Storage`, `Random`), so the tree

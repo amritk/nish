@@ -161,7 +161,7 @@ const copied = (walk: Walk, slot: i32, value: Node, written: string): string => 
  * instance can prove an index another cannot, so there it is always checked.
  */
 const checkedAt = (walk: Walk, node: Node): boolean =>
-  !walk.program.uncheckedIndexing && (walk.inInstance || !walk.program.nodeProvenIndex[node.id])
+  walk.inInstance || !walk.program.nodeProvenIndex[node.id]
 
 /**
  * The `a, i` of a written `idx(a, i)`, or of `__nish_idx(a, i)` where the
@@ -290,7 +290,7 @@ const storeRow = (walk: Walk, node: Node, operands: Operands): string | null => 
   }
   // A proven index still stores through `updIdx`, which checks it again after
   // the right side ran: the right side can shrink the array.
-  if (args === "" && !walk.program.uncheckedIndexing) {
+  if (args === "") {
     args = elementArguments(left)
   }
   return args === "" ? null : compoundStore(walk, node, operands, args)

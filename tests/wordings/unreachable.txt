@@ -62,6 +62,11 @@ NL8011  retired: WP33's printed negative zero; the reference reading's console (
 NL2391  retired: `The task given to `spawn` must be a top-level function named at the call, not an arrow`, the refusal WP29's task forms replaced; an arrow task reads its function's `const` locals and is lifted into a function named after that function (tests/link/thread_task_arrow)
 NL2554  retired: the refusal of a call to a `declare function` that takes a `u8[]`, from WP40 B1.1 until B1.2 lowered the call; the call passes `data` and holds the count to `len` now (tests/cases/ffi_buffer_call_sites, tests/cases/panics_ffi_length)
 NL2573  retired: the refusal of a `using` of a handle class, from WP40 H1.1 until H1.2 lowered its close; every exit of the block closes the handle now (tests/cases/ffi_handle_file, tests/cases/ffi_handle_exits)
+NL2426  retired: a `using a = arena()` block whose body calls `Arena.release` or `Arena.reset`, removed with them before 1.0; nothing a program can call moves the arena under the block's mark now
+NL7001  retired: the deprecation of `Arena.release` and `Arena.reset`, removed before 1.0; each is an unknown builtin (NL2244) now and `using a = arena()` is the scope (tests/run.js "arena_removed")
+NL7002  retired: the deprecation of an index unchecked only by --unchecked-indexing, removed before 1.0 with the flag; `uncheckedGet` and `uncheckedSet` from `nish:unsafe` are the unchecked forms
+NL9014  retired: the note that --unchecked-indexing reaches only the entry package, removed with the flag; the CLI refuses it with exit 2
+NL9015  retired: the note that --wrapping reaches only the entry package, removed with the flag; the CLI refuses it with exit 2 and `wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap
 
 # --- Retired at R6: stage0 stated the rule, and stage0 is gone. ---------------
 # These were `tests/wordings/stage0_only.txt`: codes a program does provoke, but

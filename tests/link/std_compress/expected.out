@@ -1,0 +1,114 @@
+PASS  crc32: the check value of 123456789 is cbf43926
+PASS  crc32: of nothing is 0
+PASS  adler32: the check value of 123456789 is 091e01de
+PASS  adler32: of nothing is 1
+PASS  crc32: of a window
+PASS  crc32: pieces of random lengths equal the whole
+PASS  adler32: pieces of random lengths equal the whole
+PASS  adler32: 20000 bytes of ff against the definition
+PASS  round trip raw: empty, levels 0 to 9
+PASS  round trip gzip: empty, levels 0 to 9
+PASS  round trip zlib: empty, levels 0 to 9
+PASS  round trip raw: one byte, levels 0 to 9
+PASS  round trip gzip: one byte, levels 0 to 9
+PASS  round trip zlib: one byte, levels 0 to 9
+PASS  round trip raw: two bytes, levels 0 to 9
+PASS  round trip gzip: two bytes, levels 0 to 9
+PASS  round trip zlib: two bytes, levels 0 to 9
+PASS  round trip raw: text, 20 KB, levels 0 to 9
+PASS  round trip gzip: text, 20 KB, levels 0 to 9
+PASS  round trip zlib: text, 20 KB, levels 0 to 9
+PASS  round trip raw: JSON, 5 KB, levels 0 to 9
+PASS  round trip gzip: JSON, 5 KB, levels 0 to 9
+PASS  round trip zlib: JSON, 5 KB, levels 0 to 9
+PASS  round trip raw: JSON, 200 KB, levels 0 to 9
+PASS  round trip gzip: JSON, 200 KB, levels 0 to 9
+PASS  round trip zlib: JSON, 200 KB, levels 0 to 9
+PASS  round trip raw: noise, 70 KB, levels 0 to 9
+PASS  round trip gzip: noise, 70 KB, levels 0 to 9
+PASS  round trip zlib: noise, 70 KB, levels 0 to 9
+PASS  round trip raw: runs, 100 KB, levels 0 to 9
+PASS  round trip gzip: runs, 100 KB, levels 0 to 9
+PASS  round trip zlib: runs, 100 KB, levels 0 to 9
+PASS  round trip raw: zeros, 140 KB, levels 0 to 9
+PASS  round trip gzip: zeros, 140 KB, levels 0 to 9
+PASS  round trip zlib: zeros, 140 KB, levels 0 to 9
+PASS  round trip raw: stitched, 1 MB, levels 0 to 9
+PASS  round trip gzip: stitched, 1 MB, levels 0 to 9
+PASS  round trip zlib: stitched, 1 MB, levels 0 to 9
+PASS  round trip raw: text, 1 MB, levels 0 to 6
+PASS  round trip gzip: text, 1 MB, levels 0 to 6
+PASS  round trip zlib: text, 1 MB, levels 0 to 6
+PASS  fuzz: 1500 random inputs, random level and format
+PASS  reuse: a reused Deflater writes what a fresh one does
+PASS  window: nothing outside [at, end) is written
+PASS  window: the middle 1000 bytes come back
+PASS  room raw: exactly the size it needs
+PASS  room raw: one byte less is -1
+PASS  room raw: no room at all is -1
+PASS  room gzip: exactly the size it needs
+PASS  room gzip: one byte less is -1
+PASS  room gzip: no room at all is -1
+PASS  room zlib: exactly the size it needs
+PASS  room zlib: one byte less is -1
+PASS  room zlib: no room at all is -1
+PASS  bound: 200 KB of noise takes at most deflateBound (200065 <= 200093)
+PASS  bound: noise is stored, so at most 5 bytes per 16 KB block over
+PASS  limit: a megabyte of zeros is 1003 bytes
+PASS  limit: 64 KB of it is refused
+PASS  limit: an output buffer shorter than the limit is the limit
+PASS  limit: all of it fits
+PASS  truncated raw: every prefix is refused
+PASS  truncated raw: the last byte missing
+PASS  corrupted raw: 300 corrupted streams decompressed without a panic
+PASS  truncated gzip: every prefix is refused
+PASS  truncated gzip: the last byte missing
+PASS  corrupted gzip: no corrupted stream decompresses to other bytes
+PASS  truncated zlib: every prefix is refused
+PASS  truncated zlib: the last byte missing
+PASS  corrupted zlib: no corrupted stream decompresses to other bytes
+PASS  gzip: a wrong CRC-32
+PASS  gzip: a wrong length
+PASS  gzip: the wrong magic
+PASS  gzip: a method other than 8
+PASS  gzip: a reserved flag
+PASS  gzip: two members decompress one after the other
+PASS  gzip: the second member's bytes follow the first's
+PASS  gzip: trailing bytes after the member
+PASS  gzip: an empty input is truncated
+PASS  gzip: FEXTRA, FNAME, FCOMMENT and FHCRC are read
+PASS  gzip: a wrong header CRC
+PASS  zlib: the header is 78 9c at level 6
+PASS  zlib: a wrong Adler-32
+PASS  zlib: a header whose check fails
+PASS  zlib: a preset dictionary is refused
+PASS  zlib: trailing bytes
+PASS  raw: trailing bytes
+PASS  raw: the consumed count says where the stream ended
+PASS  deflate: block type 3 is reserved
+PASS  deflate: a stored block whose NLEN is not ~LEN
+PASS  deflate: the same stored block, well formed
+PASS  deflate: a stored block cut short
+PASS  deflate: a distance before the start of the output
+PASS  deflate: the same match at distance 1 is aaaa
+PASS  deflate: literal/length 286 is refused
+PASS  deflate: distance 30 is refused
+PASS  deflate: an over-subscribed code is refused
+PASS  deflate: a repeat with no length before it
+PASS  deflate: a code with no end-of-block
+PASS  deflate: an empty stream is truncated
+PASS  deflate: a lone non-final block runs out
+PASS  writer: after a flush the reader has every byte written (213219 of 213219)
+PASS  writer: the stream is one gzip member
+PASS  writer: its bytes are the input
+PASS  writer: start begins a new body
+PASS  writer: the new body is its own bytes
+PASS  reader: the stream ends
+PASS  reader: every byte comes back in order (400000 of 400000)
+PASS  reader: the limit stops it
+PASS  reader: no more than the limit was handed out (0)
+PASS  reader: the error is final
+PASS  reader: input that ends inside the stream
+PASS  reader: a header longer than the input buffer is refused
+PASS  reader: having buffered at most 16 KB of it (16384)
+compress: 113 passed, 0 failed, 0 skipped

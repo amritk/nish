@@ -9,8 +9,8 @@ Write friendly comments that sound human. Comments should be clear and helpful, 
 ```typescript
 /**
  * The bounds check reads `length` before the element so that an out-of-range
- * index panics instead of loading past the header. Without this, `--unchecked-indexing`
- * and the default build would differ in more than the check.
+ * index panics instead of loading past the header. Without this, `uncheckedGet`
+ * and a checked index would differ in more than the check.
  */
 ```
 

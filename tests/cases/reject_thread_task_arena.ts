@@ -1,9 +1,10 @@
 // A task may not move the arena: the first task of a scope runs on the thread
-// that opened it, in that thread's arena, which a reset would rewind.
+// that opened it, in that thread's arena, which a `using a = arena()` block
+// would rewind.
 import { scope } from "nish/threads";
 
 const wipe = (n: i32): i32 => {
-  Arena.reset();
+  using a = arena();
   return n;
 };
 

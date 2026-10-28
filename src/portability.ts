@@ -79,9 +79,8 @@ export class PortabilityFinding {
  *   `nodeCallees`, a folded constant in `nodeConstants` and the bounds proofs
  *   in `nodeProvenIndex` / `nodeProvenClamp`; never recompute one.
  * - `table` interns every type id those tables hold (`typeName` spells one).
- * - `opts` is the command line as it reached the checker: `wrapping` is true
- *   under `--wrapping`, `numberMode` says what `number` is, and
- *   `uncheckedIndexing` whether indices are checked at all.
+ * - `opts` is the command line as it reached the checker: `numberMode` says
+ *   what `number` is.
  * - `parents` finds a node's parent, which the tree itself does not carry.
  * - `sig` and `body` are the function being walked and its body, which is
  *   the root to scan when a row needs what happens before or after a node.

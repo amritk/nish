@@ -50,9 +50,7 @@ None of this changes what a program computes, only where its memory lives
 and when it is reused. Unlike in C or Rust:
 
 - you never free anything, and so never free something twice;
-- a value you can still reach is never released under you, unless you call
-  the deprecated `Arena.release` or `Arena.reset` (below), which skip that
-  check;
+- a value you can still reach is never released under you;
 - there are no lifetimes or ownership annotations to write.
 
 ## What you do have to think about
@@ -150,6 +148,7 @@ it outside the block.
 never read: it exists so that the block has something to release when it
 ends. Under Node, where the program runs as plain TypeScript, it does nothing.
 
-`Arena.release` and `Arena.reset`, the older way to do this, are deprecated:
-they release memory without checking that nothing still points into it, and
-each call compiles with a deprecation warning (NL7001) pointing to `using a = arena()`.
+`Arena.release` and `Arena.reset`, the older way to do this, released memory
+without checking that nothing still pointed into it. They were removed before
+1.0, and a call to either is now an unknown builtin: write `using a = arena()`
+instead.

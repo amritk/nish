@@ -64,7 +64,7 @@ import { CLI, VERSION } from "./branding"
 import { agentDriven, styleFor } from "../std/cli"
 import { helpHint, helpText } from "./cli-style"
 import { capabilityIndex, capabilityNames, everyCapabilityName, optInCapabilities } from "./capabilities"
-import { Compilation, EmittedModule, isDeprecationWarning } from "./compilation"
+import { Compilation, EmittedModule } from "./compilation"
 import { NUMBER_MODE_F64, NUMBER_MODE_I32 } from "./context"
 import { checkedText } from "./dump"
 import { acceptsSidecars, ExternalFunction, externalFunctions } from "./interop-abi"
@@ -255,26 +255,9 @@ const report = (compilation: Compilation, json: boolean): void => {
  * an accident of placement: advice about code that does not compile is noise,
  * and the caller returns before this on an error.
  */
-const reportPerformance = (
-  compilation: Compilation,
-  enabled: boolean,
-  deprecationsOnly: boolean,
-  json: boolean
-): void => {
+const reportPerformance = (compilation: Compilation, enabled: boolean, json: boolean): void => {
   if (enabled) {
     reportWarnings(compilation.sink.warnings, "performance", json)
-    return
-  }
-  // `nish run` keeps the IR advice to itself but still says that a flag it was
-  // handed is deprecated: that is about the command line, not the program.
-  if (deprecationsOnly) {
-    const kept: Diagnostic[] = []
-    for (const warning of compilation.sink.warnings) {
-      if (isDeprecationWarning(warning)) {
-        kept.push(warning)
-      }
-    }
-    reportWarnings(kept, "performance", json)
   }
 }
 
@@ -522,7 +505,6 @@ export const main = (): number => {
   // WP15 §8: on by default on both sides, and driver-level rather than an
   // `Options` field, because it changes no byte of the IR.
   let warnPerformance = true
-  let deprecationsOnly = false
   let arg = runMode ? 2 : 1
   while (arg < process.argv.length) {
     const value = process.argv[arg]
@@ -706,19 +688,23 @@ export const main = (): number => {
     } else if (value === "--no-strict-exports") {
       opts.strictExports = false
     } else if (value === "--unchecked-indexing") {
-      opts.uncheckedIndexing = true
-    } else if (value === "--nsw") {
-      // Signed overflow used to be `nsw`, undefined behaviour the optimiser
-      // could assume away, and this flag said so. It is a checked panic now,
-      // and no flag brings the undefined behaviour back: the opt-in to a
-      // defined wrap is `--wrapping`, and the refusal says so rather than
-      // letting an old build script mean something it no longer can.
+      // Removed with the rest of the whole-program unsafety switches: the
+      // opt-out of one check is written at the access, through `nish:unsafe`,
+      // and the refusal names it rather than letting an old build script mean
+      // something it no longer can.
       console.error(
-        `compile: \`--nsw\` is gone: signed overflow is checked and panics; write an operation meant to wrap as \`wrappingAdd\`, \`wrappingSub\` or \`wrappingMul\` from \`nish:unsafe\` (or use the deprecated --wrapping); ${helpHint()}`
+        `compile: \`--unchecked-indexing\` is gone: every index is checked; write an access meant to skip its check as \`uncheckedGet\` or \`uncheckedSet\` from \`nish:unsafe\`; ${helpHint()}`
       )
       return 2
-    } else if (value === "--wrapping") {
-      opts.wrapping = true
+    } else if (value === "--nsw" || value === "--wrapping") {
+      // Signed overflow used to be `nsw`, undefined behaviour the optimiser
+      // could assume away, and `--wrapping` made it a defined wrap for a whole
+      // program. It is a checked panic now, and no flag changes that: the
+      // opt-in to a wrap is written at the operation, and the refusal says so.
+      console.error(
+        `compile: \`${value}\` is gone: signed overflow is checked and panics; write an operation meant to wrap as \`wrappingAdd\`, \`wrappingSub\` or \`wrappingMul\` from \`nish:unsafe\`; ${helpHint()}`
+      )
+      return 2
     } else if (value === "--no-stack-alloc") {
       opts.stackAlloc = false
     } else if (value === "--threads") {
@@ -853,10 +839,7 @@ export const main = (): number => {
     }
     // Advice about the IR is for the compile a reader asked for; a script
     // prints it on every run, into the stream the script's own errors use.
-    // A deprecated flag's warning (NL9014, NL9015) is not advice about the IR,
-    // so it still prints unless `--no-warn-performance` asked for silence.
     // `--warn-portability` is left alone: it is off unless the line asks.
-    deprecationsOnly = warnPerformance
     warnPerformance = false
   }
   // After the `run` refusals, which already cover `--fix` under `run`, so
@@ -1005,7 +988,7 @@ export const main = (): number => {
       return 1
     }
     reportDeprecations(outcome.compilation, json)
-    reportPerformance(outcome.compilation, warnPerformance, false, json)
+    reportPerformance(outcome.compilation, warnPerformance, json)
     reportPortability(outcome.compilation, json)
     return 0
   }
@@ -1041,7 +1024,7 @@ export const main = (): number => {
     return 1
   }
   reportDeprecations(compilation, json)
-  reportPerformance(compilation, warnPerformance, deprecationsOnly, json)
+  reportPerformance(compilation, warnPerformance, json)
   // `--emit-ts` writes its modules in memory here, ahead of the portability
   // report: a generic it writes as a throwing stub is one of those warnings.
   const ts = opts.emitTs.length > 0 ? emitTypeScript(compilation) : new EmittedProgram()

@@ -1,5 +1,5 @@
-// Compiled with `--wrapping` as well as `--target` (see .args), for the reason
-// cf_sum_loop gives: the checked reduction is not vectorised by design.
+// The sum is `wrappingAdd` from `nish:unsafe`, for the reason cf_sum_loop
+// gives: the checked reduction is not vectorised by design.
 //
 // Compiled with `--target x86_64-unknown-linux-gnu` (see .args): the module
 // carries `target datalayout` and `target triple`, so tests/run.js can run
@@ -7,10 +7,12 @@
 // The modulo keeps LLVM from folding the loop into a closed form, and `sumTo`
 // is exported so that `internal` linkage does not inline the loop into its one
 // constant call site and fold it away instead.
+import { wrappingAdd } from "nish:unsafe";
+
 export function sumTo(n: number): number {
   let sum = 0;
   for (let i = 0; i < n; i++) {
-    sum += i % 1000;
+    sum = wrappingAdd(sum, i % 1000);
   }
   return sum;
 }

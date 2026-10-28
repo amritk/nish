@@ -76,9 +76,7 @@ const nishc = compilerFrom(process.argv)
 // ---- Benchmarks -------------------------------------------------------------------
 
 /**
- * `integer` marks the benchmarks whose hot loop is integer arithmetic, where
- * `--wrapping` gets a column: what the overflow checks the default build keeps
- * cost. `extraC` lists further C sources that print the same checksum (the
+ * `extraC` lists further C sources that print the same checksum (the
  * naive malloc/free string builder). `kernels` names the arguments a program
  * takes to run one of its loops alone: each is timed as its own row,
  * `<name>/<kernel>`, from the binaries built once.
@@ -88,26 +86,23 @@ const nishc = compilerFrom(process.argv)
  * oracles compile the same source the same way (`tests/self/corpus.js`).
  */
 const BENCHMARKS = [
-  { name: "fib", what: "fib(40), recursive calls", integer: true },
-  { name: "nbody", what: "n-body, 5 bodies, 2e7 steps (class + array, f64)", integer: false },
-  { name: "spectral", what: "spectral norm, n = 3000 (number[] + f64)", integer: false },
-  { name: "sieve", what: "sieve of Eratosthenes, n = 1e7, 20 passes (boolean[])", integer: true },
+  { name: "fib", what: "fib(40), recursive calls" },
+  { name: "nbody", what: "n-body, 5 bodies, 2e7 steps (class + array, f64)" },
+  { name: "spectral", what: "spectral norm, n = 3000 (number[] + f64)" },
+  { name: "sieve", what: "sieve of Eratosthenes, n = 1e7, 20 passes (boolean[])" },
   {
     name: "strbuild",
     what: "string building, 131072 template pieces joined into 806 KB",
-    integer: true,
     extraC: ["strbuild-naive"],
   },
-  { name: "vec3", what: "Vec3 class with methods, 5e7 iterations (f64)", integer: false },
+  { name: "vec3", what: "Vec3 class with methods, 5e7 iterations (f64)" },
   {
     name: "result",
     what: "Result<number, number> returned and passed, 2e8 calls (WP17 packing)",
-    integer: true,
   },
   {
     name: "math",
     what: "Math builtins, one kernel per argument, folded through f32 bits (f64)",
-    integer: false,
     kernels: [
       "atan2",
       "tan",
@@ -416,7 +411,7 @@ const run = (cmd, args, what) => {
 
 /**
  * Build every variant of one benchmark. A variant is { id, label, exe, cmd,
- * timed, integerOnly }: `timed` variants appear in the time table, the rest
+ * timed }: `timed` variants appear in the time table, the rest
  * (the size-profile binary) only in the size table.
  */
 const build = (bench) => {
@@ -436,9 +431,6 @@ const build = (bench) => {
     variants.push({ id, label, exe, timed, cmd: `nish ${args.join(" ")}` })
   }
   nish("nish", "Nish", [], "speed", true)
-  if (bench.integer) {
-    nish("nish-wrapping", "Nish --wrapping", ["--wrapping"], "speed", true)
-  }
   nish("nish-size", "Nish (size profile)", [], "size", false)
 
   const cc = (id, label, source) => {
@@ -1520,7 +1512,6 @@ if (opts.validate) {
 
 const columns = [
   ["nish", "Nish"],
-  ["nish-wrapping", "Nish `--wrapping`"],
   ["c", "C `-O3`"],
   ["c-naive", "C `-O3` naive"],
   ["go", "Go"],

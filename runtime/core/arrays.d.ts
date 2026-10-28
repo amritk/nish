@@ -15,8 +15,6 @@ export declare function arraySetAt<T>(dst: T[], src: readonly T[], offset?: numb
 export declare function newArray<T>(n: number | bigint, zero: unknown): T[];
 export declare function arenaUsed(): i64;
 export declare function arenaMark(): i64;
-export declare function arenaRelease(m?: unknown): void;
-export declare function arenaReset(): void;
 /**
  * The protocol `using` reads, declared here as `nish.d.ts` does, so `using a =
  * arena()` type-checks with no `"esnext.disposable"` in a program's `lib`.

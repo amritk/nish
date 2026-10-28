@@ -1,4 +1,6 @@
 // Boolean truth tables, negation, equality on booleans, comparisons of every numeric type.
+import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
+
 function xor(a: boolean, b: boolean): boolean {
   return (a || b) && !(a && b);
 }
@@ -32,12 +34,12 @@ export function main(): number {
   const big: i64 = 3000000000;
   console.log(big > 2147483647);
   console.log(big * big < 0);
-  console.log(big * big * big < 0);
+  console.log(wrappingMul(wrappingMul(big, big), big) < 0);
   const min = -2147483647 - 1;
   console.log(min < 0);
-  console.log(min - 1 > 0);
-  console.log(min === min * -1);
-  console.log(2147483647 + 1 === min);
+  console.log(wrappingSub(min, 1) > 0);
+  console.log(min === wrappingMul(min, -1));
+  console.log(wrappingAdd(2147483647, 1) === min);
   console.log("a" === "a" && "a" !== "b");
   console.log((3 > 2) === (2 > 1));
   console.log((3 > 2) !== (1 > 2));
