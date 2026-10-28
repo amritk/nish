@@ -119,8 +119,6 @@ const wycheproof = (
   let acceptableFalse: i32 = 0;
   let mismatches: i32 = 0;
   for (const c of cases) {
-    // Each case's keys, message and signature are dead once it is judged.
-    using a = arena();
     const keyAt: i32 = toI32(c.key);
     if (keyAt < 0 || keyAt >= keyCount) {
       t.fail(`wycheproof ${file} tcId ${c.tcId}`, "no such key");

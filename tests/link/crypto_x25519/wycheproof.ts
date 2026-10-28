@@ -20,7 +20,6 @@ export const wycheproofX25519 = (t: Suite): i32 => {
   let zero: i32 = 0;
   let mismatches: i32 = 0;
   for (const c of cases) {
-    using a = arena();
     const shared: string = toHex(x25519(fromHex(c.priv), fromHex(c.pub)));
     if (shared !== c.shared) {
       t.fail(`wycheproof x25519 tcId ${c.tcId}`, `answered ${shared}, the file says ${c.shared}`);

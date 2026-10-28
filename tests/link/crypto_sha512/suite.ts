@@ -97,8 +97,6 @@ const splitMisses = (data: u8[]): i32 => {
   const want384 = hex(sha384(data));
   let misses: i32 = 0;
   for (let cut: i32 = 0; cut <= n; cut++) {
-    // Each pass's hashers and hex are garbage once compared, so hand them back.
-    using a = arena();
     const h512 = new Sha512();
     const h384 = new Sha384();
     h512.update(data, ZERO, cut);
