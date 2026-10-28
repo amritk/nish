@@ -617,10 +617,6 @@ declare module "nish:secret" {
 declare const Arena: {
   /** The current bump address. */
   mark(): i64;
-  /** Free everything allocated since `m`. */
-  release(m: i64): void;
-  /** Recycle everything in O(1), keeping the newest chunk. */
-  reset(): void;
   /** Bytes bumped in the current chunk. */
   used(): i64;
 };

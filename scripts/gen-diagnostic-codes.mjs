@@ -54,7 +54,8 @@
  *   - **The `NL9xxx` codes run from `NL9001` with no gap**, one per WP15
  *     section 8 rule, so a missing number is a rule that lost its code; and
  *     the `NL8xxx` codes run from `NL8001` the same way, one per WP33 row,
- *     and the `NL7xxx` codes from `NL7001`, one per deprecation.
+ *     and the `NL7xxx` codes from `NL7001`, one per deprecation, retired ones
+ *     included.
  *   - **`RULE_COUNT` is the number of entries.**
  *
  * A fragment is the longest literal run of its message's template -- the rule

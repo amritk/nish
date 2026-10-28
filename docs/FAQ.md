@@ -65,18 +65,16 @@ literal that provably never leaves its function is an `alloca`, and a
 function whose arena temporaries all die with it marks the arena on entry
 and releases it before returning, so a hot loop keeps the arena flat.
 `using a = arena()` frees a batch explicitly, and `Arena.mark()` /
-`Arena.used()` read the arena (`Arena.release(m)` and `Arena.reset()` still
-work but are deprecated). Optional reference counting for objects that must
-outlive an arena reset is still on the plan; it has not been built.
+`Arena.used()` read the arena. Optional reference counting for objects that
+must outlive an arena release is still on the plan; it has not been built.
 
 ### How do I keep memory flat in a long-running loop?
 
 Usually by doing nothing: a temporary `new`, `[...]`, or `{ ... }` that does
 not escape is a stack slot reused every iteration, and a helper function
 whose strings or dynamic arrays die with it gets an automatic arena scope.
-Two things defeat that: returning or storing the object (the caller now
-owns arena memory), and calling the deprecated `Arena.reset` /
-`Arena.release` inside the callee (the compiler then never scopes it). If a
+What defeats that is returning or storing the object: the caller now owns
+arena memory. If a
 batch does accumulate, open a block with `using a = arena()` around it: the
 block releases everything allocated after that line on every exit, and the
 compiler refuses the block if anything allocated in it could outlive it
@@ -141,11 +139,10 @@ wrap-around counter — must say so:
 - **Write it in an unsigned type.** `u8`, `u16`, `u32` and `u64` are *defined*
   to wrap and are never checked, which is what they are for; an FNV-1a round in
   `u32` needs nothing more.
-- The deprecated **`--wrapping`** makes every operator of your own package wrap
-  (never a dependency's or the standard library's).
 
 Earlier versions made signed overflow undefined behaviour, as C does; that is
-gone, and no flag brings it back (`--nsw` is refused)
+gone, and no flag brings it back or makes a whole program wrap (`--nsw` and
+`--wrapping` are refused)
 ([LANGUAGE.md: Semantics decisions](LANGUAGE.md#semantics-decisions)).
 
 ### How do I know the compiled program behaves like Node?

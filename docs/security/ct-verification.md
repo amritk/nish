@@ -417,8 +417,7 @@ both base64 alphabets' character maps in `std/crypto/base64url.ts` share
 those maps, and x25519's limbs through
 `f25519Add64`, `f25519Sub64` and `f25519Mul64`, whose bounds the module
 already proves in its comments — and the public offsets of the loads and
-stores the fixtures read (`at + k`) in `u32` too, so that a fixture compiled
-with `--unchecked-indexing` has no check left to branch on. Every fixture's
+stores the fixtures read (`at + k`) in `u32` too. Every fixture's
 copy changed with its module, and each still passes its link test against the
 module. A check the compiler proves away — a loop counter, a masked value —
 is no branch at all, and the fixtures rely on that too.

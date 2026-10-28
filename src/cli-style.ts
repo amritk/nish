@@ -22,7 +22,8 @@ const USAGE_COLUMN: i32 = 46
 
 /**
  * The help: every flag a user passes -- not `--strict-exports`, which only
- * restates the default, `--nsw`, which is refused, or the test hooks
+ * restates the default, the removed `--nsw`, `--wrapping` and
+ * `--unchecked-indexing`, which are refused, or the test hooks
  * `--range-reference` and `--no-elision` -- grouped by what a person reaches for it to do, one per line, inside 80
  * columns but for an agent's path to the card, as long as the install made
  * it. `--help` prints it on stdout and a bare `nish` on stderr, each styled
@@ -84,8 +85,6 @@ export const helpText = (style: Style, guide: string): string => {
   menu.row("--no-strict-exports", "", "keep every function externally visible")
   menu.row("--no-stack-alloc", "", "keep every value off the stack")
   menu.row("--runtime-decls", "", "declare the runtime even when unused")
-  menu.row("--unchecked-indexing", "", "deprecated: use nish:unsafe")
-  menu.row("--wrapping", "", "deprecated: use nish:unsafe")
 
   if (guide.length > 0) {
     menu.section("Agents")

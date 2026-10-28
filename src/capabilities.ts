@@ -216,9 +216,7 @@ export const builtinCapability = (name: string): i32 => {
     name === "Math.max" ||
     name === "Math.clz32" ||
     name === "Math.imul" ||
-    name === "Arena.reset" ||
     name === "Arena.mark" ||
-    name === "Arena.release" ||
     name === "Arena.used" ||
     name === "arena" ||
     name === "Math.PI" ||

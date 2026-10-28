@@ -47,7 +47,7 @@ import { intBits, isInteger, isUnsigned, T_I32 } from "./types"
  * rather than inside its parent's. `walk` carries the facts
  * (`PortabilityWalk`): the module with this body's side tables installed —
  * a generic instantiation's own, so a type read there is concrete — the type
- * table, the options (`--wrapping`, `--number-mode`), the parent links, and
+ * table, the options (`--number-mode`), the parent links, and
  * the function and body being walked.
  *
  * A site is reported by appending `new PortabilityFinding(node, message)` to
@@ -140,25 +140,21 @@ const stepFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[
 /**
  * NL8007. The type is read as recorded, not through `baseOf`, so a ranged
  * value is left out by choice: its arithmetic is an `i32` instruction, but
- * every write into a ranged place is checked afterwards, and a result that
- * wrapped back inside the range under `--wrapping` is too rare to report at
- * every `r++`.
+ * every write into a ranged place is checked afterwards.
  */
 const wrapFinding = (walk: PortabilityWalk, node: Node, out: PortabilityFinding[]): void => {
   const operand = walk.program.nodeTypes[node.children[0].id]
-  if (wrapsHere(walk, operand)) {
+  if (wrapsHere(operand)) {
     out.push(operatorFinding(walk, node, operand, "wraps here, and TypeScript keeps counting past the range"))
   }
 }
 
 /**
- * Whether `+ - *` on `type` wrap in the IR: always at the narrow unsigned
- * widths, and at `i32` only under `--wrapping`, because without it an `i32`
- * overflow is a checked panic — not a quiet divergence. `i64`
- * and `u64` are NL8009's: the declaration is reported, not each operation.
+ * Whether `+ - *` on `type` wrap in the IR: at the narrow unsigned widths. An
+ * `i32` overflow is a checked panic — not a quiet divergence. `i64` and `u64`
+ * are NL8009's: the declaration is reported, not each operation.
  */
-const wrapsHere = (walk: PortabilityWalk, type: i32): boolean =>
-  (isUnsigned(type) && !isWide(type)) || (type === T_I32 && walk.program.wrapping)
+const wrapsHere = (type: i32): boolean => isUnsigned(type) && !isWide(type)
 
 /** "this `/` on i32 truncates here, ...": the operator as written and the type it runs at. */
 const operatorFinding = (

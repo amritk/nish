@@ -71,7 +71,6 @@ import { Options } from "./options"
 import { layoutInlineArrays } from "./inline-arrays"
 import { proveCallSiteRanges } from "./ranges"
 import { forgetProofs } from "./bounds"
-import { reportUncheckedIndexSites } from "./unsafe-migrate"
 import { PanicSite, panicsJson, reportDeniedPanics, resolvePanicSites } from "./panics"
 import { arenaJson } from "./arena-report"
 import {
@@ -340,17 +339,6 @@ export class EmittedModule {
 /** The performance warnings whose finding is memory that stays allocated after nothing can reach it (`--deny-retention`). */
 const isRetentionCode = (code: string): boolean =>
   code === "NL9002" || code === "NL9003" || code === "NL9011" || code === "NL9016"
-
-/**
- * Whether a performance warning is a deprecated flag's (NL9014, NL9015;
- * `Compilation.reportDeprecatedFlags`). `nish run` prints these and no other
- * performance warning: the rest is advice about the IR, and a deprecation is
- * about the command line the script is run with.
- */
-export const isDeprecationWarning = (warning: Diagnostic): boolean => {
-  const code = codeFor("performance", warning.text)
-  return code === "NL9014" || code === "NL9015"
-}
 
 export class Compilation {
   opts: Options
@@ -730,12 +718,6 @@ export class Compilation {
       this.rootPackageDir = packageDirOf(name)
     }
     const packageName = packageOverride.length > 0 ? packageOverride : this.packageOf(name)
-    // `--unchecked-indexing` and `--wrapping` reach the entry package and
-    // nothing else: a dependency, and the `nish/` library, which is package
-    // `nish` wherever it is installed, keep every check and every `nsw` their
-    // authors compiled them with. What a program means to leave unchecked
-    // beyond its own modules it says at the call, through `nish:unsafe`.
-    const ownPackage = packageName === ROOT_PACKAGE
     const checker = new Checker(
       this.table,
       source,
@@ -744,8 +726,6 @@ export class Compilation {
       parser.nodeCount,
       this.sink,
       this.opts.numberMode,
-      this.opts.wrapping && ownPackage,
-      this.opts.uncheckedIndexing && ownPackage,
       this.opts.strictExports,
       packageName
     )
@@ -1273,8 +1253,6 @@ export class Compilation {
     }
     this.reportArenaLoops()
     this.denyRetention()
-    this.reportDeprecatedFlags()
-    this.reportUncheckedIndexSites(programs)
     this.checkParallel()
     this.keyEnumsBySymbol()
     if (this.sink.hasErrors()) {
@@ -2082,54 +2060,6 @@ export class Compilation {
           }
         }
       }
-    }
-  }
-
-  /**
-   * `--unchecked-indexing` and `--wrapping` are deprecated: each still reaches
-   * the entry package's own modules (`discover`), and each says so once per
-   * compilation, at the top of the entry module, naming the `nish:unsafe`
-   * functions that state the same decision at the site it is about. A
-   * performance warning rather than a portability one, because that class is
-   * on by default, so the deprecation is read by whoever still passes the flag;
-   * `--no-warn-performance` silences it with the rest.
-   */
-  reportDeprecatedFlags(): void {
-    if (this.modules.length === 0) {
-      return
-    }
-    const entry = this.modules[0].source
-    const reach =
-      "is deprecated and reaches only the modules of the entry package, never a dependency or the standard library: call"
-    if (this.opts.uncheckedIndexing) {
-      this.sink.reportPerformance(
-        entry,
-        0,
-        0,
-        `--unchecked-indexing ${reach} \`uncheckedGet\` and \`uncheckedSet\` from \`${unsafeModule()}\` where an index is meant to go unchecked: \`${CLI} --fix\` rewrites each site; then drop the flag`
-      )
-    }
-    if (this.opts.wrapping) {
-      this.sink.reportPerformance(
-        entry,
-        0,
-        0,
-        `--wrapping ${reach} \`wrappingAdd\`, \`wrappingSub\` and \`wrappingMul\` from \`${unsafeModule()}\` where an operation is meant to wrap`
-      )
-    }
-  }
-
-  /**
-   * NL7002: each site `--unchecked-indexing` leaves unchecked, as a
-   * deprecation of its own with the `nish:unsafe` rewrite that states the
-   * same decision there (`src/unsafe-migrate.ts`). NL9014 says the flag is
-   * deprecated once; these say where it still decides something, at the place
-   * a fix can edit. Read here, beside it, because the per-site proofs are
-   * final once `proveCallSiteRanges` has run.
-   */
-  reportUncheckedIndexSites(programs: CheckedProgram[]): void {
-    if (this.opts.uncheckedIndexing) {
-      reportUncheckedIndexSites(programs, this.table, this.sink)
     }
   }
 

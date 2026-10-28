@@ -90,8 +90,7 @@ so it refuses `-o` and `--link`. It rewrites your files in place, with no
 backup, so run it on a committed or backed-up tree. Run it first, then read
 what remains. A warning can carry a fix too, and `--fix` applies it only when the program
 compiles and the warning would be printed: `NL9007`'s inserts the guard that
-proves an index in range (not under `--no-warn-performance`), and `NL7002`'s
-migrates a site off `--unchecked-indexing` (below).
+proves an index in range (not under `--no-warn-performance`).
 
 When it compiles, **check the native build against the program's TypeScript
 reading**. Run the project's tests natively; where it has none, write the
@@ -247,14 +246,9 @@ the site: `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` on an array of
 numbers with an `i32` index (out of range is undefined behaviour), and
 `wrappingAdd` / `wrappingSub` / `wrappingMul` on two `i32`s or two `i64`s.
 The sixth export, `readCString`, copies a C string out of a `CPtr`
-([Calling C](#calling-c)). Calling one without the import is NL2456. `--unchecked-indexing` and
-`--wrapping` are deprecated (NL9014, NL9015) and reach only your own package,
-never a dependency or `nish/`. To migrate off `--unchecked-indexing`, run
-`nish --unchecked-indexing --fix` on your files: each index the flag leaves
-unchecked is a `deprecation` warning of its own (NL7002), and where the site
-is a number array with an `i32` index its `fix` rewrites it to `uncheckedGet`
-or `uncheckedSet` and adds the import. A site with no rewrite keeps its
-warning; dropping the flag gives it back its bounds check.
+([Calling C](#calling-c)). Calling one without the import is NL2456. No flag turns the checks off for a
+whole program: `--unchecked-indexing` and `--wrapping` were removed before 1.0
+and are refused with exit 2.
 
 ```ts nish:ok
 import { uncheckedGet, wrappingAdd, wrappingMul } from "nish:unsafe";
@@ -280,8 +274,7 @@ where it can prove the result fits — a loop counter under `i < n`, a byte
 widened with `toI32`, an `integer<Lo, Hi>`, a value masked with `& c`. Arithmetic
 that is *meant* to wrap — a hash, a PRNG, a checksum — goes in `u32` or `u64`,
 which always wrap and are never checked; convert back with `toI32` (free), or
-call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site. The deprecated
-`--wrapping` makes every signed operation of your own package wrap instead.
+call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site.
 
 ```ts nish:ok
 // FNV-1a: the multiply overflows on purpose, so the state is a `u32`.
@@ -2209,7 +2202,8 @@ unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM. None
 exists on a wasm target, and under Node each throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
-`Arena.release(m)` and `Arena.reset()` are deprecated (NL7001).
+`Arena.release(m)` and `Arena.reset()` were removed before 1.0: write
+`using a = arena()`.
 
 ### Map and Set
 
@@ -2494,10 +2488,9 @@ anything that runs for a long time, should compile with `--deny-retention`,
 which makes this warning and the three like it errors.
 
 Everything else is bumped from the arena, which is released when `main`
-returns. **Do not write `Arena.release` or `Arena.reset`**: releasing while
-anything allocated after the mark is still referenced is undefined behaviour
-the compiler does not check, so both are deprecated, and each call compiles
-with a `deprecation` warning (NL7001) pointing to `using a = arena()`.
+returns. To give memory back sooner, scope it with `using a = arena()`;
+`Arena.release` and `Arena.reset` are gone, and a call to either is an unknown
+builtin (NL2244).
 
 ## Recipes for what is missing
 
@@ -2746,8 +2739,7 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 A call into the standard library or a dependency that may panic is refused at
 the call (NL2458), because only its own author can prove it: call a function
 that cannot panic, or make the call from a module outside the scope.
-`--unchecked-indexing` is not a proof, and an index it leaves unchecked is
-still refused. `uncheckedGet` and `uncheckedSet` are not proofs either, but
+`uncheckedGet` and `uncheckedSet` are not proofs, but
 they cannot panic, and their `nish:unsafe` import is the module's visible
 opt-in to an index out of range being undefined behaviour, so the scope allows
 them (as `"allowed": true` sites) and a call into them is never refused:

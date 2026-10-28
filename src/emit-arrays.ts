@@ -681,7 +681,7 @@ const arrayUses = (emitter: Emitter, node: Node, out: ArrayUse[]): void => {
     // A proven index reads no length (`emitBoundsCheck` skips the check), so
     // asking for one here would put a load in the preheader the loop never
     // uses. The proof is read in both places or in neither.
-    const needsLen = !emitter.program.uncheckedIndexing && !emitter.program.nodeProvenIndex[node.id]
+    const needsLen = !emitter.program.nodeProvenIndex[node.id]
     noteArrayUse(emitter, node.children[0], needsLen, true, out)
   } else if (isUncheckedAccess(emitter.program, node)) {
     noteArrayUse(emitter, node.children[1].children[0], false, true, out)
@@ -935,9 +935,6 @@ export const emitNumberFromI64 = (emitter: Emitter, value: string, expr: Node): 
  * this one check, this one panic and this one message.
  */
 export const emitRangeCheck = (emitter: Emitter, idx: string, len: string): void => {
-  if (emitter.program.uncheckedIndexing) {
-    return
-  }
   const fn = emitter.fn
   const inRange = fn.emitValue(`icmp ult i64 ${idx}, ${len}`)
   const failBlock = fn.newBlock("bounds.fail")
@@ -953,14 +950,11 @@ export const emitRangeCheck = (emitter: Emitter, idx: string, len: string): void
  * The bounds check of `a[i]`: the array's length, then the shared range check.
  * `site` is the access node, which is how the checker's proof is looked up —
  * a proven access loads no length at all, so the header read goes with the
- * compare rather than being left behind for LICM to hoist.
- *
- * A proof is not the same thing as `--unchecked-indexing`: the flag removes
- * every check and trusts the program, while a proof removes one check and the
- * safety is unchanged (WP15 §2.1/§2.2, `src/bounds.ts`).
+ * compare rather than being left behind for LICM to hoist. A proof removes
+ * one check and the safety is unchanged (WP15 §2.1/§2.2, `src/bounds.ts`).
  */
 const emitBoundsCheck = (emitter: Emitter, base: ArrayBase, idx: string, site: Node): void => {
-  if (emitter.program.uncheckedIndexing || emitter.program.nodeProvenIndex[site.id]) {
+  if (emitter.program.nodeProvenIndex[site.id]) {
     return
   }
   emitRangeCheck(emitter, idx, baseLength(emitter, base))
@@ -1365,7 +1359,7 @@ const emitPop = (emitter: Emitter, expr: Node, arr: string, elem: i32): string =
   const lenPtr = headerFieldPointer(emitter, arr, 0)
   const len = fn.emitValue(`load i64, i64* ${lenPtr}${emitter.align8()}${headerAccess(emitter, 0)}`)
   // A receiver known to hold an element (`judgePop`) needs no check.
-  if (!emitter.program.uncheckedIndexing && !emitter.program.nodeProvenIndex[expr.id]) {
+  if (!emitter.program.nodeProvenIndex[expr.id]) {
     const empty = fn.emitValue(`icmp eq i64 ${len}, 0`)
     const failBlock = fn.newBlock("pop.empty")
     const okBlock = fn.newBlock("pop.ok")
@@ -1566,9 +1560,7 @@ const emitSet = (emitter: Emitter, expr: Node, dst: string, elem: i32): string =
   const at = args.length > 1 ? emitOffset(emitter, args[1]) : "0"
   const count = loadLength(emitter, src)
   const end = fn.emitValue(`add i64 ${at}, ${count}`)
-  if (!emitter.program.uncheckedIndexing) {
-    emitSliceCheck(emitter, at, end, loadLength(emitter, dst), true, "set")
-  }
+  emitSliceCheck(emitter, at, end, loadLength(emitter, dst), true, "set")
   const size = elementSize(emitter, elem)
   const bytes = size === 1 ? count : fn.emitValue(`mul i64 ${count}, ${size}`)
   const disjoint = emitter.program.nodeDisjointCopy[expr.id]

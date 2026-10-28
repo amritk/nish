@@ -5,9 +5,8 @@
 // holds no site that can panic — every check proven, nothing left but an
 // `"allowed"` `oom` or `unchecked` — has no panic path in its IR either. The
 // other direction is not a property: a site the list keeps may still have no
-// check in the IR, because `--unchecked-indexing` drops a check without
-// proving it, and the attribute pass the list is recorded beside is allowed to
-// say more than the emitter does, never less.
+// check in the IR, because the attribute pass the list is recorded beside is
+// allowed to say more than the emitter does, never less.
 //
 // A panic path is one of six shapes in unoptimised IR:
 //

@@ -196,13 +196,9 @@ const wycheproofProblem = (c: WycheproofAesGcmCase): string => {
 const wycheproof = (t: Suite, cases: WycheproofAesGcmCase[]): i32 => {
   let failed: i32 = 0;
   for (const c of cases) {
-    // A pass allocates only garbage once it is judged, so hand it back; a
-    // failure is run again outside the mark for the text the suite keeps.
-    const mark = Arena.mark();
-    const held: boolean = toI32(wycheproofProblem(c).length) === 0;
-    Arena.release(mark);
-    if (!held) {
-      t.fail(`wycheproof tcId ${c.tcId} (${c.comment})`, wycheproofProblem(c));
+    const problem: string = wycheproofProblem(c);
+    if (toI32(problem.length) !== 0) {
+      t.fail(`wycheproof tcId ${c.tcId} (${c.comment})`, problem);
       failed++;
     }
   }

@@ -6,8 +6,9 @@
 // panics on overflow, so signed overflow is never undefined. Division and
 // remainder have their own check, the compiler's own i64 index and length
 // arithmetic is neither flagged nor checked, and neither is any unsigned
-// operation: `u8`..`u64` are defined as wrapping. `tests/cases/opt_wrapping` is this same program under
-// `--wrapping`, where nothing is flagged at all.
+// operation: `u8`..`u64` are defined as wrapping. A signed operation meant to
+// wrap is written `wrappingAdd`, `wrappingSub` or `wrappingMul` from
+// `nish:unsafe` (`tests/cases/unsafe_wrapping`).
 //
 // `test` is exported because the C driver calls it; `poly`, `sum`, `mix` and
 // the constructor are not, so the other default gives them `internal` linkage.

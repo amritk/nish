@@ -74,21 +74,20 @@ function wrapFinding(walk: PortabilityWalk, node: Node, out: PortabilityFinding[
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_array_grow nish_panic_index operatorFinding wrapsHere
-  pointer walk: size=48 writesThrough=false captured=false passedTo=wrapsHere#0 operatorFinding#0
+  pointer walk: size=48 writesThrough=false captured=false passedTo=operatorFinding#0
   pointer node: size=40 writesThrough=true captured=true passedTo=operatorFinding#1
   pointer out: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:9 operand: i32 (const)
   callee -1:7 wrapsHere -> @wrapsHere
   callee +0:14 operatorFinding -> @operatorFinding
-function wrapsHere(walk: PortabilityWalk, type: i32): boolean -> @wrapsHere
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+function wrapsHere(type: i32): boolean -> @wrapsHere
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: type
   calls: isUnsigned isWide
-  pointer walk: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:4 isUnsigned -> @isUnsigned
-  callee +0:25 isWide -> @isWide
+  callee +0:43 isUnsigned -> @isUnsigned
+  callee +0:64 isWide -> @isWide
 function operatorFinding(walk: PortabilityWalk, node: Node, type: i32, fragment: string): PortabilityFinding -> @operatorFinding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false returnDeref=16
   escaping: type

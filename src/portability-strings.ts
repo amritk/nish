@@ -77,7 +77,7 @@ const CODE_UNIT: i32 = 2
  * as the parent's local. `walk` carries the facts
  * (`PortabilityWalk`): the module with this body's side tables installed —
  * a generic instantiation's own, so a type read there is concrete — the type
- * table, the options (`--wrapping`, `--number-mode`), the parent links, and
+ * table, the options (`--number-mode`), the parent links, and
  * the function and body being walked.
  *
  * A site is reported by appending `new PortabilityFinding(node, message)` to

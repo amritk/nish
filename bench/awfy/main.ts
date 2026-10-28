@@ -60,12 +60,11 @@ const doRuns = (name: string, numIterations: i32, innerIterations: i32): i64 => 
   for (let i = 0; i < numIterations; i += 1) {
     const startTime = monotonicNanos()
     // Everything one measurement allocates is dead once it has been verified,
-    // so hand it back to the arena, the way the GC or `delete` does elsewhere.
-    const mark = Arena.mark()
+    // and `innerBenchmarkLoop` answers only a boolean, so its automatic arena
+    // scope hands it back, the way the GC or `delete` does elsewhere.
     if (!innerBenchmarkLoop(name, innerIterations)) {
       panic("Benchmark failed with incorrect result")
     }
-    Arena.release(mark)
     const runTime = (monotonicNanos() - startTime) / 1000
 
     console.log(`${name}: iterations=1 runtime: ${runTime}us`)

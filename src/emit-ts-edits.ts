@@ -684,9 +684,7 @@ const mayPanic = (walk: Walk, node: Node): boolean => {
       return left >= 0 && isInteger(walk.table.baseOf(left)) && !program.nodeProvenIndex[node.id]
     }
   }
-  return (
-    !program.wrapping && checksOverflow(program, walk.table, node) && !program.nodeProvenNoOverflow[node.id]
-  )
+  return checksOverflow(program, walk.table, node) && !program.nodeProvenNoOverflow[node.id]
 }
 
 /**

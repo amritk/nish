@@ -84,16 +84,15 @@ function emitSignedArith(emitter: Emitter, opcode: string, ty: string, lhs: stri
   stackSites=0 stackLocals=0
   local +0:9 fn: IRFunction (const)
   callee +2:12 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +5:12 IRFunction.emitValue -> @IRFunction.emitValue
-  local +7:9 pair: string (const)
-  callee +7:16 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +8:27 Emitter.useRuntime -> @Emitter.useRuntime
-  local +10:9 value: string (const)
-  callee +10:17 IRFunction.emitValue -> @IRFunction.emitValue
-  local +11:9 overflow: string (const)
-  callee +11:20 IRFunction.emitValue -> @IRFunction.emitValue
-  callee +12:3 IRFunction.branchOnOverflow -> @IRFunction.branchOnOverflow
-  callee +12:44 Emitter.useRuntime -> @Emitter.useRuntime
+  local +4:9 pair: string (const)
+  callee +4:16 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +5:27 Emitter.useRuntime -> @Emitter.useRuntime
+  local +7:9 value: string (const)
+  callee +7:17 IRFunction.emitValue -> @IRFunction.emitValue
+  local +8:9 overflow: string (const)
+  callee +8:20 IRFunction.emitValue -> @IRFunction.emitValue
+  callee +9:3 IRFunction.branchOnOverflow -> @IRFunction.branchOnOverflow
+  callee +9:44 Emitter.useRuntime -> @Emitter.useRuntime
 function overflowCode(opcode: string): i32 -> @overflowCode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq

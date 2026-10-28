@@ -359,7 +359,7 @@ int32_t nish_connect_result(int32_t fd) {
 
 /* `netRead(fd, buf, off, len)`: at most `len` bytes into `buf` from `off`.
    The compiled call has already checked `0 <= off <= off + len <=
-   buf.length`, unless the program was built with `--unchecked-indexing`. */
+   buf.length`. */
 int32_t nish_net_read(int32_t fd, nish_array *buf, int64_t off, int64_t len) {
   ssize_t n = recv(fd, buf->data + off, (size_t)len, 0);
   return n < 0 ? nish_net_fail() : (int32_t)n;
