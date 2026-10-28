@@ -1,0 +1,77 @@
+PASS  accept: gzip
+PASS  accept: the browsers' gzip, deflate, br, zstd
+PASS  accept: deflate alone
+PASS  accept: deflate alone, gzip offered alone, is identity
+PASS  accept: br alone is identity
+PASS  accept: an empty field is identity
+PASS  accept: identity
+PASS  accept: x-gzip is gzip
+PASS  accept: case is ignored
+PASS  accept: * takes gzip
+PASS  accept: gzip;q=0 is refused
+PASS  accept: gzip;q=0, * gives deflate
+PASS  accept: the higher q wins
+PASS  accept: a tie goes to gzip
+PASS  accept: identity preferred over gzip
+PASS  accept: gzip at q 0.1 beats an unmentioned identity
+PASS  accept: identity;q=0 with gzip
+PASS  accept: identity;q=0 and nothing offered
+PASS  accept: *;q=0 refuses identity too
+PASS  accept: whitespace around q
+PASS  accept: OWS before the semicolon
+PASS  accept: q=1.000
+PASS  accept: q=1.5 is malformed, the element skipped
+PASS  accept: q=0.0001 is malformed
+PASS  accept: other parameters are ignored
+PASS  accept: empty elements
+PASS  accept: junk between elements
+PASS  accept: a window inside a buffer
+PASS  compressor: 5221 bytes of JSON become 838
+PASS  compressor: and gunzip back
+PASS  compressor: identity is not compressed
+PASS  compressor: deflate is not produced
+PASS  compressor: under minLength is not compressed
+PASS  compressor: over maxLength is not compressed
+PASS  compressor: a body gzip would not shrink is sent as it is
+PASS  fields: the program's, then two
+PASS  fields: content-encoding: gzip
+PASS  fields: vary: accept-encoding
+PASS  fields: without vary
+PASS  fields: identity without vary is the program's
+PASS  h1 gzip: the request is read
+PASS  h1 gzip: the connection reads gzip
+PASS  h1 gzip: respondEncoded queues it
+PASS  h1 gzip: status 200
+PASS  h1 gzip: content-encoding: gzip
+PASS  h1 gzip: vary: accept-encoding
+PASS  h1 gzip: content-length is the compressed length, 838
+PASS  h1 gzip: the program's field
+PASS  h1 gzip: the body gunzips to the JSON
+PASS  h1 gzip: byte for byte
+PASS  h1 none: the request is read
+PASS  h1 none: no accept-encoding is identity
+PASS  h1 none: respondEncoded queues it
+PASS  h1 none: no content-encoding
+PASS  h1 none: vary: accept-encoding still
+PASS  h1 none: content-length 5221
+PASS  h1 small: the request is read
+PASS  h1 small: respondEncoded
+PASS  h1 small: a body under the threshold is sent as it is
+PASS  h1 head: the request is read
+PASS  h1 head: respondEncoded
+PASS  h1 head: the head says gzip
+PASS  h1 head: and no body is sent
+PASS  h1 too big: the request is read
+PASS  h1 too big: H1_INVALID
+PASS  h1 too big: nothing queued
+PASS  h1 too big: the request can still be answered
+PASS  h1 too big: so is a gzip body still over the room
+PASS  h1 too big: or a smaller one
+PASS  h1 later: the request is read
+PASS  h1 later: the first answer
+PASS  h1 later: the first request ends
+PASS  h1 later: a second request
+PASS  h1 later: a body that does not fit behind the first is H1_AGAIN
+PASS  h1 later: nothing more queued
+PASS  h1 later: once sent, gzip fits
+http-compress: 76 passed, 0 failed, 0 skipped

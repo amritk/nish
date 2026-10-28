@@ -5337,6 +5337,7 @@ const LINK_READ_LATER = [
   "range_export_napi_async",
   "range_export_unproven",
   ...INDEX_OF_ANY_REFUSALS.map(([name]) => name),
+  "std_compress_node",
   "std_json_conformance",
   "std_json_tokenizer",
   "std_json_typed",
@@ -10100,6 +10101,33 @@ if (!only || "str_from_bytes".includes(only)) {
       oob.status === 1 && oob.stdout === "" && oob.stderr === `slice out of range: ${range}\n`,
       shown(oob)
     )
+  }
+}
+
+// The compression cross-check: `tests/link/std_compress_node` (the link loop
+// holds its expected.out, Nish decompressing what Node's zlib wrote) is run
+// again with `--emit`, and every stream it prints, each input at each level in
+// each framing, must inflate under Node's zlib to the input inputs.mjs builds.
+// And each malformed fixture the program refuses must be one Node refuses too.
+if (!only || "std_compress_node".includes(only)) {
+  const compressCheck = await import(pathToFileURL(path.join(linkDir, "std_compress_node", "check.mjs")).href)
+  const refused = compressCheck.nodeRefusesBad()
+  check(
+    `link/std_compress_node: Node's zlib refuses each of the ${refused.count} malformed fixtures`,
+    refused.count > 0 && refused.accepted.length === 0,
+    `accepted: ${refused.accepted.join(", ")}`
+  )
+  const exe = path.join(buildDir, "link", "std_compress_node", "app")
+  if (HAS_CLANG && fs.existsSync(exe)) {
+    const emitted = spawnSync(exe, ["--emit"], { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 })
+    const judged = compressCheck.judge(String(emitted.stdout ?? ""))
+    check(
+      `link/std_compress_node: each of the ${judged.lines} streams Nish compresses (every level, raw, gzip, zlib and GzipWriter) inflates under Node's zlib to its input`,
+      emitted.status === 0 && judged.problems.length === 0,
+      judged.problems.join("\n") || shown(emitted)
+    )
+  } else {
+    skip("skipped: link/std_compress_node: no native program to compress with")
   }
 }
 

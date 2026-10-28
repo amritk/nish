@@ -2162,7 +2162,7 @@ and their `.ll` goldens are byte-identical files.
   the running compiler rather than relative to the importing file, so the same
   specifier works at any depth. A module the library does not have is
   `` Module `nish/toml` is not part of the standard library (it has:
-  collections, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
+  collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
   crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256,
   crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
   testing, text, threads) ``

@@ -114,6 +114,12 @@
  */
 import { Secret } from "nish:secret"
 import { copyBytes } from "nish/bytes"
+import {
+  HTTP_CODING_IDENTITY,
+  HTTP_OFFER_GZIP,
+  HttpCompressor,
+  httpAcceptEncoding,
+} from "nish/net/http-compress"
 import { netClose, netRead, netWrite, tcpAccept } from "nish:net"
 import {
   HTTP1_BODY,
@@ -1203,6 +1209,95 @@ export class Http1Connection {
       this.closeAfter = true
     }
     return 0
+  }
+
+  // ---- Content coding -----------------------------------------------------------
+
+  /**
+   * The content coding to answer the current request with, read from its
+   * `Accept-Encoding` with gzip offered (`httpAcceptEncoding`):
+   * `HTTP_CODING_GZIP`, `HTTP_CODING_IDENTITY` (also with no such field), or
+   * `HTTP_CODING_NONE` when the client refuses identity and does not take
+   * gzip. Allocates nothing.
+   */
+  acceptEncoding(): i32 {
+    const parser: Http1Parser = this.parser
+    const i: i32 = parser.headerIndex("accept-encoding")
+    const spans: i32[] = parser.spans
+    if (i < 0 || 4 * i + 3 >= toI32(spans.length)) {
+      return HTTP_CODING_IDENTITY
+    }
+    const start: i32 = spans[4 * i + 2]
+    const end: i32 = spans[4 * i + 3]
+    if (start < 0 || start > end || end > toI32(parser.head.length)) {
+      return HTTP_CODING_IDENTITY
+    }
+    return httpAcceptEncoding(parser.head, start, end, HTTP_OFFER_GZIP)
+  }
+
+  /**
+   * Answers the current request with all of `body[off .. off + len)` in one
+   * call: `respond`, `write` and `end`, the body compressed by `enc` when
+   * `coding` (from `acceptEncoding`) is gzip and `enc.compress` takes it,
+   * with `Content-Encoding: gzip` and the compressed `Content-Length`, and
+   * otherwise sent as it is; `Vary: Accept-Encoding` either way while
+   * `enc.vary` is set. The program's fields may not name `Content-Encoding`
+   * or, with `enc.vary`, `Vary`. The whole response is written or none of
+   * it: `H1_AGAIN` when the output has no room for it yet (`H1_WRITE` says
+   * when to try again, compressing again), `H1_INVALID` for a response
+   * larger than the output could ever hold or one `respond` refuses,
+   * `H1_CLOSED` with no request to answer; 0 once it is queued. A window
+   * outside `body` panics.
+   */
+  respondEncoded(
+    status: i32,
+    names: u8[][],
+    values: u8[][],
+    body: u8[],
+    off: i32,
+    len: i32,
+    enc: HttpCompressor,
+    coding: i32
+  ): i32 {
+    http1ServerCheckWindow("Http1Connection.respondEncoded", body, off, len)
+    if (!this.answerable()) {
+      return H1_CLOSED
+    }
+    const packed: i32 = enc.compress(coding, body, off, len)
+    let n: i32 = len
+    if (packed >= 0) {
+      enc.addFields(names, values)
+      n = packed
+    } else {
+      enc.identityFields(names, values)
+    }
+    // `respond` and the body together, or neither: what `respond` sets is
+    // put back when the body does not fit behind the head.
+    const outputEnd: i32 = this.outputEnd
+    const closeAfter: boolean = this.closeAfter
+    const r: i32 = this.respond(status, enc.names, enc.values, n)
+    if (r !== 0) {
+      return r
+    }
+    if (!this.responseEmpty && n > this.bodyRoom()) {
+      const fits: boolean = this.outputEnd - outputEnd + n <= this.config.outputSize - H1_CONTROL_RESERVE
+      this.outputEnd = outputEnd
+      this.closeAfter = closeAfter
+      this.response = H1_R_NONE
+      this.responseFraming = 0
+      this.responseLeft = 0
+      this.responseEmpty = false
+      if (!fits) {
+        return H1_INVALID
+      }
+      this.writeHeld = true
+      return H1_AGAIN
+    }
+    const w: i32 = packed >= 0 ? this.write(enc.output, toI32(0), n) : this.write(body, off, n)
+    if (w !== n) {
+      panic("Http1Connection.respondEncoded: a body the room was checked for did not fit")
+    }
+    return this.end()
   }
 
   // ---- WebSocket ----------------------------------------------------------------

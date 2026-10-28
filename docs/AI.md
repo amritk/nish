@@ -2577,6 +2577,21 @@ most 100 pairs. (No block, as for `nish/text`; `tests/link/std_url` is its
 program, and the user guide's [standard-library
 page](guide/using-nish/standard-library.md#nishneturl) its walk-through.)
 
+**Gzip a response, or read a gzipped body** — there is no `node:zlib` and no
+`CompressionStream`: `nish/compress/gzip` (and `zlib`, `deflate`) compress
+and decompress into buffers you own. Build a `GzipCompressor(DEFLATE_FAST)`
+once and call `compress(src, off, len, out, at)`, which answers the end or -1
+when `out` is shorter than `compressBound(len)`; `GzipDecompressor`'s
+`decompress(..., limit)` never writes more than `limit` bytes and answers a
+negative `DEFLATE_ERR_*` / `GZIP_ERR_*` code for any malformed stream, so test
+it before reading `out`. `GzipWriter` and `GzipReader` stream. On HTTP/1.1,
+`conn.respondEncoded(status, names, values, body, off, len, enc,
+conn.acceptEncoding())` with an `HttpCompressor` from `nish/net/http-compress`
+negotiates, compresses and sets the fields. Do not compress a secret beside
+text the client chose (BREACH). (No block, as for `nish/text`;
+`tests/link/std_compress` is its program, and the user guide's
+[compression page](guide/using-nish/compression.md) its walk-through.)
+
 **Pass a list to a PostgreSQL statement** — there is no driver that expands
 `IN (...)` and no `pg`'s array serialiser: in `nish/net/postgres`, write
 `= any($1::int8[])` or `unnest($1::text[])` and bind the list as one

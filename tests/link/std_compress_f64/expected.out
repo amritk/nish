@@ -1,0 +1,6 @@
+PASS  round trip: 11263 bytes, every level and format
+PASS  writer: one gzip member
+PASS  reader: the stream ends
+PASS  reader: every byte back
+PASS  accept: gzip
+compress-f64: 5 passed, 0 failed, 0 skipped
