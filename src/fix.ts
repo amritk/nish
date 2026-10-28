@@ -216,9 +216,9 @@ const acceptedEdits = (diagnostics: Diagnostic[], unit: ModuleUnit): Edit[] => {
       continue
     }
     for (const edit of diagnostic.edits) {
-      // An edit an earlier fix already made is made once: every NL7002 fix
-      // carries the one import its module lacks, and taking it as applied
-      // lets every site land in the round that writes it.
+      // An edit an earlier fix already made is made once: two fixes that
+      // carry the same import its module lacks land it a single time, in the
+      // round that writes the first.
       if (sameAsAny(edit, accepted)) {
         continue
       }

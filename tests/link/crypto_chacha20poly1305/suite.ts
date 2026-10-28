@@ -175,10 +175,12 @@ const wycheproof = (t: Suite, cases: WycheproofChaCha20Poly1305Case[]): i32 => {
   let failed: i32 = 0;
   for (const c of cases) {
     // A pass allocates only garbage once it is judged, so hand it back; a
-    // failure is run again outside the mark for the text the suite keeps.
-    const mark = Arena.mark();
-    const held: boolean = toI32(wycheproofProblem(c).length) === 0;
-    Arena.release(mark);
+    // failure is run again outside the block for the text the suite keeps.
+    let held: boolean = false;
+    {
+      using a = arena();
+      held = toI32(wycheproofProblem(c).length) === 0;
+    }
     if (!held) {
       t.fail(`wycheproof tcId ${c.tcId} (${c.comment})`, wycheproofProblem(c));
       failed++;

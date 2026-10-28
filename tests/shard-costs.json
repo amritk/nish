@@ -718,9 +718,6 @@
     "union_export": 0,
     "union_narrowing_capture": 0,
     "unknown_export": 0,
-    "unsafe-migrate-index-fixed": 0.2,
-    "unsafe-migrate-index-flag": 0.1,
-    "unsafe_flag_scope": 0,
     "using_declarator_exit": 0
   }
 }

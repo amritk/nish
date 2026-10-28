@@ -180,7 +180,7 @@ ship in the npm package, and [llms.txt](llms.txt) indexes them.
 | `Map` and `Set` | the global `Map<K, V>` and `Set<T>`, insertion-ordered, one probe per `get`/`set`/`has`/`delete`; `get` is `V \| undefined` and narrowed as TypeScript does | [`Map` and `Set`](docs/LANGUAGE.md#map-and-set) |
 | Classes and interfaces | LLVM structs with clang's layout, constructors, methods, `readonly`, definite assignment, object literals, `implements` by identical layout; no inheritance | [Classes](docs/LANGUAGE.md#classes) |
 | Generics | generic functions, classes, interfaces and methods by monomorphisation: one specialised `define` per instantiation, type arguments inferred at a call and written after `new` or in an annotation, `<T extends Shape>` constraints, exported instantiations callable from C and JavaScript as `nish_gen_identity_i32` | [Generic functions](docs/LANGUAGE.md#generic-functions) |
-| Memory | no GC: objects that provably do not escape their function are stack `alloca`s, functions whose temporaries die with them get an automatic arena scope, `using a = arena()` frees a batch the compiler has checked nothing outlives, and `Arena.mark`/`Arena.used` read the arena (`Arena.reset` and `Arena.release` are deprecated) | [`using a = arena()`](docs/LANGUAGE.md#using-a--arena), [`Arena`](docs/LANGUAGE.md#arena), [Memory](docs/LANGUAGE.md#memory-model) |
+| Memory | no GC: objects that provably do not escape their function are stack `alloca`s, functions whose temporaries die with them get an automatic arena scope, `using a = arena()` frees a batch the compiler has checked nothing outlives, and `Arena.mark`/`Arena.used` read the arena | [`using a = arena()`](docs/LANGUAGE.md#using-a--arena), [`Arena`](docs/LANGUAGE.md#arena), [Memory](docs/LANGUAGE.md#memory-model) |
 | `T \| null` | for class, interface, array and string types; `=== null`, a `??` default, and narrowing to `T` by `if`, early return, `while`, `&&`, `?:`, enforced by the checker | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding: `panic(message)` ends the process | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
 | Threads | `nish/threads`: `parallelMap`/`parallelReduce`, scoped tasks (`using s = scope()`), `Mutex<T>`, `AtomicI32`/`AtomicI64`, `Channel<T>`; data races and deadlocks refused at compile time | [Data parallelism](docs/LANGUAGE.md#data-parallelism-nishthreads) |
@@ -313,25 +313,17 @@ weaker: one global arena, per-function granularity, no region polymorphism.
 ### Where it is not safe
 
 > [!CAUTION]
-> Three holes, every one of them asked for by name.
+> Two holes, each of them asked for by name.
 
-- **`Arena.reset()` / `Arena.release(m)`** release or recycle in O(1), and
-  doing either while anything allocated after the mark is still referenced is
-  undefined behaviour. The compiler protects its own marks — a function that
-  touches either, directly or through a callee, never gets an automatic
-  scope — and not yours. Both are deprecated (NL7001) in favour of
-  `using a = arena()`, the same release with the compiler refusing anything
-  that would outlive it ([`Arena`](docs/LANGUAGE.md#arena)).
 - **`uncheckedGet` and `uncheckedSet`** from `nish:unsafe` read and write an
   element with no bounds check, after which an out-of-range index at that site
   is undefined behaviour. A module reaches them only through the import, so
   every module that gives up a check says so at its top and every site is a
   call (`tests/cases/unsafe_get_set`). That is a different thing from the
   proof above: the proof removes a check the compiler showed was never going
-  to fire, and changes nothing about what the program means. The deprecated
-  `--unchecked-indexing` does the same to every index of your own package and
-  never reaches a dependency or `nish/`
+  to fire, and changes nothing about what the program means
   ([`nish:unsafe`](docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping)).
+  No flag turns the checks off for a whole program.
 - **Interop** hands a pointer to a C, wasm or N-API host, and what happens to
   it there is the host's business
   ([wp8-interop.md](docs/wp8-interop.md)).

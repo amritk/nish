@@ -3954,24 +3954,10 @@ if (!only || "performance".includes(only)) {
       constLines[0].includes(
         "this computes with overflow: the result 2147483648 does not fit in i32 (the range is -2147483648 to " +
           "2147483647), and signed overflow panics when it runs rather than wrapping: widen the operands with " +
-          "`toI64` first, or use --wrapping for two's-complement arithmetic"
+          "`toI64` first, or call `wrappingAdd`, `wrappingSub` or `wrappingMul` from `nish:unsafe` for two's-complement arithmetic"
       ) &&
       constLines[2].includes("the result 10000000000 does not fit in i32"),
     consts.stderr
-  )
-
-  // `--wrapping` makes the wrap the defined answer, so the constant rule has
-  // nothing left to say and must not argue with the flag. What is left is the
-  // flag's own deprecation (NL9015), once, at the top of the entry.
-  const wrapped = compile("perf_overflow_wrapping", "perf_overflow_wrapping.ll", ["--wrapping"])
-  const wrappedLines = summaries(wrapped.stderr)
-  check(
-    "performance: --wrapping silences the constant-overflow warning, which is only about the panic, and says once that it is deprecated",
-    wrapped.status === 0 &&
-      wrappedLines.length === 1 &&
-      wrappedLines[0].includes(":1:1: performance: --wrapping is deprecated") &&
-      wrappedLines[0].includes("`wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe`"),
-    wrapped.stderr
   )
 
   // WP15 §2: a bounds check the proof could not remove. The three shapes are the
@@ -4027,22 +4013,6 @@ if (!only || "performance".includes(only)) {
       clampLines[1].includes("`to` is not provably within `s`") &&
       clampLines.every((l) => l.includes("or use `slice`, which has no clamp at all")),
     clamp.stderr
-  )
-
-  // The clamp is the semantics, not a check, so the flag that removes every
-  // bounds check must leave both the clamp and its warning exactly as they were;
-  // the only line it adds is its own deprecation (NL9014).
-  const clampUnchecked = compile("perf_clamp", "perf_clamp_unchecked.ll", ["--unchecked-indexing"])
-  const clampUncheckedLines = summaries(clampUnchecked.stderr)
-  check(
-    "performance: --unchecked-indexing changes neither the substring clamp nor its warning",
-    clampUnchecked.status === 0 &&
-      clampUncheckedLines.length === 3 &&
-      clampUncheckedLines[0].includes(":1:1: performance: --unchecked-indexing is deprecated") &&
-      clampUncheckedLines.slice(1).join("\n") === clampLines.join("\n") &&
-      stripHeader(fs.readFileSync(path.join(buildDir, "perf_clamp_unchecked.ll"), "utf8")) ===
-        stripHeader(fs.readFileSync(path.join(buildDir, "perf_clamp.ll"), "utf8")),
-    clampUnchecked.stderr
   )
 
   // The proof is worth an instruction count, not just a quieter build: the two
@@ -4134,19 +4104,6 @@ if (!only || "performance".includes(only)) {
     `flagged:\n${declaresIn("perf_inline_foreign.ll")}\ndefault:\n${declaresIn("perf_inline_foreign_default.ll")}`
   )
 
-  // The flag removes every check, so there is no surviving one to report; what
-  // is left is the flag's own deprecation (NL9014), once, at the top of the entry.
-  const boundsOff = compile("perf_bounds_loop", "perf_bounds_off.ll", ["--unchecked-indexing"])
-  const boundsOffLines = summaries(boundsOff.stderr)
-  check(
-    "performance: --unchecked-indexing leaves no bounds check to warn about, and says once that it is deprecated",
-    boundsOff.status === 0 &&
-      boundsOffLines.length === 1 &&
-      boundsOffLines[0].includes(":1:1: performance: --unchecked-indexing is deprecated") &&
-      boundsOffLines[0].includes("`uncheckedGet` and `uncheckedSet` from `nish:unsafe`"),
-    boundsOff.stderr
-  )
-
   // The false-positive guards. Each of these compiles loops that concatenate or
   // allocate where the faster form is already what the compiler emits, or where the
   // program genuinely asked for the memory, so it must say nothing at all.
@@ -4190,39 +4147,25 @@ if (!only || "performance".includes(only)) {
   // #216: the arena-loop warning (NL9011) names the loops that neither a scope
   // around each pass nor one around the function reclaims, in a function of any
   // return type, and names what refused both. `tally` stores into memory on
-  // every pass, `drain` calls a function that releases the arena, and
-  // `collect`, which returns a pointer, grows an array older than the pass;
-  // `quiet`'s passes are scoped and say nothing. `perf_arena_control` is the
-  // silence the issue found untested: a function that brackets its own passes
-  // with `Arena.mark()` / `Arena.release(m)` gets no warning although it
-  // returns a pointer and stores a string, and neither does a pointer-returning
-  // function whose passes the compiler scopes.
+  // every pass, and `collect`, which returns a pointer, grows an array older
+  // than the pass; `quiet`'s passes are scoped and say nothing.
   const arenaLoop = compile("perf_arena_loop", "perf_arena_loop_report.ll")
   const arenaLoopLines = summaries(arenaLoop.stderr)
   check(
     "mem_loop_scope: NL9011 names each loop no scope reclaims, and what refused its passes and its function",
     arenaLoop.status === 0 &&
-      arenaLoopLines.length === 3 &&
-      positions(arenaLoopLines) === "25:14,39:14,48:18" &&
+      arenaLoopLines.length === 2 &&
+      positions(arenaLoopLines) === "24:14,33:18" &&
       arenaLoopLines[0].includes(
         "`makeList` leaves arena memory behind on every pass of this loop, which cannot release it after each " +
-          "pass because the allocation on line 26 is stored into memory, where this analysis stops following it, " +
+          "pass because the allocation on line 25 is stored into memory, where this analysis stops following it, " +
           "and neither can `tally` when it returns, so all of it lives as long as the caller's memory does"
       ) &&
       arenaLoopLines[1].includes(
-        "because it calls `flush`, which releases or resets the arena, and neither can `drain`"
-      ) &&
-      arenaLoopLines[2].includes(
-        "because line 48 grows `lengths`, an array older than the pass, and `collect` cannot release it when it " +
+        "because line 33 grows `lengths`, an array older than the pass, and `collect` cannot release it when it " +
           "returns because it returns a value that is not a number, a boolean, an enum or nothing"
       ),
     arenaLoop.stderr
-  )
-  const arenaControl = compile("perf_arena_control", "perf_arena_control_report.ll")
-  check(
-    "mem_loop_scope: no NL9011 under Arena control, nor for a pointer-returning loop whose passes are scoped",
-    arenaControl.status === 0 && summaries(arenaControl.stderr).length === 0,
-    arenaControl.stderr
   )
   // A call inside a `using a = arena()` block leaves nothing behind once the
   // block releases, whatever refused the pass and the function their scopes.
@@ -5051,204 +4994,32 @@ if (!only || "emit-ts".includes(only)) {
   }
 }
 
-// ---- The `deprecation` diagnostic class (NL7xxx) -----------------------------------
-// A call the language still compiles, to the bytes it always did, and is going
-// to take away: `Arena.release` and `Arena.reset`, whose undefined behaviour
-// `using a = arena()` replaces with a check. On by default with no flag to turn
-// it off, printed `file:line:col: deprecation: <text>` with the usual excerpt,
-// or with `"severity":"deprecation"` and its NL7xxx code under `--json`, ahead
-// of the other two warning classes and on the same streams. It never changes
-// the exit code, and a program with an error prints none.
-if (!only || "deprecation".includes(only) || "mem_arena_builtins".includes(only)) {
-  const compile = (source, out, extra = []) =>
-    spawnSync(NISH, [source, "-o", path.join(buildDir, out), ...extra], { cwd: root, encoding: "utf8" })
-  const summaries = (text) => text.split("\n").filter((l) => /:\d+:\d+: deprecation: /.test(l))
-  const builtins = path.join(casesDir, "mem_arena_builtins.ts")
-  const tail =
-    "is still referenced is undefined behaviour the compiler does not check. Bracket the work with " +
-    "`using a = arena()`, which releases on every exit of its block and refuses whatever would outlive it"
-
-  // The human form: one summary per call, the excerpt under it, and the count,
-  // and the program still compiles, to the IR its golden pins.
-  const warned = compile(builtins, "deprecation_builtins.ll")
-  const warnedLines = warned.stderr.split("\n")
-  check(
-    "deprecation: Arena.release and Arena.reset each warn `file:line:col: deprecation: <text>`, with an excerpt and a count, and exit 0",
-    warned.status === 0 &&
-      summaries(warned.stderr).length === 2 &&
-      warnedLines[0] ===
-        `${builtins}:27:3: deprecation: \`Arena.release\` is deprecated: releasing to a mark while anything allocated after it ${tail}` &&
-      warnedLines[1] === "  27 |   Arena.release(m);" &&
-      warnedLines[2] === "     |   ^~~~~~~~~~~~~~~~" &&
-      warnedLines[3] ===
-        `${builtins}:31:3: deprecation: \`Arena.reset\` is deprecated: resetting the arena while anything allocated in it ${tail}` &&
-      warned.stderr.includes("\n2 deprecation warnings\n") &&
-      stripHeader(fs.readFileSync(path.join(buildDir, "deprecation_builtins.ll"), "utf8")) ===
-        stripHeader(fs.readFileSync(path.join(casesDir, "mem_arena_builtins.ll"), "utf8")),
-    warned.stderr
-  )
-
-  // --json: one object per call on stdout, keyed by its code and severity.
-  const json = compile(builtins, "deprecation_builtins_json.ll", ["--json"])
-  const jsonObjects = diagnosticsOf(json.stdout)
-  check(
-    "deprecation: under --json each call is one object with code NL7001 and severity `deprecation`, and exit 0",
-    json.status === 0 &&
-      jsonObjects.length === 2 &&
-      jsonObjects.every((o) => o.code === "NL7001" && o.severity === "deprecation") &&
-      jsonObjects.map((o) => `${o.line}:${o.column}-${o.endLine}:${o.endColumn}`).join(",") ===
-        "27:3-27:19,31:3-31:16" &&
-      jsonObjects[0].message.startsWith("`Arena.release` is deprecated: ") &&
-      jsonObjects[1].message.startsWith("`Arena.reset` is deprecated: ") &&
-      summaries(json.stderr).length === 0,
-    json.stdout + json.stderr
-  )
-
-  // `Arena.mark` and `Arena.used` are not deprecated: they read the arena and
-  // free nothing.
-  const readsSrc = path.join(buildDir, "deprecation_reads.ts")
+// ---- Removed before 1.0: `Arena.release` and `Arena.reset` --------------------------
+// Both were deprecated (NL7001) for an undefined behaviour `using a = arena()`
+// replaces with a check, and are gone: a call to either is the unknown-builtin
+// error (NL2244), whose list of what is supported no longer names them, while
+// `Arena.mark` and `Arena.used`, which read the arena and free nothing, stay.
+if (!only || "arena_removed".includes(only)) {
+  const source = path.join(buildDir, "arena_removed.ts")
   fs.writeFileSync(
-    readsSrc,
-    "export const main = (): i32 => {\n  const m = Arena.mark();\n  return Arena.used() >= m ? 0 : 1;\n};\n"
+    source,
+    "export const main = (): i32 => {\n  const m = Arena.mark();\n  Arena.release(m);\n  Arena.reset();\n  return toI32(Arena.used() - m);\n};\n"
   )
-  const reads = compile(readsSrc, "deprecation_reads.ll")
-  const readsJson = compile(readsSrc, "deprecation_reads_json.ll", ["--json"])
+  const r = spawnSync(NISH, [source, "--json", "-o", path.join(buildDir, "arena_removed.ll")], {
+    cwd: root,
+    encoding: "utf8",
+  })
+  const found = diagnosticsOf(r.stdout)
   check(
-    "deprecation: Arena.mark and Arena.used alone print nothing, in either form",
-    reads.status === 0 &&
-      summaries(reads.stderr).length === 0 &&
-      readsJson.status === 0 &&
-      diagnosticsOf(readsJson.stdout).length === 0,
-    reads.stderr + readsJson.stdout
+    "arena_removed: Arena.release and Arena.reset are each an unknown builtin (NL2244), and Arena.mark and Arena.used are not",
+    r.status === 1 &&
+      found.map((d) => `${d.code} ${d.line}:${d.column}`).join(",") === "NL2244 3:3,NL2244 4:3" &&
+      found[0].message.startsWith("Unknown builtin `Arena.release` (supported: ") &&
+      found[1].message.startsWith("Unknown builtin `Arena.reset` (supported: ") &&
+      found[0].message.includes("Arena.mark, Arena.used,") &&
+      !found[0].message.includes("Arena.release,"),
+    r.stdout + r.stderr
   )
-
-  // A program with an error gets the error report and nothing else.
-  const brokenSrc = path.join(buildDir, "deprecation_error.ts")
-  fs.writeFileSync(
-    brokenSrc,
-    "export const main = (): i32 => {\n  const m = Arena.mark();\n  Arena.release(m);\n  return m + true;\n};\n"
-  )
-  const broken = compile(brokenSrc, "deprecation_error.ll")
-  const brokenJson = compile(brokenSrc, "deprecation_error_json.ll", ["--json"])
-  check(
-    "deprecation: a program with an error prints no deprecation warning, in either form",
-    broken.status === 1 &&
-      broken.stderr.includes(": error: ") &&
-      !broken.stderr.includes(": deprecation: ") &&
-      brokenJson.status === 1 &&
-      diagnosticsOf(brokenJson.stdout).length > 0 &&
-      diagnosticsOf(brokenJson.stdout).every((d) => d.severity === "error"),
-    broken.stderr + brokenJson.stdout
-  )
-
-  // A generic body is checked once per instantiation, and the call it holds is
-  // still one call in the source: it warns once.
-  const genericSrc = path.join(buildDir, "deprecation_generic.ts")
-  fs.writeFileSync(
-    genericSrc,
-    "const keep = <T>(x: T): T => {\n  const m = Arena.mark();\n  Arena.release(m);\n  return x;\n};\n\n" +
-      'export const main = (): i32 => {\n  const s = keep("ab");\n  return keep(s.length);\n};\n'
-  )
-  const generic = compile(genericSrc, "deprecation_generic.ll", ["--json"])
-  check(
-    "deprecation: a call in a generic body instantiated twice warns once",
-    generic.status === 0 &&
-      diagnosticsOf(generic.stdout)
-        .filter((o) => o.severity === "deprecation")
-        .map((o) => `${o.code} ${o.line}:${o.column}`)
-        .join(",") === "NL7001 3:3",
-    generic.stdout + generic.stderr
-  )
-
-  // Independent of the performance class in both directions, and printed
-  // before it. The program has one of each: a string rebuilt in a loop
-  // (NL9002) and an `Arena.reset()`.
-  const bothSrc = path.join(buildDir, "deprecation_both.ts")
-  fs.writeFileSync(
-    bothSrc,
-    'export const main = (): number => {\n  let s = "";\n  for (let i = 0; i < 3; i = i + 1) {\n    s = s + "x";\n  }\n  const n = s.length;\n  Arena.reset();\n  return n;\n};\n'
-  )
-  const both = compile(bothSrc, "deprecation_both.ll")
-  const bothJson = compile(bothSrc, "deprecation_both_json.ll", ["--json"])
-  const quietPerf = compile(bothSrc, "deprecation_quiet_perf.ll", ["--no-warn-performance"])
-  check(
-    "deprecation: printed before the performance warnings, on stderr, and as objects on stdout under --json",
-    both.status === 0 &&
-      both.stderr.indexOf(": deprecation: ") >= 0 &&
-      both.stderr.indexOf(": deprecation: ") < both.stderr.indexOf(": performance: ") &&
-      bothJson.status === 0 &&
-      diagnosticsOf(bothJson.stdout)
-        .map((d) => `${d.severity} ${d.code}`)
-        .join(",") === "deprecation NL7001,performance NL9002",
-    both.stderr + bothJson.stdout + bothJson.stderr
-  )
-  check(
-    "deprecation: --no-warn-performance does not silence it",
-    quietPerf.status === 0 &&
-      summaries(quietPerf.stderr).length === 1 &&
-      !quietPerf.stderr.includes(": performance: "),
-    quietPerf.stderr
-  )
-
-  // The cap the other reports have, with the class's own words.
-  const manySrc = path.join(buildDir, "deprecation_many.ts")
-  fs.writeFileSync(
-    manySrc,
-    Array.from({ length: 25 }, (_, i) => `export const f${i} = (): void => {\n  Arena.reset();\n};`).join(
-      "\n"
-    ) + "\n"
-  )
-  const many = compile(manySrc, "deprecation_many.ll")
-  check(
-    "deprecation: 25 warnings print 20, then `...and 5 more deprecation warnings` and `25 deprecation warnings`",
-    many.status === 0 &&
-      summaries(many.stderr).length === 20 &&
-      many.stderr.includes("\n...and 5 more deprecation warnings\n25 deprecation warnings"),
-    many.stderr
-  )
-
-  // `--fix` answers what is left as a plain run would, warnings included: no
-  // fix applies to a deprecated call, so the file stays as it is and each call
-  // still warns, in either form.
-  const fixDir = path.join(buildDir, "deprecation-fix")
-  fs.rmSync(fixDir, { recursive: true, force: true })
-  fs.mkdirSync(fixDir, { recursive: true })
-  const fixSrc = path.join(fixDir, "mem_arena_builtins.ts")
-  fs.copyFileSync(builtins, fixSrc)
-  const fixed = spawnSync(NISH, ["--fix", fixSrc], { cwd: root, encoding: "utf8" })
-  const fixedJson = spawnSync(NISH, ["--fix", "--json", fixSrc], { cwd: root, encoding: "utf8" })
-  check(
-    "deprecation: --fix leaves Arena.release and Arena.reset as written and still warns for each, in either form, and exits 0",
-    fixed.status === 0 &&
-      summaries(fixed.stderr).length === 2 &&
-      fixed.stderr.includes(`${fixSrc}:27:3: deprecation: \`Arena.release\` is deprecated: `) &&
-      fixed.stderr.includes(`${fixSrc}:31:3: deprecation: \`Arena.reset\` is deprecated: `) &&
-      fixedJson.status === 0 &&
-      diagnosticsOf(fixedJson.stdout)
-        .map((d) => `${d.severity} ${d.code} ${d.line}:${d.column}`)
-        .join(",") === "deprecation NL7001 27:3,deprecation NL7001 31:3" &&
-      fs.readFileSync(fixSrc, "utf8") === fs.readFileSync(builtins, "utf8"),
-    fixed.stderr + fixedJson.stdout + fixedJson.stderr
-  )
-
-  // `nish run` prints it too, ahead of the program's own output: the author
-  // of a script is the reader who has to hear it.
-  if (HAS_CLANG) {
-    const ran = spawnSync(NISH, ["run", builtins], {
-      cwd: root,
-      encoding: "utf8",
-      env: { ...process.env, XDG_CACHE_HOME: path.join(buildDir, "deprecation-run-cache") },
-    })
-    check(
-      "deprecation: `nish run` prints the warnings on stderr and runs the program, whose stdout is its own",
-      ran.status === 0 &&
-        summaries(ran.stderr).length === 2 &&
-        ran.stdout === fs.readFileSync(path.join(casesDir, "mem_arena_builtins.out"), "utf8"),
-      ran.stdout + ran.stderr
-    )
-  } else {
-    skip("deprecation: `nish run` needs clang")
-  }
 }
 
 // ---- Machine-applicable fixes: tests/fix/ --------------------------------------------
@@ -5573,7 +5344,6 @@ const LINK_READ_LATER = [
   "thread_channel_string_many",
   "thread_scope_reclaim",
   "thread_task_release",
-  "unsafe_flag_scope",
 ]
 /**
  * The sections after the link programs that are dealt like them rather than
@@ -6945,8 +6715,8 @@ if (DEALT_SECTIONS.selfHosting.selected && SHARD === sectionShard("selfHosting")
     )
 
   // A seed guaranteed to differ: the seed this run was built with, wrapped so
-  // that it emits `--unchecked-indexing`, which removes the bounds checks
-  // from the IR it writes for `src/` -- the
+  // that it emits `--no-stack-alloc`, which moves every stack value to the
+  // heap in the IR it writes for `src/` -- the
   // same shape of difference a codegen improvement makes, and the shape that
   // broke this run when the first one landed. A released seed differs from
   // HEAD already, but by however much codegen moved since that release, which
@@ -6957,16 +6727,16 @@ if (DEALT_SECTIONS.selfHosting.selected && SHARD === sectionShard("selfHosting")
   // The difference has to actually be there: a run where nothing differs
   // would pass this check while proving nothing, so the count is read out of
   // the note and required to be non-zero.
-  const perturbedSeed = seedWork("seed-unchecked.mjs")
+  const perturbedSeed = seedWork("seed-heap.mjs")
   fs.mkdirSync(path.dirname(perturbedSeed), { recursive: true })
   fs.writeFileSync(
     perturbedSeed,
-    "// Generated by tests/run.js: the seed, emitting IR without bounds checks.\n" +
+    "// Generated by tests/run.js: the seed, emitting IR with nothing on the stack.\n" +
       `import { spawnSync } from "node:child_process";\n` +
       "const args = process.argv.slice(2);\n" +
       `const asking = args.includes("--version") || args.includes("--help");\n` +
       `const r = spawnSync(${JSON.stringify(seed.cmd)}, [...${JSON.stringify(seed.prefix)}, ...args,` +
-      ` ...(asking ? [] : ["--unchecked-indexing"])], { stdio: "inherit" });\n` +
+      ` ...(asking ? [] : ["--no-stack-alloc"])], { stdio: "inherit" });\n` +
       "process.exit(r.status === null ? 70 : r.status);\n"
   )
   const released = runBootstrap("released", { NISH_BOOTSTRAP: perturbedSeed })
@@ -8585,65 +8355,6 @@ if ((!only || "par_map_idle".includes(only)) && process.platform === "linux") {
       run !== null ? `exit ${run.status}, idle ${kb} KB\n${run.stdout}${run.stderr}` : missing
     )
   }
-}
-
-// `--unchecked-indexing` and `--wrapping` reach the entry package and nothing else.
-// The link loop above built `tests/link/unsafe_flag_scope` under both flags (its
-// `args`); here it is compiled again without them, and every module but the entry's
-// must be the same bytes either way -- the dependency under `node_modules/` and
-// `nish/text` alike -- while the entry's own module must move. The panic the
-// dependency keeps is read on stderr, which the link loop does not compare.
-if (!only || "unsafe_flag_scope".includes(only)) {
-  const fixture = linkTests.includes("unsafe_flag_scope")
-  const entry = path.join(linkDir, "unsafe_flag_scope", "main.ts")
-  const scopeDir = path.join(buildDir, "unsafe-flag-scope")
-  const flagged = path.join(scopeDir, "flagged") + path.sep
-  const plain = path.join(scopeDir, "plain") + path.sep
-  fs.rmSync(scopeDir, { recursive: true, force: true })
-  const compileTo = (dir, flags) =>
-    spawnSync(NISH, [entry, "-o", dir, ...flags], { cwd: root, encoding: "utf8" })
-  const a = fixture ? compileTo(flagged, ["--unchecked-indexing", "--wrapping"]) : null
-  const b = fixture ? compileTo(plain, []) : null
-  const compiled = a !== null && b !== null && a.status === 0 && b.status === 0
-  const modules = compiled
-    ? fs
-        .readdirSync(plain)
-        .filter((f) => f.endsWith(".ll"))
-        .sort()
-    : []
-  const same = (f) =>
-    fs.readFileSync(path.join(flagged, f), "utf8") === fs.readFileSync(path.join(plain, f), "utf8")
-  let why = "no such fixture: tests/link/unsafe_flag_scope"
-  if (a !== null && b !== null) {
-    why = compiled ? `modules: ${modules.join(" ")}` : `${a.stderr}\n${b.stderr}`
-  }
-  // One deprecation per flag per compilation, however many modules it compiled.
-  const deprecations =
-    a !== null ? (String(a.stderr).match(/: performance: --[a-z-]+ is deprecated/g) ?? []) : []
-  check(
-    "unsafe_flag_scope: a three-module compile says each flag is deprecated once, and nothing else",
-    a !== null &&
-      a.status === 0 &&
-      deprecations.length === 2 &&
-      /\n2 performance warnings\n/.test(`\n${a.stderr}`),
-    a !== null ? String(a.stderr) : "no such fixture: tests/link/unsafe_flag_scope"
-  )
-  check(
-    "unsafe_flag_scope: --unchecked-indexing and --wrapping leave the dependency's and nish/text's IR as it was, byte for byte, and move the entry's",
-    compiled &&
-      modules.join(" ") === "index.ll main.ll text.ll" &&
-      same("index.ll") &&
-      same("text.ll") &&
-      !same("main.ll"),
-    why
-  )
-  const exe = path.join(buildDir, "link", "unsafe_flag_scope", "app")
-  const run = fixture && fs.existsSync(exe) ? spawnSync(exe, { encoding: "utf8" }) : null
-  check(
-    "link/unsafe_flag_scope: under --unchecked-indexing the dependency's index keeps its check and panics with the bounds message",
-    run !== null && run.status === 1 && run.stderr.includes("index out of range: 5 >= 3"),
-    run !== null ? shown(run) : `no such binary: ${exe}`
-  )
 }
 
 // `nish:unsafe` under Node: `runtime/nish.mjs` answers the import and installs the
@@ -10741,8 +10452,8 @@ if (fs.existsSync(path.join(doubledApp, "main.ts"))) {
 // ---- WP1: optimisation ------------------------------------------------------------
 // The emitted IR is target-neutral, so `opt` needs a triple before it believes it has
 // vector registers; without one the loop vectoriser never fires. x86_64 is always built in.
-// The case is compiled with `--wrapping` (its .args): a reduction that can pass INT_MAX
-// is checked by default, and a loop with an overflow exit is not vectorised.
+// The case adds with `wrappingAdd`: a reduction that can pass INT_MAX is checked by
+// default, and a loop with an overflow exit is not vectorised.
 const sumLoopLl = path.join(buildDir, "cf_sum_loop.ll")
 if (has("opt") && fs.existsSync(sumLoopLl)) {
   const o = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", sumLoopLl])
@@ -10756,7 +10467,7 @@ if (has("opt") && fs.existsSync(sumLoopLl)) {
   // check through `opt -O2`, so the loop has an overflow exit and stays scalar, and
   // `i++` under `i < n` was proven, so the step is the `nuw nsw` an induction
   // variable needs. This is the shape the default build ships; the case above pins
-  // what `--wrapping` buys back.
+  // what `wrappingAdd` buys back.
   const checkedSumLl = path.join(buildDir, "cf_sum_loop_checked.ll")
   if (fs.existsSync(checkedSumLl)) {
     const c = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", checkedSumLl])
@@ -11937,9 +11648,8 @@ if (!only || "map-fused".includes(only) || "map_extras".includes(only) || "probe
 // ---- WP4: arrays ------------------------------------------------------------------
 // 1. Every arr_ module must pass the IR verifier (the bounds check adds blocks and `unreachable`).
 // 2. A failed bounds check exits 1 with "index out of range: <idx> >= <len>" on stderr.
-// 3. `arr_sum.ts` compiled with --unchecked-indexing must vectorise its sum loop under
-//    `opt -O2`. The checked build vectorises too, but only where `sum` is inlined into
-//    `main` and the length is a known constant: the standalone `sum` keeps a hoisted
+// 3. `arr_sum.ts` must vectorise its sum loop under `opt -O2` where `sum` is inlined
+//    into `main` and the length is a known constant: the standalone `sum` keeps a hoisted
 //    length compare plus a per-iteration branch to the noreturn panic block, and LLVM
 //    18's loop vectoriser does not handle multi-exit loops (see docs/wp4-arrays.md).
 /** How many bounds checks function `fn` of module `ir` carries: its `nish_panic_index` calls. */
@@ -11968,7 +11678,6 @@ if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call"
     ["arr_range_call_rebind", "Box.get", 1],
     ["arr_range_call_rebind_callee", "Box.take", 1],
     ["arr_range_call_two_sites", "at", 1],
-    ["arr_range_call_wrap", "pick", 1],
     ["arr_range_call_exported", "pick", 1],
     ["arr_range_call_arg_rebind", "pick", 1],
     ["arr_range_call_arrow", "at9", 1],
@@ -11999,7 +11708,6 @@ if (!only || "arr_range_call".includes(only) || only.startsWith("arr_range_call"
       ["arr_range_call_grow", "a recursion whose index grows", "1\n2\n3", "3 >= 3"],
       ["arr_range_call_rebind", "a callee that stores the receiver's field before the call", "0", "5 >= 0"],
       ["arr_range_call_rebind_callee", "a store to the field inside the callee", "", "2 >= 0"],
-      ["arr_range_call_wrap", "a decrement that wraps under `--wrapping`", "2", "2147483647 >= 3"],
       ["arr_range_call_exported", "a host calling an exported function", "20", "7 >= 3"],
       ["arr_range_call_arg_rebind", "a later argument rebinding the index's local", "1", "50 >= 3"],
       ["arr_range_call_arrow", "a call from a lifted arrow", "2", "9 >= 3"],
@@ -12041,7 +11749,6 @@ if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_o
     ["arr_bounds_offset_reach", "tooFar", 1],
     ["arr_bounds_offset_other", "mixed", 1],
     ["arr_bounds_offset_floor", "pick", 1],
-    ["arr_bounds_offset_wrap", "pick", 1],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`)
     if (!fs.existsSync(ll)) {
@@ -12059,7 +11766,6 @@ if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_o
       ["arr_bounds_offset_reach", "a guard that reaches one short", "", "3 >= 3"],
       ["arr_bounds_offset_other", "a guard on another array's length", "", "2 >= 2"],
       ["arr_bounds_offset_floor", "a sum with no floor under its local", "2", "18446744073709551612 >= 3"],
-      ["arr_bounds_offset_wrap", "a sum that wraps under `--wrapping`", "3", "18446744071562067968 >= 3"],
     ]) {
       const ll = path.join(buildDir, `${name}.ll`)
       if (!fs.existsSync(ll)) {
@@ -12085,8 +11791,8 @@ if (!only || "arr_bounds_offset".includes(only) || only.startsWith("arr_bounds_o
 // stay inside the lengths the arrays were made with, so no check survives.
 // Each negative breaks one rule the proof rests on and keeps its check: a
 // range past the length, a range below zero, and an index whose call or whose
-// `new`'s constructor shrinks the array panic when run; an unsigned sum, a
-// length known only at run time and `--wrapping` are pinned by their counts.
+// `new`'s constructor shrinks the array panic when run; an unsigned sum and a
+// length known only at run time are pinned by their counts.
 if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_range")) {
   for (const [name, fn, count] of [
     ["arr_bounds_range", "diagonals", 0],
@@ -12097,7 +11803,6 @@ if (!only || "arr_bounds_range".includes(only) || only.startsWith("arr_bounds_ra
     ["arr_bounds_range_new", "nish_main", 1],
     ["arr_bounds_range_kept", "unsignedSum", 1],
     ["arr_bounds_range_kept", "unknownLength", 1],
-    ["arr_bounds_range_wrap", "diagonals", 2],
   ]) {
     const ll = path.join(buildDir, `${name}.ll`)
     if (!fs.existsSync(ll)) {
@@ -13015,9 +12720,9 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     )
   }
 
-  // (arr_alias_domains is compiled with `--wrapping`, its .args: `src[i] * 2` is
-  // unbounded, and the checked default's overflow exit would take the single trip
-  // count and the vectoriser below with it, by design rather than by regression.)
+  // (arr_alias_domains multiplies with `wrappingMul`: `src[i] * 2` is unbounded,
+  // and a checked `*`'s overflow exit would take the single trip count and the
+  // vectoriser below with it, by design rather than by regression.)
   // WP15: the array header and the element buffer are separate alias domains, so an
   // element store cannot be read as a clobber of a header. The consequence a golden
   // cannot express is that LICM then hoists `len` and `data` out of a loop that writes
@@ -13341,28 +13046,6 @@ if (!only || "arrays".includes(only) || only.startsWith("arr")) {
     )
   }
   if (has("opt")) {
-    const uncheckedLl = path.join(buildDir, "arr_sum_unchecked.ll")
-    const c = spawnSync(
-      NISH,
-      [path.join(casesDir, "arr_sum.ts"), "--unchecked-indexing", "-o", uncheckedLl],
-      { cwd: root }
-    )
-    const o =
-      c.status === 0
-        ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", uncheckedLl])
-        : null
-    const out = o ? String(o.stdout) : ""
-    check(
-      "opt -O2 vectorises the arr_sum loop built with --unchecked-indexing (<4 x i32> or <8 x i32>)",
-      o !== null && o.status === 0 && /<(4|8) x i32>/.test(out),
-      o ? out || String(o.stderr) : String(c.stderr)
-    )
-    // The unchecked module must not declare the panic symbol at all.
-    check(
-      "arr_sum with --unchecked-indexing references no nish_panic_index",
-      c.status === 0 && !fs.readFileSync(uncheckedLl, "utf8").includes("nish_panic_index"),
-      String(c.stderr)
-    )
     const checkedLl = path.join(buildDir, "arr_sum.ll")
     if (fs.existsSync(checkedLl)) {
       const oc = spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", checkedLl])
@@ -14269,24 +13952,6 @@ if (!only || "performance".includes(only) || only.startsWith("perf_rng")) {
       ) &&
       !/nish_panic_index|rng\.fail/.test(getByteIr),
     getByte.stderr + getByteIr
-  )
-
-  // The entry check is the type's meaning, so `--unchecked-indexing` leaves
-  // it, and its warning, where they are.
-  const unchecked = spawnSync(
-    NISH,
-    [
-      path.join(casesDir, "perf_rng_loop.ts"),
-      "-o",
-      path.join(buildDir, "perf_rng_loop_unchecked.ll"),
-      "--unchecked-indexing",
-    ],
-    { cwd: root, encoding: "utf8" }
-  )
-  check(
-    "performance: --unchecked-indexing keeps every NL9013 warning of perf_rng_loop, after its own deprecation",
-    unchecked.status === 0 && at(warned(unchecked.stderr)) === "1:1,14:31,16:31,18:43,20:5",
-    unchecked.stderr
   )
 
   const quiet = compileRng("perf_rng_quiet", "perf_rng_quiet_report.ll")
@@ -18574,7 +18239,7 @@ if (declarationsForTsc.length > 0) {
 // ---- WP9: bench --------------------------------------------------------------------
 // The benchmark programs in bench/ must keep printing identical checksums across
 // Nish, C and (when rustc is installed) Rust. `bench/run.mjs --validate` builds
-// every variant (speed, --wrapping, size profile, C, Rust, Rust native) at a small size and
+// every variant (speed, size profile, C, Rust, Rust native) at a small size and
 // compares the outputs; nothing is timed. The Are We Fast Yet ports in bench/awfy/
 // have no twins, so `awfy` builds their harness and runs each one once, which panics
 // when a port's own `verifyResult` fails. `maps` builds the four WP32 map layout
@@ -18645,10 +18310,9 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
       ? "the two `copy of src/map.ts` rules are missing"
       : "copy the block from src/map.ts again"
   )
-  // WP31 §10: the acceptance programs. bench/cursor.ts's `@scan` is the same
-  // function with and without `--unchecked-indexing`; the cursor declared
-  // `integer<0, …>` warns at each of its three advances; and bench/getbyte.ts
-  // is one module either way, with no check in it and its three functions
+  // WP31 §10: the acceptance programs. bench/cursor.ts's `@scan` carries no
+  // bounds check; the cursor declared `integer<0, …>` warns at each of its
+  // three advances; and bench/getbyte.ts has no check in it and its three functions
   // `{ nounwind willreturn readonly }`, as tests/cases/perf_rng_getbyte pins.
   const benchIr = (file, name, extra) => {
     const out = path.join(buildDir, `bench_${name}.ll`)
@@ -18665,15 +18329,11 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
   }
   const cursorFile = path.join("bench", "cursor.ts")
   const cursor = benchIr(cursorFile, "cursor", [])
-  const cursorU = benchIr(cursorFile, "cursor_unchecked", ["--unchecked-indexing"])
   const scan = defineOf(cursor.ir, "scan")
   check(
-    "bench: bench/cursor.ts's @scan has no bounds check and is byte-identical to the --unchecked-indexing build (WP31 §10 step 1)",
-    scan !== "" &&
-      !scan.includes("nish_panic_index") &&
-      scan === defineOf(cursorU.ir, "scan") &&
-      !/performance: /.test(cursor.r.stderr),
-    `${cursor.r.stderr}${cursorU.r.stderr}`
+    "bench: bench/cursor.ts's @scan has no bounds check (WP31 §10 step 1)",
+    scan !== "" && !scan.includes("nish_panic_index") && !/performance: /.test(cursor.r.stderr),
+    cursor.r.stderr
   )
   const rangedCursor = path.join(buildDir, "bench_cursor_ranged.ts")
   fs.writeFileSync(
@@ -18689,7 +18349,7 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
     .map((l) => /:(\d+):(\d+): /.exec(l).slice(1, 3).join(":"))
   check(
     "bench: bench/cursor.ts with its cursor declared integer<0, 2147483647> warns once at each of its three advances (WP31 §10 step 2)",
-    ranged.r.status === 0 && advances.join(",") === "42:13,47:13,51:11",
+    ranged.r.status === 0 && advances.join(",") === "41:13,46:13,50:11",
     ranged.r.stderr
   )
   if (cursor.r.status === 0 && has("clang")) {
@@ -18723,21 +18383,19 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
   }
   const getbyteFile = path.join("bench", "getbyte.ts")
   const getbyte = benchIr(getbyteFile, "getbyte", [])
-  const getbyteU = benchIr(getbyteFile, "getbyte_unchecked", ["--unchecked-indexing"])
   const readonlyGroup =
     /^attributes (#\d+) = \{ nounwind willreturn readonly(?: "probe-stack"="inline-asm")? \}$/m.exec(
       getbyte.ir
     )
   check(
-    "bench: bench/getbyte.ts is one module with and without --unchecked-indexing, with no check in it, and getByte, sumInline and sumCalled are { nounwind willreturn readonly } (WP31 §10 step 3)",
+    "bench: bench/getbyte.ts has no check in it, and getByte, sumInline and sumCalled are { nounwind willreturn readonly } (WP31 §10 step 3)",
     getbyte.ir !== "" &&
-      getbyte.ir === getbyteU.ir &&
       !/@nish_(panic|exit)/.test(getbyte.ir) &&
       readonlyGroup !== null &&
       ["getByte", "sumInline", "sumCalled"].every((fn) =>
         defineOf(getbyte.ir, fn).split("\n")[0].endsWith(` ${readonlyGroup[1]} {`)
       ),
-    `${getbyte.r.stderr}${getbyteU.r.stderr}`
+    getbyte.r.stderr
   )
   const targetLl = path.join(buildDir, "opt_target_triple.ll")
   if (has("opt") && fs.existsSync(targetLl)) {
@@ -18829,51 +18487,6 @@ if (!only || "bench".includes(only) || "wp9".includes(only)) {
         internalOps.every((m) => m[2] === undefined),
       ir
     )
-    // The opt-out: the same source under --wrapping, where every one of those
-    // operations is the plain instruction — no flag and no check — and the
-    // arithmetic is otherwise the same: as many instructions as the default
-    // build has proven and checked ones together. Since WP15 §2 the flag
-    // reaches one more thing, and honestly: the bounds proof may not carry a
-    // lower bound across `i = i + 1` when the wrap is *defined*, because the
-    // increment that passes `INT_MAX` then lands on `INT_MIN` rather than
-    // panicking. So the counted loop in `sum` keeps the checks the default
-    // build proves away, and the two IRs are compared with the bounds checks
-    // out of the picture on both sides.
-    const wrapLl = path.join(buildDir, "opt_wrapping.ll")
-    if (fs.existsSync(wrapLl)) {
-      const src = (name) => path.join(casesDir, `${name}.ts`)
-      const buildUnchecked = (name, out, extra) => {
-        const r = spawnSync(
-          NISH,
-          [src(name), "-o", path.join(buildDir, out), "--unchecked-indexing", ...extra],
-          { cwd: root, encoding: "utf8" }
-        )
-        return r.status === 0 ? stripHeader(fs.readFileSync(path.join(buildDir, out), "utf8")) : r.stderr
-      }
-      const nswBare = buildUnchecked("opt_nsw", "opt_nsw_unchecked.ll", [])
-      const wrapBare = buildUnchecked("opt_wrapping", "opt_wrapping_unchecked.ll", ["--wrapping"])
-      const arithmetic = (text) => [...text.matchAll(/= (add|sub|mul)( nsw)? i(32|64) /g)].length
-      const checks = (text) =>
-        [...text.matchAll(/= call \{ i(32|64), i1 \} @llvm\.s(add|sub|mul)\.with\.overflow\./g)].length
-      check(
-        "--wrapping removes every nsw and every overflow check, and writes one plain instruction for each",
-        !wrapBare.includes("nsw") &&
-          !wrapBare.includes("nuw") &&
-          !wrapBare.includes("with.overflow") &&
-          !wrapBare.includes("nish_panic_overflow") &&
-          arithmetic(wrapBare) === arithmetic(nswBare) + checks(nswBare),
-        `wrapping: ${arithmetic(wrapBare)} ops; default: ${arithmetic(nswBare)} ops and ${checks(nswBare)} checks\n${wrapBare}`
-      )
-      // The second half of the same story, stated rather than left implicit:
-      // the checked `--wrapping` build *does* keep the checks, and the checked
-      // default build has none, which is what the flag now costs.
-      const wrapIr = stripHeader(fs.readFileSync(wrapLl, "utf8"))
-      check(
-        "--wrapping costs the lower-bound proof: its counted loops keep the bounds checks the default build removes",
-        wrapIr.includes("nish_panic_index") && !stripHeader(ir).includes("nish_panic_index"),
-        `wrapping has panic_index: ${wrapIr.includes("nish_panic_index")}, default has: ${stripHeader(ir).includes("nish_panic_index")}`
-      )
-    }
   }
 }
 
@@ -19354,7 +18967,7 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
   )
   // Every flag the driver accepts is listed, by one of its spellings, bar
   // --help itself, the test hooks `--range-reference` and `--no-elision`, the
-  // refused `--nsw` and the default `--strict-exports`: a wrapper that reads
+  // refused `--nsw`, `--wrapping` and `--unchecked-indexing`, and the default `--strict-exports`: a wrapper that reads
   // --help to learn the surface must not be missing one.
   const documented = [
     "--output",
@@ -19364,8 +18977,6 @@ if (!only || "exit-codes".includes(only) || "wp12".includes(only)) {
     "--no-stack-alloc",
     "--no-strict-exports",
     "--no-warn-performance",
-    "--unchecked-indexing",
-    "--wrapping",
     "--number-mode",
     "--runtime-decls",
     "--threads",
@@ -26444,10 +26055,7 @@ if (!only || "c-symbols".includes(only)) {
 // the bit travels through callers, modules and packages like every other: here
 // read off `--emit-capabilities` for a direct call, a call two frames up, a
 // module with no unsafe call, each of the six exports, and a dependency that
-// imports `nish:unsafe` when the entry package does not. The deprecated
-// `--wrapping` and `--unchecked-indexing` carry no `unsafe`: each prints its
-// deprecation on every compile, on the command line that would pass the
-// policy too (docs/wp35-capabilities.md §1).
+// imports `nish:unsafe` when the entry package does not.
 if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
   const unsafeDir = path.join(buildDir, "caps-unsafe")
   fs.rmSync(unsafeDir, { recursive: true, force: true })
@@ -26484,9 +26092,6 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
     "dep.ts":
       'import { hash } from "pkg_fast";\nimport { sum } from "./pure";\n\n' +
       "export const main = (): i32 => (hash([1, 2]) & 0) + sum([1]);\n",
-    "flags.ts":
-      "export const main = (): i32 => {\n  const xs: i32[] = [1, 2];\n  let i = 0;\n  i = i + 1;\n" +
-      "  return xs[i] * 2147483647;\n};\n",
   }
   for (const [file, text] of Object.entries(program)) {
     fs.mkdirSync(path.dirname(path.join(unsafeDir, file)), { recursive: true })
@@ -26579,16 +26184,6 @@ if (!only || "capabilities".includes(only) || only.startsWith("caps_")) {
       depDenied.stderr.includes("`main` reaches `unsafe`, which the capability policy does not grant") &&
       depDenied.stderr.includes("node_modules/pkg_fast/src/index.ts:3:30 calls wrappingMul"),
     shown(depDenied)
-  )
-
-  const flags = unsafeReport("flags.ts", ["--wrapping", "--unchecked-indexing", "--deny", "unsafe"])
-  check(
-    "capabilities: `--wrapping` and `--unchecked-indexing` carry no `unsafe`, so `--deny unsafe` passes them",
-    flags.r.status === 0 &&
-      JSON.stringify(flags.report?.capabilities) === "[]" &&
-      flags.r.stderr.includes("--wrapping is deprecated") &&
-      flags.r.stderr.includes("--unchecked-indexing is deprecated"),
-    shown(flags.r)
   )
 }
 

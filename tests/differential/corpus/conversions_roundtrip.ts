@@ -1,4 +1,6 @@
 // toI32 / toI64 / toF64 in every direction: round trips, saturation, wrapping, rounding.
+import { wrappingAdd, wrappingMul } from "nish:unsafe";
+
 function roundTrip32(x: number): boolean {
   return toI32(toF64(x)) === x;
 }
@@ -21,7 +23,7 @@ export function main(): number {
   console.log(roundTrip64(big + 2));
   console.log(toF64(big + 1));
   console.log(toF64(big + 3));
-  console.log(toF64(big * 1024 + 1));
+  console.log(toF64(wrappingAdd(wrappingMul(big, 1024), 1)));
   console.log(toI32(toI64(max) + 1));
   console.log(toI32(toI64(min) - 1));
   console.log(toI32(big));

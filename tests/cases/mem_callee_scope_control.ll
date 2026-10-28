@@ -1,6 +1,7 @@
 %struct.nish_array = type { i64, i64, i8* }
 %struct.nish_arena = type { i8*, i64, i64, i8* }
 
+@.str.0 = private unnamed_addr constant { i64, [21 x i8] } { i64 20, [21 x i8] c"the arena moved back\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
@@ -10,6 +11,7 @@ declare void @nish_arena_release(i64 noundef) #0
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #0
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #0
 declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #0
+declare void @nish_panic(i8* noundef nonnull readonly align 8 nocapture) #3
 declare extern_weak void @nish_panic_overflow(i32 noundef) #3
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #4
 
@@ -99,6 +101,7 @@ entry:
   %total.addr = alloca i32, align 4
   %i.addr = alloca i32, align 4
   %m.addr = alloca i64, align 8
+  %arena.mark = call i64 @nish_arena_mark()
   store i32 0, i32* %total.addr, align 4
   store i32 0, i32* %i.addr, align 4
   br label %for.cond
@@ -124,19 +127,28 @@ for.body:
 
 ovf.ok:
   store i32 %10, i32* %total.addr, align 4
-  %12 = load i64, i64* %m.addr, align 8
-  call void @nish_arena_release(i64 %12)
+  %12 = call i64 @nish_arena_mark()
+  %13 = load i64, i64* %m.addr, align 8
+  %14 = icmp slt i64 %12, %13
+  br i1 %14, label %if.then, label %if.end
+
+if.then:
+  call void @nish_panic(i8* bitcast ({ i64, [21 x i8] }* @.str.0 to i8*))
+  unreachable
+
+if.end:
   br label %for.inc
 
 for.inc:
-  %13 = load i32, i32* %i.addr, align 4
-  %14 = add nsw i32 %13, 1
-  store i32 %14, i32* %i.addr, align 4
+  %15 = load i32, i32* %i.addr, align 4
+  %16 = add nsw i32 %15, 1
+  store i32 %16, i32* %i.addr, align 4
   br label %for.cond
 
 for.end:
-  %15 = load i32, i32* %total.addr, align 4
-  ret i32 %15
+  %17 = load i32, i32* %total.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %17
 
 ovf.fail:
   call void @nish_panic_overflow(i32 0)
@@ -145,6 +157,7 @@ ovf.fail:
 
 define internal noundef i32 @twice(i32 noundef %n) #1 {
 entry:
+  %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @sumRows(i32 %n)
   %1 = call %struct.nish_array* @makeRow(i32 %n)
   %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
@@ -156,6 +169,7 @@ entry:
   br i1 %7, label %ovf.fail, label %ovf.ok
 
 ovf.ok:
+  call void @nish_arena_release(i64 %arena.mark)
   ret i32 %6
 
 ovf.fail:

@@ -32,7 +32,6 @@ cases/rng_entry_bitwise_panic # 7 <<= 3 leaves integer<0, 15> (exit 1); JS print
 cases/perf_rng_counter        # WP31 §8: the warned counter's last i++ leaves integer<0, 255> (exit 1); JS prints 32640
 
 # Native-only introspection: these print raw Arena.used() byte counts, which the Node shim reports as 0
-cases/mem_arena_builtins   # prints arena byte usage
 cases/mem_scope_dynamic_array  # prints the arena delta across scoped calls
 
 # Calls C, so there is no Node program to compare against (WP27 S1). This is not

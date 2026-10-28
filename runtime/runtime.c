@@ -1354,7 +1354,7 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len) {
   return a;
 }
 
-/* process.argv: malloc, not the arena, so Arena.reset() cannot free it. Built once by @main.
+/* process.argv: malloc, not the arena, so no arena scope can free it. Built once by @main.
    Deliberately *not* NISH_TLS (WP20 T0 §3.2): `nish_argv_init` writes it once
    before the program's `main` body runs and nothing writes it afterwards, so
    every thread may read the one copy. That holds only while no thread is

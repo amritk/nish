@@ -119,8 +119,6 @@ const wycheproof = (
   let acceptableFalse: i32 = 0;
   let mismatches: i32 = 0;
   for (const c of cases) {
-    // Each case's keys, message and signature are dead once it is judged.
-    const mark = Arena.mark();
     const keyAt: i32 = toI32(c.key);
     if (keyAt < 0 || keyAt >= keyCount) {
       t.fail(`wycheproof ${file} tcId ${c.tcId}`, "no such key");
@@ -152,7 +150,6 @@ const wycheproof = (
     } else {
       acceptableFalse += 1;
     }
-    Arena.release(mark);
   }
   const refusedBy: string = der
     ? `${invalidByDer} by x509DerSignatureRS, ${invalidByModule} by p256Verify`

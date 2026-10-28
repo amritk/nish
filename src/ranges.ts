@@ -96,8 +96,7 @@
 // up, which ends a recursion whose range keeps growing. The summary a settled
 // fixpoint leaves was gathered by the last walk of its body, under the entry
 // that body settled on, and every walk that read it ran after it last
-// changed; a fixpoint that does not settle forgets them all. Never under
-// `--wrapping`, where a sum is not cut to its type's range.
+// changed; a fixpoint that does not settle forgets them all.
 //
 // `--range-reference` (`Options.rangeReference`) runs the pass without any of
 // that, by the rule #222 shipped, and `tests/run.js` requires the same proofs
@@ -107,9 +106,7 @@
 // cannot be assigned, and a path fact is dropped by a store to a field on it,
 // a whole-record store that reaches it, and a call whose summary says either.
 //
-// `--unchecked-indexing` has no index check to remove, but its signed
-// arithmetic is checked, so the pass runs for that unless the build is
-// `--wrapping` too. `--threads` changes nothing here. The one thing
+// `--threads` changes nothing here. The one thing
 // in the language that runs code on other threads is a `nish/threads` region
 // (`src/parallel.ts`): its body is called from an instantiation, so it is
 // entered knowing nothing; it is held to writing nothing its caller can see,
@@ -247,10 +244,9 @@ const RETURN_MOVES: i32 = 16
  * Whether what `sig` returns is a range a caller can use: an `i32` or an
  * `i64`, or a `Result` with one in its `Ok` arm. Only a plain function's: a
  * method may be dispatched to another body, and a constructor returns nothing.
- * Never under `--wrapping`, where a sum is not cut to its type's range.
  */
 const returnsRange = (ctx: CheckContext, sig: FunctionSig): boolean => {
-  if (sig.role !== ROLE_FUNCTION || ctx.wrapping) {
+  if (sig.role !== ROLE_FUNCTION) {
     return false
   }
   const table = ctx.table
@@ -383,19 +379,6 @@ const bodyOf = (tables: RangeTables, bodies: RangeBody[], sig: FunctionSig): Ran
  * side tables, and before the attribute analysis, which reads the proofs.
  */
 export const proveCallSiteRanges = (contexts: CheckContext[], mode: BuildMode, reference: boolean): void => {
-  // Nothing to prove when no module checks an index or its signed
-  // arithmetic: `--unchecked-indexing` alone still leaves every `+` checked
-  // and proven from what callers pass (`judgeOverflow`). A module that checks
-  // neither is still walked beside the ones that do: its body records no
-  // passed check (`recordPassedCheck`), so what it tells its callees is only
-  // ever less.
-  let checked = false
-  for (const ctx of contexts) {
-    checked = checked || !ctx.uncheckedIndexing || !ctx.wrapping
-  }
-  if (!checked) {
-    return
-  }
   const tables = new RangeTables()
   const bodies: RangeBody[] = []
   const hidden: RangeBody[] = []
@@ -1014,7 +997,7 @@ const scanStores = (node: Node, scan: StoreScan, inArrow: boolean): void => {
  */
 const noteOpenArithmetic = (node: Node, scan: StoreScan, inArrow: boolean): void => {
   const ctx = scan.ctx
-  if (scan.open || inArrow || ctx.wrapping || ctx.program.nodeProvenNoOverflow[node.id]) {
+  if (scan.open || inArrow || ctx.program.nodeProvenNoOverflow[node.id]) {
     return
   }
   if (checksOverflow(ctx.program, ctx.table, node)) {

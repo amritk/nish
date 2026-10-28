@@ -14,7 +14,7 @@
 // `s.substring(a, b)` clamps each end into `[0, len]` the way JavaScript
 // specifies — an `llvm.smin` / `llvm.smax` pair per bound, six intrinsic calls
 // once the two are swapped into order — and that clamp is the semantics rather
-// than a safety net, so `--unchecked-indexing` leaves it alone. A bound this
+// than a safety net. A bound this
 // analysis can place in `[0, s.length]` cannot be moved by the clamp, so the
 // clamp is dead code: `program.nodeProvenClamp` says which bounds those are
 // and `src/emit-strings.ts` writes them through. The bounds of a `s.slice`
@@ -88,9 +88,8 @@
 // fact**, because a callee holding the same array may `push` and move `len`,
 // while a string's length cannot change at all once the variable holding it is
 // bound; and an increment keeps its variable's lower
-// bound only when `nsw` is on, because `--wrapping` *defines* the step past
-// `INT_MAX` to land on `INT_MIN`. A decrement is the mirror: it keeps the upper
-// bounds, under `nsw` or where the variable is known non-negative, and never
+// bound, because a signed step past `INT_MAX` panics rather than landing on
+// `INT_MIN`. A decrement is the mirror: it keeps the upper bounds, and never
 // for an unsigned variable, which wraps at zero.
 //
 // "Any call" is pass 2's answer, which runs before every body is checked and
@@ -765,8 +764,8 @@ const forget = (state: State, v: Local): void => {
 /**
  * An unsigned increment wraps at the top of its range to zero, which keeps
  * `v >= 0` — its type says so anyway — and breaks any higher floor, so after
- * one only zero is left. A signed one keeps its floor under `nsw` or loses
- * everything under `--wrapping` (`keepsLowerBound`), and this leaves it alone.
+ * one only zero is left. A signed one keeps its floor, because a step past
+ * its top panics, and this leaves it alone.
  */
 const forgetWrappedFloor = (state: State, v: Local): void => {
   if (isUnsigned(v.type)) {
@@ -1208,15 +1207,15 @@ export class Offset {
 /**
  * `i + c` or `c + i`, with `c` a literal of 1 or more and `i` an index local:
  * the second, third and fourth element of a loop that reads several a pass.
- * Only where the sum is exact. A signed add is checked or proven unless
- * `--wrapping` is given, so outside it `i + c` either panics or is the true
- * sum, never a wrap to a small value, and a fact or an access stated about
- * the sum is one about `i`. Under `--wrapping`, and for an unsigned `i`, whose
- * add wraps by definition, there is no such sum, and nothing is read.
+ * Only where the sum is exact. A signed add is checked or proven, so
+ * `i + c` either panics or is the true sum, never a wrap to a small value,
+ * and a fact or an access stated about the sum is one about `i`. For an
+ * unsigned `i`, whose add wraps by definition, there is no such sum, and
+ * nothing is read.
  */
 export const offsetIndex = (ctx: CheckContext, expr: Node): Offset | null => {
   const e = unwrapBoundsParens(expr)
-  if (ctx.wrapping || e.kind !== N_BINARY || e.text !== "+" || !checksOverflow(ctx.program, ctx.table, e)) {
+  if (e.kind !== N_BINARY || e.text !== "+" || !checksOverflow(ctx.program, ctx.table, e)) {
     return null
   }
   const left = indexLocal(ctx, e.children[0])
@@ -1487,9 +1486,7 @@ const isArrayPop = (ctx: CheckContext, call: Node): boolean => {
 
 /**
  * Record the verdict for a `pop`: proven where its receiver is known to hold
- * an element, which `if (xs.length > 0)` says. Pass 2 alone judges it. Under `--unchecked-indexing`
- * there is no check to leave out, and the site stays unproven
- * (`src/panics.ts`), as an index does.
+ * an element, which `if (xs.length > 0)` says. Pass 2 alone judges it.
  */
 const judgePop = (walk: BoundsWalk, state: State, call: Node): void => {
   if (walk.tables !== null) {
@@ -1521,7 +1518,7 @@ const anyLiteral = (expr: Node): i64 => {
 /** The local `v` when `expr` is `v * v` at `i32`, the shape a loop bounded by a square root is written in. */
 const squaredLocal = (ctx: CheckContext, expr: Node): Local | null => {
   const e = unwrapBoundsParens(expr)
-  if (e.kind !== N_BINARY || e.text !== "*" || ctx.wrapping) {
+  if (e.kind !== N_BINARY || e.text !== "*") {
     return null
   }
   const a = indexLocal(ctx, e.children[0])
@@ -1856,10 +1853,8 @@ const concatFacts = (a: Fact[], b: Fact[]): Fact[] => {
 
 /**
  * `v = v + <non-negative literal>` and its spellings. An increment can only
- * move `v` away from zero, so the lower bound survives it — but only with
- * `nsw` on, where passing `INT_MAX` is undefined behaviour the compiler may
- * assume away. `--wrapping` *defines* that step to land on `INT_MIN`, and a
- * lower bound a documented wrap can break is not a proof.
+ * move `v` away from zero, so the lower bound survives it: a signed step past
+ * `INT_MAX` panics, and is never a wrap to `INT_MIN`.
  */
 const isIncrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
   const e = unwrapBoundsParens(rhs)
@@ -1877,8 +1872,6 @@ const isIncrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
   return false
 }
 
-const keepsLowerBound = (ctx: CheckContext, v: Local): boolean => !ctx.wrapping || isUnsigned(v.type)
-
 /**
  * `v = v - <non-negative literal>`, the mirror of `isIncrement`. Only the left
  * operand may be `v`: `c - v` moves the other way.
@@ -1894,14 +1887,12 @@ const isDecrement = (program: CheckedProgram, v: Local, rhs: Node): boolean => {
 
 /**
  * Whether a decrement of `v` keeps its upper bounds. `v - c <= v` unless the
- * subtraction wraps past `INT_MIN` to the top of the range, which `nsw` makes
- * undefined behaviour the compiler may assume away and `--wrapping` defines;
- * `known` is the caller's word that `v >= 0` there, which rules the wrap out
- * either way. An unsigned `v` wraps at zero by definition, so it never keeps
- * one.
+ * subtraction wraps past `INT_MIN` to the top of the range, which a signed
+ * one never does: it panics. An unsigned `v` wraps at zero by definition, so
+ * it never keeps one.
  */
-const keepsUpperBound = (ctx: CheckContext, v: Local, known: boolean): boolean =>
-  !isUnsigned(v.type) && isIndexType(ctx.table, v.type) && (!ctx.wrapping || known)
+const keepsUpperBound = (ctx: CheckContext, v: Local): boolean =>
+  !isUnsigned(v.type) && isIndexType(ctx.table, v.type)
 
 /**
  * The facts `v = <local> - c` and `v = <local>` give `v`, read off what the
@@ -1915,7 +1906,7 @@ const differenceFacts = (walk: BoundsWalk, state: State, v: Local, w: Local, c: 
   if (floor >= c) {
     out.push(new Fact(FACT_MIN_VALUE, v, null, floor - c))
   }
-  if (c > 0 && !keepsUpperBound(walk.ctx, w, floor >= c)) {
+  if (c > 0 && !keepsUpperBound(walk.ctx, w)) {
     return
   }
   const max = maxIndexOf(state, w)
@@ -1957,10 +1948,6 @@ const impliesNonNegative = (walk: BoundsWalk, state: State, expr: Node): boolean
     return isIndexType(ctx.table, v.type) && knownNonNegative(state, v)
   }
   if (e.kind !== N_BINARY || e.text !== "+") {
-    return false
-  }
-  const type = ctx.program.nodeTypes[e.id]
-  if (ctx.wrapping && !(type >= 0 && isUnsigned(type))) {
     return false
   }
   return impliesNonNegative(walk, state, e.children[0]) && impliesNonNegative(walk, state, e.children[1])
@@ -2042,7 +2029,7 @@ const rangeFacts = (walk: BoundsWalk, state: State, v: Local, e: Node, out: Fact
   const ctx = walk.ctx
   const base = ctx.table.baseOf(v.type)
   const computed = e.kind === N_BINARY || (e.kind === N_CALL && isBuiltinConversion(ctx.program, e, "toI64"))
-  if (ctx.wrapping || (base !== T_I32 && base !== T_I64) || !computed) {
+  if ((base !== T_I32 && base !== T_I64) || !computed) {
     return
   }
   if (writesAnyLocal(ctx.program, e)) {
@@ -2533,14 +2520,6 @@ export class BoundsWalk {
   /** Range entries whose surviving check is worth a warning (`judgeRange`), in evaluation order. */
   unprovenRanges: Node[]
   loops: i32
-  uncheckedIndexing: boolean
-  /**
-   * The second walk of a body under `--unchecked-indexing` (`proveUnflagged`):
-   * it records what an access passes, as the walk without the flag does, but
-   * only where the migration leaves the access checked, and keeps nothing but
-   * its element-access proofs.
-   */
-  shadow: boolean
   /**
    * Whether a proof is written to the side tables. `src/ranges.ts` walks a
    * body while its entry facts are still being settled, and a proof drawn from
@@ -2623,7 +2602,7 @@ export class BoundsWalk {
    */
   callRanges: boolean
 
-  constructor(ctx: CheckContext, uncheckedIndexing: boolean) {
+  constructor(ctx: CheckContext) {
     this.ctx = ctx
     this.unproven = []
     this.unprovenRanges = []
@@ -2631,8 +2610,6 @@ export class BoundsWalk {
     this.continues = []
     this.breaks = []
     this.loops = 0
-    this.uncheckedIndexing = uncheckedIndexing
-    this.shadow = false
     this.tables = null
     this.record = true
     this.proved = []
@@ -2726,25 +2703,12 @@ const isUncheckedElementCall = (program: CheckedProgram, call: Node): boolean =>
  * a guard wrote; nothing about them needs a rule of its own.
  *
  * A proven access has no check, and adds only what the state already entails.
- * Under `--unchecked-indexing` there is no check to have passed at all, so
- * nothing is recorded: an out-of-range access there proves nothing, and a
- * fact drawn from one would fold a later `substring` clamp, which that flag
- * leaves alone. The shadow walk records it anyway, for the accesses that keep
- * their check once the flag is gone, because that is what the build without
- * the flag will know there; its facts reach no side table but the one it is
- * asked about (`proveUnflagged`).
  *
  * `passes` is the caller's word that the check reads the array the holder
  * still names once the access is over. Only `a[i] = v` can break that, and the
  * caller says how.
  */
-const recordPassedCheck = (walk: BoundsWalk, state: State, node: Node, holder: Local, index: Node): void => {
-  if (
-    walk.uncheckedIndexing ||
-    (walk.shadow && node.kind === N_INDEX && hasUncheckedForm(walk.ctx.program, walk.ctx.table, node))
-  ) {
-    return
-  }
+const recordPassedCheck = (walk: BoundsWalk, state: State, holder: Local, index: Node): void => {
   const constant = literalValue(index)
   if (constant >= 0) {
     addFact(state, new Fact(FACT_MIN_LENGTH, holder, null, constant + 1))
@@ -2792,7 +2756,7 @@ const judge = (
   }
   const proven = proves(ctx, state, holder, index) || provesByRange(walk, state, holder, index)
   if (passes) {
-    recordPassedCheck(walk, state, node, holder, index)
+    recordPassedCheck(walk, state, holder, index)
   }
   if (proven) {
     noteProof(walk, node)
@@ -2801,7 +2765,7 @@ const judge = (
   // A path receiver is proved when it can be and never warned about: the
   // warning's rewrite is a local, and a field receiver was not a candidate
   // before paths were.
-  if (walk.loops === 0 || walk.uncheckedIndexing || lengthHolder(ctx, receiver) === null) {
+  if (walk.loops === 0 || lengthHolder(ctx, receiver) === null) {
     return
   }
   // A local and an offset from one are the indices a guard can prove, so they
@@ -3111,9 +3075,9 @@ const writesLocal = (program: CheckedProgram, node: Node, v: Local): boolean => 
  *
  *   - the arithmetic is exact. A signed add, subtract or multiply panics on
  *     overflow or is proven not to, so the value that reaches the check is
- *     the true one and the range saturates at the type's ends. Under
- *     `--wrapping`, and at an unsigned type, a sum wraps by definition, and
- *     at `f64` an index is truncated; none of them is read;
+ *     the true one and the range saturates at the type's ends. At an
+ *     unsigned type a sum wraps by definition, and at `f64` an index is
+ *     truncated; neither is read;
  *   - nothing in the index writes. The check is judged in the state its
  *     operands left, so in `xs[i + (i = 0) * 0]` the left `i` would have
  *     been read before a write the state already records, and its range
@@ -3126,7 +3090,7 @@ const writesLocal = (program: CheckedProgram, node: Node, v: Local): boolean => 
 const provesByRange = (walk: BoundsWalk, state: State, holder: Local, index: Node): boolean => {
   const ctx = walk.ctx
   const written = ctx.program.nodeTypes[index.id]
-  if (ctx.wrapping || written < 0 || writesSomething(index)) {
+  if (written < 0 || writesSomething(index)) {
     return false
   }
   const type = ctx.table.baseOf(written)
@@ -3496,9 +3460,7 @@ const judgeRange = (walk: BoundsWalk, state: State, node: Node): void => {
   }
   // An entry with no recorded source is a store back, a sum no fact is stated about.
   if (ctx.program.nodeCoercions[node.id] >= 0 && provesEntry(walk, state, node, to)) {
-    if (!walk.shadow) {
-      ctx.program.nodeProvenRange[node.id] = true
-    }
+    ctx.program.nodeProvenRange[node.id] = true
     return
   }
   const lo = toI64(ctx.table.rangeLo(to))
@@ -3517,7 +3479,7 @@ const applyAssignment = (
 ): void => {
   const ctx = walk.ctx
   const steps = increment || (rhs !== null && isIncrement(ctx.program, v, rhs))
-  if (steps && knownNonNegative(state, v) && keepsLowerBound(ctx, v)) {
+  if (steps && knownNonNegative(state, v)) {
     forgetUpperBounds(state, v)
     forgetWrappedFloor(state, v)
     addFact(state, new Fact(FACT_NON_NEGATIVE, v, null, 0))
@@ -3541,7 +3503,7 @@ const applyAssignment = (
  */
 const applyDecrement = (walk: BoundsWalk, state: State, v: Local, c: i32): void => {
   const floor = minValueOf(state, v)
-  if (!keepsUpperBound(walk.ctx, v, floor >= 0)) {
+  if (!keepsUpperBound(walk.ctx, v)) {
     forgetLocal(walk, state, v)
     return
   }
@@ -3921,7 +3883,7 @@ const forgetAcross = (walk: BoundsWalk, state: State, root: Node): void => {
     if (contains(effects.clobbered, v)) {
       continue
     }
-    if (keepsLowerBound(ctx, v) && !contains(effects.decremented, v)) {
+    if (!contains(effects.decremented, v)) {
       forgetUpperBounds(state, v)
       forgetWrappedFloor(state, v)
     } else {
@@ -3936,7 +3898,7 @@ const forgetAcross = (walk: BoundsWalk, state: State, root: Node): void => {
     if (contains(effects.clobbered, v) || contains(effects.stepped, v)) {
       continue
     }
-    if (keepsUpperBound(ctx, v, false)) {
+    if (keepsUpperBound(ctx, v)) {
       forgetLowerBounds(state, v)
     } else {
       forgetLocal(walk, state, v)
@@ -4396,8 +4358,8 @@ const walkDeclaration = (walk: BoundsWalk, state: State, decl: Node): void => {
  * `program.nodeProvenRange`, which are the only things the emitter ever reads
  * from here.
  */
-export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: boolean): BoundsWalk => {
-  const walk = new BoundsWalk(ctx, uncheckedIndexing)
+export const analyzeBounds = (ctx: CheckContext, body: Node): BoundsWalk => {
+  const walk = new BoundsWalk(ctx)
   // A body with nothing to judge has nothing to prove and nothing to warn
   // about, and the walk writes nothing else.
   if (!judgesAnything(ctx, body)) {
@@ -4409,59 +4371,7 @@ export const analyzeBounds = (ctx: CheckContext, body: Node, uncheckedIndexing: 
   } else {
     walkExpression(walk, state, body)
   }
-  if (uncheckedIndexing) {
-    proveUnflagged(ctx, body)
-  }
   return walk
-}
-
-/**
- * Under `--unchecked-indexing`, mark proven every element access of `body`
- * that the build without the flag would prove once the migration
- * (`src/unsafe-migrate.ts`) has run, so that it never rewrites one: the flag
- * build records no passed check, and its proofs alone are a subset of those.
- * A second walk records them as that build would, at every access the
- * migration leaves checked — one with no `nish:unsafe` form; one it rewrites
- * passes no check once rewritten. The emitter reads no access's proof under
- * the flag, which drops every check anyway, so the element accesses are the
- * only proofs kept: the walk is unrecorded, and its clamps, its overflow and
- * division proofs and its range entries rest on facts the flag build may not
- * use, so they are thrown away.
- *
- * Only pass 2's facts are taken. An access the whole-program pass
- * (`src/ranges.ts`) would prove from what a caller's passed check hands it is
- * still reported, and rewritten, which keeps its meaning.
- */
-const proveUnflagged = (ctx: CheckContext, body: Node): void => {
-  const shadow = new BoundsWalk(ctx, false)
-  shadow.shadow = true
-  shadow.record = false
-  const state = new State(ctx.table)
-  if (body.kind === N_BLOCK) {
-    walkBoundsStatement(shadow, state, body)
-  } else {
-    walkExpression(shadow, state, body)
-  }
-  for (const node of shadow.proved) {
-    if (node.kind === N_INDEX && ctx.table.isArray(ctx.program.nodeTypes[node.children[0].id])) {
-      ctx.program.nodeProvenIndex[node.id] = true
-    }
-  }
-}
-
-/**
- * Whether `uncheckedGet` and `uncheckedSet` can say `access`: its element is
- * a number and its index an `i32` or a range over one, which is what
- * `checkUncheckedAccess` (src/builtins.ts) accepts. The migration rewrites
- * only such an access (`src/unsafe-migrate.ts`), and the shadow walk records
- * a passed check at every other (`recordPassedCheck`).
- */
-export const hasUncheckedForm = (program: CheckedProgram, table: TypeTable, access: Node): boolean => {
-  if (!isNumeric(table.refOf(program.nodeTypes[access.children[0].id]))) {
-    return false
-  }
-  const index = program.nodeTypes[access.children[1].id]
-  return index === T_I32 || (table.isRanged(index) && table.baseOf(index) === T_I32)
 }
 
 /**
@@ -4476,7 +4386,7 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
   if (node.kind === N_INDEX || rangeEntryOf(ctx, node) >= 0) {
     return true
   }
-  if (!ctx.wrapping && checksOverflow(ctx.program, ctx.table, node)) {
+  if (checksOverflow(ctx.program, ctx.table, node)) {
     return true
   }
   if (node.kind === N_CALL) {
@@ -4526,10 +4436,9 @@ const judgesAnything = (ctx: CheckContext, node: Node): boolean => {
 // the state describes it. A call writes no local of the caller — a local
 // cannot be reached through an alias — so calls do not count.
 //
-// None of this runs under `--wrapping`, where nothing is checked; and every
-// fact it reads is one the bounds walk already keeps sound under checked
-// arithmetic, because a step past `MAX` that would have broken a floor now
-// panics instead (`keepsLowerBound`).
+// Every fact it reads is one the bounds walk already keeps sound under checked
+// arithmetic, because a step past `MAX` that would have broken a floor
+// panics instead.
 
 /** `2^63 - 1`, built from `2^62` because a literal past `2^53` cannot be written exactly. */
 const i64Max = (): i64 => {
@@ -5287,13 +5196,12 @@ const stepRange = (walk: BoundsWalk, node: Node, v: Local): Interval | null => {
  * within its entry range widened by that many steps — on every pass, part way
  * through one, and after the loop. `sum = sum + toI32(buf[i])` over 256 bytes
  * is at most 65280, and `count++` once a pass under `i <= n` is at most `n`.
- * Checked arithmetic is what makes the steps steps: under `--wrapping` one can
- * land anywhere, so nothing is kept.
+ * Checked arithmetic is what makes the steps steps: a step past the range
+ * panics rather than landing anywhere.
  */
 const accumulatorFacts = (walk: BoundsWalk, state: State, loop: Node): Fact[] => {
-  const ctx = walk.ctx
   const out: Fact[] = []
-  if (ctx.wrapping || loop.children[1].kind === N_EMPTY) {
+  if (loop.children[1].kind === N_EMPTY) {
     return out
   }
   const effects = new Effects()
@@ -5377,9 +5285,6 @@ const writesAnyLocal = (program: CheckedProgram, node: Node): boolean => {
  */
 const judgeOverflow = (walk: BoundsWalk, state: State, node: Node, left: Node, right: Node | null): void => {
   const ctx = walk.ctx
-  if (ctx.wrapping) {
-    return
-  }
   const type = checkedArithmeticType(ctx.program, ctx.table, node)
   if (type < 0 || ctx.program.nodeProvenNoOverflow[node.id]) {
     return
@@ -6072,8 +5977,7 @@ const siteFacts = (walk: BoundsWalk, state: State, call: Node, callee: FunctionS
  * `c + 1 <= 7` once `c` is known below 8, which is what lets the recursion's
  * entry settle at `[0, 7]` (`valueRange`). Only for the last argument that can
  * write anything or later, so nothing evaluated after it rebinds what it read,
- * only for one that writes no local itself, and never under `--wrapping`,
- * where the range is not one.
+ * and only for one that writes no local itself.
  */
 const arithmeticSiteFacts = (
   walk: BoundsWalk,
@@ -6085,7 +5989,7 @@ const arithmeticSiteFacts = (
 ): void => {
   const ctx = walk.ctx
   const e = unwrapBoundsParens(arg)
-  if (ctx.wrapping || e.kind !== N_BINARY || ctx.table.baseOf(type) !== T_I32) {
+  if (e.kind !== N_BINARY || ctx.table.baseOf(type) !== T_I32) {
     return
   }
   if (ctx.program.nodeTypes[e.id] !== type || writesAnyLocal(ctx.program, e)) {
@@ -6354,16 +6258,8 @@ export const proveSliceBounds = (
   opts: Options,
   body: Node
 ): void => {
-  const ctx = new CheckContext(
-    table,
-    program,
-    new DiagnosticSink(),
-    opts.numberMode,
-    program.wrapping,
-    program.uncheckedIndexing,
-    opts.strictExports
-  )
-  const walk = new BoundsWalk(ctx, program.uncheckedIndexing)
+  const ctx = new CheckContext(table, program, new DiagnosticSink(), opts.numberMode, opts.strictExports)
+  const walk = new BoundsWalk(ctx)
   const proved: Node[] = []
   walk.record = false
   walk.sliceClamps = proved
@@ -6399,7 +6295,7 @@ export const walkWithRanges = (
   returnType: i32,
   returnParams: (Local | null)[]
 ): BoundsWalk => {
-  const walk = new BoundsWalk(ctx, ctx.uncheckedIndexing)
+  const walk = new BoundsWalk(ctx)
   walk.tables = tables
   walk.callees = callees
   walk.record = record

@@ -1,6 +1,6 @@
 // `wrappingAdd`, `wrappingSub` and `wrappingMul` from `nish:unsafe`
 // (docs/LANGUAGE.md, "nish:unsafe"): `add`, `sub` and `mul` with no `nsw`
-// whatever `--wrapping` says, so each answer at INT_MAX and INT_MIN is the
+// and no overflow check, so each answer at INT_MAX and INT_MIN is the
 // two's-complement wrap, at `i32` and at `i64`. `WRAPPED` is a module constant
 // folded the same way, where `2147483647 + 1` would be refused. The operands
 // are parameters of exported functions, so nothing here is folded but the

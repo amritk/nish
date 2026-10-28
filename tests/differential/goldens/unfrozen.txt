@@ -27,14 +27,12 @@ cases/arr_bounds_offset added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_floor added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_other added after R6: no rewriter to freeze it with
 cases/arr_bounds_offset_reach added after R6: no rewriter to freeze it with
-cases/arr_bounds_offset_wrap added after R6: no rewriter to freeze it with
 cases/arr_bounds_range added after R6: no rewriter to freeze it with
 cases/arr_bounds_range_call added after R6: no rewriter to freeze it with
 cases/arr_bounds_range_kept added after R6: no rewriter to freeze it with
 cases/arr_bounds_range_negative added after R6: no rewriter to freeze it with
 cases/arr_bounds_range_new added after R6: no rewriter to freeze it with
 cases/arr_bounds_range_past added after R6: no rewriter to freeze it with
-cases/arr_bounds_range_wrap added after R6: no rewriter to freeze it with
 cases/arr_bounds_ranged added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned added after R6: no rewriter to freeze it with
 cases/arr_bounds_returned_kept added after R6: no rewriter to freeze it with
@@ -93,10 +91,10 @@ cases/arr_range_call_no_proof added after R6: no rewriter to freeze it with
 cases/arr_range_call_rebind added after R6: no rewriter to freeze it with
 cases/arr_range_call_rebind_callee added after R6: no rewriter to freeze it with
 cases/arr_range_call_two_sites added after R6: no rewriter to freeze it with
-cases/arr_range_call_wrap added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_clone added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_dead added after R6: no rewriter to freeze it with
 cases/arr_ref_alias_replace added after R6: no rewriter to freeze it with
+cases/arr_sum stale since R6: tests/cases/arr_sum.ts changed since the rewrite was frozen (db9b79bf0f0b86e7 -> dc44f5bae14ee81d)
 cases/arr_typed_push_pop added after R6: no rewriter to freeze it with
 cases/asi_continuation added after R6: no rewriter to freeze it with
 cases/asi_statements added after R6: no rewriter to freeze it with
@@ -149,7 +147,6 @@ cases/dbg_map_iter added after R6: no rewriter to freeze it with
 cases/dbg_rng added after R6: no rewriter to freeze it with
 cases/deny_panics_clean added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_proven added after R6: no rewriter to freeze it with
-cases/deny_panics_overflow_wrapping added after R6: no rewriter to freeze it with
 cases/deny_panics_overflow_wrapping_add added after R6: no rewriter to freeze it with
 cases/deny_panics_unsafe added after R6: no rewriter to freeze it with
 cases/deny_retention_clean added after R6: no rewriter to freeze it with
@@ -291,6 +288,7 @@ cases/mem_loop_scope_escape added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_forof added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_interior added after R6: no rewriter to freeze it with
 cases/mem_loop_scope_threads added after R6: no rewriter to freeze it with
+cases/mem_reclaim_guards stale since R6: tests/cases/mem_reclaim_guards.ts changed since the rewrite was frozen (e4af7d4a1888fb72 -> 034139e9618f89a5)
 cases/mem_return_array_callee added after R6: no rewriter to freeze it with
 cases/mem_return_array_caller added after R6: no rewriter to freeze it with
 cases/mem_return_array_nested added after R6: no rewriter to freeze it with
@@ -343,7 +341,6 @@ cases/os_spawn added after R6: no rewriter to freeze it with
 cases/os_wait added after R6: no rewriter to freeze it with
 cases/ovf_matrix added after R6: no rewriter to freeze it with
 cases/ovf_repro added after R6: no rewriter to freeze it with
-cases/ovf_repro_wrapping added after R6: no rewriter to freeze it with
 cases/owner_checks added after R6: no rewriter to freeze it with
 cases/panics_array_length added after R6: no rewriter to freeze it with
 cases/panics_call added after R6: no rewriter to freeze it with
@@ -358,13 +355,10 @@ cases/panics_oom added after R6: no rewriter to freeze it with
 cases/panics_overflow added after R6: no rewriter to freeze it with
 cases/panics_overflow_proven added after R6: no rewriter to freeze it with
 cases/panics_overflow_via added after R6: no rewriter to freeze it with
-cases/panics_overflow_wrapping added after R6: no rewriter to freeze it with
 cases/panics_panic added after R6: no rewriter to freeze it with
 cases/panics_pop added after R6: no rewriter to freeze it with
 cases/panics_range added after R6: no rewriter to freeze it with
 cases/panics_slice added after R6: no rewriter to freeze it with
-cases/panics_unchecked_indexing added after R6: no rewriter to freeze it with
-cases/perf_arena_control added after R6: no rewriter to freeze it with
 cases/perf_arena_loop added after R6: no rewriter to freeze it with
 cases/perf_arena_pass_drop added after R6: no rewriter to freeze it with
 cases/perf_arena_pass_quiet added after R6: no rewriter to freeze it with
@@ -394,7 +388,6 @@ cases/port_num_wide added after R6: no rewriter to freeze it with
 cases/port_num_wide_quiet added after R6: no rewriter to freeze it with
 cases/port_num_wrap added after R6: no rewriter to freeze it with
 cases/port_num_wrap_quiet added after R6: no rewriter to freeze it with
-cases/port_num_wrap_wrapping added after R6: no rewriter to freeze it with
 cases/port_rec_alias_arrow_quiet added after R6: no rewriter to freeze it with
 cases/port_rec_alias_copy added after R6: no rewriter to freeze it with
 cases/port_rec_alias_store added after R6: no rewriter to freeze it with
@@ -488,3 +481,15 @@ cases/union_types added after R6: no rewriter to freeze it with
 cases/unsafe_get_set added after R6: no rewriter to freeze it with
 cases/unsafe_wrapping added after R6: no rewriter to freeze it with
 cases/wipe_bytes added after R6: no rewriter to freeze it with
+corpus/bit_fnv1a stale since R6: its flags moved: the store holds `--wrapping` and `corpus/bit_fnv1a.args` now says `(none)`
+corpus/bool_logic stale since R6: its flags moved: the store holds `--wrapping` and `corpus/bool_logic.args` now says `(none)`
+corpus/const_module stale since R6: its flags moved: the store holds `--wrapping` and `corpus/const_module.args` now says `(none)`
+corpus/conversions_roundtrip stale since R6: its flags moved: the store holds `--wrapping` and `corpus/conversions_roundtrip.args` now says `(none)`
+corpus/digits stale since R6: its flags moved: the store holds `--wrapping` and `corpus/digits.args` now says `(none)`
+corpus/i64_arith stale since R6: its flags moved: the store holds `--wrapping` and `corpus/i64_arith.args` now says `(none)`
+corpus/int_compound stale since R6: its flags moved: the store holds `--wrapping` and `corpus/int_compound.args` now says `(none)`
+corpus/int_incdec stale since R6: its flags moved: the store holds `--wrapping` and `corpus/int_incdec.args` now says `(none)`
+corpus/int_literal_edges stale since R6: its flags moved: the store holds `--wrapping` and `corpus/int_literal_edges.args` now says `(none)`
+corpus/int_wrap stale since R6: its flags moved: the store holds `--wrapping` and `corpus/int_wrap.args` now says `(none)`
+corpus/prng_lcg stale since R6: its flags moved: the store holds `--wrapping` and `corpus/prng_lcg.args` now says `(none)`
+corpus/recursion stale since R6: its flags moved: the store holds `--wrapping` and `corpus/recursion.args` now says `(none)`

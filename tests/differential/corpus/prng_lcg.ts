@@ -1,6 +1,8 @@
 // A 32-bit linear congruential generator relies on wrapping multiplication.
+import { wrappingAdd, wrappingMul } from "nish:unsafe";
+
 function next(seed: number): number {
-  return seed * 1103515245 + 12345;
+  return wrappingAdd(wrappingMul(seed, 1103515245), 12345);
 }
 
 export function main(): number {
