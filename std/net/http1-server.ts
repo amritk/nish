@@ -1336,14 +1336,21 @@ export class Http1Connection {
   /**
    * The soonest `expired` can turn true at or after `now` (`monotonicNanos`),
    * however the connection moves from here: `lastActive` only grows, and a
-   * head clock not yet started starts no earlier than `now`. Counting that
-   * clock from `lastActive` instead put every keep-alive quiet for longer
-   * than `headTimeout` in the past, so each `expire` walked every slot.
+   * head clock not yet started starts no earlier than `now`, unless an
+   * exchange is open: `nextRequest` starts a pipelined head's clock at
+   * `lastActive` when it ends. Counting a quiet keep-alive's clock from
+   * `lastActive` put it in the past once it was quiet for longer than
+   * `headTimeout`, so each `expire` walked every slot.
    */
   expiresNoSooner(now: i64): i64 {
     const idle: i64 = this.lastActive + toI64(this.config.idleTimeout) * toI64(1000000)
-    const head: i64 =
-      (this.headTimed ? this.headSince : now) + toI64(this.config.headTimeout) * toI64(1000000)
+    let start: i64 = now
+    if (this.headTimed) {
+      start = this.headSince
+    } else if (this.requestOpen) {
+      start = this.lastActive
+    }
+    const head: i64 = start + toI64(this.config.headTimeout) * toI64(1000000)
     return head < idle ? head : idle
   }
 }

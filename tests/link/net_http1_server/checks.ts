@@ -1107,6 +1107,23 @@ export const serverChecks = (): i32 => {
   t.eqI32("refused: end twice", g.conn.end(), H1_CLOSED);
   t.eqStr("what it sent", sent(g.conn), `HTTP/1.1 200 OK\r\n${PINNED_DATE}Content-Length: 3\r\n\r\nabc`);
 
+  // A head pipelined behind an open exchange starts its clock from the
+  // connection's last move when the exchange ends (`nextRequest`), which can
+  // be before the `now` an `expire` passed while the exchange was open; so
+  // the bound counts that clock from `lastActive`, not `now`.
+  const behind = new Driven(config, "GET /hello HTTP/1.1\r\nHost: a\r\n\r\nGET /hello HTTP/1.1\r\n");
+  const behindMoved: i64 = toI64(1000000000);
+  behind.conn.lastActive = behindMoved;
+  const behindBound: i64 = behind.conn.expiresNoSooner(behindMoved + toI64(400000000));
+  behind.conn.respond(toI32(200), none, none, ZERO);
+  behind.conn.end();
+  behind.conn.next();
+  behind.conn.next();
+  t.ok(
+    "a head pipelined behind an open exchange is due no later than its bound says",
+    behind.conn.headTimed && behind.conn.headSince === behindMoved && behindBound <= behindMoved + toI64(500000000)
+  );
+
   // A 663-byte response left unsent, then a pipelined request: no room for its head.
   const p = new Driven(config, `${get}${get}`);
   p.conn.respond(toI32(200), none, none, toI32(663));

@@ -162,6 +162,7 @@ PASS  the end
 PASS  the request ends after
 PASS  refused: end twice
 PASS  what it sent
+PASS  a head pipelined behind an open exchange is due no later than its bound says
 PASS  the next pipelined request is read once the first is answered
 PASS  its head does not fit beside the unsent response: H1_AGAIN
 PASS  and the connection waits for the output
@@ -218,4 +219,4 @@ PASS  so do they while a byte of the next request is unread
 PASS  which is read whole
 PASS  and once nothing is open or unread both go back
 PASS  the next byte takes them again, making none
-http1 server: 220 passed, 0 failed, 0 skipped
+http1 server: 221 passed, 0 failed, 0 skipped
