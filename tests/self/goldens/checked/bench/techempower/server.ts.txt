@@ -891,14 +891,13 @@ function Http1Connection.expired(this: Http1Connection, now: i64): boolean -> @n
   stackSites=0 stackLocals=0
   callee +0:12 Http1Connection.idle -> @nish.Http1Connection.idle
   callee +0:30 Http1Connection.headLate -> @nish.Http1Connection.headLate
-function Http1Connection.expiresNoSooner(this: Http1Connection): i64 -> @nish.Http1Connection.expiresNoSooner [exported method]
+function Http1Connection.expiresNoSooner(this: Http1Connection, now: i64): i64 -> @nish.Http1Connection.expiresNoSooner [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_panic_overflow
   pointer this: size=176 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 idle: i64 (const)
   local +1:11 head: i64 (const)
-  local +2:11 soonest: i64 (const)
 function http1ExpireFloor(config: Http1Config): i64 -> @nish.http1ExpireFloor
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
