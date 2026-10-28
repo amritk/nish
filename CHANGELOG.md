@@ -26,6 +26,25 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-28
+
+### Breaking changes
+
+- checker: Remove Arena.release, Arena.reset, --wrapping and --unchecked-indexing ([#983](https://github.com/amritk/nish/pull/983))
+
+### Added
+
+- compress: Add gzip, zlib and DEFLATE, and gzip HTTP responses ([#984](https://github.com/amritk/nish/pull/984))
+
+### Fixed
+
+- interop: Keep the simulator's last packets in the runner's pcaps ([#979](https://github.com/amritk/nish/pull/979))
+
+### Build
+
+- Regenerate package-lock.json for v0.23.1 ([#981](https://github.com/amritk/nish/pull/981))
+
+
 ## [0.23.1] - 2026-10-28
 
 ### Fixed
@@ -1243,3 +1262,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.22.1]: https://github.com/amritk/nish/releases/tag/v0.22.1
 [0.23.0]: https://github.com/amritk/nish/releases/tag/v0.23.0
 [0.23.1]: https://github.com/amritk/nish/releases/tag/v0.23.1
+[0.24.0]: https://github.com/amritk/nish/releases/tag/v0.24.0
