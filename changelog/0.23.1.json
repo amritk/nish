@@ -1,0 +1,82 @@
+{
+  "version": "0.23.1",
+  "date": "2026-10-28",
+  "tag": "v0.23.1",
+  "range": {
+    "from": "v0.23.0",
+    "to": "ea875e68"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-23-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.23.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3216f3e"
+      ],
+      "pr": 975,
+      "author": "github-actions[bot]",
+      "date": "2026-10-27"
+    },
+    {
+      "id": "bring-the-readme-up-to-date-with-the",
+      "type": "docs",
+      "breaking": false,
+      "title": "bring the README up to date with the language",
+      "body": "The feature table now lists the unsigned, f32 and ranged integer types,\nenums, type aliases and discriminated unions, function-typed parameters,\nMap and Set, switch, ?? and ?.-to-?? chains, nish/threads, calling C, and\ncapabilities with the no-panic scope. The standard library section names\nthe current modules (text, regex, YAML, SQLite, terminal, the full crypto\nand networking stacks) instead of saying the language has no trim or\nregular expression. The memory-safety table and the command-line section\nfollow the same changes.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "a92847d"
+      ],
+      "pr": 976,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-27"
+    },
+    {
+      "id": "an-idle-keep-alive-no-longer-makes-every",
+      "type": "fix",
+      "scope": "std",
+      "breaking": false,
+      "title": "an idle keep-alive no longer makes every http1 expire walk every slot",
+      "body": "Http1Server.expire and Http1TlsServer.expire skip the slot walk until the soonest slot can be due, but Http1Connection.expiresNoSooner counted a head clock not yet started from the slot's last move. A kept-alive slot quiet past headTimeout put that bound in the past, so every expire walked every slot: about a third of a busy server's CPU at 30,000 connections a worker. expiresNoSooner now takes `now` and counts a clock not yet started from it. While an exchange is open it counts from lastActive instead, because nextRequest starts a pipelined head's clock there when the exchange ends. When slots close is unchanged. Security record H1-4.",
+      "metrics": [],
+      "refs": [
+        "docs/security/http1.md"
+      ],
+      "tests": [
+        "tests/link/net_http1_server",
+        "tests/link/net_http1_server_f64"
+      ],
+      "commits": [
+        "f45e9ba"
+      ],
+      "pr": 978,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "record-where-nish-net-postgres-s-client-time",
+      "type": "docs",
+      "scope": "bench",
+      "breaking": false,
+      "title": "record where nish/net/postgres's client time goes",
+      "body": "* perf(runtime): start nish/net/postgres's input buffer at 16 KiB\n\nAn 8 KiB buffer took a page of rows in two reads, and two epoll wakeups,\nwhere libpq's 16 KiB takes one: strace on bench/postgres's list showed\n5717 recvfrom for 3000 queries against libpq's 3028, and 3028 at 16 KiB.\nMeasurement against main is in progress; the figures follow in the PR.\n\nTests: tests/link/std_postgres\n\n* docs(bench): record where nish/net/postgres's client time goes\n\nReverts the 16 KiB input buffer: it halves list's recvfrom and epoll_wait\ncalls but its CPU difference against main is inside the noise band on every\nworkload. The profile puts the module's own decoding at about 7.5 % of the\nclient's CPU on list, some 4 µs a query, under that workload's IQR, so no\ndecoding change is shipped; docs/BENCHMARKS.md records the profile, the\nbuffer experiment and its figures.\n\nMeasured: 16 KiB vs main, list +2.02 µs (band 2.06 µs), pk +0.09 µs (band 0.30), insert +0.86 µs (band 0.74); 12 rounds\n\n* docs(bench): time the client's decoders, out of line and end to end\n\nRe-profiles the PostgreSQL client with its decoders kept out of line, so\neach shows its own self time. Times three decoder changes, in isolation and\nagainst the noise band in 12 interleaved rounds. Corrects the buffer\ntable's reading against its band.\n\nThe walker change saves 18 ns a call, about 0.4 us a list query. That is\na quarter of the band, so no decoding change ships.\n\n* docs(bench): record that the postgres client's loop has no system call to spare\n\nstrace counts one sendto, recvfrom and epoll_wait per answer and two\nepoll_ctl a run, and halving list's reads did not move its CPU, so the\nkernel's share is per-byte socket work and wakeups, not calls to cut.\n\n* docs(bench): time on-demand input growth and every change together\n\nA buffer that doubles to 64 KiB after a read fills it cuts list's reads\nfrom 3,829 to 2,023, and with the three decoder changes measured 1.48 us\nfaster in one 12-round run and 2.63 us slower in the next. The copy's band\nis about a tenth of a binary's run-to-run spread, so nothing ships.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "ea875e6"
+      ],
+      "pr": 974,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    }
+  ]
+}
