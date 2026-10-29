@@ -3,22 +3,22 @@ name: WebSocket client opening handshake
 overview: Give nish/net/websocket the client half of the RFC 6455 opening handshake. It writes a GET upgrade request with a caller-drawn random Sec-WebSocket-Key, checks the 101 response and Sec-WebSocket-Accept, and negotiates subprotocols. It runs over the std HTTP/1.1 client and TLS client that other sessions are building, and starts only once both are on main.
 stages:
   - id: ws-client
-    title: "feat(net): client side of the WebSocket opening handshake"
+    title: "feat(runtime): client side of the WebSocket opening handshake"
     goal: A Nish program can open a WebSocket as a client over plain TCP or TLS, with a random key, a checked 101 and accept, and a negotiated subprotocol, and then frame with the masking code that already exists
     verification: npm run check && npm run lint && npm run lint:dead && node tests/run.js net_websocket && node tests/run.js net_loopback && node tests/run.js fuzz && node scripts/security-scope.mjs && node docs/check-links.mjs
     status: pending
     todos:
       - id: client-key
-        content: Add websocketClientKey(nonce) to std/net/websocket.ts. It turns 16 caller-drawn bytes into the base64 key, and the module draws no randomness. See Key
+        content: Add websocketClientKey(nonce) to std/net/websocket.ts. It turns 16 caller-drawn bytes into the base64 key, and the module draws no randomness. See ws-client, Key
         status: pending
       - id: upgrade-request
-        content: Add websocketUpgradeRequest over the HTTP/1.1 client's request writer. See The request
+        content: Add websocketUpgradeRequest over the HTTP/1.1 client's request writer. See ws-client, The request
         status: pending
       - id: response-check
-        content: Add websocketCheckResponse over the HTTP/1.1 client's response parser. It fails closed, with a distinct result for each refusal. See The response check
+        content: Add websocketCheckResponse over the HTTP/1.1 client's response parser. It fails closed, with a distinct result for each refusal. See ws-client, The response check
         status: pending
       - id: server-offer
-        content: Add websocketOfferedProtocols so a server can choose from the client's Sec-WebSocket-Protocol list. See Subprotocols
+        content: Add websocketOfferedProtocols so a server can choose from the client's Sec-WebSocket-Protocol list. See ws-client, Subprotocols
         status: pending
       - id: ws-client-unit-tests
         content: Add unit and negative checks in tests/link/net_websocket/checks.ts, which the f64 twin also runs. See Tests
@@ -30,10 +30,10 @@ stages:
         content: Fuzz the response check from response bytes through websocketCheckResponse, with a seed corpus. See Tests
         status: pending
       - id: ws-client-record
-        content: Extend docs/security/http1.md (scope, the hostile-server threat model, findings) and the docs/security/README.md index. See Security record
+        content: Extend docs/security/http1.md (scope, the hostile-server threat model, findings) and the docs/security/README.md index. See ws-client, Security record
         status: pending
       - id: ws-guide
-        content: Add docs/guide/using-nish/websocket.md with a compiled client example and a route in scalar.config.json, and update standard-library.md, std/README.md, llms.txt and README.md. See Docs
+        content: Add docs/guide/using-nish/websocket.md with a compiled client example and a route in scalar.config.json, and update standard-library.md, std/README.md, llms.txt and README.md. See ws-client, Docs
         status: pending
       - id: ws-client-goldens
         content: Regenerate tests/self/goldens/checked with node tests/self/goldens.js --update and read the diff
@@ -55,23 +55,34 @@ Framing already works for either role. `websocketFrame` and
 random bytes for a client. `WsDecoder(expectMasked = false, …)` is the client's
 decoder.
 
-## Preconditions: work from other sessions
+No client sits underneath it on `main` (base `3e15e91`). `nish/net/http1` has a
+request parser and response writers only, and `std/net/tls.ts` is the server
+side of TLS 1.3. The only TLS client is test code
+(`tests/link/net_loopback/tls-client.ts`). Other sessions are building a std
+HTTP/1.1 client and a std TLS client.
 
-This stage builds on two pieces that other sessions are building and that are
-**not on main** when this plan is written (base `3e15e91`):
+## Approach
 
-- **A std HTTP/1.1 client**: a request-head writer, and a response parser
-  that gives the status, the fields and the bytes after the head.
-- **A std TLS 1.3 client carrier.**
+- **Start after the carriers land.** The stage waits until the std HTTP/1.1
+  client (a request-head writer, and a response parser that gives the status,
+  the fields and the bytes after the head) and the std TLS client are both
+  merged to `main`. It builds on whatever they export, and adds no second
+  request writer, response parser or TLS client. The names this plan uses for
+  them are placeholders. If either lands without something this stage needs,
+  the worker opens its PR as a draft and names the gap. It does not build the
+  missing piece itself.
+- **The module stays sans-IO and draws no randomness.** It already takes the
+  mask key as an argument, and the handshake nonce follows that rule. That
+  keeps `nish/net/websocket` compiling to wasm32. The caller draws both from
+  `crypto.getRandomValues`, and the guide shows it doing so.
+- **Fail closed, and say why.** Each of RFC 6455 §4.1's client requirements
+  is its own refusal, with a result the caller can tell apart. A non-101
+  status stays readable so a caller can report a 401 or a redirect.
+- **One pull request.** The key, the request, the response check and the
+  server's offer parser are about 200 lines over one module. The tests, the
+  record and the guide page make up the rest.
 
-The worker starts only after both have merged. It reads what they export and
-builds on that, without adding a second request writer, response parser or
-TLS client. The function names in this plan for those pieces (a request
-writer, a response parser) are placeholders for whatever they ship. If either
-lands without something this stage needs, the worker opens its PR as a draft
-and names the gap. It does not build the missing piece itself.
-
-## Stage: ws-client
+## ws-client — client side of the opening handshake
 
 **Owns:** `std/net/websocket.ts`, `tests/link/net_websocket/**`,
 `tests/link/net_websocket_f64/**`, `tests/link/net_loopback/**`,
@@ -81,21 +92,18 @@ and names the gap. It does not build the missing piece itself.
 `docs/guide/using-nish/websocket.md` (new),
 `docs/guide/using-nish/standard-library.md`, `scalar.config.json`,
 `std/README.md`, `llms.txt`, `README.md`, `tests/self/goldens/checked/**`
-(generated)
+(generated).
 
-Not owned: the HTTP/1.1 client and TLS client modules and their tests and
+Not owned: the HTTP/1.1 client and TLS client modules, and their tests and
 records. They belong to the other sessions.
 
 ### Key
 
 `websocketClientKey(nonce: u8[]): string | null` turns exactly 16 bytes into
 the 24-character padded base64 key, using the existing `base64StdPadEncode`.
-It returns null for any other length.
-
-The module draws no randomness, just as it already takes the mask key as an
-argument. That keeps it sans-IO and still compiling to wasm32. The doc comment
-says the nonce comes from `crypto.getRandomValues`, fresh for each connection
-(RFC 6455 §4.1 item 7), and the guide example draws it that way.
+It returns null for any other length. The doc comment says the nonce comes
+from `crypto.getRandomValues`, fresh for each connection (RFC 6455 §4.1
+item 7).
 
 ### The request
 
@@ -124,8 +132,7 @@ object, and the guide documents the choice.
 
 It fails closed on each of these (RFC 6455 §4.1, client requirements 1–6):
 
-1. Any status other than 101. The status stays readable so a caller can report
-   a 401 or a redirect. Redirects are not followed.
+1. Any status other than 101. Redirects are not followed.
 2. A version other than HTTP/1.1.
 3. `Upgrade` absent, or not `websocket` (compared case-insensitively).
 4. `Connection` absent, or without the `upgrade` token.
@@ -147,28 +154,7 @@ The server side already takes the chosen protocol in
 `websocketOfferedProtocols(p: Http1Parser): string[] | null` parses the
 request's `Sec-WebSocket-Protocol` fields. It handles comma lists, optional
 whitespace and repeated fields. It returns `[]` when the field is absent and
-null when it is malformed.
-
-### Tests
-
-- **`tests/link/net_websocket/checks.ts`** (the `_f64` twin runs the same
-  checks):
-  - the RFC 6455 §1.3 vector through `websocketClientKey`
-  - the exact request bytes
-  - each refusal in the response check, as its own named check
-  - parsing of the offer list
-- **`tests/link/net_loopback`**:
-  - `carrier-websocket.ts` drops its hand-written `GET` and fixed key, and
-    uses the new client over the std TLS client against `Http1TlsServer`.
-  - A new plain-TCP WebSocket carrier does the same against `Http1Server`
-    through `tcpConnect`.
-  - In both carriers the key and masks are drawn from
-    `crypto.getRandomValues`. The client offers two subprotocols, the server
-    picks one with `websocketOfferedProtocols`, the client checks it, then
-    they echo a message and close cleanly.
-  - Expected stdout pins the negotiated protocol.
-- **A fuzz target** feeds response bytes through the response parser to
-  `websocketCheckResponse`, with a seed for each refusal.
+null when it is malformed. The loopback server uses it to pick.
 
 ### Security record
 
@@ -185,7 +171,7 @@ Changes to `docs/security/http1.md`:
 - Each finding is either fixed with a before-and-after test or recorded as
   open. Every test is named by its exact check string.
 
-Update the index counts in `docs/security/README.md`.
+Update the index counts and the fuzz table in `docs/security/README.md`.
 
 ### Docs
 
@@ -209,7 +195,74 @@ handshake roles.
 
 ## Out of scope
 
-- The HTTP/1.1 client and TLS client themselves (other sessions).
-- Permessage-deflate or any other extension.
-- Following redirects, and proxies.
-- The Autobahn suite's client cases in the interop job.
+- **The HTTP/1.1 client and TLS client themselves.** Other sessions own them.
+- **Permessage-deflate or any other extension.** The client offers none and
+  refuses any in the response.
+- **Following redirects, and proxies.** A 3xx is a refusal with its status
+  readable.
+- **The Autobahn suite's client cases** in the interop job.
+
+## Tests
+
+| Where | Positive | Negative |
+| --- | --- | --- |
+| `tests/link/net_websocket/checks.ts` (and the `_f64` twin) | the RFC 6455 §1.3 nonce through `websocketClientKey` to accept `s3pPLMBiTxaQ9kYGzzhZRbK+xOo=`; the exact request bytes with and without protocols; offer-list parsing (comma lists, OWS, repeated fields) | one named check per response refusal (1–7 above); a 15- and a 17-byte nonce; a non-token, empty or duplicate protocol; CR or LF in the host, the target or a protocol; a malformed offer list |
+| `tests/link/net_loopback` | `carrier-websocket.ts` drops its hand-written `GET` and fixed key for the new client over the std TLS client against `Http1TlsServer`; a new plain-TCP carrier against `Http1Server` through `tcpConnect`. Keys and masks come from `crypto.getRandomValues`, two connections send different keys, the client offers `chat` and `superchat`, the server picks with `websocketOfferedProtocols`, and the pair echo a message and close with 1000. Expected stdout pins the negotiated protocol | |
+| fuzz | a target from response bytes through the HTTP/1.1 client's response parser to `websocketCheckResponse`, with a seed for each refusal and a 101 with frame bytes glued to the head | |
+
+Each check's exact name is the stage's to choose. Grep it in `tests/run.js`
+before citing it in the security record.
+
+## Verification
+
+Before the PR, and again after `main` is merged in before it merges:
+
+```bash
+npm run check && npm run lint && npm run lint:dead   # read the exit status, never a piped tail
+node tests/run.js net_websocket
+node tests/run.js net_loopback                       # the full suite is CI's four test shards
+node tests/run.js fuzz
+node scripts/security-scope.mjs
+node docs/check-links.mjs
+node tests/self/goldens.js --update && git diff --stat tests/self/goldens   # read the diff
+```
+
+Commit subject (the changelog entry):
+`feat(runtime): client side of the WebSocket opening handshake`. The body
+says what a client now calls and that std still draws no randomness inside
+`nish/net/websocket`.
+
+### Run notes for /feature
+
+- **Targeted test command:** `node tests/run.js <section>`.
+- **Full suite:** CI's four `test` shards on the current head, per
+  [CLAUDE.md](../../CLAUDE.md#definition-of-done). Run a local `npm test` only
+  for the exceptions it names.
+- **No coverage command.** The owner agreed that the gate is the repo's
+  definition of done (an undegraded full suite in CI's `test` shards, the
+  targeted sections above, lint, typecheck and the security scope) plus a
+  negative test for every refusal.
+- **Generated globs:** `tests/self/goldens/checked/**`.
+- **Precondition:** the std HTTP/1.1 client and TLS client are on `main`.
+  Ledger: amritk/nish#995.
+
+### Acceptance criteria
+
+1. A program on `main` opens a WebSocket client over plain TCP to
+   `Http1Server`, echoes a text message and closes with 1000 (a loopback test
+   with expected stdout and exit 0).
+2. The same over the std TLS client to `Http1TlsServer`.
+3. Two connections send different `Sec-WebSocket-Key` values. The RFC 6455
+   §1.3 nonce gives accept `s3pPLMBiTxaQ9kYGzzhZRbK+xOo=`.
+4. The client offers `chat` and `superchat`, the server picks one from the
+   parsed offer, and both report the same protocol. With no offer, no protocol
+   field is sent and none is accepted.
+5. A hostile response is refused: a non-101 status (still readable), a wrong
+   or missing accept, a missing Upgrade or Connection, a protocol that was not
+   offered, and any extension. Each refusal is a named check that passes.
+6. CR or LF in the host, the target or a protocol is refused, so there is no
+   header injection.
+7. `node scripts/security-scope.mjs` passes, and `docs/security/http1.md`
+   names the new functions and the hostile-server threat model.
+8. The `/websocket` guide page's client example compiles under `npm test`.
+9. CI's test shards are green and not degraded on `main` after the merge.
