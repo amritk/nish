@@ -1,4 +1,4 @@
-PASS  quoting: ambiguous strings are quoted and read back (80 cases)
+PASS  quoting: ambiguous strings are quoted and read back (85 cases)
 PASS  quoting: control characters and line breaks are quoted and read back (16 cases)
 PASS  quoting: near misses stay plain and read back (28 cases)
 PASS  escape: quote and backslash
@@ -32,7 +32,10 @@ PASS  -0 reads back as an integer
 PASS  a key past 1024 bytes is written as an explicit key
 PASS  explicit keys read back
 PASS  explicit keys in a sequence item read back
-PASS  a quoted key's escapes count toward the 1024 bytes
+PASS  a quoted key's \n counts toward the 1024 bytes
+PASS  a quoted key's \u2028 counts toward the 1024 bytes
+PASS  a quoted key's \x85 counts toward the 1024 bytes
+PASS  a quoted key's \x7F counts toward the 1024 bytes
 PASS  a tree JSON_WRITER_MAX_DEPTH deep is written
 PASS  a tree JSON_WRITER_MAX_DEPTH deep reads back
 PASS  an empty array at the depth limit reads back
@@ -47,4 +50,4 @@ PASS  unquoted, 0x1F would read as an integer
 PASS  unquoted, a << key would merge
 PASS  unquoted, a: b would be an error
 PASS  quoted, a << key is an ordinary key
-std/yaml-write: 49 passed, 0 failed, 0 skipped
+std/yaml-write: 52 passed, 0 failed, 0 skipped

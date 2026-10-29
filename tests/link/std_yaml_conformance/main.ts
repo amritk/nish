@@ -129,9 +129,11 @@ export const main = (): number => {
   // JSON -> stringifyYaml -> parseYaml is the JSON again, for every case with JSON.
   let written: i32 = 0;
   let trips: i32 = 0;
+  let noJson: i32 = 0;
   for (const c of cases) {
     const why = ycRoundTrip(c, json, YC_NODE_BUDGET);
     if (why === "-") {
+      noJson += 1;
       continue;
     }
     written += 1;
@@ -141,7 +143,7 @@ export const main = (): number => {
       t.fail(`${c.key}'s JSON round trips through nish/yaml-write`, why);
     }
   }
-  console.log(`${trips} of ${written} cases' JSON round trips through nish/yaml-write`);
+  console.log(`${trips} of ${written} cases' JSON round trips through nish/yaml-write (${noJson} of ${cases.length} have no JSON)`);
   t.eqI32("the round-trip count is the pinned one", trips, YC_PINNED_ROUND_TRIPS);
   return t.done();
 };

@@ -115,17 +115,17 @@ export const ywDocuments = (t: Suite): void => {
     `${ywBytes([194, 133])}${ywRun("g", 1018)}`,
     `${ywBytes([127])}${ywRun("h", 1019)}`,
   ];
+  const edgeNames: string[] = ["\\n", "\\u2028", "\\x85", "\\x7F"];
   const explicitAt: boolean[] = [false, true, false, true];
-  let edgesRight: boolean = true;
   for (let i: i32 = 0; i < toI32(edges.length); i += 1) {
     const one: JsonValue = escapes.newObject();
     escapes.set(one, edges[i], escapes.newNull());
     const yaml = stringifyYaml(escapes, one);
-    if (yaml.startsWith("? \"") !== explicitAt[i] || ywReadsBack(escapes, one, yaml) !== "") {
-      edgesRight = false;
-    }
+    t.ok(
+      `a quoted key's ${edgeNames[i]} counts toward the 1024 bytes`,
+      yaml.startsWith("? \"") === explicitAt[i] && ywReadsBack(escapes, one, yaml) === "",
+    );
   }
-  t.ok("a quoted key's escapes count toward the 1024 bytes", edgesRight);
 
   // The depth limit is stringify's: JSON_WRITER_MAX_DEPTH collections write, one more is refused.
   const deep = ywDocument();

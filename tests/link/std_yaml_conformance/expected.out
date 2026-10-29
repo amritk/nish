@@ -12,6 +12,6 @@ PASS  the cases load from tests/yaml-suite/cases.txt
 PASS  every case passes but the expected failures
 400 of 402 cases pass
 PASS  the pass count is the pinned one
-271 of 271 cases' JSON round trips through nish/yaml-write
+271 of 271 cases' JSON round trips through nish/yaml-write (131 of 402 have no JSON)
 PASS  the round-trip count is the pinned one
 std/yaml conformance: 14 passed, 0 failed, 0 skipped

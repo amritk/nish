@@ -10,11 +10,11 @@ import { ywBytes, ywDocument, ywShow } from "./common";
 /** The strings the rule quotes, as values and as keys. */
 const ywQuoted = (): string[] => [
   // Empty, and the words YAML 1.2 or 1.1 reads as null or a boolean.
-  "", "~", "null", "Null", "NULL", "nUlL", "true", "True", "FALSE", "yes", "Yes", "NO", "no",
-  "on", "On", "off", "OFF", "y", "Y", "n", "N",
+  "", "~", "null", "Null", "NULL", "nUlL", "true", "True", "TRUE", "tRuE", "FALSE", "yes", "Yes", "NO", "no",
+  "on", "On", "oN", "off", "OFF", "y", "Y", "n", "N",
   // Numbers, and what YAML 1.1 reads as one.
   "1", "0", "-1", "+1", "0x1F", "0o17", "1e3", "1.5", ".5", "-.5", "+.5", "1_000", "12:30", "2001-12-14",
-  "1a", ".inf", ".Inf", "-.INF", "+.inf", ".nan", ".NaN", "-.nan", "+.NAN",
+  "1a", ".inf", ".Inf", ".INF", "-.INF", "+.inf", ".nan", ".NaN", "-.nan", "+.NAN",
   // Indicators that cannot start a plain scalar.
   "@a", "`a", "\\a", "*a", "&a", "!a", "|a", ">a", "%a", "'a", "\"a", "#a", ",a", "[a", "]a", "{a", "}a",
   "- a", "-", "? a", "?", ": a", ":",
@@ -22,8 +22,8 @@ const ywQuoted = (): string[] => [
   "---", "--- a", "---a", "...", "... a",
   // `: ` and ` #` inside, `:` at the end.
   "a: b", "a #b", "a:", "a::",
-  // Edge spaces.
-  " ", " a", "a ", "  a  ",
+  // Edge spaces, and a trailing tab.
+  " ", " a", "a ", "  a  ", "a\t",
 ];
 
 /** Strings with characters a plain scalar may not hold. */

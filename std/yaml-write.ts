@@ -407,7 +407,9 @@ export const stringifyYaml = (doc: JsonDocument, v: JsonValue): string => {
     return ""
   }
   const writer: YamlWriter = new YamlWriter(doc)
-  const top: i32 = 0
-  writer.node(v, top, top)
-  return writer.tooDeep ? "" : String.fromBytes(writer.out, top, toI32(writer.out.length))
+  const indent: i32 = 0
+  const depth: i32 = 0
+  writer.node(v, indent, depth)
+  const from: i32 = 0
+  return writer.tooDeep ? "" : String.fromBytes(writer.out, from, toI32(writer.out.length))
 }
