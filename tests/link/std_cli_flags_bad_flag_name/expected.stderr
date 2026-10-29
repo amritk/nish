@@ -1,0 +1,1 @@
+nish/cli-flags: a flag name is not empty and has no leading '-', '=' or whitespace, got "out=file"
