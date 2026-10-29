@@ -304,6 +304,7 @@ PASS  the second's head is not in yet
 PASS  and until it is, keepAlive() is false
 PASS  a chunk over the body limit is refused
 PASS  and the connection is not kept alive
+PASS  the first feed is the first buffer
 PASS  a status line split by a feed that moves the buffer
 PASS  refused with 3 (a line ended in a bare LF): an LF as the stream's first byte
 PASS  refused with 3 (a line ended in a bare LF): a bare LF after chunk data that ends in CR
@@ -344,4 +345,4 @@ PASS  CONNECT :80 is refused
 PASS  CONNECT a:123456 is refused
 PASS  a field whose value is upgrade is written when it is not Connection
 PASS  HTTP1_E_NONE is 0, before anything goes wrong
-http1-client: 346 passed, 0 failed, 0 skipped
+http1-client: 347 passed, 0 failed, 0 skipped

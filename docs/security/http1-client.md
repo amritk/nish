@@ -6,7 +6,7 @@ incremental response parser (`Http1ResponseParser`). It says what each
 refuses and with which code, what it caps and where the cap is set, what it
 keeps in memory, and the test that pins each property. It is written with the
 code rather than after an audit, so that the audit of the protocol stack
-starts from evidence. Anchors are at `7417fbe`, on `main` at `2cdef4f`.
+starts from evidence. It names functions rather than lines, so it holds at any commit that has them.
 
 **Result.** Every response-smuggling shape RFC 9112 names is refused, never
 repaired, with its own `HTTP1_E_` code, and a refusal is final. The events,
@@ -204,11 +204,58 @@ callers pass only indexes they loop over, and the `: buf.length` arm of the
 line-end clamps in `http1ClientStatusLine`, `http1ClientFieldLine` and
 `http1ClientChunkSize`, whose line end the parser found inside the buffer.
 
-**Every condition is observed.** Each refusal and clamp was deleted in turn
-and the checks run, and each deletion fails one. Three cannot, since
-deleting them changes nothing a caller sees: the lower clamp of the `i32`
-limits (a negative limit and 0 refuse the same input with the same code), the upper clamp
-of `maxHeaders` (it is only compared, never added to) and the status line's
-`b - a < 12` length test (a shorter line puts its CR where a later byte test
-already fails). They stay as the guards the overflow arithmetic and the
-bounds of `buf` rest on.
+**Every condition is observed, or recorded as equivalent.** A mechanical
+mutation sweep of `std/net/http1-client.ts` deleted each operand of each `&&`
+and `||`, moved each `<`, `<=`, `>` and `>=` boundary by one, deleted each
+assignment statement (every reset and clamp among them) and made false each
+`if` whose body is one statement, and ran the five `net_http1_client` link
+tests against each mutant. A mutant is killed when any test's stdout, exit
+status or stderr changes.
+
+| Class | Mutants | Killed | Survived | Invalid |
+| --- | --- | --- | --- | --- |
+| `&&` / `\|\|` left operand deleted | 114 | 70 | 44 | 0 |
+| `&&` / `\|\|` right operand deleted | 114 | 80 | 34 | 0 |
+| comparison boundary moved | 153 | 83 | 70 | 0 |
+| assignment deleted | 120 | 115 | 1 | 4 |
+| one-statement guard made false | 75 | 73 | 2 | 0 |
+| all | 576 | 421 | 151 | 4 |
+
+The four invalid mutants do not compile. Every survivor is in one of four
+classes, none of which a caller can observe:
+
+- **Implied bounds** (131). The index conjuncts of the byte loops and tests
+  (`i >= 0`, `i < toI32(buf.length)` and the like, in the writer's helpers,
+  the OWS trims, `http1ClientIsComma`, `http1ClientTakeLine`, the status,
+  field and chunk-size line readers, `feed`'s window check and the
+  `names`/`values` loops) are implied by another conjunct or by the caller:
+  a line the parser found lies inside `buf` and is followed by its CR, and
+  `names` and `values` have the same length. They stay, as the guards that
+  let the compiler drop a bounds check. The status line's `b - a < 12` length
+  test is one of them: a shorter line puts its CR where a later byte test
+  already fails.
+- **Equal at the boundary** (13). The negative-limit and upper clamps, the
+  head-size tests (`need` is at least 14), the reason phrase's `b - a > 13`,
+  `tunnelBytes`'s `n > 0` and the body window's `take`: at the moved boundary
+  both arms give the same value. The `need > 2^30` test moved to `>=` differs
+  only for a head of exactly 2^30 bytes, a 1 GiB allocation.
+- **Growth only** (5). `http1ClientReserve`'s tests decide whether the buffer
+  is reused or grown, and to what size, never what it holds. Its
+  `size > 2^30` panic moved to `>=` differs only past 1 GiB fed.
+- **Speed only** (2). The scan hint `http1ClientTakeLine` leaves behind, and
+  its `p.scan > p.start` choice, decide only how much of a line is scanned
+  again.
+
+Resets that no input could observe were deleted rather than kept untested:
+the per-request reset the constructor ran over its own field initializers,
+`http1ClientStartHead`'s state write (its one caller is already in that
+state), `http1ClientReserve`'s shift of the line bounds (no line is held
+across a feed), the scan writes after a line and a body window (the next scan
+starts from `start`), CONNECT's `persistent = false` (a tunnel never asks it),
+`next()`'s write of the closed state before it answers `HTTP1_CLOSED`, a
+writer offset test implied by the room test, and a saturation flag implied by
+the length test. Before them and the checks that kill the rest, the same sweep
+of the 594 mutants then in the module killed 367, left 223 and found 4
+invalid. A negative status-line limit had been recorded as equivalent to 0;
+the sweep showed it is not (an empty line is within a limit of 0 and over an
+unclamped -5), and `a negative status-line limit is clamped to 0` now pins it.

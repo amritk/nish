@@ -18,6 +18,7 @@ import {
   HTTP1_CLOSED,
   HTTP1_END,
   HTTP1_ERROR,
+  HTTP1_FIRST_INPUT,
   HTTP1_HEAD,
   HTTP1_NEED_MORE,
   HTTP1_NO_BODY,
@@ -373,7 +374,20 @@ const firstAsked = (p: Http1ResponseParser, text: string, a: Ask): string => {
   const start: i32 = 0;
   p.expect(a.head, a.connect);
   p.feed(data, start, toI32(data.length));
-  drain(p, t, false, false);
+  // `drain` says expect after each end, which would hide what the parser
+  // forgets on its own; this loop never says it again.
+  let e: i32 = p.next();
+  while (e === HTTP1_HEAD || e === HTTP1_BODY || e === HTTP1_END) {
+    if (e === HTTP1_HEAD) {
+      t.log.push(describeHead(p));
+    } else if (e === HTTP1_BODY) {
+      t.body.push(textOf(p.body, p.bodyOff, p.bodyLen));
+    } else {
+      t.log.push(`body "${t.body.join("")}"`);
+      t.body = [];
+    }
+    e = p.next();
+  }
   return ending(p, t);
 };
 
@@ -1143,14 +1157,18 @@ export const http1ClientChecks = (): i32 => {
   t.eqI32("a chunk over the body limit is refused", refusal.error, HTTP1_E_BODY_LIMIT);
   t.ok("and the connection is not kept alive", !refusal.keepAlive());
 
-  // A line cut by a feed that moves the live bytes down is still found.
-  const moved: string = `HTTP/1.1 200 OK\r\nContent-Length: 980\r\n\r\n${repeat("y", toI32(980))}`;
+  // A line cut by a feed that moves the live bytes down is still found: the
+  // first feed fills the first buffer exactly, ten bytes of the next status
+  // line already scanned, so the rest moves them to the front, and the scan
+  // must move with them.
+  const moved: string = `HTTP/1.1 200 OK\r\nContent-Length: 974\r\n\r\n${repeat("y", toI32(974))}`;
   const movedData: u8[] = bytesOf(`${moved}HTTP/1.1 204 None\r\n\r\n`);
   const movedCut: i32 = toI32(moved.length) + 10;
+  t.eqI32("the first feed is the first buffer", movedCut, HTTP1_FIRST_INPUT);
   t.eqStr(
     "a status line split by a feed that moves the buffer",
     transcriptSplitAt(movedData, movedCut, plain()),
-    `200 1.1 keep length 980 [content-length=980]\nbody "${repeat("y", toI32(980))}"\n204 1.1 keep length -1 []\nbody ""\nneeds more`
+    `200 1.1 keep length 974 [content-length=974]\nbody "${repeat("y", toI32(974))}"\n204 1.1 keep length -1 []\nbody ""\nneeds more`
   );
 
   // A bare LF where a line starts: the stream's first byte, and the CRLF
