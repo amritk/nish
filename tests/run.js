@@ -23201,12 +23201,19 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       "bin/launcher.js reaches for a compiler of its own instead of refusing; " +
         "a platform with no prebuilt binary must be told, not quietly served something else"
     )
-    // One row per attached seed, at exactly this version. Two ways this goes wrong and
+    // One row per attached seed, all at one version. Two ways this goes wrong and
     // neither shows up in a build: a platform that gets a binary built and attached but
     // no package published, so every install on it refuses for want of a package that
-    // was never uploaded; and a version bump that moves package.json and leaves these
-    // behind, so every install resolves last release's binary against this release's
-    // compiler. `release-pr.yml` bumps them with the version for that second reason.
+    // was never uploaded; and pins left behind, so every install resolves last
+    // release's binary against this release's compiler.
+    //
+    // The version is this release's or the one before it, and nothing older. The
+    // release commit leaves the pins behind on purpose, because their lockfile entries
+    // describe tarballs that are not published yet (release-pr.yml says why), and
+    // release.yml's `lockfile` job moves them after the publish. What a user installs
+    // never sees the gap: release.yml pins the package it packs to the tag, and checks
+    // the tarball it packed. Pins two releases behind mean a `lockfile` job that never
+    // landed, and the next publish would not notice that either.
     const seedAssets = JSON.parse(
       fs.readFileSync(path.join(root, ".github", "seed-targets.json"), "utf8")
     ).targets.map((t) => t.asset)
@@ -23218,11 +23225,21 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
       JSON.stringify(Object.keys(optional).sort()) === JSON.stringify(expectedOptional),
       `optionalDependencies is ${Object.keys(optional).sort().join(", ")}; expected ${expectedOptional.join(", ")}`
     )
-    const misversioned = Object.entries(optional).filter(([, v]) => v !== manifest.version)
+    const released = fs
+      .readdirSync(path.join(root, "changelog"))
+      .filter((f) => /^\d+\.\d+\.\d+\.json$/.test(f))
+      .map((f) => f.slice(0, -".json".length))
+    const previous = released
+      .filter((v) => v !== manifest.version && notAfter(v, manifest.version))
+      .reduce((a, v) => (a === undefined || notAfter(a, v) ? v : a), undefined)
+    const allowedPins = previous === undefined ? [manifest.version] : [manifest.version, previous]
+    const pinVersions = [...new Set(Object.values(optional))]
     check(
-      `every platform package is pinned to this version (${manifest.version})`,
-      misversioned.length === 0,
-      misversioned.map(([k, v]) => `${k} is pinned to ${v}, not ${manifest.version}`).join("\n")
+      `every platform package is pinned to one version, this one or the release before (${allowedPins.join(" or ")})`,
+      pinVersions.length === 1 && allowedPins.includes(pinVersions[0]),
+      Object.entries(optional)
+        .map(([k, v]) => `${k} is pinned to ${v}`)
+        .join("\n")
     )
     // And the lockfile's copy of that same list, which is a second file saying the same
     // thing and therefore a second thing to go stale. It did: 0.4.0 shipped with
@@ -23769,9 +23786,9 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
 }
 
 // ---- WP12: the release train's version bump ------------------------------------------
-// `release-pr.yml` bumps four things in one `node -e` script: package.json's version,
-// package-lock.json's two copies of it, every platform package pinned in
-// optionalDependencies, and VERSION in src/branding.ts. Nothing ran it. It is a
+// `release-pr.yml` bumps three things in one `node -e` script: package.json's version,
+// package-lock.json's two copies of it, and VERSION in src/branding.ts, and leaves the
+// platform packages pinned in optionalDependencies alone. Nothing ran it. It is a
 // workflow step, so it executes exactly once per merge to main, in a place where a
 // failure stops the release train rather than a pull request -- and the person who finds
 // out is whoever wanted to cut a release.
@@ -23822,34 +23839,34 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
         bumped.version === next && lock.version === next && lock.packages?.[""]?.version === next,
         `package.json ${bumped.version}, lock ${lock.version}, lock.packages[""] ${lock.packages?.[""]?.version}`
       )
-      // The half that was added with the installer, and the reason this block exists: a
-      // release whose optionalDependencies were left behind installs a compiler that
-      // resolves the previous release's binaries. It succeeds, it runs, and it is one
-      // version stale in the half nobody looks at.
-      //
-      // Both copies of that list, which is the half this check did not have. package.json
-      // keeps optionalDependencies at the top level and a lockfile keeps the root
-      // package under `packages[""]`, so a bump reading only the top level moves one and
-      // leaves the other -- and reading only the top level is what this check did too,
-      // so it passed while 0.4.0 shipped a lockfile still pinned to 0.3.0. `npm ci`
-      // tolerates the disagreement and `npm install` silently rewrites it, so nothing
-      // anywhere went red. A check that looks where the code looks cannot see the code
-      // looking in the wrong place: both places are named here.
+      // The pins are the half this bump must leave alone, in both copies of the list.
+      // package.json keeps optionalDependencies at the top level and a lockfile keeps
+      // the root package under `packages[""]`, and both are compared to what they were
+      // before the bump. A bump that moved them would put main out of step with its own
+      // lockfile until release.yml's `lockfile` job landed -- the red `lint` job on
+      // every release commit up to 0.26.0 -- because the entries those pins resolve to
+      // describe tarballs that are not published yet. release.yml moves the pins
+      // instead, in the package it packs and in the lockfile pull request.
+      const before = {
+        "package.json": JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).optionalDependencies,
+        'package-lock.json packages[""]': JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
+          .packages?.[""]?.optionalDependencies,
+      }
       const pinSets = [
         ["package.json", bumped.optionalDependencies ?? {}],
         ['package-lock.json packages[""]', lock.packages?.[""]?.optionalDependencies ?? {}],
       ]
-      const stale = pinSets.flatMap(([where, deps]) =>
+      const moved = pinSets.flatMap(([where, deps]) =>
         Object.entries(deps)
-          .filter(([, v]) => v !== next)
-          .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
+          .filter(([k, v]) => (before[where] ?? {})[k] !== v)
+          .map(([k, v]) => `${where}: ${k} moved from ${(before[where] ?? {})[k]} to ${v}`)
       )
       const pinCount = pinSets.reduce((n, [, deps]) => n + Object.keys(deps).length, 0)
       check(
-        `release-pr: the bump moves every platform package in BOTH files (${pinCount})`,
-        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
-        stale.length > 0
-          ? stale.join("\n")
+        `release-pr: the bump leaves every platform package pin alone in BOTH files (${pinCount})`,
+        pinSets.every(([, deps]) => Object.keys(deps).length > 0) && moved.length === 0,
+        moved.length > 0
+          ? moved.join("\n")
           : pinSets.map(([where, deps]) => `${where} pins ${Object.keys(deps).length}`).join("; ")
       )
       const branding = fs.readFileSync(path.join(work, "src", "branding.ts"), "utf8")
@@ -23860,6 +23877,67 @@ if (!only || "release-pr".includes(only) || "wp12".includes(only)) {
       )
     }
   }
+}
+
+// ---- WP12: the pins release.yml moves -----------------------------------------------
+// The release commit leaves the platform packages pinned to the previous release, so
+// `scripts/pin-platform-packages.mjs` is what moves them: in the `release` job before
+// `npm pack`, and in the `lockfile` job with the entries they resolve to. Both run once
+// per release, after the tag, where a script that moved one file and not the other
+// would publish a package or a lockfile pinned to the last release. So it is run here,
+// against copies, with both workflow steps checked to call it.
+if (!only || "pin-platform".includes(only) || "wp12".includes(only)) {
+  const work = path.join(buildDir, "pin-platform-packages")
+  fs.rmSync(work, { recursive: true, force: true })
+  fs.mkdirSync(work, { recursive: true })
+  for (const f of ["package.json", "package-lock.json"]) {
+    fs.copyFileSync(path.join(root, f), path.join(work, f))
+  }
+  const script = path.join(root, "scripts", "pin-platform-packages.mjs")
+  const ran = spawnSync(process.execPath, [script, "9.9.9", "--dir", work], { encoding: "utf8" })
+  check("pin-platform-packages: runs against a copy of package.json and the lockfile", ran.status === 0, ran.stderr)
+  if (ran.status === 0) {
+    const pinned = JSON.parse(fs.readFileSync(path.join(work, "package.json"), "utf8"))
+    const lock = JSON.parse(fs.readFileSync(path.join(work, "package-lock.json"), "utf8"))
+    const pinSets = [
+      ["package.json", pinned.optionalDependencies ?? {}],
+      ['package-lock.json packages[""]', lock.packages?.[""]?.optionalDependencies ?? {}],
+    ]
+    const stale = pinSets.flatMap(([where, deps]) =>
+      Object.entries(deps)
+        .filter(([, v]) => v !== "9.9.9")
+        .map(([k, v]) => `${where}: ${k} stayed at ${v}`)
+    )
+    check(
+      "pin-platform-packages: moves every platform package in BOTH files",
+      pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
+      stale.join("\n")
+    )
+    const original = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
+    check(
+      "pin-platform-packages: changes nothing in package.json but the pins",
+      JSON.stringify({ ...pinned, optionalDependencies: original.optionalDependencies }) === JSON.stringify(original),
+      "package.json differs from the original outside optionalDependencies"
+    )
+  }
+  const refused = spawnSync(process.execPath, [script, "v9.9.9", "--dir", work], { encoding: "utf8" })
+  check(
+    "pin-platform-packages: refuses a version that is not one (a tag name with its `v`)",
+    refused.status === 2,
+    `exit ${refused.status}: ${refused.stderr}`
+  )
+  const release = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
+  // Line numbers, not offsets: the lockfile pull request's body names the script too.
+  const lines = release.split("\n")
+  const lineOf = (text) => lines.findIndex((l) => l.includes(text))
+  const calls = lines.flatMap((l, i) => (l.includes('node scripts/pin-platform-packages.mjs "${GITHUB_REF_NAME#v}"') ? [i] : []))
+  check(
+    "pin-platform-packages: release.yml calls it twice, before `npm pack` and in the lockfile job",
+    calls.length === 2 &&
+      calls[0] < lineOf("npm pack --pack-destination build/release") &&
+      calls[1] < lineOf("npm install --package-lock-only"),
+    `found calls on lines ${calls.map((i) => i + 1).join(", ")}`
+  )
 }
 
 // ---- The seed fetch -------------------------------------------------------------------
