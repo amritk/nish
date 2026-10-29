@@ -48,8 +48,9 @@
 # wrong, and that is measured too: `-Wl,-no_uuid` does make the two files
 # identical, and dyld on arm64 then refuses to load either of them -- `missing
 # LC_UUID load command`, then SIGABRT -- so the stage links and will not start.
-# An unloadable compiler is worse than any reproducibility, and ELF's
-# `--build-id=none` has no Mach-O twin.
+# An unloadable compiler is worse than any reproducibility. ELF needs no such
+# remedy: its twin of LC_UUID, the build-id note, is linked as
+# `--build-id=sha1` (scripts/build.sh), a hash of the output's own bytes.
 #
 # WHAT SETTLED IT was one more measurement. Three links of one input by one
 # compiler, on both rows -- twice to the same output path, once to a different
