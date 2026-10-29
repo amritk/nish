@@ -2209,7 +2209,8 @@ and their `.ll` goldens are byte-identical files.
   one per primitive: `sha256`, `sha512` (SHA-512 and SHA-384), `hmac`, `hkdf`,
   `ct` (constant-time compare), `base64url`, `x25519`, `ed25519` (Ed25519
   signatures), `chacha20poly1305` (ChaCha20-Poly1305), `aes` (AES-128 and
-  AES-256 with GCM), `p256` (P-256 ECDSA) and `x509` (DER, PEM and
+  AES-256 with GCM), `p256` (P-256 ECDSA), `p384` (P-384 ECDSA
+  verification) and `x509` (DER, PEM and
   self-signed P-256 certificates) (`tests/link/crypto_base64url` is the case
   that resolves a nested specifier). Each is ordinary Nish source under the
   rules above, and a byte string is a `u8[]`. They are written branch-free on
@@ -6375,7 +6376,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
@@ -7434,6 +7435,38 @@ the two can differ); and `totalMemory` is `os.totalmem()`, a `bigint` as every
 itself, on the event loop, so a synchronous wait has nothing to find, and the
 prelude's versions throw, naming themselves, rather than answer (the `os_`
 block of `tests/run.js`).
+
+### Scheduling: `setNice`, `setIdlePriority`
+
+How much of the CPU the program asks for: a batch job or a background indexer
+steps aside for the interactive work on the machine. Both are C in
+`runtime/runtime-os.c`, and each is exported by `nish:process` as well as
+being a global.
+
+| Signature | Semantics | Effect | Test |
+| --- | --- | --- | --- |
+| `setNice(n: i32): i32` | set the **nice value** to `n` with `setpriority(PRIO_PROCESS, 0, n)` and answer 0, or a negative errno. The kernel clamps `n` to -20..19, so no value is out of range; lowering the value below the current one needs the privilege to, and is -13 (EACCES) without it on Linux and Darwin. Children started afterwards inherit the value | write | `os_nice`; `reject_os_nice_wasm`, `reject_os_nice_task` |
+| `setIdlePriority(): i32` | move the program to **`SCHED_IDLE`** with `sched_setscheduler(0, SCHED_IDLE, …)`, which runs it only when nothing else wants the CPU, and answer 0 or a negative errno. **Linux only**: Darwin has no such policy and the answer there is -95 (Linux's EOPNOTSUPP, as `nish:net` spells it). **An unprivileged process can never leave `SCHED_IDLE`**, and an idle process can **starve** on a saturated machine, so a caller keeps a normal-priority fallback (`setNice(19)`, or a deadline) for work that must finish | write | `os_nice`; `reject_os_idle_wasm` |
+
+**Per thread.** Linux keeps both the nice value and the policy per thread: a
+call sets the calling thread's and every thread started after it. So both
+belong at the top of `main`, before a `scope()` or a parallel loop starts the
+pool, and a task or a parallel body that calls one is refused as any shared
+write is (`reject_os_nice_task`). Neither ever crashes the program: a failure
+is only the answer.
+
+**Capabilities.** Both carry `process.spawn`, the label `kill` carries: neither
+reaches another process, but the priority is the one the program's children
+inherit, and a step down cannot always be taken back.
+
+**On wasm.** A `wasm32` target schedules nothing of the host's, so both are
+refused by the checker with the N3 rule's words (NL2404;
+`reject_os_nice_wasm`, `reject_os_idle_wasm`).
+
+**The TypeScript reading.** Both are **class C** under `runtime/nish.mjs`:
+Node has `os.setPriority` but no `SCHED_IDLE`, and a reading of one without
+the other would differ from the native build on the same host, so both throw,
+naming themselves.
 
 ### `nish:net`: addresses, non-blocking TCP and UDP, and the readiness loop
 
@@ -9022,7 +9055,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |

@@ -26,6 +26,14 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 many cores and bytes of memory the machine has (`availableParallelism`,
 `totalMemory`) to size a pool of workers; see
 [Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
+A batch job steps aside for interactive work with `setNice(n)` (the nice value,
+-20..19) or, on Linux, `setIdlePriority()` (`SCHED_IDLE`: the CPU only when
+nothing else wants it). Each answers 0 or a negative errno and never throws;
+`setIdlePriority` is -95 on Darwin. An unprivileged process can never leave
+`SCHED_IDLE`, and an idle one can starve on a busy machine, so keep a
+normal-priority fallback for work that must finish, and call either at the top
+of `main`, before any thread starts. See
+[Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority).
 
 | Module | What it gives you |
 | --- | --- |
@@ -1594,6 +1602,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x25519` | X25519 key exchange |
 | `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
+| `nish/crypto/p384` | P-384 ECDSA verification |
 | `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
@@ -1749,6 +1758,15 @@ each connection rather than reading it again. When you drive a `TlsServer` or
 a `TlsRecordServer` yourself rather than through `nish/net/tls-tcp`, call its
 `wipe()` once the connection is done; the carriers call it at every end of a
 connection.
+
+When a `TlsTcpServer` slot ends a connection itself (`shutdown`, or an HTTP
+carrier above it after its answer), it does not close the socket at once:
+it shuts the write side, wipes the slot's keys and answers
+`TLS_RECORD_WANT_READ` until the client hangs up, then `TLS_RECORD_DONE`.
+Closing a socket the client is still writing to resets the connection, and a
+browser can report that reset instead of the response. Keep reading the slot
+until its interest says done, and close slots that stay quiet from your own
+loop's timeout.
 
 A server that lends byte buffers across connections takes them from
 `nish/net/buffer-pool`'s `BufferPool`: a pool of fixed-size buffers, up to a
