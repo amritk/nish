@@ -4,6 +4,10 @@ PASS  the path ends at the root
 PASS  out of order, with extra certificates
 PASS  the extras are not in the path
 PASS  an Ed25519 root signs the leaf
+PASS  RSA leaf, intermediate and root, PKCS#1 v1.5
+PASS  an RSA-PSS intermediate
+PASS  RSA with SHA-384
+PASS  RSA with SHA-512
 PASS  a wildcard name
 PASS  an IPv4 address
 PASS  an IPv6 address
@@ -22,9 +26,11 @@ PASS  pkiVerifySignature: Ed25519
 PASS  pkiVerifySignature: not the root's signature
 PASS  pkiVerifySignature: P-256
 PASS  pkiVerifySignature: not a tampered P-256 signature
+PASS  pkiVerifySignature: RSA-PSS
+PASS  pkiVerifySignature: not the RSA root's signature
 PASS  pkiVerifySignature: SHA-1 is refused
 PASS  a root given twice is kept once
-pki accepts (f64 mode): 26 passed, 0 failed, 0 skipped
+pki accepts (f64 mode): 32 passed, 0 failed, 0 skipped
 PASS  an expired leaf
 PASS  a leaf not yet valid
 PASS  an expired intermediate
@@ -54,11 +60,14 @@ PASS  a cross-signed loop
 PASS  a path past PKI_MAX_PATH
 PASS  a tampered leaf signature
 PASS  a tampered Ed25519 signature
+PASS  an RSA key under PKI_MIN_RSA_BITS
+PASS  a tampered RSA signature
+PASS  a tampered RSA-PSS signature
 PASS  the nearest attempt's reason
 PASS  the first of two as near
 PASS  the nearer of two
 PASS  a root's reason before a longer path's
-pki refusals (f64 mode): 33 passed, 0 failed, 0 skipped
+pki refusals (f64 mode): 36 passed, 0 failed, 0 skipped
 PASS  an excluded dNSName
 PASS  a dNSName not permitted
 PASS  an rfc822Name subtree

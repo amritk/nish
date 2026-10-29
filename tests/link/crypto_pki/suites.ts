@@ -20,6 +20,7 @@ import {
   PKI_ERR_UNKNOWN_CRITICAL,
   PKI_ERR_UNSUPPORTED_ALGORITHM,
   PKI_ERR_UNTRUSTED,
+  PKI_ERR_WEAK_KEY,
   PKI_MAX_CHAIN_BYTES,
   PKI_MAX_CHAIN_CERTS,
   PKI_OK,
@@ -86,6 +87,10 @@ import {
   LEAF_LOOP,
   LEAF_NOSUBJ,
   LEAF_ROLL,
+  LEAF_RSA,
+  LEAF_RSA384,
+  LEAF_RSA512,
+  LEAF_RWEAK,
   LEAF_SAME,
   LEAF_SUB,
   LEAF_SUFFIX,
@@ -93,9 +98,13 @@ import {
   LOOPB,
   NOW_MS,
   OTHER,
+  RINT,
+  RINT_PSS,
   ROOT,
   ROOT_EMPTY,
   ROOT_NOCA,
+  RROOT,
+  RWEAK,
   SAME,
   SUB,
 } from "./fixtures"
@@ -119,6 +128,9 @@ const ders = (hexes: string[]): u8[][] => {
 }
 
 const store = (): PkiTrustStore => pkiTrustStore([cert(ROOT), cert(EDROOT)])
+
+const rsaVerify = (hexes: string[], root: string): i32 =>
+  pkiVerifyServer(ders(hexes), "example.com", NOW_MS, pkiTrustStore([cert(root)])).code
 
 const verify = (hexes: string[], host: string): i32 =>
   pkiVerifyServer(ders(hexes), host, NOW_MS, store()).code
@@ -164,6 +176,10 @@ export const accepts = (mode: string): i32 => {
   eqCode(s, "out of order, with extra certificates", shuffled.code, PKI_OK)
   s.eqI32("the extras are not in the path", toI32(shuffled.path.length), toI32(3))
   eqCode(s, "an Ed25519 root signs the leaf", verify([LEAF_ED], "example.com"), PKI_OK)
+  eqCode(s, "RSA leaf, intermediate and root, PKCS#1 v1.5", rsaVerify([LEAF_RSA, RINT], RROOT), PKI_OK)
+  eqCode(s, "an RSA-PSS intermediate", rsaVerify([LEAF_RSA, RINT_PSS], RROOT), PKI_OK)
+  eqCode(s, "RSA with SHA-384", rsaVerify([LEAF_RSA384, RINT], RROOT), PKI_OK)
+  eqCode(s, "RSA with SHA-512", rsaVerify([LEAF_RSA512, RINT], RROOT), PKI_OK)
   eqCode(s, "a wildcard name", verify([LEAF, INT], "www.example.org"), PKI_OK)
   eqCode(s, "an IPv4 address", verify([LEAF, INT], "192.0.2.1"), PKI_OK)
   eqCode(s, "an IPv6 address", verify([LEAF, INT], "[2001:db8::1]"), PKI_OK)
@@ -195,6 +211,8 @@ export const accepts = (mode: string): i32 => {
   const subLast: i32 = toI32(subTampered.length) - 1
   subTampered[subLast] = toU8(toI32(subTampered[subLast]) ^ 1)
   s.ok("pkiVerifySignature: not a tampered P-256 signature", !pkiVerifySignature(parsed(subTampered), cert(SUB)))
+  s.ok("pkiVerifySignature: RSA-PSS", pkiVerifySignature(cert(RINT_PSS), cert(RROOT)))
+  s.ok("pkiVerifySignature: not the RSA root's signature", !pkiVerifySignature(cert(LEAF_RSA), cert(RROOT)))
   s.ok("pkiVerifySignature: SHA-1 is refused", !pkiVerifySignature(cert(INT_SHA1), cert(ROOT)))
   s.eqI32("a root given twice is kept once", toI32(pkiTrustStore([cert(ROOT), cert(ROOT), cert(OTHER)]).roots.length), toI32(2))
   return s.done()
@@ -271,6 +289,25 @@ export const refusals = (mode: string): i32 => {
     s,
     "a tampered Ed25519 signature",
     pkiVerifyServer([edTampered], "example.com", NOW_MS, store()).code,
+    PKI_ERR_BAD_SIGNATURE
+  )
+  eqCode(s, "an RSA key under PKI_MIN_RSA_BITS", rsaVerify([LEAF_RWEAK], RWEAK), PKI_ERR_WEAK_KEY)
+  const rsaTampered: u8[] = fromHex(LEAF_RSA)
+  const rsaLast: i32 = toI32(rsaTampered.length) - 1
+  rsaTampered[rsaLast] = toU8(toI32(rsaTampered[rsaLast]) ^ 1)
+  eqCode(
+    s,
+    "a tampered RSA signature",
+    pkiVerifyServer([rsaTampered, fromHex(RINT)], "example.com", NOW_MS, pkiTrustStore([cert(RROOT)])).code,
+    PKI_ERR_BAD_SIGNATURE
+  )
+  const pssTampered: u8[] = fromHex(RINT_PSS)
+  const pssLast: i32 = toI32(pssTampered.length) - 1
+  pssTampered[pssLast] = toU8(toI32(pssTampered[pssLast]) ^ 1)
+  eqCode(
+    s,
+    "a tampered RSA-PSS signature",
+    pkiVerifyServer([fromHex(LEAF_RSA), pssTampered], "example.com", NOW_MS, pkiTrustStore([cert(RROOT)])).code,
     PKI_ERR_BAD_SIGNATURE
   )
   eqCode(s, "the nearest attempt's reason", verify([LEAF, INT_EXPIRED], "example.com"), PKI_ERR_EXPIRED)

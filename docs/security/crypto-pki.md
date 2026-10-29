@@ -423,7 +423,8 @@ The module was written from RFC 5280 §4.2 and §6.1 and RFC 6125 §6.4. It was
 checked against those sections clause by clause, then by mutation. Each
 refusal rule in `pki.ts` was replaced by its accepting form, one at a time.
 For each, the test program was rebuilt in the debug profile and run, and the
-file was then restored. 61 mutants were run. 56 were killed by a named check
+file was then restored. 67 mutants were run, six of them on the RSA wiring.
+62 were killed by a named check
 failing, or by a debug-profile panic. The other five are equivalent:
 
 - `cand.version !== 2` (intermediate). Extensions exist only in v3, so a v1
@@ -524,13 +525,26 @@ Tests:
 
 ECDSA is accepted with SHA-256 or SHA-384 under P-256 or P-384, and Ed25519
 under an Ed25519 key. SHA-1, an unknown algorithm, and an algorithm the
-issuer's key cannot make are `PKI_ERR_UNSUPPORTED_ALGORITHM`. RSA is not yet
-wired: `pkiRsaCode` answers `PKI_ERR_UNSUPPORTED_ALGORITHM` until
-`nish/crypto/rsa` lands, so an RSA path is refused, not accepted.
+issuer's key cannot make are `PKI_ERR_UNSUPPORTED_ALGORITHM`. RSA is accepted
+as PKCS#1 v1.5 with SHA-256, SHA-384 or SHA-512, or as RSASSA-PSS with the
+hash and salt length the certificate names, under an RSA key only.
+`pkiRsaCode` hands the key to `nish/crypto/rsa`, which refuses a modulus
+outside 1,024 to 8,192 bits as a bad signature, and then refuses a modulus
+under `PKI_MIN_RSA_BITS` (2048) as `PKI_ERR_WEAK_KEY`, before any signature
+is checked. A 1,024-bit RSA root is therefore refused for its size, not
+trusted for being in the store. The record of `nish/crypto/rsa`
+([crypto-rsa.md](crypto-rsa.md)) covers the verification itself.
 
-Tests: `SHA-1`, `pkiVerifySignature: SHA-1 is refused`,
-`an Ed25519 signature under a P-256 key` and
-`an ECDSA signature under an Ed25519 key`.
+Tests:
+
+- `SHA-1`, `pkiVerifySignature: SHA-1 is refused`,
+  `an Ed25519 signature under a P-256 key` and
+  `an ECDSA signature under an Ed25519 key`
+- `RSA leaf, intermediate and root, PKCS#1 v1.5`, `an RSA-PSS intermediate`,
+  `RSA with SHA-384`, `RSA with SHA-512` and `pkiVerifySignature: RSA-PSS`
+- `an RSA key under PKI_MIN_RSA_BITS`, `a tampered RSA signature`,
+  `a tampered RSA-PSS signature` and
+  `pkiVerifySignature: not the RSA root's signature`
 
 #### PKI-7: every certificate below the root is valid now
 

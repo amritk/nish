@@ -50,6 +50,15 @@
 import { ed25519Verify, ED25519_PUBLIC_KEY_SIZE } from "nish/crypto/ed25519"
 import { p256Verify, P256_POINT_SIZE } from "nish/crypto/p256"
 import { p384Verify, P384_POINT_SIZE } from "nish/crypto/p384"
+import {
+  RSA_HASH_SHA256,
+  RSA_HASH_SHA384,
+  RSA_HASH_SHA512,
+  RsaPublicKey,
+  rsaParsePublicKey,
+  rsaVerifyPkcs1v15,
+  rsaVerifyPss,
+} from "nish/crypto/rsa"
 import { sha256 } from "nish/crypto/sha256"
 import { sha384 } from "nish/crypto/sha512"
 import {
@@ -495,14 +504,33 @@ export const pkiMatchHostname = (leaf: X509Certificate, hostname: string): boole
 // ---------------------------------------------------------------------------
 
 /**
- * An RSA signature of `cert` under `issuer`'s key. Not yet wired: the RSA
- * verifier lands with `nish/crypto/rsa`.
+ * An RSA signature of `cert` under `issuer`'s key, PKCS#1 v1.5 or PSS as
+ * `cert.sigAlg` names. A key `rsaParsePublicKey` refuses is a bad signature,
+ * and one shorter than `PKI_MIN_RSA_BITS` a weak key. `X509_HASH_` and
+ * `RSA_HASH_` number SHA-256, SHA-384 and SHA-512 alike, so `pssHash` passes
+ * straight through.
  */
 const pkiRsaCode = (cert: X509Certificate, issuer: X509Certificate): i32 => {
-  if (toI32(cert.signature.length) < 0 || toI32(issuer.publicKey.length) < 0) {
+  const key: RsaPublicKey | null = rsaParsePublicKey(issuer.publicKey)
+  if (key === null) {
     return PKI_ERR_BAD_SIGNATURE
   }
-  return PKI_ERR_UNSUPPORTED_ALGORITHM
+  if (key.bits < PKI_MIN_RSA_BITS) {
+    return PKI_ERR_WEAK_KEY
+  }
+  const alg: i32 = cert.sigAlg
+  if (alg === X509_SIG_RSA_PSS) {
+    return rsaVerifyPss(key, cert.pssHash, cert.pssSaltLen, cert.tbs, cert.signature)
+      ? PKI_OK
+      : PKI_ERR_BAD_SIGNATURE
+  }
+  let hash: i32 = RSA_HASH_SHA512
+  if (alg === X509_SIG_RSA_PKCS1_SHA256) {
+    hash = RSA_HASH_SHA256
+  } else if (alg === X509_SIG_RSA_PKCS1_SHA384) {
+    hash = RSA_HASH_SHA384
+  }
+  return rsaVerifyPkcs1v15(key, hash, cert.tbs, cert.signature) ? PKI_OK : PKI_ERR_BAD_SIGNATURE
 }
 
 /** An ECDSA signature of `cert` under a P-256 or P-384 key, with SHA-256 or SHA-384 as `cert.sigAlg` names. */
