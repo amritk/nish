@@ -509,6 +509,21 @@ function expose<u8[], i32, (bytes) => ...>(s: Secret<u8[]>, f: void): i32 -> @ni
   pointer s: size=8 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:70 (bytes) => ... -> @nish.TlsRecordProtection.advanceHeld$arrow0
+function expose<u8[], u8[] | null, ed25519PublicKeyExposed>(s: Secret<u8[]>, f: void): u8[] | null -> @nish.expose$arr.u8$opt.arr.u8$fn.28.nish.ed25519PublicKeyExposed [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.ed25519PublicKeyExposed
+  calls: nish.ed25519PublicKeyExposed
+  pointer s: size=8 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  callee +0:70 ed25519PublicKeyExposed -> @nish.ed25519PublicKeyExposed
+function exposeWith<u8[], u8[], u8[] | null, ed25519SignExposed>(s: Secret<u8[]>, arg: u8[], f: void): u8[] | null -> @nish.exposeWith$arr.u8$arr.u8$opt.arr.u8$fn.23.nish.ed25519SignExposed [exported instance]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.ed25519SignExposed
+  calls: nish.ed25519SignExposed
+  pointer s: size=8 writesThrough=false captured=false
+  pointer arg: size=0 writesThrough=false captured=false passedTo=nish.ed25519SignExposed#1
+  stackSites=0 stackLocals=0
+  callee +0:93 ed25519SignExposed -> @nish.ed25519SignExposed
 module std/net/http-fields.ts [package nish]
 const HTTP_FIELDS_OK: i32 = 0 [exported]
 const HTTP_FIELDS_BAD_NAME: i32 = -1 [exported]
