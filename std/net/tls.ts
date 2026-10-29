@@ -410,7 +410,7 @@ export class TlsP256Signer {
 }
 
 /** Whether an x25519 shared secret is all zeros, reading every byte (run inside `expose`). */
-const tlsIsZeroSecret = (shared: u8[]): boolean => timingSafeEqual(shared, new Array<u8>(X25519_SIZE))
+export const tlsIsZeroSecret = (shared: u8[]): boolean => timingSafeEqual(shared, new Array<u8>(X25519_SIZE))
 
 /**
  * `Derive-Secret(early, "derived", "")` with no PSK, the salt a full handshake's
@@ -438,7 +438,7 @@ const tlsHandshakeFromEcdhe256 = (ecdhe: u8[], salt: u8[]): u8[] => hmacSha256(s
 const tlsHandshakeFromEcdhe384 = (ecdhe: u8[], salt: u8[]): u8[] => hmacSha384(salt, ecdhe)
 
 /** Wipes the bytes a `Secret` holds, for `exposeWith` to run on one secret of a holder outside its `wipe()`; answers `answer`. */
-const tlsZeroHeld = (held: u8[], answer: i32): i32 => {
+export const tlsZeroHeld = (held: u8[], answer: i32): i32 => {
   wipe(held)
   return answer
 }

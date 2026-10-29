@@ -1,0 +1,224 @@
+PASS  truncated extensions
+PASS  truncated extensions: failed
+PASS  truncated extensions: keeps its alert
+PASS  oversized message
+PASS  oversized message: failed
+PASS  oversized message: keeps its alert
+PASS  duplicate extension
+PASS  duplicate extension: failed
+PASS  duplicate extension: keeps its alert
+PASS  bytes after the ServerHello
+PASS  bytes after the ServerHello: failed
+PASS  bytes after the ServerHello: keeps its alert
+PASS  missing supported_versions
+PASS  missing supported_versions: failed
+PASS  missing supported_versions: keeps its alert
+PASS  downgrade sentinel
+PASS  downgrade sentinel: failed
+PASS  downgrade sentinel: keeps its alert
+PASS  TLS 1.1 downgrade sentinel
+PASS  TLS 1.1 downgrade sentinel: failed
+PASS  TLS 1.1 downgrade sentinel: keeps its alert
+PASS  legacy_version other than 0x0303
+PASS  legacy_version other than 0x0303: failed
+PASS  legacy_version other than 0x0303: keeps its alert
+PASS  supported_versions selecting TLS 1.2
+PASS  supported_versions selecting TLS 1.2: failed
+PASS  supported_versions selecting TLS 1.2: keeps its alert
+PASS  non-null compression
+PASS  non-null compression: failed
+PASS  non-null compression: keeps its alert
+PASS  an unsolicited extension in the ServerHello
+PASS  an unsolicited extension in the ServerHello: failed
+PASS  an unsolicited extension in the ServerHello: keeps its alert
+PASS  ALPN in the ServerHello
+PASS  ALPN in the ServerHello: failed
+PASS  ALPN in the ServerHello: keeps its alert
+PASS  unoffered suite
+PASS  unoffered suite: failed
+PASS  unoffered suite: keeps its alert
+PASS  unoffered group in the share
+PASS  unoffered group in the share: failed
+PASS  unoffered group in the share: keeps its alert
+PASS  unoffered group in a retry
+PASS  unoffered group in a retry: failed
+PASS  unoffered group in a retry: keeps its alert
+PASS  a retry for the group already shared
+PASS  a retry for the group already shared: failed
+PASS  a retry for the group already shared: keeps its alert
+PASS  no key_share
+PASS  no key_share: failed
+PASS  no key_share: keeps its alert
+PASS  session id not echoed
+PASS  session id not echoed: failed
+PASS  session id not echoed: keeps its alert
+PASS  one retry is taken
+PASS  a second hello goes out
+PASS  a second retry
+PASS  a second retry: failed
+PASS  a second retry: keeps its alert
+PASS  a suite changed after the retry
+PASS  a suite changed after the retry: failed
+PASS  a suite changed after the retry: keeps its alert
+PASS  a retry with a cookie
+PASS  a retry with a cookie: the second hello echoes it
+PASS  a cookie too long to echo
+PASS  a cookie too long to echo: failed
+PASS  a cookie too long to echo: keeps its alert
+PASS  a P-256 key share is taken
+PASS  a P-256 key share: waits on EncryptedExtensions
+PASS  a P-256 key share: the server's handshake secret
+PASS  a P-256 share off the curve
+PASS  a P-256 share off the curve: failed
+PASS  a P-256 share off the curve: keeps its alert
+PASS  a compressed P-256 share
+PASS  a compressed P-256 share: failed
+PASS  a compressed P-256 share: keeps its alert
+PASS  a retry to P-256
+PASS  a retry to P-256: the share's group
+PASS  a retry to P-256: the second hello carries the P-256 share
+PASS  a retry to P-256: the ServerHello is taken
+PASS  a retry to P-256: the server's handshake secret
+PASS  unoffered ALPN
+PASS  unoffered ALPN: failed
+PASS  unoffered ALPN: keeps its alert
+PASS  ALPN when none was offered
+PASS  ALPN when none was offered: failed
+PASS  ALPN when none was offered: keeps its alert
+PASS  server_name acknowledged unsent
+PASS  server_name acknowledged unsent: failed
+PASS  server_name acknowledged unsent: keeps its alert
+PASS  an unsolicited extension in EncryptedExtensions
+PASS  an unsolicited extension in EncryptedExtensions: failed
+PASS  an unsolicited extension in EncryptedExtensions: keeps its alert
+PASS  key_share in EncryptedExtensions
+PASS  key_share in EncryptedExtensions: failed
+PASS  key_share in EncryptedExtensions: keeps its alert
+PASS  EncryptedExtensions at the Initial level
+PASS  EncryptedExtensions at the Initial level: failed
+PASS  EncryptedExtensions at the Initial level: keeps its alert
+PASS  ClientHello: the message type
+PASS  ClientHello: the length is the message's
+PASS  ClientHello: legacy_version
+PASS  ClientHello: the random
+PASS  ClientHello: a 32-byte legacy_session_id
+PASS  ClientHello: the suites
+PASS  ClientHello: null compression only
+PASS  ClientHello: the extensions, in order
+PASS  ClientHello: server_name
+PASS  ClientHello: supported_groups
+PASS  ClientHello: signature_algorithms
+PASS  ClientHello: ALPN
+PASS  ClientHello: supported_versions
+PASS  ClientHello: one x25519 share
+PASS  ClientHello: no cookie
+PASS  ClientHello to an IPv4 literal: no server_name
+PASS  ClientHello to an IPv6 literal: no server_name
+PASS  ClientHello with no ALPN: no ALPN extension
+PASS  ClientHello offering both groups: supported_groups
+PASS  ClientHello offering both groups: one P-256 share
+PASS  ClientHello with two protocols: ALPN in order
+PASS  at WAIT_AUTH
+PASS  at WAIT_AUTH: one certificate
+PASS  at WAIT_AUTH: the leaf is the server's certificate
+PASS  at WAIT_AUTH: the scheme
+PASS  at WAIT_AUTH: the content's length
+PASS  at WAIT_AUTH: the content's prefix
+PASS  at WAIT_AUTH: the signature is DER r and s
+PASS  at WAIT_AUTH: the signature verifies under the leaf's key
+PASS  at WAIT_AUTH: not over other content
+PASS  a new client: START
+PASS  a new client: nothing to send at the application level
+PASS  a started client
+PASS  a started client: WAIT_SERVER_HELLO
+PASS  a second start
+PASS  a second start: failed
+PASS  a second start: keeps its alert
+PASS  a second start: start answers the alert
+PASS  after the ServerHello: WAIT_ENCRYPTED_EXTENSIONS
+PASS  after EncryptedExtensions: WAIT_CERTIFICATE
+PASS  after the Certificate: WAIT_CERTIFICATE_VERIFY
+PASS  a verdict before one is due
+PASS  a verdict before one is due: failed
+PASS  a verdict before one is due: keeps its alert
+PASS  a verdict before one is due: authenticate answers the alert
+PASS  an IP literal: 127.0.0.1
+PASS  an IP literal: ::1
+PASS  an IP literal: 1234
+PASS  not an IP literal: localhost
+PASS  not an IP literal: a.b
+PASS  not an IP literal: the empty name
+PASS  Certificate before EncryptedExtensions
+PASS  Certificate before EncryptedExtensions: failed
+PASS  Certificate before EncryptedExtensions: keeps its alert
+PASS  a Finished first
+PASS  a Finished first: failed
+PASS  a Finished first: keeps its alert
+PASS  a bad Finished is held
+PASS  waits on the caller
+PASS  waits on the caller: no Finished before the verdict
+PASS  a bad Finished
+PASS  a bad Finished: failed
+PASS  a bad Finished: keeps its alert
+PASS  the caller refuses the chain
+PASS  the caller refuses the chain: failed
+PASS  the caller refuses the chain: keeps its alert
+PASS  an all-zero x25519 share
+PASS  an all-zero x25519 share: failed
+PASS  an all-zero x25519 share: keeps its alert
+PASS  a retry with neither key_share nor cookie
+PASS  a retry with neither key_share nor cookie: failed
+PASS  a retry with neither key_share nor cookie: keeps its alert
+PASS  a retry with only a cookie
+PASS  a retry with only a cookie: the share's group stays
+PASS  a retry with only a cookie: the second hello echoes it
+PASS  a CertificateRequest
+PASS  a CertificateRequest: failed
+PASS  a CertificateRequest: keeps its alert
+PASS  a Certificate with no entries
+PASS  a Certificate with no entries: failed
+PASS  a Certificate with no entries: keeps its alert
+PASS  a Certificate with a request context
+PASS  a Certificate with a request context: failed
+PASS  a Certificate with a request context: keeps its alert
+PASS  a Certificate entry with an extension
+PASS  a Certificate entry with an extension: failed
+PASS  a Certificate entry with an extension: keeps its alert
+PASS  a CertificateVerify cut short
+PASS  a CertificateVerify cut short: failed
+PASS  a CertificateVerify cut short: keeps its alert
+PASS  a CertificateVerify with a scheme not offered
+PASS  a CertificateVerify with a scheme not offered: failed
+PASS  a CertificateVerify with a scheme not offered: keeps its alert
+PASS  a CertificateVerify with bytes after it
+PASS  a CertificateVerify with bytes after it: failed
+PASS  a CertificateVerify with bytes after it: keeps its alert
+PASS  the caller's own alert
+PASS  the caller's own alert: failed
+PASS  the caller's own alert: keeps its alert
+PASS  an alert out of range
+PASS  an alert out of range: failed
+PASS  an alert out of range: keeps its alert
+PASS  alert 0
+PASS  alert 0: failed
+PASS  alert 0: keeps its alert
+PASS  alert 256
+PASS  alert 256: failed
+PASS  alert 256: keeps its alert
+PASS  alert 255
+PASS  alert 255: failed
+PASS  alert 255: keeps its alert
+PASS  alert 255: authenticate answers it
+PASS  a refusal before one is due
+PASS  a refusal before one is due: failed
+PASS  a refusal before one is due: keeps its alert
+PASS  connected
+PASS  a NewSessionTicket is dropped
+PASS  a NewSessionTicket is dropped: still connected
+PASS  a NewSessionTicket with no ticket
+PASS  a NewSessionTicket with no ticket: failed
+PASS  a NewSessionTicket with no ticket: keeps its alert
+PASS  a wiped client
+PASS  a wiped client: failed
+PASS  a wiped client: keeps its alert
+tls client refusals: 223 passed, 0 failed, 0 skipped
