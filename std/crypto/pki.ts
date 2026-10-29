@@ -608,8 +608,8 @@ const pkiSignatureCode = (cert: X509Certificate, issuer: X509Certificate): i32 =
 /**
  * Whether `cert`'s signature verifies under `issuer`'s key: ECDSA with SHA-256
  * or SHA-384 under P-256 or P-384, RSA PKCS#1 v1.5 with SHA-256, SHA-384 or
- * SHA-512 and RSASSA-PSS under a key of `PKI_MIN_RSA_BITS` or more, and
- * Ed25519. Nothing else about either certificate is checked.
+ * SHA-512 and RSASSA-PSS under a key of `PKI_MIN_RSA_BITS` or more whose
+ * modulus is a whole number of bytes, and Ed25519. Nothing else about either certificate is checked.
  */
 export const pkiVerifySignature = (cert: X509Certificate, issuer: X509Certificate): boolean =>
   pkiSignatureCode(cert, issuer) === PKI_OK
@@ -989,7 +989,8 @@ const pkiSanDnsSound = (san: string): boolean => {
 
 /**
  * Whether the leaf's own key is one a server may hold, as a code: RSA of
- * `PKI_MIN_RSA_BITS` or more in whole bytes, P-256, P-384 or Ed25519.
+ * `PKI_MIN_RSA_BITS` or more in whole bytes, P-256, P-384 or Ed25519, the keys
+ * a signature is verified under here, so the server can prove it holds it.
  */
 const pkiSubscriberKeyCode = (leaf: X509Certificate): i32 => {
   const type: i32 = leaf.keyType

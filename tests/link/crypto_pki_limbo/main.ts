@@ -143,7 +143,13 @@ export const main = (): i32 => {
       const want: string = c.success ? "SUCCESS" : "FAILURE"
       if (listed >= 0) {
         seen[listed] = true
-        console.log(`${c.id}: ${verdict}, limbo says ${want}: kept, ${kept[listed].finding}`)
+        const d: LimboDivergence = kept[listed]
+        if (d.accepts !== ok) {
+          console.log(`FAIL ${c.id}: ${verdict}, limbo says ${want}, but divergences.ts lists it the other way`)
+          failures = failures + 1
+        } else {
+          console.log(`${c.id}: ${verdict}, limbo says ${want}: kept, ${d.finding}`)
+        }
       } else {
         console.log(`FAIL ${c.id}: ${verdict}, limbo says ${want}`)
         failures = failures + 1

@@ -11,9 +11,11 @@
 // Generated: do not edit; run generate.mjs again.
 //
 // Of the file's 9802 cases, 670 are kept and 9132 left out:
-//   29 for a CRL, an ML-DSA key or a max_chain_depth
+//   17 for a CRL
+//   6 for a max_chain_depth
 //   1 for no single expected peer name
 //   10 for a CLIENT case
+//   6 for an ML-DSA key
 //   9092 for a BetterTLS case not in the 1-in-20 sample
 // and 2 of nish's own follow them (ANCHORED in generate.mjs); of all
 // 672, 100 are expected to succeed.

@@ -27,9 +27,6 @@ const BETTERTLS_STRIDE = 20
 // Every such case's peer certificate is valid then (checked below); some
 // cases hold an expired intermediate on purpose.
 const DEFAULT_TIME = Date.parse("2026-10-01T00:00:00Z")
-// Features `pkiVerifyServer` has no part of: revocation, ML-DSA and a caller's
-// own path depth.
-const UNCLAIMED = new Set(["has-crl", "has-mldsa", "max-chain-depth"])
 // Each a kept limbo case and the verdict with its first intermediate as the
 // root: a pathLen:0 anchor over a CA fails, over the leaf succeeds.
 const ANCHORED = [
@@ -57,11 +54,22 @@ const leftOut = (t) => {
   if (t.validation_kind !== "SERVER") {
     return "a CLIENT case"
   }
-  if (t.features.some((f) => UNCLAIMED.has(f)) || t.crls.length !== 0 || t.max_chain_depth !== null) {
-    return "a CRL, an ML-DSA key or a max_chain_depth"
+  if (t.features.includes("has-crl") || t.crls.length !== 0) {
+    return "a CRL"
+  }
+  if (t.features.includes("has-mldsa")) {
+    return "an ML-DSA key"
+  }
+  if (t.features.includes("max-chain-depth") || t.max_chain_depth !== null) {
+    return "a max_chain_depth"
   }
   if (t.expected_peer_name === null || t.expected_peer_names.length !== 0) {
     return "no single expected peer name"
+  }
+  // The host is passed as a string, which pki reads as an IP address or a DNS
+  // name; any other kind of name would be judged as one of those.
+  if (t.expected_peer_name.kind !== "DNS" && t.expected_peer_name.kind !== "IP") {
+    throw new Error(`${t.id}: an expected peer name of kind ${t.expected_peer_name.kind}`)
   }
   const eku = t.extended_key_usage.filter((u) => u !== "serverAuth")
   const ku = t.key_usage.filter((u) => u !== "digitalSignature")

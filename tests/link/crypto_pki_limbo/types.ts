@@ -15,8 +15,9 @@ export interface LimboCase {
   trusted: number[];
 }
 
-/** A case whose verdict differs from limbo's: its id and the finding of docs/security/crypto-pki.md that records the decision. */
+/** A case whose verdict differs from limbo's: its id, the finding of docs/security/crypto-pki.md that records the decision, and whether pki accepts the chain limbo refuses (else it refuses one limbo accepts). */
 export interface LimboDivergence {
   id: string;
   finding: string;
+  accepts: boolean;
 }

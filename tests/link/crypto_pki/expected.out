@@ -54,6 +54,8 @@ PASS  the root sent, the intermediate not
 PASS  an intermediate of another key
 PASS  an intermediate whose key identifier is another's
 PASS  an intermediate with CA:FALSE
+PASS  a root with CA:FALSE
+PASS  a leaf RSA key that does not parse
 PASS  an intermediate without basicConstraints
 PASS  a CA as the leaf
 PASS  pathLen 0 above another CA
@@ -81,7 +83,7 @@ PASS  the nearest attempt's reason
 PASS  the first of two as near
 PASS  the nearer of two
 PASS  a root's reason before a longer path's
-pki refusals: 39 passed, 0 failed, 0 skipped
+pki refusals: 41 passed, 0 failed, 0 skipped
 PASS  an excluded dNSName
 PASS  a dNSName not permitted
 PASS  an rfc822Name subtree

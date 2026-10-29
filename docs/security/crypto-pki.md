@@ -521,6 +521,17 @@ so `generate.mjs` adds two cases of its own from limbo's certificates (its
 `ANCHORED`): a pathLen:0 CA trusted as the root over another CA, refused,
 and over the leaf, accepted.
 
+A FAILURE case is counted as agreeing whatever the refusal, and five are
+refused for a reason other than the one they test. The printed reason shows
+it, so a change that moves one to SUCCESS, or to the reason it tests, shows
+in `expected.out`:
+
+- `rfc5280::serial::negative` as `ERR_UNKNOWN_CRITICAL`;
+- `rfc5280::nc::invalid-ipv4-address` as `ERR_UNTRUSTED`;
+- `rfc5280::nc::permitted-dn-mismatch` as `ERR_HOSTNAME`;
+- `webpki::aki::root-with-aki-authoritycertissuer` and
+  `webpki::aki::root-with-aki-authoritycertserialnumber` as `ERR_UNTRUSTED`.
+
 The 1-in-20 BetterTLS sample is deterministic: a case whose `tc` number is a
 multiple of 20. `generate.mjs --all-bettertls` keeps all 9572, and with this
 `pki.ts` every one agrees with limbo: 9762 cases, 934 accepted, 9732 as
@@ -532,12 +543,31 @@ under its finding. 23 turn a case, the root's pathLenConstraint one of the
 `ANCHORED` two. Requiring a subjectKeyIdentifier on a root again turns
 `rfc5280::ski::root-missing-ski` back to limbo's verdict, which `main.ts`
 refuses as a divergence listed but gone (PKI-32). Three do not, and are
-equivalent or untested:
+equivalent or tested in `tests/link/crypto_pki`:
 
-- `cand.version !== 2` on a root, as on an intermediate;
-- `!cand.bcPresent` on a root, as on an intermediate;
+- `cand.version !== 2` on a root, equivalent as on an intermediate;
+- `!cand.bcPresent` on a root, equivalent as on an intermediate;
 - `!cand.bcCa` on a root. No limbo case has a root whose basicConstraints
-  says `cA` FALSE, so this has no test of its own.
+  says `cA` FALSE; `a root with CA:FALSE` in crypto_pki trusts `ROOT_NOCA`
+  alone and is refused as `PKI_ERR_NOT_CA`, and accepts with the clause
+  reverted.
+
+Three parts of the fixes are narrower than a revert, and were mutated alone
+against crypto_pki:
+
+- the `root &&` in PKI-22's rule that a self-issued certificate's
+  authorityKeyIdentifier is its subjectKeyIdentifier. A key-rollover CA is
+  self-issued, not a root, and names its old key: `INT_ROLL`, under which
+  `pathLen 0 does not count a self-issued CA` and `a directoryName
+  constraint skips a self-issued CA` are accepted, and both fail with the
+  rule applied to every self-issued CA;
+- the leaf's RSA key that `rsaParsePublicKey` refuses, in PKI-24's key
+  check. `a leaf RSA key that does not parse` is a 512-bit leaf key under a
+  root of its own, `LEAF_RSHORT`, refused as `PKI_ERR_BAD_SIGNATURE`, and
+  accepted with that branch taken as `PKI_OK`;
+- `n < 1` in `pkiSerialSound`, PKI-23's serial check, is equivalent: the
+  parser refuses an INTEGER that is not minimal DER, and a serial of no
+  octets is not one, so the leaf never reaches the check with one.
 
 The fixtures are made by OpenSSL. The commands are in the header of
 `tests/link/crypto_pki/fixtures.ts`. The f64 twin
@@ -866,8 +896,11 @@ Tests: `rfc5280::leaf-ku-keycertsign`, `rfc5280::nc::not-allowed-in-ee-critical`
 
 An RSA modulus whose length is not a whole number of bytes is refused as
 `PKI_ERR_WEAK_KEY` wherever it is on the path. The leaf's own key, which signs
-no certificate, is held to BR §6.1.5 all the same: RSA of 2048 bits or more,
-ECDSA on P-256 or P-384, or Ed25519. A DSA or P-192 key is refused as
+no certificate, is held to the keys pki verifies a signature under all the
+same: RSA of 2048 bits or more, ECDSA on P-256 or P-384, or Ed25519. A server
+proves it holds that key by signing the handshake, and a key no verifier here
+takes cannot prove it; the BRs' list is not the reason, since it has P-521 and
+not Ed25519. A DSA or P-192 key is refused as
 `PKI_ERR_UNSUPPORTED_ALGORITHM`, a short RSA one as `PKI_ERR_WEAK_KEY`.
 
 Tests: `webpki::forbidden-rsa-key-not-divisible-by-8-in-leaf`,
@@ -931,7 +964,7 @@ subject. This is Low: every extension the module knows binds whichever way
 it is marked, so a wrong flag never widens what a path may name or a key may
 do; what is lost is catching a CA that misissues. The follow-up keeps each
 extension's critical bit in `X509Cert`, in `nish/crypto/x509`, which this
-work does not change.
+work does not change: #1028.
 
 Tests: `rfc5280::aki::critical-aki`,
 `rfc5280::nc::permitted-dns-match-noncritical`, `rfc5280::pc::ica-noncritical-pc`,
@@ -950,7 +983,7 @@ built by Name and signature, never by these fields, and no AIA fetch is made,
 so none of them widens what a path may name or reaches the network. The
 follow-ups are in `nish/crypto/x509`: decoding the authorityKeyIdentifier's
 authorityCertIssuer and serial, and parsing authorityInfoAccess so a
-malformed one refuses its certificate.
+malformed one refuses its certificate: #1028.
 
 Tests: `webpki::aki::root-with-aki-missing-keyidentifier`,
 `webpki::aki::root-with-aki-all-fields` and `webpki::malformed-aia`.
@@ -962,7 +995,7 @@ accepted for a name one label below it. The module ships no suffix list; BR
 §3.2.2.6 forbids a CA to issue such a certificate. This is Low: the wildcard
 still covers one label only, and a publicly trusted CA may not issue it. The
 follow-up is a Public Suffix List the module ships and checks a wildcard's
-base against.
+base against; #1028 tracks it, and whether to ship one at all.
 
 Tests: `webpki::san::public-suffix-multi-label-wildcard-san` and
 `webpki::san::public-suffix-private-namespace-wildcard-san`.
