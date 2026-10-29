@@ -62,6 +62,7 @@ through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` for the runs a parser skips and a writer copies |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
 | [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
+| [`nish/cli-args`](#nishcli-args) | `Cli` and `parse`: a command tree, its flags and arguments, help and did-you-mean errors |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
 | [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
@@ -1231,6 +1232,129 @@ to stderr and exits 2, the status `nish` itself uses for a usage error.
 `usageError()` answers those two lines without printing them. `exitUsage`
 reaches `exit`; the rest of the module reaches no
 [capability](../../LANGUAGE.md#capabilities).
+
+## `nish/cli-args`
+
+`nish/cli-args` parses the command line of a tool with many commands
+(`api users keys list 42 --limit 5`): you declare the tree once, `parse`
+walks the arguments, and the answer is the id of the command they reached
+and every flag's value with where it came from. `finish` then prints the
+help, the version or an error, the way [`nish/cli`](#nishcli) lays help out.
+
+```ts nish:ok
+import { Cli, ROOT, finish } from "nish/cli-args";
+import { agentDriven, styleFor } from "nish/cli";
+
+const LIST: i32 = 1;
+
+export const main = (): i32 => {
+  const cli = new Cli("api", "1.4.0", "Talk to the Example API");
+  const raw = cli.globalFlag("-r, --raw-output", "print JSON as it arrives");
+  const users = cli.group(ROOT, "users", "Manage users");
+  const list = cli.command(users, "list", LIST, "List users");
+  const limit = cli.flag(list, "-l, --limit <n>", "at most n users");
+  cli.defaultValue(limit, "20");
+
+  const r = cli.parse(process.argv, 1);
+  const agent = agentDriven();
+  finish(r, styleFor(1, agent), styleFor(2, agent));
+  if (r.id === LIST) {
+    console.log(`listing ${r.value(limit) ?? ""} users, raw: ${r.flag(raw)}`);
+  }
+  return 0;
+};
+```
+
+`api users list -l 5 -r` prints `listing 5 users, raw: true`; `api users`
+says `api users: missing command (one of: list)` on standard error and
+exits 2.
+
+**A builder, not a table.** A command cannot carry its handler, because Nish
+has no function values; instead every declaration answers a handle, an
+`i32`, and the program reads a value by the handle it declared rather than
+by a name a typo could miss. Each command gets an id you choose, which a
+`switch` on `r.id` dispatches on. A mistake in the declarations — a flag
+declared twice in one scope, a bad spec, a required argument after an
+optional one, a command id used twice or negative, a required flag on a
+command that holds commands or with a default, a flag a `--no-` negation
+would shadow — panics at the call that made it, naming it. A module constant
+can only be a number, a boolean or a string, so build the tree in `main` or
+in a class's constructor.
+
+**Declaring.** `new Cli(name, version, description)` is the root, `ROOT`.
+`group(parent, name, description)` adds a command that only holds commands;
+`command(parent, name, id, description)` adds one the program runs.
+`alias(handle, name)` gives either a second name. `flag(cmd, spec,
+description)` declares a flag of one command; `globalFlag(spec,
+description)` one every command accepts, before, between or after the
+verbs. `argument(cmd, spec, description)` declares the next positional
+argument. `defaultValue`, `required`, `repeatable` and `negatable` refine a
+flag, and `epilog(handle, text)` ends a command's help with a paragraph.
+`-h`/`--help` (anywhere before `--`), `-v`/`--version` (at the root) and the word `help`
+as the first command are built in; `help users kyes`, naming no command, is
+the unknown-command error rather than help.
+
+| Spec | Means |
+| --- | --- |
+| `--all` | a boolean, given as `--all` |
+| `-a, --all` | the same, also as `-a`; short flags cluster (`-ar`) |
+| `--limit <n>` | takes a value: `--limit 5`, `--limit=5`, `-l5`, `-l=5`, `-l 5`; `--limit=` and `-l=` give `""` |
+| `--format [fmt]` | the value is optional: `--format json`; given none, `""` |
+| `--no-color` | on by default; `--no-color` turns it off, `--color` back on; a short (`-C, --no-color`) turns it off |
+| `<id>` / `[id]` | a required / optional argument |
+| `<file...>` / `[file...]` | every argument left; only the last one |
+
+**Reading the answer.** `parse(argv, start)` reads `argv` from index
+`start` (1 for `process.argv`, past the program) and never fails: it answers
+a `ParseResult`.
+
+| Member | Answers |
+| --- | --- |
+| `kind` | `PARSE_OK`, `PARSE_HELP`, `PARSE_VERSION` or `PARSE_ERROR` |
+| `id`, `command`, `path` | the reached command's id (-1 for a group), its handle and its command line |
+| `flag(f)` | a boolean's value; for a flag with a value, whether it was given |
+| `value(f)` | the last value given, else the default, else `null` |
+| `values(f)` | every value of a repeatable flag, in order |
+| `source(f)` | `SOURCE_ARGV`, `SOURCE_DEFAULT` or `SOURCE_UNSET` |
+| `positional(a)`, `positionals(a)` | an argument's value; every value from it on |
+| `rest()` | the arguments after `--`, which are also positionals |
+| `message`, `exitCode` | the error or version line; 2 for an error, else 0 |
+| `hint`, `errorPath` | for an error, the pointer to the help and the command it names |
+| `help(style)` | the help of the reached command |
+
+`source` tells a value the user typed from a default, which is what a rule
+the tree cannot state reads, such as two flags that may not be given
+together. `finish(r, outStyle, errStyle)` prints help or the version on
+standard output and exits 0, prints an error and a pointer to the help on
+standard error and exits 2, and returns for `PARSE_OK`. The error line is
+printed plain; `errStyle` paints only `<path> --help` in the pointer:
+
+```text
+api users: unknown command 'kyes' (did you mean 'keys'?)
+Run 'api users --help' for usage.
+```
+
+The first error wins and names the command it was found at; after a flag
+error the walk still goes down the command words, so a later `-h` answers
+the deepest command, and only an unknown command stops it. A misspelt
+command or long flag gets the nearest declared one within two edits, or a
+third of its length if that is more (a swap of two letters is one edit), so
+`--lmt` finds `--limit`; an unknown short flag gets no guess. Help lists a
+command's arguments, its own flags and the global ones, descriptions lined
+up at the widest flag, up to column 32. It appends a default as
+`(default: …)`, and `(required)` and `(repeatable)` to the flags declared so,
+so a description need not say it.
+
+**What it costs and reaches.** Declaring builds no help text, and parsing
+looks each argument up once in a map: on a tree of 500 commands with 8 flags
+each, a parse takes about a microsecond. Help, guesses and error wording are
+worked out only when they are printed. `parse` reaches no
+[capability](../../LANGUAGE.md#capabilities); `finish` writes to standard
+output or standard error and exits. Shell completion and man pages are not
+generated yet, and nish's own command line does not use this module: `src/`
+can only use what a released compiler ships, so it moves onto
+`nish/cli-args` once a release carries it. The example under
+`examples/api-cli/` is a whole client.
 
 ## `nish/term`
 
