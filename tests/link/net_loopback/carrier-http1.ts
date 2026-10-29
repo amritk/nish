@@ -92,7 +92,9 @@ export const http1Checks = (t: Suite): void => {
   d.send(h1Post(ascii("the last one"), true));
   const last: ClientReader = h1Response(d);
   const alert: string = d.awaitAlert();
-  const ended: boolean = lp.awaitEnd(d.index) && lp.awaitClosed(toI32(2));
+  const reached: boolean = lp.awaitEnd(d.index) && lp.peers[d.index].failure === 0;
+  lp.hangUp(d.index);
+  const ended: boolean = reached && lp.awaitClosed(toI32(2));
   lp.meter = null;
   t.ok(
     "http/1.1: a request with Connection: close is answered, then the server closes with close_notify",

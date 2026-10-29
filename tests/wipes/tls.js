@@ -50,7 +50,8 @@ export const wipeChecks = [
   // and the opened ticket's PSK, 1 each), and `restart` 29 (`wipe`, the
   // caller's key array once it is copied in, and the salt and both tickets'
   // PSK arrays, 1 each). The carrier's `close` 652 (the record server's
-  // `close`, the flush after it and `wipeKeys`).
+  // `close`, the flush after it and `wipeKeys`), and its `linger` 43 (the
+  // `wipeKeys` once the write side is shut, before the slot drains).
   //
   // The handshake's own wipes, each a root of its own: a record's `open` 16
   // (its nonce, 1, and the AEADs' own wipes), `writeServerFlight` 3 (the
@@ -125,6 +126,7 @@ export const wipeChecks = [
       ["nish.TlsServer.wipe", 25],
       ["nish.TlsServer.restart", 29],
       ["nish.TlsTcpServer.close", 652],
+      ["nish.TlsTcpServer.linger", 43],
       ["nish.TlsRecordProtection.open", 16],
       ["nish.TlsServer.writeServerFlight", 3],
       ["nish.TlsServer.sign", 17],
