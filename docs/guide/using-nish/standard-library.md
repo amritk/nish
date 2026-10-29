@@ -2034,18 +2034,20 @@ https://example.com:443
 ```
 
 **A URL two readers could disagree on is refused**, with null, not repaired:
-a byte outside printable ASCII (a space, a tab, a non-ASCII letter), a `%`
-not followed by two hex digits, a second `@`, a host byte other than a
-letter, a digit and `-._~` (so a backslash or a percent-encoded byte), an IPv6
+a byte outside printable ASCII (a space, a tab, a non-ASCII letter), a
+backslash anywhere (a browser reads it as `/`), a `%` not followed by two hex
+digits, a second `@`, a host byte other than a letter, a digit and `-._~`
+(so a percent-encoded byte), an IPv6
 zone, a port past 65535, and a host that looks
 like a number but is not four decimal parts (`127.1`, `0x7f.0.0.1`,
-`2130706433`, `010.0.0.1`). An http or https URL needs a host. What does
+`2130706433`, `010.0.0.1`). An http, https, ws or wss URL needs a host. What does
 parse is always one host: in `http://good.com%2f@evil.com/`, everything
 before the `@` is the username.
 
 Resolution is RFC 3986's, strictly: `http:g` against an http base is an
 absolute URL with no host, so it is refused, where a browser reads it as the
-relative `g`. A non-ASCII host is written in its `xn--` form. An IPv6 host is
+relative `g`. A non-ASCII host is refused, so pass an
+international name in its punycode `xn--` form. An IPv6 host is
 compared as written, so `[::1]` and `[0::1]` are different origins; check
 an address after you resolve the name, never the string, before you trust it.
 

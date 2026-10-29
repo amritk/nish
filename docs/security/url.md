@@ -91,12 +91,14 @@ not; inside a longer segment `%2e` is kept (`/b%2ec/%2e%2e%2e`).
 A path that starts `//` under no authority writes back after `/.` and reads
 back as itself.
 
-**Host confusion refused** (`net_url_parse`): each of 51 refusals is a line
+**Host confusion refused** (`net_url_parse`): each of 57 refusals is a line
 of `expected.out` (`refused: …`) that answers null — no scheme, or one that
-starts with a digit or is empty; a tab, CR LF, NUL, a space, DEL and a byte
-past 0x7F anywhere; a `%` without two hex digits; two `@`; `[` or `]` in the
-userinfo; a host byte outside ALPHA, DIGIT and `-._~` (so `%61`, `\`, `!`);
-an empty host under http or https; a port that is signed, has a letter,
+starts with a digit or is empty; a tab, CR LF, NUL, a space, DEL, a backslash and
+a byte past 0x7F anywhere (so `http://evil.com\@good.com/`, where a WHATWG
+parser ends the host at `\`, and the reference `/\evil.com`, which it reads
+as a network path); a `%` without two hex digits; two `@`; `[` or `]` in the
+userinfo; a host byte outside ALPHA, DIGIT and `-._~` (so `%61`, `!`);
+an empty host under http, https, ws or wss; a port that is signed, has a letter,
 repeats or passes 65535; an IPv6 literal that is unclosed, empty, of seven
 groups without `::` or eight with it, with two `::` or `:::`, a group of five
 digits, a dangling `:`, a non-hex digit, a zone (`%25eth0`), an IPvFuture
@@ -110,13 +112,13 @@ each refusal parse (`0.0.0.0`, `1.a`, `a.b.`, `a.0xg`).
 is dumped part by part and written back — an escape in the case it was
 written (`%4a%4A`), `http://u:@a/` as `http://u@a/` (URL-5), `http://a:80/`
 with its port — and 4,000 seeded strings over the
-bytes the parser splits on (`:/?#@[].%` and hex digits, after one of eight
-prefixes) are each parsed and resolved against the §5.4 base with no panic;
-every one of the 2,161 answers that parse writes back to a string that parses
-to the same string (`0 broken, 2161 parsed`).
+alphabet `aZ09:/?#@[].%2eEf+-~!\`, a space and `xv` (the bytes the parser
+splits on, hex digits and some it refuses), after one of eight prefixes, are each parsed and resolved against the §5.4 base with no panic;
+every one of the 1,872 answers that parse writes back to a string that parses
+to the same string (`0 broken, 1872 parsed`).
 
-**Origins** (`net_url_parse`): `urlDefaultPort` is 80 and 443 for http and
-https and -1 otherwise; `urlOrigin` writes the port always, so
+**Origins** (`net_url_parse`): `urlDefaultPort` is 80 for http and ws, 443
+for https and wss, and -1 otherwise; `urlOrigin` writes the port always, so
 `HTTP://A.com/x` and `http://a.com:80/y` are the one origin
 `http://a.com:80`, a different port, scheme or host is a different one, an
 IPv6 host is bracketed, and any other scheme has none (null).

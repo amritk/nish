@@ -118,6 +118,12 @@ PASS  refused: an empty host with a port
 PASS  refused: a percent-encoded byte in the host
 PASS  refused: a sub-delim in the host
 PASS  refused: a backslash in the host
+PASS  refused: a backslash in the userinfo, where a WHATWG parser ends the host
+PASS  refused: a backslash in the path
+PASS  refused: a backslash in the query
+PASS  refused: a backslash in the fragment
+PASS  refused: an empty ws host
+PASS  refused: an empty wss host
 PASS  refused: two @ in the authority
 PASS  refused: a [ in the userinfo
 PASS  refused: a ] in the userinfo
@@ -151,8 +157,13 @@ PASS  refused: a host that is one decimal number
 PASS  refused: a host whose last label is hex
 PASS  refused: a reg-name whose last label is a number
 PASS  4,000 seeded strings parse and resolve without a panic, and each answer writes back to itself
+PASS  a reference /\ that a WHATWG parser reads as another host is refused
+PASS  a reference \\ is refused
 PASS  http's default port
 PASS  https's default port
+PASS  ws's default port
+PASS  wss's default port
+PASS  a wss URL has an origin
 PASS  another scheme has none
 PASS  an origin writes the default port
 PASS  so an explicit default port is the same origin
@@ -161,5 +172,5 @@ PASS  http and https are different origins
 PASS  an explicit port
 PASS  userinfo is not part of an origin
 PASS  an IPv6 origin is bracketed
-PASS  a scheme other than http or https has no origin
-net_url_parse: 164 passed, 0 failed, 0 skipped
+PASS  a scheme other than http, https, ws or wss has no origin
+net_url_parse: 175 passed, 0 failed, 0 skipped

@@ -143,6 +143,12 @@ const refusedUrls = (): string[] => [
   "a percent-encoded byte in the host", "http://%61/",
   "a sub-delim in the host", "http://a!b/",
   "a backslash in the host", "http://a\\b/",
+  "a backslash in the userinfo, where a WHATWG parser ends the host", "http://evil.com\\@good.com/",
+  "a backslash in the path", "http://a/x\\..\\y",
+  "a backslash in the query", "http://a/?x\\y",
+  "a backslash in the fragment", "http://a/#x\\y",
+  "an empty ws host", "ws:///x",
+  "an empty wss host", "wss://:443/",
   "two @ in the authority", "http://u@evil@a/",
   "a [ in the userinfo", "http://u[@a/",
   "a ] in the userinfo", "http://u]@a/",
@@ -310,12 +316,18 @@ export const urlParseChecks = (): i32 => {
   t.eqStr(
     "4,000 seeded strings parse and resolve without a panic, and each answer writes back to itself",
     roundTripFuzz(base, 4000),
-    "0 broken, 2161 parsed",
+    "0 broken, 1872 parsed",
   );
 
-  t.ok("http's default port", urlDefaultPort("http") === 80);
-  t.ok("https's default port", urlDefaultPort("https") === 443);
-  t.ok("another scheme has none", urlDefaultPort("ftp") === -1);
+  t.eqStr("a reference /\\ that a WHATWG parser reads as another host is refused", resolved(base, "/\\evil.com"), "null");
+  t.eqStr("a reference \\\\ is refused", resolved(base, "\\\\evil.com/x"), "null");
+
+  t.eqI32("http's default port", urlDefaultPort("http"), toI32(80));
+  t.eqI32("https's default port", urlDefaultPort("https"), toI32(443));
+  t.eqI32("ws's default port", urlDefaultPort("ws"), toI32(80));
+  t.eqI32("wss's default port", urlDefaultPort("wss"), toI32(443));
+  t.eqStr("a wss URL has an origin", originOf("WSS://a.com/chat"), "wss://a.com:443");
+  t.eqI32("another scheme has none", urlDefaultPort("ftp"), toI32(-1));
   t.eqStr("an origin writes the default port", originOf("HTTP://A.com/x"), "http://a.com:80");
   t.ok("so an explicit default port is the same origin", originOf("http://a.com:80/y?z") === originOf("http://A.COM/"));
   t.eqStr("an https origin", originOf("https://a.com/"), "https://a.com:443");
@@ -323,6 +335,6 @@ export const urlParseChecks = (): i32 => {
   t.eqStr("an explicit port", originOf("https://a.com:8443/"), "https://a.com:8443");
   t.eqStr("userinfo is not part of an origin", originOf("http://u:p@a.com/"), "http://a.com:80");
   t.eqStr("an IPv6 origin is bracketed", originOf("http://[::1]/"), "http://[::1]:80");
-  t.eqStr("a scheme other than http or https has no origin", originOf("file:///x"), "null");
+  t.eqStr("a scheme other than http, https, ws or wss has no origin", originOf("file:///x"), "null");
   return t.done();
 };

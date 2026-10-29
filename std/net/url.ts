@@ -73,12 +73,12 @@
  *
  * `urlParse` and `urlResolve` follow RFC 3986 (§3 for the parts, §5.2 to
  * resolve, dot segments removed) and refuse, with null, what two readers could
- * take for different hosts: a byte outside printable ASCII, a malformed `%`, a
- * second `@`, a percent-encoded or otherwise non-unreserved host byte, a host
- * that looks numeric but is not a strict dotted-decimal IPv4 address (`127.1`,
- * `0x7f.0.0.1`, `2130706433`), an IPv6 zone or IPvFuture literal, and a port
- * past 65535. The scheme and host are lower-cased; every other part is kept as
- * written, still percent-encoded.
+ * take for different hosts: a byte outside printable ASCII, a backslash, a
+ * malformed `%`, a second `@`, a percent-encoded or otherwise non-unreserved
+ * host byte, a host that looks numeric but is not a strict dotted-decimal IPv4
+ * address (`127.1`, `0x7f.0.0.1`, `2130706433`), an IPv6 zone or IPvFuture
+ * literal, and a port past 65535. The scheme and host are lower-cased; every
+ * other part is kept as written, still percent-encoded.
  *
  * The record of what this module refuses and why is `docs/security/url.md`.
  */
@@ -598,6 +598,7 @@ const URL_COLON: i32 = 58
 const URL_AT: i32 = 64
 const URL_OPEN_BRACKET: i32 = 91
 const URL_CLOSE_BRACKET: i32 = 93
+const URL_BACKSLASH: i32 = 92
 /** The largest port a URL may name (RFC 6335 §6: a port is 16 bits). */
 const URL_MAX_PORT: i32 = 65535
 
@@ -838,8 +839,8 @@ const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
 /**
  * `s` split into a `Url` whose scheme is empty when `s` is a relative
  * reference, with its path as written; null when it breaks one of the rules
- * `urlParse` names, an http(s) host aside, which only a resolved URL is held
- * to.
+ * `urlParse` names, the host a scheme with a default port needs aside, which
+ * only a resolved URL is held to.
  */
 const urlReadReference = (s: string): Url | null => {
   const bytes: u8[] | null = urlBytesOf(s)
@@ -850,7 +851,14 @@ const urlReadReference = (s: string): Url | null => {
   let i: i32 = 0
   while (i < n) {
     const c: i32 = toI32(bytes[i])
-    if (c <= URL_SPACE || c >= 127 || (c === URL_PERCENT && urlEscapeAt(bytes, i, n) < 0)) {
+    // A WHATWG parser reads `\` as `/` under http(s), so it would end the
+    // authority or start one where this reading does not: refused everywhere.
+    if (
+      c <= URL_SPACE ||
+      c >= 127 ||
+      c === URL_BACKSLASH ||
+      (c === URL_PERCENT && urlEscapeAt(bytes, i, n) < 0)
+    ) {
       return null
     }
     i += 1
@@ -968,9 +976,9 @@ const urlRemoveDotSegments = (s: string): string => {
   return out.join("")
 }
 
-/** `u` when a URL with its scheme may stand as it is, or null: an http(s) URL needs a host. */
+/** `u` when a URL with its scheme may stand as it is, or null: a scheme with a default port needs a host. */
 const urlFinish = (u: Url): Url | null => {
-  if ((u.scheme === "http" || u.scheme === "https") && u.host === "") {
+  if (urlDefaultPort(u.scheme) >= 0 && u.host === "") {
     return null
   }
   return u
@@ -979,14 +987,14 @@ const urlFinish = (u: Url): Url | null => {
 /**
  * The absolute URL `s` split into its parts, or null when it is not one this
  * module accepts. `s` is refused when it has no scheme, holds a byte outside
- * printable ASCII (a control byte, a space, DEL or anything past 0x7F) or a
- * `%` not followed by two hex digits, or its authority has more than one `@`, a
- * host with a byte outside RFC 3986's unreserved set (so a percent-encoded
- * one), a host whose last label is numeric but that is not a dotted-decimal
- * IPv4 address, a malformed IPv6 literal or a port that is not digits or is
- * above 65535. An http or https URL needs a non-empty host. The path's dot
- * segments are removed, as RFC 3986 §5.2.2 removes them from a reference with
- * a scheme. Nothing is decoded. It allocates its answer.
+ * printable ASCII (a control byte, a space, DEL or anything past 0x7F), a
+ * backslash or a `%` not followed by two hex digits, or its authority has more
+ * than one `@`, a host with a byte outside RFC 3986's unreserved set (so a
+ * percent-encoded one), a host whose last label is numeric but that is not a
+ * dotted-decimal IPv4 address, a malformed IPv6 literal or a port that is not
+ * digits or is above 65535. An http, https, ws or wss URL needs a non-empty
+ * host. The path's dot segments are removed, as RFC 3986 §5.2.2 removes them
+ * from a reference with a scheme. Nothing is decoded. It allocates its answer.
  */
 export const urlParse = (s: string): Url | null => {
   const u: Url | null = urlReadReference(s)
@@ -1012,9 +1020,9 @@ const urlMerge = (base: Url, path: string): string => {
 /**
  * The reference `ref` resolved against the absolute URL `base` by RFC 3986
  * §5.2.2, strictly (`http:g` is `http:g`, not relative), or null when `ref`
- * breaks a rule `urlParse` names or what it resolves to is an http(s) URL
- * without a host. `base`'s fragment is never carried over. It allocates its
- * answer and does not change `base`.
+ * breaks a rule `urlParse` names or what it resolves to is an http, https, ws
+ * or wss URL without a host. `base`'s fragment is never carried over. It
+ * allocates its answer and does not change `base`.
  */
 export const urlResolve = (base: Url, ref: string): Url | null => {
   const r: Url | null = urlReadReference(ref)
@@ -1083,12 +1091,12 @@ export const urlSerialize = (u: Url): string => {
   return parts.join("")
 }
 
-/** The port a scheme uses when a URL names none: 80 for `http`, 443 for `https`, else -1. */
+/** The port a scheme uses when a URL names none: 80 for `http` and `ws`, 443 for `https` and `wss`, else -1. */
 export const urlDefaultPort = (scheme: string): i32 => {
-  if (scheme === "http") {
+  if (scheme === "http" || scheme === "ws") {
     return 80
   }
-  if (scheme === "https") {
+  if (scheme === "https" || scheme === "wss") {
     return 443
   }
   return -1
@@ -1098,8 +1106,8 @@ export const urlDefaultPort = (scheme: string): i32 => {
  * `u`'s origin as `scheme://host:port`, the port always written (the scheme's
  * default when `u` names none), so two URLs are same-origin exactly when their
  * origins are equal strings: `http://A.com/x` and `http://a.com:80/y` are both
- * `http://a.com:80`. Null for a scheme other than http or https, which has no
- * origin to compare. IPv6 hosts are compared as written, so `[::1]` and
+ * `http://a.com:80`. Null for a scheme other than http, https, ws or wss, which
+ * has no origin to compare. IPv6 hosts are compared as written, so `[::1]` and
  * `[0::1]` are different origins.
  */
 export const urlOrigin = (u: Url): string | null => {
