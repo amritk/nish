@@ -9,7 +9,7 @@
 // and sees that a refused fetch never opened one. `/cut` sends half a body
 // and drops the TCP connection without a close_notify: a truncation.
 
-import { HTTP_E_CERTIFICATE, HTTP_E_TLS, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
+import { HTTP_E_CERTIFICATE, HTTP_E_REDIRECT_REFUSED, HTTP_E_TLS, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
 import { netAddress, netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpAccept, tcpConnect, tcpListen } from "nish:net";
 import { kill, monotonicNanos, platform, spawn, waitPid } from "nish:process";
 import { realpathSync, writeFileSync } from "nish:fs";
@@ -168,6 +168,12 @@ class Servers {
         site.server.connection(slot).abort();
         site.server.close(slot);
         return false;
+      }
+      if (line.startsWith("GET /tohttp ")) {
+        const moved: u8[] = asciiBytes("HTTP/1.1 301 Moved Permanently\r\nLocation: http://localhost:1/\r\nContent-Length: 0\r\n\r\n");
+        site.server.write(slot, moved, 0, toI32(moved.length));
+        end = toI32(site.got[slot].indexOf("\r\n\r\n"));
+        continue;
       }
       const reply: u8[] = asciiBytes(`HTTP/1.1 200 OK\r\nContent-Length: ${line.length}\r\nX-Conn: ${site.ids[slot]}\r\n\r\n${line}`);
       site.server.write(slot, reply, 0, toI32(reply.length));
@@ -430,6 +436,15 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   if (got !== null || cut.error !== HTTP_E_TLS) {
     console.log(`  error ${cut.error}: ${cut.errorText}`);
   }
+  t.check(cut.errorText.indexOf("close_notify") >= 0, "and the error says the close_notify never came");
+
+  // --- a redirect down to http
+  const downgrade: HttpOptions = trusting(trusted);
+  downgrade.followRedirects = true;
+  downgrade.crossOriginRedirects = true;
+  const down: HttpClient = new HttpClient(downgrade);
+  t.check(fails(down, down.fetch(get(`${good}/tohttp`)), HTTP_E_REDIRECT_REFUSED), "a redirect from https to http is refused even with crossOriginRedirects");
+  t.check(down.errorText.indexOf("from https to http") >= 0, "and the error says why");
 
   // --- through a proxy
   const tunnelled: HttpClient = new HttpClient(options);
