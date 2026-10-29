@@ -77,6 +77,7 @@ import {
   Http1ResponseParser,
   http1RequestHead,
 } from "nish/net/http1-client"
+import { httpFieldBytes } from "nish/net/http-fields"
 import { Url, urlDecode, urlDefaultPort, urlOrigin, urlParse, urlResolve } from "nish/net/url"
 import { resolveHost } from "nish/net/dns"
 import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
@@ -95,7 +96,7 @@ import {
 } from "nish:net"
 import { getenv, monotonicNanos, wallClockNanos } from "nish:process"
 import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
-import { TlsClient, TlsClientConfig } from "nish/net/tls/client"
+import { TlsClient, TlsClientConfig, tlsClientIsIpLiteral } from "nish/net/tls/client"
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client"
 import { TLS_RECORD_AGAIN, TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_OPEN } from "nish/net/tls/record-server"
 import { TlsClientTrust, tlsClientTrust, tlsClientVerdict } from "nish/net/tls/verify"
@@ -164,58 +165,27 @@ const HTTP_CLIENT_TLS_KEY_BYTES: i32 = 32
 
 /** A short name for an `HTTP_E_*` code, for messages: "dns", "read timeout", ... */
 export const httpErrorName = (code: i32): string => {
-  if (code === HTTP_E_NONE) {
-    return "none"
-  }
-  if (code === HTTP_E_URL) {
-    return "url"
-  }
-  if (code === HTTP_E_DNS) {
-    return "dns"
-  }
-  if (code === HTTP_E_REFUSED) {
-    return "refused"
-  }
-  if (code === HTTP_E_CONNECT_TIMEOUT) {
-    return "connect timeout"
-  }
-  if (code === HTTP_E_READ_TIMEOUT) {
-    return "read timeout"
-  }
-  if (code === HTTP_E_TOTAL_TIMEOUT) {
-    return "total timeout"
-  }
-  if (code === HTTP_E_PROTOCOL) {
-    return "protocol"
-  }
-  if (code === HTTP_E_TOO_MANY_REDIRECTS) {
-    return "too many redirects"
-  }
-  if (code === HTTP_E_REDIRECT_REFUSED) {
-    return "redirect refused"
-  }
-  if (code === HTTP_E_BODY_TOO_LARGE) {
-    return "body too large"
-  }
-  if (code === HTTP_E_PROXY_REFUSED) {
-    return "proxy refused"
-  }
-  if (code === HTTP_E_TLS) {
-    return "tls"
-  }
-  if (code === HTTP_E_CERTIFICATE) {
-    return "certificate"
-  }
-  if (code === HTTP_E_REQUEST) {
-    return "request"
-  }
-  if (code === HTTP_E_IO) {
-    return "io"
-  }
-  if (code === HTTP_E_PROXY) {
-    return "proxy"
-  }
-  return "unknown"
+  // Indexed by code: the order of the HTTP_E_* constants above.
+  const names: string[] = [
+    "none",
+    "url",
+    "dns",
+    "refused",
+    "connect timeout",
+    "read timeout",
+    "total timeout",
+    "protocol",
+    "too many redirects",
+    "redirect refused",
+    "body too large",
+    "proxy refused",
+    "tls",
+    "certificate",
+    "request",
+    "io",
+    "proxy",
+  ]
+  return code >= 0 && code < toI32(names.length) ? names[code] : "unknown"
 }
 
 /**
@@ -492,31 +462,26 @@ export class HttpClient {
         return res
       }
       if (hops >= this.options.maxRedirects) {
-        this.drop()
-        this.fail(
+        return this.refuse(
           HTTP_E_TOO_MANY_REDIRECTS,
           `more than ${this.options.maxRedirects} redirects, the last to ${location}`
         )
-        return null
       }
       const next: Url | null = urlResolve(url, location)
       if (next === null || (next.scheme !== "http" && next.scheme !== "https")) {
-        this.drop()
-        this.fail(HTTP_E_REDIRECT_REFUSED, `a redirect to ${location}, which is not an http or https URL`)
-        return null
+        return this.refuse(
+          HTTP_E_REDIRECT_REFUSED,
+          `a redirect to ${location}, which is not an http or https URL`
+        )
       }
       if (url.scheme === "https" && next.scheme === "http") {
-        this.drop()
-        this.fail(HTTP_E_REDIRECT_REFUSED, `a redirect from https to http (${location})`)
-        return null
+        return this.refuse(HTTP_E_REDIRECT_REFUSED, `a redirect from https to http (${location})`)
       }
       const from: string | null = urlOrigin(url)
       const to: string | null = urlOrigin(next)
       if (from === null || to === null || from !== to) {
         if (!this.options.crossOriginRedirects) {
-          this.drop()
-          this.fail(HTTP_E_REDIRECT_REFUSED, `a redirect to another origin (${location})`)
-          return null
+          return this.refuse(HTTP_E_REDIRECT_REFUSED, `a redirect to another origin (${location})`)
         }
         // Credentials were meant for the first origin, not for wherever it points.
         httpClientDropField(names, values, "authorization")
@@ -1291,6 +1256,13 @@ export class HttpClient {
     }
   }
 
+  /** Refuses a redirect: closes the connection, whose response is left unread, and fails. */
+  refuse(code: i32, text: string): HttpResponse | null {
+    this.drop()
+    this.fail(code, text)
+    return null
+  }
+
   fail(code: i32, text: string): void {
     this.error = code
     this.errorText = `${httpErrorName(code)}: ${text}`
@@ -1364,7 +1336,7 @@ export const httpProxyFor = (
  */
 export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): boolean => {
   const name: string = httpClientTrimDots(httpClientLower(host))
-  const literal: boolean = httpClientIsIpLiteral(name)
+  const literal: boolean = tlsClientIsIpLiteral(name)
   let start: i32 = 0
   const n: i32 = toI32(noProxy.length)
   while (start <= n) {
@@ -1409,7 +1381,7 @@ export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): bool
     if (entryHost === name) {
       return true
     }
-    if (!literal && !httpClientIsIpLiteral(entryHost) && name.endsWith("." + entryHost)) {
+    if (!literal && !tlsClientIsIpLiteral(entryHost) && name.endsWith("." + entryHost)) {
       return true
     }
   }
@@ -1538,21 +1510,6 @@ const httpClientPort = (s: string): i32 => {
   return v > 65535 ? -1 : v
 }
 
-/** Whether `host` is an IPv6 address (it has a colon) or a dotted IPv4 one (only digits and dots). */
-const httpClientIsIpLiteral = (host: string): boolean => {
-  if (host.indexOf(":") >= 0) {
-    return true
-  }
-  const n: i32 = toI32(host.length)
-  for (let i: i32 = 0; i < n; i += 1) {
-    const c: i32 = toI32(host.charCodeAt(i))
-    if (c !== 46 && (c < 48 || c > 57)) {
-      return false
-    }
-  }
-  return n > 0
-}
-
 /** A host as an authority writes it: an IPv6 address in brackets. */
 const httpClientHostText = (host: string): string => (host.indexOf(":") >= 0 ? "[" + host + "]" : host)
 
@@ -1593,11 +1550,5 @@ const httpClientProxyAuth = (proxy: Url): string | null => {
   if (user === null || password === null) {
     return null
   }
-  const text: string = user + ":" + password
-  const n: i32 = toI32(text.length)
-  const bytes: u8[] = new Array<u8>(n)
-  for (let i: i32 = 0; i < toI32(bytes.length) && i < toI32(text.length); i += 1) {
-    bytes[i] = toU8(text.charCodeAt(i))
-  }
-  return "Basic " + base64Encode(bytes)
+  return "Basic " + base64Encode(httpFieldBytes(user + ":" + password))
 }
