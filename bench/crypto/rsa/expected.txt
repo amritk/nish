@@ -1,0 +1,3 @@
+# <kernel> <size> <iterations> <checksum>, written by `node bench/crypto/run.mjs --validate --write-expected`.
+rsa2048-pkcs1-verify 32 3 580828e4
+rsa4096-pss-verify 32 3 96f69495

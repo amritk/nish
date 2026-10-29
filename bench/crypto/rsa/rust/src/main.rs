@@ -1,0 +1,194 @@
+// The rsa family's Rust twin: RustCrypto's rsa, under the contract in
+// bench/crypto/README.md and the inputs in this family's README.md. The runner
+// copies lib/gen.rs in as src/gen.rs; the crate is pure Rust, so there is no
+// portable column.
+mod gen;
+
+use rsa::pkcs1::DecodeRsaPublicKey;
+use rsa::{Pkcs1v15Sign, Pss, RsaPublicKey};
+use sha2::{Digest, Sha256};
+use std::time::Instant;
+
+/// The ring entry changed after it was signed, so its verify must answer false.
+const TAMPERED: usize = 1;
+
+/// The message length every signature below was made over.
+const SIZE: usize = 32;
+
+/// The 2048-bit key of rsa2048-pkcs1-verify, a PKCS #1 RSAPublicKey in DER.
+const PKCS1_KEY: &str =
+    concat!(
+        "3082010a0282010100c14ad00462e9e4d3a5e75ce36f6deff04fe7aed61acb8322cec52fac97c2312b7e6cd26511b54a",
+        "4bf2809829e4f00d0734da73d4d243718dc3f1e80a97f63b99848c1cff83df17a679ca22d44d9e5c414deb3c29d515f1",
+        "2656d778170797dfa7d114c78afc0087375a3465509b06af01b4ff8bdfd0927a3a3ee5405a22fcf48d15ea576b557f42",
+        "1b8e0a4633b70425e7eded67925c2aa360bf2a0fb2683f9dd8101289e43a8ce47c6ab0b999f4e673c5dae0188384fdf6",
+        "78f23477dfb3af403247dc847cad4e5ab3d4ecd93e970528b673e03edd7e5bb38a5406e1e6d78dc16e43d711ab34d12e",
+        "357f1858bf6d0f26c307093be3406d74a4a6a0789a4244cff10203010001",
+    );
+
+/// Its PKCS #1 v1.5 SHA-256 signatures of the ring's messages, in order.
+const PKCS1_SIGS: [&str; 4] = [
+    concat!(
+        "9af562887d8e16419706faf8e59e348c1dc98f1bf9b24af13b9d014406d151f97bd4d14a0df104ffa2a1dc696ec3f30a",
+        "c97e1e5dc054084f02db980b88aeb863c59872f4cf0fb74097857ed188b3f81ac3ff8d60b62301fa6ef40cfd3ee00f85",
+        "cefb80eb5f0be75f51893792af4c463c7868b2fddb85f670580f4d2730a2f1940fdf59bd64d0b418e22e2d229f755c19",
+        "64137ece6c0b77b71bbedfcd16a8ddf0c1c7f0a09fecf30c74e13026d512949e3eed32afa01481c6ee37ccc1bcec7858",
+        "f1b0dc44964f02f16e84087e1cb06258acd9f45cd3e18f7361d449d798549e87e1b1f9afb9ac6ba4e50ed6570b82e624",
+        "a169e2630380d89f4259d90051bf7e22",
+    ),
+    concat!(
+        "336710bac48c437adf8d1a1c722541a6dcfbed188fcafa1a589bfe09153dd2564883f1cc701aaa481290f55a0ca4d84f",
+        "66c28ce7a021223e95a713a4d3b9e3fdb504a75799efc89be4e23d9b3f3b3f896f0d5aa6d6fd030588a3a8563b1ae0c0",
+        "fa0f46fe20f9120879f054400a19f96676b69daced9d067a1322fc5d45dfea5509d3af731d72b03287a3293894f63709",
+        "f2f3d72dc986a7ef354f1b3ce24b8985b1bfb11cbd503e80b832d97304ff0ca944c212362e38a4ca30fcd81aa3a525d6",
+        "c2783ed72c6d4a0eae8ab1b5c700f0c68ff3d89002201795bbdb7f3d2db1b35ddb6cbc3b2cdf0429f25ac5b4462972fa",
+        "742aa67559898a947c231cb2410321a3",
+    ),
+    concat!(
+        "bc6b3465391ee8b57594c6026ac60cf309d055cdd319bddcdd97be7817d261974bbf5a84304891232d6d3bf33fe4ada9",
+        "ab5424e42a8365e99ca7d243a84a887529bc28a90fcaa8d60ed2f1afd368b50046974631473bd529206fc3825c643807",
+        "b5b478c5655abf18bae670e0538bd9db4632acdbbcafe510b171279354ab9bb6a90a581432cc232439cebbb85f5fd103",
+        "082b12306ceeab140765198c9b178679b764b6c252fd00e3602d252d931a1d0e941ac6c18871a11b9b0862a493d57ee6",
+        "260adfacf0e9415f2c52fdad6183a40427804a21383f8284da7c4d49c60ae769c88b52794c4d36da67565ed11aea58a7",
+        "d7b204b88811a8890d453022bae3b97f",
+    ),
+    concat!(
+        "538d6ebbe886b138081895ba943594014b458b5e2d39999f097289ea445f3495f24dd32bf544af4096b0d473c508ef1c",
+        "b3445ca73b0651b1979771fd9fc27bda49681bcb48dff8a5e787e02f664af2dea34ad1857a8e8118353ed9fd6ecacc36",
+        "6699ac58ac379de0073d0a6274ba7e327fdd060af394d7b80218d987c2a9888a74ba5d6a1e2d2d580aca477cb5cf94db",
+        "2fe5ec8db7561f1ea59a795af7a49f61689f5f29ab6ca8918479a137049a98437454dda617dbf70c9c82ede0967d9443",
+        "f8f818c65e8d764543bbd2bd822deb52903951b763f689a932ca75f03f87c8dd9c6394934483d23311dd834f8731b4ac",
+        "f5fa1404fa26712bf286600e4f88e61d",
+    ),
+];
+
+/// The 4096-bit key of rsa4096-pss-verify, a PKCS #1 RSAPublicKey in DER.
+const PSS_KEY: &str =
+    concat!(
+        "3082020a0282020100ceaa0125ae9d60f5ecf19e40e5b86960df7252a21557dcfad7d38130063b31b36b4e5a32435cf7",
+        "83da2c623627c693821a5f419f7f8cc67dbf9eb9b84672c43bd9aad80d1cca0d521a10ecdd1e8e5696c6d3372b302245",
+        "779ed0469fa967552efe76bda70a2b06c9c69b8c69fa57a1e1228cab008abec3741f0b1649d5ad95fd605fac87378f29",
+        "906e7bdd98fc4764acc3be3ef2891c529b90e3a836968046027df8c4156c6dc45e0e161cc385560ec078919a4e7e24ec",
+        "39c7b45cb6abdc1f31d15d89c423b19dc8984cfde97a8df2b33d4b89127971a6b0739e512e12116211ac088a6f3c3747",
+        "6a1c16fcc642f5401d76484fc5362a6f3626f17dfc65adf82ad3879463710ccb8d64d5a58d3380289df619808d935105",
+        "29776f6410cdd97f13aa79800519bc6134993b933b9eea80ef4ecb7f391339677e383f305163b7e6a5a73f6f3240da92",
+        "aaecdb5df5a36bd42f829dab88a82f21d1e21a20ad75510d73c6aec02ce959ee8e262b74767fb2957d6ce8548ee57ff3",
+        "c794f1007cdcf967f91486950d9cfc2cf3747aa3d6c7744b542aab8a856cb48af033c1331583d4bcce68deb98d960466",
+        "882acd6b44e2302340a170b065e9984815658daf0a85eacb90e7bd8dfacc3939132a976d5c5622bb4d50fb846c75e7af",
+        "de8ca0b97340bda6d7f8d0cad008e9b2b1ec96321b5b65bbc06f3812f9b70dec393cc6338d1c23a9870203010001",
+    );
+
+/// Its RSA-PSS SHA-256 signatures, 32-byte salt, of the ring's messages, in order.
+const PSS_SIGS: [&str; 4] = [
+    concat!(
+        "6d8054b688ec96cbf55c64f76a24aaa34f8bd9ab0814839d35638d28c8e6aa895546ef525aeda7a70d4119e4ea988ee7",
+        "7d6ea47661a63c088cd26983b8381994cef44f1027887e5781b54d98e7c45bbb3ae13926e5d91eec9e94ec21c00af40d",
+        "62f0f9fa93e430a977b1dc886b595a851f4fce082c0bcb91b8efbdbde27297eea8458b2d13d0b3638cb972ee718b6f0a",
+        "da3d68c5c7ada36c6240bdfa931a4f1aba011ccf3945b6fb234d1275a1b711873cffac42c9acff89351a107d2bf25b33",
+        "5c8e4a6561f3e96b2691ef15c14fa715d6313f438a491620253d0609a9bdc94789b3fe6fc3f72a62266fcbeb0b05fd57",
+        "e68565ae3a31150e49ea04a6a794c77fb50c179b235289a3759587fafaf500fbdeb33e2768b50d91e166d86ba9294810",
+        "73b893e1907db56753e663f3d16c07f38d6559f50b97474eb7cbe73a69b5ffcac5f44d213565deab61cb16ff6a310d35",
+        "592d7c29b92d26d54bccf7b33faa5d4c36680c0fc401907dfeaba82f3bd13320c122836ff07d50f8581e288b35472ff0",
+        "41a2c63cd1111970306e4cd6a312afdd18407515b78797c37708f018096e2a165785b61135a68f06c187e3f3794a1e6d",
+        "4aa5cdd5c88c3a59a0a36b7b42cb3462ab76045c9c2574d57c2cd43dc88bb9395ec1bae9036b965bb24381348a0f0fc1",
+        "0401376a9bf457c42dfb061072cb6fafdf45f9bff8ab744493aa47cb5bddc7c7",
+    ),
+    concat!(
+        "369bfd5b81379037066bb7e8deb145cea27fa5622b7bf32cd0a67438de162d1169f053132bfdf5fb767362c53671324e",
+        "f44149e01d4dd9ca143b8d218f3e06b75df5299b0fb15d899b02d0129c199302b7172da3e2c9f77c7d9223c560acb515",
+        "e64418aae6aafb0dda911f1e9522d1e8c430983e340e6d5fb08533eca4102fec470376cfbd68179909c51016434b0ad6",
+        "4fa3fdc05d412d2951c0faee3e79d9ec209571b26d56c40f03ad58b46f9e73113d1dce355e6bc0165e11de867351c9b4",
+        "eea4dccc03e6276c72ec8d2551076da5ef7ab558ec72c064e6702a2b3c99974588b63af21cef39e27f2a5ead778d67cb",
+        "6ce0f7a4477a25ed604e242a6653c4fef92a6ef2e7d4fec7e5564c7b96d3451f07aca02adce6696e3b35aceb5968f65e",
+        "f4a3a19179c36a1244da165fe800c5e11b0fea6f3c67e50fd27847607a3090095fffa4df1ca226ce665b22396eba86f0",
+        "d1bb3d32dbbf149341f57d529bfdb4e2c2ef3828c34c1b9ccc1908949dc0031387901a509af7e86e8e9eec609f7d0453",
+        "19d11561ad24126ff6f4ee6c61b965b9b3bbbd8c6dafdbd1da487fe0ad2c74a504f93968973c8f038fa5fa5a1c3455ad",
+        "2e608bd55d50e1ccbc6d4722536d81428fd88daa62b0146d7ecc0d0b4d6431e88890190a49d1404087db2e8a6a46a5c4",
+        "bf7ae638ade453152cf05bfbaa6cbbe484d0bdb2866e5cb90b60783476159540",
+    ),
+    concat!(
+        "7cb2388df9d51a2f8e974254fc179d8dc57683aca53c3ad503002ff52a07e261a4ef2ebbe6dfde407dba44dcf6c57e93",
+        "a90997259568ea7b0a3e4c4044c3a3f3afe5b7cd54b125827f80d234fa1150873e76f3b905e49080cb35022afde4b83a",
+        "bd0dce1a55a9dd38109b7e0a598c6cb25b3acc58c72829fce2ce2e5a6a90d1cf067c28dc9abcc0863c009f74a94e6e8e",
+        "a75f01e4864fa9266d9c5575a293c7e7d000c987b3fb07056f74b0ed7d23281893a42aa8e4e7109777101b84408dea9e",
+        "c77b184363eb61a38f203a417ee590d86c583ecdbea100fe8a52096ef486d81c72108d53f8406d1733dd95838fffcb48",
+        "861d0de41db4e934816c4203aad44192be791ecaadedcc85843ae1451e2ea5bbd3f77422c3024a20c09306df06923fdd",
+        "b99d36345f4eeb6e7193176ca7856b4365e89029df0c971eeca1853bfadfe913a4a0ee8904ea2b53e0989552e59cbe4d",
+        "158e3e9f1b6a1ab76d9269e8e8e81f17b47b326bb91d5cc5c1d8b59dbd2d9153264ba3a08f75ff52705807fb591cd828",
+        "329d5bcdda1c0f5a8f740bd9e3da45a09f7af0e771e05c153c983b9f2a29f8ad6345844fe82d54b9a104d5699fb7549e",
+        "2bb836750af41fe0a2616f16f1f62b7c6a096b21c079ec27ea7cd9649fab7655cb093fd29797243dd14a4f4bc740f022",
+        "3bcea61e15ef6e8795955238c643dd7b363dd80848e2aaa6f2b319a6c1f06657",
+    ),
+    concat!(
+        "583a5b84d7cf8a2599a115b0d7ded42ec169345eaff69dbbb03184e7f1c19f068f78ec213e3201f064c1f00e050e213a",
+        "05923cf600b61d01a532b49fca23388d33363c4dca31e1a6fb4329e28dd9407826ba97385be3fc31082965e90f9bd1c0",
+        "16aa2f3ee05a448958448ff5dbd49aa7b5b7bebf08fcdf1352667849e1ae6ad903e1b805773dcc0fb128bfbaabde049d",
+        "a21b34a0ecea3f1418a69a7ab7489549116f56fb61724b1cca2d16f8367557ace8e710a20d1a5b3d822aba1888c6976b",
+        "437f0ba68e810345b627f3b9633ff6e1546d8280ad9811e8e592e264af5f0f7f15f1c351be737afdc33a3d8f7787b0b1",
+        "65b3adf54cb302615fd5d7662ed498789a27eba3c5c26ddcbb726b91fce30a091064f0122dd3384369c1925148e7425a",
+        "6670d2d5f602535775c5325a389edee9a3f426cbdc689d4409401892df62ac49654c18ae7dcd788f69a1577080070844",
+        "04401bff6b96ed45444f83e366d9b51b4a4c7fc03b433b214e458eeac43ed67c6986ad5459a71d686555cc9ec250e019",
+        "4750369e099fa7bf6525c4a47fe82c96e1b9271f0aa9eedea3e9b8d7a0dde030433cea231324e1d359294ae6b9988273",
+        "6903431517c974ecd0c4cf42b88d31ba75933318799d35b74feed046658d9edba3f8852b0028fd942581955e956a3cfa",
+        "347c212754794d862be63035a3b4059ee247242165d3b7a61c45f1cd23971c83",
+    ),
+];
+
+fn fail(what: &str) -> ! {
+    eprintln!("rust: {what} failed");
+    std::process::exit(1);
+}
+
+fn from_hex(s: &str) -> Vec<u8> {
+    (0..s.len() / 2)
+        .map(|i| u8::from_str_radix(&s[2 * i..2 * i + 2], 16).unwrap_or_else(|_| fail("reading hex")))
+        .collect()
+}
+
+fn main() {
+    let (kernel, size, iterations) = gen::parse_args("rust");
+    let (key_hex, sig_hex, pss) = match kernel.as_str() {
+        "rsa2048-pkcs1-verify" => (PKCS1_KEY, PKCS1_SIGS, false),
+        "rsa4096-pss-verify" => (PSS_KEY, PSS_SIGS, true),
+        _ => {
+            eprintln!("rust: no kernel {kernel}");
+            std::process::exit(2);
+        }
+    };
+    if size != SIZE {
+        eprintln!("rust: the size is 32, the length of the signed messages");
+        std::process::exit(2);
+    }
+
+    let der = from_hex(key_hex);
+    let key = RsaPublicKey::from_pkcs1_der(&der).unwrap_or_else(|_| fail("RsaPublicKey::from_pkcs1_der"));
+    let inp = gen::inputs(&kernel, size, 0, 0, 0, size);
+    let base: [u8; 4] = inp.msg[..4].try_into().unwrap();
+    let mut msgs: Vec<Vec<u8>> = (0..sig_hex.len())
+        .map(|j| {
+            let mut m = inp.msg.clone();
+            gen::tweak(&mut m, 0, base, j as u32);
+            m
+        })
+        .collect();
+    msgs[TAMPERED][size - 1] ^= 1;
+    let sigs: Vec<Vec<u8>> = sig_hex.iter().map(|s| from_hex(s)).collect();
+
+    let mut sum = gen::fold(gen::FOLD_START, &der);
+    let started = Instant::now();
+    for i in 0..iterations {
+        let j = i % msgs.len();
+        let digest = Sha256::digest(&msgs[j]);
+        let ok = if pss {
+            key.verify(Pss::new_with_salt::<Sha256>(32), &digest, &sigs[j]).is_ok()
+        } else {
+            key.verify(Pkcs1v15Sign::new::<Sha256>(), &digest, &sigs[j]).is_ok()
+        };
+        if ok != (j != TAMPERED) {
+            eprintln!("rust: {kernel} gave the wrong answer");
+            std::process::exit(1);
+        }
+        sum = gen::fold(sum, &[ok as u8]);
+    }
+    gen::report(sum, started);
+}

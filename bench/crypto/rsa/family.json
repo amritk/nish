@@ -1,0 +1,15 @@
+{
+  "title": "RSA signature verification",
+  "kernels": [
+    { "name": "rsa2048-pkcs1-verify", "sizes": [32], "unit": "op/s" },
+    { "name": "rsa4096-pss-verify", "sizes": [32], "unit": "op/s" }
+  ],
+  "twins": {
+    "openssl": { "portable": { "env": { "OPENSSL_ia32cap": "~0x1000000000000000:~0x80120" } } },
+    "go": { "portable": { "tags": ["purego"] } },
+    "rust": { "portable": "RustCrypto's rsa and its bignum are pure Rust, so there is no assembly to switch off" },
+    "node": {
+      "portable": "node:crypto is OpenSSL's libcrypto with its assembly, and Node has no switch that turns it off"
+    }
+  }
+}

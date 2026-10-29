@@ -1592,6 +1592,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x25519` | X25519 key exchange |
 | `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
+| `nish/crypto/rsa` | RSA signature verification, for 2048- to 4096-bit keys: `rsaPublicKeyFromDer(der)` and `rsaPublicKeyFromParts(n, e)` read a public key, `rsaVerifyPkcs1(key, hash, msg, sig)` checks a PKCS #1 v1.5 signature and `rsaVerifyPss(key, hash, saltLen, msg, sig)` an RSA-PSS one, with `hash` one of `RSA_SHA256`, `RSA_SHA384` and `RSA_SHA512`; `rsaVerifyPkcs1Digest` and `rsaVerifyPssDigest` take the digest in place of the message. It verifies only: it signs nothing and holds no private key |
 | `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
@@ -1649,6 +1650,45 @@ use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
 `ed25519`, which came later, has been through a security audit (`ed25519` is
 recorded as a change after its area's audit); the records are in
 [docs/security/](../../security/README.md).
+
+### Verifying RSA signatures
+
+`nish/crypto/rsa` checks a signature someone else made: a JWT signed `RS256`
+or `PS256`, a certificate, a signed release. Read the key once, then verify
+each message against it. A key the module refuses — malformed DER, a modulus
+under 2048 or over 4096 bits, an even exponent or e = 1 — reads as `null`, so
+the program never verifies against it:
+
+```ts nish:ok
+import { RSA_SHA256, RsaPublicKey, rsaPublicKeyFromDer, rsaVerifyPkcs1, rsaVerifyPss } from "nish/crypto/rsa";
+
+// `keyDer` is an RSAPublicKey (RFC 8017 A.1.1) in DER, as the base64 of a
+// "BEGIN RSA PUBLIC KEY" block decodes to.
+const signedBy = (keyDer: u8[], msg: u8[], sig: u8[]): boolean => {
+  const key: RsaPublicKey | null = rsaPublicKeyFromDer(keyDer);
+  if (key === null) {
+    return false;
+  }
+  // RS256 is PKCS #1 v1.5; PS256 is RSA-PSS with a 32-byte salt.
+  return rsaVerifyPkcs1(key, RSA_SHA256, msg, sig) || rsaVerifyPss(key, RSA_SHA256, 32, msg, sig);
+};
+
+export const main = (): i32 => {
+  const notAKey: u8[] = [0x30, 0x00];
+  console.log(signedBy(notAKey, [104, 105], []) ? "verified" : "refused");
+  return 0;
+};
+```
+
+```console
+$ nish run verify.ts
+refused
+```
+
+PSS takes the salt length from you, never from the signature: name the one
+your protocol fixes (JWT's `PS256` uses the hash's length, 32). The arithmetic
+is not constant-time; that is safe here because a public key, a message and a
+signature are all public.
 
 ## `nish/net`
 
