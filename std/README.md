@@ -168,7 +168,8 @@ allocate their tables once and nothing per call, and a free function
 `nish:unsafe`'s unchecked access, each site justified in
 `docs/security/compress.md`, so a program built with `--deny unsafe` cannot
 import them. Written from the RFCs, not ported. Speed against zlib and
-libdeflate: `bench/gzip/`. Guide: [Compression](../docs/guide/using-nish/compression.md).
+libdeflate: `bench/gzip/`; against Go, Rust, Java, Node, Bun and Python:
+`bench/gzip/compare/`. Guide: [Compression](../docs/guide/using-nish/compression.md).
 
 | Module | What it is | Reproduces |
 | --- | --- | --- |

@@ -1104,7 +1104,10 @@ export class Deflater {
         let l: i32 = 0
         if (roomy) {
           const x: u64 = deflateLoad64(src, ci) ^ deflateLoad64(src, at)
-          l = x !== toU64(0) ? deflateCtz64(x) >> 3 : toI32(8) + deflateMatchLength(src, ci + 8, p + 8, maxLen - 8)
+          l =
+            x !== toU64(0)
+              ? deflateCtz64(x) >> 3
+              : toI32(8) + deflateMatchLength(src, ci + 8, p + 8, maxLen - 8)
         } else if (((deflateLoad32(src, ci) ^ word) & mask) === 0) {
           l = deflateMatchLength(src, ci, p, maxLen)
         }
@@ -1240,7 +1243,10 @@ export class Deflater {
             let l: i32 = 0
             if (p <= end - DEFLATE_MAX_MATCH && ci <= 2147483627) {
               const x: u64 = deflateLoad64(src, ci + 4) ^ deflateLoad64(src, p + 4)
-              l = x !== toU64(0) ? toI32(4) + (deflateCtz64(x) >> 3) : toI32(12) + deflateMatchLength(src, ci + 12, p + 12, maxLen - 12)
+              l =
+                x !== toU64(0)
+                  ? toI32(4) + (deflateCtz64(x) >> 3)
+                  : toI32(12) + deflateMatchLength(src, ci + 12, p + 12, maxLen - 12)
             } else {
               l = 4 + deflateMatchLength(src, ci + 4, p + 4, maxLen - 4)
             }
@@ -1895,8 +1901,12 @@ export class Inflater {
     }
     const size: i32 = 1 << bits
     const slow: i32 = INF_SLOW << 8
-    const tmpl: i32[] =
-      kind === INF_TABLE_LITLEN ? this.litEntries : kind === INF_TABLE_DIST ? this.distEntries : this.clEntries
+    let tmpl: i32[] = this.clEntries
+    if (kind === INF_TABLE_LITLEN) {
+      tmpl = this.litEntries
+    } else if (kind === INF_TABLE_DIST) {
+      tmpl = this.distEntries
+    }
     let len: i32 = 1
     while (len < 16 && count[len] === 0) {
       len += 1
@@ -2586,7 +2596,7 @@ export class Inflater {
           bc += 8
         }
       }
-      let e: i32 = this.lookup(lt, INF_TABLE_LITLEN, le, bb, bc)
+      const e: i32 = this.lookup(lt, INF_TABLE_LITLEN, le, bb, bc)
       if (e === -1) {
         status = INFLATE_NEED_INPUT
       } else if (e < 0) {

@@ -50,9 +50,11 @@ then `compress` answers `-1` (`DEFLATE_NO_ROOM`) and you can retry with more
 room or send the body as it is.
 
 The level is a number from 0 to 9. `DEFLATE_FAST` (1) is the one for a server:
-it matches greedily, within about 1.5 times libdeflate's level-1 time at the
-same size (`bench/gzip/`). `DEFLATE_DEFAULT` (6) matches lazily for a few percent smaller
-output in about twice the time, and `DEFLATE_BEST` (9) tries hardest.
+it matches greedily, within about 1.3 times libdeflate's level-1 time at the
+same size, and faster than zlib, Go, Java, Node and Python
+(`bench/gzip/compare/`). `DEFLATE_DEFAULT` (6) matches lazily for a few
+percent smaller output in about twice the time, and `DEFLATE_BEST` (9) tries
+hardest. Decompression is second only to libdeflate's among those libraries.
 `DEFLATE_STORE` (0) only frames the bytes. Whatever the level, a block that
 compression would make larger is stored instead.
 
