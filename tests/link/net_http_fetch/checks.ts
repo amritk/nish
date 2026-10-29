@@ -11,8 +11,8 @@
 
 import { HTTP_E_BODY_TOO_LARGE, HTTP_E_CONNECT_TIMEOUT, HTTP_E_DNS, HTTP_E_IO, HTTP_E_NONE, HTTP_E_PROTOCOL, HTTP_E_PROXY, HTTP_E_PROXY_REFUSED, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_E_REFUSED, HTTP_E_REQUEST, HTTP_E_TLS, HTTP_E_TOO_MANY_REDIRECTS, HTTP_E_TOTAL_TIMEOUT, HTTP_E_URL, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpChooseProxy, httpErrorName, httpFetch, httpNoProxyMatch, httpProxyFor } from "nish/net/http-client";
 import { netAddress, netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollRemove, pollWait, tcpAccept, tcpConnect, tcpListen } from "nish:net";
-import { kill, monotonicNanos, platform, spawn, waitPid } from "nish:process";
-import { realpathSync } from "nish:fs";
+import { kill, monotonicNanos, platform, spawn, spawnSyncTo, waitPid } from "nish:process";
+import { readFileSyncOrNull, realpathSync, unlinkSync } from "nish:fs";
 
 const selfPath = (): string => {
   const exe: string | null = platform === "linux" ? realpathSync("/proc/self/exe") : null;
@@ -45,6 +45,85 @@ const lower = (s: string): string => {
   return String.fromBytes(out, 0, toI32(out.length));
 };
 
+/** The value of the hexadecimal digits of `s` from `from` up to `to`. */
+const hexValue = (s: string, from: i32, to: i32): i32 => {
+  let v: i32 = 0;
+  for (let i: i32 = from; i < to; i++) {
+    const ch: i32 = toI32(s.charCodeAt(i));
+    v = v * 16 + (ch >= 97 ? ch - 87 : ch >= 65 ? ch - 55 : ch - 48);
+  }
+  return v;
+};
+
+/**
+ * Whether every byte the server sent on the loopback connection between its
+ * port `server` and the client's port `client` has been read by the client:
+ * 1 when the server's socket has nothing unacknowledged and the client's
+ * nothing unread (`tx_queue` and `rx_queue` in `/proc/net/tcp`), 0 while
+ * either holds a byte, -1 when the table does not say (not Linux, or a socket
+ * already gone).
+ */
+const readByClient = (server: i32, client: i32): i32 => {
+  // The runtime sizes a file before reading it, and procfs says 0, so `cat`
+  // copies the table into a file beside this binary first.
+  if (platform !== "linux") {
+    return -1;
+  }
+  const copy: string = `${selfPath()}.tcp${server}`;
+  if (spawnSyncTo(["cat", "/proc/net/tcp"], copy, "") !== 0) {
+    return -1;
+  }
+  const table: string | null = readFileSyncOrNull(copy);
+  unlinkSync(copy);
+  if (table === null) {
+    return -1;
+  }
+  let sent: i32 = -1;
+  let unread: i32 = -1;
+  const size: i32 = toI32(table.length);
+  // The first line names the columns.
+  let at: i32 = toI32(table.indexOf("\n")) + 1;
+  while (at > 0 && at < size) {
+    let end: i32 = toI32(table.indexOf("\n", at));
+    if (end < 0) {
+      end = size;
+    }
+    const fields: string[] = [];
+    let k: i32 = at;
+    while (k < end) {
+      while (k < end && table.charCodeAt(k) === 32) {
+        k++;
+      }
+      const from: i32 = k;
+      while (k < end && table.charCodeAt(k) !== 32) {
+        k++;
+      }
+      if (k > from) {
+        fields.push(table.substring(from, k));
+      }
+    }
+    at = end + 1;
+    if (fields.length < 5) {
+      continue;
+    }
+    const local: string = fields[1];
+    const remote: string = fields[2];
+    const queues: string = fields[4];
+    const localPort: i32 = hexValue(local, toI32(local.indexOf(":")) + 1, toI32(local.length));
+    const remotePort: i32 = hexValue(remote, toI32(remote.indexOf(":")) + 1, toI32(remote.length));
+    const colon: i32 = toI32(queues.indexOf(":"));
+    if (localPort === server && remotePort === client) {
+      sent = hexValue(queues, 0, colon);
+    } else if (localPort === client && remotePort === server) {
+      unread = hexValue(queues, colon + 1, toI32(queues.length));
+    }
+  }
+  if (sent < 0 || unread < 0) {
+    return -1;
+  }
+  return sent === 0 && unread === 0 ? 1 : 0;
+};
+
 // --- the server ----------------------------------------------------------------
 
 class Conn {
@@ -63,8 +142,14 @@ class Conn {
    * close that Linux sends as a reset.
    */
   doom: i32 = 0;
-  /** Ticks until a `doom` 4 connection is closed; -1 for none. */
+  /**
+   * A `doom` 4 connection's reset: it is closed once the client has read the
+   * bytes it was sent, or after this many ticks where that cannot be seen;
+   * -1 for none.
+   */
   resetIn: i32 = -1;
+  /** The client's end of it: its port. */
+  peerPort: i32 = -1;
   /** Ticks until `/extra-later` sends its response nobody asked for; -1 for none. */
   later: i32 = -1;
   /** `/two-part`'s second half, and the ticks until it is sent. */
@@ -265,7 +350,9 @@ class Server {
   readable(c: Conn): void {
     if (c.doom === 4) {
       // Answer without reading: the request stays in the socket, so the close
-      // `resetIn` makes is a reset, after the client has read these bytes.
+      // `resetIn` makes is a reset. A reset would discard bytes still in the
+      // server's socket, so it waits until `/proc/net/tcp` shows the client
+      // has read them; where that table does not say, three ticks.
       c.doom = 0;
       this.send(c, "HTTP/1.1 200 OK\r\nContent-Len");
       pollRemove(this.loop, c.fd);
@@ -327,6 +414,7 @@ class Server {
     while (s >= 0) {
       this.accepts += 1;
       const c: Conn = new Conn(s, this.accepts, port);
+      c.peerPort = toI32(peer[16]) * 256 + toI32(peer[17]);
       this.conns.push(c);
       pollAdd(this.loop, s, 1, toI32(this.conns.length) + 1);
       s = tcpAccept(fd, peer);
@@ -379,11 +467,14 @@ class Server {
           c.later -= 1;
         }
         if (c.open && c.resetIn >= 0) {
-          if (c.resetIn === 0) {
+          const read: i32 = readByClient(c.port, c.peerPort);
+          if (read === 1 || (read < 0 && c.resetIn === 0)) {
             netClose(c.fd);
             c.open = false;
+            c.resetIn = -1;
+          } else if (read < 0) {
+            c.resetIn -= 1;
           }
-          c.resetIn -= 1;
         }
       }
     }
