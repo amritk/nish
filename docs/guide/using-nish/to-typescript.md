@@ -140,6 +140,7 @@ configuration. They follow what the helpers return at run time:
 | `exit(code)` | ends the process with `code` | throws a `NishExit` whose `code` is the 8-bit status |
 | `panic(message)` | prints and exits 1 | prints and throws a `NishExit` with code 1 |
 | `monotonicNanos()` | `process.hrtime.bigint()` | `performance.now()`, in nanoseconds |
+| `wallClockNanos()` | `Date.now()`, in nanoseconds | the same |
 | `getenv(name)` | the environment | `null` |
 | `argv()` | the process's arguments | `["main"]` |
 | a file, process or machine call (`readFileSync`, `spawnSync`, …) | Node's `fs`, `child_process` and `os` | panics, naming the call: `readFileSync is not available in a browser` |

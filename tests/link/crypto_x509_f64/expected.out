@@ -8,4 +8,9 @@ PASS  its PEM is OpenSSL's
 PASS  and reads back
 PASS  OpenSSL's PKCS#8 key
 PASS  OpenSSL's CA verifies under itself
-x509 (f64 mode): 10 passed, 0 failed, 0 skipped
+PASS  keyUsage's mask
+PASS  pathLenConstraint 0
+PASS  a nameConstraints iPAddress mask
+PASS  a P-384 r || s
+PASS  RSASSA-PSS with a 32-octet salt
+x509 (f64 mode): 15 passed, 0 failed, 0 skipped

@@ -577,6 +577,8 @@ export class RuntimeTable {
     // holds — one `clock_gettime` and some arithmetic — and there is nothing to
     // capture, so the only argument-free entry here needs no parameter facts.
     this.add(plain("nish_monotonic_nanos", "declare i64 @nish_monotonic_nanos()", EFFECT_WRITE))
+    // `wallClockNanos`, the same call on `CLOCK_REALTIME`, for the same reasons.
+    this.add(plain("nish_wall_clock_nanos", "declare i64 @nish_wall_clock_nanos()", EFFECT_WRITE))
     // WP19 R1: the environment, so a self-hosted driver can honour `CC` before
     // it spawns `scripts/build.sh` the way stage0's preflight does.
     // `EFFECT_WRITE` and no `readnone`, for two reasons that each suffice: the

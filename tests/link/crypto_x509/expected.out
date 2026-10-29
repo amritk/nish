@@ -137,3 +137,358 @@ PASS  the server's Finished verifies
 PASS  the server takes the client's Finished
 PASS  connected
 x509 mint in a TLS handshake: 9 passed, 0 failed, 0 skipped
+PASS  FULL_DER composed from its parts is FULL_DER
+PASS  OpenSSL's certificate with every decoded extension reads
+PASS  its hash is OpenSSL's
+PASS  v3
+PASS  ecdsa-with-SHA384
+PASS  a P-256 key
+PASS  p256, and not ecdsaSha256
+PASS  subjectAltName present
+PASS  its dNSNames, in order and as encoded
+PASS  its iPAddresses, v4 and v6
+PASS  its rfc822Name counted as another form
+PASS  basicConstraints present
+PASS  cA
+PASS  pathLenConstraint 0
+PASS  keyUsage digitalSignature and keyCertSign
+PASS  extKeyUsage present
+PASS  it names serverAuth
+PASS  it does not name anyExtendedKeyUsage
+PASS  nameConstraints present
+PASS  its permittedSubtrees, in order
+PASS  its excludedSubtrees
+PASS  nothing it cannot express
+PASS  subjectKeyIdentifier
+PASS  authorityKeyIdentifier's keyIdentifier
+PASS  no unknown critical extension
+PASS  its akid is its CA's skid
+PASS  its issuer is its CA's subject
+PASS  its subject is not its CA's
+PASS  a second basicConstraints is refused
+PASS  a second keyUsage is refused
+PASS  a second extKeyUsage is refused
+PASS  a second subjectAltName is refused
+PASS  a second nameConstraints is refused
+PASS  a second subjectKeyIdentifier is refused
+PASS  a second authorityKeyIdentifier is refused
+x509 every decoded extension: 35 passed, 0 failed, 0 skipped
+PASS  every OpenSSL fixture reads
+PASS  RSA-2048: its hash is OpenSSL's
+PASS  PSS: its hash is OpenSSL's
+PASS  P-384 CA: its hash is OpenSSL's
+PASS  Ed25519 leaf: its hash is OpenSSL's
+PASS  Ed25519 CA: its hash is OpenSSL's
+PASS  critical: its hash is OpenSSL's
+PASS  RSA-2048: sha256WithRSAEncryption
+PASS  RSA-2048: an RSA key
+PASS  RSA-2048: a CA with no path length
+PASS  RSA-2048: self-signed, so its akid is its skid
+PASS  PSS: v1
+PASS  PSS: RSASSA-PSS
+PASS  PSS: over SHA-256
+PASS  PSS: a 32-octet salt
+PASS  PSS: an RSA key
+PASS  PSS: no extensions, so none present
+PASS  PSS: issued by the RSA-2048 CA
+PASS  P-384 CA: ecdsa-with-SHA384
+PASS  P-384 CA: a P-384 key
+PASS  P-384 CA: not p256
+PASS  P-384 CA: cA with pathLenConstraint 1
+PASS  P-384 CA: keyCertSign and cRLSign
+PASS  P-384 CA: no extKeyUsage
+PASS  Ed25519 leaf: ecdsa-with-SHA384 from its CA
+PASS  Ed25519 leaf: an Ed25519 key
+PASS  Ed25519 leaf: issued by the P-384 CA
+PASS  Ed25519 CA: Ed25519
+PASS  Ed25519 CA: an Ed25519 key
+PASS  RSA leaf: its hash is OpenSSL's
+PASS  RSA leaf: v3, sha256WithRSAEncryption, an RSA key
+PASS  RSA leaf: not a CA, digitalSignature only
+PASS  RSA leaf: serverAuth, and no other purpose
+PASS  RSA leaf: its subjectAltName
+PASS  RSA leaf: issued by the RSA-2048 CA, by key id too
+PASS  Ed25519 v3 leaf: its hash is OpenSSL's
+PASS  Ed25519 v3 leaf: v3, Ed25519, an Ed25519 key
+PASS  Ed25519 v3 leaf: not a CA, digitalSignature only
+PASS  Ed25519 v3 leaf: serverAuth, and no other purpose
+PASS  Ed25519 v3 leaf: its subjectAltName
+PASS  Ed25519 v3 leaf: issued by the Ed25519 CA
+PASS  a critical private extension sets unknownCritical
+PASS  and the rest is still read
+PASS  the same extension not critical leaves it clear
+PASS  an unknown critical arc under 2.5.29 sets it too
+PASS  golden: p256 and ecdsaSha256 as before
+PASS  golden: ecdsa-with-SHA256
+PASS  golden: a P-256 key
+PASS  golden: basicConstraints, not a CA
+PASS  golden: keyUsage digitalSignature
+PASS  golden: no name, purpose or key id
+x509 Web PKI algorithms and keys: 51 passed, 0 failed, 0 skipped
+PASS  PSS_DER's algorithm composed here is OpenSSL's
+PASS  PSS: SHA-256, salt 32
+PASS  PSS: an absent salt length is 20
+PASS  PSS: SHA-512, salt 64
+PASS  PSS: a hash with absent parameters
+PASS  PSS: an MGF1 hash that is not the message's
+PASS  PSS: no [0], so SHA-1 by default
+PASS  PSS: SHA-1 named
+PASS  PSS: a mask that is not MGF1
+PASS  PSS: a negative salt length
+PASS  PSS: trailerField 1, the DEFAULT, written out
+PASS  PSS: a salt length of 20, the DEFAULT, written out
+PASS  PSS: trailerField 2
+PASS  PSS: an element after the trailer
+PASS  PSS: parameters absent
+PASS  PSS: parameters NULL
+PASS  PSS: an element after the hash inside [0]
+PASS  PSS: an element after the mask inside [1]
+PASS  PSS: an element after the salt length inside [2]
+PASS  PSS: a salt of 127 reads
+PASS  PSS: a two-octet salt length, 128
+PASS  PSS: hash parameters an OCTET STRING, neither absent nor NULL
+PASS  PSS: hash NULL parameters with contents
+PASS  sha256WithRSAEncryption with NULL
+PASS  sha384WithRSAEncryption with NULL
+PASS  sha512WithRSAEncryption with NULL
+PASS  sha1WithRSAEncryption with NULL
+PASS  sha256WithRSAEncryption with its NULL absent
+PASS  sha256WithRSAEncryption with a NULL that has contents
+PASS  sha256WithRSAEncryption with an element after its NULL
+PASS  sha256WithRSAEncryption with PSS parameters is not PSS
+PASS  PSS: an element after the parameters
+PASS  ecdsa-with-SHA256 absent
+PASS  ecdsa-with-SHA256 with a NULL
+PASS  ecdsa-with-SHA384 with a NULL
+PASS  Ed25519 absent
+PASS  Ed25519 with a NULL
+PASS  id-ecPublicKey on prime256v1
+PASS  id-ecPublicKey on secp384r1
+PASS  id-ecPublicKey on secp521r1
+PASS  rsaEncryption with NULL
+PASS  rsaEncryption with its NULL absent
+PASS  rsaEncryption with a NULL that has contents
+PASS  rsaEncryption with an element after its NULL
+PASS  Ed25519 absent
+PASS  Ed25519 with a NULL
+x509 signature algorithms and key types: 46 passed, 0 failed, 0 skipped
+PASS  one extension alone reads
+PASS  an empty extensions SEQUENCE: the sound encoding reads
+PASS  an empty extensions SEQUENCE: refused
+PASS  an empty certificate: the sound encoding reads
+PASS  an empty certificate: refused
+PASS  a one-byte certificate: the sound encoding reads
+PASS  a one-byte certificate: refused
+PASS  an extnID with a padded subidentifier: the sound encoding reads
+PASS  an extnID with a padded subidentifier: refused
+PASS  an extnID whose last octet continues: the sound encoding reads
+PASS  an extnID whose last octet continues: refused
+PASS  an empty extnID: the sound encoding reads
+PASS  an empty extnID: refused
+PASS  an OID outside 2.5.29 ending in basicConstraints' arc is not basicConstraints
+PASS  an extnID with an inner 0x80 octet reads
+PASS  cA TRUE under 2.5.29.19 is a CA
+PASS  2.5.29.19.1, four octets, is not basicConstraints
+PASS  2.5.30.19, outside 2.5.29, is not basicConstraints
+PASS  1.2.29.19, outside 2.5, is not basicConstraints
+PASS  a duplicate extension: the sound encoding reads
+PASS  a duplicate extension: refused
+PASS  a duplicate unknown extension: the sound encoding reads
+PASS  a duplicate unknown extension: refused
+PASS  critical spelled FALSE, which DER leaves out: the sound encoding reads
+PASS  critical spelled FALSE, which DER leaves out: refused
+PASS  critical spelled 01 rather than ff: the sound encoding reads
+PASS  critical spelled 01 rather than ff: refused
+PASS  an element after extnValue: the sound encoding reads
+PASS  an element after extnValue: refused
+PASS  an extnValue that is not an OCTET STRING: the sound encoding reads
+PASS  an extnValue that is not an OCTET STRING: refused
+PASS  a decoded value with trailing bytes: the sound encoding reads
+PASS  a decoded value with trailing bytes: refused
+PASS  critical a two-octet BOOLEAN: the sound encoding reads
+PASS  critical a two-octet BOOLEAN: refused
+PASS  a v1 certificate reads
+PASS  an issuerUniqueID in a v1 certificate: the sound encoding reads
+PASS  an issuerUniqueID in a v1 certificate: refused
+PASS  a subjectUniqueID in a v1 certificate: the sound encoding reads
+PASS  a subjectUniqueID in a v1 certificate: refused
+PASS  extensions in a v2 certificate: the sound encoding reads
+PASS  extensions in a v2 certificate: refused
+PASS  an empty subjectAltName: the sound encoding reads
+PASS  an empty subjectAltName: refused
+PASS  a subjectAltName with trailing bytes: the sound encoding reads
+PASS  a subjectAltName with trailing bytes: refused
+PASS  an x400Address is counted, not read
+PASS  an ediPartyName is counted, not read
+PASS  a 5-octet iPAddress: the sound encoding reads
+PASS  a 5-octet iPAddress: refused
+PASS  a dNSName with an octet above 0x7f: the sound encoding reads
+PASS  a dNSName with an octet above 0x7f: refused
+PASS  a dNSName with a NUL: the sound encoding reads
+PASS  a dNSName with a NUL: refused
+PASS  an rfc822Name that is not IA5: the sound encoding reads
+PASS  an rfc822Name that is not IA5: refused
+PASS  a URI that is not IA5: the sound encoding reads
+PASS  a URI that is not IA5: refused
+PASS  an empty dNSName: the sound encoding reads
+PASS  an empty dNSName: refused
+PASS  an otherName that is not an OID and a value: the sound encoding reads
+PASS  an otherName that is not an OID and a value: refused
+PASS  an otherName whose type-id is not an OID: the sound encoding reads
+PASS  an otherName whose type-id is not an OID: refused
+PASS  an otherName with a padded type-id: the sound encoding reads
+PASS  an otherName with a padded type-id: refused
+PASS  an otherName with bytes after its value: the sound encoding reads
+PASS  an otherName with bytes after its value: refused
+PASS  a registeredID whose last octet continues: the sound encoding reads
+PASS  a registeredID whose last octet continues: refused
+PASS  a GeneralName tag no form has: the sound encoding reads
+PASS  a GeneralName tag no form has: refused
+PASS  a dNSName tagged constructed: the sound encoding reads
+PASS  a dNSName tagged constructed: refused
+PASS  a directoryName that is not a sound Name: the sound encoding reads
+PASS  a directoryName that is not a sound Name: refused
+PASS  a directoryName with bytes after its Name: the sound encoding reads
+PASS  a directoryName with bytes after its Name: refused
+PASS  cA and pathLen 3 read
+PASS  a negative pathLenConstraint: the sound encoding reads
+PASS  a negative pathLenConstraint: refused
+PASS  a non-minimal pathLenConstraint: the sound encoding reads
+PASS  a non-minimal pathLenConstraint: refused
+PASS  a pathLenConstraint of 2^31: the sound encoding reads
+PASS  a pathLenConstraint of 2^31: refused
+PASS  a pathLenConstraint of 2^32 + 1, which 32 bits read as 1: the sound encoding reads
+PASS  a pathLenConstraint of 2^32 + 1, which 32 bits read as 1: refused
+PASS  a pathLenConstraint that is not an INTEGER: the sound encoding reads
+PASS  a pathLenConstraint that is not an INTEGER: refused
+PASS  cA spelled FALSE: the sound encoding reads
+PASS  cA spelled FALSE: refused
+PASS  cA spelled 01: the sound encoding reads
+PASS  cA spelled 01: refused
+PASS  cA a two-octet BOOLEAN: the sound encoding reads
+PASS  cA a two-octet BOOLEAN: refused
+PASS  an element after pathLenConstraint: the sound encoding reads
+PASS  an element after pathLenConstraint: refused
+PASS  keyUsage decipherOnly, bit 8
+PASS  a keyUsage with no bit set: the sound encoding reads
+PASS  a keyUsage with no bit set: refused
+PASS  a keyUsage with a trailing zero bit: the sound encoding reads
+PASS  a keyUsage with a trailing zero bit: refused
+PASS  a keyUsage of three octets: the sound encoding reads
+PASS  a keyUsage of three octets: refused
+PASS  a keyUsage bit past decipherOnly: the sound encoding reads
+PASS  a keyUsage bit past decipherOnly: refused
+PASS  a keyUsage with an unused bit set: the sound encoding reads
+PASS  a keyUsage with an unused bit set: refused
+PASS  a keyUsage with trailing bytes: the sound encoding reads
+PASS  a keyUsage with trailing bytes: refused
+PASS  a keyUsage of five octets: the sound encoding reads
+PASS  a keyUsage of five octets: refused
+PASS  anyExtendedKeyUsage read
+PASS  an empty extKeyUsage: the sound encoding reads
+PASS  an empty extKeyUsage: refused
+PASS  an extKeyUsage holding a NULL: the sound encoding reads
+PASS  an extKeyUsage holding a NULL: refused
+PASS  an extKeyUsage with trailing bytes: the sound encoding reads
+PASS  an extKeyUsage with trailing bytes: refused
+PASS  an extKeyUsage with a padded OID: the sound encoding reads
+PASS  an extKeyUsage with a padded OID: refused
+PASS  excluded only
+PASS  an empty nameConstraints: the sound encoding reads
+PASS  an empty nameConstraints: refused
+PASS  a nameConstraints with trailing bytes: the sound encoding reads
+PASS  a nameConstraints with trailing bytes: refused
+PASS  an empty permittedSubtrees: the sound encoding reads
+PASS  an empty permittedSubtrees: refused
+PASS  an empty excludedSubtrees: the sound encoding reads
+PASS  an empty excludedSubtrees: refused
+PASS  an iPAddress subtree of 5 octets: the sound encoding reads
+PASS  an iPAddress subtree of 5 octets: refused
+PASS  an iPAddress subtree of 6 octets with a contiguous mask: the sound encoding reads
+PASS  an iPAddress subtree of 6 octets with a contiguous mask: refused
+PASS  an iPAddress mask that is not contiguous: the sound encoding reads
+PASS  an iPAddress mask that is not contiguous: refused
+PASS  an IPv6 subtree of 32 octets reads
+PASS  an IPv6 subtree mask that is not contiguous: the sound encoding reads
+PASS  an IPv6 subtree mask that is not contiguous: refused
+PASS  a subtree base tag no form has: the sound encoding reads
+PASS  a subtree base tag no form has: refused
+PASS  a subtree that is not a SEQUENCE: the sound encoding reads
+PASS  a subtree that is not a SEQUENCE: refused
+PASS  an element after excludedSubtrees: the sound encoding reads
+PASS  an element after excludedSubtrees: refused
+PASS  excludedSubtrees before permittedSubtrees: the sound encoding reads
+PASS  excludedSubtrees before permittedSubtrees: refused
+PASS  a subtree with a minimum is unsupported
+PASS  a subtree with a maximum is unsupported
+PASS  a subtree minimum of 0, the DEFAULT, written out: the sound encoding reads
+PASS  a subtree minimum of 0, the DEFAULT, written out: refused
+PASS  a non-minimal subtree minimum: the sound encoding reads
+PASS  a non-minimal subtree minimum: refused
+PASS  a negative subtree maximum: the sound encoding reads
+PASS  a negative subtree maximum: refused
+PASS  an element after a subtree's base: the sound encoding reads
+PASS  an element after a subtree's base: refused
+PASS  a maximum before a minimum: the sound encoding reads
+PASS  a maximum before a minimum: refused
+PASS  a URI subtree is unsupported
+PASS  a subjectKeyIdentifier that is not an OCTET STRING: the sound encoding reads
+PASS  a subjectKeyIdentifier that is not an OCTET STRING: refused
+PASS  a subjectKeyIdentifier with trailing bytes: the sound encoding reads
+PASS  a subjectKeyIdentifier with trailing bytes: refused
+PASS  an empty subjectKeyIdentifier: the sound encoding reads
+PASS  an empty subjectKeyIdentifier: refused
+PASS  an empty keyIdentifier: the sound encoding reads
+PASS  an empty keyIdentifier: refused
+PASS  an empty authorityCertIssuer: the sound encoding reads
+PASS  an empty authorityCertIssuer: refused
+PASS  an authorityCertIssuer that is not GeneralNames: the sound encoding reads
+PASS  an authorityCertIssuer that is not GeneralNames: refused
+PASS  a non-minimal authorityCertSerialNumber: the sound encoding reads
+PASS  a non-minimal authorityCertSerialNumber: refused
+PASS  an authorityCertIssuer with no serial: the sound encoding reads
+PASS  an authorityCertIssuer with no serial: refused
+PASS  an authorityCertSerialNumber with no issuer: the sound encoding reads
+PASS  an authorityCertSerialNumber with no issuer: refused
+PASS  an authorityKeyIdentifier with bytes after it: the sound encoding reads
+PASS  an authorityKeyIdentifier with bytes after it: refused
+PASS  an authorityKeyIdentifier with trailing bytes: the sound encoding reads
+PASS  an authorityKeyIdentifier with trailing bytes: refused
+PASS  an authorityKeyIdentifier that is not a SEQUENCE: the sound encoding reads
+PASS  an authorityKeyIdentifier that is not a SEQUENCE: refused
+x509 extension refusals: 184 passed, 0 failed, 0 skipped
+PASS  an issuer with an empty RDN: the sound encoding reads
+PASS  an issuer with an empty RDN: refused
+PASS  a subject with an empty RDN: the sound encoding reads
+PASS  a subject with an empty RDN: refused
+PASS  a subject attribute with no value: the sound encoding reads
+PASS  a subject attribute with no value: refused
+PASS  an attribute with no value: the sound encoding reads
+PASS  an attribute with no value: refused
+PASS  an attribute with an element after its value: the sound encoding reads
+PASS  an attribute with an element after its value: refused
+PASS  a multi-valued RDN reads
+PASS  an attribute with a padded type OID: the sound encoding reads
+PASS  an attribute with a padded type OID: refused
+PASS  O=nish is a prefix of O=nish, CN=nish-fixture-full
+PASS  not the other way about
+PASS  a Name is a prefix of itself
+PASS  the empty Name is a prefix of every Name
+PASS  CN=a is not a prefix of O=nish, ...
+PASS  an RDN that only starts the same is not a prefix
+PASS  a base that is not a Name
+PASS  a base with bytes after its Name
+PASS  the empty Name against a name with an empty RDN
+PASS  a name that is not a Name
+PASS  x509NameEqual is byte for byte
+PASS  so UTF8String and PrintableString spellings differ
+x509 Names: 25 passed, 0 failed, 0 skipped
+PASS  FULL_DER's P-384 signature as r || s, 48 octets each
+PASS  the CA's own, 96 octets
+PASS  too wide for P-256
+PASS  a small signature at P-256's width
+PASS  the same at a width that is no curve's
+PASS  an r of 49 octets
+PASS  a short r and s are padded
+PASS  a negative r
+x509 ECDSA signature widths: 8 passed, 0 failed, 0 skipped

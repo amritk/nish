@@ -61,7 +61,7 @@ through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` for the runs a parser skips and a writer copies |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
-| [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
+| [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
 | [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
@@ -1123,6 +1123,113 @@ export const main = (): i32 => {
 };
 ```
 
+### Parsing flags
+
+`nish/cli-flags` reads a command line against a table of flags you declare
+once. The same table writes the help rows, so the two cannot drift apart.
+
+```ts nish:ok
+import { HelpMenu, Style } from "nish/cli";
+import { FlagTable } from "nish/cli-flags";
+
+export const main = (): i32 => {
+  const flags = new FlagTable("git-lite");
+  flags.command("remote add", "<name> <url>", "add a remote");
+  flags.string("output", "<file>", "where to write");
+  flags.number("jobs", "<n>", "parallel jobs");
+  flags.boolean("verbose", "say more");
+  flags.repeatable("include", "<dir>", "search here too");
+  const got = flags.parseFrom(process.argv, 1);
+  if (!got.ok) {
+    got.exitUsage();
+  }
+  if (got.command === "") {
+    const menu = new HelpMenu(new Style(false, true), "git-lite", 28, 30);
+    menu.usage("<command> [flags]", "a small git");
+    flags.writeHelp(menu);
+    console.log(menu.text());
+    return 0;
+  }
+  console.log(`${got.command}: ${got.positionals.join(" ")} jobs ${got.num("jobs")}`);
+  return 0;
+};
+```
+
+`git-lite --jobs 4 remote add origin https://example.org --include a
+--include b` runs `remote add` with positionals `origin` and the URL, `jobs`
+4 and `include` `a` then `b`. With no arguments it prints:
+
+```text
+usage: git-lite <command> [flags]  a small git
+
+Commands
+  remote add <name> <url>   add a remote
+
+Flags
+  --output <file>           where to write
+  --jobs <n>                parallel jobs
+  --verbose                 say more
+  --include <dir>           search here too
+```
+
+**Declare** each flag by its name without the dashes, a placeholder for the
+help and a description: `string`, `number` and `repeatable` take a value,
+`boolean` does not. `command(path, shape, description)` declares a
+subcommand of one or more words, with what follows it in the help. A name
+declared twice panics, because the table is your program's own text, and so
+does one no command line could match: a flag name with a leading `-`, an `=`
+or whitespace, a command word with a leading `-`, or a flag `no-x` beside a
+boolean `x`, whose `--no-x` it would be.
+`parseFrom(process.argv, 1)` reads the command line after the program's own
+path, and `parse(args)` reads every string in `args`.
+
+**The grammar** is the long-option one most tools share, without short
+options:
+
+- `--name value` and `--name=value` give a value; `--name=` gives the empty
+  string. The next argument is the value whatever it looks like, so
+  `--jobs -1` is minus one and `--output --` writes to a file named `--`.
+- `--name` sets a boolean and `--no-name` clears it. A boolean takes no
+  `=value`.
+- A repeatable flag keeps every value in the order given. Any other flag
+  given twice is an error.
+- `--` ends the flags: everything after it is a positional, even `--verbose`
+  and a second `--`. A positional that starts with `-`, such as a negative
+  number, needs a `--` before it, or it reads as a flag.
+  A lone `-` is an ordinary word, as for a tool that reads `-` as stdin.
+- The words that are not flags may come before, between or after them. The
+  leading ones choose the command, the longest declared path they spell, and
+  the rest are `positionals`. A flag belongs to the whole table, not to one
+  command: check `got.command` to refuse one where it does not apply.
+
+**Reading the answer.** `got.command` is the matched path, or `""` when no
+words were given. `str`, `num`, `bool` and `all` read a flag of that kind by
+name; a flag that was not given reads as `""`, `0`, `false` or no values,
+and `has(name)` tells that apart from one given as such. A number is a
+finite `f64` written in decimal: an optional sign, digits with an optional
+fraction, and an optional exponent (`-2.5`, `.5`, `1e3`), in ASCII. Hex and
+binary, `Infinity`, an empty value, spaces round it, and a value too large
+for an `f64` (`1e999`) are refused, the same natively as under Node. Asking for a name the table does not declare, or
+as the wrong kind, panics.
+
+**A usage error is data.** `parse` stops at the first one: an unknown flag
+(any `-x` with one dash is one), a flag missing its value, a number that is
+not one, a flag given twice, a value on a boolean, or words that spell no
+declared command once any is declared. `got.ok` is false, and `got.code`
+(a `FLAG_ERR_*` constant), `got.message` and `got.argument` say what went
+wrong, so a program can word it its own way. `got.exitUsage()` is the usual
+ending: it writes
+
+```text
+git-lite: --jobs needs a number, not "four"
+usage: git-lite remote add <name> <url> [flags]
+```
+
+to stderr and exits 2, the status `nish` itself uses for a usage error.
+`usageError()` answers those two lines without printing them. `exitUsage`
+reaches `exit`; the rest of the module reaches no
+[capability](../../LANGUAGE.md#capabilities).
+
 ## `nish/term`
 
 `nish/term` is for a program that draws the whole terminal, many times a
@@ -1707,7 +1814,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
 | `nish/crypto/p384` | P-384 ECDSA verification |
 | `nish/crypto/rsa` | RSA signature verification, PKCS#1 v1.5 and PSS over SHA-256/384/512, under a PKCS#1 public key: `rsaParsePublicKey`, `rsaVerifyPkcs1v15`, `rsaVerifyPss` |
-| `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
+| `nish/crypto/x509` | DER and PEM, X.509 certificates read with their signature algorithm, key type and v3 extensions, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/pki-roots` | `pkiLoadSystemRoots()`, the root certificates to trust, parsed: those `SSL_CERT_FILE` and `SSL_CERT_DIR` name when either is set, with no fallback, and otherwise the first system bundle (`pkiSystemBundles()`) and `/etc/ssl/certs`. A block or file it cannot use is counted in `skipped`, never fatal, and only regular files are read; on macOS it reads `/etc/ssl/cert.pem`, not the Keychain, so roots and trust settings added there are missed. Native only |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
