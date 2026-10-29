@@ -565,6 +565,19 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `nish_spawn` with the three streams on pipes, and its conservative
+    // answers: the vector is captured, the child runs anything, and `waitpid`
+    // waits. `stdin` is only read. The two output headers are written as
+    // `nish_array_grow` writes a pushed array's, into a fresh arena block, and
+    // neither is retained, so both are `nocapture` as that call's is.
+    this.add(
+      new RuntimeFunction(
+        "nish_spawn_piped",
+        `declare noundef i32 @nish_spawn_piped(%struct.nish_array* noundef nonnull align 8, ${NET_BUFFER} readonly, ${NET_BUFFER}, ${NET_BUFFER})`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // One `kill(2)`. A signal is external state, so the call writes, and two
     // of them never fold into one; a program that signals itself with 9 or 15
     // never sees the call return, so no `willreturn`.

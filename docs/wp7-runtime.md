@@ -176,7 +176,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | --- | --- | ---: | ---: |
 | `runtime/runtime.c` | the core: arena, strings, arrays, formatting, `argv`, `Math.random`, panics, `nish_wipe` | 3,698 (`RUNTIME_TEXT_BUDGET`) | 3,698 (2026-10-23) |
 | `runtime.c -DNISH_THREADS=1` | the same with a `_Thread_local` arena and seed (`--threads`), and the claim that lets only the first panic print | 3,899 (`RUNTIME_THREADS_TEXT_BUDGET`) | 3,899 (2026-10-23) |
-| `runtime/runtime-os.c` | syscall wrappers: files (and `renameSync`, `unlinkSync`, `writeFileBytesSync`, `writeBytes`, `writeFileSyncMode`, `createFileExclusiveSync`), directories (and `mkdirSyncMode`), subprocesses (`spawnSync`, and `spawn`, `kill`, `waitPid`), `getenv`, the two clocks, `realpath`, platform, the CPU count and physical memory | 3,328 (`RUNTIME_OS_TEXT_BUDGET`) | 3,174 (2026-10-29) |
+| `runtime/runtime-os.c` | syscall wrappers: files (and `renameSync`, `unlinkSync`, `writeFileBytesSync`, `writeBytes`, `writeFileSyncMode`, `createFileExclusiveSync`), directories (and `mkdirSyncMode`), subprocesses (`spawnSync`, `spawnPiped`, and `spawn`, `kill`, `waitPid`), `getenv`, the two clocks, `realpath`, platform, the CPU count and physical memory | 4,608 (`RUNTIME_OS_TEXT_BUDGET`) | 4,450 (2026-10-29) |
 | `runtime/runtime-parallel.c` | the sequential fallback (and WASI) | 768 (`RUNTIME_PARALLEL_TEXT_BUDGET`) | 610 (2026-10-16) |
 | `runtime-parallel.c -DNISH_THREADS=1` | the partitioner, a scope's tasks, a lock's contended path, channels and the worker pool | 2,560 (`RUNTIME_PARALLEL_THREADS_TEXT_BUDGET`) | 2,522 (2026-10-20) |
 | `runtime/runtime-host.c` | wall clock, entropy, mtime, signals, RT-9 ownership | 768 (`RUNTIME_HOST_TEXT_BUDGET`) | 764 |
@@ -229,6 +229,7 @@ file's cost is paid only by programs that use it: `examples/hello.ts` at the
 | 2026-10-29 | the same four builtins met `setNice` and `setIdlePriority` from `main`: `runtime-os.c` 2,745 → 2,822, `nish_set_nice` 31 and `nish_set_idle_priority` 46, which each side's budget held alone and 2,816 did not hold together | os 3,072 |
 | 2026-10-29 | `wallClockNanos`: `runtime-os.c` 2,822 → 2,828 (2,380 → 2,386 alone), the two clocks sharing `nish_clock_nanos` | os 3,072 |
 | 2026-10-29 | `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` (#992): `runtime-os.c` 2,828 → 3,174, `nish_put_file_mode` 253, its two callers 12 each, `nish_mkdir_mode` 72 | os 3,328 |
+| 2026-10-29 | `spawnPiped`: `runtime-os.c` 3,174 → 4,450. `nish_spawn_piped` 1,082 (the poll loop that writes stdin while it drains both outputs, the 16 MiB cap and its kill, SIGPIPE blocked on the calling thread), `nish_pipe` 109 (`pipe2` with `O_CLOEXEC`, both ends moved off 0–2), and `nish_spawn_start` 284 → 365 for the three `dup2` actions and the check that each was recorded; the rest is the shared helpers' growth | os 4,608 |
 
 **Why the split by subject.** The criterion is whether a function wraps a
 system call, whether the operating system is its subject, because that same

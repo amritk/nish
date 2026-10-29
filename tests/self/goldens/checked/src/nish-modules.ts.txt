@@ -115,15 +115,15 @@ function nishExport(specifier: string, name: string): BuiltinExport | null -> @n
   stackSites=0 stackLocals=0
   callee +0:14 new BuiltinExport -> @BuiltinExport.constructor
   callee +6:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +24:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +27:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +33:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +38:9 netOption -> @netOption
-  callee +39:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +41:12 isNetExport -> @isNetExport
-  callee +41:32 new BuiltinExport -> @BuiltinExport.constructor
-  callee +44:12 isTermExport -> @isTermExport
-  callee +44:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +46:21 unsafeModule -> @unsafeModule
-  callee +47:12 isUnsafeExport -> @isUnsafeExport
-  callee +47:35 new BuiltinExport -> @BuiltinExport.constructor
+  callee +25:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +28:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +34:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +39:9 netOption -> @netOption
+  callee +40:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +42:12 isNetExport -> @isNetExport
+  callee +42:32 new BuiltinExport -> @BuiltinExport.constructor
+  callee +45:12 isTermExport -> @isTermExport
+  callee +45:33 new BuiltinExport -> @BuiltinExport.constructor
+  callee +47:21 unsafeModule -> @unsafeModule
+  callee +48:12 isUnsafeExport -> @isUnsafeExport
+  callee +48:35 new BuiltinExport -> @BuiltinExport.constructor

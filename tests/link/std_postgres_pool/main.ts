@@ -483,6 +483,67 @@ const slots = (t: Suite): void => {
   t.eqI32("one is left", down.waiting(), 1);
 };
 
+/**
+ * Two ready slots, three in flight a connection at most: slot 0 full, slot 1
+ * one, then one of slot 0's groups answered, so it has two to slot 1's one.
+ */
+const twoUp = (pack: boolean): PgPool => {
+  const c = config();
+  c.maxInFlight = 3;
+  c.pack = pack;
+  const p = pool(c, 3, 16);
+  p.request();
+  p.dispatch();
+  up(p);
+  run(p, "");
+  p.request();
+  run(p, "");
+  p.request();
+  run(p, "");
+  p.request();
+  p.dispatch();
+  up(p);
+  run(p, "");
+  drain(p, 0);
+  drain(p, 1);
+  feed(p, 0, cat(DONE(), IDLE()));
+  return p;
+};
+
+const spreads = (t: Suite): void => {
+  const p = twoUp(false);
+  p.request();
+  t.eqI32("by default, the next goes to the slot with fewer in flight", run(p, ""), 1);
+  p.request();
+  t.eqI32("then, both at two, to the first", run(p, ""), 0);
+};
+
+const packs = (t: Suite): void => {
+  const p = twoUp(true);
+  t.eqI32("packed, slot 0 had filled before slot 1 took one", p.connection(1).inFlight, 1);
+  p.request();
+  t.eqI32("the next goes to slot 0, though slot 1 has fewer in flight", run(p, ""), 0);
+  t.eqI32("slot 0 is full again", p.connection(0).inFlight, 3);
+  t.eqI32("and no slot is wanted while slot 1 has room", p.wanted(), PG_POOL_NONE);
+  p.request();
+  t.eqI32("then slot 1", run(p, ""), 1);
+  p.request();
+  t.eqI32("to its cap", run(p, ""), 1);
+  t.eqI32("never past maxInFlight", p.connection(1).inFlight, 3);
+  p.request();
+  t.eqI32("every ready slot full: no slot", p.dispatch(), PG_POOL_NONE);
+  t.eqI32("so the third is wanted", p.wanted(), 2);
+  p.connect(2, z("nish-postgres-test"));
+  drain(p, 0);
+  drain(p, 1);
+  drain(p, 2);
+  p.connection(0).closed();
+  t.eqStr("slot 0 fails", feed(p, 0, []), `${PG_LOST}@1,${PG_LOST}@2,${PG_LOST}@4,${PG_FAILED}@-1`);
+  feed(p, 1, cat(DONE(), IDLE()));
+  t.eqI32("the waiting request skips slot 0, failed, and slot 2, starting", run(p, ""), 1);
+  t.eqI32("its ticket", p.ticket, 7);
+};
+
 const disposes = (t: Suite): void => {
   const p = pool(config(), 2, 8);
   p.request();
@@ -509,6 +570,8 @@ export const main = (): number => {
   wraps(t);
   isolates(t);
   slots(t);
+  spreads(t);
+  packs(t);
   disposes(t);
   return t.done();
 };

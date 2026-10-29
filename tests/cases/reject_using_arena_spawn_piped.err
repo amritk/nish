@@ -1,0 +1,1 @@
+`spawnPiped(["true"], none, out, err)` grows `out` inside the `using arena()` block at 9:5, and the array is older than the block

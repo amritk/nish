@@ -90,7 +90,21 @@ PASS  its ticket
 PASS  two slots fail starting, none ready: the first takes the oldest
 PASS  the second the next
 PASS  one is left
+PASS  by default, the next goes to the slot with fewer in flight
+PASS  then, both at two, to the first
+PASS  packed, slot 0 had filled before slot 1 took one
+PASS  the next goes to slot 0, though slot 1 has fewer in flight
+PASS  slot 0 is full again
+PASS  and no slot is wanted while slot 1 has room
+PASS  then slot 1
+PASS  to its cap
+PASS  never past maxInFlight
+PASS  every ready slot full: no slot
+PASS  so the third is wanted
+PASS  slot 0 fails
+PASS  the waiting request skips slot 0, failed, and slot 2, starting
+PASS  its ticket
 PASS  dispose wipes the pool's password
 PASS  and its connections'
 PASS  and may be called twice
-postgres pool: 95 passed, 0 failed, 0 skipped
+postgres pool: 109 passed, 0 failed, 0 skipped

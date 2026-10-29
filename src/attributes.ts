@@ -3607,6 +3607,12 @@ class FactCollector {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet") {
       this.facts.effect = EFFECT_WRITE
+    } else if (name === "spawnPiped") {
+      // The runtime appends to `stdout` and `stderr` as `push` does, moving
+      // their `len` and perhaps their `data` (`isResizeCall`).
+      this.facts.effect = EFFECT_WRITE
+      this.facts.resizesArray = true
+      this.facts.callees.add("nish_array_grow")
     }
   }
 }
@@ -5624,8 +5630,8 @@ const bodyMayExtend = (
   // stores constants only.
   if (body.kind === N_CALL || body.kind === N_NEW) {
     const callee = program.nodeCallees[body.id]
-    // An unresolved callee is a builtin, and no builtin but `push`/`pop`
-    // reaches a user array's header; those two are above.
+    // An unresolved callee is a builtin, and no builtin but `push`, `pop`
+    // and `spawnPiped` reaches a user array's header; those are above.
     if (callee !== null) {
       if (known === null) {
         return true
@@ -5712,14 +5718,23 @@ export const foreignBufferCountProven = (
 }
 
 /**
- * `a.push(v)` or `a.pop()`: the two calls that move an array's `len`, and so
- * the two a hoisted header has to be safe from. Every other array method reads
- * (`indexOf`, `join`), builds something new, or writes elements and leaves
- * the header alone (`set`, `fill`).
+ * `a.push(v)`, `a.pop()` or `spawnPiped(...)`: the calls that move an array's
+ * `len`, and so the ones a hoisted header has to be safe from. Every other
+ * array method reads (`indexOf`, `join`), builds something new, or writes
+ * elements and leaves the header alone (`set`, `fill`); `spawnPiped` appends
+ * to its `stdout` and `stderr` in the runtime.
  */
 export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const method = arrayMethodName(program, table, node)
-  return method === "push" || method === "pop"
+  if (method === "push" || method === "pop") {
+    return true
+  }
+  return (
+    node.kind === N_CALL &&
+    node.children[0].kind === N_IDENT &&
+    program.nodeCallees[node.id] === null &&
+    builtinNameOf(program, node) === "spawnPiped"
+  )
 }
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */

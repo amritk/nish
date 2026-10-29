@@ -578,11 +578,12 @@ struct PgConfig (class) size=64 align=8 exported
   field options: string index=3 offset=24 initialized
   field maxMessage: i32 index=4 offset=32 initialized
   field maxInFlight: i32 index=5 offset=36 initialized
-  field inputSize: i32 index=6 offset=40 initialized
-  field maxColumns: i32 index=7 offset=44 initialized
-  field minIterations: i32 index=8 offset=48 initialized
-  field maxIterations: i32 index=9 offset=52 initialized
-  field maxOutput: i32 index=10 offset=56 initialized
+  field pack: boolean index=6 offset=40 initialized
+  field inputSize: i32 index=7 offset=44 initialized
+  field maxColumns: i32 index=8 offset=48 initialized
+  field minIterations: i32 index=9 offset=52 initialized
+  field maxIterations: i32 index=10 offset=56 initialized
+  field maxOutput: i32 index=11 offset=60 initialized
 struct PgError (class) size=56 align=8 exported
   field severity: string index=0 offset=0 readonly
   field code: string index=1 offset=8 readonly
@@ -2171,7 +2172,8 @@ function PgPool.dispatch(this: PgPool): i32 -> @nish.PgPool.dispatch [exported m
   calls: nish.PgConnection.prepare nish.PgPool.connection nish.PgPoolSlot.push nish_panic_div nish_panic_index nish_panic_overflow
   pointer this: size=88 writesThrough=true captured=false passedTo=nish.PgPool.connection#0
   stackSites=0 stackLocals=0
-  local -21:11 cap: i32 (const)
+  local -22:11 cap: i32 (const)
+  local -21:11 pack: boolean (const)
   local -20:9 best: i32 (let)
   local -19:9 load: i32 (let)
   local -18:9 starting: i32 (let)

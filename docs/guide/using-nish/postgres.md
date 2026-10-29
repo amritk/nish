@@ -364,7 +364,10 @@ for (let slot: i32 = pool.wanted(); slot >= 0; slot = pool.wanted()) {
 
 - **Requests.** `request()` queues a request and answers its ticket.
   `dispatch()` hands the oldest one to the ready connection with the fewest
-  groups in flight, never more than `PgConfig.maxInFlight` on one; build its
+  groups in flight, never more than `PgConfig.maxInFlight` on one. With
+  `PgConfig.pack` set it hands it instead to the first ready connection with
+  room, filling one to `maxInFlight` before using the next: fewer, fuller
+  writes, which pays on a lossy link to the server. Build its
   group on `connection(slot)` and end it with `send()`. Until it is sent,
   `dispatch()` answers `PG_POOL_NONE`: a request handed out and never sent
   holds the pool. `send()` answers `false` when nothing was handed out, when

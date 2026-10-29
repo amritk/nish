@@ -327,6 +327,13 @@ declare function spawnSync(argv: string[]): number;
  */
 declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
 /**
+ * The same run with all three streams on pipes: `stdin` is written to the
+ * child and closed, and what it prints is appended to `stdout` and `stderr`.
+ * The status as `spawnSync` answers it, or -2 when a stream passed 16 MiB:
+ * the child is then killed and each array keeps at most the first 16 MiB.
+ */
+declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
+/**
  * Start `argv[0]` through `PATH` without waiting: the child's pid, or a
  * negative errno. The child is the program's until `waitPid` reaps it. No
  * reading under Node, which throws.
@@ -566,6 +573,11 @@ declare module "nish:process" {
    * at either path is refused, and the answer is -1.
    */
   export function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
+  /**
+   * The same run with `stdin` written to the child and its stdout and stderr
+   * appended to the two arrays: the status, or -2 past 16 MiB on a stream.
+   */
+  export function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
   /** Start a child without waiting: its pid, or a negative errno. */
   export function spawn(argv: string[]): i32;
   /** Send 0, 2, 9 or 15 to `pid`: 0, or a negative errno; any other signal is -22. */

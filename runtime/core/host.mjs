@@ -205,6 +205,18 @@ export function spawnSyncTo(argv, out, err) {
   return host.call("spawnSyncTo", [argv, out, err]);
 }
 
+/**
+ * `spawnPiped(argv, stdin, stdout, stderr)`: the host runs the child and hands
+ * back its status and both streams' bytes, and they are appended here, as the
+ * runtime appends them to the caller's arrays.
+ */
+export function spawnPiped(argv, input, out, err) {
+  const [status, outBytes, errBytes] = host.call("spawnPiped", [argv, input]);
+  for (const b of outBytes) out.push(b);
+  for (const b of errBytes) err.push(b);
+  return status;
+}
+
 export function kill(pid, sig) {
   return host.call("kill", [pid, sig]);
 }

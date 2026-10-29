@@ -6379,7 +6379,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSync`, `mkdirSyncMode`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawnPiped`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
@@ -7246,6 +7246,7 @@ wins, as it does for every identifier builtin.
 | `isDirectorySync(path: string): boolean` | one `stat`: `true` when a directory exists at `path` as the call runs, `false` for everything else — a missing path, a plain file, a device node, a parent that cannot be searched. It is the question `-o <dir>` asks of a path, and it is the `stat` half of `mkdirSync`, which calls it (WP14 §7a) | write | `io_is_directory`; `reject_is_directory_arity`, `reject_is_directory_type` |
 | `spawnSync(argv: string[]): number` | run `argv[0]`, searched on `PATH`, with `argv` as its argument vector; wait for it; answer its exit status, or `128 + n` when signal `n` killed it (the shell's convention). `-1` when the vector is **empty** — there is no `argv[0]` to run — and whenever the child cannot be started or cannot be waited for, which is also what a WASI build always answers, since WASI has no processes. The child inherits this process's environment, streams and working directory | write | `io_spawn`; `reject_spawn_arity`, `reject_spawn_element_type` |
 | `spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number` | the same run, with each stream sent to a file rather than inherited: each path is created or truncated at `0644`, as `writeFileSync` does, and a symbolic link as its last component is refused, which answers `-1`. An **empty** path leaves that stream inherited, so one call can capture stdout and let stderr through. Every answer `spawnSync` gives, it gives — the status, `128 + n`, and `-1` for an empty vector, a child that cannot be started, and a WASI build. The two paths must not name one file: each is opened separately, with its own offset, so the streams would overwrite rather than interleave; capture them apart and concatenate | write | `io_spawn_to`, `io_spawn_to_inherit`; `reject_spawn_to_arity`, `reject_spawn_to_type` |
+| `spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32` | the same run, with every stream a pipe: the child reads `stdin`'s bytes and then end of file, and whatever it writes to its stdout and stderr is **appended** to `stdout` and `stderr`, which keep what they held. Answers the status, `128 + n`, and `-1` for an empty vector, a child that cannot be started, a pipe or `poll` that fails, and a WASI build. A stream past **16 MiB** (`NISH_PIPED_CAP`) kills the child with `SIGKILL` and answers `-2`, with that array holding the first 16 MiB; a child that exits without reading its stdin is not a failure. The child inherits the environment and working directory, and no descriptor of the program but its three streams; it starts with SIGPIPE as the program had it, whose own SIGPIPE from writing to a child that stopped reading is absorbed. The two output arrays are grown by the runtime, so they are push receivers to the arena analysis, and `readonly` is refused for them, as is a typed-array spelling (`Int32Array`, ...), whose length is fixed | write | `io_spawn_piped`, `mem_spawn_piped_scope`; `reject_spawn_piped_arity`, `reject_spawn_piped_element_type`, `reject_spawn_piped_stdin_type`, `reject_spawn_piped_output`, `reject_spawn_piped_typed_output`, `reject_spawn_piped_wasm`, `reject_using_arena_spawn_piped` |
 | `readdirSync(path: string): string[] \| null` | the directory's entries, **sorted ascending by bytes**, without `.` and `..`; every other dotfile is an entry. `null` when the directory cannot be read at all — a missing path, a plain file, a parent that cannot be searched — which is a *different* answer from the empty array an empty directory gives. A WASI build always answers `null`: `fd_readdir` lists a preopened directory rather than a path, which is a different contract and not a port of this one | write | `io_readdir`, `io_readdir_null`; `reject_readdir_arity`, `reject_readdir_type`, `reject_readdir_unchecked` |
 | `realpathSync(path: string): string \| null` | `path` with every symbolic link resolved and every `.`, `..` and repeated separator removed, as an **absolute** path — or `null` when it does not resolve, which a path that does not exist is. Every component but the last must exist for POSIX `realpath` to answer at all, so "does not resolve" is one answer rather than several, and it is the answer the caller asked for rather than an error. The bytes are copied into the arena, so the result is an ordinary string; it is narrowed with `if (p !== null)` like any other nullable (WP19 §5a item 4) | write | `io_realpath`; `reject_realpath_arity`, `reject_realpath_type` |
 
@@ -7281,6 +7282,22 @@ the output as a string, was refused for two reasons: the runtime would have to
 buffer a child that can print more than memory holds, and a harness comparing
 output against a golden wants the bytes on disk anyway, to diff and to keep
 after a failure.
+
+`spawnPiped` is the run whose streams stay in memory, for a child that takes
+a secret: a password manager's or keychain's CLI reads it on stdin, and stdin
+is the one place `ps`, `/proc/<pid>/environ` and the file system do not show.
+Its shape is four arguments with the outputs as out-parameters, the way
+`readBytesInto` fills a caller's array. The rejected shape answered a record
+(`{ status, stdout, stderr }`): no builtin returns a class, and there is no
+way to declare one the checker, both emitters and the TypeScript prelude would
+share, so the record would have been the first and its own construct. The
+out-parameters cost a caller two `const out: u8[] = []` lines; they also let a
+loop reuse one pair of arrays. The runtime writes `stdin` and drains both
+outputs in one `poll` loop, so a child that fills one pipe while the parent
+waits on another cannot deadlock it, and the 16 MiB cap is the answer to the
+reason `spawnSyncTo` gave for refusing to buffer: a child that prints more
+than memory holds is stopped, with a code no exit status can be, rather than
+followed (`docs/security/runtime.md`, RT-27 to RT-31).
 
 `readdirSync` sorts, which neither `readdir(3)` nor Node's `fs.readdirSync`
 does, and that is a decision about this language rather than a convenience:
@@ -9120,7 +9137,7 @@ policy](#the-capability-policy); without one, the set is a report.
 | `fs.read` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `readdirSync`, `realpathSync`, `isDirectorySync`, `lstatOwnerModeSync`, `isExecutableSync` (`caps_fs_read`) |
 | `fs.write` | `writeFileSync`, `appendFileSync`, `mkdirSync` (`caps_fs_write`), `writeFileBytesSync`, `renameSync`, `unlinkSync` (`caps_fs_replace`), `writeFileSyncMode`, `createFileExclusiveSync`, `mkdirSyncMode` (`caps_fs_mode`) |
 | `net` | every `nish:net` export (`caps_net`) |
-| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority` (`caps_process_nice`) |
+| `process.spawn` | `spawnSync`, `spawnSyncTo` (`caps_process_spawn`), `spawnPiped` (`caps_process_spawn_piped`), `spawn`, `kill`, `waitPid` (`caps_process_wait`), `setNice`, `setIdlePriority` (`caps_process_nice`) |
 | `signal` | `signalFd`, `readSignal` (`caps_signal`) |
 | `tty` | every `nish:term` export (`caps_tty`) |
 | `unsafe` | the six `nish:unsafe` exports: `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` (`tests/link/caps_policy_deny_unsafe`; "capabilities: each of the six `nish:unsafe` exports carries `unsafe` at its call") |
@@ -10879,7 +10896,7 @@ messages are exact for the cases cited; other rows quote the checker
 | `Math.*` on an integer | `` `Math.sqrt` requires an f64 argument, got i32 (use --number-mode f64 or toF64(x)) `` | `reject_math_i32` |
 | conversion of a non-number | `` `toI32` expects a number (i32, i64, or f64), got string `` | `reject_toi32_string` |
 | I/O with the wrong type | `` `readFileSync` expects an argument of type string, got i32 `` | `reject_readfile_number`, `reject_readdir_type`, `reject_spawn_to_type` |
-| I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_monotonic_arity` |
+| I/O with the wrong arity | `` `readdirSync` expects exactly 1 argument, got 2 ``; `` `spawnSyncTo` expects exactly 3 arguments, got 2 ``; `` `spawnPiped` expects exactly 4 arguments, got 3 ``; `` `monotonicNanos` expects exactly 0 arguments, got 1 `` | `reject_readdir_arity`, `reject_spawn_to_arity`, `reject_spawn_piped_arity`, `reject_monotonic_arity` |
 | array errors | see [Arrays](#array-literals), [Element access](#element-access), [`for...of`](#for-const-x-of-a) | `reject_arr_*` |
 | element reference held across a `push` or `pop` | `` `p` refers to an element of `ps`, and `ps.push(...)` may move or reuse that storage; index `ps` again afterwards rather than holding the element across it `` — see [Arrays of records are contiguous](#arrays-of-records-are-contiguous) | `reject_arr_element_across_push`, `reject_arr_element_loop_push`, `reject_arr_element_push_self` |
 | `push` or `pop` on a receiver spelled `Int32Array`, `Float32Array`, `Float64Array` or `BigInt64Array` (NL2415) | `` `push` is not a method of `Float64Array`, whose length is fixed: declare it `f64[]` to push and pop `` | `reject_typed_push_f64`, `reject_typed_pop_receivers` ([Typed-array names have no `push` or `pop`](#typed-array-names-have-no-push-or-pop)) |
