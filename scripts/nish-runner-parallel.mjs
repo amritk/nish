@@ -24,7 +24,7 @@
  * `io_nish_import` and `io_nish_import_global`, write the same
  * `build/test/io_nish_import.txt` by design, and the language has no `chdir`
  * for the runner to keep them apart itself. So each process runs in
- * `build/nish-runner-parallel/<slice>/`: a symbolic link to every top-level
+ * `build/nish-runner-parallel/<slice>-of-<total>/`: a symbolic link to every top-level
  * entry of the checkout but `build/` and `.git`, and a `build/` that is its
  * own. The runtime cache under `$XDG_CACHE_HOME` is shared, as it is between
  * the link programs `tests/run.js` runs at once.
@@ -32,8 +32,10 @@
  * **The report reads as one run's.** Each process's output is printed whole,
  * in slice order, once it and every slice before it are done, and the last
  * line is the runner's own summary summed over them -- `golden cases: N
- * passed, N failed, N skipped` -- so CI's `tail -n 1` reads it as before. The
- * exit status is 1 when any runner answered non-zero or printed no summary.
+ * passed, N failed, N skipped` -- so CI's `tail -n 1` reads it as before. A
+ * skip a runner makes once for a missing tool (no clang, no `opt`) is counted
+ * once per runner, as each one did skip it. The exit status is 1 when any
+ * runner answered non-zero or printed no summary.
  */
 import fs from "node:fs"
 import path from "node:path"
@@ -76,11 +78,14 @@ const compilerExe = path.resolve(compiler)
 const slices = Array.from({ length: jobs }, (_, p) => shard + shards * p)
 const total = shards * jobs
 const farm = path.join(root, "build", "nish-runner-parallel")
-fs.rmSync(farm, { recursive: true, force: true })
 
-/** A working directory that is the checkout in every entry but `build/`. */
+/**
+ * A working directory that is the checkout in every entry but `build/`, named
+ * by slice and total so that the two halves of one corpus can run at once.
+ */
 const workdir = (slice) => {
-  const dir = path.join(farm, String(slice))
+  const dir = path.join(farm, `${slice}-of-${total}`)
+  fs.rmSync(dir, { recursive: true, force: true })
   fs.mkdirSync(path.join(dir, "build"), { recursive: true })
   for (const entry of fs.readdirSync(root)) {
     if (entry !== "build" && entry !== ".git") {

@@ -5926,9 +5926,9 @@ const llFilesIn = (dir) =>
 // in tests/cases because it is a program, not a construct: the floor is that it
 // compiles every module of itself cleanly, and above that stand the oracles that
 // hold each phase to something outside it and the bootstrap's fixed point. It
-// sits here, where the split of a sharded run ends, because it is dealt like the
-// link programs (`DEALT_SECTIONS`): it runs in the shard
-// `sectionShard("selfHosting")` names, and reads nothing the sections after it write.
+// is dealt like the link programs (`DEALT_SECTIONS`): it runs in the shard
+// `sectionShard("selfHosting")` names, before the point where every shard but
+// 1 stops, and reads nothing the sections after it write.
 if (dealtHere("selfHosting")) {
   const selfDir = path.join(root, "src")
   const modules = fs.existsSync(selfDir)
@@ -7975,6 +7975,36 @@ if (dealtHere("nishRunner")) {
       "the Nish runner's --shard 1/2 and 2/2 pass the `pop` cases' checks between them, and 3/2 is refused",
       whole > 0 && halves.every((n) => n > 0) && halves[0] + halves[1] === whole && refused.status !== 0,
       `whole ${whole}, halves ${halves.join(" + ")}, 3/2 exited ${refused.status}`
+    )
+    // scripts/nish-runner-parallel.mjs, which CI's `runner` job runs: its two
+    // runners of each half pass between them exactly the checks that half
+    // passes alone, and its last line is their summaries summed in the
+    // runner's own words, so the slice arithmetic and the summing are pinned.
+    const parallel = (shard) => {
+      const r = spawnSync(
+        "node",
+        [
+          path.join("scripts", "nish-runner-parallel.mjs"),
+          "pop",
+          "--runner",
+          runnerExe,
+          "--compiler",
+          NISH,
+          "--shard",
+          shard,
+          "--jobs",
+          "2",
+        ],
+        { cwd: root, encoding: "utf8" }
+      )
+      const m = /\ngolden cases: (\d+) passed, 0 failed, \d+ skipped\n$/.exec(r.stdout)
+      return r.status === 0 && m ? Number(m[1]) : -1
+    }
+    const parallelHalves = [parallel("1/2"), parallel("2/2")]
+    check(
+      "scripts/nish-runner-parallel.mjs passes, over each half, the checks the Nish runner's --shard does alone",
+      parallelHalves[0] === halves[0] && parallelHalves[1] === halves[1],
+      `runner halves ${halves.join(" + ")}, parallel halves ${parallelHalves.join(" + ")}`
     )
   }
 }
