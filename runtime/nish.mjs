@@ -84,12 +84,16 @@ globalThis.console = {
 // `Array#sort`'s UTF-16 order — the two agree on ASCII names only.
 provide("write", shim.write);
 provide("writeError", shim.writeError);
+provide("writeBytes", shim.writeBytes);
 provide("panic", shim.panic);
 provide("readFileSync", shim.readFileSync);
 provide("readFileSyncOrNull", shim.readFileSyncOrNull);
 provide("readFileBytesSync", shim.readFileBytesSync);
 provide("writeFileSync", shim.writeFileSync);
 provide("appendFileSync", shim.appendFileSync);
+provide("writeFileBytesSync", shim.writeFileBytesSync);
+provide("renameSync", shim.renameSync);
+provide("unlinkSync", shim.unlinkSync);
 provide("mkdirSync", shim.mkdirSync);
 provide("isDirectorySync", shim.isDirectorySync);
 provide("readdirSync", shim.readdirSync);

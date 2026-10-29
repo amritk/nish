@@ -7841,6 +7841,85 @@ if (!only || "speed-link".includes(only)) {
   )
 }
 
+// The GNU build-id note (scripts/build.sh, `--build-id=sha1`): what perf, gdb
+// and debuginfod match a stripped binary to its debug file by. Every native ELF
+// profile carries one, the size and debug links included, and it is a hash of
+// the output's bytes, so two links of one input give one id -- the property the
+// bootstrap's `stage3 == stage2` rests on. The notes are read from the section
+// headers here rather than through readelf, so the check needs only a link.
+if (!only || "build_id".includes(only)) {
+  /** The NT_GNU_BUILD_ID descriptors of an ELF64 little-endian file, as hex. */
+  const gnuBuildIds = (file) => {
+    const elf = fs.readFileSync(file)
+    if (elf.readUInt32BE(0) !== 0x7f454c46 || elf[4] !== 2 || elf[5] !== 1) {
+      return null
+    }
+    const shoff = Number(elf.readBigUInt64LE(0x28))
+    const shentsize = elf.readUInt16LE(0x3a)
+    const align = (n) => (n + 3) & ~3
+    const ids = []
+    for (let i = 0; i < elf.readUInt16LE(0x3c); i++) {
+      const sh = shoff + i * shentsize
+      if (elf.readUInt32LE(sh + 4) !== 7) {
+        continue // not SHT_NOTE
+      }
+      const start = Number(elf.readBigUInt64LE(sh + 0x18))
+      const end = start + Number(elf.readBigUInt64LE(sh + 0x20))
+      for (let at = start; at + 12 <= end; ) {
+        const namesz = elf.readUInt32LE(at)
+        const descsz = elf.readUInt32LE(at + 4)
+        const name = elf.subarray(at + 12, at + 12 + namesz).toString("latin1")
+        const desc = at + 12 + align(namesz)
+        if (elf.readUInt32LE(at + 8) === 3 && name === "GNU\0") {
+          ids.push(elf.subarray(desc, desc + descsz).toString("hex"))
+        }
+        at = desc + align(descsz)
+      }
+    }
+    return ids
+  }
+  if (!HAS_CLANG) {
+    skip("build_id: the links need clang")
+  } else if (process.platform === "darwin" || process.platform === "win32") {
+    skip(`build_id: a GNU build-id is an ELF note, and ${process.platform} links another format`)
+  } else {
+    const idDir = path.join(buildDir, "build-id")
+    fs.rmSync(idDir, { recursive: true, force: true })
+    fs.mkdirSync(idDir, { recursive: true })
+    const src = path.join(linkDir, "build_id", "program.ts")
+    const link = (out, profile) =>
+      spawnSync(NISH, [src, "-o", path.join(idDir, `${out}.ll`), "--link", path.join(idDir, out), "--profile", profile], {
+        cwd: root,
+        encoding: "utf8",
+      })
+    const ids = {}
+    for (const [out, profile] of [
+      ["speed-a", "speed"],
+      ["speed-b", "speed"],
+      ["size", "size"],
+      ["debug", "debug"],
+    ]) {
+      const built = link(out, profile)
+      ids[out] = built.status === 0 ? gnuBuildIds(path.join(idDir, out)) : null
+      check(
+        `build_id: --profile ${profile} links a binary with one 20-byte NT_GNU_BUILD_ID note (${out})`,
+        ids[out] !== null && ids[out].length === 1 && ids[out][0].length === 40,
+        built.status === 0 ? `notes: ${JSON.stringify(ids[out])}` : built.stderr
+      )
+    }
+    check(
+      "build_id: two speed links of one input carry the same build id",
+      ids["speed-a"]?.length === 1 && ids["speed-a"][0] === ids["speed-b"]?.[0],
+      `${ids["speed-a"]} against ${ids["speed-b"]}`
+    )
+    check(
+      "build_id: a debug link carries a different build id from a speed link",
+      ids.debug?.length === 1 && ids["speed-a"]?.length === 1 && ids.debug[0] !== ids["speed-a"][0],
+      `${ids.debug} against ${ids["speed-a"]}`
+    )
+  }
+}
+
 // X509-6: `nish/crypto/x509-random` draws from `crypto.getRandomValues`, so
 // `tests/link/crypto_x509_random_wasm` (a wasm32 build importing it) is refused
 // by the link loop above. This is the other half: `nish/crypto/x509` alone
@@ -9500,7 +9579,7 @@ if (!only || "std_text_index_of_any".includes(only)) {
   // the non-ASCII edge's byte offsets, which the native build and this one both
   // count in UTF-8 bytes and Node in UTF-16 units, so it is held to its
   // expected.out here and natively, and never run under Node above.
-  const wasiNames = ["std_text_index_of_any", "std_text_index_of_any_non_ascii_offset"]
+  const wasiNames = ["std_text_index_of_any", "std_text_index_of_any_non_ascii_offset", "std_dns_config", "std_dns_message"]
   if (WASI_SYSROOT && has("wasm-ld")) {
     for (const name of wasiNames) {
       const wasiDir = path.join(buildDir, `wasi_${name}`)
@@ -10148,6 +10227,60 @@ if (!only || "str_from_bytes".includes(only)) {
       shown(oob)
     )
   }
+}
+
+// The byte round trip (`tests/cases/io_write_bytes.ts`): stdout and the files
+// it writes are compared with `io_write_bytes.bin`, all 256 byte values, byte
+// for byte, which a `.out` (read as UTF-8, trimmed) cannot do. Natively both
+// routes are exact: `writeBytes` and `writeFileBytesSync` from a `u8[]`, and
+// `write` and `writeFileSync` of the `String.fromBytes` string, whose
+// `{len, bytes}` is written as it is. Under `runtime/nish.mjs` the `u8[]`
+// route is exact too, and the string route is the documented divergence: each
+// byte one UTF-16 unit, written as UTF-8, so a byte above 127 leaves as two.
+// (`--emit-ts` decodes the bytes as UTF-8 instead, which the emit-ts
+// differential files under its `fromBytes` host row.)
+if (!only || "io_write_bytes".includes(only)) {
+  const src = path.join(casesDir, "io_write_bytes.ts")
+  const bin = fs.readFileSync(path.join(casesDir, "io_write_bytes.bin"))
+  const arrayFile = path.join(root, "build", "test", "io_write_bytes_array.bin")
+  const stringFile = path.join(root, "build", "test", "io_write_bytes_string.bin")
+  fs.mkdirSync(path.dirname(arrayFile), { recursive: true })
+  const readOr = (file) => (fs.existsSync(file) ? fs.readFileSync(file) : Buffer.alloc(0))
+  const dir = path.join(buildDir, "io_write_bytes.d")
+  const exe = path.join(dir, "io_write_bytes")
+  fs.mkdirSync(dir, { recursive: true })
+  fs.rmSync(arrayFile, { force: true })
+  fs.rmSync(stringFile, { force: true })
+  const built = spawnSync(NISH, [src, "-o", dir + path.sep, "--link", exe], { cwd: root, encoding: "utf8" })
+  if (built.status === 0) {
+    const run = spawnSync(exe, [], { cwd: root })
+    check(
+      "io_write_bytes: natively, stdout is the 256 bytes from writeBytes, then the same from write(String.fromBytes)",
+      run.status === 0 && Buffer.concat([bin, bin]).equals(run.stdout),
+      `exit ${run.status}, ${run.stdout.length} bytes\nstderr: ${run.stderr}`
+    )
+    check(
+      "io_write_bytes: natively, writeFileBytesSync and writeFileSync(String.fromBytes) write the 256 bytes as they are",
+      readOr(arrayFile).equals(bin) && readOr(stringFile).equals(bin),
+      `array file ${readOr(arrayFile).length} bytes, string file ${readOr(stringFile).length} bytes`
+    )
+  } else {
+    check("io_write_bytes: links natively", false, built.stderr)
+  }
+  fs.rmSync(arrayFile, { force: true })
+  fs.rmSync(stringFile, { force: true })
+  const node = runUnderPrelude(src, [], "main", { encoding: "buffer" })
+  const units = Buffer.from(bin.toString("latin1"), "utf8")
+  check(
+    "io_write_bytes: under Node, writeBytes sends the 256 bytes as they are and write(String.fromBytes) their UTF-8",
+    node.status === 0 && Buffer.concat([bin, units]).equals(node.stdout),
+    `exit ${node.status}, ${node.stdout.length} bytes\nstderr: ${node.stderr}`
+  )
+  check(
+    "io_write_bytes: under Node, writeFileBytesSync writes the 256 bytes as they are and writeFileSync their UTF-8",
+    readOr(arrayFile).equals(bin) && readOr(stringFile).equals(units),
+    `array file ${readOr(arrayFile).length} bytes, string file ${readOr(stringFile).length} bytes`
+  )
 }
 
 // The compression cross-check: `tests/link/std_compress_node` (the link loop

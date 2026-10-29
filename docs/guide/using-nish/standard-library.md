@@ -35,6 +35,17 @@ normal-priority fallback for work that must finish, and call either at the top
 of `main`, before any thread starts. See
 [Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority).
 
+`nish:fs` is where a program replaces a file in one step: write the new
+contents beside the target, then `renameSync` the temporary over it, so a
+reader sees the old file or the new one and never half of either.
+`renameSync`, `unlinkSync` and `writeFileBytesSync` answer a number instead
+of exiting: `0` (or the bytes written) on success and a negative errno on
+failure, such as `-2` for a missing path or `-18` when the two names are on
+different filesystems, so the program decides what to say. Bytes that are
+not text, a `u8[]` from `readFileBytesSync` or a codec, go out as they are
+through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
+[File I/O](../../LANGUAGE.md#file-io).
+
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
@@ -44,7 +55,7 @@ of `main`, before any thread starts. See
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
-| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column` |
+| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column`; `stringifyYaml` in `nish/yaml-write` to write a JSON value as YAML |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
@@ -56,10 +67,12 @@ of `main`, before any thread starts. See
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
-| [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url, bcrypt |
+| [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, trust anchors, base64url, bcrypt |
 | [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router, a PostgreSQL client |
 | [`nish/compress/*`](compression.md) | gzip, zlib and raw DEFLATE, both ways, into buffers you own or streamed; CRC-32 and Adler-32; `nish/net/http-compress` for `Accept-Encoding` and gzip responses |
-| [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing |
+| [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing; `urlParse`, `urlResolve` and `urlOrigin` for a whole URL |
+| [`nish/net/dns-message`](#nishnetdns-message) | `dnsBuildQuery` and `dnsParseReply`: one DNS question as bytes, and the A or AAAA addresses a reply gives it, following its CNAME chain, with every count and pointer bounded |
+| [`nish/net/dns-config`](#nishnetdns-config) | `dnsParseResolvConf` and `dnsParseHosts`: `/etc/resolv.conf` and `/etc/hosts` read into fixed tables; `dnsHostsFind` and `dnsParseAddress` |
 
 ## `nish/testing`
 
@@ -824,6 +837,54 @@ range, for `commentCount` and `comment`) and `firstDocumentOnly` (warn
 `MULTIPLE_DOCUMENTS` and stop after the first). Tabs are never indentation, as
 YAML says.
 
+### Writing YAML
+
+`stringifyYaml(doc, v)` from `nish/yaml-write` writes a `nish/json-value`
+value as YAML that `parseYaml` reads back as the same tree: block style with a
+two-space indent, `{}` and `[]` for an empty object and array, `null`, `true`
+and `false` plain, a number as its JSON text, and a trailing newline. It
+answers `""` for a handle that names no value and for a tree deeper than
+`JSON_WRITER_MAX_DEPTH`, the limit `stringify` keeps.
+
+```ts nish:ok
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+import { parseYaml } from "nish/yaml";
+import { stringifyYaml } from "nish/yaml-write";
+
+export const main = (): i32 => {
+  const doc = new JsonDocument(new JsonLimits());
+  const root = doc.parseText(`{"name":"nish","version":"0.24","tags":["yaml","no"],"empty":{}}`);
+  const yaml = stringifyYaml(doc, root);
+  console.log(yaml);
+  return parseYaml(yaml).errorCount();
+};
+```
+
+It prints:
+
+```yaml
+name: nish
+version: "0.24"
+tags:
+  - yaml
+  - "no"
+empty: {}
+```
+
+**Which strings are quoted.** A string is written plain unless YAML would read
+it as something else, and then double-quoted: an empty string; `~` and the
+words `null`, `true`, `false`, `yes`, `no`, `on`, `off`, `y` and `n` in any
+case; anything that starts like a number (an optional sign, then a digit or
+`.` and a digit) or is `.inf` or `.nan`, signed or not, in any case; a string
+that starts with an indicator (`@`, `` ` ``, `\`, `*`, `&`, `!`, `|`, `>`,
+`%`, `'`, `"`, `#`, `,`, `[`, `]`, `{`, `}`), with `-`, `?` or `:` followed
+by a space or nothing, or with `---` or `...`; a string with a leading or
+trailing space, a trailing `:`, or a `: ` or ` #` inside; a key `<<`, which
+would be a merge key; and a string holding a control character, a line break,
+U+2028, U+2029, U+FEFF, U+FFFE or U+FFFF, which are escaped. A key longer than
+1024 bytes as written is an explicit key, `? key` and then `: value`.
+
 ## `nish/pair`
 
 `Pair<A, B>` is an interface with two fields, `first` and `second`, and
@@ -1017,6 +1078,50 @@ and how many colours it has. To keep a
 program free of both, make the style yourself: `new Style(on, colour)`, where
 `on` turns painting on and `colour` picks the theme's colours over the
 monochrome failsafe.
+
+### Colours
+
+A `Style` also paints any text, not only a menu, with the same policy: plain
+when `on` is false, and the theme's colours only when `colour` is true.
+
+| group | methods | under the failsafe |
+| --- | --- | --- |
+| foreground | `black` `red` `green` `yellow` `blue` `magenta` `cyan` `white`, and `brightBlack` (gray) through `brightWhite` | plain |
+| background | `bgBlack` through `bgWhite`, and `bgBrightBlack` through `bgBrightWhite` | plain |
+| attributes | `bold` `faint` `italic` `underline` `inverse` `strikethrough` | painted |
+| raw | `sgr(text, codes)`, any SGR parameter list: `"1;31"`, `"38;5;208"`, `"38;2;255;128;0"` | plain |
+
+Each answers `text` between its escape and a reset, or `text` unchanged when
+it paints nothing. The sixteen colours are the ones your terminal theme
+redefines; a 256-colour or truecolor tone ignores the theme, so it goes
+through `sgr`, where you ask for it on purpose. The `SGR_` constants
+(`SGR_RED`, `SGR_BRIGHT_BLACK`, `SGR_BG_BLUE`, `SGR_BOLD`, ...) spell the
+codes, so `` s.sgr(text, `${SGR_BOLD};${SGR_RED}`) `` combines them without
+numbers. Nesting works too, but every painter ends with a full reset, so
+text after an inner painted part loses the outer marks: join the codes for
+anything longer than one part.
+
+**The menu's roles can be recoloured.** Each role a `HelpMenu` paints keeps
+two SGR lists, one for the theme and one for the failsafe:
+`headingThemed`/`headingMono`, `nameThemed`/`nameMono`,
+`flagThemed`/`flagMono`, `metaThemed`/`metaMono` and `dimThemed`/`dimMono`.
+Set a pair before you build the menu; an empty list leaves that role plain.
+The defaults are the ones described above.
+
+```ts nish:ok
+import { HelpMenu, SGR_BOLD, SGR_GREEN, agentDriven, styleFor } from "nish/cli";
+
+export const main = (): i32 => {
+  const style = styleFor(1, agentDriven());
+  style.flagThemed = `${SGR_BOLD};${SGR_GREEN}`;
+  const menu = new HelpMenu(style, "greet", 24, 30);
+  menu.header("1.2.0", "say hello");
+  menu.row("--shout", "", "in capitals");
+  console.log(menu.text());
+  console.log(`${style.red("error:")} ${style.bold("no name given")}`);
+  return 0;
+};
+```
 
 ## `nish/term`
 
@@ -1600,8 +1705,10 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x25519` | X25519 key exchange |
 | `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
+| `nish/crypto/p384` | P-384 ECDSA verification |
 | `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
+| `nish/crypto/pki-roots` | `pkiLoadSystemRoots()`, the root certificates to trust, parsed: those `SSL_CERT_FILE` and `SSL_CERT_DIR` name when either is set, with no fallback, and otherwise the first system bundle (`pkiSystemBundles()`) and `/etc/ssl/certs`. A block or file it cannot use is counted in `skipped`, never fatal, and only regular files are read; on macOS it reads `/etc/ssl/cert.pem`, not the Keychain, so roots and trust settings added there are missed. Native only |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
 
 ```ts nish:ok
@@ -1655,7 +1762,8 @@ a bad key length, a tag that does not verify — so narrow the result before you
 use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
 `x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1` and
 `ed25519`, which came later, has been through a security audit (`ed25519` is
-recorded as a change after its area's audit); the records are in
+recorded as a change after its area's audit, and `pki-roots` has a record
+written with its code); the records are in
 [docs/security/](../../security/README.md).
 
 ## `nish/net`
@@ -1755,6 +1863,15 @@ each connection rather than reading it again. When you drive a `TlsServer` or
 a `TlsRecordServer` yourself rather than through `nish/net/tls-tcp`, call its
 `wipe()` once the connection is done; the carriers call it at every end of a
 connection.
+
+When a `TlsTcpServer` slot ends a connection itself (`shutdown`, or an HTTP
+carrier above it after its answer), it does not close the socket at once:
+it shuts the write side, wipes the slot's keys and answers
+`TLS_RECORD_WANT_READ` until the client hangs up, then `TLS_RECORD_DONE`.
+Closing a socket the client is still writing to resets the connection, and a
+browser can report that reset instead of the response. Keep reading the slot
+until its interest says done, and close slots that stay quiet from your own
+loop's timeout.
 
 A server that lends byte buffers across connections takes them from
 `nish/net/buffer-pool`'s `BufferPool`: a pool of fixed-size buffers, up to a
@@ -1975,8 +2092,186 @@ and answers null for a key past it.
 The byte API does not check that what it decodes is UTF-8: a value may be
 binary. The `name` you give `urlQueryFind` or `urlQueryGet` is ASCII: the
 native build compares it with the key's bytes and Node with its UTF-16 code
-units, so a non-ASCII name answers differently on the two. Nothing here looks
-for a `#`, which is never part of a request target.
+units, so a non-ASCII name answers differently on the two. The byte API never
+looks for a `#`, which is never part of a request target.
+
+### Whole URLs
+
+A client handed a URL by a user, a redirect or a link needs its parts:
+`urlParse(s)` splits an absolute URL into a `Url` (`scheme`, `username`,
+`password`, `host`, `port`, `path`, `query`, `fragment`), and
+`urlResolve(base, ref)` resolves a reference against one, as a browser does
+for a link, removing `.` and `..` so a path never climbs above `/`.
+`urlSerialize` writes a `Url` back. The scheme and host are lower-cased;
+everything else is kept as written, still percent-encoded. `port` is -1 when
+the URL names none; `urlDefaultPort(scheme)` is 80 or 443, and
+`urlOrigin(u)` writes `scheme://host:port` with the port always there, so
+origins compare as plain strings. A host is compared as written, so
+`http://a.com./` (a trailing dot) and `http://[0::1]/` are different origins
+from `http://a.com/` and `http://[::1]/`: an equal string is the same origin,
+and a split errs toward "different".
+
+```ts nish:ok
+import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
+
+const show = (base: Url, ref: string): void => {
+  const u: Url | null = urlResolve(base, ref);
+  if (u === null) {
+    console.log(`${ref} is refused`);
+    return;
+  }
+  console.log(`${ref} -> ${urlSerialize(u)}, host ${u.host}, port ${u.port}`);
+};
+
+export const main = (): i32 => {
+  const base: Url | null = urlParse("https://Example.com/docs/guide/index.html?v=2");
+  if (base === null) {
+    return 1;
+  }
+  show(base, "../api/url.html#parse");
+  show(base, "/../../etc/passwd");
+  show(base, "?v=3");
+  show(base, "//cdn.example.com:8443/app.js");
+  show(base, "http://127.1/");
+  show(base, "http://good.com%2f@evil.com/");
+  show(base, "http://a@b@c/");
+  const origin: string | null = urlOrigin(base);
+  console.log(origin === null ? "no origin" : origin);
+  return 0;
+};
+```
+
+```console
+$ nish run links.ts
+../api/url.html#parse -> https://example.com/docs/api/url.html#parse, host example.com, port -1
+/../../etc/passwd -> https://example.com/etc/passwd, host example.com, port -1
+?v=3 -> https://example.com/docs/guide/index.html?v=3, host example.com, port -1
+//cdn.example.com:8443/app.js -> https://cdn.example.com:8443/app.js, host cdn.example.com, port 8443
+http://127.1/ is refused
+http://good.com%2f@evil.com/ -> http://good.com%2f@evil.com/, host evil.com, port -1
+http://a@b@c/ is refused
+https://example.com:443
+```
+
+**A URL two readers could disagree on is refused**, with null, not repaired:
+a byte outside printable ASCII (a space, a tab, a non-ASCII letter), a
+backslash anywhere (a browser reads it as `/`), a `%` not followed by two hex
+digits, a second `@`, a host byte other than a letter, a digit and `-._~`
+(so a percent-encoded byte), an IPv6
+zone, a port past 65535, and a host that looks
+like a number but is not four decimal parts (`127.1`, `0x7f.0.0.1`,
+`2130706433`, `010.0.0.1`). An http, https, ws or wss URL needs a host. What does
+parse is always one host: in `http://good.com%2f@evil.com/`, everything
+before the `@` is the username.
+
+Resolution is RFC 3986's, strictly: `http:g` against an http base is an
+absolute URL with no host, so it is refused, where a browser reads it as the
+relative `g`. A non-ASCII host is refused, so pass an
+international name in its punycode `xn--` form. An IPv6 host is
+compared as written, so `[::1]` and `[0::1]` are different origins; check
+an address after you resolve the name, never the string, before you trust it.
+
+## `nish/net/dns-message`
+
+A DNS lookup is one UDP datagram out and one back. `nish/net/dns-message` writes
+the first and reads the second; it opens no socket, so you send and receive
+the bytes yourself. `dnsBuildQuery(out, id, name, qtype)` writes a question for
+`name` of type `DNS_TYPE_A` or `DNS_TYPE_AAAA`, with recursion asked for, and
+answers its length: `out` of `DNS_QUERY_MAX_BYTES` (271) always has room. A
+name that is not one (an empty label, a label over 63 bytes, a name over 253,
+a byte outside printable ASCII) answers a negative `DNS_ERR_*` instead. Pick
+`id` at random for each query: it is half of what keeps a forged reply out.
+
+`dnsParseReply(msg, len, query, queryLen, port, reply)` reads a reply into a
+`DnsReply` you make once and reuse. It answers the reply's RCODE
+(`DNS_NOERROR`, `DNS_NXDOMAIN`, `DNS_SERVFAIL`, `DNS_REFUSED`) or a negative
+`DNS_ERR_*`: a reply whose ID, question or flags do not match your query is
+refused before a record is read, so read it as "not my answer" and keep
+waiting. On `DNS_NOERROR`, `reply.count` addresses are in `reply.addresses`,
+18 bytes each, the form `nish:net` connects to, with `port` written in; at
+most `DNS_MAX_ANSWERS` (8) are kept and `reply.dropped` counts the rest. When
+`reply.truncated` is set, nothing was read: ask again over TCP.
+
+```ts nish:ok
+import {
+  DNS_ERR_NOT_REPLY,
+  DNS_QUERY_MAX_BYTES,
+  DNS_TYPE_A,
+  DnsReply,
+  dnsBuildQuery,
+  dnsParseReply,
+} from "nish/net/dns-message";
+
+export const main = (): i32 => {
+  const query: u8[] = new Array<u8>(DNS_QUERY_MAX_BYTES);
+  const n: i32 = dnsBuildQuery(query, 0x1234, "example.com", DNS_TYPE_A);
+  console.log(`${n} bytes`);
+  // A reply that is only an echo of the query has QR clear: not a reply.
+  const reply = new DnsReply();
+  const status: i32 = dnsParseReply(query, n, query, n, 443, reply);
+  console.log(`${status === DNS_ERR_NOT_REPLY ? "not a reply" : "read"}`);
+  return 0;
+};
+```
+
+```console
+$ nish run lookup.ts
+29 bytes
+not a reply
+```
+
+**A CNAME chain is followed inside the one reply.** An address is kept only
+when its owner is the name you asked, or the last name a CNAME record before
+it pointed to; a record for any other name is read past. Compression pointers
+must point backwards, at most 16 deep, and a name never grows past 255 bytes,
+so no reply makes the parser loop or read outside `msg[0, len)`.
+
+## `nish/net/dns-config`
+
+`nish/net/dns-config` reads `/etc/resolv.conf` and `/etc/hosts` from bytes you
+have already read, into tables of fixed size. `dnsParseResolvConf(b, off, len,
+config)` fills a `DnsConfig`: up to three `servers` (18 bytes each, on port
+53), up to six `search` domains in 256 bytes, and `ndots`, `timeout` and
+`attempts` from `options`, each clamped (0 to 15, 1 to 30, 1 to 5). A file
+with no usable `nameserver` gives 127.0.0.1 and ::1, as glibc does.
+`dnsParseHosts(b, off, len, hosts)` fills a `DnsHosts`, and
+`dnsHostsFind(hosts, name, qtype, port, out, max)` writes the addresses it
+gives `name`, without case, in file order, and answers how many.
+
+```ts nish:ok
+import { DnsHosts, dnsHostsFind, dnsParseHosts } from "nish/net/dns-config";
+import { DNS_TYPE_A } from "nish/net/dns-message";
+
+const bytesOf = (text: string): u8[] => {
+  const out: u8[] = [];
+  const n: i32 = toI32(text.length);
+  for (let i: i32 = 0; i < n; i++) {
+    out.push(toU8(text.charCodeAt(i)));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  const file = bytesOf("127.0.0.1 localhost\n::1 localhost\n192.0.2.7 Build.Lan build # CI\n");
+  const hosts = new DnsHosts();
+  dnsParseHosts(file, 0, toI32(file.length), hosts);
+  const out: u8[] = new Array<u8>(4 * 18);
+  console.log(`${dnsHostsFind(hosts, "BUILD", DNS_TYPE_A, 22, out, 4)} address, ${out[15]}`);
+  return 0;
+};
+```
+
+```console
+$ nish run hosts.ts
+1 address, 7
+```
+
+Neither file is trusted to be small: what does not fit a table is dropped and
+counted (`droppedServers`, `droppedSearch`, `droppedEntries`, `droppedNames`),
+and a line over 1024 bytes is skipped whole and counted in `skippedLines`. An
+address is a strict literal: `010.0.0.1` and `fe80::1%eth0` are refused, not
+read as octal or with a zone. `dnsParseAddress` is the same reader, for a
+literal anywhere in your own bytes.
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports

@@ -1272,7 +1272,10 @@ export class Http1Connection {
       enc.identityFields(names, values)
     }
     // `respond` and the body together, or neither: what `respond` sets is
-    // put back when the body does not fit behind the head.
+    // put back when the body does not fit behind the head. `room` first, so
+    // that what was sent is already moved out of the way and the `outputEnd`
+    // put back is one `respond` did not move.
+    this.room()
     const outputEnd: i32 = this.outputEnd
     const closeAfter: boolean = this.closeAfter
     const r: i32 = this.respond(status, enc.names, enc.values, n)
@@ -1954,7 +1957,9 @@ export class Http1TlsServer {
   readable(slot: i32): i32 {
     const live: boolean = this.live(slot)
     const now: i64 = monotonicNanos()
-    if (live) {
+    // What a lingering slot drains is not activity, so `idleTimeout` bounds
+    // how long a client that trickles bytes after the close can hold it.
+    if (live && !this.tls.lingering(slot)) {
       this.connections[slot].lastActive = now
     }
     this.tls.readable(slot)

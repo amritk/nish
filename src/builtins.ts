@@ -187,6 +187,10 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "waitPid" ||
     name === "availableParallelism" ||
     name === "totalMemory" ||
+    name === "renameSync" ||
+    name === "unlinkSync" ||
+    name === "writeFileBytesSync" ||
+    name === "writeBytes" ||
     name === "setNice" ||
     name === "setIdlePriority" ||
     isTermExport(name) ||
@@ -1158,6 +1162,41 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   if (name === "setTerminalRestore") {
     if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnFreestandingWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+    }
+    return T_I32
+  }
+  // Replacing and removing a file, and bytes out: an `i32`, `>= 0` on success
+  // and a negative errno otherwise, never an exit, so a program that writes
+  // beside its target and renames over it owns the diagnostic. WASI's libc
+  // has all four calls; a freestanding wasm32 build has no file system or
+  // stdout to reach. `writeBytes` takes `netWrite`'s range-checked
+  // `(bytes, off, len)` without the descriptor, as `readStdin` takes
+  // `netRead`'s.
+  if (name === "renameSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+      checkArgumentType(ctx, args.children[1], scope, name, T_STRING)
+    }
+    return T_I32
+  }
+  if (name === "unlinkSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+    }
+    return T_I32
+  }
+  if (name === "writeFileBytesSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+      checkBuffer(ctx, args.children[1], scope, name, T_U8, false)
+    }
+    return T_I32
+  }
+  if (name === "writeBytes") {
+    if (checkBuiltinArity(ctx, call, name, args, 3) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkBuffer(ctx, args.children[0], scope, name, T_U8, false)
+      checkArgumentType(ctx, args.children[1], scope, name, T_I32)
+      checkArgumentType(ctx, args.children[2], scope, name, T_I32)
     }
     return T_I32
   }

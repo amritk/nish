@@ -816,6 +816,23 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_append_file")}(${stringArgs(emitter, expr)})`)
     return "void"
   }
+  // runtime-os.c's errno answers, an `i32` in either number mode as
+  // `readStdin`'s is. `writeFileBytesSync` hands the runtime the array's
+  // header, whose `len` and `data` it reads.
+  if (name === "renameSync") {
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_rename")}(${stringArgs(emitter, expr)})`)
+  }
+  if (name === "unlinkSync") {
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_unlink")}(${stringArgs(emitter, expr)})`)
+  }
+  if (name === "writeFileBytesSync") {
+    emitter.declareType(ARRAY_TYPE)
+    const path = emitter.emitExpression(firstArgument(expr))
+    const bytes = emitter.emitExpression(expr.children[1].children[1])
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_write_file_bytes")}(i8* ${path}, ${ARRAY_STRUCT}* ${bytes})`
+    )
+  }
   // WP14 D4: the two host calls a self-hosted driver needs to link its output.
   if (name === "mkdirSync") {
     return emitter.fn.emitValue(
@@ -979,6 +996,10 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "writeError") {
     return emitStreamWrite(emitter, expr, 2)
   }
+  // `netWrite` to stdout, less the descriptor: the same range check and call shape.
+  if (name === "writeBytes") {
+    return emitNetCall(emitter, expr, name)
+  }
   if (name === "panic") {
     return emitPanic(emitter, expr)
   }
@@ -1086,6 +1107,24 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "appendFileSync") {
     out.push("nish_append_file")
+    return out
+  }
+  if (name === "renameSync") {
+    out.push("nish_rename")
+    return out
+  }
+  if (name === "unlinkSync") {
+    out.push("nish_unlink")
+    return out
+  }
+  if (name === "writeFileBytesSync") {
+    out.push("nish_write_file_bytes")
+    return out
+  }
+  // `writeBytes` checks its range as `netWrite` does.
+  if (name === "writeBytes") {
+    out.push("nish_write_bytes")
+    out.push("nish_panic_slice")
     return out
   }
   if (name === "mkdirSync") {
@@ -1260,15 +1299,15 @@ export const identifierBuiltinCalleesNamed = (
 // ---- WP34 N5: `nish:net` -------------------------------------------------------------------
 
 /**
- * One call into runtime-net.c (or runtime-term.c, for `readStdin`), its
- * arguments emitted left to right as every call's are and passed as
+ * One call into runtime-net.c (runtime-term.c for `readStdin`, runtime-os.c
+ * for `writeBytes`), its arguments emitted left to right as every call's are and passed as
  * `bufferSignature` spells them: an `i32` as itself, a
  * string as its `i8*`, a `u8[]` (or `meta`'s `i32[]`) as its header, whose
  * `len` and `data` the runtime reads, and an offset or a length (`n`) widened
  * to an `i64` as an index is. The answer is the runtime's `i32` in either
  * number mode.
  *
- * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom` and `readStdin` take the range `[off,
+ * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom`, `readStdin` and `writeBytes` take the range `[off,
  * off + len)` of the buffer before their first `n`, checked here the way
  * `dst.set(src, at)` checks the range it writes, through the same panic and
  * with the same words: `0 <= off <= off + len <= buf.length`. Both are

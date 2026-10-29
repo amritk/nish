@@ -25,27 +25,28 @@ function timeCompress(body: u8[], level: i32, calls: i32): void -> @timeCompress
   local +8:12 i: i32 (let)
   callee +9:11 GzipCompressor.compress -> @nish.GzipCompressor.compress
   local +11:9 ns: i64 (const)
-function timeDecompress(body: u8[], level: i32, calls: i32): void -> @timeDecompress
+function timeDecompress(body: u8[], level: i32, calls: i32, given: u8[] | null): void -> @timeDecompress
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.GzipCompressor.compress
-  escaping: level
+  escaping: given level
   calls: nish.GzipCompressor.compress nish.GzipCompressor.constructor nish.GzipDecompressor.constructor nish.GzipDecompressor.decompress nish.compressBound nish_monotonic_nanos nish_panic nish_panic_overflow nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.GzipCompressor.compress#1
+  pointer given: size=0 writesThrough=true captured=true
   stackSites=2 stackLocals=1
   local +0:9 n: i32 (const)
-  local +1:9 out: u8[] (const)
-  callee +1:35 compressBound -> @nish.compressBound
-  local +2:9 end: i32 (const)
-  callee +2:20 GzipCompressor.compress -> @nish.GzipCompressor.compress
-  callee +2:20 new GzipCompressor -> @nish.GzipCompressor.constructor
-  local +3:9 back: u8[] (const)
-  local +4:9 gunzip: GzipDecompressor (const)
-  callee +4:18 new GzipDecompressor -> @nish.GzipDecompressor.constructor
-  local +5:7 got: i32 (let)
-  local +6:9 started: i64 (const)
-  local +7:12 i: i32 (let)
-  callee +8:11 GzipDecompressor.decompress -> @nish.GzipDecompressor.decompress
-  local +10:9 ns: i64 (const)
+  local +1:7 out: u8[] (let)
+  callee +1:33 compressBound -> @nish.compressBound
+  local +2:7 end: i32 (let)
+  callee +2:18 GzipCompressor.compress -> @nish.GzipCompressor.compress
+  callee +2:18 new GzipCompressor -> @nish.GzipCompressor.constructor
+  local +7:9 back: u8[] (const)
+  local +8:9 gunzip: GzipDecompressor (const)
+  callee +8:18 new GzipDecompressor -> @nish.GzipDecompressor.constructor
+  local +9:7 got: i32 (let)
+  local +10:9 started: i64 (const)
+  local +11:12 i: i32 (let)
+  callee +12:11 GzipDecompressor.decompress -> @nish.GzipDecompressor.decompress
+  local +14:9 ns: i64 (const)
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_read_file_bytes
@@ -57,187 +58,249 @@ function main(): i32 -> @nish_main [exported entry]
   local +7:9 calls: i32 (const)
   callee +8:3 timeCompress -> @timeCompress
   callee +9:3 timeCompress -> @timeCompress
-  callee +10:3 timeDecompress -> @timeDecompress
-  callee +11:3 timeDecompress -> @timeDecompress
+  local +10:9 gz1: u8[] | null (const)
+  local +11:9 gz6: u8[] | null (const)
+  callee +12:3 timeDecompress -> @timeDecompress
+  callee +13:3 timeDecompress -> @timeDecompress
 module std/compress/deflate.ts [package nish]
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
+import wrappingAdd from "nish:unsafe" -> builtin wrappingAdd
+import wrappingSub from "nish:unsafe" -> builtin wrappingSub
 import copyBytes from "nish/bytes" -> function @nish.copyBytes
 unsafe import 55:10 uncheckedGet from "nish:unsafe"
 unsafe import 55:24 uncheckedSet from "nish:unsafe"
-unsafe call 193:9 uncheckedGet (node 445)
-unsafe call 194:10 uncheckedGet (node 454)
-unsafe call 195:10 uncheckedGet (node 468)
-unsafe call 196:10 uncheckedGet (node 482)
-unsafe call 204:3 uncheckedSet (node 557)
-unsafe call 205:3 uncheckedSet (node 572)
-unsafe call 206:3 uncheckedSet (node 595)
-unsafe call 207:3 uncheckedSet (node 618)
-unsafe call 208:3 uncheckedSet (node 641)
-unsafe call 209:3 uncheckedSet (node 664)
-unsafe call 210:3 uncheckedSet (node 687)
-unsafe call 211:3 uncheckedSet (node 710)
-unsafe call 246:21 uncheckedGet (node 943)
-unsafe call 246:50 uncheckedGet (node 950)
-unsafe call 454:7 uncheckedSet (node 1887)
-unsafe call 455:7 uncheckedSet (node 1894)
-unsafe call 480:7 uncheckedSet (node 2034)
-unsafe call 487:23 uncheckedGet (node 2114)
-unsafe call 488:7 uncheckedSet (node 2124)
-unsafe call 488:32 uncheckedGet (node 2129)
-unsafe call 492:22 uncheckedGet (node 2164)
-unsafe call 493:7 uncheckedSet (node 2170)
-unsafe call 497:22 uncheckedGet (node 2201)
-unsafe call 499:23 uncheckedGet (node 2224)
-unsafe call 500:7 uncheckedSet (node 2230)
-unsafe call 501:7 uncheckedSet (node 2239)
-unsafe call 501:32 uncheckedGet (node 2244)
-unsafe call 502:7 uncheckedSet (node 2250)
-unsafe call 507:5 uncheckedSet (node 2272)
-unsafe call 507:27 uncheckedGet (node 2277)
-unsafe call 508:5 uncheckedSet (node 2283)
-unsafe call 508:27 uncheckedGet (node 2288)
-unsafe call 512:3 uncheckedSet (node 2294)
-unsafe call 512:25 uncheckedGet (node 2299)
-unsafe call 512:49 uncheckedGet (node 2304)
-unsafe call 516:25 uncheckedGet (node 2345)
-unsafe call 516:52 uncheckedGet (node 2350)
-unsafe call 517:7 uncheckedSet (node 2359)
-unsafe call 517:32 uncheckedGet (node 2364)
-unsafe call 518:7 uncheckedSet (node 2370)
-unsafe call 521:7 uncheckedSet (node 2382)
-unsafe call 521:32 uncheckedGet (node 2387)
-unsafe call 524:41 uncheckedGet (node 2404)
-unsafe call 524:68 uncheckedGet (node 2409)
-unsafe call 525:7 uncheckedSet (node 2419)
-unsafe call 525:32 uncheckedGet (node 2424)
-unsafe call 525:59 uncheckedGet (node 2429)
-unsafe call 526:7 uncheckedSet (node 2436)
-unsafe call 529:7 uncheckedSet (node 2448)
-unsafe call 529:32 uncheckedGet (node 2453)
-unsafe call 529:59 uncheckedGet (node 2458)
-unsafe call 534:3 uncheckedSet (node 2469)
-unsafe call 536:5 uncheckedSet (node 2495)
-unsafe call 536:30 uncheckedGet (node 2500)
-unsafe call 536:49 uncheckedGet (node 2504)
-unsafe call 548:25 uncheckedGet (node 2577)
-unsafe call 592:24 uncheckedGet (node 2824)
-unsafe call 874:7 uncheckedSet (node 4229)
-unsafe call 894:7 uncheckedSet (node 4345)
-unsafe call 895:7 uncheckedSet (node 4360)
-unsafe call 896:7 uncheckedSet (node 4383)
-unsafe call 897:7 uncheckedSet (node 4406)
-unsafe call 918:7 uncheckedSet (node 4515)
-unsafe call 1021:21 uncheckedGet (node 5102)
-unsafe call 1022:5 uncheckedSet (node 5108)
-unsafe call 1023:5 uncheckedSet (node 5115)
-unsafe call 1038:9 uncheckedGet (node 5251)
-unsafe call 1038:42 uncheckedGet (node 5258)
-unsafe call 1052:14 uncheckedGet (node 5329)
-unsafe call 1078:5 uncheckedSet (node 5492)
-unsafe call 1078:50 uncheckedGet (node 5502)
-unsafe call 1079:5 uncheckedSet (node 5508)
-unsafe call 1096:5 uncheckedSet (node 5608)
-unsafe call 1098:21 uncheckedGet (node 5635)
-unsafe call 1100:5 uncheckedSet (node 5653)
-unsafe call 1100:32 uncheckedGet (node 5660)
-unsafe call 1103:11 uncheckedGet (node 5679)
-unsafe call 1104:11 uncheckedGet (node 5687)
-unsafe call 1106:5 uncheckedSet (node 5711)
-unsafe call 1106:26 uncheckedGet (node 5716)
-unsafe call 1116:5 uncheckedSet (node 5779)
-unsafe call 1119:5 uncheckedSet (node 5802)
-unsafe call 1119:25 uncheckedGet (node 5807)
-unsafe call 1163:25 uncheckedGet (node 6114)
-unsafe call 1164:9 uncheckedSet (node 6120)
-unsafe call 1165:9 uncheckedSet (node 6127)
-unsafe call 1182:18 uncheckedGet (node 6273)
-unsafe call 1187:9 uncheckedSet (node 6294)
-unsafe call 1189:31 uncheckedGet (node 6319)
-unsafe call 1190:9 uncheckedSet (node 6328)
-unsafe call 1190:30 uncheckedGet (node 6333)
-unsafe call 1192:29 uncheckedGet (node 6350)
-unsafe call 1192:64 uncheckedGet (node 6357)
-unsafe call 1193:9 uncheckedSet (node 6371)
-unsafe call 1193:30 uncheckedGet (node 6376)
-unsafe call 1200:11 uncheckedSet (node 6450)
-unsafe call 1200:57 uncheckedGet (node 6460)
-unsafe call 1201:11 uncheckedSet (node 6466)
-unsafe call 1206:30 uncheckedGet (node 6490)
-unsafe call 1207:9 uncheckedSet (node 6496)
-unsafe call 1209:9 uncheckedSet (node 6507)
-unsafe call 1209:29 uncheckedGet (node 6512)
-unsafe call 1231:31 uncheckedGet (node 6624)
-unsafe call 1239:35 uncheckedGet (node 6701)
-unsafe call 1302:7 uncheckedSet (node 7058)
-unsafe call 1303:7 uncheckedSet (node 7070)
-unsafe call 1304:7 uncheckedSet (node 7084)
-unsafe call 1305:7 uncheckedSet (node 7099)
-unsafe call 1332:33 uncheckedGet (node 7265)
-unsafe call 1332:55 uncheckedGet (node 7270)
-unsafe call 1336:27 uncheckedGet (node 7297)
-unsafe call 1336:55 uncheckedGet (node 7304)
-unsafe call 1344:11 uncheckedSet (node 7348)
-unsafe call 1350:11 uncheckedSet (node 7382)
-unsafe call 1356:9 uncheckedSet (node 7413)
-unsafe call 1359:11 uncheckedSet (node 7433)
-unsafe call 1359:33 uncheckedGet (node 7438)
-unsafe call 1364:11 uncheckedSet (node 7468)
-unsafe call 1371:9 uncheckedSet (node 7502)
-unsafe call 1374:11 uncheckedSet (node 7522)
-unsafe call 1374:33 uncheckedGet (node 7527)
-unsafe call 1419:22 uncheckedGet (node 7837)
-unsafe call 1420:22 uncheckedGet (node 7846)
-unsafe call 1421:22 uncheckedGet (node 7857)
-unsafe call 1423:22 uncheckedGet (node 7873)
-unsafe call 1427:22 uncheckedGet (node 7904)
-unsafe call 1428:22 uncheckedGet (node 7913)
-unsafe call 1430:20 uncheckedGet (node 7930)
-unsafe call 1521:22 uncheckedGet (node 8619)
-unsafe call 1523:32 uncheckedGet (node 8640)
-unsafe call 1524:15 uncheckedGet (node 8654)
-unsafe call 1528:24 uncheckedGet (node 8687)
-unsafe call 1529:32 uncheckedGet (node 8703)
-unsafe call 1530:15 uncheckedGet (node 8719)
-unsafe call 1531:43 uncheckedGet (node 8740)
-unsafe call 1532:15 uncheckedGet (node 8755)
-unsafe call 1535:11 uncheckedSet (node 8773)
-unsafe call 1536:11 uncheckedSet (node 8788)
-unsafe call 1537:11 uncheckedSet (node 8811)
-unsafe call 1538:11 uncheckedSet (node 8834)
-unsafe call 1544:25 uncheckedGet (node 8884)
-unsafe call 1544:56 uncheckedGet (node 8891)
-unsafe call 1545:32 uncheckedGet (node 8915)
-unsafe call 1546:15 uncheckedGet (node 8929)
-unsafe call 1547:39 uncheckedGet (node 8946)
-unsafe call 1548:15 uncheckedGet (node 8961)
-unsafe call 1552:9 uncheckedSet (node 8979)
-unsafe call 1553:9 uncheckedSet (node 8994)
-unsafe call 1554:9 uncheckedSet (node 9017)
-unsafe call 1555:9 uncheckedSet (node 9040)
-unsafe call 1782:7 uncheckedSet (node 10278)
-unsafe call 1787:30 uncheckedGet (node 10323)
-unsafe call 1793:13 uncheckedSet (node 10400)
-unsafe call 1847:24 uncheckedGet (node 10701)
-unsafe call 2047:34 uncheckedGet (node 11794)
-unsafe call 2047:66 uncheckedGet (node 11803)
-unsafe call 2048:35 uncheckedGet (node 11822)
-unsafe call 2048:71 uncheckedGet (node 11833)
-unsafe call 2140:22 uncheckedGet (node 12369)
-unsafe call 2146:11 uncheckedSet (node 12410)
-unsafe call 2148:15 uncheckedGet (node 12428)
-unsafe call 2153:13 uncheckedSet (node 12469)
-unsafe call 2155:17 uncheckedGet (node 12487)
-unsafe call 2160:15 uncheckedSet (node 12528)
-unsafe call 2177:24 uncheckedGet (node 12649)
-unsafe call 2205:13 uncheckedSet (node 12857)
-unsafe call 2205:35 uncheckedGet (node 12862)
-unsafe call 2226:28 uncheckedGet (node 12971)
-unsafe call 2231:20 uncheckedGet (node 12996)
-unsafe call 2267:9 uncheckedSet (node 13166)
-unsafe call 2281:22 uncheckedGet (node 13275)
-unsafe call 2337:13 uncheckedSet (node 13586)
-unsafe call 2337:35 uncheckedGet (node 13591)
+unsafe import 55:38 wrappingAdd from "nish:unsafe"
+unsafe import 55:51 wrappingSub from "nish:unsafe"
+unsafe call 226:9 uncheckedGet (node 565)
+unsafe call 227:10 uncheckedGet (node 574)
+unsafe call 228:10 uncheckedGet (node 588)
+unsafe call 229:10 uncheckedGet (node 602)
+unsafe call 238:9 uncheckedGet (node 632)
+unsafe call 239:10 uncheckedGet (node 641)
+unsafe call 240:10 uncheckedGet (node 658)
+unsafe call 241:10 uncheckedGet (node 675)
+unsafe call 242:10 uncheckedGet (node 692)
+unsafe call 243:10 uncheckedGet (node 709)
+unsafe call 244:10 uncheckedGet (node 726)
+unsafe call 245:10 uncheckedGet (node 743)
+unsafe call 249:3 uncheckedSet (node 779)
+unsafe call 250:3 uncheckedSet (node 789)
+unsafe call 251:3 uncheckedSet (node 806)
+unsafe call 252:3 uncheckedSet (node 823)
+unsafe call 253:3 uncheckedSet (node 840)
+unsafe call 254:3 uncheckedSet (node 857)
+unsafe call 255:3 uncheckedSet (node 874)
+unsafe call 256:3 uncheckedSet (node 891)
+unsafe call 291:21 uncheckedGet (node 1135)
+unsafe call 291:50 uncheckedGet (node 1142)
+unsafe call 509:7 uncheckedSet (node 2165)
+unsafe call 510:7 uncheckedSet (node 2172)
+unsafe call 535:7 uncheckedSet (node 2312)
+unsafe call 542:23 uncheckedGet (node 2392)
+unsafe call 543:7 uncheckedSet (node 2402)
+unsafe call 543:32 uncheckedGet (node 2407)
+unsafe call 547:22 uncheckedGet (node 2442)
+unsafe call 548:7 uncheckedSet (node 2448)
+unsafe call 552:22 uncheckedGet (node 2479)
+unsafe call 554:23 uncheckedGet (node 2502)
+unsafe call 555:7 uncheckedSet (node 2508)
+unsafe call 556:7 uncheckedSet (node 2517)
+unsafe call 556:32 uncheckedGet (node 2522)
+unsafe call 557:7 uncheckedSet (node 2528)
+unsafe call 562:5 uncheckedSet (node 2550)
+unsafe call 562:27 uncheckedGet (node 2555)
+unsafe call 563:5 uncheckedSet (node 2561)
+unsafe call 563:27 uncheckedGet (node 2566)
+unsafe call 567:3 uncheckedSet (node 2572)
+unsafe call 567:25 uncheckedGet (node 2577)
+unsafe call 567:49 uncheckedGet (node 2582)
+unsafe call 571:25 uncheckedGet (node 2623)
+unsafe call 571:52 uncheckedGet (node 2628)
+unsafe call 572:7 uncheckedSet (node 2637)
+unsafe call 572:32 uncheckedGet (node 2642)
+unsafe call 573:7 uncheckedSet (node 2648)
+unsafe call 576:7 uncheckedSet (node 2660)
+unsafe call 576:32 uncheckedGet (node 2665)
+unsafe call 579:41 uncheckedGet (node 2682)
+unsafe call 579:68 uncheckedGet (node 2687)
+unsafe call 580:7 uncheckedSet (node 2697)
+unsafe call 580:32 uncheckedGet (node 2702)
+unsafe call 580:59 uncheckedGet (node 2707)
+unsafe call 581:7 uncheckedSet (node 2714)
+unsafe call 584:7 uncheckedSet (node 2726)
+unsafe call 584:32 uncheckedGet (node 2731)
+unsafe call 584:59 uncheckedGet (node 2736)
+unsafe call 589:3 uncheckedSet (node 2747)
+unsafe call 591:5 uncheckedSet (node 2773)
+unsafe call 591:30 uncheckedGet (node 2778)
+unsafe call 591:49 uncheckedGet (node 2782)
+unsafe call 603:25 uncheckedGet (node 2855)
+unsafe call 647:24 uncheckedGet (node 3102)
+unsafe call 929:7 uncheckedSet (node 4507)
+unsafe call 949:7 uncheckedSet (node 4623)
+unsafe call 950:7 uncheckedSet (node 4638)
+unsafe call 951:7 uncheckedSet (node 4661)
+unsafe call 952:7 uncheckedSet (node 4684)
+unsafe call 973:7 uncheckedSet (node 4793)
+unsafe call 1084:20 wrappingAdd (node 5412)
+unsafe call 1085:21 uncheckedGet (node 5423)
+unsafe call 1086:5 uncheckedSet (node 5429)
+unsafe call 1087:5 uncheckedSet (node 5436)
+unsafe call 1107:11 uncheckedGet (node 5595)
+unsafe call 1107:44 uncheckedGet (node 5602)
+unsafe call 1126:14 uncheckedGet (node 5725)
+unsafe call 1152:5 uncheckedSet (node 5887)
+unsafe call 1152:50 uncheckedGet (node 5897)
+unsafe call 1153:5 uncheckedSet (node 5903)
+unsafe call 1170:5 uncheckedSet (node 6003)
+unsafe call 1172:21 uncheckedGet (node 6030)
+unsafe call 1174:5 uncheckedSet (node 6048)
+unsafe call 1174:32 uncheckedGet (node 6055)
+unsafe call 1177:11 uncheckedGet (node 6074)
+unsafe call 1178:11 uncheckedGet (node 6082)
+unsafe call 1180:5 uncheckedSet (node 6106)
+unsafe call 1180:26 uncheckedGet (node 6111)
+unsafe call 1190:5 uncheckedSet (node 6174)
+unsafe call 1193:5 uncheckedSet (node 6197)
+unsafe call 1193:25 uncheckedGet (node 6202)
+unsafe call 1237:25 uncheckedGet (node 6509)
+unsafe call 1238:9 uncheckedSet (node 6515)
+unsafe call 1239:9 uncheckedSet (node 6522)
+unsafe call 1270:18 uncheckedGet (node 6784)
+unsafe call 1275:9 uncheckedSet (node 6805)
+unsafe call 1277:31 uncheckedGet (node 6830)
+unsafe call 1278:9 uncheckedSet (node 6839)
+unsafe call 1278:30 uncheckedGet (node 6844)
+unsafe call 1280:29 uncheckedGet (node 6861)
+unsafe call 1280:64 uncheckedGet (node 6868)
+unsafe call 1281:9 uncheckedSet (node 6882)
+unsafe call 1281:30 uncheckedGet (node 6887)
+unsafe call 1285:23 wrappingAdd (node 6923)
+unsafe call 1289:16 wrappingAdd (node 6987)
+unsafe call 1290:11 uncheckedSet (node 6993)
+unsafe call 1290:57 uncheckedGet (node 7003)
+unsafe call 1291:11 uncheckedSet (node 7009)
+unsafe call 1295:30 uncheckedGet (node 7029)
+unsafe call 1296:9 uncheckedSet (node 7035)
+unsafe call 1298:9 uncheckedSet (node 7046)
+unsafe call 1298:29 uncheckedGet (node 7051)
+unsafe call 1320:31 uncheckedGet (node 7163)
+unsafe call 1328:35 uncheckedGet (node 7240)
+unsafe call 1391:7 uncheckedSet (node 7597)
+unsafe call 1392:7 uncheckedSet (node 7609)
+unsafe call 1393:7 uncheckedSet (node 7623)
+unsafe call 1394:7 uncheckedSet (node 7638)
+unsafe call 1421:33 uncheckedGet (node 7804)
+unsafe call 1421:55 uncheckedGet (node 7809)
+unsafe call 1425:27 uncheckedGet (node 7836)
+unsafe call 1425:55 uncheckedGet (node 7843)
+unsafe call 1433:11 uncheckedSet (node 7887)
+unsafe call 1439:11 uncheckedSet (node 7921)
+unsafe call 1445:9 uncheckedSet (node 7952)
+unsafe call 1448:11 uncheckedSet (node 7972)
+unsafe call 1448:33 uncheckedGet (node 7977)
+unsafe call 1453:11 uncheckedSet (node 8007)
+unsafe call 1460:9 uncheckedSet (node 8041)
+unsafe call 1463:11 uncheckedSet (node 8061)
+unsafe call 1463:33 uncheckedGet (node 8066)
+unsafe call 1508:22 uncheckedGet (node 8376)
+unsafe call 1509:22 uncheckedGet (node 8385)
+unsafe call 1510:22 uncheckedGet (node 8396)
+unsafe call 1512:22 uncheckedGet (node 8412)
+unsafe call 1516:22 uncheckedGet (node 8443)
+unsafe call 1517:22 uncheckedGet (node 8452)
+unsafe call 1519:20 uncheckedGet (node 8469)
+unsafe call 1610:22 uncheckedGet (node 9158)
+unsafe call 1612:32 uncheckedGet (node 9179)
+unsafe call 1613:15 uncheckedGet (node 9193)
+unsafe call 1617:24 uncheckedGet (node 9226)
+unsafe call 1618:32 uncheckedGet (node 9242)
+unsafe call 1619:15 uncheckedGet (node 9258)
+unsafe call 1620:43 uncheckedGet (node 9279)
+unsafe call 1621:15 uncheckedGet (node 9294)
+unsafe call 1624:11 uncheckedSet (node 9312)
+unsafe call 1625:11 uncheckedSet (node 9322)
+unsafe call 1626:11 uncheckedSet (node 9339)
+unsafe call 1627:11 uncheckedSet (node 9356)
+unsafe call 1633:25 uncheckedGet (node 9400)
+unsafe call 1633:56 uncheckedGet (node 9407)
+unsafe call 1634:32 uncheckedGet (node 9431)
+unsafe call 1635:15 uncheckedGet (node 9445)
+unsafe call 1636:39 uncheckedGet (node 9462)
+unsafe call 1637:15 uncheckedGet (node 9477)
+unsafe call 1641:9 uncheckedSet (node 9495)
+unsafe call 1642:9 uncheckedSet (node 9505)
+unsafe call 1643:9 uncheckedSet (node 9522)
+unsafe call 1644:9 uncheckedSet (node 9539)
+unsafe call 1700:5 uncheckedSet (node 9740)
+unsafe call 1700:30 uncheckedGet (node 9745)
+unsafe call 1875:22 uncheckedGet (node 10761)
+unsafe call 1878:18 wrappingAdd (node 10786)
+unsafe call 1906:22 uncheckedGet (node 10955)
+unsafe call 1911:17 wrappingAdd (node 10998)
+unsafe call 1930:9 uncheckedSet (node 11098)
+unsafe call 1935:32 uncheckedGet (node 11143)
+unsafe call 1941:15 uncheckedSet (node 11218)
+unsafe call 1968:9 uncheckedSet (node 11332)
+unsafe call 2019:9 uncheckedSet (node 11620)
+unsafe call 2029:9 uncheckedSet (node 11718)
+unsafe call 2099:26 uncheckedGet (node 12162)
+unsafe call 2152:26 uncheckedGet (node 12438)
+unsafe call 2181:30 uncheckedGet (node 12679)
+unsafe call 2215:30 uncheckedGet (node 12900)
+unsafe call 2221:22 uncheckedGet (node 12926)
+unsafe call 2362:34 uncheckedGet (node 13649)
+unsafe call 2362:66 uncheckedGet (node 13658)
+unsafe call 2363:35 uncheckedGet (node 13677)
+unsafe call 2363:71 uncheckedGet (node 13688)
+unsafe call 2465:14 wrappingAdd (node 14207)
+unsafe call 2467:22 uncheckedGet (node 14235)
+unsafe call 2473:18 wrappingSub (node 14268)
+unsafe call 2474:13 uncheckedSet (node 14274)
+unsafe call 2475:18 wrappingAdd (node 14288)
+unsafe call 2476:17 uncheckedGet (node 14296)
+unsafe call 2479:20 wrappingSub (node 14326)
+unsafe call 2480:15 uncheckedSet (node 14332)
+unsafe call 2481:20 wrappingAdd (node 14346)
+unsafe call 2482:19 uncheckedGet (node 14354)
+unsafe call 2485:22 wrappingSub (node 14384)
+unsafe call 2486:17 uncheckedSet (node 14390)
+unsafe call 2487:22 wrappingAdd (node 14404)
+unsafe call 2488:21 uncheckedGet (node 14412)
+unsafe call 2495:20 wrappingSub (node 14447)
+unsafe call 2496:19 uncheckedGet (node 14455)
+unsafe call 2505:18 wrappingSub (node 14515)
+unsafe call 2508:17 uncheckedSet (node 14541)
+unsafe call 2509:22 wrappingAdd (node 14555)
+unsafe call 2510:21 uncheckedGet (node 14563)
+unsafe call 2524:20 wrappingSub (node 14656)
+unsafe call 2525:28 uncheckedGet (node 14667)
+unsafe call 2528:22 wrappingSub (node 14699)
+unsafe call 2529:21 uncheckedGet (node 14707)
+unsafe call 2538:20 wrappingSub (node 14766)
+unsafe call 2542:20 wrappingSub (node 14827)
+unsafe call 2549:19 uncheckedGet (node 14848)
+unsafe call 2550:33 wrappingAdd (node 14864)
+unsafe call 2563:24 wrappingAdd (node 14921)
+unsafe call 2564:26 wrappingAdd (node 14929)
+unsafe call 2567:19 uncheckedSet (node 14940)
+unsafe call 2567:41 uncheckedGet (node 14945)
+unsafe call 2568:24 wrappingAdd (node 14953)
+unsafe call 2569:26 wrappingAdd (node 14961)
+unsafe call 2573:41 uncheckedGet (node 14980)
+unsafe call 2578:24 wrappingAdd (node 15037)
+unsafe call 2581:19 uncheckedSet (node 15048)
+unsafe call 2582:24 wrappingAdd (node 15060)
+unsafe call 2588:19 uncheckedSet (node 15088)
+unsafe call 2588:41 uncheckedGet (node 15093)
+unsafe call 2589:24 wrappingAdd (node 15101)
+unsafe call 2590:26 wrappingAdd (node 15109)
+unsafe call 2601:16 wrappingAdd (node 15165)
+unsafe call 2620:28 uncheckedGet (node 15282)
+unsafe call 2654:9 uncheckedSet (node 15433)
+unsafe call 2707:11 uncheckedSet (node 15766)
+unsafe call 2707:33 uncheckedGet (node 15771)
 const DEFLATE_STORE: i32 = 0 [exported]
 const DEFLATE_FAST: i32 = 1 [exported]
 const DEFLATE_DEFAULT: i32 = 6 [exported]
@@ -266,8 +329,12 @@ const INF_LENGTH: i32 = 1
 const INF_END: i32 = 2
 const INF_SLOW: i32 = 3
 const INF_INVALID: i32 = 4
-const INF_LIT_BITS: i32 = 10
+const INF_SUB: i32 = 5
+const INF_LIT_BITS: i32 = 11
 const INF_DIST_BITS: i32 = 8
+const INF_LIT_ENOUGH: i32 = 2342
+const INF_DIST_ENOUGH: i32 = 402
+const INF_FAST_ROOM: i32 = 290
 const INF_CL_BITS: i32 = 7
 const INF_S_BLOCK: i32 = 0
 const INF_S_STORED: i32 = 1
@@ -351,7 +418,7 @@ struct InflateTable (class) size=32 align=8 exported
   field count: i32[] index=2 offset=16 readonly
   field symbols: i32[] index=3 offset=24 readonly
   constructor -> @nish.InflateTable.constructor
-struct Inflater (class) size=136 align=8 exported
+struct Inflater (class) size=160 align=8 exported
   field lit: InflateTable index=0 offset=0 readonly
   field dist: InflateTable index=1 offset=8 readonly
   field codeLengths: InflateTable index=2 offset=16 readonly
@@ -360,19 +427,22 @@ struct Inflater (class) size=136 align=8 exported
   field lens: i32[] index=5 offset=40 readonly
   field clLens: i32[] index=6 offset=48 readonly
   field offsets: i32[] index=7 offset=56 readonly
-  field lengthBase: i32[] index=8 offset=64 readonly
-  field lengthExtra: i32[] index=9 offset=72 readonly
-  field distBase: i32[] index=10 offset=80 readonly
-  field distExtra: i32[] index=11 offset=88 readonly
-  field state: i32 index=12 offset=96
-  field last: boolean index=13 offset=100
-  field fixed: boolean index=14 offset=101
-  field storedLeft: i32 index=15 offset=104
-  field bitBuf: u64 index=16 offset=112
-  field bitCount: i32 index=17 offset=120
-  field inPos: i32 index=18 offset=124
-  field outPos: i32 index=19 offset=128
-  field consumed: i32 index=20 offset=132
+  field litEntries: i32[] index=8 offset=64 readonly
+  field distEntries: i32[] index=9 offset=72 readonly
+  field clEntries: i32[] index=10 offset=80 readonly
+  field lengthBase: i32[] index=11 offset=88 readonly
+  field lengthExtra: i32[] index=12 offset=96 readonly
+  field distBase: i32[] index=13 offset=104 readonly
+  field distExtra: i32[] index=14 offset=112 readonly
+  field state: i32 index=15 offset=120
+  field last: boolean index=16 offset=124
+  field fixed: boolean index=17 offset=125
+  field storedLeft: i32 index=18 offset=128
+  field bitBuf: u64 index=19 offset=136
+  field bitCount: i32 index=20 offset=144
+  field inPos: i32 index=21 offset=148
+  field outPos: i32 index=22 offset=152
+  field consumed: i32 index=23 offset=156
   constructor -> @nish.Inflater.constructor
   method reset -> @nish.Inflater.reset
   method entryOf -> @nish.Inflater.entryOf
@@ -385,6 +455,7 @@ struct Inflater (class) size=136 align=8 exported
   method inflate -> @nish.Inflater.inflate
   method step -> @nish.Inflater.step
   method huffman -> @nish.Inflater.huffman
+  method lookup -> @nish.Inflater.lookup
   method decompress -> @nish.Inflater.decompress
 function deflateBound(n: i32): i32 -> @nish.deflateBound [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
@@ -396,6 +467,26 @@ function compressBound(n: i32): i32 -> @nish.compressBound [exported]
   calls: nish.deflateBound nish_panic_overflow
   stackSites=0 stackLocals=0
   callee +0:47 deflateBound -> @nish.deflateBound
+function inflateCopy16(b: u8[], to: integer<0, 2147483631>, from: integer<0, 2147483631>): void -> @nish.inflateCopy16
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.deflateStore64
+  escaping: from to
+  calls: nish.deflateLoad64 nish.deflateStore64 nish_panic
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.deflateStore64#0 nish.deflateLoad64#0 nish.deflateStore64#0 nish.deflateLoad64#0
+  stackSites=0 stackLocals=0
+  callee +0:3 deflateStore64 -> @nish.deflateStore64
+  callee +0:25 deflateLoad64 -> @nish.deflateLoad64
+  callee +1:3 deflateStore64 -> @nish.deflateStore64
+  callee +1:29 deflateLoad64 -> @nish.deflateLoad64
+function inflateFill16(b: u8[], to: integer<0, 2147483631>, w: u64): void -> @nish.inflateFill16
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.deflateStore64
+  escaping: to w
+  calls: nish.deflateStore64 nish_panic
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.deflateStore64#0 nish.deflateStore64#0
+  stackSites=0 stackLocals=0
+  callee +0:3 deflateStore64 -> @nish.deflateStore64
+  callee +1:3 deflateStore64 -> @nish.deflateStore64
 function deflateWindow(what: string, buf: u8[], off: i32, len: i32): void -> @nish.deflateWindow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
@@ -411,13 +502,9 @@ function deflateLoad32(b: u8[], p: integer<0, 2147483639>): u32 -> @nish.deflate
   pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function deflateLoad64(b: u8[], p: integer<0, 2147483639>): u64 -> @nish.deflateLoad64
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: p
-  calls: nish.deflateLoad32 nish_panic
-  pointer b: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad32#0 nish.deflateLoad32#0
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:9 deflateLoad32 -> @nish.deflateLoad32
-  callee +0:39 deflateLoad32 -> @nish.deflateLoad32
 function deflateStore64(b: u8[], p: integer<0, 2147483639>, w: u64): void -> @nish.deflateStore64
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:3
@@ -428,7 +515,9 @@ function deflateCtz64(x: u64): i32 -> @nish.deflateCtz64
   calls: llvm.ctlz.i32 nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 lo: u32 (const)
-  local +4:9 hi: u32 (const)
+  local +1:9 hi: u32 (const)
+  local +2:9 low: i32 (const)
+  local +3:9 high: i32 (const)
 function deflateMatchLength(src: u8[], a: i32, b: i32, max: i32): i32 -> @nish.deflateMatchLength
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.deflateCtz64 nish.deflateLoad64 nish_panic nish_panic_overflow
@@ -473,7 +562,7 @@ function deflateFixedLitLength(s: i32): i32 -> @nish.deflateFixedLitLength
 function deflateCanonical(lens: i32[], n: i32, codes: i32[], count: i32[], next: i32[]): void -> @nish.deflateCanonical
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.deflateReverse nish_panic nish_panic_overflow
+  calls: llvm.ctlz.i32 nish.deflateReverse nish_panic nish_panic_overflow
   pointer lens: size=0 writesThrough=false captured=false
   pointer codes: size=0 writesThrough=true captured=false
   pointer count: size=0 writesThrough=true captured=false
@@ -484,9 +573,13 @@ function deflateCanonical(lens: i32[], n: i32, codes: i32[], count: i32[], next:
   local +3:11 l: i32 (const)
   local +9:7 code: i32 (let)
   local +10:12 l: i32 (let)
-  local +14:12 s: i32 (let)
-  local +15:11 l: i32 (const)
-  callee +17:18 deflateReverse -> @nish.deflateReverse
+  local +16:12 l: i32 (let)
+  callee +17:15 deflateReverse -> @nish.deflateReverse
+  local +19:12 s: i32 (let)
+  local +20:11 l: i32 (const)
+  local +22:13 r: i32 (const)
+  local +24:13 top: i32 (const)
+  local +26:15 bit: i32 (const)
 function DeflateHuffmanScratch.constructor(this: DeflateHuffmanScratch): void -> @nish.DeflateHuffmanScratch.constructor [exported constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=48 writesThrough=true captured=false
@@ -687,29 +780,39 @@ function Deflater.longest(this: Deflater, src: u8[], p: i32, end: i32, histStart
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: p
-  calls: nish.deflateLoad32 nish.deflateMatchLength nish_panic nish_panic_overflow
+  calls: nish.deflateCtz64 nish.deflateLoad32 nish.deflateLoad64 nish.deflateMatchLength nish_panic nish_panic_overflow
   pointer this: size=256 writesThrough=false captured=false
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad32#0 nish.deflateLoad32#0 nish.deflateMatchLength#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad32#0 nish.deflateLoad64#0 nish.deflateLoad64#0 nish.deflateMatchLength#0 nish.deflateLoad32#0 nish.deflateMatchLength#0
   stackSites=0 stackLocals=0
-  local -12:11 head: i32[] (const)
-  local -11:11 prev: i32[] (const)
+  local -21:11 head: i32[] (const)
+  local -20:11 prev: i32[] (const)
+  local -10:11 delta: i32 (const)
+  local -9:11 minMatch: i32 (const)
+  local -8:11 at: integer<0, 2147483639> (const)
   local -7:11 word: u32 (const)
   callee -7:23 deflateLoad32 -> @nish.deflateLoad32
   local -6:11 h: i32 (const)
   local -2:11 v: i32 (const)
   local -1:9 cand: i32 (let)
-  local +2:9 maxLen: i32 (let)
+  local +4:11 roomy: boolean (const)
+  local +5:11 maxLen: i32 (const)
   local +6:9 best: i32 (let)
   local +7:9 bestDist: i32 (let)
   local +8:11 limit: i32 (const)
-  local +9:11 nice: i32 (const)
-  local +10:11 lo: i32 (const)
+  local +9:11 floor: i32 (const)
+  local +10:11 nice: i32 (const)
   local +11:11 mask: u32 (const)
   local +12:9 chain: i32 (let)
-  local +14:13 ci: i32 (const)
-  callee +19:11 deflateLoad32 -> @nish.deflateLoad32
-  local +21:15 l: i32 (const)
-  callee +21:24 deflateMatchLength -> @nish.deflateMatchLength
+  local +14:13 cd: i32 (const)
+  local +18:13 ci: integer<0, 2147483639> (const)
+  local +22:13 l: i32 (let)
+  local +24:17 x: u64 (const)
+  callee +24:26 deflateLoad64 -> @nish.deflateLoad64
+  callee +24:51 deflateLoad64 -> @nish.deflateLoad64
+  callee +27:17 deflateCtz64 -> @nish.deflateCtz64
+  callee +28:28 deflateMatchLength -> @nish.deflateMatchLength
+  callee +29:22 deflateLoad32 -> @nish.deflateLoad32
+  callee +30:15 deflateMatchLength -> @nish.deflateMatchLength
 function Deflater.insert(this: Deflater, src: u8[], p: i32): void -> @nish.Deflater.insert [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -754,9 +857,9 @@ function Deflater.collectGreedy(this: Deflater, src: u8[], start: i32, end: i32,
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: start
-  calls: nish.Deflater.startBlock nish.deflateLoad32 nish.deflateMatchLength nish_panic nish_panic_overflow
+  calls: nish.Deflater.startBlock nish.deflateCtz64 nish.deflateLoad32 nish.deflateLoad64 nish.deflateMatchLength nish_panic nish_panic_overflow
   pointer this: size=256 writesThrough=true captured=false passedTo=nish.Deflater.startBlock#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad32#0 nish.deflateLoad32#0 nish.deflateMatchLength#0 nish.deflateLoad32#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad32#0 nish.deflateLoad32#0 nish.deflateLoad64#0 nish.deflateLoad64#0 nish.deflateMatchLength#0 nish.deflateMatchLength#0 nish.deflateLoad32#0
   stackSites=0 stackLocals=0
   callee -35:5 Deflater.startBlock -> @nish.Deflater.startBlock
   local -34:11 head: i32[] (const)
@@ -787,16 +890,25 @@ function Deflater.collectGreedy(this: Deflater, src: u8[], start: i32, end: i32,
   local +5:13 chain: i32 (let)
   local +7:17 ci: i32 (const)
   callee +8:46 deflateLoad32 -> @nish.deflateLoad32
-  local +9:19 l: i32 (const)
-  callee +9:32 deflateMatchLength -> @nish.deflateMatchLength
-  local +25:15 ls: i32 (const)
-  local +27:15 ds: i32 (const)
-  local +31:15 stop: i32 (const)
-  local +32:13 q: i32 (let)
-  local +34:17 hq: i32 (const)
-  callee +34:34 deflateLoad32 -> @nish.deflateLoad32
-  local +35:17 vq: i32 (const)
-  local +42:15 b: i32 (const)
+  local +9:17 l: i32 (let)
+  local +11:21 a4: i32 (const)
+  local +12:21 b4: i32 (const)
+  local +13:19 x: u64 (let)
+  callee +15:21 deflateLoad64 -> @nish.deflateLoad64
+  callee +15:46 deflateLoad64 -> @nish.deflateLoad64
+  callee +19:33 deflateCtz64 -> @nish.deflateCtz64
+  callee +20:33 deflateMatchLength -> @nish.deflateMatchLength
+  callee +22:23 deflateMatchLength -> @nish.deflateMatchLength
+  local +39:15 ls: i32 (const)
+  local +41:15 ds: i32 (const)
+  local +45:15 stop: i32 (const)
+  local +46:15 insertEnd: i32 (const)
+  local +47:13 vq: i32 (let)
+  local +48:18 q: i32 (let)
+  local +49:17 qa: integer<0, 2147483639> (const)
+  local +50:17 hq: i32 (const)
+  callee +50:34 deflateLoad32 -> @nish.deflateLoad32
+  local +57:15 b: i32 (const)
 function Deflater.collectLazy(this: Deflater, src: u8[], start: i32, end: i32, histStart: i32): i32 -> @nish.Deflater.collectLazy [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Deflater.startBlock
@@ -955,16 +1067,25 @@ function Deflater.writeSymbols(this: Deflater, lc: i32[], ll: i32[], dc: i32[], 
   local +8:15 d: i32 (const)
   callee +16:9 deflateRoom -> @nish.deflateRoom
   callee +28:12 Deflater.putBits -> @nish.Deflater.putBits
-function InflateTable.constructor(this: InflateTable, bits: i32, symbols: i32): void -> @nish.InflateTable.constructor [exported constructor]
+function InflateTable.constructor(this: InflateTable, bits: i32, symbols: i32, capacity: i32): void -> @nish.InflateTable.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  escaping: bits symbols
+  escaping: bits capacity symbols
   calls: nish_panic
   pointer this: size=32 writesThrough=true captured=false
   stackSites=0 stackLocals=0
+function inflateDouble(entries: i32[], end: i32): void -> @nish.inflateDouble
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: end
+  calls: nish_panic nish_panic_overflow
+  pointer entries: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -2:9 twice: i32 (const)
+  local -1:12 j: i32 (let)
 function Inflater.constructor(this: Inflater): void -> @nish.Inflater.constructor [exported constructor]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish.InflateTable.constructor nish.Inflater.build nish.deflateDistBase nish.deflateDistExtra nish.deflateFixedLitLength nish.deflateLengthBase nish.deflateLengthExtra nish_alloc_struct nish_panic
-  pointer this: size=136 writesThrough=true captured=false passedTo=nish.Inflater.build#0 nish.Inflater.build#0
+  calls: nish.InflateTable.constructor nish.Inflater.build nish.Inflater.entryOf nish.deflateDistBase nish.deflateDistExtra nish.deflateFixedLitLength nish.deflateLengthBase nish.deflateLengthExtra nish_alloc_struct nish_panic
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.entryOf#0 nish.Inflater.entryOf#0 nish.Inflater.entryOf#0 nish.Inflater.build#0 nish.Inflater.build#0
   stackSites=0 stackLocals=0
   callee +0:16 new InflateTable -> @nish.InflateTable.constructor
   callee +1:17 new InflateTable -> @nish.InflateTable.constructor
@@ -977,30 +1098,36 @@ function Inflater.constructor(this: Inflater): void -> @nish.Inflater.constructo
   local +16:14 d: i32 (let)
   callee +17:26 deflateDistBase -> @nish.deflateDistBase
   callee +18:27 deflateDistExtra -> @nish.deflateDistExtra
-  local +29:14 s: i32 (let)
-  callee +30:22 deflateFixedLitLength -> @nish.deflateFixedLitLength
-  local +34:11 fl: i32 (const)
-  callee +34:21 Inflater.build -> @nish.Inflater.build
-  local +35:14 d: i32 (let)
-  local +38:11 fd: i32 (const)
-  callee +38:21 Inflater.build -> @nish.Inflater.build
+  local +32:14 s: i32 (let)
+  callee +33:28 Inflater.entryOf -> @nish.Inflater.entryOf
+  local +35:14 s: i32 (let)
+  callee +36:29 Inflater.entryOf -> @nish.Inflater.entryOf
+  local +38:14 s: i32 (let)
+  callee +39:27 Inflater.entryOf -> @nish.Inflater.entryOf
+  local +41:14 s: i32 (let)
+  callee +42:22 deflateFixedLitLength -> @nish.deflateFixedLitLength
+  local +46:11 fl: i32 (const)
+  callee +46:21 Inflater.build -> @nish.Inflater.build
+  local +47:14 d: i32 (let)
+  local +50:11 fd: i32 (const)
+  callee +50:21 Inflater.build -> @nish.Inflater.build
 function Inflater.reset(this: Inflater): void -> @nish.Inflater.reset [exported method]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  pointer this: size=136 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
 function Inflater.entryOf(this: Inflater, kind: i32, s: i32, len: i32): i32 -> @nish.Inflater.entryOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: s
   calls: nish_panic_index
-  pointer this: size=136 writesThrough=false captured=false
+  pointer this: size=160 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Inflater.build(this: Inflater, t: InflateTable, lens: i32[], from: i32, n: i32, kind: i32): i32 -> @nish.Inflater.build [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: kind
-  calls: nish.Inflater.entryOf nish.deflateReverse nish_panic nish_panic_index nish_panic_overflow
-  pointer this: size=136 writesThrough=false captured=false passedTo=nish.Inflater.entryOf#0
+  escaping: from
+  calls: llvm.ctlz.i32 nish.deflateReverse nish.inflateDouble nish_panic nish_panic_index nish_panic_overflow
+  pointer this: size=160 writesThrough=false captured=false
   pointer t: size=32 writesThrough=false captured=false
   pointer lens: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
@@ -1010,33 +1137,55 @@ function Inflater.build(this: Inflater, t: InflateTable, lens: i32[], from: i32,
   local -14:11 offs: i32[] (const)
   local -13:11 bits: i32 (const)
   local -1:14 l: i32 (let)
-  local +2:14 s: i32 (let)
-  local +3:13 l: i32 (const)
-  local +12:9 left: i32 (let)
-  local +13:9 codes: i32 (let)
-  local +14:14 l: i32 (let)
-  local +25:14 l: i32 (let)
-  local +28:14 s: i32 (let)
-  local +29:13 l: i32 (const)
-  local +31:15 at: i32 (const)
-  local +40:11 size: i32 (const)
-  local +41:11 slow: i32 (const)
-  local +42:14 i: i32 (let)
-  local +45:9 code: i32 (let)
-  local +46:9 k: i32 (let)
-  local +47:14 l: i32 (let)
-  local +48:13 codesHere: i32 (const)
-  local +49:16 c: i32 (let)
-  local +51:17 e: i32 (const)
-  callee +51:26 Inflater.entryOf -> @nish.Inflater.entryOf
-  local +52:17 step: i32 (const)
-  local +53:20 r: i32 (let)
-  callee +53:29 deflateReverse -> @nish.deflateReverse
+  local +4:11 hi: i32 (const)
+  local +5:9 seen: i32 (let)
+  local +6:14 i: i32 (let)
+  local +7:13 l: i32 (const)
+  local +9:13 c: i32 (const)
+  local +18:9 left: i32 (let)
+  local +19:9 codes: i32 (let)
+  local +20:14 l: i32 (let)
+  local +33:14 l: i32 (let)
+  local +37:14 i: i32 (let)
+  local +38:13 l: i32 (const)
+  local +39:13 at: i32 (const)
+  local +45:11 size: i32 (const)
+  local +46:11 slow: i32 (const)
+  local +47:9 tmpl: i32[] (let)
+  local +53:9 len: i32 (let)
+  local +61:16 i: i32 (let)
+  local +64:11 code: i32 (let)
+  local +65:11 k: i32 (let)
+  local +66:16 l: i32 (let)
+  local +67:15 codesHere: i32 (const)
+  local +68:18 c: i32 (let)
+  local +70:19 e: i32 (const)
+  local +71:19 step: i32 (const)
+  local +72:22 r: i32 (let)
+  callee +72:31 deflateReverse -> @nish.deflateReverse
+  local +90:9 code: i32 (let)
+  local +91:9 end: i32 (let)
+  local +92:9 k: i32 (let)
+  local +93:9 here: i32 (let)
+  callee +105:13 inflateDouble -> @nish.inflateDouble
+  local +110:15 bit: i32 (const)
+  callee +119:9 inflateDouble -> @nish.inflateDouble
+  local +130:11 limit: i32 (const)
+  local +131:9 prefix: i32 (let)
+  local +132:9 start: i32 (let)
+  local +133:9 subEnd: i32 (let)
+  local +141:13 subBits: i32 (let)
+  local +142:13 used: i32 (let)
+  local +156:13 e: i32 (const)
+  local +158:13 stride: i32 (const)
+  local +159:11 i: i32 (let)
+  local +167:13 bit: i32 (const)
+  local +171:15 next: i32 (const)
 function Inflater.slowDecode(this: Inflater, t: InflateTable, kind: i32, bb: u64, bc: i32): i32 -> @nish.Inflater.slowDecode [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: bb kind
   calls: nish.Inflater.entryOf nish_panic_overflow
-  pointer this: size=136 writesThrough=false captured=false passedTo=nish.Inflater.entryOf#0
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Inflater.entryOf#0
   pointer t: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 count: i32[] (const)
@@ -1052,75 +1201,76 @@ function Inflater.slowDecode(this: Inflater, t: InflateTable, kind: i32, bb: u64
 function Inflater.fill(this: Inflater, src: u8[], end: i32): void -> @nish.Inflater.fill [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish_panic
-  pointer this: size=136 writesThrough=true captured=false
-  pointer src: size=0 writesThrough=false captured=false
+  calls: nish.deflateLoad64 nish_panic nish_panic_overflow
+  pointer this: size=160 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad64#0
   stackSites=0 stackLocals=0
-  local -11:9 bb: u64 (let)
-  local -10:9 bc: i32 (let)
-  local -9:9 ip: i32 (let)
+  local -19:9 bb: u64 (let)
+  local -18:9 bc: i32 (let)
+  local -17:9 ip: i32 (let)
+  local -11:13 at: integer<0, 2147483639> (const)
+  callee -10:18 deflateLoad64 -> @nish.deflateLoad64
 function Inflater.take(this: Inflater, n: i32): i32 -> @nish.Inflater.take [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_overflow
-  pointer this: size=136 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 v: i32 (const)
 function Inflater.unread(this: Inflater): void -> @nish.Inflater.unread [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   calls: nish_panic_overflow
-  pointer this: size=136 writesThrough=true captured=false
+  pointer this: size=160 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -1:11 drop: i32 (const)
 function Inflater.readDynamic(this: Inflater, src: u8[], end: i32): i32 -> @nish.Inflater.readDynamic [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  escaping: end
-  calls: nish.Inflater.build nish.Inflater.fill nish.Inflater.take nish.deflateClOrder nish_panic_index nish_panic_overflow
-  pointer this: size=136 writesThrough=true captured=false passedTo=nish.Inflater.fill#0 nish.Inflater.take#0 nish.Inflater.take#0 nish.Inflater.take#0 nish.Inflater.fill#0 nish.Inflater.take#0 nish.Inflater.build#0 nish.Inflater.fill#0 nish.Inflater.take#0 nish.Inflater.take#0 nish.Inflater.take#0 nish.Inflater.take#0 nish.Inflater.build#0 nish.Inflater.build#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.fill#1 nish.Inflater.fill#1 nish.Inflater.fill#1
+  calls: nish.Inflater.build nish.deflateClOrder nish.deflateLoad64 nish_panic nish_panic_index nish_panic_overflow
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.build#0 nish.Inflater.build#0 nish.Inflater.build#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad64#0 nish.deflateLoad64#0 nish.deflateLoad64#0
   stackSites=0 stackLocals=0
-  callee -12:5 Inflater.fill -> @nish.Inflater.fill
-  local -8:11 hlit: i32 (const)
-  callee -8:23 Inflater.take -> @nish.Inflater.take
-  local -7:11 hdist: i32 (const)
-  callee -7:24 Inflater.take -> @nish.Inflater.take
-  local -6:11 hclen: i32 (const)
-  callee -6:24 Inflater.take -> @nish.Inflater.take
+  local -31:9 bb: u64 (let)
+  local -30:9 bc: i32 (let)
+  local -29:9 ip: i32 (let)
+  local -24:13 at: integer<0, 2147483639> (const)
+  callee -23:18 deflateLoad64 -> @nish.deflateLoad64
+  local -10:11 hlit: i32 (const)
+  local -9:11 hdist: i32 (const)
+  local -8:11 hclen: i32 (const)
   local -2:11 cl: i32[] (const)
   local -1:14 i: i32 (let)
   callee +0:10 deflateClOrder -> @nish.deflateClOrder
   local +2:14 i: i32 (let)
-  callee +3:7 Inflater.fill -> @nish.Inflater.fill
-  callee +7:10 deflateClOrder -> @nish.deflateClOrder
-  callee +7:31 Inflater.take -> @nish.Inflater.take
-  local +9:11 r: i32 (const)
-  callee +9:20 Inflater.build -> @nish.Inflater.build
-  local +13:11 lens: i32[] (const)
-  local +14:11 entries: i32[] (const)
-  local +15:11 total: i32 (const)
-  local +16:9 i: i32 (let)
-  callee +18:7 Inflater.fill -> @nish.Inflater.fill
-  local +19:13 e: i32 (const)
-  local +24:13 l: i32 (const)
-  callee +28:7 Inflater.take -> @nish.Inflater.take
-  local +29:13 sym: i32 (const)
-  local +37:13 rep: i32 (let)
-  local +38:13 value: i32 (let)
-  callee +47:28 Inflater.take -> @nish.Inflater.take
-  callee +52:28 Inflater.take -> @nish.Inflater.take
-  callee +57:29 Inflater.take -> @nish.Inflater.take
-  local +62:18 k: i32 (let)
-  local +71:11 rl: i32 (const)
-  callee +71:21 Inflater.build -> @nish.Inflater.build
-  callee +75:12 Inflater.build -> @nish.Inflater.build
+  local +5:17 at: integer<0, 2147483639> (const)
+  callee +6:22 deflateLoad64 -> @nish.deflateLoad64
+  callee +20:10 deflateClOrder -> @nish.deflateClOrder
+  local +24:11 r: i32 (const)
+  callee +24:20 Inflater.build -> @nish.Inflater.build
+  local +28:11 lens: i32[] (const)
+  local +29:11 entries: i32[] (const)
+  local +33:11 total: i32 (const)
+  local +34:9 i: i32 (let)
+  local +39:17 at: integer<0, 2147483639> (const)
+  callee +40:22 deflateLoad64 -> @nish.deflateLoad64
+  local +51:13 e: i32 (const)
+  local +56:13 l: i32 (const)
+  local +62:13 sym: i32 (const)
+  local +70:13 rep: i32 (let)
+  local +71:13 value: i32 (let)
+  local +72:13 x: i32 (let)
+  local +96:18 k: i32 (let)
+  local +105:11 rl: i32 (const)
+  callee +105:21 Inflater.build -> @nish.Inflater.build
+  local +109:11 rd: i32 (const)
+  callee +109:21 Inflater.build -> @nish.Inflater.build
 function Inflater.inflate(this: Inflater, src: u8[], ip: i32, inEnd: i32, more: boolean, out: u8[], op: i32, outEnd: i32, histStart: i32): i32 -> @nish.Inflater.inflate [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: histStart inEnd ip more op outEnd
   calls: nish.Inflater.step nish_panic nish_panic_overflow
-  pointer this: size=136 writesThrough=true captured=false passedTo=nish.Inflater.step#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.step#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.step#1
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.Inflater.step#4
   stackSites=0 stackLocals=0
@@ -1132,7 +1282,7 @@ function Inflater.step(this: Inflater, src: u8[], inEnd: i32, more: boolean, out
   sharedWrite: +0:11
   escaping: histStart inEnd more outEnd
   calls: nish.Inflater.fill nish.Inflater.huffman nish.Inflater.readDynamic nish.Inflater.take nish.Inflater.unread nish.copyBytes nish_panic_overflow
-  pointer this: size=136 writesThrough=true captured=false passedTo=nish.Inflater.unread#0 nish.Inflater.fill#0 nish.Inflater.take#0 nish.Inflater.unread#0 nish.Inflater.readDynamic#0 nish.Inflater.huffman#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.unread#0 nish.Inflater.fill#0 nish.Inflater.take#0 nish.Inflater.unread#0 nish.Inflater.readDynamic#0 nish.Inflater.huffman#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.Inflater.fill#1 nish.Inflater.readDynamic#1 nish.copyBytes#2 nish.Inflater.huffman#1
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0 nish.Inflater.huffman#4
   stackSites=0 stackLocals=0
@@ -1159,67 +1309,83 @@ function Inflater.step(this: Inflater, src: u8[], inEnd: i32, more: boolean, out
   callee +76:24 Inflater.huffman -> @nish.Inflater.huffman
 function Inflater.huffman(this: Inflater, src: u8[], inEnd: i32, more: boolean, out: u8[], outEnd: i32, histStart: i32): i32 -> @nish.Inflater.huffman [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: +0:11
-  calls: nish.Inflater.slowDecode nish.deflateLoad64 nish.deflateStore64 nish_panic nish_panic_overflow
-  pointer this: size=136 writesThrough=true captured=false passedTo=nish.Inflater.slowDecode#0 nish.Inflater.slowDecode#0
-  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad64#0 nish.deflateLoad64#0
-  pointer out: size=0 writesThrough=true captured=false passedTo=nish.deflateStore64#0 nish.deflateLoad64#0 nish.deflateStore64#0 nish.deflateLoad64#0
+  sharedWrite: +0:13
+  calls: nish.Inflater.lookup nish.deflateLoad64 nish.inflateCopy16 nish.inflateFill16 nish_panic nish_panic_overflow
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.lookup#0 nish.Inflater.lookup#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateLoad64#0 nish.deflateLoad64#0 nish.deflateLoad64#0
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.inflateCopy16#0 nish.inflateFill16#0
   stackSites=0 stackLocals=0
-  local -33:11 lt: InflateTable (const)
-  local -32:11 dt: InflateTable (const)
-  local -31:11 le: i32[] (const)
-  local -30:11 de: i32[] (const)
-  local -26:11 litMask: u64 (const)
-  local -25:11 distMask: u64 (const)
-  local -24:9 bb: u64 (let)
-  local -23:9 bc: i32 (let)
-  local -22:9 ip: i32 (let)
-  local -21:9 op: i32 (let)
-  local -20:9 status: i32 (let)
-  local -12:15 fBb: u64 (const)
-  local -11:15 fBc: i32 (const)
-  local -10:15 fIp: i32 (const)
-  callee -9:20 deflateLoad64 -> @nish.deflateLoad64
-  local -6:13 e: i32 (let)
-  local -3:17 n: i32 (const)
-  local +4:19 n2: i32 (const)
-  local +11:21 n3: i32 (const)
-  local +26:15 n: i32 (const)
-  local +28:15 lx: i32 (const)
-  local +29:15 len: i32 (const)
-  local +31:15 d: i32 (const)
-  local +38:15 dn: i32 (const)
-  local +39:15 dx: i32 (const)
-  local +41:15 dist: i32 (const)
-  local +48:13 from: i32 (let)
-  local +49:15 stop: i32 (const)
-  callee +52:13 deflateStore64 -> @nish.deflateStore64
-  callee +52:37 deflateLoad64 -> @nish.deflateLoad64
-  local +69:13 sBb: u64 (const)
-  local +70:13 sBc: i32 (const)
-  local +71:13 sIp: i32 (const)
-  callee +75:20 deflateLoad64 -> @nish.deflateLoad64
-  local +85:11 e: i32 (let)
-  local +86:11 kind: i32 (let)
-  callee +88:13 Inflater.slowDecode -> @nish.Inflater.slowDecode
-  local +110:13 n: i32 (const)
-  local +124:15 lx: i32 (const)
-  local +132:15 len: i32 (const)
-  local +135:13 d: i32 (let)
-  callee +137:15 Inflater.slowDecode -> @nish.Inflater.slowDecode
-  local +154:15 dn: i32 (const)
-  local +155:15 dx: i32 (const)
-  local +164:15 dist: i32 (const)
-  local +178:13 from: i32 (let)
-  local +179:15 stop: i32 (const)
-  callee +184:13 deflateStore64 -> @nish.deflateStore64
-  callee +184:37 deflateLoad64 -> @nish.deflateLoad64
+  local -46:11 lt: InflateTable (const)
+  local -45:11 dt: InflateTable (const)
+  local -44:11 le: i32[] (const)
+  local -43:11 de: i32[] (const)
+  local -39:11 litMask: u64 (const)
+  local -38:11 distMask: u64 (const)
+  local -35:11 inFast: i32 (const)
+  local -34:11 outFast: i32 (const)
+  local -33:9 bb: u64 (let)
+  local -32:9 bc: i32 (let)
+  local -31:9 ip: i32 (let)
+  local -30:9 op: i32 (let)
+  local -29:9 status: i32 (let)
+  local -28:9 ended: boolean (let)
+  local -11:15 first: integer<0, 2147483639> (const)
+  callee -10:20 deflateLoad64 -> @nish.deflateLoad64
+  local -7:13 e: i32 (let)
+  local +47:21 lx: i32 (const)
+  local +48:21 len: i32 (const)
+  local +51:19 d: i32 (let)
+  local +65:21 dx: i32 (const)
+  local +66:21 dist: i32 (const)
+  local +76:21 stop: i32 (const)
+  local +85:21 to: i32 (let)
+  local +86:21 from: i32 (let)
+  callee +88:19 inflateCopy16 -> @nish.inflateCopy16
+  local +99:23 four: u64 (const)
+  local +100:23 w: u64 (const)
+  local +101:21 to: i32 (let)
+  callee +103:19 inflateFill16 -> @nish.inflateFill16
+  local +111:21 from: i32 (let)
+  local +112:21 to: i32 (let)
+  local +125:17 at: integer<0, 2147483639> (const)
+  callee +126:22 deflateLoad64 -> @nish.deflateLoad64
+  local +135:13 sBb: u64 (const)
+  local +136:13 sBc: i32 (const)
+  local +137:13 sIp: i32 (const)
+  callee +141:20 deflateLoad64 -> @nish.deflateLoad64
+  local +151:13 e: i32 (const)
+  callee +151:22 Inflater.lookup -> @nish.Inflater.lookup
+  local +168:13 kind: i32 (const)
+  local +169:13 n: i32 (const)
+  local +183:15 lx: i32 (const)
+  local +191:15 len: i32 (const)
+  local +194:15 d: i32 (const)
+  callee +194:24 Inflater.lookup -> @nish.Inflater.lookup
+  local +206:15 dn: i32 (const)
+  local +207:15 dx: i32 (const)
+  local +216:15 dist: i32 (const)
+  local +230:13 from: i32 (let)
+  local +231:15 stop: i32 (const)
+function Inflater.lookup(this: Inflater, t: InflateTable, kind: i32, entries: i32[], bb: u64, bc: i32): i32 -> @nish.Inflater.lookup [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: bb bc kind
+  calls: nish.Inflater.slowDecode nish_panic_index nish_panic_overflow
+  pointer this: size=160 writesThrough=false captured=false passedTo=nish.Inflater.slowDecode#0
+  pointer t: size=32 writesThrough=false captured=false passedTo=nish.Inflater.slowDecode#1
+  pointer entries: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:11 mask: u64 (const)
+  local +1:9 e: i32 (let)
+  local +3:13 root: i32 (const)
+  local +4:13 at: i32 (const)
+  local +5:13 sub: i32 (const)
+  callee +8:14 Inflater.slowDecode -> @nish.Inflater.slowDecode
 function Inflater.decompress(this: Inflater, src: u8[], off: i32, len: i32, out: u8[], at: i32, limit: i32): i32 -> @nish.Inflater.decompress [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: at len off
   calls: nish.Inflater.inflate nish.Inflater.reset nish.deflateWindow nish_panic nish_panic_overflow
-  pointer this: size=136 writesThrough=true captured=false passedTo=nish.Inflater.reset#0 nish.Inflater.inflate#0
+  pointer this: size=160 writesThrough=true captured=false passedTo=nish.Inflater.reset#0 nish.Inflater.inflate#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.deflateWindow#1 nish.Inflater.inflate#1
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.deflateWindow#1 nish.Inflater.inflate#5
   stackSites=0 stackLocals=0
@@ -1658,7 +1824,7 @@ function gzipReadHeader(crc: Crc32, src: u8[], p: i32, end: i32): i32 -> @nish.g
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: p
   calls: nish.Crc32.update nish_panic_index nish_panic_overflow
-  pointer crc: size=8 writesThrough=false captured=false passedTo=nish.Crc32.update#0
+  pointer crc: size=16 writesThrough=false captured=false passedTo=nish.Crc32.update#0
   pointer src: size=0 writesThrough=false captured=false passedTo=nish.Crc32.update#2
   stackSites=0 stackLocals=0
   local +0:9 flags: i32 (const)
@@ -1771,7 +1937,8 @@ function GzipWriter.bound(this: GzipWriter, len: i32): i32 -> @nish.GzipWriter.b
   calls: nish.deflateBound nish_panic_overflow
   pointer this: size=48 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  callee +0:12 deflateBound -> @nish.deflateBound
+  local +0:11 drains: i32 (const)
+  callee +1:12 deflateBound -> @nish.deflateBound
 function GzipWriter.header(this: GzipWriter, out: u8[], at: i32): i32 -> @nish.GzipWriter.header [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1812,10 +1979,9 @@ function GzipWriter.write(this: GzipWriter, src: u8[], off: i32, len: i32, out: 
   callee +0:21 Crc32.update -> @nish.Crc32.update
   local +2:9 p: i32 (let)
   local +3:11 end: i32 (const)
-  local +4:11 cap: i32 (const)
-  local +6:11 take: i32 (let)
-  callee +10:7 copyBytes -> @nish.copyBytes
-  callee +14:13 GzipWriter.drain -> @nish.GzipWriter.drain
+  local +7:11 take: i32 (let)
+  callee +11:7 copyBytes -> @nish.copyBytes
+  callee +15:13 GzipWriter.drain -> @nish.GzipWriter.drain
 function GzipWriter.flush(this: GzipWriter, out: u8[], at: i32): i32 -> @nish.GzipWriter.flush [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.GzipWriter.header
@@ -1829,7 +1995,7 @@ function GzipWriter.flush(this: GzipWriter, out: u8[], at: i32): i32 -> @nish.Gz
   local +7:9 o: i32 (let)
   callee +7:18 GzipWriter.header -> @nish.GzipWriter.header
   callee +9:11 GzipWriter.drain -> @nish.GzipWriter.drain
-  callee +11:9 Deflater.writeStored -> @nish.Deflater.writeStored
+  callee +14:9 Deflater.writeStored -> @nish.Deflater.writeStored
 function GzipWriter.finish(this: GzipWriter, out: u8[], at: i32): i32 -> @nish.GzipWriter.finish [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -1838,11 +2004,11 @@ function GzipWriter.finish(this: GzipWriter, out: u8[], at: i32): i32 -> @nish.G
   pointer this: size=48 writesThrough=true captured=false passedTo=nish.GzipWriter.bound#0 nish.GzipWriter.header#0 nish.GzipWriter.drain#0
   pointer out: size=0 writesThrough=true captured=false passedTo=nish.gzipWindow#1 nish.GzipWriter.header#1 nish.GzipWriter.drain#1 nish.Deflater.flushBits#1 nish.gzipPut32#0 nish.gzipPut32#0
   stackSites=0 stackLocals=0
-  callee -15:5 gzipWindow -> @nish.gzipWindow
-  callee -11:34 GzipWriter.bound -> @nish.GzipWriter.bound
-  local -8:9 o: i32 (let)
-  callee -8:18 GzipWriter.header -> @nish.GzipWriter.header
-  callee -7:9 GzipWriter.drain -> @nish.GzipWriter.drain
+  callee -18:5 gzipWindow -> @nish.gzipWindow
+  callee -14:34 GzipWriter.bound -> @nish.GzipWriter.bound
+  local -11:9 o: i32 (let)
+  callee -11:18 GzipWriter.header -> @nish.GzipWriter.header
+  callee -10:9 GzipWriter.drain -> @nish.GzipWriter.drain
   callee -6:9 Deflater.flushBits -> @nish.Deflater.flushBits
   callee -2:5 gzipPut32 -> @nish.gzipPut32
   callee -1:5 gzipPut32 -> @nish.gzipPut32
@@ -1970,80 +2136,133 @@ function GzipReader.read(this: GzipReader, out: u8[], at: i32, max: i32): i32 ->
 module std/compress/checksum.ts [package nish]
 import uncheckedGet from "nish:unsafe" -> builtin uncheckedGet
 import uncheckedSet from "nish:unsafe" -> builtin uncheckedSet
-unsafe import 32:10 uncheckedGet from "nish:unsafe"
-unsafe import 32:24 uncheckedSet from "nish:unsafe"
-unsafe call 52:9 uncheckedGet (node 56)
-unsafe call 53:10 uncheckedGet (node 65)
-unsafe call 54:10 uncheckedGet (node 82)
-unsafe call 55:10 uncheckedGet (node 99)
-unsafe call 56:10 uncheckedGet (node 116)
-unsafe call 57:10 uncheckedGet (node 133)
-unsafe call 58:10 uncheckedGet (node 150)
-unsafe call 59:10 uncheckedGet (node 167)
-unsafe call 85:7 uncheckedSet (node 324)
-unsafe call 88:25 uncheckedGet (node 351)
-unsafe call 89:7 uncheckedSet (node 359)
-unsafe call 89:41 uncheckedGet (node 368)
-unsafe call 114:9 uncheckedGet (node 533)
-unsafe call 115:9 uncheckedGet (node 545)
-unsafe call 116:9 uncheckedGet (node 561)
-unsafe call 117:9 uncheckedGet (node 577)
-unsafe call 118:9 uncheckedGet (node 590)
-unsafe call 119:9 uncheckedGet (node 603)
-unsafe call 120:9 uncheckedGet (node 619)
-unsafe call 121:9 uncheckedGet (node 635)
-unsafe call 125:11 uncheckedGet (node 658)
-unsafe call 125:44 uncheckedGet (node 670)
-unsafe call 156:19 uncheckedGet (node 826)
-unsafe call 158:19 uncheckedGet (node 841)
-unsafe call 160:19 uncheckedGet (node 858)
-unsafe call 162:19 uncheckedGet (node 875)
-unsafe call 167:19 uncheckedGet (node 901)
+unsafe import 34:10 uncheckedGet from "nish:unsafe"
+unsafe import 34:24 uncheckedSet from "nish:unsafe"
+unsafe call 64:9 uncheckedGet (node 77)
+unsafe call 65:10 uncheckedGet (node 86)
+unsafe call 66:10 uncheckedGet (node 103)
+unsafe call 67:10 uncheckedGet (node 120)
+unsafe call 68:10 uncheckedGet (node 137)
+unsafe call 69:10 uncheckedGet (node 154)
+unsafe call 70:10 uncheckedGet (node 171)
+unsafe call 71:10 uncheckedGet (node 188)
+unsafe call 81:5 uncheckedGet (node 250)
+unsafe call 82:5 uncheckedGet (node 262)
+unsafe call 83:5 uncheckedGet (node 278)
+unsafe call 84:5 uncheckedGet (node 294)
+unsafe call 85:5 uncheckedGet (node 307)
+unsafe call 86:5 uncheckedGet (node 320)
+unsafe call 87:5 uncheckedGet (node 336)
+unsafe call 88:5 uncheckedGet (node 352)
+unsafe call 121:7 uncheckedSet (node 513)
+unsafe call 124:25 uncheckedGet (node 540)
+unsafe call 125:7 uncheckedSet (node 548)
+unsafe call 125:41 uncheckedGet (node 557)
+unsafe call 134:22 uncheckedGet (node 637)
+unsafe call 136:27 uncheckedGet (node 679)
+unsafe call 140:7 uncheckedSet (node 697)
+unsafe call 144:11 uncheckedSet (node 755)
+unsafe call 144:44 uncheckedGet (node 764)
+unsafe call 237:11 uncheckedGet (node 1278)
+unsafe call 237:44 uncheckedGet (node 1290)
+unsafe call 268:19 uncheckedGet (node 1446)
+unsafe call 270:19 uncheckedGet (node 1461)
+unsafe call 272:19 uncheckedGet (node 1478)
+unsafe call 274:19 uncheckedGet (node 1495)
+unsafe call 279:19 uncheckedGet (node 1521)
 const CRC32_POLY: i64 = 3988292384
 const CRC32_TABLE_SIZE: i32 = 2048
+const CRC32_BRAIDS: i32 = 5
+const CRC32_BLOCK: i32 = 40
+const CRC32_BRAID_MIN: i32 = 80
 const ADLER32_NMAX: i32 = 5552
 const ADLER32_BASE: i32 = 65521
-struct Crc32 (class) size=8 align=8 exported
+struct Crc32 (class) size=16 align=8 exported
   field table: u32[] index=0 offset=0 readonly
+  field braid: u32[] index=1 offset=8 readonly
   constructor -> @nish.Crc32.constructor
   method update -> @nish.Crc32.update
 function checksumLoad64(buf: u8[], p: integer<0, 2147483639>): u64 -> @nish.checksumLoad64
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
+function crc32Step(t: u32[], c: u32, w: u64): u32 -> @nish.crc32Step
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer t: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 lo: u32 (const)
+  local +1:9 hi: u32 (const)
 function checksumWindow(what: string, buf: u8[], off: i32, len: i32): void -> @nish.checksumWindow
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat
   pointer buf: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Crc32.constructor(this: Crc32): void -> @nish.Crc32.constructor [exported constructor]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
-  calls: nish_panic
-  pointer this: size=8 writesThrough=true captured=false
-  stackSites=0 stackLocals=0
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: llvm.ctlz.i32 nish_panic nish_panic_overflow
+  pointer this: size=16 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
   local +0:11 t: u32[] (const)
   local +1:14 i: i32 (let)
   local +2:11 c: u32 (let)
   local +3:16 k: i32 (let)
   local +8:14 i: i32 (let)
   local +9:13 prev: u32 (const)
+  local +15:11 braid: u32[] (const)
+  local +16:11 bits: u32[] (const)
+  local +17:14 k: i32 (let)
+  local +18:16 i: i32 (let)
+  local +19:13 c: u32 (let)
+  local +20:18 z: i32 (let)
+  local +26:16 b: i32 (let)
+  local +27:15 low: i32 (const)
 function Crc32.update(this: Crc32, crc: u32, buf: u8[], off: i32, len: i32): u32 -> @nish.Crc32.update [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off
-  calls: nish.checksumLoad64 nish.checksumWindow nish_panic nish_panic_overflow
-  pointer this: size=8 writesThrough=false captured=false
-  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1 nish.checksumLoad64#0
+  calls: nish.checksumLoad64 nish.checksumWindow nish.crc32Step nish_panic nish_panic_overflow
+  pointer this: size=16 writesThrough=false captured=false
+  pointer buf: size=0 writesThrough=false captured=false passedTo=nish.checksumWindow#1 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0 nish.checksumLoad64#0
   stackSites=0 stackLocals=0
   callee +0:5 checksumWindow -> @nish.checksumWindow
   local +1:11 t: u32[] (const)
-  local +5:9 c: u32 (let)
-  local +6:9 p: i32 (let)
-  local +7:11 end: i32 (const)
-  local +8:11 whole: i32 (const)
-  local +10:13 w: u64 (const)
-  callee +10:22 checksumLoad64 -> @nish.checksumLoad64
-  local +11:13 lo: u32 (const)
-  local +12:13 hi: u32 (const)
+  local +2:11 bt: u32[] (const)
+  local +6:9 c: u32 (let)
+  local +7:9 p: i32 (let)
+  local +8:11 end: i32 (const)
+  local +18:13 blocks: i32 (const)
+  local +19:13 lastBlock: i32 (const)
+  local +20:11 c1: u32 (let)
+  local +21:11 c2: u32 (let)
+  local +22:11 c3: u32 (let)
+  local +23:11 c4: u32 (let)
+  local +26:11 p1: i32 (let)
+  local +27:11 p2: i32 (let)
+  local +28:11 p3: i32 (let)
+  local +29:11 p4: i32 (let)
+  callee +43:13 crc32Step -> @nish.crc32Step
+  callee +43:30 checksumLoad64 -> @nish.checksumLoad64
+  callee +44:14 crc32Step -> @nish.crc32Step
+  callee +44:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +45:14 crc32Step -> @nish.crc32Step
+  callee +45:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +46:14 crc32Step -> @nish.crc32Step
+  callee +46:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +47:14 crc32Step -> @nish.crc32Step
+  callee +47:32 checksumLoad64 -> @nish.checksumLoad64
+  callee +66:13 crc32Step -> @nish.crc32Step
+  callee +66:29 checksumLoad64 -> @nish.checksumLoad64
+  callee +67:13 crc32Step -> @nish.crc32Step
+  callee +67:34 checksumLoad64 -> @nish.checksumLoad64
+  callee +68:13 crc32Step -> @nish.crc32Step
+  callee +68:34 checksumLoad64 -> @nish.checksumLoad64
+  callee +69:13 crc32Step -> @nish.crc32Step
+  callee +69:34 checksumLoad64 -> @nish.checksumLoad64
+  callee +70:13 crc32Step -> @nish.crc32Step
+  callee +70:34 checksumLoad64 -> @nish.checksumLoad64
+  local +74:11 whole: i32 (const)
+  callee +76:11 crc32Step -> @nish.crc32Step
+  callee +76:27 checksumLoad64 -> @nish.checksumLoad64
 function crc32(buf: u8[], off: i32, len: i32): u32 -> @nish.crc32 [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: len off

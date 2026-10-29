@@ -1,0 +1,54 @@
+PASS  P384_SCALAR_SIZE is 48 bytes
+PASS  P384_POINT_SIZE is 97 bytes
+PASS  P384_SIGNATURE_SIZE is 96 bytes
+PASS  A.2.6 SHA-384 "sample" verifies
+PASS  A.2.6 SHA-384 "test" verifies
+PASS  p384Verify of the SHA-384 verifies
+PASS  "sample"'s signature does not verify "test"
+PASS  a flipped bit in r is refused
+PASS  a flipped bit in s is refused
+PASS  a flipped bit in the message is refused
+PASS  a flipped bit in the key is refused
+PASS  another key does not verify it
+PASS  (r, n - s) verifies too: ECDSA is malleable
+PASS  the digest 5 verifies
+PASS  a 1-byte digest is its own value
+PASS  a 64-byte digest is its leftmost 48 bytes
+PASS  a 48-byte digest of 5 + n is 5
+PASS  an empty digest is 0, not 5
+PASS  the digest 4 is refused
+PASS  (r, 1) under G verifies
+PASS  (r, 1 + n) is refused
+PASS  s = 0 is refused
+PASS  s = n is refused
+PASS  r = 0 is refused
+PASS  r = n is refused
+PASS  a 95-byte signature is refused
+PASS  a 97-byte signature is refused
+PASS  an empty signature is refused
+PASS  a sum u1 G + u2 Q of the identity is refused
+PASS  r = 0 over the digest 0 is refused
+PASS  the point with x = 0 verifies
+PASS  and with x = p is refused
+PASS  the point with y = 1 verifies
+PASS  and with y = 1 + p is refused
+PASS  (Gx, Gy + 1), off the curve, is refused
+PASS  and on G itself the same signature verifies
+PASS  a key of 96 bytes is refused
+PASS  a key of 98 bytes is refused
+PASS  a compressed prefix 0x02 is refused
+PASS  a hybrid prefix 0x06 is refused
+PASS  the identity's 0x00 is refused
+PASS  (0, 0) is refused
+wycheproof ecdsa_secp384r1_sha384: 504 cases, 194 valid verified, 310 invalid refused (235 by derSignatureRS384, 75 by p384Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  wycheproof sha384: every case answers what the file expects
+wycheproof ecdsa_secp384r1_sha384_p1363: 280 cases, 193 valid verified, 87 invalid refused (all 87 by p384Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  wycheproof sha384_p1363: every case answers what the file expects
+wycheproof ecdsa_secp384r1_sha256: 472 cases, 162 valid verified, 310 invalid refused (234 by derSignatureRS384, 76 by p384Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  wycheproof sha256: every case answers what the file expects
+wycheproof ecdsa_secp384r1_sha512: 542 cases, 231 valid verified, 311 invalid refused (236 by derSignatureRS384, 75 by p384Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  wycheproof sha512: every case answers what the file expects
+wycheproof ecdsa_secp384r1_sha512_p1363: 318 cases, 230 valid verified, 88 invalid refused (all 88 by p384Verify), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  wycheproof sha512_p1363: every case answers what the file expects
+PASS  the hex helper round-trips
+p384: 48 passed, 0 failed, 0 skipped
