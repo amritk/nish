@@ -65,12 +65,12 @@ try:
             continue
         open(P, "w").write(orig.replace(rule, without))
         build = ["build/nish", "tests/link/crypto_rsa/main.ts", "-o", "build/mut/", "--link", "build/mut/app", "--profile", "debug"]
-        r = subprocess.run(build, capture_output=True, text=True)
+        r = subprocess.run(build, capture_output=True, text=True, timeout=600)
         if r.returncode:
             print(f"{name}: does not compile: {r.stderr[:200]}", flush=True)
             bad.append(name)
             continue
-        r = subprocess.run(["build/mut/app"], capture_output=True, text=True)
+        r = subprocess.run(["build/mut/app"], capture_output=True, text=True, timeout=120)
         fails = [l.strip() for l in r.stdout.splitlines() if l.startswith("FAIL")]
         caught = r.returncode != 0
         print(f"{name}: {'caught' if caught else 'missed'} {fails[:2]} {r.stderr.strip()[:120]}", flush=True)

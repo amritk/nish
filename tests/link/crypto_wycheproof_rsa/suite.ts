@@ -5,8 +5,9 @@
 // goes through `rsaParsePublicKey` and each case through `rsaVerifyPkcs1v15` or
 // `rsaVerifyPss`. docs/security/crypto-rsa.md is the audit these checks pin.
 //
-// It runs under `--number-mode f64` and the speed profile, the mode and profile
-// the vectors cost least in; `tests/link/crypto_rsa` runs the refusals in i32.
+// It runs under `--number-mode f64` and the speed profile, chosen to keep the
+// vectors' run short (not a measured optimum); `tests/link/crypto_rsa` runs the
+// refusals in i32.
 import { Suite } from "nish/testing";
 import {
   RSA_HASH_SHA256,

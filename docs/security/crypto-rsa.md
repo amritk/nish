@@ -182,7 +182,7 @@ each refusal rule in `std/crypto/rsa.ts` was replaced, one at a time, by
 and runs it, and restores the file in a `finally`. It exits nonzero unless
 exactly the four guards below go uncaught. `git diff` was empty afterwards.
 
-These 27 rules were each caught, by a failing check or by a panic in the debug
+These 28 rules were each caught, by a failing check or by a panic in the debug
 profile ("index out of range", or an `i32` overflow):
 
 - the DER tag;
@@ -190,7 +190,7 @@ profile ("index out of range", or an `i32` overflow):
   forms, and the refusal of longer forms;
 - the exponent ending the SEQUENCE, and the SEQUENCE ending the DER;
 - an empty INTEGER, a negative one, and a non-minimal one;
-- the bit-length range, and n odd;
+- the bit length's lower and upper bounds, and n odd;
 - the exponent's length cap, e odd, and e ≥ 3;
 - the signature's length, and the signature below n;
 - the zero top byte `rsaOpen` requires when emLen is k − 1;
@@ -275,8 +275,8 @@ above shows that each check fails when its rule is removed.
   checked, and each has a signature that fails only that check.
 - The salt length is the caller's and must match exactly. A negative salt
   length and one too large for emLen answer `false`, never a panic. The salt
-  lengths −1, 0x7ffffff0 and 100 (under a 1024-bit key with SHA-512, where
-  64 + 100 + 2 > 128) are tested.
+  lengths −1 and 0x7ffffff0 are tested, and so is 100 (under a 1024-bit key
+  with SHA-512, where 64 + 100 + 2 > 128).
 - MGF1 uses the message's hash. Mismatched MGF1 hashes are not offered.
 
 **No panic.** Every check above answers `true` or `false`. The debug profile

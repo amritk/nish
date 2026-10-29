@@ -8,7 +8,8 @@ byte: the primes are drawn from Python's `random.Random(20261029)` and tested
 with Miller-Rabin, each key's private exponent signs its own signatures, and
 each broken signature is the real encoding with one rule changed and then
 signed, so only that rule fails. Python's arbitrary-precision integers do the
-arithmetic; `random`'s sequence for a seed is stable across Python 3 releases.
+arithmetic. `random.Random`'s sequence for a given seed has stayed the same
+across Python 3 releases so far, but Python does not promise that it always will.
 """
 import hashlib, os, random
 R = random.Random(20261029)
