@@ -26,6 +26,14 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 many cores and bytes of memory the machine has (`availableParallelism`,
 `totalMemory`) to size a pool of workers; see
 [Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
+A batch job steps aside for interactive work with `setNice(n)` (the nice value,
+-20..19) or, on Linux, `setIdlePriority()` (`SCHED_IDLE`: the CPU only when
+nothing else wants it). Each answers 0 or a negative errno and never throws;
+`setIdlePriority` is -95 on Darwin. An unprivileged process can never leave
+`SCHED_IDLE`, and an idle one can starve on a busy machine, so keep a
+normal-priority fallback for work that must finish, and call either at the top
+of `main`, before any thread starts. See
+[Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority).
 
 | Module | What it gives you |
 | --- | --- |
