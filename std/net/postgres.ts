@@ -100,8 +100,9 @@
  * that needs a socket, `connect(slot, nonce)` starts its connection, and the
  * program moves its bytes as above through `connection(slot)`. A request is a
  * ticket from `request()`; `dispatch()` gives the oldest to the ready
- * connection with the fewest groups in flight, the program builds its group and
- * ends it with `send()`, and `next(slot)` reads that connection's events with
+ * connection with the fewest groups in flight (or, with `PgConfig.pack`, to the
+ * first ready one with room, so a burst fills few connections in fuller
+ * writes), the program builds its group and ends it with `send()`, and `next(slot)` reads that connection's events with
  * `ticket` naming the request. Statements given to `register` are prepared on
  * each connection ahead of its first request. A connection that fails reports
  * `PG_LOST` for each request it took, then `PG_FAILED`; the program closes the
@@ -238,6 +239,15 @@ export class PgConfig {
   maxMessage: i32 = 1048576
   /** The most groups waiting for their answers at once. */
   maxInFlight: i32 = 16
+  /**
+   * Read by `PgPool` only: whether `dispatch()` packs requests onto the
+   * first ready connection with room, filling it to `maxInFlight` before the
+   * next, rather than spreading them over every connection, fewest in flight
+   * first. Fewer connections in use send fuller writes, fewer packets, which
+   * pays on a lossy link to the server; a connection is still wanted only once
+   * every ready one is full.
+   */
+  pack: boolean = false
   /** The input buffer's first size, in bytes; it grows to a message's length, up to `maxMessage` + 1. */
   inputSize: i32 = 8192
   /** The widest row; past it, `PG_ERR_TOO_BIG`. PostgreSQL's own limit is 1664. */
@@ -2266,7 +2276,8 @@ class PgPoolSlot {
  *
  * A request is a ticket from `request()`, queued in FIFO order. `dispatch()`
  * hands the queue's head to the ready connection with the fewest groups in
- * flight, never past `maxInFlight` on one; the program builds the request's
+ * flight, or under `PgConfig.pack` the lowest-numbered ready one with room,
+ * never past `maxInFlight` on one; the program builds the request's
  * group on `connection(slot)` and ends it with `send()`, not `sync()`.
  * `next(slot)` then reads that connection's events, `ticket` naming the
  * request each is about. A connection that fails reports `PG_LOST` for each
@@ -2367,7 +2378,8 @@ export class PgPool {
   }
 
   /**
-   * Hands the oldest waiting request to a ready connection with room, and
+   * Hands the oldest waiting request to a ready connection with room (the
+   * one with the fewest in flight, or under `PgConfig.pack` the first), and
    * answers its slot, `ticket` set to the request: build its group on
    * `connection(slot)`, then `send()`. `PG_POOL_NONE` when nothing waits, a
    * request is still being built, or no ready connection has room; then a
@@ -2381,6 +2393,7 @@ export class PgPool {
       return PG_POOL_NONE
     }
     const cap: i32 = this.config.maxInFlight
+    const pack: boolean = this.config.pack
     let best: i32 = -1
     let load: i32 = 0
     let starting: i32 = 0
@@ -2389,7 +2402,7 @@ export class PgPool {
       const slot: PgPoolSlot = this.slots[s]
       const conn: PgConnection | null = slot.conn
       if (slot.state === PG_SLOT_READY && conn !== null) {
-        if (conn.inFlight < cap && (best < 0 || conn.inFlight < load)) {
+        if (conn.inFlight < cap && (best < 0 || (!pack && conn.inFlight < load))) {
           best = s
           load = conn.inFlight
         }
