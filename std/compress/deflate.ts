@@ -258,12 +258,12 @@ const deflateStore64 = (b: u8[], p: integer<0, 2147483639>, w: u64): void => {
 
 /** The number of trailing zero bits of a nonzero `x`. */
 const deflateCtz64 = (x: u64): i32 => {
+  // Both halves, then a select rather than a branch on which is nonzero.
   const lo: u32 = toU32(x)
-  if (lo !== 0) {
-    return toI32(31) - Math.clz32(lo & (toU32(0) - lo))
-  }
   const hi: u32 = toU32(x >> toU64(32))
-  return toI32(63) - Math.clz32(hi & (toU32(0) - hi))
+  const low: i32 = toI32(31) - Math.clz32(lo & (toU32(0) - lo))
+  const high: i32 = toI32(63) - Math.clz32(hi & (toU32(0) - hi))
+  return lo !== 0 ? low : high
 }
 
 /**
@@ -419,11 +419,21 @@ const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next:
     code = (code + count[l - 1]) << 1
     next[l] = code
   }
+  // Each length's next code is kept bit-reversed, as it is written, and
+  // incremented that way: clear the ones below its highest zero and set it.
+  for (let l: i32 = 1; l < 16; l += 1) {
+    next[l] = deflateReverse(next[l], l)
+  }
   for (let s: i32 = 0; s < n; s += 1) {
     const l: i32 = lens[s]
     if (l > 0 && l < 16) {
-      codes[s] = deflateReverse(next[l], l)
-      next[l] += 1
+      const r: i32 = next[l]
+      codes[s] = r
+      const top: i32 = (toI32(1) << l) - 1
+      if (r !== top) {
+        const bit: i32 = toI32(1) << (31 - toI32(Math.clz32(toU32(r ^ top))))
+        next[l] = (r & (bit - 1)) | bit
+      }
     } else {
       codes[s] = 0
     }
@@ -1208,14 +1218,20 @@ export class Deflater {
         let cand: i32 = uncheckedGet(head, h)
         uncheckedSet(head, h, v)
         uncheckedSet(prev, v & (DEFLATE_WINDOW - 1), cand)
-        const maxLen: i32 = end - p < DEFLATE_MAX_MATCH ? end - p : DEFLATE_MAX_MATCH
+        const maxLen: i32 = p <= end - DEFLATE_MAX_MATCH ? DEFLATE_MAX_MATCH : end - p
         const nice: i32 = niceLength < maxLen ? niceLength : maxLen
         const limit: i32 = v - DEFLATE_WINDOW
         let chain: i32 = maxChain
         while (cand >= limit && cand >= lo && cand < v && chain > 0) {
           const ci: i32 = cand - delta
           if (ci >= 0 && ci <= 2147483639 && deflateLoad32(src, ci) === word) {
-            const l: i32 = 4 + deflateMatchLength(src, ci + 4, p + 4, maxLen - 4)
+            let l: i32 = 0
+            if (p <= end - DEFLATE_MAX_MATCH && ci <= 2147483627) {
+              const x: u64 = deflateLoad64(src, ci + 4) ^ deflateLoad64(src, p + 4)
+              l = x !== toU64(0) ? toI32(4) + (deflateCtz64(x) >> 3) : toI32(12) + deflateMatchLength(src, ci + 12, p + 12, maxLen - 12)
+            } else {
+              l = 4 + deflateMatchLength(src, ci + 4, p + 4, maxLen - 4)
+            }
             if (l > best) {
               best = l
               bestDist = v - cand
@@ -1238,13 +1254,14 @@ export class Deflater {
         uncheckedSet(df, ds, uncheckedGet(df, ds) + 1)
         // Every position the match covers goes into the chains.
         const stop: i32 = p + best
-        let q: i32 = p + 1
-        while (q < stop && q >= 0 && q <= last && q <= 2147483639) {
-          const hq: i32 = toI32((deflateLoad32(src, q) * toU32(DEFLATE_HASH_MUL)) >>> 17)
-          const vq: i32 = q + delta
+        const insertEnd: i32 = stop <= last ? stop : last + 1
+        let vq: i32 = wrappingAdd(p, delta)
+        for (let q: i32 = p + 1; q < insertEnd; q += 1) {
+          const qa: integer<0, 2147483639> = q
+          const hq: i32 = toI32((deflateLoad32(src, qa) * toU32(DEFLATE_HASH_MUL)) >>> 17)
+          vq = wrappingAdd(vq, 1)
           uncheckedSet(prev, vq & (DEFLATE_WINDOW - 1), uncheckedGet(head, hq))
           uncheckedSet(head, hq, vq)
-          q += 1
         }
         p = stop
       } else {
@@ -1577,10 +1594,10 @@ export class Deflater {
         bc += uncheckedGet(lextra, s)
         if (bc >= 32) {
           deflateRoom(out, o, 4)
-          uncheckedSet(out, o, toU8(bb & toU64(255)))
-          uncheckedSet(out, o + 1, toU8((bb >> toU64(8)) & toU64(255)))
-          uncheckedSet(out, o + 2, toU8((bb >> toU64(16)) & toU64(255)))
-          uncheckedSet(out, o + 3, toU8((bb >> toU64(24)) & toU64(255)))
+          uncheckedSet(out, o, toU8(bb))
+          uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
+          uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
+          uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
           bb = bb >> toU64(32)
           bc -= 32
           o += 4
@@ -1594,10 +1611,10 @@ export class Deflater {
       }
       if (bc >= 32) {
         deflateRoom(out, o, 4)
-        uncheckedSet(out, o, toU8(bb & toU64(255)))
-        uncheckedSet(out, o + 1, toU8((bb >> toU64(8)) & toU64(255)))
-        uncheckedSet(out, o + 2, toU8((bb >> toU64(16)) & toU64(255)))
-        uncheckedSet(out, o + 3, toU8((bb >> toU64(24)) & toU64(255)))
+        uncheckedSet(out, o, toU8(bb))
+        uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
+        uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
+        uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
         bb = bb >> toU64(32)
         bc -= 32
         o += 4
