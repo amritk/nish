@@ -380,6 +380,19 @@ export const http1WriteRequestHead = (
   if (at < 0 || at > toI32(out.length) || need > toI64(toI32(out.length) - at)) {
     return HTTP1_NO_ROOM
   }
+  return http1ClientPutHead(out, at, method, target, names, values, bodyLength)
+}
+
+/** Writes a head `http1ClientRequestNeed` accepted into room it counted; answers the end. */
+const http1ClientPutHead = (
+  out: u8[],
+  at: i32,
+  method: string,
+  target: string,
+  names: string[],
+  values: string[],
+  bodyLength: i64
+): i32 => {
   let end: i32 = http1PutText(out, at, method)
   end = http1PutText(out, end, " ")
   end = http1PutText(out, end, target)
@@ -421,9 +434,7 @@ export const http1RequestHead = (
     return null
   }
   const out: u8[] = new Array<u8>(toI32(need))
-  if (http1WriteRequestHead(out, 0, method, target, names, values, bodyLength) < 0) {
-    return null
-  }
+  http1ClientPutHead(out, 0, method, target, names, values, bodyLength)
   return out
 }
 
