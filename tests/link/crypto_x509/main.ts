@@ -72,6 +72,7 @@ import {
   P384_PKCS8_PEM,
   P384_SEC1_PEM,
 } from "./fixtures"
+import { webPkiSuites } from "./extensions"
 import { handshakeSuite } from "./handshake"
 import { fromHex, toHex } from "./hex"
 
@@ -465,4 +466,4 @@ const chainSuite = (): i32 => {
   return t.done()
 }
 
-export const main = (): i32 => mintSuite() + parseSuite() + pemSuite() + keySuite() + chainSuite() + handshakeSuite()
+export const main = (): i32 => mintSuite() + parseSuite() + pemSuite() + keySuite() + chainSuite() + handshakeSuite() + webPkiSuites()

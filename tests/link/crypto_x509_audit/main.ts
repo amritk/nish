@@ -176,7 +176,7 @@ const trailingSuite = (): i32 => {
   t.eqBool("two [3] elements are refused", readsWith("a30430020500a30430020500"), false)
   t.ok("[1] as an empty BIT STRING, 81 01 00, reads", readsWith("810100"))
   t.ok("[1] with four unused bits of one octet reads", readsWith("810204f0"))
-  t.ok("[1], [2] and [3] in order read", readsWith("810100820100a30430020500"))
+  t.ok("[1], [2] and [3] in order read", readsWith("810100820100a310300e300c0603551d130101ff04023000"))
   t.eqBool("[1] with no contents at all is refused", readsWith("8100"), false)
   t.eqBool("[1] claiming 8 unused bits is refused", readsWith("810108"), false)
   t.eqBool("[1] claiming unused bits with no octet is refused", readsWith("810103"), false)
