@@ -3,11 +3,14 @@ PASS  open: suite negotiated
 PASS  open: alpn chosen
 PASS  open: the server chose it
 PASS  open: the server saw the name
-PASS  open: the server read the ping
+PASS  open: the server read the ping, then data under each next key of the client's
 PASS  open: the client read the pong
 PASS  open: close_notify ends the client's stream
 PASS  open: socket closed
 PASS  open: done
+PASS  open: a read after close is -32
+PASS  keyupdate: the client read the server's answer and its request
+PASS  keyupdate: the server read the client's request and its answer
 PASS  open: no wake lost
 PASS  literal: opened on the SAN's address
 PASS  literal: no server_name
@@ -34,6 +37,8 @@ PASS  connect: refused, not open
 PASS  connect: refused, closed
 PASS  connect: a short address
 PASS  connect: a short address is done
+PASS  connect: a refused config is not dialled
+PASS  connect: a refused config has no socket
 PASS  connect: timed out
 PASS  connect: waited the timeout
 PASS  connect: and not much more
@@ -51,5 +56,5 @@ PASS  chain: another name
 PASS  chain: not yet valid
 PASS  chain: expired
 PASS  chain: an unknown root
-PASS  chain: the CN alone is not a name
-tls client tcp: 54 passed, 0 failed, 0 skipped
+PASS  chain: a self-signed leaf with no extensions is bad_certificate
+tls client tcp: 59 passed, 0 failed, 0 skipped

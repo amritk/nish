@@ -1,8 +1,13 @@
 // A `TlsTcpServer` and a `TlsTcpClient` in one readiness loop over loopback:
 // the server accepts into a slot and signs as it is told, the client drives
 // its own handshake and authenticates the server itself. A client that opens
-// writes "ping"; the server answers "pong" and closes with close_notify, and
-// the client reads that as the end of the stream and closes too. Every wait
+// writes "ping", sends a KeyUpdate asking for the server's and writes "!"
+// under its new key. The server, once it has read "ping!", answers "pong"
+// (after the KeyUpdate it owes) and sends a KeyUpdate asking for the
+// client's; the client, once it has read "pong", writes "?" after the
+// KeyUpdate it owes, and the server, once it has read that, closes with
+// close_notify. The client reads that as the end of the stream and closes
+// too. Each end counts the KeyUpdates it read. Every wait
 // is bounded: five seconds without a wake is a failure, never a hang.
 import { Secret, secret, wipe } from "nish:secret";
 import { netAddress, netClose, netLocalPort, pollAdd, pollCreate, pollModify, pollWait, tcpListen } from "nish:net";
@@ -36,6 +41,9 @@ export class Loop {
   peerAlert: i32 = -1;
   sawName: string = "";
   chose: string = "";
+  /** The KeyUpdates each end read, once it ended; -1 until then. */
+  serverUpdates: i32 = -1;
+  clientUpdates: i32 = -1;
   /** Whether the client opened, what each end read, and whether the client read the end of the server's stream. */
   opened: boolean = false;
   clientGot: string = "";
@@ -74,6 +82,11 @@ export class Loop {
     this.clientGot = "";
     this.serverGot = "";
     this.clientEnded = false;
+    this.peerAlert = -1;
+    this.sawName = "";
+    this.chose = "";
+    this.serverUpdates = -1;
+    this.clientUpdates = -1;
     const client = new TlsTcpClient(this.address(), config, trust);
     let clientDone: boolean = client.fd() < 0;
     if (!clientDone) {
@@ -96,6 +109,7 @@ export class Loop {
           const wants: i32 = this.talk(client, (events & 5) !== 0 ? client.readable() : client.writable());
           if ((wants & TLS_RECORD_DONE) !== 0) {
             clientDone = true;
+            this.clientUpdates = client.conn.keyUpdates;
             client.close();
           } else {
             pollModify(this.loop, client.fd(), wants & 3, CLIENT);
@@ -118,6 +132,9 @@ export class Loop {
       this.opened = true;
       const ping: u8[] = [0x70, 0x69, 0x6e, 0x67];
       client.write(ping, 0, 4);
+      client.keyUpdate(true);
+      const bang: u8[] = [0x21];
+      client.write(bang, 0, 1);
       wants = client.interest();
     }
     while ((wants & TLS_RECORD_DATA) !== 0) {
@@ -130,6 +147,10 @@ export class Loop {
         return client.interest();
       }
       this.clientGot = this.clientGot + this.text(n);
+      if (this.clientGot === "pong") {
+        const ask: u8[] = [0x3f];
+        client.write(ask, 0, 1);
+      }
       wants = client.interest();
     }
     return wants;
@@ -167,9 +188,11 @@ export class Loop {
         break;
       }
       this.serverGot = this.serverGot + this.text(n);
-      if (this.serverGot === "ping") {
+      if (this.serverGot === "ping!") {
         const pong: u8[] = [0x70, 0x6f, 0x6e, 0x67];
         this.server.write(slot, pong, 0, 4);
+        this.server.keyUpdate(slot, true);
+      } else if (this.serverGot === "ping!?") {
         wants = this.server.shutdown(slot);
         break;
       }
@@ -180,6 +203,7 @@ export class Loop {
       this.peerAlert = conn.peerAlert;
       this.sawName = conn.tls.serverName;
       this.chose = conn.tls.alpn;
+      this.serverUpdates = conn.keyUpdates;
       this.server.close(slot);
       this.serverDone = true;
       return;

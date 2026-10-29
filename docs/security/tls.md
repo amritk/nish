@@ -190,7 +190,6 @@ CertificateVerify under the leaf's key and then the chain, through
 | TLS-7 | Low | `std/net/tls/client.ts` (`checkHello`) | TLS 1.2 and below are not spoken. A ServerHello without `supported_versions` naming 0x0304 is refused with `protocol_version`, and one whose `server_random` ends in RFC 8446 §4.1.3's downgrade sentinel with `illegal_parameter`, so a client of this tree cannot reach a TLS 1.2-only server. Client certificates, 0-RTT and client-side resumption are left out in the same way: a CertificateRequest is `unexpected_message`, and a NewSessionTicket is read and dropped. Pinned by `net_tls_client_refusals` ("missing supported_versions", "downgrade sentinel", "a CertificateRequest", "a NewSessionTicket is dropped"). | **Open, by design** (#480): refusing the older protocol is the point. |
 | TLS-8 | Low | `std/net/tls/client.ts` (`exchangeKeys`) | A secp256r1 share could be configured and was sent, but `nish/crypto/p256` had no ECDH, so a server that selected secp256r1 — in its ServerHello, or in a HelloRetryRequest the client then answered — failed the handshake with `internal_error` after the client's key was wiped. A server that takes only P-256 could not be reached; nothing was weakened. | **Closed** by `p256Ecdh(priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> \| null` (`docs/security/crypto-ecc.md`): `exchangeKeys` computes a secp256r1 share with it, wipes both private keys as for x25519, and answers a share that is not an uncompressed point on the curve, with `illegal_parameter` (RFC 8446 §4.2.8.2; a product at infinity is refused the same way, defensively: the encoded identity is refused by its length, and a valid point times a key in [1, n) is never infinity). Before, `net_tls_client_refusals` held "a P-256 key share" to `internal_error`; after, it holds the handshake secret of a P-256 share, and of a HelloRetryRequest to P-256, to the one a server computes from the leaf's key ("a P-256 key share: the server's handshake secret", "a retry to P-256: the server's handshake secret"), and refuses "a P-256 share off the curve" and "a compressed P-256 share". |
 | TLS-9 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | `pump` installs the client's handshake write keys once `TlsClient` has the secret, after the records of a `receive` are processed. When the handshake fails within the same `receive` that delivered the ServerHello (bytes after it, an EncryptedExtensions that breaks a rule), `fail` seals its alert under the clear state, which a server that has moved to its handshake keys may not read. The connection ends either way and nothing secret is sent; the server only loses the alert's reason. | **Open**: install the write keys as soon as `TlsClient` derives them, before the next record is processed. |
-| TLS-10 | Low | `std/net/tls/verify.ts` (`tlsClientChain`) | **What it was.** Until `nish/crypto/pki` (#1027) was in the tree the chain step was a stub: it answered `bad_certificate` for an empty chain and `unknown_ca` for every other, so `TlsTcpClient` and `tlsConnect` authenticated no server and opened no connection. It failed closed — there was no switch that skipped the step — so nothing was accepted that should not be; what was lost was every connection. **What closes it.** `tlsClientChain` hands the chain, the configured name and the wall clock to `pkiVerifyServer` against the caller's `TlsClientTrust`, and maps its refusal to the alert: a certificate outside its validity to `certificate_expired`, no path to a root of the store to `unknown_ca`, every other reason (the name not in the leaf's subjectAltName among them; the CN is never read) to `bad_certificate`. There is still no switch that skips it. Before, `net_tls_client_tcp` held every chain to `unknown_ca` ("chain: the stub refuses") and every openssl s_server handshake that reached the verdict to `failed 48`; after, it opens a connection to `TlsTcpServer` under a loopback root ("open: opened", "literal: opened on the SAN's address", "root sent: opened") and refuses "host: bad_certificate", "untrusted: unknown_ca", "expired: certificate_expired" and "forged: decrypt_error", each of which the server reads; the chain step alone holds "chain: good", "chain: by its address", "chain: another name", "chain: not yet valid", "chain: expired", "chain: an unknown root" and "chain: the CN alone is not a name"; and tests/run.js's openssl s_server block opens every case it used to refuse, plus "an RSA-PSS leaf under an RSA intermediate" and "a P-256 leaf under a P-384 intermediate", and refuses "a name the leaf does not carry" with `bad_certificate`. | **Closed** by the tls-client-tcp stage of #480. |
 
 ## Fuzzing
 
@@ -1026,8 +1025,8 @@ application data past an unauthenticated server and none can skip the step.
 and is refused over other content, under the P-384 or RSA-PSS scheme, under
 Ed25519 (never offered) and when empty; a server whose CertificateVerify
 signs other bytes is refused with `decrypt_error`, which the server reads,
-before the chain is looked at. A leaf with no usable key (not P-256, P-384
-or RSA of at least 2048 bits) is `bad_certificate`, as is an empty chain.
+which the server reads. An empty chain is `bad_certificate`, and so is a
+self-signed leaf with no extensions that the store does not hold.
 
 **Against openssl s_server** (tests/run.js, "`nish/net/tls-tcp`'s client,
 against openssl s_server"; a CA and P-256, P-384 and RSA-2048 leaves made at
@@ -1039,32 +1038,56 @@ CertificateVerify under a P-384 leaf (ECDSA P-384) and an RSA leaf (RSA-PSS
 rsae), a P-256 leaf under a P-384 intermediate and an RSA-PSS leaf under an
 RSA intermediate (the intermediate sent as `-cert_chain`), and a TLS 1.2-only
 server refused with `protocol_version`, each against the run's CA as the
-client's only root; a name the leaf does not carry is refused with
+client's only root, read through `tlsClientSystemTrust` from
+`SSL_CERT_FILE`; a name the leaf does not carry, and a leaf that names
+`localhost` in its CN alone with no subjectAltName, are refused with
 `bad_certificate` after the signature verified.
+
+**`tlsConnect` and the blocking calls against openssl s_server** (the same
+block, "tlsConnect and the blocking calls"): a program with no loop of its
+own runs `tlsConnect`, `writeAll`, `keyUpdate` and `readWait` alone. It
+writes, sends a KeyUpdate asking for the server's and writes under its new
+key, which the server reads; it reads s_server's KeyUpdate asking for its
+own (`K`) and answers it, which the server shows by reading the next line
+under that key; `-rev` answers the KeyUpdate it owed and the data, and its
+close_notify ends the client's stream as 0; the default mode's `q`, which
+closes TCP with no close_notify, is read as the failure it is, -104, not as
+an end.
 
 **Against `TlsTcpServer` over loopback** (`net_tls_client_tcp`): the verdict
 reaches the server as an alert, ALPN and the name reach it, an IP literal
 sends no `server_name` and is matched against the leaf's iPAddress, a chain
 that also carries its root opens, application data goes both ways ("open:
-the server read the ping", "open: the client read the pong"), the server's
+the server read the ping, then data under each next key of the client's",
+"open: the client read the pong"), a KeyUpdate asking for the peer's goes
+each way and is answered ("keyupdate: the client read the server's answer
+and its request", "keyupdate: the server read the client's request and its
+answer"), the server's
 `close_notify` ends the client's stream ("open: close_notify ends the
-client's stream"), and the client ends closed with `TLS_RECORD_DONE`. A
+client's stream"), the client ends closed with `TLS_RECORD_DONE`, and a read
+after `close` answers -32. A
 wrong host, an untrusted root, an expired leaf and a forged CertificateVerify
 are refused with the alerts above, and the server reads each.
 
 **`tlsConnect` is bounded** (`net_tls_client_tcp`): a refused connection
 answers `-111`, an address shorter than `nish:net`'s answers `-22`, and a
 listener that never answers is given up on after the timeout (`-110`), with
-the elapsed time checked on both sides; the socket is closed on each.
+the elapsed time checked on both sides; the socket is closed on each. A
+config the client refuses (an empty ALPN protocol) is never dialled: it
+answers its alert, `internal_error`, with no socket.
 
-**Not exercised.** Application data, KeyUpdate (`k`/`K` from s_server) and
-`close_notify` between `TlsTcpClient` and openssl s_server; that the server
-reads the client's own `close_notify` (the loopback test checks only that
-the client ends closed); the system's roots (`tlsClientSystemTrust`, read by
-`tlsConnect`), which no test reaches since none dials a public host; name
-resolution, which the client does not do (the
-address is numeric and the TLS name is always the caller's); and any public
-host.
+**Not exercised.** That the server reads the client's own `close_notify`
+(each test checks only that the client ends closed); the system's root
+store as `tlsConnect` finds it with no `SSL_CERT_FILE` (the distribution's
+bundle, or `SSL_CERT_DIR`), since no test dials a public host; an empty
+`serverName`; a leaf with no usable key (RSA under 2048 bits, Ed25519),
+which the code answers `bad_certificate`; that a forged CertificateVerify is
+refused with `decrypt_error` before a chain that would also fail is looked
+at (the forged case has a good chain); the rsa_pss_pss schemes, which are
+never offered and so refused; a KeyUpdate that does not ask for the
+peer's, from either end; name resolution, which the client does not do
+(the address is numeric and the TLS name is always the caller's); and any
+public host.
 
 ## What is not checked here
 

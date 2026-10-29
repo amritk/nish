@@ -3313,15 +3313,20 @@ if (!only || "net_tls_tcp".includes(only)) {
 // else wrote, under each suite and group, through a HelloRetryRequest, with
 // ALPN and SNI, and that it checks a P-256, a P-384 and an RSA-PSS
 // CertificateVerify from that server and the chain under it. A test CA is
-// made here at run time, with three leaves for `localhost` under it and two
-// intermediates under it, an RSA one over an RSA leaf and a P-384 one over a
-// P-256 leaf; the client trusts the CA alone, through `SSL_CERT_FILE`. The
+// made here at run time, with three leaves for `localhost` under it (and a
+// fourth that names it in its CN alone) and two intermediates under it, an
+// RSA one over an RSA leaf and a P-384 one over a P-256 leaf; the client
+// trusts the CA alone, through `SSL_CERT_FILE`. The
 // program in `connect` mode prints one line of what the handshake reached:
 // its state, then the suite, the group, whether it retried, the
-// CertificateVerify scheme and the protocol ALPN chose. Data, KeyUpdate and
-// close_notify against this server are not written yet; `docs/security/tls.md`
-// lists them. openssl is on CI's runners, so a missing one is a failure here
-// rather than a skip.
+// CertificateVerify scheme and the protocol ALPN chose. In `exchange` mode
+// it runs `tlsConnect` and the blocking calls alone through data both ways,
+// a KeyUpdate of its own that asks for the server's, the server's KeyUpdate
+// asking for the client's (s_server's `K`, typed only once the client's
+// data under its new key has arrived) and the end of the server's stream:
+// `-rev`'s close_notify, read as 0, and the default mode's `q`, which closes
+// TCP without one, read as the failure it is. openssl is on CI's runners, so
+// a missing one is a failure here rather than a skip.
 if (!only || "net_tls_client_tcp".includes(only)) {
   const dir = path.join(buildDir, "net-tls-client")
   fs.rmSync(dir, { recursive: true, force: true })
@@ -3341,7 +3346,8 @@ if (!only || "net_tls_client_tcp".includes(only)) {
   )
   const openssl = "openssl"
   // The CA, its three leaves and its two intermediates with a leaf each, every
-  // leaf for `localhost`, valid for a day.
+  // leaf for `localhost`, valid for a day, and a leaf whose CN alone says
+  // `localhost`, with no subjectAltName.
   const pki = (args) => spawnSync(openssl, args, { cwd: dir, encoding: "utf8" })
   const made = () => {
     const ca = pki([
@@ -3353,6 +3359,7 @@ if (!only || "net_tls_client_tcp".includes(only)) {
       return `the CA: ${ca.stderr}`
     }
     fs.writeFileSync(path.join(dir, "leaf.ext"), "subjectAltName=DNS:localhost\nbasicConstraints=CA:FALSE\n")
+    fs.writeFileSync(path.join(dir, "cn.ext"), "basicConstraints=CA:FALSE\n")
     fs.writeFileSync(path.join(dir, "ca.ext"), "basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign\n")
     const p256 = ["ec", "-pkeyopt", "ec_paramgen_curve:P-256"]
     const p384 = ["ec", "-pkeyopt", "ec_paramgen_curve:P-384"]
@@ -3365,6 +3372,7 @@ if (!only || "net_tls_client_tcp".includes(only)) {
       ["rsaleaf", ["rsa:2048"], "rsaca", "leaf.ext"],
       ["p384ca", p384, "ca", "ca.ext"],
       ["p384leaf", p256, "p384ca", "leaf.ext"],
+      ["cnonly", p256, "ca", "cn.ext"],
     ]
     for (const [name, key, issuer, ext] of leaves) {
       const subject = ext === "ca.ext" ? `/CN=nish test ${name}` : "/CN=localhost"
@@ -3387,10 +3395,13 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     check("net_tls_client_tcp: openssl is on PATH and makes the test CA", madeErr === "", madeErr)
   ) {
     // One s_server for one connection, with `leaf` and its issuer as its chain
-    // (the intermediate, for a leaf under one) and `server`'s flags, and the client in connect mode against it. The answer
-    // is the client's exit status and output.
+    // (the intermediate, for a leaf under one) and `server`'s flags, and the
+    // client against it: its mode, the port, then `args`. Each of `steps` is
+    // a pattern and a line: once the server's output so far matches the
+    // pattern, the line goes to its stdin, in order. The answer is the
+    // client's exit status and output.
     const issuers = { rsaleaf: "rsaca", p384leaf: "p384ca" }
-    const handshake = async (leaf, server, name, alpn, groups) => {
+    const handshake = async (leaf, server, mode, args, steps = []) => {
       const s = spawn(
         openssl,
         [
@@ -3402,9 +3413,14 @@ if (!only || "net_tls_client_tcp".includes(only)) {
       const killer = setTimeout(() => s.kill("SIGKILL"), 30000)
       const ended = new Promise((resolve) => s.on("close", resolve))
       let out = ""
+      let step = 0
       const port = await new Promise((resolve) => {
         s.stdout.on("data", (chunk) => {
           out += chunk
+          while (step < steps.length && steps[step][0].test(out)) {
+            s.stdin.write(steps[step][1])
+            step++
+          }
           const m = /ACCEPT \S*:(\d+)\n/.exec(out)
           if (m !== null) {
             resolve(Number(m[1]))
@@ -3416,7 +3432,7 @@ if (!only || "net_tls_client_tcp".includes(only)) {
         port === 0
           ? { status: -1, stdout: "", stderr: `s_server did not listen: ${out}` }
           : await new Promise((resolve) => {
-              const c = spawn(exe, ["connect", String(port), name, alpn, groups], {
+              const c = spawn(exe, [mode, String(port), ...args], {
                 cwd: dir,
                 env: { ...process.env, SSL_CERT_FILE: path.join(dir, "ca.pem") },
                 stdio: ["ignore", "pipe", "pipe"],
@@ -3476,15 +3492,42 @@ if (!only || "net_tls_client_tcp".includes(only)) {
       // refused with bad_certificate (42).
       ["a name the leaf does not carry", "p256", ["-tls1_3"], "other.test", "-", "x25519",
         "failed 42 suite 4865 group 29 retried false scheme 1027 alpn -"],
+      // A leaf whose CN is the name and that has no subjectAltName: the CN is
+      // never read, so bad_certificate (42).
+      ["the name in the CN alone", "cnonly", ["-tls1_3"], "localhost", "-", "x25519",
+        "failed 42 suite 4865 group 29 retried false scheme 1027 alpn -"],
       // A server that speaks only TLS 1.2 answers the TLS 1.3-only ClientHello
       // with protocol_version (70).
       ["TLS 1.2 only", "p256", ["-tls1_2"], "localhost", "-", "x25519",
         "failed 70 suite 0 group 29 retried false scheme 0 alpn -"],
     ]
     for (const [what, leaf, server, name, alpn, groups, want] of cases) {
-      const got = await handshake(leaf, server, name, alpn, groups)
+      const got = await handshake(leaf, server, "connect", [name, alpn, groups])
       check(
         `net_tls_client_tcp: openssl s_server, ${what}: the handshake ends as it should`,
+        got.status === 0 && got.stdout === `${want}\n`,
+        `exit ${got.status}\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
+      )
+    }
+    // The client writes "ping", a KeyUpdate asking for the server's and
+    // "after"; s_server prints each line it reads. The default mode echoes
+    // nothing back, so `K` follows "after" and "pong" follows the KeyUpdate
+    // it sent (`SSL_do_handshake -> 1`), and only a client that answered that
+    // request is read past it: "bye" is what lets `q` through. Its one
+    // KeyUpdate read stands for both, openssl folding the answer it owed into
+    // the request. `-rev` answers each line reversed, under the KeyUpdate it
+    // owed, and ends with close_notify on reading CLOSE.
+    const exchanges = [
+      ["data, KeyUpdate both ways and a close with no close_notify", [],
+        [[/after\n/, "K\n"], [/SSL_do_handshake -> 1\n/, "pong\n"], [/bye\n/, "q\n"]], "pong", "bye",
+        "open wrote 5 update 0 wrote 6 read pong server updates 1 wrote 4 end -104"],
+      ["data, a KeyUpdate answered and close_notify", ["-rev"], [], "retfa", "CLOSE",
+        "open wrote 5 update 0 wrote 6 read retfa server updates 1 wrote 6 end 0"],
+    ]
+    for (const [what, server, steps, reply, last, want] of exchanges) {
+      const got = await handshake("p256", ["-tls1_3", ...server], "exchange", [reply, last], steps)
+      check(
+        `net_tls_client_tcp: openssl s_server, tlsConnect and the blocking calls, ${what}`,
         got.status === 0 && got.stdout === `${want}\n`,
         `exit ${got.status}\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
       )

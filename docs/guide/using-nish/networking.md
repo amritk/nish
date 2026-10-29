@@ -348,8 +348,10 @@ at once, with no packet. For a command-line tool or a program's start-up,
 address like `tcpConnect`'s, connects, runs a TLS 1.3 handshake and checks
 the server's certificate for `serverName`, blocking until it has or the time
 has run out. Like the socket calls it never looks a name up: resolve one
-first, as above, and pass the name you meant as `serverName`. Its answers,
-and how to drive the client from your own loop, are on
+first, as above, and pass the name you meant as `serverName`. The client's
+`writeAll` and `readWait` then write and read under a timeout, for a program
+with no loop of its own. Their answers, and how to drive the client from
+your own loop instead, are on
 [TLS client](tls-client.md#connecting-tlsconnect), with how to trust roots
 other than the system's.
 

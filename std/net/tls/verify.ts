@@ -28,8 +28,8 @@
  * a certificate outside its validity, `unknown_ca` when no path reaches a
  * root of the store, and `bad_certificate` for every other reason. There is
  * no switch that skips the step and none is to be added: a client that is to
- * talk to a server it cannot authenticate is given a store holding that
- * server's root, never a way around the check (`docs/security/tls.md`, "The
+ * talk to a server it cannot authenticate is given a store holding its
+ * issuing root, never a way around the check (`docs/security/tls.md`, "The
  * client carrier and verify").
  *
  * The verdict is the record client's to send: `tlsClientAuthenticate` calls

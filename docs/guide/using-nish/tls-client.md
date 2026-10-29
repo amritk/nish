@@ -36,10 +36,25 @@ export const main = (): number => {
     console.log(`no connection: ${client.failure()}`);
     return 1;
   }
-  const request: u8[] = [71, 69, 84, 32, 47, 10];
-  client.write(request, 0, request.length);
+  const text = "GET / HTTP/1.0\r\nHost: localhost\r\n\r\n";
+  const request: u8[] = [];
+  for (let i = 0; i < text.length; i++) {
+    request.push(toU8(text.charCodeAt(i)));
+  }
+  if (client.writeAll(request, 0, request.length, 5000) < 0) {
+    client.close();
+    return 1;
+  }
+  const buf: u8[] = new Array<u8>(4096);
+  let total = 0;
+  let n = client.readWait(buf, 0, buf.length, 5000);
+  while (n > 0) {
+    total = total + n;
+    n = client.readWait(buf, 0, buf.length, 5000);
+  }
+  console.log(`read ${total} bytes, ended with ${n}`);
   client.close();
-  return 0;
+  return n === 0 ? 0 : 1;
 };
 ```
 
@@ -57,12 +72,23 @@ closed:
 | `51` `decrypt_error` | the server's signature does not verify under its certificate's key |
 | another alert | the server's own, such as `120` when it speaks none of your ALPN protocols |
 
-Once open, `read`, `write`, `keyUpdate`, `shutdown` and `close` answer as the
-`nish:net` calls do, and `interest()`, `readable()` and `writable()` let the
-client join your own loop (`fd()` is its socket). `tlsConnectWith(addr,
+`tlsConnect` returns only once the handshake's last flight is sent, so the
+client is ready to write. A program with no loop of its own uses the two
+waiting calls, each bounded by its own `timeoutMs`:
+
+| Call | Answers |
+| --- | --- |
+| `writeAll(data, off, len, timeoutMs)` | `len` once the socket has taken every byte; `-110` if the time ran out (some may be sent), `-104` if the connection failed, `-32` once it is closed, `-22` for a window outside `data` |
+| `readWait(buf, off, len, timeoutMs)` | the bytes read; `0` at the end of the server's stream (its close_notify); `-110` if nothing came in time (the connection stays usable); `-104` if it failed, which includes the TCP connection ending with no close_notify; `-32` once it is closed |
+
+Both handle a KeyUpdate from the server on the way. Once open, `read`,
+`write`, `keyUpdate`, `shutdown` and `close` answer as the `nish:net` calls
+do without waiting (`read` and `write` answer `-11` when they would block,
+and `read` answers `-32` after `close`), and `interest()`, `readable()` and
+`writable()` let the client join your own loop (`fd()` is its socket). `tlsConnectWith(addr,
 config, trust, timeoutMs)` takes a whole `TlsClientConfig` (to offer P-256,
 say) and the roots to trust; `tlsConnect` reads the system's roots on every
-call, so a program that connects often reads them once and passes them here.
+call, within its timeout, so a program that connects often reads them once and passes them here.
 `new TlsTcpClient(addr, config, trust)` starts
 the same connection without blocking, for a loop you already run.
 

@@ -6938,6 +6938,8 @@ import TLS_RECORD_AGAIN from "nish/net/tls/record-server" -> const TLS_RECORD_AG
 import TLS_RECORD_DATA from "nish/net/tls/record-server" -> const TLS_RECORD_DATA
 import TLS_RECORD_DONE from "nish/net/tls/record-server" -> const TLS_RECORD_DONE
 import TLS_RECORD_INVALID from "nish/net/tls/record-server" -> const TLS_RECORD_INVALID
+import TLS_RECORD_PIPE from "nish/net/tls/record-server" -> const TLS_RECORD_PIPE
+import TLS_RECORD_RESET from "nish/net/tls/record-server" -> const TLS_RECORD_RESET
 import TLS_RECORD_STATE_CLOSED from "nish/net/tls/record-server" -> const TLS_RECORD_STATE_CLOSED
 import TLS_RECORD_STATE_FAILED from "nish/net/tls/record-server" -> const TLS_RECORD_STATE_FAILED
 import TLS_RECORD_STATE_OPEN from "nish/net/tls/record-server" -> const TLS_RECORD_STATE_OPEN
@@ -7020,6 +7022,12 @@ struct TlsTcpClient (class) size=40 align=8 exported
   method writable -> @nish.TlsTcpClient.writable
   method flush -> @nish.TlsTcpClient.flush
   method read -> @nish.TlsTcpClient.read
+  method ended -> @nish.TlsTcpClient.ended
+  method readWait -> @nish.TlsTcpClient.readWait
+  method writeAll -> @nish.TlsTcpClient.writeAll
+  method sending -> @nish.TlsTcpClient.sending
+  method ownLoop -> @nish.TlsTcpClient.ownLoop
+  method turn -> @nish.TlsTcpClient.turn
   method write -> @nish.TlsTcpClient.write
   method keyUpdate -> @nish.TlsTcpClient.keyUpdate
   method shutdown -> @nish.TlsTcpClient.shutdown
@@ -7343,8 +7351,8 @@ function TlsTcpClient.constructor(this: TlsTcpClient, addr: u8[], config: TlsCli
   local +2:11 p256: u8[] (const)
   callee +7:17 new TlsRecordClient -> @nish.TlsRecordClient.constructor
   callee +7:37 new TlsClient -> @nish.TlsClient.constructor
-  local +10:11 fd: i32 (const)
-  callee +14:7 TlsRecordClient.abort -> @nish.TlsRecordClient.abort
+  local +16:11 fd: i32 (const)
+  callee +20:7 TlsRecordClient.abort -> @nish.TlsRecordClient.abort
 function TlsTcpClient.fd(this: TlsTcpClient): i32 -> @nish.TlsTcpClient.fd [exported method]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=40 writesThrough=false captured=false
@@ -7414,13 +7422,82 @@ function TlsTcpClient.read(this: TlsTcpClient, buf: u8[], off: i32, len: i32): i
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordClient.read
   escaping: len off
-  calls: nish.TlsRecordClient.read nish.TlsTcpClient.flush
-  pointer this: size=40 writesThrough=false captured=false passedTo=nish.TlsTcpClient.flush#0
+  calls: nish.TlsRecordClient.read nish.TlsTcpClient.ended nish.TlsTcpClient.flush
+  pointer this: size=40 writesThrough=false captured=false passedTo=nish.TlsTcpClient.ended#0 nish.TlsTcpClient.flush#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.TlsRecordClient.read#1
   stackSites=0 stackLocals=0
-  local +0:11 n: i32 (const)
-  callee +0:20 TlsRecordClient.read -> @nish.TlsRecordClient.read
-  callee +1:5 TlsTcpClient.flush -> @nish.TlsTcpClient.flush
+  callee +0:14 TlsTcpClient.ended -> @nish.TlsTcpClient.ended
+  local +2:11 n: i32 (const)
+  callee +2:20 TlsRecordClient.read -> @nish.TlsRecordClient.read
+  callee +3:5 TlsTcpClient.flush -> @nish.TlsTcpClient.flush
+function TlsTcpClient.ended(this: TlsTcpClient): i32 -> @nish.TlsTcpClient.ended [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function TlsTcpClient.readWait(this: TlsTcpClient, buf: u8[], off: i32, len: i32, timeoutMs: i32): i32 -> @nish.TlsTcpClient.readWait [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsTcpDeadline
+  escaping: len off timeoutMs
+  calls: nish.TlsTcpClient.ended nish.TlsTcpClient.ownLoop nish.TlsTcpClient.read nish.TlsTcpClient.turn nish.tlsTcpDeadline nish_net_close
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.TlsTcpClient.read#0 nish.TlsTcpClient.ownLoop#0 nish.TlsTcpClient.turn#0 nish.TlsTcpClient.read#0 nish.TlsTcpClient.ended#0 nish.TlsTcpClient.read#0
+  pointer buf: size=0 writesThrough=true captured=false passedTo=nish.TlsTcpClient.read#1 nish.TlsTcpClient.read#1 nish.TlsTcpClient.read#1
+  stackSites=0 stackLocals=0
+  local +0:11 end: i64 (const)
+  callee +0:22 tlsTcpDeadline -> @nish.tlsTcpDeadline
+  local +1:9 n: i32 (let)
+  callee +1:18 TlsTcpClient.read -> @nish.TlsTcpClient.read
+  local +5:11 loop: i32 (const)
+  callee +5:23 TlsTcpClient.ownLoop -> @nish.TlsTcpClient.ownLoop
+  local +10:13 turned: i32 (const)
+  callee +10:27 TlsTcpClient.turn -> @nish.TlsTcpClient.turn
+  callee +12:13 TlsTcpClient.read -> @nish.TlsTcpClient.read
+  callee +14:15 TlsTcpClient.ended -> @nish.TlsTcpClient.ended
+  callee +22:11 TlsTcpClient.read -> @nish.TlsTcpClient.read
+function TlsTcpClient.writeAll(this: TlsTcpClient, data: u8[], off: i32, len: i32, timeoutMs: i32): i32 -> @nish.TlsTcpClient.writeAll [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsTcpDeadline
+  escaping: timeoutMs
+  calls: nish.TlsTcpClient.ended nish.TlsTcpClient.ownLoop nish.TlsTcpClient.sending nish.TlsTcpClient.turn nish.TlsTcpClient.write nish.tlsTcpDeadline nish_net_close nish_panic_overflow
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.TlsTcpClient.write#0 nish.TlsTcpClient.sending#0 nish.TlsTcpClient.ownLoop#0 nish.TlsTcpClient.turn#0 nish.TlsTcpClient.ended#0
+  pointer data: size=0 writesThrough=false captured=false passedTo=nish.TlsTcpClient.write#1
+  stackSites=0 stackLocals=0
+  local +0:11 end: i64 (const)
+  callee +0:22 tlsTcpDeadline -> @nish.tlsTcpDeadline
+  local +1:9 done: i32 (let)
+  local +2:9 loop: i32 (let)
+  local +3:9 result: i32 (let)
+  local +6:15 n: i32 (const)
+  callee +6:24 TlsTcpClient.write -> @nish.TlsTcpClient.write
+  callee +14:27 TlsTcpClient.sending -> @nish.TlsTcpClient.sending
+  callee +18:16 TlsTcpClient.ownLoop -> @nish.TlsTcpClient.ownLoop
+  local +24:13 turned: i32 (const)
+  callee +24:27 TlsTcpClient.turn -> @nish.TlsTcpClient.turn
+  callee +26:18 TlsTcpClient.ended -> @nish.TlsTcpClient.ended
+function TlsTcpClient.sending(this: TlsTcpClient): boolean -> @nish.TlsTcpClient.sending [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=40 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function TlsTcpClient.ownLoop(this: TlsTcpClient): i32 -> @nish.TlsTcpClient.ownLoop [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_poll_create
+  calls: nish.TlsTcpClient.interest nish_poll_add nish_poll_create
+  pointer this: size=40 writesThrough=false captured=false passedTo=nish.TlsTcpClient.interest#0
+  stackSites=0 stackLocals=0
+  local +0:11 loop: i32 (const)
+  callee +2:34 TlsTcpClient.interest -> @nish.TlsTcpClient.interest
+function TlsTcpClient.turn(this: TlsTcpClient, loop: i32, end: i64): i32 -> @nish.TlsTcpClient.turn [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: nish.TlsTcpClient.interest nish.TlsTcpClient.readable nish.TlsTcpClient.writable nish_monotonic_nanos nish_panic_index nish_panic_overflow nish_poll_modify nish_poll_wait
+  pointer this: size=40 writesThrough=true captured=false passedTo=nish.TlsTcpClient.interest#0 nish.TlsTcpClient.readable#0 nish.TlsTcpClient.writable#0
+  stackSites=1 stackLocals=1
+  local +0:11 wants: i32 (const)
+  callee +0:24 TlsTcpClient.interest -> @nish.TlsTcpClient.interest
+  local +4:11 now: i64 (const)
+  local +9:11 ready: i32[] (const)
+  local +10:11 count: i32 (const)
+  callee +20:9 TlsTcpClient.readable -> @nish.TlsTcpClient.readable
+  callee +22:9 TlsTcpClient.writable -> @nish.TlsTcpClient.writable
 function TlsTcpClient.write(this: TlsTcpClient, data: u8[], off: i32, len: i32): i32 -> @nish.TlsTcpClient.write [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.TlsRecordClient.write
@@ -7460,44 +7537,56 @@ function TlsTcpClient.close(this: TlsTcpClient): void -> @nish.TlsTcpClient.clos
   callee -4:7 TlsRecordClient.close -> @nish.TlsRecordClient.close
   callee -3:7 TlsTcpClient.flush -> @nish.TlsTcpClient.flush
   callee +1:5 TlsRecordClient.wipe -> @nish.TlsRecordClient.wipe
+function tlsTcpDeadline(timeoutMs: i32): i64 -> @nish.tlsTcpDeadline
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish_monotonic_nanos
+  calls: nish_monotonic_nanos nish_panic_overflow
+  stackSites=0 stackLocals=0
 function tlsConnect(addr: u8[], serverName: string, alpn: string[], timeoutMs: i32): TlsTcpClient -> @nish.tlsConnect [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
-  sharedWrite: via nish.tlsConnectWith
+  sharedWrite: via nish.tlsTcpDeadline
   escaping: serverName timeoutMs
-  calls: nish.TlsClientConfig.constructor nish.tlsClientSystemTrust nish.tlsConnectWith nish_alloc_struct
-  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.tlsConnectWith#0
+  calls: nish.TlsClientConfig.constructor nish.tlsClientSystemTrust nish.tlsConnectBy nish.tlsTcpDeadline nish_alloc_struct
+  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.tlsConnectBy#0
   pointer alpn: size=0 writesThrough=true captured=true passedTo=nish.TlsClientConfig.constructor#2
   stackSites=0 stackLocals=0
-  callee +0:3 tlsConnectWith -> @nish.tlsConnectWith
-  callee +0:24 new TlsClientConfig -> @nish.TlsClientConfig.constructor
-  callee +0:63 tlsClientSystemTrust -> @nish.tlsClientSystemTrust
+  local +0:9 end: i64 (const)
+  callee +0:20 tlsTcpDeadline -> @nish.tlsTcpDeadline
+  callee +1:10 tlsConnectBy -> @nish.tlsConnectBy
+  callee +1:29 new TlsClientConfig -> @nish.TlsClientConfig.constructor
+  callee +1:68 tlsClientSystemTrust -> @nish.tlsClientSystemTrust
 function tlsConnectWith(addr: u8[], config: TlsClientConfig, trust: TlsClientTrust, timeoutMs: i32): TlsTcpClient -> @nish.tlsConnectWith [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
+  sharedWrite: via nish.tlsConnectBy
+  escaping: timeoutMs
+  calls: nish.tlsConnectBy nish.tlsTcpDeadline
+  pointer addr: size=0 writesThrough=false captured=false passedTo=nish.tlsConnectBy#0
+  pointer config: size=40 writesThrough=true captured=true passedTo=nish.tlsConnectBy#1
+  pointer trust: size=8 writesThrough=true captured=true passedTo=nish.tlsConnectBy#2
+  stackSites=0 stackLocals=0
+  callee +0:20 tlsConnectBy -> @nish.tlsConnectBy
+  callee +0:54 tlsTcpDeadline -> @nish.tlsTcpDeadline
+function tlsConnectBy(addr: u8[], config: TlsClientConfig, trust: TlsClientTrust, end: i64): TlsTcpClient -> @nish.tlsConnectBy
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=40
   sharedWrite: via nish.TlsTcpClient.constructor
-  calls: nish.TlsTcpClient.close nish.TlsTcpClient.constructor nish.TlsTcpClient.fd nish.TlsTcpClient.interest nish.TlsTcpClient.open nish.TlsTcpClient.readable nish.TlsTcpClient.writable nish_alloc_struct nish_monotonic_nanos nish_net_close nish_panic_index nish_panic_overflow nish_poll_add nish_poll_create nish_poll_modify nish_poll_wait
+  escaping: end
+  calls: nish.TlsTcpClient.close nish.TlsTcpClient.constructor nish.TlsTcpClient.fd nish.TlsTcpClient.open nish.TlsTcpClient.ownLoop nish.TlsTcpClient.sending nish.TlsTcpClient.turn nish_alloc_struct nish_net_close
   pointer addr: size=0 writesThrough=false captured=false passedTo=nish.TlsTcpClient.constructor#1
   pointer config: size=40 writesThrough=true captured=true passedTo=nish.TlsTcpClient.constructor#2
   pointer trust: size=8 writesThrough=true captured=true passedTo=nish.TlsTcpClient.constructor#3
-  stackSites=1 stackLocals=1
+  stackSites=0 stackLocals=0
   local +0:9 client: TlsTcpClient (const)
   callee +0:32 new TlsTcpClient -> @nish.TlsTcpClient.constructor
   callee +1:7 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
   local +4:9 loop: i32 (const)
+  callee +4:21 TlsTcpClient.ownLoop -> @nish.TlsTcpClient.ownLoop
   callee +7:5 TlsTcpClient.close -> @nish.TlsTcpClient.close
-  local +10:9 end: i64 (const)
-  local +11:9 ready: i32[] (const)
-  local +12:7 wants: i32 (let)
-  callee +12:20 TlsTcpClient.interest -> @nish.TlsTcpClient.interest
-  callee +13:17 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
-  callee +14:11 TlsTcpClient.open -> @nish.TlsTcpClient.open
-  local +15:11 now: i64 (const)
-  local +20:11 count: i32 (const)
-  local +30:13 events: i32 (const)
-  callee +31:54 TlsTcpClient.readable -> @nish.TlsTcpClient.readable
-  callee +31:74 TlsTcpClient.writable -> @nish.TlsTcpClient.writable
-  callee +33:26 TlsTcpClient.fd -> @nish.TlsTcpClient.fd
-  callee +38:8 TlsTcpClient.open -> @nish.TlsTcpClient.open
-  callee +39:5 TlsTcpClient.close -> @nish.TlsTcpClient.close
+  callee +12:11 TlsTcpClient.open -> @nish.TlsTcpClient.open
+  callee +12:28 TlsTcpClient.sending -> @nish.TlsTcpClient.sending
+  local +13:11 turned: i32 (const)
+  callee +13:25 TlsTcpClient.turn -> @nish.TlsTcpClient.turn
+  callee +23:8 TlsTcpClient.open -> @nish.TlsTcpClient.open
+  callee +24:5 TlsTcpClient.close -> @nish.TlsTcpClient.close
 module std/net/tls/client.ts [package nish]
 import Secret from "nish:secret" -> generic class Secret
 import expose from "nish:secret" -> generic function expose
