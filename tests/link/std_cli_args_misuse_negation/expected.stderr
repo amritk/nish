@@ -1,0 +1,1 @@
+cli-args: flag("--no-color <when>"): a global flag of that name is already declared

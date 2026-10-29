@@ -264,7 +264,7 @@ is its plan. [README.md](README.md) indexes them.
 | 42 | A multi-core server from pre-forked processes | proposed | [wp42](wp42-multicore-server.md) |
 | 43 | The HTTP application layer: router, handler interface, static files, compression | in progress; stage 1, the router, built | [wp43](wp43-http-app-layer.md) |
 | 44 | Streaming file reads: a descriptor, a positional read, a size and a close | proposed; design only, open questions for the owner | [wp44](wp44-streaming-files.md) |
-| 45 | Name resolution for `nish:net`: a DNS stub resolver | proposed | [wp45](wp45-name-resolution.md) |
+| 45 | Name resolution for `nish:net`: a DNS stub resolver | built: `nish/net/dns` on the caller's loop, `resolveHost` for start-up | [wp45](wp45-name-resolution.md) |
 | 46 | Memory for programs that do not exit: regions | proposed | [wp46](wp46-long-running-memory.md) |
 
 A package's plan said where its work would be done, which for everything up
