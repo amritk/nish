@@ -51,4 +51,41 @@ PASS  close: server saw it
 PASS  early close: failed
 PASS  early close: not an end of stream
 PASS  early close: the server's alert
-tls record client: 53 passed, 0 failed, 0 skipped
+PASS  early close: a verdict answers why
+PASS  ku asked: server asks
+PASS  ku asked: client counted
+PASS  ku asked: the client's own reached the server
+PASS  ku asked: server reads
+PASS  ku limit: the first 64 are taken
+PASS  ku limit: data between them read
+PASS  ku limit: the next fails
+PASS  ku limit: unexpected_message
+PASS  ku request 2: sealed
+PASS  ku request 2: failed
+PASS  ku request 2: illegal_parameter
+PASS  truncation: data waits
+PASS  truncation: failed
+PASS  truncation: read is reset
+PASS  truncation: no data
+PASS  truncation: a verdict answers why
+PASS  fatal alert: the server's alert
+PASS  fatal alert: read is reset
+PASS  fatal alert: a verdict answers it
+PASS  fatal alert: a refusal answers it
+PASS  abort: a verdict answers why
+PASS  verdict: asked for
+PASS  verdict: the handshake waits
+PASS  verdict: nothing sealed
+PASS  verdict: no Finished queued
+PASS  verdict: write waits
+PASS  verdict: read waits
+PASS  verdict: the handshake secret is held
+PASS  close before the verdict: closed
+PASS  close before the verdict: read keys wiped
+PASS  close before the verdict: handshake secret wiped
+PASS  close before the verdict: no verdict asked
+PASS  close before the verdict: a verdict is refused
+PASS  close before the verdict: the server's bytes are dropped
+PASS  close before the verdict: still closed
+PASS  close before the verdict: done
+tls record client: 90 passed, 0 failed, 0 skipped

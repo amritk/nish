@@ -305,6 +305,13 @@ export const main = (): i32 => {
   c = twoGroups(TLS_GROUP_X25519);
   feed(c, TLS_LEVEL_INITIAL, hello(retryRandom(), c, AES_128, join([retryShare(TLS_GROUP_SECP256R1), versions()])));
   refused(t, "a suite changed after the retry", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_256, join([share(TLS_GROUP_SECP256R1, leafPublic()), versions()]))), TLS_ALERT_ILLEGAL_PARAMETER);
+  // A cookie the second hello echoes as the retry sent it (RFC 8446 §4.2.2).
+  c = twoGroups(TLS_GROUP_X25519);
+  const shortCookie: u8[] = [];
+  u16(shortCookie, 16);
+  append(shortCookie, counting(0xc0, 16));
+  t.eqI32("a retry with a cookie", feed(c, TLS_LEVEL_INITIAL, hello(retryRandom(), c, AES_128, join([retryShare(TLS_GROUP_SECP256R1), versions(), ext(COOKIE, shortCookie)]))), ZERO);
+  t.ok("a retry with a cookie: the second hello echoes it", holds(c.takeOutput(TLS_LEVEL_INITIAL), ext(COOKIE, shortCookie)));
   // A cookie so long that the hello echoing it cannot say its extensions' length.
   c = twoGroups(TLS_GROUP_X25519);
   const cookie: u8[] = [];
@@ -364,6 +371,7 @@ export const main = (): i32 => {
   real.flight[last] = toU8(toI32(real.flight[last]) ^ 1);
   t.eqI32("a bad Finished is held", feed(real.client, TLS_LEVEL_HANDSHAKE, real.flight), ZERO);
   t.eqI32("waits on the caller", real.client.state, TLS_CLIENT_STATE_WAIT_AUTH);
+  t.eqI32("waits on the caller: no Finished before the verdict", toI32(real.client.takeOutput(TLS_LEVEL_HANDSHAKE).length), ZERO);
   refused(t, "a bad Finished", real.client, real.client.authenticate(true), TLS_ALERT_DECRYPT_ERROR);
   real = new Real();
   feed(real.client, TLS_LEVEL_INITIAL, real.serverHello);

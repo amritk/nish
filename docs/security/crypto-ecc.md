@@ -265,7 +265,10 @@ SEC 1 §3.3.1 over a validated peer point: the key must be in [1, n − 1] and
   secrets as published, 25 public keys refused, of 355". The 25 refused are
   the 24 `invalid` cases and the one `acceptable` compressed point, which RFC
   8446 §4.2.8.2 forbids. tcId 3's shared x is zero and is `valid`, so a zero
-  x is answered; only a product at infinity is refused.
+  x is answered. A product at infinity is refused too, but defensively: the
+  identity is refused by its length before it is decoded, and on a
+  prime-order curve a key in [1, n) times a point on it never gives infinity,
+  so that branch is not reached.
 - A key of 0, n, above n, or not 32 bytes, the identity, an empty or
   truncated point, a compressed point and a point off the curve are refused
   ("refusals: 12 keys and points checked"), and both sides of 25 exchanges

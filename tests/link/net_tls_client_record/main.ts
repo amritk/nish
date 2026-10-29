@@ -1,16 +1,29 @@
 // `nish/net/tls/record-client` against `nish/net/tls/record-server`, both
 // sans-IO, the bytes shuttled between them in one loop: a handshake per
 // suite, a HelloRetryRequest, ALPN and SNI, application data both ways,
-// KeyUpdate from each side, and close_notify from each side.
+// KeyUpdate from each side and its limits, close_notify from each side, a
+// close before the verdict, and what a failed connection answers.
 import { Suite } from "nish/testing";
-import { TlsServer, tlsSignEcdsaP256 } from "nish/net/tls";
+import { TLS_LEVEL_HANDSHAKE, TlsServer, tlsSignEcdsaP256 } from "nish/net/tls";
 import { Secret, secret, wipe } from "nish:secret";
-import { TLS_GROUP_SECP256R1, TLS_GROUP_X25519 } from "nish/net/tls/codec";
+import {
+  TLS_ALERT_DECRYPT_ERROR,
+  TLS_ALERT_ILLEGAL_PARAMETER,
+  TLS_ALERT_INTERNAL_ERROR,
+  TLS_ALERT_UNEXPECTED_MESSAGE,
+  TLS_GROUP_SECP256R1,
+  TLS_GROUP_X25519,
+} from "nish/net/tls/codec";
+import { TLS_ALERT_CLOSE_NOTIFY, TLS_CONTENT_HANDSHAKE } from "nish/net/tls/record";
 import { TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256 } from "nish/net/tls/schedule";
-import { TlsClient, TlsClientConfig } from "nish/net/tls/client";
+import { TLS_CLIENT_STATE_WAIT_AUTH, TlsClient, TlsClientConfig } from "nish/net/tls/client";
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client";
 import {
+  TLS_RECORD_AGAIN,
+  TLS_RECORD_DATA,
   TLS_RECORD_DONE,
+  TLS_RECORD_MAX_KEY_UPDATES,
+  TLS_RECORD_RESET,
   TLS_RECORD_SIGN,
   TLS_RECORD_STATE_CLOSED,
   TLS_RECORD_STATE_FAILED,
@@ -19,6 +32,7 @@ import {
 } from "nish/net/tls/record-server";
 import { ZERO, ascii } from "../net_tls_record_common/bytes";
 import { leafPrivate, newServer, tcpConfig } from "../net_tls_common/server";
+import { secretHex } from "../net_tls_common/secrets";
 
 const bytes = (start: i32): u8[] => {
   const out: u8[] = [];
@@ -43,6 +57,8 @@ class Pair {
   tlsServer: TlsServer;
   /** The leaf's signing key, for the server's CertificateVerify. */
   readonly key: Secret<u8[]>;
+  /** Whether `run` gives the client's verdict when it is asked for one. */
+  authenticates: boolean = true;
 
   constructor(config: TlsClientConfig, alpn: string[]) {
     this.tlsServer = newServer(tcpConfig(alpn));
@@ -76,7 +92,7 @@ class Pair {
         this.server.consume(n);
         moved = true;
       }
-      if ((this.client.interest() & TLS_RECORD_AUTH) !== 0) {
+      if (this.authenticates && (this.client.interest() & TLS_RECORD_AUTH) !== 0) {
         this.client.authenticate(true);
         moved = true;
       }
@@ -112,6 +128,20 @@ const readServer = (conn: TlsRecordServer): u8[] => {
     n = conn.read(buf, ZERO, toI32(buf.length));
   }
   return out;
+};
+
+/** A pair connected under the defaults. */
+const opened = (): Pair => {
+  const pair = new Pair(new TlsClientConfig("localhost", ["h2"]), ["h2"]);
+  pair.run();
+  return pair;
+};
+
+/** The server writes `line` and the bytes reach the client, unread. */
+const serverSends = (pair: Pair, line: string): void => {
+  const data: u8[] = ascii(line);
+  pair.server.write(data, ZERO, toI32(data.length));
+  pair.run();
 };
 
 /** Connects under `suite`, echoes a line each way, and closes from the client. */
@@ -207,6 +237,97 @@ export const main = (): i32 => {
   early.receive(closeNotify, ZERO, toI32(closeNotify.length));
   t.eqI32("early close: failed", early.state, TLS_RECORD_STATE_FAILED);
   t.ok("early close: not an end of stream", !early.peerClosed);
-  t.eqI32("early close: the server's alert", early.peerAlert, ZERO);
+  t.eqI32("early close: the server's alert", early.peerAlert, TLS_ALERT_CLOSE_NOTIFY);
+  t.eqI32("early close: a verdict answers why", early.authenticate(true), TLS_ALERT_INTERNAL_ERROR);
+
+  // The server's KeyUpdate asks for the client's, which the client sends.
+  const asked = opened();
+  t.eqI32("ku asked: server asks", asked.server.keyUpdate(true), ZERO);
+  asked.run();
+  t.eqI32("ku asked: client counted", asked.client.keyUpdates, 1);
+  t.eqI32("ku asked: the client's own reached the server", asked.server.keyUpdates, 1);
+  const answered: u8[] = ascii("after the client's answer");
+  asked.client.write(answered, ZERO, toI32(answered.length));
+  asked.run();
+  t.eqStr("ku asked: server reads", text(readServer(asked.server)), "after the client's answer");
+  asked.wipe();
+
+  // A KeyUpdate past the limit is unexpected_message; data between them keeps the idle count down.
+  const many = opened();
+  let taken: i32 = 0;
+  for (let k: i32 = 0; k < TLS_RECORD_MAX_KEY_UPDATES; k++) {
+    many.server.keyUpdate(false);
+    serverSends(many, "x");
+    taken = taken + toI32(readClient(many.client).length);
+  }
+  t.eqI32("ku limit: the first 64 are taken", many.client.keyUpdates, TLS_RECORD_MAX_KEY_UPDATES);
+  t.eqI32("ku limit: data between them read", taken, TLS_RECORD_MAX_KEY_UPDATES);
+  many.server.keyUpdate(false);
+  many.run();
+  t.eqI32("ku limit: the next fails", many.client.state, TLS_RECORD_STATE_FAILED);
+  t.eqI32("ku limit: unexpected_message", many.client.alert, TLS_ALERT_UNEXPECTED_MESSAGE);
+  many.wipe();
+
+  // A request_update other than 0 or 1 is illegal_parameter (RFC 8446 §4.6.3).
+  const odd = opened();
+  const badUpdate: u8[] = [24, 0, 0, 1, 2];
+  t.ok("ku request 2: sealed", odd.server.sealRecord(TLS_CONTENT_HANDSHAKE, badUpdate, ZERO, toI32(badUpdate.length)));
+  odd.run();
+  t.eqI32("ku request 2: failed", odd.client.state, TLS_RECORD_STATE_FAILED);
+  t.eqI32("ku request 2: illegal_parameter", odd.client.alert, TLS_ALERT_ILLEGAL_PARAMETER);
+  odd.wipe();
+
+  // Data the caller has not read is gone once the connection fails: `read` answers the reset.
+  const tiny: u8[] = new Array<u8>(8);
+  const cut = opened();
+  serverSends(cut, "never read");
+  t.ok("truncation: data waits", (cut.client.interest() & TLS_RECORD_DATA) !== 0);
+  cut.client.end();
+  t.eqI32("truncation: failed", cut.client.state, TLS_RECORD_STATE_FAILED);
+  t.eqI32("truncation: read is reset", cut.client.read(tiny, ZERO, toI32(tiny.length)), TLS_RECORD_RESET);
+  t.ok("truncation: no data", (cut.client.interest() & TLS_RECORD_DATA) === 0);
+  t.eqI32("truncation: a verdict answers why", cut.client.authenticate(true), TLS_ALERT_INTERNAL_ERROR);
+  cut.wipe();
+  const fatal = opened();
+  serverSends(fatal, "never read");
+  fatal.server.fail(TLS_ALERT_DECRYPT_ERROR);
+  fatal.run();
+  t.eqI32("fatal alert: the server's alert", fatal.client.peerAlert, TLS_ALERT_DECRYPT_ERROR);
+  t.eqI32("fatal alert: read is reset", fatal.client.read(tiny, ZERO, toI32(tiny.length)), TLS_RECORD_RESET);
+  t.eqI32("fatal alert: a verdict answers it", fatal.client.authenticate(true), TLS_ALERT_DECRYPT_ERROR);
+  t.eqI32("fatal alert: a refusal answers it", fatal.client.reject(TLS_ALERT_INTERNAL_ERROR), TLS_ALERT_DECRYPT_ERROR);
+  fatal.wipe();
+  const aborted = opened();
+  aborted.client.abort();
+  t.eqI32("abort: a verdict answers why", aborted.client.authenticate(true), TLS_ALERT_INTERNAL_ERROR);
+  aborted.wipe();
+
+  // Before the verdict nothing of the client's Finished goes out, and data waits.
+  const waiting = new Pair(new TlsClientConfig("localhost", ["h2"]), ["h2"]);
+  waiting.authenticates = false;
+  waiting.run();
+  t.ok("verdict: asked for", (waiting.client.interest() & TLS_RECORD_AUTH) !== 0);
+  t.eqI32("verdict: the handshake waits", waiting.client.tls.state, TLS_CLIENT_STATE_WAIT_AUTH);
+  t.eqI32("verdict: nothing sealed", waiting.client.outputEnd - waiting.client.outputStart, ZERO);
+  t.eqI32("verdict: no Finished queued", toI32(waiting.client.tls.takeOutput(TLS_LEVEL_HANDSHAKE).length), ZERO);
+  const tooSoon: u8[] = ascii("too soon");
+  t.eqI32("verdict: write waits", waiting.client.write(tooSoon, ZERO, toI32(tooSoon.length)), TLS_RECORD_AGAIN);
+  t.eqI32("verdict: read waits", waiting.client.read(tiny, ZERO, toI32(tiny.length)), TLS_RECORD_AGAIN);
+  const zeros: string = "0000000000000000000000000000000000000000000000000000000000000000";
+  t.ok("verdict: the handshake secret is held", secretHex(waiting.client.tls.secrets().clientHandshake) !== zeros);
+
+  // Closed before the verdict: the client reads nothing more and holds no read or handshake keys.
+  waiting.client.close();
+  t.eqI32("close before the verdict: closed", waiting.client.state, TLS_RECORD_STATE_CLOSED);
+  t.ok("close before the verdict: read keys wiped", !waiting.client.readProtection.isProtected());
+  t.eqStr("close before the verdict: handshake secret wiped", secretHex(waiting.client.tls.secrets().clientHandshake), zeros);
+  t.ok("close before the verdict: no verdict asked", (waiting.client.interest() & TLS_RECORD_AUTH) === 0);
+  t.eqI32("close before the verdict: a verdict is refused", waiting.client.authenticate(true), TLS_ALERT_INTERNAL_ERROR);
+  const record: u8[] = [0x17, 0x03, 0x03, 0x00, 0x01, 0x00];
+  t.eqI32("close before the verdict: the server's bytes are dropped", waiting.client.receive(record, ZERO, toI32(record.length)), toI32(record.length));
+  waiting.run();
+  t.eqI32("close before the verdict: still closed", waiting.client.state, TLS_RECORD_STATE_CLOSED);
+  t.ok("close before the verdict: done", (waiting.client.interest() & TLS_RECORD_DONE) !== 0);
+  waiting.wipe();
   return t.done();
 };

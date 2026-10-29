@@ -42,6 +42,8 @@ PASS  a second retry: keeps its alert
 PASS  a suite changed after the retry
 PASS  a suite changed after the retry: failed
 PASS  a suite changed after the retry: keeps its alert
+PASS  a retry with a cookie
+PASS  a retry with a cookie: the second hello echoes it
 PASS  a cookie too long to echo
 PASS  a cookie too long to echo: failed
 PASS  a cookie too long to echo: keeps its alert
@@ -79,10 +81,11 @@ PASS  a Finished first: failed
 PASS  a Finished first: keeps its alert
 PASS  a bad Finished is held
 PASS  waits on the caller
+PASS  waits on the caller: no Finished before the verdict
 PASS  a bad Finished
 PASS  a bad Finished: failed
 PASS  a bad Finished: keeps its alert
 PASS  the caller refuses the chain
 PASS  the caller refuses the chain: failed
 PASS  the caller refuses the chain: keeps its alert
-tls client refusals: 87 passed, 0 failed, 0 skipped
+tls client refusals: 90 passed, 0 failed, 0 skipped

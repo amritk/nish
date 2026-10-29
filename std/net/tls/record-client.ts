@@ -273,7 +273,8 @@ export class TlsRecordClient {
   /**
    * Wipes everything this connection holds: both traffic secrets at both
    * hash lengths, both directions' keys, the plaintext buffers and everything
-   * `TlsClient` holds. Call it when the connection is done with.
+   * `TlsClient` holds, so `read` has nothing more to give. Call it when the
+   * connection is done with.
    */
   wipe(): void {
     wipe(this.readTraffic256)
@@ -285,6 +286,8 @@ export class TlsRecordClient {
     this.readProtection.clear()
     this.writeProtection.clear()
     secureZero(this.plain)
+    this.plainStart = 0
+    this.plainEnd = 0
     secureZero(this.scratch)
     secureZero(this.postHandshake)
     this.tls.wipe()
@@ -362,14 +365,15 @@ export class TlsRecordClient {
    * Takes bytes of the server's stream, `data[off .. off + len)`, and handles
    * every record they complete. Answers how many it took, fewer than `len`
    * only when its buffers are full, or `TLS_RECORD_INVALID` for a window
-   * outside `data`. Once the connection has failed, or the server has sent
-   * `close_notify`, bytes are taken and dropped (§6.1).
+   * outside `data`. Once the connection has failed, the server has sent
+   * `close_notify`, or the client closed before the handshake was done, bytes
+   * are taken and dropped (§6.1).
    */
   receive(data: u8[], off: i32, len: i32): i32 {
     if (!tlsRecordWindowFits(toI32(data.length), off, len)) {
       return TLS_RECORD_INVALID
     }
-    if (this.state === TLS_RECORD_STATE_FAILED || this.peerClosed) {
+    if (this.state === TLS_RECORD_STATE_FAILED || this.peerClosed || this.abandoned()) {
       return len
     }
     const taken: i32 = this.reader.push(data, off, len)
@@ -422,7 +426,7 @@ export class TlsRecordClient {
    * `authenticate` comes back for them.
    */
   process(): void {
-    while (this.state !== TLS_RECORD_STATE_FAILED && !this.peerClosed) {
+    while (this.state !== TLS_RECORD_STATE_FAILED && !this.peerClosed && !this.abandoned()) {
       if (this.tls.state === TLS_CLIENT_STATE_WAIT_AUTH) {
         break
       }
@@ -1076,17 +1080,28 @@ export class TlsRecordClient {
   /**
    * Closes the client's side (§6.1): a `close_notify`, after which `write`
    * answers `TLS_RECORD_PIPE`. Application data already written stays ahead
-   * of the alert; the write keys are wiped once it is sealed. Nothing
-   * happens once the connection has failed or closed.
+   * of the alert; the write keys are wiped once it is sealed. Closed before
+   * the handshake is done, the client reads nothing more, and the read keys
+   * and everything `TlsClient` holds are wiped at once. Nothing happens once
+   * the connection has failed or closed.
    */
   close(): void {
     if (this.state === TLS_RECORD_STATE_FAILED || this.state === TLS_RECORD_STATE_CLOSED) {
       return
     }
     this.dropPending()
+    if (this.state === TLS_RECORD_STATE_HANDSHAKE) {
+      this.wipeRead()
+      this.tls.wipe()
+    }
     this.state = TLS_RECORD_STATE_CLOSED
     this.closeDue = true
     this.sealClose()
+  }
+
+  /** Whether the client closed before the handshake was done, so the server's records are not read. */
+  abandoned(): boolean {
+    return this.state === TLS_RECORD_STATE_CLOSED && this.readLevel !== TLS_LEVEL_APPLICATION
   }
 
   /** Seals the `close_notify` `close` owes once `output` has room, then wipes the write direction. */
@@ -1102,12 +1117,13 @@ export class TlsRecordClient {
    * CertificateVerify, while `interest` says `TLS_RECORD_AUTH`
    * (`TlsClient.authenticate`): `true` reads on to the server's Finished and
    * seals the client's; `false` fails the connection with `bad_certificate`
-   * sent. Answers 0, or the alert the connection failed with — a verdict
-   * given before one is due fails it with `internal_error`.
+   * sent. Answers 0, or a non-zero alert once the connection has failed
+   * (`failure`) — a verdict given before one is due answers
+   * `internal_error`.
    */
   authenticate(ok: boolean): i32 {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
-      return this.state === TLS_RECORD_STATE_FAILED ? this.alert : TLS_ALERT_INTERNAL_ERROR
+      return this.state === TLS_RECORD_STATE_FAILED ? this.failure() : TLS_ALERT_INTERNAL_ERROR
     }
     const alert: i32 = this.tls.authenticate(ok)
     if (alert !== 0) {
@@ -1116,17 +1132,29 @@ export class TlsRecordClient {
     }
     this.advance()
     this.process()
-    return this.state === TLS_RECORD_STATE_FAILED ? this.alert : 0
+    return this.state === TLS_RECORD_STATE_FAILED ? this.failure() : 0
   }
 
   /** Refuses the server with the caller's `alert` (`TlsClient.reject`), sent; answers the alert. */
   reject(alert: i32): i32 {
     if (this.state !== TLS_RECORD_STATE_HANDSHAKE) {
-      return this.state === TLS_RECORD_STATE_FAILED ? this.alert : TLS_ALERT_INTERNAL_ERROR
+      return this.state === TLS_RECORD_STATE_FAILED ? this.failure() : TLS_ALERT_INTERNAL_ERROR
     }
     const sent: i32 = this.tls.reject(alert)
     this.fail(sent)
     return sent
+  }
+
+  /**
+   * Why a failed connection failed, never 0: the alert the client sent, else
+   * the server's error alert, else `internal_error` for a failure with no
+   * alert of its own (truncation, `abort`, `close_notify` mid-handshake).
+   */
+  failure(): i32 {
+    if (this.alert !== 0) {
+      return this.alert
+    }
+    return this.peerAlert > 0 ? this.peerAlert : TLS_ALERT_INTERNAL_ERROR
   }
 
   /**

@@ -169,8 +169,9 @@ export const wipeChecks = [
   // 2, and the direction's `clear`, 7), `wipe` 47 (the four traffic secret
   // fields, both `clear`s, the three plaintext buffers, 1 each, and
   // `TlsClient.wipe`), `fail` 61 (the alert's seal, 14, and `wipe`), `abort`
-  // 47, `handleAlert` 56 (`wipeRead` and `wipe`), `sealClose` 23 and `close`
-  // 23 (the `close_notify`'s seal and `wipeWrite`), `tlsClientInstallHeld` 14
+  // 47, `handleAlert` 56 (`wipeRead` and `wipe`), `sealClose` 23 (the
+  // `close_notify`'s seal and `wipeWrite`), `close` 58 (`sealClose`, and on a
+  // close before the verdict `wipeRead` and `TlsClient.wipe`), `tlsClientInstallHeld` 14
   // (the plain copy it installs from, 1, and the keys it installs),
   // `updateReadKeys` 30 (the plain copy `tlsClientAdvanceHeld` moves on, once
   // for each hash length, and the keys it installs) and `advance` 716 (every
@@ -200,7 +201,7 @@ export const wipeChecks = [
       ["nish.TlsRecordClient.abort", 47],
       ["nish.TlsRecordClient.handleAlert", 56],
       ["nish.TlsRecordClient.sealClose", 23],
-      ["nish.TlsRecordClient.close", 23],
+      ["nish.TlsRecordClient.close", 58],
       ["nish.TlsRecordClient.updateReadKeys", 30],
       ["nish.TlsRecordClient.advance", 716],
     ],

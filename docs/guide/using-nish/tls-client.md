@@ -64,6 +64,10 @@ records, the keys at the right record boundaries, alerts, KeyUpdate and
 
 `write(data, off, len)` sends application data once the handshake is done,
 `keyUpdate(requestPeer)` rolls the keys, and `close()` sends `close_notify`.
+A `close()` before the handshake is done also stops reading: the server's
+records are dropped and the handshake's secrets are wiped. Once the connection
+has failed, data you have not read is gone: `read` answers
+`TLS_RECORD_RESET`.
 
 ## Checking the server
 
@@ -97,8 +101,9 @@ export const decide = (conn: TlsRecordClient): void => {
 export const main = (): number => 0;
 ```
 
-A client that calls `authenticate(true)` without checking talks to whoever
-answered, so never skip it.
+`authenticate` answers 0 and `reject` the alert it sent; once the connection
+has failed, both answer the alert that says why, never 0. A client that calls `authenticate(true)` without checking talks to
+whoever answered, so never skip it.
 
 ## What it offers and refuses
 
