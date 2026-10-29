@@ -2181,8 +2181,9 @@ also watches the signal fd. None of `spawn`, `kill`, `waitPid` may be called in
 a task or a parallel body; the two host facts may. `availableParallelism()` (`i32`, at least 1, no `--threads` needed) and
 `totalMemory()` (`i64` bytes, or `-1`) size a program to the machine. None of
 the five exists on a wasm target, and `spawn` and `waitPid` throw under Node.
-`setNice(n)` sets the nice value (clamped to -20..19; lowering it unprivileged
-is `-13`) and `setIdlePriority()` moves the program to Linux's `SCHED_IDLE`
+`setNice(n)` sets the nice value, and it is lower-only even as root: `n` takes
+0..19 (`-22` outside it) and a value below the current one is `-13`, with no
+system call either way. `setIdlePriority()` moves the program to Linux's `SCHED_IDLE`
 (`-95` on Darwin); each answers 0 or a negative errno. Call them at the top of
 `main`, never in a task. An unprivileged process can never leave `SCHED_IDLE`
 and an idle one can starve on a saturated machine, so keep a normal-priority

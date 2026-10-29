@@ -6,26 +6,26 @@ stages:
     title: "setNice refuses any raise and out-of-range values"
     goal: setNice(n) answers -22 outside 0..19 and -13 when n is below the current nice value, with no setpriority call on either path; a native case reads getpriority and sched_getscheduler back after each call
     verification: npm run check && npm run lint && node tests/run.js os_nice && node tests/run.js caps_process_nice && node tests/run.js reject_os && node tests/run.js wasi
-    status: pending
+    status: done
     todos:
       - id: runtime-range-and-raise
         content: In nish_set_nice (runtime/runtime-os.c) reject n outside 0..19 with -EINVAL, read getpriority(PRIO_PROCESS, 0) with errno cleared, and reject n below it with -EACCES before calling setpriority — see Owns
-        status: pending
+        status: done
       - id: header-and-dts
         content: Update the contract comments on nish_set_nice in runtime/nish.h and on setNice in runtime/nish.d.ts (both the global and nish:process forms) to the 0..19 lower-only rule
-        status: pending
+        status: done
       - id: native-case
         content: Add tests/cases/os_nice.c, the native driver that reads getpriority and sched_getscheduler after setNice and setIdlePriority, and rewrite tests/cases/os_nice.ts so root no longer expects a raise to succeed
-        status: pending
+        status: done
       - id: docs
         content: Replace the clamping sentence in docs/LANGUAGE.md (Scheduling section, the setNice row), docs/AI.md (the scheduling paragraph) and docs/guide/using-nish/standard-library.md (the setNice paragraph) with the 0..19 lower-only contract and the -22 / -13 answers
-        status: pending
+        status: done
       - id: goldens
         content: Regenerate tests/self/goldens/checked for os_nice with node tests/self/goldens.js --update and read the diff; regenerate tests/cases/os_nice.ll with UPDATE_GOLDENS=1 node tests/run.js os_nice
-        status: pending
+        status: done
       - id: budget
         content: If runtime-os.c's .text size moves past its ceiling in tests/runtime-budgets.js, raise the ceiling with the measured figure and say so in the commit body
-        status: pending
+        status: done
     Owns: runtime/runtime-os.c, runtime/nish.h, runtime/nish.d.ts, tests/cases/os_nice.ts, tests/cases/os_nice.c, tests/cases/os_nice.ll, tests/self/goldens/checked/tests/cases/os_nice.ts.txt, tests/runtime-budgets.js, docs/LANGUAGE.md, docs/AI.md, docs/guide/using-nish/standard-library.md
 ---
 
