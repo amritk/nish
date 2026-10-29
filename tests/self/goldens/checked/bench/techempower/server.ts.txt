@@ -5402,12 +5402,12 @@ function TlsP256Signer.sign(this: TlsP256Signer, priv: Secret<u8[]>, content: u8
   callee +4:21 tlsEcdsaDerLength -> @nish.tlsEcdsaDerLength
   local +8:11 der: u8[] (const)
   callee +9:5 tlsEcdsaDerInto -> @nish.tlsEcdsaDerInto
-function tlsIsZeroSecret(shared: u8[]): boolean -> @nish.tlsIsZeroSecret
+function tlsIsZeroSecret(shared: u8[]): boolean -> @nish.tlsIsZeroSecret [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   calls: nish.timingSafeEqual nish_arena_mark nish_arena_release nish_panic
   pointer shared: size=0 writesThrough=false captured=false passedTo=nish.timingSafeEqual#0
   stackSites=0 stackLocals=0
-  callee +0:52 timingSafeEqual -> @nish.timingSafeEqual
+  callee +0:59 timingSafeEqual -> @nish.timingSafeEqual
 function tlsHandshakeFromEcdhe256(ecdhe: u8[], salt: u8[]): u8[] -> @nish.tlsHandshakeFromEcdhe256
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.hmacSha256
@@ -5424,7 +5424,7 @@ function tlsHandshakeFromEcdhe384(ecdhe: u8[], salt: u8[]): u8[] -> @nish.tlsHan
   pointer salt: size=0 writesThrough=false captured=false passedTo=nish.hmacSha384#0
   stackSites=0 stackLocals=0
   callee +0:69 hmacSha384 -> @nish.hmacSha384
-function tlsZeroHeld(held: u8[], answer: i32): i32 -> @nish.tlsZeroHeld
+function tlsZeroHeld(held: u8[], answer: i32): i32 -> @nish.tlsZeroHeld [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.wipe$arr.u8
   escaping: answer
@@ -14528,7 +14528,7 @@ function TlsClientHello.constructor(this: TlsClientHello): void -> @nish.TlsClie
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   pointer this: size=152 writesThrough=true captured=false
   stackSites=0 stackLocals=0
-function tlsCopyWindow(data: u8[], at: i32, length: i32): u8[] -> @nish.tlsCopyWindow
+function tlsCopyWindow(data: u8[], at: i32, length: i32): u8[] -> @nish.tlsCopyWindow [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: length
   calls: nish_panic nish_panic_index nish_panic_overflow

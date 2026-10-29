@@ -162,7 +162,7 @@ export const wipeChecks = [
   // the constructor. The other wipes are of `Secret`s, which the holder and
   // exit rules (NL2541) pin at compile time.
   //
-  // `TlsRecordClient`: `wipeRead` 9 and `wipeWrite` 9 (`tlsClientTrafficZero`,
+  // `TlsRecordClient`: `wipeRead` 9 and `wipeWrite` 9 (`tlsZeroHeld`,
   // 2, and the direction's `clear`, 7), `wipe` 47 (the four traffic secret
   // fields, both `clear`s, the three plaintext buffers, 1 each, and
   // `TlsClient.wipe`), `fail` 61 (the alert's seal, 14, and `wipe`), `abort`
@@ -172,7 +172,7 @@ export const wipeChecks = [
   // `updateReadKeys` 30 (the plain copy `tlsClientAdvanceHeld` moves on, once
   // for each hash length, and the keys it installs) and `advance` 716 (every
   // install, the client's pool arms and the `fail`s it can reach). Deleting
-  // `tlsClientTrafficZero`'s `wipe` takes 2 from each direction's wipe and
+  // `tlsZeroHeld`'s `wipe` takes 2 from each direction's wipe and
   // every root above it; any of the three buffers' `secureZero`s 1 from
   // `wipe`, `fail`, `abort` and `handleAlert`; `tlsClientInstallHeld`'s 1
   // from itself and `tlsClientAdvanceHeld`'s 2 from `updateReadKeys`.

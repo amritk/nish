@@ -847,7 +847,7 @@ export class TlsClientHello {
 }
 
 /** A copy of `data[at .. at + length)`. */
-const tlsCopyWindow = (data: u8[], at: i32, length: i32): u8[] => {
+export const tlsCopyWindow = (data: u8[], at: i32, length: i32): u8[] => {
   const out: u8[] = new Array<u8>(length < 0 ? TLS_CODEC_FROM : length)
   for (let k: i32 = 0; k < toI32(out.length) && at + k >= 0 && at + k < toI32(data.length); k++) {
     out[k] = data[at + k]

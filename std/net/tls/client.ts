@@ -66,7 +66,7 @@
 import { Secret, expose, exposeWith, secret, wipe } from "nish:secret"
 import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
-import { timingSafeEqual, timingSafeEqualAt } from "nish/crypto/ct"
+import { timingSafeEqualAt } from "nish/crypto/ct"
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519"
 import { P256_SCALAR_SIZE, p256PublicKey } from "nish/crypto/p256"
 import {
@@ -102,6 +102,7 @@ import {
   tlsReadNewSessionTicket,
   tlsReadServerHello,
   tlsServerHelloDowngrade,
+  tlsCopyWindow,
   tlsWindowString,
   tlsWriteClientHello,
   tlsWriteFinished,
@@ -131,6 +132,7 @@ import {
   TLS_SECRET_SERVER_HANDSHAKE,
   TlsSecretPool,
   tlsHeldCopyIn,
+  tlsIsZeroSecret,
 } from "nish/net/tls"
 
 /** Built; `start` has not written the ClientHello yet. */
@@ -215,11 +217,6 @@ export const tlsClientIsIpLiteral = (name: string): boolean => {
 }
 
 /**
- * Whether `config` can be offered: suites and groups non-empty and known, the
- * share's group among the groups, every ALPN protocol 1 to 255 bytes, and a
- * server name of at most 253 bytes.
- */
-/**
  * The ClientHello's bytes before its extensions, less the session id and
  * suites: the message header (4), version (2), random (32), the session id's
  * length (1), the suites' length (2), compression (2) and the extensions'
@@ -237,6 +234,17 @@ const tlsClientIsAscii = (text: string): boolean => {
   return true
 }
 
+/** Wipes the bytes a `Secret` holds, for `exposeWith`; answers `answer`. */
+const tlsClientZeroHeld = (held: u8[], answer: i32): i32 => {
+  wipe(held)
+  return answer
+}
+
+/**
+ * Whether `config` can be offered: suites and groups non-empty and known, the
+ * share's group among the groups, every ALPN protocol 1 to 255 bytes, and a
+ * server name of at most 253 bytes.
+ */
 const tlsClientConfigFits = (config: TlsClientConfig): boolean => {
   if (toI32(config.suites.length) === 0 || toI32(config.groups.length) === 0) {
     return false
@@ -262,27 +270,6 @@ const tlsClientConfigFits = (config: TlsClientConfig): boolean => {
   return toI32(config.serverName.length) <= TLS_CLIENT_SERVER_NAME_MAX && tlsClientIsAscii(config.serverName)
 }
 
-/** Whether an x25519 shared secret is all zeros, reading every byte (run inside `expose`). */
-const tlsClientIsZeroSecret = (shared: u8[]): boolean => timingSafeEqual(shared, new Array<u8>(X25519_SIZE))
-
-/** Wipes the bytes a `Secret` holds, for `exposeWith`; answers `answer`. */
-const tlsClientZeroHeld = (held: u8[], answer: i32): i32 => {
-  wipe(held)
-  return answer
-}
-
-/** `data[at .. at + length)` in a fresh array. */
-const tlsClientCopy = (data: u8[], at: i32, length: i32): u8[] => {
-  const out: u8[] = new Array<u8>(length)
-  for (let k: i32 = 0; k < toI32(out.length); k++) {
-    const from: i32 = at + k
-    if (from >= 0 && from < toI32(data.length)) {
-      out[k] = data[from]
-    }
-  }
-  return out
-}
-
 export class TlsClient {
   config: TlsClientConfig
   clientRandom: u8[]
@@ -304,8 +291,6 @@ export class TlsClient {
   outputInitial: u8[]
   /** What the client has written at the Handshake level and not handed on: its Finished. */
   outputHandshake: u8[]
-  /** Nothing is ever written at the Application level; empty, for `takeOutput`'s sake. */
-  outputApplication: u8[]
   secrets256: TlsSecretPool
   secrets384: TlsSecretPool
   /** The server message last read, as windows into `input`. */
@@ -337,7 +322,6 @@ export class TlsClient {
   inputLength: i32 = 0
   outputInitialLength: i32 = 0
   outputHandshakeLength: i32 = 0
-  outputApplicationLength: i32 = 0
   /** Whether a HelloRetryRequest was read, so a second is fatal. */
   retried: boolean = false
   /** Whether `server_name` was sent, so that only then may the server acknowledge it. */
@@ -356,7 +340,7 @@ export class TlsClient {
     this.config = config
     this.clientRandom =
       toI32(clientRandom.length) === TLS_RANDOM_SIZE
-        ? tlsClientCopy(clientRandom, TLS_CLIENT_FROM, TLS_RANDOM_SIZE)
+        ? tlsCopyWindow(clientRandom, TLS_CLIENT_FROM, TLS_RANDOM_SIZE)
         : []
     this.x25519Key = secret(new Array<u8>(X25519_SIZE))
     this.p256Key = secret(new Array<u8>(P256_SCALAR_SIZE))
@@ -366,13 +350,12 @@ export class TlsClient {
     secureZero(p256Private)
     // Public, and derived from the public random, so it gives nothing away;
     // its only job is to make the hello look like a resumption (§D.4).
-    this.sessionId = tlsClientCopy(this.clientRandom, TLS_CLIENT_FROM, TLS_CLIENT_SESSION_ID_SIZE)
+    this.sessionId = tlsCopyWindow(this.clientRandom, TLS_CLIENT_FROM, TLS_CLIENT_SESSION_ID_SIZE)
     this.transcript = new TlsTranscript(0)
     this.firstHello = []
     this.input = new Array<u8>(1024)
     this.outputInitial = []
     this.outputHandshake = new Array<u8>(4 + SHA384_SIZE)
-    this.outputApplication = []
     this.secrets256 = new TlsSecretPool(SHA256_SIZE)
     this.secrets384 = new TlsSecretPool(SHA384_SIZE)
     this.view = new TlsServerFlightView()
@@ -405,7 +388,7 @@ export class TlsClient {
     if (end < 0) {
       return this.fail(TLS_ALERT_INTERNAL_ERROR)
     }
-    this.firstHello = tlsClientCopy(this.outputInitial, at, end - at)
+    this.firstHello = tlsCopyWindow(this.outputInitial, at, end - at)
     this.state = TLS_CLIENT_STATE_WAIT_SERVER_HELLO
     return 0
   }
@@ -809,7 +792,7 @@ export class TlsClient {
     this.transcript.restartWithMessageHash()
     this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
     if (view.hasCookie) {
-      this.cookie = tlsClientCopy(view.data, view.cookieAt, view.cookieLength)
+      this.cookie = tlsCopyWindow(view.data, view.cookieAt, view.cookieLength)
     }
     if (view.hasKeyShare) {
       this.shareGroup = view.shareGroup
@@ -851,13 +834,13 @@ export class TlsClient {
       this.wipeKeys()
       return TLS_ALERT_INTERNAL_ERROR
     }
-    const peer: u8[] = tlsClientCopy(view.data, view.shareAt, view.shareLength)
+    const peer: u8[] = tlsCopyWindow(view.data, view.shareAt, view.shareLength)
     const shared: Secret<u8[]> | null = x25519(this.x25519Key, peer)
     this.wipeKeys()
     if (shared === null) {
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
-    if (expose(shared, tlsClientIsZeroSecret)) {
+    if (expose(shared, tlsIsZeroSecret)) {
       wipe(shared)
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
@@ -931,7 +914,7 @@ export class TlsClient {
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
     this.scheme = view.scheme
-    this.signature = tlsClientCopy(view.data, view.signatureAt, view.signatureLength)
+    this.signature = tlsCopyWindow(view.data, view.signatureAt, view.signatureLength)
     this.transcript.update(this.input, TLS_CLIENT_FROM, 4 + length)
     this.state = TLS_CLIENT_STATE_WAIT_AUTH
     return 0
@@ -1085,12 +1068,12 @@ export class TlsClient {
     const none: u8[] = []
     switch (level) {
       case TLS_LEVEL_INITIAL: {
-        const out: u8[] = tlsClientCopy(this.outputInitial, TLS_CLIENT_FROM, this.outputInitialLength)
+        const out: u8[] = tlsCopyWindow(this.outputInitial, TLS_CLIENT_FROM, this.outputInitialLength)
         this.outputInitialLength = 0
         return out
       }
       case TLS_LEVEL_HANDSHAKE: {
-        const out: u8[] = tlsClientCopy(this.outputHandshake, TLS_CLIENT_FROM, this.outputHandshakeLength)
+        const out: u8[] = tlsCopyWindow(this.outputHandshake, TLS_CLIENT_FROM, this.outputHandshakeLength)
         this.outputHandshakeLength = 0
         return out
       }

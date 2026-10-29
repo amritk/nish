@@ -72,6 +72,7 @@ import {
   tlsHeldClone,
   tlsHeldCopyIn,
   tlsHeldCopyOver,
+  tlsZeroHeld,
 } from "nish/net/tls"
 import {
   TLS_CLIENT_STATE_CONNECTED,
@@ -144,12 +145,6 @@ const TLS_MESSAGE_HEADER_SIZE: i32 = 4
 
 /** A typed zero for the offsets below: a bare literal is an `f64` under `--number-mode f64`. */
 const TLS_RECORD_CLIENT_FROM: i32 = 0
-
-/** Zeroes the bytes a traffic secret field holds, for `exposeWith`; answers 0. */
-const tlsClientTrafficZero = (held: u8[], answer: i32): i32 => {
-  wipe(held)
-  return answer
-}
 
 /**
  * Installs `protection` under `suite` from the traffic secret `held`, from a
@@ -297,16 +292,16 @@ export class TlsRecordClient {
 
   /** Wipes the server's application traffic secret and the read keys. */
   wipeRead(): void {
-    exposeWith(this.readTraffic256, TLS_RECORD_CLIENT_FROM, tlsClientTrafficZero)
-    exposeWith(this.readTraffic384, TLS_RECORD_CLIENT_FROM, tlsClientTrafficZero)
+    exposeWith(this.readTraffic256, TLS_RECORD_CLIENT_FROM, tlsZeroHeld)
+    exposeWith(this.readTraffic384, TLS_RECORD_CLIENT_FROM, tlsZeroHeld)
     this.readHash = 0
     this.readProtection.clear()
   }
 
   /** Wipes the client's application traffic secret and its write keys. */
   wipeWrite(): void {
-    exposeWith(this.writeTraffic256, TLS_RECORD_CLIENT_FROM, tlsClientTrafficZero)
-    exposeWith(this.writeTraffic384, TLS_RECORD_CLIENT_FROM, tlsClientTrafficZero)
+    exposeWith(this.writeTraffic256, TLS_RECORD_CLIENT_FROM, tlsZeroHeld)
+    exposeWith(this.writeTraffic384, TLS_RECORD_CLIENT_FROM, tlsZeroHeld)
     this.writeHash = 0
     this.writeProtection.clear()
   }
