@@ -132,7 +132,7 @@ const editDistance = (a: string, b: string, rows: i32[][]): i32 => {
 
 /**
  * The candidate in `names` closest to `typed`, or empty when none is within
- * `max(1, w / 3)` edits for a `typed` of `w` bytes past its dashes; the first
+ * `max(2, w / 3)` edits for a `typed` of `w` bytes past its dashes; the first
  * declared wins a tie.
  */
 const closest = (typed: string, names: string[]): string => {
@@ -151,7 +151,7 @@ const closest = (typed: string, names: string[]): string => {
     dashes = dashes + 1
   }
   const third: i32 = (toI32(typed.length) - dashes) / 3
-  let best: i32 = third > 1 ? third : 1
+  let best: i32 = third > 2 ? third : 2
   let at: i32 = -1
   for (let i: i32 = 0; i < toI32(names.length); i++) {
     const d = editDistance(typed, names[i], rows)
@@ -253,7 +253,9 @@ export class Cli {
   flagRepeatable: boolean[]
   flags: Map<string, i32>
   negations: Map<string, i32>
-  requiredFlags: i32[]
+  cmdRequired: i32[][]
+  globalRequired: i32[]
+  ids: Map<string, i32>
 
   argOwner: i32[]
   argName: string[]
@@ -282,6 +284,7 @@ export class Cli {
     this.cmdLastArg = [-1]
     this.cmdVariadic = [false]
     this.cmdOptionalArg = [false]
+    this.cmdRequired = [[]]
     this.children = new Map<string, i32>()
     this.flagOwner = []
     this.flagShort = []
@@ -297,7 +300,8 @@ export class Cli {
     this.flagRepeatable = []
     this.flags = new Map<string, i32>()
     this.negations = new Map<string, i32>()
-    this.requiredFlags = []
+    this.globalRequired = []
+    this.ids = new Map<string, i32>()
     this.argOwner = []
     this.argName = []
     this.argRequired = []
@@ -354,6 +358,9 @@ export class Cli {
     if (this.cmdFirstArg[p] >= 0) {
       panic(`cli-args: ${call}: ${this.pathOf(p)} takes arguments, so it cannot hold commands`)
     }
+    if (toI32(this.cmdRequired[p].length) > 0) {
+      panic(`cli-args: ${call}: ${this.pathOf(p)} has a required flag, so it cannot hold commands`)
+    }
     const key = scopeKey(p, name)
     if (this.children.has(key)) {
       panic(`cli-args: ${call}: ${this.pathOf(p)} already has a command '${name}'`)
@@ -373,6 +380,7 @@ export class Cli {
     this.cmdLastArg.push(NONE)
     this.cmdVariadic.push(false)
     this.cmdOptionalArg.push(false)
+    this.cmdRequired.push(new Array<i32>(0))
     return handle
   }
 
@@ -381,9 +389,23 @@ export class Cli {
     return this.addCommand(`group(${name})`, parent, name, NONE, description, true)
   }
 
-  /** A command under `parent` that the program runs, answered by `id` in `ParseResult.id`. */
+  /**
+   * A command under `parent` that the program runs, answered by `id` in
+   * `ParseResult.id`: not negative, which is a group's, and no other command's.
+   */
   command(parent: i32, name: string, id: i32, description: string): i32 {
-    return this.addCommand(`command(${name})`, parent, name, id, description, false)
+    const call = `command(${name})`
+    if (id < 0) {
+      panic(`cli-args: ${call}: the id ${id} is negative, which a group answers`)
+    }
+    const key = `${id}`
+    const other = this.ids.get(key) ?? NONE
+    if (other >= 0) {
+      panic(`cli-args: ${call}: ${this.pathOf(other)} already has the id ${id}`)
+    }
+    const handle = this.addCommand(call, parent, name, id, description, false)
+    this.ids.set(key, handle)
+    return handle
   }
 
   /** Another name for the command or group `handle`, in the same scope. */
@@ -485,12 +507,25 @@ export class Cli {
     this.flagHasDefault[h] = true
   }
 
-  /** Makes `f` an error to leave out, for the command that owns it (every command, for a global). */
+  /**
+   * Makes `f` an error to leave out, for the command that owns it (every
+   * command, for a global); a group's flag cannot be, as no parse ends at one.
+   */
   required(f: i32): void {
     const h = this.checkFlag("required", f)
+    const owner: i32 = this.flagOwner[h]
+    if (owner !== GLOBAL && this.cmdGroup[owner]) {
+      panic(
+        `cli-args: required: ${this.pathOf(owner)} holds commands, so --${this.flagLong[h]} can never be checked`
+      )
+    }
     if (!this.flagRequired[h]) {
       this.flagRequired[h] = true
-      this.requiredFlags.push(h)
+      if (owner === GLOBAL) {
+        this.globalRequired.push(h)
+      } else {
+        this.cmdRequired[owner].push(h)
+      }
     }
   }
 
@@ -652,6 +687,7 @@ export class Cli {
           r.command = child
         } else if (r.command === ROOT && token === "help") {
           r.wantHelp = true
+          r.helpWord = true
         } else {
           this.unknownCommand(r, token)
         }
@@ -666,6 +702,7 @@ export class Cli {
   /** Records `token` as no command `r`'s group holds, with the nearest one that it does. */
   unknownCommand(r: ParseResult, token: string): void {
     const near = closest(token, this.childNames(r.command, true))
+    r.badCommand = true
     r.fail(
       r.command,
       near.length > 0 ? `unknown command '${token}' (did you mean '${near}'?)` : `unknown command '${token}'`
@@ -713,7 +750,7 @@ export class Cli {
     return next
   }
 
-  /** Records the cluster `-abc` (or `-l5`, `-l 5`) from `token`; answers the next index. */
+  /** Records the cluster `-abc` (or `-l5`, `-l=5`, `-l 5`) from `token`; answers the next index. */
   shortFlags(r: ParseResult, argv: string[], next: i32, token: string): i32 {
     for (let k: i32 = 1; k < toI32(token.length); k++) {
       const letter = token.substring(k, k + 1)
@@ -727,12 +764,17 @@ export class Cli {
           r.fail(r.command, `unknown flag -${letter}`)
           return next
         }
+        const attached = token.substring(k + 1, token.length)
         if (this.flagValue[f] !== VALUE_NONE) {
-          let attached = token.substring(k + 1, token.length)
           if (attached.startsWith("=")) {
-            attached = attached.substring(1, attached.length)
+            r.set(f, attached.substring(1, attached.length))
+            return next
           }
           return this.takeValue(r, argv, next, f, attached)
+        }
+        if (attached.startsWith("=")) {
+          r.fail(r.command, `-${letter} takes no value`)
+          return next
         }
         r.set(f, "true")
       }
@@ -907,6 +949,10 @@ export class ParseResult {
   /** The status to exit with: 2 for an error, 0 otherwise. */
   exitCode: i32
   wantHelp: boolean
+  /** Whether help was asked for by the word `help`, which a path follows. */
+  helpWord: boolean
+  /** Whether a word named no command, which `help <path>` does not forgive. */
+  badCommand: boolean
   wantVersion: boolean
 
   constructor(cli: Cli) {
@@ -920,9 +966,12 @@ export class ParseResult {
     this.exitCode = 0
     this.errorPath = ""
     this.wantHelp = false
+    this.helpWord = false
+    this.badCommand = false
     this.wantVersion = false
     this.setFlags = []
     this.setValues = []
+
     this.positionalValues = []
     this.restValues = []
   }
@@ -942,19 +991,23 @@ export class ParseResult {
     this.setValues.push(value)
   }
 
-  /** Settles the kind once the walk is over: help, then the version, then an error, then the checks only a whole command line can fail. */
+  /**
+   * Settles the kind once the walk is over: help (unless `help <path>` named
+   * no command), then the version, then an error, then the checks only a
+   * whole command line can fail.
+   */
   finishWalk(): void {
     const cli = this.cli
     const cmd = this.command
     this.id = cli.cmdId[cmd]
     this.path = cli.pathOf(cmd)
-    if (this.wantHelp) {
+    if (this.wantHelp && !(this.helpWord && this.badCommand)) {
       this.kind = PARSE_HELP
       this.message = ""
       this.hint = ""
       return
     }
-    if (this.wantVersion) {
+    if (this.wantVersion && !this.wantHelp) {
       this.kind = PARSE_VERSION
       this.message = `${cli.name} ${cli.version}`
       this.hint = ""
@@ -963,13 +1016,9 @@ export class ParseResult {
     if (cli.cmdGroup[cmd]) {
       this.fail(cmd, `missing command (one of: ${cli.childNames(cmd, false).join(", ")})`)
     }
-    let missing: i32 = -1
-    for (let i: i32 = 0; i < toI32(cli.requiredFlags.length) && missing < 0; i++) {
-      const f = cli.requiredFlags[i]
-      const owner = cli.flagOwner[f]
-      if ((owner === cmd || owner === GLOBAL) && this.lastSet(f) < 0) {
-        missing = f
-      }
+    let missing: i32 = this.firstMissing(cli.cmdRequired[cmd])
+    if (missing < 0) {
+      missing = this.firstMissing(cli.globalRequired)
     }
     if (missing >= 0) {
       this.fail(cmd, `missing required flag ${cli.spelling(missing)}`)
@@ -997,14 +1046,27 @@ export class ParseResult {
     }
   }
 
-  /** Where the last value of flag `f` is in `setValues`, or -1 when it was not given. */
+  /** The first of the `required` flags the arguments did not set, else -1. */
+  firstMissing(required: i32[]): i32 {
+    for (let i: i32 = 0; i < toI32(required.length); i++) {
+      if (this.lastSet(required[i]) < 0) {
+        return required[i]
+      }
+    }
+    return -1
+  }
+
+  /**
+   * Where the last value of flag `f` is in `setValues`, or -1 when it was not
+   * given: a scan of the flags the arguments set, so bounded by their count.
+   */
   lastSet(f: i32): i32 {
     for (let i: i32 = toI32(this.setFlags.length) - 1; i >= 0 && i < toI32(this.setFlags.length); i--) {
       if (this.setFlags[i] === f) {
         return i
       }
     }
-    return -1
+    return NONE
   }
 
   /**

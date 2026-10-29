@@ -60,7 +60,7 @@ class Api {
     this.raw = cli.globalFlag("-r, --raw-output", "print the response as it arrives")
     this.output = cli.globalFlag("-o, --output <format>", "json or table")
     cli.defaultValue(this.output, "table")
-    this.profile = cli.globalFlag("--profile <name>", "read the token from this profile")
+    this.profile = cli.globalFlag("--profile <name>", "read the base URL and token from this profile")
 
     const users = cli.group(ROOT, "users", "Manage users")
     cli.command(users, "list", USERS_LIST, "List users")
@@ -133,9 +133,14 @@ export const main = (): i32 => {
   const r = api.cli.parse(process.argv, FIRST_ARG)
   finish(r, styleFor(1, agent), styleFor(2, agent))
 
-  // A rule the tree cannot state: `source` tells a flag given from one left
-  // at its default, so the check reads what the user typed.
-  if (r.source(api.token) === SOURCE_ARGV && r.source(api.profile) === SOURCE_ARGV) {
+  // A rule the tree cannot state: a profile supplies the base URL, so an
+  // explicit --base-url conflicts with it. --base-url always has a value (its
+  // default), so only `source` tells one the user typed from the default.
+  if (r.source(api.profile) === SOURCE_ARGV && r.source(api.baseUrl) === SOURCE_ARGV) {
+    console.error(`${r.path}: --profile supplies the base URL; drop --base-url or --profile`)
+    return 2
+  }
+  if (r.source(api.profile) === SOURCE_ARGV && r.source(api.token) === SOURCE_ARGV) {
     console.error(`${r.path}: --token and --profile both name the token; give one`)
     return 2
   }

@@ -9,13 +9,17 @@ PASS  forms: --base-url from its default
 PASS  forms: --base-url default
 PASS  forms: --token unset
 PASS  forms: --token is null
-PASS  forms: unset repeatable has no values
 PASS  forms: a value flag given is on
 PASS  forms: a value flag not given is off
 PASS  forms: exit code
 PASS  forms: the last value wins
 PASS  forms: a single flag's values is the last
 PASS  forms: -l3
+PASS  forms: unset repeatable has no values
+PASS  forms: -l= is empty, as --limit= is
+PASS  forms: and takes no next word
+PASS  forms: --limit= is empty
+PASS  forms: --limit= takes no next word
 PASS  forms: a required value takes a dashed token
 PASS  forms: cluster -V
 PASS  forms: cluster -a
@@ -49,6 +53,14 @@ PASS  forms: variadic's first
 PASS  forms: an optional variadic may be empty
 PASS  forms: and its positional is null
 PASS  forms: another command's argument is null
+PASS  forms: required variadic, id
+PASS  forms: required variadic takes the rest
+PASS  forms: negatable --dry-run is on
+PASS  forms: negatable --dry-run from argv
+PASS  forms: --no-dry-run turns it off
+PASS  forms: --no-dry-run from argv
+PASS  forms: negatable not given is off
+PASS  forms: negatable not given is unset
 PASS  globals: before the first verb
 PASS  globals: between verbs
 PASS  globals: -r between verbs
@@ -59,6 +71,8 @@ PASS  globals: -r after the leaf
 PASS  globals: a sibling's local flag is refused
 PASS  globals: refused, message
 PASS  globals: a leaf's flag before the leaf is refused
+PASS  errors: a message for every case
+PASS  errors: a hint for every case
 PASS  errors: users kyes: kind
 PASS  errors: users kyes: exit code
 PASS  errors: users kyes: message
@@ -70,45 +84,95 @@ PASS  errors: users keys list 1 --limt 5: hint
 PASS  errors: users keys list 1 --zzzzzz: kind
 PASS  errors: users keys list 1 --zzzzzz: exit code
 PASS  errors: users keys list 1 --zzzzzz: message
+PASS  errors: users keys list 1 --zzzzzz: hint
 PASS  errors: users keys list 1 -q: kind
 PASS  errors: users keys list 1 -q: exit code
 PASS  errors: users keys list 1 -q: message
+PASS  errors: users keys list 1 -q: hint
 PASS  errors: users keys list 1 --limit: kind
 PASS  errors: users keys list 1 --limit: exit code
 PASS  errors: users keys list 1 --limit: message
+PASS  errors: users keys list 1 --limit: hint
 PASS  errors: users keys list 1 -l: kind
 PASS  errors: users keys list 1 -l: exit code
 PASS  errors: users keys list 1 -l: message
+PASS  errors: users keys list 1 -l: hint
 PASS  errors: users keys list 1 --verbose=yes: kind
 PASS  errors: users keys list 1 --verbose=yes: exit code
 PASS  errors: users keys list 1 --verbose=yes: message
+PASS  errors: users keys list 1 --verbose=yes: hint
 PASS  errors: users keys list 1 --no-color=yes: kind
 PASS  errors: users keys list 1 --no-color=yes: exit code
 PASS  errors: users keys list 1 --no-color=yes: message
+PASS  errors: users keys list 1 --no-color=yes: hint
 PASS  errors: users keys: kind
 PASS  errors: users keys: exit code
 PASS  errors: users keys: message
+PASS  errors: users keys: hint
 PASS  errors: : kind
 PASS  errors: : exit code
 PASS  errors: : message
+PASS  errors: : hint
 PASS  errors: users keys list: kind
 PASS  errors: users keys list: exit code
 PASS  errors: users keys list: message
+PASS  errors: users keys list: hint
 PASS  errors: users keys list 1 2: kind
 PASS  errors: users keys list 1 2: exit code
 PASS  errors: users keys list 1 2: message
+PASS  errors: users keys list 1 2: hint
 PASS  errors: users keys create 1: kind
 PASS  errors: users keys create 1: exit code
 PASS  errors: users keys create 1: message
+PASS  errors: users keys create 1: hint
 PASS  errors: frobnicate: kind
 PASS  errors: frobnicate: exit code
 PASS  errors: frobnicate: message
+PASS  errors: frobnicate: hint
 PASS  errors: --verison: kind
 PASS  errors: --verison: exit code
 PASS  errors: --verison: message
+PASS  errors: --verison: hint
 PASS  errors: users list -v: kind
 PASS  errors: users list -v: exit code
 PASS  errors: users list -v: message
+PASS  errors: users list -v: hint
+PASS  errors: users keys list 1 --lmt 5: kind
+PASS  errors: users keys list 1 --lmt 5: exit code
+PASS  errors: users keys list 1 --lmt 5: message
+PASS  errors: users keys list 1 --lmt 5: hint
+PASS  errors: users kyz: kind
+PASS  errors: users kyz: exit code
+PASS  errors: users kyz: message
+PASS  errors: users kyz: hint
+PASS  errors: help kyes: kind
+PASS  errors: help kyes: exit code
+PASS  errors: help kyes: message
+PASS  errors: help kyes: hint
+PASS  errors: help users kyes: kind
+PASS  errors: help users kyes: exit code
+PASS  errors: help users kyes: message
+PASS  errors: help users kyes: hint
+PASS  errors: help users nope --help: kind
+PASS  errors: help users nope --help: exit code
+PASS  errors: help users nope --help: message
+PASS  errors: help users nope --help: hint
+PASS  errors: users keys list 1 -r=x: kind
+PASS  errors: users keys list 1 -r=x: exit code
+PASS  errors: users keys list 1 -r=x: message
+PASS  errors: users keys list 1 -r=x: hint
+PASS  errors: users keys list 1 -ar=x: kind
+PASS  errors: users keys list 1 -ar=x: exit code
+PASS  errors: users keys list 1 -ar=x: message
+PASS  errors: users keys list 1 -ar=x: hint
+PASS  errors: p tag web: kind
+PASS  errors: p tag web: exit code
+PASS  errors: p tag web: message
+PASS  errors: p tag web: hint
+PASS  errors: p tag: kind
+PASS  errors: p tag: exit code
+PASS  errors: p tag: message
+PASS  errors: p tag: hint
 PASS  errors: the first error wins
 PASS  errors: an unknown command stops the descent
 PASS  help: -h
@@ -120,6 +184,9 @@ PASS  help: wins over an error
 PASS  help: help <path>
 PASS  help: help <path> reaches it
 PASS  help: help alone
+PASS  help: help <unknown path> is an error
+PASS  help: help <unknown path> exits 2
+PASS  help: help <unknown path> --version is still an error
 PASS  help: after --, -h is a word
 PASS  version: --version
 PASS  version: message
@@ -129,10 +196,9 @@ PASS  version: -v below the root is unknown
 PASS  help page: root
 PASS  help page: group
 PASS  help page: leaf
-PASS  help page: required and variadic
-PASS  help page: required flag
+PASS  help page: required, variadic and negatable
 PASS  wide: the last leaf's id
 PASS  wide: its last flag
 PASS  wide: every parse finds it
 PASS  wide: a parse is under 10 µs
-std/cli-args: 137 passed, 0 failed, 0 skipped
+std/cli-args: 203 passed, 0 failed, 0 skipped

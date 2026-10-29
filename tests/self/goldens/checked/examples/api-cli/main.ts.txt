@@ -140,41 +140,43 @@ function main(): i32 -> @nish_main [exported entry]
   callee +3:3 finish -> @nish.finish
   callee +3:13 styleFor -> @nish.styleFor
   callee +3:33 styleFor -> @nish.styleFor
-  callee +7:7 ParseResult.source -> @nish.ParseResult.source
-  callee +7:46 ParseResult.source -> @nish.ParseResult.source
-  local +11:9 output: string (const)
-  callee +11:18 ParseResult.value -> @nish.ParseResult.value
-  callee +19:7 send -> @send$
-  callee +19:12 call -> @call
-  callee +22:7 send -> @send$
-  callee +22:12 call -> @call
-  callee +22:42 ParseResult.positional -> @nish.ParseResult.positional
-  local +25:13 w: JsonWriter (const)
-  callee +25:17 call -> @call
-  callee +25:47 ParseResult.positional -> @nish.ParseResult.positional
-  callee +26:7 JsonWriter.key -> @nish.JsonWriter.key
-  local +27:13 limit: string | null (const)
-  callee +27:21 ParseResult.value -> @nish.ParseResult.value
-  callee +29:9 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
-  callee +31:9 JsonWriter.string -> @nish.JsonWriter.string
-  callee +33:7 list -> @list
-  callee +33:23 ParseResult.values -> @nish.ParseResult.values
-  callee +34:7 JsonWriter.key -> @nish.JsonWriter.key
-  callee +35:7 JsonWriter.boolean -> @nish.JsonWriter.boolean
-  callee +35:17 ParseResult.flag -> @nish.ParseResult.flag
-  callee +36:7 send -> @send$
-  local +40:13 w: JsonWriter (const)
-  callee +40:17 call -> @call
-  callee +40:48 ParseResult.positional -> @nish.ParseResult.positional
-  callee +41:7 JsonWriter.key -> @nish.JsonWriter.key
-  callee +42:7 JsonWriter.string -> @nish.JsonWriter.string
-  callee +42:16 ParseResult.value -> @nish.ParseResult.value
-  callee +43:7 list -> @list
-  callee +43:25 ParseResult.positionals -> @nish.ParseResult.positionals
-  callee +44:7 send -> @send$
-  callee +48:7 send -> @send$
-  callee +48:12 call -> @call
-  callee +48:32 ParseResult.flag -> @nish.ParseResult.flag
+  callee +8:7 ParseResult.source -> @nish.ParseResult.source
+  callee +8:48 ParseResult.source -> @nish.ParseResult.source
+  callee +12:7 ParseResult.source -> @nish.ParseResult.source
+  callee +12:48 ParseResult.source -> @nish.ParseResult.source
+  local +16:9 output: string (const)
+  callee +16:18 ParseResult.value -> @nish.ParseResult.value
+  callee +24:7 send -> @send$
+  callee +24:12 call -> @call
+  callee +27:7 send -> @send$
+  callee +27:12 call -> @call
+  callee +27:42 ParseResult.positional -> @nish.ParseResult.positional
+  local +30:13 w: JsonWriter (const)
+  callee +30:17 call -> @call
+  callee +30:47 ParseResult.positional -> @nish.ParseResult.positional
+  callee +31:7 JsonWriter.key -> @nish.JsonWriter.key
+  local +32:13 limit: string | null (const)
+  callee +32:21 ParseResult.value -> @nish.ParseResult.value
+  callee +34:9 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee +36:9 JsonWriter.string -> @nish.JsonWriter.string
+  callee +38:7 list -> @list
+  callee +38:23 ParseResult.values -> @nish.ParseResult.values
+  callee +39:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee +40:7 JsonWriter.boolean -> @nish.JsonWriter.boolean
+  callee +40:17 ParseResult.flag -> @nish.ParseResult.flag
+  callee +41:7 send -> @send$
+  local +45:13 w: JsonWriter (const)
+  callee +45:17 call -> @call
+  callee +45:48 ParseResult.positional -> @nish.ParseResult.positional
+  callee +46:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee +47:7 JsonWriter.string -> @nish.JsonWriter.string
+  callee +47:16 ParseResult.value -> @nish.ParseResult.value
+  callee +48:7 list -> @list
+  callee +48:25 ParseResult.positionals -> @nish.ParseResult.positionals
+  callee +49:7 send -> @send$
+  callee +53:7 send -> @send$
+  callee +53:12 call -> @call
+  callee +53:32 ParseResult.flag -> @nish.ParseResult.flag
 module std/cli-args.ts [package nish]
 import HelpMenu from "nish/cli" -> struct HelpMenu
 import Style from "nish/cli" -> struct Style
@@ -201,7 +203,7 @@ struct FlagSpec (class) size=32 align=8
   field value: i32 index=3 offset=24
   field negated: boolean index=4 offset=28
   constructor -> @nish.FlagSpec.constructor
-struct Cli (class) size=320 align=8 exported
+struct Cli (class) size=336 align=8 exported
   field name: string index=0 offset=0
   field version: string index=1 offset=8
   field description: string index=2 offset=16
@@ -234,14 +236,16 @@ struct Cli (class) size=320 align=8 exported
   field flagRepeatable: boolean[] index=29 offset=232
   field flags: Map<string, i32> index=30 offset=240
   field negations: Map<string, i32> index=31 offset=248
-  field requiredFlags: i32[] index=32 offset=256
-  field argOwner: i32[] index=33 offset=264
-  field argName: string[] index=34 offset=272
-  field argRequired: boolean[] index=35 offset=280
-  field argVariadic: boolean[] index=36 offset=288
-  field argDesc: string[] index=37 offset=296
-  field argIndex: i32[] index=38 offset=304
-  field argNext: i32[] index=39 offset=312
+  field cmdRequired: i32[][] index=32 offset=256
+  field globalRequired: i32[] index=33 offset=264
+  field ids: Map<string, i32> index=34 offset=272
+  field argOwner: i32[] index=35 offset=280
+  field argName: string[] index=36 offset=288
+  field argRequired: boolean[] index=37 offset=296
+  field argVariadic: boolean[] index=38 offset=304
+  field argDesc: string[] index=39 offset=312
+  field argIndex: i32[] index=40 offset=320
+  field argNext: i32[] index=41 offset=328
   constructor -> @nish.Cli.constructor
   method checkCommand -> @nish.Cli.checkCommand
   method checkFlag -> @nish.Cli.checkFlag
@@ -296,11 +300,14 @@ struct ParseResult (class) size=96 align=8 exported
   field id: i32 index=11 offset=80
   field exitCode: i32 index=12 offset=84
   field wantHelp: boolean index=13 offset=88
-  field wantVersion: boolean index=14 offset=89
+  field helpWord: boolean index=14 offset=89
+  field badCommand: boolean index=15 offset=90
+  field wantVersion: boolean index=16 offset=91
   constructor -> @nish.ParseResult.constructor
   method fail -> @nish.ParseResult.fail
   method set -> @nish.ParseResult.set
   method finishWalk -> @nish.ParseResult.finishWalk
+  method firstMissing -> @nish.ParseResult.firstMissing
   method lastSet -> @nish.ParseResult.lastSet
   method flag -> @nish.ParseResult.flag
   method value -> @nish.ParseResult.value
@@ -376,41 +383,42 @@ function Cli.constructor(this: Cli, name: string, version: string, description: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: description name version
   calls: nish.Map$str$i32.constructor nish_alloc_struct
-  pointer this: size=320 writesThrough=true captured=false
+  pointer this: size=336 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:21 new Map<string, i32> -> @nish.Map$str$i32.constructor
   callee +13:18 new Map<string, i32> -> @nish.Map$str$i32.constructor
   callee +14:22 new Map<string, i32> -> @nish.Map$str$i32.constructor
+  callee +16:16 new Map<string, i32> -> @nish.Map$str$i32.constructor
 function Cli.checkCommand(this: Cli, call: string, handle: i32): i32 -> @nish.Cli.checkCommand [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: handle
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=320 writesThrough=false captured=false
+  pointer this: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Cli.checkFlag(this: Cli, call: string, handle: i32): i32 -> @nish.Cli.checkFlag [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: handle
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=320 writesThrough=false captured=false
+  pointer this: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Cli.checkArgument(this: Cli, call: string, handle: i32): i32 -> @nish.Cli.checkArgument [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: handle
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=320 writesThrough=false captured=false
+  pointer this: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Cli.pathOf(this: Cli, handle: i32): string -> @nish.Cli.pathOf [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: handle
   calls: nish.Cli.checkCommand nish_panic_index
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
   stackSites=0 stackLocals=0
   callee +0:25 Cli.checkCommand -> @nish.Cli.checkCommand
 function Cli.isGroup(this: Cli, handle: i32): boolean -> @nish.Cli.isGroup [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: handle
   calls: nish.Cli.checkCommand nish_panic_index
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
   stackSites=0 stackLocals=0
   local +0:11 h: i32 (const)
   callee +0:15 Cli.checkCommand -> @nish.Cli.checkCommand
@@ -419,11 +427,12 @@ function Cli.addCommand(this: Cli, call: string, parent: i32, name: string, id: 
   sharedWrite: +0:5
   escaping: call description group id name parent
   calls: nish.Cli.checkCommand nish.Cli.pathOf nish.Map$str$i32.has nish.Map$str$i32.set nish.isWord nish.scopeKey nish_array_grow nish_panic nish_panic_index nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0
   stackSites=0 stackLocals=0
-  local -16:11 p: i32 (const)
-  callee -16:15 Cli.checkCommand -> @nish.Cli.checkCommand
-  callee -15:10 isWord -> @nish.isWord
+  local -19:11 p: i32 (const)
+  callee -19:15 Cli.checkCommand -> @nish.Cli.checkCommand
+  callee -18:10 isWord -> @nish.isWord
+  callee -14:35 Cli.pathOf -> @nish.Cli.pathOf
   callee -11:35 Cli.pathOf -> @nish.Cli.pathOf
   callee -8:35 Cli.pathOf -> @nish.Cli.pathOf
   local -6:11 key: string (const)
@@ -437,23 +446,30 @@ function Cli.group(this: Cli, parent: i32, name: string, description: string): i
   sharedWrite: via nish.Cli.addCommand
   escaping: description name parent
   calls: nish.Cli.addCommand nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.addCommand#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.addCommand#0
   stackSites=0 stackLocals=0
   callee +0:12 Cli.addCommand -> @nish.Cli.addCommand
 function Cli.command(this: Cli, parent: i32, name: string, id: i32, description: string): i32 -> @nish.Cli.command [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.Cli.addCommand
   escaping: description id name parent
-  calls: nish.Cli.addCommand nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.addCommand#0
+  calls: nish.Cli.addCommand nish.Cli.pathOf nish.Map$str$i32.probe nish.Map$str$i32.set nish.Map$str$i32.valueAt nish_panic nish_str_concat nish_str_from_i32
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.pathOf#0 nish.Cli.addCommand#0
   stackSites=0 stackLocals=0
-  callee +0:12 Cli.addCommand -> @nish.Cli.addCommand
+  local +0:11 call: string (const)
+  local +4:11 key: string (const)
+  local +5:11 other: i32 (const)
+  callee +5:19 Map<string, i32>.probe -> @nish.Map$str$i32.probe
+  callee +7:35 Cli.pathOf -> @nish.Cli.pathOf
+  local +9:11 handle: i32 (const)
+  callee +9:20 Cli.addCommand -> @nish.Cli.addCommand
+  callee +10:5 Map<string, i32>.set -> @nish.Map$str$i32.set
 function Cli.alias(this: Cli, handle: i32, name: string): void -> @nish.Cli.alias [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: handle name
   calls: nish.Cli.checkCommand nish.Cli.pathOf nish.Map$str$i32.has nish.Map$str$i32.set nish.isWord nish.scopeKey nish_array_grow nish_panic nish_panic_index nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0
   stackSites=0 stackLocals=0
   local -13:11 call: string (const)
   local -12:11 h: i32 (const)
@@ -468,7 +484,7 @@ function Cli.scopeHas(this: Cli, scope: i32, spec: FlagSpec): boolean -> @nish.C
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: scope
   calls: nish.Map$str$i32.has nish.scopeKey nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false
+  pointer this: size=336 writesThrough=false captured=false
   pointer spec: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 Map<string, i32>.has -> @nish.Map$str$i32.has
@@ -482,7 +498,7 @@ function Cli.addFlag(this: Cli, call: string, scope: i32, spec: string, descript
   sharedWrite: +0:5
   escaping: call description scope spec
   calls: nish.Cli.pathOf nish.Cli.scopeHas nish.FlagSpec.constructor nish.Map$str$i32.set nish.scopeKey nish_array_grow nish_panic nish_panic_index nish_str_concat nish_str_eq
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.scopeHas#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0 nish.Cli.scopeHas#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.scopeHas#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0 nish.Cli.scopeHas#0
   stackSites=1 stackLocals=1
   local -29:11 s: FlagSpec (const)
   callee -29:15 new FlagSpec -> @nish.FlagSpec.constructor
@@ -505,7 +521,7 @@ function Cli.globalFlag(this: Cli, spec: string, description: string): i32 -> @n
   sharedWrite: via nish.Cli.addFlag
   escaping: description spec
   calls: nish.Cli.addFlag nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.addFlag#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.addFlag#0
   stackSites=0 stackLocals=0
   callee +0:12 Cli.addFlag -> @nish.Cli.addFlag
 function Cli.flag(this: Cli, cmd: i32, spec: string, description: string): i32 -> @nish.Cli.flag [exported method]
@@ -513,7 +529,7 @@ function Cli.flag(this: Cli, cmd: i32, spec: string, description: string): i32 -
   sharedWrite: via nish.Cli.addFlag
   escaping: cmd description spec
   calls: nish.Cli.addFlag nish.Cli.checkCommand nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.addFlag#0 nish.Cli.checkCommand#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.addFlag#0 nish.Cli.checkCommand#0
   stackSites=0 stackLocals=0
   local +0:11 call: string (const)
   callee +1:12 Cli.addFlag -> @nish.Cli.addFlag
@@ -523,7 +539,7 @@ function Cli.defaultValue(this: Cli, f: i32, value: string): void -> @nish.Cli.d
   sharedWrite: +0:5
   escaping: f value
   calls: nish.Cli.checkFlag nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
   stackSites=0 stackLocals=0
   local -5:11 call: string (const)
   local -4:11 h: i32 (const)
@@ -532,17 +548,19 @@ function Cli.required(this: Cli, f: i32): void -> @nish.Cli.required [exported m
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: f
-  calls: nish.Cli.checkFlag nish_array_grow nish_panic_index
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  calls: nish.Cli.checkFlag nish.Cli.pathOf nish_array_grow nish_panic nish_panic_index nish_str_concat
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0 nish.Cli.pathOf#0
   stackSites=0 stackLocals=0
-  local -2:11 h: i32 (const)
-  callee -2:15 Cli.checkFlag -> @nish.Cli.checkFlag
+  local -8:11 h: i32 (const)
+  callee -8:15 Cli.checkFlag -> @nish.Cli.checkFlag
+  local -7:11 owner: i32 (const)
+  callee -4:32 Cli.pathOf -> @nish.Cli.pathOf
 function Cli.repeatable(this: Cli, f: i32): void -> @nish.Cli.repeatable [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: f
   calls: nish.Cli.checkFlag nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
   stackSites=0 stackLocals=0
   local -4:11 h: i32 (const)
   callee -4:15 Cli.checkFlag -> @nish.Cli.checkFlag
@@ -551,7 +569,7 @@ function Cli.negatable(this: Cli, f: i32): void -> @nish.Cli.negatable [exported
   sharedWrite: +0:5
   escaping: f
   calls: nish.Cli.checkFlag nish.Map$str$i32.has nish.Map$str$i32.set nish.scopeKey nish_panic nish_panic_index nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
   stackSites=0 stackLocals=0
   local -10:11 h: i32 (const)
   callee -10:15 Cli.checkFlag -> @nish.Cli.checkFlag
@@ -566,7 +584,7 @@ function Cli.argument(this: Cli, cmd: i32, spec: string, description: string): i
   sharedWrite: +0:7
   escaping: cmd description
   calls: nish.Cli.checkCommand nish.Cli.pathOf nish.isWord nish_array_grow nish_panic nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_new
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0
   stackSites=0 stackLocals=0
   local -27:11 call: string (const)
   local -26:11 c: i32 (const)
@@ -584,7 +602,7 @@ function Cli.epilog(this: Cli, handle: i32, text: string): void -> @nish.Cli.epi
   sharedWrite: +0:5
   escaping: handle text
   calls: nish.Cli.checkCommand nish_panic_index
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
   stackSites=0 stackLocals=0
   local -1:11 h: i32 (const)
   callee -1:15 Cli.checkCommand -> @nish.Cli.checkCommand
@@ -592,7 +610,7 @@ function Cli.lookup(this: Cli, table: Map<string, i32>, cmd: i32, name: string):
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: cmd name
   calls: nish.Map$str$i32.probe nish.Map$str$i32.valueAt nish.scopeKey
-  pointer this: size=320 writesThrough=false captured=false
+  pointer this: size=336 writesThrough=false captured=false
   pointer table: size=56 writesThrough=false captured=false passedTo=nish.Map$str$i32.probe#0 nish.Map$str$i32.probe#0
   stackSites=0 stackLocals=0
   local +0:11 own: i32 (const)
@@ -604,21 +622,21 @@ function Cli.spelling(this: Cli, f: i32): string -> @nish.Cli.spelling [exported
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: f
   calls: nish.Cli.checkFlag nish_panic_index nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
   stackSites=0 stackLocals=0
   local +0:11 h: i32 (const)
   callee +0:15 Cli.checkFlag -> @nish.Cli.checkFlag
 function Cli.longNames(this: Cli, cmd: i32): string[] -> @nish.Cli.longNames [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow nish_panic_index nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false
+  pointer this: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 names: string[] (const)
   local +1:14 f: i32 (let)
 function Cli.childNames(this: Cli, cmd: i32, withAliases: boolean): string[] -> @nish.Cli.childNames [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow nish_panic_index
-  pointer this: size=320 writesThrough=false captured=false
+  pointer this: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 names: string[] (const)
   local +1:14 c: i32 (let)
@@ -629,7 +647,7 @@ function Cli.parse(this: Cli, argv: string[], start: i32): ParseResult -> @nish.
   sharedWrite: via nish.Cli.longFlag
   escaping: start
   calls: nish.Cli.longFlag nish.Cli.shortFlags nish.Cli.unknownCommand nish.Map$str$i32.probe nish.Map$str$i32.valueAt nish.ParseResult.constructor nish.ParseResult.finishWalk nish.scopeKey nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_eq
-  pointer this: size=320 writesThrough=true captured=true passedTo=nish.ParseResult.constructor#1 nish.Cli.longFlag#0 nish.Cli.shortFlags#0 nish.Cli.unknownCommand#0
+  pointer this: size=336 writesThrough=true captured=true passedTo=nish.ParseResult.constructor#1 nish.Cli.longFlag#0 nish.Cli.shortFlags#0 nish.Cli.unknownCommand#0
   pointer argv: size=0 writesThrough=true captured=false passedTo=nish.Cli.longFlag#2 nish.Cli.shortFlags#2
   stackSites=0 stackLocals=0
   local +0:11 r: ParseResult (const)
@@ -642,26 +660,26 @@ function Cli.parse(this: Cli, argv: string[], start: i32): ParseResult -> @nish.
   local +14:15 child: i32 (const)
   callee +14:23 Map<string, i32>.probe -> @nish.Map$str$i32.probe
   callee +14:41 scopeKey -> @nish.scopeKey
-  callee +20:11 Cli.unknownCommand -> @nish.Cli.unknownCommand
-  callee +26:5 ParseResult.finishWalk -> @nish.ParseResult.finishWalk
+  callee +21:11 Cli.unknownCommand -> @nish.Cli.unknownCommand
+  callee +27:5 ParseResult.finishWalk -> @nish.ParseResult.finishWalk
 function Cli.unknownCommand(this: Cli, r: ParseResult, token: string): void -> @nish.Cli.unknownCommand [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via nish.closest
+  sharedWrite: +0:5
   escaping: token
   calls: nish.Cli.childNames nish.ParseResult.fail nish.closest nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.childNames#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.childNames#0
   pointer r: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.fail#0
   stackSites=0 stackLocals=0
-  local +0:11 near: string (const)
-  callee +0:18 closest -> @nish.closest
-  callee +0:33 Cli.childNames -> @nish.Cli.childNames
+  local -1:11 near: string (const)
+  callee -1:18 closest -> @nish.closest
+  callee -1:33 Cli.childNames -> @nish.Cli.childNames
   callee +1:5 ParseResult.fail -> @nish.ParseResult.fail
 function Cli.longFlag(this: Cli, r: ParseResult, argv: string[], next: i32, token: string): i32 -> @nish.Cli.longFlag [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: next token
   calls: nish.Cli.longNames nish.Cli.lookup nish.Cli.takeValue nish.ParseResult.fail nish.ParseResult.set nish.closest nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.lookup#0 nish.Cli.takeValue#0 nish.Cli.lookup#0 nish.Cli.longNames#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.lookup#0 nish.Cli.takeValue#0 nish.Cli.lookup#0 nish.Cli.longNames#0
   pointer r: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.fail#0 nish.ParseResult.set#0 nish.Cli.takeValue#1 nish.ParseResult.fail#0 nish.ParseResult.set#0 nish.ParseResult.fail#0
   pointer argv: size=0 writesThrough=true captured=false passedTo=nish.Cli.takeValue#2
   stackSites=0 stackLocals=0
@@ -685,8 +703,8 @@ function Cli.shortFlags(this: Cli, r: ParseResult, argv: string[], next: i32, to
   sharedWrite: +0:9
   escaping: next
   calls: nish.Cli.lookup nish.Cli.takeValue nish.ParseResult.fail nish.ParseResult.set nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_new
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.lookup#0 nish.Cli.takeValue#0
-  pointer r: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.fail#0 nish.Cli.takeValue#1 nish.ParseResult.set#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.lookup#0 nish.Cli.takeValue#0
+  pointer r: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.fail#0 nish.ParseResult.set#0 nish.Cli.takeValue#1 nish.ParseResult.fail#0 nish.ParseResult.set#0
   pointer argv: size=0 writesThrough=true captured=false passedTo=nish.Cli.takeValue#2
   stackSites=0 stackLocals=0
   local -3:14 k: i32 (let)
@@ -694,15 +712,17 @@ function Cli.shortFlags(this: Cli, r: ParseResult, argv: string[], next: i32, to
   local +4:15 f: i32 (const)
   callee +4:19 Cli.lookup -> @nish.Cli.lookup
   callee +6:11 ParseResult.fail -> @nish.ParseResult.fail
-  local +10:15 attached: string (let)
-  callee +14:18 Cli.takeValue -> @nish.Cli.takeValue
-  callee +16:9 ParseResult.set -> @nish.ParseResult.set
+  local +9:15 attached: string (const)
+  callee +12:13 ParseResult.set -> @nish.ParseResult.set
+  callee +15:18 Cli.takeValue -> @nish.Cli.takeValue
+  callee +18:11 ParseResult.fail -> @nish.ParseResult.fail
+  callee +21:9 ParseResult.set -> @nish.ParseResult.set
 function Cli.takeValue(this: Cli, r: ParseResult, argv: string[], next: i32, f: i32, attached: string): i32 -> @nish.Cli.takeValue [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.ParseResult.set
   escaping: attached f next
   calls: nish.ParseResult.fail nish.ParseResult.set nish_panic_index nish_panic_overflow nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false
+  pointer this: size=336 writesThrough=false captured=false
   pointer r: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.set#0 nish.ParseResult.set#0 nish.ParseResult.fail#0 nish.ParseResult.set#0 nish.ParseResult.set#0 nish.ParseResult.set#0
   pointer argv: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -718,7 +738,7 @@ function Cli.flagLabel(this: Cli, f: i32): string -> @nish.Cli.flagLabel [export
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: f
   calls: nish.Cli.spelling nish_panic_index nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.spelling#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.spelling#0
   stackSites=0 stackLocals=0
   local +0:11 long: string (const)
   callee +0:73 Cli.spelling -> @nish.Cli.spelling
@@ -726,7 +746,7 @@ function Cli.flagText(this: Cli, f: i32): string -> @nish.Cli.flagText [exported
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: f
   calls: nish_panic_index nish_str_concat
-  pointer this: size=320 writesThrough=false captured=false
+  pointer this: size=336 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 text: string (let)
 function Cli.flagRows(this: Cli, rows: HelpRow[], section: string, owner: i32): void -> @nish.Cli.flagRows [exported method]
@@ -734,7 +754,7 @@ function Cli.flagRows(this: Cli, rows: HelpRow[], section: string, owner: i32): 
   sharedWrite: +0:9
   escaping: section
   calls: nish.Cli.flagLabel nish.Cli.flagText nish.HelpRow.constructor nish_alloc_struct nish_array_grow nish_panic_index
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.flagLabel#0 nish.Cli.flagText#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.flagLabel#0 nish.Cli.flagText#0
   pointer rows: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -2:14 f: i32 (let)
@@ -746,7 +766,7 @@ function Cli.helpText(this: Cli, handle: i32, style: Style): string -> @nish.Cli
   sharedWrite: via nish.HelpMenu.header
   escaping: handle
   calls: nish.Cli.checkCommand nish.Cli.flagRows nish.Cli.pathOf nish.HelpMenu.constructor nish.HelpMenu.header nish.HelpMenu.line nish.HelpMenu.row nish.HelpMenu.section nish.HelpMenu.text nish.HelpMenu.usage nish.HelpRow.constructor nish.minI32 nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0 nish.Cli.flagRows#0 nish.Cli.flagRows#0
+  pointer this: size=336 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0 nish.Cli.flagRows#0 nish.Cli.flagRows#0
   pointer style: size=2 writesThrough=true captured=true passedTo=nish.HelpMenu.constructor#1
   stackSites=3 stackLocals=3
   local +0:11 cmd: i32 (const)
@@ -795,7 +815,7 @@ function ParseResult.constructor(this: ParseResult, cli: Cli): void -> @nish.Par
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: cli
   pointer this: size=96 writesThrough=true captured=false
-  pointer cli: size=320 writesThrough=true captured=true
+  pointer cli: size=336 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ParseResult.fail(this: ParseResult, cmd: i32, text: string): void -> @nish.ParseResult.fail [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -815,8 +835,8 @@ function ParseResult.set(this: ParseResult, f: i32, value: string): void -> @nis
 function ParseResult.finishWalk(this: ParseResult): void -> @nish.ParseResult.finishWalk [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: nish.Cli.childNames nish.Cli.pathOf nish.Cli.spelling nish.ParseResult.fail nish.ParseResult.lastSet nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat
-  pointer this: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.fail#0 nish.ParseResult.lastSet#0 nish.ParseResult.fail#0 nish.ParseResult.fail#0 nish.ParseResult.fail#0
+  calls: nish.Cli.childNames nish.Cli.pathOf nish.Cli.spelling nish.ParseResult.fail nish.ParseResult.firstMissing nish_alloc_struct nish_panic_index nish_panic_overflow nish_str_concat
+  pointer this: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.fail#0 nish.ParseResult.firstMissing#0 nish.ParseResult.firstMissing#0 nish.ParseResult.fail#0 nish.ParseResult.fail#0 nish.ParseResult.fail#0
   stackSites=0 stackLocals=0
   local -2:11 cli: Cli (const)
   local -1:11 cmd: i32 (const)
@@ -824,18 +844,24 @@ function ParseResult.finishWalk(this: ParseResult): void -> @nish.ParseResult.fi
   callee +15:7 ParseResult.fail -> @nish.ParseResult.fail
   callee +15:50 Cli.childNames -> @nish.Cli.childNames
   local +17:9 missing: i32 (let)
-  local +18:14 i: i32 (let)
-  local +19:13 f: i32 (const)
-  local +20:13 owner: i32 (const)
-  callee +21:50 ParseResult.lastSet -> @nish.ParseResult.lastSet
-  callee +26:7 ParseResult.fail -> @nish.ParseResult.fail
-  callee +26:47 Cli.spelling -> @nish.Cli.spelling
-  local +28:9 a: i32 (let)
-  local +29:9 last: i32 (let)
-  local +32:15 dots: string (const)
-  callee +33:9 ParseResult.fail -> @nish.ParseResult.fail
-  local +38:9 taken: i32 (let)
-  callee +43:7 ParseResult.fail -> @nish.ParseResult.fail
+  callee +17:24 ParseResult.firstMissing -> @nish.ParseResult.firstMissing
+  callee +19:17 ParseResult.firstMissing -> @nish.ParseResult.firstMissing
+  callee +22:7 ParseResult.fail -> @nish.ParseResult.fail
+  callee +22:47 Cli.spelling -> @nish.Cli.spelling
+  local +24:9 a: i32 (let)
+  local +25:9 last: i32 (let)
+  local +28:15 dots: string (const)
+  callee +29:9 ParseResult.fail -> @nish.ParseResult.fail
+  local +34:9 taken: i32 (let)
+  callee +39:7 ParseResult.fail -> @nish.ParseResult.fail
+function ParseResult.firstMissing(this: ParseResult, required: i32[]): i32 -> @nish.ParseResult.firstMissing [exported method]
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.ParseResult.lastSet
+  pointer this: size=96 writesThrough=false captured=false passedTo=nish.ParseResult.lastSet#0
+  pointer required: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +0:14 i: i32 (let)
+  callee +1:11 ParseResult.lastSet -> @nish.ParseResult.lastSet
 function ParseResult.lastSet(this: ParseResult, f: i32): i32 -> @nish.ParseResult.lastSet [exported method]
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer this: size=96 writesThrough=false captured=false

@@ -1053,7 +1053,8 @@ has no function values; instead every declaration answers a handle, an
 by a name a typo could miss. Each command gets an id you choose, which a
 `switch` on `r.id` dispatches on. A mistake in the declarations — a flag
 declared twice in one scope, a bad spec, a required argument after an
-optional one — panics at the call that made it, naming it. A module constant
+optional one, a command id used twice or negative, a required flag on a
+command that holds commands — panics at the call that made it, naming it. A module constant
 can only be a number, a boolean or a string, so build the tree in `main` or
 in a class's constructor.
 
@@ -1067,13 +1068,14 @@ verbs. `argument(cmd, spec, description)` declares the next positional
 argument. `defaultValue`, `required`, `repeatable` and `negatable` refine a
 flag, and `epilog(handle, text)` ends a command's help with a paragraph.
 `-h`/`--help` (anywhere), `-v`/`--version` (at the root) and the word `help`
-as the first command are built in.
+as the first command are built in; `help users kyes`, naming no command, is
+the unknown-command error rather than help.
 
 | Spec | Means |
 | --- | --- |
 | `--all` | a boolean, given as `--all` |
 | `-a, --all` | the same, also as `-a`; short flags cluster (`-ar`) |
-| `--limit <n>` | takes a value: `--limit 5`, `--limit=5`, `-l5`, `-l 5` |
+| `--limit <n>` | takes a value: `--limit 5`, `--limit=5`, `-l5`, `-l=5`, `-l 5`; `--limit=` and `-l=` give `""` |
 | `--format [fmt]` | the value is optional: `--format json`; given none, `""` |
 | `--no-color` | on by default; `--no-color` turns it off, `--color` back on |
 | `<id>` / `[id]` | a required / optional argument |
@@ -1100,7 +1102,8 @@ a `ParseResult`.
 the tree cannot state reads, such as two flags that may not be given
 together. `finish(r, outStyle, errStyle)` prints help or the version on
 standard output and exits 0, prints an error and a pointer to the help on
-standard error and exits 2, and returns for `PARSE_OK`:
+standard error and exits 2, and returns for `PARSE_OK`. The error line is
+printed plain; `errStyle` paints only the command in the pointer:
 
 ```text
 api users: unknown command 'kyes' (did you mean 'keys'?)
@@ -1108,11 +1111,13 @@ Run 'api users --help' for usage.
 ```
 
 The first error wins and names the command it was found at. A misspelt
-command or long flag gets the nearest declared one within a third of its
-length in edits (a swap of two letters is one); an unknown short flag gets
-no guess. Help lists a command's arguments, its own flags and the global
-ones, with defaults and `(repeatable)` shown and descriptions lined up at
-the widest flag, up to column 32.
+command or long flag gets the nearest declared one within two edits, or a
+third of its length if that is more (a swap of two letters is one edit), so
+`--lmt` finds `--limit`; an unknown short flag gets no guess. Help lists a
+command's arguments, its own flags and the global ones, descriptions lined
+up at the widest flag, up to column 32. It appends a default as
+`(default: …)`, and `(required)` and `(repeatable)` to the flags declared so,
+so a description need not say it.
 
 **What it costs and reaches.** Declaring builds no help text, and parsing
 looks each argument up once in a map: on a tree of 500 commands with 8 flags
@@ -1120,7 +1125,10 @@ each, a parse takes about a microsecond. Help, guesses and error wording are
 worked out only when they are printed. `parse` reaches no
 [capability](../../LANGUAGE.md#capabilities); `finish` writes to standard
 output or standard error and exits. Shell completion and man pages are not
-generated yet. The example under `examples/api-cli/` is a whole client.
+generated yet, and nish's own command line does not use this module: `src/`
+can only use what a released compiler ships, so it moves onto
+`nish/cli-args` once a release carries it. The example under
+`examples/api-cli/` is a whole client.
 
 ## `nish/term`
 

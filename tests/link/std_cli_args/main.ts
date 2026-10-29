@@ -24,6 +24,7 @@ const USERS_GET: i32 = 2
 const KEYS_LIST: i32 = 3
 const KEYS_CREATE: i32 = 4
 const PROJECTS_LIST: i32 = 5
+const PROJECTS_TAG: i32 = 6
 
 // Module constants are numbers, booleans or strings, so the tree and its
 // handles live in an object `build` makes.
@@ -45,7 +46,9 @@ class Api {
   name: i32
   userId: i32
   scopes: i32
+  dryRun: i32
   projectsAll: i32
+  tagged: i32
 
   constructor() {
     const cli = new Cli("api", "1.4.0", "Talk to the Example API")
@@ -75,10 +78,15 @@ class Api {
     this.scopes = cli.argument(this.keysCreate, "[scope...]", "what the key may do")
     this.name = cli.flag(this.keysCreate, "-n, --name <name>", "the key's name")
     cli.required(this.name)
+    this.dryRun = cli.flag(this.keysCreate, "--dry-run", "only say what it would create")
+    cli.negatable(this.dryRun)
     const projects = cli.group(ROOT, "projects", "Manage projects")
     cli.alias(projects, "p")
     const plist = cli.command(projects, "list", PROJECTS_LIST, "List projects")
     this.projectsAll = cli.flag(plist, "--all", "include archived projects")
+    const ptag = cli.command(projects, "tag", PROJECTS_TAG, "Tag a project")
+    cli.argument(ptag, "<project>", "the project")
+    this.tagged = cli.argument(ptag, "<tag...>", "the tags to add")
   }
 
   parse(args: string[]): ParseResult {
@@ -103,7 +111,6 @@ const flagForms = (t: Suite, api: Api): void => {
   t.eqStr("forms: --base-url default", r.value(api.base) ?? "-", "https://api.example.com")
   t.eqI32("forms: --token unset", r.source(api.token), SOURCE_UNSET)
   t.ok("forms: --token is null", r.value(api.token) === null)
-  t.eqI32("forms: unset repeatable has no values", r.values(api.token).length, 0)
   t.eqBool("forms: a value flag given is on", r.flag(api.limit), true)
   t.eqBool("forms: a value flag not given is off", r.flag(api.token), false)
   t.eqI32("forms: exit code", r.exitCode, 0)
@@ -113,6 +120,13 @@ const flagForms = (t: Suite, api: Api): void => {
   t.eqStr("forms: a single flag's values is the last", eq.values(api.limit).join(","), "9")
   const attached = api.parse(["users", "keys", "list", "42", "-l3"])
   t.eqStr("forms: -l3", attached.value(api.limit) ?? "-", "3")
+  t.eqI32("forms: unset repeatable has no values", attached.values(api.tag).length, 0)
+  const emptyShort = api.parse(["users", "keys", "list", "-l=", "42"])
+  t.eqStr("forms: -l= is empty, as --limit= is", emptyShort.value(api.limit) ?? "-", "")
+  t.eqStr("forms: and takes no next word", emptyShort.positional(api.userId) ?? "-", "42")
+  const emptyLong = api.parse(["users", "keys", "list", "--limit=", "42"])
+  t.eqStr("forms: --limit= is empty", emptyLong.value(api.limit) ?? "-", "")
+  t.eqStr("forms: --limit= takes no next word", emptyLong.positional(api.userId) ?? "-", "42")
   const dash = api.parse(["users", "keys", "list", "42", "--limit", "-1"])
   t.eqStr("forms: a required value takes a dashed token", dash.value(api.limit) ?? "-", "-1")
 
@@ -165,6 +179,18 @@ const flagForms = (t: Suite, api: Api): void => {
   t.eqI32("forms: an optional variadic may be empty", none.positionals(api.scopes).length, 0)
   t.ok("forms: and its positional is null", none.positional(api.scopes) === null)
   t.ok("forms: another command's argument is null", variadic.positional(api.userId) === null)
+  const tagged = api.parse(["p", "tag", "web", "a", "b"])
+  t.eqI32("forms: required variadic, id", tagged.id, PROJECTS_TAG)
+  t.eqStr("forms: required variadic takes the rest", tagged.positionals(api.tagged).join(","), "a,b")
+
+  const dry = api.parse(["users", "keys", "create", "7", "-n", "ci", "--dry-run"])
+  t.eqBool("forms: negatable --dry-run is on", dry.flag(api.dryRun), true)
+  t.eqI32("forms: negatable --dry-run from argv", dry.source(api.dryRun), SOURCE_ARGV)
+  const wet = api.parse(["users", "keys", "create", "7", "-n", "ci", "--dry-run", "--no-dry-run"])
+  t.eqBool("forms: --no-dry-run turns it off", wet.flag(api.dryRun), false)
+  t.eqI32("forms: --no-dry-run from argv", wet.source(api.dryRun), SOURCE_ARGV)
+  t.eqBool("forms: negatable not given is off", none.flag(api.dryRun), false)
+  t.eqI32("forms: negatable not given is unset", none.source(api.dryRun), SOURCE_UNSET)
 }
 
 const globals = (t: Suite, api: Api): void => {
@@ -203,6 +229,15 @@ const errors = (t: Suite, api: Api): void => {
     ["frobnicate"],
     ["--verison"],
     ["users", "list", "-v"],
+    ["users", "keys", "list", "1", "--lmt", "5"],
+    ["users", "kyz"],
+    ["help", "kyes"],
+    ["help", "users", "kyes"],
+    ["help", "users", "nope", "--help"],
+    ["users", "keys", "list", "1", "-r=x"],
+    ["users", "keys", "list", "1", "-ar=x"],
+    ["p", "tag", "web"],
+    ["p", "tag"],
   ]
   const want: string[] = [
     "api users: unknown command 'kyes' (did you mean 'keys'?)",
@@ -221,11 +256,45 @@ const errors = (t: Suite, api: Api): void => {
     "api: unknown command 'frobnicate'",
     "api: unknown flag --verison (did you mean --version?)",
     "api users list: unknown flag -v",
+    "api users keys list: unknown flag --lmt (did you mean --limit?)",
+    "api users: unknown command 'kyz' (did you mean 'keys'?)",
+    "api: unknown command 'kyes'",
+    "api users: unknown command 'kyes' (did you mean 'keys'?)",
+    "api users: unknown command 'nope'",
+    "api users keys list: -r takes no value",
+    "api users keys list: -r takes no value",
+    "api projects tag: missing argument <tag...>",
+    "api projects tag: missing argument <project>",
   ]
   const hints: string[] = [
     "Run 'api users --help' for usage.",
     "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys --help' for usage.",
+    "Run 'api --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys create --help' for usage.",
+    "Run 'api --help' for usage.",
+    "Run 'api --help' for usage.",
+    "Run 'api users list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users --help' for usage.",
+    "Run 'api --help' for usage.",
+    "Run 'api users --help' for usage.",
+    "Run 'api users --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api projects tag --help' for usage.",
+    "Run 'api projects tag --help' for usage.",
   ]
+  t.eqI32("errors: a message for every case", toI32(want.length), toI32(cases.length))
+  t.eqI32("errors: a hint for every case", toI32(hints.length), toI32(cases.length))
   for (let i: i32 = 0; i < toI32(cases.length) && i < toI32(want.length); i++) {
     const args = cases[i]
     const expected = want[i]
@@ -238,8 +307,8 @@ const errors = (t: Suite, api: Api): void => {
       t.eqStr(`${label}: hint`, r.hint, hints[i])
     }
   }
-  const first = api.parse(["users", "keys", "list", "--bad", "1", "2"])
-  t.eqStr("errors: the first error wins", first.message, "api users keys list: unknown flag --bad")
+  const first = api.parse(["users", "keys", "list", "--zzzzz", "1", "2"])
+  t.eqStr("errors: the first error wins", first.message, "api users keys list: unknown flag --zzzzz")
   const stuck = api.parse(["users", "kyes", "list"])
   t.eqStr("errors: an unknown command stops the descent", stuck.errorPath, "api users")
 }
@@ -256,6 +325,10 @@ const helpAndVersion = (t: Suite, api: Api): void => {
   t.eqI32("help: help <path>", path.kind, PARSE_HELP)
   t.eqI32("help: help <path> reaches it", path.command, api.keys)
   t.eqI32("help: help alone", api.parse(["help"]).kind, PARSE_HELP)
+  const badPath = api.parse(["help", "users", "kyes"])
+  t.eqI32("help: help <unknown path> is an error", badPath.kind, PARSE_ERROR)
+  t.eqI32("help: help <unknown path> exits 2", badPath.exitCode, 2)
+  t.eqI32("help: help <unknown path> --version is still an error", api.parse(["help", "kyes", "--version"]).kind, PARSE_ERROR)
   t.eqI32("help: after --, -h is a word", api.parse(["users", "keys", "list", "--", "-h"]).kind, PARSE_OK)
   const v = api.parse(["--version"])
   t.eqI32("version: --version", v.kind, PARSE_VERSION)
@@ -329,12 +402,26 @@ const helpPages = (t: Suite, api: Api): void => {
     "Examples:",
     "  api users keys list 42 --limit 5",
   ])
-  t.contains(
-    "help page: required and variadic",
-    api.cli.helpText(api.keysCreate, plain),
-    "usage: api users keys create <user-id> [scope...] [flags]"
-  )
-  t.contains("help page: required flag", api.cli.helpText(api.keysCreate, plain), "the key's name (required)")
+  t.eqLines("help page: required, variadic and negatable", splitLines(api.cli.helpText(api.keysCreate, plain)), [
+    "api 1.4.0  Talk to the Example API",
+    "",
+    "usage: api users keys create <user-id> [scope...] [flags]   Create a key",
+    "",
+    "Arguments",
+    "  <user-id>          the user",
+    "  [scope...]         what the key may do",
+    "",
+    "Flags",
+    "  -n, --name <name>  the key's name (required)",
+    "  --[no-]dry-run     only say what it would create",
+    "  -h, --help         show help",
+    "",
+    "Global flags",
+    "  --base-url <url>   API base URL (default: https://api.example.com)",
+    "  --token <token>    the API token",
+    "  -r, --raw-output   print JSON as it arrives",
+    "  --[no-]color       paint the output",
+  ])
 }
 
 // A tree of 20 groups of 25 commands, each with 8 flags of its own.
