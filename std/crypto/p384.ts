@@ -5975,7 +5975,7 @@ const p384DigestScalar = (out: u32[], digest: u8[]): void => {
   const bytes: u8[] = new Array<u8>(48)
   const take: i32 = length < 48 ? length : 48
   const skip: i32 = 48 - take
-  for (let i: i32 = 0; i < take && i < digest.length && skip + i < 48; i++) {
+  for (let i: i32 = 0; i < take && i < length && skip + i < 48; i++) {
     bytes[skip + i] = digest[i]
   }
   const a: u32[] = p384Limbs()
