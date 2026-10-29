@@ -9,6 +9,7 @@ import finish from "nish/cli-args" -> function @nish.finish
 import agentDriven from "nish/cli" -> function @nish.agentDriven
 import styleFor from "nish/cli" -> function @nish.styleFor
 import JsonWriter from "nish/json" -> struct JsonWriter
+const FIRST_ARG: i32 = 1
 const USERS_LIST: i32 = 1
 const USERS_GET: i32 = 2
 const KEYS_LIST: i32 = 3
@@ -190,6 +191,7 @@ const VALUE_NONE: i32 = 0
 const VALUE_REQUIRED: i32 = 1
 const VALUE_OPTIONAL: i32 = 2
 const GLOBAL: i32 = -1
+const NONE: i32 = -1
 const MAX_COLUMN: i32 = 32
 const DASH: i32 = 45
 struct FlagSpec (class) size=32 align=8

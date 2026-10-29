@@ -11,6 +11,9 @@ import { Cli, ParseResult, ROOT, SOURCE_ARGV, finish } from "nish/cli-args"
 import { agentDriven, styleFor } from "nish/cli"
 import { JsonWriter } from "nish/json"
 
+/** argv[0] is the program; its arguments start at 1. */
+const FIRST_ARG: i32 = 1
+
 const USERS_LIST: i32 = 1
 const USERS_GET: i32 = 2
 const KEYS_LIST: i32 = 3
@@ -127,7 +130,7 @@ const send = (w: JsonWriter): void => {
 export const main = (): i32 => {
   const api = new Api()
   const agent = agentDriven()
-  const r = api.cli.parse(process.argv, 1)
+  const r = api.cli.parse(process.argv, FIRST_ARG)
   finish(r, styleFor(1, agent), styleFor(2, agent))
 
   // A rule the tree cannot state: `source` tells a flag given from one left

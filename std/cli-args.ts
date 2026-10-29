@@ -68,6 +68,9 @@ const VALUE_OPTIONAL: i32 = 2
 /** The owner of a global flag, which no command handle is. */
 const GLOBAL: i32 = -1
 
+/** No handle: a group's id, a command without arguments, the last argument's successor. */
+const NONE: i32 = -1
+
 /** Where descriptions start at the latest, in a help row. */
 const MAX_COLUMN: i32 = 32
 
@@ -139,9 +142,9 @@ const closest = (typed: string, names: string[]): string => {
   }
   const rows: i32[][] = [[], [], []]
   for (let j: i32 = 0; j <= longest; j++) {
-    rows[0].push(0)
-    rows[1].push(0)
-    rows[2].push(0)
+    rows[0].push(j)
+    rows[1].push(j)
+    rows[2].push(j)
   }
   let dashes: i32 = 0
   while (dashes < toI32(typed.length) && toI32(typed.charCodeAt(dashes)) === DASH) {
@@ -366,8 +369,8 @@ export class Cli {
     this.cmdGroup.push(group)
     this.cmdAliases.push("")
     this.cmdEpilog.push("")
-    this.cmdFirstArg.push(-1)
-    this.cmdLastArg.push(-1)
+    this.cmdFirstArg.push(NONE)
+    this.cmdLastArg.push(NONE)
     this.cmdVariadic.push(false)
     this.cmdOptionalArg.push(false)
     return handle
@@ -375,7 +378,7 @@ export class Cli {
 
   /** A group under `parent`: it holds commands, and naming it without one is an error. */
   group(parent: i32, name: string, description: string): i32 {
-    return this.addCommand(`group(${name})`, parent, name, -1, description, true)
+    return this.addCommand(`group(${name})`, parent, name, NONE, description, true)
   }
 
   /** A command under `parent` that the program runs, answered by `id` in `ParseResult.id`. */
@@ -561,7 +564,7 @@ export class Cli {
     this.argVariadic.push(variadic)
     this.argDesc.push(description)
     this.argIndex.push(index)
-    this.argNext.push(-1)
+    this.argNext.push(NONE)
     return handle
   }
 
