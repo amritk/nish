@@ -49,6 +49,19 @@ export const main = (): number => {
   const bigStatus = spawnPiped(["/bin/cat"], big, back, quiet);
   console.log(`big: ${bigStatus} ${back.length} ${same(big, back)}`);
 
+  // One array as both stdin and stdout: the output lands after the input,
+  // which is still what is sent after the array grows and moves.
+  const twice: u8[] = [];
+  for (let i = 0; i < 100000; i++) {
+    twice.push(toU8(i));
+  }
+  spawnPiped(["cat"], twice, twice, quiet);
+  let halves = twice.length === 200000;
+  for (let i = 0; halves && i < 100000; i++) {
+    halves = twice[i] === twice[i + 100000];
+  }
+  console.log(`twice: ${twice.length} ${halves}`);
+
   // The two streams apart, and the exit status.
   const none: u8[] = [];
   const out: u8[] = [];
@@ -68,11 +81,22 @@ export const main = (): number => {
   // EPIPE, which is not fatal to this program, and the status is the child's.
   console.log(`unread: ${spawnPiped(["true"], big, out, err)}`);
 
+  // The child starts with SIGPIPE as this program had it, neither ignored
+  // nor blocked, so one that writes to a reader that has gone dies of it.
+  console.log(`child sigpipe: ${spawnPiped(["sh", "-c", "kill -PIPE $$; echo alive"], none, out, err)}`);
+
   // A child that never stops printing is killed at 16 MiB: -2, and the array
   // keeps what was read up to the cap.
   const flood: u8[] = [];
   const floodStatus = spawnPiped(["yes"], none, flood, err);
   console.log(`flood: ${floodStatus} ${flood.length}`);
+
+  // The pipes are close-on-exec: a child, started after every call above,
+  // holds its three standard streams and no other descriptor of this process.
+  const fds: u8[] = [];
+  const probe = "for f in 3 4 5 6 7 8 9; do if ( : <&$f ) 2>/dev/null; then printf '%s ' $f; fi; done";
+  spawnPiped(["sh", "-c", probe], none, fds, err);
+  console.log(`inherited: [${String.fromBytes(fds, 0, fds.length)}]`);
 
   // The secret travels on stdin only: neither the child's command line nor
   // its environment carries it.

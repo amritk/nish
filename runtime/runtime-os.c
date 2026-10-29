@@ -398,21 +398,25 @@ int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv,
    `dup2` onto itself would leave close-on-exec set and the child without
    that stream. Darwin has no `pipe2`, so there an end is close-on-exec only
    once `F_DUPFD_CLOEXEC` has moved it: a child another thread starts in
-   that window inherits it (docs/security/runtime.md, RT-25).
+   that window inherits it (docs/security/runtime.md, RT-27).
 
    One `poll` loop over non-blocking ends writes stdin and reads both outputs
    as each is ready, so a child that fills its stdout before it reads all its
    stdin, or the reverse, cannot deadlock against this process. A child that
    exits, or closes its stdin, before reading everything ends the writing
-   with EPIPE rather than SIGPIPE: the signal is ignored for the call and
-   the action it had is put back before the answer, so for that window a
-   write to a closed pipe on another thread of this process fails with EPIPE
-   too rather than ending the process.
+   with EPIPE rather than SIGPIPE: the signal is blocked on this thread once
+   the child has started, the one a write raised is taken off the pending
+   set, and the mask is put back before the answer (docs/security/runtime.md,
+   RT-26). Ignoring it instead would be process-wide, and every child
+   started meanwhile, this one included, would inherit SIGPIPE ignored and
+   never die of a reader that has gone.
 
    The bytes are written from the caller's array as they stand, and nothing
    copies them: the only copies are the kernel's pipe buffer and the child.
-   The pointer and length are read once, so `stdout` being the same array as
-   `stdin` appends to it without feeding the output back in. */
+   The length is read once, so `stdout` being the same array as `stdin`
+   appends to it without feeding the output back in, and the pointer at each
+   write, because that array moves when it grows and its stdin bytes stay
+   its first `n`. */
 #define NISH_PIPED_CAP (16u << 20)
 #ifndef __wasi__
 static int nish_pipe(int *p) {
@@ -443,14 +447,9 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
   (void)err;
   return -1;
 #else
-  const char *src = in->data;
   uint64_t n = in->len, sent = 0, got[3] = { 0, 0, 0 };
   int p[6] = { -1, -1, -1, -1, -1, -1 };
   int32_t rc = -1;
-  struct sigaction ignore, old;
-  memset(&ignore, 0, sizeof ignore);
-  ignore.sa_handler = SIG_IGN;
-  sigaction(SIGPIPE, &ignore, &old);
   if (nish_pipe(p) || nish_pipe(p + 2) || nish_pipe(p + 4)) goto done;
   int child[3] = { p[0], p[3], p[5] };
   int32_t pid = nish_spawn_start(argv, 0, 0, child);
@@ -460,6 +459,12 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
     p[k ? 2 * k + 1 : 0] = -1;
   }
   if (pid < 0) goto done;
+  sigset_t pipe_sig, mask, pending;
+  sigemptyset(&pipe_sig);
+  sigaddset(&pipe_sig, SIGPIPE);
+  pthread_sigmask(SIG_BLOCK, &pipe_sig, &mask);
+  sigpending(&pending);
+  int queued = sigismember(&pending, SIGPIPE);
   struct pollfd f[3] = { { p[1], POLLOUT, 0 }, { p[2], POLLIN, 0 }, { p[4], POLLIN, 0 } };
   p[1] = p[2] = p[4] = -1;
   for (int k = 0; k < 3; k++) fcntl(f[k].fd, F_SETFL, O_NONBLOCK);
@@ -475,7 +480,7 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
       continue;
     }
     if (f[0].revents) {
-      ssize_t k = write(f[0].fd, src + sent, n - sent);
+      ssize_t k = write(f[0].fd, in->data + sent, n - sent);
       if (k > 0) sent += k;
       if (sent == n || (k < 0 && errno != EINTR && errno != EAGAIN)) {
         close(f[0].fd);
@@ -505,6 +510,12 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
       }
     }
   }
+  sigpending(&pending);
+  if (!queued && sigismember(&pending, SIGPIPE)) {
+    int sig;
+    sigwait(&pipe_sig, &sig);
+  }
+  pthread_sigmask(SIG_SETMASK, &mask, 0);
   if (rc) kill(pid, SIGKILL);
   for (int k = 0; k < 3; k++)
     if (f[k].fd >= 0) close(f[k].fd);
@@ -519,7 +530,6 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
 done:
   for (int k = 0; k < 6; k++)
     if (p[k] >= 0) close(p[k]);
-  sigaction(SIGPIPE, &old, 0);
   return rc;
 #endif
 }
