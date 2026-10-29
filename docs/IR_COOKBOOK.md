@@ -20792,11 +20792,13 @@ so that `Math.round(-0.3)` is `-0`. The floor it takes, and `Math.floor`,
 `@nish_ceil` and `@nish_trunc` in a module for x86-64 (with no triple, on an
 x86-64 host) other than a wasm build (#943): the baseline is SSE2, where
 `llvm.floor.f64` is a call of libm's `floor`, and the runtime answers with
-SSE4.1's `roundsd` on a CPU that has it. Which one is a flag
-`@nish_round_init` sets once, from `cpuid`, as a constructor at priority 101
-(`NISH_SIMD=scalar` pins libm's routine, which the runtime calls on
-a CPU without SSE4.1), so the binary stays a baseline binary. Linked with
-`--cpu x86-64-v3`, the runtime's body is the one instruction. An
+SSE4.1's `roundsd` on a CPU that has it. The module's constructor
+`@nish.round.init`, at priority 101, passes libm's `@floor`, `@ceil` and
+`@trunc` to `@nish_round_init`, which asks `cpuid` once and keeps them only
+on a CPU without SSE4.1 (or under `NISH_SIMD=scalar`, which pins libm), so
+the binary stays a baseline binary and the runtime itself names no libm
+symbol. Linked with `--cpu x86-64-v3`, the runtime's body is the one
+instruction. An
 aarch64 or wasm module keeps `llvm.floor.f64` and its kin. The calls are
 `readnone`, like the intrinsics, but LLVM no longer folds a constant
 argument through them; `Math.min`/`max` answer NaN for a NaN
@@ -20822,12 +20824,21 @@ const clamp01 = (x: number): number => Math.min(Math.max(x, 0), 1)
 ```
 
 ```llvm
-@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish_round_init, i8* null }]
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.round.init, i8* null }]
 
+declare double @floor(double)
+declare double @ceil(double)
+declare double @trunc(double)
 declare double @nish_floor(double) #0
-declare void @nish_round_init() #1
+declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #1
 declare double @llvm.sqrt.f64(double) #0
 declare double @llvm.copysign.f64(double, double) #0
+
+define internal void @nish.round.init() nounwind {
+entry:
+  call void @nish_round_init(double (double)* @floor, double (double)* @ceil, double (double)* @trunc)
+  ret void
+}
 
 define internal noundef double @hypot$(double noundef %a, double noundef %b) #0 {
 entry:
@@ -24377,7 +24388,7 @@ declare i64 @nish_regex_scan(i8* noundef nonnull readonly align 8 nocapture, %st
 declare double @nish_floor(double) #0
 declare double @nish_ceil(double) #0
 declare double @nish_trunc(double) #0
-declare void @nish_round_init() #2
+declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #2
 declare i64 @nish_str_index_of_from(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i64 noundef) #4
 declare i64 @nish_str_len(i8* noundef nonnull readonly align 8 nocapture) #4
 declare void @nish_write(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i1 noundef zeroext) #2
