@@ -203,7 +203,7 @@ const tlsClientKnowsGroup = (group: i32): boolean =>
 export const tlsClientIsIpLiteral = (name: string): boolean => {
   let digits: boolean = true
   for (let k: i32 = 0; k < toI32(name.length); k++) {
-    const c: i32 = name.charCodeAt(k)
+    const c: i32 = toI32(name.charCodeAt(k))
     if (c === 58) {
       return true
     }

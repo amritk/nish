@@ -1,6 +1,6 @@
 /**
- * `nish/net/tls/codec` — the TLS 1.3 handshake messages a server reads and
- * writes (RFC 8446 §4), as bytes.
+ * `nish/net/tls/codec` — the TLS 1.3 handshake messages a server and a
+ * client read and write (RFC 8446 §4), as bytes.
  *
  * One reader and eight writers. `tlsParseClientHello` reads a ClientHello body
  * into a `TlsClientHello`, checking its structure: every length against the
@@ -24,6 +24,16 @@
  * Each is a `tlsWrite*` function that writes into the caller's array at an
  * offset — run over an empty array, it measures — and a `tlsEncode*` one
  * that answers the message in a fresh array.
+ *
+ * The client's side is the mirror: `tlsWriteClientHello` and
+ * `tlsEncodeClientHello` write the hello `nish/net/tls/client` sends, and five
+ * readers — `tlsReadServerHello` (a HelloRetryRequest too),
+ * `tlsReadEncryptedExtensions`, `tlsReadCertificate`,
+ * `tlsReadCertificateVerify` and `tlsReadNewSessionTicket` — read the
+ * server's flight into a `TlsServerFlightView` made once, as windows, with
+ * the same checks and the same alerts in its `alert` field. A server's bytes
+ * are the peer's just as a client's are, so these readers never panic either
+ * (the `tls-server-flight` fuzz target).
  *
  * The extensions read are `server_name` (RFC 6066 §3), `supported_groups`,
  * `signature_algorithms`, `supported_versions` and `key_share` (RFC 8446
@@ -1965,7 +1975,12 @@ export const tlsServerHelloDowngrade = (view: TlsServerFlightView): boolean => {
 }
 
 /** Reads an EncryptedExtensions body (§4.3.1) into `view`. */
-export const tlsReadEncryptedExtensions = (view: TlsServerFlightView, data: u8[], off: i32, len: i32): void => {
+export const tlsReadEncryptedExtensions = (
+  view: TlsServerFlightView,
+  data: u8[],
+  off: i32,
+  len: i32
+): void => {
   const r: TlsReader | null = tlsFlightOpen(view, data, off, len)
   if (r === null) {
     return
@@ -2040,7 +2055,11 @@ export const tlsReadNewSessionTicket = (view: TlsServerFlightView, data: u8[], o
 /** The DER certificates of the Certificate `tlsReadCertificate` last read into `view`, leaf first, each a fresh array. */
 export const tlsCopyCertificates = (view: TlsServerFlightView): u8[][] => {
   const chain: u8[][] = []
-  const r: TlsReader = new TlsReader(view.data, view.certificatesAt, view.certificatesAt + view.certificatesLength)
+  const r: TlsReader = new TlsReader(
+    view.data,
+    view.certificatesAt,
+    view.certificatesAt + view.certificatesLength
+  )
   while (view.alert === 0 && !r.failed && r.at < r.end) {
     const certificateEnd: i32 = tlsReadVector(r, 3, 1, 16777215)
     chain.push(tlsCopyWindow(view.data, r.at, certificateEnd - r.at))

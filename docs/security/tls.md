@@ -1,4 +1,4 @@
-# Security record: TLS 1.3 — the server handshake, its records and its TCP carrier
+# Security record: TLS 1.3 — the server and client handshakes, their records and the TCP carrier
 
 The record of `nish/net/tls`, WP34's lane T1, and of the record layer and the
 TCP carrier lane T2 put around it (`nish/net/tls/record`,
@@ -98,6 +98,19 @@ closed.
 ChaCha20-Poly1305 seal and open left a copy of its key in ChaCha20 state that
 nothing wiped. #639 closed it.
 
+**The client** (#480's tls-client-core stage) is recorded in "The client",
+below: `TlsClient` (`nish/net/tls/client`), the sans-IO handshake beside
+`TlsServer`, and `TlsRecordClient` (`nish/net/tls/record-client`), its record
+layer. It authenticates nothing itself: the caller judges the chain and the
+CertificateVerify signature at `WAIT_AUTH`, and nothing goes past it until
+the caller says so. Every malformed, out-of-order or unoffered server choice
+is refused with its RFC 8446 alert, the server's Finished is compared in
+constant time, and every secret is a `Secret` wiped on every path. Three Low
+findings are left open: TLS-6, TLS 1.2 and below refused by design; TLS-7, a
+server that selects secp256r1 answered with `internal_error` until
+`nish/crypto/p256` has ECDH; TLS-8, a fatal alert sent in the clear when the
+handshake fails within the `receive` that delivered the ServerHello.
+
 **Resumption** is built: `TlsServer`, `TlsRecordServer` and `TlsTcpServer`
 issue a ticket after a full handshake and resume with `psk_dhe_ke`.
 "Resumption" below records the threat model, the ticket-key and anti-replay
@@ -109,10 +122,12 @@ resumption", what the tests pin and where the code departs from the design.
 | File | Functions |
 | --- | --- |
 | `std/net/tls.ts` | `TlsServer` (`restart`, `receive`, `reserveInput`, `reserveOutput`, `handleMessage`, `handleClientHello`, `chooseSuite`, `chooseAlpn`, `takeServerName`, `exchangeKeys`, `writeServerFlight`, `signatureInput`, `sign`, `handleFinished`, `fail`, `wipeResumption`, `enableTickets`, `ticketFits`, `selectTicket`, `bindTicket`, `saltFromEarly`, `resume`, `writeResumedFlight`, `writeResumedHello`, `masterSecretStep`, `resumptionPsk`, `writeTicket`, `issue`, `sent`, `takeOutput`, `clearOutput`, `secrets`, `known`, `readKnown`, `writeKnown`, `wipeSecret`, `wipeEphemeral`, `wipe`), `TlsSecretPool` (`zero`, `wipe`), `tlsExchange` and its `TlsExchangeWords`, `tlsServerStrikeProbe`, `tlsServerTicketCapacity`, `tlsSignEcdsaP256`, `tlsEcdsaDerSignature`, `TlsP256Signer` (`sign`), and the in-place DER writers both encoders share (`tlsEcdsaDerLength`, `tlsEcdsaDerInto`, `tlsDerIntegerLength`, `tlsDerIntegerInto`) |
-| `std/net/tls/codec.ts` | `tlsReadClientHello` into a `TlsClientHelloView` and its readers (`tlsRead*`, `tlsReadServerName`, `tlsReadKeyShare`, `tlsReadAlpn`, `tlsReadExtension`, `tlsMarkSeen`), `tlsParseClientHello`, the six `tlsWrite*` writers with their `tlsEncode*` wrappers, and `tlsWriteCertificateVerifyContent` / `tlsCertificateVerifyContent` |
+| `std/net/tls/codec.ts` | `tlsReadClientHello` into a `TlsClientHelloView` and its readers (`tlsRead*`, `tlsReadServerName`, `tlsReadKeyShare`, `tlsReadAlpn`, `tlsReadExtension`, `tlsMarkSeen`), `tlsParseClientHello`, the six `tlsWrite*` writers with their `tlsEncode*` wrappers, and `tlsWriteCertificateVerifyContent` / `tlsCertificateVerifyContent`; for the client, `tlsWriteClientHello` / `tlsEncodeClientHello`, and the readers into a `TlsServerFlightView` (`tlsReadServerHello`, `tlsServerHelloDowngrade`, `tlsReadEncryptedExtensions`, `tlsReadCertificate`, `tlsReadCertificateVerify`, `tlsReadNewSessionTicket`, `tlsCopyCertificates`, and under them `tlsFlightOpen`, `tlsFlightClose`, `tlsFlightRefuseExtension`, `tlsReadServerHelloExtension`, `tlsReadEncryptedExtension`, `tlsReadServerExtensions`) |
 | `std/net/tls/schedule.ts` | the key schedule (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`), its in-place forms (`tlsDeriveSecretInto`, `tlsMasterSecretInto`, `tlsFinishedVerifyDataInto`, `tlsTrafficKeysInto`) and `TlsTranscript` |
 | `std/net/tls/record.ts` (T2) | `tlsRecordLength`, `TlsRecordReader`, `TlsRecordProtection` (`install`, `reserve`, `derive`, `clear`, `nonceInto`, `seal`, `open`), `tlsNextTrafficSecret` |
 | `std/net/tls/record-server.ts` (T2) | `TlsRecordServer`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sendKeyUpdate`, `keyUpdate`, `read`, `write`, `close`, `sealClose`, `sign`, `resume`, `issue`, `end`, `checkTruncation`, `abort`, `fail`, `wipeKeys`, `wipe`, `wipeTraffic`, `wipeRead`, `wipeWrite` |
+| `std/net/tls/client.ts` (the client) | `TlsClientConfig`, `tlsClientIsIpLiteral`, `TlsClient` (`start`, `writeHello`, `receive`, `drain`, `handleMessage`, `checkHello`, `handleServerHello`, `handleRetry`, `exchangeKeys`, `handleEncryptedExtensions`, `handleCertificate`, `handleCertificateVerify`, `authenticate`, `reject`, `handleFinished`, `handleTicket`, `peerCertificates`, `verifyScheme`, `verifyContent`, `verifySignature`, `alpn`, `expectedLevel`, `startTranscript`, `reserveInput`, `reserveOutput`, `takeOutput`, `clearOutput`, `sent`, `secrets`, `known`, `readKnown`, `writeKnown`, `fail`, `wipeKeys`, `wipeUnpicked`, `wipeSecret`, `wipe`) and the helpers under it (`tlsClientConfigFits`, `tlsClientKnowsSuite`, `tlsClientKnowsGroup`, `tlsClientIsZeroSecret`, `tlsClientZeroHeld`, `tlsClientCopy`) |
+| `std/net/tls/record-client.ts` (the client) | `TlsRecordClient`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sealChangeCipherSpec`, `sealQueue`, `sealRecord`, `sealWith`, `sendKeyUpdate`, `keyUpdate`, `authenticate`, `reject`, `interest`, `read`, `write`, `consume`, `close`, `sealClose`, `sendAlert`, `end`, `checkTruncation`, `abort`, `fail`, `wipe`, `wipeRead`, `wipeWrite`; `tlsClientTrafficZero`, `tlsClientInstallHeld`, `tlsClientAdvanceHeld` |
 | `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close` |
 
 Out of scope: the primitives underneath (`nish/crypto/*`, each with its own
@@ -140,6 +155,22 @@ memory or time a peer can make the server spend without bound, and a key or
 plaintext left readable after the connection is done with it. The program
 driving the carrier is trusted, as the caller of `TlsServer` is.
 
+For the client the roles turn round: the attacker is the server, or anyone on
+the path, and every byte handed to `TlsClient.receive` or
+`TlsRecordClient.receive` is theirs. A win is a panic, an unbounded
+allocation, a handshake completed past a server that was not authenticated
+or under a version, suite, group, extension or protocol the client did not
+offer, a Finished accepted without the handshake secret, or a secret left in
+memory or learned from timing. The caller — the configuration, the
+randomness, both private keys and the verdict on the server — is trusted.
+**Authentication is the caller's contract**: the client exposes the chain,
+the CertificateVerify scheme, the signed content and the signature at
+`WAIT_AUTH` and goes no further until `authenticate(true)`; a caller that
+answers it without checking the chain against its trust anchors, the host
+name and the signature under the leaf's key has authenticated nobody. The
+default API that calls `authenticate` for the program lands with #480's
+tls-client-tcp stage; until then every caller is a direct one.
+
 ## Findings
 
 | Id | Severity | Where | Description | Disposition |
@@ -149,15 +180,19 @@ driving the carrier is trusted, as the caller of `TlsServer` is.
 | TLS-3 | Medium | `std/net/tls.ts` (`TlsServer`), `std/net/tls/record.ts` (`TlsRecordProtection.derive`), `std/net/tls/record-server.ts` (`advance`, `pump`, `handlePostHandshake`, `sendKeyUpdate`), `std/net/tls-tcp.ts` (`accept`) | **What it was.** Each handshake left arena memory behind until the program reset the arena: `TlsServer` kept its messages, transcript and secrets in objects of its own, made per connection, and nothing it allocated along the way could be released, since HMAC, HKDF and `aesKey` stored allocations of their own and so no arena scope and no `using a = arena()` block was allowed around them (NL2424). Measured over RFC 8448's AES-128-GCM handshake through `TlsRecordServer`, **52,808 bytes per handshake** (about 53 MB of RSS after a thousand); a key install left another 5,248, 10,496 for an answered KeyUpdate. A client opening connections in a loop grew a long-running server without bound — denial of service on attacker input. | **Closed** (N9's TLS memory stage). `TlsServer` allocates its buffers, transcript hashers, secret arrays (one of each hash's length per secret), HKDF scratch and ClientHello view once, and `restart` hands them to the slot's next connection; `TlsTcpServer` keeps one per slot, built on the first accept into it (Slots built on the first accept; as of `14a6ff11`). `receive` and `sign` run in `using a = arena()` blocks over `nish/crypto/hmac`'s `HmacSha256Scratch` / `HmacSha384Scratch` and `nish/crypto/hkdf`'s `HkdfScratch`, which compute in place; the record layer derives its keys in place and expands the AES schedule into the slot's own `AesKey` with `nish/crypto/aes`'s `aesKeyInto`, in an arena block too; the x25519 exchange, whose `x25519` answers a `Secret` it allocates, runs in `tlsExchange`, which takes only an object of numbers and so gets an arena scope of its own; the ClientHello is read as windows into the input, and every message is written into the output buffers in place, which `TlsRecordServer` seals from directly. Measured (`net_tls_memory`, `net_tls_record_refusals`): after the first handshake in a slot, **0 bytes per handshake** under AES-128-GCM (RFC 8448's, 1,000 handshakes, was 52,808), ChaCha20-Poly1305 (1,000 through one slot) and AES-256-GCM-SHA384 (1,000 accepted, handshaken and closed over loopback through `TlsTcpServer`), `Arena.mark()` exactly where the first left it each time; and **0 bytes per answered KeyUpdate** (was 10,496). Three allocations remain outside the blocks, none of them per handshake in a steady state: the input buffer doubles, once per slot, up to the largest message for a ClientHello longer than 2 KB; the `serverName` string is made when a client names a host other than the last one the slot saw — so clients that alternate between names make one each handshake, as long as the name, at most 64 KiB and in practice a DNS name's 253 bytes; and over QUIC the array the client's transport parameters are copied into, which `TlsServer` keeps and refills, grows when a client's are longer than any before it (N9's QUIC stage; a QUIC connection through a reused slot keeps 0 bytes, QUIC-3). A signature made with `tlsSignEcdsaP256` leaves `p256SignSha256`'s own allocations, which stores what it makes: measured over the carrier, 9,312 bytes a connection, the whole of the 9,376 a TLS connection over `TlsTcpServer` kept accept to close (#489). `TlsTcpServer.signP256` now signs in the pool's `TlsP256Signer`, which signs with `p256SignSha256Into` in a `P256SignScratch` made once and writes the DER into one of its own arrays, one per DER length from 8 to 72 bytes (`TlsServer.sign` takes the length from the array and stores what it computes, so the signature cannot be a temporary): **0 bytes a signature** (`net_tls_memory`: 1,000 connections accepted, signed by `signP256` and closed over loopback with `Arena.mark()` where the first left it, which fails on `tlsSignEcdsaP256`; and 300 `TlsP256Signer.sign` calls over three DER lengths, each `tlsSignEcdsaP256`'s bytes and none moving the mark). Over the carrier, `net_loopback`'s TLS and HTTP/1.1 connections keep 64 bytes each from accept to close, where they kept 9,376, in each of 20 runs: the 64 is the test program's own `Secret` copy of its key. `tlsSignEcdsaP256` stays, and keeps what it kept, for a caller that signs once. **What the slot costs instead.** The state a handshake used to allocate per connection is now allocated once per slot. Measured with `Arena.used()` on a fresh chunk, a `TlsServer` is 31,192 bytes (`Arena.used()` around the constructor) where it was 1,728 (most of it the ClientHello view's two 8 KiB duplicate bitmaps, the HKDF scratch and the transcript's six hashers; 80 of it the resumption master secret's two arrays, one per hash), and a `TlsRecordProtection` is 7,368 where it was 64 (its own HKDF scratch, both key sizes and both AES schedules), two of them per slot. Measured as resident memory over a pool of 400, a `TlsTcpServer` slot was about 136 KB where it was about 86 KB, and is 25 kB idle since its record buffers are borrowed per connection, where it was 78 kB (What moves between connections): about 50 KB more per slot, fixed, against the 52,808 bytes every handshake used to add. Over QUIC, which keeps one `TlsServer` per slot and `restart`s it for each connection the slot takes (`QuicConnection`'s `tlsSlot`, QUIC-3), each slot carries the same 29 KB more. `TLS_RECORD_MAX_KEY_UPDATES` (64) stays: it no longer bounds memory but still bounds the work a client can ask a connection for, at the interoperability cost RFC 8446 §4.6.3's lack of a limit implies (a client updating on a schedule of its own is refused at its 65th); lifting it is a separate decision. |
 | TLS-4 | Low | `std/net/tls-tcp.ts` (`TlsTcpServer`) | The carrier has no clock: a client may hold a slot for as long as it keeps the TCP connection open, mid-handshake or idle, and once every slot is held new connections are accepted and closed at once (`TLS_TCP_POOL_FULL`). Memory stays bounded, since the pool never grows; availability does not. | **Open, the program's to decide.** The program owns the loop and `pollWait`'s timeout, so it closes slots that have gone quiet; a carrier-level idle timeout needs a clock argument the API does not take yet. |
 | TLS-5 | Low | `std/crypto/chacha20poly1305.ts` (`chacha20State`, `chacha20Poly1305Seal`, `chacha20Poly1305Open`), reached from `std/net/tls/record.ts` (`TlsRecordProtection.seal`, `open` under ChaCha20-Poly1305) and, once the ticket-seal stage lands, `std/net/tls/ticket.ts` | **What it was.** Every ChaCha20-Poly1305 seal and open copied its key's eight words into a fresh ChaCha20 state, and made a keystream block and a Poly1305 one-time key from it; none of them was zeroed before the arena released it, so a later memory disclosure could read the key from that memory until it was reused. That key was a ChaCha20-Poly1305 traffic key; under the resumption design (Resumption, below) it would also have been the ticket key. Found in review of that design, at b515c1b. Low on the README's scale, with TLS-1 and TLS-2: key material left in memory, not a forgery or a leak to the network. | **Closed** by #639 (ab9099e, the crypto-wipe stage of #430): every one-shot call wipes the ChaCha20 state, the keystream block, the Poly1305 key, `r` and the accumulator with `nish:secret`'s `wipe`, on the refusal path too, and `tests/wipes/crypto.js` pins each wipe after `-O2`. The ticket key's AEAD copies are wiped the same way, with nothing more from the resumption design. |
+| TLS-6 | Low | `std/net/tls/client.ts` (`checkHello`) | TLS 1.2 and below are not spoken. A ServerHello without `supported_versions` naming 0x0304 is refused with `protocol_version`, and one whose `server_random` ends in RFC 8446 §4.1.3's downgrade sentinel with `illegal_parameter`, so a client of this tree cannot reach a TLS 1.2-only server. Client certificates, 0-RTT and client-side resumption are left out in the same way: a CertificateRequest is `unexpected_message`, and a NewSessionTicket is read and dropped. Pinned by `net_tls_client_refusals` ("missing supported_versions", "downgrade sentinel"). | **Open, by design** (#480): refusing the older protocol is the point. |
+| TLS-7 | Low | `std/net/tls/client.ts` (`exchangeKeys`) | A secp256r1 share can be configured and is sent, but `nish/crypto/p256` has no ECDH, so a server that selects secp256r1 — in its ServerHello, or in a HelloRetryRequest the client then answers — fails the handshake with `internal_error` after the client's key is wiped. A server that takes only P-256 cannot be reached; nothing is weakened. Pinned by `net_tls_client_refusals` ("a P-256 key share"). | **Open**: needs `p256Ecdh(priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> \| null` in `nish/crypto/p256` (off-curve and identity points refused), after which `exchangeKeys` takes the same path as x25519. |
+| TLS-8 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | `pump` installs the client's handshake write keys once `TlsClient` has the secret, after the records of a `receive` are processed. When the handshake fails within the same `receive` that delivered the ServerHello (bytes after it, an EncryptedExtensions that breaks a rule), `fail` seals its alert under the clear state, which a server that has moved to its handshake keys may not read. The connection ends either way and nothing secret is sent; the server only loses the alert's reason. | **Open**: install the write keys as soon as `TlsClient` derives them, before the next record is processed. |
 
 ## Fuzzing
 
-Fuzzed by `tests/fuzz/targets/tls-client-hello.ts`, `tests/fuzz/targets/tls-record.ts`.
+Fuzzed by `tests/fuzz/targets/tls-client-hello.ts`, `tests/fuzz/targets/tls-record.ts`, `tests/fuzz/targets/tls-server-flight.ts`.
 
 | Target | What it drives | Executions |
 | --- | --- | ---: |
 | `tls-client-hello` | `tlsReadClientHello` and `tlsParseClientHello` (the two must agree on the alert), `tlsWindowHasU16`, `tlsWindowString` and `tlsSelectPskIdentity` over the body at offsets and trims the first two bytes choose, checking every window lies inside the input | 266,879,554 |
 | `tls-record` | `TlsRecordReader` and `TlsRecordProtection` under the clear state and each of the three suites with RFC 8448's or a synthetic secret: raw bytes in chunks, or a script the writer seals (KeyUpdate included), checking `next()` against `tlsRecordLength` and what `open` answers | 395,065 (16 KiB buffers and a key install per input make it the slowest target) |
+| `tls-server-flight` | The client's readers into a `TlsServerFlightView` (`tlsReadServerHello`, `tlsReadEncryptedExtensions`, `tlsReadCertificate`, `tlsReadCertificateVerify`, `tlsReadNewSessionTicket`) at the offset and trim the first bytes choose, checking every window lies inside the input; and `TlsClient` fed a server's flight in chunks the input sizes, at the levels it chooses, checking a refusal is an alert and leaves the client failed | not yet run under libFuzzer; CI's fuzz smoke replays its 12-seed corpus |
 
 Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
 
@@ -814,12 +849,89 @@ built its connections on the first accept too (#767, measured in #787), that
 pool was 11.7 MB at 1,024 slots, 7 kB a slot where it was 23
 (`HTTP2_TLS_SERVER_START_BYTES` in `tests/runtime-budgets.js` records how).
 
+## The client
+
+`TlsClient` and `TlsRecordClient` (#480's tls-client-core stage). Each
+property is pinned by a test that fails if it stops holding.
+
+**A full handshake against `TlsServer`, per suite** (`net_tls_client_handshake`,
+`net_tls_client_record`): the client's ClientHello is read by `TlsServer`,
+the server's flight by the client, both reach `CONNECTED` with the same
+application secrets and ALPN protocol; through `TlsRecordClient` and
+`TlsRecordServer`, AES-128-GCM, AES-256-GCM and ChaCha20-Poly1305 each carry
+application data both ways and close with `close_notify` both ways. A
+HelloRetryRequest (the server asks for a group the client did not share) is
+answered once, with the cookie echoed and the transcript restarted with
+`message_hash`; SNI reaches the server; a KeyUpdate the client asks for is
+answered, the sequence numbers reset, and the server's own is followed.
+
+**Nothing past `WAIT_AUTH` without the caller.** The client stops after
+CertificateVerify (`TLS_RECORD_AUTH` in `TlsRecordClient.interest`), hands out
+the chain, scheme, signed content and signature, and reads no Finished until
+`authenticate(true)`: `net_tls_client_refusals` holds a bad Finished at
+`WAIT_AUTH` ("a bad Finished is held", "waits on the caller"), and
+`authenticate(false)` sends `bad_certificate` ("the caller refuses the
+chain"); `reject(alert)` sends the caller's alert.
+
+**Every refusal is its RFC 8446 alert** (`net_tls_client_refusals`, 70 checks;
+each case checks the alert, that the client is `FAILED`, and that a later call
+answers the same alert):
+
+| Server's flight | Alert |
+| --- | --- |
+| Extensions cut short; a message longer than the input could hold | `decode_error` |
+| A duplicate extension; an unoffered suite; a share or retry for an unoffered group; a retry for the group already shared; the session id not echoed; a suite changed after the retry; an unoffered ALPN protocol; the downgrade sentinel | `illegal_parameter` |
+| No `supported_versions` | `protocol_version` |
+| No `key_share` | `missing_extension` |
+| `server_name` acknowledged when none was sent | `unsupported_extension` |
+| Bytes after the ServerHello at its level; a second retry; EncryptedExtensions at the Initial level; Certificate before EncryptedExtensions; a Finished first | `unexpected_message` |
+| A secp256r1 share (TLS-7) | `internal_error` |
+| A bad server Finished | `decrypt_error` |
+
+**The Finished and the session id are compared in constant time**
+(`timingSafeEqualAt` in `handleFinished` and `checkHello`), and an all-zero
+x25519 secret is `illegal_parameter` (`tlsClientIsZeroSecret`,
+`timingSafeEqual`; RFC 7748 §6.1).
+
+**The record layer** mirrors `TlsRecordServer`: the compatibility
+`change_cipher_spec` is sent once, and the server's is tolerated only between
+its ServerHello and its Finished, never mid-message, and counted with the
+other records that carry nothing (`idle`) (§D.4); a KeyUpdate from the server is answered, and no more than
+`TLS_RECORD_MAX_KEY_UPDATES` are taken; `close` seals `close_notify` and
+wipes the write direction; the server's `close_notify` ends reading and wipes
+the read direction; a stream cut off without one is a truncation.
+
+**Fuzzed** by `tls-server-flight` (Fuzzing, above), whose seeds are each
+message of a real server flight, a retry with and without a cookie, a
+downgraded ServerHello, and a ServerHello fed to `TlsClient` whole and byte by
+byte.
+
+**The wipes survive `opt -O2`.** `tls: the client's wipes survive opt -O2
+(both private keys, the ECDHE, early, handshake and traffic secrets, the
+Finished verify data, the caller's key arrays, the plaintext buffers)` in
+`tests/wipes/tls.js` counts each root's volatile wipes after `-O2`; each wipe
+was deleted in turn to show its root's count move (a `Secret` field's wipe
+cannot be deleted: NL2541 refuses the holder). Both private keys are copied
+into `Secret` fields and the caller's arrays zeroed in the constructor; the
+key of the group not picked is wiped when the server picks
+(`wipeUnpicked`), both once the exchange is done (`wipeKeys`); the ECDHE and
+early secrets are wiped before `exchangeKeys` returns; the handshake, traffic
+and exporter secrets are `Secret` fields `wipe` reaches, each wiped once the
+record layer has installed it; `fail` and `TlsRecordClient`'s `fail`,
+`abort`, `close` and `wipe` wipe everything left. What a `Secret` cannot
+reach is what TLS-1 lists for the server: registers and spills while HMAC,
+HKDF and AEAD run, and the plain clone `tlsClientInstallHeld` and
+`tlsClientAdvanceHeld` `secureZero` before their arena block ends.
+
 ## What is not checked here
 
 - The caller's signature. A wrong one is the caller's bug, and the client's
   verification catches it; the server does not hold the public key's
   algorithm to check it with.
 - The certificate chain. It is sent as configured; nothing here parses it.
+  On the client, the server's chain and its CertificateVerify signature are
+  the caller's to check at `WAIT_AUTH` (Threat model); the client copies them
+  out as the server sent them.
 - Constant-time properties of the primitives, which their own records cover.
   The handshake branches only on public values: lengths, types, the offered
   lists and the state. The record layer branches on record lengths, header

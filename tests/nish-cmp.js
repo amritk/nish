@@ -2951,6 +2951,12 @@ const DECLARED = [
     why: "a new program: the record client against the record server, every suite, a retry, KeyUpdate and close_notify, which the reference compiler refuses because its std/ has no nish/net/tls/record-client",
   },
   {
+    program: "tests/link/net_tls_client_refusals/main.ts",
+    file: "exit",
+    changelog: "the sans-IO TLS 1.3 client handshake and record layer",
+    why: "a new program: the server flights the TLS client refuses, each with its alert, which the reference compiler refuses because its std/ has no nish/net/tls/client",
+  },
+  {
     program: "tests/link/net_tls_record_f64/main.ts",
     file: "exit",
     changelog: "records over TCP (WP34 T2)",

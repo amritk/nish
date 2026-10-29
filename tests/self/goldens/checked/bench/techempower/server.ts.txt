@@ -14118,14 +14118,21 @@ const TLS_EXT_ALPN: i32 = 16 [exported]
 const TLS_EXT_SUPPORTED_VERSIONS: i32 = 43 [exported]
 const TLS_EXT_KEY_SHARE: i32 = 51 [exported]
 const TLS_EXT_QUIC_TRANSPORT_PARAMETERS: i32 = 57 [exported]
+const TLS_EXT_COOKIE: i32 = 44 [exported]
 const TLS_LEGACY_VERSION: i32 = 771 [exported]
 const TLS_VERSION_13: i32 = 772 [exported]
 const TLS_GROUP_X25519: i32 = 29 [exported]
 const TLS_X25519_SHARE_SIZE: i32 = 32 [exported]
 const TLS_SIGNATURE_ECDSA_SECP256R1_SHA256: i32 = 1027 [exported]
 const TLS_SIGNATURE_RSA_PSS_RSAE_SHA256: i32 = 2052 [exported]
+const TLS_SIGNATURE_ECDSA_SECP384R1_SHA384: i32 = 1283 [exported]
+const TLS_SIGNATURE_RSA_PSS_RSAE_SHA384: i32 = 2053 [exported]
+const TLS_SIGNATURE_RSA_PSS_RSAE_SHA512: i32 = 2054 [exported]
+const TLS_GROUP_SECP256R1: i32 = 23 [exported]
+const TLS_P256_SHARE_SIZE: i32 = 65 [exported]
 const TLS_ALERT_UNEXPECTED_MESSAGE: i32 = 10 [exported]
 const TLS_ALERT_HANDSHAKE_FAILURE: i32 = 40 [exported]
+const TLS_ALERT_BAD_CERTIFICATE: i32 = 42 [exported]
 const TLS_ALERT_ILLEGAL_PARAMETER: i32 = 47 [exported]
 const TLS_ALERT_DECODE_ERROR: i32 = 50 [exported]
 const TLS_ALERT_DECRYPT_ERROR: i32 = 51 [exported]
@@ -14133,12 +14140,15 @@ const TLS_ALERT_PROTOCOL_VERSION: i32 = 70 [exported]
 const TLS_ALERT_INTERNAL_ERROR: i32 = 80 [exported]
 const TLS_ALERT_MISSING_EXTENSION: i32 = 109 [exported]
 const TLS_ALERT_NO_APPLICATION_PROTOCOL: i32 = 120 [exported]
+const TLS_ALERT_UNSUPPORTED_EXTENSION: i32 = 110 [exported]
 const TLS_PSK_KE: i32 = 0 [exported]
 const TLS_PSK_DHE_KE: i32 = 1 [exported]
 const TLS_RANDOM_SIZE: i32 = 32 [exported]
 const TLS_CODEC_FROM: i32 = 0
 const TLS_U16_BITMAP_WORDS: i32 = 2048
 const TLS_HELLO_RETRY_RANDOM: string = "cf21ad74e59a6111be1d8c021e65b891c2a211167abb8c5e079e09e2c8a8339c"
+const TLS_DOWNGRADE_12: string = "444f574e47524401"
+const TLS_DOWNGRADE_11: string = "444f574e47524400"
 struct TlsReader (class) size=24 align=8
   field data: u8[] index=0 offset=0
   field at: i32 index=1 offset=8
@@ -14236,6 +14246,41 @@ struct TlsClientHello (class) size=152 align=8 exported
   field hasPskModes: boolean index=29 offset=150 initialized
   field pskDheKe: boolean index=30 offset=151 initialized
   constructor -> @nish.TlsClientHello.constructor
+struct TlsServerFlightView (class) size=128 align=8 exported
+  field data: u8[] index=0 offset=0
+  field extensionSeen: u32[] index=1 offset=8
+  field reader: TlsReader index=2 offset=16
+  field alert: i32 index=3 offset=24 initialized
+  field extensionAlert: i32 index=4 offset=28 initialized
+  field legacyVersion: i32 index=5 offset=32 initialized
+  field randomAt: i32 index=6 offset=36 initialized
+  field sessionIdAt: i32 index=7 offset=40 initialized
+  field sessionIdLength: i32 index=8 offset=44 initialized
+  field suite: i32 index=9 offset=48 initialized
+  field compression: i32 index=10 offset=52 initialized
+  field selectedVersion: i32 index=11 offset=56 initialized
+  field shareGroup: i32 index=12 offset=60 initialized
+  field shareAt: i32 index=13 offset=64 initialized
+  field shareLength: i32 index=14 offset=68 initialized
+  field cookieAt: i32 index=15 offset=72 initialized
+  field cookieLength: i32 index=16 offset=76 initialized
+  field alpnAt: i32 index=17 offset=80 initialized
+  field alpnLength: i32 index=18 offset=84 initialized
+  field contextLength: i32 index=19 offset=88 initialized
+  field certificatesAt: i32 index=20 offset=92 initialized
+  field certificatesLength: i32 index=21 offset=96 initialized
+  field certificateCount: i32 index=22 offset=100 initialized
+  field scheme: i32 index=23 offset=104 initialized
+  field signatureAt: i32 index=24 offset=108 initialized
+  field signatureLength: i32 index=25 offset=112 initialized
+  field isRetry: boolean index=26 offset=116 initialized
+  field hasSupportedVersions: boolean index=27 offset=117 initialized
+  field hasKeyShare: boolean index=28 offset=118 initialized
+  field hasCookie: boolean index=29 offset=119 initialized
+  field hasAlpn: boolean index=30 offset=120 initialized
+  field serverNameAcknowledged: boolean index=31 offset=121 initialized
+  constructor -> @nish.TlsServerFlightView.constructor
+  method clear -> @nish.TlsServerFlightView.clear
 function TlsReader.constructor(this: TlsReader, data: u8[], at: i32, end: i32): void -> @nish.TlsReader.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: at data end
@@ -14937,6 +14982,334 @@ function tlsCertificateVerifyContent(transcriptHash: u8[]): u8[] -> @nish.tlsCer
   local +2:9 out: u8[] (const)
   callee +3:5 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
   callee +5:3 tlsWriteCertificateVerifyContent -> @nish.tlsWriteCertificateVerifyContent
+function tlsPutClientSchemes(out: u8[], at: i32): i32 -> @nish.tlsPutClientSchemes
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsPutU16
+  escaping: at
+  calls: nish.tlsPutU16
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0
+  stackSites=0 stackLocals=0
+  local +0:7 p: i32 (let)
+  callee +0:16 tlsPutU16 -> @nish.tlsPutU16
+  callee +1:7 tlsPutU16 -> @nish.tlsPutU16
+  callee +2:7 tlsPutU16 -> @nish.tlsPutU16
+  callee +3:7 tlsPutU16 -> @nish.tlsPutU16
+  callee +4:10 tlsPutU16 -> @nish.tlsPutU16
+function tlsClientOffersScheme(scheme: i32): boolean -> @nish.tlsClientOffersScheme [exported]
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function tlsWriteClientHello(out: u8[], at: i32, random: u8[], sessionId: u8[], suites: i32[], groups: i32[], shareGroup: i32, sharePublic: u8[], serverName: string, alpn: string[], cookie: u8[]): i32 -> @nish.tlsWriteClientHello [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsPutU16
+  escaping: at serverName shareGroup
+  calls: nish.tlsPutAscii nish.tlsPutBytes nish.tlsPutClientSchemes nish.tlsPutHeader nish.tlsPutLength nish.tlsPutU16 nish.tlsPutU8 nish_panic_overflow
+  pointer out: size=0 writesThrough=true captured=false passedTo=nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutU8#0 nish.tlsPutBytes#0 nish.tlsPutU16#0 nish.tlsPutLength#0 nish.tlsPutU8#0 nish.tlsPutU8#0 nish.tlsPutU16#0 nish.tlsPutU8#0 nish.tlsPutAscii#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutClientSchemes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutAscii#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutU8#0 nish.tlsPutU16#0 nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutU16#0 nish.tlsPutBytes#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutLength#0 nish.tlsPutHeader#0
+  pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
+  pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
+  pointer suites: size=0 writesThrough=false captured=false
+  pointer groups: size=0 writesThrough=false captured=false
+  pointer sharePublic: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
+  pointer alpn: size=0 writesThrough=false captured=false
+  pointer cookie: size=0 writesThrough=false captured=false passedTo=nish.tlsPutBytes#2
+  stackSites=0 stackLocals=0
+  local +0:7 p: i32 (let)
+  callee +0:16 tlsPutU16 -> @nish.tlsPutU16
+  callee +1:7 tlsPutBytes -> @nish.tlsPutBytes
+  callee +2:7 tlsPutU8 -> @nish.tlsPutU8
+  callee +3:7 tlsPutBytes -> @nish.tlsPutBytes
+  local +4:9 suiteList: i32 (const)
+  local +6:14 suite: i32 (const)
+  callee +7:9 tlsPutU16 -> @nish.tlsPutU16
+  callee +9:3 tlsPutLength -> @nish.tlsPutLength
+  callee +10:7 tlsPutU8 -> @nish.tlsPutU8
+  callee +10:21 tlsPutU8 -> @nish.tlsPutU8
+  local +11:9 extensions: i32 (const)
+  callee +14:9 tlsPutU16 -> @nish.tlsPutU16
+  local +15:11 body: i32 (const)
+  local +16:11 list: i32 (const)
+  local +17:11 name: i32 (const)
+  callee +17:23 tlsPutU8 -> @nish.tlsPutU8
+  callee +18:9 tlsPutAscii -> @nish.tlsPutAscii
+  callee +19:5 tlsPutLength -> @nish.tlsPutLength
+  callee +20:5 tlsPutLength -> @nish.tlsPutLength
+  callee +21:5 tlsPutLength -> @nish.tlsPutLength
+  callee +23:7 tlsPutU16 -> @nish.tlsPutU16
+  local +24:9 groupsBody: i32 (const)
+  local +25:9 groupList: i32 (const)
+  local +27:14 group: i32 (const)
+  callee +28:9 tlsPutU16 -> @nish.tlsPutU16
+  callee +30:3 tlsPutLength -> @nish.tlsPutLength
+  callee +31:3 tlsPutLength -> @nish.tlsPutLength
+  callee +32:7 tlsPutU16 -> @nish.tlsPutU16
+  local +33:9 schemesBody: i32 (const)
+  local +34:9 schemeList: i32 (const)
+  callee +35:7 tlsPutClientSchemes -> @nish.tlsPutClientSchemes
+  callee +36:3 tlsPutLength -> @nish.tlsPutLength
+  callee +37:3 tlsPutLength -> @nish.tlsPutLength
+  callee +39:9 tlsPutU16 -> @nish.tlsPutU16
+  local +40:11 body: i32 (const)
+  local +41:11 list: i32 (const)
+  local +43:16 protocol: string (const)
+  local +44:13 name: i32 (const)
+  callee +45:11 tlsPutAscii -> @nish.tlsPutAscii
+  callee +46:7 tlsPutLength -> @nish.tlsPutLength
+  callee +48:5 tlsPutLength -> @nish.tlsPutLength
+  callee +49:5 tlsPutLength -> @nish.tlsPutLength
+  callee +51:7 tlsPutU16 -> @nish.tlsPutU16
+  callee +51:22 tlsPutU16 -> @nish.tlsPutU16
+  callee +52:7 tlsPutU16 -> @nish.tlsPutU16
+  callee +52:22 tlsPutU8 -> @nish.tlsPutU8
+  callee +53:7 tlsPutU16 -> @nish.tlsPutU16
+  local +54:9 shareBody: i32 (const)
+  local +55:9 shareList: i32 (const)
+  local +56:9 key: i32 (const)
+  callee +56:20 tlsPutU16 -> @nish.tlsPutU16
+  callee +57:7 tlsPutBytes -> @nish.tlsPutBytes
+  callee +58:3 tlsPutLength -> @nish.tlsPutLength
+  callee +59:3 tlsPutLength -> @nish.tlsPutLength
+  callee +60:3 tlsPutLength -> @nish.tlsPutLength
+  callee +62:9 tlsPutU16 -> @nish.tlsPutU16
+  local +63:11 body: i32 (const)
+  local +64:11 value: i32 (const)
+  callee +65:9 tlsPutBytes -> @nish.tlsPutBytes
+  callee +66:5 tlsPutLength -> @nish.tlsPutLength
+  callee +67:5 tlsPutLength -> @nish.tlsPutLength
+  callee +69:3 tlsPutLength -> @nish.tlsPutLength
+  callee +70:3 tlsPutHeader -> @nish.tlsPutHeader
+function tlsEncodeClientHello(random: u8[], sessionId: u8[], suites: i32[], groups: i32[], shareGroup: i32, sharePublic: u8[], serverName: string, alpn: string[], cookie: u8[]): u8[] -> @nish.tlsEncodeClientHello [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: serverName shareGroup
+  calls: nish.tlsWriteClientHello nish_panic
+  pointer random: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteClientHello#2 nish.tlsWriteClientHello#2
+  pointer sessionId: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteClientHello#3 nish.tlsWriteClientHello#3
+  pointer suites: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteClientHello#4 nish.tlsWriteClientHello#4
+  pointer groups: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteClientHello#5 nish.tlsWriteClientHello#5
+  pointer sharePublic: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteClientHello#7 nish.tlsWriteClientHello#7
+  pointer alpn: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteClientHello#9 nish.tlsWriteClientHello#9
+  pointer cookie: size=0 writesThrough=false captured=false passedTo=nish.tlsWriteClientHello#10 nish.tlsWriteClientHello#10
+  stackSites=1 stackLocals=1
+  local +0:9 none: u8[] (const)
+  local +1:9 out: u8[] (const)
+  callee +2:5 tlsWriteClientHello -> @nish.tlsWriteClientHello
+  callee +16:3 tlsWriteClientHello -> @nish.tlsWriteClientHello
+function TlsServerFlightView.constructor(this: TlsServerFlightView): void -> @nish.TlsServerFlightView.constructor [exported constructor]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
+  calls: nish.TlsReader.constructor nish_alloc_struct nish_panic
+  pointer this: size=128 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  callee +0:19 new TlsReader -> @nish.TlsReader.constructor
+function TlsServerFlightView.clear(this: TlsServerFlightView): void -> @nish.TlsServerFlightView.clear [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer this: size=128 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local +29:14 k: i32 (let)
+function tlsFlightRefuseExtension(view: TlsServerFlightView, alert: i32): void -> @nish.tlsFlightRefuseExtension
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: alert
+  pointer view: size=128 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function tlsClientOffersExtension(type: i32): boolean -> @nish.tlsClientOffersExtension
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function tlsFlightOpen(view: TlsServerFlightView, data: u8[], off: i32, len: i32): TlsReader | null -> @nish.tlsFlightOpen
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: data off
+  calls: nish.TlsServerFlightView.clear nish_panic_overflow
+  pointer view: size=128 writesThrough=true captured=false passedTo=nish.TlsServerFlightView.clear#0
+  pointer data: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+  callee -1:3 TlsServerFlightView.clear -> @nish.TlsServerFlightView.clear
+  local +5:9 r: TlsReader (const)
+function tlsFlightClose(view: TlsServerFlightView, r: TlsReader, end: i32): void -> @nish.tlsFlightClose
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer view: size=128 writesThrough=true captured=false
+  pointer r: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function tlsReadServerHelloExtension(r: TlsReader, type: i32, end: i32, view: TlsServerFlightView): void -> @nish.tlsReadServerHelloExtension
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: end type
+  calls: nish.tlsClientOffersExtension nish.tlsFlightRefuseExtension nish.tlsReadSkipTo nish.tlsReadU16 nish.tlsReadVector nish_panic_overflow
+  pointer r: size=24 writesThrough=true captured=false passedTo=nish.tlsReadU16#0 nish.tlsReadU16#0 nish.tlsReadVector#0 nish.tlsReadSkipTo#0 nish.tlsReadVector#0 nish.tlsReadSkipTo#0 nish.tlsReadSkipTo#0
+  pointer view: size=128 writesThrough=true captured=false passedTo=nish.tlsFlightRefuseExtension#0
+  stackSites=0 stackLocals=0
+  callee +1:28 tlsReadU16 -> @nish.tlsReadU16
+  callee +4:23 tlsReadU16 -> @nish.tlsReadU16
+  local +6:13 keyEnd: i32 (const)
+  callee +6:27 tlsReadVector -> @nish.tlsReadVector
+  callee +9:7 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  local +12:11 cookieEnd: i32 (const)
+  callee +12:28 tlsReadVector -> @nish.tlsReadVector
+  callee +16:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +18:5 tlsFlightRefuseExtension -> @nish.tlsFlightRefuseExtension
+  callee +20:7 tlsClientOffersExtension -> @nish.tlsClientOffersExtension
+  callee +22:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
+function tlsReadEncryptedExtension(r: TlsReader, type: i32, end: i32, view: TlsServerFlightView): void -> @nish.tlsReadEncryptedExtension
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: end type
+  calls: nish.tlsClientOffersExtension nish.tlsFlightRefuseExtension nish.tlsReadSkipTo nish.tlsReadU16Vector nish.tlsReadVector nish_panic_overflow
+  pointer r: size=24 writesThrough=true captured=false passedTo=nish.tlsReadVector#0 nish.tlsReadVector#0 nish.tlsReadSkipTo#0 nish.tlsReadSkipTo#0 nish.tlsReadU16Vector#0 nish.tlsReadSkipTo#0
+  pointer view: size=128 writesThrough=true captured=false passedTo=nish.tlsFlightRefuseExtension#0 nish.tlsFlightRefuseExtension#0
+  stackSites=0 stackLocals=0
+  local -2:11 listEnd: i32 (const)
+  callee -2:26 tlsReadVector -> @nish.tlsReadVector
+  local -1:11 nameEnd: i32 (const)
+  callee -1:26 tlsReadVector -> @nish.tlsReadVector
+  callee +3:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +5:7 tlsFlightRefuseExtension -> @nish.tlsFlightRefuseExtension
+  callee +6:7 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +15:5 tlsReadU16Vector -> @nish.tlsReadU16Vector
+  callee +17:5 tlsFlightRefuseExtension -> @nish.tlsFlightRefuseExtension
+  callee +19:7 tlsClientOffersExtension -> @nish.tlsClientOffersExtension
+  callee +21:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
+function tlsReadServerExtensions(r: TlsReader, view: TlsServerFlightView, hello: boolean): void -> @nish.tlsReadServerExtensions
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.tlsFlightRefuseExtension nish.tlsMarkSeen nish.tlsReadEncryptedExtension nish.tlsReadList nish.tlsReadServerHelloExtension nish.tlsReadU16 nish.tlsReadVector
+  pointer r: size=24 writesThrough=true captured=false passedTo=nish.tlsReadVector#0 nish.tlsReadList#0 nish.tlsReadU16#0 nish.tlsReadVector#0 nish.tlsReadList#0 nish.tlsReadServerHelloExtension#0 nish.tlsReadEncryptedExtension#0
+  pointer view: size=128 writesThrough=true captured=false passedTo=nish.tlsFlightRefuseExtension#0 nish.tlsReadServerHelloExtension#3 nish.tlsReadEncryptedExtension#3
+  stackSites=0 stackLocals=0
+  local -17:9 extensionsEnd: i32 (const)
+  callee -17:30 tlsReadVector -> @nish.tlsReadVector
+  local -16:9 messageEnd: i32 (const)
+  callee -16:27 tlsReadList -> @nish.tlsReadList
+  local -14:11 type: i32 (const)
+  callee -14:23 tlsReadU16 -> @nish.tlsReadU16
+  local -13:11 bodyEnd: i32 (const)
+  callee -13:26 tlsReadVector -> @nish.tlsReadVector
+  callee -9:9 tlsMarkSeen -> @nish.tlsMarkSeen
+  callee -8:7 tlsFlightRefuseExtension -> @nish.tlsFlightRefuseExtension
+  local -6:11 outerEnd: i32 (const)
+  callee -6:27 tlsReadList -> @nish.tlsReadList
+  callee -4:7 tlsReadServerHelloExtension -> @nish.tlsReadServerHelloExtension
+  callee -2:7 tlsReadEncryptedExtension -> @nish.tlsReadEncryptedExtension
+function tlsWindowIsHex(data: u8[], at: i32, text: string): boolean -> @nish.tlsWindowIsHex
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.tlsHexNibble nish_panic_index nish_panic_overflow
+  pointer data: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 length: i32 (const)
+  local +4:12 k: i32 (let)
+  local +5:11 hi: i32 (const)
+  callee +5:21 tlsHexNibble -> @nish.tlsHexNibble
+  local +6:11 lo: i32 (const)
+  callee +6:21 tlsHexNibble -> @nish.tlsHexNibble
+function tlsReadServerHello(view: TlsServerFlightView, data: u8[], off: i32, len: i32): void -> @nish.tlsReadServerHello [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: len off
+  calls: nish.tlsFlightClose nish.tlsFlightOpen nish.tlsReadServerExtensions nish.tlsReadSkipTo nish.tlsReadU16 nish.tlsReadU8 nish.tlsReadVector nish.tlsWindowIsHex nish_panic_overflow
+  pointer view: size=128 writesThrough=true captured=false passedTo=nish.tlsFlightOpen#0 nish.tlsReadServerExtensions#1 nish.tlsFlightClose#0
+  pointer data: size=0 writesThrough=true captured=true passedTo=nish.tlsFlightOpen#1 nish.tlsWindowIsHex#0
+  stackSites=0 stackLocals=0
+  local -4:9 r: TlsReader | null (const)
+  callee -4:31 tlsFlightOpen -> @nish.tlsFlightOpen
+  callee +0:24 tlsReadU16 -> @nish.tlsReadU16
+  callee +2:18 tlsWindowIsHex -> @nish.tlsWindowIsHex
+  callee +3:3 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  local +4:9 sessionEnd: i32 (const)
+  callee +4:27 tlsReadVector -> @nish.tlsReadVector
+  callee +7:3 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +8:16 tlsReadU16 -> @nish.tlsReadU16
+  callee +9:22 tlsReadU8 -> @nish.tlsReadU8
+  callee +11:5 tlsReadServerExtensions -> @nish.tlsReadServerExtensions
+  callee +13:3 tlsFlightClose -> @nish.tlsFlightClose
+function tlsServerHelloDowngrade(view: TlsServerFlightView): boolean -> @nish.tlsServerHelloDowngrade [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.tlsWindowIsHex nish_panic_overflow
+  pointer view: size=128 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 at: i32 (const)
+  callee +1:10 tlsWindowIsHex -> @nish.tlsWindowIsHex
+  callee +1:61 tlsWindowIsHex -> @nish.tlsWindowIsHex
+function tlsReadEncryptedExtensions(view: TlsServerFlightView, data: u8[], off: i32, len: i32): void -> @nish.tlsReadEncryptedExtensions [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsFlightOpen
+  escaping: len off
+  calls: nish.tlsFlightClose nish.tlsFlightOpen nish.tlsReadServerExtensions nish_panic_overflow
+  pointer view: size=128 writesThrough=true captured=false passedTo=nish.tlsFlightOpen#0 nish.tlsReadServerExtensions#1 nish.tlsFlightClose#0
+  pointer data: size=0 writesThrough=true captured=true passedTo=nish.tlsFlightOpen#1
+  stackSites=0 stackLocals=0
+  local +0:9 r: TlsReader | null (const)
+  callee +0:31 tlsFlightOpen -> @nish.tlsFlightOpen
+  callee +4:3 tlsReadServerExtensions -> @nish.tlsReadServerExtensions
+  callee +5:3 tlsFlightClose -> @nish.tlsFlightClose
+function tlsReadCertificate(view: TlsServerFlightView, data: u8[], off: i32, len: i32): void -> @nish.tlsReadCertificate [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: len off
+  calls: nish.tlsFlightClose nish.tlsFlightOpen nish.tlsFlightRefuseExtension nish.tlsReadList nish.tlsReadSkipTo nish.tlsReadVector nish_panic_overflow
+  pointer view: size=128 writesThrough=true captured=false passedTo=nish.tlsFlightOpen#0 nish.tlsFlightRefuseExtension#0 nish.tlsFlightClose#0
+  pointer data: size=0 writesThrough=true captured=true passedTo=nish.tlsFlightOpen#1
+  stackSites=0 stackLocals=0
+  local -5:9 r: TlsReader | null (const)
+  callee -5:31 tlsFlightOpen -> @nish.tlsFlightOpen
+  local -1:9 contextEnd: i32 (const)
+  callee -1:27 tlsReadVector -> @nish.tlsReadVector
+  callee +1:3 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  local +2:9 listEnd: i32 (const)
+  callee +2:24 tlsReadVector -> @nish.tlsReadVector
+  local +5:9 messageEnd: i32 (const)
+  callee +5:27 tlsReadList -> @nish.tlsReadList
+  callee +7:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +7:22 tlsReadVector -> @nish.tlsReadVector
+  local +8:11 extensionsEnd: i32 (const)
+  callee +8:32 tlsReadVector -> @nish.tlsReadVector
+  callee +10:7 tlsFlightRefuseExtension -> @nish.tlsFlightRefuseExtension
+  callee +12:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +16:3 tlsFlightClose -> @nish.tlsFlightClose
+function tlsReadCertificateVerify(view: TlsServerFlightView, data: u8[], off: i32, len: i32): void -> @nish.tlsReadCertificateVerify [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: len off
+  calls: nish.tlsFlightClose nish.tlsFlightOpen nish.tlsReadSkipTo nish.tlsReadU16 nish.tlsReadVector nish_panic_overflow
+  pointer view: size=128 writesThrough=true captured=false passedTo=nish.tlsFlightOpen#0 nish.tlsFlightClose#0
+  pointer data: size=0 writesThrough=true captured=true passedTo=nish.tlsFlightOpen#1
+  stackSites=0 stackLocals=0
+  local -4:9 r: TlsReader | null (const)
+  callee -4:31 tlsFlightOpen -> @nish.tlsFlightOpen
+  callee +0:17 tlsReadU16 -> @nish.tlsReadU16
+  local +1:9 signatureEnd: i32 (const)
+  callee +1:29 tlsReadVector -> @nish.tlsReadVector
+  callee +4:3 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +5:3 tlsFlightClose -> @nish.tlsFlightClose
+function tlsReadNewSessionTicket(view: TlsServerFlightView, data: u8[], off: i32, len: i32): void -> @nish.tlsReadNewSessionTicket [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.tlsFlightOpen
+  escaping: len off
+  calls: nish.tlsFlightClose nish.tlsFlightOpen nish.tlsReadSkipTo nish.tlsReadVector nish_panic_overflow
+  pointer view: size=128 writesThrough=true captured=false passedTo=nish.tlsFlightOpen#0 nish.tlsFlightClose#0
+  pointer data: size=0 writesThrough=true captured=true passedTo=nish.tlsFlightOpen#1
+  stackSites=0 stackLocals=0
+  local +0:9 r: TlsReader | null (const)
+  callee +0:31 tlsFlightOpen -> @nish.tlsFlightOpen
+  callee +4:3 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +5:3 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +5:20 tlsReadVector -> @nish.tlsReadVector
+  callee +6:3 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +6:20 tlsReadVector -> @nish.tlsReadVector
+  callee +7:3 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +7:20 tlsReadVector -> @nish.tlsReadVector
+  callee +8:3 tlsFlightClose -> @nish.tlsFlightClose
+function tlsCopyCertificates(view: TlsServerFlightView): u8[][] -> @nish.tlsCopyCertificates [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.TlsReader.constructor nish.tlsCopyWindow nish.tlsReadSkipTo nish.tlsReadVector nish_array_grow nish_panic_overflow
+  pointer view: size=128 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:9 chain: u8[][] (const)
+  local +1:9 r: TlsReader (const)
+  callee +1:24 new TlsReader -> @nish.TlsReader.constructor
+  local +7:11 certificateEnd: i32 (const)
+  callee +7:33 tlsReadVector -> @nish.tlsReadVector
+  callee +8:16 tlsCopyWindow -> @nish.tlsCopyWindow
+  callee +9:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +10:5 tlsReadSkipTo -> @nish.tlsReadSkipTo
+  callee +10:22 tlsReadVector -> @nish.tlsReadVector
 module std/net/tls/schedule.ts [package nish]
 import HkdfScratch from "nish/crypto/hkdf" -> struct HkdfScratch
 import hkdfExpandLabelHeldInto from "nish/crypto/hkdf" -> function @nish.hkdfExpandLabelHeldInto
