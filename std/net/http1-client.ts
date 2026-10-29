@@ -830,7 +830,12 @@ const http1ClientFieldLine = (p: Http1ResponseParser, keep: boolean): i32 => {
   if (keep) {
     let valueStart: i32 = nameEnd + 1
     let valueEnd: i32 = b
-    while (valueStart >= 0 && valueStart < valueEnd && valueStart < toI32(buf.length) && http1IsOws(toI32(buf[valueStart]))) {
+    while (
+      valueStart >= 0 &&
+      valueStart < valueEnd &&
+      valueStart < toI32(buf.length) &&
+      http1IsOws(toI32(buf[valueStart]))
+    ) {
       valueStart += 1
     }
     while (
