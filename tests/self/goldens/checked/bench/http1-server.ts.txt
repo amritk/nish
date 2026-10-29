@@ -4822,13 +4822,13 @@ function http1TakeLine(p: Http1Parser, limit: i32, overStatus: i32): i32 -> @nis
   callee -5:16 http1Fail -> @nish.http1Fail
   callee -2:16 http1Fail -> @nish.http1Fail
   callee +10:12 http1Fail -> @nish.http1Fail
-function http1IsTokenByte(c: i32): boolean -> @nish.http1IsTokenByte
+function http1IsTokenByte(c: i32): boolean -> @nish.http1IsTokenByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function http1IsValueByte(c: i32): boolean -> @nish.http1IsValueByte
+function http1IsValueByte(c: i32): boolean -> @nish.http1IsValueByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function http1Text(buf: u8[], from: i32, to: i32, lower: boolean): string -> @nish.http1Text
+function http1Text(buf: u8[], from: i32, to: i32, lower: boolean): string -> @nish.http1Text [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish_alloc_struct nish_array_grow nish_str_new
@@ -4837,12 +4837,12 @@ function http1Text(buf: u8[], from: i32, to: i32, lower: boolean): string -> @ni
   local +0:9 parts: string[] (const)
   local +1:12 k: i32 (let)
   local +2:9 c: i32 (let)
-function http1IsOws(c: i32): boolean -> @nish.http1IsOws
+function http1IsOws(c: i32): boolean -> @nish.http1IsOws [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function http1SameWord(text: string, a: i32, b: i32, word: string): boolean -> @nish.http1SameWord
+function http1SameWord(text: string, a: i32, b: i32, word: string): boolean -> @nish.http1SameWord [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
+  calls: nish_panic_index nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +4:12 k: i32 (let)
@@ -5035,7 +5035,7 @@ function http1ContentLength(bytes: u8[], from: i32, to: i32, limit: i32): i32 ->
   local +1:7 over: boolean (let)
   local +2:12 k: i32 (let)
   local +3:11 c: i32 (const)
-function http1HexValue(c: i32): i32 -> @nish.http1HexValue
+function http1HexValue(c: i32): i32 -> @nish.http1HexValue [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function http1ChunkSize(p: Http1Parser): i32 -> @nish.http1ChunkSize
@@ -5105,14 +5105,14 @@ function http1BytesOf(text: string): u8[] -> @nish.http1BytesOf
   local +1:9 out: u8[] (const)
   local +2:9 outLength: i32 (const)
   local +3:12 k: i32 (let)
-function http1IsToken(text: string): boolean -> @nish.http1IsToken
+function http1IsToken(text: string): boolean -> @nish.http1IsToken [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.http1IsTokenByte
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +4:12 k: i32 (let)
   callee +5:10 http1IsTokenByte -> @nish.http1IsTokenByte
-function http1IsFieldText(text: string): boolean -> @nish.http1IsFieldText
+function http1IsFieldText(text: string): boolean -> @nish.http1IsFieldText [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.http1IsValueByte
   stackSites=0 stackLocals=0
@@ -5208,7 +5208,7 @@ function http1DecimalDigits(n: i32): i32 -> @nish.http1DecimalDigits
   stackSites=0 stackLocals=0
   local +0:7 digits: i32 (let)
   local +1:7 v: i32 (let)
-function http1PutText(out: u8[], at: i32, text: string): i32 -> @nish.http1PutText
+function http1PutText(out: u8[], at: i32, text: string): i32 -> @nish.http1PutText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_panic_index nish_panic_overflow
@@ -29395,6 +29395,7 @@ import X509_KEY_P384 from "nish/crypto/x509" -> const X509_KEY_P384
 import X509_KEY_RSA from "nish/crypto/x509" -> const X509_KEY_RSA
 import X509_KU_DIGITAL_SIGNATURE from "nish/crypto/x509" -> const X509_KU_DIGITAL_SIGNATURE
 import X509_KU_KEY_CERT_SIGN from "nish/crypto/x509" -> const X509_KU_KEY_CERT_SIGN
+import X509_MAX_SERIAL from "nish/crypto/x509" -> const X509_MAX_SERIAL
 import X509_SIG_ECDSA_SHA256 from "nish/crypto/x509" -> const X509_SIG_ECDSA_SHA256
 import X509_SIG_ECDSA_SHA384 from "nish/crypto/x509" -> const X509_SIG_ECDSA_SHA384
 import X509_SIG_ED25519 from "nish/crypto/x509" -> const X509_SIG_ED25519
@@ -29612,19 +29613,25 @@ function pkiMatchHostname(leaf: X509Certificate, hostname: string): boolean -> @
   callee +9:31 pkiHostDns -> @nish.pkiHostDns
   local +13:14 d: string (const)
   callee +14:9 pkiDnsMatch -> @nish.pkiDnsMatch
+function pkiRsaKeyCode(key: RsaPublicKey | null): i32 -> @nish.pkiRsaKeyCode
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer key: size=24 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
 function pkiRsaCode(cert: X509Certificate, issuer: X509Certificate): i32 -> @nish.pkiRsaCode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.rsaVerifyPss
-  calls: nish.rsaParsePublicKey nish.rsaVerifyPkcs1v15 nish.rsaVerifyPss
+  calls: nish.pkiRsaKeyCode nish.rsaParsePublicKey nish.rsaVerifyPkcs1v15 nish.rsaVerifyPss
   pointer cert: size=168 writesThrough=false captured=false
   pointer issuer: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 key: RsaPublicKey | null (const)
   callee +0:36 rsaParsePublicKey -> @nish.rsaParsePublicKey
-  local +7:9 alg: i32 (const)
-  callee +9:12 rsaVerifyPss -> @nish.rsaVerifyPss
-  local +13:7 hash: i32 (let)
-  callee +19:10 rsaVerifyPkcs1v15 -> @nish.rsaVerifyPkcs1v15
+  local +1:9 fit: i32 (const)
+  callee +1:20 pkiRsaKeyCode -> @nish.pkiRsaKeyCode
+  local +5:9 alg: i32 (const)
+  callee +7:12 rsaVerifyPss -> @nish.rsaVerifyPss
+  local +11:7 hash: i32 (let)
+  callee +17:10 rsaVerifyPkcs1v15 -> @nish.rsaVerifyPkcs1v15
 function pkiEcdsaCode(cert: X509Certificate, issuer: X509Certificate): i32 -> @nish.pkiEcdsaCode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.sha256
@@ -29767,13 +29774,23 @@ function pkiTimeCode(c: X509Certificate, nowMs: i64): i32 -> @nish.pkiTimeCode
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer c: size=168 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-function pkiIntermediateCode(s: PkiSearch, child: X509Certificate, cand: X509Certificate): i32 -> @nish.pkiIntermediateCode
+function pkiKeyIdsCode(cand: X509Certificate, root: boolean): i32 -> @nish.pkiKeyIdsCode
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.pkiBytesEqual nish.pkiSelfIssued
+  pointer cand: size=168 writesThrough=false captured=false passedTo=nish.pkiSelfIssued#0
+  stackSites=0 stackLocals=0
+  local +0:9 skid: u8[] | null (const)
+  local +1:9 akid: u8[] | null (const)
+  callee +5:8 pkiSelfIssued -> @nish.pkiSelfIssued
+  callee +8:36 pkiBytesEqual -> @nish.pkiBytesEqual
+function pkiIssuerCode(s: PkiSearch, child: X509Certificate, cand: X509Certificate, root: boolean): i32 -> @nish.pkiIssuerCode
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.pkiConstraintsCode
-  calls: nish.pkiCheckSignature nish.pkiConstraintsCode nish.pkiSelfIssued nish.pkiTimeCode nish_panic_overflow
+  escaping: root
+  calls: nish.pkiCheckSignature nish.pkiConstraintsCode nish.pkiKeyIdsCode nish.pkiSelfIssued nish.pkiTimeCode nish_panic_overflow
   pointer s: size=64 writesThrough=true captured=false passedTo=nish.pkiConstraintsCode#0 nish.pkiCheckSignature#0
   pointer child: size=168 writesThrough=false captured=false passedTo=nish.pkiCheckSignature#1
-  pointer cand: size=168 writesThrough=false captured=false passedTo=nish.pkiTimeCode#0 nish.pkiConstraintsCode#1 nish.pkiCheckSignature#2
+  pointer cand: size=168 writesThrough=false captured=false passedTo=nish.pkiTimeCode#0 nish.pkiConstraintsCode#1 nish.pkiCheckSignature#2 nish.pkiKeyIdsCode#0
   stackSites=0 stackLocals=0
   local +0:9 time: i32 (const)
   callee +0:21 pkiTimeCode -> @nish.pkiTimeCode
@@ -29782,7 +29799,9 @@ function pkiIntermediateCode(s: PkiSearch, child: X509Certificate, cand: X509Cer
   callee +19:12 pkiSelfIssued -> @nish.pkiSelfIssued
   local +27:9 names: i32 (const)
   callee +27:22 pkiConstraintsCode -> @nish.pkiConstraintsCode
-  callee +31:10 pkiCheckSignature -> @nish.pkiCheckSignature
+  local +31:9 signature: i32 (const)
+  callee +31:26 pkiCheckSignature -> @nish.pkiCheckSignature
+  callee +32:45 pkiKeyIdsCode -> @nish.pkiKeyIdsCode
 function pkiNote(s: PkiSearch, code: i32, score: i32): void -> @nish.pkiNote
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
@@ -29804,27 +29823,62 @@ function pkiCandidate(s: PkiSearch, child: X509Certificate, cand: X509Certificat
 function pkiExtend(s: PkiSearch, child: X509Certificate): boolean -> @nish.pkiExtend
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:13
-  calls: nish.Map$str$arr.$X509Certificate.probe nish.Map$str$arr.$X509Certificate.valueAt nish.pkiCandidate nish.pkiCheckSignature nish.pkiExtend nish.pkiHex nish.pkiIntermediateCode nish.pkiNote nish.x509NameEqual nish_array_grow nish_panic_index nish_panic_overflow
-  pointer s: size=64 writesThrough=true captured=false passedTo=nish.pkiCandidate#0 nish.pkiCheckSignature#0 nish.pkiNote#0 nish.pkiCandidate#0 nish.pkiIntermediateCode#0 nish.pkiNote#0 nish.pkiExtend#0 nish.pkiNote#0
-  pointer child: size=168 writesThrough=false captured=false passedTo=nish.pkiCandidate#1 nish.pkiCheckSignature#1 nish.pkiCandidate#1 nish.pkiIntermediateCode#1
+  calls: nish.Map$str$arr.$X509Certificate.probe nish.Map$str$arr.$X509Certificate.valueAt nish.pkiCandidate nish.pkiExtend nish.pkiHex nish.pkiIssuerCode nish.pkiNote nish.x509NameEqual nish_array_grow nish_panic_index nish_panic_overflow
+  pointer s: size=64 writesThrough=true captured=false passedTo=nish.pkiCandidate#0 nish.pkiIssuerCode#0 nish.pkiNote#0 nish.pkiCandidate#0 nish.pkiIssuerCode#0 nish.pkiNote#0 nish.pkiExtend#0 nish.pkiNote#0
+  pointer child: size=168 writesThrough=false captured=false passedTo=nish.pkiCandidate#1 nish.pkiIssuerCode#1 nish.pkiCandidate#1 nish.pkiIssuerCode#1
   stackSites=0 stackLocals=0
-  local -12:9 depth: i32 (const)
-  local -10:11 roots: X509Certificate[] | undefined (const)
-  callee -10:50 Map<string, X509Certificate[]>.probe -> @nish.Map$str$arr.$X509Certificate.probe
-  callee -10:72 pkiHex -> @nish.pkiHex
-  local -8:18 root: X509Certificate (const)
-  callee -7:13 pkiCandidate -> @nish.pkiCandidate
+  local -11:9 depth: i32 (const)
+  local -9:11 roots: X509Certificate[] | undefined (const)
+  callee -9:50 Map<string, X509Certificate[]>.probe -> @nish.Map$str$arr.$X509Certificate.probe
+  callee -9:72 pkiHex -> @nish.pkiHex
+  local -7:18 root: X509Certificate (const)
+  callee -6:13 pkiCandidate -> @nish.pkiCandidate
   local -5:17 code: i32 (const)
-  callee -5:29 pkiCheckSignature -> @nish.pkiCheckSignature
+  callee -5:29 pkiIssuerCode -> @nish.pkiIssuerCode
   callee +3:11 pkiNote -> @nish.pkiNote
   local +7:16 cand: X509Certificate (const)
   callee +8:11 x509NameEqual -> @nish.x509NameEqual
   callee +8:56 pkiCandidate -> @nish.pkiCandidate
   local +9:15 code: i32 (const)
-  callee +9:27 pkiIntermediateCode -> @nish.pkiIntermediateCode
+  callee +9:27 pkiIssuerCode -> @nish.pkiIssuerCode
   callee +14:11 pkiNote -> @nish.pkiNote
   callee +17:15 pkiExtend -> @nish.pkiExtend
   callee +28:3 pkiNote -> @nish.pkiNote
+function pkiSerialSound(c: X509Certificate): boolean -> @nish.pkiSerialSound
+  facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer c: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+  local +4:12 i: i32 (let)
+function pkiSanDnsSound(san: string): boolean -> @nish.pkiSanDnsSound
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
+  escaping: san
+  calls: nish.pkiStripDot nish.pkiValidDns nish_arena_mark nish_arena_release nish_panic_index nish_panic_slice nish_str_index_of nish_str_index_of_from nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:9 name: string (const)
+  callee +0:24 pkiStripDot -> @nish.pkiStripDot
+  local +1:9 n: i32 (const)
+  local +2:9 wild: boolean (const)
+  callee +3:35 pkiValidDns -> @nish.pkiValidDns
+function pkiSubscriberKeyCode(leaf: X509Certificate): i32 -> @nish.pkiSubscriberKeyCode
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.pkiRsaKeyCode nish.rsaParsePublicKey
+  pointer leaf: size=168 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 type: i32 (const)
+  callee +2:12 pkiRsaKeyCode -> @nish.pkiRsaKeyCode
+  callee +2:26 rsaParsePublicKey -> @nish.rsaParsePublicKey
+function pkiLeafProfileCode(leaf: X509Certificate): i32 -> @nish.pkiLeafProfileCode
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.pkiSanDnsSound nish.pkiSelfIssued nish.pkiSerialSound nish.pkiSubscriberKeyCode
+  pointer leaf: size=168 writesThrough=false captured=false passedTo=nish.pkiSubscriberKeyCode#0 nish.pkiSerialSound#0 nish.pkiSelfIssued#0
+  stackSites=0 stackLocals=0
+  local +0:9 key: i32 (const)
+  callee +0:20 pkiSubscriberKeyCode -> @nish.pkiSubscriberKeyCode
+  callee +4:8 pkiSerialSound -> @nish.pkiSerialSound
+  callee +4:56 pkiSelfIssued -> @nish.pkiSelfIssued
+  local +7:14 d: string (const)
+  callee +8:10 pkiSanDnsSound -> @nish.pkiSanDnsSound
 function pkiLeafCode(leaf: X509Certificate, hostname: string, nowMs: i64): i32 -> @nish.pkiLeafCode
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: hostname nowMs
@@ -29856,7 +29910,7 @@ function pkiVerifyServer(chain: u8[][], hostname: string, nowMs: i64, store: Pki
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=16
   sharedWrite: +0:5
   escaping: hostname nowMs
-  calls: nish.PkiResult.constructor nish.PkiSearch.constructor nish.pkiExtend nish.pkiHostDns nish.pkiLeafCode nish.pkiParseIp nish.pkiStripDot nish.x509ParseCertificate nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow
+  calls: nish.PkiResult.constructor nish.PkiSearch.constructor nish.pkiExtend nish.pkiHostDns nish.pkiLeafCode nish.pkiLeafProfileCode nish.pkiParseIp nish.pkiStripDot nish.x509ParseCertificate nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow
   pointer chain: size=0 writesThrough=false captured=false
   pointer store: size=16 writesThrough=true captured=true passedTo=nish.PkiSearch.constructor#1
   stackSites=2 stackLocals=2
@@ -29887,8 +29941,11 @@ function pkiVerifyServer(chain: u8[][], hostname: string, nowMs: i64, store: Pki
   local +4:9 s: PkiSearch (const)
   callee +4:13 new PkiSearch -> @nish.PkiSearch.constructor
   callee +6:7 pkiExtend -> @nish.pkiExtend
-  callee +7:12 new PkiResult -> @nish.PkiResult.constructor
-  callee +9:10 new PkiResult -> @nish.PkiResult.constructor
+  local +7:11 profile: i32 (const)
+  callee +7:26 pkiLeafProfileCode -> @nish.pkiLeafProfileCode
+  callee +8:33 new PkiResult -> @nish.PkiResult.constructor
+  callee +8:65 new PkiResult -> @nish.PkiResult.constructor
+  callee +10:10 new PkiResult -> @nish.PkiResult.constructor
 function pkiReason(code: i32): string -> @nish.pkiReason [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0

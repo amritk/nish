@@ -53,6 +53,7 @@ the record that found it. The notes below the table name each such finding.
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 9 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 2 ⁷ |
+| HTTP/1.1 client | [http1-client.md](http1-client.md) | `std/net/http1-client.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
@@ -71,9 +72,9 @@ the record that found it. The notes below the table name each such finding.
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
-| PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 2 / 2 ²⁴ |
+| PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 34 / 122** | **0 / 0 / 2 / 16** |
+| **Total** ⁸ | | | **3 / 10 / 35 / 126** | **0 / 0 / 1 / 24** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -256,10 +257,19 @@ the record that found it. The notes below the table name each such finding.
     the key-size and exponent caps, and a message over 2^31 − 1 bytes
     panicking in the hash, are accepted, with the reason in their record, and
     are not counted. RSA-2 and RSA-5 are properties checked and found to hold.
-24. PKI-17 and PKI-18 (Medium) and PKI-19 and PKI-20 (Low) are open and
-    counted: no revocation, a root's own name constraints not applied, no
-    policy processing, and Names compared byte for byte, which fails closed.
-    PKI-1 to PKI-16 are properties checked and found to hold.
+24. PKI-18 (Medium) and PKI-21 to PKI-24 (Low) were found by running the
+    module against x509-limbo and are fixed: a root's own constraints, a
+    root checked as an issuer, key identifiers, the leaf's server profile and
+    its key. PKI-17 (Medium) and PKI-19, PKI-20, PKI-25 to PKI-28 and PKI-30
+    to PKI-32 (Low) are open and counted: no revocation, no policy
+    processing, Names compared byte for byte, chains limbo accepts refused,
+    criticality not read, two extensions' parts not decoded, no Public
+    Suffix List, a leaf without extKeyUsage accepted as RFC 5280 reads it, a
+    leading-period dNSName subtree read rather than refused, and a root
+    without a subjectKeyIdentifier accepted, as one Mozilla ships is. #1028
+    tracks PKI-26 to PKI-28.
+    PKI-29 (Informational), a common name not checked against the SANs, is
+    not counted. PKI-1 to PKI-16 are properties checked and found to hold.
 
 ## Fuzzed
 
@@ -280,6 +290,7 @@ building the runtime for the harness, not by a target.
 | [tls.md](tls.md) | `tls-client-hello`, `tls-record`, `tls-server-flight` |
 | [quic.md](quic.md) | `quic-header`, `quic-frame` |
 | [http1.md](http1.md) | `http1`, `websocket` |
+| [http1-client.md](http1-client.md) | `http1-client` |
 | [http2.md](http2.md) | `hpack` |
 | [crypto-x509.md](crypto-x509.md) | `x509-der`, `x509-pem` |
 
@@ -310,8 +321,10 @@ only.
 
 | Id | Severity | File | What is left | Follow-up |
 | --- | --- | --- | --- | --- |
+| PKI-17 | Medium | `std/crypto/pki.ts` | Revocation is not checked: no CRL, OCSP or stapled response is read, so a revoked certificate chains until it expires | — |
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
+| HC-1 | Low | `std/net/http1-client.ts` (`http1ClientFieldLine`) | Each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes` | — |
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
@@ -324,6 +337,15 @@ only.
 | SQL-2 | Low | `std/sqlite.ts` (`columnText`) | `sqlite3_column_text` answers NULL both for SQL `NULL` and when converting the value to text runs out of memory, and `columnText` reads either as `null`. A program can take a value it failed to read for an empty column. `columnInto` tells the two apart and answers `SQLITE_NOMEM`. | — |
 | X509-12 | Low | `std/crypto/x509.ts` (`x509NameEqual`, `x509NameIsPrefix`) | Names compare as DER byte for byte, not after RFC 5280 §7.1's stringprep, so a re-encoded issuer Name does not chain and a re-encoded directoryName constraint does not match. Fails closed | — |
 | X509-13 | Low | `std/crypto/x509.ts` (`x509DerNameSound`) | DER's SET OF order inside a multi-valued RDN is not checked: an unsorted RDN is a sound Name that matches only itself, never its sorted spelling. Fails closed | — |
+| PKI-19 | Low | `std/crypto/pki.ts` | Certificate policies are not processed: no policy tree, so a chain is not refused for its policies | — |
+| PKI-20 | Low | `std/crypto/pki.ts` | Names chain by DER byte for byte, as X509-12. Fails closed | — |
+| PKI-25 | Low | `std/crypto/pki.ts` | Six chains x509-limbo accepts are refused, each under a check kept on purpose. Fails closed | — |
+| PKI-26 | Low | `std/crypto/pki.ts` | An extension's criticality is not read, so a known extension marked against RFC 5280 §4.2 is accepted; each binds whichever way it is marked | #1028 |
+| PKI-27 | Low | `std/crypto/pki.ts` | The authorityKeyIdentifier's issuer and serial and the authorityInfoAccess extension are not decoded, so a root's malformed AKI or a malformed AIA is accepted | #1028 |
+| PKI-28 | Low | `std/crypto/pki.ts` | A wildcard over a public suffix, such as `*.co.uk`, is accepted: no Public Suffix List ships | #1028 |
+| PKI-30 | Low | `std/crypto/pki.ts` | A leaf without extKeyUsage is accepted, as RFC 5280 reads it, where the BRs require one | — |
+| PKI-31 | Low | `std/crypto/pki.ts` | A dNSName subtree with a leading period is read as the names below it, not refused; an excluded one leaves the apex allowed | — |
+| PKI-32 | Low | `std/crypto/pki.ts` | A root without a subjectKeyIdentifier anchors a path, since one root Mozilla ships lacks it | — |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in

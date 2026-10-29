@@ -524,7 +524,7 @@ const http1TakeLine = (p: Http1Parser, limit: i32, overStatus: i32): i32 => {
 }
 
 /** Whether `c` is a tchar of RFC 9110 §5.6.2, the bytes a token is made of. */
-const http1IsTokenByte = (c: i32): boolean =>
+export const http1IsTokenByte = (c: i32): boolean =>
   (c >= 97 && c <= 122) ||
   (c >= 65 && c <= 90) ||
   (c >= 48 && c <= 57) ||
@@ -541,10 +541,10 @@ const http1IsTokenByte = (c: i32): boolean =>
   c === 126
 
 /** Whether `c` may appear in a field value (RFC 9110 §5.5): HTAB, SP, VCHAR or obs-text. */
-const http1IsValueByte = (c: i32): boolean => c === 9 || (c >= 32 && c !== 127)
+export const http1IsValueByte = (c: i32): boolean => c === 9 || (c >= 32 && c !== 127)
 
 /** `buf[from .. to)` as a string, each upper-case ASCII letter lowered when `lower`. */
-const http1Text = (buf: u8[], from: i32, to: i32, lower: boolean): string => {
+export const http1Text = (buf: u8[], from: i32, to: i32, lower: boolean): string => {
   const parts: string[] = []
   for (let k: i32 = from; k >= 0 && k < to && k < toI32(buf.length); k += 1) {
     let c: i32 = toI32(buf[k])
@@ -557,10 +557,10 @@ const http1Text = (buf: u8[], from: i32, to: i32, lower: boolean): string => {
 }
 
 /** Whether `c` is optional whitespace, a space or a tab (OWS, RFC 9110 §5.6.3). */
-const http1IsOws = (c: i32): boolean => c === 32 || c === 9
+export const http1IsOws = (c: i32): boolean => c === 32 || c === 9
 
 /** Whether `text[a .. b)` is `word`, which is lowercase, in any ASCII case. */
-const http1SameWord = (text: string, a: i32, b: i32, word: string): boolean => {
+export const http1SameWord = (text: string, a: i32, b: i32, word: string): boolean => {
   const n: i32 = toI32(word.length)
   if (a < 0 || b - a !== n || b > toI32(text.length)) {
     return false
@@ -989,7 +989,7 @@ const http1ContentLength = (bytes: u8[], from: i32, to: i32, limit: i32): i32 =>
 }
 
 /** The value of the hex digit `c`, or -1. */
-const http1HexValue = (c: i32): i32 => {
+export const http1HexValue = (c: i32): i32 => {
   if (c >= 48 && c <= 57) {
     return c - 48
   }
@@ -1190,7 +1190,7 @@ const http1BytesOf = (text: string): u8[] => {
 }
 
 /** Whether every byte of `text` is a tchar, and there is at least one. */
-const http1IsToken = (text: string): boolean => {
+export const http1IsToken = (text: string): boolean => {
   const n: i32 = toI32(text.length)
   if (n === 0) {
     return false
@@ -1204,7 +1204,7 @@ const http1IsToken = (text: string): boolean => {
 }
 
 /** Whether every byte of `text` may stand in a field value or a reason phrase. */
-const http1IsFieldText = (text: string): boolean => {
+export const http1IsFieldText = (text: string): boolean => {
   const n: i32 = toI32(text.length)
   for (let k: i32 = 0; k < n; k += 1) {
     if (!http1IsValueByte(toI32(text.charCodeAt(k)))) {
@@ -1395,7 +1395,7 @@ const http1DecimalDigits = (n: i32): i32 => {
 }
 
 /** Writes `text` at `out[at ..)`, which the caller has made sure holds it, and answers where it ends. */
-const http1PutText = (out: u8[], at: i32, text: string): i32 => {
+export const http1PutText = (out: u8[], at: i32, text: string): i32 => {
   const n: i32 = toI32(text.length)
   for (let k: i32 = 0; k < n && at + k < toI32(out.length); k += 1) {
     if (at + k >= 0) {
