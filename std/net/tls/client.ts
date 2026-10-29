@@ -132,6 +132,7 @@ import {
   TlsSecretPool,
   tlsHeldCopyIn,
   tlsIsZeroSecret,
+  tlsZeroHeld,
 } from "nish/net/tls"
 
 /** Built; `start` has not written the ClientHello yet. */
@@ -231,12 +232,6 @@ const tlsClientIsAscii = (text: string): boolean => {
     }
   }
   return true
-}
-
-/** Wipes the bytes a `Secret` holds, for `exposeWith`; answers `answer`. */
-const tlsClientZeroHeld = (held: u8[], answer: i32): i32 => {
-  wipe(held)
-  return answer
 }
 
 /**
@@ -484,12 +479,21 @@ export class TlsClient {
     this.secrets().zero(index)
   }
 
-  /** Wipes every secret the client holds: both private keys and both pools. `fail` calls it, and the carriers when a connection ends. */
+  /**
+   * Wipes every secret the client holds, both private keys and both pools,
+   * and fails it: a wiped client has nothing left to go on with. `fail`
+   * calls it, and the carriers when a connection ends; wiped without a
+   * failure, it answers `internal_error` from then on.
+   */
   wipe(): void {
     wipe(this.x25519Key)
     wipe(this.p256Key)
     this.secrets256.wipe()
     this.secrets384.wipe()
+    this.state = TLS_CLIENT_STATE_FAILED
+    if (this.alert === 0) {
+      this.alert = TLS_ALERT_INTERNAL_ERROR
+    }
   }
 
   /** The level the server's next bytes must arrive at, or -1 when the state expects none. */
@@ -807,16 +811,16 @@ export class TlsClient {
 
   /** Zeroes both private keys, once the exchange is done or cannot be. */
   wipeKeys(): void {
-    exposeWith(this.x25519Key, TLS_CLIENT_FROM, tlsClientZeroHeld)
-    exposeWith(this.p256Key, TLS_CLIENT_FROM, tlsClientZeroHeld)
+    exposeWith(this.x25519Key, TLS_CLIENT_FROM, tlsZeroHeld)
+    exposeWith(this.p256Key, TLS_CLIENT_FROM, tlsZeroHeld)
   }
 
   /** Zeroes the private key of the group the client's share is not of. */
   wipeUnpicked(): void {
     if (this.shareGroup === TLS_GROUP_X25519) {
-      exposeWith(this.p256Key, TLS_CLIENT_FROM, tlsClientZeroHeld)
+      exposeWith(this.p256Key, TLS_CLIENT_FROM, tlsZeroHeld)
     } else {
-      exposeWith(this.x25519Key, TLS_CLIENT_FROM, tlsClientZeroHeld)
+      exposeWith(this.x25519Key, TLS_CLIENT_FROM, tlsZeroHeld)
     }
   }
 

@@ -2,7 +2,7 @@
 // ServerHello built byte by byte (so it can be broken), or a real server's
 // flight with one thing changed. Every case starts a fresh client.
 import { Suite } from "nish/testing";
-import { TLS_LEVEL_HANDSHAKE, TLS_LEVEL_INITIAL, TlsServer } from "nish/net/tls";
+import { TLS_LEVEL_APPLICATION, TLS_LEVEL_HANDSHAKE, TLS_LEVEL_INITIAL, TlsServer } from "nish/net/tls";
 import {
   TLS_ALERT_BAD_CERTIFICATE,
   TLS_ALERT_DECODE_ERROR,
@@ -17,6 +17,7 @@ import {
   TLS_GROUP_X25519,
 } from "nish/net/tls/codec";
 import {
+  TLS_CLIENT_STATE_CONNECTED,
   TLS_CLIENT_STATE_FAILED,
   TLS_CLIENT_STATE_WAIT_AUTH,
   TLS_CLIENT_STATE_WAIT_ENCRYPTED_EXTENSIONS,
@@ -42,6 +43,7 @@ const AES_128: i32 = 0x1301;
 const AES_256: i32 = 0x1302;
 const CCM: i32 = 0x1304;
 const SESSION_ID_AT: i32 = 4 + 2 + 32 + 1;
+const CERTIFICATE_EXPIRED: i32 = 45;
 
 const counting = (start: i32, count: i32): u8[] => {
   const out: u8[] = [];
@@ -210,6 +212,40 @@ class Real {
   }
 }
 
+/** Where the handshake message at `at` of `data` ends. */
+const messageEnd = (data: u8[], at: i32): i32 =>
+  at + 4 + ((toI32(data[at + 1]) << 16) | (toI32(data[at + 2]) << 8) | toI32(data[at + 3]));
+
+/** `data[from .. to)`, copied. */
+const part = (data: u8[], from: i32, to: i32): u8[] => {
+  const out: u8[] = [];
+  for (let k: i32 = from; k < to; k++) {
+    out.push(data[k]);
+  }
+  return out;
+};
+
+/** A real server's client fed its ServerHello and the first `count` messages of its flight. */
+const realUpTo = (count: i32): Real => {
+  const real = new Real();
+  feed(real.client, TLS_LEVEL_INITIAL, real.serverHello);
+  let end: i32 = 0;
+  for (let k: i32 = 0; k < count; k++) {
+    end = messageEnd(real.flight, end);
+  }
+  real.client.receive(TLS_LEVEL_HANDSHAKE, real.flight, ZERO, end);
+  return real;
+};
+
+/** The body of message `index` of a real server's flight. */
+const realBody = (real: Real, index: i32): u8[] => {
+  let at: i32 = 0;
+  for (let k: i32 = 0; k < index; k++) {
+    at = messageEnd(real.flight, at);
+  }
+  return part(real.flight, at + 4, messageEnd(real.flight, at));
+};
+
 /** The P-256 public key of the private key `started` gives every client. */
 const clientP256Public = (): u8[] => {
   const pub: u8[] | null = p256PublicKeyPlain(counting(0x60, 32));
@@ -377,5 +413,70 @@ export const main = (): i32 => {
   feed(real.client, TLS_LEVEL_INITIAL, real.serverHello);
   feed(real.client, TLS_LEVEL_HANDSHAKE, real.flight);
   refused(t, "the caller refuses the chain", real.client, real.client.authenticate(false), TLS_ALERT_BAD_CERTIFICATE);
+
+  // A low-order x25519 share: the shared secret is all zeros (RFC 7748 §6.1).
+  c = fresh();
+  const lowOrder: u8[] = new Array<u8>(32);
+  refused(t, "an all-zero x25519 share", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, join([share(TLS_GROUP_X25519, lowOrder), versions()]))), TLS_ALERT_ILLEGAL_PARAMETER);
+
+  // A retry must change the second hello (§4.1.4); a cookie alone does.
+  c = twoGroups(TLS_GROUP_X25519);
+  refused(t, "a retry with neither key_share nor cookie", c, feed(c, TLS_LEVEL_INITIAL, hello(retryRandom(), c, AES_128, versions())), TLS_ALERT_ILLEGAL_PARAMETER);
+  c = twoGroups(TLS_GROUP_X25519);
+  t.eqI32("a retry with only a cookie", feed(c, TLS_LEVEL_INITIAL, hello(retryRandom(), c, AES_128, join([versions(), ext(COOKIE, shortCookie)]))), ZERO);
+  t.eqI32("a retry with only a cookie: the share's group stays", c.shareGroup, TLS_GROUP_X25519);
+  t.ok("a retry with only a cookie: the second hello echoes it", holds(c.takeOutput(TLS_LEVEL_INITIAL), ext(COOKIE, shortCookie)));
+
+  // No client certificates: a CertificateRequest is not answered.
+  real = realUpTo(1);
+  refused(t, "a CertificateRequest", real.client, feed(real.client, TLS_LEVEL_HANDSHAKE, message(13, [0x00, 0x00, 0x00])), TLS_ALERT_UNEXPECTED_MESSAGE);
+
+  // Certificate (§4.4.2): at least one entry, an empty request context, and
+  // no entry extension the client did not ask for.
+  real = realUpTo(1);
+  refused(t, "a Certificate with no entries", real.client, feed(real.client, TLS_LEVEL_HANDSHAKE, message(11, [0x00, 0x00, 0x00, 0x00])), TLS_ALERT_DECODE_ERROR);
+  real = realUpTo(1);
+  const withContext: u8[] = [0x01, 0xaa];
+  const certificate: u8[] = realBody(real, 1);
+  append(withContext, part(certificate, 1, toI32(certificate.length)));
+  refused(t, "a Certificate with a request context", real.client, feed(real.client, TLS_LEVEL_HANDSHAKE, message(11, withContext)), TLS_ALERT_ILLEGAL_PARAMETER);
+  real = realUpTo(1);
+  const listLength: i32 = ((toI32(certificate[1]) << 16) | (toI32(certificate[2]) << 8) | toI32(certificate[3])) + 4;
+  const withExtension: u8[] = [0x00, toU8(listLength >> 16), toU8((listLength >> 8) & 0xff), toU8(listLength & 0xff)];
+  append(withExtension, part(certificate, 4, toI32(certificate.length) - 2));
+  append(withExtension, [0x00, 0x04]);
+  append(withExtension, ext(ALPN, []));
+  refused(t, "a Certificate entry with an extension", real.client, feed(real.client, TLS_LEVEL_HANDSHAKE, message(11, withExtension)), TLS_ALERT_UNSUPPORTED_EXTENSION);
+
+  // CertificateVerify: the signature's length is the message's.
+  real = realUpTo(2);
+  const verify: u8[] = realBody(real, 2);
+  refused(t, "a CertificateVerify cut short", real.client, feed(real.client, TLS_LEVEL_HANDSHAKE, message(15, part(verify, 0, toI32(verify.length) - 1))), TLS_ALERT_DECODE_ERROR);
+  real = realUpTo(2);
+  const longer: u8[] = part(verify, 0, toI32(verify.length));
+  longer.push(0x00);
+  refused(t, "a CertificateVerify with bytes after it", real.client, feed(real.client, TLS_LEVEL_HANDSHAKE, message(15, longer)), TLS_ALERT_DECODE_ERROR);
+
+  // `reject` sends the caller's alert, `bad_certificate` for one outside 1 to 255.
+  real = realUpTo(3);
+  refused(t, "the caller's own alert", real.client, real.client.reject(CERTIFICATE_EXPIRED), CERTIFICATE_EXPIRED);
+  real = realUpTo(3);
+  refused(t, "an alert out of range", real.client, real.client.reject(300), TLS_ALERT_BAD_CERTIFICATE);
+  c = fresh();
+  refused(t, "a refusal before one is due", c, c.reject(CERTIFICATE_EXPIRED), TLS_ALERT_INTERNAL_ERROR);
+
+  // After the handshake a NewSessionTicket is checked and dropped (§4.6.1):
+  // no client-side resumption.
+  real = realUpTo(4);
+  t.eqI32("connected", real.client.authenticate(true), ZERO);
+  const ticket: u8[] = [0x00, 0x00, 0x0e, 0x10, 0x01, 0x02, 0x03, 0x04, 0x01, 0x00, 0x00, 0x01, 0xaa, 0x00, 0x00];
+  t.eqI32("a NewSessionTicket is dropped", feed(real.client, TLS_LEVEL_APPLICATION, message(4, ticket)), ZERO);
+  t.eqI32("a NewSessionTicket is dropped: still connected", real.client.state, TLS_CLIENT_STATE_CONNECTED);
+  refused(t, "a NewSessionTicket with no ticket", real.client, feed(real.client, TLS_LEVEL_APPLICATION, message(4, [0x00, 0x00, 0x0e, 0x10, 0x01, 0x02, 0x03, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00])), TLS_ALERT_DECODE_ERROR);
+
+  // A wiped client goes no further.
+  c = fresh();
+  c.wipe();
+  refused(t, "a wiped client", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, goodExts())), TLS_ALERT_INTERNAL_ERROR);
   return t.done();
 };

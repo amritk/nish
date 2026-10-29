@@ -35,6 +35,9 @@ PASS  hrr: retried
 PASS  hrr: client open
 PASS  hrr: share
 PASS  hrr: alpn
+PASS  hrr sha384: retried
+PASS  hrr sha384: client open
+PASS  hrr sha384: suite
 PASS  alpn: client
 PASS  sni: server saw
 PASS  sni: sent
@@ -52,6 +55,13 @@ PASS  early close: failed
 PASS  early close: not an end of stream
 PASS  early close: the server's alert
 PASS  early close: a verdict answers why
+PASS  ccs before any handshake: failed
+PASS  ccs before any handshake: its alert
+PASS  ccs mid-message: a partial message waits
+PASS  ccs mid-message: failed
+PASS  ccs mid-message: its alert
+PASS  ccs after the server's Finished: failed
+PASS  ccs after the server's Finished: its alert
 PASS  ku asked: server asks
 PASS  ku asked: client counted
 PASS  ku asked: the client's own reached the server
@@ -88,4 +98,7 @@ PASS  close before the verdict: a verdict is refused
 PASS  close before the verdict: the server's bytes are dropped
 PASS  close before the verdict: still closed
 PASS  close before the verdict: done
-tls record client: 90 passed, 0 failed, 0 skipped
+PASS  refusal: the caller's alert
+PASS  refusal: failed
+PASS  refusal: the server reads it
+tls record client: 103 passed, 0 failed, 0 skipped

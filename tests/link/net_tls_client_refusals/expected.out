@@ -88,4 +88,49 @@ PASS  a bad Finished: keeps its alert
 PASS  the caller refuses the chain
 PASS  the caller refuses the chain: failed
 PASS  the caller refuses the chain: keeps its alert
-tls client refusals: 90 passed, 0 failed, 0 skipped
+PASS  an all-zero x25519 share
+PASS  an all-zero x25519 share: failed
+PASS  an all-zero x25519 share: keeps its alert
+PASS  a retry with neither key_share nor cookie
+PASS  a retry with neither key_share nor cookie: failed
+PASS  a retry with neither key_share nor cookie: keeps its alert
+PASS  a retry with only a cookie
+PASS  a retry with only a cookie: the share's group stays
+PASS  a retry with only a cookie: the second hello echoes it
+PASS  a CertificateRequest
+PASS  a CertificateRequest: failed
+PASS  a CertificateRequest: keeps its alert
+PASS  a Certificate with no entries
+PASS  a Certificate with no entries: failed
+PASS  a Certificate with no entries: keeps its alert
+PASS  a Certificate with a request context
+PASS  a Certificate with a request context: failed
+PASS  a Certificate with a request context: keeps its alert
+PASS  a Certificate entry with an extension
+PASS  a Certificate entry with an extension: failed
+PASS  a Certificate entry with an extension: keeps its alert
+PASS  a CertificateVerify cut short
+PASS  a CertificateVerify cut short: failed
+PASS  a CertificateVerify cut short: keeps its alert
+PASS  a CertificateVerify with bytes after it
+PASS  a CertificateVerify with bytes after it: failed
+PASS  a CertificateVerify with bytes after it: keeps its alert
+PASS  the caller's own alert
+PASS  the caller's own alert: failed
+PASS  the caller's own alert: keeps its alert
+PASS  an alert out of range
+PASS  an alert out of range: failed
+PASS  an alert out of range: keeps its alert
+PASS  a refusal before one is due
+PASS  a refusal before one is due: failed
+PASS  a refusal before one is due: keeps its alert
+PASS  connected
+PASS  a NewSessionTicket is dropped
+PASS  a NewSessionTicket is dropped: still connected
+PASS  a NewSessionTicket with no ticket
+PASS  a NewSessionTicket with no ticket: failed
+PASS  a NewSessionTicket with no ticket: keeps its alert
+PASS  a wiped client
+PASS  a wiped client: failed
+PASS  a wiped client: keeps its alert
+tls client refusals: 135 passed, 0 failed, 0 skipped

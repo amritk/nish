@@ -1081,8 +1081,9 @@ export class TlsRecordClient {
    * Closes the client's side (§6.1): a `close_notify`, after which `write`
    * answers `TLS_RECORD_PIPE`. Application data already written stays ahead
    * of the alert; the write keys are wiped once it is sealed. Closed before
-   * the handshake is done, the client reads nothing more, and the read keys
-   * and everything `TlsClient` holds are wiped at once. Nothing happens once
+   * the handshake is done — before the client's Finished is sealed — the
+   * client reads nothing more, and the read keys and everything `TlsClient`
+   * holds are wiped at once. Nothing happens once
    * the connection has failed or closed.
    */
   close(): void {
@@ -1090,7 +1091,10 @@ export class TlsRecordClient {
       return
     }
     this.dropPending()
-    if (this.state === TLS_RECORD_STATE_HANDSHAKE) {
+    // Until the client's Finished is sealed the handshake is not done, even
+    // once the server's Finished has opened the connection, and now it never
+    // will be.
+    if (this.writeLevel !== TLS_LEVEL_APPLICATION) {
       this.wipeRead()
       this.tls.wipe()
     }
@@ -1099,9 +1103,9 @@ export class TlsRecordClient {
     this.sealClose()
   }
 
-  /** Whether the client closed before the handshake was done, so the server's records are not read. */
+  /** Whether the client closed before its Finished was sealed, so the server's records are not read. */
   abandoned(): boolean {
-    return this.state === TLS_RECORD_STATE_CLOSED && this.readLevel !== TLS_LEVEL_APPLICATION
+    return this.state === TLS_RECORD_STATE_CLOSED && this.writeLevel !== TLS_LEVEL_APPLICATION
   }
 
   /** Seals the `close_notify` `close` owes once `output` has room, then wipes the write direction. */

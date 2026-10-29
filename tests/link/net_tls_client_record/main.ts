@@ -34,6 +34,8 @@ import { ZERO, ascii } from "../net_tls_record_common/bytes";
 import { leafPrivate, newServer, tcpConfig } from "../net_tls_common/server";
 import { secretHex } from "../net_tls_common/secrets";
 
+const CERTIFICATE_EXPIRED: i32 = 45;
+
 const bytes = (start: i32): u8[] => {
   const out: u8[] = [];
   for (let k: i32 = 0; k < 32; k++) {
@@ -189,6 +191,17 @@ export const main = (): i32 => {
   t.eqI32("hrr: share", retry.client.tls.shareGroup, TLS_GROUP_X25519);
   t.eqStr("hrr: alpn", retry.client.tls.alpn(), "http/1.1");
   retry.wipe();
+  // The same retry under SHA-384: the transcript hash restarts as the suite's.
+  const retry384Config = new TlsClientConfig("localhost", ["http/1.1"]);
+  retry384Config.groups = [TLS_GROUP_X25519, TLS_GROUP_SECP256R1];
+  retry384Config.shareGroup = TLS_GROUP_SECP256R1;
+  retry384Config.suites = [TLS_AES_256_GCM_SHA384];
+  const retry384 = new Pair(retry384Config, ["http/1.1"]);
+  retry384.run();
+  t.ok("hrr sha384: retried", retry384.client.tls.retried);
+  t.eqI32("hrr sha384: client open", retry384.client.state, TLS_RECORD_STATE_OPEN);
+  t.eqI32("hrr sha384: suite", retry384.client.tls.suite, TLS_AES_256_GCM_SHA384);
+  retry384.wipe();
 
   // ALPN: the server's pick of the client's list, and SNI as the server saw it.
   const alpn = new Pair(new TlsClientConfig("example.com", ["h2", "http/1.1"]), ["http/1.1"]);
@@ -239,6 +252,26 @@ export const main = (): i32 => {
   t.ok("early close: not an end of stream", !early.peerClosed);
   t.eqI32("early close: the server's alert", early.peerAlert, TLS_ALERT_CLOSE_NOTIFY);
   t.eqI32("early close: a verdict answers why", early.authenticate(true), TLS_ALERT_INTERNAL_ERROR);
+
+  // A ChangeCipherSpec is dropped only between handshake messages, before the
+  // server's Finished, and only as the one byte 1 (RFC 8446 §5).
+  const ccs: u8[] = [0x14, 0x03, 0x03, 0x00, 0x01, 0x01];
+  const first = new TlsRecordClient(new TlsClient(new TlsClientConfig("localhost", ["h2"]), bytes(1), bytes(0x40), bytes(0x60)));
+  first.receive(ccs, ZERO, toI32(ccs.length));
+  t.eqI32("ccs before any handshake: failed", first.state, TLS_RECORD_STATE_FAILED);
+  t.eqI32("ccs before any handshake: its alert", first.failure(), TLS_ALERT_UNEXPECTED_MESSAGE);
+  const split = new TlsRecordClient(new TlsClient(new TlsClientConfig("localhost", ["h2"]), bytes(1), bytes(0x40), bytes(0x60)));
+  const partial: u8[] = [0x16, 0x03, 0x03, 0x00, 0x04, 0x02, 0x00, 0x00, 0x50];
+  split.receive(partial, ZERO, toI32(partial.length));
+  t.ok("ccs mid-message: a partial message waits", split.state !== TLS_RECORD_STATE_FAILED);
+  split.receive(ccs, ZERO, toI32(ccs.length));
+  t.eqI32("ccs mid-message: failed", split.state, TLS_RECORD_STATE_FAILED);
+  t.eqI32("ccs mid-message: its alert", split.failure(), TLS_ALERT_UNEXPECTED_MESSAGE);
+  const afterFinished = opened();
+  afterFinished.client.receive(ccs, ZERO, toI32(ccs.length));
+  t.eqI32("ccs after the server's Finished: failed", afterFinished.client.state, TLS_RECORD_STATE_FAILED);
+  t.eqI32("ccs after the server's Finished: its alert", afterFinished.client.failure(), TLS_ALERT_UNEXPECTED_MESSAGE);
+  afterFinished.wipe();
 
   // The server's KeyUpdate asks for the client's, which the client sends.
   const asked = opened();
@@ -329,5 +362,15 @@ export const main = (): i32 => {
   t.eqI32("close before the verdict: still closed", waiting.client.state, TLS_RECORD_STATE_CLOSED);
   t.ok("close before the verdict: done", (waiting.client.interest() & TLS_RECORD_DONE) !== 0);
   waiting.wipe();
+
+  // A refusal sends the caller's alert, and the server reads it.
+  const refusing = new Pair(new TlsClientConfig("localhost", ["h2"]), ["h2"]);
+  refusing.authenticates = false;
+  refusing.run();
+  t.eqI32("refusal: the caller's alert", refusing.client.reject(CERTIFICATE_EXPIRED), CERTIFICATE_EXPIRED);
+  t.eqI32("refusal: failed", refusing.client.state, TLS_RECORD_STATE_FAILED);
+  refusing.run();
+  t.eqI32("refusal: the server reads it", refusing.server.peerAlert, CERTIFICATE_EXPIRED);
+  refusing.wipe();
   return t.done();
 };
