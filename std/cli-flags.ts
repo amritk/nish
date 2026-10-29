@@ -106,9 +106,9 @@ export class CommandSpec {
   }
 }
 
-/** Whether `words[0..count)` and `path` agree on every word both have, `count` capped at `path`'s length. */
+/** Whether `path` and `words` agree on their first `count` words; both have at least that many. */
 const agrees = (path: string[], words: string[], count: i32): boolean => {
-  for (let i: i32 = 0; i < count && i < toI32(path.length) && i < toI32(words.length); i++) {
+  for (let i: i32 = 0; i < count; i++) {
     if (path[i] !== words[i]) {
       return false
     }
@@ -117,23 +117,12 @@ const agrees = (path: string[], words: string[], count: i32): boolean => {
 }
 
 /**
- * Whether `text` is one finite number with nothing around it. `Number` reads
- * a whole string as one literal but trims spaces and reads `""` as zero, and
- * NaN and the infinities are not a count of anything, so those are refused
- * here. `n - n` is zero exactly when `n` is finite.
+ * Whether `text` is empty or starts or ends in a space or control byte.
+ * `Number` trims such bytes and reads `""` as zero, so a number flag refuses
+ * them before it asks `Number` at all.
  */
-const isNumberText = (text: string): boolean => {
-  if (text.length === 0) {
-    return false
-  }
-  const first = toI32(text.charCodeAt(0))
-  const last = toI32(text.charCodeAt(text.length - 1))
-  if (first <= 32 || last <= 32) {
-    return false
-  }
-  const n: f64 = Number(text)
-  return n - n === 0
-}
+const isPadded = (text: string): boolean =>
+  text.length === 0 || toI32(text.charCodeAt(0)) <= 32 || toI32(text.charCodeAt(text.length - 1)) <= 32
 
 /**
  * The flags and commands of one program, declared in the order its help
@@ -313,11 +302,8 @@ export class FlagTable {
           } else {
             // The next argument is the value whatever it looks like, so that
             // `--jobs -1` and `--grep --x` mean what they say.
-            let value = ""
-            if (eq >= 0) {
-              value = arg.substring(eq + 1)
-            } else {
-              value = args[i]
+            const value = eq >= 0 ? arg.substring(eq + 1) : args[i]
+            if (eq < 0) {
               i = i + 1
             }
             got.take(at, flag, value, arg)
@@ -371,8 +357,8 @@ export class FlagTable {
  * What `parse` answered: a usage error, or every flag's value. Values sit in
  * arrays parallel to the table's `flags`: `counts` says how often each was
  * given, `texts` and `numbers` hold a string or number flag's value,
- * `bools` a boolean's, and a repeatable flag's values are the `values` whose
- * `owners` entry is its index, in the order given. A flag that was not given
+ * `bools` a boolean's and `lists` a repeatable flag's values in the order
+ * given. A flag that was not given
  * reads as `""`, `0`, `false` or no values; `has` tells that apart from one
  * given as such.
  */
@@ -389,8 +375,7 @@ export class ParsedFlags {
   texts: string[]
   numbers: f64[]
   bools: boolean[]
-  owners: i32[]
-  values: string[]
+  lists: string[][]
 
   constructor(table: FlagTable) {
     this.table = table
@@ -405,13 +390,14 @@ export class ParsedFlags {
     this.texts = []
     this.numbers = []
     this.bools = []
-    this.owners = []
-    this.values = []
+    this.lists = []
     for (let i: i32 = 0; i < toI32(table.flags.length); i++) {
       this.counts.push(0)
       this.texts.push("")
       this.numbers.push(toF64(0))
       this.bools.push(false)
+      const none: string[] = []
+      this.lists.push(none)
     }
   }
 
@@ -427,8 +413,7 @@ export class ParsedFlags {
   take(at: i32, flag: string, value: string, arg: string): void {
     const kind = this.table.flags[at].kind
     if (kind === FLAG_REPEATABLE) {
-      this.owners.push(at)
-      this.values.push(value)
+      this.lists[at].push(value)
       this.counts[at] = this.counts[at] + 1
       return
     }
@@ -437,11 +422,14 @@ export class ParsedFlags {
       return
     }
     if (kind === FLAG_NUMBER) {
-      if (!isNumberText(value)) {
+      // `n - n` is zero exactly when `n` is finite: NaN and the infinities
+      // are not a count of anything.
+      const n: f64 = Number(value)
+      if (isPadded(value) || n - n !== 0) {
         this.fail(FLAG_ERR_NOT_A_NUMBER, `${flag} needs a number, not "${value}"`, value)
         return
       }
-      this.numbers[at] = Number(value)
+      this.numbers[at] = n
     }
     this.texts[at] = value
     this.counts[at] = 1
@@ -471,14 +459,11 @@ export class ParsedFlags {
     return this.bools[this.slot(name, FLAG_BOOLEAN)]
   }
 
-  /** Every value a repeatable flag was given, in order; empty when it was not given. */
+  /** Every value a repeatable flag was given, in order, as a fresh array; empty when it was not given. */
   all(name: string): string[] {
-    const at = this.slot(name, FLAG_REPEATABLE)
     const out: string[] = []
-    for (let i: i32 = 0; i < toI32(this.owners.length) && i < toI32(this.values.length); i++) {
-      if (this.owners[i] === at) {
-        out.push(this.values[i])
-      }
+    for (const v of this.lists[this.slot(name, FLAG_REPEATABLE)]) {
+      out.push(v)
     }
     return out
   }
