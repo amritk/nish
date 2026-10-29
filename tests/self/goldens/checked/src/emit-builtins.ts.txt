@@ -21,6 +21,7 @@ import isNetExport from "./nish-modules" -> function @isNetExport
 import NET_INT from "./nish-modules" -> const NET_INT
 import NET_RANGE from "./nish-modules" -> const NET_RANGE
 import NET_STRING from "./nish-modules" -> const NET_STRING
+import netOption from "./nish-modules" -> function @netOption
 import netRangeBuffer from "./nish-modules" -> function @netRangeBuffer
 import netSymbol from "./nish-modules" -> function @netSymbol
 import N_IDENT from "./nodes" -> const N_IDENT
@@ -876,7 +877,8 @@ function emitNetCall(emitter: Emitter, expr: Node, name: string): string -> @emi
 function emitNamespaceProperty(emitter: Emitter, name: string): string -> @emitNamespaceProperty [exported]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via Emitter.declareType
-  calls: Emitter.declareGlobal Emitter.declareType Emitter.useRuntime IRFunction.emitValue f64Hex internalErrorFor nish_exit nish_str_concat nish_str_eq
+  escaping: name
+  calls: Emitter.declareGlobal Emitter.declareType Emitter.useRuntime IRFunction.emitValue f64Hex internalErrorFor netOption nish_exit nish_str_concat nish_str_eq nish_str_from_i32
   pointer emitter: size=272 writesThrough=false captured=false passedTo=Emitter.declareType#0 Emitter.declareGlobal#0 Emitter.useRuntime#0 Emitter.useRuntime#0
   stackSites=0 stackLocals=0
   callee +0:12 f64Hex -> @f64Hex
@@ -889,4 +891,6 @@ function emitNamespaceProperty(emitter: Emitter, name: string): string -> @emitN
   callee +16:45 Emitter.useRuntime -> @Emitter.useRuntime
   callee +19:12 IRFunction.emitValue -> @IRFunction.emitValue
   callee +19:45 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +21:16 internalErrorFor -> @internalErrorFor
+  callee +21:7 netOption -> @netOption
+  callee +22:15 netOption -> @netOption
+  callee +24:16 internalErrorFor -> @internalErrorFor

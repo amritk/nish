@@ -62,6 +62,12 @@ const plain = [
   ...comparedNames(declaration(builtins, "conversionTarget", "builtins.ts")),
   ...comparedNames(declaration(builtins, "isBuiltinFunction", "builtins.ts")),
 ]
+// The `nish:net` option ids (`NET_TCP_NODELAY`, ...): properties the checker
+// folds through `netOption`, not through `checkNamespaceProperty`'s lines.
+const netOptions = comparedNames(declaration(modules, "netOption", "nish-modules.ts"))
+if (netOptions.length === 0) {
+  problems.push("nish-modules.ts: no option id to read in `netOption`")
+}
 const netExports = [
   ...comparedNames(declaration(modules, "netSignature", "nish-modules.ts")),
   ...comparedNames(declaration(modules, "isNetExport", "nish-modules.ts")),
@@ -112,6 +118,7 @@ const constructors = comparedNames(declaration(results, "isResultConstructor", "
 const accepted = new Set([
   ...plain,
   ...netExports,
+  ...netOptions,
   ...unsafeExports,
   ...termExports,
   ...dotted,
@@ -136,17 +143,20 @@ for (const list of exportLists) {
 }
 
 // The table: each row once, `isNetExport(name)` standing for every `nish:net`
-// export, `isUnsafeExport(name)` for every `nish:unsafe` one and
-// `isTermExport(name)` for every `nish:term` one.
+// export, `netOption(name)` for every `nish:net` option id,
+// `isUnsafeExport(name)` for every `nish:unsafe` one and `isTermExport(name)`
+// for every `nish:term` one.
 const capability = declaration(table, "builtinCapability", "capabilities.ts")
 const rows = comparedNames(capability)
 const viaNet = capability.includes("isNetExport(name)")
+const viaOption = capability.includes("netOption(name)")
 const viaUnsafe = capability.includes("isUnsafeExport(name)")
 const viaTerm = capability.includes("isTermExport(name)")
 const labelled = new Map()
 for (const row of [
   ...rows,
   ...(viaNet ? netExports : []),
+  ...(viaOption ? netOptions : []),
   ...(viaUnsafe ? unsafeExports : []),
   ...(viaTerm ? termExports : []),
 ]) {

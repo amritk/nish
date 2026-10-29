@@ -1,0 +1,26 @@
+# bench/gzip/compare's Rust comparator. Cargo reads a manifest only as
+# Cargo.toml, a name the repository's kebab-case rule refuses, so compare.mjs
+# copies this file, cargo.lock and rust-gzip.rs into build/bench/gzip-compare/
+# as Cargo.toml, Cargo.lock and main.rs, and builds there with --locked, once
+# per backend feature.
+[package]
+name = "gzip-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "gzip-bench"
+path = "main.rs"
+
+[dependencies]
+crc32fast = "1.4"
+flate2 = { version = "1.1", default-features = false }
+
+[features]
+miniz = ["flate2/rust_backend"]
+zlib-rs = ["flate2/zlib-rs"]
+
+[profile.release]
+codegen-units = 1
+lto = true

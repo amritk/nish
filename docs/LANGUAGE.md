@@ -6380,7 +6380,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
-| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
+| `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
 | `nish:term` | `readStdin`, `waitStdin`, `isTerminal`, `terminalSize`, `setRawMode`, `setTerminalRestore` — each a global too ([`nish:term`](#nishterm-terminal-input)) |
 | `nish:unsafe` | `uncheckedGet`, `uncheckedSet`, `wrappingAdd`, `wrappingSub`, `wrappingMul`, `readCString` — **reached only through the import** ([`nish:unsafe`](#nishunsafe-unchecked-access-and-defined-wrapping)) |
 
@@ -7507,7 +7507,7 @@ would wait answers "would block" instead, and the program decides what to do
 next. There is no `async` and no callback ([wp24-async.md](wp24-async.md) §2):
 the program is the loop, and it waits in [`pollWait`](#the-readiness-loop) for
 whichever of its descriptors is ready. Every socket is also **close-on-exec**,
-so a child that `spawnSync` starts inherits none of them. All nineteen functions
+so a child that `spawnSync` starts inherits none of them. All twenty functions
 are C in
 `runtime/runtime-net.c`, a translation unit of its own with its own `.text*`
 ceiling, which `scripts/build.sh` compiles beside `runtime.c` as it does the
@@ -7526,6 +7526,7 @@ exported by `nish:net` and is a global too, as every `nish:` export is.
 | `netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32` | at most `len` bytes of `buf[off, off + len)`: the count, which may be fewer than `len`, or `-11` when the send buffer is full. A peer that has gone is **`-32`, never SIGPIPE**, so a closed connection cannot end the process. The range is [checked](#bounds) | write | `net_tcp_echo`, `net_tcp_bounds`; `reject_net_write_element` |
 | `netShutdown(fd: i32, how: i32): i32` | shuts the read side (`0`), the write side (`1`) or both (`2`); any other `how` is `-22` | write | `net_tcp_calls` |
 | `netClose(fd: i32): i32` | closes the descriptor: `0`, or the failure, after which the descriptor is gone all the same, as `close(2)` promises on Linux. Not `willreturn`, because a socket the program inherited with a linger time can wait | write | `net_tcp_calls`, `net_tcp_echo`; `reject_net_fd_type` |
+| `netSetOption(fd: i32, option: i32, value: i32): i32` | sets one socket option from a whitelist, named by the ids below: `0`, or the failure, such as `-9` for a closed descriptor and `-88` for one that is not a socket. Any other `option` is **`-22`**, so there is no way to pass a raw level and name through. `value` is `0` or `1` for the switches and a byte count for the buffer sizes. `NET_TCP_QUICKACK` is Linux's, **`-95` elsewhere** | write | `net_set_option`; `reject_net_set_option_wasm` |
 
 What `tcpListenFlags`'s flag `1` does on each platform:
 
@@ -7540,7 +7541,7 @@ descriptor, a count, `0`), and a negative number is the failure's errno,
 negated. The codes a loop branches on are **Linux's numbers on every platform**:
 `-11` would block, `-95` unsupported, `-32` the peer has gone, `-104` the
 connection was reset, `-98` the address is in use, `-111` the connection was
-refused, `-110` it timed out and `-22` a bad argument; the Darwin runtime
+refused, `-110` it timed out, `-88` not a socket and `-22` a bad argument; the Darwin runtime
 translates its own. Any other failure is the host's `-errno`
 (`-9` for a descriptor that is not open, on both). `-95` is what `tcpAccept`
 answers for a datagram socket, on both (`net_udp_calls`). A number rather than a
@@ -7553,6 +7554,34 @@ tells "would block" from "the peer has gone" without asking again. No
 `nish:net` call touches the arena (`net_tcp_echo` serves two hundred messages
 in a loop whose pass scope gives back what each pass builds, and prints `flat`
 when that moved the arena no further than one message did).
+
+#### Socket options
+
+`netSetOption`'s `option` is one of five ids `nish:net` exports, each an `i32`
+and each a global too. They are the runtime's own numbers, not the kernel's,
+so a program reads the same on Linux and Darwin, and the runtime maps each to
+its level and name; there is no raw passthrough, because a level, a name and a
+length the program spells is an untyped call into the kernel.
+
+| Id | Value | Sets | `value` |
+| --- | --- | --- | --- |
+| `NET_TCP_NODELAY` | `1` | `IPPROTO_TCP`, `TCP_NODELAY` | `1` sends a small write at once, `0` lets Nagle's algorithm batch it |
+| `NET_TCP_QUICKACK` | `2` | `IPPROTO_TCP`, `TCP_QUICKACK`, Linux only; **`-95` on Darwin** | `1` acknowledges at once, `0` lets the kernel delay the ACK. Linux does not keep the mode: it leaves it on its own, so a server that wants one sets it again after every response |
+| `NET_SO_KEEPALIVE` | `3` | `SOL_SOCKET`, `SO_KEEPALIVE` | `1` probes an idle connection |
+| `NET_SO_SNDBUF` | `4` | `SOL_SOCKET`, `SO_SNDBUF` | bytes; Linux doubles the value it stores |
+| `NET_SO_RCVBUF` | `5` | `SOL_SOCKET`, `SO_RCVBUF` | bytes; Linux doubles the value it stores |
+
+An id is read as a value, as `platform` is: it folds to its number in the IR,
+cannot be assigned, and is not a [module constant](#module-constants), so a
+module constant cannot be initialised from one. A local of the same name
+shadows the global spelling.
+
+```ts nish:ok
+import { NET_TCP_QUICKACK, netSetOption } from "nish:net";
+
+// After each response: Linux may have left quick-ACK mode.
+export const answered = (conn: i32): i32 => netSetOption(conn, NET_TCP_QUICKACK, 1);
+```
 
 #### The address form
 
@@ -7739,7 +7768,7 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   are the program's own `i32`s (`` `pollWait` fills an `i32[]`, got u8[] ``,
   `reject_net_poll_element`). A descriptor, an offset, a length, a port, a
   backlog, `how`, the flags, a segment size, the ECN bits, a loop, the events,
-  a token and a timeout are `i32` in both number modes, and an
+  a token, a timeout, a socket option and its value are `i32` in both number modes, and an
   `f64` is refused rather than converted (`reject_net_fd_type`).
 - **What is written.** `netAddress`'s `out`, `tcpAccept`'s `peer`,
   `netRead`'s `buf`, `udpRecvFrom`'s `buf`, `from` and `meta`, and `pollWait`'s
@@ -7764,7 +7793,7 @@ and `pollWait` never writes past `ready.length`, so it has no range to check.
   checker with the host builtins' words: `` `tcpListen` reaches the operating
   system, and a wasm32 build has none to reach `` (NL2404; `reject_net_wasm`,
   `reject_net_import_wasm`, `reject_net_udp_wasm`, `reject_net_poll_wasm`,
-  `reject_net_reuseport_wasm`). The freestanding `--profile wasm` link, which
+  `reject_net_reuseport_wasm`, `reject_net_set_option_wasm`). The freestanding `--profile wasm` link, which
   takes IR compiled for the host, has no `runtime-net.c` either, so a program
   that calls one fails there at the link, on the undefined `nish_` symbol.
 - **Not yet.** There is no name resolution (`reject_net_unknown_export`), no
@@ -7782,7 +7811,9 @@ function throws `` `netAddress` has no synchronous reading under Node: a socket
 is ready only to the event loop, which a program that owns its loop never
 returns to (docs/wp33-round-trip.md) `` rather than answer `-11` forever (the
 `net_` block of `tests/run.js`, for `netAddress`, `tcpConnect`, `udpBind` and
-`pollCreate`).
+`pollCreate`). The option ids are plain numbers, so they read the same
+under Node as natively, and only `netSetOption` throws (`net_set_option` in
+`tests/run.js`).
 A loop has no reading either: the one a Node program has is Node's own, which
 it returns to between callbacks, and `pollWait` is a program that never
 returns to it.

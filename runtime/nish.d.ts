@@ -437,6 +437,26 @@ declare function pollModify(loop: i32, fd: i32, events: i32, token: i32): i32;
 declare function pollRemove(loop: i32, fd: i32): i32;
 /** Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error). */
 declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
+/**
+ * Set one socket option from a whitelist: `option` is one of the `NET_*` ids
+ * below, and any other is -22; there is no raw level and option number. 0, or
+ * a negative errno (-9 a closed descriptor, -88 not a socket).
+ */
+declare function netSetOption(fd: i32, option: i32, value: i32): i32;
+/** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
+declare const NET_TCP_NODELAY: i32;
+/**
+ * `TCP_QUICKACK` (Linux; -95 elsewhere): `value` 1 acknowledges at once, 0
+ * delays. Linux does not keep quick-ACK mode: the kernel leaves it on its own,
+ * so a server that wants a mode sets it again after every response.
+ */
+declare const NET_TCP_QUICKACK: i32;
+/** `SO_KEEPALIVE`: `value` 1 probes an idle connection, 0 does not. */
+declare const NET_SO_KEEPALIVE: i32;
+/** `SO_SNDBUF`: the send buffer, `value` in bytes; Linux doubles the value it stores. */
+declare const NET_SO_SNDBUF: i32;
+/** `SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
+declare const NET_SO_RCVBUF: i32;
 
 // ---- `nish:term` ------------------------------------------------------------------
 //
@@ -617,6 +637,26 @@ declare module "nish:net" {
   export function pollRemove(loop: i32, fd: i32): i32;
   /** Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error). */
   export function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
+  /**
+   * Set one socket option from a whitelist: `option` is one of the `NET_*` ids
+   * below, and any other is -22; there is no raw level and option number. 0, or
+   * a negative errno (-9 a closed descriptor, -88 not a socket).
+   */
+  export function netSetOption(fd: i32, option: i32, value: i32): i32;
+  /** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
+  export const NET_TCP_NODELAY: i32;
+  /**
+   * `TCP_QUICKACK` (Linux; -95 elsewhere): `value` 1 acknowledges at once, 0
+   * delays. Linux does not keep quick-ACK mode: the kernel leaves it on its own,
+   * so a server that wants a mode sets it again after every response.
+   */
+  export const NET_TCP_QUICKACK: i32;
+  /** `SO_KEEPALIVE`: `value` 1 probes an idle connection, 0 does not. */
+  export const NET_SO_KEEPALIVE: i32;
+  /** `SO_SNDBUF`: the send buffer, `value` in bytes; Linux doubles the value it stores. */
+  export const NET_SO_SNDBUF: i32;
+  /** `SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
+  export const NET_SO_RCVBUF: i32;
 }
 
 declare module "nish:unsafe" {

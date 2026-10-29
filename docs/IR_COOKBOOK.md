@@ -24140,6 +24140,7 @@ declare noundef i32 @nish_tcp_accept(i32 noundef, %struct.nish_array* noundef no
 declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef) #3
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
 declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_net_set_option(i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_net_close(i32 noundef) #3
 declare noundef i32 @nish_tcp_connect(%struct.nish_array* noundef nonnull align 8 nocapture readonly) #2
 declare noundef i32 @nish_connect_result(i32 noundef) #2

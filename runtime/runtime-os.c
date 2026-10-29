@@ -249,7 +249,7 @@ int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
 }
 
 /* ---- Files and directories with an explicit mode (docs/security/runtime.md,
-   RT-23 to RT-25): `writeFileSyncMode`, `createFileExclusiveSync` and
+   RT-24 to RT-26): `writeFileSyncMode`, `createFileExclusiveSync` and
    `mkdirSyncMode`. Each answers a value and never exits, as the writers just
    above do. A mode outside 0..07777 is -EINVAL before any system call. WASI
    has no file modes to apply, so there each answers -ENOSYS and creates
@@ -259,7 +259,7 @@ int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
    O_NOFOLLOW | O_CLOEXEC | flags, mode)`, then `fchmod(fd, mode)` before a
    byte is written, so the file is exactly `mode` whatever the umask and
    whatever mode a file already there had: no reader that opens it while it is
-   written finds it wider (RT-23). Then the data through `nish_put_all` and a
+   written finds it wider (RT-24). Then the data through `nish_put_all` and a
    checked `close`, as `nish_write_file_bytes` does. */
 static int32_t nish_put_file_mode(const nish_str *path, const nish_str *data, int flags, int32_t mode) {
   const char *p = nish_cpath(path);
@@ -280,7 +280,7 @@ static int32_t nish_put_file_mode(const nish_str *path, const nish_str *data, in
 
 /* `writeFileSyncMode(path, data, mode)`: `writeFileSync` with the mode given
    and an answer instead of an exit. A link at the path is refused (-ELOOP on
-   Linux) and the file it names is untouched (RT-24). */
+   Linux) and the file it names is untouched (RT-25). */
 int32_t nish_write_file_mode(const nish_str *path, const nish_str *data, int32_t mode) {
   return nish_put_file_mode(path, data, O_TRUNC, mode);
 }
@@ -296,7 +296,7 @@ int32_t nish_create_file_exclusive(const nish_str *path, const nish_str *data, i
 /* `mkdirSyncMode(path, mode)`: mkdir(2) with `mode`, one directory, not
    recursive. A path already there is -EEXIST and its mode is left as it was.
    The kernel applies the umask, so the directory is `mode & ~umask`: 0700 is
-   exact under any umask that leaves the owner's bits (RT-25). */
+   exact under any umask that leaves the owner's bits (RT-26). */
 int32_t nish_mkdir_mode(const nish_str *path, int32_t mode) {
   const char *p = nish_cpath(path);
   if (p != path->data || mode < 0 || mode > 07777) return -EINVAL;
