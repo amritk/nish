@@ -1063,7 +1063,10 @@ Flags
 help and a description: `string`, `number` and `repeatable` take a value,
 `boolean` does not. `command(path, shape, description)` declares a
 subcommand of one or more words, with what follows it in the help. A name
-declared twice panics, because the table is your program's own text.
+declared twice panics, because the table is your program's own text, and so
+does one no command line could match: a flag name with a leading `-`, an `=`
+or whitespace, a command word with a leading `-`, or a flag `no-x` beside a
+boolean `x`, whose `--no-x` it would be.
 `parseFrom(process.argv, 1)` reads the command line after the program's own
 path, and `parse(args)` reads every string in `args`.
 
@@ -1072,12 +1075,14 @@ options:
 
 - `--name value` and `--name=value` give a value; `--name=` gives the empty
   string. The next argument is the value whatever it looks like, so
-  `--jobs -1` is minus one.
+  `--jobs -1` is minus one and `--output --` writes to a file named `--`.
 - `--name` sets a boolean and `--no-name` clears it. A boolean takes no
   `=value`.
 - A repeatable flag keeps every value in the order given. Any other flag
   given twice is an error.
-- `--` ends the flags: everything after it is a positional, even `--verbose`.
+- `--` ends the flags: everything after it is a positional, even `--verbose`
+  and a second `--`. A positional that starts with `-`, such as a negative
+  number, needs a `--` before it, or it reads as a flag.
   A lone `-` is an ordinary word, as for a tool that reads `-` as stdin.
 - The words that are not flags may come before, between or after them. The
   leading ones choose the command, the longest declared path they spell, and
@@ -1087,9 +1092,11 @@ options:
 **Reading the answer.** `got.command` is the matched path, or `""` when no
 words were given. `str`, `num`, `bool` and `all` read a flag of that kind by
 name; a flag that was not given reads as `""`, `0`, `false` or no values,
-and `has(name)` tells that apart from one given as such. A number is an
-`f64`: what `Number` reads, refusing an empty value, one with spaces round
-it, NaN and the infinities. Asking for a name the table does not declare, or
+and `has(name)` tells that apart from one given as such. A number is a
+finite `f64` written in decimal: an optional sign, digits with an optional
+fraction, and an optional exponent (`-2.5`, `.5`, `1e3`), in ASCII. Hex and
+binary, `Infinity`, an empty value, spaces round it, and a value too large
+for an `f64` (`1e999`) are refused, the same natively as under Node. Asking for a name the table does not declare, or
 as the wrong kind, panics.
 
 **A usage error is data.** `parse` stops at the first one: an unknown flag

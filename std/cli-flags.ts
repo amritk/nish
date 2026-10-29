@@ -117,18 +117,61 @@ const agrees = (path: string[], words: string[], count: i32): boolean => {
 }
 
 /**
- * Whether `text` is empty or starts or ends in a space or control byte.
- * `Number` trims such bytes and reads `""` as zero, so a number flag refuses
- * them before it asks `Number` at all.
+ * Whether `text` is a decimal number in the one syntax every target reads
+ * alike: an optional sign, digits with an optional `.` fraction (one digit at
+ * least), then an optional `e` exponent with its own sign, ASCII only.
+ * `Number` alone reads more, and not the same more natively as under Node
+ * (`0x1A`, `0b11`, padding, `""` as zero), so a number flag asks this first.
  */
-const isPadded = (text: string): boolean =>
-  text.length === 0 || toI32(text.charCodeAt(0)) <= 32 || toI32(text.charCodeAt(text.length - 1)) <= 32
+const isDecimal = (text: string): boolean => {
+  // 0 before anything, 1 in the digits, 2 in the fraction, 3 just after
+  // the `e`, 4 in the exponent.
+  let state: i32 = 0
+  let mantissa: i32 = 0
+  let exponent: i32 = 0
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    const c = toI32(text.charCodeAt(i))
+    if (c >= 48 && c <= 57) {
+      if (state >= 3) {
+        exponent = exponent + 1
+        state = 4
+      } else {
+        mantissa = mantissa + 1
+        state = state === 0 ? toI32(1) : state
+      }
+    } else if ((c === 43 || c === 45) && (state === 0 || state === 3)) {
+      state = state + 1
+    } else if (c === 46 && state <= 1) {
+      state = 2
+    } else if ((c === 101 || c === 69) && (state === 1 || state === 2) && mantissa > 0) {
+      state = 3
+    } else {
+      return false
+    }
+  }
+  return mantissa > 0 && (state < 3 || exponent > 0)
+}
+
+/** Whether `name` can follow `--` and be matched: not empty, no leading `-`, and no `=`, space or control byte. */
+const isFlagName = (name: string): boolean => {
+  if (name.length === 0 || name.startsWith("-")) {
+    return false
+  }
+  for (let i: i32 = 0; i < toI32(name.length); i++) {
+    const c = toI32(name.charCodeAt(i))
+    if (c <= 32 || c === 61) {
+      return false
+    }
+  }
+  return true
+}
 
 /**
  * The flags and commands of one program, declared in the order its help
- * lists them. Each declaring method panics on a name declared twice, or one
- * that is empty or starts with `-`, because the table is the program's own
- * text and a mistake there is a bug.
+ * lists them. Each declaring method panics on a name no command line could
+ * match (empty, a leading `-`, an `=` or whitespace in a flag name), one
+ * declared twice, or a `no-x` beside a boolean `x`, because the table is the
+ * program's own text and a mistake there is a bug.
  */
 export class FlagTable {
   program: string
@@ -153,11 +196,21 @@ export class FlagTable {
 
   /** A flag of `kind`, after the checks every declaring method shares. */
   declare(name: string, kind: i32, meta: string, description: string): void {
-    if (name.length === 0 || name.startsWith("-")) {
-      panic(`nish/cli-flags: a flag name is not empty and has no leading '-', got "${name}"`)
+    if (!isFlagName(name)) {
+      panic(
+        `nish/cli-flags: a flag name is not empty and has no leading '-', '=' or whitespace, got "${name}"`
+      )
     }
     if (this.indexOf(name) >= 0) {
       panic(`nish/cli-flags: --${name} is declared twice`)
+    }
+    // `--no-x` cannot be both a flag of its own and the clearing of a boolean `--x`.
+    const clears = kind === FLAG_BOOLEAN ? this.indexOf(`no-${name}`) : toI32(-1)
+    const cleared = name.startsWith("no-") ? this.indexOf(name.substring(3)) : toI32(-1)
+    if (clears >= 0 || (cleared >= 0 && this.flags[cleared].kind === FLAG_BOOLEAN)) {
+      panic(
+        `nish/cli-flags: --${kind === FLAG_BOOLEAN ? `no-${name}` : name} would both be a flag and clear a boolean`
+      )
     }
     this.flags.push(new FlagSpec(name, kind, meta, description))
   }
@@ -173,6 +226,11 @@ export class FlagTable {
     if (words.length === 0) {
       panic("nish/cli-flags: a command path has at least one word")
     }
+    for (const w of words) {
+      if (w.startsWith("-")) {
+        panic(`nish/cli-flags: a command word has no leading '-', got "${w}" in "${joined}"`)
+      }
+    }
     for (const c of this.commands) {
       if (c.path === joined) {
         panic(`nish/cli-flags: the command "${joined}" is declared twice`)
@@ -186,7 +244,11 @@ export class FlagTable {
     this.declare(name, FLAG_STRING, meta, description)
   }
 
-  /** A number flag, read as an `f64`: what `Number` reads, finite, with no space around it. */
+  /**
+   * A number flag, read as an `f64`: a finite decimal (`-2.5`, `1e3`, `.5`),
+   * the same on every target. Hex, binary, `Infinity`, padding and `""` are
+   * usage errors.
+   */
   number(name: string, meta: string, description: string): void {
     this.declare(name, FLAG_NUMBER, meta, description)
   }
@@ -433,10 +495,11 @@ export class ParsedFlags {
       return
     }
     if (kind === FLAG_NUMBER) {
-      // `n - n` is zero exactly when `n` is finite: NaN and the infinities
-      // are not a count of anything.
-      const n: f64 = Number(value)
-      if (isPadded(value) || n - n !== 0) {
+      // `n - n` is zero exactly when `n` is finite: a decimal too large for
+      // an f64 (`1e999`) reads as Infinity, which is not a count of anything.
+      const decimal = isDecimal(value)
+      const n: f64 = decimal ? Number(value) : toF64(0)
+      if (!decimal || n - n !== 0) {
         this.fail(FLAG_ERR_NOT_A_NUMBER, `${flag} needs a number, not "${value}"`, value)
         return
       }
@@ -511,8 +574,11 @@ export class ParsedFlags {
     return `${this.table.program}: ${this.message}\n${this.usageLine()}\n`
   }
 
-  /** The usage error on stderr, then exit status 2. Call it only when `ok` is false. */
+  /** The usage error on stderr, then exit status 2. On a parse that succeeded it panics: there is no error to report. */
   exitUsage(): void {
+    if (this.ok) {
+      panic(`nish/cli-flags: ${this.table.program} calls exitUsage on a parse that succeeded`)
+    }
     writeError(this.usageError())
     process.exit(2)
   }
