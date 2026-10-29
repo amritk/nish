@@ -51,6 +51,10 @@ PASS  a relative path against an empty base path with an authority
 PASS  a relative path against a base with no authority
 PASS  a reference's scheme and host are lower-cased
 PASS  a .. in a reference with an authority is removed
+PASS  a leading ./ is removed from a relative base's merged path (§5.2.4 A)
+PASS  a lone .. leaves a relative base's merged path empty (§5.2.4 D)
+PASS  an empty query in a reference replaces the base's
+PASS  a file base keeps its empty authority
 PASS  resolving does not change the base
 PASS  the parts of a full URL
 PASS  no userinfo, port, query or fragment
@@ -80,6 +84,11 @@ PASS  userinfo is written back
 PASS  a username alone is written back
 PASS  an empty userinfo is dropped
 PASS  an empty password is written as none
+PASS  an empty username with a password is written back
+PASS  a query and fragment written empty are written back
+PASS  a file URL's empty authority is written back
+PASS  a leading ./ is removed from a path with no / (§5.2.4 A)
+PASS  a lone .. as a path with no / leaves it empty (§5.2.4 D)
 PASS  a default port written out is kept
 PASS  an escape keeps the case it was written in
 PASS  an IPv6 literal [::] is accepted
@@ -172,5 +181,7 @@ PASS  http and https are different origins
 PASS  an explicit port
 PASS  userinfo is not part of an origin
 PASS  an IPv6 origin is bracketed
+PASS  a host's trailing dot is kept in its origin
+PASS  so it is a different origin from the host without one
 PASS  a scheme other than http, https, ws or wss has no origin
-net_url_parse: 175 passed, 0 failed, 0 skipped
+net_url_parse: 186 passed, 0 failed, 0 skipped

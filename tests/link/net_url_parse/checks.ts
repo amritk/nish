@@ -247,6 +247,10 @@ export const urlParseChecks = (): i32 => {
   t.eqStr("a relative path against a base with no authority", resolved(parsed("mailto:x"), "y"), "mailto:y");
   t.eqStr("a reference's scheme and host are lower-cased", resolved(base, "HTTPS://EXAMPLE.com/X"), "https://example.com/X");
   t.eqStr("a .. in a reference with an authority is removed", resolved(base, "//g/x/../y"), "http://g/y");
+  t.eqStr("a leading ./ is removed from a relative base's merged path (§5.2.4 A)", resolved(parsed("mailto:x"), "./y"), "mailto:y");
+  t.eqStr("a lone .. leaves a relative base's merged path empty (§5.2.4 D)", resolved(parsed("mailto:x"), ".."), "mailto:");
+  t.eqStr("an empty query in a reference replaces the base's", resolved(parsed("http://a/b?q"), "?"), "http://a/b?");
+  t.eqStr("a file base keeps its empty authority", resolved(parsed("file:///a/b"), "c"), "file:///a/c");
   t.eqStr("resolving does not change the base", urlSerialize(base), "http://a/b/c/d;p?q");
 
   t.eqStr("the parts of a full URL", parts("HTTP://User:Pa%20ss@WWW.Example.COM:8080/a/B?x=1&y#Frag"),
@@ -292,6 +296,11 @@ export const urlParseChecks = (): i32 => {
   t.eqStr("a username alone is written back", roundTrip("http://u@a/"), "http://u@a/");
   t.eqStr("an empty userinfo is dropped", roundTrip("http://@a/"), "http://a/");
   t.eqStr("an empty password is written as none", roundTrip("http://u:@a/"), "http://u@a/");
+  t.eqStr("an empty username with a password is written back", roundTrip("http://:p@a/"), "http://:p@a/");
+  t.eqStr("a query and fragment written empty are written back", roundTrip("http://a/?#"), "http://a/?#");
+  t.eqStr("a file URL's empty authority is written back", roundTrip("file:///etc/hosts"), "file:///etc/hosts");
+  t.eqStr("a leading ./ is removed from a path with no / (§5.2.4 A)", roundTrip("g:./x"), "g:x");
+  t.eqStr("a lone .. as a path with no / leaves it empty (§5.2.4 D)", roundTrip("g:.."), "g:");
   t.eqStr("a default port written out is kept", roundTrip("http://a:80/"), "http://a:80/");
   t.eqStr("an escape keeps the case it was written in", roundTrip("http://a/%4a%4A?%4a#%4A"), "http://a/%4a%4A?%4a#%4A");
 
@@ -335,6 +344,8 @@ export const urlParseChecks = (): i32 => {
   t.eqStr("an explicit port", originOf("https://a.com:8443/"), "https://a.com:8443");
   t.eqStr("userinfo is not part of an origin", originOf("http://u:p@a.com/"), "http://a.com:80");
   t.eqStr("an IPv6 origin is bracketed", originOf("http://[::1]/"), "http://[::1]:80");
+  t.eqStr("a host's trailing dot is kept in its origin", originOf("http://a.com./"), "http://a.com.:80");
+  t.ok("so it is a different origin from the host without one", originOf("http://a.com./") !== originOf("http://a.com/"));
   t.eqStr("a scheme other than http, https, ws or wss has no origin", originOf("file:///x"), "null");
   return t.done();
 };

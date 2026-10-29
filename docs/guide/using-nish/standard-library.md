@@ -1989,7 +1989,10 @@ for a link, removing `.` and `..` so a path never climbs above `/`.
 everything else is kept as written, still percent-encoded. `port` is -1 when
 the URL names none; `urlDefaultPort(scheme)` is 80 or 443, and
 `urlOrigin(u)` writes `scheme://host:port` with the port always there, so
-two URLs are the same origin exactly when their origins are equal strings.
+origins compare as plain strings. A host is compared as written, so
+`http://a.com./` (a trailing dot) and `http://[0::1]/` are different origins
+from `http://a.com/` and `http://[::1]/`: an equal string is the same origin,
+and a split errs toward "different".
 
 ```ts nish:ok
 import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";

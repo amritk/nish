@@ -20,10 +20,11 @@ a refused decode leaves what it wrote before the refusal, and a repeated key
 is answered by its first value. The URL parser answers null, never a panic,
 for anything it refuses, and refuses every host two readers could take for
 different hosts: a percent-encoded or non-unreserved byte, a second `@`, a
-numeric host that is not strict dotted-decimal IPv4, an IPv6 zone. Four
-properties are accepted (URL-4 to URL-7): IPv6 hosts are compared as written,
-`user:@` writes back as `user@`, an empty path stays empty, and the input's
-length is the caller's to bound.
+numeric host that is not strict dotted-decimal IPv4, an IPv6 zone. Five
+properties are accepted (URL-4 to URL-8): IPv6 hosts are compared as written,
+`user:@` writes back as `user@`, an empty path stays empty, the input's
+length is the caller's to bound, and a host's trailing dot is kept, so
+`a.com.` is a different origin from `a.com`.
 
 ## Scope
 
@@ -74,6 +75,7 @@ serialized URL that reads back as a different one.
 | URL-5 | Low | `std/net/url.ts` (`urlSerialize`) | `http://u:@h/` writes back as `http://u@h/`: an empty password and no password are one `Url`. | **Accepted.** The two carry the same credentials; the WHATWG serializer drops the `:` too. The written form parses to itself. |
 | URL-6 | Low | `std/net/url.ts` (`urlParse`) | `http://g` keeps an empty path, as RFC 3986 parses it; an HTTP client that writes the path as the request target sends an empty one. | **Accepted.** The parser answers what was written; RFC 9112 §3.2.1 has the client send `/` for an empty path, and that belongs to the client that builds the request. |
 | URL-7 | Low | `std/net/url.ts` (`urlParse`, `urlResolve`) | No length cap: the work and the `Url` allocated are linear in the string, and a host is not checked against DNS's 253-byte or 63-byte-label limits. | **Accepted.** The string is already in memory when it is parsed, so the program that read it set its size (an HTTP header's cap, a config file's); every scan is linear and none repeats. A host longer than DNS allows fails at resolution. |
+| URL-8 | Low | `std/net/url.ts` (`urlParse`, `urlOrigin`) | A reg-name with a trailing dot is accepted and kept: `http://a.com./` has host `a.com.` and origin `http://a.com.:80`, where `http://a.com/` has `http://a.com:80`, though DNS resolves both to one name. A program that compares hosts or origins as strings sees two. | **Accepted.** The split errs toward "different origin", the safe side for dropping credentials or refusing a redirect; a program that must treat the two as one strips the dot before comparing. `urlOrigin`'s doc and the guide say hosts compare as written. Pinned in `net_url_parse`. |
 
 ## Properties verified
 

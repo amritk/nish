@@ -180,12 +180,13 @@ the record that found it. The notes below the table name each such finding.
     of one. Each is counted as a fixed Low.
     QUIC-10 (Low), ECN counts parsed and ignored, was closed by #914, which
     has the carriers mark ECT(0); it is counted as a fixed Low.
-12. URL-1 to URL-7 (Low) are accepted, with the reason in their record, and
+12. URL-1 to URL-8 (Low) are accepted, with the reason in their record, and
     are not counted: the byte API's output is not checked as UTF-8, a
     refused decode leaves the bytes before the refusal written, a repeated
     key is answered by its first value, an IPv6 host is compared as written,
-    `user:@` writes back as `user@`, an empty http path stays empty, and the
-    URL parser leaves the input's length to its caller.
+    `user:@` writes back as `user@`, an empty http path stays empty, the
+    URL parser leaves the input's length to its caller, and a host's
+    trailing dot is kept, so `a.com.` is its own origin.
 13. ROUTE-1 to ROUTE-7 are the shapes an attacker's target can take, checked
     and found to hold, and are not findings. ROUTE-8 (Low), dot segments
     matched as bytes, and ROUTE-9 (Low), the path matched before it is

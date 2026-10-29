@@ -1109,11 +1109,12 @@ export const urlDefaultPort = (scheme: string): i32 => {
 
 /**
  * `u`'s origin as `scheme://host:port`, the port always written (the scheme's
- * default when `u` names none), so two URLs are same-origin exactly when their
- * origins are equal strings: `http://A.com/x` and `http://a.com:80/y` are both
- * `http://a.com:80`. Null for a scheme other than http, https, ws or wss, which
- * has no origin to compare. IPv6 hosts are compared as written, so `[::1]` and
- * `[0::1]` are different origins.
+ * default when `u` names none), so origins compare as plain strings:
+ * `http://A.com/x` and `http://a.com:80/y` are both `http://a.com:80`. Null for
+ * a scheme other than http, https, ws or wss, which has no origin to compare.
+ * Hosts are compared as written, lower-cased, so `[::1]` and `[0::1]` are
+ * different origins, and so are `a.com.` and `a.com`: equal strings are the
+ * same origin, and a split errs toward "different".
  */
 export const urlOrigin = (u: Url): string | null => {
   const fallback: i32 = urlDefaultPort(u.scheme)
