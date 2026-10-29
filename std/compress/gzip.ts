@@ -67,7 +67,7 @@ export const GZIP_END: i32 = -100
 const GZIP_HEADER_SIZE: i32 = 10
 const GZIP_TRAILER_SIZE: i32 = 8
 
-/** The bytes a `GzipWriter` holds before it compresses them: one window of history and two of input. */
+/** The bytes a `GzipWriter` holds: 32 KB of history, and up to 64 KB of input before it compresses them. */
 const GZIP_WRITER_HISTORY: i32 = 32768
 const GZIP_WRITER_INPUT: i32 = 65536
 
@@ -337,9 +337,16 @@ export class GzipWriter {
     this.finished = false
   }
 
-  /** The most bytes a `write` of `len` bytes, or a `flush` or `finish` after it, can produce. */
+  /**
+   * The most bytes a `write` of `len` bytes, or a `flush` or `finish` after
+   * it, can produce. Less than 64 KB is pending before the call, and the
+   * call compresses once per 64 KB pending: `deflateBound` of all of it,
+   * with the constant part of `deflateBound` again for each compression
+   * after the first.
+   */
   bound(len: i32): i32 {
-    return deflateBound(GZIP_WRITER_INPUT + len) + GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE + 10
+    const drains: i32 = (len >> 16) + 1
+    return deflateBound(GZIP_WRITER_INPUT + len) + drains * 18 + GZIP_HEADER_SIZE + GZIP_TRAILER_SIZE + 10
   }
 
   /** Writes the header into `out` at `at` if it has not been; answers the new position. */
@@ -404,16 +411,17 @@ export class GzipWriter {
     this.size = this.size + toU32(len)
     let p: i32 = off
     const end: i32 = off + len
-    const cap: i32 = toI32(this.window.length)
+    // Compressed once 64 KB is pending, the first window too: `pending` is
+    // at most `GZIP_WRITER_HISTORY` here, so the window always has the room.
     while (p < end) {
-      let take: i32 = cap - this.fill
+      let take: i32 = GZIP_WRITER_INPUT - (this.fill - this.pending)
       if (take > end - p) {
         take = end - p
       }
       copyBytes(this.window, this.fill, src, p, take)
       this.fill += take
       p += take
-      if (this.fill === cap) {
+      if (this.fill - this.pending === GZIP_WRITER_INPUT) {
         o = this.drain(out, o, false)
         if (o < 0) {
           panic("GzipWriter.write: a block larger than its bound")
@@ -439,6 +447,9 @@ export class GzipWriter {
     let o: i32 = this.header(out, at)
     if (this.fill > this.pending) {
       o = this.drain(out, o, false)
+      if (o < 0) {
+        panic("GzipWriter.flush: a block larger than its bound")
+      }
     }
     o = this.deflater.writeStored(this.window, toI32(0), toI32(0), false, out, o, toI32(out.length))
     return o
@@ -459,6 +470,9 @@ export class GzipWriter {
     }
     let o: i32 = this.header(out, at)
     o = this.drain(out, o, true)
+    if (o < 0) {
+      panic("GzipWriter.finish: a block larger than its bound")
+    }
     o = this.deflater.flushBits(out, o, toI32(out.length))
     if (o < 0 || toI32(out.length) - o < GZIP_TRAILER_SIZE) {
       panic("GzipWriter.finish: a block larger than its bound")

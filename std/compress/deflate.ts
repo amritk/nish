@@ -52,7 +52,7 @@
  * the length limit is the Kraft-sum repair of the counts per length. Not
  * ported from another implementation.
  */
-import { uncheckedGet, uncheckedSet } from "nish:unsafe"
+import { uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub } from "nish:unsafe"
 import { copyBytes } from "nish/bytes"
 
 /** Level 0: stored blocks only, the input copied with five bytes of framing per 65,535. */
@@ -134,10 +134,27 @@ const INF_LENGTH: i32 = 1
 const INF_END: i32 = 2
 const INF_SLOW: i32 = 3
 const INF_INVALID: i32 = 4
+/** A pointer to a subtable: its start as the value, its bits as the extra bits, the main table's bits as the length. */
+const INF_SUB: i32 = 5
 
-/** The bits the literal/length and distance tables index directly; a longer code is decoded a bit at a time. */
-const INF_LIT_BITS: i32 = 10
+/**
+ * The bits the literal/length and distance tables index directly; a longer
+ * code is decoded through a subtable after the main table.
+ */
+const INF_LIT_BITS: i32 = 11
 const INF_DIST_BITS: i32 = 8
+
+/**
+ * The most entries a table with its subtables can need, over every complete
+ * code of up to 15 bits: what zlib's `enough` program computes for 288
+ * symbols with 11 root bits and for 32 with 8 (`enough 288 11 15`,
+ * `enough 32 8 15`), the figures libdeflate sizes its tables by.
+ */
+const INF_LIT_ENOUGH: i32 = 2342
+const INF_DIST_ENOUGH: i32 = 402
+
+/** The output the fast loop keeps in hand: the longest match and 32 bytes of copy slack. */
+const INF_FAST_ROOM: i32 = 290
 const INF_CL_BITS: i32 = 7
 
 /** The decoder's resumable states. */
@@ -165,6 +182,22 @@ export const deflateBound = (n: i32): i32 => {
  * header and trailer, which covers zlib's 6.
  */
 export const compressBound = (n: i32): i32 => deflateBound(n) + 18
+
+/**
+ * Copies `b[from .. from + 16)` to `b[to .. to + 16)` eight bytes at a time,
+ * each word read after the one before it is written, which is LZ77's
+ * meaning when `to - from` is at least 8. The caller has checked the range.
+ */
+const inflateCopy16 = (b: u8[], to: integer<0, 2147483631>, from: integer<0, 2147483631>): void => {
+  deflateStore64(b, to, deflateLoad64(b, from))
+  deflateStore64(b, to + 8, deflateLoad64(b, from + 8))
+}
+
+/** Stores `w` twice into `b[to .. to + 16)`; the caller has checked the range. */
+const inflateFill16 = (b: u8[], to: integer<0, 2147483631>, w: u64): void => {
+  deflateStore64(b, to, w)
+  deflateStore64(b, to + 8, w)
+}
 
 /** Panics unless `buf[off .. off + len)` lies inside `buf`. */
 const deflateWindow = (what: string, buf: u8[], off: i32, len: i32): void => {
@@ -195,30 +228,42 @@ const deflateLoad32 = (b: u8[], p: integer<0, 2147483639>): u32 =>
   (toU32(uncheckedGet(b, p + 2)) << 16) |
   (toU32(uncheckedGet(b, p + 3)) << 24)
 
-/** The little-endian 64-bit word at `b[p .. p + 8)`; the caller has checked the range. */
+/**
+ * The little-endian 64-bit word at `b[p .. p + 8)`; the caller has checked the
+ * range. Eight byte loads, not two `deflateLoad32`s: LLVM folds these into
+ * one load, and a word built from two halves keeps `deflateStore64` from
+ * becoming one store.
+ */
 const deflateLoad64 = (b: u8[], p: integer<0, 2147483639>): u64 =>
-  toU64(deflateLoad32(b, p)) | (toU64(deflateLoad32(b, p + 4)) << toU64(32))
+  toU64(uncheckedGet(b, p)) |
+  (toU64(uncheckedGet(b, p + 1)) << toU64(8)) |
+  (toU64(uncheckedGet(b, p + 2)) << toU64(16)) |
+  (toU64(uncheckedGet(b, p + 3)) << toU64(24)) |
+  (toU64(uncheckedGet(b, p + 4)) << toU64(32)) |
+  (toU64(uncheckedGet(b, p + 5)) << toU64(40)) |
+  (toU64(uncheckedGet(b, p + 6)) << toU64(48)) |
+  (toU64(uncheckedGet(b, p + 7)) << toU64(56))
 
 /** Stores `w` little-endian into `b[p .. p + 8)`; the caller has checked the range. */
 const deflateStore64 = (b: u8[], p: integer<0, 2147483639>, w: u64): void => {
-  uncheckedSet(b, p, toU8(w & toU64(255)))
-  uncheckedSet(b, p + 1, toU8((w >> toU64(8)) & toU64(255)))
-  uncheckedSet(b, p + 2, toU8((w >> toU64(16)) & toU64(255)))
-  uncheckedSet(b, p + 3, toU8((w >> toU64(24)) & toU64(255)))
-  uncheckedSet(b, p + 4, toU8((w >> toU64(32)) & toU64(255)))
-  uncheckedSet(b, p + 5, toU8((w >> toU64(40)) & toU64(255)))
-  uncheckedSet(b, p + 6, toU8((w >> toU64(48)) & toU64(255)))
+  uncheckedSet(b, p, toU8(w))
+  uncheckedSet(b, p + 1, toU8(w >> toU64(8)))
+  uncheckedSet(b, p + 2, toU8(w >> toU64(16)))
+  uncheckedSet(b, p + 3, toU8(w >> toU64(24)))
+  uncheckedSet(b, p + 4, toU8(w >> toU64(32)))
+  uncheckedSet(b, p + 5, toU8(w >> toU64(40)))
+  uncheckedSet(b, p + 6, toU8(w >> toU64(48)))
   uncheckedSet(b, p + 7, toU8(w >> toU64(56)))
 }
 
 /** The number of trailing zero bits of a nonzero `x`. */
 const deflateCtz64 = (x: u64): i32 => {
+  // Both halves, then a select rather than a branch on which is nonzero.
   const lo: u32 = toU32(x)
-  if (lo !== 0) {
-    return toI32(31) - Math.clz32(lo & (toU32(0) - lo))
-  }
   const hi: u32 = toU32(x >> toU64(32))
-  return toI32(63) - Math.clz32(hi & (toU32(0) - hi))
+  const low: i32 = toI32(31) - Math.clz32(lo & (toU32(0) - lo))
+  const high: i32 = toI32(63) - Math.clz32(hi & (toU32(0) - hi))
+  return lo !== 0 ? low : high
 }
 
 /**
@@ -374,11 +419,21 @@ const deflateCanonical = (lens: i32[], n: i32, codes: i32[], count: i32[], next:
     code = (code + count[l - 1]) << 1
     next[l] = code
   }
+  // Each length's next code is kept bit-reversed, as it is written, and
+  // incremented that way: clear the ones below its highest zero and set it.
+  for (let l: i32 = 1; l < 16; l += 1) {
+    next[l] = deflateReverse(next[l], l)
+  }
   for (let s: i32 = 0; s < n; s += 1) {
     const l: i32 = lens[s]
     if (l > 0 && l < 16) {
-      codes[s] = deflateReverse(next[l], l)
-      next[l] += 1
+      const r: i32 = next[l]
+      codes[s] = r
+      const top: i32 = (toI32(1) << l) - 1
+      if (r !== top) {
+        const bit: i32 = toI32(1) << (31 - toI32(Math.clz32(toU32(r ^ top))))
+        next[l] = (r & (bit - 1)) | bit
+      }
     } else {
       codes[s] = 0
     }
@@ -1009,38 +1064,57 @@ export class Deflater {
   longest(src: u8[], p: i32, end: i32, histStart: i32): i32 {
     const head: i32[] = this.head
     const prev: i32[] = this.prev
-    if (toI32(head.length) !== DEFLATE_HASH_SIZE || toI32(prev.length) !== DEFLATE_WINDOW) {
+    if (
+      toI32(head.length) !== DEFLATE_HASH_SIZE ||
+      toI32(prev.length) !== DEFLATE_WINDOW ||
+      p < 0 ||
+      p > end - 4 ||
+      end > toI32(src.length)
+    ) {
       panic("Deflater.longest: a table is not its size")
     }
-    const word: u32 = deflateLoad32(src, p)
+    const delta: i32 = this.delta
+    const minMatch: i32 = this.minMatch
+    const at: integer<0, 2147483639> = p
+    const word: u32 = deflateLoad32(src, at)
     const h: i32 =
-      this.minMatch === 3
+      minMatch === 3
         ? toI32(((word << 8) * toU32(DEFLATE_HASH_MUL)) >>> 17)
         : toI32((word * toU32(DEFLATE_HASH_MUL)) >>> 17)
-    const v: i32 = p + this.delta
+    const v: i32 = wrappingAdd(p, delta)
     let cand: i32 = uncheckedGet(head, h)
     uncheckedSet(head, h, v)
     uncheckedSet(prev, v & (DEFLATE_WINDOW - 1), cand)
-    let maxLen: i32 = end - p
-    if (maxLen > DEFLATE_MAX_MATCH) {
-      maxLen = DEFLATE_MAX_MATCH
-    }
-    let best: i32 = this.minMatch - 1
+    // Where a whole longest match fits, eight bytes past `p` can be read
+    // whatever the match, and nothing is clamped.
+    const roomy: boolean = p <= end - DEFLATE_MAX_MATCH
+    const maxLen: i32 = roomy ? DEFLATE_MAX_MATCH : end - p
+    let best: i32 = minMatch - 1
     let bestDist: i32 = 0
     const limit: i32 = v - DEFLATE_WINDOW
+    const floor: i32 = limit > histStart + delta ? limit : histStart + delta
     const nice: i32 = this.niceLength < maxLen ? this.niceLength : maxLen
-    const lo: i32 = histStart + this.delta
-    const mask: u32 = this.minMatch === 3 ? toU32(0xffffff) : ~toU32(0)
+    const mask: u32 = minMatch === 3 ? toU32(0xffffff) : ~toU32(0)
     let chain: i32 = this.maxChain
-    while (cand >= limit && cand >= lo && cand < v && chain > 0) {
-      const ci: i32 = cand - this.delta
-      if (
-        uncheckedGet(src, ci + best) === uncheckedGet(src, p + best) &&
-        ci >= 0 &&
-        ci <= 2147483639 &&
-        ((deflateLoad32(src, ci) ^ word) & mask) === 0
-      ) {
-        const l: i32 = deflateMatchLength(src, ci, p, maxLen)
+    while (cand >= floor && cand < v && chain > 0) {
+      const cd: i32 = cand - delta
+      if (cd < 0 || cd > 2147483639) {
+        break
+      }
+      const ci: integer<0, 2147483639> = cd
+      // The byte that would make this match the longest yet, first: most
+      // candidates fail on it.
+      if (uncheckedGet(src, ci + best) === uncheckedGet(src, p + best)) {
+        let l: i32 = 0
+        if (roomy) {
+          const x: u64 = deflateLoad64(src, ci) ^ deflateLoad64(src, at)
+          l =
+            x !== toU64(0)
+              ? deflateCtz64(x) >> 3
+              : toI32(8) + deflateMatchLength(src, ci + 8, p + 8, maxLen - 8)
+        } else if (((deflateLoad32(src, ci) ^ word) & mask) === 0) {
+          l = deflateMatchLength(src, ci, p, maxLen)
+        }
         if (l > best) {
           best = l
           bestDist = v - cand
@@ -1052,7 +1126,7 @@ export class Deflater {
       cand = uncheckedGet(prev, cand & (DEFLATE_WINDOW - 1))
       chain -= 1
     }
-    if (bestDist === 0 || best < this.minMatch) {
+    if (bestDist === 0 || best < minMatch) {
       return 0
     }
     // A three-byte match far back costs more than its three literals.
@@ -1163,14 +1237,28 @@ export class Deflater {
         let cand: i32 = uncheckedGet(head, h)
         uncheckedSet(head, h, v)
         uncheckedSet(prev, v & (DEFLATE_WINDOW - 1), cand)
-        const maxLen: i32 = end - p < DEFLATE_MAX_MATCH ? end - p : DEFLATE_MAX_MATCH
+        const maxLen: i32 = p <= end - DEFLATE_MAX_MATCH ? DEFLATE_MAX_MATCH : end - p
         const nice: i32 = niceLength < maxLen ? niceLength : maxLen
         const limit: i32 = v - DEFLATE_WINDOW
         let chain: i32 = maxChain
         while (cand >= limit && cand >= lo && cand < v && chain > 0) {
           const ci: i32 = cand - delta
           if (ci >= 0 && ci <= 2147483639 && deflateLoad32(src, ci) === word) {
-            const l: i32 = 4 + deflateMatchLength(src, ci + 4, p + 4, maxLen - 4)
+            let l: i32 = 0
+            if (p <= end - DEFLATE_MAX_MATCH && ci <= 2147483627) {
+              const a4: i32 = ci + 4
+              const b4: i32 = p + 4
+              let x: u64 = toU64(1)
+              if (a4 >= 0 && a4 <= 2147483639 && b4 >= 0 && b4 <= 2147483639) {
+                x = deflateLoad64(src, a4) ^ deflateLoad64(src, b4)
+              }
+              l =
+                x !== toU64(0)
+                  ? toI32(4) + (deflateCtz64(x) >> 3)
+                  : toI32(12) + deflateMatchLength(src, ci + 12, p + 12, maxLen - 12)
+            } else {
+              l = 4 + deflateMatchLength(src, ci + 4, p + 4, maxLen - 4)
+            }
             if (l > best) {
               best = l
               bestDist = v - cand
@@ -1193,13 +1281,14 @@ export class Deflater {
         uncheckedSet(df, ds, uncheckedGet(df, ds) + 1)
         // Every position the match covers goes into the chains.
         const stop: i32 = p + best
-        let q: i32 = p + 1
-        while (q < stop && q >= 0 && q <= last && q <= 2147483639) {
-          const hq: i32 = toI32((deflateLoad32(src, q) * toU32(DEFLATE_HASH_MUL)) >>> 17)
-          const vq: i32 = q + delta
+        const insertEnd: i32 = stop <= last ? stop : last + 1
+        let vq: i32 = wrappingAdd(p, delta)
+        for (let q: i32 = p + 1; q < insertEnd && q >= 0 && q <= 2147483639; q += 1) {
+          const qa: integer<0, 2147483639> = q
+          const hq: i32 = toI32((deflateLoad32(src, qa) * toU32(DEFLATE_HASH_MUL)) >>> 17)
+          vq = wrappingAdd(vq, 1)
           uncheckedSet(prev, vq & (DEFLATE_WINDOW - 1), uncheckedGet(head, hq))
           uncheckedSet(head, hq, vq)
-          q += 1
         }
         p = stop
       } else {
@@ -1532,10 +1621,10 @@ export class Deflater {
         bc += uncheckedGet(lextra, s)
         if (bc >= 32) {
           deflateRoom(out, o, 4)
-          uncheckedSet(out, o, toU8(bb & toU64(255)))
-          uncheckedSet(out, o + 1, toU8((bb >> toU64(8)) & toU64(255)))
-          uncheckedSet(out, o + 2, toU8((bb >> toU64(16)) & toU64(255)))
-          uncheckedSet(out, o + 3, toU8((bb >> toU64(24)) & toU64(255)))
+          uncheckedSet(out, o, toU8(bb))
+          uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
+          uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
+          uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
           bb = bb >> toU64(32)
           bc -= 32
           o += 4
@@ -1549,10 +1638,10 @@ export class Deflater {
       }
       if (bc >= 32) {
         deflateRoom(out, o, 4)
-        uncheckedSet(out, o, toU8(bb & toU64(255)))
-        uncheckedSet(out, o + 1, toU8((bb >> toU64(8)) & toU64(255)))
-        uncheckedSet(out, o + 2, toU8((bb >> toU64(16)) & toU64(255)))
-        uncheckedSet(out, o + 3, toU8((bb >> toU64(24)) & toU64(255)))
+        uncheckedSet(out, o, toU8(bb))
+        uncheckedSet(out, o + 1, toU8(bb >> toU64(8)))
+        uncheckedSet(out, o + 2, toU8(bb >> toU64(16)))
+        uncheckedSet(out, o + 3, toU8(bb >> toU64(24)))
         bb = bb >> toU64(32)
         bc -= 32
         o += 4
@@ -1570,7 +1659,10 @@ export class Deflater {
  * canonical order that a bit-at-a-time decode walks (§3.2.2).
  */
 export class InflateTable {
-  /** `entries[peek]`: value << 16 | kind << 8 | extra << 4 | length. */
+  /**
+   * `entries[peek]`: value << 16 | extra << 11 | kind << 8 | length. The low
+   * byte is the length alone, so a bit buffer shifts by an entry as it is.
+   */
   readonly entries: i32[]
   /** The prefix the table indexes. */
   readonly bits: i32
@@ -1579,12 +1671,33 @@ export class InflateTable {
   /** The symbols, ordered by code. */
   readonly symbols: i32[]
 
-  /** A table indexing `bits` bits, for an alphabet of up to `symbols` symbols. */
-  constructor(bits: i32, symbols: i32) {
+  /**
+   * A table indexing `bits` bits, for an alphabet of up to `symbols`
+   * symbols, with room for `capacity` entries: the main table and its
+   * subtables.
+   */
+  constructor(bits: i32, symbols: i32, capacity: i32) {
     this.bits = bits
-    this.entries = new Array<i32>(1 << bits)
+    this.entries = new Array<i32>(capacity)
     this.count = new Array<i32>(16)
     this.symbols = new Array<i32>(symbols)
+  }
+}
+
+/**
+ * Copies `entries[0 .. end)` to `entries[end .. 2 * end)`: a table for codes
+ * one bit longer, each shorter code repeated under both values of the new
+ * bit. Panics unless `2 * end` is within the table.
+ */
+const inflateDouble = (entries: i32[], end: i32): void => {
+  if (end < 0 || end > toI32(entries.length) - end) {
+    panic("Inflater.build: a table doubled past its length")
+  }
+  // A counter below a bound needs no overflow check, and the loop without
+  // one is a vector copy.
+  const twice: i32 = end + end
+  for (let j: i32 = end; j < twice; j += 1) {
+    uncheckedSet(entries, j, uncheckedGet(entries, j - end))
   }
 }
 
@@ -1610,6 +1723,10 @@ export class Inflater {
   readonly clLens: i32[]
   /** Scratch for building a table. */
   readonly offsets: i32[]
+  /** Each symbol's table entry with a length of 0, per kind of table: `entryOf(kind, s, 0)`. */
+  readonly litEntries: i32[]
+  readonly distEntries: i32[]
+  readonly clEntries: i32[]
   readonly lengthBase: i32[]
   readonly lengthExtra: i32[]
   readonly distBase: i32[]
@@ -1633,11 +1750,11 @@ export class Inflater {
 
   /** Builds the tables, the fixed code's among them. */
   constructor() {
-    this.lit = new InflateTable(INF_LIT_BITS, 288)
-    this.dist = new InflateTable(INF_DIST_BITS, 32)
-    this.codeLengths = new InflateTable(INF_CL_BITS, 19)
-    this.fixedLit = new InflateTable(INF_LIT_BITS, 288)
-    this.fixedDist = new InflateTable(INF_DIST_BITS, 32)
+    this.lit = new InflateTable(INF_LIT_BITS, 288, INF_LIT_ENOUGH)
+    this.dist = new InflateTable(INF_DIST_BITS, 32, INF_DIST_ENOUGH)
+    this.codeLengths = new InflateTable(INF_CL_BITS, 19, 1 << INF_CL_BITS)
+    this.fixedLit = new InflateTable(INF_LIT_BITS, 288, INF_LIT_ENOUGH)
+    this.fixedDist = new InflateTable(INF_DIST_BITS, 32, INF_DIST_ENOUGH)
     this.lens = new Array<i32>(320)
     this.clLens = new Array<i32>(19)
     this.offsets = new Array<i32>(16)
@@ -1653,6 +1770,9 @@ export class Inflater {
       this.distBase[d] = deflateDistBase(d)
       this.distExtra[d] = deflateDistExtra(d)
     }
+    this.litEntries = new Array<i32>(288)
+    this.distEntries = new Array<i32>(32)
+    this.clEntries = new Array<i32>(19)
     this.state = INF_S_BLOCK
     this.last = false
     this.fixed = false
@@ -1662,6 +1782,15 @@ export class Inflater {
     this.inPos = 0
     this.outPos = 0
     this.consumed = 0
+    for (let s: i32 = 0; s < 288; s += 1) {
+      this.litEntries[s] = this.entryOf(INF_TABLE_LITLEN, s, toI32(0))
+    }
+    for (let s: i32 = 0; s < 32; s += 1) {
+      this.distEntries[s] = this.entryOf(INF_TABLE_DIST, s, toI32(0))
+    }
+    for (let s: i32 = 0; s < 19; s += 1) {
+      this.clEntries[s] = this.entryOf(INF_TABLE_CODELEN, s, toI32(0))
+    }
     for (let s: i32 = 0; s < 288; s += 1) {
       this.lens[s] = deflateFixedLitLength(s)
     }
@@ -1698,7 +1827,7 @@ export class Inflater {
       if (s >= 30) {
         return (INF_INVALID << 8) | len
       }
-      return (this.distBase[s] << 16) | (this.distExtra[s] << 4) | len
+      return (this.distBase[s] << 16) | (this.distExtra[s] << 11) | len
     }
     if (s < 256) {
       return (s << 16) | (INF_LITERAL << 8) | len
@@ -1709,7 +1838,7 @@ export class Inflater {
     if (s >= 286) {
       return (INF_INVALID << 8) | len
     }
-    return (this.lengthBase[s - 257] << 16) | (INF_LENGTH << 8) | (this.lengthExtra[s - 257] << 4) | len
+    return (this.lengthBase[s - 257] << 16) | (INF_LENGTH << 8) | (this.lengthExtra[s - 257] << 11) | len
   }
 
   /**
@@ -1731,19 +1860,25 @@ export class Inflater {
       n > toI32(syms.length) ||
       toI32(count.length) < 16 ||
       toI32(offs.length) < 16 ||
-      toI32(entries.length) !== 1 << bits
+      toI32(entries.length) < 1 << bits
     ) {
       panic("Inflater.build: a table outside its scratch")
     }
     for (let l: i32 = 0; l < 16; l += 1) {
       count[l] = 0
     }
-    for (let s: i32 = 0; s < n; s += 1) {
-      const l: i32 = lens[from + s]
-      if (l < 0 || l > 15) {
-        return DEFLATE_ERR_HUFFMAN
-      }
-      count[l] += 1
+    // `lens[from .. from + n)` was checked above. A length outside 0 to 15
+    // shows in the OR of them all, tested once after the loop.
+    const hi: i32 = from + n
+    let seen: i32 = 0
+    for (let i: i32 = from; i < hi; i += 1) {
+      const l: i32 = uncheckedGet(lens, i)
+      seen = seen | l
+      const c: i32 = l & 15
+      count[c] = wrappingAdd(count[c], 1)
+    }
+    if ((seen & ~15) !== 0) {
+      return DEFLATE_ERR_HUFFMAN
     }
     count[0] = 0
     // The Kraft sum: over-subscribed is an error; incomplete is allowed for
@@ -1760,45 +1895,155 @@ export class Inflater {
     if (left > 0 && codes !== 0 && !(kind !== INF_TABLE_CODELEN && codes === 1 && count[1] === 1)) {
       return DEFLATE_ERR_HUFFMAN
     }
+    // Sorted by length, then symbol, with no branch per symbol: the unused
+    // symbols (length 0) go after the rest, where nothing reads them.
     offs[1] = 0
     for (let l: i32 = 1; l < 15; l += 1) {
       offs[l + 1] = offs[l] + count[l]
     }
-    for (let s: i32 = 0; s < n; s += 1) {
-      const l: i32 = lens[from + s]
-      if (l > 0 && l < 16) {
-        const at: i32 = offs[l]
-        if (at >= 0 && at < toI32(syms.length)) {
-          syms[at] = s
-        }
-        offs[l] = at + 1
+    offs[0] = codes
+    for (let i: i32 = from; i < hi; i += 1) {
+      const l: i32 = uncheckedGet(lens, i) & 15
+      const at: i32 = offs[l]
+      if (at >= 0 && at < toI32(syms.length)) {
+        syms[at] = i - from
       }
+      offs[l] = wrappingAdd(at, 1)
     }
-    // A prefix whose code is longer than the table, or none at all, decodes
-    // the slow way, which also finds an undefined code.
     const size: i32 = 1 << bits
     const slow: i32 = INF_SLOW << 8
-    for (let i: i32 = 0; i < size; i += 1) {
-      uncheckedSet(entries, i, slow)
+    let tmpl: i32[] = this.clEntries
+    if (kind === INF_TABLE_LITLEN) {
+      tmpl = this.litEntries
+    } else if (kind === INF_TABLE_DIST) {
+      tmpl = this.distEntries
     }
-    let code: i32 = 0
-    let k: i32 = 0
-    for (let l: i32 = 1; l <= bits && l < 16; l += 1) {
-      const codesHere: i32 = uncheckedGet(count, l)
-      for (let c: i32 = 0; c < codesHere; c += 1) {
-        if (k >= 0 && k < toI32(syms.length)) {
-          const e: i32 = this.entryOf(kind, syms[k], l)
-          const step: i32 = 1 << l
-          for (let r: i32 = deflateReverse(code, l); r < size; r += step) {
-            uncheckedSet(entries, r, e)
-          }
-        }
-        k += 1
-        code += 1
+    let len: i32 = 1
+    while (len < 16 && count[len] === 0) {
+      len += 1
+    }
+    if (left > 0 || len > bits) {
+      // No code, one incomplete one-bit code, or every code longer than the
+      // table: every prefix starts as the slow way, which also finds an
+      // undefined code, and the short codes are written over it.
+      for (let i: i32 = 0; i < size; i += 1) {
+        uncheckedSet(entries, i, slow)
       }
-      code = code << 1
+      let code: i32 = 0
+      let k: i32 = 0
+      for (let l: i32 = 1; l <= bits && l < 16; l += 1) {
+        const codesHere: i32 = uncheckedGet(count, l)
+        for (let c: i32 = 0; c < codesHere; c += 1) {
+          if (k >= 0 && k < toI32(syms.length)) {
+            const e: i32 = tmpl[syms[k]] | l
+            const step: i32 = 1 << l
+            for (let r: i32 = deflateReverse(code, l); r < size; r += step) {
+              uncheckedSet(entries, r, e)
+            }
+          }
+          k += 1
+          code += 1
+        }
+        code = code << 1
+      }
+      return 0
     }
-    return 0
+    // A complete code whose shortest codes fit the table. The codes in
+    // canonical order, kept bit-reversed (the table is indexed by the
+    // stream's low bits first): each is written once into a table of
+    // `end = 2^len` entries, and the table is doubled by copying each time
+    // the length grows, which repeats every code at every slot it prefixes.
+    // A reversed code is incremented by clearing the ones below its highest
+    // zero and setting that zero.
+    let code: i32 = 0
+    let end: i32 = 1 << len
+    let k: i32 = 0
+    let here: i32 = 0
+    while (len <= bits && len >= 0 && len < toI32(count.length)) {
+      here = count[len]
+      while (here > 0) {
+        if (k < 0 || k >= toI32(syms.length) || code < 0 || code >= end || end > size) {
+          panic("Inflater.build: a code outside its table")
+        }
+        uncheckedSet(entries, code, tmpl[syms[k]] | len)
+        k += 1
+        if (code === end - 1) {
+          // The last code, all ones: the code is complete within the table.
+          while (end < size) {
+            inflateDouble(entries, end)
+            end = end << 1
+          }
+          return 0
+        }
+        const bit: i32 = toI32(1) << (31 - toI32(Math.clz32(toU32(code ^ (end - 1)))))
+        code = (code & (bit - 1)) | bit
+        here -= 1
+      }
+      len += 1
+      while (len < 16 && count[len] === 0) {
+        len += 1
+      }
+      while (end < size && end < 1 << len) {
+        inflateDouble(entries, end)
+        end = end << 1
+      }
+    }
+    here = len < 16 ? count[len] : 0
+    // Codes longer than the table remain, `here` of them of length `len`,
+    // and `code` is the next, reversed, its low `bits` bits a slot of the
+    // main table. The codes that share a slot get a subtable after the
+    // tables already built, as wide as it takes for them to fill it (the
+    // code is complete, so they do), and the slot points to it. A subtable
+    // entry carries the bits past the main table's as its length.
+    const limit: i32 = toI32(entries.length)
+    let prefix: i32 = -1
+    let start: i32 = 0
+    let subEnd: i32 = size
+    while (true) {
+      if (len < bits || len > 15) {
+        panic("Inflater.build: a code outside its table")
+      }
+      if ((code & (size - 1)) !== prefix) {
+        prefix = code & (size - 1)
+        start = subEnd
+        let subBits: i32 = len - bits
+        let used: i32 = here
+        while (used < 1 << subBits && bits + subBits < 15) {
+          subBits += 1
+          used = (used << 1) + count[bits + subBits]
+        }
+        subEnd = start + (1 << subBits)
+        if (subEnd > limit || prefix < 0) {
+          panic("Inflater.build: a subtable past the table's room")
+        }
+        uncheckedSet(entries, prefix, (start << 16) | (INF_SUB << 8) | (subBits << 11) | bits)
+      }
+      if (k < 0 || k >= toI32(syms.length)) {
+        panic("Inflater.build: a code outside its table")
+      }
+      const e: i32 = tmpl[syms[k]] | (len - bits)
+      k += 1
+      const stride: i32 = toI32(1) << (len - bits)
+      let i: i32 = start + (code >> bits)
+      while (i < subEnd && i >= 0) {
+        uncheckedSet(entries, i, e)
+        i += stride
+      }
+      if (code === (1 << len) - 1) {
+        return 0
+      }
+      const bit: i32 = toI32(1) << (31 - toI32(Math.clz32(toU32(code ^ ((toI32(1) << len) - 1)))))
+      code = (code & (bit - 1)) | bit
+      here -= 1
+      while (here === 0 && len < 15) {
+        const next: i32 = len + 1
+        if (next < 0 || next >= toI32(count.length)) {
+          break
+        }
+        len = next
+        here = count[next]
+      }
+    }
   }
 
   /**
@@ -1843,10 +2088,18 @@ export class Inflater {
     if (ip < 0 || end > toI32(src.length)) {
       panic("Inflater.fill: a window outside its input")
     }
-    while (bc <= 56 && ip < end) {
-      bb = bb | (toU64(uncheckedGet(src, ip)) << toU64(bc))
-      ip += 1
-      bc += 8
+    if (ip <= end - 8) {
+      // A word at once, whole bytes of it counted, as the fast loop does.
+      const at: integer<0, 2147483639> = ip
+      bb = bb | (deflateLoad64(src, at) << toU64(bc))
+      ip += (63 - bc) >> 3
+      bc = bc | 56
+    } else {
+      while (bc <= 56 && ip < end) {
+        bb = bb | (toU64(uncheckedGet(src, ip)) << toU64(bc))
+        ip += 1
+        bc += 8
+      }
     }
     this.bitBuf = bb
     this.bitCount = bc
@@ -1881,13 +2134,34 @@ export class Inflater {
    * out first (nothing is consumed then: the caller rewinds), or an error.
    */
   readDynamic(src: u8[], end: i32): i32 {
-    this.fill(src, end)
-    if (this.bitCount < 14) {
+    // The bit buffer in locals: the lengths are stored into an `i32[]`,
+    // which the fields could alias, and every symbol would reload them.
+    let bb: u64 = this.bitBuf
+    let bc: i32 = this.bitCount
+    let ip: i32 = this.inPos
+    if (ip < 0 || end > toI32(src.length)) {
+      panic("Inflater.readDynamic: a window outside its input")
+    }
+    if (ip <= end - 8) {
+      const at: integer<0, 2147483639> = ip
+      bb = bb | (deflateLoad64(src, at) << toU64(bc))
+      ip += (63 - bc) >> 3
+      bc = bc | 56
+    } else {
+      while (bc <= 56 && ip < end) {
+        bb = bb | (toU64(uncheckedGet(src, ip)) << toU64(bc))
+        ip += 1
+        bc += 8
+      }
+    }
+    if (bc < 14) {
       return INFLATE_NEED_INPUT
     }
-    const hlit: i32 = this.take(toI32(5)) + 257
-    const hdist: i32 = this.take(toI32(5)) + 1
-    const hclen: i32 = this.take(toI32(4)) + 4
+    const hlit: i32 = toI32(bb & toU64(31)) + 257
+    const hdist: i32 = toI32((bb >> toU64(5)) & toU64(31)) + 1
+    const hclen: i32 = toI32((bb >> toU64(10)) & toU64(15)) + 4
+    bb = bb >> toU64(14)
+    bc -= 14
     if (hlit > 286 || hdist > 30) {
       return DEFLATE_ERR_HUFFMAN
     }
@@ -1896,11 +2170,26 @@ export class Inflater {
       cl[deflateClOrder(i)] = 0
     }
     for (let i: i32 = 0; i < hclen; i += 1) {
-      this.fill(src, end)
-      if (this.bitCount < 3) {
-        return INFLATE_NEED_INPUT
+      if (bc < 3) {
+        if (ip >= 0 && ip <= end - 8 && ip <= 2147483639) {
+          const at: integer<0, 2147483639> = ip
+          bb = bb | (deflateLoad64(src, at) << toU64(bc))
+          ip += (63 - bc) >> 3
+          bc = bc | 56
+        } else {
+          while (bc <= 56 && ip < end) {
+            bb = bb | (toU64(uncheckedGet(src, ip)) << toU64(bc))
+            ip += 1
+            bc += 8
+          }
+        }
+        if (bc < 3) {
+          return INFLATE_NEED_INPUT
+        }
       }
-      cl[deflateClOrder(i)] = this.take(toI32(3))
+      cl[deflateClOrder(i)] = toI32(bb & toU64(7))
+      bb = bb >> toU64(3)
+      bc -= 3
     }
     const r: i32 = this.build(this.codeLengths, cl, toI32(0), toI32(19), INF_TABLE_CODELEN)
     if (r !== 0) {
@@ -1908,20 +2197,38 @@ export class Inflater {
     }
     const lens: i32[] = this.lens
     const entries: i32[] = this.codeLengths.entries
+    if (toI32(entries.length) < 128) {
+      panic("Inflater.readDynamic: the code-length table is not its size")
+    }
     const total: i32 = hlit + hdist
     let i: i32 = 0
     while (i < total) {
-      this.fill(src, end)
-      const e: i32 = entries[toI32(this.bitBuf & toU64(127))]
+      // A code-length code is at most 7 bits and its repeat count at most 7.
+      if (bc < 14) {
+        if (ip >= 0 && ip <= end - 8 && ip <= 2147483639) {
+          const at: integer<0, 2147483639> = ip
+          bb = bb | (deflateLoad64(src, at) << toU64(bc))
+          ip += (63 - bc) >> 3
+          bc = bc | 56
+        } else {
+          while (bc <= 56 && ip < end) {
+            bb = bb | (toU64(uncheckedGet(src, ip)) << toU64(bc))
+            ip += 1
+            bc += 8
+          }
+        }
+      }
+      const e: i32 = uncheckedGet(entries, toI32(bb & toU64(127)))
       if (((e >> 8) & 7) === INF_SLOW) {
         // Only an incomplete code-length code leaves a prefix unfilled.
-        return this.bitCount >= 7 ? DEFLATE_ERR_SYMBOL : INFLATE_NEED_INPUT
+        return bc >= 7 ? DEFLATE_ERR_SYMBOL : INFLATE_NEED_INPUT
       }
       const l: i32 = e & 15
-      if (l > this.bitCount) {
+      if (l > bc) {
         return INFLATE_NEED_INPUT
       }
-      this.take(l)
+      bb = bb >> toU64(l)
+      bc -= l
       const sym: i32 = e >> 16
       if (sym < 16) {
         if (i < 0 || i >= toI32(lens.length)) {
@@ -1932,26 +2239,27 @@ export class Inflater {
       } else {
         let rep: i32 = 0
         let value: i32 = 0
+        let x: i32 = 0
         if (sym === 16) {
           if (i === 0) {
             return DEFLATE_ERR_HUFFMAN
           }
-          if (this.bitCount < 2) {
-            return INFLATE_NEED_INPUT
-          }
           value = lens[i - 1]
-          rep = toI32(3) + this.take(toI32(2))
+          x = 2
+          rep = 3
         } else if (sym === 17) {
-          if (this.bitCount < 3) {
-            return INFLATE_NEED_INPUT
-          }
-          rep = toI32(3) + this.take(toI32(3))
+          x = 3
+          rep = 3
         } else {
-          if (this.bitCount < 7) {
-            return INFLATE_NEED_INPUT
-          }
-          rep = toI32(11) + this.take(toI32(7))
+          x = 7
+          rep = 11
         }
+        if (bc < x) {
+          return INFLATE_NEED_INPUT
+        }
+        rep += toI32(bb & ((toU64(1) << toU64(x)) - toU64(1)))
+        bb = bb >> toU64(x)
+        bc -= x
         if (i + rep > total) {
           return DEFLATE_ERR_HUFFMAN
         }
@@ -1968,7 +2276,14 @@ export class Inflater {
     if (rl !== 0) {
       return rl
     }
-    return this.build(this.dist, lens, hlit, hdist, INF_TABLE_DIST)
+    const rd: i32 = this.build(this.dist, lens, hlit, hdist, INF_TABLE_DIST)
+    if (rd !== 0) {
+      return rd
+    }
+    this.bitBuf = bb
+    this.bitCount = bc
+    this.inPos = ip
+    return 0
   }
 
   /**
@@ -2114,110 +2429,189 @@ export class Inflater {
     const dt: InflateTable = this.fixed ? this.fixedDist : this.dist
     const le: i32[] = lt.entries
     const de: i32[] = dt.entries
-    if (toI32(le.length) !== 1 << INF_LIT_BITS || toI32(de.length) !== 1 << INF_DIST_BITS) {
+    if (toI32(le.length) !== INF_LIT_ENOUGH || toI32(de.length) !== INF_DIST_ENOUGH) {
       panic("Inflater.huffman: a table is not its size")
     }
     const litMask: u64 = toU64((1 << INF_LIT_BITS) - 1)
     const distMask: u64 = toU64((1 << INF_DIST_BITS) - 1)
+    // The fast loop runs while eight bytes of input can be loaded and the
+    // longest match, with sixteen bytes of copy slack, fits the output.
+    const inFast: i32 = inEnd - 8
+    const outFast: i32 = outEnd - INF_FAST_ROOM
     let bb: u64 = this.bitBuf
     let bc: i32 = this.bitCount
     let ip: i32 = this.inPos
     let op: i32 = this.outPos
     let status: i32 = 0
+    let ended: boolean = false
     while (true) {
-      // The fast loop: while eight bytes of input and the longest match
-      // with eight bytes of slack fit, no symbol can run short, so none is
-      // checked for it. A symbol the fast loop does not decode (an end of
-      // block, a long code, an error) is rewound and left to the careful
-      // step below, which then hands back here.
-      while (ip >= 0 && ip <= inEnd - 8 && ip <= 2147483639 && op >= 0 && op <= outEnd - 274) {
-        const fBb: u64 = bb
-        const fBc: i32 = bc
-        const fIp: i32 = ip
-        bb = bb | (deflateLoad64(src, ip) << toU64(bc))
-        ip += (63 - bc) >> 3
+      // The fast loop: after a refill the buffer holds 64 bits of input, of
+      // which it counts the whole bytes (56 to 63), and a length, its extra
+      // bits, a distance and its extra bits take at most 48. So no symbol is
+      // checked for running short, every symbol is decoded here (the end of
+      // the block and errors included), and the next symbol's entry is
+      // looked up before the refill rather than after it, from the 16 or
+      // more bits still in hand, which takes the refill off the chain of
+      // lookups. The careful step below takes over where the input or the
+      // output runs short.
+      //
+      // The bit count may carry borrows above its low byte, which alone is
+      // the count: subtracting a whole entry, whose low byte is its length,
+      // costs no mask, and every shift reads the low six bits only. It is
+      // masked again when the loop ends.
+      if (ip >= 0 && ip <= inFast && ip <= 2147483639 && op <= outFast) {
+        const first: integer<0, 2147483639> = ip
+        bb = bb | (deflateLoad64(src, first) << toU64(bc))
+        ip = wrappingAdd(ip, toI32(7) - ((bc >> 3) & 7))
         bc = bc | 56
         let e: i32 = uncheckedGet(le, toI32(bb & litMask))
-        if ((e & 0x700) === 0) {
-          // A literal; with at least 41 bits left, so may the next two be.
-          const n: i32 = e & 15
-          bb = bb >> toU64(n)
-          bc -= n
-          uncheckedSet(out, op, toU8(e >> 16))
-          op += 1
-          e = uncheckedGet(le, toI32(bb & litMask))
+        while (true) {
           if ((e & 0x700) === 0) {
-            const n2: i32 = e & 15
-            bb = bb >> toU64(n2)
-            bc -= n2
+            // A literal of at most eleven bits; with 45 or more bits left,
+            // so may the next two be.
+            bb = bb >> toU64(e)
+            bc = wrappingSub(bc, e)
             uncheckedSet(out, op, toU8(e >> 16))
-            op += 1
+            op = wrappingAdd(op, 1)
             e = uncheckedGet(le, toI32(bb & litMask))
             if ((e & 0x700) === 0) {
-              const n3: i32 = e & 15
-              bb = bb >> toU64(n3)
-              bc -= n3
+              bb = bb >> toU64(e)
+              bc = wrappingSub(bc, e)
               uncheckedSet(out, op, toU8(e >> 16))
-              op += 1
+              op = wrappingAdd(op, 1)
+              e = uncheckedGet(le, toI32(bb & litMask))
+              if ((e & 0x700) === 0) {
+                bb = bb >> toU64(e)
+                bc = wrappingSub(bc, e)
+                uncheckedSet(out, op, toU8(e >> 16))
+                op = wrappingAdd(op, 1)
+                e = uncheckedGet(le, toI32(bb & litMask))
+              }
+            }
+          } else {
+            if ((e & 0x700) === INF_SUB << 8) {
+              // A code longer than the table: its last bits index a subtable.
+              bb = bb >> toU64(e)
+              bc = wrappingSub(bc, e)
+              e = uncheckedGet(le, (e >> 16) + toI32(bb & toU64((toI32(1) << ((e >> 11) & 15)) - 1)))
+            } else if ((e & 0x700) === INF_SLOW << 8) {
+              // Only a table built for an incomplete code (none at all, or
+              // one one-bit code) has these, and every code it does have
+              // is in the table: with all the bits in hand, no code matches.
+              status = DEFLATE_ERR_SYMBOL
+              break
+            }
+            bb = bb >> toU64(e)
+            bc = wrappingSub(bc, e)
+            if ((e & 0x700) !== INF_LENGTH << 8) {
+              if ((e & 0x700) === INF_LITERAL << 8) {
+                uncheckedSet(out, op, toU8(e >> 16))
+                op = wrappingAdd(op, 1)
+                e = uncheckedGet(le, toI32(bb & litMask))
+              } else {
+                if ((e & 0x700) === INF_END << 8) {
+                  this.state = INF_S_BLOCK
+                } else {
+                  status = DEFLATE_ERR_SYMBOL
+                }
+                ended = true
+                break
+              }
+            } else {
+              const lx: i32 = (e >> 11) & 15
+              const len: i32 = (e >> 16) + toI32(bb & ((toU64(1) << toU64(lx)) - toU64(1)))
+              bb = bb >> toU64(lx)
+              bc = wrappingSub(bc, lx)
+              let d: i32 = uncheckedGet(de, toI32(bb & distMask))
+              if ((d & 0x700) === INF_SUB << 8) {
+                bb = bb >> toU64(d)
+                bc = wrappingSub(bc, d)
+                d = uncheckedGet(de, (d >> 16) + toI32(bb & toU64((toI32(1) << ((d >> 11) & 15)) - 1)))
+              }
+              if ((d & 0x700) !== 0) {
+                // A slow entry, as for the literal/length table, or one of
+                // the two distance codes that decode as errors.
+                status = DEFLATE_ERR_SYMBOL
+                break
+              }
+              bb = bb >> toU64(d)
+              bc = wrappingSub(bc, d)
+              const dx: i32 = (d >> 11) & 15
+              const dist: i32 = (d >> 16) + toI32(bb & ((toU64(1) << toU64(dx)) - toU64(1)))
+              bb = bb >> toU64(dx)
+              bc = wrappingSub(bc, dx)
+              if (dist > op - histStart) {
+                status = DEFLATE_ERR_DISTANCE
+                break
+              }
+              // The next entry, before the copy, so that its lookup and the
+              // copy overlap.
+              e = uncheckedGet(le, toI32(bb & litMask))
+              const stop: i32 = wrappingAdd(op, len)
+              if (dist >= 8) {
+                // Sixteen bytes at a time: a copy runs at most fifteen bytes
+                // past `stop`, inside `outEnd`, and the next symbol
+                // overwrites them. `op` and `op - dist` lie in
+                // [histStart, outEnd - 290], so the bounds in the condition
+                // always hold; they are what lets the positions enter the
+                // copy's range without a check, and the bytes loop after is
+                // what would finish a copy they ever stopped.
+                let to: i32 = op
+                let from: i32 = op - dist
+                while (to < stop && to >= 0 && to <= 2147483631 && from >= 0 && from <= 2147483631) {
+                  inflateCopy16(out, to, from)
+                  to = wrappingAdd(to, 16)
+                  from = wrappingAdd(from, 16)
+                }
+                while (to < stop) {
+                  uncheckedSet(out, to, uncheckedGet(out, from))
+                  to = wrappingAdd(to, 1)
+                  from = wrappingAdd(from, 1)
+                }
+              } else if (dist === 1) {
+                // A run of one byte, sixteen at a time, bounded as above.
+                const four: u64 = toU64(uncheckedGet(out, op - 1)) * toU64(0x01010101)
+                const w: u64 = four | (four << toU64(32))
+                let to: i32 = op
+                while (to < stop && to >= 0 && to <= 2147483631) {
+                  inflateFill16(out, to, w)
+                  to = wrappingAdd(to, 16)
+                }
+                while (to < stop) {
+                  uncheckedSet(out, to, toU8(w))
+                  to = wrappingAdd(to, 1)
+                }
+              } else {
+                let from: i32 = op - dist
+                let to: i32 = op
+                while (to < stop) {
+                  uncheckedSet(out, to, uncheckedGet(out, from))
+                  to = wrappingAdd(to, 1)
+                  from = wrappingAdd(from, 1)
+                }
+              }
+              op = stop
             }
           }
-          continue
-        }
-        if (((e >> 8) & 7) !== INF_LENGTH) {
-          bb = fBb
-          bc = fBc
-          ip = fIp
-          break
-        }
-        const n: i32 = e & 15
-        bb = bb >> toU64(n)
-        const lx: i32 = (e >> 4) & 15
-        const len: i32 = (e >> 16) + toI32(bb & ((toU64(1) << toU64(lx)) - toU64(1)))
-        bb = bb >> toU64(lx)
-        const d: i32 = uncheckedGet(de, toI32(bb & distMask))
-        if ((d & 0x700) !== 0) {
-          bb = fBb
-          bc = fBc
-          ip = fIp
-          break
-        }
-        const dn: i32 = d & 15
-        const dx: i32 = (d >> 4) & 15
-        bb = bb >> toU64(dn)
-        const dist: i32 = (d >> 16) + toI32(bb & ((toU64(1) << toU64(dx)) - toU64(1)))
-        bb = bb >> toU64(dx)
-        bc -= n + lx + dn + dx
-        if (dist > op - histStart) {
-          status = DEFLATE_ERR_DISTANCE
-          break
-        }
-        let from: i32 = op - dist
-        const stop: i32 = op + len
-        if (dist >= 8) {
-          while (op < stop && from >= 0 && from <= 2147483639 && op >= 0 && op <= 2147483639) {
-            deflateStore64(out, op, deflateLoad64(out, from))
-            op += 8
-            from += 8
+          if (ip < 0 || ip > inFast || ip > 2147483639 || op > outFast) {
+            break
           }
-          op = stop
-        } else {
-          while (op < stop && from >= 0 && from < op) {
-            uncheckedSet(out, op, uncheckedGet(out, from))
-            op += 1
-            from += 1
-          }
-          op = stop
+          const at: integer<0, 2147483639> = ip
+          bb = bb | (deflateLoad64(src, at) << toU64(bc))
+          ip = wrappingAdd(ip, toI32(7) - ((bc >> 3) & 7))
+          bc = bc | 56
         }
       }
-      if (status !== 0) {
+      bc = bc & 63
+      if (status !== 0 || ended) {
         break
       }
       const sBb: u64 = bb
       const sBc: i32 = bc
       const sIp: i32 = ip
-      // Refill to at least 56 bits: every symbol, its extra bits, its
-      // distance and their extra bits take at most 48.
-      if (ip >= 0 && ip <= 2147483639 && ip + 8 <= inEnd) {
+      // Refill to at least 56 bits where eight bytes remain, else as many
+      // as there are: a symbol is decoded only once all its bits are here.
+      if (ip >= 0 && ip <= inFast) {
         bb = bb | (deflateLoad64(src, ip) << toU64(bc))
         ip += (63 - bc) >> 3
         bc = bc | 56
@@ -2228,19 +2622,11 @@ export class Inflater {
           bc += 8
         }
       }
-      let e: i32 = uncheckedGet(le, toI32(bb & litMask))
-      let kind: i32 = (e >> 8) & 7
-      if (kind === INF_SLOW) {
-        e = this.slowDecode(lt, INF_TABLE_LITLEN, bb, bc)
-        if (e === -1) {
-          status = INFLATE_NEED_INPUT
-        } else if (e < 0) {
-          status = DEFLATE_ERR_SYMBOL
-        }
-        kind = (e >> 8) & 7
-      }
-      if (status === 0 && (e & 15) > bc) {
+      const e: i32 = this.lookup(lt, INF_TABLE_LITLEN, le, bb, bc)
+      if (e === -1) {
         status = INFLATE_NEED_INPUT
+      } else if (e < 0) {
+        status = DEFLATE_ERR_SYMBOL
       }
       if (status !== 0) {
         if (status === INFLATE_NEED_INPUT) {
@@ -2253,6 +2639,7 @@ export class Inflater {
         }
         break
       }
+      const kind: i32 = (e >> 8) & 7
       const n: i32 = e & 15
       bb = bb >> toU64(n)
       bc -= n
@@ -2267,7 +2654,7 @@ export class Inflater {
         uncheckedSet(out, op, toU8(e >> 16))
         op += 1
       } else if (kind === INF_LENGTH) {
-        const lx: i32 = (e >> 4) & 15
+        const lx: i32 = (e >> 11) & 15
         if (lx > bc) {
           bb = sBb
           bc = sBc
@@ -2278,27 +2665,20 @@ export class Inflater {
         const len: i32 = (e >> 16) + toI32(bb & ((toU64(1) << toU64(lx)) - toU64(1)))
         bb = bb >> toU64(lx)
         bc -= lx
-        let d: i32 = uncheckedGet(de, toI32(bb & distMask))
-        if (((d >> 8) & 7) === INF_SLOW) {
-          d = this.slowDecode(dt, INF_TABLE_DIST, bb, bc)
-          if (d === -1) {
-            bb = sBb
-            bc = sBc
-            ip = sIp
-            status = more ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
-            break
-          }
-          if (d < 0) {
-            status = DEFLATE_ERR_SYMBOL
-            break
-          }
+        const d: i32 = this.lookup(dt, INF_TABLE_DIST, de, bb, bc)
+        if (d === -1) {
+          bb = sBb
+          bc = sBc
+          ip = sIp
+          status = more ? INFLATE_NEED_INPUT : DEFLATE_ERR_TRUNCATED
+          break
         }
-        if (((d >> 8) & 7) === INF_INVALID) {
+        if (d < 0 || ((d >> 8) & 7) === INF_INVALID) {
           status = DEFLATE_ERR_SYMBOL
           break
         }
         const dn: i32 = d & 15
-        const dx: i32 = (d >> 4) & 15
+        const dx: i32 = (d >> 11) & 15
         if (dn + dx > bc) {
           bb = sBb
           bc = sBc
@@ -2323,21 +2703,10 @@ export class Inflater {
         }
         let from: i32 = op - dist
         const stop: i32 = op + len
-        if (dist >= 8 && stop + 8 <= outEnd) {
-          // Eight bytes at a time; a copy may run up to seven bytes past
-          // `stop`, inside `outEnd`, which the next symbol overwrites.
-          while (op < stop && from >= 0 && from <= 2147483639 && op >= 0 && op <= 2147483639) {
-            deflateStore64(out, op, deflateLoad64(out, from))
-            op += 8
-            from += 8
-          }
-          op = stop
-        } else {
-          while (op < stop) {
-            uncheckedSet(out, op, uncheckedGet(out, from))
-            op += 1
-            from += 1
-          }
+        while (op < stop) {
+          uncheckedSet(out, op, uncheckedGet(out, from))
+          op += 1
+          from += 1
         }
       } else if (kind === INF_END) {
         this.state = INF_S_BLOCK
@@ -2352,6 +2721,27 @@ export class Inflater {
     this.inPos = ip
     this.outPos = op
     return status
+  }
+
+  /**
+   * The entry of the symbol at the bottom of `bb`, holding `bc` valid bits,
+   * from `t` (whose entries are `entries`), with its whole code length in
+   * the low four bits, through a subtable or the slow way as the table
+   * says: -1 when the bits run out before the code ends, -2 when no code
+   * matches. A code is decoded only once all its bits are here.
+   */
+  lookup(t: InflateTable, kind: i32, entries: i32[], bb: u64, bc: i32): i32 {
+    const mask: u64 = toU64((1 << t.bits) - 1)
+    let e: i32 = entries[toI32(bb & mask)]
+    if (((e >> 8) & 7) === INF_SUB) {
+      const root: i32 = e & 15
+      const at: i32 = (e >> 16) + toI32((bb >> toU64(root)) & toU64((toI32(1) << ((e >> 11) & 15)) - 1))
+      const sub: i32 = entries[at]
+      e = (sub & ~15) | (root + (sub & 15))
+    } else if (((e >> 8) & 7) === INF_SLOW) {
+      return this.slowDecode(t, kind, bb, bc)
+    }
+    return (e & 15) > bc ? -1 : e
   }
 
   /**
