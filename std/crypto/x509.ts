@@ -1933,7 +1933,10 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
   const value = new X509DerElement(0, 0, 0, 0)
   let at: i32 = seq.start
   while (at < seq.end) {
-    if (toI32(seen.length) >= X509_MAX_EXTENSIONS || !x509DerExpectInto(der, at, seq.end, X509_TAG_SEQUENCE, ext)) {
+    if (
+      toI32(seen.length) >= X509_MAX_EXTENSIONS ||
+      !x509DerExpectInto(der, at, seq.end, X509_TAG_SEQUENCE, ext)
+    ) {
       return false
     }
     if (!x509DerExpectInto(der, ext.start, ext.end, X509_TAG_OID, id) || !x509DerOidSound(der, id)) {

@@ -1191,19 +1191,19 @@ function x509ReadExtensions(der: u8[], e: X509DerElement, out: X509Certificate):
   pointer e: size=16 writesThrough=false captured=false
   pointer out: size=168 writesThrough=true captured=false passedTo=nish.x509ReadExtension#4
   stackSites=5 stackLocals=5
-  local -44:9 seq: X509DerElement | null (const)
-  callee -44:38 x509DerExpect -> @nish.x509DerExpect
-  local -38:9 seen: u8[][] (const)
-  local -36:9 ext: X509DerElement (const)
-  callee -36:15 new X509DerElement -> @nish.X509DerElement.constructor
-  local -35:9 id: X509DerElement (const)
-  callee -35:14 new X509DerElement -> @nish.X509DerElement.constructor
-  local -34:9 flag: X509DerElement (const)
-  callee -34:16 new X509DerElement -> @nish.X509DerElement.constructor
-  local -33:9 value: X509DerElement (const)
-  callee -33:17 new X509DerElement -> @nish.X509DerElement.constructor
-  local -32:7 at: i32 (let)
-  callee -30:55 x509DerExpectInto -> @nish.x509DerExpectInto
+  local -47:9 seq: X509DerElement | null (const)
+  callee -47:38 x509DerExpect -> @nish.x509DerExpect
+  local -41:9 seen: u8[][] (const)
+  local -39:9 ext: X509DerElement (const)
+  callee -39:15 new X509DerElement -> @nish.X509DerElement.constructor
+  local -38:9 id: X509DerElement (const)
+  callee -38:14 new X509DerElement -> @nish.X509DerElement.constructor
+  local -37:9 flag: X509DerElement (const)
+  callee -37:16 new X509DerElement -> @nish.X509DerElement.constructor
+  local -36:9 value: X509DerElement (const)
+  callee -36:17 new X509DerElement -> @nish.X509DerElement.constructor
+  local -35:7 at: i32 (let)
+  callee -31:8 x509DerExpectInto -> @nish.x509DerExpectInto
   callee -27:10 x509DerExpectInto -> @nish.x509DerExpectInto
   callee -27:75 x509DerOidSound -> @nish.x509DerOidSound
   local -24:11 oid: u8[] (const)
