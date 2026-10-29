@@ -73,15 +73,15 @@ nearest a root.
 | `PKI_ERR_EXPIRED` | a certificate's validity ended before `nowMs` |
 | `PKI_ERR_NOT_YET_VALID` | a certificate's validity starts after `nowMs` |
 | `PKI_ERR_UNTRUSTED` | no path leads to a root of the store |
-| `PKI_ERR_BAD_SIGNATURE` | a signature does not verify under its issuer's key |
+| `PKI_ERR_BAD_SIGNATURE` | a signature does not verify under its issuer's key, or an RSA key is under 1024 or over 8192 bits |
 | `PKI_ERR_NOT_CA` | an issuer is not a CA certificate, or the server's is one |
 | `PKI_ERR_PATH_LENGTH` | an issuer's limit on the CAs below it is exceeded |
 | `PKI_ERR_KEY_USAGE` | a key is used for something its key usage does not allow |
 | `PKI_ERR_EXT_KEY_USAGE` | a certificate is not for TLS servers |
 | `PKI_ERR_UNKNOWN_CRITICAL` | a certificate has a critical extension this module does not know |
-| `PKI_ERR_NAME_CONSTRAINTS` | a name is outside what an issuer may certify |
+| `PKI_ERR_NAME_CONSTRAINTS` | a name is outside what an issuer may certify, an issuer excludes a directory name, or it constrains a name form this module does not check |
 | `PKI_ERR_HOSTNAME` | the server's certificate does not name the host |
-| `PKI_ERR_WEAK_KEY` | a key is too small (an RSA key under 2048 bits) |
+| `PKI_ERR_WEAK_KEY` | a key is too small (an RSA key of 1024 to 2047 bits) |
 | `PKI_ERR_UNSUPPORTED_ALGORITHM` | a signature or key algorithm is not supported, SHA-1 among them |
 | `PKI_ERR_CHAIN_TOO_LONG` | the chain or a path is longer than its bound |
 | `PKI_ERR_BUDGET` | checking would take more work than its bound allows |
@@ -98,7 +98,9 @@ The host is matched against the server certificate's DNS names and IP
 addresses, never its common name. Letters match without case, and a wildcard
 is only a whole leftmost label: `*.example.com` names `www.example.com` but
 not `example.com` or `a.b.example.com`. An IP address, `192.0.2.1` or `::1`,
-matches only an IP address in the certificate. `pkiMatchHostname(leaf, host)`
+matches only an IP address in the certificate. A DNS host must be ASCII:
+pass an internationalized name in its A-label form (`xn--…`), or the result
+is `PKI_ERR_HOSTNAME`. `pkiMatchHostname(leaf, host)`
 is that match alone, and `pkiVerifySignature(cert, issuer)` is whether one
 certificate's signature verifies under another's key.
 

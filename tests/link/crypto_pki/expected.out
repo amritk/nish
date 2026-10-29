@@ -5,6 +5,8 @@ PASS  out of order, with extra certificates
 PASS  the extras are not in the path
 PASS  an Ed25519 root signs the leaf
 PASS  RSA leaf, intermediate and root, PKCS#1 v1.5
+PASS  RSA, out of order, with extra certificates
+PASS  the RSA extras are not in the path
 PASS  an RSA-PSS intermediate
 PASS  RSA with SHA-384
 PASS  RSA with SHA-512
@@ -12,15 +14,23 @@ PASS  a wildcard name
 PASS  an IPv4 address
 PASS  an IPv6 address
 PASS  anyExtendedKeyUsage on an intermediate
+PASS  serverAuth on an intermediate
 PASS  pathLen 0 above the leaf
 PASS  pathLen 0 does not count a self-issued CA
 PASS  two intermediates
 PASS  name constraints the leaf meets
 PASS  name constraints, by address
+PASS  excluded dNSName and iPAddress subtrees the leaf misses
+PASS  a wildcard at a permitted subtree
+PASS  a dNSName subtree of . permits every name
 PASS  a directoryName constraint skips a self-issued CA
 PASS  a leaf without a subject, under a directoryName constraint
 PASS  a path of PKI_MAX_PATH certificates
 PASS  a leaf of PKI_MAX_NAMES names
+PASS  valid at notBefore
+PASS  valid at notAfter
+PASS  a millisecond before notBefore
+PASS  a millisecond after notAfter
 PASS  pkiVerifySignature: the root signed the intermediate
 PASS  pkiVerifySignature: Ed25519
 PASS  pkiVerifySignature: not the root's signature
@@ -30,7 +40,8 @@ PASS  pkiVerifySignature: RSA-PSS
 PASS  pkiVerifySignature: not the RSA root's signature
 PASS  pkiVerifySignature: SHA-1 is refused
 PASS  a root given twice is kept once
-pki accepts: 32 passed, 0 failed, 0 skipped
+PASS  two roots of one Name are both kept
+pki accepts: 43 passed, 0 failed, 0 skipped
 PASS  an expired leaf
 PASS  a leaf not yet valid
 PASS  an expired intermediate
@@ -50,13 +61,16 @@ PASS  an intermediate without keyCertSign
 PASS  a leaf without digitalSignature
 PASS  an intermediate for clientAuth only
 PASS  a leaf for clientAuth only
+PASS  a leaf for anyExtendedKeyUsage only
 PASS  an unknown critical extension, intermediate
 PASS  an unknown critical extension, leaf
 PASS  SHA-1
 PASS  an Ed25519 signature under a P-256 key
 PASS  an ECDSA signature under an Ed25519 key
+PASS  an RSA signature under a P-256 key
 PASS  an empty issuer names no root
 PASS  a cross-signed loop
+PASS  a self-signed CA sent in the chain is no root
 PASS  a path past PKI_MAX_PATH
 PASS  a tampered leaf signature
 PASS  a tampered Ed25519 signature
@@ -67,7 +81,7 @@ PASS  the nearest attempt's reason
 PASS  the first of two as near
 PASS  the nearer of two
 PASS  a root's reason before a longer path's
-pki refusals: 36 passed, 0 failed, 0 skipped
+pki refusals: 39 passed, 0 failed, 0 skipped
 PASS  an excluded dNSName
 PASS  a dNSName not permitted
 PASS  an rfc822Name subtree
@@ -77,7 +91,11 @@ PASS  an iPAddress not permitted
 PASS  an excluded iPAddress
 PASS  an IPv4 address under IPv6 subtrees
 PASS  a name that only ends in a permitted one
-pki name constraints: 9 passed, 0 failed, 0 skipped
+PASS  a wildcard over an excluded subtree
+PASS  a wildcard over a permitted subtree
+PASS  a dNSName subtree of . excludes every name
+PASS  a self-issued leaf outside a permitted subject
+pki name constraints: 13 passed, 0 failed, 0 skipped
 PASS  an empty chain
 PASS  a leaf that is no certificate
 PASS  an intermediate that is no certificate

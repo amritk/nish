@@ -53,19 +53,26 @@ import {
   INT_EXPIRED,
   INT_FUTURE,
   INT_NC_DIR,
+  INT_NC_DOTEXCL,
+  INT_NC_DOTPERM,
   INT_NC_DIRPERM,
   INT_NC_EMAIL,
   INT_NC_EXCLUDED,
+  INT_NC_EXOK,
   INT_NC_IP,
   INT_NC_IPEXCL,
   INT_NC_OK,
   INT_NC_PERMITTED,
+  INT_NC_WILDEX,
+  INT_NC_WILDPERM,
+  INT_NC_WILDPERM_OK,
   INT_NOBC,
   INT_NOCA,
   INT_NOKCS,
   INT_NC_IP6,
   INT_PATHLEN0,
   INT_ROLL,
+  INT_SERVER,
   INT_SHA1,
   INT_EDKEY,
   INT_WRONG,
@@ -73,6 +80,7 @@ import {
   LEAF,
   LEAF_1024,
   LEAF_1025,
+  LEAF_ANYEKU,
   LEAF_CA,
   LEAF_CLIENT,
   LEAF_CN,
@@ -87,6 +95,7 @@ import {
   LEAF_LOOP,
   LEAF_NOSUBJ,
   LEAF_ROLL,
+  LEAF_SELFISS,
   LEAF_RSA,
   LEAF_RSA384,
   LEAF_RSA512,
@@ -95,10 +104,14 @@ import {
   LEAF_SUB,
   LEAF_SUFFIX,
   LOOPA,
+  LOOPA0,
   LOOPB,
+  LOOPB0,
+  END_MS,
   NOW_MS,
   OTHER,
   RINT,
+  RINT_EC,
   RINT_PSS,
   ROOT,
   ROOT_EMPTY,
@@ -106,6 +119,7 @@ import {
   RROOT,
   RWEAK,
   SAME,
+  START_MS,
   SUB,
 } from "./fixtures"
 
@@ -135,6 +149,8 @@ const rsaVerify = (hexes: string[], root: string): i32 =>
 const verify = (hexes: string[], host: string): i32 =>
   pkiVerifyServer(ders(hexes), host, NOW_MS, store()).code
 
+const verifyAt = (nowMs: i64): i32 => pkiVerifyServer(ders([LEAF, INT]), "example.com", nowMs, store()).code
+
 /** `count` copies of `hex`, after `first`. */
 const copies = (first: string, hex: string, count: i32): u8[][] => {
   const out: u8[][] = [fromHex(first)]
@@ -154,6 +170,18 @@ const junk = (n: i32): u8[] => {
   return out
 }
 
+const sameBytes = (a: u8[], b: u8[]): boolean => {
+  if (a.length !== b.length) {
+    return false
+  }
+  for (let i: i32 = 0; i < toI32(a.length); i++) {
+    if (a[i] !== b[i]) {
+      return false
+    }
+  }
+  return true
+}
+
 const eqCode = (s: Suite, name: string, got: i32, want: i32): boolean =>
   got === want ? s.pass(name) : s.fail(name, `${pkiReason(got)} (${got}), wanted ${pkiReason(want)} (${want})`)
 
@@ -163,7 +191,7 @@ export const accepts = (mode: string): i32 => {
   eqCode(s, "P-256 leaf, P-384 intermediate, P-384 root", r.code, PKI_OK)
   s.eqI32("the path is leaf, intermediate, root", toI32(r.path.length), toI32(3))
   if (toI32(r.path.length) === 3) {
-    s.ok("the path ends at the root", r.path[2].der.length === cert(ROOT).der.length)
+    s.ok("the path ends at the root", sameBytes(r.path[2].der, cert(ROOT).der))
   } else {
     s.fail("the path ends at the root", "no path")
   }
@@ -177,6 +205,14 @@ export const accepts = (mode: string): i32 => {
   s.eqI32("the extras are not in the path", toI32(shuffled.path.length), toI32(3))
   eqCode(s, "an Ed25519 root signs the leaf", verify([LEAF_ED], "example.com"), PKI_OK)
   eqCode(s, "RSA leaf, intermediate and root, PKCS#1 v1.5", rsaVerify([LEAF_RSA, RINT], RROOT), PKI_OK)
+  const rsaShuffled: PkiResult = pkiVerifyServer(
+    ders([LEAF_RSA, OTHER, RROOT, RINT]),
+    "example.com",
+    NOW_MS,
+    pkiTrustStore([cert(RROOT)])
+  )
+  eqCode(s, "RSA, out of order, with extra certificates", rsaShuffled.code, PKI_OK)
+  s.eqI32("the RSA extras are not in the path", toI32(rsaShuffled.path.length), toI32(3))
   eqCode(s, "an RSA-PSS intermediate", rsaVerify([LEAF_RSA, RINT_PSS], RROOT), PKI_OK)
   eqCode(s, "RSA with SHA-384", rsaVerify([LEAF_RSA384, RINT], RROOT), PKI_OK)
   eqCode(s, "RSA with SHA-512", rsaVerify([LEAF_RSA512, RINT], RROOT), PKI_OK)
@@ -184,11 +220,15 @@ export const accepts = (mode: string): i32 => {
   eqCode(s, "an IPv4 address", verify([LEAF, INT], "192.0.2.1"), PKI_OK)
   eqCode(s, "an IPv6 address", verify([LEAF, INT], "[2001:db8::1]"), PKI_OK)
   eqCode(s, "anyExtendedKeyUsage on an intermediate", verify([LEAF, INT_ANYEKU], "example.com"), PKI_OK)
+  eqCode(s, "serverAuth on an intermediate", verify([LEAF, INT_SERVER], "example.com"), PKI_OK)
   eqCode(s, "pathLen 0 above the leaf", verify([LEAF, INT_PATHLEN0], "example.com"), PKI_OK)
   eqCode(s, "pathLen 0 does not count a self-issued CA", verify([LEAF_ROLL, INT_ROLL, INT_PATHLEN0], "example.com"), PKI_OK)
   eqCode(s, "two intermediates", verify([LEAF_SUB, SUB, INT], "example.com"), PKI_OK)
   eqCode(s, "name constraints the leaf meets", verify([LEAF, INT_NC_OK], "example.com"), PKI_OK)
   eqCode(s, "name constraints, by address", verify([LEAF, INT_NC_OK], "2001:db8::1"), PKI_OK)
+  eqCode(s, "excluded dNSName and iPAddress subtrees the leaf misses", verify([LEAF, INT_NC_EXOK], "example.com"), PKI_OK)
+  eqCode(s, "a wildcard at a permitted subtree", verify([LEAF, INT_NC_WILDPERM_OK], "example.com"), PKI_OK)
+  eqCode(s, "a dNSName subtree of . permits every name", verify([LEAF, INT_NC_DOTPERM], "example.com"), PKI_OK)
   eqCode(
     s,
     "a directoryName constraint skips a self-issued CA",
@@ -203,6 +243,10 @@ export const accepts = (mode: string): i32 => {
     PKI_OK
   )
   eqCode(s, "a leaf of PKI_MAX_NAMES names", verify([LEAF_1024, INT], "example.com"), PKI_OK)
+  eqCode(s, "valid at notBefore", verifyAt(START_MS), PKI_OK)
+  eqCode(s, "valid at notAfter", verifyAt(END_MS), PKI_OK)
+  eqCode(s, "a millisecond before notBefore", verifyAt(START_MS - toI64(1)), PKI_ERR_NOT_YET_VALID)
+  eqCode(s, "a millisecond after notAfter", verifyAt(END_MS + toI64(1)), PKI_ERR_EXPIRED)
   s.ok("pkiVerifySignature: the root signed the intermediate", pkiVerifySignature(cert(INT), cert(ROOT)))
   s.ok("pkiVerifySignature: Ed25519", pkiVerifySignature(cert(LEAF_ED), cert(EDROOT)))
   s.ok("pkiVerifySignature: not the root's signature", !pkiVerifySignature(cert(LEAF), cert(ROOT)))
@@ -215,6 +259,7 @@ export const accepts = (mode: string): i32 => {
   s.ok("pkiVerifySignature: not the RSA root's signature", !pkiVerifySignature(cert(LEAF_RSA), cert(RROOT)))
   s.ok("pkiVerifySignature: SHA-1 is refused", !pkiVerifySignature(cert(INT_SHA1), cert(ROOT)))
   s.eqI32("a root given twice is kept once", toI32(pkiTrustStore([cert(ROOT), cert(ROOT), cert(OTHER)]).roots.length), toI32(2))
+  s.eqI32("two roots of one Name are both kept", toI32(pkiTrustStore([cert(ROOT), cert(ROOT_NOCA)]).roots.length), toI32(2))
   return s.done()
 }
 
@@ -245,6 +290,7 @@ export const refusals = (mode: string): i32 => {
   eqCode(s, "a leaf without digitalSignature", verify([LEAF_KU, INT], "example.com"), PKI_ERR_KEY_USAGE)
   eqCode(s, "an intermediate for clientAuth only", verify([LEAF, INT_CLIENT], "example.com"), PKI_ERR_EXT_KEY_USAGE)
   eqCode(s, "a leaf for clientAuth only", verify([LEAF_CLIENT, INT], "example.com"), PKI_ERR_EXT_KEY_USAGE)
+  eqCode(s, "a leaf for anyExtendedKeyUsage only", verify([LEAF_ANYEKU, INT], "example.com"), PKI_ERR_EXT_KEY_USAGE)
   eqCode(s, "an unknown critical extension, intermediate", verify([LEAF, INT_CRITICAL], "example.com"), PKI_ERR_UNKNOWN_CRITICAL)
   eqCode(s, "an unknown critical extension, leaf", verify([LEAF_CRITICAL, INT], "example.com"), PKI_ERR_UNKNOWN_CRITICAL)
   eqCode(s, "SHA-1", verify([LEAF, INT_SHA1], "example.com"), PKI_ERR_UNSUPPORTED_ALGORITHM)
@@ -262,11 +308,18 @@ export const refusals = (mode: string): i32 => {
   )
   eqCode(
     s,
+    "an RSA signature under a P-256 key",
+    pkiVerifyServer(ders([LEAF_RSA]), "example.com", NOW_MS, pkiTrustStore([cert(RINT_EC)])).code,
+    PKI_ERR_UNSUPPORTED_ALGORITHM
+  )
+  eqCode(
+    s,
     "an empty issuer names no root",
     pkiVerifyServer(ders([LEAF_EMPTYISS]), "example.com", NOW_MS, pkiTrustStore([cert(ROOT_EMPTY)])).code,
     PKI_ERR_UNTRUSTED
   )
   eqCode(s, "a cross-signed loop", verify([LEAF_LOOP, LOOPA, LOOPB], "example.com"), PKI_ERR_UNTRUSTED)
+  eqCode(s, "a self-signed CA sent in the chain is no root", verify([LEAF_LOOP, LOOPA, LOOPB, LOOPA0, LOOPB0], "example.com"), PKI_ERR_UNTRUSTED)
   eqCode(
     s,
     "a path past PKI_MAX_PATH",
@@ -335,6 +388,10 @@ export const constraints = (mode: string): i32 => {
   eqCode(s, "an excluded iPAddress", verify([LEAF, INT_NC_IPEXCL], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   eqCode(s, "an IPv4 address under IPv6 subtrees", verify([LEAF, INT_NC_IP6], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   eqCode(s, "a name that only ends in a permitted one", verify([LEAF_SUFFIX, INT_NC_OK], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
+  eqCode(s, "a wildcard over an excluded subtree", verify([LEAF, INT_NC_WILDEX], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
+  eqCode(s, "a wildcard over a permitted subtree", verify([LEAF, INT_NC_WILDPERM], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
+  eqCode(s, "a dNSName subtree of . excludes every name", verify([LEAF, INT_NC_DOTEXCL], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
+  eqCode(s, "a self-issued leaf outside a permitted subject", verify([LEAF_SELFISS, INT_NC_OK], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
   return s.done()
 }
 
@@ -377,9 +434,7 @@ export const bounds = (mode: string): i32 => {
     PKI_ERR_CHAIN_TOO_LONG
   )
   eqCode(s, "a leaf of more names", verify([LEAF_1025, INT], "example.com"), PKI_ERR_BUDGET)
-  // INT_256 permits only names below example.com, so the leaf's *.example.org
-  // is refused, by its name constraints and not by their count.
-  eqCode(s, "an intermediate of PKI_MAX_SUBTREES subtrees", verify([LEAF, INT_256], "example.com"), PKI_ERR_NAME_CONSTRAINTS)
+  eqCode(s, "an intermediate of PKI_MAX_SUBTREES subtrees", verify([LEAF, INT_256], "example.com"), PKI_OK)
   eqCode(s, "an intermediate of more subtrees", verify([LEAF, INT_257], "example.com"), PKI_ERR_BUDGET)
   eqCode(s, "more name comparisons than PKI_MAX_NAME_CHECKS", verify([LEAF_1024, INT_256], "example.com"), PKI_ERR_BUDGET)
   // 100 copies of a self-issued CA, each with its own last signature byte:
@@ -388,9 +443,7 @@ export const bounds = (mode: string): i32 => {
   for (let i: i32 = 0; i < 100; i++) {
     const c: u8[] = fromHex(SAME)
     const at: i32 = toI32(c.length) - 1
-    if (at >= 0 && at < toI32(c.length)) {
-      c[at] = toU8((toI32(c[at]) + i + 1) & 255)
-    }
+    c[at] = toU8((toI32(c[at]) + i + 1) & 255)
     same.push(c)
   }
   eqCode(s, "more signatures than PKI_MAX_SIGNATURES", pkiVerifyServer(same, "example.com", NOW_MS, store()).code, PKI_ERR_BUDGET)

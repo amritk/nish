@@ -319,8 +319,8 @@ leaf to a root of the store with these properties:
 - every certificate below the root is valid at the instant given;
 - every intermediate is a v3 CA that may sign certificates for a server;
 - the path keeps every pathLenConstraint and name constraint on it;
-- no certificate on it carries a critical extension the parser does not
-  know;
+- no certificate on it below the root carries a critical extension the
+  parser does not know;
 - the leaf names the host in its subjectAltName.
 
 Each refusal has a reason code of its own (PKI-14). Each cost an attacker can
@@ -420,12 +420,28 @@ module's answer.
 ### Method
 
 The module was written from RFC 5280 §4.2 and §6.1 and RFC 6125 §6.4. It was
-checked against those sections clause by clause, then by mutation. Each
-refusal rule in `pki.ts` was replaced by its accepting form, one at a time.
-For each, the test program was rebuilt in the debug profile and run, and the
-file was then restored. 67 mutants were run, six of them on the RSA wiring.
-62 were killed by a named check
-failing, or by a debug-profile panic. The other five are equivalent:
+checked against those sections clause by clause, then by mutation, one
+mutant at a time: `pki.ts` was edited, the test program was rebuilt in the
+debug profile and run, and the file was then restored. A mutant is killed
+when a named check fails, the debug profile panics, or the run does not
+finish within 600 seconds. 84 mutants were run, of three forms:
+
+- 62 replace a refusal rule by its accepting form, so that the rule never
+  refuses;
+- 16 narrow or delete a rule an accepting form leaves untested: the
+  serverAuth clauses of both EKU rules, an excluded dNSName or iPAddress
+  subtree that always matches, a permitted directoryName that never does,
+  each wildcard branch of the dNSName constraint check, the empty subtree,
+  each validity bound made strict, the store's dedupe by Name rather than
+  DER, the RSA and ECDSA key-type gates, and the `PKI_MAX_NAMES` and
+  `PKI_MAX_SUBTREES` bounds moved down by one;
+- 6 change the RSA wiring: the weak-key bound, the PSS dispatch, each hash
+  mapping, and each verdict made `PKI_OK`.
+
+79 were killed, every one of the narrowing forms among them, and one,
+`int-sig`, by not finishing: without the counted signature check the
+`PKI_MAX_SIGNATURES` test's search has no budget. The other five are
+equivalent:
 
 - `cand.version !== 2` (intermediate). Extensions exist only in v3, so a v1
   or v2 certificate already has no basicConstraints and fails `bcPresent`.
@@ -435,9 +451,9 @@ failing, or by a debug-profile panic. The other five are equivalent:
   must hold the host as a SAN, and that SAN is checked against the same
   subtrees, so the host's own check cannot refuse anything new. It is kept
   because it states the rule.
-- `pkiValidDns`, on the SAN and on a wildcard's base, in `pkiDnsMatch`. The
-  host is validated first, and folding changes only A to Z, so a SAN that
-  folds equal to a valid host is itself valid.
+- `pkiValidDns`, on the SAN and on a wildcard's base, in `pkiDnsMatch`, two
+  mutants. The host is validated first, and folding changes only A to Z, so
+  a SAN that folds equal to a valid host is itself valid.
 
 Three facts have no test of their own:
 
@@ -494,6 +510,8 @@ Tests:
 - `P-256 leaf, P-384 intermediate, P-384 root`,
   `the path is leaf, intermediate, root` and `the path ends at the root`
 - `out of order, with extra certificates` and `the extras are not in the path`
+- `RSA, out of order, with extra certificates` and
+  `the RSA extras are not in the path`
 - `two intermediates`
 - `an intermediate whose key identifier is another's`
 - `a cross-signed loop`
@@ -504,8 +522,9 @@ A root sent in the chain is trusted only because the store holds it. The
 store keeps each root once, by its DER.
 
 Tests: `a root not in the store`, `no intermediate`,
-`the root sent, the intermediate not`, `an empty issuer names no root` and
-`a root given twice is kept once`.
+`the root sent, the intermediate not`, `an empty issuer names no root`,
+`a self-signed CA sent in the chain is no root`,
+`a root given twice is kept once` and `two roots of one Name are both kept`.
 
 #### PKI-5: every signature on the path is checked
 
@@ -540,6 +559,7 @@ Tests:
 - `SHA-1`, `pkiVerifySignature: SHA-1 is refused`,
   `an Ed25519 signature under a P-256 key` and
   `an ECDSA signature under an Ed25519 key`
+- `an RSA signature under a P-256 key`
 - `RSA leaf, intermediate and root, PKCS#1 v1.5`, `an RSA-PSS intermediate`,
   `RSA with SHA-384`, `RSA with SHA-512` and `pkiVerifySignature: RSA-PSS`
 - `an RSA key under PKI_MIN_RSA_BITS`, `a tampered RSA signature`,
@@ -548,8 +568,14 @@ Tests:
 
 #### PKI-7: every certificate below the root is valid now
 
-Tests: `an expired leaf`, `a leaf not yet valid`, `an expired intermediate`
-and `an intermediate not yet valid`.
+A certificate is valid from its notBefore to its notAfter, both included.
+
+Tests:
+
+- `an expired leaf`, `a leaf not yet valid`, `an expired intermediate` and
+  `an intermediate not yet valid`
+- `valid at notBefore`, `valid at notAfter`, `a millisecond before notBefore`
+  and `a millisecond after notAfter`
 
 #### PKI-8: an issuer is a v3 CA, and the leaf is not
 
@@ -573,8 +599,9 @@ with `anyExtendedKeyUsage` accepted on an intermediate only.
 Tests:
 
 - `an intermediate without keyCertSign` and `a leaf without digitalSignature`
-- `an intermediate for clientAuth only`, `a leaf for clientAuth only` and
-  `anyExtendedKeyUsage on an intermediate`
+- `an intermediate for clientAuth only`, `a leaf for clientAuth only`,
+  `serverAuth on an intermediate`, `anyExtendedKeyUsage on an intermediate`
+  and `a leaf for anyExtendedKeyUsage only`
 
 #### PKI-11: an unknown critical extension refuses its certificate
 
@@ -591,15 +618,26 @@ is not checked, except the leaf's, per §6.1.3 (b). Its SANs are. A subtree of
 a form the module does not check, such as rfc822Name, URI or otherName, or
 one with a minimum or maximum other than the default, refuses the chain.
 
+A dNSName subtree holds its own name and every name below it, by whole
+labels. A subtree of `.` holds every name. A wildcard SAN holds every name
+one label below its base, so it is outside a permitted subtree that holds
+only some of them, and inside an excluded subtree that holds any of them.
+
 Tests:
 
-- `name constraints the leaf meets` and `name constraints, by address`
+- `name constraints the leaf meets`, `name constraints, by address` and
+  `excluded dNSName and iPAddress subtrees the leaf misses`
+- `a wildcard at a permitted subtree`, `a wildcard over a permitted subtree`
+  and `a wildcard over an excluded subtree`
+- `a dNSName subtree of . permits every name` and
+  `a dNSName subtree of . excludes every name`
 - `a directoryName constraint skips a self-issued CA` and
   `a leaf without a subject, under a directoryName constraint`
 - `an excluded dNSName`, `a dNSName not permitted` and
   `a name that only ends in a permitted one`
 - `an rfc822Name subtree`
-- `an excluded directoryName` and `a subject not permitted`
+- `an excluded directoryName`, `a subject not permitted` and
+  `a self-issued leaf outside a permitted subject`
 - `an iPAddress not permitted`, `an excluded iPAddress` and
   `an IPv4 address under IPv6 subtrees`
 
