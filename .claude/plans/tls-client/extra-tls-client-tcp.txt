@@ -1,0 +1,29 @@
+
+STATE OF MAIN AND DEPENDENCIES (read carefully):
+- tls-client-core is MERGED on main (#1018, fb82ca3). Read std/net/tls/client.ts and record-client.ts:
+  - TlsClient is sans-IO. It stops in WAIT_AUTH and exposes peerCertificates(), verifyScheme(), verifyContent() and verifySignature(), then waits for authenticate(ok) or reject(alert).
+  - TlsRecordClient has interest bits including TLS_RECORD_AUTH, plus failure(), read, write, keyUpdate and close.
+  - Its docs/security/tls.md client section and docs/guide/using-nish/tls-client.md are yours to extend.
+- On main from run #987 (use these names exactly as they are on main):
+  - std/crypto/rsa.ts (#1006): rsaParsePublicKey, rsaVerifyPss, rsaVerifyPkcs1v15.
+  - std/crypto/p384.ts: p384Verify, p384VerifySha384.
+  - std/crypto/x509.ts (#1011): v3 extensions, plus the key-algorithm and signature-algorithm fields.
+  - std/crypto/pki-roots.ts: pkiLoadSystemRoots(), pkiLoadRoots(file, dirs, bundles), PkiRoots.
+- NOT yet on main: std/crypto/pki.ts (PR #1027, branch feature/tls-chain-validation/pki). It has pkiTrustStore, pkiVerifyServer(chain, hostname, nowMs, store) → PkiResult with code PKI_OK or PKI_ERR_*, and pkiReason. Read its API from that branch (`git fetch origin feature/tls-chain-validation/pki`), but do NOT merge or copy that branch into yours.
+- Also on main (#1019): std/net/dns-resolver.ts, a stub resolver driven on the caller's loop. If it fits cleanly, let tlsConnect and TlsTcpClient accept a host name and resolve it; otherwise take numeric addresses only, as the plan says. The TLS server name is always the name the caller gave.
+
+ORDER OF WORK:
+1. Do this now, against main:
+   - TlsTcpClient in std/net/tls-tcp.ts, on tcpConnect + connectResult and the poll loop, shaped like TlsTcpServer.
+   - The blocking tlsConnect(…, timeoutMs) helper.
+   - The TlsServer loopback round trips.
+   - The openssl s_server interop block in tests/run.js: a test CA generated at run time; each suite; -groups P-256 and X25519; HRR; ALPN h2 and http/1.1; SNI; KeyUpdate k and K; and -tls1_2 refused with protocol_version.
+   Authentication goes through ONE internal seam in std/net/tls/verify.ts. That seam may check the CertificateVerify by scheme (P-256, P-384 or RSA-PSS, on the leaf key from x509). Until #1027 lands, the chain step is a clearly marked stub that REFUSES with unknown_ca. Never skip it in any shipped code path. Keep the tests that need a trusted chain pending until step 2.
+2. When the lead messages you that #1027 has merged:
+   - Merge main.
+   - Implement tlsClientAuthenticate fully: pkiVerifyServer against the store, which is pkiLoadSystemRoots() by default or a store the caller names. Never add a skip switch.
+   - Wire the end-to-end chain tests: an RSA-PSS leaf under an RSA intermediate, a P-384 intermediate, a wrong host, an expired certificate, an untrusted root, and a corrupted CertificateVerify → decrypt_error.
+   - Mark the PR ready.
+You may open the PR as a DRAFT after step 1. The security record for the carrier and verify.ts goes in docs/security/tls.md, and the guide page docs/guide/using-nish/tls-client.md gains the carrier and tlsConnect. If name resolution or public hosts are not done, record them as not exercised.
+Every claim you add to tls.md or the guide must be pinned by a named test that fails if it breaks, or listed under its "Not pinned" heading. Reviewers check this first.
+Keep turns lean (the account has a shared 5-hour usage limit): use targeted test runs and let CI run the full suite.

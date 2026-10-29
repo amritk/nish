@@ -14,5 +14,5 @@ extra = {
 tmpl = open(sys.argv[1]).read()
 sid = sys.argv[2]; s = stages[sid]
 todos = '\n'.join(f"- [{t['id']}] {t['content']}" for t in s['todos'])
-out = tmpl.format(stage_id=sid, title=s['title'], goal=s['goal'], owns=owns(sid), verification=s['verification'], filters=filters[sid], todos=todos, extra=extra.get(sid,''), fixes='Fixes #480' if sid=='tls-client-tcp' else 'Refs #480')
+out = tmpl.format(stage_id=sid, title=s['title'], goal=s['goal'], owns=owns(sid), verification=s['verification'], filters=filters[sid], todos=todos, extra=(open(f'{sys.argv[3]}/extra-{sid}.txt').read() if __import__('os').path.exists(f'{sys.argv[3]}/extra-{sid}.txt') else extra.get(sid,'')), fixes='Fixes #480' if sid=='tls-client-tcp' else 'Refs #480')
 open(f"{sys.argv[3]}/prompt-{sid}.txt",'w').write(out); print(sid, len(out))
