@@ -11,8 +11,8 @@
 // `/until-close` sends a body that ends at the server's close_notify,
 // `/stale` drops the connection after a whole reply, `/then-notify` ends it
 // with a close_notify after one, `/alert-once` answers its first request with
-// a fatal alert, and `/notified-N` says whether connection N ended with the
-// client's close_notify.
+// a fatal alert and `/alert` every request with one, and `/notified-N` says
+// whether connection N ended with the client's close_notify.
 
 import { HTTP_E_CERTIFICATE, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_E_TLS, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
 import { netAddress, netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpAccept, tcpConnect, tcpListen } from "nish:net";
@@ -209,6 +209,12 @@ class Servers {
         this.reply(site, slot, "stale");
         site.server.flush(slot);
         site.server.connection(slot).abort();
+        site.server.close(slot);
+        return false;
+      }
+      if (line.startsWith("GET /alert ")) {
+        site.server.connection(slot).fail(80);
+        site.server.flush(slot);
         site.server.close(slot);
         return false;
       }
@@ -525,6 +531,9 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   if (a2 === null) {
     console.log(`  error ${alerting.error}: ${alerting.errorText}`);
   }
+  const alerted: HttpClient = new HttpClient(options);
+  t.check(fails(alerted, alerted.fetch(get(`${good}/alert`)), HTTP_E_TLS), "a fresh TLS connection the server ends with an alert is HTTP_E_TLS");
+  t.check(alerted.errorText.indexOf("the server sent TLS alert 80") >= 0, "and the error names the alert the server sent");
   const idle: HttpClient = new HttpClient(options);
   const n1: HttpResponse | null = idle.fetch(get(`${good}/then-notify`));
   const n1Body: string = bodyOf(n1);
