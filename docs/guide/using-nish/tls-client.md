@@ -84,8 +84,10 @@ waiting calls, each bounded by its own `timeoutMs`:
 Both handle a KeyUpdate from the server on the way. Once open, `read`,
 `write`, `keyUpdate`, `shutdown` and `close` answer as the `nish:net` calls
 do without waiting (`read` and `write` answer `-11` when they would block,
-and `read` answers `-32` after `close`; after `shutdown` the client does not wait for the server's close_notify, and `readWait` answers `-32` once its own is sent), and `interest()`, `readable()` and
-`writable()` let the client join your own loop (`fd()` is its socket). `tlsConnectWith(addr,
+and `read` answers `-32` after `close`; after `shutdown` the client does
+not wait for the server's close_notify, and `readWait` answers `-32` once
+its own is sent), and `interest()`, `readable()` and `writable()` let the
+client join your own loop (`fd()` is its socket). `tlsConnectWith(addr,
 config, trust, timeoutMs)` takes a whole `TlsClientConfig` (to offer P-256,
 say) and the roots to trust; `tlsConnect` reads the system's roots on every
 call, within its timeout, so a program that connects often reads them once and passes them here.

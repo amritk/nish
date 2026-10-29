@@ -1024,8 +1024,9 @@ application data past an unauthenticated server and none can skip the step.
 (`net_tls_client_tcp`): an ECDSA P-256 signature over the content verifies,
 and is refused over other content, under the P-384 or RSA-PSS scheme, under
 Ed25519 (never offered) and when empty; a server whose CertificateVerify
-signs other bytes is refused with `decrypt_error`, which the server reads. An empty chain is `bad_certificate`, and so is a
-self-signed leaf with no extensions that the store does not hold.
+signs other bytes is refused with `decrypt_error`, which the server
+reads. An empty chain is `bad_certificate`, and so is a self-signed leaf
+with no extensions that the store does not hold.
 
 **Against openssl s_server** (tests/run.js, "`nish/net/tls-tcp`'s client,
 against openssl s_server"; a CA and P-256, P-384 and RSA-2048 leaves made at
@@ -1097,7 +1098,14 @@ peer's, from either end; name resolution, which the client does not do
 public host; a `writeAll` that times out part way through a message, which
 leaves the stream unusable, as its comment says; and a refusal of the
 server's certificate whose alert cannot be flushed before the deadline,
-which `tlsConnect` answers with the alert, not `-110`.
+which `tlsConnect` answers with the alert, not `-110`; a `writeAll` that
+answers -104 because the connection fails during the call (the tests pin
+only the -32 of a call on a client already closed or failed); `shutdown`
+followed by `readWait`, which answers -32 once the `close_notify` is sent,
+and data already read off the socket still reading after `shutdown`; and
+`tlsConnect`'s wait for its last flight when that write would block
+(`-11`): the client's Finished always leaves in the same flush, so the
+tests pin that nothing is queued when `tlsConnect` returns, not that path.
 
 ## What is not checked here
 
