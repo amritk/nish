@@ -108,7 +108,7 @@ export class CommandSpec {
 
 /** Whether `path` and `words` agree on their first `count` words; both have at least that many. */
 const agrees = (path: string[], words: string[], count: i32): boolean => {
-  for (let i: i32 = 0; i < count; i++) {
+  for (let i: i32 = 0; i < count && i < toI32(path.length) && i < toI32(words.length); i++) {
     if (path[i] !== words[i]) {
       return false
     }
@@ -245,7 +245,7 @@ export class FlagTable {
 
   /** `args` read against the table, every one of them an argument: `parseFrom(args, 0)`. */
   parse(args: string[]): ParsedFlags {
-    return this.parseFrom(args, 0)
+    return this.parseFrom(args, toI32(0))
   }
 
   /**
@@ -259,11 +259,20 @@ export class FlagTable {
     const words: string[] = []
     const trailing: string[] = []
     let ended = false
-    let i: i32 = first < 0 ? 0 : first
-    while (i < toI32(args.length) && got.ok) {
+    // A value flag written without `=` waits here for the next argument,
+    // which is its value whatever it looks like, so that `--jobs -1` and
+    // `--grep --x` mean what they say.
+    let pending: i32 = -1
+    let pendingFlag = ""
+    let pendingArg = ""
+    for (let i: i32 = 0; i < toI32(args.length) && got.ok; i++) {
       const arg = args[i]
-      i = i + 1
-      if (ended) {
+      if (i < first) {
+        // Before `first`, so not read at all.
+      } else if (pending >= 0) {
+        got.take(pending, pendingFlag, arg, pendingArg)
+        pending = -1
+      } else if (ended) {
         trailing.push(arg)
       } else if (arg === "--") {
         ended = true
@@ -273,7 +282,7 @@ export class FlagTable {
         got.fail(FLAG_ERR_UNKNOWN, `unknown flag ${arg}`, arg)
       } else {
         const eq = toI32(arg.indexOf("="))
-        const flag = eq < 0 ? arg : arg.substring(0, eq)
+        const flag = eq < 0 ? arg : arg.slice(0, eq)
         let at = this.indexOf(flag.substring(2))
         let negated = false
         if (at < 0 && flag.startsWith("--no-")) {
@@ -296,20 +305,20 @@ export class FlagTable {
               got.bools[at] = !negated
               got.counts[at] = 1
             }
-          } else if (eq < 0 && i >= toI32(args.length)) {
-            const wanted = spec.meta.length > 0 ? spec.meta : "a value"
-            got.fail(FLAG_ERR_MISSING_VALUE, `${flag} needs ${wanted}`, arg)
+          } else if (eq >= 0) {
+            got.take(at, flag, arg.substring(eq + 1), arg)
           } else {
-            // The next argument is the value whatever it looks like, so that
-            // `--jobs -1` and `--grep --x` mean what they say.
-            const value = eq >= 0 ? arg.substring(eq + 1) : args[i]
-            if (eq < 0) {
-              i = i + 1
-            }
-            got.take(at, flag, value, arg)
+            pending = at
+            pendingFlag = flag
+            pendingArg = arg
           }
         }
       }
+    }
+    if (pending >= 0 && got.ok) {
+      const meta = this.flags[pending].meta
+      const wanted = meta.length > 0 ? meta : "a value"
+      got.fail(FLAG_ERR_MISSING_VALUE, `${pendingFlag} needs ${wanted}`, pendingArg)
     }
     if (this.commands.length > 0) {
       const at = this.matchCommand(words)
@@ -322,8 +331,10 @@ export class FlagTable {
       }
     }
     const skip: i32 = got.commandAt >= 0 ? toI32(this.commands[got.commandAt].words.length) : 0
-    for (let w: i32 = skip; w < toI32(words.length); w++) {
-      got.positionals.push(words[w])
+    for (let w: i32 = 0; w < toI32(words.length); w++) {
+      if (w >= skip) {
+        got.positionals.push(words[w])
+      }
     }
     for (const t of trailing) {
       got.positionals.push(t)
@@ -392,7 +403,7 @@ export class ParsedFlags {
     this.bools = []
     this.lists = []
     for (let i: i32 = 0; i < toI32(table.flags.length); i++) {
-      this.counts.push(0)
+      this.counts.push(toI32(0))
       this.texts.push("")
       this.numbers.push(toF64(0))
       this.bools.push(false)
