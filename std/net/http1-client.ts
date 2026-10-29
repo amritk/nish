@@ -735,6 +735,7 @@ const http1ClientTakeLine = (p: Http1ResponseParser, limit: i32, overCode: i32, 
       p.lineStart = p.start
       p.lineEnd = i - 1
       p.start = i + 1
+      p.scan = i + 1
       return HTTP1_CLIENT_LINE
     }
     i += 1
@@ -1100,6 +1101,7 @@ const http1ClientBodyWindow = (p: Http1ResponseParser, after: i32): i32 => {
   p.bodyOff = p.start
   p.bodyLen = take
   p.start += take
+  p.scan = p.start
   p.left = p.left - toI64(take)
   p.bodyTotal = p.bodyTotal + toI64(take)
   if (p.left === toI64(0)) {

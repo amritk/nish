@@ -217,12 +217,12 @@ status or stderr changes.
 | `&&` / `\|\|` left operand deleted | 114 | 70 | 44 | 0 |
 | `&&` / `\|\|` right operand deleted | 114 | 80 | 34 | 0 |
 | comparison boundary moved | 153 | 83 | 70 | 0 |
-| assignment deleted | 120 | 115 | 1 | 4 |
+| assignment deleted | 122 | 115 | 3 | 4 |
 | one-statement guard made false | 75 | 73 | 2 | 0 |
-| all | 576 | 421 | 151 | 4 |
+| all | 578 | 421 | 153 | 4 |
 
 The four invalid mutants do not compile. Every survivor is in one of four
-classes, none of which a caller can observe:
+classes, none of which a test can observe:
 
 - **Implied bounds** (131). The index conjuncts of the byte loops and tests
   (`i >= 0`, `i < toI32(buf.length)` and the like, in the writer's helpers,
@@ -242,16 +242,20 @@ classes, none of which a caller can observe:
 - **Growth only** (5). `http1ClientReserve`'s tests decide whether the buffer
   is reused or grown, and to what size, never what it holds. Its
   `size > 2^30` panic moved to `>=` differs only past 1 GiB fed.
-- **Speed only** (2). The scan hint `http1ClientTakeLine` leaves behind, and
-  its `p.scan > p.start` choice, decide only how much of a line is scanned
-  again.
+- **The scan hint** (4). The hint `http1ClientTakeLine` leaves behind on
+  `HTTP1_NEED_MORE`, and its `p.scan > p.start` choice, decide only how much
+  of a line is scanned again. The writes that pull `scan` up to `start` after
+  a line is taken and after a body window are not speed only: without them
+  `scan` only falls, by the bytes consumed at each move of the live bytes,
+  and past 2^31 bytes through one parser the i32 wraps and the next line's LF
+  is missed. They stay; a test would have to feed 2 GiB, so none pins them.
 
 Resets that no input could observe were deleted rather than kept untested:
 the per-request reset the constructor ran over its own field initializers,
 `http1ClientStartHead`'s state write (its one caller is already in that
 state), `http1ClientReserve`'s shift of the line bounds (no line is held
-across a feed), the scan writes after a line and a body window (the next scan
-starts from `start`), CONNECT's `persistent = false` (a tunnel never asks it),
+across a feed), CONNECT's `persistent = false` (`http1ClientStartHead` has
+already cleared it for that response, and nothing sets it before that branch),
 `next()`'s write of the closed state before it answers `HTTP1_CLOSED`, a
 writer offset test implied by the room test, and a saturation flag implied by
 the length test. Before them and the checks that kill the rest, the same sweep
