@@ -2179,7 +2179,8 @@ and there is no `async` and no callback: your `main` is the loop. A client calls
 `tcpConnect(addr)`, which answers the descriptor while it is still connecting;
 wait for it to be writable, then `connectResult(fd)` is 0 or the failure. Buffers
 are `u8[]` only; an address is 18 bytes of one (IPv4 as `::ffff:a.b.c.d`, then
-the port big-endian); hosts are numeric literals, because there is no DNS.
+the port big-endian); hosts are numeric literals; to reach a name, resolve it first with
+`nish/net/dns` (`DnsClient` on your loop, or the blocking `resolveHost`).
 `netRead` / `netWrite` panic on a range outside the buffer.
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
 `SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux
