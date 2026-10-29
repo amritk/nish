@@ -2042,8 +2042,11 @@ start-up still takes grows with it: the tables sized from the cap, such as an
 `Http3Server`'s connection-ID index, timer wheel and rings.
 
 `nish/net/tls/client` and `nish/net/tls/record-client` are the client side of
-TLS 1.3, sans-IO like the server; checking the server's certificate is the
-caller's job. [TLS client](tls-client.md) shows them.
+TLS 1.3, sans-IO like the server. `nish/net/tls/verify` checks the server for
+them (`tlsClientAuthenticate`), and `nish/net/tls-tcp`'s `TlsTcpClient` and
+blocking `tlsConnect` put the client on a TCP socket and check the server
+themselves, against the system's roots or ones you name.
+[TLS client](tls-client.md) shows them.
 
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
