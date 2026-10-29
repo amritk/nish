@@ -15,8 +15,9 @@
  * its own fails loudly rather than writing nowhere.
  *
  * The functions that have no synchronous reading under Node (`spawn`,
- * `waitPid`, `signalFd`, `readSignal`, the `nish:net` set) throw here without
- * asking any host.
+ * `waitPid`, `signalFd`, `readSignal`, the `nish:net` set), and `setNice` and
+ * `setIdlePriority`, which have none at all, throw here without asking any
+ * host.
  */
 
 /** What every member of the default host throws: no adapter has been imported. */
@@ -261,6 +262,24 @@ export function spawn() {
 
 export function waitPid() {
   return noProcessReading("waitPid");
+}
+
+/**
+ * `setNice(n)` and `setIdlePriority()` have no reading under Node: Node has one
+ * of the nice value (`os.setPriority`) but none of `SCHED_IDLE`, and a reading
+ * of one without the other would differ from the native build on the same host.
+ * Each throws, naming itself, as `runtime/nish.mjs` does.
+ */
+function noSchedulingReading(name) {
+  throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`);
+}
+
+export function setNice() {
+  return noSchedulingReading("setNice");
+}
+
+export function setIdlePriority() {
+  return noSchedulingReading("setIdlePriority");
 }
 
 /**

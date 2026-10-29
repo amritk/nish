@@ -654,6 +654,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "scandirat" ||
   name === "scanf" ||
   name === "sched_getaffinity" ||
+  name === "sched_setscheduler" ||
   name === "sched_yield" ||
   name === "select" ||
   name === "send" ||
@@ -666,6 +667,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "setpayloadsig" ||
   name === "setpayloadsigf" ||
   name === "setpayloadsigl" ||
+  name === "setpriority" ||
   name === "setsockopt" ||
   name === "setvbuf" ||
   name === "shutdown" ||

@@ -111,13 +111,13 @@ function nishExport(specifier: string, name: string): BuiltinExport | null -> @n
   stackSites=0 stackLocals=0
   callee +0:14 new BuiltinExport -> @BuiltinExport.constructor
   callee +6:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +22:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +25:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +31:14 new BuiltinExport -> @BuiltinExport.constructor
-  callee +36:12 isNetExport -> @isNetExport
-  callee +36:32 new BuiltinExport -> @BuiltinExport.constructor
-  callee +39:12 isTermExport -> @isTermExport
-  callee +39:33 new BuiltinExport -> @BuiltinExport.constructor
-  callee +41:21 unsafeModule -> @unsafeModule
-  callee +42:12 isUnsafeExport -> @isUnsafeExport
-  callee +42:35 new BuiltinExport -> @BuiltinExport.constructor
+  callee +24:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +27:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +33:14 new BuiltinExport -> @BuiltinExport.constructor
+  callee +38:12 isNetExport -> @isNetExport
+  callee +38:32 new BuiltinExport -> @BuiltinExport.constructor
+  callee +41:12 isTermExport -> @isTermExport
+  callee +41:33 new BuiltinExport -> @BuiltinExport.constructor
+  callee +43:21 unsafeModule -> @unsafeModule
+  callee +44:12 isUnsafeExport -> @isUnsafeExport
+  callee +44:35 new BuiltinExport -> @BuiltinExport.constructor

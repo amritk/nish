@@ -438,6 +438,15 @@ nish_array *nish_wait_pid(int32_t pid, int32_t flags);
 /* `totalMemory()`: bytes of physical memory (Linux: `_SC_PHYS_PAGES` times the
  * page size; Darwin: `hw.memsize`), or -1 where the host does not say. */
 int64_t nish_total_memory(void);
+/* `setNice(n)`: this process's nice value set to `n` (`setpriority`), 0 or a
+ * negative errno. The kernel clamps `n` to -20..19; lowering it below the
+ * current value without the privilege is -EACCES (or -EPERM). -ENOSYS under
+ * WASI. */
+int32_t nish_set_nice(int32_t n);
+/* `setIdlePriority()`: this process moved to `SCHED_IDLE` (Linux), 0 or a
+ * negative errno; -95 (Linux's EOPNOTSUPP) elsewhere, -ENOSYS under WASI. An
+ * unprivileged process cannot leave the policy again. */
+int32_t nish_set_idle_priority(void);
 
 /* ---- The environment (WP19 R1) ------------------------------------------
  * `getenv(name)`: the value of environment variable `name`, copied into the
