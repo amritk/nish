@@ -224,10 +224,24 @@ const roundingCallee = (opts: Options, intrinsic: string): string => {
   return intrinsic
 }
 
-/** Call `callee`, a rounding one `roundingCallee` chose, on `x`; a runtime one also registers its constructor. */
+/**
+ * Call `callee`, a rounding one `roundingCallee` chose, on `x`. A runtime one
+ * also registers `@nish.round.init`, the constructor that hands the runtime
+ * libm's routines for a CPU without SSE4.1: the module names libm, as the
+ * intrinsic's lowering did, so the runtime never has to.
+ */
 const emitRounding = (emitter: Emitter, callee: string, x: string): string => {
   if (callee.startsWith("nish_")) {
-    emitter.addConstructor(emitter.useRuntime("nish_round_init"))
+    const init = emitter.useRuntime("nish_round_init")
+    emitter.declare("declare double @floor(double)")
+    emitter.declare("declare double @ceil(double)")
+    emitter.declare("declare double @trunc(double)")
+    emitter.addConstructor("@nish.round.init")
+    emitter.module.addRawDefinition(`define internal void @nish.round.init() nounwind {
+entry:
+  call void ${init}(double (double)* @floor, double (double)* @ceil, double (double)* @trunc)
+  ret void
+}`)
   }
   return callIntrinsic(emitter, callee, "double", `double ${x}`)
 }

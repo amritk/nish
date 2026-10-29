@@ -1,7 +1,10 @@
 @.str.0 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c" \00" }, align 8
-@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish_round_init, i8* null }]
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.round.init, i8* null }]
 @.str.1 = private unnamed_addr constant { i64, [4 x i8] } { i64 3, [4 x i8] c" | \00" }, align 8
 
+declare double @floor(double)
+declare double @ceil(double)
+declare double @trunc(double)
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare noundef nonnull align 8 i8* @nish_arena_keep(i64 noundef, i8* noundef nonnull align 8) #1
@@ -9,10 +12,16 @@ declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull
 declare double @nish_floor(double) #2
 declare double @nish_ceil(double) #2
 declare double @nish_trunc(double) #2
-declare void @nish_round_init() #1
+declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
 declare double @llvm.copysign.f64(double, double) #2
+
+define internal void @nish.round.init() nounwind {
+entry:
+  call void @nish_round_init(double (double)* @floor, double (double)* @ceil, double (double)* @trunc)
+  ret void
+}
 
 define internal noundef nonnull align 8 i8* @shown(double noundef %r) #0 {
 entry:

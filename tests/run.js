@@ -14,7 +14,7 @@
  *                    the inherited one (WP19 R1: `getenv` has no other way to be pinned)
  *       <name>.rerun.env  a second run of the same program, under this environment
  *                    in place of `.env`, held to the same `.out` (#943: the runtime
- *                    path `NISH_SIMD=base` pins prints what the fast one does)
+ *                    path `NISH_SIMD=scalar` pins prints what the fast one does)
  *       <name>.portability  the `--warn-portability --json` portability objects, one
  *                    per line (WP33: the case is compiled a second time with the flag)
  *       <name>.caps.json  the `--emit-capabilities` report, byte for byte (WP35: the

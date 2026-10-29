@@ -284,13 +284,15 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
                         int64_t from);
 /* `Math.floor`, `Math.ceil` and `Math.trunc`, and the floor `Math.round`
    takes (#943): each answers as C's `floor`, `ceil` and `trunc` do, -0, the
-   infinities and NaN included. A module for x86-64 calls them and registers
-   `nish_round_init` in `@llvm.global_ctors`; it asks the CPU for SSE4.1 once
-   before `main`, and `NISH_SIMD=scalar` keeps libm. Before it has
-   run, or on a machine without SSE4.1, each is libm's routine. They live in
-   runtime/runtime-simd.c; runtime-wasm.c has the wasm32 ones for host IR that
-   `scripts/build.sh --profile wasm` links. */
-void nish_round_init(void);
+   infinities and NaN included. A module for x86-64 calls them and registers a
+   constructor in `@llvm.global_ctors` that passes `nish_round_init` libm's
+   `floor`, `ceil` and `trunc`; it asks the CPU for SSE4.1 once before `main`
+   and keeps them on a machine without it, or under `NISH_SIMD=scalar`. Each
+   is otherwise SSE4.1's `roundsd`, so the constructor must run first. The
+   runtime references no libm symbol: the module that rounds does. They live
+   in runtime/runtime-simd.c; runtime-wasm.c has the wasm32 ones for host IR
+   that `scripts/build.sh --profile wasm` links. */
+void nish_round_init(double (*floor_fn)(double), double (*ceil_fn)(double), double (*trunc_fn)(double));
 double nish_floor(double x);
 double nish_ceil(double x);
 double nish_trunc(double x);

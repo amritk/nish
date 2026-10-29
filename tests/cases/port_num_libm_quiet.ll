@@ -1,10 +1,13 @@
-@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish_round_init, i8* null }]
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.round.init, i8* null }]
 
+declare double @floor(double)
+declare double @ceil(double)
+declare double @trunc(double)
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
 declare double @nish_floor(double) #2
-declare void @nish_round_init() #1
+declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
@@ -13,6 +16,12 @@ declare double @llvm.fabs.f64(double) #2
 declare i32 @llvm.smin.i32(i32, i32) #2
 declare i32 @llvm.smax.i32(i32, i32) #2
 declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
+define internal void @nish.round.init() nounwind {
+entry:
+  call void @nish_round_init(double (double)* @floor, double (double)* @ceil, double (double)* @trunc)
+  ret void
+}
 
 define noundef i32 @nish_main() #0 {
 entry:

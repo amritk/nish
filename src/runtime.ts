@@ -353,9 +353,15 @@ export class RuntimeTable {
         )
       )
     }
-    // Their constructor, which only `@llvm.global_ctors` names: it asks the
-    // CPU and stores the flag.
-    this.add(plain("nish_round_init", "declare void @nish_round_init()", EFFECT_WRITE))
+    // Their setup, which only the module's constructor calls: it asks the CPU
+    // and keeps the libm routines it is passed when the answer is no.
+    this.add(
+      plain(
+        "nish_round_init",
+        "declare void @nish_round_init(double (double)*, double (double)*, double (double)*)",
+        EFFECT_WRITE
+      )
+    )
     this.add(
       new RuntimeFunction(
         "nish_str_index_of_from",

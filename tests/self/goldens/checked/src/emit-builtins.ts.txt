@@ -132,14 +132,19 @@ function roundingCallee(opts: Options, intrinsic: string): string -> @roundingCa
   callee +0:8 dispatchesRounding -> @dispatchesRounding
 function emitRounding(emitter: Emitter, callee: string, x: string): string -> @emitRounding
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
-  sharedWrite: via Emitter.addConstructor
+  sharedWrite: via Emitter.useRuntime
   escaping: callee
-  calls: Emitter.addConstructor Emitter.useRuntime callIntrinsic nish_str_at nish_str_concat
-  pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.addConstructor#0 Emitter.useRuntime#0 callIntrinsic#0
+  calls: Emitter.addConstructor Emitter.declare Emitter.useRuntime IRModule.addRawDefinition callIntrinsic nish_str_at nish_str_concat
+  pointer emitter: size=280 writesThrough=true captured=false passedTo=Emitter.useRuntime#0 Emitter.declare#0 Emitter.declare#0 Emitter.declare#0 Emitter.addConstructor#0 callIntrinsic#0
   stackSites=0 stackLocals=0
-  callee +0:5 Emitter.addConstructor -> @Emitter.addConstructor
-  callee +0:28 Emitter.useRuntime -> @Emitter.useRuntime
-  callee +2:10 callIntrinsic -> @callIntrinsic
+  local +0:11 init: string (const)
+  callee +0:18 Emitter.useRuntime -> @Emitter.useRuntime
+  callee +1:5 Emitter.declare -> @Emitter.declare
+  callee +2:5 Emitter.declare -> @Emitter.declare
+  callee +3:5 Emitter.declare -> @Emitter.declare
+  callee +4:5 Emitter.addConstructor -> @Emitter.addConstructor
+  callee +5:5 IRModule.addRawDefinition -> @IRModule.addRawDefinition
+  callee +11:10 callIntrinsic -> @callIntrinsic
 function absIntrinsic(table: TypeTable, type: i32): string -> @absIntrinsic
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via TypeTable.llvmType
