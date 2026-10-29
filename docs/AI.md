@@ -2145,7 +2145,8 @@ bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 `getenv(name)` (`string | null` — unset and empty are different answers),
 `realpathSync(path)` (`string | null`; symbolic links resolved, absolute, and
 `null` when it does not resolve),
-`monotonicNanos()` (`i64`; elapsed time only), and, for checking a path before
+`monotonicNanos()` (`i64`; elapsed time only), `wallClockNanos()` (`i64`,
+nanoseconds since the Unix epoch; the wall clock, which can step), and, for checking a path before
 trusting it, `lstatOwnerModeSync(path)` (an `i64`: the owner's uid in the high
 32 bits, `st_mode` in the low 32, `-1` when it does not resolve; a symbolic
 link answers for itself), `geteuid()` (`i64`) and `isExecutableSync(path)`

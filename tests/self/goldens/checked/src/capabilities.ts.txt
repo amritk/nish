@@ -65,4 +65,4 @@ function builtinCapability(name: string): i32 -> @builtinCapability [exported]
   callee +0:7 netOption -> @netOption
   callee +6:7 isUnsafeExport -> @isUnsafeExport
   callee +50:7 isNetExport -> @isNetExport
-  callee +75:7 isTermExport -> @isTermExport
+  callee +80:7 isTermExport -> @isTermExport
