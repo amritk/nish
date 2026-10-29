@@ -676,7 +676,7 @@ intrinsics become libm calls for non-constant arguments).
 | Profile | Flags | Equivalent |
 | --- | --- | --- |
 | `debug` | clang defaults, `-lm` | the "before" number; symbols kept |
-| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none -s`, plus `-Wl,--lto-partitions=<cores>` under lld on a target without control-flow landing pads | Rust `--release` |
+| `speed` | `-O3 -flto -DNDEBUG -ffunction-sections -fdata-sections -fomit-frame-pointer -fno-asynchronous-unwind-tables -fno-unwind-tables [-fno-plt] -Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -s`, plus `-Wl,--lto-partitions=<cores>` under lld on a target without control-flow landing pads | Rust `--release` |
 | `size` | `speed` (one LTO partition) plus `-Oz -fvisibility=hidden` | Rust `opt-level="z"`, `panic="abort"`, `strip=true` |
 | `wasm` | `--target=wasm32-unknown-unknown -Oz -nostdlib -Wl,--no-entry -Wl,--export-all -Wl,--strip-all -Wl,--gc-sections` | freestanding module for modules that do not use the C runtime |
 | `napi` | `speed` (one LTO partition) plus `-shared -fPIC -I<node headers> -I runtime` (`-Wl,-undefined,dynamic_lookup` on macOS) | a `.node` addon |
@@ -692,6 +692,12 @@ control-flow and probe-stack module flags itself (`src/ir.ts`, numbered last,
 not on wasm). `scripts/check-hardening.mjs` reads the result back from the
 binary's headers. What each flag closes, what it costs and what it leaves
 uncovered: [security/runtime.md](security/runtime.md#binary-hardening-rt-harden).
+
+Every native ELF link (`debug`, `speed`, `size`, `napi`) also passes
+`-Wl,--build-id=sha1`, so the binary carries an `NT_GNU_BUILD_ID` note that
+perf, gdb and debuginfod key on. `sha1` hashes the output's own bytes, so one
+input links to one id and the bootstrap's `stage3 == stage2` holds; Mach-O and
+the wasm profiles are unchanged. `node tests/run.js build_id` pins it.
 
 Platform notes: on macOS the script uses ld64's `-dead_strip` / `-x` instead
 of `--gc-sections` / `-s`, skips `-fuse-ld=lld` and `-fno-plt`; on Linux it

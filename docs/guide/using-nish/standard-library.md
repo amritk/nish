@@ -35,6 +35,17 @@ normal-priority fallback for work that must finish, and call either at the top
 of `main`, before any thread starts. See
 [Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority).
 
+`nish:fs` is where a program replaces a file in one step: write the new
+contents beside the target, then `renameSync` the temporary over it, so a
+reader sees the old file or the new one and never half of either.
+`renameSync`, `unlinkSync` and `writeFileBytesSync` answer a number instead
+of exiting: `0` (or the bytes written) on success and a negative errno on
+failure, such as `-2` for a missing path or `-18` when the two names are on
+different filesystems, so the program decides what to say. Bytes that are
+not text, a `u8[]` from `readFileBytesSync` or a codec, go out as they are
+through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
+[File I/O](../../LANGUAGE.md#file-io).
+
 | Module | What it gives you |
 | --- | --- |
 | [`nish/testing`](#nishtesting) | `Suite`, a test runner whose report is the exit code |
@@ -56,7 +67,7 @@ of `main`, before any thread starts. See
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
-| [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url, bcrypt |
+| [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, trust anchors, base64url, bcrypt |
 | [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router, a PostgreSQL client |
 | [`nish/compress/*`](compression.md) | gzip, zlib and raw DEFLATE, both ways, into buffers you own or streamed; CRC-32 and Adler-32; `nish/net/http-compress` for `Accept-Encoding` and gzip responses |
 | [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing |
@@ -1600,8 +1611,10 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x25519` | X25519 key exchange |
 | `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
+| `nish/crypto/p384` | P-384 ECDSA verification |
 | `nish/crypto/x509` | DER and PEM, X.509 certificates read with their signature algorithm, key type and v3 extensions, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
+| `nish/crypto/pki-roots` | `pkiLoadSystemRoots()`, the root certificates to trust, parsed: those `SSL_CERT_FILE` and `SSL_CERT_DIR` name when either is set, with no fallback, and otherwise the first system bundle (`pkiSystemBundles()`) and `/etc/ssl/certs`. A block or file it cannot use is counted in `skipped`, never fatal, and only regular files are read; on macOS it reads `/etc/ssl/cert.pem`, not the Keychain, so roots and trust settings added there are missed. Native only |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
 
 ```ts nish:ok
@@ -1655,7 +1668,8 @@ a bad key length, a tag that does not verify — so narrow the result before you
 use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
 `x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1` and
 `ed25519`, which came later, has been through a security audit (`ed25519` is
-recorded as a change after its area's audit); the records are in
+recorded as a change after its area's audit, and `pki-roots` has a record
+written with its code); the records are in
 [docs/security/](../../security/README.md).
 
 ## `nish/net`
@@ -1755,6 +1769,15 @@ each connection rather than reading it again. When you drive a `TlsServer` or
 a `TlsRecordServer` yourself rather than through `nish/net/tls-tcp`, call its
 `wipe()` once the connection is done; the carriers call it at every end of a
 connection.
+
+When a `TlsTcpServer` slot ends a connection itself (`shutdown`, or an HTTP
+carrier above it after its answer), it does not close the socket at once:
+it shuts the write side, wipes the slot's keys and answers
+`TLS_RECORD_WANT_READ` until the client hangs up, then `TLS_RECORD_DONE`.
+Closing a socket the client is still writing to resets the connection, and a
+browser can report that reset instead of the response. Keep reading the slot
+until its interest says done, and close slots that stay quiet from your own
+loop's timeout.
 
 A server that lends byte buffers across connections takes them from
 `nish/net/buffer-pool`'s `BufferPool`: a pool of fixed-size buffers, up to a

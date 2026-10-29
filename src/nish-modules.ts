@@ -116,7 +116,7 @@ export const isBuiltinSpecifier = (specifier: string): boolean =>
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
   if (specifier === `${BUILTIN_SCHEME}fs`) {
-    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync"
+    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, signalFd, readSignal, argv, platform, arch"
@@ -130,7 +130,7 @@ export const nishModuleExports = (specifier: string): string => {
   if (specifier === unsafeModule()) {
     return "uncheckedGet, uncheckedSet, wrappingAdd, wrappingSub, wrappingMul, readCString"
   }
-  return "write, writeError, panic"
+  return "write, writeError, writeBytes, panic"
 }
 
 /**
@@ -222,17 +222,24 @@ export const isNetBufferLetter = (letter: i32): boolean => isNetWrittenLetter(le
 
 /**
  * The buffer letters of a call that takes a range-checked `(buf, off, len)`
- * triple: a `nish:net` signature, and `readStdin`'s, which is `netRead`'s
- * without the descriptor. One string, so the emitter's range check, the
- * written-argument rule and the panic set read `readStdin` as they read
- * `netRead`.
+ * triple: a `nish:net` signature, `readStdin`'s, which is `netRead`'s
+ * without the descriptor, and `writeBytes`'s, which is `netWrite`'s to stdout.
+ * One string, so the emitter's range check, the written-argument rule and the
+ * panic set read `readStdin` and `writeBytes` as they read `netRead` and
+ * `netWrite`.
  */
-export const bufferSignature = (name: string): string => (name === "readStdin" ? "wnn" : netSignature(name))
+export const bufferSignature = (name: string): string => {
+  if (name === "readStdin") {
+    return "wnn"
+  }
+  return name === "writeBytes" ? "rnn" : netSignature(name)
+}
 
 /**
  * Where a `nish:net` call's range-checked `(buf, off, len)` triple starts, or
  * -1: the buffer is the argument before the first `n`. `netRead`, `netWrite`,
- * `udpSendTo` and `udpRecvFrom` have one, at 1, and `readStdin` at 0.
+ * `udpSendTo` and `udpRecvFrom` have one, at 1, and `readStdin` and
+ * `writeBytes` at 0.
  */
 export const netRangeBuffer = (name: string): i32 => {
   const at = bufferSignature(name).indexOf("n")
@@ -288,7 +295,10 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "isDirectorySync" ||
       name === "readdirSync" ||
       name === "realpathSync" ||
-      name === "statMtimeSync"
+      name === "statMtimeSync" ||
+      name === "renameSync" ||
+      name === "unlinkSync" ||
+      name === "writeFileBytesSync"
     ) {
       return new BuiltinExport("", name, false)
     }
@@ -321,7 +331,7 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
     return null
   }
   if (specifier === `${BUILTIN_SCHEME}io`) {
-    if (name === "write" || name === "writeError" || name === "panic") {
+    if (name === "write" || name === "writeError" || name === "writeBytes" || name === "panic") {
       return new BuiltinExport("", name, false)
     }
     return null

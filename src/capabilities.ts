@@ -192,6 +192,7 @@ export const builtinCapability = (name: string): i32 => {
     name === "Err" ||
     name === "write" ||
     name === "writeError" ||
+    name === "writeBytes" ||
     name === "panic" ||
     name === "console.log" ||
     name === "console.error" ||
@@ -252,7 +253,16 @@ export const builtinCapability = (name: string): i32 => {
   ) {
     return CAP_FS_READ
   }
-  if (name === "writeFileSync" || name === "appendFileSync" || name === "mkdirSync") {
+  // `unlinkSync` and `renameSync` change the file system as a write does, the
+  // second at two paths; neither reads a file's bytes.
+  if (
+    name === "writeFileSync" ||
+    name === "appendFileSync" ||
+    name === "mkdirSync" ||
+    name === "writeFileBytesSync" ||
+    name === "renameSync" ||
+    name === "unlinkSync"
+  ) {
     return CAP_FS_WRITE
   }
   // The child can write anything, so `spawnSyncTo` writing its streams to
