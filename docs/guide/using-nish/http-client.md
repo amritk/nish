@@ -57,7 +57,9 @@ says why in `error` (an `HTTP_E_*` code; `httpErrorName` names it) and
 (errno 111)`), and keeps the connection alive between fetches to the same
 place. A URL that `errorText` names is only its scheme, host, port and path,
 with `?...` where a query or fragment was left out, and a URL that does not
-parse is not echoed at all, so the sentence is safe to log:
+parse is not echoed at all. The URL is named as it parses: in
+`http://admin:8080/s3cret@example.com/` the `8080` is a port and the rest a
+path, which is echoed, so put credentials in a header, not in a URL:
 
 ```ts nish:ok
 import { HttpClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName } from "nish/net/http-client";

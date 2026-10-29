@@ -70,7 +70,8 @@ PASS  and the error names it without its password or query
 PASS  and without a query that holds an @
 PASS  or a fragment that holds an @
 PASS  and with its path whole when the path holds an @
-PASS  a URL whose password holds ://, /, ?, # or @ does not parse, and the error does not echo it
+PASS  these URLs, a password holding ://, /, ?, # or @ after a non-numeric start, do not parse, and the error does not echo them
+PASS  but a password that reads as a port leaves a valid URL, and its path is echoed as a path
 PASS  and so is a relative one
 PASS  a server that never answers is HTTP_E_READ_TIMEOUT
 PASS  after readTimeoutMs
@@ -121,4 +122,4 @@ PASS  an https server that hangs up on the ClientHello is HTTP_E_TLS
 PASS  an event stream's first event is read while the server holds the stream open
 PASS  an empty read answers 0 at once, waiting for nothing
 PASS  and the next one, the stream ending with the connection
-http fetch: 123 passed, 0 failed, 0 skipped
+http fetch: 124 passed, 0 failed, 0 skipped

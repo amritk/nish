@@ -631,7 +631,8 @@ const runClient = (portA: i32, portB: i32): i32 => {
   for (let i: i32 = 0; i < toI32(tricky.length); i += 1) {
     hidden = hidden && fails(client, client.fetch(get(tricky[i])), HTTP_E_URL) && client.errorText.endsWith(": (a URL that does not parse)") && client.errorText.indexOf("hun") < 0 && client.errorText.indexOf("ter2") < 0;
   }
-  t.check(hidden, "a URL whose password holds ://, /, ?, # or @ does not parse, and the error does not echo it");
+  t.check(hidden, "these URLs, a password holding ://, /, ?, # or @ after a non-numeric start, do not parse, and the error does not echo them");
+  t.check(fails(client, client.fetch(get("ftp://admin:8080/s3cret@example.com/")), HTTP_E_URL) && client.errorText.endsWith(": ftp://admin:8080/s3cret@example.com/"), "but a password that reads as a port leaves a valid URL, and its path is echoed as a path");
   t.check(fails(client, client.fetch(get("/relative")), HTTP_E_URL), "and so is a relative one");
 
   // --- timeouts and failures to connect
