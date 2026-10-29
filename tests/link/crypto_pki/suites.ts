@@ -100,6 +100,7 @@ import {
   LEAF_RSA,
   LEAF_RSA384,
   LEAF_RSA512,
+  LEAF_RSHORT,
   LEAF_RWEAK,
   LEAF_SAME,
   LEAF_SUB,
@@ -120,6 +121,7 @@ import {
   RROOT,
   RWEAK,
   SAME,
+  SROOT,
   START_MS,
   SUB,
 } from "./fixtures"
@@ -284,6 +286,8 @@ export const refusals = (mode: string): i32 => {
   eqCode(s, "an intermediate of another key", verify([LEAF, INT_WRONG], "example.com"), PKI_ERR_BAD_SIGNATURE)
   eqCode(s, "an intermediate whose key identifier is another's", verify([LEAF, INT_WRONGID], "example.com"), PKI_ERR_UNTRUSTED)
   eqCode(s, "an intermediate with CA:FALSE", verify([LEAF, INT_NOCA], "example.com"), PKI_ERR_NOT_CA)
+  eqCode(s, "a root with CA:FALSE", rsaVerify([LEAF, INT], ROOT_NOCA), PKI_ERR_NOT_CA)
+  eqCode(s, "a leaf RSA key that does not parse", rsaVerify([LEAF_RSHORT], SROOT), PKI_ERR_BAD_SIGNATURE)
   eqCode(s, "an intermediate without basicConstraints", verify([LEAF, INT_NOBC], "example.com"), PKI_ERR_NOT_CA)
   eqCode(s, "a CA as the leaf", verify([LEAF_CA, INT], "example.com"), PKI_ERR_NOT_CA)
   eqCode(s, "pathLen 0 above another CA", verify([LEAF_SUB, SUB, INT_PATHLEN0], "example.com"), PKI_ERR_PATH_LENGTH)
