@@ -1028,7 +1028,6 @@ export class PgConnection {
 
   private readonly config: PgConfig
   private readonly password: PgPassword
-  private state: i32 = 0
   private input: u8[]
   private inStart: i32 = 0
   private inEnd: i32 = 0
@@ -1046,14 +1045,15 @@ export class PgConnection {
   groupFailed: boolean = false
   // Whether the open bind opened its group, which `bindCancel` closes again.
   private bindOpened: boolean = false
-  private bindAt: i32 = -1
   // Whether the open bind asks for its result columns in binary.
   private bindBinary: boolean = false
+  private bindAt: i32 = -1
   private paramCountAt: i32 = 0
   private paramCount: i32 = 0
   // The open array parameter's length word, -1 when none is open, and its elements so far.
   private arrayAt: i32 = -1
   private arrayCount: i32 = 0
+  private state: i32 = 0
   private clientNonce: string = ""
   private serverSignature: u8[]
 
