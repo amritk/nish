@@ -210,13 +210,15 @@ x509 Web PKI algorithms and keys: 33 passed, 0 failed, 0 skipped
 PASS  PSS_DER's algorithm composed here is OpenSSL's
 PASS  PSS: SHA-256, salt 32
 PASS  PSS: an absent salt length is 20
-PASS  PSS: SHA-512, salt 64, trailer 1
+PASS  PSS: SHA-512, salt 64
 PASS  PSS: a hash with absent parameters
 PASS  PSS: an MGF1 hash that is not the message's
 PASS  PSS: no [0], so SHA-1 by default
 PASS  PSS: SHA-1 named
 PASS  PSS: a mask that is not MGF1
 PASS  PSS: a negative salt length
+PASS  PSS: trailerField 1, the DEFAULT, written out
+PASS  PSS: a salt length of 20, the DEFAULT, written out
 PASS  PSS: trailerField 2
 PASS  PSS: an element after the trailer
 PASS  PSS: parameters absent
@@ -238,7 +240,7 @@ PASS  rsaEncryption with NULL
 PASS  rsaEncryption with its NULL absent
 PASS  Ed25519 absent
 PASS  Ed25519 with a NULL
-x509 signature algorithms and key types: 31 passed, 0 failed, 0 skipped
+x509 signature algorithms and key types: 33 passed, 0 failed, 0 skipped
 PASS  one extension alone reads
 PASS  an empty extensions SEQUENCE: the sound encoding reads
 PASS  an empty extensions SEQUENCE: refused
@@ -273,6 +275,16 @@ PASS  a dNSName with a NUL: the sound encoding reads
 PASS  a dNSName with a NUL: refused
 PASS  an rfc822Name that is not IA5: the sound encoding reads
 PASS  an rfc822Name that is not IA5: refused
+PASS  an empty dNSName: the sound encoding reads
+PASS  an empty dNSName: refused
+PASS  an otherName that is not an OID and a value: the sound encoding reads
+PASS  an otherName that is not an OID and a value: refused
+PASS  an otherName with a padded type-id: the sound encoding reads
+PASS  an otherName with a padded type-id: refused
+PASS  an otherName with bytes after its value: the sound encoding reads
+PASS  an otherName with bytes after its value: refused
+PASS  a registeredID whose last octet continues: the sound encoding reads
+PASS  a registeredID whose last octet continues: refused
 PASS  a GeneralName tag no form has: the sound encoding reads
 PASS  a GeneralName tag no form has: refused
 PASS  a dNSName tagged constructed: the sound encoding reads
@@ -336,9 +348,30 @@ PASS  an element after excludedSubtrees: refused
 PASS  excludedSubtrees before permittedSubtrees: the sound encoding reads
 PASS  excludedSubtrees before permittedSubtrees: refused
 PASS  a subtree with a minimum is unsupported
+PASS  a subtree with a maximum is unsupported
+PASS  a subtree minimum of 0, the DEFAULT, written out: the sound encoding reads
+PASS  a subtree minimum of 0, the DEFAULT, written out: refused
+PASS  a non-minimal subtree minimum: the sound encoding reads
+PASS  a non-minimal subtree minimum: refused
+PASS  a negative subtree maximum: the sound encoding reads
+PASS  a negative subtree maximum: refused
+PASS  an element after a subtree's base: the sound encoding reads
+PASS  an element after a subtree's base: refused
+PASS  a maximum before a minimum: the sound encoding reads
+PASS  a maximum before a minimum: refused
 PASS  a URI subtree is unsupported
 PASS  a subjectKeyIdentifier that is not an OCTET STRING: the sound encoding reads
 PASS  a subjectKeyIdentifier that is not an OCTET STRING: refused
+PASS  an empty subjectKeyIdentifier: the sound encoding reads
+PASS  an empty subjectKeyIdentifier: refused
+PASS  an empty keyIdentifier: the sound encoding reads
+PASS  an empty keyIdentifier: refused
+PASS  an empty authorityCertIssuer: the sound encoding reads
+PASS  an empty authorityCertIssuer: refused
+PASS  an authorityCertIssuer that is not GeneralNames: the sound encoding reads
+PASS  an authorityCertIssuer that is not GeneralNames: refused
+PASS  a non-minimal authorityCertSerialNumber: the sound encoding reads
+PASS  a non-minimal authorityCertSerialNumber: refused
 PASS  an authorityCertIssuer with no serial: the sound encoding reads
 PASS  an authorityCertIssuer with no serial: refused
 PASS  an authorityCertSerialNumber with no issuer: the sound encoding reads
@@ -347,7 +380,7 @@ PASS  an authorityKeyIdentifier with trailing bytes: the sound encoding reads
 PASS  an authorityKeyIdentifier with trailing bytes: refused
 PASS  an authorityKeyIdentifier that is not a SEQUENCE: the sound encoding reads
 PASS  an authorityKeyIdentifier that is not a SEQUENCE: refused
-x509 extension refusals: 108 passed, 0 failed, 0 skipped
+x509 extension refusals: 139 passed, 0 failed, 0 skipped
 PASS  an issuer with an empty RDN: the sound encoding reads
 PASS  an issuer with an empty RDN: refused
 PASS  an attribute with no value: the sound encoding reads

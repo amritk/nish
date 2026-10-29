@@ -36,7 +36,8 @@
  * validator needs: subjectAltName, basicConstraints, keyUsage, extKeyUsage,
  * nameConstraints and the two key identifiers. A duplicate or malformed one
  * refuses the certificate, and any other critical one sets `unknownCritical`.
- * It parses; `nish/crypto/pki` validates. The mint writes two extensions of its
+ * It parses and does not validate: no module in `std/` does RFC 5280 §6 path
+ * validation yet, so applying these is the caller's. The mint writes two extensions of its
  * own (below).
  *
  * **PEM is RFC 7468's strict grammar**, with standard base64 (`+` and `/`,
@@ -726,7 +727,9 @@ class X509SigAlg {
  * only when the hash is SHA-2 (so `[0]` is present, its DEFAULT being SHA-1),
  * the mask is MGF1 over that same hash, the salt length is 0 to 127 (20 when
  * absent) and the trailer is 1; anything else is `X509_SIG_UNKNOWN`, which a
- * verifier refuses.
+ * verifier refuses. DER leaves a DEFAULT out (X.690 §11.5), so a salt length
+ * of 20 written out, or any trailerField at all (its one value, 1, being the
+ * DEFAULT), is unknown too.
  */
 const x509PssParams = (der: u8[], start: i32, end: i32): X509SigAlg => {
   const out = new X509SigAlg()
@@ -765,21 +768,10 @@ const x509PssParams = (der: u8[], start: i32, end: i32): X509SigAlg => {
       return out
     }
     salt = x509DerSmallInteger(der, value)
-    if (salt < 0) {
+    if (salt < 0 || salt === 20) {
       return out
     }
     at = saltWrap.end
-  }
-  if (x509DerPeek(der, at, end) === 0xa3) {
-    const trailerWrap: X509DerElement | null = x509DerRead(der, at, end)
-    if (trailerWrap === null) {
-      return out
-    }
-    const value: X509DerElement | null = x509DerRead(der, trailerWrap.start, trailerWrap.end)
-    if (value === null || value.end !== trailerWrap.end || x509DerSmallInteger(der, value) !== 1) {
-      return out
-    }
-    at = trailerWrap.end
   }
   if (at !== end) {
     return out
@@ -1468,8 +1460,20 @@ const x509GeneralNameKind = (der: u8[], e: X509DerElement): i32 => {
   if (tag === 0x81 || tag === 0x86) {
     return x509DerIa5Name(der, e) ? X509_GN_OTHER : -1
   }
-  // otherName [0], x400Address [3], ediPartyName [5] and registeredID [8].
-  if (tag === 0xa0 || tag === 0xa3 || tag === 0xa5 || tag === 0x88) {
+  // otherName [0] is `type-id OID, value [0] EXPLICIT ANY`, and registeredID
+  // [8] an IMPLICIT OID.
+  if (tag === 0xa0) {
+    const typeId: X509DerElement | null = x509DerRead(der, e.start, e.end)
+    const value: X509DerElement | null = typeId === null ? null : x509DerExpect(der, typeId.end, e.end, 0xa0)
+    return typeId !== null && x509DerOidSound(der, typeId) && value !== null && value.end === e.end
+      ? X509_GN_OTHER
+      : -1
+  }
+  if (tag === 0x88) {
+    return x509DerOidSound(der, new X509DerElement(X509_TAG_OID, e.at, e.start, e.end)) ? X509_GN_OTHER : -1
+  }
+  // x400Address [3] and ediPartyName [5], whose contents are not read.
+  if (tag === 0xa3 || tag === 0xa5) {
     return X509_GN_OTHER
   }
   return -1
@@ -1478,7 +1482,8 @@ const x509GeneralNameKind = (der: u8[], e: X509DerElement): i32 => {
 /**
  * subjectAltName (RFC 5280 §4.2.1.6), `SEQUENCE SIZE (1..MAX) OF
  * GeneralName`, into `out`: each dNSName and iPAddress (4 or 16 octets) kept,
- * the other forms counted. `false` when it is malformed.
+ * the other forms counted. `false` when it is malformed, or holds an empty
+ * dNSName, which §4.2.1.6 forbids (in a name constraint, empty is every name).
  */
 const x509ReadSubjectAltName = (der: u8[], start: i32, end: i32, out: X509Certificate): boolean => {
   const seq: X509DerElement | null = x509DerExpect(der, start, end, X509_TAG_SEQUENCE)
@@ -1493,7 +1498,7 @@ const x509ReadSubjectAltName = (der: u8[], start: i32, end: i32, out: X509Certif
     }
     const kind: i32 = x509GeneralNameKind(der, name)
     const length: i32 = name.end - name.start
-    if (kind === X509_GN_DNS) {
+    if (kind === X509_GN_DNS && length > 0) {
       out.sanDns.push(x509DerText(der, name))
     } else if (kind === X509_GN_IP && (length === 4 || length === 16)) {
       out.sanIp.push(x509DerSlice(der, name.start, name.end))
@@ -1524,7 +1529,7 @@ const x509DerNonNegative = (der: u8[], e: X509DerElement): i32 => {
   return value
 }
 
-/** Whether `der[at ..)` holds DER's TRUE, `01 01 ff`: a DEFAULT FALSE is left out (X.690 §11.5), so a present BOOLEAN is TRUE. */
+/** Whether `e` is DER's TRUE, `01 01 ff`: a DEFAULT FALSE is left out (X.690 §11.5), so a present BOOLEAN is TRUE. */
 const x509DerIsTrue = (der: u8[], e: X509DerElement): boolean =>
   e.tag === X509_TAG_BOOLEAN && e.end - e.start === 1 && toI32(der[e.start]) === 0xff
 
@@ -1642,14 +1647,20 @@ const x509MaskContiguous = (mask: u8[]): boolean => {
   return true
 }
 
+/** Whether a GeneralSubtree's IMPLICIT `BaseDistance` bound is a minimal, non-negative INTEGER. */
+const x509DerBoundSound = (der: u8[], e: X509DerElement): boolean =>
+  x509DerIntegerMinimal(der, e) && toI32(der[e.start]) < 0x80
+
 /**
  * The GeneralSubtrees filling an IMPLICIT `[0]` or `[1]` of nameConstraints
  * (RFC 5280 §4.2.1.10), `SIZE (1..MAX) OF GeneralSubtree`, pushed onto
  * `into`. Each is `SEQUENCE { base GeneralName, minimum [0] DEFAULT 0, maximum
- * [1] OPTIONAL }`: a subtree with either after its base sets
+ * [1] OPTIONAL }`: a subtree with a minimum other than 0, or a maximum, sets
  * `out.ncUnsupported`, since §4.2.1.10 has the minimum 0 and the maximum
- * absent. `false` when it is malformed, an iPAddress that is not 8 or 32
- * octets or whose mask is not contiguous among the ways.
+ * absent. `false` when it is malformed: a minimum of 0 written out (DER leaves
+ * a DEFAULT out), a bound that is not a minimal non-negative INTEGER, anything
+ * else after the base, or an iPAddress that is not 8 or 32 octets or whose
+ * mask is not contiguous.
  */
 const x509ReadSubtrees = (
   der: u8[],
@@ -1691,8 +1702,29 @@ const x509ReadSubtrees = (
     } else {
       return false
     }
-    if (base.end !== tree.end) {
+    let bound: i32 = base.end
+    if (x509DerPeek(der, bound, tree.end) === 0x80) {
+      const minimum: X509DerElement | null = x509DerRead(der, bound, tree.end)
+      if (
+        minimum === null ||
+        !x509DerBoundSound(der, minimum) ||
+        (minimum.end - minimum.start === 1 && toI32(der[minimum.start]) === 0)
+      ) {
+        return false
+      }
       out.ncUnsupported = true
+      bound = minimum.end
+    }
+    if (x509DerPeek(der, bound, tree.end) === 0x81) {
+      const maximum: X509DerElement | null = x509DerRead(der, bound, tree.end)
+      if (maximum === null || !x509DerBoundSound(der, maximum)) {
+        return false
+      }
+      out.ncUnsupported = true
+      bound = maximum.end
+    }
+    if (bound !== tree.end) {
+      return false
     }
     into.push(subtree)
     at = tree.end
@@ -1729,22 +1761,39 @@ const x509ReadNameConstraints = (der: u8[], start: i32, end: i32, out: X509Certi
   return at === seq.end
 }
 
-/** subjectKeyIdentifier (RFC 5280 §4.2.1.2), one OCTET STRING, into `out.skid`. */
+/** subjectKeyIdentifier (RFC 5280 §4.2.1.2), one OCTET STRING, into `out.skid`; `false` when it is malformed or empty. */
 const x509ReadSubjectKeyId = (der: u8[], start: i32, end: i32, out: X509Certificate): boolean => {
   const id: X509DerElement | null = x509DerExpect(der, start, end, X509_TAG_OCTET_STRING)
-  if (id === null || id.end !== end) {
+  if (id === null || id.end !== end || id.end === id.start) {
     return false
   }
   out.skid = x509DerSlice(der, id.start, id.end)
   return true
 }
 
+/** Whether `e`'s contents are a non-empty run of well-formed GeneralNames. */
+const x509GeneralNamesSound = (der: u8[], e: X509DerElement): boolean => {
+  if (e.end === e.start) {
+    return false
+  }
+  let at: i32 = e.start
+  while (at < e.end) {
+    const name: X509DerElement | null = x509DerRead(der, at, e.end)
+    if (name === null || x509GeneralNameKind(der, name) === -1) {
+      return false
+    }
+    at = name.end
+  }
+  return true
+}
+
 /**
  * authorityKeyIdentifier (RFC 5280 §4.2.1.1), `SEQUENCE { keyIdentifier [0]
  * OPTIONAL, authorityCertIssuer [1] OPTIONAL, authorityCertSerialNumber [2]
- * OPTIONAL }`, its keyIdentifier into `out.akid`. The other two are held to
- * their order and to being both present or both absent, as §4.2.1.1 has them,
- * and not read. `false` when it is malformed.
+ * OPTIONAL }`, its keyIdentifier, which may not be empty, into `out.akid`.
+ * The other two are held to their order, to being both present or both
+ * absent, as §4.2.1.1 has them, to a non-empty GeneralNames and a minimal
+ * INTEGER, and not kept. `false` when it is malformed.
  */
 const x509ReadAuthorityKeyId = (der: u8[], start: i32, end: i32, out: X509Certificate): boolean => {
   const seq: X509DerElement | null = x509DerExpect(der, start, end, X509_TAG_SEQUENCE)
@@ -1754,7 +1803,7 @@ const x509ReadAuthorityKeyId = (der: u8[], start: i32, end: i32, out: X509Certif
   let at: i32 = seq.start
   if (x509DerPeek(der, at, seq.end) === 0x80) {
     const id: X509DerElement | null = x509DerRead(der, at, seq.end)
-    if (id === null) {
+    if (id === null || id.end === id.start) {
       return false
     }
     out.akid = x509DerSlice(der, id.start, id.end)
@@ -1764,7 +1813,12 @@ const x509ReadAuthorityKeyId = (der: u8[], start: i32, end: i32, out: X509Certif
     const issuer: X509DerElement | null = x509DerRead(der, at, seq.end)
     const serial: X509DerElement | null =
       issuer === null ? null : x509DerExpect(der, issuer.end, seq.end, 0x82)
-    if (issuer === null || serial === null) {
+    if (
+      issuer === null ||
+      serial === null ||
+      !x509GeneralNamesSound(der, issuer) ||
+      !x509DerIntegerMinimal(der, serial)
+    ) {
       return false
     }
     at = serial.end
@@ -1903,8 +1957,8 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
  * **A parser, not a validator.** It checks that the bytes are one certificate
  * and what its extensions say. It does not check the signature
  * (`x509VerifySignature` does), that `notBefore` is not after `notAfter` or
- * that either is near any clock, or what the extensions mean for a chain:
- * `nish/crypto/pki` applies them.
+ * that either is near any clock, or what the extensions mean for a chain,
+ * which is a path validator's to apply.
  */
 export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   const total: i32 = toI32(der.length)
@@ -2047,8 +2101,8 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
  * certificate to the next: not the order, not that each is issued by the one
  * after it (issuer against subject, or signature), not validity against a
  * clock, nor what each one's basicConstraints, keyUsage and name constraints
- * allow, nor a trust anchor. RFC 5280 §6's path validation is
- * `nish/crypto/pki`'s, and a chain this answers is no evidence that anyone
+ * allow, nor a trust anchor. Nothing here does RFC 5280 §6's path
+ * validation, and a chain this answers is no evidence that anyone
  * vouches for the leaf.
  */
 export const x509ParseChain = (pem: string): X509Certificate[] | null => {
@@ -2073,8 +2127,8 @@ export const x509ParseChain = (pem: string): X509Certificate[] | null => {
  * as both. `false` for any other algorithm or key, and for a signature that is
  * not a DER ECDSA-Sig-Value. Only the signature: that `cert.issuer` is
  * `issuer.subject` and that the times hold are fields the caller compares, and
- * whether `issuer` may issue at all (`bcCa`, `keyUsage`) is
- * `nish/crypto/pki`'s to decide, so a `true` here is not path validation.
+ * whether `issuer` may issue at all (`bcCa`, `keyUsage`) is a path
+ * validator's to decide, so a `true` here is not path validation.
  */
 export const x509VerifySignature = (cert: X509Certificate, issuer: X509Certificate): boolean => {
   if (!cert.ecdsaSha256 || !issuer.p256) {
