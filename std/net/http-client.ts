@@ -130,6 +130,11 @@ export const HTTP_E_IO: i32 = 15
 /** A proxy setting that is not an `http://` URL with a host. */
 export const HTTP_E_PROXY: i32 = 16
 
+/** A typed zero: a bare literal is an `f64` under `--number-mode f64`. */
+const HTTP_CLIENT_ZERO: i32 = 0
+/** The read size `drain` asks a body for. */
+const HTTP_CLIENT_DRAIN_CHUNK: i32 = 4096
+
 /** The size of the client's read buffer: one netRead fills at most this. */
 const HTTP_CLIENT_READ_BYTES: i32 = 16384
 /** The most header fields a response may carry. */
@@ -242,23 +247,24 @@ export class HttpRequest {
  * `readTimeoutMs` to 0 for an event stream that may be quiet for a long time.
  */
 export class HttpOptions {
+  // Declared widest first, so no byte of a value is padding.
+  /** 256 MiB by default; a body past it fails with `HTTP_E_BODY_TOO_LARGE`. */
+  maxBodyBytes: i64 = 268435456
+  /** A PEM file of the roots an https server's chain must end at; null for the system's. */
+  rootsPemPath: string | null = null
   /** The budget for the lookup and the connect together; 0 or less for none but the total. */
   connectTimeoutMs: i32 = 10000
   /** The longest wait for the server to send or take a byte; 0 or less for none. */
   readTimeoutMs: i32 = 30000
   /** The budget for a whole fetch, its body included; 0 or less for none. */
   totalTimeoutMs: i32 = 0
-  followRedirects: boolean = false
-  crossOriginRedirects: boolean = false
   maxRedirects: i32 = 5
   /** The status line and the header section, each at most this. */
   maxHeaderBytes: i32 = 65536
-  /** 256 MiB by default; a body past it fails with `HTTP_E_BODY_TOO_LARGE`. */
-  maxBodyBytes: i64 = 268435456
+  followRedirects: boolean = false
+  crossOriginRedirects: boolean = false
   /** Read the proxy settings from the environment (see the module comment). */
   useEnvProxy: boolean = true
-  /** A PEM file of the roots an https server's chain must end at; null for the system's. */
-  rootsPemPath: string | null = null
 }
 
 /**
@@ -334,7 +340,7 @@ export class HttpBodyReader {
     let out: u8[] = new Array<u8>(size)
     let len: i32 = 0
     const chunk: u8[] = new Array<u8>(HTTP_CLIENT_READ_BYTES)
-    let n: i32 = this.read(chunk, 0, HTTP_CLIENT_READ_BYTES)
+    let n: i32 = this.read(chunk, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
     while (n > 0) {
       if (n > limit - len) {
         this.client.refuseBody(limit)
@@ -354,7 +360,7 @@ export class HttpBodyReader {
       }
       copyBytes(out, len, chunk, 0, n)
       len += n
-      n = this.read(chunk, 0, HTTP_CLIENT_READ_BYTES)
+      n = this.read(chunk, HTTP_CLIENT_ZERO, HTTP_CLIENT_READ_BYTES)
     }
     if (n < 0) {
       return null
@@ -373,44 +379,42 @@ export class HttpBodyReader {
  * connection, kept between fetches. Not for two threads at once.
  */
 export class HttpClient {
+  // Declared widest first, so no byte of a client is padding.
   options: HttpOptions
-  /** The last failure's `HTTP_E_*` code; `HTTP_E_NONE` after a fetch that answered. */
-  error: i32 = 0
   errorText: string = ""
   /** The proxy settings in use; "" for none. `setProxies` replaces them. */
   httpProxy: string = ""
   httpsProxy: string = ""
   noProxy: string = ""
-
-  // --- the connection -------------------------------------------------------
-  fd: i32 = -1
   /** Where `fd` leads: an origin, or the proxy an http request went through. */
   route: string = ""
   parser: Http1ResponseParser
+  ready: i32[]
+  rbuf: u8[]
+  /** The fetch's end in monotonic nanoseconds; `HTTP_CLIENT_NEVER` for none. */
+  deadline: i64 = 0
+  /** The last failure's `HTTP_E_*` code; `HTTP_E_NONE` after a fetch that answered. */
+  error: i32 = 0
+  fd: i32 = -1
   /** The fd registered in `loop`, and for what. */
   loop: i32 = -1
   watched: i32 = -1
   watchedEvents: i32 = 0
-  ready: i32[]
-  rbuf: u8[]
+  /** Counts responses; a reader reads only while its own is the open one. */
+  generation: i32 = 0
+  /** How the latest response's body failed, `HTTP_E_NONE` while it has not; its reader answers it again. */
+  bodyError: i32 = 0
+  /** Where the latest response's unread body bytes start in `parser`, and how many. */
+  pendOff: i32 = 0
+  pendLen: i32 = 0
   /** Whether `fd` has carried a response before the one in flight. */
   reused: boolean = false
   /** Whether any byte of the response in flight has arrived. */
   gotByte: boolean = false
   /** Whether the failure in hand was the connection going away, which a retry may cure. */
   lost: boolean = false
-
-  // --- the fetch ------------------------------------------------------------
-  /** The fetch's end in monotonic nanoseconds; `HTTP_CLIENT_NEVER` for none. */
-  deadline: i64 = 0
-  /** Counts responses; a reader reads only while its own is the open one. */
-  generation: i32 = 0
-  /** Whether the latest response's body is unread; its bytes in `parser` from `pendOff`. */
+  /** Whether the latest response's body is unread. */
   bodyOpen: boolean = false
-  /** How the latest response's body failed, `HTTP_E_NONE` while it has not; its reader answers it again. */
-  bodyError: i32 = 0
-  pendOff: i32 = 0
-  pendLen: i32 = 0
 
   constructor(options: HttpOptions) {
     this.options = options
@@ -641,7 +645,7 @@ export class HttpClient {
     }
     this.gotByte = false
     this.parser.expect(false, true)
-    if (!this.writeAll(head, 0, toI32(head.length))) {
+    if (!this.writeAll(head, HTTP_CLIENT_ZERO, toI32(head.length))) {
       return false
     }
     let event: i32 = this.head()
@@ -669,11 +673,13 @@ export class HttpClient {
     let hasHost: boolean = false
     let hasProxyAuth: boolean = false
     for (let i: i32 = 0; i < toI32(names.length) && i < toI32(values.length); i += 1) {
-      const lower: string = httpClientLower(names[i])
-      hasHost = hasHost || lower === "host"
-      hasProxyAuth = hasProxyAuth || lower === "proxy-authorization"
-      sendNames.push(names[i])
-      sendValues.push(values[i])
+      // Read before any call, which is where the bounds proof forgets a length.
+      const name: string = names[i]
+      const value: string = values[i]
+      hasHost = hasHost || httpClientNameIs(name, "host")
+      hasProxyAuth = hasProxyAuth || httpClientNameIs(name, "proxy-authorization")
+      sendNames.push(name)
+      sendValues.push(value)
     }
     const hostText: string = httpClientHostText(url.host)
     const authority: string = url.port >= 0 ? `${hostText}:${url.port}` : hostText
@@ -711,10 +717,10 @@ export class HttpClient {
     this.gotByte = false
     this.lost = false
     this.parser.expect(method === "HEAD", false)
-    if (!this.writeAll(head, 0, toI32(head.length))) {
+    if (!this.writeAll(head, HTTP_CLIENT_ZERO, toI32(head.length))) {
       return null
     }
-    if (body !== null && !this.writeAll(body, 0, toI32(body.length))) {
+    if (body !== null && !this.writeAll(body, HTTP_CLIENT_ZERO, toI32(body.length))) {
       return null
     }
     const event: i32 = this.head()
@@ -798,7 +804,7 @@ export class HttpClient {
     }
     if (n > 0) {
       this.gotByte = true
-      this.parser.feed(this.rbuf, 0, n)
+      this.parser.feed(this.rbuf, HTTP_CLIENT_ZERO, n)
       return true
     }
     if (n === 0) {
@@ -984,10 +990,10 @@ export class HttpClient {
    * request; a body too long to be worth reading, or any failure, closes it.
    */
   drain(): void {
-    const sink: u8[] = new Array<u8>(4096)
+    const sink: u8[] = new Array<u8>(HTTP_CLIENT_DRAIN_CHUNK)
     let left: i32 = HTTP_CLIENT_DRAIN_BYTES
     while (this.bodyOpen && left > 0) {
-      const n: i32 = this.readBody(this.generation, sink, 0, 4096)
+      const n: i32 = this.readBody(this.generation, sink, HTTP_CLIENT_ZERO, HTTP_CLIENT_DRAIN_CHUNK)
       if (n <= 0) {
         break
       }
@@ -1129,24 +1135,24 @@ export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): bool
   let start: i32 = 0
   const n: i32 = toI32(noProxy.length)
   while (start <= n) {
-    let end: i32 = noProxy.indexOf(",", start)
+    let end: i32 = toI32(noProxy.indexOf(",", start))
     if (end < 0) {
       end = n
     }
-    const entry: string = httpClientLower(httpClientTrim(noProxy.substring(start, end)))
+    const entry: string = httpClientLower(httpClientTrim(noProxy.slice(start, end)))
     start = end + 1
     if (entry === "*") {
       return true
     }
     let entryHost: string = entry
     let entryPort: i32 = -1
-    const colon: i32 = entry.indexOf(":")
+    const colon: i32 = toI32(entry.indexOf(":"))
     if (entry.startsWith("[")) {
-      const close: i32 = entry.indexOf("]")
+      const close: i32 = toI32(entry.indexOf("]"))
       if (close < 0) {
         continue
       }
-      entryHost = entry.substring(1, close)
+      entryHost = entry.slice(1, close)
       if (close + 1 < toI32(entry.length)) {
         if (entry.charCodeAt(close + 1) !== 58) {
           continue
@@ -1157,7 +1163,7 @@ export const httpNoProxyMatch = (noProxy: string, host: string, port: i32): bool
         }
       }
     } else if (colon >= 0 && entry.indexOf(":", colon + 1) < 0) {
-      entryHost = entry.substring(0, colon)
+      entryHost = entry.slice(0, colon)
       entryPort = httpClientPort(entry.substring(colon + 1, toI32(entry.length)))
       if (entryPort < 0) {
         continue
@@ -1219,6 +1225,24 @@ const httpClientDropField = (names: string[], values: string[], lower: string): 
   }
 }
 
+/** Whether the field name `name` is `lower`, a lower-case name, in any case; it allocates nothing. */
+const httpClientNameIs = (name: string, lower: string): boolean => {
+  const n: i32 = toI32(name.length)
+  if (n !== toI32(lower.length)) {
+    return false
+  }
+  for (let i: i32 = 0; i < n && i < toI32(lower.length); i += 1) {
+    let c: i32 = toI32(name.charCodeAt(i))
+    if (c >= 65 && c <= 90) {
+      c += 32
+    }
+    if (c !== toI32(lower.charCodeAt(i))) {
+      return false
+    }
+  }
+  return true
+}
+
 /** `s` with A to Z lower-cased. */
 const httpClientLower = (s: string): string => {
   const n: i32 = toI32(s.length)
@@ -1231,7 +1255,7 @@ const httpClientLower = (s: string): string => {
     return s
   }
   const out: u8[] = new Array<u8>(n)
-  for (let i: i32 = 0; i < n; i += 1) {
+  for (let i: i32 = 0; i < toI32(out.length) && i < toI32(s.length); i += 1) {
     const c: i32 = toI32(s.charCodeAt(i))
     out[i] = c >= 65 && c <= 90 ? toU8(c + 32) : toU8(c)
   }
@@ -1339,7 +1363,7 @@ const httpClientProxyAuth = (proxy: Url): string | null => {
   const text: string = user + ":" + password
   const n: i32 = toI32(text.length)
   const bytes: u8[] = new Array<u8>(n)
-  for (let i: i32 = 0; i < n; i += 1) {
+  for (let i: i32 = 0; i < toI32(bytes.length) && i < toI32(text.length); i += 1) {
     bytes[i] = toU8(text.charCodeAt(i))
   }
   return "Basic " + base64Encode(bytes)
