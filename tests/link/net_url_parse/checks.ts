@@ -197,14 +197,14 @@ const roundTripFuzz = (base: Url, count: i32): string => {
   let parsedCount: i32 = 0;
   for (let n: i32 = 0; n < count; n += 1) {
     seed = (seed * 75 + 74) % 65537;
-    const parts: string[] = [prefixes[seed % toI32(prefixes.length)]];
+    const pieces: string[] = [prefixes[seed % toI32(prefixes.length)]];
     const len: i32 = seed % 13;
     for (let k: i32 = 0; k < len; k += 1) {
       seed = (seed * 75 + 74) % 65537;
       const at: i32 = seed % toI32(alphabet.length);
-      parts.push(alphabet.slice(at, at + 1));
+      pieces.push(alphabet.slice(at, at + 1));
     }
-    const text: string = parts.join("");
+    const text: string = pieces.join("");
     const answers: string[] = [roundTrip(text), resolved(base, text)];
     for (let k: i32 = 0; k < 2; k += 1) {
       if (answers[k] !== "null") {

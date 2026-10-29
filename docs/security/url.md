@@ -30,7 +30,7 @@ length is the caller's to bound.
 | File | Functions |
 | --- | --- |
 | `std/net/url.ts` | `urlQueryStart`, `percentDecode`, `percentDecodeErrorAt`, `percentDecodePathSegment`; `UrlPathSegments` (`reset`, `next`); `UrlQueryLimits`; `UrlQuery` (`reset`, `next`); `urlQueryFind`; the string forms `urlDecode` and `urlQueryGet`; the helpers `urlCheckWindow`, `urlHexValue`, `urlEscapeAt`, `urlDecodeRun`, `urlKeyEquals`, `urlIsUtf8`, `urlBytesOf`, `urlDecodeString` |
-| `std/net/url.ts` (URL parser) | `Url`; `urlParse`, `urlResolve`, `urlSerialize`, `urlDefaultPort`, `urlOrigin`; the helpers `urlLowerString`, `urlFind`, `urlIsAlpha`, `urlIsDigit`, `urlIsUnreserved`, `urlIsIpv4`, `urlIsIpv6`, `urlLooksNumeric`, `urlReadAuthority`, `urlReadReference`, `urlDotAt`, `urlDotSegment`, `urlSlashFrom`, `urlRemoveDotSegments`, `urlFinish`, `urlMerge` |
+| `std/net/url.ts` (URL parser) | `Url`; `urlParse`, `urlResolve`, `urlSerialize`, `urlDefaultPort`, `urlOrigin`; the helpers `urlLowerString`, `urlFind`, `urlIsAlpha`, `urlIsDigit`, `urlIsUnreserved`, `urlIsIpv4`, `urlIsIpv6`, `urlLooksNumeric`, `urlReadAuthority`, `urlReadReference`, `urlDotAt`, `urlDotSegment`, `urlSlashFrom`, `urlRemoveDotSegments`, `urlFinish`, `urlMerge`, `urlHostText` |
 
 Out of scope: the HTTP/1.1 parser that hands the target over
 (`docs/security/http1.md`); the WHATWG URL Standard's lenient parse (a

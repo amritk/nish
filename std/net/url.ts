@@ -1029,32 +1029,32 @@ export const urlResolve = (base: Url, ref: string): Url | null => {
   if (r === null) {
     return null
   }
-  if (r.scheme !== "") {
-    r.path = urlRemoveDotSegments(r.path)
-    return urlFinish(r)
-  }
-  r.scheme = base.scheme
-  if (r.hasAuthority) {
-    r.path = urlRemoveDotSegments(r.path)
-    return urlFinish(r)
-  }
-  r.hasAuthority = base.hasAuthority
-  r.username = base.username
-  r.password = base.password
-  r.host = base.host
-  r.port = base.port
-  if (r.path === "") {
-    r.path = base.path
-    if (r.query === null) {
-      r.query = base.query
+  if (r.scheme === "") {
+    r.scheme = base.scheme
+    if (!r.hasAuthority) {
+      r.hasAuthority = base.hasAuthority
+      r.username = base.username
+      r.password = base.password
+      r.host = base.host
+      r.port = base.port
+      if (r.path === "") {
+        r.path = base.path
+        if (r.query === null) {
+          r.query = base.query
+        }
+        return urlFinish(r)
+      }
+      if (toI32(r.path.charCodeAt(0)) !== URL_SLASH) {
+        r.path = urlMerge(base, r.path)
+      }
     }
-  } else if (toI32(r.path.charCodeAt(0)) === URL_SLASH) {
-    r.path = urlRemoveDotSegments(r.path)
-  } else {
-    r.path = urlRemoveDotSegments(urlMerge(base, r.path))
   }
+  r.path = urlRemoveDotSegments(r.path)
   return urlFinish(r)
 }
+
+/** `u`'s host as a URL writes it: an IPv6 address, the one host with a `:`, in brackets. */
+const urlHostText = (u: Url): string => (u.host.indexOf(":") >= 0 ? "[" + u.host + "]" : u.host)
 
 /**
  * `u` written back as RFC 3986 §5.3 recomposes it, an IPv6 host in brackets.
@@ -1072,7 +1072,7 @@ export const urlSerialize = (u: Url): string => {
     if (u.username !== "" || u.password !== "") {
       parts.push(u.password !== "" ? u.username + ":" + u.password + "@" : u.username + "@")
     }
-    parts.push(u.host.indexOf(":") >= 0 ? "[" + u.host + "]" : u.host)
+    parts.push(urlHostText(u))
     if (u.port >= 0) {
       parts.push(`:${u.port}`)
     }
@@ -1116,6 +1116,5 @@ export const urlOrigin = (u: Url): string | null => {
     return null
   }
   const port: i32 = u.port >= 0 ? u.port : fallback
-  const host: string = u.host.indexOf(":") >= 0 ? "[" + u.host + "]" : u.host
-  return `${u.scheme}://${host}:${port}`
+  return `${u.scheme}://${urlHostText(u)}:${port}`
 }
