@@ -55,7 +55,7 @@ through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
-| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column` |
+| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column`; `stringifyYaml` in `nish/yaml-write` to write a JSON value as YAML |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
@@ -836,6 +836,54 @@ and followed by paths; on by default), `keepComments` (keep every comment's
 range, for `commentCount` and `comment`) and `firstDocumentOnly` (warn
 `MULTIPLE_DOCUMENTS` and stop after the first). Tabs are never indentation, as
 YAML says.
+
+### Writing YAML
+
+`stringifyYaml(doc, v)` from `nish/yaml-write` writes a `nish/json-value`
+value as YAML that `parseYaml` reads back as the same tree: block style with a
+two-space indent, `{}` and `[]` for an empty object and array, `null`, `true`
+and `false` plain, a number as its JSON text, and a trailing newline. It
+answers `""` for a handle that names no value and for a tree deeper than
+`JSON_WRITER_MAX_DEPTH`, the limit `stringify` keeps.
+
+```ts nish:ok
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+import { parseYaml } from "nish/yaml";
+import { stringifyYaml } from "nish/yaml-write";
+
+export const main = (): i32 => {
+  const doc = new JsonDocument(new JsonLimits());
+  const root = doc.parseText(`{"name":"nish","version":"0.24","tags":["yaml","no"],"empty":{}}`);
+  const yaml = stringifyYaml(doc, root);
+  console.log(yaml);
+  return parseYaml(yaml).errorCount();
+};
+```
+
+It prints:
+
+```yaml
+name: nish
+version: "0.24"
+tags:
+  - yaml
+  - "no"
+empty: {}
+```
+
+**Which strings are quoted.** A string is written plain unless YAML would read
+it as something else, and then double-quoted: an empty string; `~` and the
+words `null`, `true`, `false`, `yes`, `no`, `on`, `off`, `y` and `n` in any
+case; anything that starts like a number (an optional sign, then a digit or
+`.` and a digit) or is `.inf` or `.nan`, signed or not, in any case; a string
+that starts with an indicator (`@`, `` ` ``, `\`, `*`, `&`, `!`, `|`, `>`,
+`%`, `'`, `"`, `#`, `,`, `[`, `]`, `{`, `}`), with `-`, `?` or `:` followed
+by a space or nothing, or with `---` or `...`; a string with a leading or
+trailing space, a trailing `:`, or a `: ` or ` #` inside; a key `<<`, which
+would be a merge key; and a string holding a control character, a line break,
+U+2028, U+2029, U+FEFF, U+FFFE or U+FFFF, which are escaped. A key longer than
+1024 bytes as written is an explicit key, `? key` and then `: value`.
 
 ## `nish/pair`
 
