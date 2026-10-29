@@ -18,6 +18,7 @@
  * `waitPid`, `signalFd`, `readSignal`, the `nish:net` set) throw here without
  * asking any host.
  */
+import { panicSlice, toIndex } from "./checks.mjs";
 
 /** What every member of the default host throws: no adapter has been imported. */
 export class NishNoHost extends Error {
@@ -86,6 +87,18 @@ export function writeError(s) {
   host.writeErr(s);
 }
 
+/**
+ * `writeBytes(bytes, off, len)`: the range checked as the compiled call checks
+ * it, `0 <= off <= off + len <= bytes.length`, through the slice panic, then
+ * the host's write of those bytes to stdout.
+ */
+export function writeBytes(bytes, off, len) {
+  const from = toIndex(off);
+  const to = from + toIndex(len);
+  if (!(from >= 0 && from <= to && to <= bytes.length)) panicSlice(from, to, bytes.length);
+  return host.call("writeBytes", [bytes, from, to]);
+}
+
 /** `panic(message)`: the message on stderr, then exit 1. */
 export function panic(message) {
   host.writeErr(`${message}\n`);
@@ -129,6 +142,18 @@ export function writeFileSync(path, data) {
 
 export function appendFileSync(path, data) {
   return host.call("appendFileSync", [path, data]);
+}
+
+export function writeFileBytesSync(path, bytes) {
+  return host.call("writeFileBytesSync", [path, bytes]);
+}
+
+export function renameSync(from, to) {
+  return host.call("renameSync", [from, to]);
+}
+
+export function unlinkSync(path) {
+  return host.call("unlinkSync", [path]);
 }
 
 export function mkdirSync(path) {

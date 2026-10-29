@@ -73,6 +73,61 @@ function appendFileSync(path, data) {
 }
 
 /**
+ * The negative errno a failed `fs` call names, as `runtime-os.c` answers it.
+ * Node names the errno by its code; one it gives no number for, such as the
+ * `ERR_INVALID_ARG_VALUE` a path holding a NUL throws, is -22 (`EINVAL`), the
+ * runtime's answer to that path.
+ */
+function negErrno(e) {
+  return -(os.constants.errno[e.code] ?? 22);
+}
+
+/** `renameSync(from, to)`: 0, or a negative errno (-18 across file systems). */
+function renameSync(from, to) {
+  try {
+    fs.renameSync(from, to);
+    return 0;
+  } catch (e) {
+    return negErrno(e);
+  }
+}
+
+/** `unlinkSync(path)`: 0, or a negative errno; a directory is refused, not removed. */
+function unlinkSync(path) {
+  try {
+    fs.unlinkSync(path);
+    return 0;
+  } catch (e) {
+    return negErrno(e);
+  }
+}
+
+/** `writeFileBytesSync(path, bytes)`: the byte count, or a negative errno; mode 0644 and `WRITE_FLAGS`. */
+function writeFileBytesSync(path, bytes) {
+  try {
+    fs.writeFileSync(path, Uint8Array.from(bytes), { flag: WRITE_FLAGS, mode: 0o644 });
+    return bytes.length;
+  } catch (e) {
+    return negErrno(e);
+  }
+}
+
+/**
+ * `writeBytes`'s write, after the core checked the range `[from, to)`: every
+ * byte to stdout, then the count, or a negative errno. `fs.writeSync` may
+ * write less than it was given, so it is asked again for the rest.
+ */
+function writeBytes(bytes, from, to) {
+  const buf = Uint8Array.from(bytes.slice(from, to));
+  try {
+    for (let at = 0; at < buf.length; ) at += fs.writeSync(1, buf, at, buf.length - at);
+    return buf.length;
+  } catch (e) {
+    return negErrno(e);
+  }
+}
+
+/**
  * `mkdirSync(path)` (WP14 D4): one directory, not recursive, answering whether
  * a directory is there afterwards. Node throws where the runtime answers
  * false, and `EEXIST` on a plain file is a failure here as it is there, so the
@@ -238,7 +293,7 @@ function kill(pid, sig) {
     process.kill(pid, sig);
     return 0;
   } catch (e) {
-    return -(os.constants.errno[e.code] ?? 22);
+    return negErrno(e);
   }
 }
 
@@ -344,6 +399,10 @@ const CALLS = {
   readFileBytesSync,
   writeFileSync,
   appendFileSync,
+  writeFileBytesSync,
+  renameSync,
+  unlinkSync,
+  writeBytes,
   mkdirSync,
   isDirectorySync,
   readdirSync,

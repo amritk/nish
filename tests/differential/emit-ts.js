@@ -153,6 +153,8 @@ export const HOST = [
     /\\uD[89AB][0-9A-F]{2}(?!\\uD[C-F])|(?<!\\uD[89AB][0-9A-F]{2})\\uD[C-F][0-9A-F]{2}/i,
     "source",
   ],
+  // A byte string that is not UTF-8 keeps its bytes natively and decodes to U+FFFD's in Node.
+  ["fromBytes", /\butf8FromBytes\b/, "source"],
 ]
 
 /**

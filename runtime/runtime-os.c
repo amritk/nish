@@ -195,6 +195,62 @@ static void nish_put_file(const nish_str *path, const nish_str *data, int flags)
 void nish_write_file(const nish_str *path, const nish_str *data) { nish_put_file(path, data, O_TRUNC); }
 void nish_append_file(const nish_str *path, const nish_str *data) { nish_put_file(path, data, O_APPEND); }
 
+/* ---- Replacing and removing files: `renameSync`, `unlinkSync` and
+   `writeFileBytesSync`. Unlike the writers above, none exits: each answers 0
+   (or the bytes written) on success and a negative errno otherwise, so a
+   program that writes a file beside its target and renames it over the
+   target owns its own diagnostic. A path holding a NUL answers -EINVAL before
+   any system call, rather than reaching the file its prefix names
+   (docs/security/runtime.md, RT-3). */
+
+/* `renameSync(from, to)`: rename(2). On one file system it replaces `to`
+   atomically, so a reader sees the old file or the new one and never a part;
+   across two it answers -EXDEV and moves nothing, since a copy and a delete
+   would not be atomic. A link at `from` is moved as a link, not followed. */
+int32_t nish_rename(const nish_str *from, const nish_str *to) {
+  const char *f = nish_cpath(from), *t = nish_cpath(to);
+  if (f != from->data || t != to->data) return -EINVAL;
+  return rename(f, t) == 0 ? 0 : -errno;
+}
+
+/* `unlinkSync(path)`: unlink(2). A directory is refused with whatever the
+   kernel answers (-EISDIR on Linux, -EPERM elsewhere) and is never handed to
+   rmdir. A link is removed, not the file it names. */
+int32_t nish_unlink(const nish_str *path) {
+  const char *p = nish_cpath(path);
+  if (p != path->data) return -EINVAL;
+  return unlink(p) == 0 ? 0 : -errno;
+}
+
+/* `writeFileBytesSync(path, bytes)`: every element of a `u8[]` to the file,
+   opened as `writeFileSync` opens it (`O_NOFOLLOW`, `O_CLOEXEC`, `O_TRUNC`,
+   0644 before the umask) and written through the same loop, a short write
+   finished and `EINTR` retried. It answers the length written or the negative
+   errno of the `open` or `write` that failed (-EIO for a write that wrote
+   nothing); a failed write leaves the file truncated to what got out. */
+int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
+  const char *p = nish_cpath(path);
+  if (p != path->data) return -EINVAL;
+  if (bytes->len > NISH_LENGTH_MAX) return -EFBIG;
+  int fd = open(p, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0644);
+  if (fd < 0) return -errno;
+  int32_t r = (int32_t)bytes->len;
+  for (uint64_t done = 0; done < bytes->len;) {
+    ssize_t n = write(fd, bytes->data + done, bytes->len - done);
+    if (n > 0) {
+      done += n;
+    } else if (n == 0) {
+      r = -EIO;
+      break;
+    } else if (errno != EINTR) {
+      r = -errno;
+      break;
+    }
+  }
+  close(fd);
+  return r;
+}
+
 /* ---- Directories and subprocesses (WP14 D4): what a driver needs to create
    its own output directory and shell out for `--link`. Both answer a value
    instead of exiting, as `nish_read_file_or_null` does — there are no

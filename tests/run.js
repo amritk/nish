@@ -10104,6 +10104,60 @@ if (!only || "str_from_bytes".includes(only)) {
   }
 }
 
+// The byte round trip (`tests/cases/io_write_bytes.ts`): stdout and the files
+// it writes are compared with `io_write_bytes.bin`, all 256 byte values, byte
+// for byte, which a `.out` (read as UTF-8, trimmed) cannot do. Natively both
+// routes are exact: `writeBytes` and `writeFileBytesSync` from a `u8[]`, and
+// `write` and `writeFileSync` of the `String.fromBytes` string, whose
+// `{len, bytes}` is written as it is. Under `runtime/nish.mjs` the `u8[]`
+// route is exact too, and the string route is the documented divergence: each
+// byte one UTF-16 unit, written as UTF-8, so a byte above 127 leaves as two.
+// (`--emit-ts` decodes the bytes as UTF-8 instead, which the emit-ts
+// differential files under its `fromBytes` host row.)
+if (!only || "io_write_bytes".includes(only)) {
+  const src = path.join(casesDir, "io_write_bytes.ts")
+  const bin = fs.readFileSync(path.join(casesDir, "io_write_bytes.bin"))
+  const arrayFile = path.join(root, "build", "test", "io_write_bytes_array.bin")
+  const stringFile = path.join(root, "build", "test", "io_write_bytes_string.bin")
+  fs.mkdirSync(path.dirname(arrayFile), { recursive: true })
+  const readOr = (file) => (fs.existsSync(file) ? fs.readFileSync(file) : Buffer.alloc(0))
+  const dir = path.join(buildDir, "io_write_bytes.d")
+  const exe = path.join(dir, "io_write_bytes")
+  fs.mkdirSync(dir, { recursive: true })
+  fs.rmSync(arrayFile, { force: true })
+  fs.rmSync(stringFile, { force: true })
+  const built = spawnSync(NISH, [src, "-o", dir + path.sep, "--link", exe], { cwd: root, encoding: "utf8" })
+  if (built.status === 0) {
+    const run = spawnSync(exe, [], { cwd: root })
+    check(
+      "io_write_bytes: natively, stdout is the 256 bytes from writeBytes, then the same from write(String.fromBytes)",
+      run.status === 0 && Buffer.concat([bin, bin]).equals(run.stdout),
+      `exit ${run.status}, ${run.stdout.length} bytes\nstderr: ${run.stderr}`
+    )
+    check(
+      "io_write_bytes: natively, writeFileBytesSync and writeFileSync(String.fromBytes) write the 256 bytes as they are",
+      readOr(arrayFile).equals(bin) && readOr(stringFile).equals(bin),
+      `array file ${readOr(arrayFile).length} bytes, string file ${readOr(stringFile).length} bytes`
+    )
+  } else {
+    check("io_write_bytes: links natively", false, built.stderr)
+  }
+  fs.rmSync(arrayFile, { force: true })
+  fs.rmSync(stringFile, { force: true })
+  const node = runUnderPrelude(src, [], "main", { encoding: "buffer" })
+  const units = Buffer.from(bin.toString("latin1"), "utf8")
+  check(
+    "io_write_bytes: under Node, writeBytes sends the 256 bytes as they are and write(String.fromBytes) their UTF-8",
+    node.status === 0 && Buffer.concat([bin, units]).equals(node.stdout),
+    `exit ${node.status}, ${node.stdout.length} bytes\nstderr: ${node.stderr}`
+  )
+  check(
+    "io_write_bytes: under Node, writeFileBytesSync writes the 256 bytes as they are and writeFileSync their UTF-8",
+    readOr(arrayFile).equals(bin) && readOr(stringFile).equals(units),
+    `array file ${readOr(arrayFile).length} bytes, string file ${readOr(stringFile).length} bytes`
+  )
+}
+
 // The compression cross-check: `tests/link/std_compress_node` (the link loop
 // holds its expected.out, Nish decompressing what Node's zlib wrote) is run
 // again with `--emit`, and every stream it prints, each input at each level in

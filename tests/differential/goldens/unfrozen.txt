@@ -115,6 +115,7 @@ cases/caps_ffi added after R6: no rewriter to freeze it with
 cases/caps_ffi_handle added after R6: no rewriter to freeze it with
 cases/caps_fnarg added after R6: no rewriter to freeze it with
 cases/caps_fs_read added after R6: no rewriter to freeze it with
+cases/caps_fs_replace added after R6: no rewriter to freeze it with
 cases/caps_fs_write added after R6: no rewriter to freeze it with
 cases/caps_generic added after R6: no rewriter to freeze it with
 cases/caps_host added after R6: no rewriter to freeze it with
@@ -176,6 +177,10 @@ cases/fnarg_generic added after R6: no rewriter to freeze it with
 cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
 cases/fnarg_named added after R6: no rewriter to freeze it with
 cases/interop_rng_loop added after R6: no rewriter to freeze it with
+cases/io_rename added after R6: no rewriter to freeze it with
+cases/io_unlink added after R6: no rewriter to freeze it with
+cases/io_write_bytes added after R6: no rewriter to freeze it with
+cases/io_write_file_bytes added after R6: no rewriter to freeze it with
 cases/leading_zero_legal added after R6: no rewriter to freeze it with
 cases/literal_spellings added after R6: no rewriter to freeze it with
 cases/map_annotated_new added after R6: no rewriter to freeze it with

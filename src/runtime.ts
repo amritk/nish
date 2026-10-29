@@ -438,6 +438,28 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `renameSync`, `unlinkSync` and `writeFileBytesSync` (runtime-os.c) and
+    // `writeBytes` (runtime.c): an errno for an answer rather than an exit,
+    // but not `willreturn` for the reason above (an `open` or a `write` to a
+    // FIFO or a full pipe waits). Each only reads its array.
+    this.add(
+      mayNotReturn("nish_rename", `declare noundef i32 @nish_rename(${STR_NOCAP}, ${STR_NOCAP})`, EFFECT_WRITE)
+    )
+    this.add(mayNotReturn("nish_unlink", `declare noundef i32 @nish_unlink(${STR_NOCAP})`, EFFECT_WRITE))
+    this.add(
+      mayNotReturn(
+        "nish_write_file_bytes",
+        `declare noundef i32 @nish_write_file_bytes(${STR_NOCAP}, ${NET_BUFFER} readonly)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_write_bytes",
+        `declare noundef i32 @nish_write_bytes(${NET_BUFFER} readonly, i64 noundef, i64 noundef)`,
+        EFFECT_WRITE
+      )
+    )
     // WP7: process.argv and string-to-number parsing.
     // Called once by the entry wrapper: mallocs the array and copies every argument.
     this.add(

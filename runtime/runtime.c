@@ -160,7 +160,7 @@ void nish_fatal_exit(void) {
    short write and retries one a signal interrupts (docs/security/runtime.md,
    RT-11); it is unbuffered, so the message leaves before `_exit`. It used
    `fputs`, whose libc loop finishes a short write but gives up on `EINTR`. */
-static void nish_write_all(int fd, const char *p, uint64_t n);
+static int32_t nish_write_all(int fd, const char *p, uint64_t n);
 static NISH_COLD void nish_die(const char *msg) {
   nish_panic_claim();
   nish_write_all(2, msg, strlen(msg));
@@ -468,14 +468,16 @@ int64_t nish_str_index_of(const nish_str *s, const nish_str *sub) { return nish_
    arithmetic and out-of-memory panics (`nish_die`) are written here. The
    index and slice panics and the file and entropy failures use `dprintf`, and
    runtime-parallel.c's out of memory one `write`: neither retries `EINTR`. */
-static void nish_write_all(int fd, const char *p, uint64_t n) {
+static int32_t nish_write_all(int fd, const char *p, uint64_t n) {
   uint64_t done = 0;
   ssize_t k;
   while (done < n) {
     k = write(fd, p + done, n - done);
     if (k > 0) done += k;
-    else if (k == 0 || errno != EINTR) break;
+    else if (k == 0) return -EIO;
+    else if (errno != EINTR) return -errno;
   }
+  return 0;
 }
 void nish_write(const nish_str *s, int32_t fd, _Bool newline) {
   nish_write_all(fd, s->data, s->len);
@@ -1342,6 +1344,18 @@ double nish_random(void) {
 
 /* ---- Arrays: %struct.nish_array = type { i64, i64, i8* }, cold paths */
 typedef struct nish_array { uint64_t len; uint64_t cap; char *data; } nish_array;
+
+/* `writeBytes(bytes, off, len)` (nish:io): the bytes `[off, off + len)` of a
+   `u8[]` on stdout, written as `write` writes a string, through
+   `nish_write_all`'s loop, so a short write is finished and `EINTR` retried.
+   The emitter has range-checked `off` and `len` against `bytes->len`
+   (`emitNetCall`). It answers `len`, every byte out, or the negative errno of
+   the write that failed (`-EIO` for one that wrote nothing), and never exits:
+   how much of a failed call reached the descriptor is not said. */
+int32_t nish_write_bytes(const nish_array *bytes, int64_t off, int64_t len) {
+  int32_t r = nish_write_all(1, bytes->data + off, (uint64_t)len);
+  return r < 0 ? r : (int32_t)len;
+}
 
 /* Host entry (WP8): `len` uninitialised elements, len == cap. A `len` past
    `NISH_ARRAY_MAX` fails as an allocation does, which also keeps
