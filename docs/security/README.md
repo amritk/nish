@@ -70,6 +70,7 @@ the record that found it. The notes below the table name each such finding.
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
+| DNS message codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²² |
 | **Total** ⁸ | | | **3 / 10 / 30 / 118** | **0 / 0 / 0 / 10** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
@@ -231,6 +232,10 @@ the record that found it. The notes below the table name each such finding.
     are not counted: the size cap and file-type check that a descriptor-based
     builtin would tighten, and the macOS Keychain the loader does not read.
     PKI-R1 to PKI-R5 are properties checked and found to hold.
+22. DNS-1 to DNS-4 (Low) are accepted, with the reason in their record, and
+    are not counted: DNS-1 to DNS-3 are the trust a stub resolver places in
+    its recursive server, as glibc's and musl's do, and DNS-4 is the second
+    literal reader a module that compiles on `wasm32` needs.
 
 ## Fuzzed
 
