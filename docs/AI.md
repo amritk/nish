@@ -2194,6 +2194,10 @@ wait for it to be writable, then `connectResult(fd)` is 0 or the failure. Buffer
 are `u8[]` only; an address is 18 bytes of one (IPv4 as `::ffff:a.b.c.d`, then
 the port big-endian); hosts are numeric literals; to reach a name, resolve it first with
 `nish/net/dns` (`DnsClient` on your loop, or the blocking `resolveHost`).
+To fetch a URL from a CLI, skip all of this: `nish/net/http-client`'s
+`httpFetch(new HttpRequest("GET", url), new HttpOptions())` blocks until the
+response's head is in and answers it with `body.readAll(limit)`, or null on a
+failure (an `HttpClient` keeps the connection and says why in `error`).
 `netRead` / `netWrite` panic on a range outside the buffer.
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
 `SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux

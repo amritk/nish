@@ -2058,6 +2058,12 @@ writes a request's head and `Http1ResponseParser` reads the response, fed
 any slice, refusing every response-smuggling shape RFC 9112 names; [HTTP client](http-client.md)
 shows it.
 
+`nish/net/http-client` is a blocking client for command-line programs:
+`httpFetch(request, options)` answers the response with a reader for its
+body, and an `HttpClient` keeps a connection alive between fetches. Every
+wait has a timeout, every body a cap, and redirects and proxies are followed
+only as `HttpOptions` says; [HTTP client](http-client.md) shows it.
+
 `nish/net/postgres` is a PostgreSQL client that leaves the socket to your
 loop: prepared statements, pipelined groups, SCRAM-SHA-256, and rows read in
 place from the receive buffer; [PostgreSQL](postgres.md) shows it.
