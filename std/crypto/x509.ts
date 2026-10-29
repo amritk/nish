@@ -614,9 +614,6 @@ const x509OidEd25519 = (): u8[] => x509DerOidContents([1, 3, 101, 112])
 /** The NIST hash arc 2.16.840.1.101.3.4.2.`n` (RFC 4055 §2.1): 1 SHA-256, 2 SHA-384, 3 SHA-512. */
 const x509OidNistHash = (n: i32): u8[] => x509DerOidContents([2, 16, 840, 1, 101, 3, 4, 2, n])
 
-/** The certificate extension arc 2.5.29.`n` (RFC 5280 §4.2.1). */
-const x509OidCe = (n: i32): u8[] => x509DerOidContents([2, 5, 29, n])
-
 // The extensions decoded, by their arc under 2.5.29 (RFC 5280 §4.2.1).
 const X509_CE_SUBJECT_KEY_ID: i32 = 14
 const X509_CE_KEY_USAGE: i32 = 15
@@ -1410,7 +1407,11 @@ export const x509NameIsPrefix = (base: u8[], name: u8[]): boolean => {
   while (atB < b.end) {
     const rdnB: X509DerElement | null = x509DerRead(base, atB, b.end)
     const rdnN: X509DerElement | null = x509DerRead(name, atN, n.end)
-    if (rdnB === null || rdnN === null || !x509BytesEqual(x509DerWhole(base, rdnB), x509DerWhole(name, rdnN))) {
+    if (
+      rdnB === null ||
+      rdnN === null ||
+      !x509BytesEqual(x509DerWhole(base, rdnB), x509DerWhole(name, rdnN))
+    ) {
       return false
     }
     atB = rdnB.end
@@ -1761,7 +1762,8 @@ const x509ReadAuthorityKeyId = (der: u8[], start: i32, end: i32, out: X509Certif
   }
   if (x509DerPeek(der, at, seq.end) === 0xa1) {
     const issuer: X509DerElement | null = x509DerRead(der, at, seq.end)
-    const serial: X509DerElement | null = issuer === null ? null : x509DerExpect(der, issuer.end, seq.end, 0x82)
+    const serial: X509DerElement | null =
+      issuer === null ? null : x509DerExpect(der, issuer.end, seq.end, 0x82)
     if (issuer === null || serial === null) {
       return false
     }
