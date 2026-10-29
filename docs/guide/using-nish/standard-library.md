@@ -1592,6 +1592,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x25519` | X25519 key exchange |
 | `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
+| `nish/crypto/p384` | P-384 ECDSA verification only: `p384Verify(pub, digest, sig)` and `p384VerifySha384(pub, msg, sig)`, with a 97-byte uncompressed key and a 96-byte `r \|\| s` signature; every input is public, so it runs in variable time and has no signing |
 | `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
@@ -1645,9 +1646,9 @@ export const main = (): i32 => {
 A function that returns `u8[] | null` answers `null` for an input it refuses —
 a bad key length, a tag that does not verify — so narrow the result before you
 use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
-`x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1` and
-`ed25519`, which came later, has been through a security audit (`ed25519` is
-recorded as a change after its area's audit); the records are in
+`x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1`, and
+`ed25519` and `p384`, which came later, has been through a security audit (`ed25519` and `p384` are
+recorded as changes after their area's audit); the records are in
 [docs/security/](../../security/README.md).
 
 ## `nish/net`
