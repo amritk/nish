@@ -15,11 +15,12 @@ module covers answers what its file expects: 2,116 cases, 1,010 valid and
 1,106 invalid, none "acceptable". The two RFC 6979 §A.2.6 SHA-384 signatures
 verify. A key or signature of the wrong length, a key prefix other than 0x04,
 a coordinate of p or more, a key off the curve, `r` or `s` outside [1, n) and
-a sum that is the identity each answer `false`, never a panic, and each has a
-test that fails when its check is removed (see [Refusals](#refusals)). Nothing
-was found to fix or left open. Two properties are recorded rather than
-changed: high `s` is accepted (P384-1) and the module runs in variable time
-(P384-2), both because every input is public.
+a sum that is the identity each answer `false`, never a panic. Every check but
+five has a test that fails when that check alone is removed; the five are
+each backed by another check, and the record says which (see
+[Refusals](#refusals)). Nothing was found to fix or left open. Two properties
+are recorded rather than changed: high `s` is accepted (P384-1) and the module
+runs in variable time (P384-2), both because every input is public.
 
 ## Scope
 
@@ -116,19 +117,22 @@ restored. "Caught" names the test that failed.
 | x < p | `p384DecodePoint` | "and with x = p is refused" |
 | y < p | `p384DecodePoint` | "and with y = 1 + p is refused" |
 | on the curve | `p384DecodePoint` | "(Gx, Gy + 1), off the curve, is refused" |
-| `r`, `s` < n | `p384ScalarInRange` | "(r, 1 + n) is refused", "s = n is refused", and Wycheproof cases |
-| `s` in [1, n) | `p384Verify` (second call) | "s = n is refused" and Wycheproof cases |
+| `r`, `s` < n | `p384ScalarInRange` | "(r, 1 + n) is refused" and Wycheproof cases |
+| `s` < n | `p384Verify` (second call) | "(r, 1 + n) is refused" and Wycheproof cases |
 | x reduced mod n | `p384Verify` | 15 Wycheproof cases |
 | the identity, with `r` ≠ 0 | `p384Verify`, `p384ScalarInRange` | "r = 0 over the digest 0 is refused" and Wycheproof cases |
 
-Four checks are each backed by another, so removing one alone changes no
+Five checks are each backed by another, so removing one alone changes no
 answer; they are kept as defence in depth and recorded here rather than
 claimed as tested on their own:
 
 - **`r` ≠ 0 and `s` ≠ 0.** With `s` = 0, Fermat's inverse is 0, so u1 = u2 = 0
-  and the sum is the identity, which is refused. With `r` = 0, no affine x
-  mod n of a non-identity sum equals 0 for the keys tried. Removed together
-  with the identity check, "r = 0 over the digest 0 is refused" fails.
+  and the sum is the identity, which is refused. The same holds for `s` = n,
+  which is 0 mod n, so "s = n is refused" is backed by the identity check and
+  does not pin `s` < n; "(r, 1 + n) is refused" does, since 1 + n is 1 mod n
+  and (r, 1) verifies. With `r` = 0, no affine x mod n of a non-identity sum
+  equals 0 for the keys tried. Removed together with the identity check,
+  "r = 0 over the digest 0 is refused" fails.
 - **`r` < n alone.** The final compare is against an x reduced below n, which
   no `r` of n or more equals.
 - **The identity check alone.** The identity's Z is 0, its inverse is 0, so
