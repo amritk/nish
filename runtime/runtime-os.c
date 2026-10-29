@@ -178,18 +178,23 @@ nish_str *nish_read_file(const nish_str *path) {
 
    `O_CLOEXEC` for the reason the read has it (RT-12), and `EINTR` is retried
    as the read retries it (RT-13): a write cut short is finished, and one that
-   fails is `cannot write`, never a silently short file. */
+   fails is `cannot write`, never a silently short file.
+
+   The loop is `nish_put_all`, which `writeFileBytesSync` and `writeBytes`
+   share: all `n` bytes of `p` to `fd`, answering 0 or the negative errno of
+   the write that failed (-EIO for one that wrote nothing). */
+static int32_t nish_put_all(int fd, const char *p, uint64_t n) {
+  for (uint64_t done = 0; done < n;) {
+    ssize_t k = write(fd, p + done, n - done);
+    if (k > 0) done += k;
+    else if (k == 0) return -EIO;
+    else if (errno != EINTR) return -errno;
+  }
+  return 0;
+}
 static void nish_put_file(const nish_str *path, const nish_str *data, int flags) {
   int fd = open(nish_cpath(path), O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC | flags, 0644);
-  if (fd < 0) nish_io_fail("write ", path);
-  for (uint64_t done = 0; done < data->len;) {
-    ssize_t n = write(fd, data->data + done, data->len - done);
-    if (n > 0) {
-      done += n;
-    } else if (n == 0 || errno != EINTR) {
-      nish_io_fail("write ", path);
-    }
-  }
+  if (fd < 0 || nish_put_all(fd, data->data, data->len) < 0) nish_io_fail("write ", path);
   close(fd);
 }
 void nish_write_file(const nish_str *path, const nish_str *data) { nish_put_file(path, data, O_TRUNC); }
@@ -224,7 +229,7 @@ int32_t nish_unlink(const nish_str *path) {
 
 /* `writeFileBytesSync(path, bytes)`: every element of a `u8[]` to the file,
    opened as `writeFileSync` opens it (`O_NOFOLLOW`, `O_CLOEXEC`, `O_TRUNC`,
-   0644 before the umask) and written through the same loop, a short write
+   0644 before the umask) and written through `nish_put_all`, a short write
    finished and `EINTR` retried. It answers the length written or the negative
    errno of the `open` or `write` that failed (-EIO for a write that wrote
    nothing); a failed write leaves the file truncated to what got out. */
@@ -234,21 +239,26 @@ int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
   if (bytes->len > NISH_LENGTH_MAX) return -EFBIG;
   int fd = open(p, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0644);
   if (fd < 0) return -errno;
-  int32_t r = (int32_t)bytes->len;
-  for (uint64_t done = 0; done < bytes->len;) {
-    ssize_t n = write(fd, bytes->data + done, bytes->len - done);
-    if (n > 0) {
-      done += n;
-    } else if (n == 0) {
-      r = -EIO;
-      break;
-    } else if (errno != EINTR) {
-      r = -errno;
-      break;
-    }
-  }
-  close(fd);
-  return r;
+  int32_t r = nish_put_all(fd, bytes->data, bytes->len);
+  /* A write NFS or a quota refuses can surface only at `close`, and the file
+     is then short: an answer of the full length would let the caller rename
+     it over the one it replaces. */
+  if (close(fd) != 0 && r == 0 && errno != EINTR) r = -errno;
+  return r < 0 ? r : (int32_t)bytes->len;
+}
+
+/* `writeBytes(bytes, off, len)` (nish:io): the bytes `[off, off + len)` of a
+   `u8[]` on stdout, through `nish_put_all`, so a short write is finished and `EINTR` retried. The
+   emitter has range-checked `off` and `len` against `bytes->len`
+   (`emitNetCall`). It answers `len`, every byte out, or the negative errno of
+   the write that failed (`-EIO` for one that wrote nothing), and never exits:
+   how much of a failed call reached the descriptor is not said. A pipe whose
+   reader has gone raises SIGPIPE, as it does for `write`. */
+int32_t nish_write_bytes(const nish_array *bytes, int64_t off, int64_t len) {
+  /* An empty array's data may be NULL, and NULL + 0 is undefined. */
+  if (len == 0) return 0;
+  int32_t r = nish_put_all(1, bytes->data + off, (uint64_t)len);
+  return r < 0 ? r : (int32_t)len;
 }
 
 /* ---- Directories and subprocesses (WP14 D4): what a driver needs to create

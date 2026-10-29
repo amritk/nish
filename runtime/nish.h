@@ -407,10 +407,10 @@ nish_array *nish_read_file_bytes(const nish_str *path);
 int32_t nish_rename(const nish_str *from, const nish_str *to);
 int32_t nish_unlink(const nish_str *path);
 int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes);
-/* `writeBytes(bytes, off, len)` (nish:io), in runtime.c beside `nish_write`:
- * the bytes `[off, off + len)` of a `u8[]` on stdout, a short write finished
- * and `EINTR` retried. The caller has range-checked `off` and `len`. Answers
- * `len`, or the negative errno of the write that failed; never exits. */
+/* `writeBytes(bytes, off, len)` (nish:io), in runtime-os.c: the bytes
+ * `[off, off + len)` of a `u8[]` on stdout, a short write finished and `EINTR`
+ * retried. The caller has range-checked `off` and `len`. Answers `len`, or the
+ * negative errno of the write that failed; never exits. */
 int32_t nish_write_bytes(const nish_array *bytes, int64_t off, int64_t len);
 /* `spawnSync(argv)`: run element 0 of `argv` (searched on `PATH`) with `argv`
  * as its argument vector, wait for it, and answer its exit status, or
