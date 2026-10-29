@@ -1097,7 +1097,11 @@ export class Deflater {
     const mask: u32 = minMatch === 3 ? toU32(0xffffff) : ~toU32(0)
     let chain: i32 = this.maxChain
     while (cand >= floor && cand < v && chain > 0) {
-      const ci: integer<0, 2147483639> = cand - delta
+      const cd: i32 = cand - delta
+      if (cd < 0 || cd > 2147483639) {
+        break
+      }
+      const ci: integer<0, 2147483639> = cd
       // The byte that would make this match the longest yet, first: most
       // candidates fail on it.
       if (uncheckedGet(src, ci + best) === uncheckedGet(src, p + best)) {
@@ -1242,7 +1246,12 @@ export class Deflater {
           if (ci >= 0 && ci <= 2147483639 && deflateLoad32(src, ci) === word) {
             let l: i32 = 0
             if (p <= end - DEFLATE_MAX_MATCH && ci <= 2147483627) {
-              const x: u64 = deflateLoad64(src, ci + 4) ^ deflateLoad64(src, p + 4)
+              const a4: i32 = ci + 4
+              const b4: i32 = p + 4
+              let x: u64 = toU64(1)
+              if (a4 >= 0 && a4 <= 2147483639 && b4 >= 0 && b4 <= 2147483639) {
+                x = deflateLoad64(src, a4) ^ deflateLoad64(src, b4)
+              }
               l =
                 x !== toU64(0)
                   ? toI32(4) + (deflateCtz64(x) >> 3)
@@ -1274,7 +1283,7 @@ export class Deflater {
         const stop: i32 = p + best
         const insertEnd: i32 = stop <= last ? stop : last + 1
         let vq: i32 = wrappingAdd(p, delta)
-        for (let q: i32 = p + 1; q < insertEnd; q += 1) {
+        for (let q: i32 = p + 1; q < insertEnd && q >= 0 && q <= 2147483639; q += 1) {
           const qa: integer<0, 2147483639> = q
           const hq: i32 = toI32((deflateLoad32(src, qa) * toU32(DEFLATE_HASH_MUL)) >>> 17)
           vq = wrappingAdd(vq, 1)
@@ -1896,7 +1905,9 @@ export class Inflater {
     for (let i: i32 = from; i < hi; i += 1) {
       const l: i32 = uncheckedGet(lens, i) & 15
       const at: i32 = offs[l]
-      syms[at] = i - from
+      if (at >= 0 && at < toI32(syms.length)) {
+        syms[at] = i - from
+      }
       offs[l] = wrappingAdd(at, 1)
     }
     const size: i32 = 1 << bits
@@ -1948,7 +1959,7 @@ export class Inflater {
     let end: i32 = 1 << len
     let k: i32 = 0
     let here: i32 = 0
-    while (len <= bits) {
+    while (len <= bits && len >= 0 && len < toI32(count.length)) {
       here = count[len]
       while (here > 0) {
         if (k < 0 || k >= toI32(syms.length) || code < 0 || code >= end || end > size) {
@@ -2025,8 +2036,12 @@ export class Inflater {
       code = (code & (bit - 1)) | bit
       here -= 1
       while (here === 0 && len < 15) {
-        len += 1
-        here = count[len]
+        const next: i32 = len + 1
+        if (next < 0 || next >= toI32(count.length)) {
+          break
+        }
+        len = next
+        here = count[next]
       }
     }
   }
@@ -2156,7 +2171,7 @@ export class Inflater {
     }
     for (let i: i32 = 0; i < hclen; i += 1) {
       if (bc < 3) {
-        if (ip <= end - 8) {
+        if (ip >= 0 && ip <= end - 8 && ip <= 2147483639) {
           const at: integer<0, 2147483639> = ip
           bb = bb | (deflateLoad64(src, at) << toU64(bc))
           ip += (63 - bc) >> 3
@@ -2190,7 +2205,7 @@ export class Inflater {
     while (i < total) {
       // A code-length code is at most 7 bits and its repeat count at most 7.
       if (bc < 14) {
-        if (ip <= end - 8) {
+        if (ip >= 0 && ip <= end - 8 && ip <= 2147483639) {
           const at: integer<0, 2147483639> = ip
           bb = bb | (deflateLoad64(src, at) << toU64(bc))
           ip += (63 - bc) >> 3
@@ -2444,7 +2459,7 @@ export class Inflater {
       // the count: subtracting a whole entry, whose low byte is its length,
       // costs no mask, and every shift reads the low six bits only. It is
       // masked again when the loop ends.
-      if (ip <= inFast && op <= outFast) {
+      if (ip >= 0 && ip <= inFast && ip <= 2147483639 && op <= outFast) {
         const first: integer<0, 2147483639> = ip
         bb = bb | (deflateLoad64(src, first) << toU64(bc))
         ip = wrappingAdd(ip, toI32(7) - ((bc >> 3) & 7))
@@ -2534,26 +2549,37 @@ export class Inflater {
               e = uncheckedGet(le, toI32(bb & litMask))
               const stop: i32 = wrappingAdd(op, len)
               if (dist >= 8) {
-                // Sixteen bytes at a time, the first sixteen whatever the
-                // length: a copy runs at most fifteen bytes past `stop`,
-                // inside `outEnd`, and the next symbol overwrites them.
+                // Sixteen bytes at a time: a copy runs at most fifteen bytes
+                // past `stop`, inside `outEnd`, and the next symbol
+                // overwrites them. `op` and `op - dist` lie in
+                // [histStart, outEnd - 290], so the bounds in the condition
+                // always hold; they are what lets the positions enter the
+                // copy's range without a check, and the bytes loop after is
+                // what would finish a copy they ever stopped.
                 let to: i32 = op
                 let from: i32 = op - dist
-                inflateCopy16(out, to, from)
-                while (to + 16 < stop) {
+                while (to < stop && to >= 0 && to <= 2147483631 && from >= 0 && from <= 2147483631) {
+                  inflateCopy16(out, to, from)
                   to = wrappingAdd(to, 16)
                   from = wrappingAdd(from, 16)
-                  inflateCopy16(out, to, from)
+                }
+                while (to < stop) {
+                  uncheckedSet(out, to, uncheckedGet(out, from))
+                  to = wrappingAdd(to, 1)
+                  from = wrappingAdd(from, 1)
                 }
               } else if (dist === 1) {
-                // A run of one byte, sixteen at a time.
+                // A run of one byte, sixteen at a time, bounded as above.
                 const four: u64 = toU64(uncheckedGet(out, op - 1)) * toU64(0x01010101)
                 const w: u64 = four | (four << toU64(32))
                 let to: i32 = op
-                inflateFill16(out, to, w)
-                while (to + 16 < stop) {
-                  to = wrappingAdd(to, 16)
+                while (to < stop && to >= 0 && to <= 2147483631) {
                   inflateFill16(out, to, w)
+                  to = wrappingAdd(to, 16)
+                }
+                while (to < stop) {
+                  uncheckedSet(out, to, toU8(w))
+                  to = wrappingAdd(to, 1)
                 }
               } else {
                 let from: i32 = op - dist
@@ -2567,7 +2593,7 @@ export class Inflater {
               op = stop
             }
           }
-          if (ip > inFast || op > outFast) {
+          if (ip < 0 || ip > inFast || ip > 2147483639 || op > outFast) {
             break
           }
           const at: integer<0, 2147483639> = ip

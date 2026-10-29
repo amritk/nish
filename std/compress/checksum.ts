@@ -140,7 +140,9 @@ export class Crc32 {
       uncheckedSet(braid, k * 256, toU32(0))
       for (let b: i32 = 1; b < 256; b += 1) {
         const low: i32 = 31 - toI32(Math.clz32(toU32(b & -b)))
-        uncheckedSet(braid, k * 256 + b, uncheckedGet(braid, k * 256 + (b & (b - 1))) ^ bits[low])
+        if (low >= 0 && low < 8) {
+          uncheckedSet(braid, k * 256 + b, uncheckedGet(braid, k * 256 + (b & (b - 1))) ^ bits[low])
+        }
       }
     }
     this.braid = braid
@@ -176,20 +178,53 @@ export class Crc32 {
       let c2: u32 = 0
       let c3: u32 = 0
       let c4: u32 = 0
-      while (p < lastBlock && p >= 0 && p <= toI32(2147483607)) {
+      // Each word's position is a local the loop condition bounds, which
+      // is what lets it enter the loader's range without a check.
+      let p1: i32 = p + 8
+      let p2: i32 = p + 16
+      let p3: i32 = p + 24
+      let p4: i32 = p + 32
+      while (
+        p < lastBlock &&
+        p >= 0 &&
+        p1 >= 0 &&
+        p2 >= 0 &&
+        p3 >= 0 &&
+        p4 >= 0 &&
+        p4 <= 2147483639 &&
+        p3 <= 2147483639 &&
+        p2 <= 2147483639 &&
+        p1 <= 2147483639 &&
+        p <= 2147483639
+      ) {
         c = crc32Step(bt, c, checksumLoad64(buf, p))
-        c1 = crc32Step(bt, c1, checksumLoad64(buf, p + 8))
-        c2 = crc32Step(bt, c2, checksumLoad64(buf, p + 16))
-        c3 = crc32Step(bt, c3, checksumLoad64(buf, p + 24))
-        c4 = crc32Step(bt, c4, checksumLoad64(buf, p + 32))
+        c1 = crc32Step(bt, c1, checksumLoad64(buf, p1))
+        c2 = crc32Step(bt, c2, checksumLoad64(buf, p2))
+        c3 = crc32Step(bt, c3, checksumLoad64(buf, p3))
+        c4 = crc32Step(bt, c4, checksumLoad64(buf, p4))
         p += CRC32_BLOCK
+        p1 += CRC32_BLOCK
+        p2 += CRC32_BLOCK
+        p3 += CRC32_BLOCK
+        p4 += CRC32_BLOCK
       }
-      if (p >= 0 && p <= toI32(2147483607)) {
+      if (
+        p >= 0 &&
+        p1 >= 0 &&
+        p2 >= 0 &&
+        p3 >= 0 &&
+        p4 >= 0 &&
+        p4 <= 2147483639 &&
+        p3 <= 2147483639 &&
+        p2 <= 2147483639 &&
+        p1 <= 2147483639 &&
+        p <= 2147483639
+      ) {
         c = crc32Step(t, c, checksumLoad64(buf, p))
-        c = crc32Step(t, c ^ c1, checksumLoad64(buf, p + 8))
-        c = crc32Step(t, c ^ c2, checksumLoad64(buf, p + 16))
-        c = crc32Step(t, c ^ c3, checksumLoad64(buf, p + 24))
-        c = crc32Step(t, c ^ c4, checksumLoad64(buf, p + 32))
+        c = crc32Step(t, c ^ c1, checksumLoad64(buf, p1))
+        c = crc32Step(t, c ^ c2, checksumLoad64(buf, p2))
+        c = crc32Step(t, c ^ c3, checksumLoad64(buf, p3))
+        c = crc32Step(t, c ^ c4, checksumLoad64(buf, p4))
         p += CRC32_BLOCK
       }
     }
