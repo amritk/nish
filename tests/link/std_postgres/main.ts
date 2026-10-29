@@ -4,6 +4,7 @@
 // std_postgres_replay; these are the frames no well-behaved server sends.
 import {
   PgArrayWalker,
+  PgBinary,
   PgConfig,
   PgConnection,
   PgText,
@@ -32,7 +33,7 @@ import {
   PG_READY,
   PG_ROW,
 } from "nish/net/postgres";
-import { getI32BE, getU16BE } from "nish/bytes";
+import { getI32BE, getU16BE, setF64BE, setI64BE } from "nish/bytes";
 import { secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 
@@ -1108,6 +1109,212 @@ const arrayBuilder = (t: Suite): void => {
   t.eqStr("with only what was queued before the bind", drain(conn).slice(0, 1), "P");
 };
 
+/** A DataRow of binary `columns`, each the bytes as they are. */
+const binaryRow = (columns: u8[][]): u8[] => {
+  const body: u8[] = [];
+  pushI16(body, toI32(columns.length));
+  for (const col of columns) {
+    pushI32(body, toI32(col.length));
+    for (const b of col) {
+      body.push(b);
+    }
+  }
+  return msg("D", body);
+};
+
+/** `billions` * 10^9 + `rest`, for an i64 no i32 literal spells; both parts take the sign. */
+const big = (billions: i32, rest: i32): i64 => toI64(billions) * toI64(1000000000) + toI64(rest);
+
+/** No bytes. */
+const noBytes = (): u8[] => new Array<u8>(0);
+
+/** `v` as `n` big-endian bytes, `n` 2, 4 or 8. */
+const be = (v: i64, n: i32): u8[] => {
+  const out: u8[] = new Array<u8>(8);
+  setI64BE(out, 0, v);
+  return slice(out, 8 - n, 8);
+};
+
+/** The most negative i64, which a literal cannot spell. */
+const MIN_I64 = (): i64 => (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8);
+
+const binaryBinds = (t: Suite): void => {
+  const conn = ready(config());
+  conn.prepare("q", "select $1", none());
+  conn.sync();
+  drain(conn);
+  t.ok("bindStartBinary", conn.bindStartBinary("q"));
+  conn.paramInt(toI64(7));
+  t.ok("bindEnd", conn.bindEnd());
+  t.eqStr("one result format code, 1: every column binary", drain(conn), "B|||<20>|q||||<1>|||<1>7|<1>|<1>E|||<9>|||||");
+  conn.bindStart("q");
+  conn.paramInt(toI64(7));
+  conn.bindEnd();
+  t.eqStr("the next bindStart is text again: no format codes", drain(conn), "B|||<18>|q||||<1>|||<1>7||E|||<9>|||||");
+  conn.bindStartBinary("q");
+  conn.bindCancel();
+  conn.bindStart("q");
+  conn.bindEnd();
+  t.eqStr("nor after a binary bind cancelled", drain(conn), "B|||<13>|q|||||||E|||<9>|||||");
+  conn.sync();
+  drain(conn);
+
+  // Every bind keeps 17 bytes free for bindEnd and Sync; a binary one keeps 19.
+  // A Bind of `q` is 12 bytes before its parameters, one of `n` bytes 4 + n more.
+  const c = config();
+  c.maxOutput = 1024;
+  const text = ready(c);
+  text.bindStart("q");
+  t.ok("a text bind takes a parameter up to 17 short of maxOutput", text.paramText(repeat("p", 1024 - 17 - 12 - 4)));
+  text.bindEnd();
+  text.sync();
+  t.eqI32("its bindEnd and Sync fill maxOutput exactly", text.outputEnd(), 1024);
+  const binary = ready(c);
+  binary.bindStartBinary("q");
+  t.ok("a binary bind refuses that one", !binary.paramText(repeat("p", 1024 - 17 - 12 - 4)));
+  t.ok("and takes one two bytes shorter", binary.paramText(repeat("p", 1024 - 19 - 12 - 4)));
+  t.ok("bindEnd is never refused for room", binary.bindEnd());
+  t.ok("nor is Sync", binary.sync());
+  t.eqI32("which fill maxOutput exactly, two bytes more", binary.outputEnd(), 1024);
+  // A prepare of 980 bytes of SQL queues 996, which leaves the 11 bytes of an
+  // unnamed text Bind and not the 13 a binary one keeps.
+  const full = ready(c);
+  full.prepare("", repeat("x", 1024 - 17 - 16 - 11), none());
+  t.ok("bindStartBinary keeps its two bytes too", !full.bindStartBinary(""));
+  t.ok("where bindStart fits", full.bindStart(""));
+};
+
+const binaryRows = (t: Suite): void => {
+  const conn = inGroup();
+  const ts: u8[] = new Array<u8>(24);
+  t.eqStr(
+    "a binary row",
+    feed(conn, binaryRow([be(toI64(-2), 2), be(toI64(-40000), 4), be(MIN_I64(), 8), [toU8(1)], z("hi"), be(big(820540, 759409876), 8), noBytes()])),
+    `${PG_ROW}`,
+  );
+  t.ok("int2", conn.binaryInt(0) === toI64(-2));
+  t.ok("int4", conn.binaryInt(1) === toI64(-40000));
+  t.ok("int8", conn.binaryInt(2) === MIN_I64());
+  t.ok("bool", conn.binaryBool(3));
+  t.eqStr("text reads as it does in text format", conn.columnText(4), "hi");
+  t.ok("a timestamptz's microseconds", conn.binaryInt(5) === big(820540, 759409876));
+  const n: i32 = conn.binary.timestamp(conn.inputBuffer(), conn.colStart(5), conn.colLength(5), ts, 0);
+  t.eqStr("and as a time", String.fromBytes(ts, 0, n), "2025-12-31T23:59:19.409Z");
+  t.ok("nothing failed", !conn.binary.failed && !conn.text.failed);
+  t.eqI32("an empty column is not NULL", conn.colLength(6), 0);
+  t.ok("an int of no bytes fails", conn.binaryInt(6) === toI64(0) && conn.binary.failed);
+  conn.binary.reset();
+  const f: u8[] = new Array<u8>(8);
+  setF64BE(f, 0, -1.5);
+  t.eqStr("a row with a NULL", feed(conn, binaryRow([f, z("t")])), `${PG_ROW}`);
+  t.ok("float8", conn.binaryFloat(0) === -1.5);
+  t.ok("a text bool is not a binary one", !conn.binaryBool(1) && conn.binary.failed);
+  t.ok("binary failures leave text.failed alone", !conn.text.failed);
+};
+
+/** `b` read as an int by `p`, or `failed`. */
+const binInt = (p: PgBinary, b: u8[]): string => {
+  p.reset();
+  const v: i64 = p.int(b, 0, toI32(b.length));
+  return p.failed ? "failed" : `${v}`;
+};
+
+const binaryInts = (t: Suite): void => {
+  const p = new PgBinary();
+  t.eqStr("int2: 0", binInt(p, be(toI64(0), 2)), "0");
+  t.eqStr("int2: -1", binInt(p, be(toI64(-1), 2)), "-1");
+  t.eqStr("int2: the largest", binInt(p, be(toI64(32767), 2)), "32767");
+  t.eqStr("int2: the most negative", binInt(p, be(toI64(-32768), 2)), "-32768");
+  t.eqStr("int4: -1", binInt(p, be(toI64(-1), 4)), "-1");
+  t.eqStr("int4: the largest", binInt(p, be(toI64(2147483647), 4)), "2147483647");
+  t.eqStr("int4: the most negative", binInt(p, be(big(-2, -147483648), 4)), "-2147483648");
+  t.eqStr("int8: -1", binInt(p, be(toI64(-1), 8)), "-1");
+  t.eqStr("int8: the largest", binInt(p, be(-(MIN_I64() + toI64(1)), 8)), "9223372036854775807");
+  t.eqStr("int8: the most negative", binInt(p, be(MIN_I64(), 8)), "-9223372036854775808");
+  t.eqStr("int8: past 2^53", binInt(p, be(big(9007199, 254740993), 8)), "9007199254740993");
+  t.eqStr("one byte", binInt(p, [toU8(1)]), "failed");
+  t.eqStr("three bytes", binInt(p, [toU8(0), toU8(0), toU8(1)]), "failed");
+  t.eqStr("no bytes", binInt(p, noBytes()), "failed");
+  p.reset();
+  p.int(be(toI64(1), 4), 1, 4);
+  t.ok("a window past the buffer", p.failed);
+  p.reset();
+  p.int(be(toI64(1), 4), -1, 4);
+  t.ok("a window before it", p.failed);
+  p.reset();
+  p.int(be(toI64(1), 4), 0, -1);
+  t.ok("NULL's length", p.failed);
+  p.reset();
+  t.ok("bool: 1", p.bool([toU8(1)], 0, 1) && !p.failed);
+  t.ok("bool: 0", !p.bool([toU8(0)], 0, 1) && !p.failed);
+  t.ok("bool: 2", !p.bool([toU8(2)], 0, 1) && p.failed);
+  p.reset();
+  t.ok("bool: two bytes", !p.bool([toU8(0), toU8(1)], 0, 2) && p.failed);
+  p.reset();
+  const f: u8[] = new Array<u8>(8);
+  setF64BE(f, 0, 0.1);
+  t.ok("float8", p.float(f, 0, 8) === 0.1 && !p.failed);
+  t.ok("float8: four bytes", p.float(f, 0, 4) === 0 && p.failed);
+  p.reset();
+  p.float(f, 1, 8);
+  t.ok("float8: a window past the buffer", p.failed);
+};
+
+/** `micros` as `p.iso` writes it at `at`, or `failed`. */
+const iso = (p: PgBinary, micros: i64, at: i32): string => {
+  const out: u8[] = new Array<u8>(30);
+  p.reset();
+  const n: i32 = p.iso(micros, out, at);
+  return n < 0 || p.failed ? "failed" : String.fromBytes(out, at, at + n);
+};
+
+/** `micros` as an 8-byte column through `p.timestamp`, or `failed`. */
+const binTs = (p: PgBinary, micros: i64): string => {
+  const out: u8[] = new Array<u8>(24);
+  p.reset();
+  const n: i32 = p.timestamp(be(micros, 8), 0, 8, out, 0);
+  return n < 0 || p.failed ? "failed" : String.fromBytes(out, 0, n);
+};
+
+const binaryTimes = (t: Suite): void => {
+  const p = new PgBinary();
+  t.eqStr("the epoch", iso(p, toI64(0), 0), "2000-01-01T00:00:00.000Z");
+  t.eqStr("a time", iso(p, big(820540, 759409876), 0), "2025-12-31T23:59:19.409Z");
+  t.eqStr("microseconds are cut, not rounded", iso(p, big(820540, 759409999), 0), "2025-12-31T23:59:19.409Z");
+  t.eqStr("one microsecond before 2000", iso(p, toI64(-1), 0), "1999-12-31T23:59:59.999Z");
+  t.eqStr("one millisecond before 2000", iso(p, toI64(-1000), 0), "1999-12-31T23:59:59.999Z");
+  t.eqStr("one millisecond and one microsecond before", iso(p, toI64(-1001), 0), "1999-12-31T23:59:59.998Z");
+  t.eqStr("1970", iso(p, big(-946684, -800000000), 3), "1970-01-01T00:00:00.000Z");
+  t.eqStr("2000-02-29, a leap day of a 400th year", iso(p, big(5140, 800000000), 0), "2000-02-29T12:00:00.000Z");
+  t.eqStr("the last microsecond of 2024-02-29", iso(p, big(762566, 399999999), 0), "2024-02-29T23:59:59.999Z");
+  t.eqStr("the next", iso(p, big(762566, 400000000), 0), "2024-03-01T00:00:00.000Z");
+  t.eqStr("2100 is no leap year", iso(p, big(3160857, 599999999), 0), "2100-02-28T23:59:59.999Z");
+  t.eqStr("its 28 February is followed by 1 March", iso(p, big(3160857, 600000000), 0), "2100-03-01T00:00:00.000Z");
+  t.eqStr("nor is 1900", iso(p, big(-3150576, 0), 0), "1900-03-01T00:00:00.000Z");
+  t.eqStr("1600-02-29, before 2000, cut toward the past", iso(p, big(-12617683, -199999500), 0), "1600-02-29T00:00:00.000Z");
+  t.eqStr("the first time of year 0001", iso(p, big(-63082281, -600000000), 0), "0001-01-01T00:00:00.000Z");
+  t.eqStr("one microsecond before it", iso(p, big(-63082281, -600000001), 0), "failed");
+  t.eqStr("the last time of year 9999", iso(p, big(252455615, 999999999), 0), "9999-12-31T23:59:59.999Z");
+  t.eqStr("one microsecond after it", iso(p, big(252455616, 0), 0), "failed");
+  t.eqStr("infinity", iso(p, -(MIN_I64() + toI64(1)), 0), "failed");
+  t.eqStr("-infinity", iso(p, MIN_I64(), 0), "failed");
+  t.eqStr("no room in out", iso(p, toI64(0), 7), "failed");
+  t.eqStr("a negative at", iso(p, toI64(0), -1), "failed");
+  const untouched: u8[] = z("unchanged");
+  p.reset();
+  p.iso(MIN_I64(), untouched, 0);
+  t.eqStr("leaves out as it was", String.fromBytes(untouched, 0, 9), "unchanged");
+  t.eqStr("timestamp: a column", binTs(p, toI64(-1)), "1999-12-31T23:59:59.999Z");
+  t.eqStr("timestamp: infinity", binTs(p, -(MIN_I64() + toI64(1))), "failed");
+  p.reset();
+  const out: u8[] = new Array<u8>(24);
+  t.ok("timestamp: four bytes", p.timestamp(be(toI64(0), 4), 0, 4, out, 0) === -1 && p.failed);
+  const text = new PgText();
+  const same: u8[] = new Array<u8>(24);
+  text.timestamp(z("2025-12-31 23:59:19.409876+00"), 0, 29, same, 0);
+  t.eqStr("the text decoder writes the same", String.fromBytes(same, 0, 24), iso(p, big(820540, 759409876), 0));
+};
+
 export const main = (): number => {
   const t = new Suite("postgres");
   startup(t);
@@ -1129,5 +1336,9 @@ export const main = (): number => {
   arrays(t);
   intArrays(t);
   arrayBuilder(t);
+  binaryBinds(t);
+  binaryRows(t);
+  binaryInts(t);
+  binaryTimes(t);
   return t.done();
 };

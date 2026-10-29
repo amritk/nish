@@ -177,6 +177,37 @@ it lies; `columnText` makes a string. `conn.text` decodes the rest in place:
 column element by element. A decoder that meets text it cannot read answers
 `0`, `false` or `-1` and sets `conn.text.failed`.
 
+### Binary results
+
+Open a bind with `bindStartBinary(name)` instead of `bindStart(name)` and
+the server sends every result column of that execution in binary format: an
+`int8` is eight bytes, a `timestamptz` eight bytes of microseconds since
+2000-01-01 UTC, a `bool` one byte. Nothing is parsed, and a row of ids,
+counts and times is smaller on the wire. Read its columns with the binary
+decoders:
+
+```ts
+conn.bindStartBinary("post");
+conn.paramInt(id);
+conn.bindEnd();
+conn.sync();
+// on PG_ROW:
+const postId: i64 = conn.binaryInt(0); // int2, int4 or int8, by its length
+const body: string = conn.columnText(1); // text is the same bytes either way
+const n: i32 = conn.binary.timestamp(conn.inputBuffer(), conn.colStart(2), conn.colLength(2), out, 0);
+// out[0, n) is 2025-12-31T23:59:19.409Z, the microseconds cut to milliseconds
+```
+
+`binaryBool(c)` and `binaryFloat(c)` (a `float8`) read the other fixed-size
+kinds, `binaryInt(c)` of a time is its microseconds, and
+`conn.binary.iso(micros, out, at)` writes those as `PgText.timestamp` would.
+A `text` or `varchar` column needs nothing new. A column of another type, a
+`numeric` or a `text[]`, comes in PostgreSQL's own binary layout, which no
+decoder here reads: cast it to `text` in the SQL, or bind with `bindStart`.
+Rows do not say which format they are in; the program knows which of its
+binds asked for binary and reads that execution's rows with
+`conn.binary`, whose `failed` is set as `conn.text.failed` is.
+
 ## Statements, groups and pipelining
 
 Every statement goes through the extended protocol, so parameters never meet
@@ -186,7 +217,8 @@ the SQL text:
   are OIDs, and `0` lets the server infer one.
 - `bindStart(name)`, then one `paramInt`, `paramText`, `paramBytes`,
   `paramTextArray`, `paramIntArray`, `paramNull` or array (below) per
-  parameter, then `bindEnd()`, runs it.
+  parameter, then `bindEnd()`, runs it. `bindStartBinary(name)` does the
+  same and asks for the rows in [binary](#binary-results).
 - `closeStatement(name)` frees it on the server.
 - `sync()` ends the group.
 
@@ -501,7 +533,9 @@ if (due && !asked && pool.request() >= 0) {
 ## What it does not do
 
 TLS, `COPY`, `LISTEN`/`NOTIFY` (a notification is read and dropped), query
-cancellation, binary-format results and the simple query protocol. A pool
+cancellation, binary-format parameters, binary results for a type other
+than an integer, `bool`, `float8`, time or text, a mix of text and binary
+columns in one execution, and the simple query protocol. A pool
 neither reads a clock nor retries: a request waits in its queue until a
 connection takes it, and one lost with its connection is the program's to run
 again.

@@ -9,7 +9,7 @@ rather than after an audit, so that the audit of the database layer starts
 from evidence.
 
 Anchors are function names in `std/net/postgres.ts` at the commit that adds
-the batching helper `PgBatcher` (part of #971), the last to change it.
+binary result columns (`bindStartBinary`, `PgBinary`), the last to change it.
 
 **Result.** Every message is framed once, by its length, and a length under 4
 or over `maxMessage` fails the connection before its body is read; every
@@ -211,7 +211,16 @@ Edges of the module a caller owns, recorded so that no one assumes otherwise:
 - **Timestamps are checked for shape, not range.** `PgText.timestamp`
   checks the ISO digits and separators, the year (0001–9999) and the offset,
   but not the month, day or time: `2024-99-99` passes into its RFC 3339
-  output. The values are the server's, and trusted as such.
+  output. The values are the server's, and trusted as such. `PgBinary`'s
+  `timestamp` and `iso` compute the date from a microsecond count, so every
+  output is a real date; a year outside 0001–9999, `infinity` among them, is
+  refused.
+- **A binary column is read as the program says it is.** Rows carry no
+  format of their own: a program that reads a text row with `PgBinary` (or a
+  binary one with `PgText`) gets the wrong value or `failed`, never a read
+  outside the column. Each binary decoder checks the column's window against
+  its buffer and its length against the type's (2, 4 or 8 for an integer, 1
+  for a `bool`, 8 for a `float8` or a time) before it reads a byte.
 - **The output buffer's doubling is bounded by `maxOutput`.** Every message
   first makes room by moving the unsent bytes to the front (PG-13), so the
   buffer grows past its length only when the unsent bytes need it, and never
@@ -354,6 +363,19 @@ with `fs.read` for its recordings.
 
 **Decoders never write what they refuse**: "year 0000" "leaves out as it
 was", and a tag's count past an i64 is -1 and "leaves text.failed alone".
+The binary decoders likewise: `-infinity` "leaves out as it was", and "one
+byte", "three bytes", "no bytes", "a window past the buffer", "a window
+before it", "NULL's length", "bool: 2", "float8: four bytes" and
+"timestamp: four bytes" each answer `failed` without reading past the
+column. "binary failures leave text.failed alone".
+
+**Binary results**: "one result format code, 1: every column binary" pins
+the Bind's bytes, and "the next bindStart is text again: no format codes"
+that a binary bind does not leak into the next; "a binary bind refuses
+that one" and "bindEnd is never refused for room" that its two extra bytes
+are kept free under `maxOutput` from `bindStartBinary` on.
+`tests/postgres/live`'s `binary` scenario reads one statement's rows from
+PostgreSQL 18 in binary and in text and gets the same line for each.
 
 **Terminate**: "Terminate drops an open bind", so a half-built Bind is never
 sent, and "terminate drops an open array with its bind".

@@ -13,6 +13,7 @@
 //               pool; the slot is built again on its next request
 //   pipeline    an error in the middle of five pipelined groups
 //   arrays      text[], int8[] and int4[] parameters, unnested by the server
+//   binary      one statement's rows in binary and in text, read alike
 //   conduit     the Conduit article list, prepared once and run pipelined
 //   batch       keyed reads through PgBatcher: users by id, articles by slug,
 //               tags by article; duplicate and missing keys, two takes
@@ -699,6 +700,98 @@ const arrays = (port: i32): i32 => {
   return 0
 }
 
+/** The statement `binary` runs: every column kind the binary decoders read, at its edges. */
+const KINDS: string =
+  "select x.n::int2, x.n::int4, x.big, x.ok, x.f, x.label, x.at, x.at::timestamp from (values " +
+  "(-7, '-9223372036854775808'::int8, true, -1.5::float8, 'é€ text', '2025-12-31 23:59:19.409876+00'::timestamptz), " +
+  "(32767, 9223372036854775807, false, 0.1, '', '1999-12-31 23:59:59.999999+00'), " +
+  "(-32768, 9007199254740993, null, null, null, '2024-02-29 23:59:59.9995+00'), " +
+  "(0, -1, true, 0, 'x', '0001-01-01 00:00:00+00'), " +
+  "(1, 1, false, 1e300, 'y', 'infinity')) as x(n, big, ok, f, label, at)"
+
+/** The time a decoder wrote to `out` when it answered `n`, or `?` when it refused it. */
+const timeOf = (n: i32, out: u8[]): string => (n < 0 ? "?" : String.fromBytes(out, 0, n))
+
+/** A row of `KINDS`, each column read with the binary or the text decoder for its type, NULL as `NULL`. */
+const kindsRow = (conn: PgConnection, binary: boolean, out: u8[]): string => {
+  const parts: string[] = []
+  const b: u8[] = conn.inputBuffer()
+  for (let c: i32 = 0; c < conn.columns; c++) {
+    if (conn.isNull(c)) {
+      parts.push("NULL")
+    } else if (c <= 2) {
+      parts.push(`${binary ? conn.binaryInt(c) : conn.int(c)}`)
+    } else if (c === 3) {
+      parts.push(`${binary ? conn.binaryBool(c) : conn.bool(c)}`)
+    } else if (c === 4) {
+      parts.push(binary ? `${conn.binaryFloat(c)}` : conn.columnText(c))
+    } else if (c === 5) {
+      parts.push(`[${conn.columnText(c)}]`)
+    } else if (binary) {
+      parts.push(timeOf(conn.binary.timestamp(b, conn.colStart(c), conn.colLength(c), out, toI32(0)), out))
+    } else {
+      parts.push(timeOf(conn.text.timestamp(b, conn.colStart(c), conn.colLength(c), out, toI32(0)), out))
+    }
+  }
+  return parts.join(" ")
+}
+
+/**
+ * `binary`: one statement bound twice in one group, its rows asked for in
+ * binary, then in text; ints at their edges, a bool, a float8, UTF-8 text,
+ * times before and after 2000 cut to milliseconds, and infinity refused.
+ */
+const binary = (port: i32): i32 => {
+  const pool = makePool(toI32(1), toI32(8), "")
+  pool.register("kinds", KINDS, noTypes())
+  const d = new Driver(pool, port)
+  const out: u8[] = new Array<u8>(24)
+  pool.request()
+  let done: boolean = false
+  let executions: i32 = 0
+  while (!done) {
+    let slot: i32 = pool.dispatch()
+    while (slot >= 0) {
+      const conn = pool.connection(slot)
+      conn.bindStartBinary("kinds")
+      conn.bindEnd()
+      conn.bindStart("kinds")
+      conn.bindEnd()
+      pool.send()
+      slot = pool.dispatch()
+    }
+    if (!d.pump(PATIENCE)) {
+      console.log("timed out")
+      return 1
+    }
+    let event: i32 = d.next()
+    while (event !== PG_NEED_MORE) {
+      const conn = pool.connection(d.slot)
+      if (event === PG_ROW) {
+        const isBinary: boolean = executions === 0
+        conn.text.reset()
+        conn.binary.reset()
+        const line: string = kindsRow(conn, isBinary, out)
+        const failed: boolean = isBinary ? conn.binary.failed : conn.text.failed
+        console.log(`${isBinary ? "binary" : "text"}: ${line}${failed ? " (failed)" : ""}`)
+      } else if (event === PG_COMPLETE) {
+        executions += 1
+      } else if (event === PG_ERROR) {
+        console.log(failed(pool.ticket, conn))
+      } else if (event === PG_GROUP_DONE) {
+        console.log(`request ${pool.ticket} done${conn.groupFailed ? ", failed" : ""}`)
+        done = true
+      } else if (event === PG_LOST || event === PG_FAILED) {
+        console.log(`connection failed: ${conn.failure} ${errorOf(conn)}`)
+        return 1
+      }
+      event = d.next()
+    }
+  }
+  d.close()
+  return 0
+}
+
 const HEX: string = "0123456789abcdef"
 
 /** `s` as a JSON string. */
@@ -1012,6 +1105,8 @@ export const main = (): i32 => {
     return pipeline(port)
   } else if (scenario === "arrays") {
     return arrays(port)
+  } else if (scenario === "binary") {
+    return binary(port)
   } else if (scenario === "conduit") {
     return conduit(port)
   } else if (scenario === "batch") {
