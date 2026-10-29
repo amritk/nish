@@ -18,22 +18,31 @@ that drips its body cannot hold one forever. A body is capped by
 when asked, never from https to http, and to another origin only when asked
 too, without the caller's credentials. `HTTP_PROXY` is ignored under CGI. One
 finding was fixed while the module was written (HF-1, Low); two are open
-(HF-2 and HF-3, Low). https is refused with `HTTP_E_TLS` at this commit; the
-TLS stage adds its own rows here.
+(HF-2 and HF-3, Low). https is TLS 1.3 through `TlsRecordClient`: the
+server's chain is checked under the caller's roots, or the system's, at the
+wall clock's time and for the URL's host before a byte of the request is
+sent; no root to trust is a refusal before any connection; there is no switch
+that turns the check off; and a body is whole only once the server's
+`close_notify` or its framing says so. Revocation is not checked
+([PKI-17](crypto-pki.md#pki-17-medium-revocation-is-not-checked)).
 
 ## Scope
 
 | File | Functions |
 | --- | --- |
-| `std/net/http-client.ts` | `httpFetch`, `httpErrorName`, `httpChooseProxy`, `httpProxyFor`, `httpNoProxyMatch`; `HttpRequest` (`header`), `HttpOptions`, `HttpResponse` (`header`), `HttpBodyReader` (`read`, `readAll`); `HttpClient` (`setProxies`, `fetch`, `close`, `exchange`, `open`, `tunnel`, `send`, `head`, `pump`, `fill`, `writeAll`, `dial`, `wait`, `unwatch`, `readDeadline`, `drop`, `drain`, `readBody`, `refuseBody`, `failWait`, `fail`); and the helpers (`httpClientParser`, `httpClientIsRedirect`, `httpClientIdempotent`, `httpClientDropField`, `httpClientLower`, `httpClientTrim`, `httpClientTrimDots`, `httpClientPort`, `httpClientIsIpLiteral`, `httpClientHostText`, `httpClientUrlText`, `httpClientProxyUrl`, `httpClientProxyAuth`) |
+| `std/net/http-client.ts` | `httpFetch`, `httpErrorName`, `httpChooseProxy`, `httpProxyFor`, `httpNoProxyMatch`; `HttpRequest` (`header`), `HttpOptions`, `HttpResponse` (`header`), `HttpBodyReader` (`read`, `readAll`); `HttpClient` (`setProxies`, `fetch`, `close`, `exchange`, `open`, `tunnel`, `send`, `head`, `pump`, `fill`, `writeAll`, `dial`, `wait`, `unwatch`, `readDeadline`, `drop`, `drain`, `readBody`, `refuseBody`, `failWait`, `fail`, `loadTrust`, `secure`, `receiveTls`, `flushTls`, `failTls`, `readRaw`, `writeRaw`); and the helpers (`httpClientParser`, `httpClientIsRedirect`, `httpClientIdempotent`, `httpClientDropField`, `httpClientLower`, `httpClientTrim`, `httpClientTrimDots`, `httpClientPort`, `httpClientIsIpLiteral`, `httpClientHostText`, `httpClientUrlText`, `httpClientProxyUrl`, `httpClientProxyAuth`) |
 
 Out of scope: the request writer and response parser of
 `std/net/http1-client.ts` ([`http1-client.md`](http1-client.md)), the URL
 parser and resolver of `std/net/url.ts` ([`url.md`](url.md)), the stub
 resolver of `std/net/dns-resolver.ts` ([`dns.md`](dns.md)), and the socket and
-poll builtins of the runtime ([`runtime.md`](runtime.md)). This module calls
+poll builtins of the runtime ([`runtime.md`](runtime.md)), the TLS 1.3
+handshake and record layer of `std/crypto/tls*.ts` ([`tls.md`](tls.md)), and
+the chain, name and validity checks and the root loading of
+`std/crypto/pki*.ts` ([`crypto-pki.md`](crypto-pki.md)). This module calls
 them and trusts what they answer; what it adds is the order of the calls, the
-deadlines between them, and the policy for keep-alive, redirects and proxies.
+deadlines between them, and the policy for keep-alive, redirects, proxies,
+which roots are trusted and when a TLS connection has ended.
 
 ## Threat model
 
@@ -47,7 +56,12 @@ for, a request split or rewritten by a value the server chose (a `Location`),
 a body cut short taken for a whole one, a POST sent twice, or a proxy setting
 the attacker controls (the CGI `Proxy:` header). The program driving the
 client, its options and its environment are trusted; so are the proxy
-variables outside CGI.
+variables outside CGI, the root files (`rootsPemPath`, `SSL_CERT_FILE`,
+`SSL_CERT_DIR`, the system bundle), and the wall clock a certificate's
+validity is judged by. Over https, a win is also a connection to a server
+whose certificate the roots do not vouch for, for that host, now; a request
+sent before the server is authenticated; or a truncation by the path taken
+for the end of a body.
 
 ## Findings
 
@@ -132,8 +146,8 @@ default`, `and so is one to an ftp URL`, `and one from http to https, which is
 another origin`). Allowed to another origin, the hop drops `Authorization` and
 `Cookie` and sends the new origin's `Host` (`without Authorization or
 Cookie`, `with the new origin's Host and the caller's other fields`). A hop
-from https to http is refused whatever the options say (`fetch`'s second
-scheme check); no check reaches it until https lands. The method and body
+from https to http is refused whatever the options say (`a redirect from
+https to http is refused even with crossOriginRedirects`, below). The method and body
 change as RFC 9110 §15.4 says (`a POST redirected by 303 becomes a GET without
 its body`, `and so does one redirected by 302`, `307 keeps the method and the
 body`, `and so does 308, its relative Location resolved`).
@@ -150,6 +164,34 @@ is `HTTP_E_PROXY_REFUSED` (`a proxy that is not http:// is HTTP_E_PROXY`, `an
 https fetch through a proxy is tunnelled with CONNECT, the proxy authorised`,
 `a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED`).
 
+**https.** The checks are in `tests/link/net_http_fetch_tls/main.ts`, run as
+`link/net_http_fetch_tls: exits with 0 and stdout matches expected.out`. Its
+servers are loopback TLS 1.3 servers over certificates made for the test and
+frozen in `certs.ts`; the client trusts only the test's root through
+`rootsPemPath`. A server the roots trust answers, and its connection is kept
+(`an https fetch from a server the roots trust answers`, `and the next fetch
+reuses the TLS connection`); an IP literal is matched against the
+certificate's IP name (`an IP literal is matched against the certificate's IP
+name, on its own connection`). Every certificate the roots do not vouch for,
+for this host, now, is `HTTP_E_CERTIFICATE` (`an expired certificate is
+HTTP_E_CERTIFICATE`, `a certificate for another name is HTTP_E_CERTIFICATE`,
+`a chain to a root the client does not trust is HTTP_E_CERTIFICATE`, `and so
+is a good server under roots that are not its own`, `the system roots do not
+trust the test's root`). With no root to trust the fetch is refused before a
+connection opens (`with no root certificate to trust, https is
+HTTP_E_CERTIFICATE`, `and no connection was opened for it`). A server that
+does not speak TLS is `HTTP_E_TLS` (`a server that does not speak TLS is
+HTTP_E_TLS`), and a body the path cuts off without a `close_notify` is an
+error, never a short body (`a body cut off without a close_notify is
+HTTP_E_TLS, not a short body`). A redirect from https to http is refused even
+when cross-origin hops are allowed (`a redirect from https to http is refused
+even with crossOriginRedirects`), and https through a proxy is a `CONNECT`
+tunnel with TLS to the origin inside it (`https through an http proxy is a
+CONNECT tunnel, then TLS to the origin`).
+
 **What no check reaches.** A failure of the poll loop itself (`pollCreate` or
-`pollAdd` failing), a write that fails with an errno other than a reset, and
-the https-to-http refusal, which needs https.
+`pollAdd` failing), a write that fails with an errno other than a reset, the
+wiping of a closed connection's TLS keys (`drop` calls `wipe`; nothing a test
+can read sees the keys), the freshness of the handshake's random values, and
+a TLS record buffer that fills with no room for a read, which the record
+layer's sizes keep from happening.

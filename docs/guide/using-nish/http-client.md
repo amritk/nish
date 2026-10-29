@@ -91,6 +91,7 @@ HEAD, OPTIONS, TRACE, PUT or DELETE, never for a POST.
 | `maxRedirects` | 5 | How many hops |
 | `crossOriginRedirects` | false | Whether a hop may go to another origin |
 | `useEnvProxy` | true | Whether the proxy variables are read |
+| `rootsPemPath` | null | A PEM file of the roots an https server must chain to, in place of the system's |
 
 A server that sends its body a byte at a time, each inside `readTimeoutMs`,
 holds a fetch until `totalTimeoutMs`: set it when the server is not yours.
@@ -109,7 +110,18 @@ directly. `HTTP_PROXY` is ignored when the program runs as a CGI script,
 where a request's `Proxy:` header arrives under that name. Only an `http://`
 proxy is used; an https request goes through it in a `CONNECT` tunnel.
 
-**https** is refused with `HTTP_E_TLS` until TLS lands in this client.
+**https** is TLS 1.3, and the server's certificate is always checked: its
+chain must end at a root you trust, it must be valid now by the wall clock,
+and it must name the URL's host (or its IP address, for an IP literal). The
+roots are read once per client, from `rootsPemPath` when you set it, else
+from the files `SSL_CERT_FILE` and `SSL_CERT_DIR` name, else from the system's
+bundle. A certificate that is expired, for another name, or from a root you
+do not trust is `HTTP_E_CERTIFICATE`, and so is a fetch when no root can be
+read at all, refused before any connection is opened. There is no switch that
+turns the check off: to talk to a server with its own certificate authority,
+point `rootsPemPath` at that authority's root. A server that does not speak
+TLS, and a body cut off without TLS's `close_notify`, are `HTTP_E_TLS`.
+Revocation is not checked.
 
 ## The protocol alone
 
