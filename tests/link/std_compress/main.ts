@@ -370,6 +370,27 @@ export const main = (): number => {
       at += len
     }
     t.ok("crc32: pieces of random lengths equal the whole", piecewise === whole)
+    // Against the definition, one bit at a time, on both sides of the
+    // lengths where an update braids and where it takes another block, and
+    // from a running CRC.
+    let agree: boolean = true
+    const poly: u32 = 0xedb88320
+    for (const n of [0, 7, 8, 79, 80, 81, 119, 120, 121, 513, 1000, 5221, 65536, 100003]) {
+      for (const from of [0, 3]) {
+        const len: i32 = n > 100003 - from ? 100003 - from : n
+        let r: u32 = 0xffffffff
+        for (let i: i32 = from; i < from + len; i++) {
+          r = r ^ toU32(big[i])
+          for (let k: i32 = 0; k < 8; k++) {
+            r = (r & 1) !== 0 ? (r >>> 1) ^ poly : r >>> 1
+          }
+        }
+        if (crc.update(toU32(0), big, from, len) !== ~r) {
+          agree = false
+        }
+      }
+    }
+    t.ok("crc32: every length, braided or not, is the bitwise definition", agree)
     t.ok("adler32: pieces of random lengths equal the whole", adler === adler32(big, 0, 100003))
     // Adler-32's sums wrap past 5552 bytes of 0xff without reduction.
     const ones: u8[] = new Array<u8>(20000)
@@ -785,6 +806,40 @@ export const main = (): number => {
     e = w.finish(again, e)
     t.eqI32("writer: start begins a new body", kit.decompress(GZIP, again, 0, e, back, 0, n), 1000)
     t.ok("writer: the new body is its own bytes", same(copyOf(src, 1000), back, 0, 1000))
+
+    // Noise into exactly `bound` at every call, the first window too: no
+    // write, flush or finish runs out of room, at any level, for pieces
+    // small and large.
+    for (const level of [0, 1, 6, 9]) {
+      const loud: u8[] = noise(rng, 300000)
+      const nw = new GzipWriter(level)
+      const noisy: u8[] = []
+      let pos: i32 = 0
+      let k: i32 = 0
+      while (pos < 300000) {
+        let len: i32 = k % 5 === 4 ? rng.nextInt(60000, 200000) : rng.nextInt(1, 1000)
+        if (len > 300000 - pos) {
+          len = 300000 - pos
+        }
+        const room: u8[] = new Array<u8>(nw.bound(len))
+        const end: i32 = k % 7 === 6 ? nw.flush(room, 0) : nw.write(loud, pos, len, room, 0)
+        for (let i: i32 = 0; i < end; i++) {
+          noisy.push(room[i])
+        }
+        if (k % 7 !== 6) {
+          pos += len
+        }
+        k += 1
+      }
+      const last: u8[] = new Array<u8>(nw.bound(toI32(0)))
+      const fe: i32 = nw.finish(last, 0)
+      for (let i: i32 = 0; i < fe; i++) {
+        noisy.push(last[i])
+      }
+      const into: u8[] = new Array<u8>(300000)
+      t.eqI32(`writer: noise at level ${level} into exactly bound`, kit.decompress(GZIP, noisy, 0, toI32(noisy.length), into, 0, 300000), 300000)
+      t.ok(`writer: noise at level ${level} comes back`, same(loud, into, 0, 300000))
+    }
 
     // The reader across random piece sizes, the input ended by endInput.
     const r = new GzipReader(toI64(n))
