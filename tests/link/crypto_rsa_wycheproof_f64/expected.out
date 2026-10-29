@@ -1,0 +1,15 @@
+wycheproof rsa_signature_2048_sha256: 259 cases, 9 valid verified, 249 invalid refused (0 by rsaParsePublicKey, 249 by rsaVerifyPkcs1v15), 1 acceptable (0 verified, 1 refused), 0 filtered out
+PASS  rsa_signature_2048_sha256: every case answers what the file expects
+wycheproof rsa_signature_3072_sha384: 259 cases, 7 valid verified, 251 invalid refused (0 by rsaParsePublicKey, 251 by rsaVerifyPkcs1v15), 1 acceptable (0 verified, 1 refused), 0 filtered out
+PASS  rsa_signature_3072_sha384: every case answers what the file expects
+wycheproof rsa_signature_4096_sha512: 259 cases, 7 valid verified, 251 invalid refused (0 by rsaParsePublicKey, 251 by rsaVerifyPkcs1v15), 1 acceptable (0 verified, 1 refused), 0 filtered out
+PASS  rsa_signature_4096_sha512: every case answers what the file expects
+wycheproof rsa_pss_2048_sha256_mgf1_32: 108 cases, 63 valid verified, 45 invalid refused (0 by rsaParsePublicKey, 45 by rsaVerifyPss), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  rsa_pss_2048_sha256_mgf1_32: every case answers what the file expects
+wycheproof rsa_pss_3072_sha256_mgf1_32: 108 cases, 63 valid verified, 45 invalid refused (0 by rsaParsePublicKey, 45 by rsaVerifyPss), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  rsa_pss_3072_sha256_mgf1_32: every case answers what the file expects
+wycheproof rsa_pss_2048_sha384_mgf1_48: 141 cases, 95 valid verified, 46 invalid refused (0 by rsaParsePublicKey, 46 by rsaVerifyPss), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  rsa_pss_2048_sha384_mgf1_48: every case answers what the file expects
+wycheproof rsa_pss_4096_sha512_mgf1_64: 179 cases, 132 valid verified, 47 invalid refused (0 by rsaParsePublicKey, 47 by rsaVerifyPss), 0 acceptable (0 verified, 0 refused), 0 filtered out
+PASS  rsa_pss_4096_sha512_mgf1_64: every case answers what the file expects
+rsa wycheproof: 7 passed, 0 failed, 0 skipped

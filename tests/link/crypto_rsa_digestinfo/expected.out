@@ -1,0 +1,22 @@
+PASS  a 1024-bit key is refused
+PASS  a key with a byte after its SEQUENCE is refused
+PASS  a key with an even exponent is refused
+PASS  a key with an even modulus is refused
+PASS  the 2048-bit key parses
+PASS  a correct PKCS#1 v1.5 signature verifies
+PASS  bytes after the DigestInfo are refused
+PASS  a DigestInfo without the NULL parameters is refused
+PASS  a DigestInfo naming SHA-384 for a SHA-256 check is refused
+PASS  padding shorter than eight bytes is refused
+PASS  a padding byte that is not 0xff is refused
+PASS  block type 2 is refused
+PASS  a digest of another message is refused
+PASS  a SHA-256 signature checked as SHA-384 is refused
+PASS  a signature one byte short is refused
+PASS  a signature equal to the modulus is refused
+PASS  a PSS signature with a 32-byte salt verifies
+PASS  a PSS signature with no salt is refused, as sLen is hLen
+PASS  a PSS signature with a 64-byte salt is refused
+PASS  a PKCS#1 v1.5 signature is refused as PSS
+PASS  a PSS signature is refused as PKCS#1 v1.5
+rsa digestinfo: 21 passed, 0 failed, 0 skipped

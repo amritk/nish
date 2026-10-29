@@ -180,6 +180,34 @@ import the files, in both number modes.
 Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_wycheproof_aead/LICENSE-wycheproof.
 ```
 
+### `tests/link/crypto_rsa_wycheproof/LICENSE-wycheproof`
+
+More of [Project Wycheproof](https://github.com/C2SP/wycheproof)'s test
+vectors, under the same Apache License, Version 2.0, with its own copy of the
+licence text beside them. The RSA signature cases in `pkcs1.ts` and `pss.ts` in
+[`tests/link/crypto_rsa_wycheproof/`](tests/link/crypto_rsa_wycheproof/) are rewritten from upstream's JSON as Nish
+source; each names the upstream files and commit it was taken from and says
+what was changed, as the licence's section 4 asks of a modified file. The program in the directory runs them for `std/crypto/rsa.ts`, and
+`tests/link/crypto_rsa_wycheproof_f64` runs it again in f64 mode.
+
+```notice
+Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_rsa_wycheproof/LICENSE-wycheproof.
+```
+
+### `tests/link/crypto_p384_wycheproof/LICENSE-wycheproof`
+
+More of [Project Wycheproof](https://github.com/C2SP/wycheproof)'s test
+vectors, under the same Apache License, Version 2.0, with its own copy of the
+licence text beside them. The ECDSA P-384 cases in `ecdsa_secp384r1_sha384.ts` in
+[`tests/link/crypto_p384_wycheproof/`](tests/link/crypto_p384_wycheproof/) are rewritten from upstream's JSON as Nish
+source; each names the upstream files and commit it was taken from and says
+what was changed, as the licence's section 4 asks of a modified file. The program in the directory runs them for `std/crypto/p384.ts`, and
+`tests/link/crypto_p384_wycheproof_f64` runs it again in f64 mode.
+
+```notice
+Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_p384_wycheproof/LICENSE-wycheproof.
+```
+
 ### `std/crypto/LICENSE-bearssl`
 
 [BearSSL](https://www.bearssl.org/), Copyright (c) 2016 Thomas Pornin, under
@@ -368,6 +396,9 @@ Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see 
 | `tests/link/crypto_wycheproof/x25519.ts` | Wycheproof `testvectors_v1/x25519_test.json` at `3fa63dd`: all 518 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_aead/chacha20_poly1305.ts` | Wycheproof `testvectors_v1/chacha20_poly1305_test.json` at `3fa63dd`: all 325 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_aead/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_aead/aes_gcm_192.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 103 cases with a 192-bit key, which `tests/link/crypto_wycheproof/aes_gcm.ts` leaves out, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_aead/LICENSE-wycheproof` |
+| `tests/link/crypto_p384_wycheproof/ecdsa_secp384r1_sha384.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all 504 cases of `ecdsa_secp384r1_sha384_test.json` and all 280 of `ecdsa_secp384r1_sha384_p1363_test.json`, with their group keys, as Nish source | Apache-2.0 | `tests/link/crypto_p384_wycheproof/LICENSE-wycheproof` |
+| `tests/link/crypto_rsa_wycheproof/pkcs1.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all 259 cases each of `rsa_signature_2048_sha256_test.json`, `rsa_signature_3072_sha384_test.json` and `rsa_signature_4096_sha512_test.json`, with their group keys, as Nish source | Apache-2.0 | `tests/link/crypto_rsa_wycheproof/LICENSE-wycheproof` |
+| `tests/link/crypto_rsa_wycheproof/pss.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all cases of `rsa_pss_2048_sha256_mgf1_32_test.json` (108), `rsa_pss_3072_sha256_mgf1_32_test.json` (108), `rsa_pss_2048_sha384_mgf1_48_test.json` (141) and `rsa_pss_4096_sha512_mgf1_64_test.json` (179), with their group keys, as Nish source | Apache-2.0 | `tests/link/crypto_rsa_wycheproof/LICENSE-wycheproof` |
 | `tests/json-suite/test-parsing.txt` | JSONTestSuite `test_parsing/` at `1ef36fa`: all 318 files (95 `y_`, 188 `n_`, 35 `i_`), packed one per line by `tests/json-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/json-suite/LICENSE-jsontestsuite` |
 | `tests/yaml-suite/cases.txt` | yaml-test-suite (npm `yaml-test-suite@0.1.0`): all 402 cases (350 files), packed one per line by `tests/yaml-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/yaml-suite/LICENSE-yaml-test-suite` |
 | `tests/json-conformance/test262.txt` | test262 `test/built-ins/JSON/parse` and `test/built-ins/JSON/stringify` at `2e0a567`: the 772 `JSON.parse` and `JSON.stringify` calls of 64 files that are about JSON text, each with the answer the file's assertions require, extracted by `tests/json-conformance/extract.js` | BSD-3-Clause | `tests/json-conformance/LICENSE-test262` |

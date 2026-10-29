@@ -1,0 +1,22 @@
+PASS  a correct signature verifies
+PASS  a signature over another message is refused
+PASS  a compressed-point prefix is refused
+PASS  a hybrid-point prefix is refused
+PASS  a 49-byte compressed point is refused
+PASS  a point one byte short is refused
+PASS  a point off the curve is refused
+PASS  a point with x equal to p is refused
+PASS  a point with y equal to p is refused
+PASS  the all-zero point is refused
+PASS  r equal to zero is refused
+PASS  s equal to zero is refused
+PASS  r equal to n is refused
+PASS  s equal to n is refused
+PASS  a signature one byte short is refused
+PASS  r and s swapped are refused
+PASS  a SHA-256 digest verifies as it is
+PASS  a SHA-512 digest verifies by its leftmost 384 bits
+PASS  a SHA-512 signature is refused over the SHA-256 digest
+PASS  a DER signature verifies once p384DerSignatureRS reads it
+PASS  a DER signature with a byte after it is refused
+p384 points: 21 passed, 0 failed, 0 skipped

@@ -1,0 +1,5 @@
+wycheproof ecdsa_secp384r1_sha384: 504 cases, 194 valid verified, 310 invalid refused (235 by p384DerSignatureRS, 75 by p384VerifySha384), 0 acceptable
+PASS  ecdsa_secp384r1_sha384: every case answers what the file expects
+wycheproof ecdsa_secp384r1_sha384_p1363: 280 cases, 193 valid verified, 87 invalid refused (0 by p384DerSignatureRS, 87 by p384VerifySha384), 0 acceptable
+PASS  ecdsa_secp384r1_sha384_p1363: every case answers what the file expects
+p384 wycheproof: 2 passed, 0 failed, 0 skipped
