@@ -1,0 +1,53 @@
+PASS  startWith takes the trace's ClientHello
+PASS  the ClientHello goes out unchanged
+PASS  the ServerHello is accepted
+PASS  then EncryptedExtensions is awaited
+PASS  AES-128-GCM
+PASS  client_handshake_traffic_secret
+PASS  server_handshake_traffic_secret
+PASS  the Handshake level is readable and writable
+PASS  the server's flight is read
+PASS  the client waits for authentication
+PASS  nothing is written before it
+PASS  the trace authenticates
+PASS  the chain is asked once
+PASS  for the name the hello carries
+PASS  the signature is asked once
+PASS  as RSA-PSS with SHA-256
+PASS  over the input §4.4.3 defines
+PASS  connected
+PASS  the client Finished is the trace's
+PASS  client_application_traffic_secret_0
+PASS  server_application_traffic_secret_0
+PASS  exporter_master_secret
+PASS  the Application level is readable and writable
+PASS  a hello carrying this client's share is taken
+PASS  but not twice
+PASS  the trace's hello carries another key's share
+PASS  the trace's hello carries another key's share: failed
+PASS  the trace's hello carries another key's share: nothing to send
+PASS  an empty hello
+PASS  an empty hello: failed
+PASS  an empty hello: nothing to send
+PASS  a message that is not a ClientHello
+PASS  a message that is not a ClientHello: failed
+PASS  a message that is not a ClientHello: nothing to send
+PASS  a header longer than its body
+PASS  a header longer than its body: failed
+PASS  a header longer than its body: nothing to send
+PASS  a body that does not parse
+PASS  a body that does not parse: failed
+PASS  a body that does not parse: nothing to send
+PASS  no TLS 1.3 in supported_versions
+PASS  no TLS 1.3 in supported_versions: failed
+PASS  no TLS 1.3 in supported_versions: nothing to send
+PASS  early_data
+PASS  early_data: failed
+PASS  early_data: nothing to send
+PASS  a cookie
+PASS  a cookie: failed
+PASS  a cookie: nothing to send
+PASS  a pre_shared_key
+PASS  a pre_shared_key: failed
+PASS  a pre_shared_key: nothing to send
+nish/net/tls-client against RFC 8448: 52 passed, 0 failed, 0 skipped
