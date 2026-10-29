@@ -12,6 +12,10 @@ PASS  Connection: close ends the connection, and what follows is not read: trans
 PASS  Connection: close ends the connection, and what follows is not read: the same cut at every byte and fed a byte at a time
 PASS  a response to HEAD and a 304 have no body, whatever their fields say: transcript
 PASS  a response to HEAD and a 304 have no body, whatever their fields say: the same cut at every byte and fed a byte at a time
+PASS  a 304 to GET with a Content-Length has no body: transcript
+PASS  a 304 to GET with a Content-Length has no body: the same cut at every byte and fed a byte at a time
+PASS  a 304 to GET that says chunked has no body: transcript
+PASS  a 304 to GET that says chunked has no body: the same cut at every byte and fed a byte at a time
 PASS  a 2xx to CONNECT is a tunnel, and its framing fields are ignored: transcript
 PASS  a 2xx to CONNECT is a tunnel, and its framing fields are ignored: the same cut at every byte and fed a byte at a time
 PASS  a 407 to CONNECT has a body like any other: transcript
@@ -36,9 +40,15 @@ PASS  a 101 this client never asked for: transcript
 PASS  a 101 this client never asked for: the same cut at every byte and fed a byte at a time
 PASS  a status line over the limit, ended in a bare LF past it: transcript
 PASS  a status line over the limit, ended in a bare LF past it: the same cut at every byte and fed a byte at a time
+PASS  a second head across the first 1 KiB: in pieces
+PASS  a second head across the first 1 KiB: a byte at a time
+PASS  a 1500-byte body fed in uneven pieces: in pieces
+PASS  a 1500-byte body fed in uneven pieces: a byte at a time
+PASS  two pipelined responses over 1 KiB together: in pieces
+PASS  two pipelined responses over 1 KiB together: a byte at a time
 PASS  accepted: a status code with no reason or space after it
 PASS  accepted: an empty reason
-PASS  accepted: an HTTP/1.9 response, read as 1.1
+PASS  read: an HTTP/1.9 response, read as 1.1
 PASS  refused with 1 (a malformed status line): a two-digit status
 PASS  refused with 1 (a status code outside 100 to 599): a status above 599
 PASS  refused with 1 (a status code outside 100 to 599): a status below 100
@@ -61,9 +71,9 @@ PASS  refused with 4 (a control character in a field value): a CR inside a value
 PASS  refused with 4 (a field line that starts with whitespace (obs-fold)): an obs-fold in the first field
 PASS  refused with 3 (a line ended in a bare LF): a field line ended in a bare LF
 PASS  refused with 3 (a line ended in a bare LF): the empty line ended in a bare LF
-PASS  accepted: a Content-Length list of one value repeated
-PASS  accepted: two Content-Length fields that agree
-PASS  accepted: a Content-Length with leading zeros
+PASS  read: a Content-Length list of one value repeated
+PASS  read: two Content-Length fields that agree
+PASS  read: a Content-Length with leading zeros
 PASS  accepted: chunked in any case
 PASS  refused with 8 (a Content-Length that is not one run of digits): a Content-Length that is not digits
 PASS  refused with 8 (a Content-Length that is not one run of digits): a negative Content-Length
@@ -72,6 +82,8 @@ PASS  refused with 8 (a Content-Length that is not one run of digits): a Content
 PASS  refused with 8 (Content-Length values that differ): a Content-Length list whose values differ
 PASS  refused with 8 (Content-Length values that differ): two Content-Length fields that differ
 PASS  refused with 8 (a Content-Length that is not one run of digits): a Content-Length with a sign
+PASS  refused with 8 (Content-Length values that differ): two Content-Length values past 2^53 that differ, on a 304
+PASS  refused with 8 (Content-Length values that differ): a Content-Length past 2^53 repeated, which saturation cannot compare
 PASS  refused with 8 (a Content-Length that is not one run of digits): a malformed Content-Length on a 304 too
 PASS  refused with 8 (Content-Length values that differ): Content-Length values that differ, on a response to HEAD too
 PASS  refused with 6 (both Content-Length and Transfer-Encoding): Transfer-Encoding with Content-Length on a 204
@@ -216,4 +228,4 @@ PASS  as a chunked POST
 PASS  with its body
 PASS  to its end
 PASS  HTTP1_E_NONE is 0, before anything goes wrong
-http1-client: 218 passed, 0 failed, 0 skipped
+http1-client: 230 passed, 0 failed, 0 skipped

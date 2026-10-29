@@ -299,6 +299,46 @@ const limitedParser = (which: i32, value: i32): Http1ResponseParser => {
   return new Http1ResponseParser(maxStatusLine, maxHeaderBytes, maxHeaders, maxBody, maxTrailerBytes);
 };
 
+/** Pins the whole transcript of `text`, read with the corpus's limits. */
+const readAs = (t: Suite, name: string, text: string, a: Ask, expected: string): void => {
+  const data: u8[] = bytesOf(text);
+  t.eqStr(`read: ${name}`, transcriptSplitAt(data, toI32(data.length), a), expected);
+};
+
+/**
+ * The transcript of `data` fed in pieces of the sizes `pieces` names, in
+ * turn and over again, to a parser with a 512-byte head and an 8192-byte
+ * body: past `HTTP1_FIRST_INPUT`, so feeds after the first move the live
+ * bytes down or into a larger buffer.
+ */
+const transcriptInPieces = (data: u8[], pieces: i32[], a: Ask): string => {
+  const p: Http1ResponseParser = limitedParser(-1, 0);
+  const t: Transcript = new Transcript();
+  const n: i32 = toI32(data.length);
+  let at: i32 = 0;
+  let k: i32 = 0;
+  p.expect(a.head, a.connect);
+  while (at < n) {
+    let len: i32 = pieces[k % toI32(pieces.length)];
+    if (len > n - at) {
+      len = n - at;
+    }
+    p.feed(data, at, len);
+    drain(p, t, a.head, a.connect);
+    at += len;
+    k += 1;
+  }
+  return ending(p, t);
+};
+
+/** Pins the transcript of `text` fed in `pieces`, and that fed a byte at a time it is the same. */
+const piecesCase = (t: Suite, name: string, text: string, pieces: i32[], expected: string): void => {
+  const data: u8[] = bytesOf(text);
+  const one: i32[] = [1];
+  t.eqStr(`${name}: in pieces`, transcriptInPieces(data, pieces, plain()), expected);
+  t.eqStr(`${name}: a byte at a time`, transcriptInPieces(data, one, plain()), expected);
+};
+
 /** Checks `text` against a limit of `cap`, which it meets exactly, and of `cap - 1`, which it passes by one. */
 const atCap = (t: Suite, name: string, which: i32, cap: i32, text: string, a: Ask, code: i32): void => {
   t.eqStr(`${name}: exactly at the limit`, outcomeOf(limitedParser(which, cap), text, a), "ends 1, error 0");
@@ -405,6 +445,28 @@ export const http1ClientChecks = (): i32 => {
   );
   corpusCase(
     t,
+    "a 304 to GET with a Content-Length has no body",
+    "HTTP/1.1 304 Not Modified\r\nContent-Length: 5\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok",
+    plain(),
+    "304 1.1 keep length -1 [content-length=5]\n" +
+      'body ""\n' +
+      "200 1.1 keep length 2 [content-length=2]\n" +
+      'body "ok"\n' +
+      "needs more"
+  );
+  corpusCase(
+    t,
+    "a 304 to GET that says chunked has no body",
+    "HTTP/1.1 304 Not Modified\r\nTransfer-Encoding: chunked\r\n\r\nHTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok",
+    plain(),
+    "304 1.1 keep length -1 [transfer-encoding=chunked]\n" +
+      'body ""\n' +
+      "200 1.1 keep length 2 [content-length=2]\n" +
+      'body "ok"\n' +
+      "needs more"
+  );
+  corpusCase(
+    t,
     "a 2xx to CONNECT is a tunnel, and its framing fields are ignored",
     "HTTP/1.1 200 Connection Established\r\nContent-Length: 10\r\n\r\n\u0016\u0003\u0001 the tunnel's bytes",
     toConnect(),
@@ -488,10 +550,38 @@ export const http1ClientChecks = (): i32 => {
     "error 11"
   );
 
+  // --- Past the first buffer -------------------------------------------------
+  const longPieces: i32[] = [700, 333, 41];
+  piecesCase(
+    t,
+    "a second head across the first 1 KiB",
+    `HTTP/1.1 200 OK\r\nContent-Length: 960\r\n\r\n${repeat("a", toI32(960))}HTTP/1.1 200 OK\r\nX-Long: ${repeat("b", toI32(60))}\r\nContent-Length: 3\r\n\r\nxyz`,
+    longPieces,
+    `200 1.1 keep length 960 [content-length=960]\nbody "${repeat("a", toI32(960))}"\n` +
+      `200 1.1 keep length 3 [x-long=${repeat("b", toI32(60))}; content-length=3]\nbody "xyz"\nneeds more`
+  );
+  const unevenPieces: i32[] = [13, 400, 1, 777, 250];
+  piecesCase(
+    t,
+    "a 1500-byte body fed in uneven pieces",
+    `HTTP/1.1 200 OK\r\nContent-Length: 1500\r\n\r\n${repeat("0123456789", toI32(150))}`,
+    unevenPieces,
+    `200 1.1 keep length 1500 [content-length=1500]\nbody "${repeat("0123456789", toI32(150))}"\nneeds more`
+  );
+  const pipelinedPieces: i32[] = [100, 900, 3];
+  piecesCase(
+    t,
+    "two pipelined responses over 1 KiB together",
+    `HTTP/1.1 200 OK\r\nContent-Length: 600\r\n\r\n${repeat("x", toI32(600))}HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n1f4\r\n${repeat("y", toI32(500))}\r\n0\r\n\r\n`,
+    pipelinedPieces,
+    `200 1.1 keep length 600 [content-length=600]\nbody "${repeat("x", toI32(600))}"\n` +
+      `200 1.1 keep chunked [transfer-encoding=chunked]\nbody "${repeat("y", toI32(500))}"\nneeds more`
+  );
+
   // --- The status line --------------------------------------------------------
   accepted(t, "a status code with no reason or space after it", "HTTP/1.1 204\r\n\r\n", plain());
   accepted(t, "an empty reason", "HTTP/1.1 204 \r\n\r\n", plain());
-  accepted(t, "an HTTP/1.9 response, read as 1.1", "HTTP/1.9 204 No Content\r\n\r\n", plain());
+  readAs(t, "an HTTP/1.9 response, read as 1.1", "HTTP/1.9 204 No Content\r\n\r\n", plain(), '204 1.1 keep length -1 []\nbody ""\nneeds more');
   refused(t, "a two-digit status", "HTTP/1.1 20 OK\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
   refused(t, "a status above 599", "HTTP/1.1 600 Nope\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
   refused(t, "a status below 100", "HTTP/1.1 099 Nope\r\n\r\n", plain(), HTTP1_E_STATUS_LINE);
@@ -518,9 +608,9 @@ export const http1ClientChecks = (): i32 => {
   refused(t, "the empty line ended in a bare LF", "HTTP/1.1 204 No Content\r\nX-A: 1\r\n\n", plain(), HTTP1_E_BARE_LF);
 
   // --- Framing ---------------------------------------------------------------
-  accepted(t, "a Content-Length list of one value repeated", "HTTP/1.1 200 OK\r\nContent-Length: 2, 2\r\n\r\nok", plain());
-  accepted(t, "two Content-Length fields that agree", "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\nok", plain());
-  accepted(t, "a Content-Length with leading zeros", "HTTP/1.1 200 OK\r\nContent-Length: 0002\r\n\r\nok", plain());
+  readAs(t, "a Content-Length list of one value repeated", "HTTP/1.1 200 OK\r\nContent-Length: 2, 2\r\n\r\nok", plain(), '200 1.1 keep length 2 [content-length=2, 2]\nbody "ok"\nneeds more');
+  readAs(t, "two Content-Length fields that agree", "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 2\r\n\r\nok", plain(), '200 1.1 keep length 2 [content-length=2; content-length=2]\nbody "ok"\nneeds more');
+  readAs(t, "a Content-Length with leading zeros", "HTTP/1.1 200 OK\r\nContent-Length: 0002\r\n\r\nok", plain(), '200 1.1 keep length 2 [content-length=0002]\nbody "ok"\nneeds more');
   accepted(t, "chunked in any case", "HTTP/1.1 200 OK\r\nTransfer-Encoding: CHUNKED\r\n\r\n0\r\n\r\n", plain());
   refused(t, "a Content-Length that is not digits", "HTTP/1.1 200 OK\r\nContent-Length: 0x5\r\n\r\n", plain(), HTTP1_E_LENGTH);
   refused(t, "a negative Content-Length", "HTTP/1.1 200 OK\r\nContent-Length: -1\r\n\r\n", plain(), HTTP1_E_LENGTH);
@@ -529,6 +619,8 @@ export const http1ClientChecks = (): i32 => {
   refused(t, "a Content-Length list whose values differ", "HTTP/1.1 200 OK\r\nContent-Length: 2, 3\r\n\r\nok", plain(), HTTP1_E_LENGTH);
   refused(t, "two Content-Length fields that differ", "HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Length: 3\r\n\r\nok", plain(), HTTP1_E_LENGTH);
   refused(t, "a Content-Length with a sign", "HTTP/1.1 200 OK\r\nContent-Length: +2\r\n\r\nok", plain(), HTTP1_E_LENGTH);
+  refused(t, "two Content-Length values past 2^53 that differ, on a 304", "HTTP/1.1 304 Not Modified\r\nContent-Length: 90071992547409930, 90071992547409931\r\n\r\n", plain(), HTTP1_E_LENGTH);
+  refused(t, "a Content-Length past 2^53 repeated, which saturation cannot compare", "HTTP/1.1 304 Not Modified\r\nContent-Length: 90071992547409930\r\nContent-Length: 90071992547409930\r\n\r\n", plain(), HTTP1_E_LENGTH);
   refused(t, "a malformed Content-Length on a 304 too", "HTTP/1.1 304 Not Modified\r\nContent-Length: x\r\n\r\n", plain(), HTTP1_E_LENGTH);
   refused(t, "Content-Length values that differ, on a response to HEAD too", "HTTP/1.1 200 OK\r\nContent-Length: 1, 2\r\n\r\n", toHead(), HTTP1_E_LENGTH);
   refused(t, "Transfer-Encoding with Content-Length on a 204", "HTTP/1.1 204 No Content\r\nTransfer-Encoding: chunked\r\nContent-Length: 0\r\n\r\n", plain(), HTTP1_E_FRAMING);

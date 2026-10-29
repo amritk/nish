@@ -121,8 +121,11 @@ answers them again, and what is fed after them is dropped.
 
 - A response to `HEAD`, an interim 1xx, a 204 and a 304 have no body,
   whatever their fields say. Call `p.expect(true, false)` before a response to `HEAD`.
-- A 2xx to `CONNECT` is a tunnel; call `p.expect(false, true)` first. Any
-  other answer to `CONNECT` has a body like any response.
+- A 2xx to `CONNECT` is a tunnel; call `p.expect(false, true)` first. It
+  answers `HTTP1_HEAD`, then `HTTP1_END` with no body, then `HTTP1_UPGRADE`
+  on the next call; `tunnelBytes()` means something only after
+  `HTTP1_UPGRADE`, and answers what was fed past the head. Any other answer
+  to `CONNECT` has a body like any response.
 - `Transfer-Encoding: chunked` is de-chunked; `Content-Length` is that many
   bytes.
 - Anything else is read until the server closes. Call `p.finish()` when the

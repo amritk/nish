@@ -101,7 +101,7 @@ export const HTTP1_MAX_INFORMATIONAL: i32 = 32
 
 /** `error`: nothing is wrong. */
 export const HTTP1_E_NONE: i32 = 0
-/** `error`: the status line is not `HTTP/1.x`, a three-digit status from 100 to 599 and a reason. */
+/** `error`: the status line is not `HTTP/1.x`, a three-digit status from 100 to 599 and an optional reason. */
 export const HTTP1_E_STATUS_LINE: i32 = 1
 /** `error`: the response's HTTP major version is not 1. */
 export const HTTP1_E_VERSION: i32 = 2
@@ -868,7 +868,8 @@ const http1ClientFieldLine = (p: Http1ResponseParser, keep: boolean): i32 => {
  * elements are each a run of digits and all the same as each other and as
  * `seen`, the value of an earlier field (-1 for none). Answers the value, -1
  * when an element is empty or not digits, or -2 when two values differ. A
- * value past 2^53 is saturated to 2^53 + 1: over any `maxBody`.
+ * value past 2^53 is saturated to 2^53 + 1: over any `maxBody`. Saturated
+ * values cannot be told apart, so one seen with any other value is -2.
  */
 const http1ClientLengthList = (value: string, seen: i64): i64 => {
   const n: i32 = toI32(value.length)
@@ -893,7 +894,8 @@ const http1ClientLengthList = (value: string, seen: i64): i64 => {
           v = HTTP1_CLIENT_MAX_BODY + toI64(1)
         }
       }
-      if (found >= toI64(0) && found !== v) {
+      const saturated: boolean = v > HTTP1_CLIENT_MAX_BODY || found > HTTP1_CLIENT_MAX_BODY
+      if (found >= toI64(0) && (found !== v || saturated)) {
         return toI64(-2)
       }
       found = v

@@ -22,7 +22,7 @@ the memory each response's fields leave in the arena.
 
 | File | Functions |
 | --- | --- |
-| `std/net/http1-client.ts` | `http1WriteRequestHead`, `http1RequestHead` and their helpers (`http1ClientRequestNeed`, `http1ClientTargetOk`, `http1ClientPutField`, `http1ClientListHas`); `Http1ResponseParser` (`expect`, `feed`, `finish`, `next`, `keepAlive`, `header`, `buffered`, `tunnelBytes`) and its helpers (`http1ClientReserve`, `http1ClientTakeLine`, `http1ClientStatusLine`, `http1ClientFieldLine`, `http1ClientLengthList`, `http1ClientTally`, `http1ClientEndOfHead`, `http1ClientChunkSize`, `http1ClientBodyWindow`, `http1ClientCloseBody`, `http1ClientNext`) |
+| `std/net/http1-client.ts` | `http1WriteRequestHead`, `http1RequestHead` and their helpers (`http1ClientRequestNeed`, `http1ClientTargetOk`, `http1ClientPutField`, `http1ClientPutHead`, `http1ClientListHas`); `Http1ResponseParser` (`expect`, `feed`, `finish`, `next`, `keepAlive`, `header`, `buffered`, `tunnelBytes`) and its helpers (`http1ClientReserve`, `http1ClientClamp`, `http1ClientFail`, `http1ClientStartHead`, `http1ClientStartResponse`, `http1ClientTakeLine`, `http1ClientStatusLine`, `http1ClientFieldLine`, `http1ClientDigitAt`, `http1ClientLengthList`, `http1ClientTally`, `http1ClientConnectionHas`, `http1ClientEndOfHead`, `http1ClientChunkSize`, `http1ClientBodyWindow`, `http1ClientCloseBody`, `http1ClientNext`) |
 
 Out of scope: `std/net/http1.ts`, whose byte classes, text helpers and chunk
 writers the client imports and whose record is
@@ -137,6 +137,8 @@ responses to one request (`HTTP1_MAX_INFORMATIONAL`, 32, counted again for
 each request). Negative limits are clamped to 0, each `i32` limit to 2^30 and
 `maxBody` to 2^53, so that no sum the parser makes overflows; a length past
 2^63 or a chunk size past 64 bits is over the body limit, not wrapped. A
+`Content-Length` past 2^53 seen with another value is refused as values that
+differ, since two saturated values cannot be compared, on a 304 too. A
 `Content-Length` over `maxBody` on a response to HEAD is not refused, since
 no body is read. What is buffered is the input fed and not yet read: a line
 in progress is held only up to its limit, body bytes are handed out as they
