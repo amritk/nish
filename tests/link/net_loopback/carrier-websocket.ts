@@ -129,7 +129,9 @@ export const websocketChecks = (t: Suite): void => {
   t.ok("websocket: the client's close with code 4000 is answered with a close of that code", lbWsEvent(c, d) === WS_CLOSE && d.closeCode === 4000);
   t.eqI32("websocket: and the server's program saw the client's code", lp.h1App.closeStatus, toI32(4000));
   t.eqStr("websocket: then the server ends TLS with close_notify", c.awaitAlert(), "1 0");
-  t.ok("websocket: and closes the slot", lp.awaitEnd(c.index) && lp.awaitClosed(toI32(1)) && lp.busy() === 0);
+  t.ok("websocket: then the end of the stream, not a reset", lp.awaitEnd(c.index) && lp.peers[c.index].failure === 0);
+  lp.hangUp(c.index);
+  t.ok("websocket: and, once the client hangs up, closes the slot", lp.awaitClosed(toI32(1)) && lp.busy() === 0);
   t.eqI32("websocket: the program refused nothing", lp.h1App.refusals, ZERO);
   t.eqStr("websocket: with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();

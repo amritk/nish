@@ -118,8 +118,13 @@ const RUNTIME_TEXT_BUDGET = 3698
  * that file is a closed set and its loop answers nothing: sharing it would have grown
  * runtime.c by 21 bytes past its ceiling. The budget is the next 256-byte boundary above
  * the measurement, leaving 71.
+ *
+ * **Raised to 3,072 when `main`'s `setNice` and `setIdlePriority` met them**, measured
+ * **2,822 bytes** on 2026-10-29 with clang 18.1.3 on linux-x64: `nish_set_nice` 31 and
+ * `nish_set_idle_priority` 46, which fit the old 2,560 alone and the 2,816 above only
+ * without each other's 77. The budget is the next 256-byte boundary, leaving 250.
  */
-const RUNTIME_OS_TEXT_BUDGET = 2816
+const RUNTIME_OS_TEXT_BUDGET = 3072
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.

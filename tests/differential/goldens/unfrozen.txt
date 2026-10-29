@@ -120,6 +120,7 @@ cases/caps_fs_write added after R6: no rewriter to freeze it with
 cases/caps_generic added after R6: no rewriter to freeze it with
 cases/caps_host added after R6: no rewriter to freeze it with
 cases/caps_net added after R6: no rewriter to freeze it with
+cases/caps_process_nice added after R6: no rewriter to freeze it with
 cases/caps_process_spawn added after R6: no rewriter to freeze it with
 cases/caps_process_wait added after R6: no rewriter to freeze it with
 cases/caps_pure added after R6: no rewriter to freeze it with
@@ -337,6 +338,7 @@ cases/os_cpu added after R6: no rewriter to freeze it with
 cases/os_kill added after R6: no rewriter to freeze it with
 cases/os_memory added after R6: no rewriter to freeze it with
 cases/os_mtime added after R6: no rewriter to freeze it with
+cases/os_nice added after R6: no rewriter to freeze it with
 cases/os_now added after R6: no rewriter to freeze it with
 cases/os_random added after R6: no rewriter to freeze it with
 cases/os_random_limit added after R6: no rewriter to freeze it with

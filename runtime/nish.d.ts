@@ -321,6 +321,21 @@ declare function waitPid(pid: i32, flags: i32): i32[];
 declare function availableParallelism(): i32;
 /** Bytes of physical memory, or -1 when the host does not say. */
 declare function totalMemory(): i64;
+/**
+ * Set this process's nice value to `n`: 0, or a negative errno. The kernel
+ * clamps `n` to -20..19, and lowering it below the current value needs the
+ * privilege to (-13 without it on Linux). Children started afterwards inherit
+ * it. Throws under Node.
+ */
+declare function setNice(n: i32): i32;
+/**
+ * Move this process to `SCHED_IDLE`, which runs it only when nothing else wants
+ * the CPU: 0, or a negative errno, and -95 where the host has no such policy
+ * (Darwin). An unprivileged process can never leave `SCHED_IDLE` again, and an
+ * idle process can starve on a saturated machine, so a caller keeps a
+ * normal-priority fallback for work that must finish. Throws under Node.
+ */
+declare function setIdlePriority(): i32;
 /** One environment variable, or `null` when it is unset (an empty value is a set variable). */
 declare function getenv(name: string): string | null;
 /**
@@ -500,6 +515,14 @@ declare module "nish:process" {
   export function availableParallelism(): i32;
   /** Bytes of physical memory, or -1. */
   export function totalMemory(): i64;
+  /** Set this process's nice value (clamped to -20..19): 0, or a negative errno. */
+  export function setNice(n: i32): i32;
+  /**
+   * Move this process to `SCHED_IDLE`: 0, a negative errno, or -95 off Linux.
+   * An unprivileged process can never leave it, and an idle process can starve
+   * on a saturated machine, so a caller keeps a normal-priority fallback.
+   */
+  export function setIdlePriority(): i32;
   /**
    * A monotonic clock in nanoseconds. The origin is arbitrary, so only the
    * difference between two reads is meaningful.

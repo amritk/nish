@@ -190,6 +190,8 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "unlinkSync" ||
     name === "writeFileBytesSync" ||
     name === "writeBytes" ||
+    name === "setNice" ||
+    name === "setIdlePriority" ||
     isTermExport(name) ||
     isNetExport(name) ||
     isUnsafeExport(name)
@@ -1101,6 +1103,21 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       refuseOnWasm(ctx, call, name)
     }
     return name === "totalMemory" ? T_I64 : T_I32
+  }
+  // This process's nice value and its move to `SCHED_IDLE`, each 0 or a
+  // negative errno. A wasm32 build schedules nothing of the host's, and
+  // runtime-os.c answers -ENOSYS there, so both are refused as `kill` is.
+  if (name === "setNice") {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_I32)
+    }
+    return T_I32
+  }
+  if (name === "setIdlePriority") {
+    if (checkBuiltinArity(ctx, call, name, args, 0)) {
+      refuseOnWasm(ctx, call, name)
+    }
+    return T_I32
   }
   // `nish:term`, runtime-term.c. `readStdin` is `netRead` without the
   // descriptor: the `u8[]` it writes and the range of it, checked as

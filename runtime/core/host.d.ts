@@ -73,6 +73,9 @@ export declare function spawn(argv: string[]): i32;
 export declare function waitPid(pid: i32, flags: i32): i32[];
 export declare function signalFd(): i32;
 export declare function readSignal(fd: i32): i32;
+/** These two have no reading under Node: each throws, naming itself. */
+export declare function setNice(n: i32): i32;
+export declare function setIdlePriority(): i32;
 /** What each `nish:net` function is under the core: a throw naming `name`. */
 export declare function noNetReading(name: string): never;
 /** What `readStdin`, `waitStdin`, `setRawMode` and `setTerminalRestore` are under the core: a throw naming `name`. */

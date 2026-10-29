@@ -1468,6 +1468,23 @@ if (!only || "os_host".includes(only)) {
       reaped.stderr.includes("`waitPid` has no synchronous reading under Node"),
     shown(reaped)
   )
+
+  // setNice and setIdlePriority under the prelude. Node has `os.setPriority`
+  // but no SCHED_IDLE, so both throw, naming themselves, before printing.
+  const loudNice = runCaseUnderPrelude("os_nice", [])
+  check(
+    "os_nice: under the prelude setNice fails loudly rather than answering",
+    loudNice.status !== 0 && loudNice.stdout === "" && loudNice.stderr.includes("`setNice` has no reading under Node"),
+    shown(loudNice)
+  )
+  const idler = path.join(osDir, "idler.ts")
+  fs.writeFileSync(idler, "export const main = (): number => {\n  console.log(setIdlePriority());\n  return 0;\n};\n")
+  const idled = runUnderPrelude(idler, [])
+  check(
+    "os_nice: under the prelude setIdlePriority fails loudly rather than answering",
+    idled.status !== 0 && idled.stdout === "" && idled.stderr.includes("`setIdlePriority` has no reading under Node"),
+    shown(idled)
+  )
 }
 
 // A socket program of the `net_` blocks, run with `args`: `onChunk(out, child)` is

@@ -901,6 +901,13 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "totalMemory") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_total_memory")}()`)
   }
+  if (name === "setNice") {
+    const n = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_nice")}(i32 ${n})`)
+  }
+  if (name === "setIdlePriority") {
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_idle_priority")}()`)
+  }
   // One call answering the array header, which may be null. The same shape as
   // `readFileSyncOrNull` one type up: the checker typed it `string[] | null` and
   // an ordinary null compare narrows it, so nothing here has to know that a
@@ -1149,6 +1156,14 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "totalMemory") {
     out.push("nish_total_memory")
+    return out
+  }
+  if (name === "setNice") {
+    out.push("nish_set_nice")
+    return out
+  }
+  if (name === "setIdlePriority") {
+    out.push("nish_set_idle_priority")
     return out
   }
   if (name === "readdirSync") {
