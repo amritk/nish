@@ -113,7 +113,8 @@ after `readTimeoutMs` (`a server that never answers is HTTP_E_READ_TIMEOUT`,
 `after readTimeoutMs`); a body dripped a byte at a time, each byte inside the
 read timeout, is cut off by `totalTimeoutMs`, counted from the start of the
 fetch (`a body dripped a byte at a time is cut off by totalTimeoutMs`, `after
-totalTimeoutMs, counted from the start of the fetch`); a listener that never
+totalTimeoutMs, counted from the start of the fetch`, `and the error says the
+fetch ran past totalTimeoutMs`); a listener that never
 accepts is `HTTP_E_CONNECT_TIMEOUT` (`a listener whose backlog is full is
 HTTP_E_CONNECT_TIMEOUT`). A refused port and an unknown name have their own
 codes (`a port nothing listens on is HTTP_E_REFUSED`, `a name that does not
@@ -127,8 +128,9 @@ refuses a body past its own limit and reads one exactly at it whole (`and so
 is one past readAll's limit`, `while one exactly at the limit is read whole`).
 A body that failed, cut short or refused, answers the same error on every later
 read (`and the body answers that error again when read after it`, twice), and
-one read two bytes at a time is whole (`a body read two bytes at a time is
-read whole`). A stream is handed out as it arrives (`an event stream's first event is read
+a read never writes past the count it asked for (`a read asking for two bytes
+of a longer body answers two`, `a body read two bytes at a time is read
+whole`). A stream is handed out as it arrives (`an event stream's first event is read
 while the server holds the stream open`).
 
 **Keep-alive cannot mix responses.** A second fetch reuses the connection
@@ -142,7 +144,9 @@ POST (`a GET on it is sent again on a fresh connection`, `a POST on it is not
 sent twice: it fails with HTTP_E_IO`). A response that says `Connection:
 close` ends its connection even when the server leaves the socket open (`a
 response that says Connection: close is read`, `and its connection is not used
-again, though the server left it open`).
+again, though the server left it open`), so a POST after it is sent once, on a
+new connection (`a POST after it goes on a new connection, with no retry
+needed`).
 
 **Redirects.** Not followed by default (`a redirect is not followed by
 default`); followed, bounded by `maxRedirects` (`a redirect loop is
@@ -198,9 +202,11 @@ HTTP_E_TLS`), and a body the path cuts off without a `close_notify` is an
 error, never a short body (`a body cut off without a close_notify is
 HTTP_E_TLS, not a short body`), while a body with no length ends cleanly at
 the server's `close_notify` (`a body with no length ends at the server's
-close_notify`). A pooled TLS connection the server dropped is retried on a
+close_notify`, `and read again, it answers 0 with no error`). A pooled TLS
+connection the server dropped, or ended with a fatal alert, is retried on a
 new one (`a pooled TLS connection the server dropped is retried on a new
-one`), and a server silent through the handshake is a read timeout, not a TLS
+one`, `a pooled TLS connection the server ends with an alert is retried on a
+new one`), and a server silent through the handshake is a read timeout, not a TLS
 failure (`a server that never answers the handshake is HTTP_E_READ_TIMEOUT`).
 A redirect from https to http is refused even
 when cross-origin hops are allowed (`a redirect from https to http is refused
