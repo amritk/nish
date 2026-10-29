@@ -1,6 +1,7 @@
 /**
  * `nish/net/url` — the request target's path and query, split and
- * percent-decoded in place, and its query string read as key/value pairs.
+ * percent-decoded in place, and its query string read as key/value pairs; and
+ * whole URLs, parsed into their parts and references resolved against them.
  *
  * A handler that routes on a path or reads `?name=…` from a query otherwise
  * writes its own byte scan, and each such scan decides differently what `%zz`,
@@ -54,9 +55,30 @@
  * pairs (`a&&b`, a leading or trailing `&`) are skipped and not counted, as
  * `URLSearchParams` skips them.
  *
- * **A fragment is not part of a request target** (RFC 9112 §3.2), so nothing
- * here looks for a `#`: in a target that holds one, it is a byte of the path
- * or of the last value.
+ * **A fragment is not part of a request target** (RFC 9112 §3.2), so the byte
+ * API never looks for a `#`: in a target that holds one, it is a byte of the
+ * path or of the last value.
+ *
+ * **A whole URL is parsed strictly, and nothing in it is decoded.** A client
+ * that is handed `http://…` by a user, a redirect or a link needs its host and
+ * port before it connects, and the place each reference points to:
+ *
+ *     import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
+ *
+ *     const base: Url | null = urlParse("https://example.com/a/b?q")
+ *     if (base !== null) {
+ *       const next: Url | null = urlResolve(base, "../c#top")  // https://example.com/c#top
+ *       // next.host, next.port (-1: the default), urlOrigin(next) === "https://example.com:443"
+ *     }
+ *
+ * `urlParse` and `urlResolve` follow RFC 3986 (§3 for the parts, §5.2 to
+ * resolve, dot segments removed) and refuse, with null, what two readers could
+ * take for different hosts: a byte outside printable ASCII, a malformed `%`, a
+ * second `@`, a percent-encoded or otherwise non-unreserved host byte, a host
+ * that looks numeric but is not a strict dotted-decimal IPv4 address (`127.1`,
+ * `0x7f.0.0.1`, `2130706433`), an IPv6 zone or IPvFuture literal, and a port
+ * past 65535. The scheme and host are lower-cased; every other part is kept as
+ * written, still percent-encoded.
  *
  * The record of what this module refuses and why is `docs/security/url.md`.
  */

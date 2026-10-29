@@ -145,6 +145,7 @@ const refusedUrls = (): string[] => [
   "a backslash in the host", "http://a\\b/",
   "two @ in the authority", "http://u@evil@a/",
   "a [ in the userinfo", "http://u[@a/",
+  "a ] in the userinfo", "http://u]@a/",
   "port 65536", "http://a:65536/",
   "a port of twenty digits", "http://a:99999999999999999999/",
   "a signed port", "http://a:+80/",
@@ -175,6 +176,41 @@ const refusedUrls = (): string[] => [
   "a host whose last label is hex", "http://0x7f.0.0.1/",
   "a reg-name whose last label is a number", "http://a.b.123/",
 ];
+
+/**
+ * `count` seeded strings over the bytes the parser splits on, each parsed and
+ * resolved against `base`: none may panic, and every URL either answer gives
+ * must write back to a string that parses to itself. Answers how many broke
+ * that, and how many parsed, so the corpus is known to reach both sides.
+ */
+const roundTripFuzz = (base: Url, count: i32): string => {
+  const prefixes: string[] = ["http://", "https://", "HTTP://", "g:", "//", "", "/", "file://"];
+  const alphabet: string = "aZ09:/?#@[].%2eEf+-~!\\ xv";
+  let seed: i32 = 1;
+  let broken: i32 = 0;
+  let parsedCount: i32 = 0;
+  for (let n: i32 = 0; n < count; n += 1) {
+    seed = (seed * 75 + 74) % 65537;
+    const parts: string[] = [prefixes[seed % toI32(prefixes.length)]];
+    const len: i32 = seed % 13;
+    for (let k: i32 = 0; k < len; k += 1) {
+      seed = (seed * 75 + 74) % 65537;
+      const at: i32 = seed % toI32(alphabet.length);
+      parts.push(alphabet.slice(at, at + 1));
+    }
+    const text: string = parts.join("");
+    const answers: string[] = [roundTrip(text), resolved(base, text)];
+    for (let k: i32 = 0; k < 2; k += 1) {
+      if (answers[k] !== "null") {
+        parsedCount += 1;
+        if (roundTrip(answers[k]) !== answers[k]) {
+          broken += 1;
+        }
+      }
+    }
+  }
+  return `${broken} broken, ${parsedCount} parsed`;
+};
 
 export const urlParseChecks = (): i32 => {
   const t = new Suite("net_url_parse");
@@ -249,6 +285,9 @@ export const urlParseChecks = (): i32 => {
   t.eqStr("userinfo is written back", roundTrip("http://u:p@a/"), "http://u:p@a/");
   t.eqStr("a username alone is written back", roundTrip("http://u@a/"), "http://u@a/");
   t.eqStr("an empty userinfo is dropped", roundTrip("http://@a/"), "http://a/");
+  t.eqStr("an empty password is written as none", roundTrip("http://u:@a/"), "http://u@a/");
+  t.eqStr("a default port written out is kept", roundTrip("http://a:80/"), "http://a:80/");
+  t.eqStr("an escape keeps the case it was written in", roundTrip("http://a/%4a%4A?%4a#%4A"), "http://a/%4a%4A?%4a#%4A");
 
   const ipv6Accepted: string[] = [
     "::", "::1", "1::", "1:2:3:4:5:6:7:8", "1:2:3:4:5:6:7::", "::2:3:4:5:6:7:8",
@@ -267,6 +306,12 @@ export const urlParseChecks = (): i32 => {
   for (let i: i32 = 0; i + 1 < toI32(refused.length); i += 2) {
     t.eqStr(`refused: ${refused[i]}`, parts(refused[i + 1]), "null");
   }
+
+  t.eqStr(
+    "4,000 seeded strings parse and resolve without a panic, and each answer writes back to itself",
+    roundTripFuzz(base, 4000),
+    "0 broken, 2161 parsed",
+  );
 
   t.ok("http's default port", urlDefaultPort("http") === 80);
   t.ok("https's default port", urlDefaultPort("https") === 443);

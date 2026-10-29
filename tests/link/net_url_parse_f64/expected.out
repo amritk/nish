@@ -1,0 +1,165 @@
+PASS  the RFC 3986 §5.4 base parses and writes back
+PASS  §5.4.1 "g:h"
+PASS  §5.4.1 "g"
+PASS  §5.4.1 "./g"
+PASS  §5.4.1 "g/"
+PASS  §5.4.1 "/g"
+PASS  §5.4.1 "//g"
+PASS  §5.4.1 "?y"
+PASS  §5.4.1 "g?y"
+PASS  §5.4.1 "#s"
+PASS  §5.4.1 "g#s"
+PASS  §5.4.1 "g?y#s"
+PASS  §5.4.1 ";x"
+PASS  §5.4.1 "g;x"
+PASS  §5.4.1 "g;x?y#s"
+PASS  §5.4.1 ""
+PASS  §5.4.1 "."
+PASS  §5.4.1 "./"
+PASS  §5.4.1 ".."
+PASS  §5.4.1 "../"
+PASS  §5.4.1 "../g"
+PASS  §5.4.1 "../.."
+PASS  §5.4.1 "../../"
+PASS  §5.4.1 "../../g"
+PASS  §5.4.2 "../../../g"
+PASS  §5.4.2 "../../../../g"
+PASS  §5.4.2 "/./g"
+PASS  §5.4.2 "/../g"
+PASS  §5.4.2 "g."
+PASS  §5.4.2 ".g"
+PASS  §5.4.2 "g.."
+PASS  §5.4.2 "..g"
+PASS  §5.4.2 "./../g"
+PASS  §5.4.2 "./g/."
+PASS  §5.4.2 "g/./h"
+PASS  §5.4.2 "g/../h"
+PASS  §5.4.2 "g;x=1/./y"
+PASS  §5.4.2 "g;x=1/../y"
+PASS  §5.4.2 "g?y/./x"
+PASS  §5.4.2 "g?y/../x"
+PASS  §5.4.2 "g#s/./x"
+PASS  §5.4.2 "g#s/../x"
+PASS  §5.4.2 "http:g" resolves strictly to an http URL with no host, which is refused
+PASS  a reference with an empty authority is refused for http
+PASS  a reference breaking a parse rule is refused
+PASS  a reference with a bad host is refused
+PASS  the base's fragment is not carried over
+PASS  an empty reference drops the base's fragment
+PASS  the base's userinfo and port are carried over
+PASS  a relative path against an empty base path with an authority
+PASS  a relative path against a base with no authority
+PASS  a reference's scheme and host are lower-cased
+PASS  a .. in a reference with an authority is removed
+PASS  resolving does not change the base
+PASS  the parts of a full URL
+PASS  no userinfo, port, query or fragment
+PASS  a query and fragment written empty are empty, not null
+PASS  a username alone
+PASS  an empty port is no port
+PASS  port 0
+PASS  port 65535
+PASS  a port with leading zeros
+PASS  an IPv6 host loses its brackets and is lower-cased
+PASS  an IPv4 host
+PASS  a file URL with an empty host
+PASS  a URL with no authority
+PASS  a scheme with digits, +, - and .
+PASS  a ? and # in the fragment belong to it
+PASS  a : and @ in the path belong to it
+PASS  dot segments are removed when parsing
+PASS  dot segments written as %2e are removed
+PASS  %2e%2e at the end leaves a directory
+PASS  %2e inside a segment is kept
+PASS  dot segments in the query are kept
+PASS  an empty segment before .. is the one removed
+PASS  a path that would read back as an authority is written after /.
+PASS  which parses back to the same path
+PASS  an IPv6 host is written back in brackets
+PASS  userinfo is written back
+PASS  a username alone is written back
+PASS  an empty userinfo is dropped
+PASS  an empty password is written as none
+PASS  a default port written out is kept
+PASS  an escape keeps the case it was written in
+PASS  an IPv6 literal [::] is accepted
+PASS  an IPv6 literal [::1] is accepted
+PASS  an IPv6 literal [1::] is accepted
+PASS  an IPv6 literal [1:2:3:4:5:6:7:8] is accepted
+PASS  an IPv6 literal [1:2:3:4:5:6:7::] is accepted
+PASS  an IPv6 literal [::2:3:4:5:6:7:8] is accepted
+PASS  an IPv6 literal [1:2:3:4:5:6::8] is accepted
+PASS  an IPv6 literal [abcd:ef01::] is accepted
+PASS  an IPv6 literal [::ffff:1.2.3.4] is accepted
+PASS  an IPv6 literal [1:2:3:4:5:6:1.2.3.4] is accepted
+PASS  an IPv6 literal [::1.2.3.4] is accepted
+PASS  255.255.255.255 is an IPv4 host
+PASS  0.0.0.0 is an IPv4 host
+PASS  a reg-name with a numeric label that is not the last
+PASS  a reg-name ending in a dot
+PASS  a reg-name with unreserved punctuation
+PASS  a reg-name whose last label starts with 0x but is not hex
+PASS  refused: no scheme
+PASS  refused: no scheme: a relative path
+PASS  refused: a scheme that starts with a digit
+PASS  refused: an empty scheme
+PASS  refused: a space
+PASS  refused: a tab
+PASS  refused: a CR LF
+PASS  refused: a NUL
+PASS  refused: a DEL
+PASS  refused: a byte past 0x7F
+PASS  refused: a % not followed by two hex digits
+PASS  refused: a % at the end
+PASS  refused: an empty http host
+PASS  refused: an empty https host
+PASS  refused: an http URL with no authority
+PASS  refused: an empty host with a port
+PASS  refused: a percent-encoded byte in the host
+PASS  refused: a sub-delim in the host
+PASS  refused: a backslash in the host
+PASS  refused: two @ in the authority
+PASS  refused: a [ in the userinfo
+PASS  refused: a ] in the userinfo
+PASS  refused: port 65536
+PASS  refused: a port of twenty digits
+PASS  refused: a signed port
+PASS  refused: a port with a letter
+PASS  refused: two ports
+PASS  refused: an unclosed IPv6 literal
+PASS  refused: an empty IPv6 literal
+PASS  refused: an IPv6 literal with nine groups
+PASS  refused: an IPv6 literal with seven groups and no ::
+PASS  refused: an IPv6 literal with :: and eight groups
+PASS  refused: an IPv6 literal with two ::
+PASS  refused: an IPv6 literal with :::
+PASS  refused: an IPv6 group of five digits
+PASS  refused: an IPv6 literal ending in one :
+PASS  refused: an IPv6 literal starting with one :
+PASS  refused: an IPv6 literal with a non-hex digit
+PASS  refused: an IPv6 zone
+PASS  refused: an IPvFuture literal
+PASS  refused: an IPv6 literal with a bad IPv4 tail
+PASS  refused: an IPv6 literal with an IPv4 tail too many
+PASS  refused: bytes between ] and the port
+PASS  refused: an IPv4 octet above 255
+PASS  refused: an IPv4 address of three parts
+PASS  refused: an IPv4 address of five parts
+PASS  refused: an IPv4 octet with a leading zero
+PASS  refused: an IPv4 address with a trailing dot
+PASS  refused: a host that is one decimal number
+PASS  refused: a host whose last label is hex
+PASS  refused: a reg-name whose last label is a number
+PASS  4,000 seeded strings parse and resolve without a panic, and each answer writes back to itself
+PASS  http's default port
+PASS  https's default port
+PASS  another scheme has none
+PASS  an origin writes the default port
+PASS  so an explicit default port is the same origin
+PASS  an https origin
+PASS  http and https are different origins
+PASS  an explicit port
+PASS  userinfo is not part of an origin
+PASS  an IPv6 origin is bracketed
+PASS  a scheme other than http or https has no origin
+net_url_parse: 164 passed, 0 failed, 0 skipped

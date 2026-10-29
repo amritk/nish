@@ -79,6 +79,9 @@ PASS  an IPv6 host is written back in brackets
 PASS  userinfo is written back
 PASS  a username alone is written back
 PASS  an empty userinfo is dropped
+PASS  an empty password is written as none
+PASS  a default port written out is kept
+PASS  an escape keeps the case it was written in
 PASS  an IPv6 literal [::] is accepted
 PASS  an IPv6 literal [::1] is accepted
 PASS  an IPv6 literal [1::] is accepted
@@ -117,6 +120,7 @@ PASS  refused: a sub-delim in the host
 PASS  refused: a backslash in the host
 PASS  refused: two @ in the authority
 PASS  refused: a [ in the userinfo
+PASS  refused: a ] in the userinfo
 PASS  refused: port 65536
 PASS  refused: a port of twenty digits
 PASS  refused: a signed port
@@ -146,6 +150,7 @@ PASS  refused: an IPv4 address with a trailing dot
 PASS  refused: a host that is one decimal number
 PASS  refused: a host whose last label is hex
 PASS  refused: a reg-name whose last label is a number
+PASS  4,000 seeded strings parse and resolve without a panic, and each answer writes back to itself
 PASS  http's default port
 PASS  https's default port
 PASS  another scheme has none
@@ -157,4 +162,4 @@ PASS  an explicit port
 PASS  userinfo is not part of an origin
 PASS  an IPv6 origin is bracketed
 PASS  a scheme other than http or https has no origin
-net_url_parse: 159 passed, 0 failed, 0 skipped
+net_url_parse: 164 passed, 0 failed, 0 skipped

@@ -59,7 +59,7 @@ of `main`, before any thread starts. See
 | [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url, bcrypt |
 | [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router, a PostgreSQL client |
 | [`nish/compress/*`](compression.md) | gzip, zlib and raw DEFLATE, both ways, into buffers you own or streamed; CRC-32 and Adler-32; `nish/net/http-compress` for `Accept-Encoding` and gzip responses |
-| [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing |
+| [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing; `urlParse`, `urlResolve` and `urlOrigin` for a whole URL |
 
 ## `nish/testing`
 
@@ -1975,8 +1975,79 @@ and answers null for a key past it.
 The byte API does not check that what it decodes is UTF-8: a value may be
 binary. The `name` you give `urlQueryFind` or `urlQueryGet` is ASCII: the
 native build compares it with the key's bytes and Node with its UTF-16 code
-units, so a non-ASCII name answers differently on the two. Nothing here looks
-for a `#`, which is never part of a request target.
+units, so a non-ASCII name answers differently on the two. The byte API never
+looks for a `#`, which is never part of a request target.
+
+### Whole URLs
+
+A client handed a URL by a user, a redirect or a link needs its parts:
+`urlParse(s)` splits an absolute URL into a `Url` (`scheme`, `username`,
+`password`, `host`, `port`, `path`, `query`, `fragment`), and
+`urlResolve(base, ref)` resolves a reference against one, as a browser does
+for a link, removing `.` and `..` so a path never climbs above `/`.
+`urlSerialize` writes a `Url` back. The scheme and host are lower-cased;
+everything else is kept as written, still percent-encoded. `port` is -1 when
+the URL names none; `urlDefaultPort(scheme)` is 80 or 443, and
+`urlOrigin(u)` writes `scheme://host:port` with the port always there, so
+two URLs are the same origin exactly when their origins are equal strings.
+
+```ts nish:ok
+import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
+
+const show = (base: Url, ref: string): void => {
+  const u: Url | null = urlResolve(base, ref);
+  if (u === null) {
+    console.log(`${ref} is refused`);
+    return;
+  }
+  console.log(`${ref} -> ${urlSerialize(u)}, host ${u.host}, port ${u.port}`);
+};
+
+export const main = (): i32 => {
+  const base: Url | null = urlParse("https://Example.com/docs/guide/index.html?v=2");
+  if (base === null) {
+    return 1;
+  }
+  show(base, "../api/url.html#parse");
+  show(base, "/../../etc/passwd");
+  show(base, "?v=3");
+  show(base, "//cdn.example.com:8443/app.js");
+  show(base, "http://127.1/");
+  show(base, "http://good.com%2f@evil.com/");
+  show(base, "http://a@b@c/");
+  const origin: string | null = urlOrigin(base);
+  console.log(origin === null ? "no origin" : origin);
+  return 0;
+};
+```
+
+```console
+$ nish run links.ts
+../api/url.html#parse -> https://example.com/docs/api/url.html#parse, host example.com, port -1
+/../../etc/passwd -> https://example.com/etc/passwd, host example.com, port -1
+?v=3 -> https://example.com/docs/guide/index.html?v=3, host example.com, port -1
+//cdn.example.com:8443/app.js -> https://cdn.example.com:8443/app.js, host cdn.example.com, port 8443
+http://127.1/ is refused
+http://good.com%2f@evil.com/ -> http://good.com%2f@evil.com/, host evil.com, port -1
+http://a@b@c/ is refused
+https://example.com:443
+```
+
+**A URL two readers could disagree on is refused**, with null, not repaired:
+a byte outside printable ASCII (a space, a tab, a non-ASCII letter), a `%`
+not followed by two hex digits, a second `@`, a host byte other than a
+letter, a digit and `-._~` (so a backslash or a percent-encoded byte), an IPv6
+zone, a port past 65535, and a host that looks
+like a number but is not four decimal parts (`127.1`, `0x7f.0.0.1`,
+`2130706433`, `010.0.0.1`). An http or https URL needs a host. What does
+parse is always one host: in `http://good.com%2f@evil.com/`, everything
+before the `@` is the username.
+
+Resolution is RFC 3986's, strictly: `http:g` against an http base is an
+absolute URL with no host, so it is refused, where a browser reads it as the
+relative `g`. A non-ASCII host is written in its `xn--` form. An IPv6 host is
+compared as written, so `[::1]` and `[0::1]` are different origins; check
+an address after you resolve the name, never the string, before you trust it.
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports
