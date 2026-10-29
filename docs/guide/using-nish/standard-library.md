@@ -1816,6 +1816,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x509` | DER and PEM, X.509 certificates read with their signature algorithm, key type and v3 extensions, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/pki-roots` | `pkiLoadSystemRoots()`, the root certificates to trust, parsed: those `SSL_CERT_FILE` and `SSL_CERT_DIR` name when either is set, with no fallback, and otherwise the first system bundle (`pkiSystemBundles()`) and `/etc/ssl/certs`. A block or file it cannot use is counted in `skipped`, never fatal, and only regular files are read; on macOS it reads `/etc/ssl/cert.pem`, not the Keychain, so roots and trust settings added there are missed. Native only |
+| `nish/crypto/pki` | `pkiVerifyServer(chain, hostname, nowMs, store)`, whether a TLS server's chain leads to a root of `pkiTrustStore(roots)` and names the host, as a `PkiResult` of a `code` (`PKI_OK` or a `PKI_ERR_` reason, `pkiReason(code)` its sentence) and the `path`. Checks signatures, validity, CA and path-length rules, key usages, name constraints and the hostname, never the common name; revocation is not checked. [Verifying TLS certificates](./tls-certificates.md) |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
 
 ```ts nish:ok
@@ -1869,8 +1870,8 @@ a bad key length, a tag that does not verify — so narrow the result before you
 use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
 `x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1` and
 `ed25519`, which came later, has been through a security audit (`ed25519` is
-recorded as a change after its area's audit, and `pki-roots` has a record
-written with its code); the records are in
+recorded as a change after its area's audit, and `pki-roots` and `pki` have
+a record written with their code); the records are in
 [docs/security/](../../security/README.md).
 
 ## `nish/net`
