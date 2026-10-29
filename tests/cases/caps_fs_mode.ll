@@ -22,23 +22,25 @@ entry:
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @nish_mkdir_mode(i8* %dir, i32 448)
   %1 = call i8* @nish_str_concat(i8* %dir, i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*))
-  %2 = call i32 @nish_create_file_exclusive(i8* %1, i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i32 384)
-  %3 = icmp slt i32 %2, 0
-  br i1 %3, label %if.then, label %if.end
+  %2 = call i32 @nish_unlink(i8* %1)
+  %3 = call i8* @nish_str_concat(i8* %dir, i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*))
+  %4 = call i32 @nish_create_file_exclusive(i8* %3, i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i32 384)
+  %5 = icmp slt i32 %4, 0
+  br i1 %5, label %if.then, label %if.end
 
 if.then:
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 1
 
 if.end:
-  %4 = call i8* @nish_str_concat(i8* %dir, i8* bitcast ({ i64, [8 x i8] }* @.str.2 to i8*))
-  %5 = call i32 @nish_write_file_mode(i8* %4, i8* %secret, i32 384)
-  store i32 %5, i32* %wrote.addr, align 4
-  %6 = call i8* @nish_str_concat(i8* %dir, i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*))
-  %7 = call i32 @nish_unlink(i8* %6)
-  %8 = load i32, i32* %wrote.addr, align 4
-  %9 = icmp slt i32 %8, 0
-  br i1 %9, label %cond.true, label %cond.false
+  %6 = call i8* @nish_str_concat(i8* %dir, i8* bitcast ({ i64, [8 x i8] }* @.str.2 to i8*))
+  %7 = call i32 @nish_write_file_mode(i8* %6, i8* %secret, i32 384)
+  store i32 %7, i32* %wrote.addr, align 4
+  %8 = call i8* @nish_str_concat(i8* %dir, i8* bitcast ({ i64, [6 x i8] }* @.str.0 to i8*))
+  %9 = call i32 @nish_unlink(i8* %8)
+  %10 = load i32, i32* %wrote.addr, align 4
+  %11 = icmp slt i32 %10, 0
+  br i1 %11, label %cond.true, label %cond.false
 
 cond.true:
   br label %cond.end
@@ -47,9 +49,9 @@ cond.false:
   br label %cond.end
 
 cond.end:
-  %10 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
+  %12 = phi i32 [ 1, %cond.true ], [ 0, %cond.false ]
   call void @nish_arena_release(i64 %arena.mark)
-  ret i32 %10
+  ret i32 %12
 }
 
 define noundef i32 @nish_main() #0 {

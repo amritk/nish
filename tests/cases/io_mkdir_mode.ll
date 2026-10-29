@@ -11,8 +11,9 @@
 @.str.7 = private unnamed_addr constant { i64, [6 x i8] } { i64 5, [6 x i8] c"false\00" }, align 8
 @.str.8 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c"bad mode: \00" }, align 8
 @.str.9 = private unnamed_addr constant { i64, [27 x i8] } { i64 26, [27 x i8] c"build/test/io_mkdir_mode.e\00" }, align 8
-@.str.10 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"missing parent: \00" }, align 8
-@.str.11 = private unnamed_addr constant { i64, [29 x i8] } { i64 28, [29 x i8] c"build/test/io_mkdir_mode.e/f\00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"sticky bit: \00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [17 x i8] } { i64 16, [17 x i8] c"missing parent: \00" }, align 8
+@.str.12 = private unnamed_addr constant { i64, [29 x i8] } { i64 28, [29 x i8] c"build/test/io_mkdir_mode.e/f\00" }, align 8
 @nish_arena = external global %struct.nish_arena, align 8
 
 declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
@@ -89,10 +90,14 @@ entry:
   %25 = call i8* @nish_str_from_i32(i32 %24)
   %26 = call i8* @nish_str_concat(i8* bitcast ({ i64, [11 x i8] }* @.str.8 to i8*), i8* %25)
   call void @nish_print(i8* %26)
-  %27 = call i32 @nish_mkdir_mode(i8* bitcast ({ i64, [29 x i8] }* @.str.11 to i8*), i32 448)
+  %27 = call i32 @nish_mkdir_mode(i8* bitcast ({ i64, [27 x i8] }* @.str.9 to i8*), i32 960)
   %28 = call i8* @nish_str_from_i32(i32 %27)
-  %29 = call i8* @nish_str_concat(i8* bitcast ({ i64, [17 x i8] }* @.str.10 to i8*), i8* %28)
+  %29 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.10 to i8*), i8* %28)
   call void @nish_print(i8* %29)
+  %30 = call i32 @nish_mkdir_mode(i8* bitcast ({ i64, [29 x i8] }* @.str.12 to i8*), i32 448)
+  %31 = call i8* @nish_str_from_i32(i32 %30)
+  %32 = call i8* @nish_str_concat(i8* bitcast ({ i64, [17 x i8] }* @.str.11 to i8*), i8* %31)
+  call void @nish_print(i8* %32)
   ret i32 0
 }
 

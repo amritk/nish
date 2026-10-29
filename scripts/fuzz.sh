@@ -115,11 +115,12 @@ build() {
   # clang instruments only functions carrying `sanitize_address`, which the
   # compiler never emits, so every definition is given it here; without it the
   # compiled Nish code links under ASan uninstrumented. Every `define` line
-  # ends `) {` or `) #N {` (an attribute group), and `#N sanitize_address` is a
-  # valid mixed list. UBSan instruments in clang's frontend, so it never
-  # reaches a .ll: the compiled code's own bounds and division checks stand
-  # in for it. A define this misses fails the build rather than going quiet.
-  sed -i -E 's/^(define .*\) (#[0-9]+ )?)\{$/\1sanitize_address {/' "$ir"/*.ll
+  # ends `) {`, `) #N {` (an attribute group) or `) <attributes> {` (a raw
+  # definition's inline list, such as `nounwind` or `"probe-stack"="inline-asm"`),
+  # and the attribute is appended to whichever list is there. UBSan instruments
+  # in clang's frontend, so it never reaches a .ll: the compiled code's own
+  # bounds and division checks stand in for it. A define this misses fails the build rather than going quiet.
+  sed -i -E 's/^(define .*\)( [^!{]*)?) \{$/\1 sanitize_address {/' "$ir"/*.ll
   if grep -h '^define ' "$ir"/*.ll | grep -qv ' sanitize_address {$'; then
     die "$name: a define in $ir/ was not given sanitize_address"
   fi

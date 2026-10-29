@@ -4,6 +4,7 @@
 // The report names the first of them as `keep`'s witness.
 const keep = (dir: string, secret: string): i32 => {
   mkdirSyncMode(dir, 0o700);
+  unlinkSync(`${dir}/lock`);
   if (createFileExclusiveSync(`${dir}/lock`, "", 0o600) < 0) {
     return 1;
   }

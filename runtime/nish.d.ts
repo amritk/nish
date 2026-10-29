@@ -281,21 +281,26 @@ declare function unlinkSync(path: string): i32;
  * (`0o600` for a secret) before a byte of `data` is in it, whatever the umask
  * or a file already there had, and a symbolic link at the path is refused
  * (-40). The byte count, or a negative errno: -22 for a mode outside
- * 0..0o7777. Written to a temporary name and moved with `renameSync`, a crash
- * leaves the old file or the new one. Never an exit.
+ * 0..0o777, the setuid, setgid and sticky bits included. The file is
+ * truncated and written in place, so a crash or a failed write leaves it
+ * empty or partial, and a file this process may write but does not own is
+ * emptied before the mode change answers -1 (`EPERM`). For a file that must
+ * be the old one or the new one, write a temporary name with this and move it
+ * with `renameSync`. Never an exit.
  */
 declare function writeFileSyncMode(path: string, data: string, mode: i32): i32;
 /**
  * `data` in a new file of exactly `mode`, created only if nothing is at `path`:
  * -17 when something is, a dangling symbolic link included. Of several
  * processes racing for one path exactly one succeeds, so it takes a lock. The
- * byte count, or a negative errno. Never an exit.
+ * byte count, or a negative errno; a write that fails after the create
+ * removes the file, so the lock is not left taken. Never an exit.
  */
 declare function createFileExclusiveSync(path: string, data: string, mode: i32): i32;
 /**
  * One directory made with `mode` less the umask (`0o700` is exact under any
  * umask that leaves the owner's bits): 0, or a negative errno. A path already
- * there is -17 and its mode is not changed.
+ * there is -17 and its mode is not changed; -22 for a mode outside 0..0o777.
  */
 declare function mkdirSyncMode(path: string, mode: i32): i32;
 /** One directory, not recursive; whether a directory is there afterwards. */
@@ -526,9 +531,9 @@ declare module "nish:fs" {
   export function renameSync(from: string, to: string): i32;
   /** 0, or a negative errno: a directory is refused, not removed. */
   export function unlinkSync(path: string): i32;
-  /** The byte count, or a negative errno; the file is exactly `mode` before it holds a byte, a link refused. */
+  /** The byte count, or a negative errno; the file is exactly `mode` (0..0o777) before it holds a byte, a link refused, written in place. */
   export function writeFileSyncMode(path: string, data: string, mode: i32): i32;
-  /** As `writeFileSyncMode`, but -17 when anything is at `path`: one racer wins. */
+  /** As `writeFileSyncMode`, but -17 when anything is at `path`: one racer wins; a failed write removes the file. */
   export function createFileExclusiveSync(path: string, data: string, mode: i32): i32;
   /** 0, or a negative errno: -17 for a path already there, whose mode is left alone. */
   export function mkdirSyncMode(path: string, mode: i32): i32;

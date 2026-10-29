@@ -251,7 +251,9 @@ int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
 /* ---- Files and directories with an explicit mode (docs/security/runtime.md,
    RT-24 to RT-26): `writeFileSyncMode`, `createFileExclusiveSync` and
    `mkdirSyncMode`. Each answers a value and never exits, as the writers just
-   above do. A mode outside 0..07777 is -EINVAL before any system call. WASI
+   above do. A mode outside 0..0777 is -EINVAL before any system call: the
+   setuid, setgid and sticky bits are refused, not applied, so the mode asked
+   for is the mode the file has. WASI
    has no file modes to apply, so there each answers -ENOSYS and creates
    nothing rather than a file whose mode was not set. */
 
@@ -260,10 +262,14 @@ int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
    byte is written, so the file is exactly `mode` whatever the umask and
    whatever mode a file already there had: no reader that opens it while it is
    written finds it wider (RT-24). Then the data through `nish_put_all` and a
-   checked `close`, as `nish_write_file_bytes` does. */
+   checked `close`, as `nish_write_file_bytes` does. The open truncates
+   before the `fchmod`, so a file there that this process may write but does
+   not own is emptied and then answers -EPERM. When `flags` holds `O_EXCL`,
+   any failure after the create unlinks the file this call made, so a lock
+   whose write failed does not stay taken. */
 static int32_t nish_put_file_mode(const nish_str *path, const nish_str *data, int flags, int32_t mode) {
   const char *p = nish_cpath(path);
-  if (p != path->data || mode < 0 || mode > 07777) return -EINVAL;
+  if (p != path->data || mode < 0 || mode > 0777) return -EINVAL;
   if (data->len > NISH_LENGTH_MAX) return -EFBIG;
 #ifdef __wasi__
   (void)flags;
@@ -274,6 +280,7 @@ static int32_t nish_put_file_mode(const nish_str *path, const nish_str *data, in
   int32_t r = fchmod(fd, (mode_t)mode) == 0 ? 0 : -errno;
   if (r == 0) r = nish_put_all(fd, data->data, data->len);
   if (close(fd) != 0 && r == 0 && errno != EINTR) r = -errno;
+  if (r < 0 && (flags & O_EXCL)) unlink(p);
   return r < 0 ? r : (int32_t)data->len;
 #endif
 }
@@ -288,7 +295,8 @@ int32_t nish_write_file_mode(const nish_str *path, const nish_str *data, int32_t
 /* `createFileExclusiveSync(path, data, mode)`: `O_EXCL`, so the path is
    created by this call or the call answers -EEXIST, a link there included,
    dangling or not. Of N processes racing for one path exactly one wins, which
-   is what a lock file needs. */
+   is what a lock file needs; a winner whose write then fails removes the file
+   and answers the error. */
 int32_t nish_create_file_exclusive(const nish_str *path, const nish_str *data, int32_t mode) {
   return nish_put_file_mode(path, data, O_EXCL, mode);
 }
@@ -299,7 +307,7 @@ int32_t nish_create_file_exclusive(const nish_str *path, const nish_str *data, i
    exact under any umask that leaves the owner's bits (RT-26). */
 int32_t nish_mkdir_mode(const nish_str *path, int32_t mode) {
   const char *p = nish_cpath(path);
-  if (p != path->data || mode < 0 || mode > 07777) return -EINVAL;
+  if (p != path->data || mode < 0 || mode > 0777) return -EINVAL;
 #ifdef __wasi__
   return -ENOSYS;
 #else

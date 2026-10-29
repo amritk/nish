@@ -1,6 +1,7 @@
 write: 6
 content: secret
 negative mode: -22
+setuid bit: -22
 mode past 0o7777: -22
 content kept: secret
 missing directory: -2

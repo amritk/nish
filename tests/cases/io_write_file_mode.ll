@@ -5,10 +5,11 @@
 @.str.4 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"content: \00" }, align 8
 @.str.5 = private unnamed_addr constant { i64, [16 x i8] } { i64 15, [16 x i8] c"negative mode: \00" }, align 8
 @.str.6 = private unnamed_addr constant { i64, [2 x i8] } { i64 1, [2 x i8] c"x\00" }, align 8
-@.str.7 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"mode past 0o7777: \00" }, align 8
-@.str.8 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"content kept: \00" }, align 8
-@.str.9 = private unnamed_addr constant { i64, [20 x i8] } { i64 19, [20 x i8] c"missing directory: \00" }, align 8
-@.str.10 = private unnamed_addr constant { i64, [34 x i8] } { i64 33, [34 x i8] c"build/test/io_write_file_mode.d/x\00" }, align 8
+@.str.7 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c"setuid bit: \00" }, align 8
+@.str.8 = private unnamed_addr constant { i64, [19 x i8] } { i64 18, [19 x i8] c"mode past 0o7777: \00" }, align 8
+@.str.9 = private unnamed_addr constant { i64, [15 x i8] } { i64 14, [15 x i8] c"content kept: \00" }, align 8
+@.str.10 = private unnamed_addr constant { i64, [20 x i8] } { i64 19, [20 x i8] c"missing directory: \00" }, align 8
+@.str.11 = private unnamed_addr constant { i64, [34 x i8] } { i64 33, [34 x i8] c"build/test/io_write_file_mode.d/x\00" }, align 8
 
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
@@ -42,18 +43,23 @@ entry:
   %11 = call i8* @nish_str_concat(i8* bitcast ({ i64, [16 x i8] }* @.str.5 to i8*), i8* %10)
   call void @nish_print(i8* %11)
   %12 = load i8*, i8** %path.addr, align 8
-  %13 = call i32 @nish_write_file_mode(i8* %12, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*), i32 4096)
+  %13 = call i32 @nish_write_file_mode(i8* %12, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*), i32 2432)
   %14 = call i8* @nish_str_from_i32(i32 %13)
-  %15 = call i8* @nish_str_concat(i8* bitcast ({ i64, [19 x i8] }* @.str.7 to i8*), i8* %14)
+  %15 = call i8* @nish_str_concat(i8* bitcast ({ i64, [13 x i8] }* @.str.7 to i8*), i8* %14)
   call void @nish_print(i8* %15)
   %16 = load i8*, i8** %path.addr, align 8
-  %17 = call i8* @nish_read_file(i8* %16)
-  %18 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.8 to i8*), i8* %17)
-  call void @nish_print(i8* %18)
-  %19 = call i32 @nish_write_file_mode(i8* bitcast ({ i64, [34 x i8] }* @.str.10 to i8*), i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*), i32 384)
-  %20 = call i8* @nish_str_from_i32(i32 %19)
-  %21 = call i8* @nish_str_concat(i8* bitcast ({ i64, [20 x i8] }* @.str.9 to i8*), i8* %20)
-  call void @nish_print(i8* %21)
+  %17 = call i32 @nish_write_file_mode(i8* %16, i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*), i32 4096)
+  %18 = call i8* @nish_str_from_i32(i32 %17)
+  %19 = call i8* @nish_str_concat(i8* bitcast ({ i64, [19 x i8] }* @.str.8 to i8*), i8* %18)
+  call void @nish_print(i8* %19)
+  %20 = load i8*, i8** %path.addr, align 8
+  %21 = call i8* @nish_read_file(i8* %20)
+  %22 = call i8* @nish_str_concat(i8* bitcast ({ i64, [15 x i8] }* @.str.9 to i8*), i8* %21)
+  call void @nish_print(i8* %22)
+  %23 = call i32 @nish_write_file_mode(i8* bitcast ({ i64, [34 x i8] }* @.str.11 to i8*), i8* bitcast ({ i64, [2 x i8] }* @.str.6 to i8*), i32 384)
+  %24 = call i8* @nish_str_from_i32(i32 %23)
+  %25 = call i8* @nish_str_concat(i8* bitcast ({ i64, [20 x i8] }* @.str.10 to i8*), i8* %24)
+  call void @nish_print(i8* %25)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

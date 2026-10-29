@@ -18,12 +18,12 @@
               "capabilities": ["fs.write"],
               "witnesses": {
                 "fs.write": [
-                  { "function": "main", "at": "caps_fs_mode.ts:16:16", "calls": "keep" },
+                  { "function": "main", "at": "caps_fs_mode.ts:17:16", "calls": "keep" },
                   { "function": "keep", "at": "caps_fs_mode.ts:6:3", "calls": "mkdirSyncMode" }
                 ]
               },
               "panics": [
-                { "kind": "oom", "at": "caps_fs_mode.ts:17:15", "allowed": true }
+                { "kind": "oom", "at": "caps_fs_mode.ts:18:15", "allowed": true }
               ]
             }
           ]

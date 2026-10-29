@@ -8607,9 +8607,11 @@ if (!only || "rt4_nofollow".includes(only) || "shim symlink".includes(only)) {
 // (the fchmod, not the umask, decides), a symbolic link at the path refused
 // with its target untouched, a directory at 0700 that a second call leaves
 // alone with -17, and an exclusive create that a file or a dangling link at the
-// path turns into -17. The lock race is native only, as `spawn` is: eight
-// children of the probe race `createFileExclusiveSync` for one path, silently
-// (`take`), and exactly one of them may exit 0.
+// path turns into -17, and one whose write fails (`ulimit -f 0`, `SIGXFSZ`
+// ignored, so the write answers -EFBIG) removes the file it made. The lock
+// race is native only, as `spawn` is: eight children of the probe race
+// `createFileExclusiveSync` for one path, silently (`take`, which exits with
+// the errno it lost to), and exactly one may exit 0, every other with 17.
 if (!only || "fs_mode".includes(only) || "mode excl".includes(only)) {
   const dir = path.join(buildDir, "fs_mode")
   fs.rmSync(dir, { recursive: true, force: true })
@@ -8631,12 +8633,16 @@ export const main = (): number => {
       pids.push(spawn([process.argv[3], "take", at]));
     }
     let winners = 0;
+    let taken = 0;
     for (const pid of pids) {
-      if (waitPid(pid, 0)[1] === 0) {
+      const status = waitPid(pid, 0)[1];
+      if (status === 0) {
         winners++;
+      } else if (status === 17) {
+        taken++;
       }
     }
-    console.log(\`winners \${winners}\`);
+    console.log(\`winners \${winners} eexist \${taken}\`);
     return 0;
   }
   let r: i32 = -1;
@@ -8649,9 +8655,10 @@ export const main = (): number => {
   } else if (op === "mkdir700") {
     r = mkdirSyncMode(at, 0o700);
   }
-  if (op !== "take") {
-    console.log(\`\${op} \${r}\`);
+  if (op === "take") {
+    return r >= 0 ? 0 : -r;
   }
+  console.log(\`\${op} \${r}\`);
   return r >= 0 ? 0 : 1;
 };
 `
@@ -8672,16 +8679,18 @@ export const main = (): number => {
       `const m = await import(${JSON.stringify(probe)}); process.exit(m.main());`,
       "probe",
     ]
-    // Each side runs under `umask`, through `sh` so the child inherits it.
+    // Each side runs under `umask` and any `pre` shell commands, through `sh`
+    // so the child inherits them.
     const sides = [
-      ["native", (umask, op, at) => ["sh", ["-c", `umask ${umask}; exec "$0" "$@"`, exe, op, at]]],
-      ["node", (umask, op, at) => ["sh", ["-c", `umask ${umask}; exec "$0" "$@"`, "node", ...nodeArgs, op, at]]],
+      ["native", (umask, op, at, pre) => ["sh", ["-c", `${pre}umask ${umask}; exec "$0" "$@"`, exe, op, at]]],
+      ["node", (umask, op, at, pre) => ["sh", ["-c", `${pre}umask ${umask}; exec "$0" "$@"`, "node", ...nodeArgs, op, at]]],
     ]
     const ELOOP = -os.constants.errno.ELOOP
+    const EFBIG = -os.constants.errno.EFBIG
     const modeOf = (p) => (fs.statSync(p).mode & 0o7777).toString(8)
     for (const [side, argvOf] of sides) {
-      const run = (op, at, umask = "022") => {
-        const [cmd, args] = argvOf(umask, op, at)
+      const run = (op, at, umask = "022", pre = "") => {
+        const [cmd, args] = argvOf(umask, op, at, pre)
         const r = spawnSync(cmd, args, { cwd: dir, encoding: "utf8" })
         return `exit ${r.status} ${r.stdout.trim()}${r.stderr}`
       }
@@ -8726,8 +8735,13 @@ export const main = (): number => {
         `${run("excl", at("dangling"))} target made ${fs.existsSync(at("nowhere"))}`,
         "exit 1 excl -17 target made false"
       )
+      row(
+        "exclusive whose write fails",
+        `${run("excl", at("full"), "022", "trap '' XFSZ; ulimit -f 0; ")} left ${fs.existsSync(at("full"))}`,
+        `exit 1 excl ${EFBIG} left false`
+      )
       check(
-        `fs_mode: under ${side === "native" ? "the native build" : "runtime/nish.mjs"} the modes read back with fs.statSync are the ones asked for, a link is refused and a taken path is -17`,
+        `fs_mode: under ${side === "native" ? "the native build" : "runtime/nish.mjs"} the modes read back with fs.statSync are the ones asked for, a link is refused, a taken path is -17 and a failed exclusive create leaves no file`,
         got.join("\n") === want.join("\n"),
         `--- want\n${want.join("\n")}\n--- got\n${got.join("\n")}`
       )
@@ -8736,8 +8750,8 @@ export const main = (): number => {
     const raced = spawnSync(exe, ["race", lock, exe], { cwd: dir, encoding: "utf8" })
     const raceGot = `exit ${raced.status} ${raced.stdout.trim()} ${fs.existsSync(lock) ? `${modeOf(lock)} ${JSON.stringify(fs.readFileSync(lock, "utf8"))}` : "no lock"}`
     check(
-      "fs_mode: of eight children racing createFileExclusiveSync for one path exactly one wins, and the lock is theirs at 0600",
-      raceGot === `exit 0 winners 1 600 ${JSON.stringify("held\n")}`,
+      "fs_mode: of eight children racing createFileExclusiveSync for one path exactly one wins, the other seven answer -17, and the lock is the winner's at 0600",
+      raceGot === `exit 0 winners 1 eexist 7 600 ${JSON.stringify("held\n")}`,
       `${raceGot}\n${raced.stderr}`
     )
   }

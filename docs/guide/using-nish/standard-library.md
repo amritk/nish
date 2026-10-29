@@ -64,8 +64,9 @@ reader then sees the old secret or the new one, never half of either.
 `-17` when the name already exists, so of any number of processes racing for
 one path exactly one wins: a lock file, released with `unlinkSync`.
 `mkdirSyncMode(path, 0o700)` makes a directory only you can enter; the umask
-still applies to a directory, which only ever narrows it. The numbers are the
-platform's errno values (Linux's shown).
+still applies to a directory, which only ever narrows it. A mode past `0o777`,
+the setuid, setgid and sticky bits included, is `-22` and nothing is made. The
+numbers are the platform's errno values (Linux's shown).
 
 | Module | What it gives you |
 | --- | --- |

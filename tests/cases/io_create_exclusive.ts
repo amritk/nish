@@ -9,7 +9,8 @@ export function main(): number {
   console.log(`first: ${createFileExclusiveSync(path, "pid 1", 0o600)}`);
   console.log(`second: ${createFileExclusiveSync(path, "pid 2", 0o600)}`);
   console.log(`content: ${readFileSync(path)}`);
-  console.log(`bad mode: ${createFileExclusiveSync("build/test/io_create_exclusive.other", "x", 0o10000)}`);
+  console.log(`setgid bit: ${createFileExclusiveSync("build/test/io_create_exclusive.other", "x", 0o2600)}`);
+  console.log(`other made: ${unlinkSync("build/test/io_create_exclusive.other")}`);
   console.log(`released: ${unlinkSync(path)}`);
   console.log(`again: ${createFileExclusiveSync(path, "pid 3", 0o600)}`);
   return 0;

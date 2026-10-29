@@ -106,10 +106,11 @@ const writeFileBytesSync = (path, bytes) =>
  * `writeFileSyncMode` and `createFileExclusiveSync`'s shared body, as
  * `runtime-os.c`'s: the file opened with `flag`, `fchmod`ed to exactly `mode`
  * before a byte is written, then every byte of `data`, then the count, or a
- * negative errno. A mode outside 0..0o7777 is -22 before the file is touched.
+ * negative errno. A mode outside 0..0o777 is -22 before the file is touched.
+ * After an exclusive create (`"wx"`), any failure unlinks the file it made.
  */
 function putFileMode(path, data, flag, mode) {
-  if (!(mode >= 0 && mode <= 0o7777)) return -22;
+  if (!(mode >= 0 && mode <= 0o777)) return -22;
   let fd;
   try {
     fd = fs.openSync(path, flag, mode);
@@ -126,7 +127,9 @@ function putFileMode(path, data, flag, mode) {
     r = negErrno(e);
   }
   const closed = errnoOr(0, () => fs.closeSync(fd));
-  return r >= 0 && closed < 0 ? closed : r;
+  const answer = r >= 0 && closed < 0 ? closed : r;
+  if (answer < 0 && flag === "wx") errnoOr(0, () => fs.unlinkSync(path));
+  return answer;
 }
 
 /** `writeFileSyncMode(path, data, mode)`: `WRITE_FLAGS`, so a link at the path is refused. */
@@ -137,7 +140,7 @@ const createFileExclusiveSync = (path, data, mode) => putFileMode(path, data, "w
 
 /** `mkdirSyncMode(path, mode)`: 0, or a negative errno; -17 for a path already there. */
 const mkdirSyncMode = (path, mode) =>
-  mode >= 0 && mode <= 0o7777 ? errnoOr(0, () => fs.mkdirSync(path, { mode })) : -22;
+  mode >= 0 && mode <= 0o777 ? errnoOr(0, () => fs.mkdirSync(path, { mode })) : -22;
 
 /**
  * `writeBytes`'s write, after the core checked the range `[from, to)`: every

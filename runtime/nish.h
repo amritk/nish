@@ -415,7 +415,9 @@ int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes);
  * path is refused. The file writers answer the byte count and `nish_mkdir_mode`
  * 0, or a negative platform errno: -EEXIST for an exclusive create or a mkdir
  * that finds the path taken (a directory's mode is then left alone), -EINVAL
- * for a mode outside 0..07777 or a path holding a NUL, -ENOSYS under WASI. */
+ * for a mode outside 0..0777 (the setuid, setgid and sticky bits included) or
+ * a path holding a NUL, -ENOSYS under WASI. A failed exclusive create leaves
+ * no file behind. */
 int32_t nish_write_file_mode(const nish_str *path, const nish_str *data, int32_t mode);
 int32_t nish_create_file_exclusive(const nish_str *path, const nish_str *data, int32_t mode);
 int32_t nish_mkdir_mode(const nish_str *path, int32_t mode);
