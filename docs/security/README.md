@@ -71,8 +71,9 @@ the record that found it. The notes below the table name each such finding.
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
+| PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 2 / 2 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 34 / 122** | **0 / 0 / 0 / 14** |
+| **Total** ⁸ | | | **3 / 10 / 34 / 122** | **0 / 0 / 2 / 16** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -255,6 +256,10 @@ the record that found it. The notes below the table name each such finding.
     the key-size and exponent caps, and a message over 2^31 − 1 bytes
     panicking in the hash, are accepted, with the reason in their record, and
     are not counted. RSA-2 and RSA-5 are properties checked and found to hold.
+24. PKI-17 and PKI-18 (Medium) and PKI-19 and PKI-20 (Low) are open and
+    counted: no revocation, a root's own name constraints not applied, no
+    policy processing, and Names compared byte for byte, which fails closed.
+    PKI-1 to PKI-16 are properties checked and found to hold.
 
 ## Fuzzed
 
