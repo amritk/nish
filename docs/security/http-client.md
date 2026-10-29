@@ -203,10 +203,11 @@ error, never a short body (`a body cut off without a close_notify is
 HTTP_E_TLS, not a short body`), while a body with no length ends cleanly at
 the server's `close_notify` (`a body with no length ends at the server's
 close_notify`, `and read again, it answers 0 with no error`). A pooled TLS
-connection the server dropped, or ended with a fatal alert, is retried on a
-new one (`a pooled TLS connection the server dropped is retried on a new
-one`, `a pooled TLS connection the server ends with an alert is retried on a
-new one`), and a server silent through the handshake is a read timeout, not a TLS
+connection the server dropped, ended with a fatal alert, or ended with a
+`close_notify` while idle, is retried on a new one (`a pooled TLS connection
+the server dropped is retried on a new one`, `a pooled TLS connection the
+server ends with an alert is retried on a new one`, `a pooled TLS connection
+the server ended with a close_notify is retried on a new one`), and a server silent through the handshake is a read timeout, not a TLS
 failure (`a server that never answers the handshake is HTTP_E_READ_TIMEOUT`).
 A redirect from https to http is refused even
 when cross-origin hops are allowed (`a redirect from https to http is refused
