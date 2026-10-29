@@ -1,7 +1,18 @@
 # WP45: Name resolution for `nish:net`
 
-**Status: proposed.** Nothing here is built. The anchors below are at
-`c8a00d6`.
+**Status: built.** The stub resolver is `std/net/dns-resolver.ts`
+(`nish/net/dns-resolver`), driven on the caller's loop by `std/net/dns.ts`
+(`nish/net/dns`), over the codec and file parsers of stages 1 and 2; its
+security record is `docs/security/dns.md`. The anchors below are at `c8a00d6`,
+from when this was a proposal.
+
+**As built**, the design below changed in four places. The resolver honours
+`search`, `ndots`, `timeout` and `attempts` from `resolv.conf`, which the
+proposal left for later, and `resolveHost` adds a blocking lookup for a
+command-line tool or a program's start-up; both were asked for while the stage
+was in review. The core (`dns-resolver.ts`) imports no `nish:*` module and builds
+for `wasm32`, so only the driver is native. A CNAME chain is cut at 8 queries
+(`DNS_RESOLVER_MAX_CNAME_HOPS`).
 
 `nish:net` takes address literals only. `netAddress` answers `-22` for a name
 ("there is no DNS", `docs/LANGUAGE.md:6783`), the "Not yet" bullet says so
@@ -208,7 +219,9 @@ bounded work per byte; `docs/security/json.md:181-184`).
 
 ## 7. Stages
 
-Each is a later pull request; none is built here.
+All four are built. Stage 3 split the resolver in two: a core with no
+I/O (`std/net/dns-resolver.ts`), which builds for `wasm32`, and its driver
+over `nish:net` (`std/net/dns.ts`). Stage 4's docs landed with stage 3.
 
 1. **`std/net/dns-message.ts`** (`nish/net/dns-message`): a query builder and
    a bounded response parser over caller-owned arrays, with no `nish:net`
