@@ -45,6 +45,8 @@ import {
   CRITICAL_DER,
   ED25519_CA_DER,
   ED25519_LEAF_DER,
+  ED25519_V3_LEAF_DER,
+  ED25519_V3_LEAF_SHA256,
   FULL_ALGORITHM,
   FULL_DER,
   FULL_EXT_AUTHORITY_KEY_ID,
@@ -65,6 +67,8 @@ import {
   P384_CA_DER,
   PSS_DER,
   RSA_DER,
+  RSA_LEAF_DER,
+  RSA_LEAF_SHA256,
 } from "./webpki"
 
 /** `n` zero octets as hex. */
@@ -91,14 +95,18 @@ const der = (tag: string, body: string): string => {
   return `${tag}82${hexByte(n >> 8)}${hexByte(n & 255)}${body}`
 }
 
-/** A certificate of FULL_DER's fields with `issuer`, `alg` (inner and outer), `spki` and `tail` after the key. */
-const compose = (issuer: string, alg: string, spki: string, tail: string): string =>
+/** A certificate of FULL_DER's fields with `issuer`, `subject`, `alg` (inner and outer), `spki` and `tail` after the key. */
+const composeNamed = (issuer: string, subject: string, alg: string, spki: string, tail: string): string =>
   der(
     "30",
-    der("30", `${FULL_VERSION}${FULL_SERIAL}${alg}${issuer}${FULL_VALIDITY}${FULL_SUBJECT}${spki}${tail}`) +
+    der("30", `${FULL_VERSION}${FULL_SERIAL}${alg}${issuer}${FULL_VALIDITY}${subject}${spki}${tail}`) +
       alg +
       FULL_SIGNATURE
   )
+
+/** `composeNamed` with FULL_DER's own subject. */
+const compose = (issuer: string, alg: string, spki: string, tail: string): string =>
+  composeNamed(issuer, FULL_SUBJECT, alg, spki, tail)
 
 /** FULL_DER with `exts`, the concatenated Extension elements, as its whole `[3]`. */
 const withExtensions = (exts: string): string =>
@@ -284,11 +292,30 @@ const fixtureSuite = (): i32 => {
   t.eqI32("Ed25519 CA: Ed25519", edCa.sigAlg, X509_SIG_ED25519)
   t.eqI32("Ed25519 CA: an Ed25519 key", edCa.keyType, X509_KEY_ED25519)
 
+  const rsaLeaf: X509Certificate | null = read(RSA_LEAF_DER)
+  const edV3: X509Certificate | null = read(ED25519_V3_LEAF_DER)
+  if (rsaLeaf === null || edV3 === null) {
+    t.fail("both v3 leaves read", "a null")
+    return t.done()
+  }
+  t.eqStr("RSA leaf: its hash is OpenSSL's", toHex(x509CertificateHash(rsaLeaf.der)), RSA_LEAF_SHA256)
+  t.ok("RSA leaf: v3, sha256WithRSAEncryption, an RSA key", rsaLeaf.version === 2 && rsaLeaf.sigAlg === X509_SIG_RSA_PKCS1_SHA256 && rsaLeaf.keyType === X509_KEY_RSA)
+  t.ok("RSA leaf: not a CA, digitalSignature only", rsaLeaf.bcPresent && !rsaLeaf.bcCa && rsaLeaf.keyUsage === X509_KU_DIGITAL_SIGNATURE)
+  t.ok("RSA leaf: serverAuth, and no other purpose", rsaLeaf.ekuPresent && rsaLeaf.ekuServerAuth && !rsaLeaf.ekuAny)
+  t.eqStr("RSA leaf: its subjectAltName", rsaLeaf.sanDns.join(","), "leaf.example.test")
+  t.ok("RSA leaf: issued by the RSA-2048 CA, by key id too", x509NameEqual(rsaLeaf.issuer, rsa.subject) && toHex(rsaLeaf.akid) === toHex(rsa.skid))
+  t.eqStr("Ed25519 v3 leaf: its hash is OpenSSL's", toHex(x509CertificateHash(edV3.der)), ED25519_V3_LEAF_SHA256)
+  t.ok("Ed25519 v3 leaf: v3, Ed25519, an Ed25519 key", edV3.version === 2 && edV3.sigAlg === X509_SIG_ED25519 && edV3.keyType === X509_KEY_ED25519)
+  t.ok("Ed25519 v3 leaf: not a CA, digitalSignature only", edV3.bcPresent && !edV3.bcCa && edV3.keyUsage === X509_KU_DIGITAL_SIGNATURE)
+  t.ok("Ed25519 v3 leaf: serverAuth, and no other purpose", edV3.ekuPresent && edV3.ekuServerAuth && !edV3.ekuAny)
+  t.eqStr("Ed25519 v3 leaf: its subjectAltName", edV3.sanDns.join(","), "leaf.example.test")
+  t.ok("Ed25519 v3 leaf: issued by the Ed25519 CA", x509NameEqual(edV3.issuer, edCa.subject))
+
   t.ok("a critical private extension sets unknownCritical", crit.unknownCritical)
   t.eqStr("and the rest is still read", crit.sanDns.join(","), "crit.example.test")
   t.ok(
     "the same extension not critical leaves it clear",
-    !unknownCriticalOf("2b0601040183b2030101", false, "0500") && readsOne("2b0601040183b2030101", "0500")
+    !unknownCriticalOf("2b0601040183b20301", false, "0500") && readsOne("2b0601040183b20301", "0500")
   )
   t.ok(
     "an unknown critical arc under 2.5.29 sets it too",
@@ -378,12 +405,28 @@ const algorithmSuite = (): i32 => {
   t.eqI32("PSS: an element after the trailer", sigAlgOf(pssAlg(pssParams(h256, h256, salt32 + "0500"))), X509_SIG_UNKNOWN)
   t.eqI32("PSS: parameters absent", sigAlgOf(der("30", der("06", PSS_OID))), X509_SIG_UNKNOWN)
   t.eqI32("PSS: parameters NULL", sigAlgOf(der("30", der("06", PSS_OID) + "0500")), X509_SIG_UNKNOWN)
+  // Beside "PSS: SHA-256, salt 32", the same parameters with one wrapper or
+  // one hash spelled wrong.
+  t.eqI32("PSS: an element after the hash inside [0]", sigAlgOf(pssAlg(pssParams(h256 + "0500", h256, salt32))), X509_SIG_UNKNOWN)
+  t.eqI32(
+    "PSS: an element after the mask inside [1]",
+    sigAlgOf(pssAlg(der("30", der("a0", h256) + der("a1", der("30", der("06", MGF1_OID) + h256) + "0500") + salt32))),
+    X509_SIG_UNKNOWN
+  )
+  t.eqI32("PSS: an element after the salt length inside [2]", sigAlgOf(pssAlg(pssParams(h256, h256, der("a2", "0201200500")))), X509_SIG_UNKNOWN)
+  t.eqI32("PSS: a salt of 127 reads", sigAlgOf(pssAlg(pssParams(h256, h256, der("a2", "02017f")))), X509_SIG_RSA_PSS)
+  t.eqI32("PSS: a two-octet salt length, 128", sigAlgOf(pssAlg(pssParams(h256, h256, der("a2", "02020080")))), X509_SIG_UNKNOWN)
+  const octets: string = der("30", der("06", SHA256_OID) + "0401ff")
+  t.eqI32("PSS: hash parameters an OCTET STRING, neither absent nor NULL", sigAlgOf(pssAlg(pssParams(octets, octets, salt32))), X509_SIG_UNKNOWN)
+  t.eqI32("PSS: hash NULL parameters with contents", sigAlgOf(pssAlg(pssParams(der("30", der("06", SHA256_OID) + "050100"), h256, salt32))), X509_SIG_UNKNOWN)
 
   t.eqI32("sha256WithRSAEncryption with NULL", sigAlgOf(hashAlg("2a864886f70d01010b")), X509_SIG_RSA_PKCS1_SHA256)
   t.eqI32("sha384WithRSAEncryption with NULL", sigAlgOf(hashAlg("2a864886f70d01010c")), X509_SIG_RSA_PKCS1_SHA384)
   t.eqI32("sha512WithRSAEncryption with NULL", sigAlgOf(hashAlg("2a864886f70d01010d")), X509_SIG_RSA_PKCS1_SHA512)
   t.eqI32("sha1WithRSAEncryption with NULL", sigAlgOf(hashAlg("2a864886f70d010105")), X509_SIG_RSA_PKCS1_SHA1)
   t.eqI32("sha256WithRSAEncryption with its NULL absent", sigAlgOf(der("30", der("06", "2a864886f70d01010b"))), X509_SIG_UNKNOWN)
+  t.eqI32("sha256WithRSAEncryption with a NULL that has contents", sigAlgOf(der("30", der("06", "2a864886f70d01010b") + "050100")), X509_SIG_UNKNOWN)
+  t.eqI32("sha256WithRSAEncryption with an element after its NULL", sigAlgOf(der("30", der("06", "2a864886f70d01010b") + "05000500")), X509_SIG_UNKNOWN)
   t.eqI32("ecdsa-with-SHA256 absent", sigAlgOf(der("30", der("06", "2a8648ce3d040302"))), X509_SIG_ECDSA_SHA256)
   t.eqI32("ecdsa-with-SHA256 with a NULL", sigAlgOf(hashAlg("2a8648ce3d040302")), X509_SIG_UNKNOWN)
   t.eqI32("ecdsa-with-SHA384 with a NULL", sigAlgOf(hashAlg("2a8648ce3d040303")), X509_SIG_UNKNOWN)
@@ -396,6 +439,8 @@ const algorithmSuite = (): i32 => {
   t.eqI32("id-ecPublicKey on secp521r1", keyTypeOf(der("30", ec + der("06", "2b81040023"))), X509_KEY_UNKNOWN)
   t.eqI32("rsaEncryption with NULL", keyTypeOf(hashAlg("2a864886f70d010101")), X509_KEY_RSA)
   t.eqI32("rsaEncryption with its NULL absent", keyTypeOf(der("30", der("06", "2a864886f70d010101"))), X509_KEY_UNKNOWN)
+  t.eqI32("rsaEncryption with a NULL that has contents", keyTypeOf(der("30", der("06", "2a864886f70d010101") + "050100")), X509_KEY_UNKNOWN)
+  t.eqI32("rsaEncryption with an element after its NULL", keyTypeOf(der("30", der("06", "2a864886f70d010101") + "05000500")), X509_KEY_UNKNOWN)
   t.eqI32("Ed25519 absent", keyTypeOf(der("30", der("06", "2b6570"))), X509_KEY_ED25519)
   t.eqI32("Ed25519 with a NULL", keyTypeOf(hashAlg("2b6570")), X509_KEY_UNKNOWN)
   return t.done()
@@ -413,7 +458,7 @@ const extensionSuite = (): i32 => {
   refuses(
     t,
     "an extnID with a padded subidentifier",
-    readsOne("2b0601040183b2030101", "0500"),
+    readsOne("2b0601040183b20301", "0500"),
     readsOne("2b060104018083b2030101", "0500")
   )
   refuses(t, "an extnID whose last octet continues", readsOne("2a0303", "0500"), readsOne("2a0383", "0500"))
@@ -467,6 +512,7 @@ const extensionSuite = (): i32 => {
   refuses(t, "a dNSName with an octet above 0x7f", readsOne(OID_SAN, SAN_GOOD), readsOne(OID_SAN, der("30", der("82", "612ef4657374"))))
   refuses(t, "a dNSName with a NUL", readsOne(OID_SAN, SAN_GOOD), readsOne(OID_SAN, der("30", der("82", "61002e74657374"))))
   refuses(t, "an rfc822Name that is not IA5", readsOne(OID_SAN, der("30", der("81", "6140622e63"))), readsOne(OID_SAN, der("30", der("81", "61c0622e63"))))
+  refuses(t, "a URI that is not IA5", readsOne(OID_SAN, der("30", der("86", "687474703a2f2f61"))), readsOne(OID_SAN, der("30", der("86", "687474703a2f2fc1"))))
   refuses(t, "an empty dNSName", readsOne(OID_SAN, SAN_GOOD), readsOne(OID_SAN, der("30", der("82", ""))))
   const otherName: string = der("a0", der("06", "2a03") + der("a0", der("0c", "61")))
   refuses(t, "an otherName that is not an OID and a value", readsOne(OID_SAN, der("30", otherName)), readsOne(OID_SAN, der("30", der("a0", "ffff"))))
@@ -532,6 +578,15 @@ const extensionSuite = (): i32 => {
     readsOne(OID_NC, der("30", der("a0", der("30", der("87", "c0000200ffff0000"))))),
     readsOne(OID_NC, der("30", der("a0", der("30", der("87", "c0000200ff00ff00")))))
   )
+  const v6: string = "20010db8000000000000000000000000ffffffff000000000000000000000000"
+  const v6Tree: X509Certificate | null = readOne(OID_NC, true, der("30", der("a0", der("30", der("87", v6)))))
+  t.ok("an IPv6 subtree of 32 octets reads", v6Tree !== null && toI32(v6Tree.ncPermitted.length) === 1 && !v6Tree.ncUnsupported)
+  refuses(
+    t,
+    "an IPv6 subtree mask that is not contiguous",
+    readsOne(OID_NC, der("30", der("a0", der("30", der("87", v6))))),
+    readsOne(OID_NC, der("30", der("a0", der("30", der("87", "20010db8000000000000000000000000ffffffff000000000000000000000001")))))
+  )
   refuses(t, "a subtree base tag no form has", readsOne(OID_NC, der("30", der("a0", dnsTree))), readsOne(OID_NC, der("30", der("a0", der("30", der("89", "00"))))))
   refuses(t, "a subtree that is not a SEQUENCE", readsOne(OID_NC, der("30", der("a0", dnsTree))), readsOne(OID_NC, der("30", der("a0", der("31", der("82", "61"))))))
   refuses(t, "an element after excludedSubtrees", readsOne(OID_NC, der("30", der("a1", dnsTree))), readsOne(OID_NC, der("30", der("a1", dnsTree) + "0500")))
@@ -571,6 +626,18 @@ const nameSuite = (): i32 => {
     "an issuer with an empty RDN",
     reads(compose(der("30", der("31", cn)), FULL_ALGORITHM, FULL_SPKI, "")),
     reads(compose(der("30", der("31", cn) + der("31", "")), FULL_ALGORITHM, FULL_SPKI, ""))
+  )
+  refuses(
+    t,
+    "a subject with an empty RDN",
+    reads(composeNamed(FULL_ISSUER, der("30", der("31", cn)), FULL_ALGORITHM, FULL_SPKI, "")),
+    reads(composeNamed(FULL_ISSUER, der("30", der("31", cn) + der("31", "")), FULL_ALGORITHM, FULL_SPKI, ""))
+  )
+  refuses(
+    t,
+    "a subject attribute with no value",
+    reads(composeNamed(FULL_ISSUER, der("30", der("31", cn)), FULL_ALGORITHM, FULL_SPKI, "")),
+    reads(composeNamed(FULL_ISSUER, der("30", der("31", der("30", der("06", "550403")))), FULL_ALGORITHM, FULL_SPKI, ""))
   )
   refuses(
     t,

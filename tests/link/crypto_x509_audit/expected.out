@@ -60,6 +60,11 @@ PASS  basicConstraints with cA FALSE written out, a DEFAULT DER omits, is refuse
 PASS  keyUsage critical and then again non-critical is refused
 PASS  cA TRUE reads as a CA with no path length
 X509-10: each extension once, and each known one whole: 8 passed, 0 failed, 0 skipped
+PASS  32 distinct extensions read
+PASS  64 distinct extensions read
+PASS  65 distinct extensions are refused
+PASS  127 distinct extensions are refused
+X509-14: at most 64 extensions: 4 passed, 0 failed, 0 skipped
 PASS  a non-critical private extension leaves unknownCritical clear
 PASS  a critical private extension reads, with unknownCritical set
 PASS  a critical basicConstraints leaves it clear
@@ -72,3 +77,4 @@ PASS  open, X509-13: an RDN out of SET OF order is still a Name
 PASS  open, X509-13: and does not match the sorted one
 PASS  nor is it a prefix of it
 X509-12 and X509-13: Names compare byte for byte: 6 passed, 0 failed, 0 skipped
+

@@ -196,6 +196,18 @@ PASS  Ed25519 leaf: an Ed25519 key
 PASS  Ed25519 leaf: issued by the P-384 CA
 PASS  Ed25519 CA: Ed25519
 PASS  Ed25519 CA: an Ed25519 key
+PASS  RSA leaf: its hash is OpenSSL's
+PASS  RSA leaf: v3, sha256WithRSAEncryption, an RSA key
+PASS  RSA leaf: not a CA, digitalSignature only
+PASS  RSA leaf: serverAuth, and no other purpose
+PASS  RSA leaf: its subjectAltName
+PASS  RSA leaf: issued by the RSA-2048 CA, by key id too
+PASS  Ed25519 v3 leaf: its hash is OpenSSL's
+PASS  Ed25519 v3 leaf: v3, Ed25519, an Ed25519 key
+PASS  Ed25519 v3 leaf: not a CA, digitalSignature only
+PASS  Ed25519 v3 leaf: serverAuth, and no other purpose
+PASS  Ed25519 v3 leaf: its subjectAltName
+PASS  Ed25519 v3 leaf: issued by the Ed25519 CA
 PASS  a critical private extension sets unknownCritical
 PASS  and the rest is still read
 PASS  the same extension not critical leaves it clear
@@ -206,7 +218,7 @@ PASS  golden: a P-256 key
 PASS  golden: basicConstraints, not a CA
 PASS  golden: keyUsage digitalSignature
 PASS  golden: no name, purpose or key id
-x509 Web PKI algorithms and keys: 33 passed, 0 failed, 0 skipped
+x509 Web PKI algorithms and keys: 45 passed, 0 failed, 0 skipped
 PASS  PSS_DER's algorithm composed here is OpenSSL's
 PASS  PSS: SHA-256, salt 32
 PASS  PSS: an absent salt length is 20
@@ -223,11 +235,20 @@ PASS  PSS: trailerField 2
 PASS  PSS: an element after the trailer
 PASS  PSS: parameters absent
 PASS  PSS: parameters NULL
+PASS  PSS: an element after the hash inside [0]
+PASS  PSS: an element after the mask inside [1]
+PASS  PSS: an element after the salt length inside [2]
+PASS  PSS: a salt of 127 reads
+PASS  PSS: a two-octet salt length, 128
+PASS  PSS: hash parameters an OCTET STRING, neither absent nor NULL
+PASS  PSS: hash NULL parameters with contents
 PASS  sha256WithRSAEncryption with NULL
 PASS  sha384WithRSAEncryption with NULL
 PASS  sha512WithRSAEncryption with NULL
 PASS  sha1WithRSAEncryption with NULL
 PASS  sha256WithRSAEncryption with its NULL absent
+PASS  sha256WithRSAEncryption with a NULL that has contents
+PASS  sha256WithRSAEncryption with an element after its NULL
 PASS  ecdsa-with-SHA256 absent
 PASS  ecdsa-with-SHA256 with a NULL
 PASS  ecdsa-with-SHA384 with a NULL
@@ -238,9 +259,11 @@ PASS  id-ecPublicKey on secp384r1
 PASS  id-ecPublicKey on secp521r1
 PASS  rsaEncryption with NULL
 PASS  rsaEncryption with its NULL absent
+PASS  rsaEncryption with a NULL that has contents
+PASS  rsaEncryption with an element after its NULL
 PASS  Ed25519 absent
 PASS  Ed25519 with a NULL
-x509 signature algorithms and key types: 33 passed, 0 failed, 0 skipped
+x509 signature algorithms and key types: 44 passed, 0 failed, 0 skipped
 PASS  one extension alone reads
 PASS  an empty extensions SEQUENCE: the sound encoding reads
 PASS  an empty extensions SEQUENCE: refused
@@ -275,6 +298,8 @@ PASS  a dNSName with a NUL: the sound encoding reads
 PASS  a dNSName with a NUL: refused
 PASS  an rfc822Name that is not IA5: the sound encoding reads
 PASS  an rfc822Name that is not IA5: refused
+PASS  a URI that is not IA5: the sound encoding reads
+PASS  a URI that is not IA5: refused
 PASS  an empty dNSName: the sound encoding reads
 PASS  an empty dNSName: refused
 PASS  an otherName that is not an OID and a value: the sound encoding reads
@@ -339,6 +364,9 @@ PASS  an iPAddress subtree of 6 octets with a contiguous mask: the sound encodin
 PASS  an iPAddress subtree of 6 octets with a contiguous mask: refused
 PASS  an iPAddress mask that is not contiguous: the sound encoding reads
 PASS  an iPAddress mask that is not contiguous: refused
+PASS  an IPv6 subtree of 32 octets reads
+PASS  an IPv6 subtree mask that is not contiguous: the sound encoding reads
+PASS  an IPv6 subtree mask that is not contiguous: refused
 PASS  a subtree base tag no form has: the sound encoding reads
 PASS  a subtree base tag no form has: refused
 PASS  a subtree that is not a SEQUENCE: the sound encoding reads
@@ -380,9 +408,13 @@ PASS  an authorityKeyIdentifier with trailing bytes: the sound encoding reads
 PASS  an authorityKeyIdentifier with trailing bytes: refused
 PASS  an authorityKeyIdentifier that is not a SEQUENCE: the sound encoding reads
 PASS  an authorityKeyIdentifier that is not a SEQUENCE: refused
-x509 extension refusals: 139 passed, 0 failed, 0 skipped
+x509 extension refusals: 144 passed, 0 failed, 0 skipped
 PASS  an issuer with an empty RDN: the sound encoding reads
 PASS  an issuer with an empty RDN: refused
+PASS  a subject with an empty RDN: the sound encoding reads
+PASS  a subject with an empty RDN: refused
+PASS  a subject attribute with no value: the sound encoding reads
+PASS  a subject attribute with no value: refused
 PASS  an attribute with no value: the sound encoding reads
 PASS  an attribute with no value: refused
 PASS  an attribute with an element after its value: the sound encoding reads
@@ -401,7 +433,7 @@ PASS  the empty Name against a name with an empty RDN
 PASS  a name that is not a Name
 PASS  x509NameEqual is byte for byte
 PASS  so UTF8String and PrintableString spellings differ
-x509 Names: 20 passed, 0 failed, 0 skipped
+x509 Names: 24 passed, 0 failed, 0 skipped
 PASS  FULL_DER's P-384 signature as r || s, 48 octets each
 PASS  the CA's own, 96 octets
 PASS  too wide for P-256
@@ -411,3 +443,4 @@ PASS  an r of 49 octets
 PASS  a short r and s are padded
 PASS  a negative r
 x509 ECDSA signature widths: 8 passed, 0 failed, 0 skipped
+

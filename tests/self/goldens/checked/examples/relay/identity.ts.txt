@@ -175,6 +175,7 @@ const X509_KU_DIGITAL_SIGNATURE: i32 = 1 [exported]
 const X509_KU_KEY_CERT_SIGN: i32 = 32 [exported]
 const X509_KU_CRL_SIGN: i32 = 64 [exported]
 const X509_MAX_COMMON_NAME: i32 = 64
+const X509_MAX_EXTENSIONS: i32 = 64
 const X509_NO_TIME: i64 = -1000000000000
 const X509_MS_PER_DAY: i64 = 86400000
 const X509_TAG_BOOLEAN: i32 = 1
@@ -1202,7 +1203,7 @@ function x509ReadExtensions(der: u8[], e: X509DerElement, out: X509Certificate):
   local -33:9 value: X509DerElement (const)
   callee -33:17 new X509DerElement -> @nish.X509DerElement.constructor
   local -32:7 at: i32 (let)
-  callee -30:10 x509DerExpectInto -> @nish.x509DerExpectInto
+  callee -30:55 x509DerExpectInto -> @nish.x509DerExpectInto
   callee -27:10 x509DerExpectInto -> @nish.x509DerExpectInto
   callee -27:75 x509DerOidSound -> @nish.x509DerOidSound
   local -24:11 oid: u8[] (const)

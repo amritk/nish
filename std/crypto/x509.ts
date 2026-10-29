@@ -171,6 +171,13 @@ export const X509_KU_CRL_SIGN: i32 = 64
 /** The longest common name minted, in bytes (RFC 5280 Appendix A's `ub-common-name`). */
 const X509_MAX_COMMON_NAME: i32 = 64
 
+/**
+ * The most extensions a certificate may carry. A Web PKI certificate carries
+ * fewer than 20; the cap bounds the repeated-extnID search, which compares
+ * each extension with every one before it.
+ */
+const X509_MAX_EXTENSIONS: i32 = 64
+
 /** What a time field reads as when it is not a valid RFC 5280 time: before any year the reader accepts. */
 const X509_NO_TIME: i64 = -1000000000000
 
@@ -261,7 +268,12 @@ export class X509Certificate {
   pssSaltLen: i32 = 0
   /** The subject key's algorithm, an `X509_KEY_` constant. */
   keyType: i32 = 0
-  /** How many of subjectAltName's names are another form: rfc822Name, URI, directoryName and the rest. */
+  /**
+   * How many of subjectAltName's names are another form: rfc822Name, URI,
+   * directoryName and the rest. Each must still be well formed: an rfc822Name
+   * or URI is an IA5String like a dNSName, so one with an octet of 0x80 or
+   * more, or a NUL, refuses the certificate rather than being counted.
+   */
   sanOther: i32 = 0
   /** basicConstraints' pathLenConstraint, or -1 when it is absent (no limit) or the extension is. */
   bcPathLen: i32 = -1
@@ -1901,9 +1913,10 @@ const x509ExtensionArc = (der: u8[], id: X509DerElement): i32 => {
  * non-empty SEQUENCE of `SEQUENCE { extnID OID, critical BOOLEAN DEFAULT
  * FALSE, extnValue OCTET STRING }` and nothing after it. `false` when any is
  * malformed, a critical flag is not DER's TRUE, an OID appears twice (§4.2:
- * "MUST NOT include more than one instance"), or a decoded extension is
- * malformed. A critical extension this module does not decode sets
- * `out.unknownCritical`; a non-critical one is skipped.
+ * "MUST NOT include more than one instance"), there are more than
+ * `X509_MAX_EXTENSIONS`, or a decoded extension is malformed. A critical
+ * extension this module does not decode sets `out.unknownCritical`; a
+ * non-critical one is skipped.
  */
 const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate): boolean => {
   const seq: X509DerElement | null = x509DerExpect(der, e.start, e.end, X509_TAG_SEQUENCE)
@@ -1920,7 +1933,7 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
   const value = new X509DerElement(0, 0, 0, 0)
   let at: i32 = seq.start
   while (at < seq.end) {
-    if (!x509DerExpectInto(der, at, seq.end, X509_TAG_SEQUENCE, ext)) {
+    if (toI32(seen.length) >= X509_MAX_EXTENSIONS || !x509DerExpectInto(der, at, seq.end, X509_TAG_SEQUENCE, ext)) {
       return false
     }
     if (!x509DerExpectInto(der, ext.start, ext.end, X509_TAG_OID, id) || !x509DerOidSound(der, id)) {

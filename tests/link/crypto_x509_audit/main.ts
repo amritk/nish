@@ -97,6 +97,45 @@ const withTrailing = (extraHex: string): u8[] => {
   return out
 }
 
+/** `n` as a two-octet DER length, `82 hi lo`, pushed onto `out`. */
+const pushLong = (out: u8[], tag: i32, n: i32): void => {
+  out.push(toU8(tag))
+  out.push(0x82)
+  out.push(toU8(n >> 8))
+  out.push(toU8(n & 0xff))
+}
+
+/**
+ * The old golden with `count` distinct private extensions after the key, 1.2.0
+ * up to 1.2.(count - 1), each `30 06 06 02 2a k 04 00`. Past `withTrailing`'s
+ * 50 octets, so every length here is the two-octet form, which DER makes
+ * minimal only from 256 octets: `count` is 32 to 127, the top so each arc is
+ * one octet.
+ */
+const withExtensions = (count: i32): u8[] => {
+  const g: u8[] = fromHex(GOLDEN_NO_EXTENSIONS)
+  const list: i32 = 8 * count
+  const tbs: i32 = 0xca + list + 8
+  const out: u8[] = []
+  pushLong(out, 0x30, 4 + tbs + toI32(g.length) - 209)
+  pushLong(out, 0x30, tbs)
+  for (let i: i32 = 7; i < 209 && i < toI32(g.length); i++) {
+    out.push(g[i])
+  }
+  pushLong(out, 0xa3, list + 4)
+  pushLong(out, 0x30, list)
+  for (let k: i32 = 0; k < count; k++) {
+    const ext: u8[] = [0x30, 0x06, 0x06, 0x02, 0x2a, toU8(k), 0x04, 0x00]
+    for (const b of ext) {
+      out.push(b)
+    }
+  }
+  for (let i: i32 = 209; i < toI32(g.length); i++) {
+    out.push(g[i])
+  }
+  return out
+}
+
 /** Whether `x509ParseCertificate` reads the old golden with `extraHex` after the key. */
 const readsWith = (extraHex: string): boolean => x509ParseCertificate(withTrailing(extraHex)) !== null
 
@@ -181,8 +220,8 @@ const trailingSuite = (): i32 => {
   t.ok("[3] holding a real extension reads", readsWith("a310300e300c0603551d130101ff04023000"))
   t.eqBool("[3] holding a NULL is refused", readsWith("a3020500"), false)
   t.eqBool("[3] holding an empty SEQUENCE is refused", readsWith("a3023000"), false)
-  t.eqBool("[3] holding a SEQUENCE and then more is refused", readsWith("a306300205003000"), false)
-  t.eqBool("two [3] elements are refused", readsWith("a30430020500a30430020500"), false)
+  t.eqBool("[3] holding a SEQUENCE and then more is refused", readsWith("a312300e300c0603551d130101ff040230003000"), false)
+  t.eqBool("two [3] elements are refused", readsWith("a310300e300c0603551d130101ff04023000a310300e300c0603551d130101ff04023000"), false)
   t.ok("[1] as an empty BIT STRING, 81 01 00, reads", readsWith("810100"))
   t.ok("[1] with four unused bits of one octet reads", readsWith("810204f0"))
   t.ok("[1], [2] and [3] in order read", readsWith("810100820100a310300e300c0603551d130101ff04023000"))
@@ -244,6 +283,15 @@ const extensionSuite = (): i32 => {
   return t.done()
 }
 
+const extensionCapSuite = (): i32 => {
+  const t = new Suite("X509-14: at most 64 extensions")
+  t.ok("32 distinct extensions read", x509ParseCertificate(withExtensions(32)) !== null)
+  t.ok("64 distinct extensions read", x509ParseCertificate(withExtensions(64)) !== null)
+  t.eqBool("65 distinct extensions are refused", x509ParseCertificate(withExtensions(65)) !== null, false)
+  t.eqBool("127 distinct extensions are refused", x509ParseCertificate(withExtensions(127)) !== null, false)
+  return t.done()
+}
+
 const criticalSuite = (): i32 => {
   const t = new Suite("X509-11: an unknown critical extension is reported")
   const plain: X509Certificate | null = readWith(`a30a3008${PRIVATE_EXT}`)
@@ -277,4 +325,4 @@ const nameEqualSuite = (): i32 => {
 }
 
 export const main = (): i32 =>
-  pemSuite() + nameSuite() + trailingSuite() + scopeSuite() + outerKeySuite() + extensionSuite() + criticalSuite() + nameEqualSuite()
+  pemSuite() + nameSuite() + trailingSuite() + scopeSuite() + outerKeySuite() + extensionSuite() + extensionCapSuite() + criticalSuite() + nameEqualSuite()
