@@ -113,10 +113,10 @@ function builtinArgumentLetters(program: CheckedProgram, call: Node): string -> 
   local +0:9 callee: Node (const)
   local +7:11 name: string (const)
   callee +7:18 builtinNameOf -> @builtinNameOf
-  callee +8:69 bufferSignature -> @bufferSignature
-  local +10:9 fills: boolean (const)
-  callee +11:5 dottedName -> @dottedName
-  callee +11:57 receiverIsValue -> @receiverIsValue
+  callee +13:69 bufferSignature -> @bufferSignature
+  local +15:9 fills: boolean (const)
+  callee +16:5 dottedName -> @dottedName
+  callee +16:57 receiverIsValue -> @receiverIsValue
 function isWrittenArgument(letters: string, index: i32): boolean -> @isWrittenArgument [exported]
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: isNetWrittenLetter

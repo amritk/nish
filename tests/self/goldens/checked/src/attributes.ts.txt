@@ -2156,7 +2156,7 @@ function FactCollector.noteWrittenArguments(this: FactCollector, call: Node): vo
 function FactCollector.collectIdentifierBuiltinFacts(this: FactCollector, node: Node): void -> @FactCollector.collectIdentifierBuiltinFacts [method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: FactCollector.addCallees FactCollector.noteBuiltin FactCollector.noteBuiltinSite FactCollector.noteWorld FactCollector.noteWrittenArguments builtinCalleesNamed builtinNameOf identifierBuiltinCallees identifierBuiltinCalleesNamed isArenaCall nish_panic_index nish_str_eq nish_str_index_of nish_str_index_of_from
+  calls: FactCollector.addCallees FactCollector.noteBuiltin FactCollector.noteBuiltinSite FactCollector.noteWorld FactCollector.noteWrittenArguments StringSet.add builtinCalleesNamed builtinNameOf identifierBuiltinCallees identifierBuiltinCalleesNamed isArenaCall nish_panic_index nish_str_eq nish_str_index_of nish_str_index_of_from
   pointer this: size=56 writesThrough=false captured=false passedTo=FactCollector.noteBuiltinSite#0 FactCollector.noteBuiltin#0 FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.addCallees#0 FactCollector.noteWorld#0 FactCollector.noteWrittenArguments#0
   pointer node: size=40 writesThrough=true captured=true passedTo=FactCollector.noteBuiltinSite#1 builtinNameOf#1 FactCollector.noteBuiltin#2 identifierBuiltinCalleesNamed#2 builtinCalleesNamed#2 FactCollector.noteWorld#1 identifierBuiltinCallees#2 FactCollector.noteWorld#1 isArenaCall#1 FactCollector.noteWrittenArguments#1 builtinNameOf#1
   stackSites=0 stackLocals=0
@@ -2177,6 +2177,7 @@ function FactCollector.collectIdentifierBuiltinFacts(this: FactCollector, node: 
   callee +4:5 FactCollector.noteWrittenArguments -> @FactCollector.noteWrittenArguments
   local +10:11 name: string (const)
   callee +10:18 builtinNameOf -> @builtinNameOf
+  callee +20:7 StringSet.add -> @StringSet.add
 function initialisesFields(sig: FunctionSig): boolean -> @initialisesFields
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer sig: size=136 writesThrough=false captured=false
@@ -3136,14 +3137,15 @@ function foreignBufferCountProven(program: CheckedProgram, table: TypeTable, cal
   local +19:7 at: i32 (let)
   callee +21:9 bodyMayExtend -> @bodyMayExtend
 function isResizeCall(program: CheckedProgram, table: TypeTable, node: Node): boolean -> @isResizeCall [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: arrayMethodName nish_str_eq
-  pointer program: size=656 writesThrough=false captured=false passedTo=arrayMethodName#0
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: arrayMethodName builtinNameOf nish_panic_index nish_str_eq
+  pointer program: size=656 writesThrough=false captured=false passedTo=arrayMethodName#0 builtinNameOf#0
   pointer table: size=96 writesThrough=false captured=false passedTo=arrayMethodName#1
-  pointer node: size=40 writesThrough=false captured=false passedTo=arrayMethodName#2
+  pointer node: size=40 writesThrough=false captured=false passedTo=arrayMethodName#2 builtinNameOf#1
   stackSites=0 stackLocals=0
   local +0:9 method: string (const)
   callee +0:18 arrayMethodName -> @arrayMethodName
+  callee +8:5 builtinNameOf -> @builtinNameOf
 function bodyDisturbs(body: Node, names: string[]): boolean -> @bodyDisturbs
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: bodyDisturbs isAssignmentOperator nish_panic_index nish_str_eq
