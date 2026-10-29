@@ -61,6 +61,7 @@ export declare function kill(pid: i32, sig: i32): i32;
 export declare function availableParallelism(): i32;
 export declare function totalMemory(): i64;
 export declare function monotonicNanos(): i64;
+export declare function wallClockNanos(): i64;
 export declare function statMtimeSync(path: string): f64;
 export declare function lstatOwnerModeSync(path: string): i64;
 export declare function geteuid(): i64;

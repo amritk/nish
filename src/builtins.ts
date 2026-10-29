@@ -171,6 +171,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "spawnSyncTo" ||
     name === "readdirSync" ||
     name === "monotonicNanos" ||
+    name === "wallClockNanos" ||
     name === "isDirectorySync" ||
     name === "getenv" ||
     name === "realpathSync" ||
@@ -976,6 +977,14 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   // only the difference between two reads means anything. Zero arguments, which
   // `checkBuiltinArity` words the way `Math.random` already does.
   if (name === "monotonicNanos") {
+    checkBuiltinArity(ctx, call, name, args, 0)
+    return T_I64
+  }
+  // The wall clock, nanoseconds since the Unix epoch, an `i64` for the reason
+  // `monotonicNanos` is one. Unlike that clock it can step backwards when the
+  // system time is set, which is why the two are separate names: this one is
+  // for a timestamp, the other for a duration.
+  if (name === "wallClockNanos") {
     checkBuiltinArity(ctx, call, name, args, 0)
     return T_I64
   }

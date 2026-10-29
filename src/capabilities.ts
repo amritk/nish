@@ -304,7 +304,12 @@ export const builtinCapability = (name: string): i32 => {
     return CAP_ENV
   }
   // `statMtimeSync` reads the file system, but what it answers is a time.
-  if (name === "Date.now" || name === "monotonicNanos" || name === "statMtimeSync") {
+  if (
+    name === "Date.now" ||
+    name === "monotonicNanos" ||
+    name === "wallClockNanos" ||
+    name === "statMtimeSync"
+  ) {
     return CAP_CLOCK
   }
   // runtime.c's `nish_random` seeds itself from `time(0)` and `getpid()`.

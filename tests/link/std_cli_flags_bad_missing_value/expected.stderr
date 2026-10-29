@@ -1,0 +1,2 @@
+tool: --output needs <file>
+usage: tool [flags]
