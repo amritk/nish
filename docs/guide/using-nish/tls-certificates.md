@@ -116,9 +116,9 @@ certificate's signature verifies under another's key.
 
 A root is checked as an issuer is: an expired root, one without
 basicConstraints, one with an extended key usage and one whose name
-constraints the server's names break are refused, and so is a root without
-a subject key identifier. A TLS-inspection proxy's root that carries an
-extended key usage therefore anchors nothing. The server's certificate is
+constraints the server's names break are refused, and a root's path length
+constraint binds the CAs below it. A TLS-inspection proxy's root that
+carries an extended key usage therefore anchors nothing. The server's certificate is
 checked against the CA/Browser Forum's profile: it may not sign
 certificates, carry name constraints or allow any extended key usage, and its
 key must be RSA of 2048 bits or more, P-256, P-384 or Ed25519. The checks

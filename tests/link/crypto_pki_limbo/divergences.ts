@@ -2,9 +2,11 @@
 // the finding of docs/security/crypto-pki.md that records why it is kept.
 // main.ts fails when a case diverges that is not listed here, or a listed one
 // no longer does. PKI-25 lists the chains refused that limbo accepts; every
-// other finding here is a chain accepted that limbo refuses, kept open because
-// its fix needs a part of the certificate `nish/crypto/x509` does not decode,
-// or would refuse chains limbo's own passing cases rely on.
+// other finding here is a chain accepted that limbo refuses: PKI-26 to PKI-28
+// because the fix needs a part of the certificate `nish/crypto/x509` does not
+// decode, or a Public Suffix List; PKI-29 to PKI-31 because pki follows RFC
+// 5280 or the other validators there; PKI-32 because the rule would refuse a
+// root Mozilla's store ships.
 import { LimboDivergence } from "./types"
 
 /** Every divergence kept, in cases.ts's order. */
@@ -18,6 +20,7 @@ export const limboDivergences = (): LimboDivergence[] => [
   { id: "rfc5280::nc::nc-forbids-othername-noop", finding: "PKI-25" },
   { id: "rfc5280::pc::ica-noncritical-pc", finding: "PKI-26" },
   { id: "rfc5280::san::noncritical-with-empty-subject", finding: "PKI-26" },
+  { id: "rfc5280::ski::root-missing-ski", finding: "PKI-32" },
   { id: "rfc5280::validity::notafter-fractional", finding: "PKI-25" },
   { id: "rfc5280::root-non-critical-basic-constraints", finding: "PKI-26" },
   { id: "rfc5280::ca-as-leaf", finding: "PKI-25" },

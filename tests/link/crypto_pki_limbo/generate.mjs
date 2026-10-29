@@ -10,7 +10,10 @@
 // name-constraint cases (`bettertls::`), every BETTERTLS_STRIDE-th is kept, to
 // keep the files small; `--all-bettertls` keeps them all, for a run by hand.
 // Every left-out case is counted by its reason, and the counts and kept cases
-// must add up to the file's SERVER and CLIENT cases.
+// must add up to the file's SERVER and CLIENT cases. No case trusts a CA with
+// a pathLenConstraint, so ANCHORED adds cases of nish's own made from limbo's
+// certificates: a limbo case's chain with the CA just below its root trusted
+// in the root's place, whose pathLenConstraint then binds as an anchor's.
 import crypto from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
@@ -27,6 +30,12 @@ const DEFAULT_TIME = Date.parse("2026-10-01T00:00:00Z")
 // Features `pkiVerifyServer` has no part of: revocation, ML-DSA and a caller's
 // own path depth.
 const UNCLAIMED = new Set(["has-crl", "has-mldsa", "max-chain-depth"])
+// Each a kept limbo case and the verdict with its first intermediate as the
+// root: a pathLen:0 anchor over a CA fails, over the leaf succeeds.
+const ANCHORED = [
+  ["pathlen::intermediate-violates-pathlen-0", false],
+  ["pathlen::ee-with-intermediate-pathlen-0", true],
+]
 
 const args = process.argv.slice(2)
 const all = args.includes("--all-bettertls")
@@ -111,9 +120,28 @@ for (const t of limbo.testcases) {
   )
 }
 const server = limbo.testcases.length
+const limboKept = lines.length
+for (const [id, ok] of ANCHORED) {
+  const t = limbo.testcases.find((c) => c.id === id)
+  if (t === undefined || leftOut(t) !== null || t.validation_time !== null) {
+    throw new Error(`${id}: not a kept case judged at the default time`)
+  }
+  const [anchor, ...below] = t.untrusted_intermediates
+  const root = new crypto.X509Certificate(t.trusted_certs[0])
+  if (anchor === undefined || !new crypto.X509Certificate(anchor).checkIssued(root)) {
+    throw new Error(`${id}: the first intermediate is not the root's`)
+  }
+  const atSec = Math.floor(DEFAULT_TIME / 1000)
+  success += ok ? 1 : 0
+  const list = (ps) => (ps.length === 0 ? "none()" : `[${ps.map(certOf).join(", ")}]`)
+  lines.push(
+    `  { id: ${JSON.stringify(`nish::anchor-pathlen::${id}`)}, host: ${JSON.stringify(t.expected_peer_name.value)}, atSec: ${atSec}, atMs: 0, success: ${ok}, ` +
+      `peer: ${certOf(t.peer_certificate)}, untrusted: ${list(below)}, trusted: [${certOf(anchor)}] },\n`
+  )
+}
 const dropped = [...reasons.values()].reduce((a, b) => a + b, 0)
-if (dropped + lines.length !== server) {
-  throw new Error(`${lines.length} kept and ${dropped} left out of ${server}`)
+if (dropped + limboKept !== server) {
+  throw new Error(`${limboKept} kept and ${dropped} left out of ${server}`)
 }
 
 const head =
@@ -141,8 +169,9 @@ fs.writeFileSync(
   path.join(here, "cases.ts"),
   head +
     "//\n" +
-    `// Of the file's ${server} cases, ${lines.length} are kept (${success} expected to succeed) and\n` +
-    `// ${dropped} left out:\n${listing}` +
+    `// Of the file's ${server} cases, ${limboKept} are kept and ${dropped} left out:\n${listing}` +
+    `// and ${ANCHORED.length} of nish's own follow them (ANCHORED in generate.mjs); of all\n` +
+    `// ${lines.length}, ${success} are expected to succeed.\n` +
     "\n" +
     'import { LimboCase } from "./types"\n' +
     "\n" +
@@ -152,4 +181,4 @@ fs.writeFileSync(
     "/** The cases kept, in the file's order. */\n" +
     `export const limboCases = (): LimboCase[] => [\n${lines.join("")}];\n`
 )
-console.log(`${lines.length} cases kept, ${dropped} left out, ${certs.length} certificates`)
+console.log(`${limboKept} cases kept and ${ANCHORED.length} anchored, ${dropped} left out, ${certs.length} certificates`)

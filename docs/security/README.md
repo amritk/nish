@@ -71,9 +71,9 @@ the record that found it. The notes below the table name each such finding.
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
-| PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 2 / 8 ²⁴ |
+| PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 34 / 122** | **0 / 0 / 2 / 16** |
+| **Total** ⁸ | | | **3 / 10 / 34 / 122** | **0 / 0 / 1 / 17** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -259,11 +259,13 @@ the record that found it. The notes below the table name each such finding.
 24. PKI-18 (Medium) and PKI-21 to PKI-24 (Low) were found by running the
     module against x509-limbo and are fixed: a root's own constraints, a
     root checked as an issuer, key identifiers, the leaf's server profile and
-    its key. PKI-17 and PKI-26 (Medium) and PKI-19, PKI-20 and PKI-25 to
-    PKI-31 (Low) are open and counted: no revocation, criticality not read,
-    no policy processing, Names compared byte for byte, chains limbo accepts
-    refused, and five checks of the web PKI's profile not made. PKI-1 to PKI-16
-    are properties checked and found to hold.
+    its key. PKI-17 (Medium) and PKI-19, PKI-20, PKI-25 to PKI-28 and PKI-30
+    to PKI-32 (Low) are open and counted: no revocation, no policy
+    processing, Names compared byte for byte, chains limbo accepts refused,
+    criticality not read, four checks of the web PKI's profile not made, and
+    a root without a subjectKeyIdentifier accepted, as one Mozilla ships is.
+    PKI-29 (Informational), a common name not checked against the SANs, is
+    not counted. PKI-1 to PKI-16 are properties checked and found to hold.
 
 ## Fuzzed
 

@@ -5,7 +5,7 @@ where a program's root certificates come from, what the loader does with a
 file it cannot use, and what it bounds (PKI-R1 to PKI-R7). `nish/crypto/pki`:
 whether the chain a TLS server sent leads to one of those roots and names the
 host dialled, and what one call may cost ([Path validation](#path-validation-nishcryptopki),
-PKI-1 to PKI-31). Both are written with the code rather than after an audit,
+PKI-1 to PKI-32). Both are written with the code rather than after an audit,
 so that the audit starts from evidence; the path validator is then run
 against x509-limbo's server-authentication cases, which found PKI-18 and
 PKI-21 to PKI-24.
@@ -13,7 +13,7 @@ PKI-21 to PKI-24.
 Anchors are function names: in `std/crypto/pki-roots.ts` on the head that
 merged its half, whose base is `2cdef4fa`, and in `std/crypto/pki.ts` on the
 head that merges the path validator, whose base is `351a9a8f`, except PKI-18
-and PKI-21 to PKI-31, on the head that merges the x509-limbo run, whose base
+and PKI-21 to PKI-32, on the head that merges the x509-limbo run, whose base
 is `50af350c`.
 
 **Result.** The loader reads the roots `SSL_CERT_FILE` and `SSL_CERT_DIR`
@@ -327,7 +327,8 @@ leaf to a root of the store with these properties:
   root's too;
 - no certificate on it carries a critical extension the parser does not
   know;
-- every issuer carries the key identifiers RFC 5280 asks of it;
+- every issuer carries the key identifiers RFC 5280 asks of it, a root
+  its authorityKeyIdentifier only;
 - the leaf names the host in its subjectAltName and keeps the CA/Browser
   Forum's profile of a server's certificate.
 
@@ -342,13 +343,16 @@ and counted:
 - PKI-20 (Low): Names are compared byte for byte, not folded as RFC 5280
   §7.1 says. This fails closed.
 - PKI-25 (Low): six chains limbo accepts are refused. This fails closed.
-- PKI-26 (Medium): an extension's criticality is not read;
+- PKI-26 (Low): an extension's criticality is not read;
 - PKI-27 (Low): the authorityKeyIdentifier's issuer fields and the
   authorityInfoAccess extension are not decoded;
 - PKI-28 (Low): a wildcard is not checked against the Public Suffix List;
-- PKI-29 (Low): a common name the subjectAltName lacks is not refused;
 - PKI-30 (Low): a leaf without extKeyUsage is accepted;
-- PKI-31 (Low): a dNSName subtree with a leading period is not refused.
+- PKI-31 (Low): a dNSName subtree with a leading period is not refused;
+- PKI-32 (Low): a root without a subjectKeyIdentifier anchors a path.
+
+PKI-29 (Informational) records that a common name the subjectAltName lacks
+is not refused; it is not counted.
 
 ### Threat model
 
@@ -409,23 +413,35 @@ module's answer.
 - **An iPAddress subtree of the other family never holds an address.** An
   IPv4 address under IPv6-only permitted subtrees is outside them, and an
   IPv6 subtree never excludes an IPv4 address.
-- **The root is checked as an issuer.** RFC 5280 §6.1.1 makes a trust
-  anchor a name and a key, but x509-limbo refuses an expired root, a root
-  without basicConstraints, one with an unknown critical extension, one with
-  an EKU and one whose name constraints a name below breaks, as the web
-  PKI's validators do (PKI-18, PKI-21). A root's keyUsage and
-  pathLenConstraint are not read: no limbo case asks for them. The cost
-  fails closed: of the roots Debian's `ca-certificates` takes from Mozilla's
-  store, TWCA Global Root CA carries no subjectKeyIdentifier (PKI-22), so it
-  anchors no path, and a TLS-inspection root that carries an extKeyUsage,
-  as some enterprise proxies' do, anchors none either.
-- **A pathLenConstraint is read only on an intermediate CA.** The parser keeps
-  it whatever `cA` says, but `pkiIssuerCode` reads it only after requiring
-  `cA` TRUE, never on a root, and the leaf's is never read.
+- **The root is checked as an issuer, as far as the shipped roots allow.**
+  RFC 5280 §6.1.1 makes a trust anchor a name and a key, but x509-limbo
+  refuses an expired root, a root without basicConstraints, one with an
+  unknown critical extension, one with an EKU and one whose name constraints
+  a name below breaks, as the web PKI's validators do (PKI-18, PKI-21). A
+  root's pathLenConstraint binds the CAs below it. Each structural rule on a
+  root was first run over the 118 roots Debian's `ca-certificates` ships
+  from Mozilla's store (`/etc/ssl/certs/ca-certificates.crt`): v3,
+  basicConstraints present with `cA` TRUE, an authorityKeyIdentifier with a
+  keyIdentifier equal to the subjectKeyIdentifier on a self-issued root, an
+  authorityKeyIdentifier on one that is not, and keyCertSign in a keyUsage
+  each refuse none, and are kept, but for keyUsage, which no limbo case
+  tests on a root. A subjectKeyIdentifier refuses one, TWCA Global Root CA,
+  so a root need not carry one (PKI-32). Validity, unknown critical
+  extensions, pathLenConstraint, name constraints and extKeyUsage are
+  security-bearing and checked on every root whatever the store holds: two
+  shipped roots carry a pathLenConstraint (Firmaprofesional CIF A62634068,
+  1; NetLock Arany, 4), none carries an EKU, an unknown critical extension
+  or is outside its validity. A TLS-inspection root that carries an
+  extKeyUsage, as some enterprise proxies' do, anchors no path.
+- **A pathLenConstraint is read on every issuer, the root too.** The parser
+  keeps it whatever `cA` says, but `pkiIssuerCode` reads it only after
+  requiring `cA` TRUE, and the leaf's is never read.
 - **A known extension is honoured whether it is critical or not.** The
   parser does not keep the flag, so a non-critical nameConstraints or
   basicConstraints binds as a critical one does. A certificate that breaks
   §4.2 by marking one wrongly is not refused for it (PKI-26).
+- **A dNSName subtree with a leading period** holds the names strictly below
+  it, as OpenSSL and Go read it (PKI-31).
 - **Every name compares without ASCII case.** That covers the SANs, the host
   and dNSName subtrees. A SAN that is not a valid DNS name, such as one with
   an empty label, a space, a partial wildcard or a label over 63 octets,
@@ -499,13 +515,24 @@ max_chain_depth, no ML-DSA key and no key usage of their own, and one in
 20 of the BetterTLS name-constraint cases (`generate.mjs` there says how).
 Each verdict is printed with its reason, and a case whose verdict is not
 limbo's must be listed in `divergences.ts` with the finding that keeps it.
-Before PKI-18 and PKI-21 to PKI-24, 63 cases diverged; 29 do now, all listed
-under PKI-25 to PKI-31.
+Before PKI-18 and PKI-21 to PKI-24, 63 cases diverged; 30 do now, all listed
+under PKI-25 to PKI-32. No limbo case trusts a CA with a pathLenConstraint,
+so `generate.mjs` adds two cases of its own from limbo's certificates (its
+`ANCHORED`): a pathLen:0 CA trusted as the root over another CA, refused,
+and over the leaf, accepted.
+
+The 1-in-20 BetterTLS sample is deterministic: a case whose `tc` number is a
+multiple of 20. `generate.mjs --all-bettertls` keeps all 9572, and with this
+`pki.ts` every one agrees with limbo: 9762 cases, 934 accepted, 9732 as
+limbo says, and the 30 divergences above.
 
 Each fix was then reverted alone, the run rebuilt and repeated, and the cases
-that diverged anew were read: 25 reverts, each named with the cases it turns
-under its finding. 22 turn a limbo case. Three do not, and are equivalent or
-untested:
+that diverged anew were read: 26 reverts, each named with the cases it turns
+under its finding. 23 turn a case, the root's pathLenConstraint one of the
+`ANCHORED` two. Requiring a subjectKeyIdentifier on a root again turns
+`rfc5280::ski::root-missing-ski` back to limbo's verdict, which `main.ts`
+refuses as a divergence listed but gone (PKI-32). Three do not, and are
+equivalent or untested:
 
 - `cand.version !== 2` on a root, as on an intermediate;
 - `!cand.bcPresent` on a root, as on an intermediate;
@@ -636,8 +663,14 @@ Tests: `an intermediate with CA:FALSE`,
 Per §6.1.4 (h) and (l), a self-issued intermediate does not count, and
 neither does the leaf.
 
+A root's pathLenConstraint binds as an intermediate's does.
+
 Tests: `pathLen 0 above the leaf`, `pathLen 0 does not count a self-issued CA`
-and `pathLen 0 above another CA`.
+and `pathLen 0 above another CA`; on a root,
+`nish::anchor-pathlen::pathlen::intermediate-violates-pathlen-0` in
+`tests/link/crypto_pki_limbo/expected.out`, and
+`nish::anchor-pathlen::pathlen::ee-with-intermediate-pathlen-0` for the leaf
+it still allows.
 
 #### PKI-10: key usage and extended key usage
 
@@ -783,21 +816,25 @@ case, in that check's `expected.out`, that reverting the fix alone turns.
 A root that anchors a path must be valid at the instant given, carry no
 unknown critical extension, be a v3 certificate whose basicConstraints says
 `cA` TRUE, and carry no extKeyUsage; RFC 5280 §6.1 asks none of this, but
-limbo's cases and the web PKI's validators do. A root's keyUsage and
-pathLenConstraint are not read.
+limbo's cases and the web PKI's validators do. Its pathLenConstraint binds
+the CAs below it (PKI-9). Its keyUsage is not read: the one limbo case with a
+root that lacks keyCertSign, `rfc5280::root-inconsistent-ca-extensions`, is
+refused before it, as its root does not parse, so the rule would have no test
+that fails without it. None of the 118 roots Debian ships from Mozilla's
+store lacks keyCertSign.
 
 Tests: `rfc5280::validity::expired-root`,
 `rfc5280::unknown-critical-extension-root`,
-`rfc5280::root-missing-basic-constraints` and `webpki::eku::root-has-eku`.
-On these cases the version check and the basicConstraints one stand for
+`rfc5280::root-missing-basic-constraints`, `webpki::eku::root-has-eku` and
+`nish::anchor-pathlen::pathlen::intermediate-violates-pathlen-0`. On these cases the version check and the basicConstraints one stand for
 each other, and no case has a root whose basicConstraints says `cA` FALSE,
 so the `cA` check has no test of its own.
 
 #### PKI-22 (Low, fixed): an issuer carries its key identifiers
 
-As RFC 5280 §4.2.1.1 and §4.2.1.2 ask, every issuer carries a
-subjectKeyIdentifier, and an authorityKeyIdentifier unless it is
-self-issued, a cross-signed root too. A self-issued root's
+As RFC 5280 §4.2.1.1 and §4.2.1.2 ask, every issuer but a root carries a
+subjectKeyIdentifier (PKI-32), and every issuer an authorityKeyIdentifier
+unless it is self-issued, a cross-signed root too. A self-issued root's
 authorityKeyIdentifier, when present, is its own subjectKeyIdentifier. A
 missing or mismatched identifier refuses the chain as `PKI_ERR_MALFORMED`. It
 is read only once the issuer's signature verifies, so an issuer with the
@@ -806,7 +843,7 @@ is not compared with its issuer's subjectKeyIdentifier: the path is built by
 Name and signature.
 
 Tests: `rfc5280::ski::intermediate-missing-ski`,
-`rfc5280::ski::root-missing-ski`, `rfc5280::aki::cross-signed-root-missing-aki`,
+`rfc5280::aki::cross-signed-root-missing-aki`,
 `rfc5280::aki::intermediate-missing-aki`, `rfc5280::aki::leaf-missing-aki` and
 `webpki::aki::root-with-aki-ski-mismatch`.
 
@@ -883,16 +920,18 @@ Each fails closed, under a check this record keeps on purpose:
 - `rfc5280::validity::notafter-fractional`: a certificate is expired a
   millisecond after its notAfter (PKI-7).
 
-#### PKI-26 (Medium): an extension's criticality is not read
+#### PKI-26 (Low): an extension's criticality is not read
 
 The parser does not keep the critical flag, so a known extension binds
 whichever way it is marked. A certificate that breaks RFC 5280 §4.2 by
 marking one wrongly is accepted: a critical authorityKeyIdentifier or
 extKeyUsage, a non-critical nameConstraints, policyConstraints or root
 basicConstraints, and a subjectAltName whose criticality does not follow its
-subject. This is Medium because a name constraint some validators would
-ignore still binds here, but a CA that issues such a certificate is not
-caught. Closing it needs the flag kept in `X509Cert`, in `nish/crypto/x509`.
+subject. This is Low: every extension the module knows binds whichever way
+it is marked, so a wrong flag never widens what a path may name or a key may
+do; what is lost is catching a CA that misissues. The follow-up keeps each
+extension's critical bit in `X509Cert`, in `nish/crypto/x509`, which this
+work does not change.
 
 Tests: `rfc5280::aki::critical-aki`,
 `rfc5280::nc::permitted-dns-match-noncritical`, `rfc5280::pc::ica-noncritical-pc`,
@@ -906,8 +945,12 @@ and `webpki::san::san-critical-with-nonempty-subject`, each listed in
 The authorityKeyIdentifier's authorityCertIssuer and serial fields, and the
 authorityInfoAccess extension, are not decoded, so a root whose
 authorityKeyIdentifier lacks a keyIdentifier or carries the other fields, and
-a malformed authorityInfoAccess, are accepted. None of these widens what a
-path may name.
+a malformed authorityInfoAccess, are accepted. This is Low: the path is
+built by Name and signature, never by these fields, and no AIA fetch is made,
+so none of them widens what a path may name or reaches the network. The
+follow-ups are in `nish/crypto/x509`: decoding the authorityKeyIdentifier's
+authorityCertIssuer and serial, and parsing authorityInfoAccess so a
+malformed one refuses its certificate.
 
 Tests: `webpki::aki::root-with-aki-missing-keyidentifier`,
 `webpki::aki::root-with-aki-all-fields` and `webpki::malformed-aia`.
@@ -916,30 +959,59 @@ Tests: `webpki::aki::root-with-aki-missing-keyidentifier`,
 
 A wildcard dNSName whose base is a public suffix, such as `*.co.uk`, is
 accepted for a name one label below it. The module ships no suffix list; BR
-§3.2.2.6 forbids a CA to issue such a certificate.
+§3.2.2.6 forbids a CA to issue such a certificate. This is Low: the wildcard
+still covers one label only, and a publicly trusted CA may not issue it. The
+follow-up is a Public Suffix List the module ships and checks a wildcard's
+base against.
 
 Tests: `webpki::san::public-suffix-multi-label-wildcard-san` and
 `webpki::san::public-suffix-private-namespace-wildcard-san`.
 
-#### PKI-29 (Low): a common name the subjectAltName lacks is not refused
+#### PKI-29 (Informational): a common name the subjectAltName lacks is not refused
 
 The subject's common name is never read (Choices), so a leaf whose CN is not
-one of its SANs, as BR §7.1.4.3 asks, is accepted for the SAN it names.
+one of its SANs, as BR §7.1.4.3 asks, is accepted for the SAN it names. The
+host is matched against the SANs alone, so the CN cannot name a host, and
+this is Informational. limbo is not of one mind here: cases it expects to
+succeed carry a CN their SANs lack, among them
+`rfc5280::nc::permitted-dns-match-more`, `rfc5280::nc::permitted-ipv4-match`,
+`rfc5280::nc::permitted-ipv6-match`, `webpki::nc::nc-permits-dns-san-pattern`,
+`webpki::san::exact-localhost-ip-san` and `webpki::san::leftmost-wildcard-san`,
+with 19 of the BetterTLS sample; a CN-in-SAN rule refuses all 25.
 
 Tests: the nine `webpki::cn::*` cases listed in `divergences.ts`.
 
 #### PKI-30 (Low): a leaf without extKeyUsage is accepted
 
-BR §7.1.2.7.6 makes a server's extKeyUsage required; RFC 5280 reads its
-absence as any use. The module follows RFC 5280, so a leaf without one is
-accepted.
+BR §7.1.2.7.6 makes a server's extKeyUsage required; RFC 5280 §4.2.1.12
+reads its absence as any use. The module follows RFC 5280, so a leaf without
+one is accepted, as limbo's own RFC 5280 case expects. This is Low: a leaf
+with an extKeyUsage that leaves out serverAuth is still refused.
 
-Test: `webpki::eku::ee-without-eku`.
+Tests: `webpki::eku::ee-without-eku`, kept, and
+`rfc5280::eku::ee-without-eku`, which limbo expects to succeed.
 
 #### PKI-31 (Low): a dNSName subtree with a leading period is not refused
 
 RFC 5280 §4.2.1.10 allows a leading period only in a URI subtree. A dNSName
-subtree such as `.example.com` is read as the names below `example.com`, as
-OpenSSL reads it, rather than refused as malformed.
+subtree such as `.example.com` is read as the names strictly below
+`example.com`, as OpenSSL reads it, rather than refused as malformed; Go and
+OpenSSL accept such a constraint too. Read so, a permitted `.example.com` is
+narrower than `example.com`, which also holds the apex, and fails closed for
+it; an excluded `.example.com` leaves the apex `example.com` itself allowed.
+This is Low: the constraint is malformed, a CA that writes it means the names
+below, and the one name it fails to exclude is the apex.
 
 Test: `rfc5280::nc::invalid-dnsname-leading-period`.
+
+#### PKI-32 (Low): a root without a subjectKeyIdentifier anchors a path
+
+RFC 5280 §4.2.1.2 asks a CA's certificate for a subjectKeyIdentifier, and
+limbo refuses a root without one. Of the 118 roots Debian's
+`ca-certificates` ships from Mozilla's store, one lacks it, TWCA Global Root
+CA, so the rule would refuse a root the store trusts: a root needs none
+here. This is Low, anchor hygiene: the identifier only helps to build a path,
+which is built here by Name and signature, and the root is still one the
+store holds.
+
+Test: `rfc5280::ski::root-missing-ski`, kept in `divergences.ts`.

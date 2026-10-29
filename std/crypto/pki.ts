@@ -814,15 +814,16 @@ const pkiTimeCode = (c: X509Certificate, nowMs: i64): i32 => {
 
 /**
  * The key identifiers an issuer `cand` must carry (RFC 5280 §4.2.1.1 and
- * §4.2.1.2), as a code: a subjectKeyIdentifier, and an
- * authorityKeyIdentifier unless it is self-issued, even on a root. A self-issued root's
- * authorityKeyIdentifier, when present, is its own subjectKeyIdentifier.
+ * §4.2.1.2), as a code: a subjectKeyIdentifier, which a root may lack, as
+ * one Mozilla ships does, and an authorityKeyIdentifier unless it is
+ * self-issued, even on a root. A self-issued root's authorityKeyIdentifier,
+ * when present, is its own subjectKeyIdentifier.
  */
 const pkiKeyIdsCode = (cand: X509Certificate, root: boolean): i32 => {
   const skid: u8[] | null = cand.skid
   const akid: u8[] | null = cand.akid
   if (skid === null) {
-    return PKI_ERR_MALFORMED
+    return root ? PKI_OK : PKI_ERR_MALFORMED
   }
   if (!pkiSelfIssued(cand)) {
     return akid === null ? PKI_ERR_MALFORMED : PKI_OK
@@ -836,10 +837,10 @@ const pkiKeyIdsCode = (cand: X509Certificate, root: boolean): i32 => {
  * extensions, that it is a CA, its extKeyUsage, its name constraints, its
  * signature over `child` — the only check that costs — and, once that
  * verifies, its key identifiers, so a wrong key reads as a signature. An
- * intermediate also needs room for a root above it, a keyUsage that allows
- * keyCertSign and a pathLenConstraint that covers the intermediates below it;
- * a root's keyUsage and pathLenConstraint are not read, as RFC 5280 §6.1
- * reads none of a trust anchor's, and it may carry no extKeyUsage at all.
+ * intermediate also needs room for a root above it and a keyUsage that
+ * allows keyCertSign; every issuer, the root too, needs a pathLenConstraint
+ * that covers the intermediates below it. A root's keyUsage is not read, and
+ * it may carry no extKeyUsage at all.
  */
 const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certificate, root: boolean): i32 => {
   // No intermediate is added past PKI_MAX_PATH - 1, so a root always fits.
@@ -862,7 +863,7 @@ const pkiIssuerCode = (s: PkiSearch, child: X509Certificate, cand: X509Certifica
   if (cand.ekuPresent && (root || (!cand.ekuServerAuth && !cand.ekuAny))) {
     return PKI_ERR_EXT_KEY_USAGE
   }
-  if (!root && cand.bcPathLen >= 0) {
+  if (cand.bcPathLen >= 0) {
     let below: i32 = 0
     for (let i: i32 = 1; i < toI32(s.path.length); i++) {
       if (!pkiSelfIssued(s.path[i])) {

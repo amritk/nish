@@ -81,7 +81,7 @@ rfc5280::serial::too-long: FAILURE ERR_MALFORMED
 rfc5280::serial::zero: FAILURE ERR_MALFORMED
 rfc5280::serial::negative: FAILURE ERR_UNKNOWN_CRITICAL
 rfc5280::ski::critical-ski: FAILURE ERR_UNTRUSTED
-rfc5280::ski::root-missing-ski: FAILURE ERR_MALFORMED
+rfc5280::ski::root-missing-ski: SUCCESS, limbo says FAILURE: kept, PKI-32
 rfc5280::ski::intermediate-missing-ski: FAILURE ERR_MALFORMED
 rfc5280::validity::expired-root: FAILURE ERR_EXPIRED
 rfc5280::validity::expired-intermediate: FAILURE ERR_EXPIRED
@@ -668,4 +668,6 @@ online::apple.com: SUCCESS
 online::cloudflare.com: SUCCESS
 online::microsoft.com: SUCCESS
 online::stackoverflow.com: SUCCESS
-x509-limbo: 670 cases, 116 accepted, 641 as limbo says, 29 divergences kept
+nish::anchor-pathlen::pathlen::intermediate-violates-pathlen-0: FAILURE ERR_PATH_LENGTH
+nish::anchor-pathlen::pathlen::ee-with-intermediate-pathlen-0: SUCCESS
+x509-limbo: 672 cases, 118 accepted, 642 as limbo says, 30 divergences kept

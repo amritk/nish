@@ -10,12 +10,13 @@
 // descriptions, keys and metadata and the cases it does not keep.
 // Generated: do not edit; run generate.mjs again.
 //
-// Of the file's 9802 cases, 670 are kept (99 expected to succeed) and
-// 9132 left out:
+// Of the file's 9802 cases, 670 are kept and 9132 left out:
 //   29 for a CRL, an ML-DSA key or a max_chain_depth
 //   1 for no single expected peer name
 //   10 for a CLIENT case
 //   9092 for a BetterTLS case not in the 1-in-20 sample
+// and 2 of nish's own follow them (ANCHORED in generate.mjs); of all
+// 672, 100 are expected to succeed.
 
 import { LimboCase } from "./types"
 
@@ -694,4 +695,6 @@ export const limboCases = (): LimboCase[] => [
   { id: "online::cloudflare.com", host: "cloudflare.com", atSec: 1788647380, atMs: 0, success: true, peer: 2339, untrusted: [2340], trusted: [2341] },
   { id: "online::microsoft.com", host: "microsoft.com", atSec: 1782205458, atMs: 0, success: true, peer: 2342, untrusted: [2316, 2317], trusted: [2318] },
   { id: "online::stackoverflow.com", host: "stackoverflow.com", atSec: 1786797547, atMs: 0, success: true, peer: 2343, untrusted: [2344, 2345], trusted: [2346] },
+  { id: "nish::anchor-pathlen::pathlen::intermediate-violates-pathlen-0", host: "example.com", atSec: 1790812800, atMs: 0, success: false, peer: 32, untrusted: [34], trusted: [33] },
+  { id: "nish::anchor-pathlen::pathlen::ee-with-intermediate-pathlen-0", host: "example.com", atSec: 1790812800, atMs: 0, success: true, peer: 20, untrusted: none(), trusted: [21] },
 ];
