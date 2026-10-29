@@ -51,6 +51,7 @@
 /* WASI has no processes, so `spawn.h` and `wait.h` do not exist there. */
 #include <signal.h>
 #include <spawn.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 extern char **environ;
 #endif
@@ -474,6 +475,36 @@ int64_t nish_total_memory(void) {
   return pages > 0 && page > 0 ? (int64_t)pages * page : -1;
 #else
   return -1;
+#endif
+}
+
+/* `setNice(n)`: this process's nice value set to `n`, 0 or a negative errno.
+   The kernel clamps `n` to its range (-20 to 19), so only lowering the value
+   below what the process has can fail: -EACCES (Linux, Darwin) or -EPERM
+   without the privilege to raise a priority. Linux keeps the value per thread,
+   so it is the calling thread's and every thread started after it. */
+int32_t nish_set_nice(int32_t n) {
+#ifdef __wasi__
+  (void)n;
+  return -ENOSYS;
+#else
+  return setpriority(PRIO_PROCESS, 0, n) == 0 ? 0 : -errno;
+#endif
+}
+
+/* `setIdlePriority()`: this process moved to `SCHED_IDLE`, which runs it only
+   when nothing else wants the CPU. Linux alone has the policy; elsewhere the
+   answer is -EOPNOTSUPP's Linux number, -95, as runtime-net.c answers it. An
+   unprivileged process cannot leave the policy again. Like the nice value, the
+   policy is the calling thread's. */
+int32_t nish_set_idle_priority(void) {
+#if defined(__linux__)
+  struct sched_param param = {0};
+  return sched_setscheduler(0, SCHED_IDLE, &param) == 0 ? 0 : -errno;
+#elif defined(__wasi__)
+  return -ENOSYS;
+#else
+  return -95;
 #endif
 }
 
