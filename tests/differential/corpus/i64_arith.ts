@@ -1,12 +1,14 @@
 // i64: wrapping at 2^63, negative division and remainder, abs/min/max, conversions, printing.
+import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
+
 function square(x: i64): i64 {
-  return x * x;
+  return wrappingMul(x, x);
 }
 
 function pow2(n: number): i64 {
   let r: i64 = 1;
   for (let i = 0; i < n; i++) {
-    r *= 2;
+    r = wrappingMul(r, 2);
   }
   return r;
 }
@@ -15,7 +17,7 @@ export function main(): number {
   const big: i64 = 3000000000;
   console.log(big);
   console.log(square(big));
-  console.log(square(big) * 2);
+  console.log(wrappingMul(square(big), 2));
   console.log(square(square(big)));
   console.log(-big);
   console.log(big / 7);
@@ -28,9 +30,9 @@ export function main(): number {
   const min = -max - 1;
   console.log(max);
   console.log(min);
-  console.log(max + 1);
-  console.log(min - 1);
-  console.log(max * 2);
+  console.log(wrappingAdd(max, 1));
+  console.log(wrappingSub(min, 1));
+  console.log(wrappingMul(max, 2));
   console.log(min / 2);
   console.log(min % 10);
   console.log(Math.abs(min));
@@ -40,7 +42,7 @@ export function main(): number {
   console.log(Math.max(min, max));
   console.log(Math.min(big, -big));
   console.log(min < max);
-  console.log(min === max + 1);
+  console.log(min === wrappingAdd(max, 1));
   console.log(big !== square(big));
   console.log(toI64(2147483647) + 1);
   console.log(toI64(-2147483647 - 1) - 1);
@@ -51,7 +53,7 @@ export function main(): number {
   console.log(toF64(min));
   console.log(toF64(big) / 2);
   const e18: f64 = 1e18;
-  console.log(toI64(e18) * 10);
+  console.log(wrappingMul(toI64(e18), 10));
   const mid: f64 = -1.5;
   console.log(toI64(mid));
   console.log(pow2(63));
@@ -59,7 +61,7 @@ export function main(): number {
   console.log(pow2(32) + pow2(31));
   let n: i64 = 1;
   for (let i = 1; i <= 25; i++) {
-    n *= toI64(i);
+    n = wrappingMul(n, toI64(i));
   }
   console.log(n);
   console.log(`${big} ${-big} ${square(big)} ${min}`);

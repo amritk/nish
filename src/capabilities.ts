@@ -20,7 +20,7 @@
 // error. `tests/capabilities.js` enumerates every name the checker accepts and
 // fails the suite when one has no row here, before any program calls it.
 
-import { isNetExport, isTermExport, isUnsafeExport } from "./nish-modules"
+import { isNetExport, isTermExport, isUnsafeExport, netOption } from "./nish-modules"
 
 /** A deliberate "none": the builtin has a row, and the row says it reaches nothing. */
 export const CAP_NONE: i32 = -1
@@ -192,6 +192,7 @@ export const builtinCapability = (name: string): i32 => {
     name === "Err" ||
     name === "write" ||
     name === "writeError" ||
+    name === "writeBytes" ||
     name === "panic" ||
     name === "console.log" ||
     name === "console.error" ||
@@ -216,9 +217,7 @@ export const builtinCapability = (name: string): i32 => {
     name === "Math.max" ||
     name === "Math.clz32" ||
     name === "Math.imul" ||
-    name === "Arena.reset" ||
     name === "Arena.mark" ||
-    name === "Arena.release" ||
     name === "Arena.used" ||
     name === "arena" ||
     name === "Math.PI" ||
@@ -234,6 +233,11 @@ export const builtinCapability = (name: string): i32 => {
   // reads them to size itself rather than to reach anything. So they take
   // what `process.platform` and `process.arch` take.
   if (name === "availableParallelism" || name === "totalMemory") {
+    return CAP_NONE
+  }
+  // The `nish:net` option ids fold to the runtime's own numbers (`netOption`)
+  // and reach nothing, as `process.platform` reaches nothing.
+  if (netOption(name) > 0) {
     return CAP_NONE
   }
   // `nish:unsafe` reaches none of the world's capabilities: an unchecked
@@ -254,7 +258,19 @@ export const builtinCapability = (name: string): i32 => {
   ) {
     return CAP_FS_READ
   }
-  if (name === "writeFileSync" || name === "appendFileSync" || name === "mkdirSync") {
+  // `unlinkSync` and `renameSync` change the file system as a write does, the
+  // second at two paths; neither reads a file's bytes.
+  if (
+    name === "writeFileSync" ||
+    name === "appendFileSync" ||
+    name === "mkdirSync" ||
+    name === "writeFileBytesSync" ||
+    name === "renameSync" ||
+    name === "unlinkSync" ||
+    name === "writeFileSyncMode" ||
+    name === "createFileExclusiveSync" ||
+    name === "mkdirSyncMode"
+  ) {
     return CAP_FS_WRITE
   }
   // The child can write anything, so `spawnSyncTo` writing its streams to
@@ -266,6 +282,17 @@ export const builtinCapability = (name: string): i32 => {
   // and `waitPid` reaps a child; both reach other processes the way starting
   // one does, so they share `spawn`'s capability rather than taking their own.
   if (name === "spawn" || name === "kill" || name === "waitPid") {
+    return CAP_PROCESS_SPAWN
+  }
+  // The child of `spawnPiped` runs anything too; its streams come back into
+  // the program's own arrays rather than reaching a file or the network.
+  if (name === "spawnPiped") {
+    return CAP_PROCESS_SPAWN
+  }
+  // Lowering this process's own priority reaches no other process, but it is
+  // the scheduling `spawn`'s children inherit and a change the program cannot
+  // always undo, so it is gated with the process calls rather than free.
+  if (name === "setNice" || name === "setIdlePriority") {
     return CAP_PROCESS_SPAWN
   }
   if (isNetExport(name)) {
@@ -280,7 +307,12 @@ export const builtinCapability = (name: string): i32 => {
     return CAP_ENV
   }
   // `statMtimeSync` reads the file system, but what it answers is a time.
-  if (name === "Date.now" || name === "monotonicNanos" || name === "statMtimeSync") {
+  if (
+    name === "Date.now" ||
+    name === "monotonicNanos" ||
+    name === "wallClockNanos" ||
+    name === "statMtimeSync"
+  ) {
     return CAP_CLOCK
   }
   // runtime.c's `nish_random` seeds itself from `time(0)` and `getpid()`.

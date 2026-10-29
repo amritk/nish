@@ -1,0 +1,4 @@
+wycheproof ecdh: 330 shared secrets as published, 25 public keys refused, of 355
+refusals: 12 keys and points checked
+exchanges: 25 of 25 pairs agree both ways
+ok

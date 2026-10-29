@@ -752,15 +752,13 @@ export class FunctionFacts {
   returnsFreshElements: boolean
   /** The parameter whose elements the call fills with strings it allocated, or -1 (escape.ts, `fillsParam`). */
   fillsParam: i32
-  /** Calls `Arena.reset` / `Arena.release`, directly or through a callee. */
-  usesArenaControl: boolean
   /**
    * Reads the arena's bump position — `Arena.mark`, `Arena.used` — directly or
    * through a callee (fixpoint). Such a function answers a number that depends
    * on *when* the arena was last reclaimed, which is what stops
    * `marksTailCall` (escape.ts) from moving a scope release across a call to
-   * it. It is deliberately not folded into `usesArenaControl`: reading
-   * the position invalidates nothing, so it must not cost a function its scope.
+   * it. Reading the position invalidates nothing, so it costs no function its
+   * scope.
    */
   readsArenaState: boolean
   /**
@@ -814,7 +812,7 @@ export class FunctionFacts {
   sourceName: string
   /** Allocates from the arena in its own body, before any callee is counted. */
   allocatesItself: boolean
-  /** Calls `Arena.mark`, `Arena.release` or `Arena.reset` in its own body: the program is managing this memory. */
+  /** Calls `Arena.mark` in its own body: the program is managing this memory. */
   managesArena: boolean
   /**
    * Leaves arena memory behind when it returns: it allocates, itself or
@@ -918,7 +916,6 @@ export class FunctionFacts {
     this.returnsAllocation = false
     this.returnsFreshElements = false
     this.fillsParam = -1
-    this.usesArenaControl = false
     this.readsArenaState = false
     this.opensArena = false
     this.callSites = []
@@ -3141,9 +3138,7 @@ class FactCollector {
       // also allocate, and `slice` and an unproven `charCodeAt` can reach a panic.
       this.facts.readsMemory = true
       const name = node.children[0].text
-      this.addCallees(
-        stringConstructCallees(name, this.unit.program.uncheckedIndexing, program.nodeProvenIndex[node.id])
-      )
+      this.addCallees(stringConstructCallees(name, program.nodeProvenIndex[node.id]))
       if (name === "charCodeAt") {
         this.noteSite(node, PANIC_INDEX, program.nodeProvenIndex[node.id], "")
       } else if (name === "slice") {
@@ -3329,7 +3324,7 @@ class FactCollector {
       // proved in range emits no call, so listing `nish_panic_index` here would
       // cost the function `willreturn` for a `noreturn` callee that is not in
       // its IR.
-      if (!this.unit.program.uncheckedIndexing && !program.nodeProvenIndex[node.id]) {
+      if (!program.nodeProvenIndex[node.id]) {
         this.facts.callees.add("nish_panic_index")
       }
       this.noteSite(node, PANIC_INDEX, program.nodeProvenIndex[node.id], "")
@@ -3384,9 +3379,7 @@ class FactCollector {
         program.nodeProvenIndex[node.children[0].id] &&
         callsAnything(node.children[1])
       ) {
-        if (!this.opts.uncheckedIndexing) {
-          this.facts.callees.add("nish_panic_index")
-        }
+        this.facts.callees.add("nish_panic_index")
         // The check after the right side is a panic site of its own, and an
         // unproven one: the first check's proof does not survive the call.
         this.noteSite(node, PANIC_INDEX, false, "")
@@ -3414,7 +3407,7 @@ class FactCollector {
       this.noteArrayWrite(call, methodReceiver(call))
       this.facts.resizesArray = true
       const proven = this.unit.program.nodeProvenIndex[call.id]
-      if (!this.unit.program.uncheckedIndexing && !proven) {
+      if (!proven) {
         this.facts.callees.add("nish_panic_index")
       }
       this.noteSite(call, PANIC_POP, proven, "")
@@ -3433,9 +3426,7 @@ class FactCollector {
       this.noteArrayWrite(call, methodReceiver(call))
       if (method === "set") {
         this.facts.readsMemory = true
-        if (!this.unit.program.uncheckedIndexing) {
-          this.facts.callees.add("nish_panic_slice")
-        }
+        this.facts.callees.add("nish_panic_slice")
         this.noteSite(call, PANIC_SLICE, false, "")
       }
       return
@@ -3477,13 +3468,12 @@ class FactCollector {
    * Every checked signed `+ - *`, negation and step may call the noreturn
    * overflow panic, as a division may call its own, and is an `overflow` site.
    * One the bounds walk proved fits (`nodeProvenNoOverflow`) is a plain
-   * `add nsw` and calls nothing, so its site is proven; under `--wrapping`
-   * none is checked and none is a site. The question is `checksOverflow`'s,
+   * `add nsw` and calls nothing, so its site is proven. The question is `checksOverflow`'s,
    * the one `emitIntBinary` is reached on, so the two cannot drift apart.
    */
   collectOverflowFacts(node: Node): void {
     const program = this.unit.program
-    if (program.wrapping || !checksOverflow(program, this.table, node)) {
+    if (!checksOverflow(program, this.table, node)) {
       return
     }
     const proven = program.nodeProvenNoOverflow[node.id]
@@ -3552,11 +3542,7 @@ class FactCollector {
     }
   }
 
-  /**
-   * The site a builtin call is, by the name the analysis resolved it to: the
-   * kind does not depend on `--unchecked-indexing`, which drops the net range
-   * check without proving it (`builtinPanicKind`).
-   */
+  /** The site a builtin call is, by the name the analysis resolved it to (`builtinPanicKind`). */
   noteBuiltinSite(call: Node, name: string): void {
     const kind = builtinPanicKind(name)
     if (kind >= 0) {
@@ -3588,7 +3574,6 @@ class FactCollector {
     // answers for. Reading the text here instead would leave a call to `exit`
     // looking like no call at all, and the function would keep a `willreturn`
     // it has not earned.
-    const unchecked = this.unit.program.uncheckedIndexing
     const imported = this.unit.program.nodeBuiltins[node.id]
     this.noteBuiltinSite(node, imported.length > 0 ? imported : node.children[0].text)
     if (this.known !== null) {
@@ -3597,12 +3582,12 @@ class FactCollector {
     if (imported.length > 0) {
       const named =
         imported.indexOf(".") < 0
-          ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported, unchecked)
+          ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported)
           : builtinCalleesNamed(this.unit.program, this.table, this.opts, node, imported)
       this.addCallees(named)
       this.noteWorld(node, named, imported)
     } else {
-      const plain = identifierBuiltinCallees(this.unit.program, this.table, node, unchecked)
+      const plain = identifierBuiltinCallees(this.unit.program, this.table, node)
       this.addCallees(plain)
       this.noteWorld(node, plain, node.children[0].text)
     }
@@ -3622,6 +3607,12 @@ class FactCollector {
       this.facts.readsMemory = true
     } else if (name === "uncheckedSet") {
       this.facts.effect = EFFECT_WRITE
+    } else if (name === "spawnPiped") {
+      // The runtime appends to `stdout` and `stderr` as `push` does, moving
+      // their `len` and perhaps their `data` (`isResizeCall`).
+      this.facts.effect = EFFECT_WRITE
+      this.facts.resizesArray = true
+      this.facts.callees.add("nish_array_grow")
     }
   }
 }
@@ -3672,7 +3663,6 @@ const collectFacts = (
     facts.returnsAllocation = memory.returnsAllocation
     facts.returnsFreshElements = memory.returnsFreshElements
     facts.fillsParam = memory.fillsParam
-    facts.usesArenaControl = memory.usesArenaControl
     facts.callSites = memory.callSites
     facts.escapingNodes = memory.escapingNodes
     facts.carriedStores = memory.carriedStores
@@ -3846,7 +3836,7 @@ const collectFacts = (
   }
 
   facts.readsArenaState = facts.callees.has("nish_arena_mark") || facts.callees.has("nish_arena_used")
-  facts.managesArena = facts.usesArenaControl || facts.callees.has("nish_arena_mark")
+  facts.managesArena = facts.callees.has("nish_arena_mark")
 
   if (facts.readsMemory) {
     facts.effect = maxEffect(facts.effect, EFFECT_READ)
@@ -4224,7 +4214,7 @@ export const analyzeFunctions = (
   propagate(facts, runtime)
   propagateCapabilities(facts)
   for (const f of facts.list) {
-    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation && !f.usesArenaControl
+    f.arenaScope = f.directArena && !f.allocLeaks && !f.returnsAllocation
     // What a function stores into a parameter it fills is its caller's, so
     // no scope of its own may release it.
     f.contained = (f.contained || !f.allocEscapes) && f.fillsParam < 0
@@ -4332,7 +4322,7 @@ const scopeParallelBodies = (units: AnalysisUnit[], facts: FactsTable): void => 
  * through `makeList` and keeps one `i32`, and every list lived until the
  * harness released its own mark. This adds a second way to earn the bracket:
  *
- *     contained && returnsScalar && !usesArenaControl && some callee net-allocates
+ *     contained && returnsScalar && some callee net-allocates
  *
  * **Why it is sound.** The release rewinds the arena to where it stood on
  * entry, freeing exactly what was allocated while the function ran, by it or
@@ -4341,9 +4331,8 @@ const scopeParallelBodies = (units: AnalysisUnit[], facts: FactsTable): void => 
  * memory that existed before the call. The return value is a number, a
  * `boolean`, an `enum` or nothing, so it names no memory. `contained` says no
  * allocation made during the call is reachable any other way, which covers the
- * writes. And `usesArenaControl` being false means nothing in the call reset or
- * released the arena under the mark, so the mark still names the entry
- * position when the release runs. Reading the position (`Arena.mark`,
+ * writes. Nothing in the call can move the arena below the mark, so the mark
+ * still names the entry position when the release runs. Reading the position (`Arena.mark`,
  * `Arena.used`) is allowed, exactly as the WP6 rule allows it: it answers a
  * smaller number after a scope reclaimed memory, which is the point, and
  * `readsArenaState` keeps a release from moving ahead of a tail call to one.
@@ -4417,7 +4406,7 @@ const settleScope = (facts: FactsTable, i: i32, state: i32[], before: boolean[])
     }
     c = c + 1
   }
-  if (!f.arenaScope && calleeAllocates && f.contained && f.returnsScalar && !f.usesArenaControl) {
+  if (!f.arenaScope && calleeAllocates && f.contained && f.returnsScalar) {
     f.arenaScope = true
   }
   f.netAllocates = !f.arenaScope && (f.allocatesItself || calleeAllocates)
@@ -4732,10 +4721,6 @@ const propagateCallee = (
     // header when the callee it invokes does.
     if (calleeFacts.resizesArray && !f.resizesArray) {
       f.resizesArray = true
-      changed = true
-    }
-    if (calleeFacts.usesArenaControl && !f.usesArenaControl) {
-      f.usesArenaControl = true
       changed = true
     }
     if (calleeFacts.readsArenaState && !f.readsArenaState) {
@@ -5645,8 +5630,8 @@ const bodyMayExtend = (
   // stores constants only.
   if (body.kind === N_CALL || body.kind === N_NEW) {
     const callee = program.nodeCallees[body.id]
-    // An unresolved callee is a builtin, and no builtin but `push`/`pop`
-    // reaches a user array's header; those two are above.
+    // An unresolved callee is a builtin, and no builtin but `push`, `pop`
+    // and `spawnPiped` reaches a user array's header; those are above.
     if (callee !== null) {
       if (known === null) {
         return true
@@ -5733,14 +5718,23 @@ export const foreignBufferCountProven = (
 }
 
 /**
- * `a.push(v)` or `a.pop()`: the two calls that move an array's `len`, and so
- * the two a hoisted header has to be safe from. Every other array method reads
- * (`indexOf`, `join`), builds something new, or writes elements and leaves
- * the header alone (`set`, `fill`).
+ * `a.push(v)`, `a.pop()` or `spawnPiped(...)`: the calls that move an array's
+ * `len`, and so the ones a hoisted header has to be safe from. Every other
+ * array method reads (`indexOf`, `join`), builds something new, or writes
+ * elements and leaves the header alone (`set`, `fill`); `spawnPiped` appends
+ * to its `stdout` and `stderr` in the runtime.
  */
 export const isResizeCall = (program: CheckedProgram, table: TypeTable, node: Node): boolean => {
   const method = arrayMethodName(program, table, node)
-  return method === "push" || method === "pop"
+  if (method === "push" || method === "pop") {
+    return true
+  }
+  return (
+    node.kind === N_CALL &&
+    node.children[0].kind === N_IDENT &&
+    program.nodeCallees[node.id] === null &&
+    builtinNameOf(program, node) === "spawnPiped"
+  )
 }
 
 /** True when `body` may assign one of `names` (by any assignment form) or may throw. */

@@ -84,6 +84,12 @@ likely to add to it:
   arm64) and the stack protector in the C runtime. You do not need a flag for
   it, and `node scripts/check-hardening.mjs <binary>` in a checkout reads the
   protections back from a binary's headers.
+  On Linux every native binary also carries a GNU build id (an
+  `NT_GNU_BUILD_ID` note; `readelf -n app` shows it), which `perf`, `gdb` and
+  debuginfod use to match a binary with its debug information. The id is a
+  hash of the binary's bytes, so linking the same program twice gives the
+  same id, while two different builds (a `-g` link and a plain one, or two
+  profiles) give different ones.
 - **`--cpu x86-64-v3`** — compiles your program and the runtime for x86-64
   CPUs with AVX2 (Intel Haswell, AMD Excavator and later), which can make
   tight loops faster. It is the one level `nish` accepts; anything else, and
@@ -93,6 +99,22 @@ likely to add to it:
   that stay on machines you know; ship anything else without it.
 - **`-g`** — DWARF debug info, so `gdb` and `lldb` step through your `.ts`
   source.
+
+  To ship a binary without its debug information and keep that information
+  beside it, split the `-g` build rather than linking twice, since a second
+  link would carry a different build id:
+
+  ```sh
+  nish app.ts --link app -g
+  objcopy --only-keep-debug app app.debug
+  strip -g app
+  objcopy --add-gnu-debuglink=app.debug app
+  ```
+
+  `app` and `app.debug` share one build id, so `gdb`, debuginfod or
+  `perf buildid-cache -a app.debug` match the shipped `app` with the DWARF
+  in `app.debug`, and source lines come back for it. (`strip -g` keeps the
+  symbol table, so function names resolve without the debug file.)
 - **`--number-mode f64`** — makes a bare `number` a 64-bit float rather than
   the default `i32`. Code that spells its widths (`i32`, `f64`) means the same
   thing in both modes.
@@ -198,8 +220,8 @@ Some constructs JavaScript spells differently are rewritten too:
   the same name: `enum Shape { Circle, Square = 4 }` is written as
   `const Shape = { Circle: 0, Square: 4 } as const;` and
   `type Shape = (typeof Shape)[keyof typeof Shape];`.
-- **`Arena.used()`** and its siblings become `nish/runtime`'s `arenaUsed`,
-  `arenaMark`, `arenaRelease` and `arenaReset`, and a `Result` annotation
+- **`Arena.used()`** and `Arena.mark()` become `nish/runtime`'s `arenaUsed`
+  and `arenaMark`, and a `Result` annotation
   imports `Result` from it.
 - **An element read `a[i]`** whose index the compiler cannot prove in range
   becomes `idx(a, i)`, and a store `a[i] = v` becomes `setIdx(a, i, v)`.
@@ -218,7 +240,7 @@ Some constructs JavaScript spells differently are rewritten too:
 - **`i32` arithmetic** that can overflow, `a + b`, `a - b`, `a * b` and
   `-a`, becomes `checkedAdd(a, b)`, `checkedSub`, `checkedMul` and
   `checkedNeg`, which panic as the native build does; where the compiler
-  proved the result fits, or under `--wrapping`, it is `(a + b) | 0` or
+  proved the result fits, it is `(a + b) | 0` or
   `Math.imul(a, b)`. `/` and `%` become `idiv` and `irem`.
 - **`dst.set(src, at)`** between two arrays of one type becomes
   `arraySetAt(dst, src, at)`, the copy a plain JavaScript array lacks, which

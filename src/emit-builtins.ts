@@ -3,7 +3,7 @@
 // milestone S4).
 //
 // Two families, told apart the same way the checker tells them apart. **Dotted
-// callees** (`console.log`, `Math.sqrt`, `process.exit`, `Arena.reset`,
+// callees** (`console.log`, `Math.sqrt`, `process.exit`, `Arena.mark`,
 // `String.fromCharCode`) are member calls whose receiver is not a value;
 // **plain callees** (`toI32`, `parseInt`, `readFileSync`, `panic`) are
 // consulted only when no user function of that name is in scope.
@@ -39,6 +39,7 @@ import {
   NET_INT,
   NET_RANGE,
   NET_STRING,
+  netOption,
   netRangeBuffer,
   netSymbol,
 } from "./nish-modules"
@@ -47,7 +48,7 @@ import { Options } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
 import { resolveTarget } from "./target"
 import { buildsWasmModule, isWasmBuild } from "./visibility"
-import { rangedStoreOf } from "./emit-util"
+import { builtinNameOf, rangedStoreOf } from "./emit-util"
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime"
 import { f64Hex } from "./strings"
 import {
@@ -506,9 +507,7 @@ export const panicTailCallees = (out: string[]): void => {
  * `value`, of type `from`, entering the range `to` (WP31 §6): one unsigned
  * compare, `sub` then `icmp ult` against the width of the range — the shape of
  * the index check — and a cold block that panics. Nothing is emitted when the
- * source is a range inside this one, or when the range is all of `i32`. The
- * check is the type's meaning, not an index check, so `--unchecked-indexing`
- * leaves it where it is.
+ * source is a range inside this one, or when the range is all of `i32`.
  */
 export const emitRangeEntry = (emitter: Emitter, value: string, from: i32, to: i32): void => {
   const table = emitter.table
@@ -588,7 +587,7 @@ const emitParseCall = (emitter: Emitter, s: string, mode: i32): string =>
 
 // ---- Dotted builtins -------------------------------------------------------------------
 
-/** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.reset()`, ... */
+/** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.mark()`, ... */
 export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): string => {
   if (name === "console.log") {
     return emitConsoleLog(emitter, expr)
@@ -646,15 +645,6 @@ export const emitBuiltinCall = (emitter: Emitter, expr: Node, name: string): str
     emitter.fn.emit("unreachable")
     return "void"
   }
-  if (name === "Arena.reset") {
-    emitter.fn.emit(`call void ${emitter.useRuntime("nish_reset_arena")}()`)
-    return "void"
-  }
-  if (name === "Arena.release") {
-    const mark = emitter.emitExpression(firstArgument(expr))
-    emitter.fn.emit(`call void ${emitter.useRuntime("nish_arena_release")}(i64 ${mark})`)
-    return "void"
-  }
   if (name === "Arena.mark") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
   }
@@ -708,9 +698,7 @@ export const builtinCalleesNamed = (
   }
   if (name === "String.fromBytes") {
     out.push("nish_str_new")
-    if (!program.uncheckedIndexing) {
-      out.push("nish_panic_slice")
-    }
+    out.push("nish_panic_slice")
     return out
   }
   if (name === "Math.pow") {
@@ -762,14 +750,6 @@ export const builtinCalleesNamed = (
   }
   if (name === "process.exit") {
     out.push("nish_exit")
-    return out
-  }
-  if (name === "Arena.reset") {
-    out.push("nish_reset_arena")
-    return out
-  }
-  if (name === "Arena.release") {
-    out.push("nish_arena_release")
     return out
   }
   if (name === "Arena.mark") {
@@ -878,6 +858,39 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
     emitter.fn.emit(`call void ${emitter.useRuntime("nish_append_file")}(${stringArgs(emitter, expr)})`)
     return "void"
   }
+  // runtime-os.c's errno answers, an `i32` in either number mode as
+  // `readStdin`'s is. `writeFileBytesSync` hands the runtime the array's
+  // header, whose `len` and `data` it reads.
+  if (name === "renameSync") {
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_rename")}(${stringArgs(emitter, expr)})`)
+  }
+  if (name === "unlinkSync") {
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_unlink")}(${stringArgs(emitter, expr)})`)
+  }
+  if (name === "writeFileBytesSync") {
+    emitter.declareType(ARRAY_TYPE)
+    const path = emitter.emitExpression(firstArgument(expr))
+    const bytes = emitter.emitExpression(expr.children[1].children[1])
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_write_file_bytes")}(i8* ${path}, ${ARRAY_STRUCT}* ${bytes})`
+    )
+  }
+  // The mode is an `i32` beside the strings.
+  if (name === "writeFileSyncMode" || name === "createFileExclusiveSync" || name === "mkdirSyncMode") {
+    const args = expr.children[1].children
+    const path = emitter.emitExpression(args[0])
+    if (name === "mkdirSyncMode") {
+      const mode = emitter.emitExpression(args[1])
+      return emitter.fn.emitValue(
+        `call i32 ${emitter.useRuntime("nish_mkdir_mode")}(i8* ${path}, i32 ${mode})`
+      )
+    }
+    const data = emitter.emitExpression(args[1])
+    const mode = emitter.emitExpression(args[2])
+    const fn = name === "writeFileSyncMode" ? "nish_write_file_mode" : "nish_create_file_exclusive"
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime(fn)}(i8* ${path}, i8* ${data}, i32 ${mode})`)
+  }
+
   // WP14 D4: the two host calls a self-hosted driver needs to link its output.
   if (name === "mkdirSync") {
     return emitter.fn.emitValue(
@@ -926,6 +939,19 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
       `call i32 ${emitter.useRuntime("nish_spawn_child")}(${ARRAY_STRUCT}* ${argv})`
     )
   }
+  // The four headers, emitted left to right: the runtime reads the vector and
+  // `stdin`, and appends to the two output arrays as a `push` would.
+  if (name === "spawnPiped") {
+    emitter.declareType(ARRAY_TYPE)
+    const args = expr.children[1].children
+    const argv = emitter.emitExpression(args[0])
+    const input = emitter.emitExpression(args[1])
+    const out = emitter.emitExpression(args[2])
+    const err = emitter.emitExpression(args[3])
+    return emitter.fn.emitValue(
+      `call i32 ${emitter.useRuntime("nish_spawn_piped")}(${ARRAY_STRUCT}* ${argv}, ${ARRAY_STRUCT}* ${input}, ${ARRAY_STRUCT}* ${out}, ${ARRAY_STRUCT}* ${err})`
+    )
+  }
   if (name === "kill" || name === "waitPid") {
     const args = expr.children[1].children
     const pid = emitter.emitExpression(args[0])
@@ -947,6 +973,13 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "totalMemory") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_total_memory")}()`)
   }
+  if (name === "setNice") {
+    const n = emitter.emitExpression(firstArgument(expr))
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_nice")}(i32 ${n})`)
+  }
+  if (name === "setIdlePriority") {
+    return emitter.fn.emitValue(`call i32 ${emitter.useRuntime("nish_set_idle_priority")}()`)
+  }
   // One call answering the array header, which may be null. The same shape as
   // `readFileSyncOrNull` one type up: the checker typed it `string[] | null` and
   // an ordinary null compare narrows it, so nothing here has to know that a
@@ -960,6 +993,9 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   // One call, an `i64`, and no arguments to emit.
   if (name === "monotonicNanos") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_monotonic_nanos")}()`)
+  }
+  if (name === "wallClockNanos") {
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_wall_clock_nanos")}()`)
   }
   // The mark a `using a = arena()` block releases to (`openScope`).
   if (name === "arena") {
@@ -1034,6 +1070,10 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "writeError") {
     return emitStreamWrite(emitter, expr, 2)
   }
+  // `netWrite` to stdout, less the descriptor: the same range check and call shape.
+  if (name === "writeBytes") {
+    return emitNetCall(emitter, expr, name)
+  }
   if (name === "panic") {
     return emitPanic(emitter, expr)
   }
@@ -1073,35 +1113,31 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
 
 /** The other half of the pair above, in the same order. */
 /**
- * A call of the `spawnSync`, `spawnSyncTo` or `spawn` builtin (not of a user
+ * A call of the `spawnSync`, `spawnSyncTo`, `spawn` or `spawnPiped` builtin (not of a user
  * function that happens to be called any of them, which wins the name as every
  * identifier builtin loses it). `attributes.ts` asks, because the argument escapes into
  * the runtime: the spawn path copies each element's bytes pointer into an arena
- * vector that outlives the call. It answers for all three names, because all
- * three reach that same C.
+ * vector that outlives the call. It answers for all four names, because all
+ * four reach that same C.
  */
 export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   const callee = call.children[0]
   if (callee.kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
     return false
   }
-  return callee.text === "spawnSync" || callee.text === "spawnSyncTo" || callee.text === "spawn"
+  const name = builtinNameOf(program, call)
+  return name === "spawnSync" || name === "spawnSyncTo" || name === "spawn" || name === "spawnPiped"
 }
 
-export const identifierBuiltinCallees = (
-  program: CheckedProgram,
-  table: TypeTable,
-  call: Node,
-  uncheckedIndexing: boolean
-): string[] => identifierBuiltinCalleesNamed(program, table, call, call.children[0].text, uncheckedIndexing)
+export const identifierBuiltinCallees = (program: CheckedProgram, table: TypeTable, call: Node): string[] =>
+  identifierBuiltinCalleesNamed(program, table, call, call.children[0].text)
 
 /** The same, under the name a `nish:` import bound — see `builtinCalleesNamed`. */
 export const identifierBuiltinCalleesNamed = (
   program: CheckedProgram,
   table: TypeTable,
   call: Node,
-  name: string,
-  uncheckedIndexing: boolean
+  name: string
 ): string[] => {
   const out: string[] = []
   if (!isBuiltinFunction(name)) {
@@ -1148,6 +1184,36 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_append_file")
     return out
   }
+  if (name === "renameSync") {
+    out.push("nish_rename")
+    return out
+  }
+  if (name === "unlinkSync") {
+    out.push("nish_unlink")
+    return out
+  }
+  if (name === "writeFileBytesSync") {
+    out.push("nish_write_file_bytes")
+    return out
+  }
+  if (name === "writeFileSyncMode") {
+    out.push("nish_write_file_mode")
+    return out
+  }
+  if (name === "createFileExclusiveSync") {
+    out.push("nish_create_file_exclusive")
+    return out
+  }
+  if (name === "mkdirSyncMode") {
+    out.push("nish_mkdir_mode")
+    return out
+  }
+  // `writeBytes` checks its range as `netWrite` does.
+  if (name === "writeBytes") {
+    out.push("nish_write_bytes")
+    out.push("nish_panic_slice")
+    return out
+  }
   if (name === "mkdirSync") {
     out.push("nish_mkdir")
     return out
@@ -1162,6 +1228,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "spawn") {
     out.push("nish_spawn_child")
+    return out
+  }
+  if (name === "spawnPiped") {
+    out.push("nish_spawn_piped")
     return out
   }
   if (name === "kill") {
@@ -1180,12 +1250,24 @@ export const identifierBuiltinCalleesNamed = (
     out.push("nish_total_memory")
     return out
   }
+  if (name === "setNice") {
+    out.push("nish_set_nice")
+    return out
+  }
+  if (name === "setIdlePriority") {
+    out.push("nish_set_idle_priority")
+    return out
+  }
   if (name === "readdirSync") {
     out.push("nish_readdir")
     return out
   }
   if (name === "monotonicNanos") {
     out.push("nish_monotonic_nanos")
+    return out
+  }
+  if (name === "wallClockNanos") {
+    out.push("nish_wall_clock_nanos")
     return out
   }
   // The release every exit of the block makes. The mark the call itself takes
@@ -1252,9 +1334,7 @@ export const identifierBuiltinCalleesNamed = (
   // `readStdin` checks its range as `netRead` does; the rest are one call each.
   if (name === "readStdin") {
     out.push("nish_read_stdin")
-    if (!uncheckedIndexing) {
-      out.push("nish_panic_slice")
-    }
+    out.push("nish_panic_slice")
     return out
   }
   if (name === "waitStdin") {
@@ -1278,11 +1358,10 @@ export const identifierBuiltinCalleesNamed = (
     return out
   }
   // WP34 N5: one symbol each, and the slice panic behind the range check of
-  // `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom` unless
-  // `--unchecked-indexing` dropped it.
+  // `netRead`, `netWrite`, `udpSendTo` and `udpRecvFrom`.
   if (isNetExport(name)) {
     out.push(netSymbol(name))
-    if (netRangeBuffer(name) >= 0 && !uncheckedIndexing) {
+    if (netRangeBuffer(name) >= 0) {
       out.push("nish_panic_slice")
     }
     return out
@@ -1315,22 +1394,21 @@ export const identifierBuiltinCalleesNamed = (
 // ---- WP34 N5: `nish:net` -------------------------------------------------------------------
 
 /**
- * One call into runtime-net.c (or runtime-term.c, for `readStdin`), its
- * arguments emitted left to right as every call's are and passed as
+ * One call into runtime-net.c (runtime-term.c for `readStdin`, runtime-os.c
+ * for `writeBytes`), its arguments emitted left to right as every call's are and passed as
  * `bufferSignature` spells them: an `i32` as itself, a
  * string as its `i8*`, a `u8[]` (or `meta`'s `i32[]`) as its header, whose
  * `len` and `data` the runtime reads, and an offset or a length (`n`) widened
  * to an `i64` as an index is. The answer is the runtime's `i32` in either
  * number mode.
  *
- * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom` and `readStdin` take the range `[off,
+ * `netRead`, `netWrite`, `udpSendTo`, `udpRecvFrom`, `readStdin` and `writeBytes` take the range `[off,
  * off + len)` of the buffer before their first `n`, checked here the way
  * `dst.set(src, at)` checks the range it writes, through the same panic and
  * with the same words: `0 <= off <= off + len <= buf.length`. Both are
  * `i32`s, so their sum cannot wrap an `i64`, and the unsigned compares refuse
  * a negative one. The buffer's length is read after every argument is
- * evaluated, as JavaScript reads it, and `--unchecked-indexing` drops the
- * check with the rest.
+ * evaluated, as JavaScript reads it.
  */
 const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
   const fn = emitter.fn
@@ -1363,7 +1441,7 @@ const emitNetCall = (emitter: Emitter, expr: Node, name: string): string => {
     emitter.declareType(ARRAY_TYPE)
   }
   const at = netRangeBuffer(name)
-  if (at >= 0 && !emitter.program.uncheckedIndexing && values.length === params.length) {
+  if (at >= 0 && values.length === params.length) {
     const end = fn.emitValue(`add i64 ${values[at + 1]}, ${values[at + 2]}`)
     const field = fn.emitValue(
       `getelementptr inbounds ${ARRAY_STRUCT}, ${ARRAY_STRUCT}* ${values[at]}, i64 0, i32 0`
@@ -1399,6 +1477,9 @@ export const emitNamespaceProperty = (emitter: Emitter, name: string): string =>
   }
   if (name === "process.arch") {
     return emitter.fn.emitValue(`call i8* ${emitter.useRuntime("nish_arch")}()`)
+  }
+  if (netOption(name) > 0) {
+    return `${netOption(name)}`
   }
   process.exit(internalErrorFor(`emitter: unexpected builtin property \`${name}\``, emitter.opts.json))
 }

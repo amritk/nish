@@ -1,0 +1,89 @@
+{
+  "version": "0.24.0",
+  "date": "2026-10-28",
+  "tag": "v0.24.0",
+  "range": {
+    "from": "v0.23.1",
+    "to": "4049a392"
+  },
+  "entries": [
+    {
+      "id": "keep-the-simulator-s-last-packets-in-the",
+      "type": "fix",
+      "scope": "interop",
+      "breaking": false,
+      "title": "keep the simulator's last packets in the runner's pcaps",
+      "body": "The network simulator's run.sh forwarded the stop signal to dumpcap at once and then exited as PID 1. As a result, the packets of the last libpcap TPACKET_V3 block never reached the pcap. The ngtcp2 handshake case closes within about 80 ms, so its server trace had no QUIC packets, and the runner failed it with \"Expected exactly one version. Got []\". The workflow now builds the pinned simulator with run.sh patched so it waits 0.5 s before forwarding the signal and waits for dumpcap to exit.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "db80221"
+      ],
+      "pr": 979,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "regenerate-package-lock-json-for-v0-23-1",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.23.1",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "0b1ffa9"
+      ],
+      "pr": 981,
+      "author": "github-actions[bot]",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "remove-arena-release-arena-reset-wrapping-and-unchecked",
+      "type": "feat",
+      "scope": "checker",
+      "breaking": true,
+      "title": "remove Arena.release, Arena.reset, --wrapping and --unchecked-indexing",
+      "body": "* feat(checker)!: remove Arena.release, Arena.reset, --wrapping and --unchecked-indexing\n\nThe four deprecated ways to step around a check are gone before 1.0.\n\n`Arena.release(m)` and `Arena.reset()` freed to a mark with no proof that\nnothing allocated after it was still reachable. Each is now an unknown builtin\n(NL2244); scope memory with `using a = arena()`. `Arena.mark` and `Arena.used`\nstay, and a function that calls `Arena.mark` still takes no automatic arena\nscope of its own.\n\n`--wrapping` and `--unchecked-indexing` turned a check off for a whole\npackage. The CLI now refuses each with exit 2, as it already refused `--nsw`,\nand names the per-site replacement from `nish:unsafe`: `wrappingAdd`,\n`wrappingSub` and `wrappingMul`, or `uncheckedGet` and `uncheckedSet`. The\nNL7002 migration fix, which rewrote sites off `--unchecked-indexing`, goes\nwith the flag.\n\nNL7001, NL7002, NL9014, NL9015 and NL2426 are retired. The tests,\ncookbook entries and benchmark variants that existed only for the removed\nforms are deleted, and the language reference, the user guide, the AI guide,\nthe FAQ, the architecture notes and the security records no longer describe\nthem.\n\nBREAKING CHANGE: `Arena.release` and `Arena.reset` no longer compile, and\n`--wrapping` and `--unchecked-indexing` exit 2.\nTests: arena_removed, tests/nish/cli.ts\n\n* test(self): move the benches off the removed arena calls\n\nThe AWFY harness now lets innerBenchmarkLoop's automatic arena scope hand back each measurement instead of a manual block. The StringMap copy in bench/map-vs-stringmap.ts follows src/map.ts's reworded FNV comment again. The bench/cursor.ts advance positions move with its shorter comment.\n\nTests: bench, mem_awfy\n\n* test(self): drop the arena blocks the checker refuses in six crypto suites\n\nThe crypto_aes, crypto_p256, crypto_sha256, crypto_sha512, crypto_x25519 and crypto_x509_malformed loops were moved from Arena.mark/release to using arena() blocks, which the escape analysis refuses: each loop calls a parser or hasher that keeps allocations in object fields. In p256 and x25519 the old release also freed the message t.fail had just kept. The loops now run unscoped.\n\nTests: crypto_aes, crypto_p256, crypto_sha256, crypto_sha512, crypto_x25519, crypto_x509_malformed\n\n* test(self): keep mem_reclaim_guards' output the same under --emit-ts\n\nThe TypeScript runtime's Arena.mark() always answers 0, so the guard that\ntested for 0 printed \"empty\" there while the native run printed r2. A mark is\nnever negative in either runtime, so the guard now tests for that, and the\ncall stays in place for the analysis the case pins.\n\nTests: tests/cases/mem_reclaim_guards",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "3e15e91"
+      ],
+      "pr": 983,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "add-gzip-zlib-and-deflate-and-gzip-http",
+      "type": "feat",
+      "scope": "compress",
+      "breaking": false,
+      "title": "add gzip, zlib and DEFLATE, and gzip HTTP responses",
+      "body": "New standard-library modules, in pure Nish and written from the RFCs:\nnish/compress/deflate (a raw DEFLATE compressor at levels 0 to 9, greedy at\n1 to 3 and lazy at 4 to 9, each block the smallest of dynamic, fixed and\nstored; a decompressor that answers an error code for every malformed stream\nand never writes past its limit), nish/compress/gzip and nish/compress/zlib\n(the RFC 1952 and RFC 1950 framings, one-shot and, for gzip, streaming with\nGzipWriter and GzipReader) and nish/compress/checksum (CRC-32 by\nslicing-by-8, Adler-32). Every compressor and decompressor allocates its\ntables once and nothing per call.\n\nnish/net/http-compress negotiates Accept-Encoding (q-values, identity, *)\nand gzips a body with HttpCompressor; Http1Connection.acceptEncoding and\nrespondEncoded answer an HTTP/1.1 request in one call with Content-Encoding,\nthe compressed Content-Length and Vary set. Compression stays opt-in.",
+      "metrics": [
+        "gzip -1 of a 5.2 KB JSON body 25.1 us, 1.58x libdeflate -1 at the same size (1890 vs 1888 bytes); -6 1.47x libdeflate -6; +-10 %"
+      ],
+      "refs": [
+        "docs/security/compress.md",
+        "docs/guide/using-nish/compression.md",
+        "bench/gzip/README.md"
+      ],
+      "tests": [
+        "tests/link/std_compress",
+        "tests/link/std_compress_node",
+        "tests/link/std_http_compress",
+        "tests/link/std_compress_f64"
+      ],
+      "commits": [
+        "4049a39"
+      ],
+      "pr": 984,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    }
+  ]
+}

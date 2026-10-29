@@ -49,8 +49,10 @@
 #include <unistd.h>
 #ifndef __wasi__
 /* WASI has no processes, so `spawn.h` and `wait.h` do not exist there. */
+#include <poll.h>
 #include <signal.h>
 #include <spawn.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 extern char **environ;
 #endif
@@ -169,6 +171,19 @@ nish_str *nish_read_file(const nish_str *path) {
   return s;
 }
 
+/* All `n` bytes of `p` to `fd`, answering 0 or the negative errno of the
+   write that failed (-EIO for one that wrote nothing). A write cut short is
+   finished and `EINTR` retried (RT-13). Every writer below shares it. */
+static int32_t nish_put_all(int fd, const char *p, uint64_t n) {
+  for (uint64_t done = 0; done < n;) {
+    ssize_t k = write(fd, p + done, n - done);
+    if (k > 0) done += k;
+    else if (k == 0) return -EIO;
+    else if (errno != EINTR) return -errno;
+  }
+  return 0;
+}
+
 /* `O_NOFOLLOW` (docs/security/runtime.md, RT-4): a symbolic link as the last
    component of the path is refused, as an unwritable file is, rather than
    followed to whatever file it names. `nish file.ts` writes `file.ll` beside
@@ -176,24 +191,144 @@ nish_str *nish_read_file(const nish_str *path) {
    truncate any file the user can write. A link among the directories on the
    way is still followed.
 
-   `O_CLOEXEC` for the reason the read has it (RT-12), and `EINTR` is retried
-   as the read retries it (RT-13): a write cut short is finished, and one that
-   fails is `cannot write`, never a silently short file. */
+   `O_CLOEXEC` for the reason the read has it (RT-12), and the bytes go out
+   through `nish_put_all`, so a write that fails is `cannot write`, never a
+   silently short file. */
 static void nish_put_file(const nish_str *path, const nish_str *data, int flags) {
   int fd = open(nish_cpath(path), O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC | flags, 0644);
-  if (fd < 0) nish_io_fail("write ", path);
-  for (uint64_t done = 0; done < data->len;) {
-    ssize_t n = write(fd, data->data + done, data->len - done);
-    if (n > 0) {
-      done += n;
-    } else if (n == 0 || errno != EINTR) {
-      nish_io_fail("write ", path);
-    }
-  }
+  if (fd < 0 || nish_put_all(fd, data->data, data->len) < 0) nish_io_fail("write ", path);
   close(fd);
 }
 void nish_write_file(const nish_str *path, const nish_str *data) { nish_put_file(path, data, O_TRUNC); }
 void nish_append_file(const nish_str *path, const nish_str *data) { nish_put_file(path, data, O_APPEND); }
+
+/* ---- Replacing and removing files: `renameSync`, `unlinkSync` and
+   `writeFileBytesSync`. Unlike the writers above, none exits: each answers 0
+   (or the bytes written) on success and a negative errno otherwise, so a
+   program that writes a file beside its target and renames it over the
+   target owns its own diagnostic. A path holding a NUL answers -EINVAL before
+   any system call, rather than reaching the file its prefix names
+   (docs/security/runtime.md, RT-3). */
+
+/* `renameSync(from, to)`: rename(2). On one file system it replaces `to`
+   atomically, so a reader sees the old file or the new one and never a part;
+   across two it answers -EXDEV and moves nothing, since a copy and a delete
+   would not be atomic. A link at `from` is moved as a link, not followed. */
+int32_t nish_rename(const nish_str *from, const nish_str *to) {
+  const char *f = nish_cpath(from), *t = nish_cpath(to);
+  if (f != from->data || t != to->data) return -EINVAL;
+  return rename(f, t) == 0 ? 0 : -errno;
+}
+
+/* `unlinkSync(path)`: unlink(2). A directory is refused with whatever the
+   kernel answers (-EISDIR on Linux, -EPERM elsewhere) and is never handed to
+   rmdir. A link is removed, not the file it names. */
+int32_t nish_unlink(const nish_str *path) {
+  const char *p = nish_cpath(path);
+  if (p != path->data) return -EINVAL;
+  return unlink(p) == 0 ? 0 : -errno;
+}
+
+/* `writeFileBytesSync(path, bytes)`: every element of a `u8[]` to the file,
+   opened as `writeFileSync` opens it (`O_NOFOLLOW`, `O_CLOEXEC`, `O_TRUNC`,
+   0644 before the umask) and written through `nish_put_all`, a short write
+   finished and `EINTR` retried. It answers the length written or the negative
+   errno of the `open` or `write` that failed (-EIO for a write that wrote
+   nothing); a failed write leaves the file truncated to what got out. */
+int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
+  const char *p = nish_cpath(path);
+  if (p != path->data) return -EINVAL;
+  if (bytes->len > NISH_LENGTH_MAX) return -EFBIG;
+  int fd = open(p, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0644);
+  if (fd < 0) return -errno;
+  int32_t r = nish_put_all(fd, bytes->data, bytes->len);
+  /* A write NFS or a quota refuses can surface only at `close`, and the file
+     is then short: an answer of the full length would let the caller rename
+     it over the one it replaces. */
+  if (close(fd) != 0 && r == 0 && errno != EINTR) r = -errno;
+  return r < 0 ? r : (int32_t)bytes->len;
+}
+
+/* ---- Files and directories with an explicit mode (docs/security/runtime.md,
+   RT-24 to RT-26): `writeFileSyncMode`, `createFileExclusiveSync` and
+   `mkdirSyncMode`. Each answers a value and never exits, as the writers just
+   above do. A mode outside 0..0777 is -EINVAL before any system call: the
+   setuid, setgid and sticky bits are refused, not applied, so the mode asked
+   for is the mode the file has. WASI
+   has no file modes to apply, so there each answers -ENOSYS and creates
+   nothing rather than a file whose mode was not set. */
+
+/* The two file writers' shared body: `open(p, O_WRONLY | O_CREAT |
+   O_NOFOLLOW | O_CLOEXEC | flags, mode)`, then `fchmod(fd, mode)` before a
+   byte is written, so the file is exactly `mode` whatever the umask and
+   whatever mode a file already there had: no reader that opens it while it is
+   written finds it wider (RT-24). Then the data through `nish_put_all` and a
+   checked `close`, as `nish_write_file_bytes` does. The open truncates
+   before the `fchmod`, so a file there that this process may write but does
+   not own is emptied and then answers -EPERM. When `flags` holds `O_EXCL`,
+   any failure after the create unlinks the file this call made, so a lock
+   whose write failed does not stay taken. */
+static int32_t nish_put_file_mode(const nish_str *path, const nish_str *data, int flags, int32_t mode) {
+  const char *p = nish_cpath(path);
+  if (p != path->data || mode < 0 || mode > 0777) return -EINVAL;
+  if (data->len > NISH_LENGTH_MAX) return -EFBIG;
+#ifdef __wasi__
+  (void)flags;
+  return -ENOSYS;
+#else
+  int fd = open(p, O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC | flags, (mode_t)mode);
+  if (fd < 0) return -errno;
+  int32_t r = fchmod(fd, (mode_t)mode) == 0 ? 0 : -errno;
+  if (r == 0) r = nish_put_all(fd, data->data, data->len);
+  if (close(fd) != 0 && r == 0 && errno != EINTR) r = -errno;
+  if (r < 0 && (flags & O_EXCL)) unlink(p);
+  return r < 0 ? r : (int32_t)data->len;
+#endif
+}
+
+/* `writeFileSyncMode(path, data, mode)`: `writeFileSync` with the mode given
+   and an answer instead of an exit. A link at the path is refused (-ELOOP on
+   Linux) and the file it names is untouched (RT-25). */
+int32_t nish_write_file_mode(const nish_str *path, const nish_str *data, int32_t mode) {
+  return nish_put_file_mode(path, data, O_TRUNC, mode);
+}
+
+/* `createFileExclusiveSync(path, data, mode)`: `O_EXCL`, so the path is
+   created by this call or the call answers -EEXIST, a link there included,
+   dangling or not. Of N processes racing for one path exactly one wins, which
+   is what a lock file needs; a winner whose write then fails removes the file
+   and answers the error. */
+int32_t nish_create_file_exclusive(const nish_str *path, const nish_str *data, int32_t mode) {
+  return nish_put_file_mode(path, data, O_EXCL, mode);
+}
+
+/* `mkdirSyncMode(path, mode)`: mkdir(2) with `mode`, one directory, not
+   recursive. A path already there is -EEXIST and its mode is left as it was.
+   The kernel applies the umask, so the directory is `mode & ~umask`: 0700 is
+   exact under any umask that leaves the owner's bits (RT-26). */
+int32_t nish_mkdir_mode(const nish_str *path, int32_t mode) {
+  const char *p = nish_cpath(path);
+  if (p != path->data || mode < 0 || mode > 0777) return -EINVAL;
+#ifdef __wasi__
+  return -ENOSYS;
+#else
+  return mkdir(p, (mode_t)mode) == 0 ? 0 : -errno;
+#endif
+}
+
+/* `writeBytes(bytes, off, len)` (nish:io): the bytes `[off, off + len)` of a
+   `u8[]` on stdout, through `nish_put_all`, so a short write is finished and `EINTR` retried. The
+   emitter has range-checked `off` and `len` against `bytes->len`
+   (`emitNetCall`). It answers `len`, every byte out, or the negative errno of
+   the write that failed (`-EIO` for one that wrote nothing), and never exits:
+   how much of a failed call reached the descriptor is not said. A pipe whose
+   reader has gone raises SIGPIPE, as it does for `write`. */
+int32_t nish_write_bytes(const nish_array *bytes, int64_t off, int64_t len) {
+  /* An empty array's data may be NULL, and NULL + 0 is undefined. */
+  if (len == 0) return 0;
+  int32_t r = nish_put_all(1, bytes->data + off, (uint64_t)len);
+  return r < 0 ? r : (int32_t)len;
+}
 
 /* ---- Directories and subprocesses (WP14 D4): what a driver needs to create
    its own output directory and shell out for `--link`. Both answer a value
@@ -223,17 +358,19 @@ _Bool nish_mkdir(const nish_str *path) {
    value rather than through a child that has already run.
 
    `out` and `err` are paths for the child's stdout and stderr, or NULL to let
-   it inherit this process's. Every spawn builtin starts its child here, so the
+   it inherit this process's; `dup`, when not NULL, is three descriptors the
+   child takes as its stdin, stdout and stderr instead (`spawnPiped`'s pipes). Every spawn builtin starts its child here, so the
    argv vector and the redirects are written once; it is `static`, so a program
    that spawns nothing loses it to `--gc-sections`. The answer is the child's
    pid, or a negative errno: -EINVAL for an empty argv or an argument holding a
    NUL, and `posix_spawnp`'s own error otherwise (-ENOENT for a command that is
    not on PATH, on glibc). */
-static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err) {
+static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err, const int *dup) {
 #ifdef __wasi__
   (void)argv;
   (void)out;
   (void)err;
+  (void)dup;
   return -ENOSYS;
 #else
   if (!argv->len) return -EINVAL; /* argv[0] would read past an empty array */
@@ -256,6 +393,13 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
   posix_spawn_file_actions_t fa;
   int failed = posix_spawn_file_actions_init(&fa);
   if (failed) return -failed;
+  /* A `dup2` action that could not be recorded would start the child on this
+     process's own stream in its place, so it fails the spawn. */
+  for (int k = 0; dup && k < 3 && !failed; k++) failed = posix_spawn_file_actions_adddup2(&fa, dup[k], k);
+  if (failed) {
+    posix_spawn_file_actions_destroy(&fa);
+    return -failed;
+  }
   const nish_str *to[2] = { out, err };
   for (int k = 0; k < 2; k++) {
     /* The child opens the file, not this process: a redirect that this process
@@ -281,7 +425,7 @@ static int32_t nish_exit_code(int status) {
 /* The two blocking builtins: start, then wait for that one child. A failed
    start is -1, the answer they have always given. */
 static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, const nish_str *err) {
-  int32_t pid = nish_spawn_start(argv, out, err);
+  int32_t pid = nish_spawn_start(argv, out, err, 0);
   if (pid < 0) return -1;
 #ifdef __wasi__
   return -1;
@@ -312,7 +456,160 @@ int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_st
 /* `spawn(argv)`: the child's pid, or a negative errno, without waiting. The
    child is this process's until a `waitPid` reaps it; one never reaped stays
    a zombie until the program exits, as it would in C. */
-int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv, 0, 0); }
+int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv, 0, 0, 0); }
+
+/* `spawnPiped(argv, stdin, stdout, stderr)`: run the child as `nish_spawn`
+   does, with `stdin`'s bytes on its standard input and its standard output
+   and error appended to `stdout` and `stderr`, and answer its status. -1 is
+   `nish_spawn`'s failure (an empty argv, a NUL, a child that cannot start or
+   be waited for, a pipe or `poll` that fails), and -2 is a stream that passed
+   NISH_PIPED_CAP bytes: the child is killed with SIGKILL and reaped, and the
+   array holds the first NISH_PIPED_CAP bytes of that stream.
+
+   The three pipes are close-on-exec, so no other child this process starts
+   inherits an end, and each end is moved off descriptors 0 to 2, where a
+   `dup2` onto itself would leave close-on-exec set and the child without
+   that stream. Darwin has no `pipe2`, so there an end is close-on-exec only
+   once `F_DUPFD_CLOEXEC` has moved it: a child another thread starts in
+   that window inherits it (docs/security/runtime.md, RT-30).
+
+   One `poll` loop over non-blocking ends writes stdin and reads both outputs
+   as each is ready, so a child that fills its stdout before it reads all its
+   stdin, or the reverse, cannot deadlock against this process. A child that
+   exits, or closes its stdin, before reading everything ends the writing
+   with EPIPE rather than SIGPIPE: the signal is blocked on this thread once
+   the child has started, the one a write raised is taken off the pending
+   set, and the mask is put back before the answer (docs/security/runtime.md,
+   RT-29). Ignoring it instead would be process-wide, and every child
+   started meanwhile, this one included, would inherit SIGPIPE ignored and
+   never die of a reader that has gone.
+
+   The bytes are written from the caller's array as they stand, and nothing
+   copies them: the only copies are the kernel's pipe buffer and the child.
+   The length is read once, so `stdout` being the same array as `stdin`
+   appends to it without feeding the output back in, and the pointer at each
+   write, because that array moves when it grows and its stdin bytes stay
+   its first `n`. */
+#define NISH_PIPED_CAP (16u << 20)
+#ifndef __wasi__
+static int nish_pipe(int *p) {
+#ifdef __linux__
+  if (pipe2(p, O_CLOEXEC)) return -1;
+#else
+  if (pipe(p)) return -1;
+#endif
+  for (int k = 0; k < 2; k++) {
+#ifdef __linux__
+    if (p[k] > 2) continue;
+#endif
+    int moved = fcntl(p[k], F_DUPFD_CLOEXEC, 3);
+    close(p[k]);
+    p[k] = moved;
+    if (moved < 0) return -1;
+  }
+  return 0;
+}
+
+#endif
+
+int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err) {
+#ifdef __wasi__
+  (void)argv;
+  (void)in;
+  (void)out;
+  (void)err;
+  return -1;
+#else
+  uint64_t n = in->len, sent = 0, got[3] = { 0, 0, 0 };
+  int p[6] = { -1, -1, -1, -1, -1, -1 };
+  int32_t rc = -1;
+  if (nish_pipe(p) || nish_pipe(p + 2) || nish_pipe(p + 4)) goto done;
+  int child[3] = { p[0], p[3], p[5] };
+  int32_t pid = nish_spawn_start(argv, 0, 0, child);
+  /* The child holds its ends now; this process keeps only its own. */
+  for (int k = 0; k < 3; k++) {
+    close(child[k]);
+    p[k ? 2 * k + 1 : 0] = -1;
+  }
+  if (pid < 0) goto done;
+  sigset_t pipe_sig, mask, pending;
+  sigemptyset(&pipe_sig);
+  sigaddset(&pipe_sig, SIGPIPE);
+  pthread_sigmask(SIG_BLOCK, &pipe_sig, &mask);
+  sigpending(&pending);
+  int queued = sigismember(&pending, SIGPIPE);
+  struct pollfd f[3] = { { p[1], POLLOUT, 0 }, { p[2], POLLIN, 0 }, { p[4], POLLIN, 0 } };
+  p[1] = p[2] = p[4] = -1;
+  /* A blocking end could stall the loop on one stream while the child fills
+     another, so an end that stays blocking fails the run: the loop is skipped
+     and the child killed. */
+  rc = 0;
+  for (int k = 0; k < 3; k++)
+    if (fcntl(f[k].fd, F_SETFL, O_NONBLOCK) < 0) rc = -1;
+  if (!n) {
+    close(f[0].fd);
+    f[0].fd = -1;
+  }
+  nish_array *to[3] = { 0, out, err };
+  while (!rc && (f[0].fd >= 0 || f[1].fd >= 0 || f[2].fd >= 0)) {
+    if (poll(f, 3, -1) < 0) {
+      if (errno != EINTR) rc = -1;
+      continue;
+    }
+    if (f[0].revents) {
+      ssize_t k = write(f[0].fd, in->data + sent, n - sent);
+      if (k > 0) sent += k;
+      if (sent == n || (k < 0 && errno != EINTR && errno != EAGAIN)) {
+        close(f[0].fd);
+        f[0].fd = -1;
+      }
+    }
+    for (int s = 1; s < 3 && !rc; s++) {
+      if (!f[s].revents) continue;
+      nish_array *a = to[s];
+      /* Grown as `push` grows it, so the array keeps the shape every other
+         array has, and an ASan build tracks the block the same way. */
+      if (a->len == a->cap) nish_array_grow(a, 1);
+      /* One byte past the cap at most, which is how a stream that ends at
+         exactly the cap is told from one that goes on. */
+      uint64_t room = a->cap - a->len, left = NISH_PIPED_CAP + 1 - got[s];
+      ssize_t k = read(f[s].fd, a->data + a->len, room < left ? room : left);
+      if (k > 0) {
+        a->len += k;
+        got[s] += k;
+        if (got[s] > NISH_PIPED_CAP) {
+          a->len--;
+          rc = -2;
+        }
+      } else if (!k || (errno != EINTR && errno != EAGAIN)) {
+        close(f[s].fd);
+        f[s].fd = -1;
+      }
+    }
+  }
+  sigpending(&pending);
+  if (!queued && sigismember(&pending, SIGPIPE)) {
+    int sig;
+    sigwait(&pipe_sig, &sig);
+  }
+  pthread_sigmask(SIG_SETMASK, &mask, 0);
+  if (rc) kill(pid, SIGKILL);
+  for (int k = 0; k < 3; k++)
+    if (f[k].fd >= 0) close(f[k].fd);
+  int status;
+  while (waitpid(pid, &status, 0) < 0) {
+    if (errno != EINTR) {
+      rc = -1;
+      break;
+    }
+  }
+  if (!rc) rc = nish_exit_code(status);
+done:
+  for (int k = 0; k < 6; k++)
+    if (p[k] >= 0) close(p[k]);
+  return rc;
+#endif
+}
 
 /* `kill(pid, sig)`: 0, or a negative errno. Only the four signals a program
    asks a child to stop or report with are sent -- 0 (is it there), SIGINT,
@@ -477,6 +774,36 @@ int64_t nish_total_memory(void) {
 #endif
 }
 
+/* `setNice(n)`: this process's nice value set to `n`, 0 or a negative errno.
+   The kernel clamps `n` to its range (-20 to 19), so only lowering the value
+   below what the process has can fail: -EACCES (Linux, Darwin) or -EPERM
+   without the privilege to raise a priority. Linux keeps the value per thread,
+   so it is the calling thread's and every thread started after it. */
+int32_t nish_set_nice(int32_t n) {
+#ifdef __wasi__
+  (void)n;
+  return -ENOSYS;
+#else
+  return setpriority(PRIO_PROCESS, 0, n) == 0 ? 0 : -errno;
+#endif
+}
+
+/* `setIdlePriority()`: this process moved to `SCHED_IDLE`, which runs it only
+   when nothing else wants the CPU. Linux alone has the policy; elsewhere the
+   answer is -EOPNOTSUPP's Linux number, -95, as runtime-net.c answers it. An
+   unprivileged process cannot leave the policy again. Like the nice value, the
+   policy is the calling thread's. */
+int32_t nish_set_idle_priority(void) {
+#if defined(__linux__)
+  struct sched_param param = {0};
+  return sched_setscheduler(0, SCHED_IDLE, &param) == 0 ? 0 : -errno;
+#elif defined(__wasi__)
+  return -ENOSYS;
+#else
+  return -95;
+#endif
+}
+
 /* `readdirSync(path)`: the listing a driver needs to discover its own inputs.
 
    **Sorted by bytes**, which `readdir(3)` and Node are not, for two reasons
@@ -545,11 +872,17 @@ nish_array *nish_readdir(const nish_str *path) {
    backwards and make an elapsed time negative. Only the difference between two
    reads means anything — the origin is arbitrary and is not comparable across
    processes or machines — and an i64 of nanoseconds is 292 years of it. */
-int64_t nish_monotonic_nanos(void) {
+static int64_t nish_clock_nanos(clockid_t clock) {
   struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
+  clock_gettime(clock, &ts);
   return (int64_t)ts.tv_sec * 1000000000 + ts.tv_nsec;
 }
+int64_t nish_monotonic_nanos(void) { return nish_clock_nanos(CLOCK_MONOTONIC); }
+
+/* `wallClockNanos()`: `CLOCK_REALTIME`, nanoseconds since the Unix epoch, for
+   dating an event. It steps when the system time is set, so a duration is
+   `monotonicNanos`'s to measure. */
+int64_t nish_wall_clock_nanos(void) { return nish_clock_nanos(CLOCK_REALTIME); }
 
 /* A C string copied into the arena, or NULL for NULL: the shape of every
    answer libc hands back by pointer, `getenv`'s here and `realpath`'s below. */

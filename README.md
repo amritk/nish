@@ -170,19 +170,25 @@ ship in the npm package, and [llms.txt](llms.txt) indexes them.
 
 | Feature | Summary | Reference |
 |:---|:---|:---|
-| Types | `number` (`i32` by default, `double` with `--number-mode f64`), `i32`, `i64`, `f64`, `boolean`, `string`, `T[]`, classes, interfaces, `T \| null`, `void`; 1:1 LLVM mapping, no implicit conversions | [Types](docs/LANGUAGE.md#types) |
-| Functions and modules | annotated signatures, calls in any order, `export`/named relative `import`, whole-program attribute facts, `export const main` as the entry, `internal` linkage for everything not exported | [Declarations](docs/LANGUAGE.md#declarations) |
-| Control flow | `if`/`else`, `while`, `do`, `for`, `for...of`, `break`/`continue`, boolean-only conditions, definite return, unreachable-code errors | [Statements](docs/LANGUAGE.md#statements) |
-| Expressions | `+ - * / %` (integer `/` and `%` checked: zero divisor or `MIN / -1` panics), numeric-only ordering, `=== !==` (strings by content), `&& \|\|`, `?:`, `op=`, `++`/`--`, template literals, contextual numeric literals | [Expressions](docs/LANGUAGE.md#expressions) |
+| Types | `number` (`i32` by default, `double` with `--number-mode f64`), `i32`, `i64`, unsigned `u8`/`u16`/`u32`/`u64`, `f32`, `f64`, ranged `integer<Lo, Hi>`, `boolean`, `string`, `T[]` and `readonly T[]`, classes, interfaces, `T \| null`, `void`; 1:1 LLVM mapping, no implicit conversions | [Types](docs/LANGUAGE.md#types) |
+| Enums, aliases and unions | numeric `enum`s as a distinct type, with members usable as types (`Kind.Circle`); `type` aliases; discriminated unions `Circle \| Square` of classes or interfaces tagged by an enum-member field, narrowed by testing the tag; all exportable across modules | [Enums](docs/LANGUAGE.md#enums), [Type aliases](docs/LANGUAGE.md#type-aliases), [Discriminated unions](docs/LANGUAGE.md#discriminated-unions) |
+| Functions and modules | annotated signatures, calls in any order, `export`/named relative `import`, packages by name, whole-program attribute facts, `export const main` as the entry, `internal` linkage for everything not exported; a parameter may have a function type, and each function or arrow passed to it compiles to its own instantiation with a direct call, never a function pointer | [Declarations](docs/LANGUAGE.md#declarations), [Function parameters](docs/LANGUAGE.md#function-parameters) |
+| Control flow | `if`/`else`, `while`, `do`, `for`, `for...of` (arrays, `Map` keys and values, `Set`), `switch` (exhaustive over a union's tag), `break`/`continue`, boolean-only conditions, definite return, unreachable-code errors | [Statements](docs/LANGUAGE.md#statements) |
+| Expressions | `+ - * / %` (integer `/` and `%` checked: zero divisor or `MIN / -1` panics), shifts and bitwise operators, numeric-only ordering, `=== !==` (strings by content), `&& \|\|`, `?:`, `??` on a `T \| null` and a `?.` chain that ends in `??`, `op=`, `++`/`--`, template literals, contextual numeric literals | [Expressions](docs/LANGUAGE.md#expressions) |
 | Strings | immutable UTF-8 (`.length` is the byte length), literals as constant data, `+`, `===`, templates, `console.log` | [Builtins](docs/LANGUAGE.md#builtins), [Semantics](docs/LANGUAGE.md#semantics-decisions) |
-| Arrays | `T[]` with one element type, literals, `new Array<T>(n)` zero-filled, bounds-checked `a[i]` (panic, or `uncheckedGet` from `nish:unsafe`), `.length`, `push`, `for...of` | [Arrays](docs/LANGUAGE.md#array-literals) |
-| Classes and interfaces | LLVM structs with clang's layout, constructors, methods, `readonly`, definite assignment, object literals, `implements` by identical layout | [Classes](docs/LANGUAGE.md#classes) |
+| Arrays | `T[]` with one element type, literals, `new Array<T>(n)` zero-filled, bounds-checked `a[i]` (panic, or `uncheckedGet` from `nish:unsafe`), `.length`, `push`/`pop`, `set`/`fill`, `for...of`; arrays of records stored contiguously and fixed-length array fields inline | [Arrays](docs/LANGUAGE.md#array-literals) |
+| `Map` and `Set` | the global `Map<K, V>` and `Set<T>`, insertion-ordered, one probe per `get`/`set`/`has`/`delete`; `get` is `V \| undefined` and narrowed as TypeScript does | [`Map` and `Set`](docs/LANGUAGE.md#map-and-set) |
+| Classes and interfaces | LLVM structs with clang's layout, constructors, methods, `readonly`, definite assignment, object literals, `implements` by identical layout; no inheritance | [Classes](docs/LANGUAGE.md#classes) |
 | Generics | generic functions, classes, interfaces and methods by monomorphisation: one specialised `define` per instantiation, type arguments inferred at a call and written after `new` or in an annotation, `<T extends Shape>` constraints, exported instantiations callable from C and JavaScript as `nish_gen_identity_i32` | [Generic functions](docs/LANGUAGE.md#generic-functions) |
-| Memory | no GC: objects that provably do not escape their function are stack `alloca`s, functions whose temporaries die with them get an automatic arena scope, `using a = arena()` frees a batch the compiler has checked nothing outlives, and `Arena.mark`/`Arena.used` read the arena (`Arena.reset` and `Arena.release` are deprecated) | [`using a = arena()`](docs/LANGUAGE.md#using-a--arena), [`Arena`](docs/LANGUAGE.md#arena), [Memory](docs/LANGUAGE.md#memory-model) |
-| `T \| null` | for class, interface, array and string types; `=== null`, and narrowing to `T` by `if`, early return, `while`, `&&`, `?:`, enforced by the checker | [Nullable types](docs/LANGUAGE.md#nullable-types) |
-| Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
-| Builtins | `console.log`, `Math.*` as LLVM intrinsics (ECMAScript `pow` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, `readFileSync`/`writeFileSync`/`appendFileSync`; the runtime-backed ones are also importable from `nish:fs` / `nish:process` / `nish:io` / `nish:net`, which is the same builtin under a name nothing can shadow; `nish:unsafe` (unchecked access, defined wrapping) and `nish:secret` (`Secret<T>`, key material the checker keeps in and wipes) are reached only by import | [Builtins](docs/LANGUAGE.md#builtins), [Builtin modules](docs/LANGUAGE.md#builtin-modules-nish) |
-| Rejected | `any`, `unknown`, `var`, `==`, `?.`, `??`, generic type aliases, `async`, `try`, `throw`, `typeof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
+| Memory | no GC: objects that provably do not escape their function are stack `alloca`s, functions whose temporaries die with them get an automatic arena scope, `using a = arena()` frees a batch the compiler has checked nothing outlives, and `Arena.mark`/`Arena.used` read the arena | [`using a = arena()`](docs/LANGUAGE.md#using-a--arena), [`Arena`](docs/LANGUAGE.md#arena), [Memory](docs/LANGUAGE.md#memory-model) |
+| `T \| null` | for class, interface, array and string types; `=== null`, a `??` default, and narrowing to `T` by `if`, early return, `while`, `&&`, `?:`, enforced by the checker | [Nullable types](docs/LANGUAGE.md#nullable-types) |
+| Errors | Rust-style `Result<T, E>` with `Ok`/`Err`, `isOk()`/`isErr()`, `orReturn()` (the `?`), `unwrapOr`, `expect`; the checker refuses to let a failure be dropped or the success payload be read before the error is handled. No `throw`, no unwinding: `panic(message)` ends the process | [Result and error handling](docs/LANGUAGE.md#result-and-error-handling) |
+| Threads | `nish/threads`: `parallelMap`/`parallelReduce`, scoped tasks (`using s = scope()`), `Mutex<T>`, `AtomicI32`/`AtomicI64`, `Channel<T>`; data races and deadlocks refused at compile time | [Data parallelism](docs/LANGUAGE.md#data-parallelism-nishthreads) |
+| Builtins | `console.log`, `Math.*` as LLVM intrinsics (JavaScript's `pow`, `round`, `min`/`max` corner cases included), `Math.random`, `toI32`/`toI64`/`toF64`, `process.exit`, files, directories, subprocesses, the environment and the clock; the runtime-backed ones are also importable from `nish:fs` / `nish:process` / `nish:io` / `nish:net` / `nish:term`, which is the same builtin under a name nothing can shadow; `nish:unsafe` (unchecked access, defined wrapping) and `nish:secret` (`Secret<T>`, key material the checker keeps in and wipes) are reached only by import | [Builtins](docs/LANGUAGE.md#builtins), [Builtin modules](docs/LANGUAGE.md#builtin-modules-nish) |
+| Calling C | `declare function` binds a C symbol, `CPtr` holds an opaque C pointer, and a handle class bound with `using` is closed at every exit of its block | [Calling C](docs/LANGUAGE.md#calling-c) |
+| Capabilities and policies | the compiler reports which capabilities (`fs.read`, `net`, `process.spawn`, `ffi`, `unsafe`, ...) every function, module and package reaches, with the call chain; `--allow`/`--deny` and `package.json` refuse a program that reaches one it is not granted, a dependency gets none it is not given, and a capability lockfile fails a build when a dependency reaches a new one. `--deny-panics` or `noPanic` refuses every panic site the compiler cannot prove away | [Capabilities](docs/LANGUAGE.md#capabilities), [The no-panic scope](docs/LANGUAGE.md#the-no-panic-scope) |
+| Rejected | `any`, `unknown`, `var`, `==`, `?.` outside a `??` chain, generic type aliases, `async`, `try`, `throw`, `typeof`, `instanceof`, `delete`, prototypes, `Object.assign`, string-keyed access, ... with exact messages | [Forbidden constructs](docs/LANGUAGE.md#forbidden-constructs-phase-0-validator) |
+
 Semantics that differ from JavaScript on purpose: signed integer overflow
 panics unless the compiler proves the operation fits (`wrappingAdd`,
 `wrappingSub` and `wrappingMul` from `nish:unsafe` wrap two's-complement; the
@@ -195,18 +201,25 @@ Node.
 
 ### The standard library
 
-[`std/`](std/README.md) is Nish written in Nish, for Nish programs to import:
-[`std/testing`](std/testing.ts), a test runner, so a compiled program can check
-itself and answer an exit code with no Node in the picture,
-[`std/text`](std/text.ts), the string operations a program would otherwise write
-inline — the language has no `split`, `trim` or regular expression, because each
-of those allocates and some need a character table the runtime has no room for —
-and [`std/json`](std/json.ts), the value of one field of one flat JSON object,
-which is the shape the compiler's own `--json` diagnostics have. Beside them,
-`nish/crypto/*` holds the primitives under TLS 1.3 (SHA-2, HMAC, HKDF,
-ChaCha20-Poly1305, AES-GCM, X25519, P-256 ECDSA, X.509) and `nish/net/*` the
-protocols written on them (TLS 1.3, QUIC, HPACK, HTTP/1.1, WebSocket); the
-[`std/` README](std/README.md) lists every module.
+[`std/`](std/README.md) is Nish written in Nish, for Nish programs to import.
+[`std/testing`](std/testing.ts) is a test runner, so a compiled program can
+check itself and return an exit code with no Node involved. For text there is
+[`std/text`](std/text.ts) (`trim`, `splitLines`, `splitWhitespace`,
+`replaceAll`) and [`std/regex`](std/regex.ts), regular expressions in
+JavaScript syntax whose search time is linear in the input. For data there is
+`std/json` (plus a tokenizer, typed decoding and a value tree), `std/yaml`,
+`std/base64` and `std/bytes`. Programs also get `std/cli` for arguments,
+`std/random` (a seeded `Rng`), `std/map`, `std/collections`, `std/threads`,
+`std/sqlite` (SQLite, the database in a file) and `std/term` (raw-mode
+terminal I/O and styling, with pixel graphics in `std/term-pixels`).
+`nish/crypto/*` holds the primitives: SHA-1/2, HMAC, PBKDF2, HKDF,
+ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, bcrypt and X.509,
+with secret material held as a wiped `Secret<T>`. `nish/net/*` holds the
+protocols built on them: TLS 1.3, QUIC, HTTP/1.1, HTTP/2 (HPACK), HTTP/3
+(QPACK), WebSocket, WebTransport, a URL parser, an HTTP router, a prefork
+server and a sans-IO PostgreSQL client. The [standard
+library](docs/guide/using-nish/standard-library.md) guide page walks through
+them, and the [`std/` README](std/README.md) lists every module.
 
 ```ts
 import { Suite } from "nish/testing";
@@ -222,9 +235,10 @@ A library module is source, not a built artifact, so it compiles with the
 program that imports it and the whole-program pass sees straight through it
 ([docs/wp21-packages.md](docs/wp21-packages.md)): `nish/<module>` resolves to
 `std/<module>.ts` beside the running compiler, and what you import but never
-call is dropped at the link. What the library does *not* have is callbacks,
-which is what makes a suite a value with methods rather than a
-`test("name", () => ...)`: a function is never a value here.
+call is dropped at the link. A function can be *passed* as a typed parameter.
+Each call site is specialised into a direct call. A function is never a stored
+value, so a suite is an object with methods rather than a registry of
+`test("name", () => ...)` closures.
 
 The suite's own golden cases are run by [`tests/nish/run.ts`](tests/nish/run.ts),
 which is this repository's test harness written in the language it tests:
@@ -253,7 +267,7 @@ call on purpose.
 |:---|:---|:---|
 | Use-after-free, double free | Not expressible: nothing is freed individually. Four compile-time mechanisms decide where a value lives — a stack `alloca` when escape analysis proves it dies with the frame, an automatic arena scope when a function's temporaries do, a `nish_arena_keep` reclaim at the call site for a returned string, the bump arena otherwise — and the arena goes back when `main` returns | [Memory model](docs/LANGUAGE.md#memory-model), [wp6-memory.md](docs/wp6-memory.md) |
 | Out-of-bounds read or write | Every `a[i]`, `a[i] op= v`, `s.charCodeAt(i)`, `s.slice(a, b)` and `a.pop()` is bounds-checked, with an unsigned compare, so a negative index fails too; the failure prints `index out of range: <i> >= <len>` (or, for `slice`, `slice out of range: [<a>, <b>) of length <len>`) and exits 1. Where a flow-sensitive proof shows the index is already in range — a loop condition, a length guard, a hoisted `const n = a.length`, an unsigned index — **no check is emitted at all**, and the checks that survive inside a loop say so as a `performance` warning naming the guard that would remove them | [Element access](docs/LANGUAGE.md#element-access), `tests/cases/arr_bounds_panic`, `arr_bounds_proven` |
-| Null dereference | `T \| null` is a separate type, for pointers only; member access needs a narrowing the checker accepts and `?.` is forbidden — which is what lets the emitter put `nonnull dereferenceable` on every pointer that is not one | [Nullable types](docs/LANGUAGE.md#nullable-types) |
+| Null dereference | `T \| null` is a separate type, for pointers only; member access needs a narrowing the checker accepts, and `?.` appears only in a chain that ends in a `??` default — which is what lets the emitter put `nonnull dereferenceable` on every pointer that is not one | [Nullable types](docs/LANGUAGE.md#nullable-types) |
 | Uninitialised memory | `new Array<T>(n)` zero-fills and rejects pointer element types, because a zeroed pointer would be a null nobody declared; class fields are definitely assigned | [Classes](docs/LANGUAGE.md#classes), `tests/cases/arr_new_zeroed` |
 | Unwinding past a release | There is none. Every function is `nounwind`; a failure a caller should handle is a `Result<T, E>` and one it should not is `panic(message)` — stderr, exit 1 | [Result](docs/LANGUAGE.md#result-and-error-handling) |
 
@@ -299,25 +313,17 @@ weaker: one global arena, per-function granularity, no region polymorphism.
 ### Where it is not safe
 
 > [!CAUTION]
-> Three holes, every one of them asked for by name.
+> Two holes, each of them asked for by name.
 
-- **`Arena.reset()` / `Arena.release(m)`** release or recycle in O(1), and
-  doing either while anything allocated after the mark is still referenced is
-  undefined behaviour. The compiler protects its own marks — a function that
-  touches either, directly or through a callee, never gets an automatic
-  scope — and not yours. Both are deprecated (NL7001) in favour of
-  `using a = arena()`, the same release with the compiler refusing anything
-  that would outlive it ([`Arena`](docs/LANGUAGE.md#arena)).
 - **`uncheckedGet` and `uncheckedSet`** from `nish:unsafe` read and write an
   element with no bounds check, after which an out-of-range index at that site
   is undefined behaviour. A module reaches them only through the import, so
   every module that gives up a check says so at its top and every site is a
   call (`tests/cases/unsafe_get_set`). That is a different thing from the
   proof above: the proof removes a check the compiler showed was never going
-  to fire, and changes nothing about what the program means. The deprecated
-  `--unchecked-indexing` does the same to every index of your own package and
-  never reaches a dependency or `nish/`
+  to fire, and changes nothing about what the program means
   ([`nish:unsafe`](docs/LANGUAGE.md#nishunsafe-unchecked-access-and-defined-wrapping)).
+  No flag turns the checks off for a whole program.
 - **Interop** hands a pointer to a C, wasm or N-API host, and what happens to
   it there is the host's business
   ([wp8-interop.md](docs/wp8-interop.md)).
@@ -342,7 +348,12 @@ Capabilities, Interop, Inspect, Code generation), then the exit codes and a
 few examples; it is coloured on a terminal and plain when piped, under
 `NO_COLOR` or when a coding agent runs it. An unknown flag is refused in one
 line that points at `--help`. [The CLI](docs/guide/using-nish/cli.md) walks
-through the flags you will reach for.
+through the flags you will reach for. Among them: `--link` builds a native
+binary, and `--fix` applies the compiler's safe fixes in place.
+`--allow`/`--deny` refuse a program that reaches more than a capability
+policy grants, and `--update-capability-lock` records what each dependency
+reaches. `--deny-panics` refuses any panic the compiler cannot prove away.
+`--emit-ts` writes the program out as plain TypeScript instead of IR.
 
 Exit codes: `0` success, `1` compile error (`file:line:col: error: ...` plus
 a caret excerpt), `2` usage error, `3` toolchain error, `70` internal

@@ -1,5 +1,5 @@
-// WP33 NL8007, quiet: without --wrapping an i32 overflow is `nsw`, undefined
-// natively, so it is not a quiet divergence and this row says nothing about it.
+// WP33 NL8007, quiet: an i32 overflow is checked natively and panics, so it is
+// not a quiet divergence and this row says nothing about it.
 // A ranged place is checked on every write, a double does not wrap, and a
 // string `+` concatenates in both readings.
 export const main = (): number => {

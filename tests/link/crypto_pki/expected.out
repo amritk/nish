@@ -1,0 +1,159 @@
+PASS  P-256 leaf, P-384 intermediate, P-384 root
+PASS  the path is leaf, intermediate, root
+PASS  the path ends at the root
+PASS  out of order, with extra certificates
+PASS  the extras are not in the path
+PASS  an Ed25519 root signs the leaf
+PASS  RSA leaf, intermediate and root, PKCS#1 v1.5
+PASS  RSA, out of order, with extra certificates
+PASS  the RSA extras are not in the path
+PASS  an RSA-PSS intermediate
+PASS  RSA with SHA-384
+PASS  RSA with SHA-512
+PASS  a wildcard name
+PASS  an IPv4 address
+PASS  an IPv6 address
+PASS  anyExtendedKeyUsage on an intermediate
+PASS  serverAuth on an intermediate
+PASS  pathLen 0 above the leaf
+PASS  pathLen 0 does not count a self-issued CA
+PASS  two intermediates
+PASS  name constraints the leaf meets
+PASS  name constraints, by address
+PASS  excluded dNSName and iPAddress subtrees the leaf misses
+PASS  a wildcard at a permitted subtree
+PASS  a dNSName subtree of . permits every name
+PASS  a directoryName constraint skips a self-issued CA
+PASS  a leaf without a subject, under a directoryName constraint
+PASS  a path of PKI_MAX_PATH certificates
+PASS  a leaf of PKI_MAX_NAMES names
+PASS  valid at notBefore
+PASS  valid at notAfter
+PASS  a millisecond before notBefore
+PASS  a millisecond after notAfter
+PASS  pkiVerifySignature: the root signed the intermediate
+PASS  pkiVerifySignature: Ed25519
+PASS  pkiVerifySignature: not the root's signature
+PASS  pkiVerifySignature: P-256
+PASS  pkiVerifySignature: not a tampered P-256 signature
+PASS  pkiVerifySignature: RSA-PSS
+PASS  pkiVerifySignature: not the RSA root's signature
+PASS  pkiVerifySignature: SHA-1 is refused
+PASS  a root given twice is kept once
+PASS  two roots of one Name are both kept
+pki accepts: 43 passed, 0 failed, 0 skipped
+PASS  an expired leaf
+PASS  a leaf not yet valid
+PASS  an expired intermediate
+PASS  an intermediate not yet valid
+PASS  another host
+PASS  a name only in the common name
+PASS  a root not in the store
+PASS  no intermediate
+PASS  the root sent, the intermediate not
+PASS  an intermediate of another key
+PASS  an intermediate whose key identifier is another's
+PASS  an intermediate with CA:FALSE
+PASS  a root with CA:FALSE
+PASS  a leaf RSA key that does not parse
+PASS  an intermediate without basicConstraints
+PASS  a CA as the leaf
+PASS  pathLen 0 above another CA
+PASS  an intermediate without keyCertSign
+PASS  a leaf without digitalSignature
+PASS  an intermediate for clientAuth only
+PASS  a leaf for clientAuth only
+PASS  a leaf for anyExtendedKeyUsage only
+PASS  an unknown critical extension, intermediate
+PASS  an unknown critical extension, leaf
+PASS  SHA-1
+PASS  an Ed25519 signature under a P-256 key
+PASS  an ECDSA signature under an Ed25519 key
+PASS  an RSA signature under a P-256 key
+PASS  an empty issuer names no root
+PASS  a cross-signed loop
+PASS  a self-signed CA sent in the chain is no root
+PASS  a path past PKI_MAX_PATH
+PASS  a tampered leaf signature
+PASS  a tampered Ed25519 signature
+PASS  an RSA key under PKI_MIN_RSA_BITS
+PASS  a tampered RSA signature
+PASS  a tampered RSA-PSS signature
+PASS  the nearest attempt's reason
+PASS  the first of two as near
+PASS  the nearer of two
+PASS  a root's reason before a longer path's
+pki refusals: 41 passed, 0 failed, 0 skipped
+PASS  an excluded dNSName
+PASS  a dNSName not permitted
+PASS  an rfc822Name subtree
+PASS  an excluded directoryName
+PASS  a subject not permitted
+PASS  an iPAddress not permitted
+PASS  an excluded iPAddress
+PASS  an IPv4 address under IPv6 subtrees
+PASS  a name that only ends in a permitted one
+PASS  a wildcard over an excluded subtree
+PASS  a wildcard below an excluded subtree
+PASS  a wildcard over a permitted subtree
+PASS  a dNSName subtree of . excludes every name
+PASS  a self-issued leaf outside a permitted subject
+pki name constraints: 14 passed, 0 failed, 0 skipped
+PASS  an empty chain
+PASS  a leaf that is no certificate
+PASS  an intermediate that is no certificate
+PASS  PKI_MAX_CHAIN_CERTS certificates
+PASS  one more
+PASS  PKI_MAX_CHAIN_BYTES bytes
+PASS  one byte more
+PASS  a leaf of more names
+PASS  an intermediate of PKI_MAX_SUBTREES subtrees
+PASS  an intermediate of more subtrees
+PASS  more name comparisons than PKI_MAX_NAME_CHECKS
+PASS  more signatures than PKI_MAX_SIGNATURES
+pki bounds: 12 passed, 0 failed, 0 skipped
+PASS  the name
+PASS  without case
+PASS  with a trailing dot
+PASS  not two trailing dots
+PASS  not a name below it
+PASS  not a name above it
+PASS  a wildcard's one label
+PASS  a wildcard without case
+PASS  not a wildcard's two labels
+PASS  not a wildcard's base
+PASS  not an empty label
+PASS  not an empty host
+PASS  not a space
+PASS  not a wildcard host
+PASS  an IPv4 address
+PASS  not another address
+PASS  not a leading zero
+PASS  not three octets
+PASS  not an octet over 255
+PASS  an IPv6 address
+PASS  in brackets
+PASS  spelt out
+PASS  not another IPv6 address
+PASS  not two gaps
+PASS  not nine groups
+PASS  not a group of five digits
+PASS  an address names no dNSName
+PASS  an IPv4 address in IPv6
+PASS  not the IPv4 address it maps
+PASS  a dNSName in capitals
+PASS  a dNSName with a trailing dot
+PASS  not *.com
+PASS  not a partial wildcard
+PASS  not a wildcard inside
+PASS  not an invalid dNSName
+PASS  not a dNSName with a space
+PASS  an underscore
+PASS  not a label of 64
+PASS  a label of 63
+PASS  a name of 253 octets
+PASS  not a name of 254 octets
+pki hostnames: 41 passed, 0 failed, 0 skipped
+PASS  every code has a sentence of its own
+PASS  an unknown code has one too
+pki reasons: 2 passed, 0 failed, 0 skipped

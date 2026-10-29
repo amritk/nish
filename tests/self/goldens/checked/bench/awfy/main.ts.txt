@@ -37,18 +37,17 @@ function doRuns(name: string, numIterations: i32, innerIterations: i32): i64 -> 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   escaping: innerIterations name
-  calls: innerBenchmarkLoop nish_arena_mark nish_arena_release nish_monotonic_nanos nish_panic nish_panic_overflow nish_print nish_str_concat nish_str_from_i64
+  calls: innerBenchmarkLoop nish_monotonic_nanos nish_panic nish_panic_overflow nish_print nish_str_concat nish_str_from_i64
   stackSites=0 stackLocals=0
   local +0:7 total: i64 (let)
   local +1:12 i: i32 (let)
   local +2:11 startTime: i64 (const)
-  local +5:11 mark: i64 (const)
   callee +6:10 innerBenchmarkLoop -> @innerBenchmarkLoop
-  local +10:11 runTime: i64 (const)
+  local +9:11 runTime: i64 (const)
 function main(): i32 -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via printUsage
-  calls: doRuns isKnownBenchmark llvm.fptosi.sat.i32.f64 nish_panic_div nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 printUsage
+  calls: doRuns isKnownBenchmark llvm.fptosi.sat.i32.f64 nish_arena_mark nish_arena_release nish_panic_div nish_panic_overflow nish_parse_number nish_print nish_str_concat nish_str_from_i32 nish_str_from_i64 printUsage
   stackSites=0 stackLocals=0
   local +0:9 args: string[] (const)
   callee +2:5 printUsage -> @printUsage

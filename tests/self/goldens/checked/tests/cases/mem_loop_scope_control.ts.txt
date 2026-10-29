@@ -68,19 +68,19 @@ function growth(which: i32, rounds: i32): string -> @growth
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_arena_release
   escaping: rounds
-  calls: countDown grid nish_arena_mark nish_arena_release nish_arena_used nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64 skipOdd
+  calls: countDown grid nish_arena_release nish_arena_used nish_panic_overflow nish_str_concat nish_str_from_i32 nish_str_from_i64 skipOdd
   stackSites=0 stackLocals=0
-  local +0:9 m: i64 (const)
-  local +1:9 before: i64 (const)
-  local +2:7 n: i32 (let)
-  callee +4:9 skipOdd -> @skipOdd
-  callee +6:9 grid -> @grid
-  callee +8:9 countDown -> @countDown
-  local +10:9 grown: i64 (const)
+  local +0:7 n: i32 (let)
+  local +1:7 grown: i64 (let)
+  local +3:11 a: i64 (const)
+  local +4:11 before: i64 (const)
+  callee +6:11 skipOdd -> @skipOdd
+  callee +8:11 grid -> @grid
+  callee +10:11 countDown -> @countDown
 function main(): void -> @nish_main [exported entry]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via nish_print
-  calls: Box.constructor find firstWide growth nish_alloc_struct nish_array_grow nish_print nish_str_concat nish_str_from_i32
+  calls: Box.constructor find firstWide growth nish_alloc_struct nish_arena_mark nish_arena_release nish_array_grow nish_print nish_str_concat nish_str_from_i32
   stackSites=1 stackLocals=1
   callee +0:18 growth -> @growth
   callee +0:36 growth -> @growth

@@ -1,0 +1,2 @@
+git-lite: --jobs needs a number, not "four"
+usage: git-lite remote add <name> <url> [flags]

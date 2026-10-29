@@ -458,6 +458,55 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `renameSync`, `unlinkSync`, `writeFileBytesSync` and `writeBytes`
+    // (runtime-os.c): an errno for an answer rather than an exit,
+    // but not `willreturn` for the reason above (an `open` or a `write` to a
+    // FIFO or a full pipe waits). Each only reads its array.
+    this.add(
+      mayNotReturn(
+        "nish_rename",
+        `declare noundef i32 @nish_rename(${STR_NOCAP}, ${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(mayNotReturn("nish_unlink", `declare noundef i32 @nish_unlink(${STR_NOCAP})`, EFFECT_WRITE))
+    this.add(
+      mayNotReturn(
+        "nish_write_file_bytes",
+        `declare noundef i32 @nish_write_file_bytes(${STR_NOCAP}, ${NET_BUFFER} readonly)`,
+        EFFECT_WRITE
+      )
+    )
+    // `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode`: an
+    // errno for an answer as above, the mode a plain `i32`.
+    this.add(
+      mayNotReturn(
+        "nish_write_file_mode",
+        `declare noundef i32 @nish_write_file_mode(${STR_NOCAP}, ${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_create_file_exclusive",
+        `declare noundef i32 @nish_create_file_exclusive(${STR_NOCAP}, ${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_mkdir_mode",
+        `declare noundef i32 @nish_mkdir_mode(${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_write_bytes",
+        `declare noundef i32 @nish_write_bytes(${NET_BUFFER} readonly, i64 noundef, i64 noundef)`,
+        EFFECT_WRITE
+      )
+    )
     // WP7: process.argv and string-to-number parsing.
     // Called once by the entry wrapper: mallocs the array and copies every argument.
     this.add(
@@ -536,6 +585,19 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `nish_spawn` with the three streams on pipes, and its conservative
+    // answers: the vector is captured, the child runs anything, and `waitpid`
+    // waits. `stdin` is only read. The two output headers are written as
+    // `nish_array_grow` writes a pushed array's, into a fresh arena block, and
+    // neither is retained, so both are `nocapture` as that call's is.
+    this.add(
+      new RuntimeFunction(
+        "nish_spawn_piped",
+        `declare noundef i32 @nish_spawn_piped(%struct.nish_array* noundef nonnull align 8, ${NET_BUFFER} readonly, ${NET_BUFFER}, ${NET_BUFFER})`,
+        attrs1("nounwind"),
+        EFFECT_WRITE
+      )
+    )
     // One `kill(2)`. A signal is external state, so the call writes, and two
     // of them never fold into one; a program that signals itself with 9 or 15
     // never sees the call return, so no `willreturn`.
@@ -571,6 +633,8 @@ export class RuntimeTable {
     // holds — one `clock_gettime` and some arithmetic — and there is nothing to
     // capture, so the only argument-free entry here needs no parameter facts.
     this.add(plain("nish_monotonic_nanos", "declare i64 @nish_monotonic_nanos()", EFFECT_WRITE))
+    // `wallClockNanos`, the same call on `CLOCK_REALTIME`, for the same reasons.
+    this.add(plain("nish_wall_clock_nanos", "declare i64 @nish_wall_clock_nanos()", EFFECT_WRITE))
     // WP19 R1: the environment, so a self-hosted driver can honour `CC` before
     // it spawns `scripts/build.sh` the way stage0's preflight does.
     // `EFFECT_WRITE` and no `readnone`, for two reasons that each suffice: the
@@ -767,6 +831,14 @@ export class RuntimeTable {
       plain(
         "nish_net_shutdown",
         "declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef)",
+        EFFECT_WRITE
+      )
+    )
+    // `netSetOption`: one `setsockopt`, which never waits.
+    this.add(
+      plain(
+        "nish_net_set_option",
+        "declare noundef i32 @nish_net_set_option(i32 noundef, i32 noundef, i32 noundef)",
         EFFECT_WRITE
       )
     )
@@ -1150,6 +1222,12 @@ export class RuntimeTable {
       WRITES_NOTHING,
       plain("nish_total_memory", "declare noundef i64 @nish_total_memory()", EFFECT_WRITE)
     )
+    // `setNice` and `setIdlePriority`, runtime-os.c: each changes how the
+    // kernel schedules the calling thread, which Linux keeps per thread, so a
+    // call from a task would move one worker and not the program. A shared
+    // write, then, which a task is refused, and two calls never fold into one.
+    this.add(plain("nish_set_nice", "declare noundef i32 @nish_set_nice(i32 noundef)", EFFECT_WRITE))
+    this.add(plain("nish_set_idle_priority", "declare noundef i32 @nish_set_idle_priority()", EFFECT_WRITE))
     // WP38 S5: AES-GCM on the CPU's AES instructions, runtime-aes.c
     // (`src/kernels.ts`). `nish_aes_hw` is `nish_str_index_of_any`'s resolver
     // on its own: the one store it makes is the first call's answer, into a

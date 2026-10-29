@@ -317,6 +317,8 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "faccessat" ||
   name === "fadd" ||
   name === "faddl" ||
+  name === "fchmod" ||
+  name === "fchmodat" ||
   name === "fclose" ||
   name === "fcntl" ||
   name === "fdim" ||
@@ -427,6 +429,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "getc_unlocked" ||
   name === "getchar" ||
   name === "getchar_unlocked" ||
+  name === "getcwd" ||
   name === "getentropy" ||
   name === "getenv" ||
   name === "geteuid" ||
@@ -564,6 +567,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "poll" ||
   name === "popen" ||
   name === "posix_memalign" ||
+  name === "posix_spawn_file_actions_adddup2" ||
   name === "posix_spawn_file_actions_addopen" ||
   name === "posix_spawn_file_actions_destroy" ||
   name === "posix_spawn_file_actions_init" ||
@@ -595,6 +599,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "pthread_mutex_init" ||
   name === "pthread_mutex_lock" ||
   name === "pthread_mutex_unlock" ||
+  name === "pthread_sigmask" ||
   name === "putc" ||
   name === "putc_unlocked" ||
   name === "putchar" ||
@@ -651,6 +656,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "scandirat" ||
   name === "scanf" ||
   name === "sched_getaffinity" ||
+  name === "sched_setscheduler" ||
   name === "sched_yield" ||
   name === "select" ||
   name === "send" ||
@@ -663,6 +669,7 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "setpayloadsig" ||
   name === "setpayloadsigf" ||
   name === "setpayloadsigl" ||
+  name === "setpriority" ||
   name === "setsockopt" ||
   name === "setvbuf" ||
   name === "shutdown" ||
@@ -672,7 +679,10 @@ export const isCLibrarySymbol = (name: string): boolean =>
   name === "sigemptyset" ||
   name === "sigfillset" ||
   name === "signal" ||
+  name === "sigismember" ||
+  name === "sigpending" ||
   name === "sigprocmask" ||
+  name === "sigwait" ||
   name === "sin" ||
   name === "sincos" ||
   name === "sincosf" ||

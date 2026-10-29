@@ -514,17 +514,18 @@ function JsonWriter.nullValue(this: JsonWriter): void -> @nish.JsonWriter.nullVa
   callee +0:37 jsonWriterPutText -> @nish.jsonWriterPutText
   callee +1:7 jsonWriterValueDone -> @nish.jsonWriterValueDone
 function JsonWriter.raw(this: JsonWriter, bytes: u8[], off: i32, len: i32): void -> @nish.JsonWriter.raw [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
-  calls: nish.jsonWriterValueDone nish.jsonWriterValueDue nish_panic_index nish_panic_overflow
+  escaping: len off
+  calls: nish.copyBytes nish.jsonWriterValueDone nish.jsonWriterValueDue nish_panic_overflow
   pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterValueDue#0 nish.jsonWriterValueDone#0
-  pointer bytes: size=0 writesThrough=false captured=false
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
   stackSites=0 stackLocals=0
   callee +3:10 jsonWriterValueDue -> @nish.jsonWriterValueDue
   local +6:11 buf: u8[] (const)
   local +7:11 at: i32 (const)
-  local +12:14 k: i32 (let)
-  callee +18:5 jsonWriterValueDone -> @nish.jsonWriterValueDone
+  callee +12:5 copyBytes -> @nish.copyBytes
+  callee +14:5 jsonWriterValueDone -> @nish.jsonWriterValueDone
 function jsonWriterInObject(w: JsonWriter): boolean -> @nish.jsonWriterInObject
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   pointer w: size=48 writesThrough=false captured=false

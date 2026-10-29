@@ -32,12 +32,12 @@
  * Only `clean` exits 0; every other kind, and a program the compiler
  * refuses, exits 1. A file with no `export const main` is skipped (exit 0).
  *
- * Usage: node tests/differential/asan.js <file.ts> [--compiler <nish>] [--unchecked] [--threads] [--exe <path>]
+ * Usage: node tests/differential/asan.js <file.ts> [--compiler <nish>] [--threads] [--exe <path>]
  *        node tests/differential/asan.js --self-test [--compiler <nish>]
  *
  * The self-test reads one past the end of arrays built every way the compiler
  * allocates them (push, a literal, `new Array(n)`, 8-, 4- and 1-byte elements)
- * in a build with `--unchecked-indexing`, which no check can stop, and fails
+ * through `uncheckedGet` from `nish:unsafe`, which no check can stop, and fails
  * unless ASan reports each; it also runs the in-bounds twins, which must come
  * out clean, and a checked build, which must panic. A C driver then checks
  * that the runtime's `nish_array_grow` moves a block at the push a normal
@@ -156,19 +156,15 @@ const runtimeObjects = (threads) => {
 
 /**
  * Compile `file` with `compiler` (a `lib.compilerFor` result) and link it under
- * ASan into `exe`. `unchecked` builds with `--unchecked-indexing`, `threads`
- * with `--threads`. The compiler writes one `.ll` per module (a program that
+ * ASan into `exe`. `threads` builds with `--threads`. The compiler writes one `.ll` per module (a program that
  * imports `nish/threads` has two) and each is instrumented. Returns `{ exe }`,
  * `{ rejected, stderr }` when the compiler refuses the program, or `{ error }`
  * when the toolchain fails.
  */
-const build = (file, exe, { compiler, unchecked = false, threads = false }) => {
+const build = (file, exe, { compiler, threads = false }) => {
   const modules = `${exe}.modules`
   fs.rmSync(modules, { recursive: true, force: true })
   const args = [...compiler.prefix, file, "-o", `${modules}/`]
-  if (unchecked) {
-    args.push("--unchecked-indexing")
-  }
   if (threads) {
     args.push("--threads")
   }
@@ -302,16 +298,17 @@ const SELF_TEST_ARRAYS = {
   },
 }
 
-const selfTestSource = (shape, past) => {
+const selfTestSource = (shape, past, unchecked) => {
   const spec = SELF_TEST_ARRAYS[shape]
   const read = spec.read ?? ((e) => e)
   const make = spec.make ?? `const a = make(${spec.arg})`
   const sum = spec.type === "f64[]" ? "let s: f64 = 0" : "let s: i32 = 0"
-  return `${spec.builder ? `const make = ${spec.builder}\n` : ""}export const main = (): void => {
+  const head = unchecked ? 'import { uncheckedGet } from "nish:unsafe"\n' : ""
+  return `${head}${spec.builder ? `const make = ${spec.builder}\n` : ""}export const main = (): void => {
   ${make}
   ${sum}
   for (let i = 0; i ${past ? "<=" : "<"} a.length; i++) {
-    s += ${read("a[i]")}
+    s += ${read(unchecked ? "uncheckedGet(a, i)" : "a[i]")}
   }
   console.log(s)
 }
@@ -401,11 +398,8 @@ const selfTest = (compiler) => {
   let failed = 0
   const ran = cases.map((c) => {
     const file = path.join(dir, `${c.name}.ts`)
-    fs.writeFileSync(file, selfTestSource(c.shape, c.past))
-    return {
-      ...c,
-      res: runUnderAsan(file, { compiler, unchecked: c.unchecked, exe: path.join(dir, c.name) }),
-    }
+    fs.writeFileSync(file, selfTestSource(c.shape, c.past, c.unchecked))
+    return { ...c, res: runUnderAsan(file, { compiler, exe: path.join(dir, c.name) }) }
   })
   for (const c of [...ran, ...growCases(dir)]) {
     const res = c.res
@@ -430,7 +424,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   let compilerSpec = null
   let file = null
   let self = false
-  let unchecked = false
   let threads = false
   let exe
   for (let i = 0; i < argv.length; i++) {
@@ -440,8 +433,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       exe = path.resolve(argv[++i])
     } else if (argv[i] === "--self-test") {
       self = true
-    } else if (argv[i] === "--unchecked") {
-      unchecked = true
     } else if (argv[i] === "--threads") {
       threads = true
     } else if (!argv[i].startsWith("-") && file === null) {
@@ -475,7 +466,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   if (exe !== undefined) {
     fs.mkdirSync(path.dirname(exe), { recursive: true })
   }
-  const res = runUnderAsan(path.resolve(file), { compiler, unchecked, threads, exe })
+  const res = runUnderAsan(path.resolve(file), { compiler, threads, exe })
   if (res.rejected) {
     console.log(`rejected: ${String(res.stderr).trim().split("\n")[0]}`)
     process.exit(1)

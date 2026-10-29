@@ -1,7 +1,10 @@
 /**
  * `nish/net/tls-tcp` — TLS 1.3 over TCP (WP34 T2): a pool of server
  * connections on `nish:net`, each a `TlsRecordServer` driving a `TlsServer`,
- * for a program that owns its readiness loop.
+ * for a program that owns its readiness loop; and `TlsTcpClient`, one
+ * client connection that authenticates the server (`nish/net/tls/verify`)
+ * and is driven by the same kind of loop or, through `tlsConnect`,
+ * `readWait` and `writeAll`, by none (its own comment, below, says how).
  *
  *     const listener = tcpListen("0.0.0.0", 8443, 128);
  *     const tls = new TlsTcpServer(config, listener, 64);
@@ -72,20 +75,61 @@
  * `close` frees the slot at once; `shutdown` sends the `close_notify` as the
  * socket takes it, and the slot is done when its interest says so.
  *
+ * **A closed connection lingers until the client hangs up.** Once a
+ * connection the server closed has sent everything, the slot shuts the
+ * socket's write side — the client reads the response, the `close_notify`
+ * and then the end of the stream — and reads and throws away what the
+ * client still sends, until its own end of stream, before its interest says
+ * `TLS_RECORD_DONE` (RFC 9112 §9.6's staged close). A socket closed with
+ * the client's bytes unread, or that the client writes to after the close,
+ * answers with a TCP reset, and a client may report that reset instead of
+ * the response it was sent: Chromium's `ERR_CONNECTION_RESET` after an HTTP/2
+ * `GOAWAY`, when its SETTINGS acknowledgement crossed the server's close. A
+ * lingering slot holds no key and no record buffer, asks only to be read,
+ * and gives up past `TLS_TCP_LINGER_LIMIT` bytes. A connection that failed,
+ * whose client sent its own `close_notify` (it writes nothing after it,
+ * RFC 8446 §6.1) or whose client's stream had already ended, is done at
+ * once. A client that never hangs up keeps its slot, as one that never sends
+ * does: how long a slot may wait is the program's (`docs/security/tls.md`,
+ * TLS-6 and TLS-4).
+ *
  * Written from RFC 8446 and docs/LANGUAGE.md's `nish:net`, not ported from
  * another implementation.
  */
 import { Secret } from "nish:secret"
-import { netClose, netRead, netWrite, tcpAccept } from "nish:net"
+import {
+  connectResult,
+  netClose,
+  netRead,
+  netShutdown,
+  netWrite,
+  pollAdd,
+  pollCreate,
+  pollModify,
+  pollWait,
+  tcpAccept,
+  tcpConnect,
+} from "nish:net"
+import { monotonicNanos, wallClockNanos } from "nish:process"
 import { TlsP256Signer, TlsServer, TlsServerConfig } from "nish/net/tls"
+import { TlsClient, TlsClientConfig } from "nish/net/tls/client"
+import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client"
+import { TlsClientTrust, tlsClientAuthenticate, tlsClientSystemTrust } from "nish/net/tls/verify"
 import { TLS_ALERT_INTERNAL_ERROR } from "nish/net/tls/codec"
 import { TLS_MAX_RECORD } from "nish/net/tls/record"
 import { TlsTicketKeyInfo, TlsTicketStrikes } from "nish/net/tls/ticket"
 import {
   TLS_RECORD_AGAIN,
+  TLS_RECORD_DATA,
   TLS_RECORD_DONE,
   TLS_RECORD_INVALID,
+  TLS_RECORD_PIPE,
+  TLS_RECORD_RESET,
+  TLS_RECORD_STATE_CLOSED,
   TLS_RECORD_STATE_FAILED,
+  TLS_RECORD_STATE_OPEN,
+  TLS_RECORD_WANT_READ,
+  TLS_RECORD_WANT_WRITE,
   TlsRecordPools,
   TlsRecordServer,
 } from "nish/net/tls/record-server"
@@ -102,8 +146,35 @@ const TLS_TCP_FROM: i32 = 0
 /** The length of an x25519 private key and of a server random: what `TlsServer` takes for each. */
 const TLS_TCP_KEY_SIZE: i32 = 32
 
+/** The most a lingering slot reads and throws away before it is done anyway: 64 KiB. */
+const TLS_TCP_LINGER_LIMIT: i32 = 65536
+
+/** In `lingered`: a slot that is not lingering. */
+const TLS_TCP_LIVE: i32 = -1
+
+/** In `lingered`: a slot whose linger is over, which is done. */
+const TLS_TCP_LINGERED: i32 = -2
+
+/** `netShutdown`'s write side. */
+const TLS_TCP_SHUT_WRITE: i32 = 1
+
 /** The address form's length, from `nish:net`. */
 const TLS_TCP_ADDRESS_SIZE: i32 = 18
+
+/** What `tlsConnect` answers when the connection did not open within its timeout. Linux's ETIMEDOUT. */
+export const TLS_TCP_TIMED_OUT: i32 = -110
+
+/** `pollWait`'s readable bit and its hang-up-or-error bit: the events `readable` takes. */
+const TLS_TCP_READ_EVENTS: i32 = 5
+
+/** The events `pollModify` takes, readable and writable: the low two `TLS_RECORD_*` bits. */
+const TLS_TCP_POLL_EVENTS: i32 = 3
+
+/** The token `tlsConnect`'s own loop watches its one socket under. */
+const TLS_TCP_TOKEN: i32 = 1
+
+/** Nanoseconds in a millisecond, for the clocks of `nish:process`. */
+const TLS_TCP_NANOS_PER_MS: i64 = 1000000
 
 /**
  * A pool of TLS 1.3 server connections on one listening socket. `slot`s are
@@ -125,6 +196,12 @@ export class TlsTcpServer {
    * it has never been used.
    */
   fds: i32[]
+  /**
+   * Each slot's linger, beside `fds`: `TLS_TCP_LIVE` until its connection is
+   * over, then how many bytes it has thrown away while it waits for the
+   * client's end of stream, then `TLS_TCP_LINGERED` once it is done.
+   */
+  lingered: i32[]
   /**
    * The slots closed since they were used, a stack whose top `accept` takes
    * before it builds a slot past the high-water mark, so finding one costs
@@ -180,6 +257,7 @@ export class TlsTcpServer {
     this.listener = listener
     this.connections = []
     this.fds = []
+    this.lingered = []
     this.free = []
     this.randoms = []
     this.slots = size < 1 ? 1 : size
@@ -301,6 +379,7 @@ export class TlsTcpServer {
     } else if (toI32(this.fds.length) < this.slots) {
       slot = toI32(this.fds.length)
       this.fds.push(TLS_TCP_FREE)
+      this.lingered.push(TLS_TCP_LIVE)
     }
     if (slot < 0 || slot >= toI32(this.fds.length)) {
       netClose(fd)
@@ -309,6 +388,7 @@ export class TlsTcpServer {
     const conn: TlsRecordServer =
       slot < toI32(this.connections.length) ? this.connections[slot] : this.build()
     this.fds[slot] = fd
+    this.lingered[slot] = TLS_TCP_LIVE
     const random: u8[] = this.randoms[slot]
     for (
       let k: i32 = 0;
@@ -326,12 +406,15 @@ export class TlsTcpServer {
   /**
    * The socket of `slot` is readable: reads it until it would block or the
    * connection has no room, handing each read to the connection, then sends
-   * what that produced. Answers the connection's `interest`; a free slot
-   * answers `TLS_RECORD_DONE`.
+   * what that produced. Answers the connection's `interest`, or, while the
+   * slot lingers, what `drain` answers; a free slot answers `TLS_RECORD_DONE`.
    */
   readable(slot: i32): i32 {
     if (!this.holds(slot)) {
       return TLS_RECORD_DONE
+    }
+    if (this.lingered[slot] !== TLS_TCP_LIVE) {
+      return this.drain(slot)
     }
     const fd: i32 = this.fds[slot]
     const conn: TlsRecordServer = this.connections[slot]
@@ -365,13 +448,25 @@ export class TlsTcpServer {
 
   /**
    * Writes the connection's output until the socket would block or it is all
-   * sent, and answers its `interest`; a slot never built answers
-   * `TLS_RECORD_DONE`.
+   * sent, and answers its `interest`; once the connection is over and the
+   * program has read what the client sent, the slot lingers (`linger`). A
+   * free slot answers `TLS_RECORD_DONE`.
    */
   flush(slot: i32): i32 {
-    if (slot < 0 || slot >= toI32(this.fds.length) || slot >= toI32(this.connections.length)) {
+    if (!this.holds(slot)) {
       return TLS_RECORD_DONE
     }
+    if (this.lingered[slot] !== TLS_TCP_LIVE) {
+      return this.lingerInterest(slot)
+    }
+    const wants: i32 = this.send(slot)
+    // Application data still unread keeps the connection, and its keys, until
+    // the program reads it: lingering gives back the buffer that holds it.
+    return (wants & TLS_RECORD_DONE) !== 0 && (wants & TLS_RECORD_DATA) === 0 ? this.linger(slot) : wants
+  }
+
+  /** Writes `slot`'s output until the socket would block or it is all sent; answers the connection's `interest`. */
+  send(slot: i32): i32 {
     const fd: i32 = this.fds[slot]
     const conn: TlsRecordServer = this.connections[slot]
     while (conn.outputEnd > conn.outputStart) {
@@ -387,9 +482,70 @@ export class TlsTcpServer {
     return conn.interest()
   }
 
+  /**
+   * `slot`'s connection is over and everything is sent. One the server
+   * closed, whose client has neither sent its `close_notify` nor ended its
+   * stream, lingers: the socket's write side is shut, every key wiped and
+   * every record buffer given back, and what the client sends is drained
+   * (`drain`). Any other is done.
+   */
+  linger(slot: i32): i32 {
+    const conn: TlsRecordServer = this.connections[slot]
+    if (
+      conn.state !== TLS_RECORD_STATE_CLOSED ||
+      conn.peerClosed ||
+      conn.ended ||
+      netShutdown(this.fds[slot], TLS_TCP_SHUT_WRITE) < 0
+    ) {
+      this.lingered[slot] = TLS_TCP_LINGERED
+      return TLS_RECORD_DONE
+    }
+    this.lingered[slot] = 0
+    conn.wipeKeys()
+    conn.release()
+    return this.drain(slot)
+  }
+
+  /**
+   * Reads what a lingering `slot`'s client sends and throws it away, until
+   * the socket would block (`TLS_RECORD_WANT_READ`), or its stream ends, the
+   * socket fails or more than `TLS_TCP_LINGER_LIMIT` bytes came
+   * (`TLS_RECORD_DONE`).
+   */
+  drain(slot: i32): i32 {
+    while (this.lingered[slot] >= 0) {
+      const n: i32 = netRead(this.fds[slot], this.scratch, TLS_TCP_FROM, toI32(this.scratch.length))
+      if (n === TLS_RECORD_AGAIN) {
+        return TLS_RECORD_WANT_READ
+      }
+      this.lingered[slot] =
+        n > 0 && this.lingered[slot] + n <= TLS_TCP_LINGER_LIMIT ? this.lingered[slot] + n : TLS_TCP_LINGERED
+    }
+    return TLS_RECORD_DONE
+  }
+
+  /**
+   * Whether `slot` lingers: its connection is over and it waits for the
+   * client to hang up. A carrier's idle clock does not move for what a
+   * lingering slot drains, so its idle timeout bounds the wait.
+   */
+  lingering(slot: i32): boolean {
+    return this.holds(slot) && this.lingered[slot] >= 0
+  }
+
+  /** A lingering `slot`'s interest: to be read, or `TLS_RECORD_DONE` once its linger is over. */
+  lingerInterest(slot: i32): i32 {
+    return this.lingered[slot] >= 0 ? TLS_RECORD_WANT_READ : TLS_RECORD_DONE
+  }
+
   /** What `slot`'s connection wants now, without touching the socket; `TLS_RECORD_DONE` for a free slot. */
   interest(slot: i32): i32 {
-    return this.holds(slot) ? this.connections[slot].interest() : TLS_RECORD_DONE
+    if (!this.holds(slot)) {
+      return TLS_RECORD_DONE
+    }
+    return this.lingered[slot] !== TLS_TCP_LIVE
+      ? this.lingerInterest(slot)
+      : this.connections[slot].interest()
   }
 
   /** What `slot`'s CertificateVerify signs, while its `interest` says `TLS_RECORD_SIGN`; `null` otherwise. */
@@ -522,7 +678,9 @@ export class TlsTcpServer {
    * Closes the server's side of `slot`'s connection (§6.1): a `close_notify`
    * after whatever is already written, sent as the socket takes it. The slot
    * stays the program's until its interest says `TLS_RECORD_DONE` — every
-   * byte is sent — and the program calls `close`. Answers the interest.
+   * byte is sent and, once the slot lingers (`linger`), the client has hung
+   * up — and the program calls `close`. Meanwhile the interest asks for the
+   * socket to be read. Answers the interest.
    */
   shutdown(slot: i32): i32 {
     if (!this.holds(slot)) {
@@ -545,13 +703,486 @@ export class TlsTcpServer {
       return
     }
     const conn: TlsRecordServer = this.connections[slot]
-    conn.close()
-    this.flush(slot)
+    if (this.lingered[slot] === TLS_TCP_LIVE) {
+      conn.close()
+      this.send(slot)
+    }
     netClose(this.fds[slot])
     this.fds[slot] = TLS_TCP_FREE
+    this.lingered[slot] = TLS_TCP_LIVE
     this.free.push(slot)
     conn.wipeKeys()
     // Whatever the last flush could not send is dropped with its buffer.
     conn.release()
   }
+}
+
+/**
+ * One TLS 1.3 client connection over TCP: a `TlsRecordClient` driving a
+ * `TlsClient` on a socket `tcpConnect` opened, for a program that owns its
+ * readiness loop, as `TlsTcpServer` is for a server.
+ *
+ *     const client = new TlsTcpClient(addr, new TlsClientConfig("example.com", ["h2"]), trust);
+ *     pollAdd(loop, client.fd(), client.interest() & 3, TOKEN);
+ *     // when the token comes back:
+ *     let wants: i32 = (events & 5) !== 0 ? client.readable() : client.writable();
+ *     if ((wants & TLS_RECORD_DATA) !== 0) { client.read(buf, 0, buf.length); ... }
+ *     if ((wants & TLS_RECORD_DONE) !== 0) { client.close(); }
+ *     else { pollModify(loop, client.fd(), wants & 3, TOKEN); }
+ *
+ * **The server is always authenticated.** When the handshake reaches the
+ * server's certificate chain and CertificateVerify, the client gives its own
+ * verdict at once (`tlsClientAuthenticate` in `nish/net/tls/verify`) under
+ * `trust` and the wall clock, before it reads the server's Finished, so
+ * `interest` never says `TLS_RECORD_AUTH` and there is no way to open a
+ * connection to a server the trust does not vouch for. A refusal fails the
+ * connection with its alert sent: `failure()` names it.
+ *
+ * **Randomness is the CSPRNG's.** The client random and both ephemeral keys
+ * (x25519, and P-256 for a server that asks for that group) are drawn from
+ * `crypto.getRandomValues` in the constructor; `TlsClient` copies the keys
+ * into its own `Secret`s and the arrays they were drawn into are zeroed.
+ *
+ * The socket is still connecting when the constructor returns, so the first
+ * interest is writable alone; the first event on it, writable or a hang-up,
+ * says how the connection went (`connectResult`), and a socket that did not
+ * connect leaves the client done, its failure in `connectError`.
+ */
+export class TlsTcpClient {
+  conn: TlsRecordClient
+  trust: TlsClientTrust
+  /** The socket, -1 once `close` has run or when `tcpConnect` refused at once. */
+  socket: i32 = -1
+  /** Whether the socket has yet to say how its connection went. */
+  connecting: boolean = true
+  /**
+   * Why the connection failed below TLS, or 0: `tcpConnect`'s or
+   * `connectResult`'s failure, or what ended `tlsConnect`'s wait — its
+   * timeout (`TLS_TCP_TIMED_OUT`) or its loop's failure.
+   */
+  connectError: i32 = 0
+  /** Where the socket is read into before the connection takes the bytes: the largest record. */
+  scratch: u8[]
+
+  /**
+   * A connection to the server at `addr` (`nish:net`'s 18-byte form, which
+   * `netAddress` writes) under `config`, authenticated against `trust`. The
+   * name the certificate must carry is `config.serverName`, never one taken
+   * from `addr`. The ClientHello is sealed here and waits for the socket.
+   */
+  constructor(addr: u8[], config: TlsClientConfig, trust: TlsClientTrust) {
+    const random: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
+    const x25519: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
+    const p256: u8[] = new Array<u8>(TLS_TCP_KEY_SIZE)
+    crypto.getRandomValues(random)
+    crypto.getRandomValues(x25519)
+    crypto.getRandomValues(p256)
+    // `TlsClient` copies both keys and zeroes these arrays.
+    this.conn = new TlsRecordClient(new TlsClient(config, random, x25519, p256))
+    this.trust = trust
+    this.scratch = new Array<u8>(TLS_MAX_RECORD)
+    // A config `TlsClient` refused (a bad name or protocol) is never dialled:
+    // the client is failed already, its alert in `failure()`.
+    if (this.conn.state === TLS_RECORD_STATE_FAILED) {
+      this.connecting = false
+      return
+    }
+    const fd: i32 = toI32(addr.length) < TLS_TCP_ADDRESS_SIZE ? TLS_RECORD_INVALID : tcpConnect(addr)
+    if (fd < 0) {
+      this.connecting = false
+      this.connectError = fd
+      this.conn.abort()
+      return
+    }
+    this.socket = fd
+  }
+
+  /** The socket, for `pollAdd`; -1 when there is none. */
+  fd(): i32 {
+    return this.socket
+  }
+
+  /** Whether the handshake is done and the server authenticated, so application data flows. */
+  open(): boolean {
+    return this.conn.state === TLS_RECORD_STATE_OPEN
+  }
+
+  /** Why a failed connection failed: `connectError` when TCP did not connect, else the alert (`TlsRecordClient.failure`). */
+  failure(): i32 {
+    return this.connectError !== 0 ? this.connectError : this.conn.failure()
+  }
+
+  /** What the connection wants now, as `TLS_RECORD_*` bits, without touching the socket. */
+  interest(): i32 {
+    if (this.socket < 0) {
+      return TLS_RECORD_DONE
+    }
+    return this.connecting ? TLS_RECORD_WANT_WRITE : this.conn.interest()
+  }
+
+  /**
+   * The first event on a connecting socket: whether it connected. One that
+   * did not leaves the client failed with nothing sent, its reason in
+   * `connectError`.
+   */
+  connected(): boolean {
+    this.connecting = false
+    const result: i32 = connectResult(this.socket)
+    if (result !== 0) {
+      this.connectError = result
+      this.conn.abort()
+      return false
+    }
+    return true
+  }
+
+  /**
+   * The socket is readable, or hung up: reads it until it would block or the
+   * connection has no room, handing each read to the connection, then sends
+   * what that produced. Answers the `interest`.
+   */
+  readable(): i32 {
+    if (this.socket < 0) {
+      return TLS_RECORD_DONE
+    }
+    if (this.connecting && !this.connected()) {
+      return TLS_RECORD_DONE
+    }
+    const conn: TlsRecordClient = this.conn
+    while (true) {
+      const room: i32 = conn.space()
+      const want: i32 = room < toI32(this.scratch.length) ? room : toI32(this.scratch.length)
+      if (want <= 0 || conn.state === TLS_RECORD_STATE_FAILED || conn.peerClosed) {
+        break
+      }
+      const n: i32 = netRead(this.socket, this.scratch, TLS_TCP_FROM, want)
+      if (n <= 0) {
+        if (n === 0) {
+          conn.end()
+        } else if (n !== TLS_RECORD_AGAIN) {
+          conn.abort()
+        }
+        break
+      }
+      conn.receive(this.scratch, TLS_TCP_FROM, n)
+    }
+    return this.flush()
+  }
+
+  /** The socket is writable: on the first event, how the connection went; then sends what the connection holds. Answers the `interest`. */
+  writable(): i32 {
+    if (this.socket < 0) {
+      return TLS_RECORD_DONE
+    }
+    if (this.connecting && !this.connected()) {
+      return TLS_RECORD_DONE
+    }
+    return this.flush()
+  }
+
+  /**
+   * Authenticates the server once the handshake asks for it, then writes the
+   * connection's output until the socket would block or it is all sent, and
+   * answers the `interest`.
+   */
+  flush(): i32 {
+    if (this.socket < 0) {
+      return TLS_RECORD_DONE
+    }
+    if (this.connecting) {
+      return TLS_RECORD_WANT_WRITE
+    }
+    if ((this.conn.interest() & TLS_RECORD_AUTH) !== 0) {
+      tlsClientAuthenticate(this.conn, this.trust, wallClockNanos() / TLS_TCP_NANOS_PER_MS)
+    }
+    const conn: TlsRecordClient = this.conn
+    while (conn.outputEnd > conn.outputStart) {
+      const n: i32 = netWrite(this.socket, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
+      if (n <= 0) {
+        if (n !== TLS_RECORD_AGAIN) {
+          conn.abort()
+        }
+        break
+      }
+      conn.consume(n)
+    }
+    return conn.interest()
+  }
+
+  /**
+   * Application data from the server into `buf[off .. off + len)`: the count,
+   * 0 at the end of its stream, -11 when nothing is waiting, -104 once the
+   * connection has failed, as `TlsRecordClient.read` says, and -32 once
+   * `close` has run. What reading makes room for is answered and sent here;
+   * re-arm with `interest()`.
+   */
+  read(buf: u8[], off: i32, len: i32): i32 {
+    if (this.socket < 0) {
+      return this.ended()
+    }
+    const n: i32 = this.conn.read(buf, off, len)
+    this.flush()
+    return n
+  }
+
+  /** What a call on a client that is done answers: -104 when it failed, else -32. */
+  ended(): i32 {
+    return this.conn.state === TLS_RECORD_STATE_FAILED ? TLS_RECORD_RESET : TLS_RECORD_PIPE
+  }
+
+  /**
+   * Application data from the server, waiting for it up to `timeoutMs`
+   * milliseconds in a loop of the client's own, for a program with no loop:
+   * the count, 0 at the end of the server's stream, `TLS_TCP_TIMED_OUT` when
+   * nothing came in time (the connection stays usable), -104 once it has
+   * failed, -32 once it is done otherwise, or the loop's failure. It drives
+   * the handshake too, so it may follow `new TlsTcpClient` directly.
+   */
+  readWait(buf: u8[], off: i32, len: i32, timeoutMs: i32): i32 {
+    const end: i64 = tlsTcpDeadline(timeoutMs)
+    let n: i32 = this.read(buf, off, len)
+    if (n !== TLS_RECORD_AGAIN) {
+      return n
+    }
+    const loop: i32 = this.ownLoop()
+    if (loop < 0) {
+      return loop
+    }
+    while (n === TLS_RECORD_AGAIN) {
+      const turned: i32 = this.turn(loop, end)
+      if (turned === TLS_RECORD_DONE) {
+        n = this.read(buf, off, len)
+        if (n === TLS_RECORD_AGAIN) {
+          n = this.ended()
+        }
+        break
+      }
+      if (turned < 0) {
+        n = turned
+        break
+      }
+      n = this.read(buf, off, len)
+    }
+    netClose(loop)
+    return n
+  }
+
+  /**
+   * Writes all of `data[off .. off + len)` and waits up to `timeoutMs`
+   * milliseconds, in a loop of the client's own, until the socket has taken
+   * every byte of it: `len`, or — some of it perhaps sent — `TLS_TCP_TIMED_OUT`,
+   * -32 when the client had closed or failed before the call, -104 when the
+   * connection fails during it, -22 for a window outside `data`, or the
+   * loop's failure. It drives the handshake too, so it may follow
+   * `new TlsTcpClient` directly. A timed-out call does not say how much was
+   * sent, and the same bytes written again would reach the server twice:
+   * once the handshake is done, a timeout leaves the stream unusable, and
+   * the client is for `close`.
+   */
+  writeAll(data: u8[], off: i32, len: i32, timeoutMs: i32): i32 {
+    const end: i64 = tlsTcpDeadline(timeoutMs)
+    let done: i32 = 0
+    let loop: i32 = -1
+    let result: i32 = 0
+    while (true) {
+      if (done < len) {
+        const n: i32 = this.write(data, off + done, len - done)
+        if (n >= 0) {
+          done = done + n
+        } else if (n !== TLS_RECORD_AGAIN) {
+          result = n
+          break
+        }
+      }
+      if (done >= len && !this.sending()) {
+        break
+      }
+      if (loop < 0) {
+        loop = this.ownLoop()
+        if (loop < 0) {
+          result = loop
+          break
+        }
+      }
+      const turned: i32 = this.turn(loop, end)
+      if (turned === TLS_RECORD_DONE) {
+        result = this.ended()
+        break
+      }
+      if (turned < 0) {
+        result = turned
+        break
+      }
+    }
+    if (loop >= 0) {
+      netClose(loop)
+    }
+    return result < 0 ? result : done
+  }
+
+  /** Whether sealed bytes are still waiting for the socket. */
+  sending(): boolean {
+    return this.conn.outputEnd > this.conn.outputStart
+  }
+
+  /** A readiness loop of the client's own holding its socket, for the waiting calls, or the loop's failure. */
+  ownLoop(): i32 {
+    const loop: i32 = pollCreate()
+    if (loop >= 0) {
+      pollAdd(loop, this.socket, this.interest() & TLS_TCP_POLL_EVENTS, TLS_TCP_TOKEN)
+    }
+    return loop
+  }
+
+  /**
+   * One turn of `loop` (from `ownLoop`): waits until the socket is ready, or
+   * until `end` on the monotonic clock, and handles what came. Answers 0,
+   * `TLS_RECORD_DONE` once the connection wants nothing more,
+   * `TLS_TCP_TIMED_OUT`, or the loop's failure.
+   */
+  turn(loop: i32, end: i64): i32 {
+    const wants: i32 = this.interest()
+    if ((wants & TLS_RECORD_DONE) !== 0) {
+      return TLS_RECORD_DONE
+    }
+    const now: i64 = monotonicNanos()
+    if (now >= end) {
+      return TLS_TCP_TIMED_OUT
+    }
+    pollModify(loop, this.socket, wants & TLS_TCP_POLL_EVENTS, TLS_TCP_TOKEN)
+    const ready: i32[] = new Array<i32>(2)
+    const count: i32 = pollWait(
+      loop,
+      ready,
+      toI32((end - now + TLS_TCP_NANOS_PER_MS - 1) / TLS_TCP_NANOS_PER_MS)
+    )
+    if (count < 0) {
+      return count
+    }
+    if (count > 0) {
+      if ((ready[1] & TLS_TCP_READ_EVENTS) !== 0) {
+        this.readable()
+      } else {
+        this.writable()
+      }
+    }
+    return 0
+  }
+
+  /**
+   * Application data for the server, `data[off .. off + len)`: seals as much
+   * as fits and sends what the socket takes, and answers how much was taken,
+   * -11 when nothing fits yet or the handshake is under way, -32 once the
+   * client has closed, as `TlsRecordClient.write` says.
+   */
+  write(data: u8[], off: i32, len: i32): i32 {
+    const n: i32 = this.conn.write(data, off, len)
+    this.flush()
+    return n
+  }
+
+  /** Sends a KeyUpdate, asking the server for one too when `requestPeer`; answers as `TlsRecordClient.keyUpdate`. */
+  keyUpdate(requestPeer: boolean): i32 {
+    const r: i32 = this.conn.keyUpdate(requestPeer)
+    this.flush()
+    return r
+  }
+
+  /**
+   * Closes the client's side (§6.1): a `close_notify` after whatever is
+   * already written, sent as the socket takes it. The client does not wait
+   * for the server's own `close_notify`: data already read off the socket
+   * still reads, and once the `close_notify` is sent the interest says
+   * `TLS_RECORD_DONE` and `readWait` answers -32; call `close` then.
+   * Answers the interest.
+   */
+  shutdown(): i32 {
+    this.conn.close()
+    return this.flush()
+  }
+
+  /**
+   * Ends the connection at once: a `close_notify` unless it already failed
+   * or closed, one attempt to send what is left, every key wiped and the
+   * socket closed, which also takes it out of every loop.
+   */
+  close(): void {
+    if (this.socket < 0) {
+      this.conn.wipe()
+      return
+    }
+    if (!this.connecting) {
+      this.conn.close()
+      this.flush()
+    }
+    netClose(this.socket)
+    this.socket = -1
+    this.conn.wipe()
+  }
+}
+
+/** The monotonic clock `timeoutMs` milliseconds from now. */
+const tlsTcpDeadline = (timeoutMs: i32): i64 => monotonicNanos() + toI64(timeoutMs) * TLS_TCP_NANOS_PER_MS
+
+/**
+ * Opens a TLS 1.3 connection to the server at `addr` (`nish:net`'s 18-byte
+ * form) for `serverName`, offering `alpn`, authenticated against the
+ * system's roots, and waits in a loop of its own until the handshake is done
+ * and the client's last flight sent, or it fails, or `timeoutMs` milliseconds
+ * pass, reading the roots included. Answers the client either way:
+ * `open()` says whether it opened; otherwise `failure()` says why — the TCP
+ * failure, the alert, or `TLS_TCP_TIMED_OUT`, the client closed. Nothing is
+ * looked up: to reach a name, resolve it first with `nish/net/dns`'s
+ * `resolveHost`; the name the certificate must carry is always `serverName`,
+ * never one taken from `addr`. The open client's socket is in no loop: the
+ * program adds it to its own, or uses `writeAll` and `readWait`. The roots
+ * are read on every call; a program that connects often reads them once with
+ * `tlsClientSystemTrust` and passes them to `tlsConnectWith`.
+ */
+export const tlsConnect = (addr: u8[], serverName: string, alpn: string[], timeoutMs: i32): TlsTcpClient => {
+  const end: i64 = tlsTcpDeadline(timeoutMs)
+  return tlsConnectBy(addr, new TlsClientConfig(serverName, alpn), tlsClientSystemTrust(), end)
+}
+
+/** `tlsConnect` under a `config` and `trust` of the caller's. */
+export const tlsConnectWith = (
+  addr: u8[],
+  config: TlsClientConfig,
+  trust: TlsClientTrust,
+  timeoutMs: i32
+): TlsTcpClient => tlsConnectBy(addr, config, trust, tlsTcpDeadline(timeoutMs))
+
+/** `tlsConnectWith`, waiting until `end` on the monotonic clock. */
+const tlsConnectBy = (addr: u8[], config: TlsClientConfig, trust: TlsClientTrust, end: i64): TlsTcpClient => {
+  const client: TlsTcpClient = new TlsTcpClient(addr, config, trust)
+  if (client.fd() < 0) {
+    return client
+  }
+  const loop: i32 = client.ownLoop()
+  if (loop < 0) {
+    client.connectError = loop
+    client.close()
+    return client
+  }
+  // The connection opens on the server's Finished, with the client's own
+  // perhaps still queued: it is sent before the client is handed back.
+  while (!client.open() || client.sending()) {
+    const turned: i32 = client.turn(loop, end)
+    if (turned === TLS_RECORD_DONE) {
+      break
+    }
+    // A refusal whose alert could not be flushed in time is still the
+    // refusal: the timeout is the reason only while the handshake lives.
+    if (turned < 0) {
+      if (client.conn.state !== TLS_RECORD_STATE_FAILED) {
+        client.connectError = turned
+      }
+      break
+    }
+  }
+  netClose(loop)
+  if (!client.open() || client.connectError !== 0) {
+    client.close()
+  }
+  return client
 }

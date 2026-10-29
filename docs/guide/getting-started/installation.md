@@ -88,7 +88,7 @@ or run `npm install -g nish@0.20.0`. Read the
 ### Checking where the download came from
 
 Every release lists a SHA-256 for each of its files in `SHA256SUMS`, and the
-install script refuses a download that does not match. Releases after 0.20.0
+install script refuses a download that does not match. Releases after 0.21.0
 also carry a signed *build provenance attestation*: a record, signed through
 GitHub, that the files were built by Nish's release workflow from the tagged
 source on GitHub's own runners. A matching checksum shows that the file is the

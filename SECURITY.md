@@ -75,12 +75,9 @@ The full model for each area is in its record. In summary:
   trust.
 - **The holes the language asks for by name**: an out-of-range
   [`uncheckedGet` or `uncheckedSet`](README.md#where-it-is-not-safe), each a
-  call a module reaches only by importing it from `nish:unsafe` (and every index
-  of your own package under the deprecated `--unchecked-indexing`, which never
-  reaches a dependency or `nish/`), `Arena.reset()` and `Arena.release(m)` with
-  a live reference, signed overflow (undefined except through the `nish:unsafe`
-  `wrapping*` calls, or in your own package under the deprecated `--wrapping`),
-  and what an interop host does with a pointer it is given. A dependency that
+  call a module reaches only by importing it from `nish:unsafe`, a wrap of
+  signed arithmetic, which only the `nish:unsafe` `wrapping*` calls make, and
+  what an interop host does with a pointer it is given. A dependency that
   imports `nish:unsafe` has taken that hole on its own account, and its import
   says so; `--emit-checked` lists every such import and call.
 - **Timing outside the constant-time check's reach**: functions no fixture

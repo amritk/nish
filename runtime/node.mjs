@@ -73,6 +73,88 @@ function appendFileSync(path, data) {
 }
 
 /**
+ * The negative errno a failed `fs` call names, as `runtime-os.c` answers it.
+ * Node names the errno by its code; one it gives no number for, such as the
+ * `ERR_INVALID_ARG_VALUE` a path holding a NUL throws, is -22 (`EINVAL`), the
+ * runtime's answer to that path.
+ */
+function negErrno(e) {
+  return -(os.constants.errno[e.code] ?? 22);
+}
+
+/** `ok` when `f` returns, or the negative errno of what it threw. */
+function errnoOr(ok, f) {
+  try {
+    f();
+    return ok;
+  } catch (e) {
+    return negErrno(e);
+  }
+}
+
+/** `renameSync(from, to)`: 0, or a negative errno (-18 across file systems). */
+const renameSync = (from, to) => errnoOr(0, () => fs.renameSync(from, to));
+
+/** `unlinkSync(path)`: 0, or a negative errno; a directory is refused, not removed. */
+const unlinkSync = (path) => errnoOr(0, () => fs.unlinkSync(path));
+
+/** `writeFileBytesSync(path, bytes)`: the byte count, or a negative errno; mode 0644 and `WRITE_FLAGS`. */
+const writeFileBytesSync = (path, bytes) =>
+  errnoOr(bytes.length, () => fs.writeFileSync(path, Uint8Array.from(bytes), { flag: WRITE_FLAGS, mode: 0o644 }));
+
+/**
+ * `writeFileSyncMode` and `createFileExclusiveSync`'s shared body, as
+ * `runtime-os.c`'s: the file opened with `flag`, `fchmod`ed to exactly `mode`
+ * before a byte is written, then every byte of `data`, then the count, or a
+ * negative errno. A mode outside 0..0o777 is -22 before the file is touched.
+ * After an exclusive create (`"wx"`), any failure unlinks the file it made.
+ */
+function putFileMode(path, data, flag, mode) {
+  if (!(mode >= 0 && mode <= 0o777)) return -22;
+  let fd;
+  try {
+    fd = fs.openSync(path, flag, mode);
+  } catch (e) {
+    return negErrno(e);
+  }
+  let r;
+  try {
+    fs.fchmodSync(fd, mode);
+    const buf = Buffer.from(data, "utf8");
+    for (let done = 0; done < buf.length; ) done += fs.writeSync(fd, buf, done);
+    r = buf.length;
+  } catch (e) {
+    r = negErrno(e);
+  }
+  const closed = errnoOr(0, () => fs.closeSync(fd));
+  const answer = r >= 0 && closed < 0 ? closed : r;
+  if (answer < 0 && flag === "wx") errnoOr(0, () => fs.unlinkSync(path));
+  return answer;
+}
+
+/** `writeFileSyncMode(path, data, mode)`: `WRITE_FLAGS`, so a link at the path is refused. */
+const writeFileSyncMode = (path, data, mode) => putFileMode(path, data, WRITE_FLAGS, mode);
+
+/** `createFileExclusiveSync(path, data, mode)`: `"wx"`, -17 when anything is at the path. */
+const createFileExclusiveSync = (path, data, mode) => putFileMode(path, data, "wx", mode);
+
+/** `mkdirSyncMode(path, mode)`: 0, or a negative errno; -17 for a path already there. */
+const mkdirSyncMode = (path, mode) =>
+  mode >= 0 && mode <= 0o777 ? errnoOr(0, () => fs.mkdirSync(path, { mode })) : -22;
+
+/**
+ * `writeBytes`'s write, after the core checked the range `[from, to)`: every
+ * byte to stdout, then the count, or a negative errno. `fs.writeSync` may
+ * write less than it was given, so it is asked again for the rest.
+ */
+function writeBytes(bytes, from, to) {
+  const buf = Uint8Array.from(bytes.slice(from, to));
+  return errnoOr(buf.length, () => {
+    for (let at = 0; at < buf.length; ) at += fs.writeSync(1, buf, at, buf.length - at);
+  });
+}
+
+/**
  * `mkdirSync(path)` (WP14 D4): one directory, not recursive, answering whether
  * a directory is there afterwards. Node throws where the runtime answers
  * false, and `EEXIST` on a plain file is a failure here as it is there, so the
@@ -226,6 +308,41 @@ function spawnSyncTo(argv, out, err) {
   return spawnImpl(argv, out, err);
 }
 
+/** The bytes `spawnPiped` keeps of one stream, as `runtime-os.c`'s `NISH_PIPED_CAP`. */
+const PIPED_CAP = 16 * 1024 * 1024;
+
+/**
+ * `spawnPiped(argv, stdin)`'s run, after the core took it apart: the status
+ * and the two streams' bytes, which the core appends to the caller's arrays.
+ * The status is `spawnImpl`'s, and -2 when a stream passed `PIPED_CAP`: Node
+ * then kills the child with `SIGKILL`, as the runtime does, and reports
+ * `ENOBUFS`, and what it read is cut to the cap here as the runtime keeps it.
+ * A child that exits without reading its stdin is not an error on either side.
+ */
+function spawnPiped(argv, input) {
+  if (argv.length === 0) return [-1, [], []];
+  let r;
+  // Node throws, rather than reporting, for an empty command or a NUL in any
+  // argument, which the runtime answers -1 for without starting a child.
+  try {
+    r = child_process.spawnSync(argv[0], argv.slice(1), {
+      input: Uint8Array.from(input),
+      maxBuffer: PIPED_CAP,
+      killSignal: "SIGKILL",
+    });
+  } catch {
+    return [-1, [], []];
+  }
+  const bytes = (b) => (b === null || b === undefined ? [] : Array.from(b.subarray(0, PIPED_CAP)));
+  const out = bytes(r.stdout);
+  const err = bytes(r.stderr);
+  // `EPIPE` is the child closing its stdin unread, which Node reports with
+  // the status it still waited for; the runtime ignores it the same way.
+  if (r.error !== undefined && r.error.code !== "EPIPE") return [r.error.code === "ENOBUFS" ? -2 : -1, out, err];
+  if (r.signal !== null && r.signal !== undefined) return [128 + (os.constants.signals[r.signal] ?? 0), out, err];
+  return [r.status === null ? -1 : r.status, out, err];
+}
+
 /**
  * `kill(pid, sig)`: 0, or a negative errno, as `runtime-os.c`'s `nish_kill`
  * answers. Only 0, 2, 9 and 15 are sent and a pid of 0 or below is refused,
@@ -234,12 +351,7 @@ function spawnSyncTo(argv, out, err) {
  */
 function kill(pid, sig) {
   if (pid <= 0 || !(sig === 0 || sig === 2 || sig === 9 || sig === 15)) return -22;
-  try {
-    process.kill(pid, sig);
-    return 0;
-  } catch (e) {
-    return -(os.constants.errno[e.code] ?? 22);
-  }
+  return errnoOr(0, () => process.kill(pid, sig));
 }
 
 /**
@@ -273,6 +385,15 @@ function totalMemory() {
  */
 function monotonicNanos() {
   return process.hrtime.bigint();
+}
+
+/**
+ * `wallClockNanos()`: the wall clock in nanoseconds since the epoch, a BigInt
+ * like `monotonicNanos`'s. Node's wall clock is `Date.now`, whole
+ * milliseconds, so the last six digits are zeros where a native run has them.
+ */
+function wallClockNanos() {
+  return BigInt(Date.now()) * 1000000n;
 }
 
 /**
@@ -344,6 +465,13 @@ const CALLS = {
   readFileBytesSync,
   writeFileSync,
   appendFileSync,
+  writeFileBytesSync,
+  renameSync,
+  unlinkSync,
+  writeFileSyncMode,
+  createFileExclusiveSync,
+  mkdirSyncMode,
+  writeBytes,
   mkdirSync,
   isDirectorySync,
   readdirSync,
@@ -353,10 +481,12 @@ const CALLS = {
   getenv,
   spawnSync,
   spawnSyncTo,
+  spawnPiped,
   kill,
   availableParallelism,
   totalMemory,
   monotonicNanos,
+  wallClockNanos,
   statMtimeSync,
   lstatOwnerModeSync,
   geteuid,

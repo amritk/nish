@@ -26,6 +26,74 @@ built-in modules that wrap the operating system (`nish:fs`, `nish:process`,
 many cores and bytes of memory the machine has (`availableParallelism`,
 `totalMemory`) to size a pool of workers; see
 [Children and the machine](../../LANGUAGE.md#children-and-the-machine-spawn-kill-waitpid-availableparallelism-totalmemory).
+A batch job steps aside for interactive work with `setNice(n)` (the nice value,
+-20..19) or, on Linux, `setIdlePriority()` (`SCHED_IDLE`: the CPU only when
+nothing else wants it). Each answers 0 or a negative errno and never throws;
+`setIdlePriority` is -95 on Darwin. An unprivileged process can never leave
+`SCHED_IDLE`, and an idle one can starve on a busy machine, so keep a
+normal-priority fallback for work that must finish, and call either at the top
+of `main`, before any thread starts. See
+[Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority).
+
+`spawnPiped(argv, stdin, stdout, stderr)` runs a child with every stream in
+memory: the child reads `stdin`'s bytes and then end of file, and what it
+writes is appended to `stdout` and `stderr`. It answers the exit status (128
+plus the signal for one killed by a signal), -1 when the child cannot start,
+and -2 when either output passes 16 MiB, after which the child is killed. It is
+how a program hands a child a secret, since a child's argument vector and
+environment are readable by other processes and a file outlives the run:
+
+```ts
+const token = "ghp_example"
+const request = `protocol=https\nhost=github.com\nusername=bot\npassword=${token}\n\n`
+const input: u8[] = []
+for (let i = 0; i < request.length; i++) {
+  input.push(toU8(request.charCodeAt(i)))
+}
+const out: u8[] = []
+const err: u8[] = []
+const status = spawnPiped(["git", "credential", "approve"], input, out, err)
+if (status !== 0) {
+  console.log(`git credential failed (${status}): ${String.fromBytes(err, 0, err.length)}`)
+}
+```
+
+It is `process.spawn` in the capability report, and refused when compiling for
+WebAssembly. See
+[Directories and subprocesses](../../LANGUAGE.md#directories-and-subprocesses).
+
+`nish:fs` is where a program replaces a file in one step: write the new
+contents beside the target, then `renameSync` the temporary over it, so a
+reader sees the old file or the new one and never half of either.
+`renameSync`, `unlinkSync`, `writeFileBytesSync` and the mode-taking writes
+below answer a number instead
+of exiting: `0` (or the bytes written) on success and a negative errno on
+failure, such as `-2` for a missing path or `-18` when the two names are on
+different filesystems, so the program decides what to say. Bytes that are
+not text, a `u8[]` from `readFileBytesSync` or a codec, go out as they are
+through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
+[File I/O](../../LANGUAGE.md#file-io). A native string built by
+`String.fromBytes` carries any bytes, and `write` and `writeFileSync` send it
+as it is, but under `--emit-ts` `String.fromBytes` decodes UTF-8 and an
+invalid sequence becomes U+FFFD, so `writeBytes` and `writeFileBytesSync` are
+the route that is exact everywhere.
+
+Writing a secret to disk, a key or a token, takes three things
+`writeFileSync` does not give. `writeFileSyncMode(path, data, 0o600)` leaves
+the file at exactly the mode you name, set before the first byte is written,
+so the umask cannot widen it and a file that was `0644` is narrowed before it
+holds the secret. A symbolic link at `path` is refused with a negative errno
+(`-40` on Linux) and the file it names is left alone, so nobody can point your
+write somewhere else. And to replace a secret in one step, write it at `0600`
+to a temporary beside the target and `renameSync` the temporary over it: a
+reader then sees the old secret or the new one, never half of either.
+`createFileExclusiveSync(path, data, mode)` is the same write that fails with
+`-17` when the name already exists, so of any number of processes racing for
+one path exactly one wins: a lock file, released with `unlinkSync`.
+`mkdirSyncMode(path, 0o700)` makes a directory only you can enter; the umask
+still applies to a directory, which only ever narrows it. A mode past `0o777`,
+the setuid, setgid and sticky bits included, is `-22` and nothing is made. The
+numbers are the platform's errno values (Linux's shown).
 
 | Module | What it gives you |
 | --- | --- |
@@ -36,21 +104,27 @@ many cores and bytes of memory the machine has (`availableParallelism`,
 | [`nish/json-tokenizer`](#nishjson-tokenizer) | `JsonTokenizer`, which checks any JSON text and reads it one token at a time, with limits |
 | [`nish/json-typed`](#nishjson-typed) | `jsonDecode` and `jsonEncode`: read a JSON object into a class and write one back, with renamed and optional keys and lossless numbers |
 | [`nish/json-value`](#nishjson-value) | `JsonDocument`: any JSON document as a tree to read, change and write back, with every number kept exactly as written |
-| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column` |
+| [`nish/yaml`](#nishyaml) | `parseYaml`: a YAML 1.2 stream as documents, nodes and diagnostics, each with its byte range; `pathNode` to find a key, through aliases and merge keys; `nish/yaml-lines` for `line:column`; `stringifyYaml` in `nish/yaml-write` to write a JSON value as YAML |
 | [`nish/pair`](#nishpair) | `Pair<A, B>`, for a function that returns two values |
 | [`nish/map`](#nishmap) | `getOrInsert` and `reserve` for `Map` |
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` for the runs a parser skips and a writer copies |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
-| [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
+| [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
+| [`nish/cli-args`](#nishcli-args) | `Cli` and `parse`: a command tree, its flags and arguments, help and did-you-mean errors |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
 | [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
 | [`nish/threads`](#nishthreads) | `parallelMapInto`, `parallelMap`, `parallelFrom`, `parallelReduce`, `scope`, `Mutex`, `Channel` |
 | [`nish:secret`](#nishsecret) | `Secret<T>`: key material the compiler keeps from leaking, and wipes |
-| [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, base64url, bcrypt |
+| [`nish/crypto/*`](#nishcrypto) | SHA-2, HMAC, HKDF, ChaCha20-Poly1305, AES-GCM, X25519, Ed25519, P-256 ECDSA, X.509, trust anchors, base64url, bcrypt |
 | [`nish/net/*`](#nishnet) | TLS 1.3, QUIC, HTTP/1.1, HTTP/2, HTTP/3, WebSocket, an HTTP router, a PostgreSQL client |
-| [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing |
+| [`nish/compress/*`](compression.md) | gzip, zlib and raw DEFLATE, both ways, into buffers you own or streamed; CRC-32 and Adler-32; `nish/net/http-compress` for `Accept-Encoding` and gzip responses |
+| [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing; `urlParse`, `urlResolve` and `urlOrigin` for a whole URL |
+| [`nish/net/dns-message`](#nishnetdns-message) | `dnsBuildQuery` and `dnsParseReply`: one DNS question as bytes, and the A or AAAA addresses a reply gives it, following its CNAME chain, with every count and pointer bounded |
+| [`nish/net/dns-config`](#nishnetdns-config) | `dnsParseResolvConf` and `dnsParseHosts`: `/etc/resolv.conf` and `/etc/hosts` read into fixed tables; `dnsHostsFind` and `dnsParseAddress` |
+| [`nish/net/dns-resolver`](#nishnetdns-resolver) | `DnsResolver`: a DNS stub resolver with no I/O of its own, which says what to send and reads what came back; it builds for `wasm32` |
+| [`nish/net/dns`](#nishnetdns) | `DnsClient`, the resolver on your own `pollWait` loop, and `resolveHost`, a blocking lookup for a CLI or start-up |
 
 ## `nish/testing`
 
@@ -815,6 +889,54 @@ range, for `commentCount` and `comment`) and `firstDocumentOnly` (warn
 `MULTIPLE_DOCUMENTS` and stop after the first). Tabs are never indentation, as
 YAML says.
 
+### Writing YAML
+
+`stringifyYaml(doc, v)` from `nish/yaml-write` writes a `nish/json-value`
+value as YAML that `parseYaml` reads back as the same tree: block style with a
+two-space indent, `{}` and `[]` for an empty object and array, `null`, `true`
+and `false` plain, a number as its JSON text, and a trailing newline. It
+answers `""` for a handle that names no value and for a tree deeper than
+`JSON_WRITER_MAX_DEPTH`, the limit `stringify` keeps.
+
+```ts nish:ok
+import { JsonLimits } from "nish/json-tokenizer";
+import { JsonDocument } from "nish/json-value";
+import { parseYaml } from "nish/yaml";
+import { stringifyYaml } from "nish/yaml-write";
+
+export const main = (): i32 => {
+  const doc = new JsonDocument(new JsonLimits());
+  const root = doc.parseText(`{"name":"nish","version":"0.24","tags":["yaml","no"],"empty":{}}`);
+  const yaml = stringifyYaml(doc, root);
+  console.log(yaml);
+  return parseYaml(yaml).errorCount();
+};
+```
+
+It prints:
+
+```yaml
+name: nish
+version: "0.24"
+tags:
+  - yaml
+  - "no"
+empty: {}
+```
+
+**Which strings are quoted.** A string is written plain unless YAML would read
+it as something else, and then double-quoted: an empty string; `~` and the
+words `null`, `true`, `false`, `yes`, `no`, `on`, `off`, `y` and `n` in any
+case; anything that starts like a number (an optional sign, then a digit or
+`.` and a digit) or is `.inf` or `.nan`, signed or not, in any case; a string
+that starts with an indicator (`@`, `` ` ``, `\`, `*`, `&`, `!`, `|`, `>`,
+`%`, `'`, `"`, `#`, `,`, `[`, `]`, `{`, `}`), with `-`, `?` or `:` followed
+by a space or nothing, or with `---` or `...`; a string with a leading or
+trailing space, a trailing `:`, or a `: ` or ` #` inside; a key `<<`, which
+would be a merge key; and a string holding a control character, a line break,
+U+2028, U+2029, U+FEFF, U+FFFE or U+FFFF, which are escaped. A key longer than
+1024 bytes as written is an explicit key, `? key` and then `: value`.
+
 ## `nish/pair`
 
 `Pair<A, B>` is an interface with two fields, `first` and `second`, and
@@ -1008,6 +1130,280 @@ and how many colours it has. To keep a
 program free of both, make the style yourself: `new Style(on, colour)`, where
 `on` turns painting on and `colour` picks the theme's colours over the
 monochrome failsafe.
+
+### Colours
+
+A `Style` also paints any text, not only a menu, with the same policy: plain
+when `on` is false, and the theme's colours only when `colour` is true.
+
+| group | methods | under the failsafe |
+| --- | --- | --- |
+| foreground | `black` `red` `green` `yellow` `blue` `magenta` `cyan` `white`, and `brightBlack` (gray) through `brightWhite` | plain |
+| background | `bgBlack` through `bgWhite`, and `bgBrightBlack` through `bgBrightWhite` | plain |
+| attributes | `bold` `faint` `italic` `underline` `inverse` `strikethrough` | painted |
+| raw | `sgr(text, codes)`, any SGR parameter list: `"1;31"`, `"38;5;208"`, `"38;2;255;128;0"` | plain |
+
+Each answers `text` between its escape and a reset, or `text` unchanged when
+it paints nothing. The sixteen colours are the ones your terminal theme
+redefines; a 256-colour or truecolor tone ignores the theme, so it goes
+through `sgr`, where you ask for it on purpose. The `SGR_` constants
+(`SGR_RED`, `SGR_BRIGHT_BLACK`, `SGR_BG_BLUE`, `SGR_BOLD`, ...) spell the
+codes, so `` s.sgr(text, `${SGR_BOLD};${SGR_RED}`) `` combines them without
+numbers. Nesting works too, but every painter ends with a full reset, so
+text after an inner painted part loses the outer marks: join the codes for
+anything longer than one part.
+
+**The menu's roles can be recoloured.** Each role a `HelpMenu` paints keeps
+two SGR lists, one for the theme and one for the failsafe:
+`headingThemed`/`headingMono`, `nameThemed`/`nameMono`,
+`flagThemed`/`flagMono`, `metaThemed`/`metaMono` and `dimThemed`/`dimMono`.
+Set a pair before you build the menu; an empty list leaves that role plain.
+The defaults are the ones described above.
+
+```ts nish:ok
+import { HelpMenu, SGR_BOLD, SGR_GREEN, agentDriven, styleFor } from "nish/cli";
+
+export const main = (): i32 => {
+  const style = styleFor(1, agentDriven());
+  style.flagThemed = `${SGR_BOLD};${SGR_GREEN}`;
+  const menu = new HelpMenu(style, "greet", 24, 30);
+  menu.header("1.2.0", "say hello");
+  menu.row("--shout", "", "in capitals");
+  console.log(menu.text());
+  console.log(`${style.red("error:")} ${style.bold("no name given")}`);
+  return 0;
+};
+```
+
+### Parsing flags
+
+`nish/cli-flags` reads a command line against a table of flags you declare
+once. The same table writes the help rows, so the two cannot drift apart.
+
+```ts nish:ok
+import { HelpMenu, Style } from "nish/cli";
+import { FlagTable } from "nish/cli-flags";
+
+export const main = (): i32 => {
+  const flags = new FlagTable("git-lite");
+  flags.command("remote add", "<name> <url>", "add a remote");
+  flags.string("output", "<file>", "where to write");
+  flags.number("jobs", "<n>", "parallel jobs");
+  flags.boolean("verbose", "say more");
+  flags.repeatable("include", "<dir>", "search here too");
+  const got = flags.parseFrom(process.argv, 1);
+  if (!got.ok) {
+    got.exitUsage();
+  }
+  if (got.command === "") {
+    const menu = new HelpMenu(new Style(false, true), "git-lite", 28, 30);
+    menu.usage("<command> [flags]", "a small git");
+    flags.writeHelp(menu);
+    console.log(menu.text());
+    return 0;
+  }
+  console.log(`${got.command}: ${got.positionals.join(" ")} jobs ${got.num("jobs")}`);
+  return 0;
+};
+```
+
+`git-lite --jobs 4 remote add origin https://example.org --include a
+--include b` runs `remote add` with positionals `origin` and the URL, `jobs`
+4 and `include` `a` then `b`. With no arguments it prints:
+
+```text
+usage: git-lite <command> [flags]  a small git
+
+Commands
+  remote add <name> <url>   add a remote
+
+Flags
+  --output <file>           where to write
+  --jobs <n>                parallel jobs
+  --verbose                 say more
+  --include <dir>           search here too
+```
+
+**Declare** each flag by its name without the dashes, a placeholder for the
+help and a description: `string`, `number` and `repeatable` take a value,
+`boolean` does not. `command(path, shape, description)` declares a
+subcommand of one or more words, with what follows it in the help. A name
+declared twice panics, because the table is your program's own text, and so
+does one no command line could match: a flag name with a leading `-`, an `=`
+or whitespace, a command word with a leading `-`, or a flag `no-x` beside a
+boolean `x`, whose `--no-x` it would be.
+`parseFrom(process.argv, 1)` reads the command line after the program's own
+path, and `parse(args)` reads every string in `args`.
+
+**The grammar** is the long-option one most tools share, without short
+options:
+
+- `--name value` and `--name=value` give a value; `--name=` gives the empty
+  string. The next argument is the value whatever it looks like, so
+  `--jobs -1` is minus one and `--output --` writes to a file named `--`.
+- `--name` sets a boolean and `--no-name` clears it. A boolean takes no
+  `=value`.
+- A repeatable flag keeps every value in the order given. Any other flag
+  given twice is an error.
+- `--` ends the flags: everything after it is a positional, even `--verbose`
+  and a second `--`. A positional that starts with `-`, such as a negative
+  number, needs a `--` before it, or it reads as a flag.
+  A lone `-` is an ordinary word, as for a tool that reads `-` as stdin.
+- The words that are not flags may come before, between or after them. The
+  leading ones choose the command, the longest declared path they spell, and
+  the rest are `positionals`. A flag belongs to the whole table, not to one
+  command: check `got.command` to refuse one where it does not apply.
+
+**Reading the answer.** `got.command` is the matched path, or `""` when no
+words were given. `str`, `num`, `bool` and `all` read a flag of that kind by
+name; a flag that was not given reads as `""`, `0`, `false` or no values,
+and `has(name)` tells that apart from one given as such. A number is a
+finite `f64` written in decimal: an optional sign, digits with an optional
+fraction, and an optional exponent (`-2.5`, `.5`, `1e3`), in ASCII. Hex and
+binary, `Infinity`, an empty value, spaces round it, and a value too large
+for an `f64` (`1e999`) are refused, the same natively as under Node. Asking for a name the table does not declare, or
+as the wrong kind, panics.
+
+**A usage error is data.** `parse` stops at the first one: an unknown flag
+(any `-x` with one dash is one), a flag missing its value, a number that is
+not one, a flag given twice, a value on a boolean, or words that spell no
+declared command once any is declared. `got.ok` is false, and `got.code`
+(a `FLAG_ERR_*` constant), `got.message` and `got.argument` say what went
+wrong, so a program can word it its own way. `got.exitUsage()` is the usual
+ending: it writes
+
+```text
+git-lite: --jobs needs a number, not "four"
+usage: git-lite remote add <name> <url> [flags]
+```
+
+to stderr and exits 2, the status `nish` itself uses for a usage error.
+`usageError()` answers those two lines without printing them. `exitUsage`
+reaches `exit`; the rest of the module reaches no
+[capability](../../LANGUAGE.md#capabilities).
+
+## `nish/cli-args`
+
+`nish/cli-args` parses the command line of a tool with many commands
+(`api users keys list 42 --limit 5`): you declare the tree once, `parse`
+walks the arguments, and the answer is the id of the command they reached
+and every flag's value with where it came from. `finish` then prints the
+help, the version or an error, the way [`nish/cli`](#nishcli) lays help out.
+
+```ts nish:ok
+import { Cli, ROOT, finish } from "nish/cli-args";
+import { agentDriven, styleFor } from "nish/cli";
+
+const LIST: i32 = 1;
+
+export const main = (): i32 => {
+  const cli = new Cli("api", "1.4.0", "Talk to the Example API");
+  const raw = cli.globalFlag("-r, --raw-output", "print JSON as it arrives");
+  const users = cli.group(ROOT, "users", "Manage users");
+  const list = cli.command(users, "list", LIST, "List users");
+  const limit = cli.flag(list, "-l, --limit <n>", "at most n users");
+  cli.defaultValue(limit, "20");
+
+  const r = cli.parse(process.argv, 1);
+  const agent = agentDriven();
+  finish(r, styleFor(1, agent), styleFor(2, agent));
+  if (r.id === LIST) {
+    console.log(`listing ${r.value(limit) ?? ""} users, raw: ${r.flag(raw)}`);
+  }
+  return 0;
+};
+```
+
+`api users list -l 5 -r` prints `listing 5 users, raw: true`; `api users`
+says `api users: missing command (one of: list)` on standard error and
+exits 2.
+
+**A builder, not a table.** A command cannot carry its handler, because Nish
+has no function values; instead every declaration answers a handle, an
+`i32`, and the program reads a value by the handle it declared rather than
+by a name a typo could miss. Each command gets an id you choose, which a
+`switch` on `r.id` dispatches on. A mistake in the declarations — a flag
+declared twice in one scope, a bad spec, a required argument after an
+optional one, a command id used twice or negative, a required flag on a
+command that holds commands or with a default, a flag a `--no-` negation
+would shadow — panics at the call that made it, naming it. A module constant
+can only be a number, a boolean or a string, so build the tree in `main` or
+in a class's constructor.
+
+**Declaring.** `new Cli(name, version, description)` is the root, `ROOT`.
+`group(parent, name, description)` adds a command that only holds commands;
+`command(parent, name, id, description)` adds one the program runs.
+`alias(handle, name)` gives either a second name. `flag(cmd, spec,
+description)` declares a flag of one command; `globalFlag(spec,
+description)` one every command accepts, before, between or after the
+verbs. `argument(cmd, spec, description)` declares the next positional
+argument. `defaultValue`, `required`, `repeatable` and `negatable` refine a
+flag, and `epilog(handle, text)` ends a command's help with a paragraph.
+`-h`/`--help` (anywhere before `--`), `-v`/`--version` (at the root) and the word `help`
+as the first command are built in; `help users kyes`, naming no command, is
+the unknown-command error rather than help.
+
+| Spec | Means |
+| --- | --- |
+| `--all` | a boolean, given as `--all` |
+| `-a, --all` | the same, also as `-a`; short flags cluster (`-ar`) |
+| `--limit <n>` | takes a value: `--limit 5`, `--limit=5`, `-l5`, `-l=5`, `-l 5`; `--limit=` and `-l=` give `""` |
+| `--format [fmt]` | the value is optional: `--format json`; given none, `""` |
+| `--no-color` | on by default; `--no-color` turns it off, `--color` back on; a short (`-C, --no-color`) turns it off |
+| `<id>` / `[id]` | a required / optional argument |
+| `<file...>` / `[file...]` | every argument left; only the last one |
+
+**Reading the answer.** `parse(argv, start)` reads `argv` from index
+`start` (1 for `process.argv`, past the program) and never fails: it answers
+a `ParseResult`.
+
+| Member | Answers |
+| --- | --- |
+| `kind` | `PARSE_OK`, `PARSE_HELP`, `PARSE_VERSION` or `PARSE_ERROR` |
+| `id`, `command`, `path` | the reached command's id (-1 for a group), its handle and its command line |
+| `flag(f)` | a boolean's value; for a flag with a value, whether it was given |
+| `value(f)` | the last value given, else the default, else `null` |
+| `values(f)` | every value of a repeatable flag, in order |
+| `source(f)` | `SOURCE_ARGV`, `SOURCE_DEFAULT` or `SOURCE_UNSET` |
+| `positional(a)`, `positionals(a)` | an argument's value; every value from it on |
+| `rest()` | the arguments after `--`, which are also positionals |
+| `message`, `exitCode` | the error or version line; 2 for an error, else 0 |
+| `hint`, `errorPath` | for an error, the pointer to the help and the command it names |
+| `help(style)` | the help of the reached command |
+
+`source` tells a value the user typed from a default, which is what a rule
+the tree cannot state reads, such as two flags that may not be given
+together. `finish(r, outStyle, errStyle)` prints help or the version on
+standard output and exits 0, prints an error and a pointer to the help on
+standard error and exits 2, and returns for `PARSE_OK`. The error line is
+printed plain; `errStyle` paints only `<path> --help` in the pointer:
+
+```text
+api users: unknown command 'kyes' (did you mean 'keys'?)
+Run 'api users --help' for usage.
+```
+
+The first error wins and names the command it was found at; after a flag
+error the walk still goes down the command words, so a later `-h` answers
+the deepest command, and only an unknown command stops it. A misspelt
+command or long flag gets the nearest declared one within two edits, or a
+third of its length if that is more (a swap of two letters is one edit), so
+`--lmt` finds `--limit`; an unknown short flag gets no guess. Help lists a
+command's arguments, its own flags and the global ones, descriptions lined
+up at the widest flag, up to column 32. It appends a default as
+`(default: …)`, and `(required)` and `(repeatable)` to the flags declared so,
+so a description need not say it.
+
+**What it costs and reaches.** Declaring builds no help text, and parsing
+looks each argument up once in a map: on a tree of 500 commands with 8 flags
+each, a parse takes about a microsecond. Help, guesses and error wording are
+worked out only when they are printed. `parse` reaches no
+[capability](../../LANGUAGE.md#capabilities); `finish` writes to standard
+output or standard error and exits. Shell completion and man pages are not
+generated yet, and nish's own command line does not use this module: `src/`
+can only use what a released compiler ships, so it moves onto
+`nish/cli-args` once a release carries it. The example under
+`examples/api-cli/` is a whole client.
 
 ## `nish/term`
 
@@ -1591,8 +1987,12 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x25519` | X25519 key exchange |
 | `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
-| `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
+| `nish/crypto/p384` | P-384 ECDSA verification |
+| `nish/crypto/rsa` | RSA signature verification, PKCS#1 v1.5 and PSS over SHA-256/384/512, under a PKCS#1 public key: `rsaParsePublicKey`, `rsaVerifyPkcs1v15`, `rsaVerifyPss` |
+| `nish/crypto/x509` | DER and PEM, X.509 certificates read with their signature algorithm, key type and v3 extensions, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
+| `nish/crypto/pki-roots` | `pkiLoadSystemRoots()`, the root certificates to trust, parsed: those `SSL_CERT_FILE` and `SSL_CERT_DIR` name when either is set, with no fallback, and otherwise the first system bundle (`pkiSystemBundles()`) and `/etc/ssl/certs`. A block or file it cannot use is counted in `skipped`, never fatal, and only regular files are read; on macOS it reads `/etc/ssl/cert.pem`, not the Keychain, so roots and trust settings added there are missed. Native only |
+| `nish/crypto/pki` | `pkiVerifyServer(chain, hostname, nowMs, store)`, whether a TLS server's chain leads to a root of `pkiTrustStore(roots)` and names the host, as a `PkiResult` of a `code` (`PKI_OK` or a `PKI_ERR_` reason, `pkiReason(code)` its sentence) and the `path`. Checks signatures, validity, CA and path-length rules, key usages, name constraints and the hostname, never the common name; revocation is not checked. [Verifying TLS certificates](./tls-certificates.md) |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
 
 ```ts nish:ok
@@ -1646,7 +2046,8 @@ a bad key length, a tag that does not verify — so narrow the result before you
 use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
 `x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1` and
 `ed25519`, which came later, has been through a security audit (`ed25519` is
-recorded as a change after its area's audit); the records are in
+recorded as a change after its area's audit, and `pki-roots` and `pki` have
+a record written with their code); the records are in
 [docs/security/](../../security/README.md).
 
 ## `nish/net`
@@ -1664,7 +2065,12 @@ that sit on sockets are `nish/net/tls-tcp`, `nish/net/http1-server` (its
 loop re-arms an `Http1Server` slot only when `server.rearm(slot, wants)` says
 its interest changed, so a keep-alive request costs one `recv` and one `send`
 and no `pollModify`. A slot borrows its output buffer only while it writes, so
-an idle connection costs a few KiB, not `outputSize`. An `Http1Server` builds
+an idle connection costs a few KiB, not `outputSize`. Set
+`Http1Config.idleInput` and a slot lends its input and head buffers back too,
+whenever it has answered a request and holds no byte of the next: a server
+holding tens of thousands of keep-alive connections that each send a request
+now and then keeps those buffers only for the connections mid-request, for two
+pool operations a request. It is off by default. An `Http1Server` builds
 a slot's connection on the first accept into it and keeps it for the next, so
 a pool sized for 16,384 connections costs some 16 KiB until they come;
 `bench/http.mjs` load-tests that loop on one core. Call `expire(now)` on an
@@ -1675,15 +2081,33 @@ milliseconds, and one whose request head has been arriving for longer than
 a time cannot hold a slot. Over TLS the head's clock starts with the first
 bytes after the handshake, so a client that finishes its handshake and then
 sends nothing is closed after `headTimeout` too. Both are `Http1Config`
-fields, and a value of 0 or less stops start-up. `TlsTcpServer`,
+fields, and a value of 0 or less stops start-up. Calling `expire` on every
+turn of the loop is cheap: it walks the slots only when one can be due, about
+once per the shorter of the two timeouts, and `expireScans` counts the walks. `TlsTcpServer`,
 `Http1TlsServer`, `Http2TlsServer` and `Http3Server` build a slot the same
 way, on the first connection accepted into it (an `Http2TlsServer` builds slot
 0 in its constructor), so a pool's size is a ceiling on its connections. What
 start-up still takes grows with it: the tables sized from the cap, such as an
 `Http3Server`'s connection-ID index, timer wheel and rings.
 
+`nish/net/tls/client` and `nish/net/tls/record-client` are the client side of
+TLS 1.3, sans-IO like the server. `nish/net/tls/verify` checks the server for
+them (`tlsClientAuthenticate`), and `nish/net/tls-tcp`'s `TlsTcpClient` and
+blocking `tlsConnect` put the client on a TCP socket and check the server
+themselves, against the system's roots or ones you name.
+[TLS client](tls-client.md) shows them.
+
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
+shows it.
+
+`nish/net/http-compress` reads `Accept-Encoding` and gzips a response body,
+and `Http1Connection.respondEncoded` sends one with `Content-Encoding` and
+`Content-Length` set; [Compression](compression.md) shows it.
+
+`nish/net/http1-client` is the client side of HTTP/1.1: `http1RequestHead`
+writes a request's head and `Http1ResponseParser` reads the response, fed
+any slice, refusing every response-smuggling shape RFC 9112 names; [HTTP client](http-client.md)
 shows it.
 
 `nish/net/postgres` is a PostgreSQL client that leaves the socket to your
@@ -1735,6 +2159,15 @@ each connection rather than reading it again. When you drive a `TlsServer` or
 a `TlsRecordServer` yourself rather than through `nish/net/tls-tcp`, call its
 `wipe()` once the connection is done; the carriers call it at every end of a
 connection.
+
+When a `TlsTcpServer` slot ends a connection itself (`shutdown`, or an HTTP
+carrier above it after its answer), it does not close the socket at once:
+it shuts the write side, wipes the slot's keys and answers
+`TLS_RECORD_WANT_READ` until the client hangs up, then `TLS_RECORD_DONE`.
+Closing a socket the client is still writing to resets the connection, and a
+browser can report that reset instead of the response. Keep reading the slot
+until its interest says done, and close slots that stay quiet from your own
+loop's timeout.
 
 A server that lends byte buffers across connections takes them from
 `nish/net/buffer-pool`'s `BufferPool`: a pool of fixed-size buffers, up to a
@@ -1955,8 +2388,340 @@ and answers null for a key past it.
 The byte API does not check that what it decodes is UTF-8: a value may be
 binary. The `name` you give `urlQueryFind` or `urlQueryGet` is ASCII: the
 native build compares it with the key's bytes and Node with its UTF-16 code
-units, so a non-ASCII name answers differently on the two. Nothing here looks
-for a `#`, which is never part of a request target.
+units, so a non-ASCII name answers differently on the two. The byte API never
+looks for a `#`, which is never part of a request target.
+
+### Whole URLs
+
+A client handed a URL by a user, a redirect or a link needs its parts:
+`urlParse(s)` splits an absolute URL into a `Url` (`scheme`, `username`,
+`password`, `host`, `port`, `path`, `query`, `fragment`), and
+`urlResolve(base, ref)` resolves a reference against one, as a browser does
+for a link, removing `.` and `..` so a path never climbs above `/`.
+`urlSerialize` writes a `Url` back. The scheme and host are lower-cased;
+everything else is kept as written, still percent-encoded. `port` is -1 when
+the URL names none; `urlDefaultPort(scheme)` is 80 or 443, and
+`urlOrigin(u)` writes `scheme://host:port` with the port always there, so
+origins compare as plain strings. A host is compared as written, so
+`http://a.com./` (a trailing dot) and `http://[0::1]/` are different origins
+from `http://a.com/` and `http://[::1]/`: an equal string is the same origin,
+and a split errs toward "different".
+
+```ts nish:ok
+import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
+
+const show = (base: Url, ref: string): void => {
+  const u: Url | null = urlResolve(base, ref);
+  if (u === null) {
+    console.log(`${ref} is refused`);
+    return;
+  }
+  console.log(`${ref} -> ${urlSerialize(u)}, host ${u.host}, port ${u.port}`);
+};
+
+export const main = (): i32 => {
+  const base: Url | null = urlParse("https://Example.com/docs/guide/index.html?v=2");
+  if (base === null) {
+    return 1;
+  }
+  show(base, "../api/url.html#parse");
+  show(base, "/../../etc/passwd");
+  show(base, "?v=3");
+  show(base, "//cdn.example.com:8443/app.js");
+  show(base, "http://127.1/");
+  show(base, "http://good.com%2f@evil.com/");
+  show(base, "http://a@b@c/");
+  const origin: string | null = urlOrigin(base);
+  console.log(origin === null ? "no origin" : origin);
+  return 0;
+};
+```
+
+```console
+$ nish run links.ts
+../api/url.html#parse -> https://example.com/docs/api/url.html#parse, host example.com, port -1
+/../../etc/passwd -> https://example.com/etc/passwd, host example.com, port -1
+?v=3 -> https://example.com/docs/guide/index.html?v=3, host example.com, port -1
+//cdn.example.com:8443/app.js -> https://cdn.example.com:8443/app.js, host cdn.example.com, port 8443
+http://127.1/ is refused
+http://good.com%2f@evil.com/ -> http://good.com%2f@evil.com/, host evil.com, port -1
+http://a@b@c/ is refused
+https://example.com:443
+```
+
+**A URL two readers could disagree on is refused**, with null, not repaired:
+a byte outside printable ASCII (a space, a tab, a non-ASCII letter), a
+backslash anywhere (a browser reads it as `/`), a `%` not followed by two hex
+digits, a second `@`, a host byte other than a letter, a digit and `-._~`
+(so a percent-encoded byte), an IPv6
+zone, a port past 65535, and a host that looks
+like a number but is not four decimal parts (`127.1`, `0x7f.0.0.1`,
+`2130706433`, `010.0.0.1`). An http, https, ws or wss URL needs a host. What does
+parse is always one host: in `http://good.com%2f@evil.com/`, everything
+before the `@` is the username.
+
+Resolution is RFC 3986's, strictly: `http:g` against an http base is an
+absolute URL with no host, so it is refused, where a browser reads it as the
+relative `g`. A non-ASCII host is refused, so pass an
+international name in its punycode `xn--` form. An IPv6 host is
+compared as written, so `[::1]` and `[0::1]` are different origins; check
+an address after you resolve the name, never the string, before you trust it.
+
+## `nish/net/dns-message`
+
+A DNS lookup is one UDP datagram out and one back. `nish/net/dns-message` writes
+the first and reads the second; it opens no socket, so you send and receive
+the bytes yourself. `dnsBuildQuery(out, id, name, qtype)` writes a question for
+`name` of type `DNS_TYPE_A` or `DNS_TYPE_AAAA`, with recursion asked for, and
+answers its length: `out` of `DNS_QUERY_MAX_BYTES` (271) always has room. A
+name that is not one (an empty label, a label over 63 bytes, a name over 253,
+a byte outside printable ASCII) answers a negative `DNS_ERR_*` instead. Pick
+`id` at random for each query: it is half of what keeps a forged reply out.
+
+`dnsParseReply(msg, len, query, queryLen, port, reply)` reads a reply into a
+`DnsReply` you make once and reuse. It answers the reply's RCODE
+(`DNS_NOERROR`, `DNS_NXDOMAIN`, `DNS_SERVFAIL`, `DNS_REFUSED`) or a negative
+`DNS_ERR_*`: a reply whose ID, question or flags do not match your query is
+refused before a record is read, so read it as "not my answer" and keep
+waiting. On `DNS_NOERROR`, `reply.count` addresses are in `reply.addresses`,
+18 bytes each, the form `nish:net` connects to, with `port` written in; at
+most `DNS_MAX_ANSWERS` (8) are kept and `reply.dropped` counts the rest. When
+`reply.truncated` is set, nothing was read: ask again over TCP.
+
+```ts nish:ok
+import {
+  DNS_ERR_NOT_REPLY,
+  DNS_QUERY_MAX_BYTES,
+  DNS_TYPE_A,
+  DnsReply,
+  dnsBuildQuery,
+  dnsParseReply,
+} from "nish/net/dns-message";
+
+export const main = (): i32 => {
+  const query: u8[] = new Array<u8>(DNS_QUERY_MAX_BYTES);
+  const n: i32 = dnsBuildQuery(query, 0x1234, "example.com", DNS_TYPE_A);
+  console.log(`${n} bytes`);
+  // A reply that is only an echo of the query has QR clear: not a reply.
+  const reply = new DnsReply();
+  const status: i32 = dnsParseReply(query, n, query, n, 443, reply);
+  console.log(`${status === DNS_ERR_NOT_REPLY ? "not a reply" : "read"}`);
+  return 0;
+};
+```
+
+```console
+$ nish run lookup.ts
+29 bytes
+not a reply
+```
+
+**A CNAME chain is followed inside the one reply.** An address is kept only
+when its owner is the name you asked, or the last name a CNAME record before
+it pointed to; a record for any other name is read past. Compression pointers
+must point backwards, at most 16 deep, and a name never grows past 255 bytes,
+so no reply makes the parser loop or read outside `msg[0, len)`.
+
+## `nish/net/dns-config`
+
+`nish/net/dns-config` reads `/etc/resolv.conf` and `/etc/hosts` from bytes you
+have already read, into tables of fixed size. `dnsParseResolvConf(b, off, len,
+config)` fills a `DnsConfig`: up to three `servers` (18 bytes each, on port
+53), up to six `search` domains in 256 bytes, and `ndots`, `timeout` and
+`attempts` from `options`, each clamped (0 to 15, 1 to 30, 1 to 5). A file
+with no usable `nameserver` gives 127.0.0.1 and ::1, as glibc does.
+`dnsParseHosts(b, off, len, hosts)` fills a `DnsHosts`, and
+`dnsHostsFind(hosts, name, qtype, port, out, max)` writes the addresses it
+gives `name`, without case, in file order, and answers how many.
+
+```ts nish:ok
+import { DnsHosts, dnsHostsFind, dnsParseHosts } from "nish/net/dns-config";
+import { DNS_TYPE_A } from "nish/net/dns-message";
+
+const bytesOf = (text: string): u8[] => {
+  const out: u8[] = [];
+  const n: i32 = toI32(text.length);
+  for (let i: i32 = 0; i < n; i++) {
+    out.push(toU8(text.charCodeAt(i)));
+  }
+  return out;
+};
+
+export const main = (): i32 => {
+  const file = bytesOf("127.0.0.1 localhost\n::1 localhost\n192.0.2.7 Build.Lan build # CI\n");
+  const hosts = new DnsHosts();
+  dnsParseHosts(file, 0, toI32(file.length), hosts);
+  const out: u8[] = new Array<u8>(4 * 18);
+  console.log(`${dnsHostsFind(hosts, "BUILD", DNS_TYPE_A, 22, out, 4)} address, ${out[15]}`);
+  return 0;
+};
+```
+
+```console
+$ nish run hosts.ts
+1 address, 7
+```
+
+Neither file is trusted to be small: what does not fit a table is dropped and
+counted (`droppedServers`, `droppedSearch`, `droppedEntries`, `droppedNames`),
+and a line over 1024 bytes is skipped whole and counted in `skippedLines`. An
+address is a strict literal: `010.0.0.1` and `fe80::1%eth0` are refused, not
+read as octal or with a zone. `dnsParseAddress` is the same reader, for a
+literal anywhere in your own bytes.
+
+## `nish/net/dns-resolver`
+
+`DnsResolver` is a stub resolver: it asks the servers in a `DnsConfig` for a
+name's A and AAAA records and gives you the addresses. It opens no socket,
+reads no clock and reads no file, so it builds for `wasm32` too; you, or
+[`nish/net/dns`](#nishnetdns), move its bytes. `new DnsResolver(config, hosts,
+maxLookups)` makes every buffer it will need, for up to `maxLookups` lookups at
+once (1 to 64), so a lookup allocates only the sixteen bytes an address
+literal is parsed into.
+
+`start(name, port, nowNanos)` begins a lookup and answers its slot.
+`nextOutgoing(out, to, meta, id)` says what to do next, a query to send over
+UDP or TCP or a socket to close, with `id` a fresh random 16-bit number each
+time; `receive` and `receiveStream` take what came back; `tick(nowNanos)` moves
+on from a server that did not answer by `nextDeadlineNanos()`. `result(lookup,
+out, ttls)` answers `DNS_RESOLVE_PENDING` while the lookup runs, then the
+address count, A first, 18 bytes each with `port` written in, and each TTL in
+seconds: the smallest TTL of the address records, not of the CNAMEs that led to
+them. A failure is `DNS_RESOLVE_NOT_FOUND` (the name has no address: NXDOMAIN,
+or NODATA, a name with no A or AAAA record), `DNS_RESOLVE_NO_ANSWER` (no server
+answered) or `DNS_RESOLVE_CNAME` (an alias chain ran past 8, or led back to
+the name asked across replies; a loop inside one reply is
+`DNS_RESOLVE_NOT_FOUND`). `start` itself answers a negative code when it
+cannot begin: `DNS_RESOLVE_BUSY` when every slot is taken, or the `DNS_ERR_*`
+code of `nish/net/dns-message` for a name that is not one, such as `""` or a
+label over 63 bytes. Check it before you pass it to `result`, which panics on a
+number that is not a lookup.
+
+`localhost`, an address literal and a name your hosts table has answer at once,
+with no packet sent:
+
+```ts nish:ok
+import { DnsResolver } from "nish/net/dns-resolver";
+import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config";
+import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";
+
+export const main = (): i32 => {
+  const config = new DnsConfig();
+  dnsParseResolvConf(new Array<u8>(0), 0, 0, config);
+  const resolver = new DnsResolver(config, null, 1);
+  const lookup: i32 = resolver.start("localhost", 443, toI64(0));
+  const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
+  const ttls: i32[] = new Array<i32>(16);
+  console.log(`${resolver.result(lookup, out, ttls)} addresses, 127.0.0.${out[15]} first`);
+  return 0;
+};
+```
+
+```console
+$ nish run local.ts
+2 addresses, 127.0.0.1 first
+```
+
+**A forged reply cannot end a lookup.** A reply from another address or port
+than the server's, or with another ID or question, is dropped and counted
+(`droppedSource`, `droppedId`, `droppedQuestion`), and the lookup keeps
+waiting for the true one. A truncated reply is asked again over TCP, once; a
+server that does not answer in `timeout` seconds gives way to the next, for
+`attempts` rounds; a name with fewer dots than `ndots` is tried with each
+`search` domain. When one family answers NXDOMAIN and the other reached no
+server, the next candidate is tried, and if none answers the lookup ends with
+the unreachable family's error. Every counter stops at 2,147,483,647 rather
+than wrapping. Every lookup ends.
+
+## `nish/net/dns`
+
+`nish/net/dns` drives a `DnsResolver` over `nish:net` sockets on the loop your
+program already runs, so a lookup never stops a server from serving. `new
+DnsClient(resolver, loop, tokenBase)` joins your `pollCreate` loop under the
+tokens `tokenBase` to `tokenBase + client.tokens() - 1`. Start a lookup with
+`client.start(name, port, now)`, pass `client.timeoutMs(now, yours)` to
+`pollWait`, hand every ready token `client.owns(token)` claims to
+`client.ready(token, events, now)`, call `client.tick(now)` after each wake,
+and read `client.result(lookup, out, ttls)` until it is not
+`DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket with a random ID,
+and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32) datagrams, so a
+flood on the port cannot keep your loop inside the client.
+
+```ts nish:ok
+import { DnsClient } from "nish/net/dns";
+import { DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver";
+import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config";
+import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";
+import { pollCreate, pollWait } from "nish:net";
+import { monotonicNanos } from "nish:process";
+
+export const main = (): i32 => {
+  const config = new DnsConfig();
+  const conf: u8[] = [];
+  const text = "nameserver 192.0.2.53\n";
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    conf.push(toU8(text.charCodeAt(i)));
+  }
+  dnsParseResolvConf(conf, 0, toI32(conf.length), config);
+  const loop: i32 = pollCreate();
+  const client = new DnsClient(new DnsResolver(config, null, 4), loop, 100);
+  const lookup: i32 = client.start("example.com", 443, monotonicNanos());
+  if (lookup < 0) {
+    console.log(`not started: ${lookup}`);
+    return 1;
+  }
+  const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
+  const ttls: i32[] = new Array<i32>(16);
+  const ready: i32[] = new Array<i32>(16);
+  let status: i32 = client.result(lookup, out, ttls);
+  while (status === DNS_RESOLVE_PENDING) {
+    // Your own sockets share this loop; -1 means you have no timer of your own.
+    const count: i32 = pollWait(loop, ready, client.timeoutMs(monotonicNanos(), -1));
+    const now: i64 = monotonicNanos();
+    for (let k: i32 = 0; k < count; k++) {
+      if (client.owns(ready[2 * k])) {
+        client.ready(ready[2 * k], ready[2 * k + 1], now);
+      }
+    }
+    client.tick(now);
+    status = client.result(lookup, out, ttls);
+  }
+  console.log(`${status}`);
+  return 0;
+};
+```
+
+`resolveHost(name, timeoutMs, port, out, ttls)` is the same lookup with
+`/etc/resolv.conf` and `/etc/hosts` read for you, on a loop of its own: **it
+blocks** until the lookup ends or `timeoutMs` passes
+(`DNS_RESOLVE_TIMEOUT`), so it is for a command-line tool or a program's
+start-up, not a server's loop. It waits for both the A and the AAAA answer, so
+a family that answered is not returned on its own when `timeoutMs` passes. A
+`pollWait` that fails cancels the lookup and its negative errno is the answer;
+a name `start` refuses answers `start`'s code. `dnsLookupWith` is the same with a
+configuration you give it.
+
+```ts nish:ok
+import { resolveHost } from "nish/net/dns";
+import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";
+
+export const main = (): i32 => {
+  const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
+  const ttls: i32[] = new Array<i32>(16);
+  console.log(`${resolveHost("localhost", 2000, 80, out, ttls)} addresses`);
+  return 0;
+};
+```
+
+```console
+$ nish run host.ts
+2 addresses
+```
+
+A program that uses `DnsClient` reports `net` and `entropy` under
+`--emit-capabilities`, the IDs being random; `resolveHost` adds `fs.read` for
+the two files and `clock` for its deadline. Both are native only, as every
+`nish:net` call is.
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports

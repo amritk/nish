@@ -228,6 +228,12 @@ declare function write(s: string): void;
 /** `s` to stderr, likewise. */
 declare function writeError(s: string): void;
 /**
+ * `bytes[off .. off + len)` to stdout, every byte as it is, partial writes and
+ * interruptions retried: the count, or a negative errno. A range outside
+ * `bytes` panics, as `dst.set` does. The shape is `netWrite`'s.
+ */
+declare function writeBytes(bytes: readonly u8[], off: i32, len: i32): i32;
+/**
  * `message` and a newline to stderr, then exit 1. Terminates control flow, so
  * it is `never`: that is what lets `tsc` agree that a function ending in a
  * `panic` returns, and that `x` is not null after `if (x === null) { panic(...); }`
@@ -257,6 +263,46 @@ declare function readFileBytesSync(path: string): u8[] | null;
 declare function writeFileSync(path: string, data: string): void;
 /** `data` added at the end of the file, with the same refusal of a symbolic link. */
 declare function appendFileSync(path: string, data: string): void;
+/**
+ * The file's contents replaced by `bytes`, created at 0644 when missing, with
+ * the same refusal of a symbolic link: the byte count, or a negative errno.
+ * Never an exit.
+ */
+declare function writeFileBytesSync(path: string, bytes: readonly u8[]): i32;
+/**
+ * `from` moved to `to`, replacing a file there in one step on one file system:
+ * 0, or a negative errno (-18 across file systems, -2 for a missing `from`).
+ */
+declare function renameSync(from: string, to: string): i32;
+/** The name `path` removed: 0, or a negative errno. A directory is refused, not removed. */
+declare function unlinkSync(path: string): i32;
+/**
+ * `writeFileSync` with an explicit `mode`: the file is exactly `mode`
+ * (`0o600` for a secret) before a byte of `data` is in it, whatever the umask
+ * or a file already there had, and a symbolic link at the path is refused
+ * (-40). The byte count, or a negative errno: -22 for a mode outside
+ * 0..0o777, the setuid, setgid and sticky bits included. The file is
+ * truncated and written in place, so a crash or a failed write leaves it
+ * empty or partial, and a file this process may write but does not own is
+ * emptied before the mode change answers -1 (`EPERM`). For a file that must
+ * be the old one or the new one, write a temporary name with this and move it
+ * with `renameSync`. Never an exit.
+ */
+declare function writeFileSyncMode(path: string, data: string, mode: i32): i32;
+/**
+ * `data` in a new file of exactly `mode`, created only if nothing is at `path`:
+ * -17 when something is, a dangling symbolic link included. Of several
+ * processes racing for one path exactly one succeeds, so it takes a lock. The
+ * byte count, or a negative errno; a write that fails after the create
+ * removes the file, so the lock is not left taken. Never an exit.
+ */
+declare function createFileExclusiveSync(path: string, data: string, mode: i32): i32;
+/**
+ * One directory made with `mode` less the umask (`0o700` is exact under any
+ * umask that leaves the owner's bits): 0, or a negative errno. A path already
+ * there is -17 and its mode is not changed; -22 for a mode outside 0..0o777.
+ */
+declare function mkdirSyncMode(path: string, mode: i32): i32;
 /** One directory, not recursive; whether a directory is there afterwards. */
 declare function mkdirSync(path: string): boolean;
 /** Whether a directory is at `path` right now. One `stat`, and never an exit. */
@@ -281,6 +327,13 @@ declare function spawnSync(argv: string[]): number;
  */
 declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
 /**
+ * The same run with all three streams on pipes: `stdin` is written to the
+ * child and closed, and what it prints is appended to `stdout` and `stderr`.
+ * The status as `spawnSync` answers it, or -2 when a stream passed 16 MiB:
+ * the child is then killed and each array keeps at most the first 16 MiB.
+ */
+declare function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
+/**
  * Start `argv[0]` through `PATH` without waiting: the child's pid, or a
  * negative errno. The child is the program's until `waitPid` reaps it. No
  * reading under Node, which throws.
@@ -302,6 +355,21 @@ declare function waitPid(pid: i32, flags: i32): i32[];
 declare function availableParallelism(): i32;
 /** Bytes of physical memory, or -1 when the host does not say. */
 declare function totalMemory(): i64;
+/**
+ * Set this process's nice value to `n`: 0, or a negative errno. The kernel
+ * clamps `n` to -20..19, and lowering it below the current value needs the
+ * privilege to (-13 without it on Linux). Children started afterwards inherit
+ * it. Throws under Node.
+ */
+declare function setNice(n: i32): i32;
+/**
+ * Move this process to `SCHED_IDLE`, which runs it only when nothing else wants
+ * the CPU: 0, or a negative errno, and -95 where the host has no such policy
+ * (Darwin). An unprivileged process can never leave `SCHED_IDLE` again, and an
+ * idle process can starve on a saturated machine, so a caller keeps a
+ * normal-priority fallback for work that must finish. Throws under Node.
+ */
+declare function setIdlePriority(): i32;
 /** One environment variable, or `null` when it is unset (an empty value is a set variable). */
 declare function getenv(name: string): string | null;
 /**
@@ -309,6 +377,11 @@ declare function getenv(name: string): string | null;
  * origin is arbitrary, so only the difference between two reads is meaningful.
  */
 declare function monotonicNanos(): i64;
+/**
+ * The wall clock in nanoseconds since the Unix epoch, for dating an event. It
+ * steps when the system time is set, so a duration is `monotonicNanos`'s.
+ */
+declare function wallClockNanos(): i64;
 /**
  * The modification time of `path` in milliseconds since the epoch, with the
  * sub-millisecond fraction the file system keeps (Node's `mtimeMs`), or NaN
@@ -353,7 +426,7 @@ declare function netWrite(fd: i32, buf: readonly u8[], off: i32, len: i32): i32;
 declare function netShutdown(fd: i32, how: i32): i32;
 /** Close the descriptor. */
 declare function netClose(fd: i32): i32;
-/** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. */
+/** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. It holds `TCP_NODELAY`, so a small write is sent at once. */
 declare function tcpConnect(addr: readonly u8[]): i32;
 /** Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused). */
 declare function connectResult(fd: i32): i32;
@@ -381,6 +454,26 @@ declare function pollModify(loop: i32, fd: i32, events: i32, token: i32): i32;
 declare function pollRemove(loop: i32, fd: i32): i32;
 /** Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error). */
 declare function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
+/**
+ * Set one socket option from a whitelist: `option` is one of the `NET_*` ids
+ * below, and any other is -22; there is no raw level and option number. 0, or
+ * a negative errno (-9 a closed descriptor, -88 not a socket).
+ */
+declare function netSetOption(fd: i32, option: i32, value: i32): i32;
+/** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
+declare const NET_TCP_NODELAY: i32;
+/**
+ * `TCP_QUICKACK` (Linux; -95 elsewhere): `value` 1 acknowledges at once, 0
+ * delays. Linux does not keep quick-ACK mode: the kernel leaves it on its own,
+ * so a server that wants a mode sets it again after every response.
+ */
+declare const NET_TCP_QUICKACK: i32;
+/** `SO_KEEPALIVE`: `value` 1 probes an idle connection, 0 does not. */
+declare const NET_SO_KEEPALIVE: i32;
+/** `SO_SNDBUF`: the send buffer, `value` in bytes; Linux doubles the value it stores. */
+declare const NET_SO_SNDBUF: i32;
+/** `SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
+declare const NET_SO_RCVBUF: i32;
 
 // ---- `nish:term` ------------------------------------------------------------------
 //
@@ -433,6 +526,9 @@ declare var crypto: {
 //
 // `docs/LANGUAGE.md` -> Builtins -> Builtin modules is the normative list.
 
+// Every negative errno a file call answers is the platform's own, untranslated:
+// the numbers shown here are Linux's (-2 ENOENT, -17 EEXIST, -18 EXDEV, -22
+// EINVAL, -40 ELOOP), and Darwin's differ (ELOOP is -62 there).
 declare module "nish:fs" {
   export function readFileSync(path: string): string;
   export function readFileSyncOrNull(path: string): string | null;
@@ -441,6 +537,18 @@ declare module "nish:fs" {
   export function writeFileSync(path: string, data: string): void;
   /** Refuses a symbolic link as the last component of the path, as the global does. */
   export function appendFileSync(path: string, data: string): void;
+  /** The byte count, or a negative errno; refuses a symbolic link as `writeFileSync` does. */
+  export function writeFileBytesSync(path: string, bytes: readonly u8[]): i32;
+  /** 0, or a negative errno: -18 across file systems. */
+  export function renameSync(from: string, to: string): i32;
+  /** 0, or a negative errno: a directory is refused, not removed. */
+  export function unlinkSync(path: string): i32;
+  /** The byte count, or a negative errno; the file is exactly `mode` (0..0o777) before it holds a byte, a link refused, written in place. */
+  export function writeFileSyncMode(path: string, data: string, mode: i32): i32;
+  /** As `writeFileSyncMode`, but -17 when anything is at `path`: one racer wins; a failed write removes the file. */
+  export function createFileExclusiveSync(path: string, data: string, mode: i32): i32;
+  /** 0, or a negative errno: -17 for a path already there, whose mode is left alone. */
+  export function mkdirSyncMode(path: string, mode: i32): i32;
   /** `true` when the directory was created, `false` when it already existed. */
   export function mkdirSync(path: string): boolean;
   export function isDirectorySync(path: string): boolean;
@@ -465,6 +573,11 @@ declare module "nish:process" {
    * at either path is refused, and the answer is -1.
    */
   export function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
+  /**
+   * The same run with `stdin` written to the child and its stdout and stderr
+   * appended to the two arrays: the status, or -2 past 16 MiB on a stream.
+   */
+  export function spawnPiped(argv: string[], stdin: readonly u8[], stdout: u8[], stderr: u8[]): i32;
   /** Start a child without waiting: its pid, or a negative errno. */
   export function spawn(argv: string[]): i32;
   /** Send 0, 2, 9 or 15 to `pid`: 0, or a negative errno; any other signal is -22. */
@@ -475,11 +588,21 @@ declare module "nish:process" {
   export function availableParallelism(): i32;
   /** Bytes of physical memory, or -1. */
   export function totalMemory(): i64;
+  /** Set this process's nice value (clamped to -20..19): 0, or a negative errno. */
+  export function setNice(n: i32): i32;
+  /**
+   * Move this process to `SCHED_IDLE`: 0, a negative errno, or -95 off Linux.
+   * An unprivileged process can never leave it, and an idle process can starve
+   * on a saturated machine, so a caller keeps a normal-priority fallback.
+   */
+  export function setIdlePriority(): i32;
   /**
    * A monotonic clock in nanoseconds. The origin is arbitrary, so only the
    * difference between two reads is meaningful.
    */
   export function monotonicNanos(): i64;
+  /** The wall clock in nanoseconds since the Unix epoch; it steps when the system time is set. */
+  export function wallClockNanos(): i64;
   /** A descriptor readable when SIGTERM or SIGINT arrives; the same one every call, or -1. */
   export function signalFd(): i32;
   /** Block until SIGTERM or SIGINT arrives: 15 or 2, or -1 for a descriptor that is not `signalFd()`'s. */
@@ -510,7 +633,7 @@ declare module "nish:net" {
   /** Shut the read side (0), the write side (1) or both (2). */
   export function netShutdown(fd: i32, how: i32): i32;
   export function netClose(fd: i32): i32;
-  /** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. */
+  /** A TCP socket connecting to `addr`, answered while it connects: writable once it has, or has failed. It holds `TCP_NODELAY`, so a small write is sent at once. */
   export function tcpConnect(addr: readonly u8[]): i32;
   /** Once `fd` is writable: 0 when the connection is made, else its failure (-111 refused). */
   export function connectResult(fd: i32): i32;
@@ -538,6 +661,26 @@ declare module "nish:net" {
   export function pollRemove(loop: i32, fd: i32): i32;
   /** Wait up to `timeoutMs` (negative: forever); pairs `ready[2k]` token, `ready[2k + 1]` events (4: hang-up or error). */
   export function pollWait(loop: i32, ready: i32[], timeoutMs: i32): i32;
+  /**
+   * Set one socket option from a whitelist: `option` is one of the `NET_*` ids
+   * below, and any other is -22; there is no raw level and option number. 0, or
+   * a negative errno (-9 a closed descriptor, -88 not a socket).
+   */
+  export function netSetOption(fd: i32, option: i32, value: i32): i32;
+  /** `TCP_NODELAY`: `value` 1 sends a small write at once, 0 lets Nagle batch it. */
+  export const NET_TCP_NODELAY: i32;
+  /**
+   * `TCP_QUICKACK` (Linux; -95 elsewhere): `value` 1 acknowledges at once, 0
+   * delays. Linux does not keep quick-ACK mode: the kernel leaves it on its own,
+   * so a server that wants a mode sets it again after every response.
+   */
+  export const NET_TCP_QUICKACK: i32;
+  /** `SO_KEEPALIVE`: `value` 1 probes an idle connection, 0 does not. */
+  export const NET_SO_KEEPALIVE: i32;
+  /** `SO_SNDBUF`: the send buffer, `value` in bytes; Linux doubles the value it stores. */
+  export const NET_SO_SNDBUF: i32;
+  /** `SO_RCVBUF`: the receive buffer, `value` in bytes; Linux doubles the value it stores. */
+  export const NET_SO_RCVBUF: i32;
 }
 
 declare module "nish:unsafe" {
@@ -560,6 +703,11 @@ declare module "nish:io" {
   export function write(s: string): void;
   /** The same, on stderr. */
   export function writeError(s: string): void;
+  /**
+   * `bytes[off .. off + len)` to stdout, every byte as it is: the count, or a
+   * negative errno. A range outside `bytes` panics, as `dst.set` does.
+   */
+  export function writeBytes(bytes: readonly u8[], off: i32, len: i32): i32;
   /** `message` to stderr, then exit 1. A terminator, as `process.exit` is. */
   export function panic(message: string): never;
 }
@@ -617,10 +765,6 @@ declare module "nish:secret" {
 declare const Arena: {
   /** The current bump address. */
   mark(): i64;
-  /** Free everything allocated since `m`. */
-  release(m: i64): void;
-  /** Recycle everything in O(1), keeping the newest chunk. */
-  reset(): void;
   /** Bytes bumped in the current chunk. */
   used(): i64;
 };

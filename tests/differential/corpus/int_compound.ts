@@ -1,11 +1,14 @@
-// Compound assignment on locals and on array elements, with wrapping.
+// Compound assignment on locals and on array elements; the steps that wrap
+// are the `nish:unsafe` calls that ask for it.
+import { wrappingAdd, wrappingMul, wrappingSub } from "nish:unsafe";
+
 export function main(): number {
   let x = 2147483000;
-  x += 1000;
+  x = wrappingAdd(x, 1000);
   console.log(x);
-  x -= 2000;
+  x = wrappingSub(x, 2000);
   console.log(x);
-  x *= 3;
+  x = wrappingMul(x, 3);
   console.log(x);
   x /= -7;
   console.log(x);
@@ -16,7 +19,7 @@ export function main(): number {
     xs[i] *= 1000000;
     xs[i] += i;
   }
-  xs[3] *= 4000;
+  xs[3] = wrappingMul(xs[3], 4000);
   xs[0] -= 5;
   xs[1] /= 3;
   xs[2] %= 7;

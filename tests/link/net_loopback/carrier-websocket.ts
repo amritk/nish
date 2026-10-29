@@ -26,7 +26,7 @@ import { h3IsPattern, h3Pattern } from "../net_http3/peer";
 import { ClientReader } from "../net_http1_server/harness";
 import { textOf } from "../crypto_x509/hex";
 import { CARRIER_H1, TcpLoop } from "./tcp";
-import { TlsClient } from "./tls-client";
+import { LoopbackTlsClient } from "./tls-client";
 import { h1Response } from "./carrier-http1";
 import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
@@ -41,7 +41,7 @@ const wsClientFrame = (fin: boolean, opcode: i32, payload: u8[], off: i32, len: 
 const wsWhole = (opcode: i32, payload: u8[]): u8[] => wsClientFrame(true, opcode, payload, ZERO, toI32(payload.length));
 
 /** The next event the client's decoder reads, opening records as they arrive. */
-const lbWsEvent = (c: TlsClient, d: WsDecoder): i32 => {
+const lbWsEvent = (c: LoopbackTlsClient, d: WsDecoder): i32 => {
   let event: i32 = d.next();
   while (event === WS_NEED_MORE) {
     if (toI32(c.plain.length) > 0) {
@@ -61,7 +61,7 @@ const wsMessageOf = (d: WsDecoder): u8[] => range(d.data, ZERO, d.dataLen);
 /** Every check of the WebSocket carrier. */
 export const websocketChecks = (t: Suite): void => {
   const lp = new TcpLoop(CARRIER_H1);
-  const c = new TlsClient(lp);
+  const c = new LoopbackTlsClient(lp);
   const shook: boolean = c.handshake([H1_ALPN]);
   c.send(
     ascii(
@@ -129,7 +129,9 @@ export const websocketChecks = (t: Suite): void => {
   t.ok("websocket: the client's close with code 4000 is answered with a close of that code", lbWsEvent(c, d) === WS_CLOSE && d.closeCode === 4000);
   t.eqI32("websocket: and the server's program saw the client's code", lp.h1App.closeStatus, toI32(4000));
   t.eqStr("websocket: then the server ends TLS with close_notify", c.awaitAlert(), "1 0");
-  t.ok("websocket: and closes the slot", lp.awaitEnd(c.index) && lp.awaitClosed(toI32(1)) && lp.busy() === 0);
+  t.ok("websocket: then the end of the stream, not a reset", lp.awaitEnd(c.index) && lp.peers[c.index].failure === 0);
+  lp.hangUp(c.index);
+  t.ok("websocket: and, once the client hangs up, closes the slot", lp.awaitClosed(toI32(1)) && lp.busy() === 0);
   t.eqI32("websocket: the program refused nothing", lp.h1App.refusals, ZERO);
   t.eqStr("websocket: with nothing gone wrong in the loop", lp.failure, "");
   lp.shutdown();

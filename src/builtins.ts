@@ -3,7 +3,7 @@
 // pass 2): the functions that exist without a declaration.
 //
 // Two families. **Dotted callees** (`console.log`, `Math.sqrt`,
-// `process.exit`, `Arena.reset`, `String.fromCharCode`) are told from method
+// `process.exit`, `Arena.mark`, `String.fromCharCode`) are told from method
 // calls by whether the receiver is a value; **plain callees** (`toI32`,
 // `parseInt`, `readFileSync`, `panic`) are consulted only when no user
 // function of that name is in scope, so a user definition always wins.
@@ -13,7 +13,8 @@
 // here `checkStatement` records the expression it is about to check so the
 // builtin can compare against it. One field instead of a parent chain.
 
-import { readonlyWriteMessage } from "./arrays"
+import { typedArrayElement } from "./annotations"
+import { readonlyWriteMessage, typedArraySpelling } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
 import { internalErrorFor } from "./ice"
@@ -26,6 +27,7 @@ import {
   isUnsafeExport,
   NET_STRING,
   NET_WORDS,
+  netOption,
   netSignature,
   unsafeModule,
 } from "./nish-modules"
@@ -170,6 +172,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "spawnSyncTo" ||
     name === "readdirSync" ||
     name === "monotonicNanos" ||
+    name === "wallClockNanos" ||
     name === "isDirectorySync" ||
     name === "getenv" ||
     name === "realpathSync" ||
@@ -182,10 +185,20 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "geteuid" ||
     name === "isExecutableSync" ||
     name === "spawn" ||
+    name === "spawnPiped" ||
     name === "kill" ||
     name === "waitPid" ||
     name === "availableParallelism" ||
     name === "totalMemory" ||
+    name === "renameSync" ||
+    name === "unlinkSync" ||
+    name === "writeFileBytesSync" ||
+    name === "writeFileSyncMode" ||
+    name === "createFileExclusiveSync" ||
+    name === "mkdirSyncMode" ||
+    name === "writeBytes" ||
+    name === "setNice" ||
+    name === "setIdlePriority" ||
     isTermExport(name) ||
     isNetExport(name) ||
     isUnsafeExport(name)
@@ -424,6 +437,11 @@ export const checkNamespaceProperty = (
   if (namespace === "process" && (member === "platform" || member === "arch")) {
     return T_STRING
   }
+  // `nish:net`'s socket option ids, the one integer constants a `nish:`
+  // module exports: read as a value like `platform`, and folded to the id.
+  if (namespace === "" && netOption(member) > 0) {
+    return T_I32
+  }
   if (namespace === "Date") {
     return ctx.errorType(expr, dateRefusal(`Date.${member}`))
   }
@@ -438,7 +456,7 @@ export const checkNamespaceProperty = (
 
 // ---- Dotted calls -------------------------------------------------------------------
 
-/** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.reset()`, ... */
+/** `console.log(x)`, `Math.sqrt(x)`, `process.exit(n)`, `Arena.mark()`, ... */
 /**
  * Every dotted builtin, in the order stage0's `src/checker/strings.ts` builds its
  * `builtinCalls` table — `Object.keys` there, so the order is the table's and
@@ -453,7 +471,7 @@ const SUPPORTED_BUILTINS: string =
   "console.log, console.error, String.fromCharCode, String.fromBytes, Math.sqrt, Math.floor, Math.ceil, " +
   "Math.trunc, Math.round, Math.sin, Math.cos, Math.tan, Math.exp, Math.log, Math.pow, Math.atan2, " +
   "Math.hypot, Math.abs, Math.sign, Math.min, Math.max, Math.clz32, Math.imul, Math.random, process.exit, " +
-  "Arena.reset, Arena.mark, Arena.release, Arena.used, Date.now, crypto.getRandomValues"
+  "Arena.mark, Arena.used, Date.now, crypto.getRandomValues"
 
 /** stage0's one sentence for a call whose dotted name is not a builtin. */
 const unknownBuiltin = (ctx: CheckContext, at: Node, name: string): i32 =>
@@ -497,7 +515,7 @@ export const checkBuiltinCall = (ctx: CheckContext, call: Node, scope: Scope): i
     return checkProcess(ctx, call, args, name, member, scope)
   }
   if (namespace === "Arena") {
-    return checkArena(ctx, call, args, name, member, scope)
+    return checkArena(ctx, call, args, name, member)
   }
   if (namespace === "Date") {
     return checkDate(ctx, call, args, name, member)
@@ -721,49 +739,12 @@ const checkProcess = (
   return T_VOID
 }
 
-const checkArena = (
-  ctx: CheckContext,
-  call: Node,
-  args: Node,
-  name: string,
-  member: string,
-  scope: Scope
-): i32 => {
+const checkArena = (ctx: CheckContext, call: Node, args: Node, name: string, member: string): i32 => {
   if (member === "mark" || member === "used") {
     checkBuiltinArity(ctx, call, name, args, 0)
     return T_I64
   }
-  if (member === "reset") {
-    checkBuiltinArity(ctx, call, name, args, 0)
-    requireStatementPosition(ctx, call, name)
-    deprecateArenaControl(ctx, call, name, "resetting the arena while anything allocated in it")
-    return T_VOID
-  }
-  if (member === "release") {
-    if (checkBuiltinArity(ctx, call, name, args, 1)) {
-      checkArgumentType(ctx, args.children[0], scope, name, T_I64)
-    }
-    requireStatementPosition(ctx, call, name)
-    deprecateArenaControl(ctx, call, name, "releasing to a mark while anything allocated after it")
-    return T_VOID
-  }
   return unknownBuiltin(ctx, call.children[0], name)
-}
-
-/**
- * NL7001: `Arena.release` and `Arena.reset` still compile, to the call they
- * always did, and warn. They are the one way left for a program to free memory
- * it still references with no opt-in anywhere in its source, and
- * `using a = arena()` is the same release with the escape check done by the
- * compiler (docs/LANGUAGE.md, "`using a = arena()`").
- */
-const deprecateArenaControl = (ctx: CheckContext, call: Node, name: string, what: string): void => {
-  ctx.deprecation(
-    call,
-    `\`${name}\` is deprecated: ${what} is still referenced is undefined behaviour the compiler does not ` +
-      "check. Bracket the work with `using a = arena()`, which releases on every exit of its block and refuses " +
-      "whatever would outlive it"
-  )
 }
 
 /**
@@ -1003,6 +984,14 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     checkBuiltinArity(ctx, call, name, args, 0)
     return T_I64
   }
+  // The wall clock, nanoseconds since the Unix epoch, an `i64` for the reason
+  // `monotonicNanos` is one. Unlike that clock it can step backwards when the
+  // system time is set, which is why the two are separate names: this one is
+  // for a timestamp, the other for a duration.
+  if (name === "wallClockNanos") {
+    checkBuiltinArity(ctx, call, name, args, 0)
+    return T_I64
+  }
   // `using a = arena()`: the arena's mark, taken where the block's arena opens
   // and released to on every edge that leaves the block. The language spells
   // its type `Disposable`, and nothing may read it (`arenaBindingMessage` in
@@ -1119,6 +1108,20 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     }
     return T_I32
   }
+  // `spawnSync` with the child's three streams on pipes: `stdin` is read and
+  // never written, so a `readonly u8[]` is accepted there, and the two output
+  // arrays are appended to, so they are written arrays as `push`'s receiver
+  // is. The status is `i32` in either number mode, as `spawn`'s pid is. On
+  // wasm there is no child to start.
+  if (name === "spawnPiped") {
+    if (checkBuiltinArity(ctx, call, name, args, 4) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING))
+      checkBuffer(ctx, args.children[1], scope, name, T_U8, false)
+      checkBuffer(ctx, args.children[2], scope, name, T_U8, true)
+      checkBuffer(ctx, args.children[3], scope, name, T_U8, true)
+    }
+    return T_I32
+  }
   if (name === "kill" || name === "waitPid") {
     if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_I32)
@@ -1134,6 +1137,21 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
       refuseOnWasm(ctx, call, name)
     }
     return name === "totalMemory" ? T_I64 : T_I32
+  }
+  // This process's nice value and its move to `SCHED_IDLE`, each 0 or a
+  // negative errno. A wasm32 build schedules nothing of the host's, and
+  // runtime-os.c answers -ENOSYS there, so both are refused as `kill` is.
+  if (name === "setNice") {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_I32)
+    }
+    return T_I32
+  }
+  if (name === "setIdlePriority") {
+    if (checkBuiltinArity(ctx, call, name, args, 0)) {
+      refuseOnWasm(ctx, call, name)
+    }
+    return T_I32
   }
   // `nish:term`, runtime-term.c. `readStdin` is `netRead` without the
   // descriptor: the `u8[]` it writes and the range of it, checked as
@@ -1172,6 +1190,58 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   if (name === "setTerminalRestore") {
     if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnFreestandingWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+    }
+    return T_I32
+  }
+  // Replacing and removing a file, and bytes out: an `i32`, `>= 0` on success
+  // and a negative errno otherwise, never an exit, so a program that writes
+  // beside its target and renames over it owns the diagnostic. WASI's libc
+  // has all four calls; a freestanding wasm32 build has no file system or
+  // stdout to reach. `writeBytes` takes `netWrite`'s range-checked
+  // `(bytes, off, len)` without the descriptor, as `readStdin` takes
+  // `netRead`'s.
+  if (name === "renameSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+      checkArgumentType(ctx, args.children[1], scope, name, T_STRING)
+    }
+    return T_I32
+  }
+  if (name === "unlinkSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+    }
+    return T_I32
+  }
+  if (name === "writeFileBytesSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+      checkBuffer(ctx, args.children[1], scope, name, T_U8, false)
+    }
+    return T_I32
+  }
+  // A file or directory with an explicit mode (runtime-os.c): an `i32` as
+  // above, the mode an `i32` the runtime range-checks.
+  if (name === "writeFileSyncMode" || name === "createFileExclusiveSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 3) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+      checkArgumentType(ctx, args.children[1], scope, name, T_STRING)
+      checkArgumentType(ctx, args.children[2], scope, name, T_I32)
+    }
+    return T_I32
+  }
+  if (name === "mkdirSyncMode") {
+    if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+      checkArgumentType(ctx, args.children[1], scope, name, T_I32)
+    }
+    return T_I32
+  }
+  if (name === "writeBytes") {
+    if (checkBuiltinArity(ctx, call, name, args, 3) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkBuffer(ctx, args.children[0], scope, name, T_U8, false)
+      checkArgumentType(ctx, args.children[1], scope, name, T_I32)
+      checkArgumentType(ctx, args.children[2], scope, name, T_I32)
     }
     return T_I32
   }
@@ -1224,7 +1294,22 @@ const checkBuffer = (
 ): void => {
   const want = ctx.table.arrayOf(element)
   const got = checkExpression(ctx, arg, scope, want)
-  if (got === T_ERROR || got === want) {
+  if (got === T_ERROR) {
+    return
+  }
+  // `spawnPiped` appends to its two output arrays, so one spelled with a
+  // typed-array name is refused as `push` refuses that receiver: the name
+  // promises a length that never changes, and the TypeScript the program is
+  // emitted to would throw on the append.
+  const alias = written && name === "spawnPiped" ? typedArraySpelling(ctx, arg, scope) : ""
+  if (typedArrayElement(alias) >= 0) {
+    ctx.error(
+      arg,
+      `\`${name}\` appends to this array, spelled \`${alias}\`, whose length is fixed: declare it \`u8[]\``
+    )
+    return
+  }
+  if (got === want) {
     return
   }
   const readonlyWant = ctx.table.isReadonlyArray(got) && ctx.table.refOf(got) === element
@@ -1278,7 +1363,7 @@ export const terminatesControlFlow = (ctx: CheckContext, expr: Node): boolean =>
  * Whether an expression *is* `process.argv`. The array is built once by the
  * `@main` wrapper and lives outside the arena, so a program may read it any
  * way it likes and may not write it: a store, a `push` or a `pop` would
- * change what every other module sees and would outlive an `Arena.reset`.
+ * change what every other module sees and would outlive the arena it was made in.
  */
 export const isArgvExpression = (ctx: CheckContext, expr: Node, scope: Scope): boolean => {
   // `(process.argv).push(...)` is the same write as `process.argv.push(...)`,

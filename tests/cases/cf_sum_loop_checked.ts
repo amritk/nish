@@ -1,5 +1,4 @@
-// cf_sum_loop under the checked default (cf_sum_loop itself is compiled with
-// `--wrapping`). `sum` can pass INT_MAX for a large `n`, so each `+=` is
+// cf_sum_loop with a plain `+=` (cf_sum_loop itself calls `wrappingAdd`). `sum` can pass INT_MAX for a large `n`, so each `+=` is
 // `llvm.sadd.with.overflow` and a branch to the overflow panic, while `i++`
 // under `i < n` is proven and is `add nsw`. tests/run.js pins the loop this
 // leaves after `opt -O2`: the check survives in the loop, the step widens to

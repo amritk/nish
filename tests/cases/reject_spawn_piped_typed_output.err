@@ -1,0 +1,2 @@
+`spawnPiped` appends to this array, spelled `Int32Array`, whose length is fixed: declare it `u8[]`
+`spawnPiped` appends to this array, spelled `Float64Array`, whose length is fixed: declare it `u8[]`

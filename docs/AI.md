@@ -90,8 +90,7 @@ so it refuses `-o` and `--link`. It rewrites your files in place, with no
 backup, so run it on a committed or backed-up tree. Run it first, then read
 what remains. A warning can carry a fix too, and `--fix` applies it only when the program
 compiles and the warning would be printed: `NL9007`'s inserts the guard that
-proves an index in range (not under `--no-warn-performance`), and `NL7002`'s
-migrates a site off `--unchecked-indexing` (below).
+proves an index in range (not under `--no-warn-performance`).
 
 When it compiles, **check the native build against the program's TypeScript
 reading**. Run the project's tests natively; where it has none, write the
@@ -247,14 +246,9 @@ the site: `uncheckedGet(xs, i)` and `uncheckedSet(xs, i, v)` on an array of
 numbers with an `i32` index (out of range is undefined behaviour), and
 `wrappingAdd` / `wrappingSub` / `wrappingMul` on two `i32`s or two `i64`s.
 The sixth export, `readCString`, copies a C string out of a `CPtr`
-([Calling C](#calling-c)). Calling one without the import is NL2456. `--unchecked-indexing` and
-`--wrapping` are deprecated (NL9014, NL9015) and reach only your own package,
-never a dependency or `nish/`. To migrate off `--unchecked-indexing`, run
-`nish --unchecked-indexing --fix` on your files: each index the flag leaves
-unchecked is a `deprecation` warning of its own (NL7002), and where the site
-is a number array with an `i32` index its `fix` rewrites it to `uncheckedGet`
-or `uncheckedSet` and adds the import. A site with no rewrite keeps its
-warning; dropping the flag gives it back its bounds check.
+([Calling C](#calling-c)). Calling one without the import is NL2456. No flag turns the checks off for a
+whole program: `--unchecked-indexing` and `--wrapping` were removed before 1.0
+and are refused with exit 2.
 
 ```ts nish:ok
 import { uncheckedGet, wrappingAdd, wrappingMul } from "nish:unsafe";
@@ -280,8 +274,7 @@ where it can prove the result fits — a loop counter under `i < n`, a byte
 widened with `toI32`, an `integer<Lo, Hi>`, a value masked with `& c`. Arithmetic
 that is *meant* to wrap — a hash, a PRNG, a checksum — goes in `u32` or `u64`,
 which always wrap and are never checked; convert back with `toI32` (free), or
-call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site. The deprecated
-`--wrapping` makes every signed operation of your own package wrap instead.
+call `wrappingAdd` / `wrappingSub` / `wrappingMul` at the site.
 
 ```ts nish:ok
 // FNV-1a: the multiply overflows on purpose, so the state is a `u32`.
@@ -2140,13 +2133,27 @@ a `\u` escape `nish/json` decodes) is one unit per byte, and counts its bytes.
 **Files and the system.** `readFileSync(path)` (exits 1 on failure),
 `readFileSyncOrNull(path)` (`string | null`), `readFileBytesSync(path)`
 (`u8[] | null`, the bytes as they are on disk), `writeFileSync(path, data)`,
-`appendFileSync(path, data)`, `mkdirSync(path)` (one level, `boolean`),
+`appendFileSync(path, data)`, `writeFileBytesSync(path, bytes)` (a `u8[]` as
+it is; `i32`: the length, or a negative errno), `renameSync(from, to)` (`0` or
+a negative errno; atomic on one filesystem, `-18` across two, so write the
+temporary beside the target), `unlinkSync(path)` (`0` or a negative errno; a
+directory is refused), `writeFileSyncMode(path, data, mode)` (the file left
+at exactly `mode` (`0..0o777`), set before the first byte, written in place; a symbolic link refused; the
+length or a negative errno), `createFileExclusiveSync(path, data, mode)` (the
+same, but `-17` when the name exists: a lock file), `mkdirSyncMode(path, mode)`
+(`0`, `-17` when it exists, the umask applies), `writeBytes(bytes, off, len)` (a `u8[]` range to stdout
+as it is, the length or a negative errno; the range panics like
+`netWrite`'s), `mkdirSync(path)` (one level, `boolean`),
 `isDirectorySync(path)`, `readdirSync(path)` (`string[] | null`, sorted by
 bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
+`spawnPiped(argv, stdin, stdout, stderr)` (stdin from a `u8[]`, both outputs
+appended to `u8[]`s, the status; `-2` past 16 MiB; the way to hand a child a
+secret, never argv or the environment),
 `getenv(name)` (`string | null` — unset and empty are different answers),
 `realpathSync(path)` (`string | null`; symbolic links resolved, absolute, and
 `null` when it does not resolve),
-`monotonicNanos()` (`i64`; elapsed time only), and, for checking a path before
+`monotonicNanos()` (`i64`; elapsed time only), `wallClockNanos()` (`i64`,
+nanoseconds since the Unix epoch; the wall clock, which can step), and, for checking a path before
 trusting it, `lstatOwnerModeSync(path)` (an `i64`: the owner's uid in the high
 32 bits, `st_mode` in the low 32, `-1` when it does not resolve; a symbolic
 link answers for itself), `geteuid()` (`i64`) and `isExecutableSync(path)`
@@ -2174,6 +2181,12 @@ also watches the signal fd. None of `spawn`, `kill`, `waitPid` may be called in
 a task or a parallel body; the two host facts may. `availableParallelism()` (`i32`, at least 1, no `--threads` needed) and
 `totalMemory()` (`i64` bytes, or `-1`) size a program to the machine. None of
 the five exists on a wasm target, and `spawn` and `waitPid` throw under Node.
+`setNice(n)` sets the nice value (clamped to -20..19; lowering it unprivileged
+is `-13`) and `setIdlePriority()` moves the program to Linux's `SCHED_IDLE`
+(`-95` on Darwin); each answers 0 or a negative errno. Call them at the top of
+`main`, never in a task. An unprivileged process can never leave `SCHED_IDLE`
+and an idle one can starve on a saturated machine, so keep a normal-priority
+fallback. Neither exists on wasm; both throw under Node.
 
 **Sockets** (`nish:net`, or the same names as globals). `tcpListen(host, port,
 backlog)`, `tcpAccept(fd, peer)`, `netRead(fd, buf, off, len)`,
@@ -2186,7 +2199,8 @@ and there is no `async` and no callback: your `main` is the loop. A client calls
 `tcpConnect(addr)`, which answers the descriptor while it is still connecting;
 wait for it to be writable, then `connectResult(fd)` is 0 or the failure. Buffers
 are `u8[]` only; an address is 18 bytes of one (IPv4 as `::ffff:a.b.c.d`, then
-the port big-endian); hosts are numeric literals, because there is no DNS.
+the port big-endian); hosts are numeric literals; to reach a name, resolve it first with
+`nish/net/dns` (`DnsClient` on your loop, or the blocking `resolveHost`).
 `netRead` / `netWrite` panic on a range outside the buffer.
 `tcpListenFlags(host, port, backlog, flags)` is `tcpListen` with flag 1
 `SO_REUSEPORT`, so several listeners, in one process or many, share a port (Linux
@@ -2205,11 +2219,18 @@ loop, `pollAdd(loop, fd, events, token)` / `pollModify(...)` watch `fd` for
 for `-1`), fills `ready: i32[]` with pairs — `ready[2k]` a token,
 `ready[2k + 1]` its events, 4 added for a hang-up or error — and answers how
 many, **0 on a timeout or a signal**. It is level-triggered, so what you leave
-unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM. None
+unread is reported again. Add `signalFd()` to the loop to wake on SIGTERM.
+`netSetOption(fd, option, value)` sets one socket option from a whitelist:
+`NET_TCP_NODELAY`, `NET_TCP_QUICKACK` (Linux; `-95` on Darwin),
+`NET_SO_KEEPALIVE`, `NET_SO_SNDBUF` and `NET_SO_RCVBUF`, `i32` ids exported
+beside it; any other id is `-22`. Linux drops quick-ACK mode on its own, so set
+it again after each response. The ids are not module constants: pass them
+directly. None
 exists on a wasm target, and under Node each throws.
 
 **Arena.** `Arena.mark()`, `Arena.used()` and `using a = arena()` — see below.
-`Arena.release(m)` and `Arena.reset()` are deprecated (NL7001).
+`Arena.release(m)` and `Arena.reset()` were removed before 1.0: write
+`using a = arena()`.
 
 ### Map and Set
 
@@ -2494,10 +2515,9 @@ anything that runs for a long time, should compile with `--deny-retention`,
 which makes this warning and the three like it errors.
 
 Everything else is bumped from the arena, which is released when `main`
-returns. **Do not write `Arena.release` or `Arena.reset`**: releasing while
-anything allocated after the mark is still referenced is undefined behaviour
-the compiler does not check, so both are deprecated, and each call compiles
-with a `deprecation` warning (NL7001) pointing to `using a = arena()`.
+returns. To give memory back sooner, scope it with `using a = arena()`;
+`Arena.release` and `Arena.reset` are gone, and a call to either is an unknown
+builtin (NL2244).
 
 ## Recipes for what is missing
 
@@ -2583,6 +2603,53 @@ since a peer's `%zz` makes it negative and `urlQueryStart` answers -1 for no
 most 100 pairs. (No block, as for `nish/text`; `tests/link/std_url` is its
 program, and the user guide's [standard-library
 page](guide/using-nish/standard-library.md#nishneturl) its walk-through.)
+
+**Gzip a response, or read a gzipped body** — there is no `node:zlib` and no
+`CompressionStream`: `nish/compress/gzip` (and `zlib`, `deflate`) compress
+and decompress into buffers you own. Build a `GzipCompressor(DEFLATE_FAST)`
+once and call `compress(src, off, len, out, at)`, which answers the end or -1
+when `out` is shorter than `compressBound(len)`; `GzipDecompressor`'s
+`decompress(..., limit)` never writes more than `limit` bytes and answers a
+negative `DEFLATE_ERR_*` / `GZIP_ERR_*` code for any malformed stream, so test
+it before reading `out`. `GzipWriter` and `GzipReader` stream. On HTTP/1.1,
+`conn.respondEncoded(status, names, values, body, off, len, enc,
+conn.acceptEncoding())` with an `HttpCompressor` from `nish/net/http-compress`
+negotiates, compresses and sets the fields. Do not compress a secret beside
+text the client chose (BREACH). (No block, as for `nish/text`;
+`tests/link/std_compress` is its program, and the user guide's
+[compression page](guide/using-nish/compression.md) its walk-through.)
+
+**Pass a list to a PostgreSQL statement** — there is no driver that expands
+`IN (...)` and no `pg`'s array serialiser: in `nish/net/postgres`, write
+`= any($1::int8[])` or `unnest($1::text[])` and bind the list as one
+parameter. `paramIntArray(values, start, count)` binds an `i64[]` window;
+`arrayStart()`, `arrayElement(bytes, start, length)` or `arrayNull()` per
+element, then `arrayEnd()`, builds a `text[]` straight into the Bind from
+windows of a buffer. An element refused for room answers `false` and leaves
+the array open: end it and send the rest in the next statement. Every other
+`param...` call and `bindEnd()` panic until `arrayEnd()`. (No block, as for
+`nish/text`; `tests/postgres/live` runs it against a server, and the user
+guide's [PostgreSQL page](guide/using-nish/postgres.md#array-parameters) its
+walk-through.)
+
+**Batch a server's keyed reads into one PostgreSQL query** — there is no
+DataLoader and no `setTimeout` to collect a tick's keys: in `nish/net/postgres`,
+a `PgBatcher` built from a `PgBatchConfig` (`name`, `select` reading the key as
+`q.key`, `keyType` `PG_BATCH_INT` or `PG_BATCH_TEXT`, caps) queues requests with
+`addInt(key, tag)` or `addText(bytes, start, length, tag)` — `false` when its
+queue is full, or for a text key too long for `maxBytes`, with no room left in
+`queueBytes`, with a NUL or not UTF-8 — and `take(conn)`
+binds the waiting ones, each key once, as one execution of its `sql` over
+`unnest($1) with ordinality`, answering a run handle or -1. Hand that
+execution's `PG_ROW` to `row(run, conn)`, `PG_COMPLETE` to `end(run)`, an error
+or `PG_LOST` to `fail(run)` (on a spent handle these do nothing and count in
+`stray`), and after each call `next(run)` until
+`PG_BATCH_NONE`: `PG_BATCH_ROW` (the connection's row answers request `tag`),
+then one of `PG_BATCH_DONE`, `PG_BATCH_MISSING` or `PG_BATCH_FAILED` per
+request. It reads no clock: when to take is the loop's choice. (No block;
+`tests/postgres/live`'s `batch` scenario runs it against a server, and the user
+guide's [PostgreSQL page](guide/using-nish/postgres.md#batching-keyed-reads)
+its walk-through.)
 
 **Draw to the whole terminal** (a game, a dashboard) — there is no curses and
 no `process.stdout.on("resize")`: `runTerminal(options, state, update, render)`
@@ -2699,8 +2766,7 @@ export const at = (xs: i32[], i: i32): i32 => xs[i];
 A call into the standard library or a dependency that may panic is refused at
 the call (NL2458), because only its own author can prove it: call a function
 that cannot panic, or make the call from a module outside the scope.
-`--unchecked-indexing` is not a proof, and an index it leaves unchecked is
-still refused. `uncheckedGet` and `uncheckedSet` are not proofs either, but
+`uncheckedGet` and `uncheckedSet` are not proofs, but
 they cannot panic, and their `nish:unsafe` import is the module's visible
 opt-in to an index out of range being undefined behaviour, so the scope allows
 them (as `"allowed": true` sites) and a call into them is never refused:

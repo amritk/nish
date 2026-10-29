@@ -63,6 +63,10 @@
 # put in the .ll (line table, variables) reaches the binary. `nish
 # --link -g` passes it through automatically.
 #
+# Build id: every native ELF binary carries an NT_GNU_BUILD_ID note
+# (--build-id=sha1). A -g link hashes other bytes than a plain one, so strip
+# the -g build to pair a binary with its debug file (docs/guide/using-nish/cli.md).
+#
 # CPU level (WP38 S2): `--cpu x86-64-v3` compiles and links every input --
 # the module, the runtime and any other C -- with -march=x86-64-v3
 # -ffp-contract=off, so the code generator may use AVX2, BMI2 and the other
@@ -282,8 +286,8 @@ case "$(uname -s)" in
     # followed by SIGABRT, so the stage1 that linked went on to abort the
     # moment the bootstrap ran it. Measured too, on the run after the one that
     # named the UUID. An unloadable compiler is worse than any reproducibility,
-    # so the UUID stays. The ELF branch's --build-id=none below is the flag
-    # this would have been; ELF has no loader that insists on one.
+    # so the UUID stays. ELF's twin is the build-id note below, which ELF's
+    # loader never asks for and which is a hash of the output's bytes anyway.
     #
     # It costs nothing, because the UUID was measured stable across two links
     # of one input to one output path, and differing on a link to another. That
@@ -295,8 +299,14 @@ case "$(uname -s)" in
     strip_flag=(-Wl,-x) ;;
   *)
     # shellcheck disable=SC2054 # -Wl,<flag> is one argument: the comma is the linker's
-    gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2 -Wl,--build-id=none); strip_flag=(-s)
+    gc=(-Wl,--gc-sections -Wl,--as-needed -Wl,-O2); strip_flag=(-s)
     elf=(-fno-plt)
+    # A GNU build-id note on every native link, debug included, so perf, gdb
+    # and debuginfod can match a stripped binary to its debug file. sha1 is a
+    # hash of the output's own bytes in lld, GNU ld and gold, so one input
+    # links to one id and `stage3 == stage2` holds; uuid would be random.
+    # shellcheck disable=SC2054
+    common+=(-Wl,--build-id=sha1)
     # GNU ld needs the gold plugin for LTO; prefer lld when clang can find it.
     if command -v ld.lld >/dev/null 2>&1; then common+=(-fuse-ld=lld); lld=1; fi ;;
 esac

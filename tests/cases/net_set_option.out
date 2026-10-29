@@ -1,0 +1,14 @@
+nodelay on: 0, reads 1
+nodelay off: 0, reads 0
+keepalive on: 0, reads 1
+keepalive off: 0, reads 0
+sndbuf 65536: 0, reads at least 65536 1
+rcvbuf 65536: 0, reads at least 65536 1
+sndbuf doubled 1
+quickack on: set
+quickack off: 0
+option 0: -22
+option 6: -22
+option -1: -22
+closed: -9
+pipe: -88

@@ -32,6 +32,7 @@ import {
   PG_READY,
   PG_ROW,
 } from "nish/net/postgres";
+import { getI32BE, getU16BE } from "nish/bytes";
 import { secret, wipe } from "nish:secret";
 import { Suite } from "nish/testing";
 
@@ -917,6 +918,196 @@ const arrays = (t: Suite): void => {
   t.eqI32("stays bad", w.next(), PG_ARRAY_BAD);
 };
 
+/** A ready connection with a Bind of `q` open. */
+const bound = (c: PgConfig): PgConnection => {
+  const conn = ready(c);
+  conn.prepare("q", "select $1", none());
+  conn.sync();
+  drain(conn);
+  conn.bindStart("q");
+  return conn;
+};
+
+/**
+ * Ends the open Bind of `q` and answers its one parameter: the length word,
+ * then the bytes as `drain` shows them; the Bind starts `at` bytes into the
+ * queued output, and everything is marked sent.
+ */
+const onlyParam = (conn: PgConnection, at: i32): string => {
+  conn.bindEnd();
+  const out: u8[] = conn.outputBuffer();
+  const p: i32 = conn.outputStart() + at + 12;
+  const n: i32 = getI32BE(out, p);
+  const parts: string[] = [`${toI32(getU16BE(out, p - 2))} of ${n}:`];
+  for (let i: i32 = p + 4; i < p + 4 + n; i++) {
+    const c: i32 = toI32(out[i]);
+    parts.push(c === 0 ? "|" : c < 32 || c > 126 ? `<${c}>` : String.fromCharCode(c));
+  }
+  conn.sent(conn.outputEnd() - conn.outputStart());
+  return parts.join("");
+};
+
+const intArrays = (t: Suite): void => {
+  const empty: i64[] = [];
+  let conn = bound(config());
+  t.ok("paramIntArray: the empty array", conn.paramIntArray(empty, 0, 0));
+  t.eqStr("is {}", onlyParam(conn, 0), "1 of 2:{}");
+  const min: i64 = (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8);
+  const values: i64[] = [toI64(7), toI64(-1), toI64(0), min, -(min + toI64(1))];
+  conn = bound(config());
+  conn.paramIntArray(values, 0, 5);
+  t.eqStr("every value in decimal, the most negative too", onlyParam(conn, 0), "1 of 49:{7,-1,0,-9223372036854775808,9223372036854775807}");
+  conn = bound(config());
+  conn.paramIntArray(values, 1, 2);
+  t.eqStr("a window of the array", onlyParam(conn, 0), "1 of 6:{-1,0}");
+  conn = bound(config());
+  conn.paramIntArray(values, 5, 0);
+  t.eqStr("an empty window at its end", onlyParam(conn, 0), "1 of 2:{}");
+
+  const c = config();
+  c.maxOutput = 1024;
+  // The Bind's first 12 bytes are queued and 17 stay free: 995 for the
+  // parameter, its length word among them; 91 ten-digit values take 1002.
+  const big: i64[] = [];
+  for (let i: i32 = 0; i < 91; i++) {
+    big.push(toI64(1000000000));
+  }
+  conn = bound(c);
+  t.ok("an int8[] that would pass maxOutput is refused", !conn.paramIntArray(big, 0, 91));
+  t.ok("its exact size is asked for: one value less fits", conn.paramIntArray(big, 1, 90));
+  t.eqStr("and the refused one left nothing behind", onlyParam(conn, 0).slice(0, 12), "1 of 991:{10");
+  t.ok("without a bind, refused", !conn.paramIntArray(big, 0, 1));
+};
+
+const arrayBuilder = (t: Suite): void => {
+  let conn = bound(config());
+  t.ok("arrayStart", conn.arrayStart());
+  conn.arrayEnd();
+  t.eqStr("no elements: the empty array", onlyParam(conn, 0), "1 of 2:{}");
+
+  conn = bound(config());
+  conn.arrayStart();
+  t.ok("a NULL element", conn.arrayNull());
+  const awkward: string[] = ["\"", "\\", ",", "{", "}", " x y ", "NULL", "", "é"];
+  for (const item of awkward) {
+    const b: u8[] = z(item);
+    t.ok(`an element of ${toI32(b.length)} bytes`, conn.arrayElement(b, 0, toI32(b.length)));
+  }
+  conn.arrayEnd();
+  t.eqStr(
+    "NULL unquoted, every text element quoted, \" and \\ escaped, UTF-8 as it is",
+    onlyParam(conn, 0),
+    "1 of 51:{NULL,\"\\\"\",\"\\\\\",\",\",\"{\",\"}\",\" x y \",\"NULL\",\"\",\"<195><169>\"}",
+  );
+
+  conn = bound(config());
+  conn.paramInt(toI64(1));
+  conn.arrayStart();
+  conn.arrayElement(z("abcdef"), 2, 3);
+  conn.arrayNull();
+  t.ok("no sync while an array is open", !conn.sync());
+  t.ok("no prepare", !conn.prepare("r", "select 2", none()));
+  t.ok("no closeStatement", !conn.closeStatement("q"));
+  t.ok("no bindStart", !conn.bindStart("q"));
+  conn.arrayEnd();
+  conn.paramText("z");
+  t.ok("bindEnd after arrayEnd", conn.bindEnd());
+  t.eqStr(
+    "an array between two parameters is one parameter, its window bound",
+    drain(conn),
+    "B|||'|q||||<3>|||<1>1|||<12>{\"cde\",NULL}|||<1>z||E|||<9>|||||",
+  );
+
+  const c = config();
+  c.maxOutput = 1024;
+  // 12 bytes of Bind, the length word and `{` are queued and 17 stay free:
+  // 990 for the first element, its quotes and the `}` it owes.
+  conn = bound(c);
+  conn.arrayStart();
+  const quotes: u8[] = z(repeat("\"", 494));
+  t.ok("an element whose escapes pass maxOutput is refused", !conn.arrayElement(quotes, 0, 494));
+  t.ok("its escapes are counted: one less fits", conn.arrayElement(quotes, 1, 493));
+  conn.arrayEnd();
+  t.eqStr("and the refused one left nothing behind", onlyParam(conn, 0).slice(0, 14), "1 of 990:{\"\\\"\\");
+
+  conn = bound(c);
+  conn.arrayStart();
+  const long: u8[] = z(repeat("a", 988));
+  t.ok("an element that would pass maxOutput is refused", !conn.arrayElement(long, 0, 988));
+  t.ok("one byte less fits", conn.arrayElement(long, 1, 987));
+  t.ok("a NULL after it is refused", !conn.arrayNull());
+  t.ok("as is another element", !conn.arrayElement(long, 0, 0));
+  conn.arrayEnd();
+  t.ok("the array still ends", conn.bindEnd());
+  t.ok("and Sync fits", conn.sync());
+  t.eqStr("with the element that fit", drain(conn), `B||<3><240>|q||||<1>||<3><223>{"${repeat("a", 987)}"}||E|||<9>|||||S|||<4>`);
+
+  conn = ready(c);
+  t.ok("without a bind, arrayStart is refused", !conn.arrayStart());
+  conn.prepare("", repeat("y", 500), none());
+  conn.sync();
+  const unsent: u8[] = slice(conn.outputBuffer(), 300, 521);
+  conn.sent(300);
+  conn.bindStart("q");
+  conn.arrayStart();
+  t.eqI32("an open array with sent bytes before it", conn.outputStart(), 300);
+  t.ok("an element that fits under maxOutput but not after the end", conn.arrayElement(long, 0, 500));
+  t.eqI32("moves the unsent bytes to the start", conn.outputStart(), 0);
+  t.eqI32("instead of growing the buffer", toI32(conn.outputBuffer().length), 1024);
+  conn.arrayNull();
+  conn.arrayEnd();
+  t.ok("the unsent bytes as they were", same(conn.outputBuffer(), 0, unsent));
+  t.eqStr("the array's length patched where it moved to", onlyParam(conn, 221).slice(0, 14), "1 of 509:{\"aaa");
+
+  conn = bound(config());
+  conn.arrayStart();
+  conn.arrayNull();
+  conn.terminate();
+  t.eqStr("terminate drops an open array with its bind", drain(conn), "X|||<4>");
+  t.ok("and leaves none open", !conn.paramText("x"));
+
+  conn = bound(config());
+  conn.arrayStart();
+  const min: i64 = (toI64(-922337203) * toI64(1000000000) - toI64(685477580)) * toI64(10) - toI64(8);
+  t.ok("arrayInt", conn.arrayInt(toI64(7)));
+  conn.arrayNull();
+  conn.arrayInt(min);
+  conn.arrayInt(toI64(0));
+  conn.arrayEnd();
+  t.eqStr("arrayInt writes decimal, unquoted, the most negative too", onlyParam(conn, 0), "1 of 31:{7,NULL,-9223372036854775808,0}");
+
+  // 12 bytes of Bind, the length word and `{` are queued and 17 stay free:
+  // 990 for the elements and the `}` they owe.
+  conn = bound(c);
+  conn.arrayStart();
+  conn.arrayElement(long, 0, 975);
+  t.ok("an int whose digits would pass maxOutput is refused", !conn.arrayInt(toI64(-1000000000) * toI64(10)));
+  t.ok("one digit less fits", conn.arrayInt(toI64(-1000000000)));
+  conn.arrayEnd();
+  t.eqStr("and the refused one left nothing behind", onlyParam(conn, 0).slice(983), "aaa\",-1000000000}");
+
+  conn = ready(config());
+  t.ok("bindCancel with no bind open is refused", !conn.bindCancel());
+  conn.prepare("q", "select $1", none());
+  conn.sync();
+  drain(conn);
+  conn.bindStart("q");
+  conn.arrayStart();
+  conn.arrayInt(toI64(1));
+  t.eqI32("a bind opens a group, beside the prepare's unanswered one", conn.inFlight, 2);
+  t.ok("bindCancel", conn.bindCancel());
+  t.eqStr("drops the bind and its open array, unsent", drain(conn), "");
+  t.eqI32("and closes the group it opened", conn.inFlight, 1);
+  t.ok("so sync has no group to end", !conn.sync());
+  t.ok("a parameter after it is refused: no bind is open", !conn.paramInt(toI64(1)));
+  conn.prepare("r", "select 2", none());
+  conn.bindStart("q");
+  conn.bindCancel();
+  t.eqI32("a bind in a group already open leaves it open", conn.inFlight, 2);
+  t.ok("so sync still ends it", conn.sync());
+  t.eqStr("with only what was queued before the bind", drain(conn).slice(0, 1), "P");
+};
+
 export const main = (): number => {
   const t = new Suite("postgres");
   startup(t);
@@ -936,5 +1127,7 @@ export const main = (): number => {
   ints(t);
   timestamps(t);
   arrays(t);
+  intArrays(t);
+  arrayBuilder(t);
   return t.done();
 };

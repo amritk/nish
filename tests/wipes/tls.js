@@ -1,7 +1,7 @@
-// The TLS holders' wipes after `opt -O2` (`index.js` says what a group is and
-// how a root's count is read). The counts are as LLVM 18's `opt -O2` leaves
-// them, and each wipe this group pins was deleted in turn to show its root's
-// count move (#430).
+// The TLS holders' wipes, server and client, after `opt -O2` (`index.js` says
+// what a group is and how a root's count is read). The counts are as LLVM 18's
+// `opt -O2` leaves them, and each wipe a group pins was deleted in turn to show
+// its root's count move (#430, #480).
 
 /** The modules that define the TLS server, its record layer and carrier, and the AEADs they seal with. */
 const TLS_MODULES = /^define [^\n]*@nish\.(Tls|tls|Aes|aes|ghash|chacha20|poly1305)/m
@@ -50,7 +50,8 @@ export const wipeChecks = [
   // and the opened ticket's PSK, 1 each), and `restart` 29 (`wipe`, the
   // caller's key array once it is copied in, and the salt and both tickets'
   // PSK arrays, 1 each). The carrier's `close` 652 (the record server's
-  // `close`, the flush after it and `wipeKeys`).
+  // `close`, the flush after it and `wipeKeys`), and its `linger` 43 (the
+  // `wipeKeys` once the write side is shut, before the slot drains).
   //
   // The handshake's own wipes, each a root of its own: a record's `open` 16
   // (its nonce, 1, and the AEADs' own wipes), `writeServerFlight` 3 (the
@@ -125,6 +126,7 @@ export const wipeChecks = [
       ["nish.TlsServer.wipe", 25],
       ["nish.TlsServer.restart", 29],
       ["nish.TlsTcpServer.close", 652],
+      ["nish.TlsTcpServer.linger", 43],
       ["nish.TlsRecordProtection.open", 16],
       ["nish.TlsServer.writeServerFlight", 3],
       ["nish.TlsServer.sign", 17],
@@ -141,6 +143,68 @@ export const wipeChecks = [
       ["nish.TlsServer.resumptionPsk", 1],
       ["nish.TlsServer.writeTicket", 10],
       ["nish.TlsServer.issue", 11],
+    ],
+  },
+  // `nish/net/tls/client` and `nish/net/tls/record-client` wipe what the
+  // client holds the same way; `net_tls_client_record` drives both through a
+  // handshake, a key update and every way a connection ends.
+  //
+  // `TlsClient`: `wipeSecret` 12 (`TlsSecretPool.zero`, every arm), `wipe` 26
+  // (both private keys, 1 each, and both pools' twelve), `fail` 26 (`wipe`),
+  // the constructor 28 (the caller's two key arrays once they are copied in,
+  // 1 each, and the `fail` of a bad argument, inlined), `wipeKeys` 2 and
+  // `wipeUnpicked` 1 (`nish/net/tls`'s `tlsZeroHeld` on each private key, and on the one
+  // the server did not pick), `exchangeKeys` 8 (`wipeKeys`, 2, the ECDHE
+  // secret and the early secret, and the derivations under them; 9 until
+  // P-256's ECDH, when a secp256r1 share took an `internal_error` path that
+  // called `wipeKeys` again) and `handleFinished` 19 (the server's expected verify data and the client's
+  // own, 1 each, and the derivations and pool arms under them). Deleting
+  // `tlsZeroHeld`'s `wipe` takes 2 from `wipeKeys`, 1 from
+  // `wipeUnpicked` and 2 from `exchangeKeys`; either Finished `secureZero`
+  // takes 1 from `handleFinished`, and either of the caller's arrays 1 from
+  // the constructor. The other wipes are of `Secret`s, which the holder and
+  // exit rules (NL2541) pin at compile time.
+  //
+  // `TlsRecordClient`: `wipeRead` 9 and `wipeWrite` 9 (`tlsZeroHeld`,
+  // 2, and the direction's `clear`, 7), `wipe` 47 (the four traffic secret
+  // fields, both `clear`s, the three plaintext buffers, 1 each, and
+  // `TlsClient.wipe`), `fail` 61 (the alert's seal, 14, and `wipe`), `abort`
+  // 47, `handleAlert` 56 (`wipeRead` and `wipe`), `sealClose` 23 (the
+  // `close_notify`'s seal and `wipeWrite`), `close` 58 (`sealClose`, 23, and on a
+  // close before the client's Finished is sealed `wipeRead`, 9, and
+  // `TlsClient.wipe`, 26), `tlsClientInstallHeld` 14
+  // (the plain copy it installs from, 1, and the keys it installs),
+  // `updateReadKeys` 30 (the plain copy `tlsClientAdvanceHeld` moves on, once
+  // for each hash length, and the keys it installs) and `advance` 716 (every
+  // install, the client's pool arms and the `fail`s it can reach). Deleting
+  // `tlsZeroHeld`'s `wipe` takes 2 from each direction's wipe and
+  // every root above it; any of the three buffers' `secureZero`s 1 from
+  // `wipe`, `fail`, `abort` and `handleAlert`; `tlsClientInstallHeld`'s 1
+  // from itself and `tlsClientAdvanceHeld`'s 2 from `updateReadKeys`.
+  {
+    name: "tls: the client's wipes survive opt -O2 (both private keys, the ECDHE, early, handshake and traffic secrets, the Finished verify data, the caller's key arrays, the plaintext buffers)",
+    program: "tests/link/net_tls_client_record/main.ts",
+    modules: TLS_MODULES,
+    roots: [
+      ["nish.TlsClient.wipeSecret", 12],
+      ["nish.TlsClient.wipe", 26],
+      ["nish.TlsClient.fail", 26],
+      ["nish.TlsClient.constructor", 28],
+      ["nish.TlsClient.wipeKeys", 2],
+      ["nish.TlsClient.wipeUnpicked", 1],
+      ["nish.TlsClient.exchangeKeys", 8],
+      ["nish.TlsClient.handleFinished", 19],
+      ["nish.tlsClientInstallHeld", 14],
+      ["nish.TlsRecordClient.wipeRead", 9],
+      ["nish.TlsRecordClient.wipeWrite", 9],
+      ["nish.TlsRecordClient.wipe", 47],
+      ["nish.TlsRecordClient.fail", 61],
+      ["nish.TlsRecordClient.abort", 47],
+      ["nish.TlsRecordClient.handleAlert", 56],
+      ["nish.TlsRecordClient.sealClose", 23],
+      ["nish.TlsRecordClient.close", 58],
+      ["nish.TlsRecordClient.updateReadKeys", 30],
+      ["nish.TlsRecordClient.advance", 716],
     ],
   },
   // `nish/net/tls/schedule`'s one-shot derivations take and answer `Secret`s

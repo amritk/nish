@@ -273,4 +273,66 @@ PASS  text after a quote
 PASS  a space unquoted
 PASS  a window too short
 PASS  stays bad
-postgres: 275 passed, 0 failed, 0 skipped
+PASS  paramIntArray: the empty array
+PASS  is {}
+PASS  every value in decimal, the most negative too
+PASS  a window of the array
+PASS  an empty window at its end
+PASS  an int8[] that would pass maxOutput is refused
+PASS  its exact size is asked for: one value less fits
+PASS  and the refused one left nothing behind
+PASS  without a bind, refused
+PASS  arrayStart
+PASS  no elements: the empty array
+PASS  a NULL element
+PASS  an element of 1 bytes
+PASS  an element of 1 bytes
+PASS  an element of 1 bytes
+PASS  an element of 1 bytes
+PASS  an element of 1 bytes
+PASS  an element of 5 bytes
+PASS  an element of 4 bytes
+PASS  an element of 0 bytes
+PASS  an element of 2 bytes
+PASS  NULL unquoted, every text element quoted, " and \ escaped, UTF-8 as it is
+PASS  no sync while an array is open
+PASS  no prepare
+PASS  no closeStatement
+PASS  no bindStart
+PASS  bindEnd after arrayEnd
+PASS  an array between two parameters is one parameter, its window bound
+PASS  an element whose escapes pass maxOutput is refused
+PASS  its escapes are counted: one less fits
+PASS  and the refused one left nothing behind
+PASS  an element that would pass maxOutput is refused
+PASS  one byte less fits
+PASS  a NULL after it is refused
+PASS  as is another element
+PASS  the array still ends
+PASS  and Sync fits
+PASS  with the element that fit
+PASS  without a bind, arrayStart is refused
+PASS  an open array with sent bytes before it
+PASS  an element that fits under maxOutput but not after the end
+PASS  moves the unsent bytes to the start
+PASS  instead of growing the buffer
+PASS  the unsent bytes as they were
+PASS  the array's length patched where it moved to
+PASS  terminate drops an open array with its bind
+PASS  and leaves none open
+PASS  arrayInt
+PASS  arrayInt writes decimal, unquoted, the most negative too
+PASS  an int whose digits would pass maxOutput is refused
+PASS  one digit less fits
+PASS  and the refused one left nothing behind
+PASS  bindCancel with no bind open is refused
+PASS  a bind opens a group, beside the prepare's unanswered one
+PASS  bindCancel
+PASS  drops the bind and its open array, unsent
+PASS  and closes the group it opened
+PASS  so sync has no group to end
+PASS  a parameter after it is refused: no bind is open
+PASS  a bind in a group already open leaves it open
+PASS  so sync still ends it
+PASS  with only what was queued before the bind
+postgres: 337 passed, 0 failed, 0 skipped

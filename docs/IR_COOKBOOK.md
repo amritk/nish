@@ -56,7 +56,7 @@ sentence each:
 | `align 4` / `align 8` on `alloca`, `load`, `store` | The natural alignment of the type, as clang and rustc emit. |
 | `inbounds` on `getelementptr` | The computed address stays inside the object (field or element access on a valid pointer). |
 | `immarg` | The operand must be a constant (the `isvolatile` flag of `llvm.memset`). |
-| `nsw` (flag on `add`/`sub`/`mul`) | On a user-level **signed** integer add/sub/mul the bounds walk has *proven* fits, restating the proof so LLVM may widen and fold on it. Every other signed `+`, `-`, `*`, negation, `++`, `--` and `op=` is checked instead — `llvm.s{add,sub,mul}.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](LANGUAGE.md#semantics-decisions)). `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` are the plain instructions, neither flagged nor checked; the deprecated `--wrapping` makes the entry package's operators plain too. Never on an unsigned type (those are defined to wrap) and never on the compiler's own index and length arithmetic. |
+| `nsw` (flag on `add`/`sub`/`mul`) | On a user-level **signed** integer add/sub/mul the bounds walk has *proven* fits, restating the proof so LLVM may widen and fold on it. Every other signed `+`, `-`, `*`, negation, `++`, `--` and `op=` is checked instead — `llvm.s{add,sub,mul}.with.overflow` and a branch to `nish_panic_overflow` ([Semantics decisions](LANGUAGE.md#semantics-decisions)). `wrappingAdd`/`wrappingSub`/`wrappingMul` from `nish:unsafe` are the plain instructions, neither flagged nor checked. Never on an unsigned type (those are defined to wrap) and never on the compiler's own index and length arithmetic. |
 
 `--plain` drops every attribute and alignment hint and produces the bare
 form shown under [Functions](#functions).
@@ -9762,8 +9762,7 @@ attributes #3 = { nounwind readonly "probe-stack"="inline-asm" }
 
 `i64` arithmetic overflows like `i32` — a checked panic by default unless
 proven to fit ([Semantics decisions](LANGUAGE.md#semantics-decisions)),
-wrapping through the `nish:unsafe` `wrapping*` calls (or the deprecated
-`--wrapping`); `toI32` on an `i64` is a `trunc`, which wraps either way.
+wrapping through the `nish:unsafe` `wrapping*` calls; `toI32` on an `i64` is a `trunc`, which wraps either way.
 
 <!-- cookbook:begin types-i64 -->
 ```ts
@@ -13764,8 +13763,7 @@ block per function, however many checks branch to it, so a small function
 stays small enough to inline; under `-g` it is one block per source location
 instead, so that each call carries the `!dbg` of the check that failed. The panic is declared `extern_weak`, so a
 freestanding wasm module that links no runtime still traps on overflow
-rather than failing to link. Under `--wrapping` both are plain `mul` and
-`add`.
+rather than failing to link.
 
 <!-- cookbook:begin expr-overflow-checked -->
 ```ts
@@ -15401,8 +15399,7 @@ three further below `INT_MAX`, so the three sums and the step `i + 4` are
 `add nsw`. Two kinds of overflow check are left. The loop condition's own
 `i + 3` keeps one, because after a step of four `i` may be as large as the
 length and three more may pass `INT_MAX`. The running total keeps its four,
-because they are the program's own arithmetic. Under `--wrapping` the sum
-wraps by definition and every bounds check stays.
+because they are the program's own arithmetic.
 
 <!-- cookbook:begin arr-bounds-offset -->
 ```ts
@@ -15549,8 +15546,8 @@ is checked, so each value is exact: a product or a sum that overflowed would
 have panicked before the index was used, and the range saturates at the
 type's ends rather than wrapping. The same range is what makes `r * 4`,
 `+ c` and both loop steps `nsw`; the running total keeps its overflow check,
-because it is the program's own arithmetic. Under `--wrapping`, for an unsigned index and
-for an `f64` one the range is not the value's, and the check stays.
+because it is the program's own arithmetic. For an unsigned index and for an
+`f64` one the range is not the value's, and the check stays.
 
 <!-- cookbook:begin arr-bounds-range -->
 ```ts
@@ -16696,60 +16693,6 @@ attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
 !18 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end unsafe-unchecked-get -->
-
-### `--unchecked-indexing` (deprecated)
-
-The compare, the branch and the panic block disappear from every index of the
-entry package's modules; `get` regains `willreturn` and becomes `readonly`.
-Out-of-range is then undefined behaviour. Unlike the proof above, this is a
-promise the *program* makes: an out-of-range index is undefined behaviour
-rather than a panic. The flag prints NL9014 and never reaches a dependency or
-a `nish/` module; `uncheckedGet` above says the same thing at one site.
-
-<!-- cookbook:begin arr-unchecked -->
-Compiled with `--unchecked-indexing`.
-
-```ts
-const get = (a: number[], i: number): number => a[i]
-```
-
-```llvm
-%struct.nish_array = type { i64, i64, i8* }
-
-define internal noundef i32 @get(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %a, i32 noundef %i) #0 {
-entry:
-  %0 = sext i32 %i to i64
-  %1 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %a, i64 0, i32 2
-  %2 = load i8*, i8** %1, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %3 = bitcast i8* %2 to i32*
-  %4 = getelementptr inbounds i32, i32* %3, i64 %0
-  %5 = load i32, i32* %4, align 4, !alias.scope !4, !noalias !3, !tbaa !12
-  ret i32 %5
-}
-
-attributes #0 = { nounwind willreturn readonly "probe-stack"="inline-asm" }
-
-!llvm.module.flags = !{!13, !14, !15, !16, !17}
-!0 = !{!"nish array"}
-!1 = !{!"header", !0}
-!2 = !{!"elements", !0}
-!3 = !{!1}
-!4 = !{!2}
-!5 = !{!"nish TBAA"}
-!6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"header i64", !6, i64 0}
-!8 = !{!"header ptr", !6, i64 0}
-!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
-!10 = !{!9, !8, i64 16}
-!11 = !{!"element i32", !6, i64 0}
-!12 = !{!11, !11, i64 0}
-!13 = !{i32 8, !"cf-protection-branch", i32 1}
-!14 = !{i32 8, !"cf-protection-return", i32 1}
-!15 = !{i32 8, !"branch-target-enforcement", i32 1}
-!16 = !{i32 8, !"sign-return-address", i32 1}
-!17 = !{i32 4, !"probe-stack", !"inline-asm"}
-```
-<!-- cookbook:end arr-unchecked -->
 
 ### Literals and `push`
 
@@ -20155,151 +20098,6 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end mem-reclaim -->
 
-### `Arena.mark` / `release` / `used` / `reset`
-
-`Arena.release` and `Arena.reset` are deprecated (NL7001): a release to a
-mark something allocated after it still references is undefined behaviour the
-compiler does not check, and [`using a = arena()`](#using-a--arena) below is
-the checked bracket that replaces them. The listing stays because a program
-written before it still compiles to this.
-
-The explicit builtins lower to one runtime call each. `measure` calls
-`Arena.release` itself, so the compiler never wraps it in an automatic
-scope (its own mark would be invalidated by the user's release); the
-8000-byte `new Array<number>(2000)` is over the 4096-byte stack cap, so it
-is an arena allocation that the release reclaims.
-
-<!-- cookbook:begin mem-arena-builtins -->
-```ts
-const measure = (): i64 => {
-  const m = Arena.mark()
-  const xs = new Array<number>(2000) // 8000 bytes: over the 4096-byte stack cap, so arena
-  const used = Arena.used()
-  Arena.release(m)
-  return used + toI64(xs.length)
-}
-
-const recycle = (): void => {
-  Arena.reset()
-}
-```
-
-```llvm
-%struct.nish_array = type { i64, i64, i8* }
-%struct.nish_arena = type { i8*, i64, i64, i8* }
-
-@nish_arena = external global %struct.nish_arena, align 8
-
-declare void @llvm.memset.p0i8.i64(i8* nocapture writeonly, i8, i64, i1 immarg)
-declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #2
-declare void @nish_reset_arena() #1
-declare noundef i64 @nish_arena_mark() #1
-declare void @nish_arena_release(i64 noundef) #1
-declare noundef i64 @nish_arena_used() #1
-declare extern_weak void @nish_panic_overflow(i32 noundef) #3
-declare { i64, i1 } @llvm.sadd.with.overflow.i64(i64, i64) #4
-
-define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #5 {
-entry:
-  %size.p7 = add i64 %size, 7
-  %size.aligned = and i64 %size.p7, -8
-  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
-  %off = load i64, i64* %off.ptr, align 8
-  %new.off = add i64 %off, %size.aligned
-  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
-  %cap = load i64, i64* %cap.ptr, align 8
-  %fits = icmp ule i64 %new.off, %cap
-  br i1 %fits, label %fast, label %slow
-
-fast:
-  store i64 %new.off, i64* %off.ptr, align 8
-  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
-  %buf = load i8*, i8** %buf.ptr, align 8
-  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
-  ret i8* %obj
-
-slow:
-  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
-  ret i8* %grown
-}
-
-define internal noundef i64 @measure() #0 {
-entry:
-  %m.addr = alloca i64, align 8
-  %xs.addr = alloca %struct.nish_array*, align 8
-  %used.addr = alloca i64, align 8
-  %0 = call i64 @nish_arena_mark()
-  store i64 %0, i64* %m.addr, align 8
-  %1 = call i8* @nish_alloc_struct(i64 24)
-  %2 = bitcast i8* %1 to %struct.nish_array*
-  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 0
-  store i64 2000, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 1
-  store i64 2000, i64* %4, align 8, !alias.scope !3, !noalias !4, !tbaa !11
-  %5 = mul i64 2000, 4
-  %6 = call i8* @nish_alloc_struct(i64 %5)
-  call void @llvm.memset.p0i8.i64(i8* align 8 %6, i8 0, i64 %5, i1 false), !alias.scope !4, !noalias !3
-  %7 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %2, i64 0, i32 2
-  store i8* %6, i8** %7, align 8, !alias.scope !3, !noalias !4, !tbaa !12
-  store %struct.nish_array* %2, %struct.nish_array** %xs.addr, align 8
-  %8 = call i64 @nish_arena_used()
-  store i64 %8, i64* %used.addr, align 8
-  %9 = load i64, i64* %m.addr, align 8
-  call void @nish_arena_release(i64 %9)
-  %10 = load i64, i64* %used.addr, align 8
-  %11 = load %struct.nish_array*, %struct.nish_array** %xs.addr, align 8
-  %12 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
-  %13 = load i64, i64* %12, align 8, !alias.scope !3, !noalias !4, !tbaa !10
-  %14 = trunc i64 %13 to i32
-  %15 = sext i32 %14 to i64
-  %16 = call { i64, i1 } @llvm.sadd.with.overflow.i64(i64 %10, i64 %15)
-  %17 = extractvalue { i64, i1 } %16, 0
-  %18 = extractvalue { i64, i1 } %16, 1
-  br i1 %18, label %ovf.fail, label %ovf.ok
-
-ovf.ok:
-  ret i64 %17
-
-ovf.fail:
-  call void @nish_panic_overflow(i32 0)
-  unreachable
-}
-
-define internal void @recycle() #1 {
-entry:
-  call void @nish_reset_arena()
-  ret void
-}
-
-attributes #0 = { nounwind "probe-stack"="inline-asm" }
-attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #2 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
-attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
-attributes #4 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
-attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
-
-!llvm.module.flags = !{!13, !14, !15, !16, !17}
-!0 = !{!"nish array"}
-!1 = !{!"header", !0}
-!2 = !{!"elements", !0}
-!3 = !{!1}
-!4 = !{!2}
-!5 = !{!"nish TBAA"}
-!6 = !{!"omnipotent char", !5, i64 0}
-!7 = !{!"header i64", !6, i64 0}
-!8 = !{!"header ptr", !6, i64 0}
-!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
-!10 = !{!9, !7, i64 0}
-!11 = !{!9, !7, i64 8}
-!12 = !{!9, !8, i64 16}
-!13 = !{i32 8, !"cf-protection-branch", i32 1}
-!14 = !{i32 8, !"cf-protection-return", i32 1}
-!15 = !{i32 8, !"branch-target-enforcement", i32 1}
-!16 = !{i32 8, !"sign-return-address", i32 1}
-!17 = !{i32 4, !"probe-stack", !"inline-asm"}
-```
-<!-- cookbook:end mem-arena-builtins -->
-
 ### `using a = arena()`
 
 A block that declares `using a = arena()` calls `nish_arena_mark` where the
@@ -21893,8 +21691,7 @@ answering an `i32`, a negative errno on failure, and every one is a write: it
 changes the kernel's state of a socket, so no two calls fold into one. A buffer
 travels as its array header. `netRead` and `netWrite` check `0 <= off <= off +
 len <= buf.length` before the call with the `slice` check `dst.set` uses, which
-is the `net.fail` block and its `noreturn` panic; `--unchecked-indexing`
-removes both. The buffer `netRead` fills keeps `nocapture` and loses
+is the `net.fail` block and its `noreturn` panic. The buffer `netRead` fills keeps `nocapture` and loses
 `readonly`, and neither call is `willreturn`, because a blocking socket the
 program inherited can wait
 ([LANGUAGE.md](LANGUAGE.md#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)).
@@ -22360,8 +22157,7 @@ A key-reading loop without the `net` capability: `waitStdin` is a `select` on
 stdin with a timeout (a `poll` under WASI), `readStdin` a read of what is already there, and the
 three terminal questions are a call each. `readStdin(buf, off, len)` lowers as
 `netRead` does with the descriptor left out — the `[off, off + len)` check, the
-same `net.fail` block and its slice panic, then the call — and
-`--unchecked-indexing` removes the check. `terminalSize` answers a fresh
+same `net.fail` block and its slice panic, then the call. `terminalSize` answers a fresh
 `i32[]` from the arena, so `[0]` on it is an ordinary element read with its
 bounds check. `columns` only reads the pair, so it gets the automatic arena
 scope that gives the pair back; a function that returns it gets none
@@ -23246,6 +23042,282 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end builtin-driver -->
 
+### The wall clock
+
+`wallClockNanos` is `monotonicNanos` on `CLOCK_REALTIME`: one call answering an
+`i64`, `willreturn` and a write, so two reads never fold into one. The division
+is the checked `i64` one, with nothing to check: the divisor is a constant that
+is neither zero nor `-1`.
+
+<!-- cookbook:begin builtin-wall-clock -->
+```ts
+// `wallClockNanos`, `CLOCK_REALTIME` in nanoseconds since the epoch: the same
+// one call as `monotonicNanos`, on the other clock.
+import { wallClockNanos } from "nish:process"
+
+export const seconds = (): i64 => wallClockNanos() / 1000000000
+```
+
+```llvm
+declare i64 @nish_wall_clock_nanos() #0
+
+define noundef i64 @seconds() #0 {
+entry:
+  %0 = call i64 @nish_wall_clock_nanos()
+  %1 = sdiv i64 %0, 1000000000
+  ret i64 %1
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-wall-clock -->
+
+### Feeding a child from memory
+
+`spawnPiped` hands a child a secret the way it should travel: on its stdin,
+never in its argument vector (which `/proc/<pid>/cmdline` shows to every
+user) or its environment. The snippet passes four values straight through —
+the vector, the bytes to send and the two arrays the child's output is
+appended to — and gets back the status, with no wrapper on this side.
+
+The `declare` line is the one to read. `@nish_spawn_piped` is not
+`willreturn` (the child may never exit). `stdin` is `readonly`; `stdout` and
+`stderr` are `nocapture` but not `readonly`, because the runtime grows them
+and writes their headers, so the escape and attribute passes treat each as a
+`push` receiver. None is `noalias`: one array may be both stdin and stdout,
+and the runtime reads the input through the header as the output moves it.
+
+<!-- cookbook:begin builtin-spawn-piped -->
+```ts
+export const main = (): number => {
+  const secret: u8[] = []
+  const word = "hunter2"
+  for (let i = 0; i < word.length; i++) {
+    secret.push(toU8(word.charCodeAt(i)))
+  }
+  const out: u8[] = []
+  const err: u8[] = []
+  const status = spawnPiped(["sha256sum"], secret, out, err)
+  console.log(`status ${status}, ${out.length} bytes out, ${err.length} bytes err`)
+  return 0
+}
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+%struct.nish_arena = type { i8*, i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"hunter2\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [10 x i8] } { i64 9, [10 x i8] c"sha256sum\00" }, align 8
+@.str.2 = private unnamed_addr constant { i64, [8 x i8] } { i64 7, [8 x i8] c"status \00" }, align 8
+@.str.3 = private unnamed_addr constant { i64, [3 x i8] } { i64 2, [3 x i8] c", \00" }, align 8
+@.str.4 = private unnamed_addr constant { i64, [13 x i8] } { i64 12, [13 x i8] c" bytes out, \00" }, align 8
+@.str.5 = private unnamed_addr constant { i64, [11 x i8] } { i64 10, [11 x i8] c" bytes err\00" }, align 8
+@nish_arena = external global %struct.nish_arena, align 8
+
+declare noalias noundef nonnull align 8 i8* @nish_arena_grow(i64 noundef) #1
+declare void @nish_free_arena() #2
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #2
+declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #2
+declare noundef i32 @nish_spawn_piped(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #0
+declare void @nish_array_grow(%struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef) #2
+
+define internal noalias noundef nonnull align 8 i8* @nish_alloc_struct(i64 noundef %size) #3 {
+entry:
+  %size.p7 = add i64 %size, 7
+  %size.aligned = and i64 %size.p7, -8
+  %off.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 1
+  %off = load i64, i64* %off.ptr, align 8
+  %new.off = add i64 %off, %size.aligned
+  %cap.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 2
+  %cap = load i64, i64* %cap.ptr, align 8
+  %fits = icmp ule i64 %new.off, %cap
+  br i1 %fits, label %fast, label %slow
+
+fast:
+  store i64 %new.off, i64* %off.ptr, align 8
+  %buf.ptr = getelementptr inbounds %struct.nish_arena, %struct.nish_arena* @nish_arena, i64 0, i32 0
+  %buf = load i8*, i8** %buf.ptr, align 8
+  %obj = getelementptr inbounds i8, i8* %buf, i64 %off
+  ret i8* %obj
+
+slow:
+  %grown = call i8* @nish_arena_grow(i64 %size.aligned)
+  ret i8* %grown
+}
+
+define noundef i32 @nish_main() #0 {
+entry:
+  %secret.addr = alloca %struct.nish_array*, align 8
+  %word.addr = alloca i8*, align 8
+  %i.addr = alloca i32, align 4
+  %out.addr = alloca %struct.nish_array*, align 8
+  %err.addr = alloca %struct.nish_array*, align 8
+  %status.addr = alloca i32, align 4
+  %0 = call i8* @nish_alloc_struct(i64 24)
+  %1 = bitcast i8* %0 to %struct.nish_array*
+  %2 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 0
+  store i64 0, i64* %2, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %3 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 1
+  store i64 0, i64* %3, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %4 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %1, i64 0, i32 2
+  store i8* null, i8** %4, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %1, %struct.nish_array** %secret.addr, align 8
+  store i8* bitcast ({ i64, [8 x i8] }* @.str.0 to i8*), i8** %word.addr, align 8
+  store i32 0, i32* %i.addr, align 4
+  br label %for.cond
+
+for.cond:
+  %5 = load i32, i32* %i.addr, align 4
+  %6 = load i8*, i8** %word.addr, align 8
+  %7 = bitcast i8* %6 to i64*
+  %8 = load i64, i64* %7, align 8
+  %9 = trunc i64 %8 to i32
+  %10 = icmp slt i32 %5, %9
+  br i1 %10, label %for.body, label %for.end
+
+for.body:
+  %11 = load %struct.nish_array*, %struct.nish_array** %secret.addr, align 8
+  %12 = load i8*, i8** %word.addr, align 8
+  %13 = load i32, i32* %i.addr, align 4
+  %14 = sext i32 %13 to i64
+  %15 = getelementptr inbounds i8, i8* %12, i64 8
+  %16 = getelementptr inbounds i8, i8* %15, i64 %14
+  %17 = load i8, i8* %16, align 1
+  %18 = zext i8 %17 to i32
+  %19 = trunc i32 %18 to i8
+  %20 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 0
+  %21 = load i64, i64* %20, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %22 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 1
+  %23 = load i64, i64* %22, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %24 = icmp eq i64 %21, %23
+  br i1 %24, label %push.grow, label %push.store
+
+push.grow:
+  call void @nish_array_grow(%struct.nish_array* %11, i64 1)
+  br label %push.store
+
+push.store:
+  %25 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %11, i64 0, i32 2
+  %26 = load i8*, i8** %25, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %27 = bitcast i8* %26 to i8*
+  %28 = getelementptr inbounds i8, i8* %27, i64 %21
+  store i8 %19, i8* %28, align 1, !alias.scope !4, !noalias !3, !tbaa !14
+  %29 = add i64 %21, 1
+  store i64 %29, i64* %20, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %30 = trunc i64 %29 to i32
+  br label %for.inc
+
+for.inc:
+  %31 = load i32, i32* %i.addr, align 4
+  %32 = add nsw i32 %31, 1
+  store i32 %32, i32* %i.addr, align 4
+  br label %for.cond
+
+for.end:
+  %33 = call i8* @nish_alloc_struct(i64 24)
+  %34 = bitcast i8* %33 to %struct.nish_array*
+  %35 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 0
+  store i64 0, i64* %35, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %36 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 1
+  store i64 0, i64* %36, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %37 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %34, i64 0, i32 2
+  store i8* null, i8** %37, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %34, %struct.nish_array** %out.addr, align 8
+  %38 = call i8* @nish_alloc_struct(i64 24)
+  %39 = bitcast i8* %38 to %struct.nish_array*
+  %40 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %39, i64 0, i32 0
+  store i64 0, i64* %40, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %41 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %39, i64 0, i32 1
+  store i64 0, i64* %41, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %42 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %39, i64 0, i32 2
+  store i8* null, i8** %42, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  store %struct.nish_array* %39, %struct.nish_array** %err.addr, align 8
+  %43 = call i8* @nish_alloc_struct(i64 24)
+  %44 = bitcast i8* %43 to %struct.nish_array*
+  %45 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 0
+  store i64 1, i64* %45, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %46 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 1
+  store i64 1, i64* %46, align 8, !alias.scope !3, !noalias !4, !tbaa !11
+  %47 = call i8* @nish_alloc_struct(i64 8)
+  %48 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %44, i64 0, i32 2
+  store i8* %47, i8** %48, align 8, !alias.scope !3, !noalias !4, !tbaa !12
+  %49 = bitcast i8* %47 to i8**
+  %50 = getelementptr inbounds i8*, i8** %49, i64 0
+  store i8* bitcast ({ i64, [10 x i8] }* @.str.1 to i8*), i8** %50, align 8, !alias.scope !4, !noalias !3, !tbaa !16
+  %51 = load %struct.nish_array*, %struct.nish_array** %secret.addr, align 8
+  %52 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %53 = load %struct.nish_array*, %struct.nish_array** %err.addr, align 8
+  %54 = call i32 @nish_spawn_piped(%struct.nish_array* %44, %struct.nish_array* %51, %struct.nish_array* %52, %struct.nish_array* %53)
+  store i32 %54, i32* %status.addr, align 4
+  %55 = load i32, i32* %status.addr, align 4
+  %56 = call i8* @nish_str_from_i32(i32 %55)
+  %57 = call i8* @nish_str_concat(i8* bitcast ({ i64, [8 x i8] }* @.str.2 to i8*), i8* %56)
+  %58 = call i8* @nish_str_concat(i8* %57, i8* bitcast ({ i64, [3 x i8] }* @.str.3 to i8*))
+  %59 = load %struct.nish_array*, %struct.nish_array** %out.addr, align 8
+  %60 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %59, i64 0, i32 0
+  %61 = load i64, i64* %60, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %62 = trunc i64 %61 to i32
+  %63 = call i8* @nish_str_from_i32(i32 %62)
+  %64 = call i8* @nish_str_concat(i8* %58, i8* %63)
+  %65 = call i8* @nish_str_concat(i8* %64, i8* bitcast ({ i64, [13 x i8] }* @.str.4 to i8*))
+  %66 = load %struct.nish_array*, %struct.nish_array** %err.addr, align 8
+  %67 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %66, i64 0, i32 0
+  %68 = load i64, i64* %67, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %69 = trunc i64 %68 to i32
+  %70 = call i8* @nish_str_from_i32(i32 %69)
+  %71 = call i8* @nish_str_concat(i8* %65, i8* %70)
+  %72 = call i8* @nish_str_concat(i8* %71, i8* bitcast ({ i64, [11 x i8] }* @.str.5 to i8*))
+  call void @nish_print(i8* %72)
+  ret i32 0
+}
+
+define noundef i32 @main(i32 noundef %argc, i8** noundef %argv) #0 {
+entry:
+  %0 = call i32 @nish_main()
+  call void @nish_free_arena()
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn cold noinline allocsize(0) "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #3 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!17, !18, !19, !20, !21}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{!9, !7, i64 8}
+!12 = !{!9, !8, i64 16}
+!13 = !{!"element i8", !6, i64 0}
+!14 = !{!13, !13, i64 0}
+!15 = !{!"element ptr", !6, i64 0}
+!16 = !{!15, !15, i64 0}
+!17 = !{i32 8, !"cf-protection-branch", i32 1}
+!18 = !{i32 8, !"cf-protection-return", i32 1}
+!19 = !{i32 8, !"branch-target-enforcement", i32 1}
+!20 = !{i32 8, !"sign-return-address", i32 1}
+!21 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-spawn-piped -->
+
 ### Reading the environment
 
 `getenv` is the only environment read the language has, and it is a call rather
@@ -23493,6 +23565,211 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 !15 = !{i32 4, !"probe-stack", !"inline-asm"}
 ```
 <!-- cookbook:end builtin-read-bytes -->
+
+### Replacing a file, and bytes out
+
+`writeFileBytesSync`, `renameSync` and `unlinkSync` each answer an `i32`, the
+count or 0 on success and a negative errno otherwise, so the write-then-rename
+below branches on a value and no call can exit. `writeBytes` lowers as
+`netWrite` does with the descriptor fixed at 1: the range check is the
+`slice` panic's, emitted once after the arguments, and the call after it takes
+the array header and the two widened `i64`s.
+
+<!-- cookbook:begin builtin-replace-bytes -->
+```ts
+export const replace = (path: string, bytes: readonly u8[]): number => {
+  const tmp = `${path}.tmp`
+  const written = writeFileBytesSync(tmp, bytes)
+  if (written < 0) {
+    unlinkSync(tmp)
+    return written
+  }
+  return renameSync(tmp, path)
+}
+
+export const echo = (bytes: readonly u8[]): number => writeBytes(bytes, 0, bytes.length)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c".tmp\00" }, align 8
+
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_rename(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_unlink(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_write_file_bytes(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture readonly) #0
+declare noundef i32 @nish_write_bytes(%struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #0
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define noundef i32 @replace(i8* noundef nonnull noalias readonly align 8 nocapture %path, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes) #0 {
+entry:
+  %tmp.addr = alloca i8*, align 8
+  %written.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_str_concat(i8* %path, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  store i8* %0, i8** %tmp.addr, align 8
+  %1 = load i8*, i8** %tmp.addr, align 8
+  %2 = call i32 @nish_write_file_bytes(i8* %1, %struct.nish_array* %bytes)
+  store i32 %2, i32* %written.addr, align 4
+  %3 = load i32, i32* %written.addr, align 4
+  %4 = icmp slt i32 %3, 0
+  br i1 %4, label %if.then, label %if.end
+
+if.then:
+  %5 = load i8*, i8** %tmp.addr, align 8
+  %6 = call i32 @nish_unlink(i8* %5)
+  %7 = load i32, i32* %written.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %7
+
+if.end:
+  %8 = load i8*, i8** %tmp.addr, align 8
+  %9 = call i32 @nish_rename(i8* %8, i8* %path)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %9
+}
+
+define noundef i32 @echo(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = sext i32 %2 to i64
+  %4 = add i64 0, %3
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8
+  %7 = icmp ule i64 0, %4
+  %8 = icmp ule i64 %4, %6
+  %9 = and i1 %7, %8
+  br i1 %9, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %4, i64 %6)
+  unreachable
+
+net.ok:
+  %10 = call i32 @nish_write_bytes(%struct.nish_array* %bytes, i64 0, i64 %3)
+  ret i32 %10
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-replace-bytes -->
+
+### A secret on disk, a lock file and a private directory
+
+`writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` lower to one
+runtime call each, the mode passed as the `i32` it is and the answer the `i32`
+the program branches on: the `fchmod` that fixes the mode before the first
+byte is written, and the `O_NOFOLLOW` or `O_EXCL` that keeps a link from
+redirecting the write, are inside the runtime, not in the IR. The `0o600`
+literal is `384`, and the lock's `>= 0` is one `icmp sge`.
+
+<!-- cookbook:begin builtin-secret-file -->
+```ts
+export const storeSecret = (path: string, secret: string): number => {
+  const tmp = `${path}.tmp`
+  const written = writeFileSyncMode(tmp, secret, 0o600)
+  if (written < 0) {
+    unlinkSync(tmp)
+    return written
+  }
+  return renameSync(tmp, path)
+}
+
+export const lock = (path: string): boolean => createFileExclusiveSync(path, "", 0o600) >= 0
+
+export const privateDir = (path: string): number => mkdirSyncMode(path, 0o700)
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c".tmp\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_rename(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_unlink(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_write_file_mode(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish_create_file_exclusive(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish_mkdir_mode(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
+
+define noundef i32 @storeSecret(i8* noundef nonnull noalias readonly align 8 nocapture %path, i8* noundef nonnull noalias readonly align 8 nocapture %secret) #0 {
+entry:
+  %tmp.addr = alloca i8*, align 8
+  %written.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_str_concat(i8* %path, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  store i8* %0, i8** %tmp.addr, align 8
+  %1 = load i8*, i8** %tmp.addr, align 8
+  %2 = call i32 @nish_write_file_mode(i8* %1, i8* %secret, i32 384)
+  store i32 %2, i32* %written.addr, align 4
+  %3 = load i32, i32* %written.addr, align 4
+  %4 = icmp slt i32 %3, 0
+  br i1 %4, label %if.then, label %if.end
+
+if.then:
+  %5 = load i8*, i8** %tmp.addr, align 8
+  %6 = call i32 @nish_unlink(i8* %5)
+  %7 = load i32, i32* %written.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %7
+
+if.end:
+  %8 = load i8*, i8** %tmp.addr, align 8
+  %9 = call i32 @nish_rename(i8* %8, i8* %path)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %9
+}
+
+define noundef zeroext i1 @lock(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
+entry:
+  %0 = call i32 @nish_create_file_exclusive(i8* %path, i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i32 384)
+  %1 = icmp sge i32 %0, 0
+  ret i1 %1
+}
+
+define noundef i32 @privateDir(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
+entry:
+  %0 = call i32 @nish_mkdir_mode(i8* %path, i32 448)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-secret-file -->
 
 ### Capabilities: a report, not a lowering
 
@@ -23855,9 +24132,7 @@ and the flag branches to the function's cold `ovf.fail` block, which calls
 `nish_panic_overflow` and exits 1 with `attempt to add with overflow`
 ([Semantics decisions](LANGUAGE.md#semantics-decisions)). One that is proven
 to fit is the plain instruction with `nsw`, the flag restating the proof
-([Checked signed arithmetic](#checked-signed-arithmetic)); the deprecated
-`--wrapping` makes the entry package's operators plain, neither flagged nor
-checked. Division and remainder have no `nsw` form, the compiler's own
+([Checked signed arithmetic](#checked-signed-arithmetic)). Division and remainder have no `nsw` form, the compiler's own
 index and length arithmetic is never flagged, and an **unsigned** type is never
 flagged at all — `u8`..`u64` are defined as wrapping, which is what hashing and
 bit-packing are written against. A negated integer *literal* is no instruction
@@ -24005,45 +24280,10 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end unsafe-wrapping -->
 
-The deprecated `--wrapping` makes every operator of the entry package's
-modules (never a dependency's or a `nish/` module's) the plain instruction,
-neither flagged nor checked, and prints NL9015; the same source, one flag, and
-no `nsw` or overflow check anywhere:
-
-<!-- cookbook:begin opt-wrapping -->
-Compiled with `--wrapping`.
-
-```ts
-const poly = (x: number, y: number): number => x * x - 3 * y + -x
-```
-
-```llvm
-define internal noundef i32 @poly(i32 noundef %x, i32 noundef %y) #0 {
-entry:
-  %0 = mul i32 %x, %x
-  %1 = mul i32 3, %y
-  %2 = sub i32 %0, %1
-  %3 = sub i32 0, %x
-  %4 = add i32 %2, %3
-  ret i32 %4
-}
-
-attributes #0 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
-
-!llvm.module.flags = !{!0, !1, !2, !3, !4}
-!0 = !{i32 8, !"cf-protection-branch", i32 1}
-!1 = !{i32 8, !"cf-protection-return", i32 1}
-!2 = !{i32 8, !"branch-target-enforcement", i32 1}
-!3 = !{i32 8, !"sign-return-address", i32 1}
-!4 = !{i32 4, !"probe-stack", !"inline-asm"}
-```
-<!-- cookbook:end opt-wrapping -->
-
 A module constant follows the same rule, because a fold has to agree with the
 instruction it replaces: `const OVER: i32 = 2147483647 + 1` is
-`` attempt to compute with overflow in a constant `` by default, and
-`-2147483648` under `--wrapping`; `const OVER: i32 = wrappingAdd(2147483647, 1)`
-folds to `-2147483648` in every build.
+`` attempt to compute with overflow in a constant ``, and
+`const OVER: i32 = wrappingAdd(2147483647, 1)` folds to `-2147483648`.
 
 ### `--target`
 
@@ -24152,6 +24392,13 @@ declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull 
 declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_rename(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_unlink(i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_write_file_bytes(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture readonly) #3
+declare noundef i32 @nish_write_file_mode(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #3
+declare noundef i32 @nish_create_file_exclusive(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #3
+declare noundef i32 @nish_mkdir_mode(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #3
+declare noundef i32 @nish_write_bytes(%struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
 declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #2
 declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -24159,10 +24406,12 @@ declare zeroext i1 @nish_is_dir(i8* noundef nonnull readonly align 8 nocapture) 
 declare noundef i32 @nish_spawn(%struct.nish_array* noundef nonnull align 8) #3
 declare noundef i32 @nish_spawn_to(%struct.nish_array* noundef nonnull align 8, i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8) #2
+declare noundef i32 @nish_spawn_piped(%struct.nish_array* noundef nonnull align 8, %struct.nish_array* noundef nonnull align 8 nocapture readonly, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #3
 declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #3
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef) #3
 declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_monotonic_nanos() #2
+declare i64 @nish_wall_clock_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #3
@@ -24189,6 +24438,7 @@ declare noundef i32 @nish_tcp_accept(i32 noundef, %struct.nish_array* noundef no
 declare noundef i32 @nish_net_read(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, i64 noundef, i64 noundef) #3
 declare noundef i32 @nish_net_write(i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
 declare noundef i32 @nish_net_shutdown(i32 noundef, i32 noundef) #2
+declare noundef i32 @nish_net_set_option(i32 noundef, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_net_close(i32 noundef) #3
 declare noundef i32 @nish_tcp_connect(%struct.nish_array* noundef nonnull align 8 nocapture readonly) #2
 declare noundef i32 @nish_connect_result(i32 noundef) #2
@@ -24227,6 +24477,8 @@ declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #3
 declare noundef i64 @nish_cpu_count() #2
 declare noundef i64 @nish_cpu_online() #2
 declare noundef i64 @nish_total_memory() #2
+declare noundef i32 @nish_set_nice(i32 noundef) #2
+declare noundef i32 @nish_set_idle_priority() #2
 declare i32 @nish_aes_hw() #9
 declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2

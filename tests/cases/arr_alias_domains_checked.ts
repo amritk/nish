@@ -1,5 +1,5 @@
-// arr_alias_domains under the checked default (arr_alias_domains itself is
-// compiled with `--wrapping`). `src[i] * 2` is unbounded, so it is
+// arr_alias_domains with a checked `*` (arr_alias_domains itself writes
+// `wrappingMul`). `src[i] * 2` is unbounded, so it is
 // `llvm.smul.with.overflow` and a branch to the overflow panic. The alias
 // domains do not depend on the mode: tests/run.js pins that after `opt -O2`
 // every array header load is still hoisted out of the loop, and that the

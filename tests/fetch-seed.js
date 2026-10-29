@@ -438,7 +438,7 @@ check(`install.sh derives an asset for this machine (${hostAsset || "none"})`, h
 
 // ---- install.sh: the build provenance attestation (SC-16) ---------------------------
 //
-// A release after 0.20.0 is checked with `gh attestation verify` when a usable
+// A release after 0.21.0 is checked with `gh attestation verify` when a usable
 // gh is there, and skipped with a note when it is not. Each case below has a
 // SHA256SUMS that matches, so the attestation is the only thing deciding.
 
@@ -504,15 +504,15 @@ for (const [mode, reason] of [
   )
 }
 
-// 0.20.0 and earlier carry no attestation, so none is asked for, even from a gh
+// 0.21.0 and earlier carry no attestation, so none is asked for, even from a gh
 // that would reject everything.
 {
-  const box = installSandbox("0.20.0")
+  const box = installSandbox("0.21.0")
   withSums(box)
   ghMode(box, "fail")
-  const r = install(box, ["0.20.0", "--dir", box.home])
+  const r = install(box, ["0.21.0", "--dir", box.home])
   check(
-    "install.sh asks for no attestation from 0.20.0, which predates them",
+    "install.sh asks for no attestation from 0.21.0, which predates them",
     r.status === 0 && ran(box) && ghCalls(box) === "",
     `${told(box, r)}\ngh:\n${ghCalls(box)}`
   )

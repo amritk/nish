@@ -25,9 +25,7 @@
  * byte for byte, module set included (WP14, repointed by WP19 G2.2), reusing
  * the comparison of `tests/nish-cmp.js` so that the generated corpus is held
  * to exactly what the checked-in one is. The pair is the seed release
- * (`NISH_BOOTSTRAP`, or `--reference`) against HEAD, linked once per run. Both
- * compile with `--wrapping` while the seed predates checked signed arithmetic,
- * which changed the IR of every `+ - *` by design (see `stage1Run`).
+ * (`NISH_BOOTSTRAP`, or `--reference`) against HEAD, linked once per run.
  *
  * **An intended change is declared, not waved through.** HEAD is meant to
  * differ from the seed when a release changes what the emitter writes, and
@@ -554,17 +552,12 @@ const DECLARED = []
  * `onlyDropsChecks` stays, held to fabricated pairs on every `npm test`, for
  * the next release that drops a check.
  *
- * The binary hardening adds lines rather than dropping any, and is stated the
- * way `tests/nish-cmp.js` states it: the candidate, less exactly what
- * `withoutHardening` removes, is the reference.
+ * 0.22.1 shipped the binary hardening, which an entry here stated the way
+ * `tests/nish-cmp.js` states it: `explains: (reference, candidate) =>
+ * cmp.withoutHardening(candidate) === reference`. It is empty while the seed
+ * carries every such change.
  */
-const DECLARED_CHECKS = [
-  {
-    changelog: "Harden every native binary",
-    why: 'every native module carries the control-flow and stack-clash module flags, and every definition `"probe-stack"="inline-asm"`',
-    explains: (reference, candidate) => cmp.withoutHardening(candidate) === reference,
-  },
-]
+const DECLARED_CHECKS = []
 
 /** How many times each runtime panic is called, and each check block opened, in an IR text. */
 const panicCounts = (ir) => {
@@ -969,14 +962,7 @@ const stage1Run = ({
     const file = path.join(dir, `fuzz-${s}.ts`)
     fs.writeFileSync(file, generateProgram(s, { depth }))
     const t0 = Date.now()
-    // `--wrapping` on both sides: the seed flags every signed `+ - *` `nsw`
-    // unproven and HEAD checks it (`docs/LANGUAGE.md`, "Semantics decisions"),
-    // so every generated program differs in its arithmetic by design. Under
-    // the flag both write the plain instruction, and the comparison keeps
-    // saying something about everything else the program exercises. The
-    // checked lowering itself is pinned by the `ovf_*` goldens. Drop the flag
-    // once the seed is a release that checks.
-    const result = cmp.compare(pair, work, file, { sidecars: false, lines: 3, extraFlags: ["--wrapping"] })
+    const result = cmp.compare(pair, work, file, { sidecars: false, lines: 3 })
     // A generated program carries no `.args` and stays inside the language, so
     // none of the outcomes below can happen for a benign reason: every verdict
     // other than an agreement is a failure worth saving.
@@ -1172,8 +1158,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   // A stale entry fails even a one-program reproduction that does not reach
   // it; the line says which, so it does not read as the program's own fault.
   for (const d of res.stale) {
+    // A `DECLARED_CHECKS` entry has no function or groups, only its changelog words.
+    const where = d.function === undefined ? `"${d.changelog}"` : `@${d.function} ${d.seed} -> ${d.head}`
     console.log(
-      `  STALE: no program differs at @${d.function} ${d.seed} -> ${d.head}; the seed carries the change ` +
+      `  STALE: no program differs at ${where}; the seed carries the change ` +
         "or the generator no longer reaches it, so the declaration goes"
     )
   }

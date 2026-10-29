@@ -1,0 +1,105 @@
+PASS  node gzip -0, empty: decompresses to the input (0 bytes)
+PASS  node gzip -0, empty: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -1, empty: decompresses to the input (0 bytes)
+PASS  node gzip -1, empty: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -6, empty: decompresses to the input (0 bytes)
+PASS  node gzip -6, empty: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -9, empty: decompresses to the input (0 bytes)
+PASS  node gzip -9, empty: a GzipReader fed 333 bytes at a time agrees
+PASS  node raw -6, empty: decompresses to the input (0 bytes)
+PASS  node zlib -6, empty: decompresses to the input (0 bytes)
+PASS  node gzip -0, one: decompresses to the input (1 bytes)
+PASS  node gzip -0, one: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -1, one: decompresses to the input (1 bytes)
+PASS  node gzip -1, one: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -6, one: decompresses to the input (1 bytes)
+PASS  node gzip -6, one: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -9, one: decompresses to the input (1 bytes)
+PASS  node gzip -9, one: a GzipReader fed 333 bytes at a time agrees
+PASS  node raw -6, one: decompresses to the input (1 bytes)
+PASS  node zlib -6, one: decompresses to the input (1 bytes)
+PASS  node gzip -1, text: decompresses to the input (12000 bytes)
+PASS  node gzip -1, text: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -6, text: decompresses to the input (12000 bytes)
+PASS  node gzip -6, text: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -9, text: decompresses to the input (12000 bytes)
+PASS  node gzip -9, text: a GzipReader fed 333 bytes at a time agrees
+PASS  node raw -6, text: decompresses to the input (12000 bytes)
+PASS  node zlib -6, text: decompresses to the input (12000 bytes)
+PASS  node gzip -0, json: decompresses to the input (5221 bytes)
+PASS  node gzip -0, json: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -1, json: decompresses to the input (5221 bytes)
+PASS  node gzip -1, json: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -6, json: decompresses to the input (5221 bytes)
+PASS  node gzip -6, json: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -9, json: decompresses to the input (5221 bytes)
+PASS  node gzip -9, json: a GzipReader fed 333 bytes at a time agrees
+PASS  node raw -6, json: decompresses to the input (5221 bytes)
+PASS  node zlib -6, json: decompresses to the input (5221 bytes)
+PASS  node gzip -0, noise: decompresses to the input (2000 bytes)
+PASS  node gzip -0, noise: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -1, noise: decompresses to the input (2000 bytes)
+PASS  node gzip -1, noise: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -6, noise: decompresses to the input (2000 bytes)
+PASS  node gzip -6, noise: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -9, noise: decompresses to the input (2000 bytes)
+PASS  node gzip -9, noise: a GzipReader fed 333 bytes at a time agrees
+PASS  node raw -6, noise: decompresses to the input (2000 bytes)
+PASS  node zlib -6, noise: decompresses to the input (2000 bytes)
+PASS  node gzip -1, zeros: decompresses to the input (70000 bytes)
+PASS  node gzip -1, zeros: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -6, zeros: decompresses to the input (70000 bytes)
+PASS  node gzip -6, zeros: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -9, zeros: decompresses to the input (70000 bytes)
+PASS  node gzip -9, zeros: a GzipReader fed 333 bytes at a time agrees
+PASS  node raw -6, zeros: decompresses to the input (70000 bytes)
+PASS  node zlib -6, zeros: decompresses to the input (70000 bytes)
+PASS  node gzip -1, mixed: decompresses to the input (16000 bytes)
+PASS  node gzip -1, mixed: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -6, mixed: decompresses to the input (16000 bytes)
+PASS  node gzip -6, mixed: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip -9, mixed: decompresses to the input (16000 bytes)
+PASS  node gzip -9, mixed: a GzipReader fed 333 bytes at a time agrees
+PASS  node raw -6, mixed: decompresses to the input (16000 bytes)
+PASS  node zlib -6, mixed: decompresses to the input (16000 bytes)
+PASS  node gzip two members, text: decompresses to the input (12000 bytes)
+PASS  node gzip two members, text: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip filtered, text: decompresses to the input (12000 bytes)
+PASS  node gzip filtered, text: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip huffman-only, text: decompresses to the input (12000 bytes)
+PASS  node gzip huffman-only, text: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip rle, text: decompresses to the input (12000 bytes)
+PASS  node gzip rle, text: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip fixed, text: decompresses to the input (12000 bytes)
+PASS  node gzip fixed, text: a GzipReader fed 333 bytes at a time agrees
+PASS  node raw windowBits 9, text: decompresses to the input (12000 bytes)
+PASS  node zlib memLevel 1, text: decompresses to the input (12000 bytes)
+PASS  node raw sync-flushed pieces, text: decompresses to the input (12000 bytes)
+PASS  node gzip two members, json: decompresses to the input (5221 bytes)
+PASS  node gzip two members, json: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip filtered, json: decompresses to the input (5221 bytes)
+PASS  node gzip filtered, json: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip huffman-only, json: decompresses to the input (5221 bytes)
+PASS  node gzip huffman-only, json: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip rle, json: decompresses to the input (5221 bytes)
+PASS  node gzip rle, json: a GzipReader fed 333 bytes at a time agrees
+PASS  node gzip fixed, json: decompresses to the input (5221 bytes)
+PASS  node gzip fixed, json: a GzipReader fed 333 bytes at a time agrees
+PASS  node raw windowBits 9, json: decompresses to the input (5221 bytes)
+PASS  node zlib memLevel 1, json: decompresses to the input (5221 bytes)
+PASS  node raw sync-flushed pieces, json: decompresses to the input (5221 bytes)
+PASS  node gzip two members, mixed: decompresses to the input (16000 bytes)
+PASS  node gzip two members, mixed: a GzipReader fed 333 bytes at a time agrees
+PASS  node refuses gzip with a wrong CRC-32, and so does this: GZIP_ERR_CRC
+PASS  node refuses gzip with a wrong length, and so does this: GZIP_ERR_SIZE
+PASS  node refuses gzip cut in the stream, and so does this: DEFLATE_ERR_TRUNCATED
+PASS  node refuses gzip cut in the trailer, and so does this: DEFLATE_ERR_TRUNCATED
+PASS  node refuses gzip cut in the header, and so does this: DEFLATE_ERR_TRUNCATED
+PASS  node refuses gzip with the wrong magic, and so does this: GZIP_ERR_HEADER
+PASS  node refuses zlib with a wrong Adler-32, and so does this: ZLIB_ERR_ADLER
+PASS  node refuses raw: a distance before the start, and so does this: DEFLATE_ERR_DISTANCE
+PASS  node refuses raw: an over-subscribed code-length code, and so does this: DEFLATE_ERR_HUFFMAN
+PASS  node refuses raw: an incomplete literal/length code, and so does this: DEFLATE_ERR_HUFFMAN
+PASS  node refuses raw: block type 3, and so does this: DEFLATE_ERR_BLOCK_TYPE
+PASS  node refuses raw: a stored block whose NLEN is wrong, and so does this: DEFLATE_ERR_STORED_LENGTH
+compress-node: 104 passed, 0 failed, 0 skipped

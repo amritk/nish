@@ -22,7 +22,9 @@
 #
 # Every tool is pinned: actions by commit, images by digest, the runner by
 # commit, h2spec by release and SHA-256, Python packages by hash
-# (tests/interop/*-requirements.txt), tshark by package version. Nothing here
+# (tests/interop/*-requirements.txt), tshark by package version. The
+# simulator's run.sh is patched (tests/interop/simulator.dockerfile) so its
+# pcaps keep the packets of the case's last fraction of a second. Nothing here
 # turns a failure green: the one retry, a quic-interop-runner case run once
 # more after it fails, passes only if that second run succeeds, and the
 # verdict prints both.
@@ -68,6 +70,10 @@ concurrency:
   group: interop-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+#
+# Every Ubuntu install step first points apt from the Azure mirror at
+# archive.ubuntu.com: the Azure mirror served libllvm18 at about 100 KB/s
+# on #963 and timed the five-minute install out before any test ran.
 env:
   # The quic-interop-runner at a fixed commit, and the images it drives.
   RUNNER_COMMIT: 740c05a10b61d65e8abd3ad38d60898004d335d9
@@ -156,9 +162,11 @@ jobs:
           CLIENT: ${{ matrix.client }}
         run: |
           # The runner's docker-compose.yml names the simulator by tag; the
-          # pinned digest is pulled and given that tag, so compose finds it.
+          # pinned digest, with tests/interop/simulator.dockerfile's fix to
+          # the capture's teardown, is built under that tag, so compose finds it.
           docker pull "$SIMULATOR"
-          docker tag "$SIMULATOR" martenseemann/quic-network-simulator:latest
+          docker build -f tests/interop/simulator.dockerfile --build-arg SIMULATOR="$SIMULATOR" \
+            -t martenseemann/quic-network-simulator:latest tests/interop
           if [ "$CLIENT" = quic-go ]; then image="$QUIC_GO"; else image="$NGTCP2"; fi
           docker pull "$image"
           echo "CLIENT_IMAGE=$image" >> "$GITHUB_ENV"
@@ -194,6 +202,7 @@ jobs:
           mkdir -p "$archives/partial"
           apt_cache="-o Dir::Cache::Archives=$archives -o APT::Sandbox::User=root"
           pkgs="tshark=4.2.2-1.1build3"
+          grep -rlZ azure.archive.ubuntu.com /etc/apt | xargs -0r sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g'
           sudo apt-get $APT_OPTS update
           for attempt in 1 2 3; do
             if sudo timeout -k 5 60 apt-get $APT_OPTS $apt_cache install -y --no-install-recommends \
