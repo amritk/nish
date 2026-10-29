@@ -134,6 +134,42 @@ A program can watch both listeners in one loop, as in the server above, and
 accept from whichever is ready. A server that wants both the shared port and
 its small answers sent at once opens each listener with `3`.
 
+## Socket options: `netSetOption`
+
+`netSetOption(fd, option, value)` sets one option on a socket. The option is
+one of five ids `nish:net` exports, and any other number answers `-22`:
+
+| Option | `value` |
+| --- | --- |
+| `NET_TCP_NODELAY` | `1` sends small writes at once, `0` lets Nagle batch them |
+| `NET_TCP_QUICKACK` | `1` acknowledges what arrives at once; Linux only, `-95` on macOS |
+| `NET_SO_KEEPALIVE` | `1` probes a connection that has gone quiet |
+| `NET_SO_SNDBUF` | the send buffer, in bytes (Linux stores twice the value) |
+| `NET_SO_RCVBUF` | the receive buffer, in bytes (Linux stores twice the value) |
+
+It answers `0`, or a negative error: `-9` for a closed descriptor, `-88` for
+one that is not a socket.
+
+Linux does not keep quick-ACK mode. The kernel leaves it on its own, by its
+own reading of the traffic, so a server that wants every request
+acknowledged at once sets it again after each response:
+
+```ts nish:ok
+import { NET_TCP_QUICKACK, netSetOption, netWrite } from "nish:net";
+
+export const respond = (conn: i32, answer: u8[]): i32 => {
+  const n = netWrite(conn, answer, 0, answer.length);
+  // Quick-ACK may be off again by now: turn it back on for the next request.
+  // On macOS this answers -95, which a server can ignore.
+  netSetOption(conn, NET_TCP_QUICKACK, 1);
+  return n;
+};
+```
+
+The ids are plain `i32`s you pass straight to the call. They are not module
+constants, so `const MODE = NET_TCP_QUICKACK;` at the top of a module is an
+error; write the id where you call `netSetOption`.
+
 ## A server on every core: `nish/net/prefork`
 
 A Nish server is one thread. To use every core, run one copy of it per core,
