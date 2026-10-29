@@ -8,7 +8,7 @@ import SOURCE_ARGV from "nish/cli-args" -> const SOURCE_ARGV
 import finish from "nish/cli-args" -> function @nish.finish
 import agentDriven from "nish/cli" -> function @nish.agentDriven
 import styleFor from "nish/cli" -> function @nish.styleFor
-import replaceAll from "nish/text" -> function @nish.replaceAll
+import JsonWriter from "nish/json" -> struct JsonWriter
 const USERS_LIST: i32 = 1
 const USERS_GET: i32 = 2
 const KEYS_LIST: i32 = 3
@@ -31,21 +31,19 @@ struct Api (class) size=64 align=8
   field scopes: i32 index=13 offset=56
   field projectsAll: i32 index=14 offset=60
   constructor -> @Api.constructor
-function quote(s: string): string -> @quote
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: s
-  calls: nish.replaceAll nish_str_concat
-  stackSites=0 stackLocals=0
-  callee +0:42 replaceAll -> @nish.replaceAll
-  callee +0:53 replaceAll -> @nish.replaceAll
-function list(xs: string[]): string -> @list
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_alloc_struct nish_array_grow nish_str_concat quote
+function list(w: JsonWriter, key: string, xs: string[]): void -> @list
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonWriter.key
+  escaping: key
+  calls: nish.JsonWriter.beginArray nish.JsonWriter.endArray nish.JsonWriter.key nish.JsonWriter.string
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.key#0 nish.JsonWriter.beginArray#0 nish.JsonWriter.string#0 nish.JsonWriter.endArray#0
   pointer xs: size=0 writesThrough=true captured=false
-  stackSites=1 stackLocals=1
-  local +0:9 quoted: string[] (const)
-  local +1:12 i: i32 (let)
-  callee +2:17 quote -> @quote
+  stackSites=0 stackLocals=0
+  callee +0:3 JsonWriter.key -> @nish.JsonWriter.key
+  callee +1:3 JsonWriter.beginArray -> @nish.JsonWriter.beginArray
+  local +2:12 i: i32 (let)
+  callee +3:5 JsonWriter.string -> @nish.JsonWriter.string
+  callee +5:3 JsonWriter.endArray -> @nish.JsonWriter.endArray
 function Api.constructor(this: Api): void -> @Api.constructor [constructor]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=true
   sharedWrite: via nish.Cli.globalFlag
@@ -90,29 +88,47 @@ function Api.constructor(this: Api): void -> @Api.constructor [constructor]
   local +33:11 projectsList: i32 (const)
   callee +33:26 Cli.command -> @nish.Cli.command
   callee +34:24 Cli.flag -> @nish.Cli.flag
-function call(api: Api, r: ParseResult, method: string, route: string, extra: string): string -> @call
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+function call(api: Api, r: ParseResult, method: string, route: string): JsonWriter -> @call
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true returnDeref=48
+  sharedWrite: via nish.JsonWriter.constructor
   escaping: method
-  calls: nish.ParseResult.flag nish.ParseResult.source nish.ParseResult.value nish_str_concat quote
+  calls: nish.JsonWriter.beginObject nish.JsonWriter.boolean nish.JsonWriter.constructor nish.JsonWriter.key nish.JsonWriter.string nish.ParseResult.flag nish.ParseResult.source nish.ParseResult.value nish_alloc_struct nish_panic nish_panic_index nish_panic_overflow nish_str_concat
   pointer api: size=64 writesThrough=false captured=false
-  pointer r: size=96 writesThrough=false captured=false passedTo=nish.ParseResult.value#0 nish.ParseResult.value#0 nish.ParseResult.source#0 nish.ParseResult.source#0 nish.ParseResult.flag#0
+  pointer r: size=96 writesThrough=false captured=false passedTo=nish.ParseResult.source#0 nish.ParseResult.source#0 nish.ParseResult.value#0 nish.ParseResult.value#0 nish.ParseResult.flag#0
   stackSites=0 stackLocals=0
-  local +0:9 base: string (const)
-  callee +0:16 ParseResult.value -> @nish.ParseResult.value
-  local +1:9 output: string (const)
-  callee +1:18 ParseResult.value -> @nish.ParseResult.value
-  local +2:7 tokenFrom: string (let)
-  callee +3:7 ParseResult.source -> @nish.ParseResult.source
-  callee +5:14 ParseResult.source -> @nish.ParseResult.source
-  callee +8:23 quote -> @quote
-  callee +8:46 quote -> @quote
-  callee +8:83 quote -> @quote
-  callee +8:106 ParseResult.flag -> @nish.ParseResult.flag
-  callee +8:133 quote -> @quote
+  local +0:7 size: i32 (let)
+  local +1:12 i: i32 (let)
+  local +4:9 w: JsonWriter (const)
+  callee +4:13 new JsonWriter -> @nish.JsonWriter.constructor
+  local +5:7 tokenFrom: string (let)
+  callee +6:7 ParseResult.source -> @nish.ParseResult.source
+  callee +8:14 ParseResult.source -> @nish.ParseResult.source
+  callee +11:3 JsonWriter.beginObject -> @nish.JsonWriter.beginObject
+  callee +12:3 JsonWriter.key -> @nish.JsonWriter.key
+  callee +13:3 JsonWriter.string -> @nish.JsonWriter.string
+  callee +14:3 JsonWriter.key -> @nish.JsonWriter.key
+  callee +15:3 JsonWriter.string -> @nish.JsonWriter.string
+  callee +15:15 ParseResult.value -> @nish.ParseResult.value
+  callee +16:3 JsonWriter.key -> @nish.JsonWriter.key
+  callee +17:3 JsonWriter.string -> @nish.JsonWriter.string
+  callee +17:12 ParseResult.value -> @nish.ParseResult.value
+  callee +18:3 JsonWriter.key -> @nish.JsonWriter.key
+  callee +19:3 JsonWriter.boolean -> @nish.JsonWriter.boolean
+  callee +19:13 ParseResult.flag -> @nish.ParseResult.flag
+  callee +20:3 JsonWriter.key -> @nish.JsonWriter.key
+  callee +21:3 JsonWriter.string -> @nish.JsonWriter.string
+function send(w: JsonWriter): void -> @send$
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonWriter.endObject
+  calls: nish.JsonWriter.endObject nish.JsonWriter.text nish_arena_mark nish_arena_release nish_print
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.endObject#0 nish.JsonWriter.text#0
+  stackSites=0 stackLocals=0
+  callee +0:3 JsonWriter.endObject -> @nish.JsonWriter.endObject
+  callee +1:15 JsonWriter.text -> @nish.JsonWriter.text
 function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
   sharedWrite: via Api.constructor
-  calls: Api.constructor call list nish.Cli.parse nish.ParseResult.flag nish.ParseResult.positional nish.ParseResult.positionals nish.ParseResult.source nish.ParseResult.value nish.ParseResult.values nish.agentDriven nish.finish nish.styleFor nish_arena_mark nish_arena_release nish_print nish_str_concat nish_str_eq nish_write quote
+  calls: Api.constructor call list nish.Cli.parse nish.JsonWriter.boolean nish.JsonWriter.key nish.JsonWriter.nullValue nish.JsonWriter.string nish.ParseResult.flag nish.ParseResult.positional nish.ParseResult.positionals nish.ParseResult.source nish.ParseResult.value nish.ParseResult.values nish.agentDriven nish.finish nish.styleFor nish_arena_mark nish_arena_release nish_str_concat nish_str_eq nish_write send$
   stackSites=1 stackLocals=1
   local +0:9 api: Api (const)
   callee +0:15 new Api -> @Api.constructor
@@ -127,28 +143,37 @@ function main(): i32 -> @nish_main [exported entry]
   callee +7:46 ParseResult.source -> @nish.ParseResult.source
   local +11:9 output: string (const)
   callee +11:18 ParseResult.value -> @nish.ParseResult.value
-  callee +19:19 call -> @call
-  callee +22:19 call -> @call
-  callee +22:49 ParseResult.positional -> @nish.ParseResult.positional
-  local +25:13 limit: string | null (const)
-  callee +25:21 ParseResult.value -> @nish.ParseResult.value
-  local +26:13 shown: string (const)
-  callee +26:47 quote -> @quote
-  local +27:13 extra: string (const)
-  callee +27:49 list -> @list
-  callee +27:54 ParseResult.values -> @nish.ParseResult.values
-  callee +27:82 ParseResult.flag -> @nish.ParseResult.flag
-  callee +28:19 call -> @call
-  callee +28:49 ParseResult.positional -> @nish.ParseResult.positional
-  local +32:13 extra: string (const)
-  callee +32:32 quote -> @quote
-  callee +32:38 ParseResult.value -> @nish.ParseResult.value
-  callee +32:75 list -> @list
-  callee +32:80 ParseResult.positionals -> @nish.ParseResult.positionals
-  callee +33:19 call -> @call
-  callee +33:50 ParseResult.positional -> @nish.ParseResult.positional
-  callee +37:19 call -> @call
-  callee +37:39 ParseResult.flag -> @nish.ParseResult.flag
+  callee +19:7 send -> @send$
+  callee +19:12 call -> @call
+  callee +22:7 send -> @send$
+  callee +22:12 call -> @call
+  callee +22:42 ParseResult.positional -> @nish.ParseResult.positional
+  local +25:13 w: JsonWriter (const)
+  callee +25:17 call -> @call
+  callee +25:47 ParseResult.positional -> @nish.ParseResult.positional
+  callee +26:7 JsonWriter.key -> @nish.JsonWriter.key
+  local +27:13 limit: string | null (const)
+  callee +27:21 ParseResult.value -> @nish.ParseResult.value
+  callee +29:9 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee +31:9 JsonWriter.string -> @nish.JsonWriter.string
+  callee +33:7 list -> @list
+  callee +33:23 ParseResult.values -> @nish.ParseResult.values
+  callee +34:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee +35:7 JsonWriter.boolean -> @nish.JsonWriter.boolean
+  callee +35:17 ParseResult.flag -> @nish.ParseResult.flag
+  callee +36:7 send -> @send$
+  local +40:13 w: JsonWriter (const)
+  callee +40:17 call -> @call
+  callee +40:48 ParseResult.positional -> @nish.ParseResult.positional
+  callee +41:7 JsonWriter.key -> @nish.JsonWriter.key
+  callee +42:7 JsonWriter.string -> @nish.JsonWriter.string
+  callee +42:16 ParseResult.value -> @nish.ParseResult.value
+  callee +43:7 list -> @list
+  callee +43:25 ParseResult.positionals -> @nish.ParseResult.positionals
+  callee +44:7 send -> @send$
+  callee +48:7 send -> @send$
+  callee +48:12 call -> @call
+  callee +48:32 ParseResult.flag -> @nish.ParseResult.flag
 module std/cli-args.ts [package nish]
 import HelpMenu from "nish/cli" -> struct HelpMenu
 import Style from "nish/cli" -> struct Style
@@ -174,7 +199,7 @@ struct FlagSpec (class) size=32 align=8
   field value: i32 index=3 offset=24
   field negated: boolean index=4 offset=28
   constructor -> @nish.FlagSpec.constructor
-struct Cli (class) size=312 align=8 exported
+struct Cli (class) size=320 align=8 exported
   field name: string index=0 offset=0
   field version: string index=1 offset=8
   field description: string index=2 offset=16
@@ -183,37 +208,38 @@ struct Cli (class) size=312 align=8 exported
   field cmdId: i32[] index=5 offset=40
   field cmdDesc: string[] index=6 offset=48
   field cmdGroup: boolean[] index=7 offset=56
-  field cmdAliases: string[] index=8 offset=64
-  field aliasOwner: i32[] index=9 offset=72
-  field aliasName: string[] index=10 offset=80
-  field cmdEpilog: string[] index=11 offset=88
-  field cmdFirstArg: i32[] index=12 offset=96
-  field cmdLastArg: i32[] index=13 offset=104
-  field cmdVariadic: boolean[] index=14 offset=112
-  field cmdOptionalArg: boolean[] index=15 offset=120
-  field children: Map<string, i32> index=16 offset=128
-  field flagOwner: i32[] index=17 offset=136
-  field flagShort: string[] index=18 offset=144
-  field flagLong: string[] index=19 offset=152
-  field flagMeta: string[] index=20 offset=160
-  field flagValue: i32[] index=21 offset=168
-  field flagNegated: boolean[] index=22 offset=176
-  field flagNegatable: boolean[] index=23 offset=184
-  field flagDesc: string[] index=24 offset=192
-  field flagDefault: string[] index=25 offset=200
-  field flagHasDefault: boolean[] index=26 offset=208
-  field flagRequired: boolean[] index=27 offset=216
-  field flagRepeatable: boolean[] index=28 offset=224
-  field flags: Map<string, i32> index=29 offset=232
-  field negations: Map<string, i32> index=30 offset=240
-  field requiredFlags: i32[] index=31 offset=248
-  field argOwner: i32[] index=32 offset=256
-  field argName: string[] index=33 offset=264
-  field argRequired: boolean[] index=34 offset=272
-  field argVariadic: boolean[] index=35 offset=280
-  field argDesc: string[] index=36 offset=288
-  field argIndex: i32[] index=37 offset=296
-  field argNext: i32[] index=38 offset=304
+  field cmdPath: string[] index=8 offset=64
+  field cmdAliases: string[] index=9 offset=72
+  field aliasOwner: i32[] index=10 offset=80
+  field aliasName: string[] index=11 offset=88
+  field cmdEpilog: string[] index=12 offset=96
+  field cmdFirstArg: i32[] index=13 offset=104
+  field cmdLastArg: i32[] index=14 offset=112
+  field cmdVariadic: boolean[] index=15 offset=120
+  field cmdOptionalArg: boolean[] index=16 offset=128
+  field children: Map<string, i32> index=17 offset=136
+  field flagOwner: i32[] index=18 offset=144
+  field flagShort: string[] index=19 offset=152
+  field flagLong: string[] index=20 offset=160
+  field flagMeta: string[] index=21 offset=168
+  field flagValue: i32[] index=22 offset=176
+  field flagNegated: boolean[] index=23 offset=184
+  field flagNegatable: boolean[] index=24 offset=192
+  field flagDesc: string[] index=25 offset=200
+  field flagDefault: string[] index=26 offset=208
+  field flagHasDefault: boolean[] index=27 offset=216
+  field flagRequired: boolean[] index=28 offset=224
+  field flagRepeatable: boolean[] index=29 offset=232
+  field flags: Map<string, i32> index=30 offset=240
+  field negations: Map<string, i32> index=31 offset=248
+  field requiredFlags: i32[] index=32 offset=256
+  field argOwner: i32[] index=33 offset=264
+  field argName: string[] index=34 offset=272
+  field argRequired: boolean[] index=35 offset=280
+  field argVariadic: boolean[] index=36 offset=288
+  field argDesc: string[] index=37 offset=296
+  field argIndex: i32[] index=38 offset=304
+  field argNext: i32[] index=39 offset=312
   constructor -> @nish.Cli.constructor
   method checkCommand -> @nish.Cli.checkCommand
   method checkFlag -> @nish.Cli.checkFlag
@@ -234,8 +260,7 @@ struct Cli (class) size=312 align=8 exported
   method negatable -> @nish.Cli.negatable
   method argument -> @nish.Cli.argument
   method epilog -> @nish.Cli.epilog
-  method lookupFlag -> @nish.Cli.lookupFlag
-  method lookupNegation -> @nish.Cli.lookupNegation
+  method lookup -> @nish.Cli.lookup
   method spelling -> @nish.Cli.spelling
   method longNames -> @nish.Cli.longNames
   method childNames -> @nish.Cli.childNames
@@ -246,6 +271,7 @@ struct Cli (class) size=312 align=8 exported
   method takeValue -> @nish.Cli.takeValue
   method flagLabel -> @nish.Cli.flagLabel
   method flagText -> @nish.Cli.flagText
+  method flagRows -> @nish.Cli.flagRows
   method helpText -> @nish.Cli.helpText
 struct HelpRow (class) size=32 align=8
   field section: string index=0 offset=0
@@ -348,7 +374,7 @@ function Cli.constructor(this: Cli, name: string, version: string, description: 
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: description name version
   calls: nish.Map$str$i32.constructor nish_alloc_struct
-  pointer this: size=312 writesThrough=true captured=false
+  pointer this: size=320 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   callee +0:21 new Map<string, i32> -> @nish.Map$str$i32.constructor
   callee +13:18 new Map<string, i32> -> @nish.Map$str$i32.constructor
@@ -357,36 +383,32 @@ function Cli.checkCommand(this: Cli, call: string, handle: i32): i32 -> @nish.Cl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: handle
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=312 writesThrough=false captured=false
+  pointer this: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Cli.checkFlag(this: Cli, call: string, handle: i32): i32 -> @nish.Cli.checkFlag [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: handle
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=312 writesThrough=false captured=false
+  pointer this: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Cli.checkArgument(this: Cli, call: string, handle: i32): i32 -> @nish.Cli.checkArgument [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=false
   escaping: handle
   calls: nish_arena_mark nish_arena_release nish_panic nish_str_concat nish_str_from_i32
-  pointer this: size=312 writesThrough=false captured=false
+  pointer this: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
 function Cli.pathOf(this: Cli, handle: i32): string -> @nish.Cli.pathOf [exported method]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: handle
-  calls: nish.Cli.checkCommand nish_alloc_struct nish_array_grow nish_panic_index
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
-  stackSites=2 stackLocals=2
-  local +0:11 names: string[] (const)
-  local +1:9 h: i32 (let)
-  callee +1:18 Cli.checkCommand -> @nish.Cli.checkCommand
-  local +6:11 out: string[] (const)
-  local +7:14 i: i32 (let)
+  calls: nish.Cli.checkCommand nish_panic_index
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
+  stackSites=0 stackLocals=0
+  callee +0:25 Cli.checkCommand -> @nish.Cli.checkCommand
 function Cli.isGroup(this: Cli, handle: i32): boolean -> @nish.Cli.isGroup [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: handle
   calls: nish.Cli.checkCommand nish_panic_index
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
   stackSites=0 stackLocals=0
   local +0:11 h: i32 (const)
   callee +0:15 Cli.checkCommand -> @nish.Cli.checkCommand
@@ -395,7 +417,7 @@ function Cli.addCommand(this: Cli, call: string, parent: i32, name: string, id: 
   sharedWrite: +0:5
   escaping: call description group id name parent
   calls: nish.Cli.checkCommand nish.Cli.pathOf nish.Map$str$i32.has nish.Map$str$i32.set nish.isWord nish.scopeKey nish_array_grow nish_panic nish_panic_index nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0
   stackSites=0 stackLocals=0
   local -16:11 p: i32 (const)
   callee -16:15 Cli.checkCommand -> @nish.Cli.checkCommand
@@ -413,7 +435,7 @@ function Cli.group(this: Cli, parent: i32, name: string, description: string): i
   sharedWrite: via nish.Cli.addCommand
   escaping: description name parent
   calls: nish.Cli.addCommand nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.addCommand#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.addCommand#0
   stackSites=0 stackLocals=0
   callee +0:12 Cli.addCommand -> @nish.Cli.addCommand
 function Cli.command(this: Cli, parent: i32, name: string, id: i32, description: string): i32 -> @nish.Cli.command [exported method]
@@ -421,7 +443,7 @@ function Cli.command(this: Cli, parent: i32, name: string, id: i32, description:
   sharedWrite: via nish.Cli.addCommand
   escaping: description id name parent
   calls: nish.Cli.addCommand nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.addCommand#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.addCommand#0
   stackSites=0 stackLocals=0
   callee +0:12 Cli.addCommand -> @nish.Cli.addCommand
 function Cli.alias(this: Cli, handle: i32, name: string): void -> @nish.Cli.alias [exported method]
@@ -429,7 +451,7 @@ function Cli.alias(this: Cli, handle: i32, name: string): void -> @nish.Cli.alia
   sharedWrite: +0:5
   escaping: handle name
   calls: nish.Cli.checkCommand nish.Cli.pathOf nish.Map$str$i32.has nish.Map$str$i32.set nish.isWord nish.scopeKey nish_array_grow nish_panic nish_panic_index nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0
   stackSites=0 stackLocals=0
   local -13:11 call: string (const)
   local -12:11 h: i32 (const)
@@ -444,7 +466,7 @@ function Cli.scopeHas(this: Cli, scope: i32, spec: FlagSpec): boolean -> @nish.C
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: scope
   calls: nish.Map$str$i32.has nish.scopeKey nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false
+  pointer this: size=320 writesThrough=false captured=false
   pointer spec: size=32 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   callee +0:7 Map<string, i32>.has -> @nish.Map$str$i32.has
@@ -458,7 +480,7 @@ function Cli.addFlag(this: Cli, call: string, scope: i32, spec: string, descript
   sharedWrite: +0:5
   escaping: call description scope spec
   calls: nish.Cli.pathOf nish.Cli.scopeHas nish.FlagSpec.constructor nish.Map$str$i32.set nish.scopeKey nish_array_grow nish_panic nish_panic_index nish_str_concat nish_str_eq
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.scopeHas#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0 nish.Cli.scopeHas#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.scopeHas#0 nish.Cli.pathOf#0 nish.Cli.pathOf#0 nish.Cli.scopeHas#0
   stackSites=1 stackLocals=1
   local -29:11 s: FlagSpec (const)
   callee -29:15 new FlagSpec -> @nish.FlagSpec.constructor
@@ -481,7 +503,7 @@ function Cli.globalFlag(this: Cli, spec: string, description: string): i32 -> @n
   sharedWrite: via nish.Cli.addFlag
   escaping: description spec
   calls: nish.Cli.addFlag nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.addFlag#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.addFlag#0
   stackSites=0 stackLocals=0
   callee +0:12 Cli.addFlag -> @nish.Cli.addFlag
 function Cli.flag(this: Cli, cmd: i32, spec: string, description: string): i32 -> @nish.Cli.flag [exported method]
@@ -489,7 +511,7 @@ function Cli.flag(this: Cli, cmd: i32, spec: string, description: string): i32 -
   sharedWrite: via nish.Cli.addFlag
   escaping: cmd description spec
   calls: nish.Cli.addFlag nish.Cli.checkCommand nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.addFlag#0 nish.Cli.checkCommand#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.addFlag#0 nish.Cli.checkCommand#0
   stackSites=0 stackLocals=0
   local +0:11 call: string (const)
   callee +1:12 Cli.addFlag -> @nish.Cli.addFlag
@@ -499,7 +521,7 @@ function Cli.defaultValue(this: Cli, f: i32, value: string): void -> @nish.Cli.d
   sharedWrite: +0:5
   escaping: f value
   calls: nish.Cli.checkFlag nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
   stackSites=0 stackLocals=0
   local -5:11 call: string (const)
   local -4:11 h: i32 (const)
@@ -509,7 +531,7 @@ function Cli.required(this: Cli, f: i32): void -> @nish.Cli.required [exported m
   sharedWrite: +0:7
   escaping: f
   calls: nish.Cli.checkFlag nish_array_grow nish_panic_index
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
   stackSites=0 stackLocals=0
   local -2:11 h: i32 (const)
   callee -2:15 Cli.checkFlag -> @nish.Cli.checkFlag
@@ -518,7 +540,7 @@ function Cli.repeatable(this: Cli, f: i32): void -> @nish.Cli.repeatable [export
   sharedWrite: +0:5
   escaping: f
   calls: nish.Cli.checkFlag nish_arena_mark nish_arena_release nish_panic nish_panic_index nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
   stackSites=0 stackLocals=0
   local -4:11 h: i32 (const)
   callee -4:15 Cli.checkFlag -> @nish.Cli.checkFlag
@@ -527,7 +549,7 @@ function Cli.negatable(this: Cli, f: i32): void -> @nish.Cli.negatable [exported
   sharedWrite: +0:5
   escaping: f
   calls: nish.Cli.checkFlag nish.Map$str$i32.has nish.Map$str$i32.set nish.scopeKey nish_panic nish_panic_index nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
   stackSites=0 stackLocals=0
   local -10:11 h: i32 (const)
   callee -10:15 Cli.checkFlag -> @nish.Cli.checkFlag
@@ -542,7 +564,7 @@ function Cli.argument(this: Cli, cmd: i32, spec: string, description: string): i
   sharedWrite: +0:7
   escaping: cmd description
   calls: nish.Cli.checkCommand nish.Cli.pathOf nish.isWord nish_array_grow nish_panic nish_panic_index nish_panic_overflow nish_str_at nish_str_concat nish_str_new
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0
   stackSites=0 stackLocals=0
   local -27:11 call: string (const)
   local -26:11 c: i32 (const)
@@ -560,51 +582,41 @@ function Cli.epilog(this: Cli, handle: i32, text: string): void -> @nish.Cli.epi
   sharedWrite: +0:5
   escaping: handle text
   calls: nish.Cli.checkCommand nish_panic_index
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0
   stackSites=0 stackLocals=0
   local -1:11 h: i32 (const)
   callee -1:15 Cli.checkCommand -> @nish.Cli.checkCommand
-function Cli.lookupFlag(this: Cli, cmd: i32, name: string): i32 -> @nish.Cli.lookupFlag [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+function Cli.lookup(this: Cli, table: Map<string, i32>, cmd: i32, name: string): i32 -> @nish.Cli.lookup [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: cmd name
   calls: nish.Map$str$i32.probe nish.Map$str$i32.valueAt nish.scopeKey
-  pointer this: size=312 writesThrough=false captured=false
+  pointer this: size=320 writesThrough=false captured=false
+  pointer table: size=56 writesThrough=false captured=false passedTo=nish.Map$str$i32.probe#0 nish.Map$str$i32.probe#0
   stackSites=0 stackLocals=0
   local +0:11 own: i32 (const)
   callee +0:17 Map<string, i32>.probe -> @nish.Map$str$i32.probe
-  callee +0:32 scopeKey -> @nish.scopeKey
+  callee +0:27 scopeKey -> @nish.scopeKey
   callee +1:30 Map<string, i32>.probe -> @nish.Map$str$i32.probe
-  callee +1:45 scopeKey -> @nish.scopeKey
-function Cli.lookupNegation(this: Cli, cmd: i32, name: string): i32 -> @nish.Cli.lookupNegation [exported method]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: cmd name
-  calls: nish.Map$str$i32.probe nish.Map$str$i32.valueAt nish.scopeKey
-  pointer this: size=312 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:11 own: i32 (const)
-  callee +0:17 Map<string, i32>.probe -> @nish.Map$str$i32.probe
-  callee +0:36 scopeKey -> @nish.scopeKey
-  callee +1:30 Map<string, i32>.probe -> @nish.Map$str$i32.probe
-  callee +1:49 scopeKey -> @nish.scopeKey
+  callee +1:40 scopeKey -> @nish.scopeKey
 function Cli.spelling(this: Cli, f: i32): string -> @nish.Cli.spelling [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: f
   calls: nish.Cli.checkFlag nish_panic_index nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkFlag#0
   stackSites=0 stackLocals=0
   local +0:11 h: i32 (const)
   callee +0:15 Cli.checkFlag -> @nish.Cli.checkFlag
 function Cli.longNames(this: Cli, cmd: i32): string[] -> @nish.Cli.longNames [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow nish_panic_index nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false
+  pointer this: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 names: string[] (const)
   local +1:14 f: i32 (let)
 function Cli.childNames(this: Cli, cmd: i32, withAliases: boolean): string[] -> @nish.Cli.childNames [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   calls: nish_array_grow nish_panic_index
-  pointer this: size=312 writesThrough=false captured=false
+  pointer this: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:11 names: string[] (const)
   local +1:14 c: i32 (let)
@@ -615,29 +627,27 @@ function Cli.parse(this: Cli, argv: string[], start: i32): ParseResult -> @nish.
   sharedWrite: via nish.Cli.longFlag
   escaping: start
   calls: nish.Cli.longFlag nish.Cli.shortFlags nish.Cli.unknownCommand nish.Map$str$i32.probe nish.Map$str$i32.valueAt nish.ParseResult.constructor nish.ParseResult.finishWalk nish.scopeKey nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_eq
-  pointer this: size=312 writesThrough=true captured=true passedTo=nish.ParseResult.constructor#1 nish.Cli.longFlag#0 nish.Cli.shortFlags#0 nish.Cli.unknownCommand#0
+  pointer this: size=320 writesThrough=true captured=true passedTo=nish.ParseResult.constructor#1 nish.Cli.longFlag#0 nish.Cli.shortFlags#0 nish.Cli.unknownCommand#0
   pointer argv: size=0 writesThrough=true captured=false passedTo=nish.Cli.longFlag#2 nish.Cli.shortFlags#2
   stackSites=0 stackLocals=0
   local +0:11 r: ParseResult (const)
   callee +0:15 new ParseResult -> @nish.ParseResult.constructor
   local +1:9 i: i32 (let)
   local +2:9 dashed: boolean (let)
-  local +3:9 helpPath: boolean (let)
-  local +4:9 stuck: boolean (let)
-  local +6:13 token: string (const)
-  callee +14:38 Cli.longFlag -> @nish.Cli.longFlag
-  callee +14:73 Cli.shortFlags -> @nish.Cli.shortFlags
-  local +16:15 child: i32 (const)
-  callee +16:23 Map<string, i32>.probe -> @nish.Map$str$i32.probe
-  callee +16:41 scopeKey -> @nish.scopeKey
-  callee +24:11 Cli.unknownCommand -> @nish.Cli.unknownCommand
-  callee +30:5 ParseResult.finishWalk -> @nish.ParseResult.finishWalk
+  local +4:13 token: string (const)
+  callee +12:38 Cli.longFlag -> @nish.Cli.longFlag
+  callee +12:73 Cli.shortFlags -> @nish.Cli.shortFlags
+  local +14:15 child: i32 (const)
+  callee +14:23 Map<string, i32>.probe -> @nish.Map$str$i32.probe
+  callee +14:41 scopeKey -> @nish.scopeKey
+  callee +20:11 Cli.unknownCommand -> @nish.Cli.unknownCommand
+  callee +26:5 ParseResult.finishWalk -> @nish.ParseResult.finishWalk
 function Cli.unknownCommand(this: Cli, r: ParseResult, token: string): void -> @nish.Cli.unknownCommand [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.closest
   escaping: token
   calls: nish.Cli.childNames nish.ParseResult.fail nish.closest nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.childNames#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.childNames#0
   pointer r: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.fail#0
   stackSites=0 stackLocals=0
   local +0:11 near: string (const)
@@ -648,20 +658,20 @@ function Cli.longFlag(this: Cli, r: ParseResult, argv: string[], next: i32, toke
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   escaping: next token
-  calls: nish.Cli.longNames nish.Cli.lookupFlag nish.Cli.lookupNegation nish.Cli.takeValue nish.ParseResult.fail nish.ParseResult.set nish.closest nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.lookupFlag#0 nish.Cli.takeValue#0 nish.Cli.lookupNegation#0 nish.Cli.longNames#0
+  calls: nish.Cli.longNames nish.Cli.lookup nish.Cli.takeValue nish.ParseResult.fail nish.ParseResult.set nish.closest nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_index_of nish_str_index_of_from nish_str_new
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.lookup#0 nish.Cli.takeValue#0 nish.Cli.lookup#0 nish.Cli.longNames#0
   pointer r: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.fail#0 nish.ParseResult.set#0 nish.Cli.takeValue#1 nish.ParseResult.fail#0 nish.ParseResult.set#0 nish.ParseResult.fail#0
   pointer argv: size=0 writesThrough=true captured=false passedTo=nish.Cli.takeValue#2
   stackSites=0 stackLocals=0
   local -3:11 eq: i32 (const)
   local -2:11 name: string (const)
   local +7:11 f: i32 (const)
-  callee +7:15 Cli.lookupFlag -> @nish.Cli.lookupFlag
+  callee +7:15 Cli.lookup -> @nish.Cli.lookup
   callee +11:11 ParseResult.fail -> @nish.ParseResult.fail
   callee +13:11 ParseResult.set -> @nish.ParseResult.set
   callee +17:14 Cli.takeValue -> @nish.Cli.takeValue
   local +19:11 off: i32 (const)
-  callee +19:17 Cli.lookupNegation -> @nish.Cli.lookupNegation
+  callee +19:17 Cli.lookup -> @nish.Cli.lookup
   callee +22:9 ParseResult.fail -> @nish.ParseResult.fail
   callee +24:9 ParseResult.set -> @nish.ParseResult.set
   local +28:11 near: string (const)
@@ -672,15 +682,15 @@ function Cli.shortFlags(this: Cli, r: ParseResult, argv: string[], next: i32, to
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: next
-  calls: nish.Cli.lookupFlag nish.Cli.takeValue nish.ParseResult.fail nish.ParseResult.set nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_new
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.lookupFlag#0 nish.Cli.takeValue#0
+  calls: nish.Cli.lookup nish.Cli.takeValue nish.ParseResult.fail nish.ParseResult.set nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_new
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.lookup#0 nish.Cli.takeValue#0
   pointer r: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.fail#0 nish.Cli.takeValue#1 nish.ParseResult.set#0
   pointer argv: size=0 writesThrough=true captured=false passedTo=nish.Cli.takeValue#2
   stackSites=0 stackLocals=0
   local -3:14 k: i32 (let)
   local -2:13 letter: string (const)
   local +4:15 f: i32 (const)
-  callee +4:19 Cli.lookupFlag -> @nish.Cli.lookupFlag
+  callee +4:19 Cli.lookup -> @nish.Cli.lookup
   callee +6:11 ParseResult.fail -> @nish.ParseResult.fail
   local +10:15 attached: string (let)
   callee +14:18 Cli.takeValue -> @nish.Cli.takeValue
@@ -690,7 +700,7 @@ function Cli.takeValue(this: Cli, r: ParseResult, argv: string[], next: i32, f: 
   sharedWrite: via nish.ParseResult.set
   escaping: attached f next
   calls: nish.ParseResult.fail nish.ParseResult.set nish_panic_index nish_panic_overflow nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false
+  pointer this: size=320 writesThrough=false captured=false
   pointer r: size=96 writesThrough=true captured=false passedTo=nish.ParseResult.set#0 nish.ParseResult.set#0 nish.ParseResult.fail#0 nish.ParseResult.set#0 nish.ParseResult.set#0 nish.ParseResult.set#0
   pointer argv: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
@@ -706,7 +716,7 @@ function Cli.flagLabel(this: Cli, f: i32): string -> @nish.Cli.flagLabel [export
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: f
   calls: nish.Cli.spelling nish_panic_index nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.spelling#0
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.spelling#0
   stackSites=0 stackLocals=0
   local +0:11 long: string (const)
   callee +0:73 Cli.spelling -> @nish.Cli.spelling
@@ -714,15 +724,27 @@ function Cli.flagText(this: Cli, f: i32): string -> @nish.Cli.flagText [exported
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: f
   calls: nish_panic_index nish_str_concat
-  pointer this: size=312 writesThrough=false captured=false
+  pointer this: size=320 writesThrough=false captured=false
   stackSites=0 stackLocals=0
   local +0:9 text: string (let)
+function Cli.flagRows(this: Cli, rows: HelpRow[], section: string, owner: i32): void -> @nish.Cli.flagRows [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: section
+  calls: nish.Cli.flagLabel nish.Cli.flagText nish.HelpRow.constructor nish_alloc_struct nish_array_grow nish_panic_index
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.flagLabel#0 nish.Cli.flagText#0
+  pointer rows: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -2:14 f: i32 (let)
+  callee +0:19 new HelpRow -> @nish.HelpRow.constructor
+  callee +0:40 Cli.flagLabel -> @nish.Cli.flagLabel
+  callee +0:77 Cli.flagText -> @nish.Cli.flagText
 function Cli.helpText(this: Cli, handle: i32, style: Style): string -> @nish.Cli.helpText [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish.HelpMenu.header
   escaping: handle
-  calls: nish.Cli.checkCommand nish.Cli.flagLabel nish.Cli.flagText nish.Cli.pathOf nish.HelpMenu.constructor nish.HelpMenu.header nish.HelpMenu.line nish.HelpMenu.row nish.HelpMenu.section nish.HelpMenu.text nish.HelpMenu.usage nish.HelpRow.constructor nish.minI32 nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
-  pointer this: size=312 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0 nish.Cli.flagLabel#0 nish.Cli.flagText#0 nish.Cli.flagLabel#0 nish.Cli.flagText#0
+  calls: nish.Cli.checkCommand nish.Cli.flagRows nish.Cli.pathOf nish.HelpMenu.constructor nish.HelpMenu.header nish.HelpMenu.line nish.HelpMenu.row nish.HelpMenu.section nish.HelpMenu.text nish.HelpMenu.usage nish.HelpRow.constructor nish.minI32 nish_alloc_struct nish_array_grow nish_panic_index nish_panic_overflow nish_str_concat nish_str_eq nish_str_new
+  pointer this: size=320 writesThrough=false captured=false passedTo=nish.Cli.checkCommand#0 nish.Cli.pathOf#0 nish.Cli.flagRows#0 nish.Cli.flagRows#0
   pointer style: size=2 writesThrough=true captured=true passedTo=nish.HelpMenu.constructor#1
   stackSites=3 stackLocals=3
   local +0:11 cmd: i32 (const)
@@ -739,35 +761,29 @@ function Cli.helpText(this: Cli, handle: i32, style: Style): string -> @nish.Cli
   local +19:13 dots: string (const)
   local +20:13 label: string (const)
   callee +22:17 new HelpRow -> @nish.HelpRow.constructor
-  local +26:14 f: i32 (let)
-  callee +28:19 new HelpRow -> @nish.HelpRow.constructor
-  callee +28:40 Cli.flagLabel -> @nish.Cli.flagLabel
-  callee +28:77 Cli.flagText -> @nish.Cli.flagText
-  callee +31:15 new HelpRow -> @nish.HelpRow.constructor
-  callee +33:17 new HelpRow -> @nish.HelpRow.constructor
-  local +35:14 f: i32 (let)
-  callee +37:19 new HelpRow -> @nish.HelpRow.constructor
-  callee +37:47 Cli.flagLabel -> @nish.Cli.flagLabel
-  callee +37:84 Cli.flagText -> @nish.Cli.flagText
-  local +40:9 widest: i32 (let)
-  local +41:14 i: i32 (let)
-  local +42:13 row: HelpRow (const)
-  local +43:13 width: i32 (const)
-  local +46:11 usage: string (const)
-  local +47:11 usageColumn: i32 (const)
-  local +48:11 menu: HelpMenu (const)
-  callee +48:18 new HelpMenu -> @nish.HelpMenu.constructor
-  callee +48:49 minI32 -> @nish.minI32
-  callee +49:5 HelpMenu.header -> @nish.HelpMenu.header
-  callee +50:5 HelpMenu.usage -> @nish.HelpMenu.usage
-  local +51:9 open: string (let)
-  local +52:14 i: i32 (let)
-  local +53:13 row: HelpRow (const)
-  callee +56:9 HelpMenu.section -> @nish.HelpMenu.section
-  callee +58:7 HelpMenu.row -> @nish.HelpMenu.row
-  callee +61:7 HelpMenu.line -> @nish.HelpMenu.line
-  callee +62:7 HelpMenu.line -> @nish.HelpMenu.line
-  callee +64:12 HelpMenu.text -> @nish.HelpMenu.text
+  callee +26:5 Cli.flagRows -> @nish.Cli.flagRows
+  callee +27:15 new HelpRow -> @nish.HelpRow.constructor
+  callee +29:17 new HelpRow -> @nish.HelpRow.constructor
+  callee +31:5 Cli.flagRows -> @nish.Cli.flagRows
+  local +32:9 widest: i32 (let)
+  local +33:14 i: i32 (let)
+  local +34:13 row: HelpRow (const)
+  local +35:13 width: i32 (const)
+  local +38:11 usage: string (const)
+  local +39:11 usageColumn: i32 (const)
+  local +40:11 menu: HelpMenu (const)
+  callee +40:18 new HelpMenu -> @nish.HelpMenu.constructor
+  callee +40:49 minI32 -> @nish.minI32
+  callee +41:5 HelpMenu.header -> @nish.HelpMenu.header
+  callee +42:5 HelpMenu.usage -> @nish.HelpMenu.usage
+  local +43:9 open: string (let)
+  local +44:14 i: i32 (let)
+  local +45:13 row: HelpRow (const)
+  callee +48:9 HelpMenu.section -> @nish.HelpMenu.section
+  callee +50:7 HelpMenu.row -> @nish.HelpMenu.row
+  callee +53:7 HelpMenu.line -> @nish.HelpMenu.line
+  callee +54:7 HelpMenu.line -> @nish.HelpMenu.line
+  callee +56:12 HelpMenu.text -> @nish.HelpMenu.text
 function HelpRow.constructor(this: HelpRow, section: string, label: string, meta: string, text: string): void -> @nish.HelpRow.constructor [constructor]
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=false
   escaping: label meta section text
@@ -777,7 +793,7 @@ function ParseResult.constructor(this: ParseResult, cli: Cli): void -> @nish.Par
   facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=true sharedWrite=false
   escaping: cli
   pointer this: size=96 writesThrough=true captured=false
-  pointer cli: size=312 writesThrough=true captured=true
+  pointer cli: size=320 writesThrough=true captured=true
   stackSites=0 stackLocals=0
 function ParseResult.fail(this: ParseResult, cmd: i32, text: string): void -> @nish.ParseResult.fail [exported method]
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
@@ -1475,109 +1491,1011 @@ function sameKey<string>(a: string, b: string): boolean -> @nish.sameKey$str [in
   facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish_str_eq
   stackSites=0 stackLocals=0
-module std/text.ts [package nish]
-const NEWLINE: i32 = 10
-const CARRIAGE_RETURN: i32 = 13
-const SPACE: i32 = 32
-const TAB: i32 = 9
-const INDEX_OF_ANY_MAX_SET: i32 = 16
-const NON_ASCII: i32 = 128
-const UTF8_TOP_BITS: i32 = 192
-const UTF8_CONTINUATION: i32 = 128
-const HIGH_SURROGATE: i32 = 55296
-const LOW_SURROGATE: i32 = 56320
-const SURROGATE_END: i32 = 57344
-function isTextBlankByte(code: i32): boolean -> @nish.isTextBlankByte
+module std/json.ts [package nish]
+import copyBytes from "nish/bytes" -> function @nish.copyBytes
+import skipJsonPlain from "nish/bytes" -> function @nish.skipJsonPlain
+const JSON_BACKSPACE: i32 = 8
+const JSON_TAB: i32 = 9
+const JSON_NEWLINE: i32 = 10
+const JSON_FORM_FEED: i32 = 12
+const JSON_CARRIAGE_RETURN: i32 = 13
+const JSON_SPACE: i32 = 32
+const JSON_QUOTE: i32 = 34
+const JSON_COMMA: i32 = 44
+const JSON_COLON: i32 = 58
+const JSON_BACKSLASH: i32 = 92
+const JSON_LETTER_U: i32 = 117
+const JSON_OPEN_BRACKET: i32 = 91
+const JSON_CLOSE_BRACKET: i32 = 93
+const JSON_OPEN_BRACE: i32 = 123
+const JSON_CLOSE_BRACE: i32 = 125
+const JSON_UTF8_TWO_BYTE_LEAD: i32 = 192
+const JSON_UTF8_THREE_BYTE_LEAD: i32 = 224
+const JSON_UTF8_CONTINUATION: i32 = 128
+const JSON_UTF8_LOW_SIX: i32 = 63
+const JSON_UTF8_TWO_BYTE_FLOOR: i32 = 128
+const JSON_UTF8_THREE_BYTE_FLOOR: i32 = 2048
+const JSON_HEX_BASE: i32 = 16
+const JSON_INLINE_SCAN: i32 = 16
+const JSON_WRITE_OK: i32 = 0 [exported]
+const JSON_WRITE_KEY_EXPECTED: i32 = -1 [exported]
+const JSON_WRITE_VALUE_EXPECTED: i32 = -2 [exported]
+const JSON_WRITE_UNBALANCED: i32 = -3 [exported]
+const JSON_WRITE_TOO_DEEP: i32 = -4 [exported]
+const JSON_WRITE_FULL: i32 = -5 [exported]
+const JSON_WRITE_DONE: i32 = -6 [exported]
+const JSON_WRITE_BAD_WINDOW: i32 = -7 [exported]
+const JSON_WRITE_NON_FINITE: i32 = -8 [exported]
+const JSON_WRITER_MAX_DEPTH: i32 = 64 [exported]
+const JSON_WRITER_BIT: i32 = 1
+const JSON_WRITER_TOP_BIT: i32 = 31
+const JSON_WRITER_MAX_INDENT: i32 = 10
+const JSON_SLASH_B: i32 = 98
+const JSON_SLASH_F: i32 = 102
+const JSON_SLASH_N: i32 = 110
+const JSON_SLASH_R: i32 = 114
+const JSON_SLASH_T: i32 = 116
+const JSON_DIGIT_ZERO: i32 = 48
+const JSON_MINUS: i32 = 45
+const JSON_DECIMAL_BASE: i32 = 10
+const JSON_LOWER_A: i32 = 97
+const JSON_WRITER_SEP_NONE: i32 = 0
+const JSON_WRITER_SEP_COMMA: i32 = 1
+const JSON_WRITER_SEP_INDENTED: i32 = 2
+const JSON_WRITER_SEP_COMMA_BREAK: i32 = 3
+const JSON_PLAIN_RUN_MIN: i32 = 16
+struct JsonMember (class) size=20 align=4
+  field keyAt: i32 index=0 offset=0 initialized
+  field keyEnd: i32 index=1 offset=4 initialized
+  field valueAt: i32 index=2 offset=8 initialized
+  field valueEnd: i32 index=3 offset=12 initialized
+  field next: i32 index=4 offset=16 initialized
+struct JsonWriter (class) size=48 align=8 exported
+  field buf: u8[] index=0 offset=0
+  field start: i32 index=1 offset=8 initialized
+  field end: i32 index=2 offset=12 initialized
+  field failed: i32 index=3 offset=16 initialized
+  field depth: i32 index=4 offset=20 initialized
+  field objectsLow: i32 index=5 offset=24 initialized
+  field objectsHigh: i32 index=6 offset=28 initialized
+  field sep: i32 index=7 offset=32 initialized
+  field indentWidth: i32 index=8 offset=36 initialized
+  field indentByte: i32 index=9 offset=40 initialized
+  field afterKey: boolean index=10 offset=44 initialized
+  field done: boolean index=11 offset=45 initialized
+  field strict: boolean index=12 offset=46 initialized
+  constructor -> @nish.JsonWriter.constructor
+  method reset -> @nish.JsonWriter.reset
+  method setIndent -> @nish.JsonWriter.setIndent
+  method setIndentTab -> @nish.JsonWriter.setIndentTab
+  method setStrict -> @nish.JsonWriter.setStrict
+  method written -> @nish.JsonWriter.written
+  method complete -> @nish.JsonWriter.complete
+  method text -> @nish.JsonWriter.text
+  method beginObject -> @nish.JsonWriter.beginObject
+  method endObject -> @nish.JsonWriter.endObject
+  method beginArray -> @nish.JsonWriter.beginArray
+  method endArray -> @nish.JsonWriter.endArray
+  method key -> @nish.JsonWriter.key
+  method string -> @nish.JsonWriter.string
+  method keyBytes -> @nish.JsonWriter.keyBytes
+  method stringBytes -> @nish.JsonWriter.stringBytes
+  method i32 -> @nish.JsonWriter.i32
+  method u32 -> @nish.JsonWriter.u32
+  method i64 -> @nish.JsonWriter.i64
+  method f64 -> @nish.JsonWriter.f64
+  method boolean -> @nish.JsonWriter.boolean
+  method nullValue -> @nish.JsonWriter.nullValue
+  method raw -> @nish.JsonWriter.raw
+function jsonIsBlankByte(code: i32): boolean -> @nish.jsonIsBlankByte
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function splitLines(text: string): string[] -> @nish.splitLines [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_array_grow nish_str_new
-  stackSites=0 stackLocals=0
-  local +0:9 length: i32 (const)
-  local +1:9 lines: string[] (const)
-  local +2:7 start: i32 (let)
-  local +3:7 i: i32 (let)
-function splitWhitespace(text: string): string[] -> @nish.splitWhitespace [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.isTextBlankByte nish_array_grow nish_str_new
-  stackSites=0 stackLocals=0
-  local +0:9 length: i32 (const)
-  local +1:9 parts: string[] (const)
-  local +2:7 start: i32 (let)
-  local +3:7 i: i32 (let)
-  callee +5:9 isTextBlankByte -> @nish.isTextBlankByte
-function trimStart(text: string): string -> @nish.trimStart [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.isTextBlankByte nish_str_new
+function jsonSkipBlank(text: string, from: i32): i32 -> @nish.jsonSkipBlank
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  calls: nish.jsonIsBlankByte
   stackSites=0 stackLocals=0
   local +0:9 length: i32 (const)
   local +1:7 i: i32 (let)
-  callee +2:24 isTextBlankByte -> @nish.isTextBlankByte
-function trimEnd(text: string): string -> @nish.trimEnd [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.isTextBlankByte nish_panic_index nish_str_new
-  stackSites=0 stackLocals=0
-  local +0:7 end: i32 (let)
-  callee +1:21 isTextBlankByte -> @nish.isTextBlankByte
-function trim(text: string): string -> @nish.trim [exported]
-  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: text
-  calls: nish.trimEnd nish.trimStart
-  stackSites=0 stackLocals=0
-  callee +0:47 trimEnd -> @nish.trimEnd
-  callee +0:55 trimStart -> @nish.trimStart
-function contains(haystack: string, needle: string): boolean -> @nish.contains [exported]
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_index_of nish_str_index_of_from
-  stackSites=0 stackLocals=0
-function replaceAll(text: string, needle: string, replacement: string): string -> @nish.replaceAll [exported]
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  escaping: text
-  calls: nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_index_of nish_str_index_of_from nish_str_new
-  stackSites=1 stackLocals=1
-  local +0:9 needleLength: i32 (const)
-  local +4:9 parts: string[] (const)
-  local +5:7 rest: string (let)
-  local +7:11 at: i32 (const)
-function firstDifference(left: string[], right: string[]): i32 -> @nish.firstDifference [exported]
-  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_str_eq
-  pointer left: size=0 writesThrough=false captured=false
-  pointer right: size=0 writesThrough=false captured=false
-  stackSites=0 stackLocals=0
-  local +0:9 leftLength: i32 (const)
-  local +1:9 rightLength: i32 (const)
-  local +2:7 i: i32 (let)
-function indexOfAny(text: string, bytes: string, from: i32): i32 -> @nish.indexOfAny [exported]
+  callee +2:24 jsonIsBlankByte -> @nish.jsonIsBlankByte
+function jsonClosingQuote(text: string, start: i32): i32 -> @nish.jsonClosingQuote
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  escaping: bytes from text
-  calls: nish.indexOfAnyFrom nish_panic
+  calls: nish_panic_overflow nish_str_index_of nish_str_index_of_from
   stackSites=0 stackLocals=0
+  local +0:9 length: i32 (const)
+  local +4:7 quote: i32 (let)
+  local +11:9 j: i32 (let)
+function jsonEndOfString(text: string, at: i32): i32 -> @nish.jsonEndOfString
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: text
+  calls: nish.jsonClosingQuote nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 length: i32 (const)
+  local +4:9 stop: i32 (const)
+  local +5:7 i: i32 (let)
+  local +8:11 code: i32 (const)
+  local +21:9 quote: i32 (const)
+  callee +21:22 jsonClosingQuote -> @nish.jsonClosingQuote
+function jsonEndOfValue(text: string, at: i32): i32 -> @nish.jsonEndOfValue
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at text
+  calls: nish.jsonClosingQuote nish.jsonIsBlankByte nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:9 length: i32 (const)
+  local +4:9 first: i32 (const)
+  local +6:9 depth: i32 (let)
+  local +7:9 i: i32 (let)
+  local +13:13 code: i32 (const)
+  local +15:15 stop: i32 (const)
+  local +16:13 j: i32 (let)
+  local +17:13 close: i32 (let)
+  local +19:17 inner: i32 (const)
+  callee +34:19 jsonClosingQuote -> @nish.jsonClosingQuote
+  local +57:7 i: i32 (let)
+  local +59:11 code: i32 (const)
+  callee +63:9 jsonIsBlankByte -> @nish.jsonIsBlankByte
+function jsonHexDigit(code: i32): i32 -> @nish.jsonHexDigit
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonHex4(text: string, at: i32, end: i32): i32 -> @nish.jsonHex4
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish.jsonHexDigit nish_panic_index nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:7 value: i32 (let)
+  local +1:7 i: i32 (let)
+  local +3:11 digit: i32 (const)
+  callee +3:24 jsonHexDigit -> @nish.jsonHexDigit
+function jsonUtf8(code: i32): string -> @nish.jsonUtf8
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_str_concat nish_str_new
+  stackSites=0 stackLocals=0
+  local +0:11 lead: string (const)
+  local +3:9 lead: string (const)
+  local +4:9 middle: string (const)
+function jsonUtf8Width(code: i32): i32 -> @nish.jsonUtf8Width
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonUtf8Byte(code: i32, width: i32, k: i32): i32 -> @nish.jsonUtf8Byte
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: code
+  calls: nish_panic_overflow
+  stackSites=0 stackLocals=0
+function jsonUnescape(text: string, at: i32, end: i32): string -> @nish.jsonUnescape
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: at end text
+  calls: nish.jsonHex4 nish.jsonUtf8 nish_alloc_struct nish_array_grow nish_panic_overflow nish_str_new
+  stackSites=1 stackLocals=1
+  local +0:7 i: i32 (let)
+  local +7:9 parts: string[] (const)
+  local +8:7 start: i32 (let)
+  local +24:11 letter: i32 (const)
+  local +41:13 code: i32 (const)
+  callee +41:25 jsonHex4 -> @nish.jsonHex4
+  callee +48:20 jsonUtf8 -> @nish.jsonUtf8
+function jsonNameHas(name: string, j: i32, code: i32): boolean -> @nish.jsonNameHas
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonKeyEquals(text: string, at: i32, end: i32, name: string): boolean -> @nish.jsonKeyEquals
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: at end name text
+  calls: nish.jsonHex4 nish.jsonNameHas nish.jsonUtf8Byte nish.jsonUtf8Width nish_panic_overflow
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +1:7 j: i32 (let)
+  local +3:11 code: i32 (const)
+  callee +5:12 jsonNameHas -> @nish.jsonNameHas
+  local +12:11 letter: i32 (const)
+  local +14:13 point: i32 (const)
+  callee +14:26 jsonHex4 -> @nish.jsonHex4
+  callee +16:14 jsonNameHas -> @nish.jsonNameHas
+  callee +16:55 jsonNameHas -> @nish.jsonNameHas
+  local +23:13 width: i32 (const)
+  callee +23:26 jsonUtf8Width -> @nish.jsonUtf8Width
+  local +24:11 k: i32 (let)
+  callee +26:14 jsonNameHas -> @nish.jsonNameHas
+  callee +26:39 jsonUtf8Byte -> @nish.jsonUtf8Byte
+  local +36:9 decoded: i32 (let)
+  callee +50:10 jsonNameHas -> @nish.jsonNameHas
+function jsonFirstKey(object: string): i32 -> @nish.jsonFirstKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: object
+  calls: nish.jsonSkipBlank nish_panic_index
+  stackSites=0 stackLocals=0
+  local +0:9 length: i32 (const)
+  local +1:9 i: i32 (const)
+  callee +1:18 jsonSkipBlank -> @nish.jsonSkipBlank
+  callee +5:10 jsonSkipBlank -> @nish.jsonSkipBlank
+function jsonReadMember(object: string, at: i32, member: JsonMember): boolean -> @nish.jsonReadMember
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: at object
+  calls: nish.jsonEndOfString nish.jsonEndOfValue nish.jsonSkipBlank
+  pointer member: size=20 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -21:9 length: i32 (const)
+  local -13:9 keyEnd: i32 (const)
+  callee -13:23 jsonEndOfString -> @nish.jsonEndOfString
+  local -9:9 colon: i32 (const)
+  callee -9:22 jsonSkipBlank -> @nish.jsonSkipBlank
+  local -5:9 valueAt: i32 (const)
+  callee -5:24 jsonSkipBlank -> @nish.jsonSkipBlank
+  local -4:9 valueEnd: i32 (const)
+  callee -4:25 jsonEndOfValue -> @nish.jsonEndOfValue
+  local +4:9 comma: i32 (const)
+  callee +4:22 jsonSkipBlank -> @nish.jsonSkipBlank
+  callee +8:19 jsonSkipBlank -> @nish.jsonSkipBlank
+function jsonValueText(object: string, member: JsonMember): string -> @nish.jsonValueText
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: object
+  calls: nish.jsonUnescape nish_panic_index nish_panic_overflow nish_str_new
+  pointer member: size=20 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 valueAt: i32 (const)
+  local +1:9 valueEnd: i32 (const)
+  callee +9:12 jsonUnescape -> @nish.jsonUnescape
+function jsonField(object: string, name: string): string | null -> @nish.jsonField [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: name object
+  calls: nish.jsonFirstKey nish.jsonKeyEquals nish.jsonReadMember nish.jsonValueText
+  stackSites=1 stackLocals=1
+  local +0:9 member: JsonMember (const)
+  local +1:7 at: i32 (let)
+  callee +1:17 jsonFirstKey -> @nish.jsonFirstKey
+  callee +2:10 jsonReadMember -> @nish.jsonReadMember
+  callee +6:9 jsonKeyEquals -> @nish.jsonKeyEquals
+  callee +7:14 jsonValueText -> @nish.jsonValueText
+function jsonFields(object: string, names: string[]): string | null[] -> @nish.jsonFields [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
+  escaping: object
+  calls: nish.jsonFirstKey nish.jsonKeyEquals nish.jsonReadMember nish.jsonValueText nish_panic nish_panic_overflow
+  pointer names: size=0 writesThrough=true captured=false
+  stackSites=1 stackLocals=1
   local +0:9 count: i32 (const)
-  local +4:7 j: i32 (let)
-  local +11:9 length: i32 (const)
-  local +12:7 start: i32 (let)
-  callee +19:10 indexOfAnyFrom -> @nish.indexOfAnyFrom
-function indexOfAnyFrom(text: string, bytes: string, from: i32): i32 -> @nish.indexOfAnyFrom
+  local +1:9 values: string | null[] (const)
+  local +2:9 member: JsonMember (const)
+  local +3:7 missing: i32 (let)
+  local +4:7 at: i32 (let)
+  callee +4:17 jsonFirstKey -> @nish.jsonFirstKey
+  callee +5:25 jsonReadMember -> @nish.jsonReadMember
+  local +8:9 text: string | null (let)
+  local +9:9 k: i32 (let)
+  callee +13:33 jsonKeyEquals -> @nish.jsonKeyEquals
+  callee +15:18 jsonValueText -> @nish.jsonValueText
+function jsonShortEscape(code: i32): i32 -> @nish.jsonShortEscape
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: code
+  stackSites=0 stackLocals=0
+function jsonHexByte(nibble: i32): i32 -> @nish.jsonHexByte
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonIsPlainByte(code: i32): boolean -> @nish.jsonIsPlainByte
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  stackSites=0 stackLocals=0
+function jsonEscapedWidth(code: i32): i32 -> @nish.jsonEscapedWidth
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: code
+  calls: nish.jsonIsPlainByte nish.jsonShortEscape
+  stackSites=0 stackLocals=0
+  callee +0:7 jsonIsPlainByte -> @nish.jsonIsPlainByte
+  callee +3:10 jsonShortEscape -> @nish.jsonShortEscape
+function JsonWriter.constructor(this: JsonWriter, buf: u8[], start: i32): void -> @nish.JsonWriter.constructor [exported constructor]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=true sharedWrite=true
+  sharedWrite: via nish.JsonWriter.reset
+  escaping: buf start
+  calls: nish.JsonWriter.reset
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.reset#0
+  pointer buf: size=0 writesThrough=true captured=true passedTo=nish.JsonWriter.reset#1
+  stackSites=0 stackLocals=0
+  callee +0:5 JsonWriter.reset -> @nish.JsonWriter.reset
+function JsonWriter.reset(this: JsonWriter, buf: u8[], start: i32): void -> @nish.JsonWriter.reset [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: buf start
+  pointer this: size=48 writesThrough=true captured=false
+  pointer buf: size=0 writesThrough=true captured=true
+  stackSites=0 stackLocals=0
+function JsonWriter.setIndent(this: JsonWriter, spaces: i32): void -> @nish.JsonWriter.setIndent [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: spaces
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -6:9 width: i32 (let)
+function JsonWriter.setIndentTab(this: JsonWriter): void -> @nish.JsonWriter.setIndentTab [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function JsonWriter.setStrict(this: JsonWriter, strict: boolean): void -> @nish.JsonWriter.setStrict [exported method]
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: strict
+  pointer this: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function JsonWriter.written(this: JsonWriter): i32 -> @nish.JsonWriter.written [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_overflow
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function JsonWriter.complete(this: JsonWriter): boolean -> @nish.JsonWriter.complete [exported method]
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function JsonWriter.text(this: JsonWriter): string -> @nish.JsonWriter.text [exported method]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_alloc_struct nish_array_grow nish_str_new
+  pointer this: size=48 writesThrough=false captured=false
+  stackSites=1 stackLocals=1
+  local +0:11 buf: u8[] (const)
+  local +1:11 parts: string[] (const)
+  local +2:14 k: i32 (let)
+function JsonWriter.beginObject(this: JsonWriter): void -> @nish.JsonWriter.beginObject [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterOpen
+  calls: nish.jsonWriterOpen
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterOpen#0
+  stackSites=0 stackLocals=0
+  callee +0:5 jsonWriterOpen -> @nish.jsonWriterOpen
+function JsonWriter.endObject(this: JsonWriter): void -> @nish.JsonWriter.endObject [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterCloseIndented
+  calls: nish.jsonWriterClose nish.jsonWriterCloseIndented
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterCloseIndented#0 nish.jsonWriterClose#0
+  stackSites=0 stackLocals=0
+  callee +0:7 jsonWriterCloseIndented -> @nish.jsonWriterCloseIndented
+  callee +2:7 jsonWriterClose -> @nish.jsonWriterClose
+function JsonWriter.beginArray(this: JsonWriter): void -> @nish.JsonWriter.beginArray [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterOpen
+  calls: nish.jsonWriterOpen
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterOpen#0
+  stackSites=0 stackLocals=0
+  callee +0:5 jsonWriterOpen -> @nish.jsonWriterOpen
+function JsonWriter.endArray(this: JsonWriter): void -> @nish.JsonWriter.endArray [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterCloseIndented
+  calls: nish.jsonWriterClose nish.jsonWriterCloseIndented
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterCloseIndented#0 nish.jsonWriterClose#0
+  stackSites=0 stackLocals=0
+  callee +0:7 jsonWriterCloseIndented -> @nish.jsonWriterCloseIndented
+  callee +2:7 jsonWriterClose -> @nish.jsonWriterClose
+function JsonWriter.key(this: JsonWriter, name: string): void -> @nish.JsonWriter.key [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: name
+  calls: nish.jsonWriterInObject nish.jsonWriterIndented nish.jsonWriterPutByte nish.jsonWriterPutString
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterInObject#0 nish.jsonWriterIndented#0 nish.jsonWriterPutByte#0 nish.jsonWriterPutString#0 nish.jsonWriterPutByte#0
+  stackSites=0 stackLocals=0
+  callee +3:10 jsonWriterInObject -> @nish.jsonWriterInObject
+  local +7:11 sep: i32 (const)
+  callee +10:9 jsonWriterIndented -> @nish.jsonWriterIndented
+  callee +13:12 jsonWriterPutByte -> @nish.jsonWriterPutByte
+  callee +17:9 jsonWriterPutString -> @nish.jsonWriterPutString
+  callee +17:44 jsonWriterPutByte -> @nish.jsonWriterPutByte
+function JsonWriter.string(this: JsonWriter, s: string): void -> @nish.JsonWriter.string [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterValueDue
+  escaping: s
+  calls: nish.jsonWriterPutString nish.jsonWriterValueDone nish.jsonWriterValueDue
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterValueDue#0 nish.jsonWriterPutString#0 nish.jsonWriterValueDone#0
+  stackSites=0 stackLocals=0
+  callee +0:9 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  callee +0:37 jsonWriterPutString -> @nish.jsonWriterPutString
+  callee +1:7 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function JsonWriter.keyBytes(this: JsonWriter, bytes: u8[], off: i32, len: i32): void -> @nish.JsonWriter.keyBytes [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: len off
+  calls: nish.jsonWriterBreakBeforeKey nish.jsonWriterInObject nish.jsonWriterPutByte nish.jsonWriterPutBytes nish.jsonWriterWindowOk
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterWindowOk#0 nish.jsonWriterInObject#0 nish.jsonWriterBreakBeforeKey#0 nish.jsonWriterPutByte#0 nish.jsonWriterPutBytes#0 nish.jsonWriterPutByte#0 nish.jsonWriterPutByte#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.jsonWriterWindowOk#1 nish.jsonWriterPutBytes#1
+  stackSites=0 stackLocals=0
+  callee -4:10 jsonWriterWindowOk -> @nish.jsonWriterWindowOk
+  callee +3:10 jsonWriterInObject -> @nish.jsonWriterInObject
+  local +7:11 sep: i32 (const)
+  local +8:11 indented: boolean (const)
+  callee +10:12 jsonWriterBreakBeforeKey -> @nish.jsonWriterBreakBeforeKey
+  callee +13:50 jsonWriterPutByte -> @nish.jsonWriterPutByte
+  callee +17:7 jsonWriterPutBytes -> @nish.jsonWriterPutBytes
+  callee +18:7 jsonWriterPutByte -> @nish.jsonWriterPutByte
+  callee +19:21 jsonWriterPutByte -> @nish.jsonWriterPutByte
+function JsonWriter.stringBytes(this: JsonWriter, bytes: u8[], off: i32, len: i32): void -> @nish.JsonWriter.stringBytes [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterWindowOk
+  escaping: len off
+  calls: nish.jsonWriterPutBytes nish.jsonWriterValueDone nish.jsonWriterValueDue nish.jsonWriterWindowOk
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterWindowOk#0 nish.jsonWriterValueDue#0 nish.jsonWriterPutBytes#0 nish.jsonWriterValueDone#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.jsonWriterWindowOk#1 nish.jsonWriterPutBytes#1
+  stackSites=0 stackLocals=0
+  callee +0:10 jsonWriterWindowOk -> @nish.jsonWriterWindowOk
+  callee +3:9 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  callee +3:37 jsonWriterPutBytes -> @nish.jsonWriterPutBytes
+  callee +4:7 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function JsonWriter.i32(this: JsonWriter, v: i32): void -> @nish.JsonWriter.i32 [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterValueDue
+  escaping: v
+  calls: nish.jsonWriterPutDigits nish.jsonWriterValueDone nish.jsonWriterValueDue
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterValueDue#0 nish.jsonWriterPutDigits#0 nish.jsonWriterValueDone#0
+  stackSites=0 stackLocals=0
+  callee +0:9 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  callee +0:37 jsonWriterPutDigits -> @nish.jsonWriterPutDigits
+  callee +1:7 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function JsonWriter.u32(this: JsonWriter, v: u32): void -> @nish.JsonWriter.u32 [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterValueDue
+  calls: nish.jsonWriterPutDigits nish.jsonWriterValueDone nish.jsonWriterValueDue
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterValueDue#0 nish.jsonWriterPutDigits#0 nish.jsonWriterPutDigits#0 nish.jsonWriterValueDone#0
+  stackSites=0 stackLocals=0
+  callee +0:10 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  local +4:11 i32Max: u32 (const)
+  local +5:9 written: boolean (let)
+  callee +7:17 jsonWriterPutDigits -> @nish.jsonWriterPutDigits
+  local +9:13 ten: u32 (const)
+  local +10:13 last: u32 (const)
+  callee +11:17 jsonWriterPutDigits -> @nish.jsonWriterPutDigits
+  callee +14:7 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function JsonWriter.i64(this: JsonWriter, v: i64): void -> @nish.JsonWriter.i64 [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterValueDue
+  escaping: v
+  calls: nish.jsonWriterPutDigits64 nish.jsonWriterValueDone nish.jsonWriterValueDue
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterValueDue#0 nish.jsonWriterPutDigits64#0 nish.jsonWriterValueDone#0
+  stackSites=0 stackLocals=0
+  callee +0:9 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  callee +0:37 jsonWriterPutDigits64 -> @nish.jsonWriterPutDigits64
+  callee +1:7 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function JsonWriter.f64(this: JsonWriter, v: f64): void -> @nish.JsonWriter.f64 [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:9
+  escaping: v
+  calls: nish.JsonWriter.nullValue nish.jsonWriterPutF64 nish.jsonWriterValueAllowed nish.jsonWriterValueDone nish.jsonWriterValueDue
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.JsonWriter.nullValue#0 nish.jsonWriterValueAllowed#0 nish.jsonWriterValueDue#0 nish.jsonWriterPutF64#0 nish.jsonWriterValueDone#0
+  stackSites=0 stackLocals=0
+  callee -2:9 JsonWriter.nullValue -> @nish.JsonWriter.nullValue
+  callee -1:18 jsonWriterValueAllowed -> @nish.jsonWriterValueAllowed
+  callee +2:16 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  callee +2:44 jsonWriterPutF64 -> @nish.jsonWriterPutF64
+  callee +3:7 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function JsonWriter.boolean(this: JsonWriter, v: boolean): void -> @nish.JsonWriter.boolean [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterValueDue
+  calls: nish.jsonWriterPutText nish.jsonWriterValueDone nish.jsonWriterValueDue
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterValueDue#0 nish.jsonWriterPutText#0 nish.jsonWriterValueDone#0
+  stackSites=0 stackLocals=0
+  callee +0:9 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  callee +0:37 jsonWriterPutText -> @nish.jsonWriterPutText
+  callee +1:7 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function JsonWriter.nullValue(this: JsonWriter): void -> @nish.JsonWriter.nullValue [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterValueDue
+  calls: nish.jsonWriterPutText nish.jsonWriterValueDone nish.jsonWriterValueDue
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterValueDue#0 nish.jsonWriterPutText#0 nish.jsonWriterValueDone#0
+  stackSites=0 stackLocals=0
+  callee +0:9 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  callee +0:37 jsonWriterPutText -> @nish.jsonWriterPutText
+  callee +1:7 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function JsonWriter.raw(this: JsonWriter, bytes: u8[], off: i32, len: i32): void -> @nish.JsonWriter.raw [exported method]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  escaping: len off
+  calls: nish.copyBytes nish.jsonWriterValueDone nish.jsonWriterValueDue nish_panic_overflow
+  pointer this: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterValueDue#0 nish.jsonWriterValueDone#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.copyBytes#2
+  stackSites=0 stackLocals=0
+  callee +3:10 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  local +6:11 buf: u8[] (const)
+  local +7:11 at: i32 (const)
+  callee +12:5 copyBytes -> @nish.copyBytes
+  callee +14:5 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function jsonWriterInObject(w: JsonWriter): boolean -> @nish.jsonWriterInObject
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  pointer w: size=48 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function jsonWriterValueDue(w: JsonWriter): boolean -> @nish.jsonWriterValueDue
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish.jsonWriterInObject nish.jsonWriterIndented nish.jsonWriterPutByte
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterInObject#0 nish.jsonWriterPutByte#0 nish.jsonWriterIndented#0
+  stackSites=0 stackLocals=0
+  callee +9:7 jsonWriterInObject -> @nish.jsonWriterInObject
+  local +15:9 sep: i32 (const)
+  callee +17:12 jsonWriterPutByte -> @nish.jsonWriterPutByte
+  callee +19:42 jsonWriterIndented -> @nish.jsonWriterIndented
+function jsonWriterValueAllowed(w: JsonWriter): boolean -> @nish.jsonWriterValueAllowed
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.jsonWriterInObject
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterInObject#0
+  stackSites=0 stackLocals=0
+  callee +3:24 jsonWriterInObject -> @nish.jsonWriterInObject
+function jsonWriterValueDone(w: JsonWriter): void -> @nish.jsonWriterValueDone
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  pointer w: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function jsonWriterOpen(w: JsonWriter, object: boolean, opener: i32): void -> @nish.jsonWriterOpen
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: opener
+  calls: nish.jsonWriterPutByte nish.jsonWriterValueDue nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterValueDue#0 nish.jsonWriterPutByte#0
+  stackSites=0 stackLocals=0
+  callee +3:8 jsonWriterValueDue -> @nish.jsonWriterValueDue
+  callee +3:34 jsonWriterPutByte -> @nish.jsonWriterPutByte
+  local +6:9 low: i32 (const)
+function jsonWriterClose(w: JsonWriter, object: boolean, closer: i32): void -> @nish.jsonWriterClose
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: closer
+  calls: nish.jsonWriterInObject nish.jsonWriterPutByte nish.jsonWriterValueDone nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterInObject#0 nish.jsonWriterPutByte#0 nish.jsonWriterValueDone#0
+  stackSites=0 stackLocals=0
+  callee -1:24 jsonWriterInObject -> @nish.jsonWriterInObject
+  callee +7:7 jsonWriterPutByte -> @nish.jsonWriterPutByte
+  local +9:11 high: i32 (const)
+  callee +12:5 jsonWriterValueDone -> @nish.jsonWriterValueDone
+function jsonWriterCloseIndented(w: JsonWriter, object: boolean, closer: i32): void -> @nish.jsonWriterCloseIndented
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterIndented
+  escaping: closer object
+  calls: nish.jsonWriterClose nish.jsonWriterInObject nish.jsonWriterIndented nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterInObject#0 nish.jsonWriterIndented#0 nish.jsonWriterClose#0
+  stackSites=0 stackLocals=0
+  callee +0:5 jsonWriterInObject -> @nish.jsonWriterInObject
+  callee +2:6 jsonWriterIndented -> @nish.jsonWriterIndented
+  callee +6:3 jsonWriterClose -> @nish.jsonWriterClose
+function jsonWriterPutByte(w: JsonWriter, code: i32): boolean -> @nish.jsonWriterPutByte
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer w: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -3:9 buf: u8[] (const)
+  local -2:9 at: i32 (const)
+function jsonWriterIndented(w: JsonWriter, level: i32, name: string): boolean -> @nish.jsonWriterIndented
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: name
+  calls: nish.jsonWriterInObject nish.jsonWriterPutByte nish.jsonWriterPutString nish_panic_index nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterPutByte#0 nish.jsonWriterInObject#0 nish.jsonWriterPutString#0 nish.jsonWriterPutByte#0 nish.jsonWriterPutByte#0
+  stackSites=0 stackLocals=0
+  local -8:9 closing: boolean (const)
+  callee -7:61 jsonWriterPutByte -> @nish.jsonWriterPutByte
+  local -4:9 buf: u8[] (const)
+  local -3:9 at: i32 (const)
+  local -2:9 stop: i32 (const)
+  callee +7:19 jsonWriterInObject -> @nish.jsonWriterInObject
+  callee +10:7 jsonWriterPutString -> @nish.jsonWriterPutString
+  callee +10:39 jsonWriterPutByte -> @nish.jsonWriterPutByte
+  callee +10:75 jsonWriterPutByte -> @nish.jsonWriterPutByte
+function jsonWriterWindowOk(w: JsonWriter, bytes: u8[], off: i32, len: i32): boolean -> @nish.jsonWriterWindowOk
+  facts: effect=write willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  pointer w: size=48 writesThrough=true captured=false
+  pointer bytes: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function jsonWriterBreakBeforeKey(w: JsonWriter): boolean -> @nish.jsonWriterBreakBeforeKey
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.jsonWriterPutByte nish_panic_index nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterPutByte#0
+  stackSites=0 stackLocals=0
+  callee -7:49 jsonWriterPutByte -> @nish.jsonWriterPutByte
+  local -4:9 buf: u8[] (const)
+  local -3:9 at: i32 (const)
+  local -2:9 stop: i32 (const)
+function jsonWriterPutText(w: JsonWriter, text: string): boolean -> @nish.jsonWriterPutText
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_index nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -4:9 buf: u8[] (const)
+  local -3:9 n: i32 (const)
+  local -2:9 at: i32 (const)
+  local +3:12 k: i32 (let)
+function jsonWriterPutString(w: JsonWriter, s: string): boolean -> @nish.jsonWriterPutString
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish.jsonHexByte nish.jsonIsPlainByte nish.jsonShortEscape nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -5:9 buf: u8[] (const)
+  local -4:9 cap: i32 (const)
+  local -3:9 n: i32 (const)
+  local -2:7 at: i32 (let)
+  local +5:12 i: i32 (let)
+  local +6:11 code: i32 (const)
+  callee +10:9 jsonIsPlainByte -> @nish.jsonIsPlainByte
+  local +19:11 letter: i32 (const)
+  callee +19:25 jsonShortEscape -> @nish.jsonShortEscape
+  callee +38:24 jsonHexByte -> @nish.jsonHexByte
+  callee +39:24 jsonHexByte -> @nish.jsonHexByte
+function jsonWriterPutBytes(w: JsonWriter, bytes: u8[], off: i32, len: i32): boolean -> @nish.jsonWriterPutBytes
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: len off
+  calls: nish.jsonHexByte nish.jsonIsPlainByte nish.jsonShortEscape nish.jsonWriterPutRuns nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterPutRuns#0
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.jsonWriterPutRuns#1
+  stackSites=0 stackLocals=0
+  callee -6:12 jsonWriterPutRuns -> @nish.jsonWriterPutRuns
+  local -4:9 buf: u8[] (const)
+  local -3:9 cap: i32 (const)
+  local -2:7 at: i32 (let)
+  local +5:9 stop: i32 (const)
+  local +6:12 i: i32 (let)
+  local +7:11 code: i32 (const)
+  callee +8:9 jsonIsPlainByte -> @nish.jsonIsPlainByte
+  local +17:11 letter: i32 (const)
+  callee +17:25 jsonShortEscape -> @nish.jsonShortEscape
+  callee +36:24 jsonHexByte -> @nish.jsonHexByte
+  callee +37:24 jsonHexByte -> @nish.jsonHexByte
+function jsonWriterPutRuns(w: JsonWriter, bytes: u8[], off: i32, len: i32): boolean -> @nish.jsonWriterPutRuns
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: off
+  calls: nish.copyBytes nish.jsonHexByte nish.jsonShortEscape nish.skipJsonPlain nish_panic_index nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false
+  pointer bytes: size=0 writesThrough=false captured=false passedTo=nish.skipJsonPlain#0 nish.copyBytes#2
+  stackSites=0 stackLocals=0
+  local -4:9 buf: u8[] (const)
+  local -3:9 cap: i32 (const)
+  local -2:7 at: i32 (let)
+  local +5:9 stop: i32 (const)
+  local +6:7 i: i32 (let)
+  local +8:11 run: i32 (const)
+  callee +8:22 skipJsonPlain -> @nish.skipJsonPlain
+  local +9:11 count: i32 (const)
+  callee +15:7 copyBytes -> @nish.copyBytes
+  local +22:11 code: i32 (const)
+  local +24:11 letter: i32 (const)
+  callee +24:25 jsonShortEscape -> @nish.jsonShortEscape
+  callee +43:24 jsonHexByte -> @nish.jsonHexByte
+  callee +44:24 jsonHexByte -> @nish.jsonHexByte
+function jsonWriterPutDigits(w: JsonWriter, v: i32, suffix: i32): boolean -> @nish.jsonWriterPutDigits
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: v
+  calls: nish_panic_index nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -12:7 digits: i32 (let)
+  local -11:7 rest: i32 (let)
+  local -6:9 sign: i32 (const)
+  local -5:9 extra: i32 (const)
+  local -4:9 buf: u8[] (const)
+  local -3:9 at: i32 (const)
+  local -2:9 width: i32 (const)
+  local +10:12 k: i32 (let)
+  local +11:11 digit: i32 (const)
+function jsonWriterPutDigits64(w: JsonWriter, v: i64): boolean -> @nish.jsonWriterPutDigits64
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  escaping: v
+  calls: nish_panic_index nish_panic_overflow
+  pointer w: size=48 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -12:9 ten: i64 (const)
+  local -11:7 digits: i32 (let)
+  local -10:7 rest: i64 (let)
+  local -5:9 sign: i32 (const)
+  local -4:9 buf: u8[] (const)
+  local -3:9 at: i32 (const)
+  local -2:9 width: i32 (const)
+  local +7:12 k: i32 (let)
+  local +8:11 digit: i32 (const)
+function jsonWriterPutF64(w: JsonWriter, v: f64): boolean -> @nish.jsonWriterPutF64
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  sharedWrite: via nish.jsonWriterPutText
+  calls: nish.jsonWriterPutText nish_arena_mark nish_arena_release nish_str_from_f64
+  pointer w: size=48 writesThrough=true captured=false passedTo=nish.jsonWriterPutText#0
+  stackSites=0 stackLocals=0
+  callee +0:62 jsonWriterPutText -> @nish.jsonWriterPutText
+function jsonStringifyString(s: string): string -> @nish.jsonStringifyString [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.JsonWriter.constructor
+  escaping: s
+  calls: nish.JsonWriter.constructor nish.JsonWriter.string nish.JsonWriter.text nish.jsonEscapedWidth nish_panic nish_panic_overflow nish_str_concat
+  stackSites=1 stackLocals=1
+  local +0:9 n: i32 (const)
+  local +1:7 width: i32 (let)
+  local +2:12 i: i32 (let)
+  callee +3:14 jsonEscapedWidth -> @nish.jsonEscapedWidth
+  local +8:9 w: JsonWriter (const)
+  callee +8:25 new JsonWriter -> @nish.JsonWriter.constructor
+  callee +9:3 JsonWriter.string -> @nish.JsonWriter.string
+  callee +10:10 JsonWriter.text -> @nish.JsonWriter.text
+module std/bytes.ts [package nish]
+const BYTES_SPACE: i32 = 32
+const BYTES_TAB: i32 = 9
+const BYTES_NEWLINE: i32 = 10
+const BYTES_CARRIAGE_RETURN: i32 = 13
+const BYTES_DIGIT_ZERO: i32 = 48
+const BYTES_DIGIT_NINE: i32 = 57
+const BYTES_QUOTE: i32 = 34
+const BYTES_BACKSLASH: i32 = 92
+const BYTES_NON_ASCII: i32 = 128
+const BYTES_CONTINUATION_TOP: i32 = 191
+function getU16LE(b: u8[], off: i32): u16 -> @nish.getU16LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU16BE(b: u8[], off: i32): u16 -> @nish.getU16BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU32LE(b: u8[], off: i32): u32 -> @nish.getU32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU32BE(b: u8[], off: i32): u32 -> @nish.getU32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+function getU64LE(b: u8[], off: i32): u64 -> @nish.getU64LE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 v: u64 (let)
+  local +1:12 i: i32 (let)
+function getU64BE(b: u8[], off: i32): u64 -> @nish.getU64BE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 v: u64 (let)
+  local +1:12 i: i32 (let)
+function getI32LE(b: u8[], off: i32): i32 -> @nish.getI32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU32LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32LE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU32LE -> @nish.getU32LE
+function getI32BE(b: u8[], off: i32): i32 -> @nish.getI32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU32BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU32BE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU32BE -> @nish.getU32BE
+function getI64LE(b: u8[], off: i32): i64 -> @nish.getI64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU64LE -> @nish.getU64LE
+function getI64BE(b: u8[], off: i32): i64 -> @nish.getI64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:59 getU64BE -> @nish.getU64BE
+function getF64LE(b: u8[], off: i32): f64 -> @nish.getF64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64LE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:69 getU64LE -> @nish.getU64LE
+function getF64BE(b: u8[], off: i32): f64 -> @nish.getF64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: off
+  calls: nish.getU64BE
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.getU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:69 getU64BE -> @nish.getU64BE
+function setU16LE(b: u8[], off: i32, v: u16): void -> @nish.setU16LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU16BE(b: u8[], off: i32, v: u16): void -> @nish.setU16BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU32LE(b: u8[], off: i32, v: u32): void -> @nish.setU32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU32BE(b: u8[], off: i32, v: u32): void -> @nish.setU32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:3
+  escaping: off
+  calls: nish_panic_index
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+function setU64LE(b: u8[], off: i32, v: u64): void -> @nish.setU64LE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:12 i: i32 (let)
+function setU64BE(b: u8[], off: i32, v: u64): void -> @nish.setU64BE [exported]
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:5
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=true captured=false
+  stackSites=0 stackLocals=0
+  local -1:12 i: i32 (let)
+function setI32LE(b: u8[], off: i32, v: i32): void -> @nish.setI32LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU32LE
+  escaping: off
+  calls: nish.setU32LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32LE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU32LE -> @nish.setU32LE
+function setI32BE(b: u8[], off: i32, v: i32): void -> @nish.setI32BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU32BE
+  escaping: off
+  calls: nish.setU32BE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU32BE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU32BE -> @nish.setU32BE
+function setI64LE(b: u8[], off: i32, v: i64): void -> @nish.setI64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64LE
+  escaping: off
+  calls: nish.setU64LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64LE -> @nish.setU64LE
+function setI64BE(b: u8[], off: i32, v: i64): void -> @nish.setI64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64BE
+  escaping: off
+  calls: nish.setU64BE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64BE -> @nish.setU64BE
+function setF64LE(b: u8[], off: i32, v: f64): void -> @nish.setF64LE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64LE
+  escaping: off
+  calls: nish.setU64LE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64LE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64LE -> @nish.setU64LE
+function setF64BE(b: u8[], off: i32, v: f64): void -> @nish.setF64BE [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.setU64BE
+  escaping: off
+  calls: nish.setU64BE
+  pointer b: size=0 writesThrough=true captured=false passedTo=nish.setU64BE#0
+  stackSites=0 stackLocals=0
+  callee +0:62 setU64BE -> @nish.setU64BE
+function bytesRunEnd(b: u8[], to: i32): i32 -> @nish.bytesRunEnd
+  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: to
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 n: i32 (const)
+function bytesRunStart(from: i32, end: i32): i32 -> @nish.bytesRunStart
+  facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: end from
+  stackSites=0 stackLocals=0
+function skipBlank(b: u8[], from: i32, to: i32): i32 -> @nish.skipBlank [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipBlankWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipBlankWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipBlankWalk -> @nish.skipBlankWalk
+  callee +1:27 bytesRunStart -> @nish.bytesRunStart
+function skipDigits(b: u8[], from: i32, to: i32): i32 -> @nish.skipDigits [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipDigitsWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipDigitsWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipDigitsWalk -> @nish.skipDigitsWalk
+  callee +1:28 bytesRunStart -> @nish.bytesRunStart
+function skipJsonText(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonText [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipJsonTextWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipJsonTextWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipJsonTextWalk -> @nish.skipJsonTextWalk
+  callee +1:30 bytesRunStart -> @nish.bytesRunStart
+function skipJsonPlain(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPlain [exported]
+  facts: effect=read willReturn=false hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesRunEnd nish.bytesRunStart nish.skipJsonPlainWalk
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesRunEnd#0 nish.skipJsonPlainWalk#0
+  stackSites=0 stackLocals=0
+  local +0:9 end: i32 (const)
+  callee +0:20 bytesRunEnd -> @nish.bytesRunEnd
+  callee +1:10 skipJsonPlainWalk -> @nish.skipJsonPlainWalk
+  callee +1:31 bytesRunStart -> @nish.bytesRunStart
+function copyBytes(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytes [exported]
+  facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: via nish.copyBytesWalk
+  escaping: at count from
+  calls: nish.copyBytesWalk nish_panic
+  pointer dst: size=0 writesThrough=true captured=false passedTo=nish.copyBytesWalk#0
+  pointer src: size=0 writesThrough=false captured=false passedTo=nish.copyBytesWalk#2
+  stackSites=0 stackLocals=0
+  callee +0:3 copyBytesWalk -> @nish.copyBytesWalk
+function skipBlankWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipBlankWalk
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   escaping: from
+  pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 length: i32 (const)
-  local +1:9 count: i32 (const)
-  local +2:7 i: i32 (let)
-  local +6:11 code: i32 (const)
-  local +7:9 j: i32 (let)
-function textUnitsAreBytes(): boolean -> @nish.textUnitsAreBytes
-  facts: effect=read willReturn=true hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  stackSites=0 stackLocals=0
-function codePointLength(text: string): i32 -> @nish.codePointLength [exported]
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+function skipDigitsWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipDigitsWalk
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish.textUnitsAreBytes
+  escaping: from
+  pointer b: size=0 writesThrough=false captured=false
   stackSites=0 stackLocals=0
-  local +0:9 length: i32 (const)
-  local +5:7 count: u32 (let)
-  local +6:7 i: i32 (let)
-  callee +7:7 textUnitsAreBytes -> @nish.textUnitsAreBytes
-  local +18:7 afterHigh: boolean (let)
-  local +20:11 unit: i32 (const)
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+function bytesUtf8Length(b: u8[], i: i32, to: i32): i32 -> @nish.bytesUtf8Length
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: i
+  calls: nish_panic_index nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:9 lead: i32 (const)
+  local +1:7 low: i32 (let)
+  local +2:7 high: i32 (let)
+  local +3:7 n: i32 (let)
+  local +28:9 second: i32 (const)
+  local +32:7 k: i32 (let)
+  local +34:11 c: i32 (const)
+function skipJsonTextWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonTextWalk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from to
+  calls: nish.bytesUtf8Length nish_panic_overflow
+  pointer b: size=0 writesThrough=false captured=false passedTo=nish.bytesUtf8Length#0
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+  local +4:13 n: i32 (const)
+  callee +4:22 bytesUtf8Length -> @nish.bytesUtf8Length
+function skipJsonPlainWalk(b: u8[], from: i32, to: i32): i32 -> @nish.skipJsonPlainWalk
+  facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
+  escaping: from
+  pointer b: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local +0:7 i: i32 (let)
+  local +2:11 c: i32 (const)
+function copyBytesWalk(dst: u8[], at: i32, src: u8[], from: i32, count: i32): void -> @nish.copyBytesWalk
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
+  sharedWrite: +0:7
+  calls: nish_panic_index nish_panic_overflow
+  pointer dst: size=0 writesThrough=true captured=false
+  pointer src: size=0 writesThrough=false captured=false
+  stackSites=0 stackLocals=0
+  local -2:9 k: i32 (let)
+  local +5:7 k: i32 (let)

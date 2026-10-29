@@ -9,7 +9,7 @@
 // smoke: argv users get 7 --raw-output
 import { Cli, ParseResult, ROOT, SOURCE_ARGV, finish } from "nish/cli-args"
 import { agentDriven, styleFor } from "nish/cli"
-import { replaceAll } from "nish/text"
+import { JsonWriter } from "nish/json"
 
 const USERS_LIST: i32 = 1
 const USERS_GET: i32 = 2
@@ -17,16 +17,14 @@ const KEYS_LIST: i32 = 3
 const KEYS_CREATE: i32 = 4
 const PROJECTS_LIST: i32 = 5
 
-/** A JSON string literal for `s`: backslashes and quotes escaped. */
-const quote = (s: string): string => `"${replaceAll(replaceAll(s, "\\", "\\\\"), '"', '\\"')}"`
-
-/** A JSON array of the strings in `xs`. */
-const list = (xs: string[]): string => {
-  const quoted: string[] = []
+/** Writes `key` and the strings in `xs` as an array. */
+const list = (w: JsonWriter, key: string, xs: string[]): void => {
+  w.key(key)
+  w.beginArray()
   for (let i = 0; i < xs.length; i++) {
-    quoted.push(quote(xs[i]))
+    w.string(xs[i])
   }
-  return `[${quoted.join(",")}]`
+  w.endArray()
 }
 
 /**
@@ -89,17 +87,41 @@ class Api {
   }
 }
 
-/** The request line for `method` on `route`, as a JSON object with the global settings. */
-const call = (api: Api, r: ParseResult, method: string, route: string, extra: string): string => {
-  const base = r.value(api.baseUrl) ?? ""
-  const output = r.value(api.output) ?? ""
+/**
+ * Opens the JSON object for `method` on `route` with the global settings, in a
+ * buffer sized for the worst case of every argument escaped; the command adds
+ * its own keys and `send` closes and prints it.
+ */
+const call = (api: Api, r: ParseResult, method: string, route: string): JsonWriter => {
+  let size = 512 + 6 * route.length
+  for (let i = 0; i < process.argv.length; i++) {
+    size += 6 * process.argv[i].length
+  }
+  const w = new JsonWriter(new Array<u8>(size), 0)
   let tokenFrom = "none"
   if (r.source(api.token) === SOURCE_ARGV) {
     tokenFrom = "flag"
   } else if (r.source(api.profile) === SOURCE_ARGV) {
     tokenFrom = "profile"
   }
-  return `{"method":${quote(method)},"url":${quote(`${base}${route}`)},"output":${quote(output)},"raw":${r.flag(api.raw)},"token":${quote(tokenFrom)}${extra}}`
+  w.beginObject()
+  w.key("method")
+  w.string(method)
+  w.key("url")
+  w.string(`${r.value(api.baseUrl) ?? ""}${route}`)
+  w.key("output")
+  w.string(r.value(api.output) ?? "")
+  w.key("raw")
+  w.boolean(r.flag(api.raw))
+  w.key("token")
+  w.string(tokenFrom)
+  return w
+}
+
+/** Closes the object `call` opened and prints it. */
+const send = (w: JsonWriter): void => {
+  w.endObject()
+  console.log(w.text())
 }
 
 export const main = (): i32 => {
@@ -122,25 +144,36 @@ export const main = (): i32 => {
 
   switch (r.id) {
     case USERS_LIST:
-      console.log(call(api, r, "GET", "/users", ""))
+      send(call(api, r, "GET", "/users"))
       break
     case USERS_GET:
-      console.log(call(api, r, "GET", `/users/${r.positional(api.getUser) ?? ""}`, ""))
+      send(call(api, r, "GET", `/users/${r.positional(api.getUser) ?? ""}`))
       break
     case KEYS_LIST: {
+      const w = call(api, r, "GET", `/users/${r.positional(api.keysUser) ?? ""}/keys`)
+      w.key("limit")
       const limit = r.value(api.limit)
-      const shown = limit === null ? "null" : quote(limit)
-      const extra = `,"limit":${shown},"tags":${list(r.values(api.tag))},"all":${r.flag(api.all)}`
-      console.log(call(api, r, "GET", `/users/${r.positional(api.keysUser) ?? ""}/keys`, extra))
+      if (limit === null) {
+        w.nullValue()
+      } else {
+        w.string(limit)
+      }
+      list(w, "tags", r.values(api.tag))
+      w.key("all")
+      w.boolean(r.flag(api.all))
+      send(w)
       break
     }
     case KEYS_CREATE: {
-      const extra = `,"name":${quote(r.value(api.name) ?? "")},"scopes":${list(r.positionals(api.scopes))}`
-      console.log(call(api, r, "POST", `/users/${r.positional(api.createUser) ?? ""}/keys`, extra))
+      const w = call(api, r, "POST", `/users/${r.positional(api.createUser) ?? ""}/keys`)
+      w.key("name")
+      w.string(r.value(api.name) ?? "")
+      list(w, "scopes", r.positionals(api.scopes))
+      send(w)
       break
     }
     case PROJECTS_LIST:
-      console.log(call(api, r, "GET", r.flag(api.projectsAll) ? "/projects?archived=1" : "/projects", ""))
+      send(call(api, r, "GET", r.flag(api.projectsAll) ? "/projects?archived=1" : "/projects"))
       break
   }
   return 0

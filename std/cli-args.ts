@@ -225,6 +225,7 @@ export class Cli {
   cmdId: i32[]
   cmdDesc: string[]
   cmdGroup: boolean[]
+  cmdPath: string[]
   cmdAliases: string[]
   aliasOwner: i32[]
   aliasName: string[]
@@ -269,6 +270,7 @@ export class Cli {
     this.cmdId = [-1]
     this.cmdDesc = [description]
     this.cmdGroup = [false]
+    this.cmdPath = [name]
     this.cmdAliases = [""]
     this.aliasOwner = []
     this.aliasName = []
@@ -328,17 +330,7 @@ export class Cli {
 
   /** The command line that names `handle`: the program, then each command down to it. */
   pathOf(handle: i32): string {
-    const names: string[] = []
-    let h: i32 = this.checkCommand("path", handle)
-    while (h >= 0 && h < toI32(this.cmdName.length)) {
-      names.push(this.cmdName[h])
-      h = this.cmdParent[h]
-    }
-    const out: string[] = []
-    for (let i: i32 = toI32(names.length) - 1; i >= 0 && i < toI32(names.length); i--) {
-      out.push(names[i])
-    }
-    return out.join(" ")
+    return this.cmdPath[this.checkCommand("path", handle)]
   }
 
   /** Whether `handle` holds commands rather than running: a group, or a root given children. */
@@ -368,6 +360,7 @@ export class Cli {
     this.cmdGroup[p] = true
     this.cmdName.push(name)
     this.cmdParent.push(p)
+    this.cmdPath.push(`${this.cmdPath[p]} ${name}`)
     this.cmdId.push(id)
     this.cmdDesc.push(description)
     this.cmdGroup.push(group)
@@ -578,16 +571,13 @@ export class Cli {
     this.cmdEpilog[h] = text
   }
 
-  /** The flag `-short` or `--long` (`name`, dashes included) means at `cmd`: its own, then a global; -1 for none. */
-  lookupFlag(cmd: i32, name: string): i32 {
-    const own = this.flags.get(scopeKey(cmd, name)) ?? -1
-    return own >= 0 ? own : (this.flags.get(scopeKey(GLOBAL, name)) ?? -1)
-  }
-
-  /** The flag `--no-x` (`name`) turns off at `cmd`, or -1. */
-  lookupNegation(cmd: i32, name: string): i32 {
-    const own = this.negations.get(scopeKey(cmd, name)) ?? -1
-    return own >= 0 ? own : (this.negations.get(scopeKey(GLOBAL, name)) ?? -1)
+  /**
+   * The flag `name` (dashes included) names in `table` at `cmd`: its own, then
+   * a global; -1 for none. `table` is `flags`, or `negations` for `--no-x`.
+   */
+  lookup(table: Map<string, i32>, cmd: i32, name: string): i32 {
+    const own = table.get(scopeKey(cmd, name)) ?? -1
+    return own >= 0 ? own : (table.get(scopeKey(GLOBAL, name)) ?? -1)
   }
 
   /** How `f` is spelled on the command line: its long name, or `--no-x` for one declared that way. */
@@ -643,8 +633,6 @@ export class Cli {
     const r = new ParseResult(this)
     let i: i32 = start < 0 ? 0 : start
     let dashed = false
-    let helpPath = false
-    let stuck = false
     while (i >= 0 && i < toI32(argv.length)) {
       const token = argv[i]
       i = i + 1
@@ -655,15 +643,13 @@ export class Cli {
         dashed = true
       } else if (token.length > 1 && toI32(token.charCodeAt(0)) === DASH) {
         i = token.startsWith("--") ? this.longFlag(r, argv, i, token) : this.shortFlags(r, argv, i, token)
-      } else if (this.cmdGroup[r.command] && !stuck && r.message.length === 0) {
+      } else if (this.cmdGroup[r.command] && r.message.length === 0) {
         const child = this.children.get(scopeKey(r.command, token)) ?? -1
         if (child >= 0) {
           r.command = child
-        } else if (r.command === ROOT && token === "help" && !helpPath) {
-          helpPath = true
+        } else if (r.command === ROOT && token === "help") {
           r.wantHelp = true
         } else {
-          stuck = true
           this.unknownCommand(r, token)
         }
       } else {
@@ -695,7 +681,7 @@ export class Cli {
       r.wantVersion = true
       return next
     }
-    const f = this.lookupFlag(r.command, name)
+    const f = this.lookup(this.flags, r.command, name)
     if (f >= 0) {
       if (eq >= 0) {
         if (this.flagValue[f] === VALUE_NONE) {
@@ -707,7 +693,7 @@ export class Cli {
       }
       return this.takeValue(r, argv, next, f, "")
     }
-    const off = this.lookupNegation(r.command, name)
+    const off = this.lookup(this.negations, r.command, name)
     if (off >= 0) {
       if (eq >= 0) {
         r.fail(r.command, `${name} takes no value`)
@@ -733,7 +719,7 @@ export class Cli {
       } else if (letter === "v" && r.command === ROOT) {
         r.wantVersion = true
       } else {
-        const f = this.lookupFlag(r.command, `-${letter}`)
+        const f = this.lookup(this.flags, r.command, `-${letter}`)
         if (f < 0) {
           r.fail(r.command, `unknown flag -${letter}`)
           return next
@@ -804,6 +790,15 @@ export class Cli {
     return text
   }
 
+  /** Adds a `section` row to `rows` for every flag `owner` (a command, or `GLOBAL`) declares. */
+  flagRows(rows: HelpRow[], section: string, owner: i32): void {
+    for (let f: i32 = 0; f < toI32(this.flagLong.length); f++) {
+      if (this.flagOwner[f] === owner) {
+        rows.push(new HelpRow(section, this.flagLabel(f), this.flagMeta[f], this.flagText(f)))
+      }
+    }
+  }
+
   /** The help of the command or group `handle`, painted with `style`. */
   helpText(handle: i32, style: Style): string {
     const cmd = this.checkCommand("help", handle)
@@ -832,20 +827,12 @@ export class Cli {
       a = this.argNext[a]
     }
     shape.push("[flags]")
-    for (let f: i32 = 0; f < toI32(this.flagLong.length); f++) {
-      if (this.flagOwner[f] === cmd) {
-        rows.push(new HelpRow("Flags", this.flagLabel(f), this.flagMeta[f], this.flagText(f)))
-      }
-    }
+    this.flagRows(rows, "Flags", cmd)
     rows.push(new HelpRow("Flags", "-h, --help", "", "show help"))
     if (cmd === ROOT) {
       rows.push(new HelpRow("Flags", "-v, --version", "", "show the version"))
     }
-    for (let f: i32 = 0; f < toI32(this.flagLong.length); f++) {
-      if (this.flagOwner[f] === GLOBAL) {
-        rows.push(new HelpRow("Global flags", this.flagLabel(f), this.flagMeta[f], this.flagText(f)))
-      }
-    }
+    this.flagRows(rows, "Global flags", GLOBAL)
     let widest: i32 = 0
     for (let i: i32 = 0; i < toI32(rows.length); i++) {
       const row = rows[i]
@@ -970,7 +957,7 @@ export class ParseResult {
       this.hint = ""
       return
     }
-    if (this.message.length === 0 && cli.cmdGroup[cmd]) {
+    if (cli.cmdGroup[cmd]) {
       this.fail(cmd, `missing command (one of: ${cli.childNames(cmd, false).join(", ")})`)
     }
     let missing: i32 = -1
