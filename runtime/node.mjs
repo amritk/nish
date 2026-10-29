@@ -73,6 +73,48 @@ function appendFileSync(path, data) {
 }
 
 /**
+ * The negative errno a failed `fs` call names, as `runtime-os.c` answers it.
+ * Node names the errno by its code; one it gives no number for, such as the
+ * `ERR_INVALID_ARG_VALUE` a path holding a NUL throws, is -22 (`EINVAL`), the
+ * runtime's answer to that path.
+ */
+function negErrno(e) {
+  return -(os.constants.errno[e.code] ?? 22);
+}
+
+/** `ok` when `f` returns, or the negative errno of what it threw. */
+function errnoOr(ok, f) {
+  try {
+    f();
+    return ok;
+  } catch (e) {
+    return negErrno(e);
+  }
+}
+
+/** `renameSync(from, to)`: 0, or a negative errno (-18 across file systems). */
+const renameSync = (from, to) => errnoOr(0, () => fs.renameSync(from, to));
+
+/** `unlinkSync(path)`: 0, or a negative errno; a directory is refused, not removed. */
+const unlinkSync = (path) => errnoOr(0, () => fs.unlinkSync(path));
+
+/** `writeFileBytesSync(path, bytes)`: the byte count, or a negative errno; mode 0644 and `WRITE_FLAGS`. */
+const writeFileBytesSync = (path, bytes) =>
+  errnoOr(bytes.length, () => fs.writeFileSync(path, Uint8Array.from(bytes), { flag: WRITE_FLAGS, mode: 0o644 }));
+
+/**
+ * `writeBytes`'s write, after the core checked the range `[from, to)`: every
+ * byte to stdout, then the count, or a negative errno. `fs.writeSync` may
+ * write less than it was given, so it is asked again for the rest.
+ */
+function writeBytes(bytes, from, to) {
+  const buf = Uint8Array.from(bytes.slice(from, to));
+  return errnoOr(buf.length, () => {
+    for (let at = 0; at < buf.length; ) at += fs.writeSync(1, buf, at, buf.length - at);
+  });
+}
+
+/**
  * `mkdirSync(path)` (WP14 D4): one directory, not recursive, answering whether
  * a directory is there afterwards. Node throws where the runtime answers
  * false, and `EEXIST` on a plain file is a failure here as it is there, so the
@@ -234,12 +276,7 @@ function spawnSyncTo(argv, out, err) {
  */
 function kill(pid, sig) {
   if (pid <= 0 || !(sig === 0 || sig === 2 || sig === 9 || sig === 15)) return -22;
-  try {
-    process.kill(pid, sig);
-    return 0;
-  } catch (e) {
-    return -(os.constants.errno[e.code] ?? 22);
-  }
+  return errnoOr(0, () => process.kill(pid, sig));
 }
 
 /**
@@ -344,6 +381,10 @@ const CALLS = {
   readFileBytesSync,
   writeFileSync,
   appendFileSync,
+  writeFileBytesSync,
+  renameSync,
+  unlinkSync,
+  writeBytes,
   mkdirSync,
   isDirectorySync,
   readdirSync,

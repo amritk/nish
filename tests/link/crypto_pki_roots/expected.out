@@ -1,0 +1,90 @@
+PASS  SSL_CERT_FILE alone
+PASS  SSL_CERT_DIR alone
+PASS  both, the file first
+PASS  SSL_CERT_FILE set, SSL_CERT_DIR empty
+PASS  neither set: the system defaults
+PASS  both empty: the system defaults
+pki-roots: pkiLoadSystemRoots reads the environment: 6 passed, 0 failed, 0 skipped
+PASS  both set: the file, then the directory, and no default: roots
+PASS  both set: the file, then the directory, and no default: sources
+PASS  both set: the file, then the directory, and no default: skipped
+PASS  the file alone: roots
+PASS  the file alone: sources
+PASS  the file alone: skipped
+PASS  the file alone, the directory empty: roots
+PASS  the file alone, the directory empty: sources
+PASS  the file alone, the directory empty: skipped
+PASS  the directory alone: roots
+PASS  the directory alone: sources
+PASS  the directory alone: skipped
+PASS  a directory list, empty components passed over: roots
+PASS  a directory list, empty components passed over: sources
+PASS  a directory list, empty components passed over: skipped
+PASS  a missing file is no fallback: roots
+PASS  a missing file is no fallback: sources
+PASS  a missing file is no fallback: skipped
+PASS  a missing directory is no fallback: roots
+PASS  a missing directory is no fallback: sources
+PASS  a missing directory is no fallback: skipped
+PASS  neither set: the defaults: roots
+PASS  neither set: the defaults: sources
+PASS  neither set: the defaults: skipped
+PASS  both empty: the defaults: roots
+PASS  both empty: the defaults: sources
+PASS  both empty: the defaults: skipped
+pki-roots: SSL_CERT_FILE and SSL_CERT_DIR: 27 passed, 0 failed, 0 skipped
+PASS  a hash name
+PASS  a hash name with a two-digit suffix
+PASS  a .pem
+PASS  a .crt
+PASS  not upper-case hex
+PASS  not seven hex digits
+PASS  not a hash with no suffix
+PASS  not a CRL's hash name
+PASS  not a letter suffix
+PASS  not a bare .pem
+PASS  not a .txt
+PASS  the directory: hash and suffix names, a duplicate once, no subdirectory: roots
+PASS  the directory: hash and suffix names, a duplicate once, no subdirectory: sources
+PASS  the directory: hash and suffix names, a duplicate once, no subdirectory: skipped
+PASS  a plain file named as a directory: roots
+PASS  a plain file named as a directory: sources
+PASS  a plain file named as a directory: skipped
+PASS  a symbolic link to a root is read, under the name it has in the directory: roots
+PASS  a symbolic link to a root is read, under the name it has in the directory: sources
+PASS  a symbolic link to a root is read, under the name it has in the directory: skipped
+pki-roots: a trust directory: 20 passed, 0 failed, 0 skipped
+PASS  a bundle: every bad block skipped and counted, a duplicate dropped: roots
+PASS  a bundle: every bad block skipped and counted, a duplicate dropped: sources
+PASS  a bundle: every bad block skipped and counted, a duplicate dropped: skipped
+PASS  the first bundle that exists, and only it: roots
+PASS  the first bundle that exists, and only it: sources
+PASS  the first bundle that exists, and only it: skipped
+PASS  a bundle with no PEM still counts as the one found: roots
+PASS  a bundle with no PEM still counts as the one found: sources
+PASS  a bundle with no PEM still counts as the one found: skipped
+PASS  a root in the file and the bundle is kept once, from the file: roots
+PASS  a root in the file and the bundle is kept once, from the file: sources
+PASS  a root in the file and the bundle is kept once, from the file: skipped
+PASS  nothing found is an empty store: roots
+PASS  nothing found is an empty store: sources
+PASS  nothing found is an empty store: skipped
+PASS  the six system bundles, in order
+PASS  the system directory
+pki-roots: bundles: 17 passed, 0 failed, 0 skipped
+PASS  a file one byte past the cap is not parsed: roots
+PASS  a file one byte past the cap is not parsed: sources
+PASS  a file one byte past the cap is not parsed: skipped
+PASS  a file at the cap is parsed
+PASS  mkfifo makes the FIFO
+PASS  a FIFO is not read: roots
+PASS  a FIFO is not read: sources
+PASS  a FIFO is not read: skipped
+PASS  a FIFO is not the bundle found: roots
+PASS  a FIFO is not the bundle found: sources
+PASS  a FIFO is not the bundle found: skipped
+PASS  the files cap: files read
+PASS  the files cap: the one past it skipped
+PASS  the roots cap: roots kept
+PASS  the roots cap: the one past it skipped, the duplicate not
+pki-roots: a FIFO, and the caps: 15 passed, 0 failed, 0 skipped
