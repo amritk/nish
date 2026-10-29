@@ -23,8 +23,8 @@
  * (`docs/wp26-stdlib.md` §3e), which is why each one carries the module's name.
  */
 
-import { DNS_ADDRESS_BYTES } from "./dns-message"
-import { DnsConfig, DnsHosts, dnsParseHosts, dnsParseResolvConf } from "./dns-config"
+import { DNS_ADDRESS_BYTES } from "nish/net/dns-message"
+import { DnsConfig, DnsHosts, dnsParseHosts, dnsParseResolvConf } from "nish/net/dns-config"
 import {
   DNS_CLOSE,
   DNS_OUTGOING_MAX_BYTES,
@@ -33,7 +33,7 @@ import {
   DNS_RESOLVE_TIMEOUT,
   DNS_SEND_TCP,
   DnsResolver,
-} from "./dns-resolver"
+} from "nish/net/dns-resolver"
 import {
   connectResult,
   netClose,

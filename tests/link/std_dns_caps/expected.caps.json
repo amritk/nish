@@ -1,0 +1,1345 @@
+{
+  "version": 1,
+  "entry": "main.ts",
+  "deterministic": false,
+  "capabilities": ["clock", "entropy", "fs.read", "net"],
+  "packages": [
+    {
+      "name": "<root>",
+      "capabilities": ["clock", "entropy", "fs.read", "net"],
+      "modules": [
+        {
+          "path": "main.ts",
+          "capabilities": ["clock", "entropy", "fs.read", "net"],
+          "functions": [
+            {
+              "name": "blocking",
+              "exported": true,
+              "capabilities": ["clock", "entropy", "fs.read", "net"],
+              "witnesses": {
+                "clock": [
+                  { "function": "blocking", "at": "main.ts:29:10", "calls": "resolveHost" },
+                  { "function": "resolveHost", "at": "std/net/dns.ts:382:10", "calls": "dnsLookupWith" },
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:410:22", "calls": "monotonicNanos" }
+                ],
+                "entropy": [
+                  { "function": "blocking", "at": "main.ts:29:10", "calls": "resolveHost" },
+                  { "function": "resolveHost", "at": "std/net/dns.ts:382:10", "calls": "dnsLookupWith" },
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:412:23", "calls": "DnsClient.start" },
+                  { "function": "DnsClient.start", "at": "std/net/dns.ts:137:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "fs.read": [
+                  { "function": "blocking", "at": "main.ts:29:10", "calls": "resolveHost" },
+                  { "function": "resolveHost", "at": "std/net/dns.ts:371:29", "calls": "readFileBytesSync" }
+                ],
+                "net": [
+                  { "function": "blocking", "at": "main.ts:29:10", "calls": "resolveHost" },
+                  { "function": "resolveHost", "at": "std/net/dns.ts:382:10", "calls": "dnsLookupWith" },
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:405:21", "calls": "pollCreate" }
+                ]
+              },
+              "panics": [
+                { "kind": "array-length", "at": "main.ts:27:21", "proven": false },
+                { "kind": "oom", "at": "main.ts:27:21", "allowed": true },
+                { "kind": "overflow", "at": "main.ts:27:35", "proven": true },
+                { "kind": "call", "at": "main.ts:29:10", "callee": "resolveHost", "via": "array-length" }
+              ]
+            },
+            {
+              "name": "main",
+              "exported": true,
+              "capabilities": ["clock", "entropy", "fs.read", "net"],
+              "witnesses": {
+                "clock": [
+                  { "function": "main", "at": "main.ts:33:28", "calls": "blocking" },
+                  { "function": "blocking", "at": "main.ts:29:10", "calls": "resolveHost" },
+                  { "function": "resolveHost", "at": "std/net/dns.ts:382:10", "calls": "dnsLookupWith" },
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:410:22", "calls": "monotonicNanos" }
+                ],
+                "entropy": [
+                  { "function": "main", "at": "main.ts:33:10", "calls": "onLoop" },
+                  { "function": "onLoop", "at": "main.ts:19:23", "calls": "DnsClient.start" },
+                  { "function": "DnsClient.start", "at": "std/net/dns.ts:137:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "fs.read": [
+                  { "function": "main", "at": "main.ts:33:28", "calls": "blocking" },
+                  { "function": "blocking", "at": "main.ts:29:10", "calls": "resolveHost" },
+                  { "function": "resolveHost", "at": "std/net/dns.ts:371:29", "calls": "readFileBytesSync" }
+                ],
+                "net": [
+                  { "function": "main", "at": "main.ts:33:10", "calls": "onLoop" },
+                  { "function": "onLoop", "at": "main.ts:14:21", "calls": "pollCreate" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "main.ts:33:10", "callee": "onLoop", "via": "array-length" },
+                { "kind": "call", "at": "main.ts:33:28", "callee": "blocking", "via": "array-length" }
+              ]
+            },
+            {
+              "name": "onLoop",
+              "exported": true,
+              "capabilities": ["entropy", "net"],
+              "witnesses": {
+                "entropy": [
+                  { "function": "onLoop", "at": "main.ts:19:23", "calls": "DnsClient.start" },
+                  { "function": "DnsClient.start", "at": "std/net/dns.ts:137:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "net": [
+                  { "function": "onLoop", "at": "main.ts:14:21", "calls": "pollCreate" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "main.ts:18:29", "callee": "DnsClient.constructor", "via": "panic" },
+                { "kind": "call", "at": "main.ts:18:43", "callee": "DnsResolver.constructor", "via": "panic" },
+                { "kind": "oom", "at": "main.ts:18:43", "allowed": true },
+                { "kind": "call", "at": "main.ts:18:59", "callee": "DnsConfig.constructor", "via": "array-length" },
+                { "kind": "oom", "at": "main.ts:18:59", "allowed": true },
+                { "kind": "call", "at": "main.ts:19:23", "callee": "DnsClient.start", "via": "panic" },
+                { "kind": "array-length", "at": "main.ts:20:21", "proven": false },
+                { "kind": "oom", "at": "main.ts:20:21", "allowed": true },
+                { "kind": "overflow", "at": "main.ts:20:35", "proven": true },
+                { "kind": "call", "at": "main.ts:22:10", "callee": "DnsClient.result", "via": "index" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "nish",
+      "capabilities": ["clock", "entropy", "fs.read", "net"],
+      "modules": [
+        {
+          "path": "std/bytes.ts",
+          "capabilities": [],
+          "functions": [
+            {
+              "name": "copyBytes",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/bytes.ts:282:47", "proven": true },
+                { "kind": "overflow", "at": "std/bytes.ts:282:83", "proven": true },
+                { "kind": "panic", "at": "std/bytes.ts:283:5", "proven": false },
+                { "kind": "call", "at": "std/bytes.ts:285:3", "callee": "copyBytesWalk", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "getF64BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:119:69", "callee": "getU64BE", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "getF64LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:116:69", "callee": "getU64LE", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "getI32BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:107:59", "callee": "getU32BE", "via": "index" }
+              ]
+            },
+            {
+              "name": "getI32LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:104:59", "callee": "getU32LE", "via": "index" }
+              ]
+            },
+            {
+              "name": "getI64BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:113:59", "callee": "getU64BE", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "getI64LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:110:59", "callee": "getU64LE", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "getU16BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/bytes.ts:73:60", "proven": false },
+                { "kind": "index", "at": "std/bytes.ts:73:82", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:73:84", "proven": true }
+              ]
+            },
+            {
+              "name": "getU16LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/bytes.ts:70:59", "proven": false },
+                { "kind": "index", "at": "std/bytes.ts:70:76", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:70:78", "proven": true }
+              ]
+            },
+            {
+              "name": "getU32BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/bytes.ts:82:9", "proven": false },
+                { "kind": "index", "at": "std/bytes.ts:83:11", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:83:13", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:83:39", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:83:41", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:83:65", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:83:67", "proven": true }
+              ]
+            },
+            {
+              "name": "getU32LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/bytes.ts:77:10", "proven": false },
+                { "kind": "index", "at": "std/bytes.ts:77:27", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:77:29", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:77:54", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:77:56", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:78:9", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:78:11", "proven": true }
+              ]
+            },
+            {
+              "name": "getU64BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/bytes.ts:97:31", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:98:33", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:98:35", "proven": false }
+              ]
+            },
+            {
+              "name": "getU64LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/bytes.ts:88:31", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:89:20", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:89:22", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:89:41", "proven": true }
+              ]
+            },
+            {
+              "name": "setF64BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:179:62", "callee": "setU64BE", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "setF64LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:176:62", "callee": "setU64LE", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "setI32BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:167:62", "callee": "setU32BE", "via": "index" }
+              ]
+            },
+            {
+              "name": "setI32LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:164:62", "callee": "setU32LE", "via": "index" }
+              ]
+            },
+            {
+              "name": "setI64BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:173:62", "callee": "setU64BE", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "setI64LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:170:62", "callee": "setU64LE", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "setU16BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/bytes.ts:129:3", "proven": false },
+                { "kind": "index", "at": "std/bytes.ts:130:3", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:130:5", "proven": true }
+              ]
+            },
+            {
+              "name": "setU16LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/bytes.ts:123:3", "proven": false },
+                { "kind": "index", "at": "std/bytes.ts:124:3", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:124:5", "proven": true }
+              ]
+            },
+            {
+              "name": "setU32BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/bytes.ts:143:3", "proven": false },
+                { "kind": "index", "at": "std/bytes.ts:144:3", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:144:5", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:145:3", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:145:5", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:146:3", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:146:5", "proven": true }
+              ]
+            },
+            {
+              "name": "setU32LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/bytes.ts:135:3", "proven": false },
+                { "kind": "index", "at": "std/bytes.ts:136:3", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:136:5", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:137:3", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:137:5", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:138:3", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:138:5", "proven": true }
+              ]
+            },
+            {
+              "name": "setU64BE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/bytes.ts:158:31", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:159:5", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:159:7", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:159:35", "proven": true },
+                { "kind": "overflow", "at": "std/bytes.ts:159:36", "proven": true }
+              ]
+            },
+            {
+              "name": "setU64LE",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/bytes.ts:151:31", "proven": true },
+                { "kind": "index", "at": "std/bytes.ts:152:5", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:152:7", "proven": false },
+                { "kind": "overflow", "at": "std/bytes.ts:152:35", "proven": true }
+              ]
+            },
+            {
+              "name": "skipBlank",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": []
+            },
+            {
+              "name": "skipDigits",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": []
+            },
+            {
+              "name": "skipJsonPlain",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": []
+            },
+            {
+              "name": "skipJsonText",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/bytes.ts:251:10", "callee": "skipJsonTextWalk", "via": "index" }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "std/net/dns-config.ts",
+          "capabilities": [],
+          "functions": [
+            {
+              "name": "DnsConfig.constructor",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "array-length", "at": "std/net/dns-config.ts:119:20", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:119:20", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:119:34", "proven": true },
+                { "kind": "oom", "at": "std/net/dns-config.ts:120:20", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-config.ts:121:19", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:121:19", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-config.ts:122:24", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:122:24", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-config.ts:123:25", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:123:25", "allowed": true }
+              ]
+            },
+            {
+              "name": "DnsHosts.constructor",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "array-length", "at": "std/net/dns-config.ts:153:22", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:153:22", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:153:36", "proven": true },
+                { "kind": "array-length", "at": "std/net/dns-config.ts:154:18", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:154:18", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-config.ts:155:20", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-config.ts:156:22", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:156:22", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-config.ts:157:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:157:23", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-config.ts:158:22", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:158:22", "allowed": true }
+              ]
+            },
+            {
+              "name": "dnsHostsFind",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "panic", "at": "std/net/dns-config.ts:699:5", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:699:11", "allowed": true },
+                { "kind": "divide", "at": "std/net/dns-config.ts:701:24", "proven": true },
+                { "kind": "panic", "at": "std/net/dns-config.ts:702:5", "proven": false },
+                { "kind": "panic", "at": "std/net/dns-config.ts:705:5", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-config.ts:705:11", "allowed": true },
+                { "kind": "index", "at": "std/net/dns-config.ts:708:22", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:708:38", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:709:5", "proven": true },
+                { "kind": "index", "at": "std/net/dns-config.ts:715:24", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:716:21", "proven": false },
+                { "kind": "call", "at": "std/net/dns-config.ts:719:7", "callee": "dnsIsIpv4", "via": "overflow" },
+                { "kind": "call", "at": "std/net/dns-config.ts:720:7", "callee": "dnsHostNameIs", "via": "index" },
+                { "kind": "index", "at": "std/net/dns-config.ts:724:9", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:724:13", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:724:13", "proven": false },
+                { "kind": "index", "at": "std/net/dns-config.ts:724:46", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:724:62", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:725:9", "proven": true },
+                { "kind": "call", "at": "std/net/dns-config.ts:727:7", "callee": "setU16BE", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:727:21", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:727:21", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:728:7", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:731:5", "proven": true }
+              ]
+            },
+            {
+              "name": "dnsParseAddress",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/net/dns-config.ts:311:3", "callee": "dnsParseAddressVia", "via": "panic" }
+              ]
+            },
+            {
+              "name": "dnsParseHosts",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/net/dns-config.ts:647:3", "callee": "dnsConfigCheckWindow", "via": "panic" },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:654:19", "proven": true },
+                { "kind": "call", "at": "std/net/dns-config.ts:657:22", "callee": "dnsLineEnd", "via": "panic" },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:658:9", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:659:7", "proven": false },
+                { "kind": "call", "at": "std/net/dns-config.ts:661:7", "callee": "dnsHostsLine", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns-config.ts:661:26", "callee": "dnsCommentCut", "via": "panic" },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:663:9", "proven": false }
+              ]
+            },
+            {
+              "name": "dnsParseResolvConf",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/net/dns-config.ts:546:3", "callee": "dnsConfigCheckWindow", "via": "panic" },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:555:19", "proven": true },
+                { "kind": "call", "at": "std/net/dns-config.ts:558:22", "callee": "dnsLineEnd", "via": "panic" },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:559:9", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:560:7", "proven": false },
+                { "kind": "call", "at": "std/net/dns-config.ts:562:7", "callee": "dnsResolvLine", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns-config.ts:562:27", "callee": "dnsCommentCut", "via": "panic" },
+                { "kind": "overflow", "at": "std/net/dns-config.ts:564:9", "proven": false },
+                { "kind": "call", "at": "std/net/dns-config.ts:567:5", "callee": "dnsFallbackServers", "via": "panic" }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "std/net/dns-message.ts",
+          "capabilities": [],
+          "functions": [
+            {
+              "name": "DnsReply.constructor",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "array-length", "at": "std/net/dns-message.ts:160:22", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-message.ts:160:22", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:160:36", "proven": true },
+                { "kind": "array-length", "at": "std/net/dns-message.ts:161:17", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-message.ts:161:17", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-message.ts:162:18", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-message.ts:162:18", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-message.ts:163:18", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-message.ts:163:18", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-message.ts:164:18", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-message.ts:164:18", "allowed": true }
+              ]
+            },
+            {
+              "name": "dnsBuildQuery",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "panic", "at": "std/net/dns-message.ts:189:5", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-message.ts:189:11", "allowed": true },
+                { "kind": "index", "at": "std/net/dns-message.ts:195:16", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:195:32", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:196:5", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:202:7", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:205:22", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:205:22", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:205:22", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:209:3", "callee": "setU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:210:3", "callee": "setU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:211:3", "callee": "setU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:212:3", "callee": "setU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:213:3", "callee": "setU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:214:3", "callee": "setU16BE", "via": "index" },
+                { "kind": "index", "at": "std/net/dns-message.ts:219:34", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:221:26", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:221:26", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:231:7", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:232:18", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:232:18", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:236:7", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:236:11", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:236:11", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:238:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:240:3", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:240:7", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:240:7", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:241:3", "callee": "setU16BE", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:241:17", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:241:17", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:242:3", "callee": "setU16BE", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:242:17", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:242:17", "proven": false }
+              ]
+            },
+            {
+              "name": "dnsParseReply",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/net/dns-message.ts:407:3", "callee": "dnsCheckLength", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns-message.ts:408:3", "callee": "dnsCheckLength", "via": "panic" },
+                { "kind": "panic", "at": "std/net/dns-message.ts:410:5", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-message.ts:410:11", "allowed": true },
+                { "kind": "call", "at": "std/net/dns-message.ts:419:28", "callee": "getU16BE", "via": "index" },
+                { "kind": "index", "at": "std/net/dns-message.ts:426:38", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:426:49", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:426:61", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:426:72", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:429:13", "callee": "getU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:432:22", "callee": "dnsReadName", "via": "overflow" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:433:20", "proven": false },
+                { "kind": "panic", "at": "std/net/dns-message.ts:434:5", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:436:22", "callee": "dnsReadName", "via": "overflow" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:440:7", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:444:6", "callee": "dnsSameName", "via": "overflow" },
+                { "kind": "index", "at": "std/net/dns-message.ts:445:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:445:20", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:446:5", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:446:9", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:446:24", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:446:30", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:447:5", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:447:9", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:447:24", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:447:30", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:448:5", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:448:9", "proven": false },
+                { "kind": "index", "at": "std/net/dns-message.ts:448:24", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:448:30", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:452:28", "callee": "getU16BE", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:464:18", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:465:24", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:465:24", "proven": true },
+                { "kind": "call", "at": "std/net/dns-message.ts:465:30", "callee": "getU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:465:56", "callee": "getU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:465:82", "callee": "getU16BE", "via": "index" },
+                { "kind": "divide", "at": "std/net/dns-message.ts:466:17", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:466:18", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:472:30", "callee": "getU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:475:24", "callee": "dnsReadName", "via": "overflow" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:479:9", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:482:29", "callee": "getU16BE", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-message.ts:483:30", "callee": "getU16BE", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:483:44", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:484:31", "callee": "getU32BE", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:484:45", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:485:29", "callee": "getU16BE", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:485:43", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:486:23", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:487:16", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:494:11", "callee": "dnsSameName", "via": "overflow" },
+                { "kind": "call", "at": "std/net/dns-message.ts:496:31", "callee": "dnsReadName", "via": "overflow" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:496:48", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:500:26", "proven": false },
+                { "kind": "call", "at": "std/net/dns-message.ts:503:11", "callee": "dnsCopyName", "via": "overflow" },
+                { "kind": "call", "at": "std/net/dns-message.ts:506:13", "callee": "dnsKeepAddress", "via": "overflow" },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:508:13", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:513:11", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-message.ts:514:5", "proven": true }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "std/net/dns-resolver.ts",
+          "capabilities": [],
+          "functions": [
+            {
+              "name": "DnsResolver.active",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/net/dns-resolver.ts:570:11", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:571:9", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:573:7", "proven": true }
+              ]
+            },
+            {
+              "name": "DnsResolver.cancel",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/net/dns-resolver.ts:557:52", "proven": false },
+                { "kind": "panic", "at": "std/net/dns-resolver.ts:558:7", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:558:13", "allowed": true },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:560:5", "callee": "dnsResolverStop", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:560:27", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:561:5", "callee": "dnsResolverStop", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:561:27", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:561:27", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:562:5", "proven": false }
+              ]
+            },
+            {
+              "name": "DnsResolver.constructor",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "panic", "at": "std/net/dns-resolver.ts:176:7", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:176:13", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:181:20", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:182:20", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:183:18", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:184:19", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:185:20", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:186:20", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:187:23", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:188:18", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:189:28", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:190:23", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:193:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:193:25", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:193:25", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:194:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:194:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:194:23", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:195:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:195:24", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:195:24", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:196:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:196:25", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:196:25", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:197:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:197:25", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:197:25", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:197:39", "proven": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:198:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:198:28", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:198:28", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:199:7", "proven": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:203:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:203:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:203:23", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:204:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:204:33", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:204:33", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:204:47", "proven": true },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:205:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:205:28", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:205:28", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:206:7", "proven": true },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:208:18", "callee": "DnsReply.constructor", "via": "array-length" },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:208:18", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:209:20", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:209:20", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:210:24", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:210:24", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:211:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:211:23", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:212:18", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:212:18", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:213:20", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:213:20", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:214:20", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:214:20", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:215:19", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:215:19", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:216:18", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:216:18", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:217:17", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:217:17", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:218:21", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:218:21", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:219:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:219:23", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:220:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:220:23", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:221:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:221:23", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:222:21", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:222:21", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:223:21", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:223:21", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:224:22", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:224:22", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:225:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:225:23", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:226:17", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:226:17", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:227:24", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:227:24", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:228:25", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:228:25", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns-resolver.ts:229:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:229:23", "allowed": true }
+              ]
+            },
+            {
+              "name": "DnsResolver.fail",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/net/dns-resolver.ts:479:5", "callee": "dnsResolverCheckQuery", "via": "overflow" },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:480:9", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:480:40", "proven": true },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:481:7", "callee": "dnsResolverServerFailed", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "DnsResolver.nextDeadlineNanos",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:500:20", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:505:10", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:505:41", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:506:25", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:508:19", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:510:7", "proven": true }
+              ]
+            },
+            {
+              "name": "DnsResolver.nextOutgoing",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "panic", "at": "std/net/dns-resolver.ts:326:7", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:326:13", "allowed": true },
+                { "kind": "panic", "at": "std/net/dns-resolver.ts:333:7", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:335:20", "proven": false },
+                { "kind": "divide", "at": "std/net/dns-resolver.ts:338:22", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:338:23", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:339:25", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:341:9", "proven": true },
+                { "kind": "divide", "at": "std/net/dns-resolver.ts:342:23", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:342:24", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:343:9", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:344:9", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:348:29", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:349:9", "callee": "setU16BE", "via": "index" },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:350:29", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:353:11", "callee": "setU16BE", "via": "index" },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:357:11", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:357:15", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:357:27", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:358:11", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:360:9", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:360:19", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:361:27", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:361:27", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:364:11", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:364:19", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:364:39", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:365:11", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:367:9", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:370:7", "proven": true }
+              ]
+            },
+            {
+              "name": "DnsResolver.receive",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/net/dns-resolver.ts:383:5", "callee": "dnsResolverCheckQuery", "via": "overflow" },
+                { "kind": "panic", "at": "std/net/dns-resolver.ts:385:7", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:387:9", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:388:7", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:391:21", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:391:21", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:394:11", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:394:23", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:394:43", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:395:9", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:398:7", "proven": true },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:400:25", "callee": "dnsParseReply", "via": "panic" },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:403:7", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:404:7", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:405:7", "proven": false },
+                { "kind": "divide", "at": "std/net/dns-resolver.ts:405:23", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:409:7", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:411:7", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:413:7", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:415:7", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:416:7", "callee": "dnsResolverSend", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:418:7", "callee": "dnsResolverAnswer", "via": "index" }
+              ]
+            },
+            {
+              "name": "DnsResolver.receiveStream",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/net/dns-resolver.ts:430:5", "callee": "dnsResolverCheckQuery", "via": "overflow" },
+                { "kind": "panic", "at": "std/net/dns-resolver.ts:432:7", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:434:9", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:437:26", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:440:25", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:442:9", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:442:31", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:442:64", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:443:28", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:443:55", "proven": true },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:444:11", "callee": "dnsResolverServerFailed", "via": "overflow" },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:447:18", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:447:29", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:448:9", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:448:16", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:448:28", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:450:7", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:450:28", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:451:7", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:453:23", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:454:9", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:454:35", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:454:35", "proven": true },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:457:25", "callee": "dnsParseReply", "via": "panic" },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:460:7", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:461:7", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:462:7", "proven": false },
+                { "kind": "divide", "at": "std/net/dns-resolver.ts:462:23", "proven": true },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:466:7", "callee": "dnsResolverServerFailed", "via": "overflow" },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:468:7", "callee": "dnsResolverAnswer", "via": "index" }
+              ]
+            },
+            {
+              "name": "DnsResolver.result",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "index", "at": "std/net/dns-resolver.ts:525:52", "proven": false },
+                { "kind": "panic", "at": "std/net/dns-resolver.ts:526:7", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:526:13", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:529:27", "proven": true },
+                { "kind": "panic", "at": "std/net/dns-resolver.ts:532:7", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:534:9", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:537:24", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:539:16", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:540:7", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:540:16", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:540:16", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:541:7", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:545:7", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:545:17", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:545:17", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:546:7", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:548:5", "proven": true }
+              ]
+            },
+            {
+              "name": "DnsResolver.start",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "panic", "at": "std/net/dns-resolver.ts:245:7", "proven": false },
+                { "kind": "oom", "at": "std/net/dns-resolver.ts:245:13", "allowed": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:248:35", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:249:7", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:254:5", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:254:16", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:255:5", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:255:16", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:255:16", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:256:22", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:257:25", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:258:9", "callee": "dnsResolverIsLocalhost", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:259:7", "callee": "dnsResolverLoopback", "via": "index" },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:260:7", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:261:7", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:262:14", "callee": "dnsResolverFinishNow", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:264:9", "callee": "dnsResolverLiteral", "via": "panic" },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:265:7", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:266:14", "callee": "dnsResolverFinishNow", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:268:24", "callee": "dnsBuildQuery", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:274:23", "callee": "dnsHostsFind", "via": "panic" },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:274:67", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:274:80", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:275:23", "callee": "dnsHostsFind", "via": "panic" },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:275:70", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:275:83", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:275:83", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:276:11", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:277:9", "callee": "dnsResolverGather", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:278:16", "callee": "dnsResolverFinishNow", "via": "index" },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:278:46", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:283:24", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:284:29", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:284:29", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:288:7", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:288:17", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:288:30", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:289:7", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:294:7", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:294:12", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:294:18", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:296:9", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:299:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:300:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:300:30", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:300:46", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:301:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:302:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:303:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:303:26", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:303:49", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:304:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:305:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:306:5", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:307:10", "callee": "dnsResolverNextCandidate", "via": "index" },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:308:7", "callee": "dnsResolverFinish", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "DnsResolver.tick",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:487:20", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:490:12", "proven": false },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:490:43", "proven": true },
+                { "kind": "index", "at": "std/net/dns-resolver.ts:490:75", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:491:9", "proven": false },
+                { "kind": "call", "at": "std/net/dns-resolver.ts:492:9", "callee": "dnsResolverServerFailed", "via": "overflow" },
+                { "kind": "overflow", "at": "std/net/dns-resolver.ts:494:7", "proven": true }
+              ]
+            }
+          ]
+        },
+        {
+          "path": "std/net/dns.ts",
+          "capabilities": ["clock", "entropy", "fs.read", "net"],
+          "functions": [
+            {
+              "name": "DnsClient.cancel",
+              "exported": true,
+              "capabilities": ["entropy", "net"],
+              "witnesses": {
+                "entropy": [
+                  { "function": "DnsClient.cancel", "at": "std/net/dns.ts:149:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "net": [
+                  { "function": "DnsClient.cancel", "at": "std/net/dns.ts:149:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:208:7", "calls": "dnsClientClose" },
+                  { "function": "dnsClientClose", "at": "std/net/dns.ts:231:5", "calls": "netClose" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "std/net/dns.ts:148:5", "callee": "DnsResolver.cancel", "via": "index" },
+                { "kind": "call", "at": "std/net/dns.ts:149:5", "callee": "DnsClient.pump", "via": "io-exit" }
+              ]
+            },
+            {
+              "name": "DnsClient.constructor",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "panic", "at": "std/net/dns.ts:98:7", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:98:13", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns.ts:100:20", "proven": false },
+                { "kind": "array-length", "at": "std/net/dns.ts:104:16", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:104:16", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns.ts:106:20", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:106:20", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns.ts:107:20", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns.ts:110:7", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns.ts:110:25", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:110:25", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns.ts:111:7", "proven": true },
+                { "kind": "array-length", "at": "std/net/dns.ts:113:25", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:113:25", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns.ts:114:23", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:114:23", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns.ts:115:16", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:115:16", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns.ts:116:15", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:116:15", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns.ts:117:17", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns.ts:118:16", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:118:16", "allowed": true },
+                { "kind": "array-length", "at": "std/net/dns.ts:119:17", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:119:17", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns.ts:120:21", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns.ts:121:20", "allowed": true }
+              ]
+            },
+            {
+              "name": "DnsClient.nextOutgoing",
+              "exported": true,
+              "capabilities": ["entropy"],
+              "witnesses": {
+                "entropy": [
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ]
+              },
+              "panics": [
+                { "kind": "io-exit", "at": "std/net/dns.ts:221:5", "proven": false },
+                { "kind": "index", "at": "std/net/dns.ts:222:28", "proven": false },
+                { "kind": "index", "at": "std/net/dns.ts:222:59", "proven": false },
+                { "kind": "call", "at": "std/net/dns.ts:223:12", "callee": "DnsResolver.nextOutgoing", "via": "panic" }
+              ]
+            },
+            {
+              "name": "DnsClient.owns",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/net/dns.ts:131:39", "proven": false },
+                { "kind": "call", "at": "std/net/dns.ts:131:64", "callee": "DnsClient.tokens", "via": "overflow" }
+              ]
+            },
+            {
+              "name": "DnsClient.pump",
+              "exported": true,
+              "capabilities": ["entropy", "net"],
+              "witnesses": {
+                "entropy": [
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "net": [
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:208:7", "calls": "dnsClientClose" },
+                  { "function": "dnsClientClose", "at": "std/net/dns.ts:231:5", "calls": "netClose" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "std/net/dns.ts:206:18", "callee": "DnsClient.nextOutgoing", "via": "io-exit" },
+                { "kind": "call", "at": "std/net/dns.ts:208:7", "callee": "dnsClientClose", "via": "index" },
+                { "kind": "index", "at": "std/net/dns.ts:209:25", "proven": false },
+                { "kind": "call", "at": "std/net/dns.ts:211:9", "callee": "dnsClientOpenTcp", "via": "overflow" },
+                { "kind": "call", "at": "std/net/dns.ts:213:9", "callee": "dnsClientSendUdp", "via": "overflow" },
+                { "kind": "call", "at": "std/net/dns.ts:215:11", "callee": "DnsClient.nextOutgoing", "via": "io-exit" }
+              ]
+            },
+            {
+              "name": "DnsClient.ready",
+              "exported": true,
+              "capabilities": ["entropy", "net"],
+              "witnesses": {
+                "entropy": [
+                  { "function": "DnsClient.ready", "at": "std/net/dns.ts:175:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "net": [
+                  { "function": "DnsClient.ready", "at": "std/net/dns.ts:169:7", "calls": "dnsClientReadDatagrams" },
+                  { "function": "dnsClientReadDatagrams", "at": "std/net/dns.ts:302:20", "calls": "udpRecvFrom" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "std/net/dns.ts:159:10", "callee": "DnsClient.owns", "via": "overflow" },
+                { "kind": "panic", "at": "std/net/dns.ts:160:7", "proven": false },
+                { "kind": "oom", "at": "std/net/dns.ts:160:13", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns.ts:162:20", "proven": false },
+                { "kind": "index", "at": "std/net/dns.ts:163:21", "proven": false },
+                { "kind": "index", "at": "std/net/dns.ts:167:24", "proven": false },
+                { "kind": "call", "at": "std/net/dns.ts:169:7", "callee": "dnsClientReadDatagrams", "via": "index" },
+                { "kind": "call", "at": "std/net/dns.ts:171:7", "callee": "dnsClientWrite", "via": "index" },
+                { "kind": "call", "at": "std/net/dns.ts:173:7", "callee": "dnsClientReadStream", "via": "index" },
+                { "kind": "call", "at": "std/net/dns.ts:175:5", "callee": "DnsClient.pump", "via": "io-exit" }
+              ]
+            },
+            {
+              "name": "DnsClient.result",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/net/dns.ts:143:12", "callee": "DnsResolver.result", "via": "index" }
+              ]
+            },
+            {
+              "name": "DnsClient.start",
+              "exported": true,
+              "capabilities": ["entropy", "net"],
+              "witnesses": {
+                "entropy": [
+                  { "function": "DnsClient.start", "at": "std/net/dns.ts:137:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "net": [
+                  { "function": "DnsClient.start", "at": "std/net/dns.ts:137:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:208:7", "calls": "dnsClientClose" },
+                  { "function": "dnsClientClose", "at": "std/net/dns.ts:231:5", "calls": "netClose" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "std/net/dns.ts:136:25", "callee": "DnsResolver.start", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns.ts:137:5", "callee": "DnsClient.pump", "via": "io-exit" }
+              ]
+            },
+            {
+              "name": "DnsClient.tick",
+              "exported": true,
+              "capabilities": ["entropy", "net"],
+              "witnesses": {
+                "entropy": [
+                  { "function": "DnsClient.tick", "at": "std/net/dns.ts:181:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "net": [
+                  { "function": "DnsClient.tick", "at": "std/net/dns.ts:181:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:208:7", "calls": "dnsClientClose" },
+                  { "function": "dnsClientClose", "at": "std/net/dns.ts:231:5", "calls": "netClose" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "std/net/dns.ts:180:5", "callee": "DnsResolver.tick", "via": "overflow" },
+                { "kind": "call", "at": "std/net/dns.ts:181:5", "callee": "DnsClient.pump", "via": "io-exit" }
+              ]
+            },
+            {
+              "name": "DnsClient.timeoutMs",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "call", "at": "std/net/dns.ts:190:27", "callee": "DnsResolver.nextDeadlineNanos", "via": "overflow" },
+                { "kind": "divide", "at": "std/net/dns.ts:196:14", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns.ts:196:15", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns.ts:196:15", "proven": false }
+              ]
+            },
+            {
+              "name": "DnsClient.tokens",
+              "exported": true,
+              "capabilities": [],
+              "witnesses": {},
+              "panics": [
+                { "kind": "overflow", "at": "std/net/dns.ts:126:12", "proven": false }
+              ]
+            },
+            {
+              "name": "dnsLookupWith",
+              "exported": true,
+              "capabilities": ["clock", "entropy", "net"],
+              "witnesses": {
+                "clock": [
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:410:22", "calls": "monotonicNanos" }
+                ],
+                "entropy": [
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:412:23", "calls": "DnsClient.start" },
+                  { "function": "DnsClient.start", "at": "std/net/dns.ts:137:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "net": [
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:405:21", "calls": "pollCreate" }
+                ]
+              },
+              "panics": [
+                { "kind": "overflow", "at": "std/net/dns.ts:400:25", "proven": true },
+                { "kind": "panic", "at": "std/net/dns.ts:403:5", "proven": false },
+                { "kind": "call", "at": "std/net/dns.ts:409:29", "callee": "DnsClient.constructor", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns.ts:409:43", "callee": "DnsResolver.constructor", "via": "panic" },
+                { "kind": "oom", "at": "std/net/dns.ts:409:43", "allowed": true },
+                { "kind": "overflow", "at": "std/net/dns.ts:411:20", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns.ts:411:28", "proven": true },
+                { "kind": "call", "at": "std/net/dns.ts:412:23", "callee": "DnsClient.start", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns.ts:418:21", "callee": "DnsClient.result", "via": "index" },
+                { "kind": "call", "at": "std/net/dns.ts:422:7", "callee": "DnsClient.cancel", "via": "index" },
+                { "kind": "divide", "at": "std/net/dns.ts:426:28", "proven": true },
+                { "kind": "overflow", "at": "std/net/dns.ts:426:29", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns.ts:426:29", "proven": false },
+                { "kind": "call", "at": "std/net/dns.ts:427:46", "callee": "DnsClient.timeoutMs", "via": "overflow" },
+                { "kind": "overflow", "at": "std/net/dns.ts:430:25", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns.ts:430:25", "proven": false },
+                { "kind": "call", "at": "std/net/dns.ts:431:11", "callee": "DnsClient.owns", "via": "overflow" },
+                { "kind": "index", "at": "std/net/dns.ts:431:23", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns.ts:431:29", "proven": false },
+                { "kind": "call", "at": "std/net/dns.ts:432:9", "callee": "DnsClient.ready", "via": "overflow" },
+                { "kind": "index", "at": "std/net/dns.ts:432:22", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns.ts:432:28", "proven": false },
+                { "kind": "index", "at": "std/net/dns.ts:432:36", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns.ts:432:42", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns.ts:432:42", "proven": false },
+                { "kind": "overflow", "at": "std/net/dns.ts:434:7", "proven": true },
+                { "kind": "call", "at": "std/net/dns.ts:436:5", "callee": "DnsClient.tick", "via": "overflow" },
+                { "kind": "call", "at": "std/net/dns.ts:437:14", "callee": "DnsClient.result", "via": "index" }
+              ]
+            },
+            {
+              "name": "resolveHost",
+              "exported": true,
+              "capabilities": ["clock", "entropy", "fs.read", "net"],
+              "witnesses": {
+                "clock": [
+                  { "function": "resolveHost", "at": "std/net/dns.ts:382:10", "calls": "dnsLookupWith" },
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:410:22", "calls": "monotonicNanos" }
+                ],
+                "entropy": [
+                  { "function": "resolveHost", "at": "std/net/dns.ts:382:10", "calls": "dnsLookupWith" },
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:412:23", "calls": "DnsClient.start" },
+                  { "function": "DnsClient.start", "at": "std/net/dns.ts:137:5", "calls": "DnsClient.pump" },
+                  { "function": "DnsClient.pump", "at": "std/net/dns.ts:206:18", "calls": "DnsClient.nextOutgoing" },
+                  { "function": "DnsClient.nextOutgoing", "at": "std/net/dns.ts:221:5", "calls": "crypto.getRandomValues" }
+                ],
+                "fs.read": [
+                  { "function": "resolveHost", "at": "std/net/dns.ts:371:29", "calls": "readFileBytesSync" }
+                ],
+                "net": [
+                  { "function": "resolveHost", "at": "std/net/dns.ts:382:10", "calls": "dnsLookupWith" },
+                  { "function": "dnsLookupWith", "at": "std/net/dns.ts:405:21", "calls": "pollCreate" }
+                ]
+              },
+              "panics": [
+                { "kind": "call", "at": "std/net/dns.ts:370:29", "callee": "DnsConfig.constructor", "via": "array-length" },
+                { "kind": "oom", "at": "std/net/dns.ts:370:29", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns.ts:371:29", "allowed": true },
+                { "kind": "call", "at": "std/net/dns.ts:373:5", "callee": "dnsParseResolvConf", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns.ts:375:5", "callee": "dnsParseResolvConf", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns.ts:377:27", "callee": "DnsHosts.constructor", "via": "array-length" },
+                { "kind": "oom", "at": "std/net/dns.ts:377:27", "allowed": true },
+                { "kind": "oom", "at": "std/net/dns.ts:378:34", "allowed": true },
+                { "kind": "call", "at": "std/net/dns.ts:380:5", "callee": "dnsParseHosts", "via": "panic" },
+                { "kind": "call", "at": "std/net/dns.ts:382:10", "callee": "dnsLookupWith", "via": "panic" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

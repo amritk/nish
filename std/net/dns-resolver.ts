@@ -49,9 +49,9 @@ import {
   DnsReply,
   dnsBuildQuery,
   dnsParseReply,
-} from "./dns-message"
+} from "nish/net/dns-message"
 import { setU16BE } from "nish/bytes"
-import { DnsConfig, DnsHosts, dnsHostsFind, dnsParseAddress } from "./dns-config"
+import { DnsConfig, DnsHosts, dnsHostsFind, dnsParseAddress } from "nish/net/dns-config"
 
 /** `result` for a lookup that has not finished. */
 export const DNS_RESOLVE_PENDING: i32 = -40
