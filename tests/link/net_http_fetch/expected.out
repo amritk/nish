@@ -30,6 +30,9 @@ PASS  a caller's Host is sent in place of the URL's
 PASS  a body left unread answers an error once the next fetch starts
 PASS  and the next fetch went on a new connection
 PASS  a body read to its end answers 0 again
+PASS  a body read two bytes at a time is read whole
+PASS  a response that says Connection: close is read
+PASS  and its connection is not used again, though the server left it open
 PASS  the server answers and then closes the kept connection
 PASS  a GET on it is sent again on a fresh connection
 PASS  a POST on it is not sent twice: it fails with HTTP_E_IO
@@ -37,10 +40,12 @@ PASS  and the client fetches again after it
 PASS  a Content-Length past maxBodyBytes is HTTP_E_BODY_TOO_LARGE before the body is read
 PASS  and a chunked body is cut off as it passes maxBodyBytes
 PASS  and so is one past readAll's limit
+PASS  and the body answers that error again when read after it
 PASS  while one exactly at the limit is read whole
 PASS  two Content-Length fields that disagree are HTTP_E_PROTOCOL
 PASS  and errorText names the parser's code
 PASS  a body cut short by the close is an error, never a whole body
+PASS  and the body answers that error again when read after it
 PASS  a header value with CR LF is refused before a byte is sent
 PASS  and so is a method that is not a token
 PASS  an ftp URL is HTTP_E_URL
@@ -64,11 +69,14 @@ PASS  and so does one redirected by 302
 PASS  307 keeps the method and the body
 PASS  and so does 308, its relative Location resolved
 PASS  a redirect loop is HTTP_E_TOO_MANY_REDIRECTS after maxRedirects
+PASS  exactly maxRedirects redirects are followed
+PASS  and one more is HTTP_E_TOO_MANY_REDIRECTS
+PASS  a HEAD redirected by 303 stays a HEAD
 PASS  a redirect to another origin is refused by default
 PASS  and so is one to an ftp URL
 PASS  and one from http to https, which is another origin
 PASS  allowed, it is followed to the other origin
-PASS  without Authorization or Cookie
+PASS  without Authorization, Proxy-Authorization or Cookie
 PASS  with the new origin's Host and the caller's other fields
 PASS  through an http proxy the target is absolute-form, the Host the origin's
 PASS  and the proxy's decoded userinfo is sent as Proxy-Authorization
@@ -79,4 +87,4 @@ PASS  a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED
 PASS  an https server that hangs up on the ClientHello is HTTP_E_TLS
 PASS  an event stream's first event is read while the server holds the stream open
 PASS  and the next one, the stream ending with the connection
-http fetch: 81 passed, 0 failed, 0 skipped
+http fetch: 89 passed, 0 failed, 0 skipped

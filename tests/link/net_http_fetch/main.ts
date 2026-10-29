@@ -170,6 +170,20 @@ class Server {
       this.respond(c, "307 Temporary Redirect", "Location: /echo\r\n", redirect);
     } else if (path === "/to-echo-308") {
       this.respond(c, "308 Permanent Redirect", "Location: echo\r\n", redirect);
+    } else if (path === "/method") {
+      this.respond(c, "200 OK", `X-Method: ${method}\r\n`, "");
+    } else if (path === "/to-method-303") {
+      this.respond(c, "303 See Other", "Location: /method\r\n", "");
+    } else if (path === "/close-header") {
+      // Says it closes, and leaves the socket open: the client must not reuse it.
+      this.respond(c, "200 OK", "Connection: close\r\n", "closing");
+    } else if (path.startsWith("/hops-")) {
+      const left: i32 = toI32(path.charCodeAt(6)) - 48;
+      if (left > 0) {
+        this.respond(c, "302 Found", `Location: /hops-${left - 1}\r\n`, redirect);
+      } else {
+        this.respond(c, "200 OK", "", "landed");
+      }
     } else if (path === "/loop") {
       this.respond(c, "302 Found", "Location: /loop\r\n", redirect);
     } else if (path === "/to-other") {
@@ -413,6 +427,18 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t.check(open !== null && open.body.read(buf, 0, 16) === -HTTP_E_IO, "a body left unread answers an error once the next fetch starts");
   t.check(after !== null && bodyOf(after) === "hello" && conn(after) !== conn(open), "and the next fetch went on a new connection");
   t.check(after !== null && after.body.read(buf, 0, 16) === 0, "a body read to its end answers 0 again");
+  const pieces: HttpResponse | null = client.fetch(get(`${base}/hello`));
+  let pieced: string = "";
+  let piece: i32 = pieces !== null ? pieces.body.read(buf, 0, 2) : -1;
+  while (piece > 0 && pieces !== null) {
+    pieced = pieced + String.fromBytes(buf, 0, piece);
+    piece = pieces.body.read(buf, 0, 2);
+  }
+  t.check(piece === 0 && pieced === "hello", "a body read two bytes at a time is read whole");
+  const closing: HttpResponse | null = client.fetch(get(`${base}/close-header`));
+  t.check(bodyOf(closing) === "closing", "a response that says Connection: close is read");
+  const reopened: HttpResponse | null = client.fetch(get(`${base}/hello`));
+  t.check(bodyOf(reopened) === "hello" && conn(reopened) !== conn(closing), "and its connection is not used again, though the server left it open");
 
   // --- a stale kept-alive connection
   const s1: HttpResponse | null = client.fetch(get(`${base}/stale`));
@@ -436,12 +462,14 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t.check(chunkedBig !== null && chunkedBig.body.readAll(1000) === null && limited.error === HTTP_E_BODY_TOO_LARGE, "and a chunked body is cut off as it passes maxBodyBytes");
   const big2: HttpResponse | null = client.fetch(get(`${base}/big`));
   t.check(big2 !== null && big2.body.readAll(39) === null && client.error === HTTP_E_BODY_TOO_LARGE, "and so is one past readAll's limit");
+  t.check(big2 !== null && big2.body.read(buf, 0, 16) === -HTTP_E_BODY_TOO_LARGE, "and the body answers that error again when read after it");
   const big3: HttpResponse | null = client.fetch(get(`${base}/big`));
   t.check(big3 !== null && text(big3.body.readAll(40)) === "0123456789012345678901234567890123456789", "while one exactly at the limit is read whole");
   t.check(fails(client, client.fetch(get(`${base}/bad`)), HTTP_E_PROTOCOL), "two Content-Length fields that disagree are HTTP_E_PROTOCOL");
   t.check(client.errorText.indexOf("http1 error") >= 0, "and errorText names the parser's code");
   const short: HttpResponse | null = client.fetch(get(`${base}/short`));
   t.check(short !== null && short.body.readAll(100) === null && client.error === HTTP_E_PROTOCOL, "a body cut short by the close is an error, never a whole body");
+  t.check(short !== null && short.body.read(buf, 0, 16) === -HTTP_E_PROTOCOL, "and the body answers that error again when read after it");
   const crlf: HttpRequest = get(`${base}/echo`);
   crlf.header("X-Evil", "a\r\nInjected: yes");
   t.check(fails(client, client.fetch(crlf), HTTP_E_REQUEST), "a header value with CR LF is refused before a byte is sent");
@@ -523,8 +551,14 @@ const runClient = (portA: i32, portB: i32): i32 => {
   limitOpts.maxRedirects = 3;
   const lc: HttpClient = new HttpClient(limitOpts);
   t.check(fails(lc, lc.fetch(get(`${base}/loop`)), HTTP_E_TOO_MANY_REDIRECTS), "a redirect loop is HTTP_E_TOO_MANY_REDIRECTS after maxRedirects");
+  t.check(bodyOf(lc.fetch(get(`${base}/hops-3`))) === "landed", "exactly maxRedirects redirects are followed");
+  t.check(fails(lc, lc.fetch(get(`${base}/hops-4`)), HTTP_E_TOO_MANY_REDIRECTS), "and one more is HTTP_E_TOO_MANY_REDIRECTS");
+  const headed: HttpResponse | null = rc.fetch(new HttpRequest("HEAD", `${base}/to-method-303`));
+  const headedMethod: string | null = headed !== null ? headed.header("X-Method") : null;
+  t.check(headedMethod !== null && headedMethod === "HEAD", "a HEAD redirected by 303 stays a HEAD");
   const other: HttpRequest = get(`${base}/to-other`);
   other.header("Authorization", "Bearer secret");
+  other.header("Proxy-Authorization", "Basic c2VjcmV0");
   other.header("Cookie", "id=1");
   other.header("Host", `127.0.0.1:${portA}`);
   other.header("X-Kept", "yes");
@@ -539,7 +573,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const x1: HttpResponse | null = xc.fetch(other);
   const x1body: string = bodyOf(x1);
   t.check(x1 !== null && x1.url === `http://127.0.0.1:${portB}/echo`, "allowed, it is followed to the other origin");
-  t.check(lower(x1body).indexOf("authorization") < 0 && lower(x1body).indexOf("cookie") < 0, "without Authorization or Cookie");
+  t.check(lower(x1body).indexOf("authorization") < 0 && lower(x1body).indexOf("cookie") < 0, "without Authorization, Proxy-Authorization or Cookie");
   t.check(x1body.indexOf(`\r\nHost: 127.0.0.1:${portB}\r\n`) >= 0 && x1body.indexOf("\r\nX-Kept: yes\r\n") >= 0, "with the new origin's Host and the caller's other fields");
 
   // --- proxies
