@@ -122,7 +122,7 @@ export const nishModuleExports = (specifier: string): string => {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, kill, waitPid, availableParallelism, totalMemory, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
-    return "netAddress, netResolve, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
+    return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait"
   }
   if (specifier === `${BUILTIN_SCHEME}term`) {
     return "readStdin, waitStdin, isTerminal, terminalSize, setRawMode, setTerminalRestore"
@@ -149,9 +149,6 @@ export const nishModuleExports = (specifier: string): string => {
 export const netSignature = (name: string): string => {
   if (name === "netAddress") {
     return "wsi"
-  }
-  if (name === "netResolve") {
-    return "wsii"
   }
   if (name === "netLocalPort" || name === "netClose" || name === "connectResult") {
     return "i"
@@ -203,7 +200,7 @@ export const netSignature = (name: string): string => {
  * size, ECN bits, a loop, readiness events, a token, a timeout).
  */
 export const NET_INT: i32 = 105
-/** `s`: a `string`, a host: numeric, or a name `netResolve` looks up. */
+/** `s`: a `string`, a numeric host. */
 export const NET_STRING: i32 = 115
 /** `w`: a `u8[]` the call writes. */
 const NET_WRITTEN: i32 = 119

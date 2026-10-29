@@ -342,13 +342,6 @@ declare function readSignal(fd: i32): i32;
 
 /** Write the address form of a numeric `host` and `port` into `out`: 0, or -22. */
 declare function netAddress(out: u8[], host: string, port: i32): i32;
-/**
- * Look `host` up with `getaddrinfo` and write each address with `port` into
- * `out`, 18 bytes each, in resolver order, as many as fit; `family` is 0, 4 or
- * 6. The count, -22 for a bad argument (an empty host, a NUL, over 253 bytes),
- * or -1001 no such name, -1002 a temporary failure, -1003 another failure.
- */
-declare function netResolve(out: u8[], host: string, port: i32, family: i32): i32;
 /** The port the socket `fd` is bound to. */
 declare function netLocalPort(fd: i32): i32;
 /** A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6. */
@@ -509,8 +502,6 @@ declare module "nish:process" {
 declare module "nish:net" {
   /** The address form of a numeric `host` and `port` in `out`'s first 18 bytes: 0, or -22. */
   export function netAddress(out: u8[], host: string, port: i32): i32;
-  /** `getaddrinfo` on `host`: each address with `port`, 18 bytes each, in resolver order; the count, -22, or -1001 no such name, -1002 temporary, -1003 other. */
-  export function netResolve(out: u8[], host: string, port: i32, family: i32): i32;
   /** The port the socket is bound to. */
   export function netLocalPort(fd: i32): i32;
   /** A listening TCP socket with `SO_REUSEADDR`; `"::"` hears IPv4 and IPv6. */

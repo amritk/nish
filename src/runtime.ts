@@ -704,16 +704,6 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
-    // `getaddrinfo` reads files and may ask a resolver over the network, so
-    // `netResolve` waits as `accept` does: `nounwind` alone.
-    this.add(
-      new RuntimeFunction(
-        "nish_net_resolve",
-        `declare noundef i32 @nish_net_resolve(${NET_BUFFER}, ${STR_NOCAP}, i32 noundef, i32 noundef)`,
-        attrs1("nounwind"),
-        EFFECT_WRITE
-      )
-    )
     this.add(
       plain("nish_net_local_port", "declare noundef i32 @nish_net_local_port(i32 noundef)", EFFECT_WRITE)
     )

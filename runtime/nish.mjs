@@ -112,7 +112,6 @@ provide("readSignal", shim.readSignal);
 // Node's event loop, which a program that owns its loop never returns to.
 for (const name of [
   "netAddress",
-  "netResolve",
   "netLocalPort",
   "tcpListen",
   "tcpListenFlags",

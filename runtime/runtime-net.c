@@ -54,7 +54,6 @@ typedef int nish_net_unused;
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <stdint.h>
@@ -77,14 +76,6 @@ typedef int nish_net_unused;
 #endif
 
 #include "nish.h"
-
-/* glibc's `EAI_NODATA` (a name with no address of the family asked for) is
-   no such name too; where there is none, `EAI_NONAME` stands in. */
-#ifdef EAI_NODATA
-#define NISH_EAI_NODATA EAI_NODATA
-#else
-#define NISH_EAI_NODATA EAI_NONAME
-#endif
 
 /* The bytes an address takes in a caller's `u8[]`. */
 #define NISH_ADDR_BYTES 18
@@ -268,7 +259,8 @@ int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlo
    IP -- is eighteen zeros: those bytes of `s` were never written, and copying
    them handed the caller whatever the stack held (docs/security/runtime.md,
    RT-6). */
-static void nish_net_put(unsigned char *p, const nish_sockaddr *s, socklen_t n) {
+static void nish_net_put(nish_array *out, const nish_sockaddr *s, socklen_t n) {
+  unsigned char *p = (unsigned char *)out->data;
   uint16_t port = 0;
   memset(p, 0, NISH_ADDR_BYTES);
   if (n >= sizeof s->v4 && s->sa.sa_family == AF_INET) {
@@ -280,39 +272,6 @@ static void nish_net_put(unsigned char *p, const nish_sockaddr *s, socklen_t n) 
     port = s->v6.sin6_port;
   }
   memcpy(p + 16, &port, 2);
-}
-
-/* `netResolve(out, host, port, family)`: `getaddrinfo` on a host name or a
-   numeric host, for a stream socket and with `AI_ADDRCONFIG`, so a family the
-   machine has no address in is left out. Each address goes into `out` as one
-   18-byte form with `port`, in the order the resolver gave them and as many as
-   `out` holds, and the answer is how many were written. `family` is 0 for
-   either, 4 or 6 for one. A host that is empty, holds a NUL or is longer than
-   the 253 bytes a DNS name can be is -22 before libc sees it, as are a port
-   outside 0..65535, another family and an `out` shorter than 18 bytes. A
-   failed lookup is outside errno's band: -1001 no such name, -1002 a
-   temporary failure (no answer from the resolver), -1003 any other. */
-int32_t nish_net_resolve(nish_array *out, const nish_str *host, int32_t port, int32_t family) {
-  struct addrinfo hints, *list, *ai;
-  int32_t n = 0;
-  int e;
-  if (out->len < NISH_ADDR_BYTES || (uint32_t)port > 65535 || host->len == 0 || host->len > 253 ||
-      strlen(host->data) != host->len || (family != 0 && family != 4 && family != 6))
-    return -22;
-  memset(&hints, 0, sizeof hints);
-  hints.ai_family = family == 4 ? AF_INET : family == 6 ? AF_INET6 : AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  hints.ai_flags = AI_ADDRCONFIG;
-  e = getaddrinfo(host->data, NULL, &hints, &list);
-  if (e != 0) return e == EAI_AGAIN ? -1002 : e == EAI_NONAME || e == NISH_EAI_NODATA ? -1001 : -1003;
-  for (ai = list; ai != NULL && (uint64_t)(n + 1) * NISH_ADDR_BYTES <= out->len; ai = ai->ai_next, n++) {
-    unsigned char *p = (unsigned char *)out->data + (uint64_t)n * NISH_ADDR_BYTES;
-    nish_net_put(p, (const nish_sockaddr *)ai->ai_addr, ai->ai_addrlen);
-    p[16] = (unsigned char)(port >> 8);
-    p[17] = (unsigned char)port;
-  }
-  freeaddrinfo(list);
-  return n;
 }
 
 /* `tcpAccept(fd, peer)`: the next connection as a descriptor of its own,
@@ -348,7 +307,7 @@ int32_t nish_tcp_accept(int32_t fd, nish_array *peer) {
     close(c);
     return nish_net_err(e);
   }
-  nish_net_put((unsigned char *)peer->data, &s, n);
+  nish_net_put(peer, &s, n);
   return c;
 }
 
@@ -536,7 +495,7 @@ int32_t nish_udp_recv_from(int32_t fd, nish_array *buf, int64_t off, int64_t len
   }
 #endif
   memcpy(meta->data, info, sizeof info);
-  nish_net_put((unsigned char *)from->data, &s, m.msg_namelen);
+  nish_net_put(from, &s, m.msg_namelen);
   return (int32_t)got;
 }
 

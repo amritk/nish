@@ -305,8 +305,6 @@ cases/neg_literal_unsigned added after R6: no rewriter to freeze it with
 cases/net_dual_stack added after R6: no rewriter to freeze it with
 cases/net_loop_calls added after R6: no rewriter to freeze it with
 cases/net_loop_two added after R6: no rewriter to freeze it with
-cases/net_resolve_errors added after R6: no rewriter to freeze it with
-cases/net_resolve_localhost added after R6: no rewriter to freeze it with
 cases/net_tcp_calls added after R6: no rewriter to freeze it with
 cases/net_tcp_connect added after R6: no rewriter to freeze it with
 cases/net_tcp_connect_import added after R6: no rewriter to freeze it with

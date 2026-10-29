@@ -536,10 +536,6 @@ bool nish_is_executable(const nish_str *path);
  * array is -22. Nothing allocates.
  *
  * `nish_net_address(out, host, port)`: the form of a numeric `host`.
- * `nish_net_resolve(out, host, port, family)`: `getaddrinfo` on `host`, each
- * address in resolver order as one form with `port`, as many as `out` holds;
- * the count, -22 for a bad argument (an empty host, a NUL, more than 253
- * bytes), or -1001 no such name, -1002 a temporary failure, -1003 another.
  * `nish_net_local_port(fd)`: the port a socket is bound to.
  * `nish_tcp_listen(host, port, backlog)`: `SO_REUSEADDR`, and `::` hears
  * both families, or IPv4 alone on a kernel without IPv6.
@@ -576,7 +572,6 @@ bool nish_is_executable(const nish_str *path);
  * and at most 64 in one call. It answers the count, 0 on a timeout or an
  * interrupting signal, and -22 for a `ready` shorter than 2. */
 int32_t nish_net_address(nish_array *out, const nish_str *host, int32_t port);
-int32_t nish_net_resolve(nish_array *out, const nish_str *host, int32_t port, int32_t family);
 int32_t nish_net_local_port(int32_t fd);
 int32_t nish_tcp_listen(const nish_str *host, int32_t port, int32_t backlog);
 int32_t nish_tcp_listen_flags(const nish_str *host, int32_t port, int32_t backlog, int32_t flags);
