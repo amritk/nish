@@ -23959,7 +23959,6 @@ declare noalias noundef nonnull align 8 %struct.nish_array* @nish_terminal_size(
 declare noundef i32 @nish_set_raw_mode(i1 noundef zeroext) #3
 declare noundef i32 @nish_set_terminal_restore(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_net_address(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
-declare noundef i32 @nish_net_resolve(%struct.nish_array* noundef nonnull align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #3
 declare noundef i32 @nish_net_local_port(i32 noundef) #2
 declare noundef i32 @nish_tcp_listen(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef) #2
 declare noundef i32 @nish_tcp_listen_flags(i8* noundef nonnull readonly align 8 nocapture, i32 noundef, i32 noundef, i32 noundef) #2
