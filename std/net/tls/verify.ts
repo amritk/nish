@@ -20,13 +20,17 @@
  * The signature goes first so a forged CertificateVerify reads as what it is
  * whatever the chain would have said.
  *
- * **The chain step refuses everything for now.** Path building, validity,
- * name matching and the rest live in `nish/crypto/pki`, which is not in the
- * tree yet; until it is, `tlsClientChain` answers `unknown_ca` for every
- * chain, so no server is ever authenticated and no connection opens. There
- * is no switch that skips the step and none is to be added: a client that
- * cannot check a chain must not pretend it did (`docs/security/tls.md`,
- * "The client carrier and verify").
+ * **The chain is `nish/crypto/pki`'s.** `pkiVerifyServer` builds a path from
+ * the leaf to a root of `trust`'s store and checks every certificate on it —
+ * signatures, validity at the instant given, basicConstraints, keyUsage,
+ * serverAuth, name constraints — and that the leaf's subjectAltName names
+ * the host dialled. Its refusal becomes the alert: `certificate_expired` for
+ * a certificate outside its validity, `unknown_ca` when no path reaches a
+ * root of the store, and `bad_certificate` for every other reason. There is
+ * no switch that skips the step and none is to be added: a client that is to
+ * talk to a server it cannot authenticate is given a store holding that
+ * server's root, never a way around the check (`docs/security/tls.md`, "The
+ * client carrier and verify").
  *
  * The verdict is the record client's to send: `tlsClientAuthenticate` calls
  * `authenticate(true)` or `reject(alert)` on it, so the refusal goes out as
@@ -35,6 +39,16 @@
  */
 import { p256VerifySha256 } from "nish/crypto/p256"
 import { p384VerifySha384 } from "nish/crypto/p384"
+import {
+  PKI_ERR_EXPIRED,
+  PKI_ERR_NOT_YET_VALID,
+  PKI_ERR_UNTRUSTED,
+  PKI_OK,
+  PkiResult,
+  PkiTrustStore,
+  pkiTrustStore,
+  pkiVerifyServer,
+} from "nish/crypto/pki"
 import { PkiRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
 import {
   RSA_HASH_SHA256,
@@ -82,16 +96,15 @@ const TLS_VERIFY_P256_WIDTH: i32 = 32
 const TLS_VERIFY_P384_WIDTH: i32 = 48
 
 /**
- * The roots a client trusts, read once and shared by every connection made
- * with them. A class of its own, not `PkiRoots`, so the chain step can keep
- * its index of the roots here when it lands without the callers changing.
+ * The roots a client trusts, indexed once and shared by every connection
+ * made with them.
  */
 export class TlsClientTrust {
-  /** Every root, in the order the source gave them. */
-  roots: X509Certificate[]
+  /** The roots, as `pkiVerifyServer` looks them up. */
+  store: PkiTrustStore
 
   constructor(roots: X509Certificate[]) {
-    this.roots = roots
+    this.store = pkiTrustStore(roots)
   }
 }
 
@@ -163,17 +176,17 @@ const tlsVerifyKeyUsable = (leaf: X509Certificate): boolean => {
  * The chain step: 0 when `chain` (DER, leaf first) leads to a root in
  * `trust` and names `serverName` at `nowMs`, else the alert —
  * `certificate_expired`, `unknown_ca` or `bad_certificate`.
- *
- * TODO(#1027): a stub that refuses every chain with `unknown_ca`
- * until `nish/crypto/pki`'s `pkiVerifyServer` is in the tree (#1027). It
- * must never answer 0 before then.
  */
-export const tlsClientChain = (
-  chain: u8[][],
-  _serverName: string,
-  _nowMs: i64,
-  _trust: TlsClientTrust
-): i32 => (toI32(chain.length) === 0 ? TLS_ALERT_BAD_CERTIFICATE : TLS_ALERT_UNKNOWN_CA)
+export const tlsClientChain = (chain: u8[][], serverName: string, nowMs: i64, trust: TlsClientTrust): i32 => {
+  const result: PkiResult = pkiVerifyServer(chain, serverName, nowMs, trust.store)
+  if (result.code === PKI_OK) {
+    return 0
+  }
+  if (result.code === PKI_ERR_EXPIRED || result.code === PKI_ERR_NOT_YET_VALID) {
+    return TLS_ALERT_CERTIFICATE_EXPIRED
+  }
+  return result.code === PKI_ERR_UNTRUSTED ? TLS_ALERT_UNKNOWN_CA : TLS_ALERT_BAD_CERTIFICATE
+}
 
 /**
  * The verdict on `tls`'s server at `TLS_CLIENT_STATE_WAIT_AUTH`: 0 when the

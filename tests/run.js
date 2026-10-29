@@ -3312,19 +3312,16 @@ if (!only || "net_tls_tcp".includes(only)) {
 // that the Nish client completes a handshake with a TLS 1.3 server somebody
 // else wrote, under each suite and group, through a HelloRetryRequest, with
 // ALPN and SNI, and that it checks a P-256, a P-384 and an RSA-PSS
-// CertificateVerify from that server. A test CA is made here at run time, and
-// three leaves for `localhost` under it; the client trusts the CA through
-// `SSL_CERT_FILE`. The program in `connect` mode prints one line of what the
-// handshake reached: its state, then the suite, the group, whether it retried,
-// the CertificateVerify scheme and the protocol ALPN chose.
-//
-// Until `nish/crypto/pki` lands (#1027) the client's chain step refuses every
-// chain with unknown_ca (48), so every handshake that reaches the verdict
-// fails with 48 after its CertificateVerify verified: a signature that did
-// not would be decrypt_error (51). The data, KeyUpdate (`k`, `K`) and
-// close_notify cases need a chain the client accepts and are not written yet;
-// `docs/security/tls.md` lists them as open. openssl is on CI's runners, so a
-// missing one is a failure here rather than a skip.
+// CertificateVerify from that server and the chain under it. A test CA is
+// made here at run time, with three leaves for `localhost` under it and two
+// intermediates under it, an RSA one over an RSA leaf and a P-384 one over a
+// P-256 leaf; the client trusts the CA alone, through `SSL_CERT_FILE`. The
+// program in `connect` mode prints one line of what the handshake reached:
+// its state, then the suite, the group, whether it retried, the
+// CertificateVerify scheme and the protocol ALPN chose. Data, KeyUpdate and
+// close_notify against this server are not written yet; `docs/security/tls.md`
+// lists them. openssl is on CI's runners, so a missing one is a failure here
+// rather than a skip.
 if (!only || "net_tls_client_tcp".includes(only)) {
   const dir = path.join(buildDir, "net-tls-client")
   fs.rmSync(dir, { recursive: true, force: true })
@@ -3343,7 +3340,8 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     { cwd: root, encoding: "utf8" }
   )
   const openssl = "openssl"
-  // The CA and its three leaves, each for `localhost`, valid for a day.
+  // The CA, its three leaves and its two intermediates with a leaf each, every
+  // leaf for `localhost`, valid for a day.
   const pki = (args) => spawnSync(openssl, args, { cwd: dir, encoding: "utf8" })
   const made = () => {
     const ca = pki([
@@ -3355,18 +3353,27 @@ if (!only || "net_tls_client_tcp".includes(only)) {
       return `the CA: ${ca.stderr}`
     }
     fs.writeFileSync(path.join(dir, "leaf.ext"), "subjectAltName=DNS:localhost\nbasicConstraints=CA:FALSE\n")
+    fs.writeFileSync(path.join(dir, "ca.ext"), "basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign\n")
+    const p256 = ["ec", "-pkeyopt", "ec_paramgen_curve:P-256"]
+    const p384 = ["ec", "-pkeyopt", "ec_paramgen_curve:P-384"]
+    // Each is its name, its key, its issuer and its extensions, in issuing order.
     const leaves = [
-      ["p256", ["ec", "-pkeyopt", "ec_paramgen_curve:P-256"]],
-      ["p384", ["ec", "-pkeyopt", "ec_paramgen_curve:P-384"]],
-      ["rsa", ["rsa:2048"]],
+      ["p256", p256, "ca", "leaf.ext"],
+      ["p384", p384, "ca", "leaf.ext"],
+      ["rsa", ["rsa:2048"], "ca", "leaf.ext"],
+      ["rsaca", ["rsa:2048"], "ca", "ca.ext"],
+      ["rsaleaf", ["rsa:2048"], "rsaca", "leaf.ext"],
+      ["p384ca", p384, "ca", "ca.ext"],
+      ["p384leaf", p256, "p384ca", "leaf.ext"],
     ]
-    for (const [name, key] of leaves) {
+    for (const [name, key, issuer, ext] of leaves) {
+      const subject = ext === "ca.ext" ? `/CN=nish test ${name}` : "/CN=localhost"
       const csr = pki([
-        "req", "-new", "-newkey", ...key, "-nodes", "-keyout", `${name}.key`, "-out", `${name}.csr`, "-subj", "/CN=localhost",
+        "req", "-new", "-newkey", ...key, "-nodes", "-keyout", `${name}.key`, "-out", `${name}.csr`, "-subj", subject,
       ])
       const signed = pki([
-        "x509", "-req", "-in", `${name}.csr`, "-CA", "ca.pem", "-CAkey", "ca.key", "-CAcreateserial",
-        "-out", `${name}.pem`, "-days", "1", "-extfile", "leaf.ext",
+        "x509", "-req", "-in", `${name}.csr`, "-CA", `${issuer}.pem`, "-CAkey", `${issuer}.key`, "-CAcreateserial",
+        "-out", `${name}.pem`, "-days", "1", "-extfile", ext,
       ])
       if (csr.status !== 0 || signed.status !== 0) {
         return `the ${name} leaf: ${csr.stderr}${signed.stderr}`
@@ -3379,15 +3386,16 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     check("net_tls_client_tcp: the client links", built.status === 0, String(built.stderr)) &&
     check("net_tls_client_tcp: openssl is on PATH and makes the test CA", madeErr === "", madeErr)
   ) {
-    // One s_server for one connection, with `leaf` and the CA as its chain and
-    // `server`'s flags, and the client in connect mode against it. The answer
+    // One s_server for one connection, with `leaf` and its issuer as its chain
+    // (the intermediate, for a leaf under one) and `server`'s flags, and the client in connect mode against it. The answer
     // is the client's exit status and output.
+    const issuers = { rsaleaf: "rsaca", p384leaf: "p384ca" }
     const handshake = async (leaf, server, name, alpn, groups) => {
       const s = spawn(
         openssl,
         [
           "s_server", "-accept", "0", "-naccept", "1",
-          "-cert", `${leaf}.pem`, "-key", `${leaf}.key`, "-cert_chain", "ca.pem", ...server,
+          "-cert", `${leaf}.pem`, "-key", `${leaf}.key`, "-cert_chain", `${issuers[leaf] ?? "ca"}.pem`, ...server,
         ],
         { cwd: dir, stdio: ["pipe", "pipe", "pipe"] }
       )
@@ -3437,29 +3445,37 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     const sni = ["-tls1_3", "-servername", "localhost", "-servername_fatal", "-cert2", "p384.pem", "-key2", "p384.key"]
     const cases = [
       ["TLS_AES_128_GCM_SHA256", "p256", ["-tls1_3", "-ciphersuites", "TLS_AES_128_GCM_SHA256"], "localhost", "-", "x25519",
-        "failed 48 suite 4865 group 29 retried false scheme 1027 alpn -"],
+        "open suite 4865 group 29 retried false scheme 1027 alpn -"],
       ["TLS_AES_256_GCM_SHA384", "p256", ["-tls1_3", "-ciphersuites", "TLS_AES_256_GCM_SHA384"], "localhost", "-", "x25519",
-        "failed 48 suite 4866 group 29 retried false scheme 1027 alpn -"],
+        "open suite 4866 group 29 retried false scheme 1027 alpn -"],
       ["TLS_CHACHA20_POLY1305_SHA256", "p256", ["-tls1_3", "-ciphersuites", "TLS_CHACHA20_POLY1305_SHA256"], "localhost", "-", "x25519",
-        "failed 48 suite 4867 group 29 retried false scheme 1027 alpn -"],
+        "open suite 4867 group 29 retried false scheme 1027 alpn -"],
       ["a P-256 key share", "p256", ["-tls1_3", "-groups", "P-256"], "localhost", "-", "p256",
-        "failed 48 suite 4865 group 23 retried false scheme 1027 alpn -"],
+        "open suite 4865 group 23 retried false scheme 1027 alpn -"],
       ["a HelloRetryRequest from X25519 to P-256", "p256", ["-tls1_3", "-groups", "P-256"], "localhost", "-", "both",
-        "failed 48 suite 4865 group 23 retried true scheme 1027 alpn -"],
+        "open suite 4865 group 23 retried true scheme 1027 alpn -"],
       ["ALPN h2", "p256", ["-tls1_3", "-alpn", "h2"], "localhost", "http/1.1,h2", "x25519",
-        "failed 48 suite 4865 group 29 retried false scheme 1027 alpn h2"],
+        "open suite 4865 group 29 retried false scheme 1027 alpn h2"],
       ["ALPN http/1.1", "p256", ["-tls1_3", "-alpn", "http/1.1"], "localhost", "h2,http/1.1", "x25519",
-        "failed 48 suite 4865 group 29 retried false scheme 1027 alpn http/1.1"],
+        "open suite 4865 group 29 retried false scheme 1027 alpn http/1.1"],
       ["no common ALPN protocol", "p256", ["-tls1_3", "-alpn", "http/1.1"], "localhost", "h2", "x25519",
         "failed 120 suite 0 group 29 retried false scheme 0 alpn -"],
       ["SNI for localhost", "p256", sni, "localhost", "-", "x25519",
-        "failed 48 suite 4865 group 29 retried false scheme 1283 alpn -"],
+        "open suite 4865 group 29 retried false scheme 1283 alpn -"],
       ["SNI for another name", "p256", sni, "other.test", "-", "x25519",
         "failed 112 suite 0 group 29 retried false scheme 0 alpn -"],
       ["a P-384 leaf", "p384", ["-tls1_3"], "localhost", "-", "x25519",
-        "failed 48 suite 4865 group 29 retried false scheme 1283 alpn -"],
+        "open suite 4865 group 29 retried false scheme 1283 alpn -"],
       ["an RSA-PSS leaf", "rsa", ["-tls1_3"], "localhost", "-", "x25519",
-        "failed 48 suite 4865 group 29 retried false scheme 2052 alpn -"],
+        "open suite 4865 group 29 retried false scheme 2052 alpn -"],
+      ["an RSA-PSS leaf under an RSA intermediate", "rsaleaf", ["-tls1_3"], "localhost", "-", "x25519",
+        "open suite 4865 group 29 retried false scheme 2052 alpn -"],
+      ["a P-256 leaf under a P-384 intermediate", "p384leaf", ["-tls1_3"], "localhost", "-", "x25519",
+        "open suite 4865 group 29 retried false scheme 1027 alpn -"],
+      // A name the leaf does not carry: the signature verified, the chain
+      // refused with bad_certificate (42).
+      ["a name the leaf does not carry", "p256", ["-tls1_3"], "other.test", "-", "x25519",
+        "failed 42 suite 4865 group 29 retried false scheme 1027 alpn -"],
       // A server that speaks only TLS 1.2 answers the TLS 1.3-only ClientHello
       // with protocol_version (70).
       ["TLS 1.2 only", "p256", ["-tls1_2"], "localhost", "-", "x25519",
@@ -3468,7 +3484,7 @@ if (!only || "net_tls_client_tcp".includes(only)) {
     for (const [what, leaf, server, name, alpn, groups, want] of cases) {
       const got = await handshake(leaf, server, name, alpn, groups)
       check(
-        `net_tls_client_tcp: openssl s_server, ${what}: the handshake reaches the verdict it should`,
+        `net_tls_client_tcp: openssl s_server, ${what}: the handshake ends as it should`,
         got.status === 0 && got.stdout === `${want}\n`,
         `exit ${got.status}\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
       )

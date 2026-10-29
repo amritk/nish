@@ -7,10 +7,10 @@
 // `net_tls_client_tcp` block of tests/run.js drives that mode against
 // openssl s_server.
 //
-// Until `nish/crypto/pki` lands (#1027) the chain step refuses every chain
-// with `unknown_ca`, so no handshake here opens: what is checked is that the
-// handshake reaches the verdict, that the signature is checked before the
-// chain, and that the refusal reaches the server as an alert.
+// The loopback server sends `chain.ts`'s leaves, and the client trusts only
+// its root: a good chain opens and carries data both ways to close_notify;
+// a wrong name, an expired leaf, an untrusted root and a CertificateVerify
+// over other bytes each fail with their own alert, which the server reads.
 import { Suite } from "nish/testing";
 import { netAddress, netClose, netLocalPort, tcpListen } from "nish:net";
 import { monotonicNanos } from "nish:process";
@@ -29,6 +29,7 @@ import {
 import { TlsClientConfig } from "nish/net/tls/client";
 import { TLS_RECORD_DONE } from "nish/net/tls/record-server";
 import {
+  TLS_ALERT_CERTIFICATE_EXPIRED,
   TLS_ALERT_UNKNOWN_CA,
   TlsClientTrust,
   tlsClientChain,
@@ -37,7 +38,8 @@ import {
 } from "nish/net/tls/verify";
 import { TLS_TCP_TIMED_OUT, TlsTcpClient, tlsConnect, tlsConnectWith } from "nish/net/tls-tcp";
 import { X509Certificate, x509ParseCertificate } from "nish/crypto/x509";
-import { leafCertificate, leafPrivate, tcpConfig } from "../net_tls_common/server";
+import { leafCertificate, leafPrivate } from "../net_tls_common/server";
+import { chainConfig, expiredLeaf, goodLeaf, loopbackRoot } from "./chain";
 import { Loop, SIGN_OTHER } from "./loop";
 
 const CONNECTION_REFUSED: i32 = -111;
@@ -70,42 +72,85 @@ const refusingAddress = (): u8[] => {
   return addr;
 };
 
-/** The loopback handshakes, each ending at the client's verdict or before it. */
+/** The trust holding the loopback root alone. */
+const rootTrust = (t: Suite): TlsClientTrust => {
+  const roots: X509Certificate[] = [];
+  const root: X509Certificate | null = x509ParseCertificate(loopbackRoot());
+  if (root === null) {
+    t.fail("chain: the root parses", "");
+  } else {
+    roots.push(root);
+  }
+  return new TlsClientTrust(roots);
+};
+
+/** The loopback handshakes, each opening or ending at the client's verdict. */
 const loopbackChecks = (t: Suite): void => {
+  const trust: TlsClientTrust = rootTrust(t);
   const none: X509Certificate[] = [];
-  const trust = new TlsClientTrust(none);
+  const untrusted = new TlsClientTrust(none);
 
-  // A good chain and signature: the signature verifies, the stub refuses the chain.
-  const lb = new Loop(tcpConfig(["http/1.1"]));
+  // A good chain and signature: open, and data both ways until the server's close_notify.
+  const lb = new Loop(chainConfig([goodLeaf()], ["http/1.1"]));
   const good: TlsTcpClient = lb.run(new TlsClientConfig("localhost", ["h2", "http/1.1"]), trust);
-  t.eqBool("verdict: not open", good.open(), false);
-  t.eqI32("verdict: the stub's unknown_ca", good.failure(), TLS_ALERT_UNKNOWN_CA);
-  t.eqI32("verdict: the server reads it", lb.peerAlert, TLS_ALERT_UNKNOWN_CA);
-  t.eqBool("verdict: suite negotiated", good.conn.tls.suite !== 0, true);
-  t.eqBool("verdict: alpn read before the verdict", good.conn.tls.alpnChosen === "http/1.1", true);
-  t.eqBool("verdict: the server chose it", lb.chose === "http/1.1", true);
-  t.eqBool("verdict: the server saw the name", lb.sawName === "localhost", true);
-  t.eqI32("verdict: socket closed", good.fd(), -1);
-  t.eqI32("verdict: done", good.interest(), TLS_RECORD_DONE);
-  t.eqBool("verdict: no wake lost", lb.failure === "", true);
+  t.eqBool("open: opened", lb.opened, true);
+  t.eqBool("open: suite negotiated", good.conn.tls.suite !== 0, true);
+  t.eqBool("open: alpn chosen", good.conn.tls.alpnChosen === "http/1.1", true);
+  t.eqBool("open: the server chose it", lb.chose === "http/1.1", true);
+  t.eqBool("open: the server saw the name", lb.sawName === "localhost", true);
+  t.eqBool("open: the server read the ping", lb.serverGot === "ping", true);
+  t.eqBool("open: the client read the pong", lb.clientGot === "pong", true);
+  t.eqBool("open: close_notify ends the client's stream", lb.clientEnded, true);
+  t.eqI32("open: socket closed", good.fd(), -1);
+  t.eqI32("open: done", good.interest(), TLS_RECORD_DONE);
+  t.eqBool("open: no wake lost", lb.failure === "", true);
 
-  // An IP literal is never sent as server_name.
-  const literal: TlsTcpClient = lb.run(new TlsClientConfig("127.0.0.1", ["http/1.1"]), trust);
-  t.eqI32("literal: refused at the chain", literal.failure(), TLS_ALERT_UNKNOWN_CA);
+  // An IP literal is never sent as server_name, and is matched against the SAN's address.
+  lb.run(new TlsClientConfig("127.0.0.1", ["http/1.1"]), trust);
+  t.eqBool("literal: opened on the SAN's address", lb.opened, true);
   t.eqBool("literal: no server_name", lb.sawName === "", true);
+
+  // A name the leaf does not carry.
+  const host: TlsTcpClient = lb.run(new TlsClientConfig("other.test", ["http/1.1"]), trust);
+  t.eqBool("host: not opened", lb.opened, false);
+  t.eqI32("host: bad_certificate", host.failure(), TLS_ALERT_BAD_CERTIFICATE);
+  t.eqI32("host: the server reads it", lb.peerAlert, TLS_ALERT_BAD_CERTIFICATE);
+
+  // A root the client does not trust.
+  const unknown: TlsTcpClient = lb.run(new TlsClientConfig("localhost", ["http/1.1"]), untrusted);
+  t.eqBool("untrusted: not opened", lb.opened, false);
+  t.eqI32("untrusted: unknown_ca", unknown.failure(), TLS_ALERT_UNKNOWN_CA);
+  t.eqI32("untrusted: the server reads it", lb.peerAlert, TLS_ALERT_UNKNOWN_CA);
+  t.eqBool("untrusted: no wake lost", lb.failure === "", true);
 
   // A protocol the server does not speak: its alert, read by the client.
   const alpn: TlsTcpClient = lb.run(new TlsClientConfig("localhost", ["h2"]), trust);
   t.eqI32("alpn: the server's no_application_protocol", alpn.failure(), TLS_ALERT_NO_APPLICATION_PROTOCOL);
   t.eqBool("alpn: no wake lost", lb.failure === "", true);
 
-  // A CertificateVerify over other bytes: decrypt_error before the chain is looked at.
+  // A CertificateVerify over other bytes, on a chain that would pass: decrypt_error.
   lb.signing = SIGN_OTHER;
   const forged: TlsTcpClient = lb.run(new TlsClientConfig("localhost", ["http/1.1"]), trust);
+  t.eqBool("forged: not opened", lb.opened, false);
   t.eqI32("forged: decrypt_error", forged.failure(), TLS_ALERT_DECRYPT_ERROR);
   t.eqI32("forged: the server reads it", lb.peerAlert, TLS_ALERT_DECRYPT_ERROR);
   t.eqBool("forged: no wake lost", lb.failure === "", true);
   lb.shutdown();
+
+  // The root sent after the leaf: still one path, and it opens.
+  const sent = new Loop(chainConfig([goodLeaf(), loopbackRoot()], ["http/1.1"]));
+  sent.run(new TlsClientConfig("localhost", ["http/1.1"]), trust);
+  t.eqBool("root sent: opened", sent.opened, true);
+  t.eqBool("root sent: no wake lost", sent.failure === "", true);
+  sent.shutdown();
+
+  // A leaf past its notAfter.
+  const old = new Loop(chainConfig([expiredLeaf()], ["http/1.1"]));
+  const expired: TlsTcpClient = old.run(new TlsClientConfig("localhost", ["http/1.1"]), trust);
+  t.eqBool("expired: not opened", old.opened, false);
+  t.eqI32("expired: certificate_expired", expired.failure(), TLS_ALERT_CERTIFICATE_EXPIRED);
+  t.eqI32("expired: the server reads it", old.peerAlert, TLS_ALERT_CERTIFICATE_EXPIRED);
+  old.shutdown();
 };
 
 /** `tlsConnect`'s failures below TLS. */
@@ -136,7 +181,7 @@ const connectChecks = (t: Suite): void => {
   netClose(silent);
 };
 
-/** The CertificateVerify check and the chain stub on their own. */
+/** The CertificateVerify check and the chain step on their own. */
 const verifyChecks = (t: Suite): void => {
   const parsed: X509Certificate | null = x509ParseCertificate(leafCertificate());
   if (parsed === null) {
@@ -158,11 +203,23 @@ const verifyChecks = (t: Suite): void => {
   t.eqBool("verify: ed25519, never offered", tlsVerifyCertificateVerify(leaf, 0x0807, content, signature), false);
   t.eqBool("verify: an empty signature", tlsVerifyCertificateVerify(leaf, TLS_SIGNATURE_ECDSA_SECP256R1_SHA256, content, none), false);
 
-  const trust: TlsClientTrust = tlsClientSystemTrust();
   const empty: u8[][] = [];
-  const chain: u8[][] = [leafCertificate()];
-  t.eqI32("chain: none is bad_certificate", tlsClientChain(empty, "localhost", toI64(0), trust), TLS_ALERT_BAD_CERTIFICATE);
-  t.eqI32("chain: the stub refuses", tlsClientChain(chain, "localhost", toI64(1767225600) * toI64(1000), trust), TLS_ALERT_UNKNOWN_CA);
+  t.eqI32("chain: none is bad_certificate", tlsClientChain(empty, "localhost", toI64(0), tlsClientSystemTrust()), TLS_ALERT_BAD_CERTIFICATE);
+  const trust: TlsClientTrust = rootTrust(t);
+  const roots: X509Certificate[] = [];
+  const untrusted = new TlsClientTrust(roots);
+  const june2026: i64 = toI64(1780272000) * toI64(1000);
+  const june2025: i64 = toI64(1748736000) * toI64(1000);
+  const good: u8[][] = [goodLeaf()];
+  const expired: u8[][] = [expiredLeaf()];
+  t.eqI32("chain: good", tlsClientChain(good, "localhost", june2026, trust), 0);
+  t.eqI32("chain: by its address", tlsClientChain(good, "127.0.0.1", june2026, trust), 0);
+  t.eqI32("chain: another name", tlsClientChain(good, "other.test", june2026, trust), TLS_ALERT_BAD_CERTIFICATE);
+  t.eqI32("chain: not yet valid", tlsClientChain(good, "localhost", june2025, trust), TLS_ALERT_CERTIFICATE_EXPIRED);
+  t.eqI32("chain: expired", tlsClientChain(expired, "localhost", june2026, trust), TLS_ALERT_CERTIFICATE_EXPIRED);
+  t.eqI32("chain: an unknown root", tlsClientChain(good, "localhost", june2026, untrusted), TLS_ALERT_UNKNOWN_CA);
+  const selfSigned: u8[][] = [leafCertificate()];
+  t.eqI32("chain: the CN alone is not a name", tlsClientChain(selfSigned, "localhost", toI64(1767225700) * toI64(1000), trust), TLS_ALERT_BAD_CERTIFICATE);
 };
 
 /** Connect mode: one handshake against a third-party server, and one line of what it reached. */
