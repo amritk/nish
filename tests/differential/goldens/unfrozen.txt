@@ -122,6 +122,7 @@ cases/caps_host added after R6: no rewriter to freeze it with
 cases/caps_net added after R6: no rewriter to freeze it with
 cases/caps_process_nice added after R6: no rewriter to freeze it with
 cases/caps_process_spawn added after R6: no rewriter to freeze it with
+cases/caps_process_spawn_piped added after R6: no rewriter to freeze it with
 cases/caps_process_wait added after R6: no rewriter to freeze it with
 cases/caps_pure added after R6: no rewriter to freeze it with
 cases/caps_signal added after R6: no rewriter to freeze it with
@@ -179,6 +180,7 @@ cases/fnarg_loop_hoist added after R6: no rewriter to freeze it with
 cases/fnarg_named added after R6: no rewriter to freeze it with
 cases/interop_rng_loop added after R6: no rewriter to freeze it with
 cases/io_rename added after R6: no rewriter to freeze it with
+cases/io_spawn_piped added after R6: no rewriter to freeze it with
 cases/io_unlink added after R6: no rewriter to freeze it with
 cases/io_write_bytes added after R6: no rewriter to freeze it with
 cases/io_write_file_bytes added after R6: no rewriter to freeze it with
@@ -300,6 +302,7 @@ cases/mem_return_array_caller added after R6: no rewriter to freeze it with
 cases/mem_return_array_nested added after R6: no rewriter to freeze it with
 cases/mem_return_array_readdir added after R6: no rewriter to freeze it with
 cases/mem_return_array_scope added after R6: no rewriter to freeze it with
+cases/mem_spawn_piped_scope added after R6: no rewriter to freeze it with
 cases/mem_terminal_size_scope added after R6: no rewriter to freeze it with
 cases/mem_using_arena added after R6: no rewriter to freeze it with
 cases/mem_using_arena_or_return added after R6: no rewriter to freeze it with

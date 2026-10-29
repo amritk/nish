@@ -13,8 +13,7 @@
 // here `checkStatement` records the expression it is about to check so the
 // builtin can compare against it. One field instead of a parent chain.
 
-import { typedArrayElement } from "./annotations"
-import { readonlyWriteMessage, typedArraySpelling } from "./arrays"
+import { readonlyWriteMessage } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
 import { internalErrorFor } from "./ice"
@@ -1105,19 +1104,8 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     if (checkBuiltinArity(ctx, call, name, args, 4) && !refuseOnWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING))
       checkBuffer(ctx, args.children[1], scope, name, T_U8, false)
-      for (const k of [2, 3]) {
-        const out = args.children[k]
-        checkBuffer(ctx, out, scope, name, T_U8, true)
-        // Appending moves the length, which a typed array's spelling fixes,
-        // so it is refused here as `push` is on one.
-        const alias = typedArraySpelling(ctx, out, scope)
-        if (typedArrayElement(alias) >= 0) {
-          ctx.error(
-            out,
-            `\`${name}\` appends to its output arrays, and \`${alias}\` has a fixed length: declare it \`u8[]\``
-          )
-        }
-      }
+      checkBuffer(ctx, args.children[2], scope, name, T_U8, true)
+      checkBuffer(ctx, args.children[3], scope, name, T_U8, true)
     }
     return T_I32
   }
