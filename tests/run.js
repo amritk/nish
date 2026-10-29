@@ -7810,6 +7810,7 @@ if (!only || "build_id".includes(only)) {
     }
     const shoff = Number(elf.readBigUInt64LE(0x28))
     const shentsize = elf.readUInt16LE(0x3a)
+    const align = (n) => (n + 3) & ~3
     const ids = []
     for (let i = 0; i < elf.readUInt16LE(0x3c); i++) {
       const sh = shoff + i * shentsize
@@ -7818,7 +7819,6 @@ if (!only || "build_id".includes(only)) {
       }
       const start = Number(elf.readBigUInt64LE(sh + 0x18))
       const end = start + Number(elf.readBigUInt64LE(sh + 0x20))
-      const align = (n) => (n + 3) & ~3
       for (let at = start; at + 12 <= end; ) {
         const namesz = elf.readUInt32LE(at)
         const descsz = elf.readUInt32LE(at + 4)
