@@ -874,8 +874,12 @@ const urlDotAt = (s: string, i: i32, end: i32): i32 => {
   if (i < end && toI32(s.charCodeAt(i)) === URL_DOT) {
     return 1
   }
-  if (end - i >= 3 && toI32(s.charCodeAt(i)) === URL_PERCENT && toI32(s.charCodeAt(i + 1)) === 50 &&
-      (toI32(s.charCodeAt(i + 2)) | 32) === 101) {
+  if (
+    end - i >= 3 &&
+    toI32(s.charCodeAt(i)) === URL_PERCENT &&
+    toI32(s.charCodeAt(i + 1)) === 50 &&
+    (toI32(s.charCodeAt(i + 2)) | 32) === 101
+  ) {
     return 3
   }
   return 0

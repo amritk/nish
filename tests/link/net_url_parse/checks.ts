@@ -268,9 +268,9 @@ export const urlParseChecks = (): i32 => {
     t.eqStr(`refused: ${refused[i]}`, parts(refused[i + 1]), "null");
   }
 
-  t.eqI32("http's default port", urlDefaultPort("http"), 80);
-  t.eqI32("https's default port", urlDefaultPort("https"), 443);
-  t.eqI32("another scheme has none", urlDefaultPort("ftp"), -1);
+  t.ok("http's default port", urlDefaultPort("http") === 80);
+  t.ok("https's default port", urlDefaultPort("https") === 443);
+  t.ok("another scheme has none", urlDefaultPort("ftp") === -1);
   t.eqStr("an origin writes the default port", originOf("HTTP://A.com/x"), "http://a.com:80");
   t.ok("so an explicit default port is the same origin", originOf("http://a.com:80/y?z") === originOf("http://A.COM/"));
   t.eqStr("an https origin", originOf("https://a.com/"), "https://a.com:443");
