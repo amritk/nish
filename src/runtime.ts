@@ -457,6 +457,29 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode`: an
+    // errno for an answer as above, the mode a plain `i32`.
+    this.add(
+      mayNotReturn(
+        "nish_write_file_mode",
+        `declare noundef i32 @nish_write_file_mode(${STR_NOCAP}, ${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_create_file_exclusive",
+        `declare noundef i32 @nish_create_file_exclusive(${STR_NOCAP}, ${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_mkdir_mode",
+        `declare noundef i32 @nish_mkdir_mode(${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
     this.add(
       mayNotReturn(
         "nish_write_bytes",
@@ -539,6 +562,19 @@ export class RuntimeTable {
       plain(
         "nish_spawn_child",
         "declare noundef i32 @nish_spawn_child(%struct.nish_array* noundef nonnull align 8)",
+        EFFECT_WRITE
+      )
+    )
+    // `nish_spawn` with the three streams on pipes, and its conservative
+    // answers: the vector is captured, the child runs anything, and `waitpid`
+    // waits. `stdin` is only read. The two output headers are written as
+    // `nish_array_grow` writes a pushed array's, into a fresh arena block, and
+    // neither is retained, so both are `nocapture` as that call's is.
+    this.add(
+      new RuntimeFunction(
+        "nish_spawn_piped",
+        `declare noundef i32 @nish_spawn_piped(%struct.nish_array* noundef nonnull align 8, ${NET_BUFFER} readonly, ${NET_BUFFER}, ${NET_BUFFER})`,
+        attrs1("nounwind"),
         EFFECT_WRITE
       )
     )

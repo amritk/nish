@@ -1,0 +1,2 @@
+`spawnPiped` sends from a `u8[]`, got string
+`spawnPiped` sends from a `u8[]`, got i32[]

@@ -1,0 +1,16 @@
+cat: 0 256 true 0
+big: 0 1572864 true
+twice: 200000 true
+split: 3 out err
+appended: outmore
+missing: -1
+missing path: -1
+empty command: -1
+nul argument: -1 -1
+unread: 0
+child sigpipe: 141
+flood: -2 16777216
+stderr flood: -2 16777216
+at cap: 0 16777216
+inherited: []
+secret visible: false argv printed: true

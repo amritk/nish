@@ -403,10 +403,24 @@ nish_array *nish_read_file_bytes(const nish_str *path);
  * errno — -EXDEV for a rename across file systems, which moves nothing, and
  * -EISDIR or -EPERM for a directory handed to `nish_unlink`, which never calls
  * rmdir. A path holding a NUL answers -EINVAL, not -ENOENT, so a program can
- * tell a malformed path from a missing file. */
+ * tell a malformed path from a missing file. The numbers are the platform's
+ * errno values, untranslated: -ELOOP is -40 on Linux and -62 on Darwin. */
 int32_t nish_rename(const nish_str *from, const nish_str *to);
 int32_t nish_unlink(const nish_str *path);
 int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes);
+/* `writeFileSyncMode(path, data, mode)`, `createFileExclusiveSync(path, data,
+ * mode)` and `mkdirSyncMode(path, mode)`: a file written, or created only if
+ * nothing is at the path (`O_EXCL`), then `fchmod`ed to exactly `mode` before a
+ * byte is written; a directory made with `mode & ~umask`. A link at a file's
+ * path is refused. The file writers answer the byte count and `nish_mkdir_mode`
+ * 0, or a negative platform errno: -EEXIST for an exclusive create or a mkdir
+ * that finds the path taken (a directory's mode is then left alone), -EINVAL
+ * for a mode outside 0..0777 (the setuid, setgid and sticky bits included) or
+ * a path holding a NUL, -ENOSYS under WASI. A failed exclusive create leaves
+ * no file behind. */
+int32_t nish_write_file_mode(const nish_str *path, const nish_str *data, int32_t mode);
+int32_t nish_create_file_exclusive(const nish_str *path, const nish_str *data, int32_t mode);
+int32_t nish_mkdir_mode(const nish_str *path, int32_t mode);
 /* `writeBytes(bytes, off, len)` (nish:io), in runtime-os.c: the bytes
  * `[off, off + len)` of a `u8[]` on stdout, a short write finished and `EINTR`
  * retried. The caller has range-checked `off` and `len`. Answers `len`, or the
@@ -438,6 +452,17 @@ int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_st
  * own error otherwise, and -ENOSYS under WASI. The child is reaped by
  * `nish_wait_pid`. */
 int32_t nish_spawn_child(const nish_array *argv);
+/* `spawnPiped(argv, stdin, stdout, stderr)`: start element 0 of `argv` as
+ * `nish_spawn` does, with the bytes of `stdin` (a `u8[]`) on its standard input
+ * and its standard output and error appended to `stdout` and `stderr`, wait for
+ * it, and answer `nish_spawn`'s status. -1 is `nish_spawn`'s -1, a pipe or
+ * `poll` that fails included, and always under WASI. -2 is a stream that passed
+ * 16 MiB: the child is killed with SIGKILL and reaped, and that array holds the
+ * stream's first 16 MiB. The two output arrays grow as `push` grows them, so
+ * the compiler treats both as pushed. `stdin` is read in place and never
+ * copied; SIGPIPE is blocked on the calling thread for the call, a SIGPIPE the
+ * call raised is consumed, and the thread's mask is restored after it. */
+int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err);
 /* `kill(pid, sig)`: send `sig` to `pid` and answer 0, or a negative errno. Only
  * 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are sent; any other signal, and
  * a pid of 0 or below, is -EINVAL. -ESRCH when no process has the pid, -EPERM

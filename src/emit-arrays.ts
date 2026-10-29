@@ -522,11 +522,12 @@ const baseData = (emitter: Emitter, base: ArrayBase): string => {
  * what a hoisted `len` and `data` depend on, and what a compound element store
  * re-checks its slot against once its right side has run (CG-10).
  *
- * Three things can: a `push` or a `pop` written in it, a call to a user
- * function the fixpoint says grows an array (`FunctionFacts.resizesArray`), and
- * a `new` of a class whose constructor it says the same of (CG-11). A builtin
- * cannot -- `push` and `pop` are the only builtins that reach a user array's
- * header and both are caught in the first place -- and an element store cannot
+ * Three things can: a `push`, a `pop` or a `spawnPiped` written in it
+ * (`isResizeCall`), a call to a user function the fixpoint says grows an array
+ * (`FunctionFacts.resizesArray`), and a `new` of a class whose constructor it
+ * says the same of (CG-11). No other builtin can -- those three are the only
+ * builtins that reach a user array's header and all are caught in the first
+ * place -- and an element store cannot
  * either, which is the reason the fact is not `writesThrough`: a loop that
  * writes `dst[i]` is exactly the loop this is for.
  *

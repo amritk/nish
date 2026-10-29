@@ -266,7 +266,10 @@ export const builtinCapability = (name: string): i32 => {
     name === "mkdirSync" ||
     name === "writeFileBytesSync" ||
     name === "renameSync" ||
-    name === "unlinkSync"
+    name === "unlinkSync" ||
+    name === "writeFileSyncMode" ||
+    name === "createFileExclusiveSync" ||
+    name === "mkdirSyncMode"
   ) {
     return CAP_FS_WRITE
   }
@@ -279,6 +282,11 @@ export const builtinCapability = (name: string): i32 => {
   // and `waitPid` reaps a child; both reach other processes the way starting
   // one does, so they share `spawn`'s capability rather than taking their own.
   if (name === "spawn" || name === "kill" || name === "waitPid") {
+    return CAP_PROCESS_SPAWN
+  }
+  // The child of `spawnPiped` runs anything too; its streams come back into
+  // the program's own arrays rather than reaching a file or the network.
+  if (name === "spawnPiped") {
     return CAP_PROCESS_SPAWN
   }
   // Lowering this process's own priority reaches no other process, but it is

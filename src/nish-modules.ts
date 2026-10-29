@@ -116,10 +116,10 @@ export const isBuiltinSpecifier = (specifier: string): boolean =>
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
   if (specifier === `${BUILTIN_SCHEME}fs`) {
-    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync"
+    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync, writeFileSyncMode, createFileExclusiveSync, mkdirSyncMode"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
-    return "exit, getenv, spawnSync, spawnSyncTo, spawn, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
+    return "exit, getenv, spawnSync, spawnSyncTo, spawn, spawnPiped, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, wallClockNanos, signalFd, readSignal, argv, platform, arch"
   }
   if (specifier === `${BUILTIN_SCHEME}net`) {
     return "netAddress, netLocalPort, tcpListen, tcpListenFlags, tcpAccept, netRead, netWrite, netShutdown, netClose, tcpConnect, connectResult, udpBind, udpSendTo, udpRecvFrom, pollCreate, pollAdd, pollModify, pollRemove, pollWait, netSetOption, NET_TCP_NODELAY, NET_TCP_QUICKACK, NET_SO_KEEPALIVE, NET_SO_SNDBUF, NET_SO_RCVBUF"
@@ -326,7 +326,10 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "statMtimeSync" ||
       name === "renameSync" ||
       name === "unlinkSync" ||
-      name === "writeFileBytesSync"
+      name === "writeFileBytesSync" ||
+      name === "writeFileSyncMode" ||
+      name === "createFileExclusiveSync" ||
+      name === "mkdirSyncMode"
     ) {
       return new BuiltinExport("", name, false)
     }
@@ -341,6 +344,7 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "spawnSync" ||
       name === "spawnSyncTo" ||
       name === "spawn" ||
+      name === "spawnPiped" ||
       name === "kill" ||
       name === "waitPid" ||
       name === "availableParallelism" ||

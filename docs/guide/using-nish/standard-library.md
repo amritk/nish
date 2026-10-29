@@ -35,16 +35,65 @@ normal-priority fallback for work that must finish, and call either at the top
 of `main`, before any thread starts. See
 [Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority).
 
+`spawnPiped(argv, stdin, stdout, stderr)` runs a child with every stream in
+memory: the child reads `stdin`'s bytes and then end of file, and what it
+writes is appended to `stdout` and `stderr`. It answers the exit status (128
+plus the signal for one killed by a signal), -1 when the child cannot start,
+and -2 when either output passes 16 MiB, after which the child is killed. It is
+how a program hands a child a secret, since a child's argument vector and
+environment are readable by other processes and a file outlives the run:
+
+```ts
+const token = "ghp_example"
+const request = `protocol=https\nhost=github.com\nusername=bot\npassword=${token}\n\n`
+const input: u8[] = []
+for (let i = 0; i < request.length; i++) {
+  input.push(toU8(request.charCodeAt(i)))
+}
+const out: u8[] = []
+const err: u8[] = []
+const status = spawnPiped(["git", "credential", "approve"], input, out, err)
+if (status !== 0) {
+  console.log(`git credential failed (${status}): ${String.fromBytes(err, 0, err.length)}`)
+}
+```
+
+It is `process.spawn` in the capability report, and refused when compiling for
+WebAssembly. See
+[Directories and subprocesses](../../LANGUAGE.md#directories-and-subprocesses).
+
 `nish:fs` is where a program replaces a file in one step: write the new
 contents beside the target, then `renameSync` the temporary over it, so a
 reader sees the old file or the new one and never half of either.
-`renameSync`, `unlinkSync` and `writeFileBytesSync` answer a number instead
+`renameSync`, `unlinkSync`, `writeFileBytesSync` and the mode-taking writes
+below answer a number instead
 of exiting: `0` (or the bytes written) on success and a negative errno on
 failure, such as `-2` for a missing path or `-18` when the two names are on
 different filesystems, so the program decides what to say. Bytes that are
 not text, a `u8[]` from `readFileBytesSync` or a codec, go out as they are
 through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
-[File I/O](../../LANGUAGE.md#file-io).
+[File I/O](../../LANGUAGE.md#file-io). A native string built by
+`String.fromBytes` carries any bytes, and `write` and `writeFileSync` send it
+as it is, but under `--emit-ts` `String.fromBytes` decodes UTF-8 and an
+invalid sequence becomes U+FFFD, so `writeBytes` and `writeFileBytesSync` are
+the route that is exact everywhere.
+
+Writing a secret to disk, a key or a token, takes three things
+`writeFileSync` does not give. `writeFileSyncMode(path, data, 0o600)` leaves
+the file at exactly the mode you name, set before the first byte is written,
+so the umask cannot widen it and a file that was `0644` is narrowed before it
+holds the secret. A symbolic link at `path` is refused with a negative errno
+(`-40` on Linux) and the file it names is left alone, so nobody can point your
+write somewhere else. And to replace a secret in one step, write it at `0600`
+to a temporary beside the target and `renameSync` the temporary over it: a
+reader then sees the old secret or the new one, never half of either.
+`createFileExclusiveSync(path, data, mode)` is the same write that fails with
+`-17` when the name already exists, so of any number of processes racing for
+one path exactly one wins: a lock file, released with `unlinkSync`.
+`mkdirSyncMode(path, 0o700)` makes a directory only you can enter; the umask
+still applies to a directory, which only ever narrows it. A mode past `0o777`,
+the setuid, setgid and sticky bits included, is `-22` and nothing is made. The
+numbers are the platform's errno values (Linux's shown).
 
 | Module | What it gives you |
 | --- | --- |

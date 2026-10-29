@@ -10824,6 +10824,165 @@ if (!only || "rt4_nofollow".includes(only) || "shim symlink".includes(only)) {
   }
 }
 
+// RT-24 to RT-26 (`writeFileSyncMode`, `createFileExclusiveSync`,
+// `mkdirSyncMode`): every mode is read back here with Node's `fs.statSync`,
+// never taken from the builtin's answer, which says only that a call went
+// through. The probe is built natively and run under `runtime/nish.mjs`, and
+// both sides must leave the same files behind: a new file at exactly 0600, a
+// 0644 file rewritten at 0600, 0644 asked for under `umask 077` kept at 0644
+// (the fchmod, not the umask, decides), a symbolic link at the path refused
+// with its target untouched, a directory at 0700 that a second call leaves
+// alone with -17, and an exclusive create that a file or a dangling link at the
+// path turns into -17, and one whose write fails (`ulimit -f 0`, `SIGXFSZ`
+// ignored, so the write answers -EFBIG) removes the file it made. The lock
+// race is native only, as `spawn` is: eight children of the probe race
+// `createFileExclusiveSync` for one path, silently (`take`, which exits with
+// the errno it lost to), and exactly one may exit 0, every other with 17.
+if (!only || "fs_mode".includes(only) || "mode excl".includes(only)) {
+  const dir = path.join(buildDir, "fs_mode")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const probe = path.join(dir, "probe.ts")
+  fs.writeFileSync(
+    probe,
+    `const RACERS: i32 = 8;
+
+export const main = (): number => {
+  if (process.argv.length < 3) {
+    return 2;
+  }
+  const op = process.argv[1];
+  const at = process.argv[2];
+  if (op === "race") {
+    const pids: i32[] = [];
+    for (let i = 0; i < RACERS; i++) {
+      pids.push(spawn([process.argv[3], "take", at]));
+    }
+    let winners = 0;
+    let taken = 0;
+    for (const pid of pids) {
+      const status = waitPid(pid, 0)[1];
+      if (status === 0) {
+        winners++;
+      } else if (status === 17) {
+        taken++;
+      }
+    }
+    console.log(\`winners \${winners} eexist \${taken}\`);
+    return 0;
+  }
+  let r: i32 = -1;
+  if (op === "write600") {
+    r = writeFileSyncMode(at, "secret\\n", 0o600);
+  } else if (op === "write644") {
+    r = writeFileSyncMode(at, "public\\n", 0o644);
+  } else if (op === "excl" || op === "take") {
+    r = createFileExclusiveSync(at, "held\\n", 0o600);
+  } else if (op === "mkdir700") {
+    r = mkdirSyncMode(at, 0o700);
+  }
+  if (op === "take") {
+    return r >= 0 ? 0 : -r;
+  }
+  console.log(\`\${op} \${r}\`);
+  return r >= 0 ? 0 : 1;
+};
+`
+  )
+  const exe = path.join(dir, "probe")
+  const built = HAS_CLANG ? spawnSync(NISH, [probe, "--link", exe], { cwd: root, encoding: "utf8" }) : null
+  if (built === null) {
+    skip("skipped: fs_mode: no clang, so the probe cannot be built")
+  } else if (built.status !== 0) {
+    check("fs_mode: the probe builds natively", false, built.stderr)
+  } else {
+    const nodeArgs = [
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--import",
+      path.join(root, "runtime", "nish.mjs"),
+      "-e",
+      `const m = await import(${JSON.stringify(probe)}); process.exit(m.main());`,
+      "probe",
+    ]
+    // Each side runs under `umask` and any `pre` shell commands, through `sh`
+    // so the child inherits them.
+    const sides = [
+      ["native", (umask, op, at, pre) => ["sh", ["-c", `${pre}umask ${umask}; exec "$0" "$@"`, exe, op, at]]],
+      ["node", (umask, op, at, pre) => ["sh", ["-c", `${pre}umask ${umask}; exec "$0" "$@"`, "node", ...nodeArgs, op, at]]],
+    ]
+    const ELOOP = -os.constants.errno.ELOOP
+    const EFBIG = -os.constants.errno.EFBIG
+    const modeOf = (p) => (fs.statSync(p).mode & 0o7777).toString(8)
+    for (const [side, argvOf] of sides) {
+      const run = (op, at, umask = "022", pre = "") => {
+        const [cmd, args] = argvOf(umask, op, at, pre)
+        const r = spawnSync(cmd, args, { cwd: dir, encoding: "utf8" })
+        return `exit ${r.status} ${r.stdout.trim()}${r.stderr}`
+      }
+      const at = (name) => path.join(dir, `${side}-${name}`)
+      const got = []
+      const want = []
+      const row = (label, actual, expected) => {
+        got.push(`${label}: ${actual}`)
+        want.push(`${label}: ${expected}`)
+      }
+      row("new file", `${run("write600", at("new"))} mode ${modeOf(at("new"))}`, "exit 0 write600 7 mode 600")
+      row("new file's bytes", JSON.stringify(fs.readFileSync(at("new"), "utf8")), JSON.stringify("secret\n"))
+      fs.writeFileSync(at("old"), "an older and longer text\n", { mode: 0o644 })
+      fs.chmodSync(at("old"), 0o644)
+      row("0644 file", `${run("write600", at("old"))} mode ${modeOf(at("old"))}`, "exit 0 write600 7 mode 600")
+      row("0644 file's bytes", JSON.stringify(fs.readFileSync(at("old"), "utf8")), JSON.stringify("secret\n"))
+      row(
+        "0644 under umask 077",
+        `${run("write644", at("wide"), "077")} mode ${modeOf(at("wide"))}`,
+        "exit 0 write644 7 mode 644"
+      )
+      fs.writeFileSync(at("target"), "the target's own bytes\n", { mode: 0o644 })
+      fs.chmodSync(at("target"), 0o644)
+      fs.symlinkSync(path.basename(at("target")), at("link"))
+      row(
+        "through a link",
+        `${run("write600", at("link"))} target ${modeOf(at("target"))} ${JSON.stringify(fs.readFileSync(at("target"), "utf8"))} still a link ${fs.lstatSync(at("link")).isSymbolicLink()}`,
+        `exit 1 write600 ${ELOOP} target 644 ${JSON.stringify("the target's own bytes\n")} still a link true`
+      )
+      row("directory", `${run("mkdir700", at("dir"))} mode ${modeOf(at("dir"))}`, "exit 0 mkdir700 0 mode 700")
+      fs.chmodSync(at("dir"), 0o755)
+      row("directory again", `${run("mkdir700", at("dir"))} mode ${modeOf(at("dir"))}`, "exit 1 mkdir700 -17 mode 755")
+      row("exclusive", `${run("excl", at("lock"))} mode ${modeOf(at("lock"))}`, "exit 0 excl 5 mode 600")
+      row(
+        "exclusive again",
+        `${run("excl", at("lock"))} ${JSON.stringify(fs.readFileSync(at("lock"), "utf8"))}`,
+        `exit 1 excl -17 ${JSON.stringify("held\n")}`
+      )
+      fs.symlinkSync(path.basename(at("nowhere")), at("dangling"))
+      row(
+        "exclusive at a dangling link",
+        `${run("excl", at("dangling"))} target made ${fs.existsSync(at("nowhere"))}`,
+        "exit 1 excl -17 target made false"
+      )
+      row(
+        "exclusive whose write fails",
+        `${run("excl", at("full"), "022", "trap '' XFSZ; ulimit -f 0; ")} left ${fs.existsSync(at("full"))}`,
+        `exit 1 excl ${EFBIG} left false`
+      )
+      check(
+        `fs_mode: under ${side === "native" ? "the native build" : "runtime/nish.mjs"} the modes read back with fs.statSync are the ones asked for, a link is refused, a taken path is -17 and a failed exclusive create leaves no file`,
+        got.join("\n") === want.join("\n"),
+        `--- want\n${want.join("\n")}\n--- got\n${got.join("\n")}`
+      )
+    }
+    const lock = path.join(dir, "race.lock")
+    const raced = spawnSync(exe, ["race", lock, exe], { cwd: dir, encoding: "utf8" })
+    const raceGot = `exit ${raced.status} ${raced.stdout.trim()} ${fs.existsSync(lock) ? `${modeOf(lock)} ${JSON.stringify(fs.readFileSync(lock, "utf8"))}` : "no lock"}`
+    check(
+      "fs_mode: of eight children racing createFileExclusiveSync for one path exactly one wins, the other seven answer -17, and the lock is the winner's at 0600",
+      raceGot === `exit 0 winners 1 eexist 7 600 ${JSON.stringify("held\n")}`,
+      `${raceGot}\n${raced.stderr}`
+    )
+  }
+}
+
 // WP29: an allocating parallel body compiles with NL9012 at the call, which
 // the link loop above does not assert: it reads a successful compile's stderr
 // for nothing but a failure report. Asked of `--json`, whose `code` is the contract, and again under
