@@ -213,7 +213,7 @@ export class DnsClient {
   /** Carries out everything the core has queued: opens, sends and closes sockets. */
   pump(nowNanos: i64): void {
     let q: i32 = this.nextOutgoing()
-    while (q >= 0 && q < this.fds.length) {
+    while (q >= 0 && q < toI32(this.fds.length)) {
       dnsClientClose(this, q)
       const kind: i32 = this.meta[0]
       if (kind === DNS_SEND_TCP) {
@@ -264,7 +264,7 @@ const dnsClientFail = (c: DnsClient, q: i32, nowNanos: i64): void => {
 /** Whether the 18-byte address `to` is IPv4, `::ffff:a.b.c.d`. */
 const dnsClientIsV4 = (to: u8[]): boolean => {
   let i: i32 = 0
-  while (i < 10 && i < to.length) {
+  while (i < 10 && i < toI32(to.length)) {
     if (to[i] !== 0) {
       return false
     }
@@ -303,7 +303,7 @@ const dnsClientOpenTcp = (c: DnsClient, q: i32, nowNanos: i64): void => {
   const length: i32 = c.meta[1]
   const output: u8[] = c.outputs[q]
   let i: i32 = 0
-  while (i < length && i < output.length && i < c.out.length) {
+  while (i < length && i < toI32(output.length) && i < toI32(c.out.length)) {
     output[i] = c.out[i]
     i += 1
   }
@@ -450,7 +450,7 @@ export const dnsLookupWith = (
     const count: i32 = pollWait(loop, ready, client.timeoutMs(now, own))
     const after: i64 = monotonicNanos()
     let k: i32 = 0
-    while (k < count && 2 * k + 1 < ready.length) {
+    while (k < count && 2 * k + 1 < toI32(ready.length)) {
       if (client.owns(ready[2 * k])) {
         client.ready(ready[2 * k], ready[2 * k + 1], after)
       }

@@ -284,13 +284,13 @@ export class DnsResolver {
     const baseLength: i32 = built - 12 - 5
     let i: i32 = 0
     let dots: i32 = 0
-    while (i < baseLength && i < base.length) {
+    while (i < baseLength && i < toI32(base.length)) {
       base[i] = this.scratch[12 + i]
       i += 1
     }
     // Every length byte past the first is a dot of the name.
     let p: i32 = 0
-    while (p >= 0 && p < baseLength && p < base.length) {
+    while (p >= 0 && p < baseLength && p < toI32(base.length)) {
       p += toI32(base[p]) + 1
       if (p < baseLength) {
         dots += 1
@@ -353,14 +353,14 @@ export class DnsResolver {
           setU16BE(out, 0, toU16(length))
         }
         let i: i32 = 0
-        while (i < length && i < query.length) {
+        while (i < length && i < toI32(query.length)) {
           out[skip + i] = query[i]
           i += 1
         }
         meta[1] = skip + length
         const from: i32 = this.server[q] * DNS_ADDRESS_BYTES
         i = 0
-        while (i < DNS_ADDRESS_BYTES && i < to.length) {
+        while (i < DNS_ADDRESS_BYTES && i < toI32(to.length)) {
           to[i] = this.config.servers[from + i]
           i += 1
         }
@@ -390,7 +390,7 @@ export class DnsResolver {
     }
     const at: i32 = this.server[q] * DNS_ADDRESS_BYTES
     let i: i32 = 0
-    while (i < DNS_ADDRESS_BYTES && i < from.length) {
+    while (i < DNS_ADDRESS_BYTES && i < toI32(from.length)) {
       if (from[i] !== this.config.servers[at + i]) {
         this.droppedSource += 1
         return
@@ -536,12 +536,12 @@ export class DnsResolver {
     }
     const count: i32 = this.lookupResult[lookup]
     let i: i32 = 0
-    while (i < count * DNS_ADDRESS_BYTES && i < out.length) {
+    while (i < count * DNS_ADDRESS_BYTES && i < toI32(out.length)) {
       out[i] = this.lookupAddresses[lookup][i]
       i += 1
     }
     i = 0
-    while (i < count && i < ttls.length) {
+    while (i < count && i < toI32(ttls.length)) {
       ttls[i] = this.lookupTtls[lookup][i]
       i += 1
     }
@@ -594,7 +594,7 @@ const dnsResolverIsLocalhost = (name: string): boolean => {
     return false
   }
   let i: i32 = 0
-  while (i < 9 && i < word.length) {
+  while (i < 9 && i < toI32(word.length)) {
     let b: i32 = toI32(name.charCodeAt(n - 9 + i))
     if (b >= 65 && b <= 90) {
       b += 32
@@ -610,7 +610,7 @@ const dnsResolverIsLocalhost = (name: string): boolean => {
 /** Writes 127.0.0.1 then ::1, both with `port`, to `out`. */
 const dnsResolverLoopback = (out: u8[], port: i32): void => {
   let i: i32 = 0
-  while (i < 2 * DNS_ADDRESS_BYTES && i < out.length) {
+  while (i < 2 * DNS_ADDRESS_BYTES && i < toI32(out.length)) {
     out[i] = toU8(0)
     i += 1
   }
@@ -694,7 +694,7 @@ const dnsResolverGather = (r: DnsResolver, l: i32, v4: i32, v6: i32, fromServer:
       j += 1
     }
     let i: i32 = 0
-    while (i < count && k >= 0 && k < ttls.length) {
+    while (i < count && k >= 0 && k < toI32(ttls.length)) {
       let b: i32 = 0
       while (b < DNS_ADDRESS_BYTES) {
         out[k * DNS_ADDRESS_BYTES + b] = r.answers[q][i * DNS_ADDRESS_BYTES + b]
@@ -755,7 +755,7 @@ const dnsResolverCandidate = (r: DnsResolver, l: i32, suffix: i32, out: u8[]): i
   const base: u8[] = r.bases[l]
   let n: i32 = r.baseLength[l]
   let i: i32 = 0
-  while (i < n && i < out.length && i < base.length) {
+  while (i < n && i < toI32(out.length) && i < toI32(base.length)) {
     out[i] = base[i]
     i += 1
   }
@@ -769,7 +769,7 @@ const dnsResolverCandidate = (r: DnsResolver, l: i32, suffix: i32, out: u8[]): i
     while (k <= length) {
       const b: i32 = k < length ? toI32(r.config.search[start + k]) : 46
       if (b === 46) {
-        if (label === 0 || label > DNS_MAX_LABEL_BYTES || n < 0 || n >= out.length) {
+        if (label === 0 || label > DNS_MAX_LABEL_BYTES || n < 0 || n >= toI32(out.length)) {
           return 0
         }
         out[n] = toU8(label)
@@ -820,7 +820,7 @@ const dnsResolverAsk = (r: DnsResolver, q: i32, qtype: i32, nowNanos: i64): void
   setU16BE(query, 8, toU16(0))
   setU16BE(query, 10, toU16(0))
   let i: i32 = 0
-  while (i < length && 12 + i < query.length) {
+  while (i < length && 12 + i < toI32(query.length)) {
     query[12 + i] = r.names[q][i]
     i += 1
   }
@@ -914,7 +914,7 @@ const dnsResolverAnswer = (r: DnsResolver, q: i32, status: i32, nowNanos: i64): 
 /** The length of the wire name in `name`, its root byte included, read label by label since a label may hold a 0 byte. */
 const dnsResolverNameLength = (name: u8[]): i32 => {
   let i: i32 = 0
-  while (i >= 0 && i < name.length && name[i] !== toU8(0)) {
+  while (i >= 0 && i < toI32(name.length) && name[i] !== toU8(0)) {
     i += toI32(name[i]) + 1
   }
   return i + 1
@@ -924,7 +924,7 @@ const dnsResolverNameLength = (name: u8[]): i32 => {
 const dnsResolverSameName = (a: u8[], b: u8[]): boolean => {
   const n: i32 = dnsResolverNameLength(a)
   let i: i32 = 0
-  while (i < n && i < a.length && i < b.length) {
+  while (i < n && i < toI32(a.length) && i < toI32(b.length)) {
     if (a[i] !== b[i]) {
       return false
     }
