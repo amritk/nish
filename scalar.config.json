@@ -96,6 +96,7 @@
             "title": "Verifying TLS certificates",
             "filepath": "docs/guide/using-nish/tls-certificates.md"
           },
+          "/tls-client": { "type": "page", "title": "TLS client", "filepath": "docs/guide/using-nish/tls-client.md" },
           "/terminal": { "type": "page", "title": "Terminal programs", "filepath": "docs/guide/using-nish/terminal.md" },
           "/password-hashing": {
             "type": "page",

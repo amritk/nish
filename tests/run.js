@@ -3048,10 +3048,12 @@ const SPEED_LINK = new Map([
   ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
   ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
   ["crypto_p256", "tests/wipes and the p256ScalarInverse wipes survive opt -O2"],
+  ["crypto_p256_ecdh", "tests/wipes counts its wipes after -O2"],
   ["net_quic_server_wipes", "tests/wipes counts its wipes after -O2"],
   ["net_quic_server_wipes_f64", "the f64 twin of net_quic_server_wipes"],
   ["net_quic_wipes", "tests/wipes counts its wipes after -O2"],
   ["net_quic_wipes_f64", "the f64 twin of net_quic_wipes"],
+  ["net_tls_client_record", "tests/wipes counts its wipes after -O2"],
   ["net_tls_rfc8448", "tests/wipes counts its wipes after -O2"],
   ["net_tls_ticket", "tests/wipes counts its wipes after -O2"],
   ["net_tls_wipes", "tests/wipes counts its wipes after -O2"],
@@ -12892,6 +12894,7 @@ runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
         c.status === 0
           ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "p256.ll")], {
               encoding: "utf8",
+              maxBuffer: 64 * 1024 * 1024,
             })
           : c
       const body =
