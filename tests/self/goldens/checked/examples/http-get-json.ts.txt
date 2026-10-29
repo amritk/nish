@@ -1486,7 +1486,7 @@ function HttpClient.send(this: HttpClient, url: Url, method: string, names: stri
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
   escaping: method
-  calls: nish.Http1ResponseParser.expect nish.HttpBodyReader.constructor nish.HttpClient.fail nish.HttpClient.head nish.HttpClient.writeAll nish.HttpResponse.constructor nish.http1RequestHead nish.httpClientHostText nish.httpClientNameIs nish.httpClientProxyAuth nish.httpClientProxyUrl nish.httpClientUrlText nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_from_i32
+  calls: nish.Http1ResponseParser.expect nish.HttpBodyReader.constructor nish.HttpClient.fail nish.HttpClient.head nish.HttpClient.writeAll nish.HttpResponse.constructor nish.http1RequestHead nish.httpClientHostText nish.httpClientNameIs nish.httpClientProxyAuth nish.httpClientProxyUrl nish.httpClientRedact nish.httpClientUrlText nish_alloc_struct nish_array_grow nish_panic_index nish_str_at nish_str_concat nish_str_eq nish_str_from_i32
   pointer this: size=152 writesThrough=true captured=true passedTo=nish.HttpClient.fail#0 nish.HttpClient.fail#0 nish.HttpClient.writeAll#0 nish.HttpClient.writeAll#0 nish.HttpClient.head#0 nish.HttpBodyReader.constructor#1
   pointer url: size=64 writesThrough=false captured=false passedTo=nish.httpClientUrlText#0
   pointer names: size=0 writesThrough=false captured=false
@@ -1518,6 +1518,7 @@ function HttpClient.send(this: HttpClient, url: Url, method: string, names: stri
   local -8:11 head: u8[] | null (const)
   callee -8:31 http1RequestHead -> @nish.http1RequestHead
   callee -6:7 HttpClient.fail -> @nish.HttpClient.fail
+  callee -4:34 httpClientRedact -> @nish.httpClientRedact
   callee +2:5 Http1ResponseParser.expect -> @nish.Http1ResponseParser.expect
   callee +3:10 HttpClient.writeAll -> @nish.HttpClient.writeAll
   callee +6:27 HttpClient.writeAll -> @nish.HttpClient.writeAll
@@ -1949,16 +1950,16 @@ function httpClientUrlText(url: Url): string -> @nish.httpClientUrlText
   local +2:9 query: string | null (const)
 function httpClientRedact(text: string): string -> @nish.httpClientRedact
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index nish_panic_overflow nish_panic_slice nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
+  escaping: text
+  calls: nish_panic_overflow nish_panic_slice nish_str_concat nish_str_index_of nish_str_index_of_from nish_str_new
   stackSites=0 stackLocals=0
-  local +0:7 cut: i32 (let)
-  local +1:9 query: i32 (const)
-  local +5:9 fragment: i32 (const)
-  local +9:7 head: string (let)
-  local +10:9 scheme: i32 (const)
-  local +11:9 start: i32 (const)
-  local +12:7 at: i32 (let)
-  local +13:12 i: i32 (let)
+  local +0:9 scheme: i32 (const)
+  local +1:9 start: i32 (const)
+  local +2:7 rest: i32 (let)
+  local +3:7 at: i32 (let)
+  local +8:9 bare: string (const)
+  local +9:7 cut: i32 (let)
+  local +10:9 fragment: i32 (const)
 function httpClientProxyUrl(text: string): Url | null -> @nish.httpClientProxyUrl
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5

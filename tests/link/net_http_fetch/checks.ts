@@ -615,9 +615,13 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const crlf: HttpRequest = get(`${base}/echo`);
   crlf.header("X-Evil", "a\r\nInjected: yes");
   t.check(fails(client, client.fetch(crlf), HTTP_E_REQUEST), "a header value with CR LF is refused before a byte is sent");
+  const crlfQuery: HttpRequest = get(`${base}/echo?token=s3cr3t`);
+  crlfQuery.header("X-Evil", "a\r\nInjected: yes");
+  t.check(fails(client, client.fetch(crlfQuery), HTTP_E_REQUEST) && client.errorText.indexOf("/echo?... was refused") >= 0 && client.errorText.indexOf("s3cr3t") < 0, "and the error names its target without the query");
   t.check(fails(client, client.fetch(new HttpRequest("GE T", `${base}/`)), HTTP_E_REQUEST), "and so is a method that is not a token");
   t.check(fails(client, client.fetch(get("ftp://me:hunter2@127.0.0.1/?token=s3cr3t")), HTTP_E_URL), "an ftp URL is HTTP_E_URL");
   t.check(client.errorText.endsWith(": ftp://127.0.0.1/?..."), "and the error names it without its password or query");
+  t.check(fails(client, client.fetch(get("ftp://me:hun?ter2#x@127.0.0.1/?token=s3cr3t")), HTTP_E_URL) && client.errorText.endsWith(": ftp://127.0.0.1/?...") && client.errorText.indexOf("hun") < 0, "and without a password that holds a ? or #");
   t.check(fails(client, client.fetch(get("/relative")), HTTP_E_URL), "and so is a relative one");
 
   // --- timeouts and failures to connect

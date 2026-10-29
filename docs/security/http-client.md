@@ -75,7 +75,7 @@ for the end of a body.
 | HF-5 | Low | `std/net/http-client.ts` (`HttpClient.send`) | A `Proxy-Authorization` the caller set went to the origin whenever the request did not go through an http proxy: fetched directly, or inside a CONNECT tunnel, whose CONNECT carries only the proxy URL's own userinfo. The proxy's credentials reached a server that has no use for them. | **Fixed** before the module shipped: `send` drops the caller's `Proxy-Authorization` unless the request goes to an http proxy. Before, `a caller's Proxy-Authorization never goes to an origin fetched directly` failed; after, it passes. |
 | HF-6 | Low | `std/net/http-client.ts` (`HttpClient.drop`) | A body whose client closed it before its end (`close()` on a cancel path, or any drop that keeps the generation) answered 0 on its next `read`, so `readAll` took the bytes read so far for the whole body. A stale reader also overwrote the client's error with its own, losing the later fetch's failure before the program reported it. | **Fixed** before the module shipped: `drop` sets the open body's `bodyError` to `HTTP_E_IO`, and a stale reader answers `-HTTP_E_IO` without touching the client. Before, `a body its client closed before its end answers an error, never 0` and `a stale body's read leaves the later fetch's error in place` failed; after, they pass. |
 | HF-7 | Low | `std/net/http-client.ts` (`HttpClient.readBody`, `open`) | A kept connection was used again with bytes past its last response on it: sent in the same segment as the response, or by the server while the connection sat idle. The next fetch on it read those bytes as its own response, one the server wrote before it saw the request, so a server out of step answered each request with the one before's answer. | **Fixed** before the module shipped: `release` closes a connection on which `leftover` finds a byte held by the parser or the TLS layer, and `open` reuses one only when `quiet`, a poll that does not wait, finds nothing to read on it. Before, `a response followed in its segment by another nobody asked for is read, and its connection dropped` and `and so is one whose server spoke while it sat idle` failed (the next fetch read the unasked-for `evil!`); after, they pass. |
-| HF-8 | Low | `std/net/http-client.ts` (`HttpClient.fetch`, `open`) | `errorText` named a request URL, a redirect's `Location` and a proxy setting whole, so a password in the userinfo or a token in the query went wherever a program reports its errors, a log or a CI transcript. | **Fixed** before the module shipped: `httpClientRedact` cuts the userinfo, the query and the fragment from every URL an error names, and marks the cut with `?...`. Before, `and the error names it without its password or query` (for a request URL and for a proxy setting) and `a refused Location is named without its password or query` failed; after, they pass. |
+| HF-8 | Low | `std/net/http-client.ts` (`HttpClient.fetch`, `open`) | `errorText` named a request URL, a redirect's `Location` and a proxy setting whole, so a password in the userinfo or a token in the query went wherever a program reports its errors, a log or a CI transcript. | **Fixed** before the module shipped: `httpClientRedact` cuts the userinfo, the query and the fragment from every URL an error names, the target of a request refused before it is sent included, and marks the cut with `?...`. The userinfo goes first, up to the last `@` after the scheme, so a password holding a `?` or `#` is not left in front of the cut. Before, `and the error names it without its password or query` (for a request URL and for a proxy setting) and `a refused Location is named without its password or query` failed; after, they pass. |
 | HF-9 | Low | `std/net/http-client.ts` (`HttpClient.fill`, `writeRaw`) | `totalTimeoutMs` was checked only by a wait. A body whose next bytes were always on the socket before the client asked for them never waited, so a fetch read on past its deadline. | **Fixed** before the module shipped: `overdue` fails the fetch with `HTTP_E_TOTAL_TIMEOUT` before every read and every write once the deadline has passed. Before, `a body whose rest is already waiting is still cut off once totalTimeoutMs has passed` failed; after, it passes. |
 | HF-3 | Low | `std/net/http-client.ts` (`HttpClient.fetch`, `send`, `dial`) | Each fetch makes its field arrays, its response, the response's copies of the parser's fields, the lookup's address arrays and its error text afresh, so they stay in the arena until the program resets it, as HC-1 records for the parser beneath. Bounded for each fetch by `maxRedirects + 1` heads of `HTTP_CLIENT_MAX_HEADERS` fields within the parser's caps. | **Open, accepted for now.** A long-running program fetches inside an arena it resets; a per-connection arena closes it with HC-1. |
 
@@ -271,7 +271,7 @@ against `link/net_http_fetch`, `link/net_http_fetch_f64` and
 `link/net_http_fetch_tls`, show which lines the checks above pin. Every
 mutant of the retry rule (a dropped `reused`, `lost` or `gotByte` term, POST
 made idempotent), of HF-7's `leftover` and `quiet` taken out together, of
-HF-8's redaction at each of its six call sites and in each of its cuts, of
+HF-8's redaction at each of its seven call sites and in each of its cuts, of
 `fill`'s `overdue`, of `maxHeaderBytes`, of the empty read, and of the TLS
 read of bytes that arrive with a proxy's `200` (T9) is killed. These survive,
 and stay:
@@ -289,3 +289,18 @@ and stay:
 - `T15`: `conn.abort` on a read error. `drop` wipes and discards the
   connection anyway.
 - `T19`: `writeTls`'s final flush. The read that follows flushes first.
+- `T16`: `receiveTls`'s `want <= 0` guard, for a TLS connection with no
+  room for the server's next record. The record layer opens each record it
+  holds before the next read, so its buffer always has room and no peer
+  reaches the guard; it stays as the stop for a buffer a later change
+  shrinks, where reading 0 bytes would look like a close.
+- `T18`: the branch for a failed write in the TLS write path. A peer that is
+  gone fails the read that precedes the next write first, so the write's own
+  errno is not reached on loopback; a write errno is recorded under "What no
+  check reaches".
+- `T20`: `drop`'s `conn.wipe` when a TLS connection closes. It clears keys in the
+  client's own memory, which no peer can observe; key hygiene, kept.
+- `T23`: the client random filled from the system's random source. An
+  all-zero random still completes a handshake with a loopback server, since
+  nothing checks it there; RFC 8446 §4.1.2 requires it to be fresh, and it
+  is kept.

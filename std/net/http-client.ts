@@ -798,7 +798,7 @@ export class HttpClient {
     if (head === null) {
       this.fail(
         HTTP_E_REQUEST,
-        `the request ${method} ${target} was refused: a bad method, target or header field`
+        `the request ${method} ${httpClientRedact(target)} was refused: a bad method, target or header field`
       )
       return null
     }
@@ -1590,32 +1590,26 @@ const httpClientUrlText = (url: Url): string => {
  * A URL as an error may echo it: without the userinfo, which can hold a
  * password, nor the query and fragment, which can hold a token; `?...` marks
  * where they were cut. Works on the text, so a URL that does not parse is
- * cut too: everything before the last `@` after the scheme goes, a password
- * with a raw `/` in it included, at the cost of a host when a path has one.
+ * cut too: everything before the last `@` after the scheme goes first, a
+ * password with a raw `/`, `?` or `#` in it included, at the cost of a host
+ * when a path or query has an `@`; then the query and fragment.
  */
 const httpClientRedact = (text: string): string => {
-  let cut: i32 = toI32(text.length)
-  const query: i32 = toI32(text.indexOf("?"))
-  if (query >= 0) {
-    cut = query
+  const scheme: i32 = toI32(text.indexOf("://"))
+  const start: i32 = scheme >= 0 ? scheme + 3 : 0
+  let rest: i32 = start
+  let at: i32 = toI32(text.indexOf("@", start))
+  while (at >= 0) {
+    rest = at + 1
+    at = toI32(text.indexOf("@", rest))
   }
-  const fragment: i32 = toI32(text.indexOf("#"))
-  if (fragment >= 0 && fragment < cut) {
+  const bare: string = rest > start ? text.slice(0, start) + text.slice(rest) : text
+  let cut: i32 = toI32(bare.indexOf("?"))
+  const fragment: i32 = toI32(bare.indexOf("#"))
+  if (fragment >= 0 && (cut < 0 || fragment < cut)) {
     cut = fragment
   }
-  let head: string = text.slice(0, cut)
-  const scheme: i32 = toI32(head.indexOf("://"))
-  const start: i32 = scheme >= 0 ? scheme + 3 : 0
-  let at: i32 = -1
-  for (let i: i32 = start; i < toI32(head.length); i += 1) {
-    if (head.charCodeAt(i) === 64) {
-      at = i
-    }
-  }
-  if (at >= 0) {
-    head = head.slice(0, start) + head.slice(at + 1)
-  }
-  return cut < toI32(text.length) ? head + "?..." : head
+  return cut >= 0 ? `${bare.slice(0, cut)}?...` : bare
 }
 
 /**

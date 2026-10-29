@@ -63,9 +63,11 @@ PASS  and the body answers that error again when read after it
 PASS  a response head past maxHeaderBytes is HTTP_E_PROTOCOL
 PASS  and read under a limit above it
 PASS  a header value with CR LF is refused before a byte is sent
+PASS  and the error names its target without the query
 PASS  and so is a method that is not a token
 PASS  an ftp URL is HTTP_E_URL
 PASS  and the error names it without its password or query
+PASS  and without a password that holds a ? or #
 PASS  and so is a relative one
 PASS  a server that never answers is HTTP_E_READ_TIMEOUT
 PASS  after readTimeoutMs
@@ -113,4 +115,4 @@ PASS  an https server that hangs up on the ClientHello is HTTP_E_TLS
 PASS  an event stream's first event is read while the server holds the stream open
 PASS  an empty read answers 0 at once, waiting for nothing
 PASS  and the next one, the stream ending with the connection
-http fetch: 115 passed, 0 failed, 0 skipped
+http fetch: 117 passed, 0 failed, 0 skipped
