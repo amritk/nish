@@ -1,0 +1,95 @@
+PASS  query: example.com A
+PASS  query: example.com AAAA
+PASS  query: a trailing dot names the same root
+PASS  query: an empty name
+PASS  query: the root alone
+PASS  query: an empty label in the middle
+PASS  query: a leading dot
+PASS  query: two trailing dots
+PASS  query: a 63-byte label fits
+PASS  query: a 64-byte label
+PASS  query: a 253-byte name fills 255 bytes of wire form
+PASS  query: a 254-byte name
+PASS  query: a 254-byte name with a trailing dot is still 253
+PASS  query: a space
+PASS  query: a control byte
+PASS  query: a byte above 0x7e
+PASS  query: a CNAME question is not asked
+PASS  query: one byte short of room
+PASS  query: exactly room
+PASS  captured example.com A: NOERROR
+PASS  captured example.com A: two addresses
+PASS  captured example.com A: 104.20.23.154 on 443
+PASS  captured example.com A: 172.66.147.243 on 443
+PASS  captured example.com A: TTL 300
+PASS  captured example.com A: not truncated
+PASS  captured example.com A against an AAAA query: the question differs
+PASS  captured www.microsoft.com A: the CNAME chain is followed
+PASS  captured www.microsoft.com A: one address, at the chain's end
+PASS  captured www.microsoft.com A: 23.54.42.39
+PASS  captured www.microsoft.com A: the A record's TTL
+PASS  captured nxdomain.invalid A: NXDOMAIN
+PASS  captured nxdomain.invalid A: no address
+PASS  captured nxdomain.invalid A: rcode 3
+PASS  captured outlook.com A: NOERROR
+PASS  captured outlook.com A: DNS_MAX_ANSWERS kept
+PASS  captured outlook.com A: the ninth dropped and counted
+PASS  captured outlook.com A: the eighth kept is the eighth sent
+PASS  captured example.com A, question as EXAMPLE: the same name
+PASS  built example.com AAAA: NOERROR
+PASS  built example.com AAAA: the sixteen bytes and port
+PASS  built TC reply: the rcode stands
+PASS  built TC reply: truncated
+PASS  built TC reply: no record read
+PASS  built TC reply, 255 answers claimed: the rcode stands
+PASS  built TC reply, 255 answers claimed: truncated
+PASS  built TC reply, 255 answers claimed: no record read
+PASS  built SERVFAIL
+PASS  built REFUSED
+PASS  built FORMERR
+PASS  built NOTIMP
+PASS  built mixed records: NOERROR
+PASS  built mixed records: only the asked type, class and owner kept
+PASS  built mixed records: 1.2.3.5
+PASS  built mixed records: a TTL above 2^31 - 1 reads as 0
+PASS  built CNAME off the chain: NOERROR
+PASS  built CNAME off the chain: no address
+PASS  malformed: an 11-byte header
+PASS  malformed: an empty datagram
+PASS  malformed: QR clear
+PASS  malformed: opcode 2 (STATUS)
+PASS  malformed: another ID
+PASS  malformed: no question
+PASS  malformed: two questions
+PASS  malformed: another question name
+PASS  malformed: another question class
+PASS  malformed: the question cut short
+PASS  malformed: the question's type cut short
+PASS  malformed: 65,535 answers in 61 bytes
+PASS  malformed: an additional count past the end
+PASS  malformed: a forward pointer
+PASS  malformed: a pointer into the header
+PASS  malformed: a self-pointer
+PASS  malformed: a label then a pointer back to its start
+PASS  malformed: a two-pointer loop entered by a backward hop
+PASS  malformed: a label length byte 0x40
+PASS  malformed: a label length byte 0x80
+PASS  malformed: a label of 63 running past the end
+PASS  malformed: an A record with RDLENGTH 5
+PASS  malformed: an A record with RDLENGTH 3
+PASS  malformed: an AAAA record with RDLENGTH 4
+PASS  malformed: the last RDATA one byte past the end
+PASS  malformed: RDLENGTH 65,535
+PASS  malformed: a record's fixed fields cut short
+PASS  malformed: a CNAME whose target does not fill its RDATA
+PASS  malformed: a CNAME whose target runs past its RDATA
+PASS  malformed: a CNAME whose target points forwards
+PASS  built: an owner of exactly 255 bytes
+PASS  malformed: an owner of 256 bytes
+PASS  malformed: a name past 255 bytes by a pointer
+PASS  built: a name of 16 hops
+PASS  malformed: a name of 17 hops
+mutation tally: 0=795 2=3 5=1 -7=140 -8=50 -9=46 -10=221 -11=1196 -12=248 -13=494 -14=231 -16=249 -17=15 -18=269 -19=42
+PASS  mutation: every round answers a status or a documented code
+PASS  mutation: every round keeps at most DNS_MAX_ANSWERS, and none on TC
+dns-message: 93 passed, 0 failed, 0 skipped

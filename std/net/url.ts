@@ -1,6 +1,7 @@
 /**
  * `nish/net/url` — the request target's path and query, split and
- * percent-decoded in place, and its query string read as key/value pairs.
+ * percent-decoded in place, and its query string read as key/value pairs; and
+ * whole URLs, parsed into their parts and references resolved against them.
  *
  * A handler that routes on a path or reads `?name=…` from a query otherwise
  * writes its own byte scan, and each such scan decides differently what `%zz`,
@@ -54,9 +55,30 @@
  * pairs (`a&&b`, a leading or trailing `&`) are skipped and not counted, as
  * `URLSearchParams` skips them.
  *
- * **A fragment is not part of a request target** (RFC 9112 §3.2), so nothing
- * here looks for a `#`: in a target that holds one, it is a byte of the path
- * or of the last value.
+ * **A fragment is not part of a request target** (RFC 9112 §3.2), so the byte
+ * API never looks for a `#`: in a target that holds one, it is a byte of the
+ * path or of the last value.
+ *
+ * **A whole URL is parsed strictly, and nothing in it is decoded.** A client
+ * that is handed `http://…` by a user, a redirect or a link needs its host and
+ * port before it connects, and the place each reference points to:
+ *
+ *     import { Url, urlOrigin, urlParse, urlResolve, urlSerialize } from "nish/net/url";
+ *
+ *     const base: Url | null = urlParse("https://example.com/a/b?q")
+ *     if (base !== null) {
+ *       const next: Url | null = urlResolve(base, "../c#top")  // https://example.com/c#top
+ *       // next.host, next.port (-1: the default), urlOrigin(next) === "https://example.com:443"
+ *     }
+ *
+ * `urlParse` and `urlResolve` follow RFC 3986 (§3 for the parts, §5.2 to
+ * resolve, dot segments removed) and refuse, with null, what two readers could
+ * take for different hosts: a byte outside printable ASCII, a backslash, a
+ * malformed `%`, a second `@`, a percent-encoded or otherwise non-unreserved
+ * host byte, a host that looks numeric but is not a strict dotted-decimal IPv4
+ * address (`127.1`, `0x7f.0.0.1`, `2130706433`), an IPv6 zone or IPvFuture
+ * literal, and a port past 65535. The scheme and host are lower-cased; every
+ * other part is kept as written, still percent-encoded.
  *
  * The record of what this module refuses and why is `docs/security/url.md`.
  */
@@ -568,4 +590,537 @@ export const urlQueryGet = (target: string, name: string): string | null => {
     return ""
   }
   return urlDecodeString(bytes, query.valueStart, query.valueLength, URL_DECODE_FORM)
+}
+
+const URL_HASH: i32 = 35
+const URL_DOT: i32 = 46
+const URL_COLON: i32 = 58
+const URL_AT: i32 = 64
+const URL_OPEN_BRACKET: i32 = 91
+const URL_CLOSE_BRACKET: i32 = 93
+const URL_BACKSLASH: i32 = 92
+/** The largest port a URL may name (RFC 6335 §6: a port is 16 bits). */
+const URL_MAX_PORT: i32 = 65535
+
+/**
+ * A URL split into its parts (RFC 3986 §3). Each part is held as it was
+ * written, still percent-encoded, except that `scheme` and `host` are
+ * lower-cased. `urlParse` and `urlResolve` make one; `urlSerialize` writes one
+ * back.
+ */
+export class Url {
+  /** Lower-cased, without its `:`: `http`. */
+  scheme: string = ""
+  /** The userinfo before its first `:`, as written; empty when there is none. */
+  username: string = ""
+  /** The userinfo after its first `:`, as written; empty when there is none. */
+  password: string = ""
+  /** A lower-cased reg-name, a dotted IPv4 address, or an IPv6 address without its brackets. */
+  host: string = ""
+  /** With its dot segments removed; empty, or starting with `/` when there is an authority. */
+  path: string = ""
+  /** Without its `?`, or null when there is no `?`. */
+  query: string | null = null
+  /** Without its `#`, or null when there is no `#`. */
+  fragment: string | null = null
+  /** 0 to 65535, or -1 when the URL names none; `urlOrigin` supplies the scheme's default. */
+  port: i32 = -1
+  /** True when the URL has a `//` authority; `mailto:a@b` has none and `file:///x` has an empty one. */
+  hasAuthority: boolean = false
+}
+
+/** `bytes[a, b)` as a string with A to Z lower-cased. */
+const urlLowerString = (bytes: u8[], a: i32, b: i32): string => {
+  const out: u8[] = new Array<u8>(b - a)
+  let i: i32 = a
+  while (i >= 0 && i < b && i < toI32(bytes.length) && i - a < toI32(out.length)) {
+    const c: i32 = toI32(bytes[i])
+    out[i - a] = c >= 65 && c <= 90 ? toU8(c + 32) : toU8(c)
+    i += 1
+  }
+  return String.fromBytes(out, 0, b - a)
+}
+
+/** The first `c` in `bytes[a, b)`, or `b`. */
+const urlFind = (bytes: u8[], a: i32, b: i32, c: i32): i32 => {
+  let i: i32 = a
+  while (i >= 0 && i < b && i < toI32(bytes.length) && toI32(bytes[i]) !== c) {
+    i += 1
+  }
+  return i
+}
+
+const urlIsAlpha = (c: i32): boolean => (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+
+const urlIsDigit = (c: i32): boolean => c >= 48 && c <= 57
+
+/** RFC 3986's unreserved set: what a host may hold. */
+const urlIsUnreserved = (c: i32): boolean =>
+  urlIsAlpha(c) || urlIsDigit(c) || c === 45 || c === URL_DOT || c === 95 || c === 126
+
+/**
+ * True when `bytes[a, b)` is a dotted-decimal IPv4 address exactly as RFC
+ * 3986 §3.2.2 writes one: four parts of one to three digits, each at most 255,
+ * with no leading zero.
+ */
+const urlIsIpv4 = (bytes: u8[], a: i32, b: i32): boolean => {
+  let parts: i32 = 0
+  let i: i32 = a
+  while (parts < 4) {
+    const start: i32 = i
+    let value: i32 = 0
+    while (i >= 0 && i < b && i < toI32(bytes.length) && i - start < 4 && urlIsDigit(toI32(bytes[i]))) {
+      value = value * 10 + toI32(bytes[i]) - 48
+      i += 1
+    }
+    const digits: i32 = i - start
+    if (
+      digits === 0 ||
+      digits > 3 ||
+      value > 255 ||
+      (digits > 1 && start >= 0 && start < toI32(bytes.length) && toI32(bytes[start]) === 48)
+    ) {
+      return false
+    }
+    parts += 1
+    if (parts < 4) {
+      if (i < 0 || i >= b || i >= toI32(bytes.length) || toI32(bytes[i]) !== URL_DOT) {
+        return false
+      }
+      i += 1
+    }
+  }
+  return i === b
+}
+
+/**
+ * True when `bytes[a, b)` is an IPv6 address as RFC 4291 §2.2 writes one:
+ * eight groups of one to four hex digits, or fewer with one `::` standing for
+ * the rest, the last two optionally a dotted IPv4 address. A zone (`%25eth0`)
+ * and an IPvFuture literal (`v1.x`) are not.
+ */
+const urlIsIpv6 = (bytes: u8[], a: i32, b: i32): boolean => {
+  let groups: i32 = 0
+  let elided: boolean = false
+  let i: i32 = a
+  if (b - a >= 2 && toI32(bytes[a]) === URL_COLON && toI32(bytes[a + 1]) === URL_COLON) {
+    elided = true
+    i = a + 2
+  }
+  while (i < b) {
+    const start: i32 = i
+    while (i >= 0 && i < b && i < toI32(bytes.length) && urlHexValue(toI32(bytes[i])) >= 0) {
+      i += 1
+    }
+    if (i === start) {
+      return false
+    }
+    if (i >= 0 && i < b && i < toI32(bytes.length) && toI32(bytes[i]) === URL_DOT) {
+      if (!urlIsIpv4(bytes, start, b)) {
+        return false
+      }
+      groups += 2
+      i = b
+    } else {
+      if (i - start > 4) {
+        return false
+      }
+      groups += 1
+      if (i >= 0 && i < b && i < toI32(bytes.length)) {
+        if (toI32(bytes[i]) !== URL_COLON || i + 1 === b) {
+          return false
+        }
+        i += 1
+        if (i < toI32(bytes.length) && toI32(bytes[i]) === URL_COLON) {
+          if (elided) {
+            return false
+          }
+          elided = true
+          i += 1
+        }
+      }
+    }
+  }
+  return elided ? groups <= 7 : groups === 8
+}
+
+/**
+ * True when a reg-name `bytes[a, b)` would be read as a number by a resolver
+ * or by the WHATWG host parser: its last label (a trailing `.` aside) is all
+ * digits or `0x` and hex. Such a host must be a dotted-decimal IPv4 address
+ * exactly, so `127.1`, `0x7f.0.0.1` and `017700000001` never reach a lookup
+ * that reads them as 127.0.0.1.
+ */
+const urlLooksNumeric = (bytes: u8[], a: i32, b: i32): boolean => {
+  let end: i32 = b
+  if (end > a && toI32(bytes[end - 1]) === URL_DOT) {
+    end -= 1
+  }
+  let start: i32 = end
+  while (start > a && toI32(bytes[start - 1]) !== URL_DOT) {
+    start -= 1
+  }
+  if (start === end) {
+    return false
+  }
+  let i: i32 = start
+  if (end - start >= 2 && toI32(bytes[start]) === 48 && (toI32(bytes[start + 1]) | 32) === 120) {
+    i = start + 2
+    while (i >= 0 && i < end && i < toI32(bytes.length) && urlHexValue(toI32(bytes[i])) >= 0) {
+      i += 1
+    }
+    return i === end
+  }
+  while (i >= 0 && i < end && i < toI32(bytes.length) && urlIsDigit(toI32(bytes[i]))) {
+    i += 1
+  }
+  return i === end
+}
+
+/** Reads the authority `bytes[a, b)` into `u`, or answers false when it breaks a rule `urlParse` names. */
+const urlReadAuthority = (bytes: u8[], a: i32, b: i32, u: Url): boolean => {
+  const at: i32 = urlFind(bytes, a, b, URL_AT)
+  let h: i32 = a
+  if (at < b) {
+    if (urlFind(bytes, at + 1, b, URL_AT) < b) {
+      return false
+    }
+    if (urlFind(bytes, a, at, URL_OPEN_BRACKET) < at || urlFind(bytes, a, at, URL_CLOSE_BRACKET) < at) {
+      return false
+    }
+    const colon: i32 = urlFind(bytes, a, at, URL_COLON)
+    u.username = String.fromBytes(bytes, a, colon)
+    if (colon < at) {
+      u.password = String.fromBytes(bytes, colon + 1, at)
+    }
+    h = at + 1
+  }
+  let portAt: i32 = b
+  if (h < b && toI32(bytes[h]) === URL_OPEN_BRACKET) {
+    const close: i32 = urlFind(bytes, h, b, URL_CLOSE_BRACKET)
+    if (close === b || !urlIsIpv6(bytes, h + 1, close)) {
+      return false
+    }
+    u.host = urlLowerString(bytes, h + 1, close)
+    if (close + 1 < b) {
+      if (toI32(bytes[close + 1]) !== URL_COLON) {
+        return false
+      }
+      portAt = close + 1
+    }
+  } else {
+    portAt = urlFind(bytes, h, b, URL_COLON)
+    let i: i32 = h
+    while (i >= 0 && i < portAt && i < toI32(bytes.length) && urlIsUnreserved(toI32(bytes[i]))) {
+      i += 1
+    }
+    if (i < portAt) {
+      return false
+    }
+    if (urlLooksNumeric(bytes, h, portAt) && !urlIsIpv4(bytes, h, portAt)) {
+      return false
+    }
+    u.host = urlLowerString(bytes, h, portAt)
+  }
+  if (portAt + 1 < b) {
+    let port: i32 = 0
+    let i: i32 = portAt + 1
+    while (i >= 0 && i < b && i < toI32(bytes.length)) {
+      const c: i32 = toI32(bytes[i])
+      if (!urlIsDigit(c)) {
+        return false
+      }
+      port = port * 10 + c - 48
+      if (port > URL_MAX_PORT) {
+        return false
+      }
+      i += 1
+    }
+    u.port = port
+  }
+  return true
+}
+
+/**
+ * `s` split into a `Url` whose scheme is empty when `s` is a relative
+ * reference, with its path as written; null when it breaks one of the rules
+ * `urlParse` names, the host a scheme with a default port needs aside, which
+ * only a resolved URL is held to.
+ */
+const urlReadReference = (s: string): Url | null => {
+  const bytes: u8[] | null = urlBytesOf(s)
+  if (bytes === null) {
+    return null
+  }
+  const n: i32 = toI32(bytes.length)
+  let i: i32 = 0
+  while (i < n) {
+    const c: i32 = toI32(bytes[i])
+    // A WHATWG parser reads `\` as `/` under http(s), so it would end the
+    // authority or start one where this reading does not: refused everywhere.
+    if (
+      c <= URL_SPACE ||
+      c >= 127 ||
+      c === URL_BACKSLASH ||
+      (c === URL_PERCENT && urlEscapeAt(bytes, i, n) < 0)
+    ) {
+      return null
+    }
+    i += 1
+  }
+  const u: Url = new Url()
+  const hash: i32 = urlFind(bytes, 0, n, URL_HASH)
+  if (hash < n) {
+    u.fragment = String.fromBytes(bytes, hash + 1, n)
+  }
+  const question: i32 = urlFind(bytes, 0, hash, URL_QUESTION)
+  if (question < hash) {
+    u.query = String.fromBytes(bytes, question + 1, hash)
+  }
+  let pos: i32 = 0
+  if (question > 0 && urlIsAlpha(toI32(bytes[0]))) {
+    let j: i32 = 1
+    while (j < question) {
+      const c: i32 = toI32(bytes[j])
+      if (!(urlIsAlpha(c) || urlIsDigit(c) || c === URL_PLUS || c === 45 || c === URL_DOT)) {
+        break
+      }
+      j += 1
+    }
+    if (j < question && toI32(bytes[j]) === URL_COLON) {
+      u.scheme = urlLowerString(bytes, 0, j)
+      pos = j + 1
+    }
+  }
+  if (question - pos >= 2 && toI32(bytes[pos]) === URL_SLASH && toI32(bytes[pos + 1]) === URL_SLASH) {
+    const end: i32 = urlFind(bytes, pos + 2, question, URL_SLASH)
+    u.hasAuthority = true
+    if (!urlReadAuthority(bytes, pos + 2, end, u)) {
+      return null
+    }
+    pos = end
+  }
+  u.path = String.fromBytes(bytes, pos, question)
+  return u
+}
+
+/** The width of a `.` (1) or `%2e` (3) at `s[i]`, or 0. */
+const urlDotAt = (s: string, i: i32, end: i32): i32 => {
+  if (i < end && toI32(s.charCodeAt(i)) === URL_DOT) {
+    return 1
+  }
+  if (
+    end - i >= 3 &&
+    toI32(s.charCodeAt(i)) === URL_PERCENT &&
+    toI32(s.charCodeAt(i + 1)) === 50 &&
+    (toI32(s.charCodeAt(i + 2)) | 32) === 101
+  ) {
+    return 3
+  }
+  return 0
+}
+
+/** 1 when the segment `s[a, b)` is `.`, 2 when it is `..`, either written with `%2e`, else 0. */
+const urlDotSegment = (s: string, a: i32, b: i32): i32 => {
+  const first: i32 = urlDotAt(s, a, b)
+  if (first === 0) {
+    return 0
+  }
+  if (a + first === b) {
+    return 1
+  }
+  const second: i32 = urlDotAt(s, a + first, b)
+  if (second > 0 && a + first + second === b) {
+    return 2
+  }
+  return 0
+}
+
+/** The first `/` in `s[i, n)`, or `n`. */
+const urlSlashFrom = (s: string, i: i32, n: i32): i32 => {
+  let j: i32 = i
+  while (j < n && toI32(s.charCodeAt(j)) !== URL_SLASH) {
+    j += 1
+  }
+  return j
+}
+
+/**
+ * RFC 3986 §5.2.4 remove_dot_segments, reading `%2e` as `.` the way the WHATWG
+ * URL Standard does, so `/a/%2e%2e/b` is `/b` here and at a server that
+ * decodes before it resolves. The output is kept as its segments, each with
+ * the `/` before it, so "remove the last segment" is a `pop`.
+ */
+const urlRemoveDotSegments = (s: string): string => {
+  const n: i32 = toI32(s.length)
+  const out: string[] = []
+  let i: i32 = 0
+  while (i >= 0 && i < n) {
+    if (toI32(s.charCodeAt(i)) !== URL_SLASH) {
+      const j: i32 = urlSlashFrom(s, i, n)
+      if (urlDotSegment(s, i, j) > 0) {
+        i = j < n ? j + 1 : n
+      } else {
+        out.push(s.slice(i, j))
+        i = j
+      }
+    } else {
+      const j: i32 = urlSlashFrom(s, i + 1, n)
+      const dots: i32 = urlDotSegment(s, i + 1, j)
+      if (dots === 0) {
+        out.push(s.slice(i, j))
+      } else if (dots === 2 && out.length > 0) {
+        out.pop()
+      }
+      if (dots > 0 && j === n) {
+        out.push("/")
+      }
+      i = j
+    }
+  }
+  return out.join("")
+}
+
+/** `u` when a URL with its scheme may stand as it is, or null: a scheme with a default port needs a host. */
+const urlFinish = (u: Url): Url | null => {
+  if (urlDefaultPort(u.scheme) >= 0 && u.host === "") {
+    return null
+  }
+  return u
+}
+
+/**
+ * The absolute URL `s` split into its parts, or null when it is not one this
+ * module accepts. `s` is refused when it has no scheme, holds a byte outside
+ * printable ASCII (a control byte, a space, DEL or anything past 0x7F), a
+ * backslash or a `%` not followed by two hex digits, or its authority has more
+ * than one `@`, a host with a byte outside RFC 3986's unreserved set (so a
+ * percent-encoded one), a host whose last label is numeric but that is not a
+ * dotted-decimal IPv4 address, a malformed IPv6 literal or a port that is not
+ * digits or is above 65535. An http, https, ws or wss URL needs a non-empty
+ * host. The path's dot segments are removed, as RFC 3986 §5.2.2 removes them
+ * from a reference with a scheme. Nothing is decoded. It allocates its answer.
+ */
+export const urlParse = (s: string): Url | null => {
+  const u: Url | null = urlReadReference(s)
+  if (u === null || u.scheme === "") {
+    return null
+  }
+  u.path = urlRemoveDotSegments(u.path)
+  return urlFinish(u)
+}
+
+/** RFC 3986 §5.2.3: `path` merged onto `base`'s directory. */
+const urlMerge = (base: Url, path: string): string => {
+  if (base.hasAuthority && base.path === "") {
+    return "/" + path
+  }
+  let k: i32 = toI32(base.path.length)
+  while (k > 0 && toI32(base.path.charCodeAt(k - 1)) !== URL_SLASH) {
+    k -= 1
+  }
+  return base.path.slice(0, k) + path
+}
+
+/**
+ * The reference `ref` resolved against the absolute URL `base` by RFC 3986
+ * §5.2.2, strictly (`http:g` is `http:g`, not relative), or null when `ref`
+ * breaks a rule `urlParse` names or what it resolves to is an http, https, ws
+ * or wss URL without a host. `base`'s fragment is never carried over. It
+ * allocates its answer and does not change `base`.
+ */
+export const urlResolve = (base: Url, ref: string): Url | null => {
+  const r: Url | null = urlReadReference(ref)
+  if (r === null) {
+    return null
+  }
+  if (r.scheme === "") {
+    r.scheme = base.scheme
+    if (!r.hasAuthority) {
+      r.hasAuthority = base.hasAuthority
+      r.username = base.username
+      r.password = base.password
+      r.host = base.host
+      r.port = base.port
+      if (r.path === "") {
+        r.path = base.path
+        if (r.query === null) {
+          r.query = base.query
+        }
+        return urlFinish(r)
+      }
+      if (toI32(r.path.charCodeAt(0)) !== URL_SLASH) {
+        r.path = urlMerge(base, r.path)
+      }
+    }
+  }
+  r.path = urlRemoveDotSegments(r.path)
+  return urlFinish(r)
+}
+
+/** `u`'s host as a URL writes it: an IPv6 address, the one host with a `:`, in brackets. */
+const urlHostText = (u: Url): string => (u.host.indexOf(":") >= 0 ? "[" + u.host + "]" : u.host)
+
+/**
+ * `u` written back as RFC 3986 §5.3 recomposes it, an IPv6 host in brackets.
+ * The userinfo is written when either half is non-empty. A path that starts
+ * with `//` under no authority is written after `/.`, as the WHATWG URL
+ * Standard writes it, so the string does not read back with an authority.
+ */
+export const urlSerialize = (u: Url): string => {
+  const parts: string[] = []
+  if (u.scheme !== "") {
+    parts.push(u.scheme + ":")
+  }
+  if (u.hasAuthority) {
+    parts.push("//")
+    if (u.username !== "" || u.password !== "") {
+      parts.push(u.password !== "" ? u.username + ":" + u.password + "@" : u.username + "@")
+    }
+    parts.push(urlHostText(u))
+    if (u.port >= 0) {
+      parts.push(`:${u.port}`)
+    }
+  } else if (u.path.startsWith("//")) {
+    parts.push("/.")
+  }
+  parts.push(u.path)
+  const query: string | null = u.query
+  if (query !== null) {
+    parts.push("?" + query)
+  }
+  const fragment: string | null = u.fragment
+  if (fragment !== null) {
+    parts.push("#" + fragment)
+  }
+  return parts.join("")
+}
+
+/** The port a scheme uses when a URL names none: 80 for `http` and `ws`, 443 for `https` and `wss`, else -1. */
+export const urlDefaultPort = (scheme: string): i32 => {
+  if (scheme === "http" || scheme === "ws") {
+    return 80
+  }
+  if (scheme === "https" || scheme === "wss") {
+    return 443
+  }
+  return -1
+}
+
+/**
+ * `u`'s origin as `scheme://host:port`, the port always written (the scheme's
+ * default when `u` names none), so origins compare as plain strings:
+ * `http://A.com/x` and `http://a.com:80/y` are both `http://a.com:80`. Null for
+ * a scheme other than http, https, ws or wss, which has no origin to compare.
+ * Hosts are compared as written, lower-cased, so `[::1]` and `[0::1]` are
+ * different origins, and so are `a.com.` and `a.com`: equal strings are the
+ * same origin, and a split errs toward "different".
+ */
+export const urlOrigin = (u: Url): string | null => {
+  const fallback: i32 = urlDefaultPort(u.scheme)
+  if (fallback < 0) {
+    return null
+  }
+  const port: i32 = u.port >= 0 ? u.port : fallback
+  return `${u.scheme}://${urlHostText(u)}:${port}`
 }
