@@ -1,0 +1,139 @@
+PASS  ipv4: 127.0.0.1
+PASS  ipv4: 255.255.255.255
+PASS  ipv4: 0.0.0.0
+PASS  ipv4: a part of 256
+PASS  ipv4: a leading zero is not octal
+PASS  ipv4: four digits
+PASS  ipv4: three parts
+PASS  ipv4: five parts
+PASS  ipv4: an empty part
+PASS  ipv4: a trailing dot
+PASS  ipv4: one number
+PASS  ipv4: a sign
+PASS  ipv4: empty
+PASS  ipv6: ::1
+PASS  ipv6: ::
+PASS  ipv6: eight groups
+PASS  ipv6: a gap in the middle
+PASS  ipv6: a gap at the end
+PASS  ipv6: a gap standing for one group
+PASS  ipv6: an IPv4 tail
+PASS  ipv6: an IPv4 tail after six groups
+PASS  ipv6: an IPv4 tail after seven groups
+PASS  ipv6: a bad IPv4 tail
+PASS  ipv6: nine groups
+PASS  ipv6: seven groups and no gap
+PASS  ipv6: eight groups and a gap
+PASS  ipv6: two gaps
+PASS  ipv6: a group of five digits
+PASS  ipv6: a single leading colon
+PASS  ipv6: a single trailing colon
+PASS  ipv6: three colons
+PASS  ipv6: a zone
+PASS  ipv6: brackets
+PASS  ipv6: not hex
+PASS  literal: a refusal answers false
+PASS  literal: a refusal writes nothing
+PASS  literal: a window reads only its bytes
+PASS  literal: 10.0.0.1 on port 853
+PASS  resolv: empty: two default servers
+PASS  resolv: empty: 127.0.0.1 first
+PASS  resolv: empty: ::1 second
+PASS  resolv: empty: ndots 1
+PASS  resolv: empty: timeout 5
+PASS  resolv: empty: attempts 2
+PASS  resolv: empty: no search domain
+PASS  resolv: the first DNS_MAX_SERVERS kept
+PASS  resolv: the servers past three counted
+PASS  resolv: an IPv4 server on port 53
+PASS  resolv: an IPv6 server after a tab, its comment and CR cut
+PASS  resolv: a server after blanks and a `;` comment
+PASS  resolv: two search domains
+PASS  resolv: a search domain lowercased, its dot dropped
+PASS  resolv: the second search domain
+PASS  resolv: ndots:2
+PASS  resolv: timeout:3
+PASS  resolv: attempts:4
+PASS  resolv: invalid servers are skipped, then the defaults stand
+PASS  resolv: invalid servers: 127.0.0.1
+PASS  resolv: invalid servers are not counted as dropped
+PASS  resolv: one word read from a nameserver line
+PASS  resolv: an IPv6-only file keeps its server
+PASS  resolv: domain replaces search, one word
+PASS  resolv: domain's word
+PASS  resolv: search replaces domain
+PASS  resolv: the last list wins
+PASS  resolv: DNS_MAX_SEARCH domains kept
+PASS  resolv: the domains past six counted
+PASS  resolv: a domain past DNS_MAX_SEARCH_BYTES dropped
+PASS  resolv: the domain after it that fits kept
+PASS  resolv: the bytes kept
+PASS  resolv: a search domain of `.` alone is dropped
+PASS  resolv: the domain after `.`
+PASS  resolv: ndots clamped to 15
+PASS  resolv: timeout clamped up to 1
+PASS  resolv: attempts clamped to 5
+PASS  resolv: ndots:0 stands
+PASS  resolv: twenty digits clamp, never wrap
+PASS  resolv: a hundred digits clamp, never wrap
+PASS  resolv: options that are not counts are ignored: ndots
+PASS  resolv: options that are not counts are ignored: timeout
+PASS  resolv: options that are not counts are ignored: attempts
+PASS  resolv: the last option wins
+PASS  resolv: directives are lowercase only: options
+PASS  resolv: directives are lowercase only: nameserver
+PASS  resolv: commented-out lines are not read
+PASS  resolv: a comment straight after the word
+PASS  resolv: a line of 1025 bytes skipped and counted
+PASS  resolv: a line of 1024 bytes read
+PASS  resolv: the 1024-byte line's server
+PASS  resolv: a last line with no newline
+PASS  resolv: a new parse resets the skipped count
+PASS  resolv: a new parse resets the servers
+PASS  resolv: a window: one server
+PASS  resolv: a window: the second line's
+PASS  hosts: the entries with an address and a name
+PASS  hosts: localhost A
+PASS  hosts: localhost AAAA
+PASS  hosts: an alias
+PASS  hosts: an IPv6-only name has no A
+PASS  hosts: two entries for one name, in file order
+PASS  hosts: the IPv6 entry for that name
+PASS  hosts: found without case and with a trailing dot
+PASS  hosts: the alias after it
+PASS  hosts: a comment is not a name
+PASS  hosts: ::ffff:a.b.c.d answers A
+PASS  hosts: ::ffff:a.b.c.d does not answer AAAA
+PASS  hosts: an invalid address's name
+PASS  hosts: a `;` comment is not a name
+PASS  hosts: a name given twice by one entry is written once
+PASS  hosts: an unknown name
+PASS  hosts: a prefix of a name is not the name
+PASS  hosts: the empty name
+PASS  hosts: max stops the search
+PASS  hosts: max 1 keeps the first
+PASS  hosts: max 0 writes none
+PASS  hosts: a 254-byte name dropped and counted
+PASS  hosts: 253-byte names kept, one with a trailing dot
+PASS  hosts: a 253-byte name found
+PASS  hosts: DNS_HOSTS_MAX_ENTRIES kept
+PASS  hosts: the entries past the cap counted
+PASS  hosts: the last kept entry
+PASS  hosts: an entry past the cap is not found
+PASS  hosts: a line of 250 names is over DNS_CONFIG_MAX_LINE and skipped
+PASS  hosts: no line skipped
+PASS  hosts: DNS_HOSTS_MAX_NAMES kept
+PASS  hosts: the names past the cap counted
+PASS  hosts: the last kept name
+PASS  hosts: a name past the cap is not found
+PASS  hosts: names kept until DNS_HOSTS_MAX_NAME_BYTES
+PASS  hosts: the bytes kept
+PASS  hosts: the names past the byte cap counted
+PASS  hosts: a new parse has no entries
+PASS  hosts: a new parse has no names
+PASS  hosts: a new parse finds nothing
+PASS  flat arena: 1000 nameserver lines and 1501 hosts lines allocate nothing
+PASS  flat arena: no nameserver parsed, so the two fallbacks
+PASS  flat arena: the first fallback is 127.0.0.1:53
+PASS  flat arena: the second fallback is [::1]:53
+dns-config: 138 passed, 0 failed, 0 skipped

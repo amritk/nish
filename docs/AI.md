@@ -2133,7 +2133,13 @@ a `\u` escape `nish/json` decodes) is one unit per byte, and counts its bytes.
 **Files and the system.** `readFileSync(path)` (exits 1 on failure),
 `readFileSyncOrNull(path)` (`string | null`), `readFileBytesSync(path)`
 (`u8[] | null`, the bytes as they are on disk), `writeFileSync(path, data)`,
-`appendFileSync(path, data)`, `mkdirSync(path)` (one level, `boolean`),
+`appendFileSync(path, data)`, `writeFileBytesSync(path, bytes)` (a `u8[]` as
+it is; `i32`: the length, or a negative errno), `renameSync(from, to)` (`0` or
+a negative errno; atomic on one filesystem, `-18` across two, so write the
+temporary beside the target), `unlinkSync(path)` (`0` or a negative errno; a
+directory is refused), `writeBytes(bytes, off, len)` (a `u8[]` range to stdout
+as it is, the length or a negative errno; the range panics like
+`netWrite`'s), `mkdirSync(path)` (one level, `boolean`),
 `isDirectorySync(path)`, `readdirSync(path)` (`string[] | null`, sorted by
 bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
 `getenv(name)` (`string | null` — unset and empty are different answers),
@@ -2167,6 +2173,12 @@ also watches the signal fd. None of `spawn`, `kill`, `waitPid` may be called in
 a task or a parallel body; the two host facts may. `availableParallelism()` (`i32`, at least 1, no `--threads` needed) and
 `totalMemory()` (`i64` bytes, or `-1`) size a program to the machine. None of
 the five exists on a wasm target, and `spawn` and `waitPid` throw under Node.
+`setNice(n)` sets the nice value (clamped to -20..19; lowering it unprivileged
+is `-13`) and `setIdlePriority()` moves the program to Linux's `SCHED_IDLE`
+(`-95` on Darwin); each answers 0 or a negative errno. Call them at the top of
+`main`, never in a task. An unprivileged process can never leave `SCHED_IDLE`
+and an idle one can starve on a saturated machine, so keep a normal-priority
+fallback. Neither exists on wasm; both throw under Node.
 
 **Sockets** (`nish:net`, or the same names as globals). `tcpListen(host, port,
 backlog)`, `tcpAccept(fd, peer)`, `netRead(fd, buf, off, len)`,

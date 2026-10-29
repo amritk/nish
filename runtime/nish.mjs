@@ -84,12 +84,16 @@ globalThis.console = {
 // `Array#sort`'s UTF-16 order — the two agree on ASCII names only.
 provide("write", shim.write);
 provide("writeError", shim.writeError);
+provide("writeBytes", shim.writeBytes);
 provide("panic", shim.panic);
 provide("readFileSync", shim.readFileSync);
 provide("readFileSyncOrNull", shim.readFileSyncOrNull);
 provide("readFileBytesSync", shim.readFileBytesSync);
 provide("writeFileSync", shim.writeFileSync);
 provide("appendFileSync", shim.appendFileSync);
+provide("writeFileBytesSync", shim.writeFileBytesSync);
+provide("renameSync", shim.renameSync);
+provide("unlinkSync", shim.unlinkSync);
 provide("mkdirSync", shim.mkdirSync);
 provide("isDirectorySync", shim.isDirectorySync);
 provide("readdirSync", shim.readdirSync);
@@ -103,6 +107,14 @@ provide("kill", shim.kill);
 provide("waitPid", shim.waitPid);
 provide("availableParallelism", shim.availableParallelism);
 provide("totalMemory", shim.totalMemory);
+// `setNice` and `setIdlePriority` throw, naming themselves: Node has a reading
+// of the nice value (`os.setPriority`) but none of `SCHED_IDLE`, and a reading
+// of one without the other would differ from the native build on the same host.
+for (const name of ["setNice", "setIdlePriority"]) {
+  provide(name, () => {
+    throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`);
+  });
+}
 provide("getenv", shim.getenv);
 provide("statMtimeSync", shim.statMtimeSync);
 provide("signalFd", shim.signalFd);
