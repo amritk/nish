@@ -71,7 +71,7 @@ PASS  malformed: a forward pointer
 PASS  malformed: a pointer into the header
 PASS  malformed: a self-pointer
 PASS  malformed: a label then a pointer back to its start
-PASS  malformed: a two-pointer loop
+PASS  malformed: a two-pointer loop entered by a backward hop
 PASS  malformed: a label length byte 0x40
 PASS  malformed: a label length byte 0x80
 PASS  malformed: a label of 63 running past the end
@@ -91,4 +91,5 @@ PASS  built: a name of 16 hops
 PASS  malformed: a name of 17 hops
 mutation tally: 0=795 2=3 5=1 -7=140 -8=50 -9=46 -10=221 -11=1196 -12=248 -13=494 -14=231 -16=249 -17=15 -18=269 -19=42
 PASS  mutation: every round answers a status or a documented code
-dns-message: 92 passed, 0 failed, 0 skipped
+PASS  mutation: every round keeps at most DNS_MAX_ANSWERS, and none on TC
+dns-message: 93 passed, 0 failed, 0 skipped

@@ -17,7 +17,8 @@ linear in the reply's length. Both files are read into tables of fixed size
 whose overflow is dropped and counted, and a literal is parsed into the
 table's own sixteen-byte buffer, so a file of any length leaves the arena where
 it found it (`flat arena: 1000 nameserver lines and 1501 hosts lines allocate
-nothing`). Only the program's own mistakes — a
+nothing`). The one allocation is the exported `dnsParseAddress`'s, sixteen
+bytes a call, as its documentation says; the file parsers do not call it. Only the program's own mistakes — a
 window outside its array, a port or ID that is not 16 bits, a query
 `dnsBuildQuery` did not write — panic. Four properties are recorded as
 accepted (DNS-1 to DNS-4); none is counted. The panics are not yet pinned by a
@@ -54,7 +55,7 @@ is trusted; its mistakes panic.
 
 | Id | Severity | Where | Description | Disposition |
 | --- | --- | --- | --- | --- |
-| DNS-1 | Low | `std/net/dns-message.ts` (`dnsParseReply`) | The codec checks the ID, the QR bit, the opcode and the question, but not who sent the datagram: an off-path spoofer that guesses the 16-bit ID and the source port has a reply read as the answer. | **Accepted.** The source address and port are the socket's, and the resolver stage draws the ID and the port at random and reads from a connected socket; the codec has no address to compare. |
+| DNS-1 | Low | `std/net/dns-message.ts` (`dnsParseReply`) | The codec checks the ID, the QR bit, the opcode and the question, but not who sent the datagram: an off-path spoofer that guesses the 16-bit ID and the source port has a reply read as the answer. | **Accepted.** The source address and port are the socket's, which the codec never sees. The resolver stage must draw the ID and the source port at random for each query and read from a connected socket; its record checks that it does. |
 | DNS-2 | Low | `std/net/dns-message.ts` (`dnsBuildQuery`, `dnsSameName`) | The question's name is written as the program gave it and compared without case, so the 0x20 bits of the name add no entropy against a spoofer. | **Accepted.** RFC 4343 asks for comparison without case, and a recursive server that does not echo the case exactly would make a case-exact check refuse true answers. |
 | DNS-3 | Low | `std/net/dns-message.ts` (`dnsParseReply`) | A CNAME whose owner is the chain's end moves the chain to any target, and an address for that target is kept, whatever zone it is in. A lying recursive server can answer anything. | **Accepted.** The recursive server is the stub's trust anchor, as it is glibc's and musl's; what the chain prevents is an address for a name off the chain, which is read past (`built CNAME off the chain: no address`). |
 | DNS-4 | Low | `std/net/dns-config.ts` (`dnsParseIpv4`, `dnsParseIpv6`) | The address literal is read by the module's own parser, not by `nish:net`'s `netAddress`, which a std module that must compile on `wasm32` may not import. Two readers of one literal could drift. | **Accepted.** Both are strict: four decimal parts without a leading zero, or RFC 4291 §2.2's text form with at most one `::` and an optional IPv4 tail, no zone and no brackets; every edge is pinned (`ipv4: *`, `ipv6: *`). |
@@ -88,7 +89,7 @@ before any record is read. The name is compared without case
 start of the run of labels that holds it and after the header, so each hop
 moves backwards (`a forward pointer`, `a pointer into the header`,
 `a self-pointer`, `a label then a pointer back to its start`,
-`a two-pointer loop`: `DNS_ERR_POINTER`). Sixteen hops are read and a
+`a two-pointer loop entered by a backward hop`: `DNS_ERR_POINTER`). Sixteen hops are read and a
 seventeenth is `DNS_ERR_HOPS` (`built: a name of 16 hops`,
 `malformed: a name of 17 hops`). A name of 255 bytes in wire form is read and
 one of 256, directly or by a pointer, is `DNS_ERR_NAME_LONG`
@@ -126,7 +127,9 @@ reply, 255 answers claimed`).
 **Mutation does not break a bound** (`mutation: every round answers a status
 or a documented code`). 4000 seeded mutations of the captured replies (one to
 four bytes set at random, the copy sometimes cut short) each answer a reply
-status or a code `dnsParseReply` documents, and none panics; the tally of
+status or a code `dnsParseReply` documents, none panics, none keeps more than
+`DNS_MAX_ANSWERS` addresses and a TC reply keeps none (`mutation: every round
+keeps at most DNS_MAX_ANSWERS, and none on TC`); the tally of
 statuses and codes is the one `mutation tally:` line in `expected.out`, so a
 change in what any mutation answers is seen.
 

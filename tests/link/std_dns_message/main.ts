@@ -116,9 +116,10 @@ const LABEL_64: string = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 const LABEL_63: string = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 // Replies captured from 8.8.8.8 on 2026-10-29 for queries written exactly as
-// `query` writes them (ID 0x1234, RD, no EDNS). The resolver's path filtered
-// AAAA and TXT answers, so the AAAA and TC replies below are built instead, on
-// the layout of the A reply.
+// `query` writes them (ID 0x1234, RD, no EDNS): a Python script sent each query
+// from a UDP socket to 8.8.8.8:53 and wrote the datagram it received as hex,
+// unedited. The resolver's path filtered AAAA and TXT answers, so the AAAA and
+// TC replies below are built instead, on the layout of the A reply.
 
 /** `example.com A`: two A records, each owner a pointer to the question (`c00c`). */
 const CAPTURED_EXAMPLE_A: string =
@@ -291,10 +292,16 @@ export const main = (): number => {
     parse(fromHex(exampleHead("01") + "0178c01d000100010000012c000401020304"), qa, reply),
     DNS_ERR_POINTER
   )
-  // Two pointers that point at each other, 29 -> 31 -> 29: the forward one is refused.
+  // A TXT record, read past, whose RDATA at 41 is a pointer to 43; the next
+  // owner, at 43, points back to 41. The first hop, 43 -> 41, moves backwards
+  // and is followed; the second, 41 -> 43, closes the loop and is refused.
   t.eqI32(
-    "malformed: a two-pointer loop",
-    parse(fromHex(exampleHead("01") + "c01fc01d" + "00010000012c0004" + "01020304"), qa, reply),
+    "malformed: a two-pointer loop entered by a backward hop",
+    parse(
+      fromHex(exampleHead("02") + "c00c00100001" + "0000012c0002c02b" + "c02900010001" + "0000012c0004" + "01020304"),
+      qa,
+      reply
+    ),
     DNS_ERR_POINTER
   )
   t.eqI32("malformed: a label length byte 0x40", parse(patched(example, 29, 0x40), qa, reply), DNS_ERR_LABEL_TYPE)
@@ -394,14 +401,16 @@ export const main = (): number => {
   // --- mutation pass -----------------------------------------------------------
   // Each round copies one captured reply, sets one to four bytes at random
   // offsets to random values, sometimes cuts it short, and parses it. What is
-  // pinned is the tally: no round panics, and every answer is a reply status
-  // or one of the codes dnsParseReply documents (DNS_ERR_NAME_LONG, or
-  // DNS_ERR_HEADER through DNS_ERR_RCODE).
+  // pinned is the tally: no round panics, every answer is a reply status or one
+  // of the codes dnsParseReply documents (DNS_ERR_NAME_LONG, or DNS_ERR_HEADER
+  // through DNS_ERR_RCODE), no reply keeps more than DNS_MAX_ANSWERS addresses,
+  // and a TC reply keeps none.
   const seeds: u8[][] = [example, microsoft, outlook, aaaa, other]
   const queries: u8[][] = [qa, query("www.microsoft.com", DNS_TYPE_A), query("outlook.com", DNS_TYPE_A), qaaaa, qa]
   const rng: Lcg = new Lcg(toI64(20261029))
   const tally: i32[] = new Array<i32>(32)
   let answered: i32 = 0
+  let bounded: i32 = 0
   let round: i32 = 0
   while (round < 4000) {
     const pick: i32 = rng.next(5)
@@ -420,6 +429,9 @@ export const main = (): number => {
     const status: i32 = dnsParseReply(msg, len, queries[pick], toI32(queries[pick].length), 53, reply)
     const slot: i32 = status < 0 ? 12 - status : status
     tally[slot] = tally[slot] + 1
+    if (reply.count <= DNS_MAX_ANSWERS && (status < 0 || !reply.truncated || reply.count === 0)) {
+      bounded += 1
+    }
     if (
       status === DNS_NOERROR ||
       status === DNS_SERVFAIL ||
@@ -442,5 +454,6 @@ export const main = (): number => {
   }
   console.log(line)
   t.eqI32("mutation: every round answers a status or a documented code", answered, 4000)
+  t.eqI32("mutation: every round keeps at most DNS_MAX_ANSWERS, and none on TC", bounded, 4000)
   return t.done()
 }
