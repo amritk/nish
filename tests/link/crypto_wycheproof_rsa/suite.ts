@@ -91,7 +91,7 @@ const hashId = (sha: string): i32 => {
  * through `rsaVerifyPss` with the group's salt length when `pss` is set, and
  * `rsaVerifyPkcs1v15` otherwise. Every group's key must parse. `valid` must
  * verify and `invalid` must not; `acceptable` may go either way and is only
- * counted. A mismatch is named by its file and `tcId`. Answers the number of
+ * counted, and any other result is a mismatch. A mismatch is named by its file and `tcId`. Answers the number of
  * mismatches.
  */
 const wycheproof = (
@@ -147,6 +147,9 @@ const wycheproof = (
       } else {
         invalid += 1;
       }
+    } else if (c.result !== "acceptable") {
+      t.fail(`wycheproof ${file} tcId ${c.tcId}`, `an unknown result "${c.result}"`);
+      mismatches += 1;
     } else if (verified) {
       acceptableTrue += 1;
     } else {

@@ -12,14 +12,16 @@
 // rsa_pss_4096_sha384_mgf1_48_test.json (141 cases),
 // rsa_pss_4096_sha512_mgf1_32_test.json (177 cases),
 // rsa_pss_4096_sha512_mgf1_64_test.json (179 cases), rsa_pss_misc_test.json (18
-// of its 150 cases). And changed: the JSON is rewritten as Nish source, each
-// test group's public key (its publicKeyAsn), hash and salt length are listed
-// once and each case names its group's key by index, and the per-case comments
-// and flags are left out. Every case is kept but those of
-// rsa_pss_misc_test.json whose group hashes with SHA-1 or SHA-224, or whose
-// MGF1 hash differs from the message hash, which nish/crypto/rsa does not
-// offer. None of the files has a case whose result is "acceptable". Every value
-// kept is as upstream wrote it. `tests/link/crypto_wycheproof_rsa` runs them.
+// of its 150 cases). And changed: the JSON is rewritten as Nish source by
+// generate.mjs beside this file, each test group's public key (its
+// publicKeyAsn), hash and salt length are listed once and each case names its
+// group's key by index, and the per-case comments and flags are left out. Every
+// case is kept but those of rsa_pss_misc_test.json whose group hashes with
+// SHA-1 or SHA-224, or whose MGF1 hash differs from the message hash, which
+// nish/crypto/rsa does not offer. None of the files has a case whose result is
+// "acceptable". Every value kept is as upstream wrote it.
+// `tests/link/crypto_wycheproof_rsa` runs them. Generated: do not edit; run
+// generate.mjs again.
 
 import { WycheproofRsaCase, WycheproofRsaKey } from "./types"
 

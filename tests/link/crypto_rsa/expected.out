@@ -18,6 +18,7 @@ PASS  an exponent that is not an INTEGER is refused
 PASS  an empty exponent is refused
 PASS  a negative modulus is refused
 PASS  an exponent with a needless leading zero is refused
+PASS  a modulus with a needless leading zero is refused
 PASS  a key one byte short is refused
 PASS  an empty key is refused
 PASS  an even modulus is refused
@@ -71,4 +72,4 @@ PASS  PSS verifies under a 2049-bit key
 PASS  a 2049-bit key's signature of 2^2048 plus a block is refused
 PASS  PSS SHA-512 verifies under a 1024-bit key
 PASS  a salt too long for a 1024-bit key and SHA-512 is refused
-rsa: 73 passed, 0 failed, 0 skipped
+rsa: 74 passed, 0 failed, 0 skipped

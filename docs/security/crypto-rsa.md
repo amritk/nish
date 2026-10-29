@@ -103,9 +103,11 @@ No code was copied, so `std/crypto/rsa.ts` carries no notice and has no row in
 **Wycheproof.** The cases come from Project Wycheproof's `testvectors_v1/` at
 `3fa63dd0344abb611f1fb1d77e119938603ea230`, the commit
 `tests/link/crypto_wycheproof` already pins. They were rewritten as Nish source
-under `tests/link/crypto_wycheproof_rsa/`, which carries Wycheproof's Apache-2.0
-notice and `LICENSE-wycheproof`. Each case is checked against its `result`.
-For an `acceptable` case, the run prints which way the module went.
+under `tests/link/crypto_wycheproof_rsa/` by its `generate.mjs`, which throws
+when a file's kept and left-out cases do not add up to its `numberOfTests`.
+The directory carries Wycheproof's Apache-2.0 notice and `LICENSE-wycheproof`. Each case is checked against its `result`.
+For an `acceptable` case, the run prints which way the module went; any other
+result label is a mismatch.
 
 | File | Cases | Valid verified | Invalid refused | Acceptable | Test |
 | --- | --- | --- | --- | --- | --- |
@@ -153,10 +155,12 @@ different MGF1 hash, which the module does not offer.
 - `rsa_pkcs1_{2048,3072,4096}` and every `rsa_oaep_*` and
   `rsa_three_primes_*` file: decryption.
 
-**Hand-made cases** (`tests/link/crypto_rsa`, 73 checks). The keys and
-signatures in `tests/link/crypto_rsa/vectors.ts` were made for this test. A
-script generated their primes with a fixed seed and Miller-Rabin, and signed
-with its own private keys, so the file says how each value was made. They
+**Hand-made cases** (`tests/link/crypto_rsa`, 74 checks). The keys and
+signatures in `tests/link/crypto_rsa/vectors.ts` were made for this test.
+`tests/link/crypto_rsa/generate.py` writes the file: it draws the primes from
+a fixed seed, tests them with Miller-Rabin, and signs with its own private
+keys, so a run writes the same file byte for byte and the file says how each
+value was made. They
 cover what Wycheproof does not:
 
 - keys of 1023, 2049 and 8193 bits, an exponent of 2^32 − 5, a modulus whose
@@ -169,12 +173,14 @@ cover what Wycheproof does not:
 - each PSS rule one by one, under signatures re-signed so that only that rule
   fails: the trailer, the top bits of maskedDB, a nonzero padding octet, a
   missing 0x01, and a data block of zeros alone;
-- salt lengths of −1, 0x7ffffff0 and 100 under a 1024-bit key with SHA-512.
+- salt lengths of −1 and 0x7ffffff0 under key A with SHA-256, and of 100
+  under the 1024-bit key E with SHA-512.
 
 **Mutation check.** A test that has never been seen to fail proves little. So
-each refusal rule in `std/crypto/rsa.ts` was replaced, one at a time, by a
-script that edits the file, rebuilds `crypto_rsa` and runs it, and restores
-the file in a `finally`. `git diff` was empty afterwards.
+each refusal rule in `std/crypto/rsa.ts` was replaced, one at a time, by
+`tests/link/crypto_rsa/mutate.py`, which edits the file, rebuilds `crypto_rsa`
+and runs it, and restores the file in a `finally`. It exits nonzero unless
+exactly the four guards below go uncaught. `git diff` was empty afterwards.
 
 These 27 rules were each caught, by a failing check or by a panic in the debug
 profile ("index out of range", or an `i32` overflow):
@@ -213,7 +219,7 @@ state a rule where the code relies on it:
 | --- | --- | --- | --- | --- |
 | RSA-1 | Low | `rsaVerifyPkcs1v15`, `rsaDigestInfoPrefix` | A DigestInfo whose AlgorithmIdentifier has no NULL parameters is refused. RFC 8017 §9.2 note 2 lets a verifier accept that form, and Wycheproof marks it `acceptable` (one case in each of the twelve `rsa_signature_*` files). A signer that leaves out the NULL fails to verify here. | **Accepted, not counted.** Comparing against the one encoding the RFC prints keeps verification a whole-block comparison, with no second accepted encoding. Certificates in the Web PKI carry the NULL. The twelve acceptable cases are printed as refused, and `crypto_rsa` pins it with "a DigestInfo without NULL parameters is refused". |
 | RSA-2 | None (a property) | the whole module | Variable time. The exponentiation branches on the exponent's bits, `rsaMontMul` subtracts only when the result is at least n, and comparisons stop at the first difference. | **Accepted, not counted.** Every input is public (see "Threat model"), so timing reveals only what the attacker sent. A caller must never pass a secret value here. Nothing in the module takes one, and it neither signs nor decrypts. |
-| RSA-3 | Low | `rsaParsePublicKey` | The exponent must be below 2^32, the modulus 1024 to 8192 bits, and e at least 3. RFC 8017 allows any e in [3, n − 1]. A key outside these bounds parses as `null`, even though RFC 8017 would call it valid. | **Accepted, not counted.** The bound limits one verification's cost to at most 31 squarings and 31 multiplications of an 8192-bit number, plus R², whatever key the attacker supplies. Every certificate in use has e = 65537. The 1024-bit floor follows Wycheproof's smallest keys; `pki` imposes 2048. Pinned by "the exponent 2^32 + 1 is refused", "the exponent 2^32 - 1 reads, its leading zero dropped", "a 1023-bit modulus is refused", "an 8193-bit modulus is refused", "an 8192-bit modulus reads", "the exponent 1 is refused", "the exponent 3 reads" and "PKCS#1 v1.5 verifies under e = 2^32 - 5". |
+| RSA-3 | Low | `rsaParsePublicKey` | The exponent must be below 2^32, the modulus 1024 to 8192 bits, and e at least 3. RFC 8017 allows any e in [3, n − 1]. A key outside these bounds parses as `null`, even though RFC 8017 would call it valid. | **Accepted, not counted.** The bound limits one verification's cost to at most 31 squarings and 31 multiplications of an 8192-bit number, plus R², whatever key the attacker supplies. Every certificate in use has e = 65537. The 1024-bit floor still reads the legacy 1024-bit keys some old certificates carry, and refuses anything smaller, which is cheap to factor; `pki` imposes 2048, and every vendored Wycheproof key is at least 2048 bits. Pinned by "the exponent 2^32 + 1 is refused", "the exponent 2^32 - 1 reads, its leading zero dropped", "a 1023-bit modulus is refused", "an 8193-bit modulus is refused", "an 8192-bit modulus reads", "the exponent 1 is refused", "the exponent 3 reads" and "PKCS#1 v1.5 verifies under e = 2^32 - 5". |
 | RSA-4 | Low | `rsaVerifyPkcs1v15`, `rsaVerifyPss` (through `sha256` / `sha384` / `sha512`) | A message longer than 2^31 − 1 bytes panics, as the one-shot hashes do (`std/crypto/sha256.ts`'s `sha256` doc). | **Accepted, not counted.** The hashes panic rather than hash a prefix, which would let one signature verify for every message sharing that prefix. A caller that may see such a message must refuse it first. No test reaches this length, and the behaviour is the hashes'. |
 | RSA-5 | None (a property) | `RsaPublicKey` | The class's constructor is public and checks nothing, so a caller can build a key the parser would refuse: even, short, with a leading zero, or with a long exponent. | **Accepted, not counted; documented.** The class doc says so. The verifiers read only `n` and `e`. Their room checks refuse any n shorter than 51 bytes before it reaches the arithmetic, so a key with an empty or short n answers `false` and never indexes an empty array. Answers for any other hand-built key mean nothing, and its cost is not bounded by RSA-3. `crypto_rsa`'s 488-bit key D, built by hand, pins one case: "a modulus with room for seven FFs is refused" (61 bytes, one short of SHA-256's 62). |
 
@@ -283,7 +289,7 @@ length Wycheproof has.
 
 - "link/crypto_rsa: exits with 0 and stdout matches expected.out", the
   template `` `link/${name}: exits with ${wantCode} and stdout matches expected.out` ``
-  with `name` = `crypto_rsa`. 73 checks.
+  with `name` = `crypto_rsa`. 74 checks.
 - "link/crypto_wycheproof_rsa: exits with 0 and stdout matches
   expected.out", the same template with `name` = `crypto_wycheproof_rsa`.
   All 21 files above.

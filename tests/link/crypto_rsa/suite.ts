@@ -102,6 +102,7 @@ export const runSuite = (): i32 => {
   t.ok("an empty exponent is refused", !parses(`30820107${N_A_INT}0200`));
   t.ok("a negative modulus is refused", !parses(`30820109${"02820100"}${N_A_INT.slice(10)}0203010001`));
   t.ok("an exponent with a needless leading zero is refused", !parses(`3082010b${N_A_INT}020400010001`));
+  t.ok("a modulus with a needless leading zero is refused", !parses(`3082010b028201020000${N_A_INT.slice(10)}0203010001`));
   t.ok("a key one byte short is refused", !parses(KEY_A.slice(0, KEY_A.length - 2)));
   t.ok("an empty key is refused", !parses(""));
   t.ok("an even modulus is refused", !parses(KEY_EVEN_N));

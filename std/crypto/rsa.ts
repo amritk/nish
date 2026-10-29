@@ -58,7 +58,7 @@
 import { sha256 } from "nish/crypto/sha256"
 import { sha384, sha512 } from "nish/crypto/sha512"
 
-/** SHA-256, the hash id `rsaVerifyPkcs1v15` and `rsaVerifyPss` take. The same number as `nish/crypto/x509-ext`'s `X509_HASH_SHA256`. */
+/** SHA-256, the hash id `rsaVerifyPkcs1v15` and `rsaVerifyPss` take. The same number as `nish/crypto/x509`'s `X509_HASH_SHA256`. */
 export const RSA_HASH_SHA256: i32 = 1
 
 /** SHA-384. */

@@ -6,12 +6,13 @@
 // 3fa63dd0344abb611f1fb1d77e119938603ea230: rsa_signature_2048_sha256_test.json
 // (259 cases), rsa_signature_2048_sha384_test.json (258 cases),
 // rsa_signature_2048_sha512_test.json (259 cases). And changed: the JSON is
-// rewritten as Nish source, each test group's public key (its publicKeyAsn),
-// hash and salt length are listed once and each case names its group's key by
-// index, and the per-case comments and flags are left out. Every case is kept.
-// The case each file marks "acceptable" (tcId 8, a DigestInfo without its NULL
-// parameters) is kept. Every value kept is as upstream wrote it.
-// `tests/link/crypto_wycheproof_rsa` runs them.
+// rewritten as Nish source by generate.mjs beside this file, each test group's
+// public key (its publicKeyAsn), hash and salt length are listed once and each
+// case names its group's key by index, and the per-case comments and flags are
+// left out. Every case is kept. The case each file marks "acceptable" (tcId 8,
+// a DigestInfo without its NULL parameters) is kept. Every value kept is as
+// upstream wrote it. `tests/link/crypto_wycheproof_rsa` runs them. Generated:
+// do not edit; run generate.mjs again.
 
 import { WycheproofRsaCase, WycheproofRsaKey } from "./types"
 
