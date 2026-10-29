@@ -104,11 +104,15 @@ answered, so never skip it.
 
 The client offers the three TLS 1.3 cipher suites (AES-128-GCM, AES-256-GCM
 and ChaCha20-Poly1305) and X25519 key exchange, and answers a
-HelloRetryRequest once. It refuses, with an alert:
+HelloRetryRequest once. Add P-256 (`secp256r1`) to the config's `groups` and
+a server may pick it instead, in its ServerHello or in a HelloRetryRequest;
+the client's third argument is the P-256 private key. It refuses, with an
+alert:
 
 - **TLS 1.2 and older.** A server that cannot speak 1.3 fails the handshake.
-- **P-256 key exchange.** A server that picks P-256 gets `internal_error`;
-  leave `groups` at its default, X25519.
+- **A bad key share.** An X25519 share that gives an all-zero secret, or a
+  P-256 share that is not an uncompressed point on the curve, is
+  `illegal_parameter`.
 - **Client certificates.** None is offered, so a CertificateRequest is
   `unexpected_message`.
 - **Resumption.** A NewSessionTicket is checked and dropped; every connection

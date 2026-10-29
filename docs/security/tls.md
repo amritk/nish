@@ -105,11 +105,11 @@ layer. It authenticates nothing itself: the caller judges the chain and the
 CertificateVerify signature at `WAIT_AUTH`, and nothing goes past it until
 the caller says so. Every malformed, out-of-order or unoffered server choice
 is refused with its RFC 8446 alert, the server's Finished is compared in
-constant time, and every secret is a `Secret` wiped on every path. Three Low
-findings are left open: TLS-6, TLS 1.2 and below refused by design; TLS-7, a
-server that selects secp256r1 answered with `internal_error` until
-`nish/crypto/p256` has ECDH; TLS-8, a fatal alert sent in the clear when the
-handshake fails within the `receive` that delivered the ServerHello.
+constant time, and every secret is a `Secret` wiped on every path. Two Low
+findings are left open: TLS-6, TLS 1.2 and below refused by design; TLS-8, a
+fatal alert sent in the clear when the handshake fails within the `receive`
+that delivered the ServerHello. TLS-7, a server that selects secp256r1
+answered with `internal_error`, is closed by `p256Ecdh`.
 
 **Resumption** is built: `TlsServer`, `TlsRecordServer` and `TlsTcpServer`
 issue a ticket after a full handshake and resume with `psk_dhe_ke`.
@@ -181,7 +181,7 @@ tls-client-tcp stage; until then every caller is a direct one.
 | TLS-4 | Low | `std/net/tls-tcp.ts` (`TlsTcpServer`) | The carrier has no clock: a client may hold a slot for as long as it keeps the TCP connection open, mid-handshake or idle, and once every slot is held new connections are accepted and closed at once (`TLS_TCP_POOL_FULL`). Memory stays bounded, since the pool never grows; availability does not. | **Open, the program's to decide.** The program owns the loop and `pollWait`'s timeout, so it closes slots that have gone quiet; a carrier-level idle timeout needs a clock argument the API does not take yet. |
 | TLS-5 | Low | `std/crypto/chacha20poly1305.ts` (`chacha20State`, `chacha20Poly1305Seal`, `chacha20Poly1305Open`), reached from `std/net/tls/record.ts` (`TlsRecordProtection.seal`, `open` under ChaCha20-Poly1305) and, once the ticket-seal stage lands, `std/net/tls/ticket.ts` | **What it was.** Every ChaCha20-Poly1305 seal and open copied its key's eight words into a fresh ChaCha20 state, and made a keystream block and a Poly1305 one-time key from it; none of them was zeroed before the arena released it, so a later memory disclosure could read the key from that memory until it was reused. That key was a ChaCha20-Poly1305 traffic key; under the resumption design (Resumption, below) it would also have been the ticket key. Found in review of that design, at b515c1b. Low on the README's scale, with TLS-1 and TLS-2: key material left in memory, not a forgery or a leak to the network. | **Closed** by #639 (ab9099e, the crypto-wipe stage of #430): every one-shot call wipes the ChaCha20 state, the keystream block, the Poly1305 key, `r` and the accumulator with `nish:secret`'s `wipe`, on the refusal path too, and `tests/wipes/crypto.js` pins each wipe after `-O2`. The ticket key's AEAD copies are wiped the same way, with nothing more from the resumption design. |
 | TLS-6 | Low | `std/net/tls/client.ts` (`checkHello`) | TLS 1.2 and below are not spoken. A ServerHello without `supported_versions` naming 0x0304 is refused with `protocol_version`, and one whose `server_random` ends in RFC 8446 §4.1.3's downgrade sentinel with `illegal_parameter`, so a client of this tree cannot reach a TLS 1.2-only server. Client certificates, 0-RTT and client-side resumption are left out in the same way: a CertificateRequest is `unexpected_message`, and a NewSessionTicket is read and dropped. Pinned by `net_tls_client_refusals` ("missing supported_versions", "downgrade sentinel"). | **Open, by design** (#480): refusing the older protocol is the point. |
-| TLS-7 | Low | `std/net/tls/client.ts` (`exchangeKeys`) | A secp256r1 share can be configured and is sent, but `nish/crypto/p256` has no ECDH, so a server that selects secp256r1 — in its ServerHello, or in a HelloRetryRequest the client then answers — fails the handshake with `internal_error` after the client's key is wiped. A server that takes only P-256 cannot be reached; nothing is weakened. Pinned by `net_tls_client_refusals` ("a P-256 key share"). | **Open**: needs `p256Ecdh(priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> \| null` in `nish/crypto/p256` (off-curve and identity points refused), after which `exchangeKeys` takes the same path as x25519. |
+| TLS-7 | Low | `std/net/tls/client.ts` (`exchangeKeys`) | A secp256r1 share could be configured and was sent, but `nish/crypto/p256` had no ECDH, so a server that selected secp256r1 — in its ServerHello, or in a HelloRetryRequest the client then answered — failed the handshake with `internal_error` after the client's key was wiped. A server that takes only P-256 could not be reached; nothing was weakened. | **Closed** by `p256Ecdh(priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> \| null` (`docs/security/crypto-ecc.md`): `exchangeKeys` computes a secp256r1 share with it, wipes both private keys as for x25519, and answers a share that is not an uncompressed point on the curve, or whose product is the point at infinity, with `illegal_parameter` (RFC 8446 §4.2.8.2). Before, `net_tls_client_refusals` held "a P-256 key share" to `internal_error`; after, it holds the handshake secret of a P-256 share, and of a HelloRetryRequest to P-256, to the one a server computes from the leaf's key ("a P-256 key share: the server's handshake secret", "a retry to P-256: the server's handshake secret"), and refuses "a P-256 share off the curve" and "a compressed P-256 share". |
 | TLS-8 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | `pump` installs the client's handshake write keys once `TlsClient` has the secret, after the records of a `receive` are processed. When the handshake fails within the same `receive` that delivered the ServerHello (bytes after it, an EncryptedExtensions that breaks a rule), `fail` seals its alert under the clear state, which a server that has moved to its handshake keys may not read. The connection ends either way and nothing secret is sent; the server only loses the alert's reason. | **Open**: install the write keys as soon as `TlsClient` derives them, before the next record is processed. |
 
 ## Fuzzing
@@ -880,18 +880,21 @@ answers the same alert):
 | Server's flight | Alert |
 | --- | --- |
 | Extensions cut short; a message longer than the input could hold | `decode_error` |
-| A duplicate extension; an unoffered suite; a share or retry for an unoffered group; a retry for the group already shared; the session id not echoed; a suite changed after the retry; an unoffered ALPN protocol; the downgrade sentinel | `illegal_parameter` |
+| A duplicate extension; an unoffered suite; a share or retry for an unoffered group; a retry for the group already shared; the session id not echoed; a suite changed after the retry; an unoffered ALPN protocol; the downgrade sentinel; a secp256r1 share off the curve, compressed or at infinity | `illegal_parameter` |
 | No `supported_versions` | `protocol_version` |
 | No `key_share` | `missing_extension` |
 | `server_name` acknowledged when none was sent; ALPN when none was offered | `unsupported_extension` |
 | Bytes after the ServerHello at its level; a second retry; EncryptedExtensions at the Initial level; Certificate before EncryptedExtensions; a Finished first | `unexpected_message` |
-| A secp256r1 share (TLS-7); a retry cookie too long for the second ClientHello's extensions to hold | `internal_error` |
+| A retry cookie too long for the second ClientHello's extensions to hold | `internal_error` |
 | A bad server Finished | `decrypt_error` |
 
 **The Finished and the session id are compared in constant time**
 (`timingSafeEqualAt` in `handleFinished` and `checkHello`), and an all-zero
 x25519 secret is `illegal_parameter` (`tlsIsZeroSecret`,
-`timingSafeEqual`; RFC 7748 §6.1).
+`timingSafeEqual`; RFC 7748 §6.1). A secp256r1 share goes to `p256Ecdh`,
+which validates the point before it multiplies (RFC 8446 §4.2.8.2); its
+shared secret is the product's x, which SEC 1 lets be zero, so it has no
+all-zero check (TLS-7).
 
 **The record layer** mirrors `TlsRecordServer`: the compatibility
 `change_cipher_spec` is sent once, and the server's is tolerated only between

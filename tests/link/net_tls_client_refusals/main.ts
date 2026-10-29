@@ -16,10 +16,21 @@ import {
   TLS_GROUP_SECP256R1,
   TLS_GROUP_X25519,
 } from "nish/net/tls/codec";
-import { TLS_CLIENT_STATE_FAILED, TLS_CLIENT_STATE_WAIT_AUTH, TlsClient, TlsClientConfig } from "nish/net/tls/client";
+import {
+  TLS_CLIENT_STATE_FAILED,
+  TLS_CLIENT_STATE_WAIT_AUTH,
+  TLS_CLIENT_STATE_WAIT_ENCRYPTED_EXTENSIONS,
+  TlsClient,
+  TlsClientConfig,
+} from "nish/net/tls/client";
+import { tlsEarlySecret, tlsHandshakeSecretHeld } from "nish/net/tls/schedule";
+import { Secret, secret, wipe } from "nish:secret";
+import { p256Ecdh } from "nish/crypto/p256";
+import { p256PublicKeyPlain } from "../crypto_p256/plain";
+import { secretHex } from "../net_tls_common/secrets";
 import { x25519BasePlain } from "../crypto_x25519/plain";
 import { fromHex } from "../crypto_x509/hex";
-import { leafPublic, newServer, serverPrivate, signWithLeaf, tcpConfig } from "../net_tls_common/server";
+import { leafPrivate, leafPublic, newServer, serverPrivate, signWithLeaf, tcpConfig } from "../net_tls_common/server";
 
 const ZERO: i32 = 0;
 const SUPPORTED_VERSIONS: i32 = 0x002b;
@@ -199,6 +210,52 @@ class Real {
   }
 }
 
+/** The P-256 public key of the private key `started` gives every client. */
+const clientP256Public = (): u8[] => {
+  const pub: u8[] | null = p256PublicKeyPlain(counting(0x60, 32));
+  if (pub === null) {
+    return [];
+  }
+  return pub;
+};
+
+/**
+ * The handshake secret (RFC 8446 §7.1) a server computes over SHA-256 with the
+ * leaf's P-256 key and the client's share: what a client that took the leaf's
+ * public key as the server's share must derive.
+ */
+const p256HandshakeHex = (): string => {
+  const key: Secret<u8[]> = secret(leafPrivate());
+  const shared: Secret<u8[]> | null = p256Ecdh(key, clientP256Public());
+  wipe(key);
+  if (shared === null) {
+    return "no shared secret";
+  }
+  const early: Secret<u8[]> = tlsEarlySecret(32);
+  const handshake: Secret<u8[]> = secret(new Array<u8>(32));
+  tlsHandshakeSecretHeld(32, early, shared, handshake);
+  const hex: string = secretHex(handshake);
+  wipe(early);
+  wipe(shared);
+  wipe(handshake);
+  return hex;
+};
+
+/** Whether `needle` appears in `hay`. */
+const holds = (hay: u8[], needle: u8[]): boolean => {
+  const n: i32 = toI32(needle.length);
+  for (let at: i32 = 0; at + n <= toI32(hay.length); at++) {
+    let k: i32 = 0;
+    while (k < n && hay[at + k] === needle[k]) {
+      k++;
+    }
+    if (k === n) {
+      return true;
+    }
+  }
+  return false;
+};
+
 export const main = (): i32 => {
   const t = new Suite("tls client refusals");
 
@@ -257,9 +314,28 @@ export const main = (): i32 => {
   }
   refused(t, "a cookie too long to echo", c, feed(c, TLS_LEVEL_INITIAL, hello(retryRandom(), c, AES_128, join([retryShare(TLS_GROUP_SECP256R1), versions(), ext(COOKIE, cookie)]))), TLS_ALERT_INTERNAL_ERROR);
 
-  // secp256r1: the share is offered and taken, but no ECDH computes it.
+  // secp256r1: the server's share is the leaf's public key, so the test
+  // computes the server's side of the exchange from the leaf's private key.
   c = twoGroups(TLS_GROUP_SECP256R1);
-  refused(t, "a P-256 key share", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, join([share(TLS_GROUP_SECP256R1, leafPublic()), versions()]))), TLS_ALERT_INTERNAL_ERROR);
+  t.eqI32("a P-256 key share is taken", feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, join([share(TLS_GROUP_SECP256R1, leafPublic()), versions()]))), ZERO);
+  t.eqI32("a P-256 key share: waits on EncryptedExtensions", c.state, TLS_CLIENT_STATE_WAIT_ENCRYPTED_EXTENSIONS);
+  t.eqStr("a P-256 key share: the server's handshake secret", secretHex(c.secrets().handshake), p256HandshakeHex());
+  c = twoGroups(TLS_GROUP_SECP256R1);
+  const offCurve: u8[] = leafPublic();
+  offCurve[64] = toU8(toI32(offCurve[64]) ^ 1);
+  refused(t, "a P-256 share off the curve", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, join([share(TLS_GROUP_SECP256R1, offCurve), versions()]))), TLS_ALERT_ILLEGAL_PARAMETER);
+  c = twoGroups(TLS_GROUP_SECP256R1);
+  // The point's length, with a compressed point's prefix byte.
+  const compressed: u8[] = leafPublic();
+  compressed[0] = 0x02;
+  refused(t, "a compressed P-256 share", c, feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, join([share(TLS_GROUP_SECP256R1, compressed), versions()]))), TLS_ALERT_ILLEGAL_PARAMETER);
+  // A HelloRetryRequest to secp256r1: the second hello carries the client's P-256 share.
+  c = twoGroups(TLS_GROUP_X25519);
+  t.eqI32("a retry to P-256", feed(c, TLS_LEVEL_INITIAL, hello(retryRandom(), c, AES_128, join([retryShare(TLS_GROUP_SECP256R1), versions()]))), ZERO);
+  t.eqI32("a retry to P-256: the share's group", c.shareGroup, TLS_GROUP_SECP256R1);
+  t.ok("a retry to P-256: the second hello carries the P-256 share", holds(c.takeOutput(TLS_LEVEL_INITIAL), clientP256Public()));
+  t.eqI32("a retry to P-256: the ServerHello is taken", feed(c, TLS_LEVEL_INITIAL, hello(randomOf(0xa0), c, AES_128, join([share(TLS_GROUP_SECP256R1, leafPublic()), versions()]))), ZERO);
+  t.eqStr("a retry to P-256: the server's handshake secret", secretHex(c.secrets().handshake), p256HandshakeHex());
 
   // EncryptedExtensions.
   c = afterHello();

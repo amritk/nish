@@ -45,9 +45,20 @@ PASS  a suite changed after the retry: keeps its alert
 PASS  a cookie too long to echo
 PASS  a cookie too long to echo: failed
 PASS  a cookie too long to echo: keeps its alert
-PASS  a P-256 key share
-PASS  a P-256 key share: failed
-PASS  a P-256 key share: keeps its alert
+PASS  a P-256 key share is taken
+PASS  a P-256 key share: waits on EncryptedExtensions
+PASS  a P-256 key share: the server's handshake secret
+PASS  a P-256 share off the curve
+PASS  a P-256 share off the curve: failed
+PASS  a P-256 share off the curve: keeps its alert
+PASS  a compressed P-256 share
+PASS  a compressed P-256 share: failed
+PASS  a compressed P-256 share: keeps its alert
+PASS  a retry to P-256
+PASS  a retry to P-256: the share's group
+PASS  a retry to P-256: the second hello carries the P-256 share
+PASS  a retry to P-256: the ServerHello is taken
+PASS  a retry to P-256: the server's handshake secret
 PASS  unoffered ALPN
 PASS  unoffered ALPN: failed
 PASS  unoffered ALPN: keeps its alert
@@ -74,4 +85,4 @@ PASS  a bad Finished: keeps its alert
 PASS  the caller refuses the chain
 PASS  the caller refuses the chain: failed
 PASS  the caller refuses the chain: keeps its alert
-tls client refusals: 76 passed, 0 failed, 0 skipped
+tls client refusals: 87 passed, 0 failed, 0 skipped

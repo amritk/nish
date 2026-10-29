@@ -10723,6 +10723,7 @@ runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
         c.status === 0
           ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "p256.ll")], {
               encoding: "utf8",
+              maxBuffer: 64 * 1024 * 1024,
             })
           : c
       const body =

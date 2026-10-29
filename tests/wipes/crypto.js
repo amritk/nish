@@ -154,6 +154,22 @@ export const wipeChecks = [
       ["nish.p256SignSha256Into", 59],
     ],
   },
+  // `nish/crypto/p256`'s ECDH (`p256Ecdh`, for TLS's secp256r1 share).
+  // `p256EcdhExposed` wipes the product's scratch and point, 1 / Z, the
+  // shared x's limbs, and the output it refuses for a product at infinity;
+  // `p256ScalarMult` under it wipes its window table and accumulator, and
+  // `p256ScalarInRange` the key's limbs. `opt` inlines it into `p256Ecdh`, so
+  // the two count the same 25. Deleting `wipe(acc)` (1 / Z) or `wipe(x)` takes
+  // 1 from each.
+  {
+    name: "crypto: the wipes survive opt -O2 (P-256 ECDH's product, scratch, 1 / Z and shared x in p256EcdhExposed)",
+    program: "tests/link/crypto_p256_ecdh/main.ts",
+    modules: P256_MODULES,
+    roots: [
+      ["nish.p256Ecdh", 25],
+      ["nish.p256EcdhExposed", 25],
+    ],
+  },
   // The derivations into a held `Secret` (#668). Each derives into a fresh
   // plain buffer inside `exposeWith`, copies it into the held destination and
   // wipes it before it returns, so every root counts its own HKDF-Expand

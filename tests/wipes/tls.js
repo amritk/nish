@@ -152,12 +152,13 @@ export const wipeChecks = [
   // the constructor 28 (the caller's two key arrays once they are copied in,
   // 1 each, and the `fail` of a bad argument, inlined), `wipeKeys` 2 and
   // `wipeUnpicked` 1 (`tlsClientZeroHeld` on each private key, and on the one
-  // the server did not pick), `exchangeKeys` 9 (`wipeKeys`, 2, the ECDHE
-  // secret and the early secret, and the derivations under them) and
-  // `handleFinished` 19 (the server's expected verify data and the client's
+  // the server did not pick), `exchangeKeys` 8 (`wipeKeys`, 2, the ECDHE
+  // secret and the early secret, and the derivations under them; 9 until
+  // P-256's ECDH, when a secp256r1 share took an `internal_error` path that
+  // called `wipeKeys` again) and `handleFinished` 19 (the server's expected verify data and the client's
   // own, 1 each, and the derivations and pool arms under them). Deleting
   // `tlsClientZeroHeld`'s `wipe` takes 2 from `wipeKeys`, 1 from
-  // `wipeUnpicked` and 3 from `exchangeKeys`; either Finished `secureZero`
+  // `wipeUnpicked` and 2 from `exchangeKeys`; either Finished `secureZero`
   // takes 1 from `handleFinished`, and either of the caller's arrays 1 from
   // the constructor. The other wipes are of `Secret`s, which the holder and
   // exit rules (NL2541) pin at compile time.
@@ -187,7 +188,7 @@ export const wipeChecks = [
       ["nish.TlsClient.constructor", 28],
       ["nish.TlsClient.wipeKeys", 2],
       ["nish.TlsClient.wipeUnpicked", 1],
-      ["nish.TlsClient.exchangeKeys", 9],
+      ["nish.TlsClient.exchangeKeys", 8],
       ["nish.TlsClient.handleFinished", 19],
       ["nish.tlsClientInstallHeld", 14],
       ["nish.TlsRecordClient.wipeRead", 9],

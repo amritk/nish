@@ -16,7 +16,7 @@ fixed here, and one lies outside this stage's files and stays open.
 
 | File | Functions |
 | --- | --- |
-| `std/crypto/p256.ts` | `p256PublicKey`, `p256Sign`, `p256Verify`, `p256SignSha256`, `p256VerifySha256`, and everything they reach: the `p256Fiat*` field and scalar arithmetic, `p256DecodePoint` / `p256EncodePoint`, `p256ScalarInRange`, `p256DigestScalar`, the RFC 6979 nonce (`p256NonceKey`, `p256SignScalar`), the inversions, the complete point formulas and the windowed `p256ScalarMult`, and the fixed-base comb that multiplies G for a public key or a signature (`p256BaseMult`, `p256BaseMultWith` and the table `p256BaseTable`, added by #628 after this audit; see below); `P256SignScratch` and `p256SignSha256Into`, with the SHA-256 and HMAC they run (`p256ShaCompress`, `p256ShaInto`, `p256HmacInto`), the key's steps (`p256NonceKeyExposed`, `p256SignSExposed`) and `p256ScalarMultWith`, which #628 replaced with `p256BaseMultWith` |
+| `std/crypto/p256.ts` | `p256PublicKey`, `p256Ecdh` (with `p256EcdhExposed`; added after this audit, see "P-256 ECDH" under Properties verified), `p256Sign`, `p256Verify`, `p256SignSha256`, `p256VerifySha256`, and everything they reach: the `p256Fiat*` field and scalar arithmetic, `p256DecodePoint` / `p256EncodePoint`, `p256ScalarInRange`, `p256DigestScalar`, the RFC 6979 nonce (`p256NonceKey`, `p256SignScalar`), the inversions, the complete point formulas and the windowed `p256ScalarMult`, and the fixed-base comb that multiplies G for a public key or a signature (`p256BaseMult`, `p256BaseMultWith` and the table `p256BaseTable`, added by #628 after this audit; see below); `P256SignScratch` and `p256SignSha256Into`, with the SHA-256 and HMAC they run (`p256ShaCompress`, `p256ShaInto`, `p256HmacInto`), the key's steps (`p256NonceKeyExposed`, `p256SignSExposed`) and `p256ScalarMultWith`, which #628 replaced with `p256BaseMultWith` |
 | `std/crypto/x25519.ts` | `x25519`, `x25519Base`, and the field (`f25519*`), `f25519Decode` / `f25519Encode`, `f25519Invert` and `x25519Ladder` |
 | `std/crypto/ed25519.ts` | added after this audit and recorded as ECC-5: `ed25519PublicKey`, `ed25519Sign`, `ed25519Verify` and everything they reach |
 | `tests/cases/ct_asm_p256.ts`, `tests/cases/ct_asm_x25519.ts` | the copies the constant-time disassembly check holds, compared here with the module functions they mirror |
@@ -147,7 +147,8 @@ Every case passes in both number modes. The 254 X25519 cases marked
 `acceptable` are low-order points, twist points and non-canonical
 u-coordinates. They are held to the file's exact shared secret, which is RFC
 7748's answer and so this module's promise. Some files do not apply: the
-`ecdh_secp256r1_*` files (the module has no ECDH), the SHA-3 and SHA-224
+`ecdh_secp256r1_*` files (the module had no ECDH; `p256Ecdh` now runs the
+`_ecpoint` file, see "P-256 ECDH"), the SHA-3 and SHA-224
 variants (`std` has neither hash), and `x25519_asn` / `_jwk` / `_pem` (these
 test key encodings, which the module does not parse).
 
@@ -252,6 +253,30 @@ would fail if it stopped holding.
 - The public keys of 1 and n − 1 are G and −G: "the public key of 1 is G" and
   "the public key of n - 1 is -G".
 
+**P-256 ECDH** (`p256Ecdh`, added after this audit for TLS's secp256r1 share;
+`tests/link/crypto_p256_ecdh/main.ts`, run by `node tests/run.js crypto_p256_ecdh`).
+SEC 1 §3.3.1 over a validated peer point: the key must be in [1, n − 1] and
+32 bytes, the point an uncompressed SEC 1 point on the curve
+(`p256DecodePoint`), the product is computed inside `exposeWith` with
+`p256ScalarMult`, and its x leaves as a `Secret<u8[]>`.
+
+- Wycheproof's `ecdh_secp256r1_ecpoint_test.json` (the commit above), through
+  the public function with the key as a `Secret`: "wycheproof ecdh: 330 shared
+  secrets as published, 25 public keys refused, of 355". The 25 refused are
+  the 24 `invalid` cases and the one `acceptable` compressed point, which RFC
+  8446 §4.2.8.2 forbids. tcId 3's shared x is zero and is `valid`, so a zero
+  x is answered; only a product at infinity is refused.
+- A key of 0, n, above n, or not 32 bytes, the identity, an empty or
+  truncated point, a compressed point and a point off the curve are refused
+  ("refusals: 12 keys and points checked"), and both sides of 25 exchanges
+  over five keys agree, with 1 · G's x as G's ("exchanges: 25 of 25 pairs
+  agree both ways").
+- Every intermediate is wiped: "crypto: the wipes survive opt -O2 (P-256
+  ECDH's product, scratch, 1 / Z and shared x in p256EcdhExposed)" in
+  `tests/wipes/crypto.js` pins 25 volatile wipes in `p256Ecdh`. What a wipe
+  cannot reach is as ECC-2 records for `p256Sign`: values in registers and
+  spill slots.
+
 **X25519** (`x25519`, `x25519Base`; `tests/link/crypto_x25519/main.ts` and
 `wycheproof.ts`, with the Wycheproof run repeated in `f64` mode by
 `crypto_x25519_f64`):
@@ -297,8 +322,8 @@ and it reveals only that a discarded value was large.
 comb over `p256BaseTable` (`:4119`), 240 affine multiples of G that
 `scripts/gen-p256-table.mjs` computes with BigInt, in 4 rows of 16 mixed
 additions with a doubling between rows. `p256Verify` keeps
-`p256ScalarMult`, which is also the comb's reference. The module has no ECDH
-entry point (see above); the ECDH below is the test corpus, Wycheproof's
+`p256ScalarMult`, which is also the comb's reference. The module had no ECDH
+entry point then (`p256Ecdh` came later, see "P-256 ECDH"); the ECDH below is the test corpus, Wycheproof's
 `ecdh_secp256r1_ecpoint` private keys multiplied through `p256ScalarMult` in
 `tests/link/crypto_p256_agree`.
 

@@ -40,9 +40,8 @@
  * **What is offered.** TLS 1.3 only, with a 32-byte `legacy_session_id` for
  * middlebox compatibility (§D.4). The suites, groups and first key share are
  * the configuration's: by default the three suites this tree negotiates and
- * the group x25519. `secp256r1` may be configured and its share is sent, but
- * a server that selects it fails the handshake with `internal_error`:
- * `nish/crypto/p256` has no ECDH yet. `signature_algorithms` lists ECDSA
+ * the group x25519; `secp256r1` may be configured too, for the first share or
+ * for a HelloRetryRequest to pick. `signature_algorithms` lists ECDSA
  * P-256 and P-384 and RSA-PSS; `server_name` is sent unless the name is an
  * IP literal (RFC 6066 §3); ALPN is the configuration's. One
  * HelloRetryRequest is answered (§4.1.4); resumption, 0-RTT and client
@@ -68,7 +67,7 @@ import { SHA256_SIZE } from "nish/crypto/sha256"
 import { SHA384_SIZE } from "nish/crypto/sha512"
 import { timingSafeEqualAt } from "nish/crypto/ct"
 import { X25519_SIZE, x25519, x25519Base } from "nish/crypto/x25519"
-import { P256_SCALAR_SIZE, p256PublicKey } from "nish/crypto/p256"
+import { P256_SCALAR_SIZE, p256Ecdh, p256PublicKey } from "nish/crypto/p256"
 import {
   TLS_ALERT_BAD_CERTIFICATE,
   TLS_ALERT_DECODE_ERROR,
@@ -825,22 +824,20 @@ export class TlsClient {
    * The ECDHE exchange with the server's share, `input[view.shareAt ..)`, and
    * the handshake secret from it. Both private keys are wiped on every path,
    * and the shared and early secrets before it returns. An all-zero x25519
-   * secret is `illegal_parameter` (RFC 7748 §6.1, RFC 8446 §7.4.2). A
-   * secp256r1 share is `internal_error`: `nish/crypto/p256` has no ECDH.
+   * secret is `illegal_parameter` (RFC 7748 §6.1, RFC 8446 §7.4.2), and so is
+   * a secp256r1 share that is not an uncompressed point on the curve
+   * (§4.2.8.2); its shared secret is the product's x, which may be zero.
    */
   exchangeKeys(): i32 {
     const view: TlsServerFlightView = this.view
-    if (this.shareGroup !== TLS_GROUP_X25519) {
-      this.wipeKeys()
-      return TLS_ALERT_INTERNAL_ERROR
-    }
     const peer: u8[] = tlsCopyWindow(view.data, view.shareAt, view.shareLength)
-    const shared: Secret<u8[]> | null = x25519(this.x25519Key, peer)
+    const isX25519: boolean = this.shareGroup === TLS_GROUP_X25519
+    const shared: Secret<u8[]> | null = isX25519 ? x25519(this.x25519Key, peer) : p256Ecdh(this.p256Key, peer)
     this.wipeKeys()
     if (shared === null) {
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
-    if (expose(shared, tlsIsZeroSecret)) {
+    if (isX25519 && expose(shared, tlsIsZeroSecret)) {
       wipe(shared)
       return TLS_ALERT_ILLEGAL_PARAMETER
     }
