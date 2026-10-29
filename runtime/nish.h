@@ -396,6 +396,22 @@ nish_array *nish_readdir(const nish_str *path);
  * and the bytes live in the arena, so copy what you keep before the next reset
  * or release. */
 nish_array *nish_read_file_bytes(const nish_str *path);
+/* `renameSync(from, to)`, `unlinkSync(path)` and `writeFileBytesSync(path,
+ * bytes)`: rename(2), unlink(2), and every element of a `u8[]` written to a
+ * file opened as `nish_write_file` opens it (`O_TRUNC`, 0644, a link refused).
+ * None exits: each answers 0 (the write, the length written) or a negative
+ * errno — -EXDEV for a rename across file systems, which moves nothing, and
+ * -EISDIR or -EPERM for a directory handed to `nish_unlink`, which never calls
+ * rmdir. A path holding a NUL answers -EINVAL, not -ENOENT, so a program can
+ * tell a malformed path from a missing file. */
+int32_t nish_rename(const nish_str *from, const nish_str *to);
+int32_t nish_unlink(const nish_str *path);
+int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes);
+/* `writeBytes(bytes, off, len)` (nish:io), in runtime-os.c: the bytes
+ * `[off, off + len)` of a `u8[]` on stdout, a short write finished and `EINTR`
+ * retried. The caller has range-checked `off` and `len`. Answers `len`, or the
+ * negative errno of the write that failed; never exits. */
+int32_t nish_write_bytes(const nish_array *bytes, int64_t off, int64_t len);
 /* `spawnSync(argv)`: run element 0 of `argv` (searched on `PATH`) with `argv`
  * as its argument vector, wait for it, and answer its exit status, or
  * `128 + n` when signal `n` killed it. -1 when `argv` is empty, when the
@@ -438,6 +454,15 @@ nish_array *nish_wait_pid(int32_t pid, int32_t flags);
 /* `totalMemory()`: bytes of physical memory (Linux: `_SC_PHYS_PAGES` times the
  * page size; Darwin: `hw.memsize`), or -1 where the host does not say. */
 int64_t nish_total_memory(void);
+/* `setNice(n)`: this process's nice value set to `n` (`setpriority`), 0 or a
+ * negative errno. The kernel clamps `n` to -20..19; lowering it below the
+ * current value without the privilege is -EACCES (or -EPERM). -ENOSYS under
+ * WASI. */
+int32_t nish_set_nice(int32_t n);
+/* `setIdlePriority()`: this process moved to `SCHED_IDLE` (Linux), 0 or a
+ * negative errno; -95 (Linux's EOPNOTSUPP) elsewhere, -ENOSYS under WASI. An
+ * unprivileged process cannot leave the policy again. */
+int32_t nish_set_idle_priority(void);
 
 /* ---- The environment (WP19 R1) ------------------------------------------
  * `getenv(name)`: the value of environment variable `name`, copied into the

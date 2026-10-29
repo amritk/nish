@@ -9,10 +9,12 @@ PASS  five responses, the pinned clock a second on before each, carry its date
 PASS  formatting it once a second, and the arena moves no further than on a still clock (5 formats, 0 and 0 bytes)
 PASS  the last stream ends
 PASS  after the client's GOAWAY the server sends close_notify
-PASS  and its program closes the slot
+PASS  then the end of the stream, not a reset, while the slot waits for the client to hang up
+PASS  and once it does, its program closes the slot
 PASS  a client offering no ALPN completes the handshake
 PASS  but the slot is shut down with close_notify, before any HTTP/2 byte
-PASS  and closed
+PASS  then the end of the stream, not a reset
+PASS  and closed once the client hangs up
 PASS  a client that will close at once completes the handshake
 PASS  its requests and its close_notify in one write: both requests are still answered
 PASS  and only then does the server close its side
@@ -35,4 +37,4 @@ PASS  a server of 1024 slots and no connection has made no frame buffer (0)
 PASS  and has made one slot's connection, slot 0's (1)
 PASS  a slot never accepted into is free: no descriptor, H2_ERROR to next, done to flush
 PASS  and names slot 0's connection, making none for itself
-http2 over tls: 37 passed, 0 failed, 0 skipped
+http2 over tls: 39 passed, 0 failed, 0 skipped

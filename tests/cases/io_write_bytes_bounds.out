@@ -1,0 +1,8 @@
+BC
+3
+slice out of range: [2, 5) of length 4
+pastEnd exit 1
+slice out of range: [-1, 1) of length 4
+negativeOffset exit 1
+slice out of range: [2, 1) of length 4
+negativeLength exit 1

@@ -121,11 +121,11 @@ const AMBIENT_NAMES: string =
   " write writeError panic readFileSync readFileSyncOrNull" +
   " readFileBytesSync writeFileSync appendFileSync mkdirSync" +
   " isDirectorySync readdirSync realpathSync getenv spawnSync spawnSyncTo" +
-  " spawn kill waitPid availableParallelism totalMemory monotonicNanos" +
-  " statMtimeSync lstatOwnerModeSync geteuid isExecutableSync toI32 toI64" +
+  " spawn kill waitPid availableParallelism totalMemory setNice setIdlePriority" +
+  " monotonicNanos statMtimeSync lstatOwnerModeSync geteuid isExecutableSync toI32 toI64" +
   " toF64 f64ToBits f32ToBits bitsToF64 ctSelect ctEq parseInt parseFloat secureZero" +
   " Ok Err arena readStdin waitStdin isTerminal terminalSize setRawMode" +
-  " setTerminalRestore "
+  " setTerminalRestore renameSync unlinkSync writeFileBytesSync writeBytes "
 
 /**
  * The width types `nish/runtime` declares (`runtime/core.d.ts`), and the

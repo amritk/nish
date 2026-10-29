@@ -23274,6 +23274,119 @@ attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-read-bytes -->
 
+### Replacing a file, and bytes out
+
+`writeFileBytesSync`, `renameSync` and `unlinkSync` each answer an `i32`, the
+count or 0 on success and a negative errno otherwise, so the write-then-rename
+below branches on a value and no call can exit. `writeBytes` lowers as
+`netWrite` does with the descriptor fixed at 1: the range check is the
+`slice` panic's, emitted once after the arguments, and the call after it takes
+the array header and the two widened `i64`s.
+
+<!-- cookbook:begin builtin-replace-bytes -->
+```ts
+export const replace = (path: string, bytes: readonly u8[]): number => {
+  const tmp = `${path}.tmp`
+  const written = writeFileBytesSync(tmp, bytes)
+  if (written < 0) {
+    unlinkSync(tmp)
+    return written
+  }
+  return renameSync(tmp, path)
+}
+
+export const echo = (bytes: readonly u8[]): number => writeBytes(bytes, 0, bytes.length)
+```
+
+```llvm
+%struct.nish_array = type { i64, i64, i8* }
+
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c".tmp\00" }, align 8
+
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_rename(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_unlink(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_write_file_bytes(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture readonly) #0
+declare noundef i32 @nish_write_bytes(%struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #0
+declare void @nish_panic_slice(i64 noundef, i64 noundef, i64 noundef) #2
+
+define noundef i32 @replace(i8* noundef nonnull noalias readonly align 8 nocapture %path, %struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes) #0 {
+entry:
+  %tmp.addr = alloca i8*, align 8
+  %written.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_str_concat(i8* %path, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  store i8* %0, i8** %tmp.addr, align 8
+  %1 = load i8*, i8** %tmp.addr, align 8
+  %2 = call i32 @nish_write_file_bytes(i8* %1, %struct.nish_array* %bytes)
+  store i32 %2, i32* %written.addr, align 4
+  %3 = load i32, i32* %written.addr, align 4
+  %4 = icmp slt i32 %3, 0
+  br i1 %4, label %if.then, label %if.end
+
+if.then:
+  %5 = load i8*, i8** %tmp.addr, align 8
+  %6 = call i32 @nish_unlink(i8* %5)
+  %7 = load i32, i32* %written.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %7
+
+if.end:
+  %8 = load i8*, i8** %tmp.addr, align 8
+  %9 = call i32 @nish_rename(i8* %8, i8* %path)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %9
+}
+
+define noundef i32 @echo(%struct.nish_array* noundef nonnull align 8 dereferenceable(24) readonly nocapture %bytes) #0 {
+entry:
+  %0 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
+  %1 = load i64, i64* %0, align 8, !alias.scope !3, !noalias !4, !tbaa !10
+  %2 = trunc i64 %1 to i32
+  %3 = sext i32 %2 to i64
+  %4 = add i64 0, %3
+  %5 = getelementptr inbounds %struct.nish_array, %struct.nish_array* %bytes, i64 0, i32 0
+  %6 = load i64, i64* %5, align 8
+  %7 = icmp ule i64 0, %4
+  %8 = icmp ule i64 %4, %6
+  %9 = and i1 %7, %8
+  br i1 %9, label %net.ok, label %net.fail
+
+net.fail:
+  call void @nish_panic_slice(i64 0, i64 %4, i64 %6)
+  unreachable
+
+net.ok:
+  %10 = call i32 @nish_write_bytes(%struct.nish_array* %bytes, i64 0, i64 %3)
+  ret i32 %10
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!11, !12, !13, !14, !15}
+!0 = !{!"nish array"}
+!1 = !{!"header", !0}
+!2 = !{!"elements", !0}
+!3 = !{!1}
+!4 = !{!2}
+!5 = !{!"nish TBAA"}
+!6 = !{!"omnipotent char", !5, i64 0}
+!7 = !{!"header i64", !6, i64 0}
+!8 = !{!"header ptr", !6, i64 0}
+!9 = !{!"array header", !7, i64 0, !7, i64 8, !8, i64 16}
+!10 = !{!9, !7, i64 0}
+!11 = !{i32 8, !"cf-protection-branch", i32 1}
+!12 = !{i32 8, !"cf-protection-return", i32 1}
+!13 = !{i32 8, !"branch-target-enforcement", i32 1}
+!14 = !{i32 8, !"sign-return-address", i32 1}
+!15 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-replace-bytes -->
+
 ### Capabilities: a report, not a lowering
 
 Every builtin carries one capability label (`docs/LANGUAGE.md` ->
@@ -23891,6 +24004,10 @@ declare noalias noundef nonnull align 8 i8* @nish_read_file(i8* noundef nonnull 
 declare noalias noundef align 8 i8* @nish_read_file_or_null(i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_write_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare void @nish_append_file(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_rename(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_unlink(i8* noundef nonnull readonly align 8 nocapture) #3
+declare noundef i32 @nish_write_file_bytes(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture readonly) #3
+declare noundef i32 @nish_write_bytes(%struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
 declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #2
 declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2
 declare zeroext i1 @nish_mkdir(i8* noundef nonnull readonly align 8 nocapture) #2
@@ -23966,6 +24083,8 @@ declare noundef i8* @nish_guard_keep(i8* noundef, i8* noundef) #3
 declare noundef i64 @nish_cpu_count() #2
 declare noundef i64 @nish_cpu_online() #2
 declare noundef i64 @nish_total_memory() #2
+declare noundef i32 @nish_set_nice(i32 noundef) #2
+declare noundef i32 @nish_set_idle_priority() #2
 declare i32 @nish_aes_hw() #9
 declare void @nish_aes_schedule(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture) #2
 declare void @nish_aes_block(%struct.nish_array* noundef nonnull align 8 nocapture, i32 noundef, %struct.nish_array* noundef nonnull align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture) #2
