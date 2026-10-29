@@ -1,0 +1,63 @@
+PASS  open: opened
+PASS  open: suite negotiated
+PASS  open: alpn chosen
+PASS  open: the server chose it
+PASS  open: the server saw the name
+PASS  open: the server read all the client sent, across its key updates
+PASS  open: the client read the pong
+PASS  open: close_notify ends the client's stream
+PASS  open: socket closed
+PASS  open: done
+PASS  open: a read after close is -32
+PASS  keyupdate: the client read the server's answer and its request
+PASS  keyupdate: the server read the client's request and its answer
+PASS  open: no wake lost
+PASS  literal: opened on the SAN's address
+PASS  literal: no server_name
+PASS  host: not opened
+PASS  host: bad_certificate
+PASS  host: the server reads it
+PASS  untrusted: not opened
+PASS  untrusted: unknown_ca
+PASS  untrusted: the server reads it
+PASS  untrusted: no wake lost
+PASS  alpn: the server's no_application_protocol
+PASS  alpn: no wake lost
+PASS  forged: not opened
+PASS  forged: decrypt_error
+PASS  forged: the server reads it
+PASS  forged: no wake lost
+PASS  root sent: opened
+PASS  root sent: no wake lost
+PASS  expired: not opened
+PASS  expired: certificate_expired
+PASS  expired: the server reads it
+PASS  connect: refused
+PASS  connect: refused, not open
+PASS  connect: refused, closed
+PASS  connect: a short address
+PASS  connect: a short address is done
+PASS  connect: a refused config is not dialled
+PASS  connect: a refused config has no socket
+PASS  connect: timed out
+PASS  connect: waited the timeout
+PASS  connect: and not much more
+PASS  connect: timed out, closed
+PASS  connect: readWait straight after new times out
+PASS  connect: and is still not open
+PASS  connect: writeAll before the handshake times out
+PASS  verify: P-256 verifies
+PASS  verify: other content
+PASS  verify: P-384 scheme on a P-256 key
+PASS  verify: RSA-PSS scheme on a P-256 key
+PASS  verify: ed25519, never offered
+PASS  verify: an empty signature
+PASS  chain: none is bad_certificate
+PASS  chain: good
+PASS  chain: by its address
+PASS  chain: another name
+PASS  chain: not yet valid
+PASS  chain: expired
+PASS  chain: an unknown root
+PASS  chain: a self-signed leaf with no extensions is bad_certificate
+tls client tcp: 62 passed, 0 failed, 0 skipped

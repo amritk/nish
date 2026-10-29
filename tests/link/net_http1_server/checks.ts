@@ -203,7 +203,7 @@ class Driven {
 const SUITE: i32 = TLS_CHACHA20_POLY1305_SHA256;
 
 /** One TLS client: its socket in the loop, its record keys, and the plaintext it has read. */
-class TlsClient {
+class CheckTlsClient {
   lb: H1Loop;
   index: i32 = -1;
   read: TlsRecordProtection;
@@ -946,7 +946,7 @@ export const serverChecks = (): i32 => {
   tlsNeverBuilt(t);
 
   // --- 6. TLS -------------------------------------------------------------------------------------
-  const s = new TlsClient(lb);
+  const s = new CheckTlsClient(lb);
   t.ok("a client offering http/1.1 completes the handshake, the server's signature and Finished verified", s.handshake([H1_ALPN]) && s.verified);
   t.eqStr("ALPN chose http/1.1", lb.secure.alpn(ZERO), "http/1.1");
   t.ok(
@@ -999,7 +999,7 @@ export const serverChecks = (): i32 => {
   t.eqI32("so idleTimeout still bounds the linger", lb.secure.expire(monotonicNanos() + toI64(2000000000)), toI32(1));
   t.ok("and the slot is closed", !lb.secure.holds(lingerSlot) && lb.secure.busy() === 0);
 
-  const flood = new TlsClient(lb);
+  const flood = new CheckTlsClient(lb);
   t.ok("a client that will flood the linger completes the handshake", flood.handshake([H1_ALPN]));
   flood.send("GET /hello HTTP/1.1\r\nHost: a\r\nConnection: close\r\n\r\n");
   flood.response(new ClientReader(false));
@@ -1013,7 +1013,7 @@ export const serverChecks = (): i32 => {
   t.ok("a client that sends more than the linger limit after the close is closed anyway", lb.awaitClosed(closedBeforeFlood + 1) && lb.secure.busy() === 0);
   lb.hangUp(flood.index);
 
-  const n = new TlsClient(lb);
+  const n = new CheckTlsClient(lb);
   const noAlpn: string[] = [];
   t.ok("a client offering no ALPN completes the handshake", n.handshake(noAlpn));
   n.send(get);
@@ -1025,7 +1025,7 @@ export const serverChecks = (): i32 => {
   lb.secure.expire(monotonicNanos());
   t.eqI32("a TLS expire before any slot can be due walks no slot", lb.secure.expireScans, tlsWalks);
 
-  const sl = new TlsClient(lb);
+  const sl = new CheckTlsClient(lb);
   sl.handshake(noAlpn);
   sl.send("GET /hello HTTP/1.1\r\n");
   settleLonger(lb);
@@ -1043,7 +1043,7 @@ export const serverChecks = (): i32 => {
 
   // A record trickled a byte at a time hands the connection no plaintext
   // until it is whole, so the clock must start on its ciphertext.
-  const rec = new TlsClient(lb);
+  const rec = new CheckTlsClient(lb);
   rec.handshake(noAlpn);
   const sealed: u8[] = sealOne(rec.write, TLS_CONTENT_APPLICATION_DATA, ascii("GET /hello HTTP/1.1\r\nHost: a\r\n\r\n"), ZERO);
   lb.send(rec.index, range(sealed, ZERO, toI32(3)));
@@ -1056,7 +1056,7 @@ export const serverChecks = (): i32 => {
   );
   t.ok("and its client sees the end", lb.awaitEnd(rec.index) && lb.secure.busy() === 0);
 
-  const h = new TlsClient(lb);
+  const h = new CheckTlsClient(lb);
   t.ok("a client offering only h2 completes the handshake", h.handshake(["h2"]));
   h.send(get);
   const refusedResponse = h.response(new ClientReader(false));

@@ -342,6 +342,19 @@ at once, with no packet. For a command-line tool or a program's start-up,
 `/etc/hosts` and blocks until the lookup ends. The
 [standard library page](standard-library.md#nishnetdns) has both in full.
 
+## TLS to a server: `tlsConnect`
+
+`nish/net/tls-tcp`'s `tlsConnect(addr, serverName, alpn, timeoutMs)` takes an
+address like `tcpConnect`'s, connects, runs a TLS 1.3 handshake and checks
+the server's certificate for `serverName`, blocking until it has or the time
+has run out. Like the socket calls it never looks a name up: resolve one
+first, as above, and pass the name you meant as `serverName`. The client's
+`writeAll` and `readWait` then write and read under a timeout, for a program
+with no loop of its own. Their answers, and how to drive the client from
+your own loop instead, are on
+[TLS client](tls-client.md#connecting-tlsconnect), with how to trust roots
+other than the system's.
+
 ## Trusting a peer's address
 
 A TCP peer's address is proven: the handshake that `tcpAccept` completes needs
