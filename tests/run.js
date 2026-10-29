@@ -7814,7 +7814,7 @@ if (!only || "speed-link".includes(only)) {
 
 // The GNU build-id note (scripts/build.sh, `--build-id=sha1`): what perf, gdb
 // and debuginfod match a stripped binary to its debug file by. Every native ELF
-// profile carries one, the debug profile's link included, and it is a hash of
+// profile carries one, the size and debug links included, and it is a hash of
 // the output's bytes, so two links of one input give one id -- the property the
 // bootstrap's `stage3 == stage2` rests on. The notes are read from the section
 // headers here rather than through readelf, so the check needs only a link.
@@ -7867,6 +7867,7 @@ if (!only || "build_id".includes(only)) {
     for (const [out, profile] of [
       ["speed-a", "speed"],
       ["speed-b", "speed"],
+      ["size", "size"],
       ["debug", "debug"],
     ]) {
       const built = link(out, profile)
@@ -7881,6 +7882,11 @@ if (!only || "build_id".includes(only)) {
       "build_id: two speed links of one input carry the same build id",
       ids["speed-a"]?.length === 1 && ids["speed-a"][0] === ids["speed-b"]?.[0],
       `${ids["speed-a"]} against ${ids["speed-b"]}`
+    )
+    check(
+      "build_id: a debug link carries a different build id from a speed link",
+      ids.debug?.length === 1 && ids["speed-a"]?.length === 1 && ids.debug[0] !== ids["speed-a"][0],
+      `${ids.debug} against ${ids["speed-a"]}`
     )
   }
 }
