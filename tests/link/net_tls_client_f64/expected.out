@@ -1,0 +1,246 @@
+PASS  AES-128-GCM: client alert
+PASS  AES-128-GCM: server alert
+PASS  AES-128-GCM: client connected
+PASS  AES-128-GCM: server connected
+PASS  AES-128-GCM: one chain check
+PASS  AES-128-GCM: one signature check
+PASS  AES-128-GCM: suite
+PASS  AES-128-GCM: alpn
+PASS  AES-128-GCM: exporter agrees
+PASS  AES-128-GCM: what the client writes the server reads
+PASS  AES-128-GCM: what the server writes the client reads
+PASS  AES-128-GCM: both application secrets known
+PASS  AES-128-GCM: the handshake secrets stay for the carrier
+PASS  AES-128-GCM: nothing more to send
+PASS  AES-256-GCM: client alert
+PASS  AES-256-GCM: server alert
+PASS  AES-256-GCM: client connected
+PASS  AES-256-GCM: server connected
+PASS  AES-256-GCM: one chain check
+PASS  AES-256-GCM: one signature check
+PASS  AES-256-GCM: suite
+PASS  AES-256-GCM: alpn
+PASS  AES-256-GCM: exporter agrees
+PASS  AES-256-GCM: what the client writes the server reads
+PASS  AES-256-GCM: what the server writes the client reads
+PASS  AES-256-GCM: both application secrets known
+PASS  AES-256-GCM: the handshake secrets stay for the carrier
+PASS  AES-256-GCM: nothing more to send
+PASS  ChaCha20-Poly1305: client alert
+PASS  ChaCha20-Poly1305: server alert
+PASS  ChaCha20-Poly1305: client connected
+PASS  ChaCha20-Poly1305: server connected
+PASS  ChaCha20-Poly1305: one chain check
+PASS  ChaCha20-Poly1305: one signature check
+PASS  ChaCha20-Poly1305: suite
+PASS  ChaCha20-Poly1305: alpn
+PASS  ChaCha20-Poly1305: exporter agrees
+PASS  ChaCha20-Poly1305: what the client writes the server reads
+PASS  ChaCha20-Poly1305: what the server writes the client reads
+PASS  ChaCha20-Poly1305: both application secrets known
+PASS  ChaCha20-Poly1305: the handshake secrets stay for the carrier
+PASS  ChaCha20-Poly1305: nothing more to send
+PASS  AES-256-GCM first of three: client alert
+PASS  AES-256-GCM first of three: server alert
+PASS  AES-256-GCM first of three: client connected
+PASS  AES-256-GCM first of three: server connected
+PASS  AES-256-GCM first of three: one chain check
+PASS  AES-256-GCM first of three: one signature check
+PASS  AES-256-GCM first of three: suite
+PASS  AES-256-GCM first of three: alpn
+PASS  AES-256-GCM first of three: exporter agrees
+PASS  AES-256-GCM first of three: what the client writes the server reads
+PASS  AES-256-GCM first of three: what the server writes the client reads
+PASS  AES-256-GCM first of three: both application secrets known
+PASS  AES-256-GCM first of three: the handshake secrets stay for the carrier
+PASS  AES-256-GCM first of three: nothing more to send
+PASS  with ALPN: client alert
+PASS  with ALPN: server alert
+PASS  with ALPN: client connected
+PASS  with ALPN: server connected
+PASS  with ALPN: one chain check
+PASS  with ALPN: one signature check
+PASS  with ALPN: suite
+PASS  with ALPN: alpn
+PASS  with ALPN: exporter agrees
+PASS  with ALPN: what the client writes the server reads
+PASS  with ALPN: what the server writes the client reads
+PASS  with ALPN: both application secrets known
+PASS  with ALPN: the handshake secrets stay for the carrier
+PASS  with ALPN: nothing more to send
+PASS  ALPN the server does not speak: client alert
+PASS  ALPN the server does not speak: server alert
+PASS  ALPN the server does not speak: client connected
+PASS  ALPN the server does not speak: server connected
+PASS  ALPN the server does not speak: one chain check
+PASS  ALPN the server does not speak: one signature check
+PASS  ALPN the server does not speak: suite
+PASS  ALPN the server does not speak: alpn
+PASS  ALPN the server does not speak: exporter agrees
+PASS  ALPN the server does not speak: what the client writes the server reads
+PASS  ALPN the server does not speak: what the server writes the client reads
+PASS  ALPN the server does not speak: both application secrets known
+PASS  ALPN the server does not speak: the handshake secrets stay for the carrier
+PASS  ALPN the server does not speak: nothing more to send
+PASS  a retry for the share: client alert
+PASS  a retry for the share: server alert
+PASS  a retry for the share: client connected
+PASS  a retry for the share: server connected
+PASS  a retry for the share: one chain check
+PASS  a retry for the share: one signature check
+PASS  a retry for the share: suite
+PASS  a retry for the share: alpn
+PASS  a retry for the share: exporter agrees
+PASS  a retry for the share: what the client writes the server reads
+PASS  a retry for the share: what the server writes the client reads
+PASS  a retry for the share: both application secrets known
+PASS  a retry for the share: the handshake secrets stay for the carrier
+PASS  a retry for the share: nothing more to send
+PASS  a retry under SHA-384: client alert
+PASS  a retry under SHA-384: server alert
+PASS  a retry under SHA-384: client connected
+PASS  a retry under SHA-384: server connected
+PASS  a retry under SHA-384: one chain check
+PASS  a retry under SHA-384: one signature check
+PASS  a retry under SHA-384: suite
+PASS  a retry under SHA-384: alpn
+PASS  a retry under SHA-384: exporter agrees
+PASS  a retry under SHA-384: what the client writes the server reads
+PASS  a retry under SHA-384: what the server writes the client reads
+PASS  a retry under SHA-384: both application secrets known
+PASS  a retry under SHA-384: the handshake secrets stay for the carrier
+PASS  a retry under SHA-384: nothing more to send
+PASS  a 31-byte random
+PASS  a 31-byte key
+PASS  no suites
+PASS  a suite the client does not know
+PASS  an empty ALPN name
+PASS  an ALPN name of 256 bytes
+PASS  a name of 254 characters
+PASS  a label of 64 bytes
+PASS  a name ending in a dot
+PASS  a name with a space
+PASS  a name with an empty label
+PASS  start twice
+PASS  a client that failed answers its alert again
+PASS  ...and to bytes
+PASS  an IPv4 literal sends no SNI
+PASS  an IPv6 literal sends no SNI
+PASS  a DNS name is sent
+PASS  the hello is written
+PASS  and taken once
+PASS  rebuilt ServerHello is accepted
+PASS  rebuilt ServerHello is accepted: failed
+PASS  a suite not offered
+PASS  a suite not offered: failed
+PASS  a legacy version other than 1.2
+PASS  a legacy version other than 1.2: failed
+PASS  a TLS 1.2 ServerHello
+PASS  a TLS 1.2 ServerHello: failed
+PASS  the TLS 1.2 downgrade sentinel
+PASS  the TLS 1.2 downgrade sentinel: failed
+PASS  the TLS 1.1 downgrade sentinel
+PASS  the TLS 1.1 downgrade sentinel: failed
+PASS  the sentinel on a TLS 1.2 ServerHello
+PASS  the sentinel on a TLS 1.2 ServerHello: failed
+PASS  supported_versions 1.2
+PASS  supported_versions 1.2: failed
+PASS  a compression method
+PASS  a compression method: failed
+PASS  a session id the client did not send
+PASS  a session id the client did not send: failed
+PASS  no key_share
+PASS  no key_share: failed
+PASS  an extension not offered
+PASS  an extension not offered: failed
+PASS  a duplicate extension
+PASS  a duplicate extension: failed
+PASS  a share of 31 bytes
+PASS  a share of 31 bytes: failed
+PASS  a share for secp256r1
+PASS  a share for secp256r1: failed
+PASS  an all-zero share
+PASS  an all-zero share: failed
+PASS  a ServerHello cut short waits for the rest
+PASS  a ServerHello cut short waits for the rest: failed
+PASS  a ServerHello whose body ends early
+PASS  a ServerHello whose body ends early: failed
+PASS  EncryptedExtensions instead
+PASS  EncryptedExtensions instead: failed
+PASS  bytes after the ServerHello
+PASS  bytes after the ServerHello: failed
+PASS  a header longer than 64 KiB
+PASS  a header longer than 64 KiB: failed
+PASS  the ServerHello at the Handshake level
+PASS  a window past the end
+PASS  a negative offset
+PASS  no bytes is not an error
+PASS  ...and changes nothing
+PASS  bytes before start
+PASS  the ServerHello a byte at a time
+PASS  ...derives the handshake secrets
+PASS  a retry for x25519
+PASS  ...sends a second ClientHello, longer by the share
+PASS  a second retry
+PASS  a retry with a cookie
+PASS  ...echoes it
+PASS  a retry for secp256r1
+PASS  a retry for the share already sent
+PASS  a retry that changes nothing
+PASS  a retry for a suite not offered
+PASS  a ServerHello whose suite is not the retry's
+PASS  the recorded flight
+PASS  an ALPN not offered
+PASS  two ALPN protocols
+PASS  a server_name with a body
+PASS  an empty server_name
+PASS  key_share in EncryptedExtensions
+PASS  an extension not offered
+PASS  EncryptedExtensions cut short
+PASS  a CertificateRequest
+PASS  CertificateVerify before Certificate
+PASS  Finished before Certificate
+PASS  an empty certificate list
+PASS  a certificate request context
+PASS  an empty certificate
+PASS  a CertificateVerify scheme not offered
+PASS  a CertificateVerify cut short
+PASS  a ClientHello in the flight
+PASS  a second EncryptedExtensions
+PASS  a NewSessionTicket before Finished
+PASS  CertificateVerify waits on the caller
+PASS  the scheme is the server's
+PASS  one certificate
+PASS  the leaf as sent
+PASS  the content opens with 64 spaces
+PASS  and the server context string
+PASS  Finished is kept while it waits
+PASS  ...and taken when the caller accepts
+PASS  connected
+PASS  bytes after the handshake
+PASS  a chain refused with unknown_ca
+PASS  a chain refused with unknown_ca: failed
+PASS  a chain refused with unknown_ca: nothing to send
+PASS  a chain refused with certificate_expired
+PASS  a chain refused with certificate_expired: failed
+PASS  a chain refused with certificate_expired: nothing to send
+PASS  a chain refused with an alert out of range
+PASS  a chain refused with an alert out of range: failed
+PASS  a chain refused with an alert out of range: nothing to send
+PASS  a chain refused with a negative alert
+PASS  a chain refused with a negative alert: failed
+PASS  a chain refused with a negative alert: nothing to send
+PASS  a signature that does not verify
+PASS  a signature that does not verify: failed
+PASS  a signature that does not verify: nothing to send
+PASS  authenticate before the flight
+PASS  the pinned chain for another name
+PASS  ...is not asked about the signature
+PASS  a CertificateVerify signature changed
+PASS  the hand-off on a client not waiting
+PASS  ...asks neither verifier
+PASS  a Finished changed
+PASS  a Finished a byte short
+PASS  bytes after Finished
+PASS  more than 64 KiB kept while it waits
+nish/net/tls-client: 245 passed, 0 failed, 0 skipped

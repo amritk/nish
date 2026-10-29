@@ -1486,3 +1486,628 @@ export const tlsCertificateVerifyContent = (transcriptHash: u8[]): u8[] => {
   tlsWriteCertificateVerifyContent(out, TLS_CODEC_FROM, transcriptHash, TLS_CODEC_FROM, length)
   return out
 }
+
+// ---- The client side --------------------------------------------------------
+//
+// What a client writes (its ClientHello) and reads (the server's flight, RFC
+// 8446 §4.1.3 to §4.4.4), checked against the ClientHello it sent. The client
+// parses its own hello with `tlsReadClientHello` into a `TlsClientHelloView`
+// and passes that view here as `offered`, so "did the client offer this" is
+// one question about bytes it actually sent, whether `tlsWriteClientHello`
+// wrote them or a caller encoded the hello itself.
+
+/** `cookie` (§4.2.2): sent in a HelloRetryRequest and echoed in the second ClientHello. */
+export const TLS_EXT_COOKIE: i32 = 44
+/** `signature_algorithms_cert` (§4.2.3). */
+export const TLS_EXT_SIGNATURE_ALGORITHMS_CERT: i32 = 50
+/** `secp256r1` (§4.2.7), which a client may be asked for by a HelloRetryRequest. */
+export const TLS_GROUP_SECP256R1: i32 = 0x0017
+/** The `bad_certificate` alert (§6.2): the default answer of a refused chain. */
+export const TLS_ALERT_BAD_CERTIFICATE: i32 = 42
+/** The `unsupported_extension` alert (§6.2): an extension the client did not offer. */
+export const TLS_ALERT_UNSUPPORTED_EXTENSION: i32 = 110
+
+/**
+ * The signature schemes a client offers for CertificateVerify (§4.2.3):
+ * ECDSA with P-256 and P-384, RSA-PSS in both key encodings, and Ed25519.
+ * Whether the authenticator can check each is the caller's business; the
+ * client only refuses a scheme it did not offer.
+ */
+const TLS_CLIENT_SCHEMES: string = "040305030804080508060809080a080b0807"
+/** The certificate signature schemes (§4.2.3): the same, plus RSA PKCS#1 v1.5, which certificates still use. */
+const TLS_CLIENT_CERT_SCHEMES: string = "040305030804080508060809080a080b0807040105010601"
+/** The last eight bytes of a TLS 1.2 server's random when it was offered TLS 1.3 (§4.1.3): "DOWNGRD" and 01. */
+const TLS_DOWNGRADE_12: string = "444f574e47524401"
+/** The same for a TLS 1.1 or earlier server: "DOWNGRD" and 00. */
+const TLS_DOWNGRADE_11: string = "444f574e47524400"
+
+/** Whether `value`'s bit is set in `bits`, without setting it (`tlsMarkSeen` sets it). */
+const tlsBitSeen = (bits: u32[], value: i32): boolean => {
+  const word: i32 = (value >> 5) & (TLS_U16_BITMAP_WORDS - 1)
+  if (word < 0 || word >= toI32(bits.length)) {
+    return false
+  }
+  return (bits[word] & (toU32(1) << toU32(value & 31))) !== toU32(0)
+}
+
+/** Whether `data[at .. at + text.length / 2)` is the bytes the hex constant `text` spells. */
+const tlsWindowIsHex = (data: u8[], at: i32, text: string): boolean => {
+  const length: i32 = toI32(text.length) >> 1
+  if (at < 0 || at > toI32(data.length) - length) {
+    return false
+  }
+  for (let k: i32 = 0; k < length; k++) {
+    const hi: i32 = tlsHexNibble(toI32(text.charCodeAt(2 * k)))
+    const lo: i32 = tlsHexNibble(toI32(text.charCodeAt(2 * k + 1)))
+    if (toI32(data[at + k]) !== ((hi << 4) | lo)) {
+      return false
+    }
+  }
+  return true
+}
+
+/** A 16-bit list extension whose values are the hex constant `text`: `type`, its length, the list's length, the list. */
+const tlsPutHexListExtension = (out: u8[], at: i32, type: i32, text: string, width: i32): i32 => {
+  const listLength: i32 = toI32(text.length) >> 1
+  let p: i32 = tlsPutU16(out, at, type)
+  p = tlsPutU16(out, p, listLength + width)
+  p = width === 1 ? tlsPutU8(out, p, listLength) : tlsPutU16(out, p, listLength)
+  return tlsHexInto(text, out, p)
+}
+
+/**
+ * Writes a ClientHello (§4.1.2) at `out[at]` and answers where it ends. It
+ * offers TLS 1.3 alone, `suites` in order, the group x25519 with the share
+ * `x25519Public` (an empty array sends an empty share list, which asks the
+ * server for a HelloRetryRequest), the schemes `TLS_CLIENT_SCHEMES` and
+ * `TLS_CLIENT_CERT_SCHEMES`, `server_name` when `serverName` is not empty,
+ * ALPN when `alpn` is not, and the cookie `cookie[cookieOff .. cookieOff +
+ * cookieLength)` when that is not empty (§4.2.2, a second hello's echo). The
+ * legacy session id is empty, so no compatibility ChangeCipherSpec is owed
+ * (§D.4). Its inputs are the client's own, so it checks nothing.
+ */
+export const tlsWriteClientHello = (
+  out: u8[],
+  at: i32,
+  random: u8[],
+  serverName: string,
+  alpn: string[],
+  suites: i32[],
+  x25519Public: u8[],
+  cookie: u8[],
+  cookieOff: i32,
+  cookieLength: i32
+): i32 => {
+  let p: i32 = tlsPutU16(out, at + 4, TLS_LEGACY_VERSION)
+  p = tlsPutBytes(out, p, random)
+  p = tlsPutU8(out, p, 0)
+  const suitesAt: i32 = p + 2
+  p = suitesAt
+  for (const suite of suites) {
+    p = tlsPutU16(out, p, suite)
+  }
+  tlsPutLength(out, suitesAt, p, 2)
+  p = tlsPutU16(out, p, 0x0100)
+  const extensions: i32 = p + 2
+  p = extensions
+  if (toI32(serverName.length) > 0) {
+    p = tlsPutU16(out, p, TLS_EXT_SERVER_NAME)
+    const body: i32 = p + 2
+    const list: i32 = body + 2
+    const name: i32 = tlsPutU8(out, list, 0) + 2
+    p = tlsPutAscii(out, name, serverName)
+    tlsPutLength(out, name, p, 2)
+    tlsPutLength(out, list, p, 2)
+    tlsPutLength(out, body, p, 2)
+  }
+  p = tlsPutU16(
+    out,
+    tlsPutU16(out, tlsPutU16(out, tlsPutU16(out, p, TLS_EXT_SUPPORTED_GROUPS), 4), 2),
+    TLS_GROUP_X25519
+  )
+  p = tlsPutHexListExtension(out, p, TLS_EXT_SIGNATURE_ALGORITHMS, TLS_CLIENT_SCHEMES, 2)
+  p = tlsPutHexListExtension(out, p, TLS_EXT_SIGNATURE_ALGORITHMS_CERT, TLS_CLIENT_CERT_SCHEMES, 2)
+  p = tlsPutHexListExtension(out, p, TLS_EXT_SUPPORTED_VERSIONS, "0304", 1)
+  p = tlsPutU16(out, p, TLS_EXT_KEY_SHARE)
+  const shareBody: i32 = p + 2
+  const shares: i32 = shareBody + 2
+  p = shares
+  if (toI32(x25519Public.length) > 0) {
+    p = tlsPutU16(out, p, TLS_GROUP_X25519)
+    const key: i32 = p + 2
+    p = tlsPutBytes(out, key, x25519Public)
+    tlsPutLength(out, key, p, 2)
+  }
+  tlsPutLength(out, shares, p, 2)
+  tlsPutLength(out, shareBody, p, 2)
+  if (toI32(alpn.length) > 0) {
+    p = tlsPutU16(out, p, TLS_EXT_ALPN)
+    const body: i32 = p + 2
+    const list: i32 = body + 2
+    p = list
+    for (const protocol of alpn) {
+      const name: i32 = p + 1
+      p = tlsPutAscii(out, name, protocol)
+      tlsPutLength(out, name, p, 1)
+    }
+    tlsPutLength(out, list, p, 2)
+    tlsPutLength(out, body, p, 2)
+  }
+  if (cookieLength > 0) {
+    p = tlsPutU16(out, p, TLS_EXT_COOKIE)
+    const body: i32 = p + 2
+    const value: i32 = body + 2
+    p = tlsPutWindow(out, value, cookie, cookieOff, cookieLength)
+    tlsPutLength(out, value, p, 2)
+    tlsPutLength(out, body, p, 2)
+  }
+  tlsPutLength(out, extensions, p, 2)
+  tlsPutHeader(out, at, TLS_HANDSHAKE_CLIENT_HELLO, p)
+  return p
+}
+
+/** A ClientHello (§4.1.2) with no cookie, in a fresh array (`tlsWriteClientHello`). */
+export const tlsEncodeClientHello = (
+  random: u8[],
+  serverName: string,
+  alpn: string[],
+  suites: i32[],
+  x25519Public: u8[]
+): u8[] => {
+  const none: u8[] = []
+  const zero: i32 = TLS_CODEC_FROM
+  const out: u8[] = new Array<u8>(
+    tlsWriteClientHello(none, zero, random, serverName, alpn, suites, x25519Public, none, zero, zero)
+  )
+  tlsWriteClientHello(out, zero, random, serverName, alpn, suites, x25519Public, none, zero, zero)
+  return out
+}
+
+/**
+ * A message of the server's flight as `tlsReadServerHello` and the readers
+ * after it read it: windows into `data`, numbers and flags, and the first
+ * fault as the alert to send (0 when there is none). Make one per client and
+ * read every message into it; it allocates nothing after its constructor.
+ */
+export class TlsServerMessageView {
+  /** The buffer the last message was read from: every `…At` points into it. */
+  data: u8[]
+  /** One bit per extension type the message carried, for the duplicate check of §4.2. */
+  extensionSeen: u32[]
+  reader: TlsReader
+  alert: i32 = 0
+  /** A HelloRetryRequest rather than a ServerHello (§4.1.3, the fixed random). */
+  retry: boolean = false
+  randomAt: i32 = 0
+  suite: i32 = 0
+  /** The `supported_versions` the server selected, or 0 when it sent none. */
+  version: i32 = 0
+  /** The ServerHello's share's group, or the group a HelloRetryRequest asks for; 0 when absent. */
+  group: i32 = 0
+  shareAt: i32 = 0
+  shareLength: i32 = 0
+  cookieAt: i32 = 0
+  cookieLength: i32 = 0
+  /** The protocol EncryptedExtensions chose, an empty window when none. */
+  alpnAt: i32 = 0
+  alpnLength: i32 = 0
+  /** CertificateVerify's scheme and signature. */
+  scheme: i32 = 0
+  signatureAt: i32 = 0
+  signatureLength: i32 = 0
+
+  constructor() {
+    this.data = []
+    this.extensionSeen = new Array<u32>(TLS_U16_BITMAP_WORDS)
+    this.reader = new TlsReader(this.data, TLS_CODEC_FROM, TLS_CODEC_FROM)
+  }
+
+  /** Forgets the last message. */
+  clear(): void {
+    this.alert = 0
+    this.retry = false
+    this.randomAt = 0
+    this.suite = 0
+    this.version = 0
+    this.group = 0
+    this.shareAt = 0
+    this.shareLength = 0
+    this.cookieAt = 0
+    this.cookieLength = 0
+    this.alpnAt = 0
+    this.alpnLength = 0
+    this.scheme = 0
+    this.signatureAt = 0
+    this.signatureLength = 0
+    for (let k: i32 = 0; k < toI32(this.extensionSeen.length); k++) {
+      this.extensionSeen[k] = toU32(0)
+    }
+  }
+}
+
+/** Records `alert` on `view` unless an earlier one is there. */
+const tlsServerRefuse = (view: TlsServerMessageView, alert: i32): void => {
+  if (view.alert === 0) {
+    view.alert = alert
+  }
+}
+
+/** Points `view`'s reader at `data[off .. off + len)`, or refuses a window outside `data`; answers its end. */
+const tlsServerOpen = (view: TlsServerMessageView, data: u8[], off: i32, len: i32): i32 => {
+  view.clear()
+  view.data = data
+  const r: TlsReader = view.reader
+  r.data = data
+  r.at = off
+  r.end = off + len
+  r.failed = false
+  if (off < 0 || len < 0 || off > toI32(data.length) - len) {
+    r.failed = true
+    r.end = off
+  }
+  return off + len
+}
+
+/** The extension types RFC 8446 §4.2's table assigns, whose messages it lists. */
+const TLS_EXTENSIONS_KNOWN: string =
+  "000000010005000a000d000e000f001000120013001400150029002a002b002c002d002f0030003100320033"
+/** Those §4.2's table never allows in EncryptedExtensions. */
+const TLS_EXTENSIONS_NOT_EE: string = "0005000d001200150029002b002c002d002f0030003100320033"
+
+/** Whether the hex list `text` of 16-bit values holds `value`. */
+const tlsHexListHas = (text: string, value: i32): boolean => {
+  for (let k: i32 = 0; k + 3 < toI32(text.length); k += 4) {
+    let v: i32 = 0
+    for (let d: i32 = 0; d < 4; d++) {
+      v = (v << 4) | tlsHexNibble(toI32(text.charCodeAt(k + d)))
+    }
+    if (v === value) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * The extension rule of §4.2 for one extension of type `type` in a server
+ * message: a second one is `illegal_parameter`, one the client did not offer
+ * is `unsupported_extension` ("Implementations MUST NOT send extension
+ * responses if the remote endpoint did not send the corresponding extension
+ * requests, with the exception of the 'cookie' extension in the
+ * HelloRetryRequest"), and an offered one the message may not carry is
+ * `illegal_parameter`. Answers whether the extension may be read.
+ */
+const tlsServerExtensionAllowed = (
+  view: TlsServerMessageView,
+  offered: TlsClientHelloView,
+  type: i32,
+  unsolicited: boolean,
+  permitted: boolean
+): boolean => {
+  if (tlsMarkSeen(view.extensionSeen, type)) {
+    tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+    return false
+  }
+  if (!unsolicited && !tlsBitSeen(offered.extensionSeen, type)) {
+    tlsServerRefuse(view, TLS_ALERT_UNSUPPORTED_EXTENSION)
+    return false
+  }
+  if (!permitted) {
+    tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+    return false
+  }
+  return true
+}
+
+/** Reads one ServerHello or HelloRetryRequest extension, `r.at .. end` (§4.2: these three are all either may carry). */
+const tlsReadServerHelloExtension = (
+  view: TlsServerMessageView,
+  offered: TlsClientHelloView,
+  type: i32,
+  end: i32
+): void => {
+  const r: TlsReader = view.reader
+  const cookie: boolean = view.retry && type === TLS_EXT_COOKIE
+  const permitted: boolean = type === TLS_EXT_KEY_SHARE || type === TLS_EXT_SUPPORTED_VERSIONS || cookie
+  if (!tlsServerExtensionAllowed(view, offered, type, cookie, permitted)) {
+    tlsReadSkipTo(r, end)
+    return
+  }
+  if (type === TLS_EXT_SUPPORTED_VERSIONS) {
+    view.version = tlsReadU16(r)
+  } else if (type === TLS_EXT_KEY_SHARE) {
+    view.group = tlsReadU16(r)
+    if (!view.retry) {
+      const shareEnd: i32 = tlsReadVector(r, 2, 1, 65535)
+      view.shareAt = r.at
+      view.shareLength = shareEnd - r.at
+      tlsReadSkipTo(r, shareEnd)
+    }
+  } else {
+    const cookieEnd: i32 = tlsReadVector(r, 2, 1, 65535)
+    view.cookieAt = r.at
+    view.cookieLength = cookieEnd - r.at
+    tlsReadSkipTo(r, cookieEnd)
+  }
+  if (r.at !== end) {
+    r.failed = true
+  }
+}
+
+/** Reads an extensions block `<0..2^16-1>` and hands each extension to `read`, bounded by its own length. */
+const tlsReadServerExtensions = (
+  view: TlsServerMessageView,
+  offered: TlsClientHelloView,
+  read: (view: TlsServerMessageView, offered: TlsClientHelloView, type: i32, end: i32) => void
+): void => {
+  const r: TlsReader = view.reader
+  const extensionsEnd: i32 = tlsReadVector(r, 2, 0, 65535)
+  const outer: i32 = tlsReadList(r, extensionsEnd)
+  while (!r.failed && r.at < extensionsEnd) {
+    const type: i32 = tlsReadU16(r)
+    const bodyEnd: i32 = tlsReadVector(r, 2, 0, 65535)
+    if (r.failed) {
+      break
+    }
+    const inner: i32 = tlsReadList(r, bodyEnd)
+    read(view, offered, type, bodyEnd)
+    r.end = inner
+  }
+  r.end = outer
+}
+
+/**
+ * Reads a ServerHello body `data[off .. off + len)` (§4.1.3, without the
+ * four-byte header) into `view`, checking it against `offered`, the
+ * ClientHello it answers. `view.retry` says whether it was a
+ * HelloRetryRequest. The first fault is the alert:
+ *
+ * - `decode_error` for a malformed message;
+ * - `protocol_version` for a legacy version other than 0x0303, or no
+ *   `supported_versions` (a TLS 1.2 server), unless the random carries the
+ *   downgrade sentinel, which is `illegal_parameter` (§4.1.3);
+ * - `illegal_parameter` for a selected version other than TLS 1.3, a session
+ *   id that is not the offered one, a suite not offered, a compression other
+ *   than null, a share for a group not offered or without a share sent, an
+ *   x25519 share not 32 bytes, a retry for a group not offered or one already
+ *   shared, or a retry that would change nothing (§4.1.4);
+ * - `unsupported_extension` or `illegal_parameter` per §4.2's rule;
+ * - `missing_extension` for a ServerHello without `key_share`.
+ *
+ * What depends on the handshake so far — a second retry, a suite that moved,
+ * a group the client cannot compute — is the client's to check.
+ */
+export const tlsReadServerHello = (
+  view: TlsServerMessageView,
+  offered: TlsClientHelloView,
+  data: u8[],
+  off: i32,
+  len: i32
+): void => {
+  const end: i32 = tlsServerOpen(view, data, off, len)
+  const r: TlsReader = view.reader
+  const legacyVersion: i32 = tlsReadU16(r)
+  view.randomAt = r.at
+  tlsReadSkipTo(r, r.at + TLS_RANDOM_SIZE)
+  view.retry = !r.failed && tlsWindowIsHex(data, view.randomAt, TLS_HELLO_RETRY_RANDOM)
+  const sessionEnd: i32 = tlsReadVector(r, 1, 0, 32)
+  const sessionAt: i32 = r.at
+  tlsReadSkipTo(r, sessionEnd)
+  view.suite = tlsReadU16(r)
+  const compression: i32 = tlsReadU8(r)
+  tlsReadServerExtensions(view, offered, tlsReadServerHelloExtension)
+  if (r.failed || r.at !== end) {
+    view.alert = TLS_ALERT_DECODE_ERROR
+    return
+  }
+  const sentinel: boolean =
+    tlsWindowIsHex(data, view.randomAt + 24, TLS_DOWNGRADE_12) ||
+    tlsWindowIsHex(data, view.randomAt + 24, TLS_DOWNGRADE_11)
+  if (view.version === 0 || legacyVersion !== TLS_LEGACY_VERSION) {
+    tlsServerRefuse(view, sentinel ? TLS_ALERT_ILLEGAL_PARAMETER : TLS_ALERT_PROTOCOL_VERSION)
+  }
+  if (sentinel || view.version !== TLS_VERSION_13 || compression !== 0) {
+    tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+  }
+  let sameSession: boolean = sessionEnd - sessionAt === offered.sessionIdLength
+  for (let k: i32 = 0; sameSession && k < offered.sessionIdLength; k++) {
+    sameSession = data[sessionAt + k] === offered.data[offered.sessionIdAt + k]
+  }
+  if (!sameSession || !tlsWindowHasU16(offered.data, offered.suitesAt, offered.suitesLength, view.suite)) {
+    tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+  }
+  const groupOffered: boolean = tlsWindowHasU16(
+    offered.data,
+    offered.groupsAt,
+    offered.groupsLength,
+    view.group
+  )
+  const groupShared: boolean = tlsBitSeen(offered.shareSeen, view.group)
+  if (view.retry) {
+    // §4.1.4: a retry asks for a group the client offered and did not share,
+    // or for a cookie; one that would not change the hello is refused.
+    if (tlsBitSeen(view.extensionSeen, TLS_EXT_KEY_SHARE) && (!groupOffered || groupShared)) {
+      tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+    }
+    if (view.group === 0 && view.cookieLength === 0) {
+      tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+    }
+    return
+  }
+  if (!tlsBitSeen(view.extensionSeen, TLS_EXT_KEY_SHARE)) {
+    tlsServerRefuse(view, TLS_ALERT_MISSING_EXTENSION)
+  } else if (!groupOffered || !groupShared) {
+    tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+  } else if (view.group === TLS_GROUP_X25519 && view.shareLength !== TLS_X25519_SHARE_SIZE) {
+    tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+  }
+}
+
+/** Reads one EncryptedExtensions extension (§4.3.1): an empty `server_name`, one offered ALPN protocol, or one ignored. */
+const tlsReadEncryptedExtension = (
+  view: TlsServerMessageView,
+  offered: TlsClientHelloView,
+  type: i32,
+  end: i32
+): void => {
+  const r: TlsReader = view.reader
+  if (!tlsServerExtensionAllowed(view, offered, type, false, !tlsHexListHas(TLS_EXTENSIONS_NOT_EE, type))) {
+    tlsReadSkipTo(r, end)
+    return
+  }
+  if (type === TLS_EXT_ALPN) {
+    // RFC 7301 §3.1: the list holds exactly one protocol, one the client offered.
+    const listEnd: i32 = tlsReadVector(r, 2, 2, 65535)
+    const nameEnd: i32 = tlsReadVector(r, 1, 1, 255)
+    view.alpnAt = r.at
+    view.alpnLength = nameEnd - r.at
+    tlsReadSkipTo(r, nameEnd)
+    if (
+      !r.failed &&
+      (nameEnd !== listEnd || !tlsAlpnOffered(offered, view.data, view.alpnAt, view.alpnLength))
+    ) {
+      tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+    }
+    tlsReadSkipTo(r, listEnd)
+  } else {
+    // `server_name`'s acknowledgement is empty (RFC 6066 §3); `supported_groups`
+    // and any other offered extension are information the client does not use.
+    if (type === TLS_EXT_SERVER_NAME && end !== r.at) {
+      r.failed = true
+    }
+    tlsReadSkipTo(r, end)
+  }
+  if (r.at !== end) {
+    r.failed = true
+  }
+}
+
+/** Whether `offered`'s ALPN list names the protocol `data[at .. at + length)`. */
+const tlsAlpnOffered = (offered: TlsClientHelloView, data: u8[], at: i32, length: i32): boolean => {
+  const list: u8[] = offered.data
+  let p: i32 = offered.alpnAt
+  const end: i32 = offered.alpnAt + offered.alpnLength
+  while (p < end && p < toI32(list.length)) {
+    const n: i32 = toI32(list[p])
+    let same: boolean = n === length && p + 1 + n <= toI32(list.length)
+    for (let k: i32 = 0; same && k < n; k++) {
+      same = list[p + 1 + k] === data[at + k]
+    }
+    if (same) {
+      return true
+    }
+    p = p + 1 + n
+  }
+  return false
+}
+
+/**
+ * Reads an EncryptedExtensions body (§4.3.1) into `view`: `alpnAt` and
+ * `alpnLength` are the protocol the server chose, an empty window when it
+ * chose none. `decode_error` for a malformed message or a non-empty
+ * `server_name`; `illegal_parameter` for an ALPN list that is not exactly one
+ * offered protocol or an extension §4.2's table keeps out of this message;
+ * `unsupported_extension` for one the client did not offer.
+ */
+export const tlsReadEncryptedExtensions = (
+  view: TlsServerMessageView,
+  offered: TlsClientHelloView,
+  data: u8[],
+  off: i32,
+  len: i32
+): void => {
+  const end: i32 = tlsServerOpen(view, data, off, len)
+  tlsReadServerExtensions(view, offered, tlsReadEncryptedExtension)
+  if (view.reader.failed || view.reader.at !== end) {
+    view.alert = TLS_ALERT_DECODE_ERROR
+  }
+}
+
+/**
+ * Reads one CertificateEntry extension (§4.4.2): only `status_request` and
+ * `signed_certificate_timestamp` belong there, and only when offered, but an
+ * offered extension §4.2's table does not know is passed over.
+ */
+const tlsReadCertificateExtension = (
+  view: TlsServerMessageView,
+  offered: TlsClientHelloView,
+  type: i32,
+  end: i32
+): void => {
+  const permitted: boolean = type === 5 || type === 18 || !tlsHexListHas(TLS_EXTENSIONS_KNOWN, type)
+  tlsServerExtensionAllowed(view, offered, type, false, permitted)
+  tlsReadSkipTo(view.reader, end)
+}
+
+/**
+ * Reads a server's Certificate body (§4.4.2) into `view` and pushes a copy of
+ * each certificate's DER onto `chain`, leaf first, which the caller passes in
+ * empty. `illegal_parameter` for a non-empty request context, which a server
+ * never has; `decode_error` for a malformed message or an empty list
+ * (§4.4.2.4); the extension rule of §4.2 for each entry's extensions, which
+ * the duplicate check runs per entry.
+ */
+export const tlsReadServerCertificate = (
+  view: TlsServerMessageView,
+  offered: TlsClientHelloView,
+  data: u8[],
+  off: i32,
+  len: i32,
+  chain: u8[][]
+): void => {
+  const end: i32 = tlsServerOpen(view, data, off, len)
+  const r: TlsReader = view.reader
+  const contextEnd: i32 = tlsReadVector(r, 1, 0, 255)
+  if (contextEnd !== r.at) {
+    tlsServerRefuse(view, TLS_ALERT_ILLEGAL_PARAMETER)
+  }
+  tlsReadSkipTo(r, contextEnd)
+  const listEnd: i32 = tlsReadVector(r, 3, 1, 16777215)
+  const outer: i32 = tlsReadList(r, listEnd)
+  while (!r.failed && r.at < listEnd) {
+    const certificateEnd: i32 = tlsReadVector(r, 3, 1, 16777215)
+    if (!r.failed) {
+      const certificate: u8[] = new Array<u8>(certificateEnd - r.at)
+      tlsPutWindow(certificate, TLS_CODEC_FROM, data, r.at, certificateEnd - r.at)
+      chain.push(certificate)
+    }
+    tlsReadSkipTo(r, certificateEnd)
+    for (let k: i32 = 0; k < toI32(view.extensionSeen.length); k++) {
+      view.extensionSeen[k] = toU32(0)
+    }
+    tlsReadServerExtensions(view, offered, tlsReadCertificateExtension)
+  }
+  r.end = outer
+  if (r.failed || r.at !== end) {
+    view.alert = TLS_ALERT_DECODE_ERROR
+  }
+}
+
+/**
+ * Reads a CertificateVerify body (§4.4.3) into `view`: `scheme`, and the
+ * signature as the window `signatureAt`, `signatureLength`. `decode_error`
+ * for a malformed message; `illegal_parameter` for a scheme the client did
+ * not offer in `signature_algorithms` (§4.4.3).
+ */
+export const tlsReadCertificateVerify = (
+  view: TlsServerMessageView,
+  offered: TlsClientHelloView,
+  data: u8[],
+  off: i32,
+  len: i32
+): void => {
+  const end: i32 = tlsServerOpen(view, data, off, len)
+  const r: TlsReader = view.reader
+  view.scheme = tlsReadU16(r)
+  const signatureEnd: i32 = tlsReadVector(r, 2, 0, 65535)
+  view.signatureAt = r.at
+  view.signatureLength = signatureEnd - r.at
+  tlsReadSkipTo(r, signatureEnd)
+  if (r.failed || r.at !== end) {
+    view.alert = TLS_ALERT_DECODE_ERROR
+    return
+  }
+  if (!tlsWindowHasU16(offered.data, offered.schemesAt, offered.schemesLength, view.scheme)) {
+    view.alert = TLS_ALERT_ILLEGAL_PARAMETER
+  }
+}
