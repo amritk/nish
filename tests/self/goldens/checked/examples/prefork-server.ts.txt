@@ -4180,13 +4180,13 @@ function http1TakeLine(p: Http1Parser, limit: i32, overStatus: i32): i32 -> @nis
   callee -5:16 http1Fail -> @nish.http1Fail
   callee -2:16 http1Fail -> @nish.http1Fail
   callee +10:12 http1Fail -> @nish.http1Fail
-function http1IsTokenByte(c: i32): boolean -> @nish.http1IsTokenByte
+function http1IsTokenByte(c: i32): boolean -> @nish.http1IsTokenByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function http1IsValueByte(c: i32): boolean -> @nish.http1IsValueByte
+function http1IsValueByte(c: i32): boolean -> @nish.http1IsValueByte [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function http1Text(buf: u8[], from: i32, to: i32, lower: boolean): string -> @nish.http1Text
+function http1Text(buf: u8[], from: i32, to: i32, lower: boolean): string -> @nish.http1Text [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=true arenaScope=false freshThis=false sharedWrite=false
   escaping: from
   calls: nish_alloc_struct nish_array_grow nish_str_new
@@ -4195,12 +4195,12 @@ function http1Text(buf: u8[], from: i32, to: i32, lower: boolean): string -> @ni
   local +0:9 parts: string[] (const)
   local +1:12 k: i32 (let)
   local +2:9 c: i32 (let)
-function http1IsOws(c: i32): boolean -> @nish.http1IsOws
+function http1IsOws(c: i32): boolean -> @nish.http1IsOws [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
-function http1SameWord(text: string, a: i32, b: i32, word: string): boolean -> @nish.http1SameWord
+function http1SameWord(text: string, a: i32, b: i32, word: string): boolean -> @nish.http1SameWord [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
-  calls: nish_panic_index
+  calls: nish_panic_index nish_panic_overflow
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +4:12 k: i32 (let)
@@ -4393,7 +4393,7 @@ function http1ContentLength(bytes: u8[], from: i32, to: i32, limit: i32): i32 ->
   local +1:7 over: boolean (let)
   local +2:12 k: i32 (let)
   local +3:11 c: i32 (const)
-function http1HexValue(c: i32): i32 -> @nish.http1HexValue
+function http1HexValue(c: i32): i32 -> @nish.http1HexValue [exported]
   facts: effect=none willReturn=true hasLoops=false loopsBounded=true readsMemory=false hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   stackSites=0 stackLocals=0
 function http1ChunkSize(p: Http1Parser): i32 -> @nish.http1ChunkSize
@@ -4463,14 +4463,14 @@ function http1BytesOf(text: string): u8[] -> @nish.http1BytesOf
   local +1:9 out: u8[] (const)
   local +2:9 outLength: i32 (const)
   local +3:12 k: i32 (let)
-function http1IsToken(text: string): boolean -> @nish.http1IsToken
+function http1IsToken(text: string): boolean -> @nish.http1IsToken [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.http1IsTokenByte
   stackSites=0 stackLocals=0
   local +0:9 n: i32 (const)
   local +4:12 k: i32 (let)
   callee +5:10 http1IsTokenByte -> @nish.http1IsTokenByte
-function http1IsFieldText(text: string): boolean -> @nish.http1IsFieldText
+function http1IsFieldText(text: string): boolean -> @nish.http1IsFieldText [exported]
   facts: effect=read willReturn=true hasLoops=true loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: nish.http1IsValueByte
   stackSites=0 stackLocals=0
@@ -4566,7 +4566,7 @@ function http1DecimalDigits(n: i32): i32 -> @nish.http1DecimalDigits
   stackSites=0 stackLocals=0
   local +0:7 digits: i32 (let)
   local +1:7 v: i32 (let)
-function http1PutText(out: u8[], at: i32, text: string): i32 -> @nish.http1PutText
+function http1PutText(out: u8[], at: i32, text: string): i32 -> @nish.http1PutText [exported]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
   calls: nish_panic_index nish_panic_overflow

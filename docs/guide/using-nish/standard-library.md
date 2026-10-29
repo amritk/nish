@@ -2053,6 +2053,11 @@ shows it.
 and `Http1Connection.respondEncoded` sends one with `Content-Encoding` and
 `Content-Length` set; [Compression](compression.md) shows it.
 
+`nish/net/http1-client` is the client side of HTTP/1.1: `http1RequestHead`
+writes a request's head and `Http1ResponseParser` reads the response, fed
+any slice, refusing every response-smuggling shape RFC 9112 names; [HTTP client](http-client.md)
+shows it.
+
 `nish/net/postgres` is a PostgreSQL client that leaves the socket to your
 loop: prepared statements, pipelined groups, SCRAM-SHA-256, and rows read in
 place from the receive buffer; [PostgreSQL](postgres.md) shows it.
