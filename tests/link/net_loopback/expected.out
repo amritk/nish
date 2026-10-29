@@ -32,7 +32,8 @@ PASS  websocket: and every server wake kept 0 bytes over them
 PASS  websocket: the client's close with code 4000 is answered with a close of that code
 PASS  websocket: and the server's program saw the client's code
 PASS  websocket: then the server ends TLS with close_notify
-PASS  websocket: and closes the slot
+PASS  websocket: then the end of the stream, not a reset
+PASS  websocket: and, once the client hangs up, closes the slot
 PASS  websocket: the program refused nothing
 PASS  websocket: with nothing gone wrong in the loop
 PASS  http/2: a TLS handshake offering h2 across loopback
@@ -95,4 +96,4 @@ PASS  webtransport: three more connections, each a session and a datagram, close
 PASS  webtransport: each keeps at most 2 KiB of arena from its Initial to its close, none of it the QUIC connection's, the signature's or the listener's (WT-1, H3-1, H3-3)
 PASS  webtransport: the program was refused nothing and held nothing it could not place
 PASS  webtransport: with nothing gone wrong in the loop
-net loopback: 94 passed, 0 failed, 0 skipped
+net loopback: 95 passed, 0 failed, 0 skipped

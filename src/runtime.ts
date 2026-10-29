@@ -438,6 +438,32 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `renameSync`, `unlinkSync`, `writeFileBytesSync` and `writeBytes`
+    // (runtime-os.c): an errno for an answer rather than an exit,
+    // but not `willreturn` for the reason above (an `open` or a `write` to a
+    // FIFO or a full pipe waits). Each only reads its array.
+    this.add(
+      mayNotReturn(
+        "nish_rename",
+        `declare noundef i32 @nish_rename(${STR_NOCAP}, ${STR_NOCAP})`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(mayNotReturn("nish_unlink", `declare noundef i32 @nish_unlink(${STR_NOCAP})`, EFFECT_WRITE))
+    this.add(
+      mayNotReturn(
+        "nish_write_file_bytes",
+        `declare noundef i32 @nish_write_file_bytes(${STR_NOCAP}, ${NET_BUFFER} readonly)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_write_bytes",
+        `declare noundef i32 @nish_write_bytes(${NET_BUFFER} readonly, i64 noundef, i64 noundef)`,
+        EFFECT_WRITE
+      )
+    )
     // WP7: process.argv and string-to-number parsing.
     // Called once by the entry wrapper: mallocs the array and copies every argument.
     this.add(
@@ -1130,6 +1156,12 @@ export class RuntimeTable {
       WRITES_NOTHING,
       plain("nish_total_memory", "declare noundef i64 @nish_total_memory()", EFFECT_WRITE)
     )
+    // `setNice` and `setIdlePriority`, runtime-os.c: each changes how the
+    // kernel schedules the calling thread, which Linux keeps per thread, so a
+    // call from a task would move one worker and not the program. A shared
+    // write, then, which a task is refused, and two calls never fold into one.
+    this.add(plain("nish_set_nice", "declare noundef i32 @nish_set_nice(i32 noundef)", EFFECT_WRITE))
+    this.add(plain("nish_set_idle_priority", "declare noundef i32 @nish_set_idle_priority()", EFFECT_WRITE))
     // WP38 S5: AES-GCM on the CPU's AES instructions, runtime-aes.c
     // (`src/kernels.ts`). `nish_aes_hw` is `nish_str_index_of_any`'s resolver
     // on its own: the one store it makes is the first call's answer, into a

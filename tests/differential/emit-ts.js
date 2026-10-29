@@ -142,6 +142,9 @@ export const HOST = [
   // A child is reaped by the event loop, which a synchronous wait never returns to.
   ["spawn", /`spawn` has no synchronous reading under Node/, "stderr"],
   ["waitPid", /`waitPid` has no synchronous reading under Node/, "stderr"],
+  // How the kernel schedules the native process; Node has no reading of SCHED_IDLE.
+  ["setNice", /`setNice` has no reading under Node/, "stderr"],
+  ["setIdlePriority", /`setIdlePriority` has no reading under Node/, "stderr"],
   // Stdin is read only by the event loop; the restore bytes go out on native exit paths.
   ["readStdin", /`readStdin` has no synchronous reading under Node/, "stderr"],
   ["waitStdin", /`waitStdin` has no synchronous reading under Node/, "stderr"],
@@ -153,6 +156,8 @@ export const HOST = [
     /\\uD[89AB][0-9A-F]{2}(?!\\uD[C-F])|(?<!\\uD[89AB][0-9A-F]{2})\\uD[C-F][0-9A-F]{2}/i,
     "source",
   ],
+  // A byte string that is not UTF-8 keeps its bytes natively and decodes to U+FFFD's in Node.
+  ["fromBytes", /\butf8FromBytes\b/, "source"],
 ]
 
 /**

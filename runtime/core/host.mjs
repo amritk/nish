@@ -15,9 +15,11 @@
  * its own fails loudly rather than writing nowhere.
  *
  * The functions that have no synchronous reading under Node (`spawn`,
- * `waitPid`, `signalFd`, `readSignal`, the `nish:net` set) throw here without
- * asking any host.
+ * `waitPid`, `signalFd`, `readSignal`, the `nish:net` set), and `setNice` and
+ * `setIdlePriority`, which have none at all, throw here without asking any
+ * host.
  */
+import { panicSlice, toIndex } from "./checks.mjs";
 
 /** What every member of the default host throws: no adapter has been imported. */
 export class NishNoHost extends Error {
@@ -86,6 +88,18 @@ export function writeError(s) {
   host.writeErr(s);
 }
 
+/**
+ * `writeBytes(bytes, off, len)`: the range checked as the compiled call checks
+ * it, `0 <= off <= off + len <= bytes.length`, through the slice panic, then
+ * the host's write of those bytes to stdout.
+ */
+export function writeBytes(bytes, off, len) {
+  const from = toIndex(off);
+  const to = from + toIndex(len);
+  if (!(from >= 0 && from <= to && to <= bytes.length)) panicSlice(from, to, bytes.length);
+  return host.call("writeBytes", [bytes, from, to]);
+}
+
 /** `panic(message)`: the message on stderr, then exit 1. */
 export function panic(message) {
   host.writeErr(`${message}\n`);
@@ -129,6 +143,18 @@ export function writeFileSync(path, data) {
 
 export function appendFileSync(path, data) {
   return host.call("appendFileSync", [path, data]);
+}
+
+export function writeFileBytesSync(path, bytes) {
+  return host.call("writeFileBytesSync", [path, bytes]);
+}
+
+export function renameSync(from, to) {
+  return host.call("renameSync", [from, to]);
+}
+
+export function unlinkSync(path) {
+  return host.call("unlinkSync", [path]);
 }
 
 export function mkdirSync(path) {
@@ -257,6 +283,24 @@ export function spawn() {
 
 export function waitPid() {
   return noProcessReading("waitPid");
+}
+
+/**
+ * `setNice(n)` and `setIdlePriority()` have no reading under Node: Node has one
+ * of the nice value (`os.setPriority`) but none of `SCHED_IDLE`, and a reading
+ * of one without the other would differ from the native build on the same host.
+ * Each throws, naming itself, as `runtime/nish.mjs` does.
+ */
+function noSchedulingReading(name) {
+  throw new Error(`\`${name}\` has no reading under Node: it changes how the kernel schedules the native program`);
+}
+
+export function setNice() {
+  return noSchedulingReading("setNice");
+}
+
+export function setIdlePriority() {
+  return noSchedulingReading("setIdlePriority");
 }
 
 /**

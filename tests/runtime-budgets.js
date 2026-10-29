@@ -107,8 +107,24 @@ const RUNTIME_TEXT_BUDGET = 3698
  * `availableParallelism` reads it in a build without `--threads` and that build of
  * runtime-parallel.c compiles none of it. The two files together grew by 278. The
  * budget is the next 256-byte boundary above the measurement, leaving 177.
+ *
+ * It measured **2,380 bytes** at the head WP37's file builtins started from. **Raised to
+ * 2,816 by `renameSync`, `unlinkSync`, `writeFileBytesSync` and `writeBytes`**, measured
+ * **2,745 bytes** on 2026-10-29 with clang 18.1.3 on linux-x64, 365 more, as
+ * `-ffunction-sections` sizes them: `nish_rename` 85, `nish_unlink` 53,
+ * `nish_write_file_bytes` 139 and `nish_write_bytes` 34, plus `nish_put_all` (106), the
+ * write loop the two byte writers share with `writeFileSync`, which took `nish_put_file`
+ * from 142 to 93. `writeBytes` lives here rather than beside `write` in runtime.c because
+ * that file is a closed set and its loop answers nothing: sharing it would have grown
+ * runtime.c by 21 bytes past its ceiling. The budget is the next 256-byte boundary above
+ * the measurement, leaving 71.
+ *
+ * **Raised to 3,072 when `main`'s `setNice` and `setIdlePriority` met them**, measured
+ * **2,822 bytes** on 2026-10-29 with clang 18.1.3 on linux-x64: `nish_set_nice` 31 and
+ * `nish_set_idle_priority` 46, which fit the old 2,560 alone and the 2,816 above only
+ * without each other's 77. The budget is the next 256-byte boundary, leaving 250.
  */
-const RUNTIME_OS_TEXT_BUDGET = 2560
+const RUNTIME_OS_TEXT_BUDGET = 3072
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.

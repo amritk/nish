@@ -10,7 +10,7 @@ answer. Line numbers in the findings table refer to `main` at `bc6ad66`.
 | --- | --- |
 | `runtime/runtime.c` | the arena (`nish_arena_grow`, `nish_alloc_struct`, marks, `nish_arena_keep`), every string function, the integer and Ryu formatters and their buffers, `nish_parse_number`, `Math.random`, `nish_alloc_array`, `nish_argv_init`, `nish_array_grow`, the panics |
 | `runtime/nish.h` | every prototype and layout against its definition, and every contract comment against what the code does |
-| `runtime/runtime-os.c` | the file reads and writes, `isDirectorySync`, `mkdirSync`, `readdirSync` and its sort, both spawns, `getenv`, `realpathSync` |
+| `runtime/runtime-os.c` | the file reads and writes, `writeFileBytesSync` (`O_NOFOLLOW` as `writeFileSync`, and a `close` that fails answers its errno rather than the full length), `writeBytes` (`nish_write_bytes`, after the emitter's range check), the shared write loop `nish_put_all`, `renameSync` and `unlinkSync` (a NUL in a path answers `-EINVAL` before the call; neither follows a link, and `unlinkSync` never falls back to `rmdir`), `isDirectorySync`, `mkdirSync`, `readdirSync` and its sort, both spawns, `getenv`, `realpathSync` |
 | `runtime/runtime-host.c` | `Date.now`, `crypto.getRandomValues` (short reads, `EINTR`, the limit), `statMtimeSync`, the signal pipe and its handler |
 | `runtime/runtime-net.c` | every address, length and control-message buffer, descriptor flags and leaks on each error path, the readiness loop's output bounds |
 | `runtime/runtime-parallel.c` | the partition arithmetic, the scope task list, thread-local state, thread-creation failure |
@@ -19,7 +19,7 @@ answer. Line numbers in the findings table refer to `main` at `bc6ad66`.
 
 Read beside them, without owning them: `src/runtime.ts` (the declarations and
 the inline allocator), the range checks `src/emit-builtins.ts` puts in front of
-the network calls, `src/interop-wasm.ts` (the loader's `nish_alloc_array`),
+the network calls and `writeBytes`, `src/interop-wasm.ts` (the loader's `nish_alloc_array`),
 `runtime/shim.mjs` (the Node twin) and `docs/security/codegen.md`, whose K1-6,
 CG-3 and CG-9 were routed here.
 
