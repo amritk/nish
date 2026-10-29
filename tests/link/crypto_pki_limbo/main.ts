@@ -127,6 +127,7 @@ export const main = (): i32 => {
     for (let k: i32 = 0; k < toI32(kept.length); k++) {
       if (kept[k].id === c.id) {
         listed = k
+        break
       }
     }
     if (ok === c.success) {

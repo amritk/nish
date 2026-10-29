@@ -78,6 +78,7 @@ import {
   X509_KEY_RSA,
   X509_KU_DIGITAL_SIGNATURE,
   X509_KU_KEY_CERT_SIGN,
+  X509_MAX_SERIAL,
   X509_SIG_ECDSA_SHA256,
   X509_SIG_ECDSA_SHA384,
   X509_SIG_ED25519,
@@ -962,7 +963,7 @@ const pkiExtend = (s: PkiSearch, child: X509Certificate): boolean => {
 /** Whether `c`'s serial number is 1 to 20 octets and not zero (RFC 5280 §4.1.2.2). */
 const pkiSerialSound = (c: X509Certificate): boolean => {
   const n: i32 = toI32(c.serial.length)
-  if (n < 1 || n > 20) {
+  if (n < 1 || n > X509_MAX_SERIAL) {
     return false
   }
   for (let i: i32 = 0; i < n; i++) {
