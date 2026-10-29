@@ -160,27 +160,33 @@ export class Style {
     return `${CSI}${code}m${text}${CSI}0m`
   }
 
-  /** A section heading: bold, in the theme's magenta, unless recoloured. */
+  /** A section heading, in `headingThemed` or `headingMono`. */
   heading(text: string): string {
     return this.paint(text, this.headingThemed, this.headingMono)
   }
 
-  /** The tool's own name where it opens a line. */
+  /** The tool's own name where it opens a line, in `nameThemed` or `nameMono`. */
   name(text: string): string {
     return this.paint(text, this.nameThemed, this.nameMono)
   }
 
-  /** A flag, or a command a person would type. */
+  /** A flag, or a command a person would type, in `flagThemed` or `flagMono`. */
   flag(text: string): string {
     return this.paint(text, this.flagThemed, this.flagMono)
   }
 
-  /** A placeholder the person fills in: `<file.ts>`, `speed|size`. */
+  /**
+   * A placeholder the person fills in, such as `<file.ts>` or `speed|size`, in
+   * `metaThemed` or `metaMono`.
+   */
   meta(text: string): string {
     return this.paint(text, this.metaThemed, this.metaMono)
   }
 
-  /** Text that explains rather than names: descriptions, notes. */
+  /**
+   * Text that explains rather than names, such as descriptions and notes, in
+   * `dimThemed` or `dimMono`.
+   */
   dim(text: string): string {
     return this.paint(text, this.dimThemed, this.dimMono)
   }
