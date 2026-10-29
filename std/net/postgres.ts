@@ -17,7 +17,9 @@
  *       // PG_READY: authenticated; prepare statements and send queries
  *       //   conn.prepare("by_id", "select id, name from users where id = $1", [23]); conn.sync()
  *       //   conn.bindStart("by_id"); conn.paramInt(7); conn.bindEnd(); conn.sync()
+ *       //   or conn.bindStartBinary("by_id") for binary result columns
  *       // PG_ROW: conn.int(0), conn.colStart(1) .. + conn.colLength(1) in conn.inputBuffer()
+ *       //   after bindStartBinary: conn.binaryInt(0), the text column as before
  *       // PG_COMPLETE: conn.tagRows(); PG_ERROR: conn.lastError.code
  *       // PG_GROUP_DONE: one sync()'s group has been answered
  *       event = conn.next();
@@ -57,18 +59,29 @@
  * does not need: a program prepares a statement and executes it in the same
  * flight.
  *
- * **Text results, no copies.** Every parameter and every result column is in
- * text format. A row is read where it lies in the input buffer: `next()` frames
- * each message once, validates its layout, and records each column's start and
- * length in two reused arrays, so a row costs no allocation. `int`, `bool`,
- * `isNull` and `PgText.timestamp` decode a column in place; `PgArrayWalker`
- * walks a one-dimensional `text[]` in place. `columnText(c)` is the one that
- * allocates, a string. An array parameter is a text array literal too:
- * `paramIntArray` writes an `int8[]` from an `i64[]` window, and `arrayStart`,
- * `arrayElement`, `arrayInt`, `arrayNull` and `arrayEnd` build an array one
- * element at a time into the Bind, so a list needs no string built first. A
- * program whose element was refused for room can drop the whole bind,
- * unsent, with `bindCancel`.
+ * **Text results, no copies.** Every parameter is in text format, and so is
+ * every result column unless the bind asks otherwise. A row is read where it
+ * lies in the input buffer: `next()` frames each message once, validates its
+ * layout, and records each column's start and length in two reused arrays, so
+ * a row costs no allocation. `int`, `bool`, `isNull` and `PgText.timestamp`
+ * decode a column in place; `PgArrayWalker` walks a one-dimensional `text[]`
+ * in place. `columnText(c)` is the one that allocates, a string. An array
+ * parameter is a text array literal too: `paramIntArray` writes an `int8[]`
+ * from an `i64[]` window, and `arrayStart`, `arrayElement`, `arrayInt`,
+ * `arrayNull` and `arrayEnd` build an array one element at a time into the
+ * Bind, so a list needs no string built first. A program whose element was
+ * refused for room can drop the whole bind, unsent, with `bindCancel`.
+ *
+ * **Binary results.** A bind opened with `bindStartBinary` instead of
+ * `bindStart` asks for every result column in binary format: an `int8` is
+ * eight bytes, a `timestamptz` eight bytes of microseconds since 2000, a
+ * `bool` one byte, so there is nothing to parse and less on the wire.
+ * `binaryInt`, `binaryBool` and `binaryFloat` read them in place, and
+ * `PgBinary`'s `timestamp` and `iso` write a time as `PgText.timestamp` does.
+ * A `text` column is the same bytes in either format, so `columnText` and the
+ * column windows read it unchanged. The program knows which of its binds
+ * asked for which, and reads each execution's rows with the matching
+ * decoders.
  *
  * **Authentication.** SCRAM-SHA-256 (RFC 5802, RFC 7677) or none (`trust`).
  * The password arrives as a `Secret<u8[]>`; the connection keeps a copy in a
@@ -128,7 +141,7 @@
  * Written from PostgreSQL's "Frontend/Backend Protocol" chapter (version 18)
  * and RFC 5802 and RFC 7677; not ported from another implementation.
  */
-import { copyBytes, getI32BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
+import { copyBytes, getF64BE, getI32BE, getI64BE, getU16BE, setI32BE, setU16BE } from "nish/bytes"
 import { base64StdPadDecode, base64StdPadEncode } from "nish/crypto/base64url"
 import { timingSafeEqual } from "nish/crypto/ct"
 import { hmacSha256, pbkdf2HmacSha256 } from "nish/crypto/hmac"
@@ -219,6 +232,11 @@ const PG_NONCE_BYTES: i32 = 18
 // take: kept free under `maxOutput` by every other builder call, so that
 // `bindEnd()` and `sync()` are never refused for room.
 const PG_TAIL: i32 = 17
+// What a binary bind's end takes beyond `PG_TAIL`: its one result format code,
+// kept free from `bindStartBinary` on.
+const PG_BINARY_TAIL: i32 = 2
+// The result format code for binary.
+const PG_FORMAT_BINARY: i32 = 1
 // The largest `maxMessage` and `maxOutput`. The input buffer doubles up to one
 // past them; the output buffer doubles only while twice its size fits in an i32.
 const PG_MAX_CAP: i32 = 1073741823
@@ -687,6 +705,159 @@ export class PgText {
   }
 }
 
+// The days from 0000-03-01, where the civil calendar's year starts for the
+// conversion below, to 2000-01-01, where PostgreSQL's binary times count from.
+const PG_EPOCH_DAYS: i64 = 730425
+// The first and last days `PgBinary.iso` writes, counted from 2000-01-01:
+// 0001-01-01 and 9999-12-31, the years four digits spell.
+const PG_FIRST_DAY: i64 = -730119
+const PG_LAST_DAY: i64 = 2921939
+
+/** `value`'s last `width` decimal digits into `out[at, at + width)`. */
+const pgDigits = (out: u8[], at: i32, value: i32, width: i32): void => {
+  let v: i32 = value
+  for (let i: i32 = width - 1; i >= 0; i--) {
+    out[at + i] = toU8((v % 10) + 48)
+    v = v / 10
+  }
+}
+
+/**
+ * Decoders for PostgreSQL's binary format, in place, for the rows of a bind
+ * that `bindStartBinary` opened; a bad input sets `failed`, which stays set.
+ * A `text` or `varchar` column's bytes are the same in either format, so
+ * `columnText`, `colStart` and `colLength` read it as they read a text one.
+ */
+export class PgBinary {
+  /** Whether a decode since the last `reset()` was given something it could not read. */
+  failed: boolean = false
+
+  /** Clears `failed`. */
+  reset(): void {
+    this.failed = false
+  }
+
+  // Whether `[start, start + length)` is inside `b`; sets `failed` when not.
+  private inside(b: u8[], start: i32, length: i32): boolean {
+    if (start < 0 || length < 0 || start > toI32(b.length) - length) {
+      this.failed = true
+      return false
+    }
+    return true
+  }
+
+  /**
+   * An `int2`, `int4` or `int8` column, told apart by its length (2, 4 or 8
+   * bytes, big-endian two's complement); 0 and `failed` for any other length,
+   * NULL's -1 among them. A `timestamptz` or `timestamp` reads as an `int8`:
+   * microseconds since 2000-01-01 00:00:00 UTC, which `iso` writes out.
+   */
+  int(b: u8[], start: i32, length: i32): i64 {
+    if ((length !== 2 && length !== 4 && length !== 8) || !this.inside(b, start, length)) {
+      this.failed = true
+      return 0
+    }
+    if (length === 8) {
+      return getI64BE(b, start)
+    }
+    if (length === 4) {
+      return toI64(getI32BE(b, start))
+    }
+    const v: i32 = toI32(getU16BE(b, start))
+    return toI64(v >= 32768 ? v - 65536 : v)
+  }
+
+  /** A `bool` column: one byte, 1 or 0; false and `failed` otherwise. */
+  bool(b: u8[], start: i32, length: i32): boolean {
+    if (length === 1 && this.inside(b, start, length)) {
+      const c: i32 = toI32(b[start])
+      if (c === 1) {
+        return true
+      }
+      if (c === 0) {
+        return false
+      }
+    }
+    this.failed = true
+    return false
+  }
+
+  /** A `float8` column: eight bytes, IEEE 754 big-endian; 0 and `failed` otherwise. */
+  float(b: u8[], start: i32, length: i32): f64 {
+    if (length !== 8 || !this.inside(b, start, length)) {
+      this.failed = true
+      return 0
+    }
+    return getF64BE(b, start)
+  }
+
+  /**
+   * A `timestamptz` or `timestamp` column, written to `out[at, at + 24)` as
+   * `iso` writes it. Answers 24, or -1 and `failed` for a column that is not
+   * eight bytes or a time `iso` refuses.
+   */
+  timestamp(b: u8[], start: i32, length: i32, out: u8[], at: i32): i32 {
+    if (length !== 8 || !this.inside(b, start, length)) {
+      this.failed = true
+      return -1
+    }
+    return this.iso(getI64BE(b, start), out, at)
+  }
+
+  /**
+   * `micros`, microseconds since 2000-01-01 00:00:00 UTC, written to
+   * `out[at, at + 24)` as `2024-01-02T03:04:05.123Z`: the microseconds cut,
+   * not rounded, to milliseconds, as `PgText.timestamp` cuts the same time.
+   * Answers 24, or -1 and `failed` with `out` untouched for a year outside
+   * 0001–9999 (`infinity` and `-infinity` among them) or no room in `out`.
+   */
+  iso(micros: i64, out: u8[], at: i32): i32 {
+    if (at < 0 || at > toI32(out.length) - 24) {
+      this.failed = true
+      return -1
+    }
+    // Floored, so that a time before 2000 keeps its day and is cut toward the past.
+    const dayMicros: i64 = toI64(86400000) * 1000
+    let days: i64 = micros / dayMicros
+    let rest: i64 = micros % dayMicros
+    if (rest < 0) {
+      days -= 1
+      rest += dayMicros
+    }
+    if (days < PG_FIRST_DAY || days > PG_LAST_DAY) {
+      this.failed = true
+      return -1
+    }
+    // The civil date of a day count: eras of 400 years (146097 days), each
+    // year starting on 1 March so that a leap day is its last.
+    const z: i64 = days + PG_EPOCH_DAYS
+    const era: i64 = z / 146097
+    const doe: i64 = z - era * 146097
+    const yoe: i64 = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    const doy: i64 = doe - (365 * yoe + yoe / 4 - yoe / 100)
+    const mp: i64 = (5 * doy + 2) / 153
+    const day: i64 = doy - (153 * mp + 2) / 5 + 1
+    const month: i64 = mp < 10 ? mp + 3 : mp - 9
+    const year: i64 = yoe + era * 400 + (month <= 2 ? 1 : 0)
+    const millis: i32 = toI32(rest / 1000)
+    pgDigits(out, at, toI32(year), 4)
+    out[at + 4] = toU8(45)
+    pgDigits(out, at + 5, toI32(month), 2)
+    out[at + 7] = toU8(45)
+    pgDigits(out, at + 8, toI32(day), 2)
+    out[at + 10] = toU8(84)
+    pgDigits(out, at + 11, millis / 3600000, 2)
+    out[at + 13] = toU8(58)
+    pgDigits(out, at + 14, (millis / 60000) % 60, 2)
+    out[at + 16] = toU8(58)
+    pgDigits(out, at + 17, (millis / 1000) % 60, 2)
+    out[at + 19] = toU8(46)
+    pgDigits(out, at + 20, millis % 1000, 3)
+    out[at + 23] = toU8(90)
+    return 24
+  }
+}
+
 /**
  * A walk over a one-dimensional `text[]` column in place: `start` the
  * column, then `next()` until `PG_ARRAY_END` or `PG_ARRAY_BAD`. Each element
@@ -852,10 +1023,11 @@ export class PgConnection {
   lastNotice: PgError | null = null
   /** The decoders `int`, `bool` and `isNull` use; `text.failed` says whether one was given a column it could not read. */
   readonly text: PgText
+  /** The decoders `binaryInt`, `binaryBool` and `binaryFloat` use, for a bind `bindStartBinary` opened; `binary.failed` as `text.failed`. */
+  readonly binary: PgBinary
 
   private readonly config: PgConfig
   private readonly password: PgPassword
-  private state: i32 = 0
   private input: u8[]
   private inStart: i32 = 0
   private inEnd: i32 = 0
@@ -873,12 +1045,15 @@ export class PgConnection {
   groupFailed: boolean = false
   // Whether the open bind opened its group, which `bindCancel` closes again.
   private bindOpened: boolean = false
+  // Whether the open bind asks for its result columns in binary.
+  private bindBinary: boolean = false
   private bindAt: i32 = -1
   private paramCountAt: i32 = 0
   private paramCount: i32 = 0
   // The open array parameter's length word, -1 when none is open, and its elements so far.
   private arrayAt: i32 = -1
   private arrayCount: i32 = 0
+  private state: i32 = 0
   private clientNonce: string = ""
   private serverSignature: u8[]
 
@@ -895,6 +1070,7 @@ export class PgConnection {
     pgCheckConfig(config)
     this.config = config
     this.text = new PgText()
+    this.binary = new PgBinary()
     this.password = new PgPassword(password)
     const inputSize: i32 = config.inputSize < 64 ? 64 : config.inputSize
     this.input = new Array<u8>(inputSize)
@@ -1584,7 +1760,8 @@ export class PgConnection {
    */
   private room(size: i32): boolean {
     const queued: i32 = this.outEnd - this.outStart
-    if (size < 0 || size > this.config.maxOutput - PG_TAIL - queued) {
+    const tail: i32 = this.bindAt >= 0 && this.bindBinary ? PG_TAIL + PG_BINARY_TAIL : PG_TAIL
+    if (size < 0 || size > this.config.maxOutput - tail - queued) {
       return false
     }
     if (this.outStart > 0 && this.outEnd + size > toI32(this.out.length)) {
@@ -1750,11 +1927,31 @@ export class PgConnection {
    * order, then `bindEnd()`. False as `prepare` is.
    */
   bindStart(name: string): boolean {
+    return this.openBind(name, false)
+  }
+
+  /**
+   * `bindStart`, asking for every result column of the execution in binary
+   * format rather than text: fixed-size integers, booleans, floats and
+   * times, read in place by `binaryInt`, `binaryBool`, `binaryFloat` and
+   * `binary.timestamp`. A `text` column's bytes are the same in either
+   * format, so `columnText` and the column windows read it as before; a
+   * `text[]` or `numeric` column comes in PostgreSQL's binary layout, which
+   * no decoder here reads. Its `bindEnd()` writes two bytes more, kept free
+   * under `maxOutput` from here on. False as `prepare` is.
+   */
+  bindStartBinary(name: string): boolean {
+    return this.openBind(name, true)
+  }
+
+  private openBind(name: string, binary: boolean): boolean {
     const opens: boolean = !this.groupOpen
-    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(11 + toI32(name.length))) {
+    const extra: i32 = binary ? PG_BINARY_TAIL : 0
+    if (pgHasNul(name) || toI32(name.length) > PG_MAX_CAP || !this.canOpen(11 + extra + toI32(name.length))) {
       return false
     }
     this.bindOpened = opens
+    this.bindBinary = binary
     this.bindAt = this.startMessage(PG_FE_BIND)
     this.putByte(PG_ZERO)
     this.putCString(name)
@@ -2068,9 +2265,10 @@ export class PgConnection {
   }
 
   /**
-   * Ends the Bind (every result column in text) and queues its Execute, for
-   * every row. False, and nothing written, when no bind is open; never for
-   * room, which the calls before it kept.
+   * Ends the Bind (every result column in text, or in binary after
+   * `bindStartBinary`) and queues its Execute, for every row. False, and
+   * nothing written, when no bind is open; never for room, which the calls
+   * before it kept.
    */
   bindEnd(): boolean {
     if (this.bindAt < 0) {
@@ -2079,10 +2277,17 @@ export class PgConnection {
     if (this.arrayAt >= 0) {
       panic("nish/net/postgres: bindEnd() while an array is open")
     }
-    this.tailRoom(PG_TAIL)
+    const binary: boolean = this.bindBinary
+    this.tailRoom(binary ? PG_TAIL + PG_BINARY_TAIL : PG_TAIL)
     const at: i32 = this.bindAt
     setU16BE(this.out, this.paramCountAt, toU16(this.paramCount))
-    this.putI16(PG_ZERO)
+    if (binary) {
+      // One format code, which the server applies to every column.
+      this.putI16(toI32(1))
+      this.putI16(PG_FORMAT_BINARY)
+    } else {
+      this.putI16(PG_ZERO)
+    }
     this.endMessage(at)
     this.bindAt = -1
     const execute: i32 = this.startMessage(PG_FE_EXECUTE)
@@ -2178,6 +2383,21 @@ export class PgConnection {
   /** Column `c` as a boolean; NULL or a bad value sets `text.failed`. */
   bool(c: i32): boolean {
     return this.text.bool(this.input, this.colStarts[c], this.colLengths[c])
+  }
+
+  /** Binary column `c`, an `int2`, `int4`, `int8` or a time's microseconds, as an integer; NULL or another length sets `binary.failed`. */
+  binaryInt(c: i32): i64 {
+    return this.binary.int(this.input, this.colStarts[c], this.colLengths[c])
+  }
+
+  /** Binary column `c` as a boolean; NULL or a bad value sets `binary.failed`. */
+  binaryBool(c: i32): boolean {
+    return this.binary.bool(this.input, this.colStarts[c], this.colLengths[c])
+  }
+
+  /** Binary column `c`, a `float8`, as an f64; NULL or another length sets `binary.failed`. */
+  binaryFloat(c: i32): f64 {
+    return this.binary.float(this.input, this.colStarts[c], this.colLengths[c])
   }
 
   /** Whether the tag of the execution just completed starts with the word `word` (`INSERT`, `SELECT`, ...). */

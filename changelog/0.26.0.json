@@ -1,0 +1,136 @@
+{
+  "version": "0.26.0",
+  "date": "2026-10-29",
+  "tag": "v0.26.0",
+  "range": {
+    "from": "v0.25.0",
+    "to": "f85cf3ef"
+  },
+  "entries": [
+    {
+      "id": "files-and-directories-with-an-explicit-mode-and",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "files and directories with an explicit mode, and exclusive create, in nish:fs",
+      "body": "nish:fs gains writeFileSyncMode(path, data, mode), mkdirSyncMode(path, mode)\nand createFileExclusiveSync(path, data, mode), so a program can write a\nsecret at 0600, create a 0700 directory, and take a lock file that exactly\none of several racing processes wins. Each answers the byte count (or 0) or a\nnegative errno and never exits; a mode outside 0..0o777 answers -22, so the\nsetuid, setgid and sticky bits are refused.\n\nwriteFileSyncMode opens with O_NOFOLLOW and O_CLOEXEC and fchmods the\ndescriptor to exactly `mode` before the first byte is written, so a file that\nalready existed at 0644 never holds the new data at 0644 and the umask cannot\nwiden the result. It truncates and writes in place: a crash leaves the file\nempty or partial, and a caller that needs the old file or the new one writes\na temporary with it and renameSyncs it into place. createFileExclusiveSync\nopens with O_CREAT|O_EXCL, answers -17 when the path exists (a dangling link\nincluded), and unlinks the file it created if the mode change or the write\nthen fails, so a failed attempt never leaves a lock behind. mkdirSyncMode\nanswers -17 for an existing path and leaves its mode alone.\n\nThe errno numbers in nish:fs are the platform's, untranslated; the docs show\nLinux's and note that Darwin's differ (ELOOP is -62 there). The guide now\nsays that a native string from String.fromBytes carries any bytes while\n--emit-ts decodes UTF-8, so writeBytes and writeFileBytesSync are the route\nthat is exact on every target.\n\nscripts/fuzz.sh is fixed too. Its sed missed defines with an inline attribute\nlist, so about thirty JSON codec functions were built without ASan, and its\n`grep -q` guard under pipefail let the SIGPIPE it caused read as \"no miss\".\nThe sed now appends sanitize_address to any attribute list, and the guard\nreads all of grep's output.\n\nThe security record adds RT-24 (the mode race on a pre-existing file), RT-25\n(symlink following) and RT-26 (umask on mkdir).",
+      "metrics": [
+        "runtime-os.c .text 3,174 bytes at -Oz (clang 18.1.3, linux-x64), budget 3,328"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#file-io",
+        "docs/security/runtime.md"
+      ],
+      "tests": [
+        "tests/cases/io_write_file_mode",
+        "tests/cases/io_mkdir_mode",
+        "tests/cases/io_create_exclusive",
+        "tests/cases/caps_fs_mode"
+      ],
+      "commits": [
+        "044e18e"
+      ],
+      "pr": 1020,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "regenerate-package-lock-json-for-v0-25-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.25.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b20a18f"
+      ],
+      "pr": 1035,
+      "author": "github-actions[bot]",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "spawnpiped-runs-a-child-with-stdin-from-memory",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "spawnPiped runs a child with stdin from memory and stdout/stderr captured",
+      "body": "nish:process gains spawnPiped(argv, stdin, stdout, stderr), which runs a\nchild by absolute path or a PATH search, writes `stdin` to it on a pipe, and\nappends what it prints to the caller's `stdout` and `stderr` arrays. A secret\ncan therefore reach `security -i` or `secret-tool store` without touching\nargv, the environment or a file. It answers the child's status as spawnSync\nencodes it, -1 when the program cannot be started (an empty argv[0], a NUL in\nan argument, a missing program), or a distinct negative code when the\ncaptured output passes the byte cap; then the child is killed and reaped.\n\nThe result is caller-owned out-params rather than a record, because no\nbuiltin returns a nominal type today; the written arrays must be spelled\n`u8[]`, and a typed-array spelling is refused (NL2415) because its length is\nfixed. One poll(2) loop drives stdin and both outputs over non-blocking\nclose-on-exec pipes, so a child that fills its stdout before reading its\nstdin cannot deadlock either side. SIGPIPE is blocked around the writes, and\nany SIGPIPE the call raised is consumed before the mask is restored. A child\nthat exits without reading its input does not kill the caller. The runtime\ncopies nothing out of `stdin`, so there is nothing of the caller's secret\nleft to wipe. Under Node the call runs child_process.spawnSync with `input`\nand a maxBuffer at the same cap, and answers -1 wherever native does.\n\nThe escape rule the other spawns have covers spawnPiped's argv, and its out-\nparams are recorded as written and growable. The security record adds RT-27\nto RT-31: deadlock, unbounded output, SIGPIPE, descriptors inherited by the\nchild (a Darwin window is recorded open), and argv and environment exposure.",
+      "metrics": [
+        "runtime-os.c .text 4,450 bytes at -Oz (clang 18.1.3, linux-x64), budget 4,608"
+      ],
+      "refs": [
+        "docs/LANGUAGE.md#directories-and-subprocesses",
+        "docs/security/runtime.md"
+      ],
+      "tests": [
+        "tests/cases/io_spawn_piped",
+        "tests/cases/mem_spawn_piped_scope",
+        "tests/cases/reject_spawn_piped_typed_output"
+      ],
+      "commits": [
+        "25e8a01"
+      ],
+      "pr": 1025,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "a-packing-dispatch-policy-for-nish-net-postgres",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a packing dispatch policy for nish/net/postgres's PgPool",
+      "body": "`PgConfig.pack`, false by default, makes `PgPool.dispatch()` hand a request\nto the first ready connection with room, filling it to `maxInFlight` before\nthe next, instead of to the one with the fewest groups in flight. Fewer\nconnections in use send fuller writes and so fewer packets, which pays on a\nlossy link between the program and the server. A connection is still wanted\nonly once every ready one is full, and a dispatch still costs one pass over\nthe slots and no allocation. The default is unchanged.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_postgres_pool"
+      ],
+      "commits": [
+        "e4450ab"
+      ],
+      "pr": 1036,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "bump-github-com-klauspost-compress-1021",
+      "type": "build",
+      "scope": "deps",
+      "breaking": false,
+      "title": "bump github.com/klauspost/compress",
+      "body": "Bumps the go_modules group with 1 update in the /bench/gzip/compare directory: [github.com/klauspost/compress](https://github.com/klauspost/compress).\n\n\nUpdates `github.com/klauspost/compress` from 1.18.0 to 1.18.7\n- [Release notes](https://github.com/klauspost/compress/releases)\n- [Commits](https://github.com/klauspost/compress/compare/v1.18.0...v1.18.7)\n\n---\nupdated-dependencies:\n- dependency-name: github.com/klauspost/compress\n  dependency-version: 1.18.7\n  dependency-type: direct:production\n  dependency-group: go_modules\n...",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "baed7d0"
+      ],
+      "pr": 1021,
+      "author": "dependabot[bot]",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "binary-result-columns-for-nish-net-postgres-1037",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "binary result columns for nish/net/postgres",
+      "body": "bindStartBinary(name) opens a Bind whose bindEnd() asks for every result column in binary format; binaryInt, binaryBool and binaryFloat on PgConnection and the PgBinary decoders (int, bool, float, timestamp, iso) read int2/int4/int8, bool, float8 and timestamptz in place with no parsing. bindStart/bindEnd and every text path are unchanged. The two extra bytes of a binary bindEnd are kept free under maxOutput, so bindEnd and sync are still never refused for room.",
+      "metrics": [],
+      "refs": [],
+      "tests": [
+        "tests/link/std_postgres",
+        "tests/postgres/live (binary scenario)"
+      ],
+      "commits": [
+        "f85cf3e"
+      ],
+      "pr": 1037,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    }
+  ]
+}
