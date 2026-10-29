@@ -1,0 +1,138 @@
+PASS  forms: kind
+PASS  forms: id
+PASS  forms: path
+PASS  forms: --limit 5
+PASS  forms: -t a, --tag=b, -tc, -t=d in order
+PASS  forms: positional
+PASS  forms: --limit from argv
+PASS  forms: --base-url from its default
+PASS  forms: --base-url default
+PASS  forms: --token unset
+PASS  forms: --token is null
+PASS  forms: unset repeatable has no values
+PASS  forms: a value flag given is on
+PASS  forms: a value flag not given is off
+PASS  forms: exit code
+PASS  forms: the last value wins
+PASS  forms: a single flag's values is the last
+PASS  forms: -l3
+PASS  forms: a required value takes a dashed token
+PASS  forms: cluster -V
+PASS  forms: cluster -a
+PASS  forms: cluster ends in a value flag
+PASS  forms: a boolean not given is off
+PASS  forms: a boolean not given is unset
+PASS  forms: --no-color turns color off
+PASS  forms: --no-color from argv
+PASS  forms: color is on by default
+PASS  forms: a negated flag's default is a default
+PASS  forms: --color after --no-color turns it back on
+PASS  forms: [fmt] given none is empty
+PASS  forms: [fmt] given none is on
+PASS  forms: [fmt] takes the next word
+PASS  forms: the argument after it
+PASS  forms: [fmt] leaves a flag alone
+PASS  forms: and the flag is read
+PASS  forms: after --, kind
+PASS  forms: after --, a dashed positional
+PASS  forms: rest
+PASS  forms: after --, words fill the variadic
+PASS  forms: and rest
+PASS  forms: after --, -n is not a flag
+PASS  forms: a word after -- still counts
+PASS  forms: a group alias
+PASS  forms: the path names the command, not the alias
+PASS  forms: a command alias
+PASS  forms: variadic, id
+PASS  forms: variadic takes the rest
+PASS  forms: variadic's first
+PASS  forms: an optional variadic may be empty
+PASS  forms: and its positional is null
+PASS  forms: another command's argument is null
+PASS  globals: before the first verb
+PASS  globals: between verbs
+PASS  globals: -r between verbs
+PASS  globals: between verbs, id
+PASS  globals: after the leaf at depth 3
+PASS  globals: and its source
+PASS  globals: -r after the leaf
+PASS  globals: a sibling's local flag is refused
+PASS  globals: refused, message
+PASS  globals: a leaf's flag before the leaf is refused
+PASS  errors: users kyes: kind
+PASS  errors: users kyes: exit code
+PASS  errors: users kyes: message
+PASS  errors: users kyes: hint
+PASS  errors: users keys list 1 --limt 5: kind
+PASS  errors: users keys list 1 --limt 5: exit code
+PASS  errors: users keys list 1 --limt 5: message
+PASS  errors: users keys list 1 --limt 5: hint
+PASS  errors: users keys list 1 --zzzzzz: kind
+PASS  errors: users keys list 1 --zzzzzz: exit code
+PASS  errors: users keys list 1 --zzzzzz: message
+PASS  errors: users keys list 1 -q: kind
+PASS  errors: users keys list 1 -q: exit code
+PASS  errors: users keys list 1 -q: message
+PASS  errors: users keys list 1 --limit: kind
+PASS  errors: users keys list 1 --limit: exit code
+PASS  errors: users keys list 1 --limit: message
+PASS  errors: users keys list 1 -l: kind
+PASS  errors: users keys list 1 -l: exit code
+PASS  errors: users keys list 1 -l: message
+PASS  errors: users keys list 1 --verbose=yes: kind
+PASS  errors: users keys list 1 --verbose=yes: exit code
+PASS  errors: users keys list 1 --verbose=yes: message
+PASS  errors: users keys list 1 --no-color=yes: kind
+PASS  errors: users keys list 1 --no-color=yes: exit code
+PASS  errors: users keys list 1 --no-color=yes: message
+PASS  errors: users keys: kind
+PASS  errors: users keys: exit code
+PASS  errors: users keys: message
+PASS  errors: : kind
+PASS  errors: : exit code
+PASS  errors: : message
+PASS  errors: users keys list: kind
+PASS  errors: users keys list: exit code
+PASS  errors: users keys list: message
+PASS  errors: users keys list 1 2: kind
+PASS  errors: users keys list 1 2: exit code
+PASS  errors: users keys list 1 2: message
+PASS  errors: users keys create 1: kind
+PASS  errors: users keys create 1: exit code
+PASS  errors: users keys create 1: message
+PASS  errors: frobnicate: kind
+PASS  errors: frobnicate: exit code
+PASS  errors: frobnicate: message
+PASS  errors: --verison: kind
+PASS  errors: --verison: exit code
+PASS  errors: --verison: message
+PASS  errors: users list -v: kind
+PASS  errors: users list -v: exit code
+PASS  errors: users list -v: message
+PASS  errors: the first error wins
+PASS  errors: an unknown command stops the descent
+PASS  help: -h
+PASS  help: exit code
+PASS  help: for the command it reached
+PASS  help: --help
+PASS  help: in a cluster
+PASS  help: wins over an error
+PASS  help: help <path>
+PASS  help: help <path> reaches it
+PASS  help: help alone
+PASS  help: after --, -h is a word
+PASS  version: --version
+PASS  version: message
+PASS  version: exit code
+PASS  version: -v
+PASS  version: -v below the root is unknown
+PASS  help page: root
+PASS  help page: group
+PASS  help page: leaf
+PASS  help page: required and variadic
+PASS  help page: required flag
+PASS  wide: the last leaf's id
+PASS  wide: its last flag
+PASS  wide: every parse finds it
+PASS  wide: a parse is under 10 µs
+std/cli-args: 137 passed, 0 failed, 0 skipped
