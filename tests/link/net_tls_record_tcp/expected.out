@@ -23,9 +23,11 @@ PASS  while slot 0 is open, the slot never built reads as a free one: not held, 
 PASS  the last record the key may protect
 PASS  the next is preceded by the writer's own KeyUpdate
 PASS  and comes under the next key
-PASS  the program shuts the connection down
+PASS  the program shuts the connection down with the client's last record unread: the slot waits to read
 PASS  the client reads the server's close_notify
-PASS  and, once it is done, the program closes the socket
+PASS  then the end of the stream, not a reset
+PASS  the slot holds no key while it waits for the client to hang up
+PASS  and, once the client hangs up, the program closes the socket
 PASS  a third client at once for two slots is accepted and shed
 PASS  the first two hold both slots, the first reused
 PASS  two clients that hang up without a word are closed: the stream was cut short
@@ -60,4 +62,4 @@ PASS  closing it and enabling tickets build nothing
 PASS  an accept with no listener answers tcpAccept's -9 and builds nothing
 PASS  a never-built slot's connection is one no slot holds, made once, failed, with no ALPN, and building no slot
 PASS  a slot built after enableTickets has tickets on as the pool's are, and is not the vacant connection
-tls over tcp: 62 passed, 0 failed, 0 skipped
+tls over tcp: 64 passed, 0 failed, 0 skipped

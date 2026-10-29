@@ -403,6 +403,16 @@ export class TcpLoop {
     return this.carrier === CARRIER_H1 ? this.h1.busy() : this.h2.busy();
   }
 
+  /** Closes client `index`'s socket, as a client does once it has read the server's end of the stream. */
+  hangUp(index: i32): void {
+    const peer: Peer = this.peers[index];
+    if (peer.fd >= 0) {
+      netClose(peer.fd);
+      peer.fd = -1;
+      peer.ended = true;
+    }
+  }
+
   /** Closes every socket the loop made. */
   shutdown(): void {
     for (const peer of this.peers) {
