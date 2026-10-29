@@ -1813,7 +1813,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
 | `nish/crypto/p384` | P-384 ECDSA verification |
-| `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
+| `nish/crypto/x509` | DER and PEM, X.509 certificates read with their signature algorithm, key type and v3 extensions, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/pki-roots` | `pkiLoadSystemRoots()`, the root certificates to trust, parsed: those `SSL_CERT_FILE` and `SSL_CERT_DIR` name when either is set, with no fallback, and otherwise the first system bundle (`pkiSystemBundles()`) and `/etc/ssl/certs`. A block or file it cannot use is counted in `skipped`, never fatal, and only regular files are read; on macOS it reads `/etc/ssl/cert.pem`, not the Keychain, so roots and trust settings added there are missed. Native only |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
