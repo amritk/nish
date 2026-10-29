@@ -119,9 +119,13 @@ build() {
   # definition's inline list, such as `nounwind` or `"probe-stack"="inline-asm"`),
   # and the attribute is appended to whichever list is there. UBSan instruments
   # in clang's frontend, so it never reaches a .ll: the compiled code's own
-  # bounds and division checks stand in for it. A define this misses fails the build rather than going quiet.
+  # bounds and division checks stand in for it. A define this misses fails the
+  # build rather than going quiet. The check reads all of grep's output instead
+  # of `grep -q`: under pipefail, -q's early exit SIGPIPEs the first grep, and
+  # the pipeline's 141 read as "no miss", so a miss passed whenever the first
+  # grep was still writing.
   sed -i -E 's/^(define .*\)( [^!{]*)?) \{$/\1 sanitize_address {/' "$ir"/*.ll
-  if grep -h '^define ' "$ir"/*.ll | grep -qv ' sanitize_address {$'; then
+  if grep -h '^define ' "$ir"/*.ll | grep -v ' sanitize_address {$' >/dev/null; then
     die "$name: a define in $ir/ was not given sanitize_address"
   fi
   # A library build writes one module per source module, the std modules the
