@@ -54,6 +54,13 @@ import { monotonicNanos } from "nish:process"
 /** The longest datagram a UDP try reads; a longer one is cut, fails to parse and is dropped. */
 export const DNS_UDP_MAX_REPLY: i32 = 4096
 
+/**
+ * The most datagrams one `ready` reads from a query's socket. The loop is
+ * level-triggered, so the rest wait for the next `pollWait`, and a flood on
+ * the port cannot hold the caller's loop inside the client.
+ */
+export const DNS_CLIENT_MAX_DATAGRAMS: i32 = 32
+
 /** What a query's socket is doing: none open, a UDP try, a TCP try connecting or writing, one reading. */
 const DNS_FD_NONE: i32 = 0
 const DNS_FD_UDP: i32 = 1
@@ -151,9 +158,9 @@ export class DnsClient {
 
   /**
    * The pair `token`, `events` that `pollWait` reported at `nowNanos`, for a
-   * token `owns` answers true for: reads every datagram or stream byte that is
-   * waiting, finishes a connection or a write, and sends whatever the core
-   * asks next. Panics for a token that is not the client's.
+   * token `owns` answers true for: reads the datagrams (at most
+   * `DNS_CLIENT_MAX_DATAGRAMS`) or stream bytes that are waiting, finishes a
+   * connection or a write, and sends whatever the core asks next. Panics for a token that is not the client's.
    */
   ready(token: i32, events: i32, nowNanos: i64): void {
     if (!this.owns(token)) {
@@ -296,13 +303,18 @@ const dnsClientOpenTcp = (c: DnsClient, q: i32, nowNanos: i64): void => {
   }
 }
 
-/** Every datagram waiting on query `q`'s socket, to the core, until none is or the try ends. */
+/**
+ * The datagrams waiting on query `q`'s socket, to the core, until none is,
+ * the try ends or `DNS_CLIENT_MAX_DATAGRAMS` are read.
+ */
 const dnsClientReadDatagrams = (c: DnsClient, q: i32, fd: i32, nowNanos: i64): void => {
-  while (c.fds[q] === fd) {
+  let read: i32 = 0
+  while (c.fds[q] === fd && read < DNS_CLIENT_MAX_DATAGRAMS) {
     const n: i32 = udpRecvFrom(fd, c.buf, 0, DNS_UDP_MAX_REPLY, c.from, c.recvMeta)
     if (n < 0) {
       return
     }
+    read += 1
     c.resolver.receive(q, c.buf, n, c.from, nowNanos)
     c.pump(nowNanos)
   }

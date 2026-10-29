@@ -4,9 +4,10 @@
 // TC retry over TCP, a CNAME chain, the search list, a dead server timing out
 // so the next one answers, `attempts`, the hosts file and `localhost` with no
 // packet, spoofed replies dropped while the genuine one completes the lookup,
-// and IDs and source ports that vary.
+// a flood read at most `DNS_CLIENT_MAX_DATAGRAMS` a wake, and IDs and source
+// ports that vary.
 import { DNS_RESOLVE_NO_ANSWER, DNS_RESOLVE_NOT_FOUND, DNS_RESOLVE_PENDING, DNS_RESOLVE_TIMEOUT, DnsResolver } from "nish/net/dns-resolver"
-import { DnsClient, dnsLookupWith, resolveHost } from "nish/net/dns"
+import { DNS_CLIENT_MAX_DATAGRAMS, DnsClient, dnsLookupWith, resolveHost } from "nish/net/dns"
 import { DnsConfig, DnsHosts, dnsParseHosts, dnsParseResolvConf } from "nish/net/dns-config"
 import { DNS_ADDRESS_BYTES, DNS_TYPE_A, DNS_TYPE_AAAA, DNS_TYPE_CNAME } from "nish/net/dns-message"
 import { setU16BE } from "nish/bytes"
@@ -41,6 +42,8 @@ const LISTEN_TOKEN: i32 = 2
 const CONN_TOKEN: i32 = 10
 const CONNS: i32 = 4
 const CONN_BUF: i32 = 600
+/** Forged datagrams ahead of `flood.test`'s genuine reply: more than one `ready` reads. */
+const FLOOD: i32 = 40
 
 const ascii = (s: string): u8[] => {
   const n: i32 = toI32(s.length)
@@ -175,12 +178,12 @@ const zone = (name: string, qtype: i32, overTcp: boolean, head: i32[]): u8[] => 
       ? cat(cname, record(target, DNS_TYPE_A, 300, v4(192, 0, 2, 1)))
       : cat(cname, record(target, DNS_TYPE_AAAA, 600, v6(1)))
   }
-  if (name === "host.zone.test" || name === "spoof.test") {
+  if (name === "host.zone.test" || name === "spoof.test" || name === "flood.test") {
     if (!a) {
       head[1] = 0
       return new Array<u8>(0)
     }
-    return record(atQuestion(), DNS_TYPE_A, 100, v4(192, 0, 2, name === "spoof.test" ? 4 : 3))
+    return record(atQuestion(), DNS_TYPE_A, 100, v4(192, 0, 2, name === "spoof.test" ? 4 : name === "flood.test" ? 5 : 3))
   }
   head[0] = NXDOMAIN
   head[1] = 0
@@ -290,7 +293,9 @@ const deadQueries = (s: Server): i32 => {
 /**
  * Answers every datagram waiting. A `spoof.test` A query is first answered
  * three ways the client must drop: the genuine reply from another port, then
- * from the server with another ID, then with another question.
+ * from the server with another ID, then with another question. A
+ * `flood.test` A query is first sent `FLOOD` copies of its reply from
+ * another port.
  */
 const serverUdp = (s: Server): void => {
   let n: i32 = udpRecvFrom(s.udp, s.buf, 0, toI32(s.buf.length), s.from, s.meta)
@@ -311,6 +316,13 @@ const serverUdp = (s: Server): void => {
       const wrongQuestion: u8[] = copy(forged, 0, len)
       setU16BE(wrongQuestion, qtype[1] - 4, toU16(DNS_TYPE_AAAA))
       udpSendTo(s.udp, wrongQuestion, 0, len, s.from, 0, 0)
+    }
+    if (questionOf(s.buf, n, qtype) === "flood.test" && qtype[0] === DNS_TYPE_A) {
+      let f: i32 = 0
+      while (f < FLOOD) {
+        udpSendTo(s.spoofer, reply, 0, len, s.from, 0, 0)
+        f += 1
+      }
     }
     udpSendTo(s.udp, reply, 0, len, s.from, 0, 0)
     n = udpRecvFrom(s.udp, s.buf, 0, toI32(s.buf.length), s.from, s.meta)
@@ -534,6 +546,21 @@ export const main = (): number => {
   t.eqI32("spoof: another ID is droppedId", c.resolver.droppedId, 1)
   t.eqI32("spoof: another question is droppedQuestion", c.resolver.droppedQuestion, 1)
 
+  // A flood from another port: one ready reads DNS_CLIENT_MAX_DATAGRAMS of it and leaves
+  // the rest to the next wait, and the genuine reply behind it still completes the lookup.
+  const sourceBefore: i32 = c.resolver.droppedSource
+  const floodLookup: i32 = c.start("flood.test", 80, monotonicNanos())
+  serverUdp(s)
+  let token: i32 = c.tokenBase
+  while (token < c.tokenBase + c.tokens()) {
+    c.ready(token, 1, monotonicNanos())
+    token += 1
+  }
+  t.eqI32("flood: one ready reads DNS_CLIENT_MAX_DATAGRAMS", c.resolver.droppedSource - sourceBefore, DNS_CLIENT_MAX_DATAGRAMS)
+  const flooded: Answer = run(s, c, loop, floodLookup, monotonicNanos())
+  t.eqStr("flood: the genuine address stands", listed(flooded), "00000000000000000000ffffc00002050050/100")
+  t.eqI32("flood: every forged datagram is droppedSource", c.resolver.droppedSource - sourceBefore, FLOOD)
+
   // Every UDP query went from a fresh socket with a fresh ID.
   t.ok("vary: IDs differ between queries", distinct(s.ids) > s.ids.length / 2)
   t.ok("vary: source ports differ between queries", distinct(s.ports) > s.ports.length / 2)
@@ -542,7 +569,9 @@ export const main = (): number => {
   // A dead server first: each query waits its one-second timeout there, then the live one answers.
   const two: string = "nameserver 127.0.0.1\nnameserver 127.0.0.1\noptions timeout:1 attempts:1\n"
   const deadFirst: DnsClient = new DnsClient(new DnsResolver(config(two, [s.deadPort, s.port]), null, 1), loop, 200)
-  const failover: Answer = run(s, deadFirst, loop, deadFirst.start("www.test", 80, monotonicNanos()), monotonicNanos())
+  // The clock is read once, before start, so the timeout is measured from the send.
+  const failoverBegun: i64 = monotonicNanos()
+  const failover: Answer = run(s, deadFirst, loop, deadFirst.start("www.test", 80, failoverBegun), failoverBegun)
   t.eqI32("dead server: the next one answers", failover.status, 2)
   t.eqI32("dead server: both queries timed out there", deadFirst.resolver.timeouts, 2)
   t.ok("dead server: after its timeout", failover.millis >= 1000)
@@ -551,7 +580,8 @@ export const main = (): number => {
   // Only the dead server, two attempts: each type asks it twice, then NO_ANSWER.
   const deadOnly: string = "nameserver 127.0.0.1\noptions timeout:1 attempts:2\n"
   const silent: DnsClient = new DnsClient(new DnsResolver(config(deadOnly, [s.deadPort]), null, 1), loop, 300)
-  const gone: Answer = run(s, silent, loop, silent.start("www.test", 80, monotonicNanos()), monotonicNanos())
+  const goneBegun: i64 = monotonicNanos()
+  const gone: Answer = run(s, silent, loop, silent.start("www.test", 80, goneBegun), goneBegun)
   t.eqI32("attempts: NO_ANSWER after every try", gone.status, DNS_RESOLVE_NO_ANSWER)
   t.eqI32("attempts: two tries per type", deadQueries(s), 4)
   t.ok("attempts: two timeouts long", gone.millis >= 2000)
