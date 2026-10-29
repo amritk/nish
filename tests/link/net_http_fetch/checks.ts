@@ -411,6 +411,11 @@ class Server {
         }
         c.len -= used;
         this.handle(c, head, body);
+        if (c.doom === 4) {
+          // The next request must reach the reset at the top, unread, even
+          // when it is already in the socket: the poll loop brings it back.
+          return;
+        }
         text = String.fromBytes(c.buf, 0, c.len);
         end = toI32(text.indexOf("\r\n\r\n"));
       }
