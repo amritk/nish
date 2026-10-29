@@ -3048,10 +3048,12 @@ const SPEED_LINK = new Map([
   ["crypto_held_derive", "tests/wipes counts its wipes after -O2"],
   ["crypto_hkdf_wycheproof", "tests/wipes counts its wipes after -O2"],
   ["crypto_p256", "tests/wipes and the p256ScalarInverse wipes survive opt -O2"],
+  ["crypto_p256_ecdh", "tests/wipes counts its wipes after -O2"],
   ["net_quic_server_wipes", "tests/wipes counts its wipes after -O2"],
   ["net_quic_server_wipes_f64", "the f64 twin of net_quic_server_wipes"],
   ["net_quic_wipes", "tests/wipes counts its wipes after -O2"],
   ["net_quic_wipes_f64", "the f64 twin of net_quic_wipes"],
+  ["net_tls_client_record", "tests/wipes counts its wipes after -O2"],
   ["net_tls_rfc8448", "tests/wipes counts its wipes after -O2"],
   ["net_tls_ticket", "tests/wipes counts its wipes after -O2"],
   ["net_tls_wipes", "tests/wipes counts its wipes after -O2"],
@@ -3301,6 +3303,240 @@ if (!only || "net_tls_tcp".includes(only)) {
       ended.code === 0 && body === want,
       `exit ${ended.code} signal ${ended.signal}\nstdout: ${JSON.stringify(body)}\nwant:   ${JSON.stringify(want)}\nstderr: ${serverErr}`
     )
+  }
+}
+
+// ---- `nish/net/tls-tcp`'s client, against openssl s_server ----------------------
+//
+// What the loopback program in `tests/link/net_tls_client_tcp` cannot say:
+// that the Nish client completes a handshake with a TLS 1.3 server somebody
+// else wrote, under each suite and group, through a HelloRetryRequest, with
+// ALPN and SNI, and that it checks a P-256, a P-384 and an RSA-PSS
+// CertificateVerify from that server and the chain under it. A test CA is
+// made here at run time, with three leaves for `localhost` under it (and a
+// fourth that names it in its CN alone) and two intermediates under it, an
+// RSA one over an RSA leaf and a P-384 one over a P-256 leaf; the client
+// trusts the CA alone, through `SSL_CERT_FILE`. The
+// program in `connect` mode prints one line of what the handshake reached:
+// its state, then the suite, the group, whether it retried, the
+// CertificateVerify scheme and the protocol ALPN chose. In `exchange` mode
+// it runs `tlsConnect` and the blocking calls alone through data both ways,
+// a KeyUpdate of its own that asks for the server's, the server's KeyUpdate
+// asking for the client's (s_server's `K`, typed only once the client's
+// data under its new key has arrived) and the end of the server's stream:
+// `-rev`'s close_notify, read as 0, and the default mode's `q`, which closes
+// TCP without one, read as the failure it is. openssl is on CI's runners, so
+// a missing one is a failure here rather than a skip.
+if (!only || "net_tls_client_tcp".includes(only)) {
+  const dir = path.join(buildDir, "net-tls-client")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const exe = path.join(dir, "app")
+  const built = spawnSync(
+    NISH,
+    [
+      path.join(root, "tests", "link", "net_tls_client_tcp", "main.ts"),
+      "-o",
+      dir + path.sep,
+      "--link",
+      exe,
+      ...linkProfile("net_tls_client_tcp"),
+    ],
+    { cwd: root, encoding: "utf8" }
+  )
+  const openssl = "openssl"
+  // The CA, its three leaves and its two intermediates with a leaf each, every
+  // leaf for `localhost`, valid for a day, and a leaf whose CN alone says
+  // `localhost`, with no subjectAltName.
+  const pki = (args) => spawnSync(openssl, args, { cwd: dir, encoding: "utf8" })
+  const made = () => {
+    const ca = pki([
+      "req", "-x509", "-newkey", "ec", "-pkeyopt", "ec_paramgen_curve:P-256", "-nodes",
+      "-keyout", "ca.key", "-out", "ca.pem", "-subj", "/CN=nish test CA", "-days", "2",
+      "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign",
+    ])
+    if (ca.status !== 0) {
+      return `the CA: ${ca.stderr}`
+    }
+    fs.writeFileSync(path.join(dir, "leaf.ext"), "subjectAltName=DNS:localhost\nbasicConstraints=CA:FALSE\n")
+    fs.writeFileSync(path.join(dir, "cn.ext"), "basicConstraints=CA:FALSE\n")
+    fs.writeFileSync(path.join(dir, "ca.ext"), "basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign\n")
+    const p256 = ["ec", "-pkeyopt", "ec_paramgen_curve:P-256"]
+    const p384 = ["ec", "-pkeyopt", "ec_paramgen_curve:P-384"]
+    // Each is its name, its key, its issuer and its extensions, in issuing order.
+    const leaves = [
+      ["p256", p256, "ca", "leaf.ext"],
+      ["p384", p384, "ca", "leaf.ext"],
+      ["rsa", ["rsa:2048"], "ca", "leaf.ext"],
+      ["rsaca", ["rsa:2048"], "ca", "ca.ext"],
+      ["rsaleaf", ["rsa:2048"], "rsaca", "leaf.ext"],
+      ["p384ca", p384, "ca", "ca.ext"],
+      ["p384leaf", p256, "p384ca", "leaf.ext"],
+      ["cnonly", p256, "ca", "cn.ext"],
+    ]
+    for (const [name, key, issuer, ext] of leaves) {
+      const subject = ext === "ca.ext" ? `/CN=nish test ${name}` : "/CN=localhost"
+      const csr = pki([
+        "req", "-new", "-newkey", ...key, "-nodes", "-keyout", `${name}.key`, "-out", `${name}.csr`, "-subj", subject,
+      ])
+      const signed = pki([
+        "x509", "-req", "-in", `${name}.csr`, "-CA", `${issuer}.pem`, "-CAkey", `${issuer}.key`, "-CAcreateserial",
+        "-out", `${name}.pem`, "-days", "1", "-extfile", ext,
+      ])
+      if (csr.status !== 0 || signed.status !== 0) {
+        return `the ${name} leaf: ${csr.stderr}${signed.stderr}`
+      }
+    }
+    return ""
+  }
+  const madeErr = has(openssl) ? made() : "missing: openssl"
+  if (
+    check("net_tls_client_tcp: the client links", built.status === 0, String(built.stderr)) &&
+    check("net_tls_client_tcp: openssl is on PATH and makes the test CA", madeErr === "", madeErr)
+  ) {
+    // One s_server for one connection, with `leaf` and its issuer as its chain
+    // (the intermediate, for a leaf under one) and `server`'s flags, and the
+    // client against it: its mode, the port, then `args`. Each of `steps` is
+    // a pattern and a line: once the server's output so far matches the
+    // pattern, the line goes to its stdin, in order. The answer is the
+    // client's exit status and output, and how many steps fired.
+    const issuers = { rsaleaf: "rsaca", p384leaf: "p384ca" }
+    const handshake = async (leaf, server, mode, args, steps = []) => {
+      const s = spawn(
+        openssl,
+        [
+          "s_server", "-accept", "0", "-naccept", "1",
+          "-cert", `${leaf}.pem`, "-key", `${leaf}.key`, "-cert_chain", `${issuers[leaf] ?? "ca"}.pem`, ...server,
+        ],
+        { cwd: dir, stdio: ["pipe", "pipe", "pipe"] }
+      )
+      const killer = setTimeout(() => s.kill("SIGKILL"), 30000)
+      const ended = new Promise((resolve) => s.on("close", resolve))
+      let out = ""
+      let step = 0
+      const port = await new Promise((resolve) => {
+        s.stdout.on("data", (chunk) => {
+          out += chunk
+          while (step < steps.length && steps[step][0].test(out)) {
+            s.stdin.write(steps[step][1])
+            step++
+          }
+          const m = /ACCEPT \S*:(\d+)\n/.exec(out)
+          if (m !== null) {
+            resolve(Number(m[1]))
+          }
+        })
+        s.on("close", () => resolve(0))
+      })
+      const client =
+        port === 0
+          ? { status: -1, stdout: "", stderr: `s_server did not listen: ${out}` }
+          : await new Promise((resolve) => {
+              const c = spawn(exe, [mode, String(port), ...args], {
+                cwd: dir,
+                env: { ...process.env, SSL_CERT_FILE: path.join(dir, "ca.pem") },
+                stdio: ["ignore", "pipe", "pipe"],
+              })
+              let stdout = ""
+              let stderr = ""
+              c.stdout.on("data", (chunk) => {
+                stdout += chunk
+              })
+              c.stderr.on("data", (chunk) => {
+                stderr += chunk
+              })
+              c.on("close", (status) => resolve({ status, stdout, stderr }))
+            })
+      s.kill("SIGKILL")
+      await ended
+      clearTimeout(killer)
+      return { ...client, stepped: step }
+    }
+    // 4865, 4866 and 4867 are TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384 and
+    // TLS_CHACHA20_POLY1305_SHA256; 29 is X25519 and 23 secp256r1; 1027, 1283 and
+    // 2052 are ecdsa_secp256r1_sha256, ecdsa_secp384r1_sha384 and
+    // rsa_pss_rsae_sha256. The SNI case has s_server answer `localhost` with
+    // its second certificate, the P-384 leaf, and refuse any other name with
+    // unrecognized_name (112): the scheme says the name was sent and matched.
+    const sni = ["-tls1_3", "-servername", "localhost", "-servername_fatal", "-cert2", "p384.pem", "-key2", "p384.key"]
+    const cases = [
+      ["TLS_AES_128_GCM_SHA256", "p256", ["-tls1_3", "-ciphersuites", "TLS_AES_128_GCM_SHA256"], "localhost", "-", "x25519",
+        "open suite 4865 group 29 retried false scheme 1027 alpn -"],
+      ["TLS_AES_256_GCM_SHA384", "p256", ["-tls1_3", "-ciphersuites", "TLS_AES_256_GCM_SHA384"], "localhost", "-", "x25519",
+        "open suite 4866 group 29 retried false scheme 1027 alpn -"],
+      ["TLS_CHACHA20_POLY1305_SHA256", "p256", ["-tls1_3", "-ciphersuites", "TLS_CHACHA20_POLY1305_SHA256"], "localhost", "-", "x25519",
+        "open suite 4867 group 29 retried false scheme 1027 alpn -"],
+      ["a P-256 key share", "p256", ["-tls1_3", "-groups", "P-256"], "localhost", "-", "p256",
+        "open suite 4865 group 23 retried false scheme 1027 alpn -"],
+      ["a HelloRetryRequest from X25519 to P-256", "p256", ["-tls1_3", "-groups", "P-256"], "localhost", "-", "both",
+        "open suite 4865 group 23 retried true scheme 1027 alpn -"],
+      ["ALPN h2", "p256", ["-tls1_3", "-alpn", "h2"], "localhost", "http/1.1,h2", "x25519",
+        "open suite 4865 group 29 retried false scheme 1027 alpn h2"],
+      ["ALPN http/1.1", "p256", ["-tls1_3", "-alpn", "http/1.1"], "localhost", "h2,http/1.1", "x25519",
+        "open suite 4865 group 29 retried false scheme 1027 alpn http/1.1"],
+      ["no common ALPN protocol", "p256", ["-tls1_3", "-alpn", "http/1.1"], "localhost", "h2", "x25519",
+        "failed 120 suite 0 group 29 retried false scheme 0 alpn -"],
+      ["SNI for localhost", "p256", sni, "localhost", "-", "x25519",
+        "open suite 4865 group 29 retried false scheme 1283 alpn -"],
+      ["SNI for another name", "p256", sni, "other.test", "-", "x25519",
+        "failed 112 suite 0 group 29 retried false scheme 0 alpn -"],
+      ["a P-384 leaf", "p384", ["-tls1_3"], "localhost", "-", "x25519",
+        "open suite 4865 group 29 retried false scheme 1283 alpn -"],
+      ["an RSA-PSS leaf", "rsa", ["-tls1_3"], "localhost", "-", "x25519",
+        "open suite 4865 group 29 retried false scheme 2052 alpn -"],
+      ["an RSA-PSS leaf under an RSA intermediate", "rsaleaf", ["-tls1_3"], "localhost", "-", "x25519",
+        "open suite 4865 group 29 retried false scheme 2052 alpn -"],
+      ["a P-256 leaf under a P-384 intermediate", "p384leaf", ["-tls1_3"], "localhost", "-", "x25519",
+        "open suite 4865 group 29 retried false scheme 1027 alpn -"],
+      // A name the leaf does not carry: the signature verified, the chain
+      // refused with bad_certificate (42).
+      ["a name the leaf does not carry", "p256", ["-tls1_3"], "other.test", "-", "x25519",
+        "failed 42 suite 4865 group 29 retried false scheme 1027 alpn -"],
+      // A leaf whose CN is the name and that has no subjectAltName: the CN is
+      // never read, so bad_certificate (42).
+      ["the name in the CN alone", "cnonly", ["-tls1_3"], "localhost", "-", "x25519",
+        "failed 42 suite 4865 group 29 retried false scheme 1027 alpn -"],
+      // A server that speaks only TLS 1.2 answers the TLS 1.3-only ClientHello
+      // with protocol_version (70).
+      ["TLS 1.2 only", "p256", ["-tls1_2"], "localhost", "-", "x25519",
+        "failed 70 suite 0 group 29 retried false scheme 0 alpn -"],
+    ]
+    for (const [what, leaf, server, name, alpn, groups, want] of cases) {
+      const got = await handshake(leaf, server, "connect", [name, alpn, groups])
+      check(
+        `net_tls_client_tcp: openssl s_server, ${what}: the handshake ends as it should`,
+        got.status === 0 && got.stdout === `${want}\n`,
+        `exit ${got.status}\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
+      )
+    }
+    // The client writes "ping", a KeyUpdate asking for the server's and
+    // "after"; s_server prints each line it reads. The default mode echoes
+    // nothing back, so `K` follows "after" and "pong" follows the KeyUpdate
+    // it sent (`SSL_do_handshake -> 1`), and only a client that answered that
+    // request is read past it: "bye" is what lets `q` through. Its one
+    // KeyUpdate read stands for both, openssl folding the answer it owed into
+    // the request. `-rev` answers each line reversed, under the KeyUpdate it
+    // owed, and ends with close_notify on reading CLOSE. Every step has to
+    // have fired: the last, on "bye", is s_server's own word that it read
+    // the data sent under the client's answering key. Before any of it the
+    // client waits out 300 ms of silence (the `fresh` one its whole first
+    // readWait, which drives the handshake) and is refused a window past
+    // its data; after closing, a read and a write each answer how it ended.
+    const exchanges = [
+      ["data, KeyUpdate both ways and a close with no close_notify", [], "connect",
+        [[/after\n/, "K\n"], [/SSL_do_handshake -> 1\n/, "pong\n"], [/bye\n/, "q\n"]], "pong", "bye",
+        "open queued false idle -110 window -22 wrote 5 update 0 wrote 6 read pong server updates 1 wrote 4 end -104 closed -104 -32"],
+      ["a client from new, data, a KeyUpdate answered and close_notify", ["-rev"], "fresh", [], "retfa", "CLOSE",
+        "open queued false idle -110 window -22 wrote 5 update 0 wrote 6 read retfa server updates 1 wrote 6 end 0 closed -32 -32"],
+    ]
+    for (const [what, server, how, steps, reply, last, want] of exchanges) {
+      const got = await handshake("p256", ["-tls1_3", ...server], "exchange", [how, reply, last], steps)
+      check(
+        `net_tls_client_tcp: openssl s_server, the blocking calls, ${what}`,
+        got.status === 0 && got.stdout === `${want}\n` && got.stepped === steps.length,
+        `exit ${got.status}, ${got.stepped} of ${steps.length} steps\nstdout: ${JSON.stringify(got.stdout)}\nwant:   ${JSON.stringify(`${want}\n`)}\nstderr: ${got.stderr}`
+      )
+    }
   }
 }
 
@@ -9913,6 +10149,22 @@ if (!only || "crypto_x509_random_wasm".includes(only)) {
   )
 }
 
+// `nish/crypto/pki` reads no file, so a wasm32 build that imports it without
+// `nish/crypto/pki-roots` compiles: a TLS client there brings its own roots.
+if (!only || "crypto_pki".includes(only)) {
+  const entry = path.join(linkDir, "crypto_pki", "wasm-only.ts")
+  const outDir = path.join(buildDir, "pki-only-wasm") + path.sep
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const r = fs.existsSync(entry)
+    ? spawnSync(NISH, [entry, "--target", "wasm32", "-o", outDir], { cwd: root, encoding: "utf8" })
+    : null
+  check(
+    "crypto_pki: a wasm32 build importing nish/crypto/pki without pki-roots compiles",
+    r !== null && r.status === 0,
+    r === null ? "no such fixture: tests/link/crypto_pki/wasm-only.ts" : r.stderr
+  )
+}
+
 // #628: P-256's fixed-base comb (`p256BaseMult`, which `p256PublicKey` and
 // `p256Sign` use) against its variable-base window (`p256ScalarMult` on G, which
 // `p256Verify` uses), byte for byte, on Wycheproof's scalars, RFC 6979 A.2.5's,
@@ -10569,6 +10821,165 @@ if (!only || "rt4_nofollow".includes(only) || "shim symlink".includes(only)) {
         `--- want\n${want.join("\n")}\n--- got\n${runs.join("\n")}`
       )
     }
+  }
+}
+
+// RT-24 to RT-26 (`writeFileSyncMode`, `createFileExclusiveSync`,
+// `mkdirSyncMode`): every mode is read back here with Node's `fs.statSync`,
+// never taken from the builtin's answer, which says only that a call went
+// through. The probe is built natively and run under `runtime/nish.mjs`, and
+// both sides must leave the same files behind: a new file at exactly 0600, a
+// 0644 file rewritten at 0600, 0644 asked for under `umask 077` kept at 0644
+// (the fchmod, not the umask, decides), a symbolic link at the path refused
+// with its target untouched, a directory at 0700 that a second call leaves
+// alone with -17, and an exclusive create that a file or a dangling link at the
+// path turns into -17, and one whose write fails (`ulimit -f 0`, `SIGXFSZ`
+// ignored, so the write answers -EFBIG) removes the file it made. The lock
+// race is native only, as `spawn` is: eight children of the probe race
+// `createFileExclusiveSync` for one path, silently (`take`, which exits with
+// the errno it lost to), and exactly one may exit 0, every other with 17.
+if (!only || "fs_mode".includes(only) || "mode excl".includes(only)) {
+  const dir = path.join(buildDir, "fs_mode")
+  fs.rmSync(dir, { recursive: true, force: true })
+  fs.mkdirSync(dir, { recursive: true })
+  const probe = path.join(dir, "probe.ts")
+  fs.writeFileSync(
+    probe,
+    `const RACERS: i32 = 8;
+
+export const main = (): number => {
+  if (process.argv.length < 3) {
+    return 2;
+  }
+  const op = process.argv[1];
+  const at = process.argv[2];
+  if (op === "race") {
+    const pids: i32[] = [];
+    for (let i = 0; i < RACERS; i++) {
+      pids.push(spawn([process.argv[3], "take", at]));
+    }
+    let winners = 0;
+    let taken = 0;
+    for (const pid of pids) {
+      const status = waitPid(pid, 0)[1];
+      if (status === 0) {
+        winners++;
+      } else if (status === 17) {
+        taken++;
+      }
+    }
+    console.log(\`winners \${winners} eexist \${taken}\`);
+    return 0;
+  }
+  let r: i32 = -1;
+  if (op === "write600") {
+    r = writeFileSyncMode(at, "secret\\n", 0o600);
+  } else if (op === "write644") {
+    r = writeFileSyncMode(at, "public\\n", 0o644);
+  } else if (op === "excl" || op === "take") {
+    r = createFileExclusiveSync(at, "held\\n", 0o600);
+  } else if (op === "mkdir700") {
+    r = mkdirSyncMode(at, 0o700);
+  }
+  if (op === "take") {
+    return r >= 0 ? 0 : -r;
+  }
+  console.log(\`\${op} \${r}\`);
+  return r >= 0 ? 0 : 1;
+};
+`
+  )
+  const exe = path.join(dir, "probe")
+  const built = HAS_CLANG ? spawnSync(NISH, [probe, "--link", exe], { cwd: root, encoding: "utf8" }) : null
+  if (built === null) {
+    skip("skipped: fs_mode: no clang, so the probe cannot be built")
+  } else if (built.status !== 0) {
+    check("fs_mode: the probe builds natively", false, built.stderr)
+  } else {
+    const nodeArgs = [
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--import",
+      path.join(root, "runtime", "nish.mjs"),
+      "-e",
+      `const m = await import(${JSON.stringify(probe)}); process.exit(m.main());`,
+      "probe",
+    ]
+    // Each side runs under `umask` and any `pre` shell commands, through `sh`
+    // so the child inherits them.
+    const sides = [
+      ["native", (umask, op, at, pre) => ["sh", ["-c", `${pre}umask ${umask}; exec "$0" "$@"`, exe, op, at]]],
+      ["node", (umask, op, at, pre) => ["sh", ["-c", `${pre}umask ${umask}; exec "$0" "$@"`, "node", ...nodeArgs, op, at]]],
+    ]
+    const ELOOP = -os.constants.errno.ELOOP
+    const EFBIG = -os.constants.errno.EFBIG
+    const modeOf = (p) => (fs.statSync(p).mode & 0o7777).toString(8)
+    for (const [side, argvOf] of sides) {
+      const run = (op, at, umask = "022", pre = "") => {
+        const [cmd, args] = argvOf(umask, op, at, pre)
+        const r = spawnSync(cmd, args, { cwd: dir, encoding: "utf8" })
+        return `exit ${r.status} ${r.stdout.trim()}${r.stderr}`
+      }
+      const at = (name) => path.join(dir, `${side}-${name}`)
+      const got = []
+      const want = []
+      const row = (label, actual, expected) => {
+        got.push(`${label}: ${actual}`)
+        want.push(`${label}: ${expected}`)
+      }
+      row("new file", `${run("write600", at("new"))} mode ${modeOf(at("new"))}`, "exit 0 write600 7 mode 600")
+      row("new file's bytes", JSON.stringify(fs.readFileSync(at("new"), "utf8")), JSON.stringify("secret\n"))
+      fs.writeFileSync(at("old"), "an older and longer text\n", { mode: 0o644 })
+      fs.chmodSync(at("old"), 0o644)
+      row("0644 file", `${run("write600", at("old"))} mode ${modeOf(at("old"))}`, "exit 0 write600 7 mode 600")
+      row("0644 file's bytes", JSON.stringify(fs.readFileSync(at("old"), "utf8")), JSON.stringify("secret\n"))
+      row(
+        "0644 under umask 077",
+        `${run("write644", at("wide"), "077")} mode ${modeOf(at("wide"))}`,
+        "exit 0 write644 7 mode 644"
+      )
+      fs.writeFileSync(at("target"), "the target's own bytes\n", { mode: 0o644 })
+      fs.chmodSync(at("target"), 0o644)
+      fs.symlinkSync(path.basename(at("target")), at("link"))
+      row(
+        "through a link",
+        `${run("write600", at("link"))} target ${modeOf(at("target"))} ${JSON.stringify(fs.readFileSync(at("target"), "utf8"))} still a link ${fs.lstatSync(at("link")).isSymbolicLink()}`,
+        `exit 1 write600 ${ELOOP} target 644 ${JSON.stringify("the target's own bytes\n")} still a link true`
+      )
+      row("directory", `${run("mkdir700", at("dir"))} mode ${modeOf(at("dir"))}`, "exit 0 mkdir700 0 mode 700")
+      fs.chmodSync(at("dir"), 0o755)
+      row("directory again", `${run("mkdir700", at("dir"))} mode ${modeOf(at("dir"))}`, "exit 1 mkdir700 -17 mode 755")
+      row("exclusive", `${run("excl", at("lock"))} mode ${modeOf(at("lock"))}`, "exit 0 excl 5 mode 600")
+      row(
+        "exclusive again",
+        `${run("excl", at("lock"))} ${JSON.stringify(fs.readFileSync(at("lock"), "utf8"))}`,
+        `exit 1 excl -17 ${JSON.stringify("held\n")}`
+      )
+      fs.symlinkSync(path.basename(at("nowhere")), at("dangling"))
+      row(
+        "exclusive at a dangling link",
+        `${run("excl", at("dangling"))} target made ${fs.existsSync(at("nowhere"))}`,
+        "exit 1 excl -17 target made false"
+      )
+      row(
+        "exclusive whose write fails",
+        `${run("excl", at("full"), "022", "trap '' XFSZ; ulimit -f 0; ")} left ${fs.existsSync(at("full"))}`,
+        `exit 1 excl ${EFBIG} left false`
+      )
+      check(
+        `fs_mode: under ${side === "native" ? "the native build" : "runtime/nish.mjs"} the modes read back with fs.statSync are the ones asked for, a link is refused, a taken path is -17 and a failed exclusive create leaves no file`,
+        got.join("\n") === want.join("\n"),
+        `--- want\n${want.join("\n")}\n--- got\n${got.join("\n")}`
+      )
+    }
+    const lock = path.join(dir, "race.lock")
+    const raced = spawnSync(exe, ["race", lock, exe], { cwd: dir, encoding: "utf8" })
+    const raceGot = `exit ${raced.status} ${raced.stdout.trim()} ${fs.existsSync(lock) ? `${modeOf(lock)} ${JSON.stringify(fs.readFileSync(lock, "utf8"))}` : "no lock"}`
+    check(
+      "fs_mode: of eight children racing createFileExclusiveSync for one path exactly one wins, the other seven answer -17, and the lock is the winner's at 0600",
+      raceGot === `exit 0 winners 1 eexist 7 600 ${JSON.stringify("held\n")}`,
+      `${raceGot}\n${raced.stderr}`
+    )
   }
 }
 
@@ -12876,6 +13287,7 @@ runWipeChecks({ only, has, check, skip, nish: NISH, root, buildDir })
         c.status === 0
           ? spawnSync("opt", ["-O2", "-S", "-mtriple=x86_64-unknown-linux-gnu", path.join(dir, "p256.ll")], {
               encoding: "utf8",
+              maxBuffer: 64 * 1024 * 1024,
             })
           : c
       const body =

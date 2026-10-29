@@ -47,12 +47,13 @@ the record that found it. The notes below the table name each such finding.
 | DER, PEM, X.509 | [crypto-x509.md](crypto-x509.md) | `std/crypto/x509.ts` | 0 / 0 / 1 / 11 | 0 / 0 / 0 / 2 |
 | Constant-time checks | [ct-verification.md](ct-verification.md) | `tests/ct-asm.js`, `tests/ct-asm-runtime.js`, `tests/ct-timing.js`, the `ct_asm_*` fixtures, the harness in `tests/run.js` | 0 / 0 / 0 / 17 ² | 0 / 0 / 0 / 1 |
 | Codegen | [codegen.md](codegen.md) | `src/bounds.ts`, `src/attributes.ts`, `src/escape.ts`, `src/parallel.ts`, `src/emit-arrays.ts` | 0 / 4 / 3 / 4 ³ | 0 / 0 / 0 / 0 |
-| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 11 / 10 ⁴ | 0 / 0 / 0 / 0 |
+| C runtime | [runtime.md](runtime.md) | `runtime/*.c`, `runtime/nish.h`; RT-14 to RT-16 and RT-18 anchor in `src/` (`emit-strings.ts`, `escape.ts`, `emit.ts`, `declarations.ts`, `builtins.ts`, `expressions.ts`, `attributes.ts`, `parallel.ts`) | 0 / 2 / 13 / 11 ⁴ | 0 / 0 / 0 / 0 |
 | CLI and `nish run` | [cli.md](cli.md) | `src/compile.ts`, `src/run-cache.ts`, `src/compilation.ts` (module resolution), `std/cli.ts` (the terminal and colour probe) | 0 / 1 / 2 / 7 ⁵ | 0 / 0 / 0 / 0 |
-| TLS 1.3 server handshake, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 4 ⁹ | 0 / 0 / 0 / 1 |
+| TLS 1.3 server and client handshakes, records and TCP carrier | [tls.md](tls.md) | `std/net/tls.ts`, `std/net/tls/codec.ts`, `std/net/tls/schedule.ts`, `std/net/tls/record.ts`, `std/net/tls/record-server.ts`, `std/net/tls/client.ts`, `std/net/tls/record-client.ts`, `std/net/tls/verify.ts`, `std/net/tls-tcp.ts` | 0 / 0 / 1 / 5 ⁹ | 0 / 0 / 0 / 3 |
 | QUIC packets, connections and listener | [quic.md](quic.md) | `std/net/quic-packet.ts`, `std/net/quic.ts`, `std/net/quic-frame.ts`, `std/net/quic-conn-params.ts`, `std/net/quic-conn-ack.ts`, `std/net/quic-conn-cid.ts`, `std/net/quic-listener.ts`, `std/net/quic-recovery.ts` | 0 / 0 / 1 / 9 ¹¹ | 0 / 0 / 0 / 0 |
 | Supply chain | [supply-chain.md](supply-chain.md) | `install.sh`, `bin/`, the install, seed and build scripts, `.github/workflows/`, `runtime/nish.mjs` and `shim.mjs`, `web/` | 3 / 0 / 4 / 21 | 0 / 0 / 0 / 0 ⁶ |
 | HTTP/1.1 and WebSocket | [http1.md](http1.md) | `std/net/http1.ts`, `std/net/http1-server.ts`, `std/net/websocket.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 2 ⁷ |
+| HTTP/1.1 client | [http1-client.md](http1-client.md) | `std/net/http1-client.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 1 |
 | HTTP/2 | [http2.md](http2.md) | `std/net/http2.ts`, `std/net/http2-tls.ts`, `std/net/hpack.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 1 ⁷ |
 | HTTP/3 | [http3.md](http3.md) | `std/net/http3.ts`, `std/net/http3-server.ts` | 0 / 0 / 0 / 6 | 0 / 0 / 0 / 1 ⁷ |
 | WebTransport | [webtransport.md](webtransport.md) | `std/net/webtransport.ts` | 0 / 0 / 0 / 1 | 0 / 0 / 0 / 1 ⁷ |
@@ -71,8 +72,9 @@ the record that found it. The notes below the table name each such finding.
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 2 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
 | P-384 ECDSA verification | [crypto-p384.md](crypto-p384.md) | `std/crypto/p384.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | PKI trust anchors | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki-roots.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²¹ |
+| PKI path validation and hostnames | [crypto-pki.md](crypto-pki.md) | `std/crypto/pki.ts` | 0 / 0 / 1 / 4 | 0 / 0 / 1 / 9 ²⁴ |
 | DNS stub resolver, its codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns.ts`, `std/net/dns-resolver.ts`, `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 1 / 0 | 0 / 0 / 0 / 0 ²² |
-| **Total** ⁸ | | | **3 / 10 / 34 / 121** | **0 / 0 / 0 / 12** |
+| **Total** ⁸ | | | **3 / 10 / 40 / 128** | **0 / 0 / 1 / 24** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
    and `new Array` by the codegen stage, and the file reads and concatenation
@@ -102,11 +104,14 @@ the record that found it. The notes below the table name each such finding.
    owns (#861). RT-21 (Low), `nish_argv_init` testing `malloc`'s answer for
    null only after computing from it, was found by #888's harness stage while
    building the runtime under UBSan, fixed there, and is counted as a fixed
-   Low. RT-27, RT-28 and RT-30 (Medium) and RT-29 (Low), `spawnPiped`'s
-   deadlock, output cap, pipe descriptors and SIGPIPE, were found and fixed
-   by the stage that added it, and are counted as fixed; RT-30's Darwin
-   window is recorded in the row and is not counted. RT-31, the stdin
-   channel itself, is a decision and is not counted.
+   Low. RT-24 and RT-25 (Medium), the mode race and the link a secret's
+   write could follow, and RT-26 (Low), the umask on `mkdirSyncMode`, were
+   decided and fixed by the stage that added the mode-taking writes (#992),
+   and are counted as fixed. RT-27, RT-28 and RT-30 (Medium) and RT-29
+   (Low), `spawnPiped`'s deadlock, output cap, pipe descriptors and SIGPIPE,
+   were found and fixed by the stage that added it, and are counted as
+   fixed; RT-30's Darwin window is recorded in the row and is not counted.
+   RT-31, the stdin channel itself, is a decision and is not counted.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)
    was left open by the CLI stage and fixed by #425 (for #386): the cache
@@ -146,6 +151,12 @@ the record that found it. The notes below the table name each such finding.
    TLS-1, an open connection's secrets kept in plain fields, was closed by
    #674's secret-fields stage, which made each a `Secret` field, and is
    counted as a fixed Low.
+   The client (#480) adds three Lows. TLS-8, a secp256r1 share the client
+   could not complete, was closed by `p256Ecdh` and is counted as a fixed
+   Low. TLS-7, no TLS 1.2, client certificates, 0-RTT or client-side
+   resumption, is open by design, and TLS-9, a refusal in the ServerHello's
+   own `receive` sealed under the clear state, is open; both are counted as
+   open Lows, beside the carrier's TLS-4.
 10. JSON-1, JSON-4, JSON-5, JSON-6, JSON-7, JSON-8, JSON-9, JSON-11 and JSON-12 (Low) are accepted, with the reason in
     their record, and are not counted, and so is JSON-14 (Low), a `JsonNumber`'s
     bytes written raw. JSON-2 is open. JSON-13 (Medium), the map keys a body
@@ -253,6 +264,19 @@ the record that found it. The notes below the table name each such finding.
     the key-size and exponent caps, and a message over 2^31 − 1 bytes
     panicking in the hash, are accepted, with the reason in their record, and
     are not counted. RSA-2 and RSA-5 are properties checked and found to hold.
+24. PKI-18 (Medium) and PKI-21 to PKI-24 (Low) were found by running the
+    module against x509-limbo and are fixed: a root's own constraints, a
+    root checked as an issuer, key identifiers, the leaf's server profile and
+    its key. PKI-17 (Medium) and PKI-19, PKI-20, PKI-25 to PKI-28 and PKI-30
+    to PKI-32 (Low) are open and counted: no revocation, no policy
+    processing, Names compared byte for byte, chains limbo accepts refused,
+    criticality not read, two extensions' parts not decoded, no Public
+    Suffix List, a leaf without extKeyUsage accepted as RFC 5280 reads it, a
+    leading-period dNSName subtree read rather than refused, and a root
+    without a subjectKeyIdentifier accepted, as one Mozilla ships is. #1028
+    tracks PKI-26 to PKI-28.
+    PKI-29 (Informational), a common name not checked against the SANs, is
+    not counted. PKI-1 to PKI-16 are properties checked and found to hold.
 
 ## Fuzzed
 
@@ -260,7 +284,8 @@ Each parser below is a libFuzzer target in `tests/fuzz/targets/` (how to
 build, run and replay one: [`tests/fuzz/README.md`](../../tests/fuzz/README.md)),
 and its record says what fuzzing found. The TLS, QUIC, HTTP/1, WebSocket,
 HPACK and X.509 targets each ran for at least 30 minutes from their seed
-corpora and found no crash, sanitizer report, timeout or OOM; CI replays every
+corpora and found no crash, sanitizer report, timeout or OOM, except
+`tls-server-flight`, which has not yet had its run; CI replays every
 corpus on each PR and runs each target for 30 minutes weekly. RT-21 was found
 building the runtime for the harness, not by a target.
 
@@ -269,9 +294,10 @@ building the runtime for the harness, not by a target.
 | [json.md](json.md) | `json-tokenizer`, `json-typed`, `json-value` |
 | [url.md](url.md) | `url` |
 | [regex.md](regex.md) | `regex` |
-| [tls.md](tls.md) | `tls-client-hello`, `tls-record` |
+| [tls.md](tls.md) | `tls-client-hello`, `tls-record`, `tls-server-flight` |
 | [quic.md](quic.md) | `quic-header`, `quic-frame` |
 | [http1.md](http1.md) | `http1`, `websocket` |
+| [http1-client.md](http1-client.md) | `http1-client` |
 | [http2.md](http2.md) | `hpack` |
 | [crypto-x509.md](crypto-x509.md) | `x509-der`, `x509-pem` |
 
@@ -302,18 +328,31 @@ only.
 
 | Id | Severity | File | What is left | Follow-up |
 | --- | --- | --- | --- | --- |
+| PKI-17 | Medium | `std/crypto/pki.ts` | Revocation is not checked: no CRL, OCSP or stapled response is read, so a revoked certificate chains until it expires | — |
 | H1-2 | Low | `std/net/http1-server.ts` (`fail`, the carriers' `close`) | After a refusal the socket is closed at once, without the lingering close RFC 9112 §9.6 describes, so a client still sending a body may see a reset instead of the 413 or 400 | — |
 | H1-3 | Low | `std/net/http1-server.ts` (`acceptWebSocket`) | Accepting a WebSocket leaves 58 bytes in the arena until the program resets it; once a connection, not once a message | — |
+| HC-1 | Low | `std/net/http1-client.ts` (`http1ClientFieldLine`) | Each response's fields and reason are kept as strings, about 59 bytes a response of three fields, until the program resets its arena; bounded for each response by `maxHeaderBytes` | — |
 | H2-3 | Low | `std/net/http2.ts`, `std/net/http2-tls.ts` | No clock: a client that never acknowledges SETTINGS, or holds a connection idle, keeps its slot. The program owns the timeout | — |
 | H3-5 | Low | `std/net/http3.ts`, `std/net/http3-server.ts` | No clock at the HTTP/3 layer: a client that trickles bytes keeps its slot. The program owns the timeout. WT-2 repeats it for sessions | — |
 | WT-2 | Low | `std/net/webtransport.ts` | No clock and no rate cap on a session; the program may `close` or `drain` one. As H3-5 | — |
 | AEAD-4 | Low | `runtime/runtime-aes.c` (`nish_aes_schedule`, `nish_aes_ctr`, `nish_aes_ghash`) | On the AES-NI and PMULL path the round keys, H's powers, counter blocks, keystream and GHASH state pass through vector registers and any spill of them, which no store from C or the language can wipe. The two stack buffers the kernels own are wiped by volatile stores, and `rk`, H's powers included, and H by `aesKeyWipe`'s when TLS and QUIC wipe a key (the ends TLS-2 and QUIC-2 list); the registers are recorded rather than reached | — |
 | TLS-4 | Low | `std/net/tls-tcp.ts` | No timeout in the carrier: a client may hold a slot as long as it keeps its connection open, and once every slot is held new connections are shed. The program owns the loop's timeout | — |
+| TLS-7 | Low | `std/net/tls/client.ts` | TLS 1.2 and below are refused by design (`protocol_version`, or `illegal_parameter` for the downgrade sentinel); client certificates, 0-RTT and client resumption are not offered | — |
+| TLS-9 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | A handshake that fails within the `receive` that delivered the ServerHello seals its fatal alert in the clear, before the client's handshake write keys are installed | — |
 | CT-16 | Low | `tests/run.js` | The check reads `clang -O2` for the baseline CPU and `x86-64-v3` (the one level `--cpu` accepts); every other level is unread. Documented in [`docs/LANGUAGE.md`](../LANGUAGE.md#constant-time-ctselect-and-cteq) | — |
 | JSON-2 | Low | `std/json-tokenizer.ts` (`reset`, `JSON_TOK_END_CEILING`) | A window ending within 64 bytes of 2^31 − 1 is refused so that no offset can overflow; no test reaches it, since it takes a 2 GiB array | — |
 | SQL-2 | Low | `std/sqlite.ts` (`columnText`) | `sqlite3_column_text` answers NULL both for SQL `NULL` and when converting the value to text runs out of memory, and `columnText` reads either as `null`. A program can take a value it failed to read for an empty column. `columnInto` tells the two apart and answers `SQLITE_NOMEM`. | — |
 | X509-12 | Low | `std/crypto/x509.ts` (`x509NameEqual`, `x509NameIsPrefix`) | Names compare as DER byte for byte, not after RFC 5280 §7.1's stringprep, so a re-encoded issuer Name does not chain and a re-encoded directoryName constraint does not match. Fails closed | — |
 | X509-13 | Low | `std/crypto/x509.ts` (`x509DerNameSound`) | DER's SET OF order inside a multi-valued RDN is not checked: an unsorted RDN is a sound Name that matches only itself, never its sorted spelling. Fails closed | — |
+| PKI-19 | Low | `std/crypto/pki.ts` | Certificate policies are not processed: no policy tree, so a chain is not refused for its policies | — |
+| PKI-20 | Low | `std/crypto/pki.ts` | Names chain by DER byte for byte, as X509-12. Fails closed | — |
+| PKI-25 | Low | `std/crypto/pki.ts` | Six chains x509-limbo accepts are refused, each under a check kept on purpose. Fails closed | — |
+| PKI-26 | Low | `std/crypto/pki.ts` | An extension's criticality is not read, so a known extension marked against RFC 5280 §4.2 is accepted; each binds whichever way it is marked | #1028 |
+| PKI-27 | Low | `std/crypto/pki.ts` | The authorityKeyIdentifier's issuer and serial and the authorityInfoAccess extension are not decoded, so a root's malformed AKI or a malformed AIA is accepted | #1028 |
+| PKI-28 | Low | `std/crypto/pki.ts` | A wildcard over a public suffix, such as `*.co.uk`, is accepted: no Public Suffix List ships | #1028 |
+| PKI-30 | Low | `std/crypto/pki.ts` | A leaf without extKeyUsage is accepted, as RFC 5280 reads it, where the BRs require one | — |
+| PKI-31 | Low | `std/crypto/pki.ts` | A dNSName subtree with a leading period is read as the names below it, not refused; an excluded one leaves the apex allowed | — |
+| PKI-32 | Low | `std/crypto/pki.ts` | A root without a subjectKeyIdentifier anchors a path, since one root Mozilla ships lacks it | — |
 
 #382 also tracks the emitter half of CG-6. The codegen stage closed CG-6 by
 refusing `orReturn` inside a `scope()` region. Joining before the return in

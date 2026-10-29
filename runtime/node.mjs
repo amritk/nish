@@ -103,6 +103,46 @@ const writeFileBytesSync = (path, bytes) =>
   errnoOr(bytes.length, () => fs.writeFileSync(path, Uint8Array.from(bytes), { flag: WRITE_FLAGS, mode: 0o644 }));
 
 /**
+ * `writeFileSyncMode` and `createFileExclusiveSync`'s shared body, as
+ * `runtime-os.c`'s: the file opened with `flag`, `fchmod`ed to exactly `mode`
+ * before a byte is written, then every byte of `data`, then the count, or a
+ * negative errno. A mode outside 0..0o777 is -22 before the file is touched.
+ * After an exclusive create (`"wx"`), any failure unlinks the file it made.
+ */
+function putFileMode(path, data, flag, mode) {
+  if (!(mode >= 0 && mode <= 0o777)) return -22;
+  let fd;
+  try {
+    fd = fs.openSync(path, flag, mode);
+  } catch (e) {
+    return negErrno(e);
+  }
+  let r;
+  try {
+    fs.fchmodSync(fd, mode);
+    const buf = Buffer.from(data, "utf8");
+    for (let done = 0; done < buf.length; ) done += fs.writeSync(fd, buf, done);
+    r = buf.length;
+  } catch (e) {
+    r = negErrno(e);
+  }
+  const closed = errnoOr(0, () => fs.closeSync(fd));
+  const answer = r >= 0 && closed < 0 ? closed : r;
+  if (answer < 0 && flag === "wx") errnoOr(0, () => fs.unlinkSync(path));
+  return answer;
+}
+
+/** `writeFileSyncMode(path, data, mode)`: `WRITE_FLAGS`, so a link at the path is refused. */
+const writeFileSyncMode = (path, data, mode) => putFileMode(path, data, WRITE_FLAGS, mode);
+
+/** `createFileExclusiveSync(path, data, mode)`: `"wx"`, -17 when anything is at the path. */
+const createFileExclusiveSync = (path, data, mode) => putFileMode(path, data, "wx", mode);
+
+/** `mkdirSyncMode(path, mode)`: 0, or a negative errno; -17 for a path already there. */
+const mkdirSyncMode = (path, mode) =>
+  mode >= 0 && mode <= 0o777 ? errnoOr(0, () => fs.mkdirSync(path, { mode })) : -22;
+
+/**
  * `writeBytes`'s write, after the core checked the range `[from, to)`: every
  * byte to stdout, then the count, or a negative errno. `fs.writeSync` may
  * write less than it was given, so it is asked again for the rest.
@@ -428,6 +468,9 @@ const CALLS = {
   writeFileBytesSync,
   renameSync,
   unlinkSync,
+  writeFileSyncMode,
+  createFileExclusiveSync,
+  mkdirSyncMode,
   writeBytes,
   mkdirSync,
   isDirectorySync,

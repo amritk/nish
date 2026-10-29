@@ -171,20 +171,9 @@ nish_str *nish_read_file(const nish_str *path) {
   return s;
 }
 
-/* `O_NOFOLLOW` (docs/security/runtime.md, RT-4): a symbolic link as the last
-   component of the path is refused, as an unwritable file is, rather than
-   followed to whatever file it names. `nish file.ts` writes `file.ll` beside
-   its source, so a link planted at that name in a checkout would otherwise
-   truncate any file the user can write. A link among the directories on the
-   way is still followed.
-
-   `O_CLOEXEC` for the reason the read has it (RT-12), and `EINTR` is retried
-   as the read retries it (RT-13): a write cut short is finished, and one that
-   fails is `cannot write`, never a silently short file.
-
-   The loop is `nish_put_all`, which `writeFileBytesSync` and `writeBytes`
-   share: all `n` bytes of `p` to `fd`, answering 0 or the negative errno of
-   the write that failed (-EIO for one that wrote nothing). */
+/* All `n` bytes of `p` to `fd`, answering 0 or the negative errno of the
+   write that failed (-EIO for one that wrote nothing). A write cut short is
+   finished and `EINTR` retried (RT-13). Every writer below shares it. */
 static int32_t nish_put_all(int fd, const char *p, uint64_t n) {
   for (uint64_t done = 0; done < n;) {
     ssize_t k = write(fd, p + done, n - done);
@@ -194,6 +183,17 @@ static int32_t nish_put_all(int fd, const char *p, uint64_t n) {
   }
   return 0;
 }
+
+/* `O_NOFOLLOW` (docs/security/runtime.md, RT-4): a symbolic link as the last
+   component of the path is refused, as an unwritable file is, rather than
+   followed to whatever file it names. `nish file.ts` writes `file.ll` beside
+   its source, so a link planted at that name in a checkout would otherwise
+   truncate any file the user can write. A link among the directories on the
+   way is still followed.
+
+   `O_CLOEXEC` for the reason the read has it (RT-12), and the bytes go out
+   through `nish_put_all`, so a write that fails is `cannot write`, never a
+   silently short file. */
 static void nish_put_file(const nish_str *path, const nish_str *data, int flags) {
   int fd = open(nish_cpath(path), O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC | flags, 0644);
   if (fd < 0 || nish_put_all(fd, data->data, data->len) < 0) nish_io_fail("write ", path);
@@ -247,6 +247,73 @@ int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes) {
      it over the one it replaces. */
   if (close(fd) != 0 && r == 0 && errno != EINTR) r = -errno;
   return r < 0 ? r : (int32_t)bytes->len;
+}
+
+/* ---- Files and directories with an explicit mode (docs/security/runtime.md,
+   RT-24 to RT-26): `writeFileSyncMode`, `createFileExclusiveSync` and
+   `mkdirSyncMode`. Each answers a value and never exits, as the writers just
+   above do. A mode outside 0..0777 is -EINVAL before any system call: the
+   setuid, setgid and sticky bits are refused, not applied, so the mode asked
+   for is the mode the file has. WASI
+   has no file modes to apply, so there each answers -ENOSYS and creates
+   nothing rather than a file whose mode was not set. */
+
+/* The two file writers' shared body: `open(p, O_WRONLY | O_CREAT |
+   O_NOFOLLOW | O_CLOEXEC | flags, mode)`, then `fchmod(fd, mode)` before a
+   byte is written, so the file is exactly `mode` whatever the umask and
+   whatever mode a file already there had: no reader that opens it while it is
+   written finds it wider (RT-24). Then the data through `nish_put_all` and a
+   checked `close`, as `nish_write_file_bytes` does. The open truncates
+   before the `fchmod`, so a file there that this process may write but does
+   not own is emptied and then answers -EPERM. When `flags` holds `O_EXCL`,
+   any failure after the create unlinks the file this call made, so a lock
+   whose write failed does not stay taken. */
+static int32_t nish_put_file_mode(const nish_str *path, const nish_str *data, int flags, int32_t mode) {
+  const char *p = nish_cpath(path);
+  if (p != path->data || mode < 0 || mode > 0777) return -EINVAL;
+  if (data->len > NISH_LENGTH_MAX) return -EFBIG;
+#ifdef __wasi__
+  (void)flags;
+  return -ENOSYS;
+#else
+  int fd = open(p, O_WRONLY | O_CREAT | O_NOFOLLOW | O_CLOEXEC | flags, (mode_t)mode);
+  if (fd < 0) return -errno;
+  int32_t r = fchmod(fd, (mode_t)mode) == 0 ? 0 : -errno;
+  if (r == 0) r = nish_put_all(fd, data->data, data->len);
+  if (close(fd) != 0 && r == 0 && errno != EINTR) r = -errno;
+  if (r < 0 && (flags & O_EXCL)) unlink(p);
+  return r < 0 ? r : (int32_t)data->len;
+#endif
+}
+
+/* `writeFileSyncMode(path, data, mode)`: `writeFileSync` with the mode given
+   and an answer instead of an exit. A link at the path is refused (-ELOOP on
+   Linux) and the file it names is untouched (RT-25). */
+int32_t nish_write_file_mode(const nish_str *path, const nish_str *data, int32_t mode) {
+  return nish_put_file_mode(path, data, O_TRUNC, mode);
+}
+
+/* `createFileExclusiveSync(path, data, mode)`: `O_EXCL`, so the path is
+   created by this call or the call answers -EEXIST, a link there included,
+   dangling or not. Of N processes racing for one path exactly one wins, which
+   is what a lock file needs; a winner whose write then fails removes the file
+   and answers the error. */
+int32_t nish_create_file_exclusive(const nish_str *path, const nish_str *data, int32_t mode) {
+  return nish_put_file_mode(path, data, O_EXCL, mode);
+}
+
+/* `mkdirSyncMode(path, mode)`: mkdir(2) with `mode`, one directory, not
+   recursive. A path already there is -EEXIST and its mode is left as it was.
+   The kernel applies the umask, so the directory is `mode & ~umask`: 0700 is
+   exact under any umask that leaves the owner's bits (RT-26). */
+int32_t nish_mkdir_mode(const nish_str *path, int32_t mode) {
+  const char *p = nish_cpath(path);
+  if (p != path->data || mode < 0 || mode > 0777) return -EINVAL;
+#ifdef __wasi__
+  return -ENOSYS;
+#else
+  return mkdir(p, (mode_t)mode) == 0 ? 0 : -errno;
+#endif
 }
 
 /* `writeBytes(bytes, off, len)` (nish:io): the bytes `[off, off + len)` of a

@@ -65,13 +65,35 @@ WebAssembly. See
 `nish:fs` is where a program replaces a file in one step: write the new
 contents beside the target, then `renameSync` the temporary over it, so a
 reader sees the old file or the new one and never half of either.
-`renameSync`, `unlinkSync` and `writeFileBytesSync` answer a number instead
+`renameSync`, `unlinkSync`, `writeFileBytesSync` and the mode-taking writes
+below answer a number instead
 of exiting: `0` (or the bytes written) on success and a negative errno on
 failure, such as `-2` for a missing path or `-18` when the two names are on
 different filesystems, so the program decides what to say. Bytes that are
 not text, a `u8[]` from `readFileBytesSync` or a codec, go out as they are
 through `writeFileBytesSync` and, on stdout, `writeBytes` from `nish:io`; see
-[File I/O](../../LANGUAGE.md#file-io).
+[File I/O](../../LANGUAGE.md#file-io). A native string built by
+`String.fromBytes` carries any bytes, and `write` and `writeFileSync` send it
+as it is, but under `--emit-ts` `String.fromBytes` decodes UTF-8 and an
+invalid sequence becomes U+FFFD, so `writeBytes` and `writeFileBytesSync` are
+the route that is exact everywhere.
+
+Writing a secret to disk, a key or a token, takes three things
+`writeFileSync` does not give. `writeFileSyncMode(path, data, 0o600)` leaves
+the file at exactly the mode you name, set before the first byte is written,
+so the umask cannot widen it and a file that was `0644` is narrowed before it
+holds the secret. A symbolic link at `path` is refused with a negative errno
+(`-40` on Linux) and the file it names is left alone, so nobody can point your
+write somewhere else. And to replace a secret in one step, write it at `0600`
+to a temporary beside the target and `renameSync` the temporary over it: a
+reader then sees the old secret or the new one, never half of either.
+`createFileExclusiveSync(path, data, mode)` is the same write that fails with
+`-17` when the name already exists, so of any number of processes racing for
+one path exactly one wins: a lock file, released with `unlinkSync`.
+`mkdirSyncMode(path, 0o700)` makes a directory only you can enter; the umask
+still applies to a directory, which only ever narrows it. A mode past `0o777`,
+the setuid, setgid and sticky bits included, is `-22` and nothing is made. The
+numbers are the platform's errno values (Linux's shown).
 
 | Module | What it gives you |
 | --- | --- |
@@ -1970,6 +1992,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/x509` | DER and PEM, X.509 certificates read with their signature algorithm, key type and v3 extensions, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/pki-roots` | `pkiLoadSystemRoots()`, the root certificates to trust, parsed: those `SSL_CERT_FILE` and `SSL_CERT_DIR` name when either is set, with no fallback, and otherwise the first system bundle (`pkiSystemBundles()`) and `/etc/ssl/certs`. A block or file it cannot use is counted in `skipped`, never fatal, and only regular files are read; on macOS it reads `/etc/ssl/cert.pem`, not the Keychain, so roots and trust settings added there are missed. Native only |
+| `nish/crypto/pki` | `pkiVerifyServer(chain, hostname, nowMs, store)`, whether a TLS server's chain leads to a root of `pkiTrustStore(roots)` and names the host, as a `PkiResult` of a `code` (`PKI_OK` or a `PKI_ERR_` reason, `pkiReason(code)` its sentence) and the `path`. Checks signatures, validity, CA and path-length rules, key usages, name constraints and the hostname, never the common name; revocation is not checked. [Verifying TLS certificates](./tls-certificates.md) |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
 
 ```ts nish:ok
@@ -2023,8 +2046,8 @@ a bad key length, a tag that does not verify — so narrow the result before you
 use it. The modules that hold a private key (`p256`, `x25519`, `ed25519`,
 `x509`, `x509-random`) take and give it as a `Secret<u8[]>`. Every module but `sha1` and
 `ed25519`, which came later, has been through a security audit (`ed25519` is
-recorded as a change after its area's audit, and `pki-roots` has a record
-written with its code); the records are in
+recorded as a change after its area's audit, and `pki-roots` and `pki` have
+a record written with their code); the records are in
 [docs/security/](../../security/README.md).
 
 ## `nish/net`
@@ -2067,6 +2090,13 @@ way, on the first connection accepted into it (an `Http2TlsServer` builds slot
 start-up still takes grows with it: the tables sized from the cap, such as an
 `Http3Server`'s connection-ID index, timer wheel and rings.
 
+`nish/net/tls/client` and `nish/net/tls/record-client` are the client side of
+TLS 1.3, sans-IO like the server. `nish/net/tls/verify` checks the server for
+them (`tlsClientAuthenticate`), and `nish/net/tls-tcp`'s `TlsTcpClient` and
+blocking `tlsConnect` put the client on a TCP socket and check the server
+themselves, against the system's roots or ones you name.
+[TLS client](tls-client.md) shows them.
+
 `nish/net/router` maps a request's method and path to a route you added, on
 any of the three HTTP versions, without allocating; [HTTP routing](http-router.md)
 shows it.
@@ -2074,6 +2104,11 @@ shows it.
 `nish/net/http-compress` reads `Accept-Encoding` and gzips a response body,
 and `Http1Connection.respondEncoded` sends one with `Content-Encoding` and
 `Content-Length` set; [Compression](compression.md) shows it.
+
+`nish/net/http1-client` is the client side of HTTP/1.1: `http1RequestHead`
+writes a request's head and `Http1ResponseParser` reads the response, fed
+any slice, refusing every response-smuggling shape RFC 9112 names; [HTTP client](http-client.md)
+shows it.
 
 `nish/net/postgres` is a PostgreSQL client that leaves the socket to your
 loop: prepared statements, pipelined groups, SCRAM-SHA-256, and rows read in

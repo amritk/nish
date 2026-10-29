@@ -1,0 +1,104 @@
+PASS  aes128: client open
+PASS  aes128: server open
+PASS  aes128: suite
+PASS  aes128: write
+PASS  aes128: server reads
+PASS  aes128: server writes
+PASS  aes128: client reads
+PASS  aes128: server saw close_notify
+PASS  aes128: client saw close_notify
+PASS  aes128: client closed
+PASS  aes128: client done
+PASS  aes256: client open
+PASS  aes256: server open
+PASS  aes256: suite
+PASS  aes256: write
+PASS  aes256: server reads
+PASS  aes256: server writes
+PASS  aes256: client reads
+PASS  aes256: server saw close_notify
+PASS  aes256: client saw close_notify
+PASS  aes256: client closed
+PASS  aes256: client done
+PASS  chacha: client open
+PASS  chacha: server open
+PASS  chacha: suite
+PASS  chacha: write
+PASS  chacha: server reads
+PASS  chacha: server writes
+PASS  chacha: client reads
+PASS  chacha: server saw close_notify
+PASS  chacha: client saw close_notify
+PASS  chacha: client closed
+PASS  chacha: client done
+PASS  hrr: retried
+PASS  hrr: client open
+PASS  hrr: share
+PASS  hrr: alpn
+PASS  hrr sha384: retried
+PASS  hrr sha384: client open
+PASS  hrr sha384: suite
+PASS  alpn: client
+PASS  sni: server saw
+PASS  sni: sent
+PASS  ku: client asks
+PASS  ku: client sequence reset
+PASS  ku: server answered
+PASS  ku: server reads
+PASS  ku: server updates
+PASS  ku: client counted
+PASS  ku: client reads
+PASS  close: client saw it
+PASS  close: read is end
+PASS  close: server saw it
+PASS  early close: failed
+PASS  early close: not an end of stream
+PASS  early close: the server's alert
+PASS  early close: a verdict answers why
+PASS  ccs before any handshake: failed
+PASS  ccs before any handshake: its alert
+PASS  ccs mid-message: a partial message waits
+PASS  ccs mid-message: failed
+PASS  ccs mid-message: its alert
+PASS  ccs after the server's Finished: failed
+PASS  ccs after the server's Finished: its alert
+PASS  ku asked: server asks
+PASS  ku asked: client counted
+PASS  ku asked: the client's own reached the server
+PASS  ku asked: server reads
+PASS  ku limit: the first 64 are taken
+PASS  ku limit: data between them read
+PASS  ku limit: the next fails
+PASS  ku limit: unexpected_message
+PASS  ku request 2: sealed
+PASS  ku request 2: failed
+PASS  ku request 2: illegal_parameter
+PASS  truncation: data waits
+PASS  truncation: failed
+PASS  truncation: read is reset
+PASS  truncation: no data
+PASS  truncation: a verdict answers why
+PASS  fatal alert: the server's alert
+PASS  fatal alert: read is reset
+PASS  fatal alert: a verdict answers it
+PASS  fatal alert: a refusal answers it
+PASS  abort: a verdict answers why
+PASS  verdict: asked for
+PASS  verdict: the handshake waits
+PASS  verdict: nothing sealed
+PASS  verdict: no Finished queued
+PASS  verdict: write waits
+PASS  verdict: read waits
+PASS  verdict: the handshake secret is held
+PASS  close before the verdict: closed
+PASS  close before the verdict: read keys wiped
+PASS  close before the verdict: handshake secret wiped
+PASS  close before the verdict: no verdict asked
+PASS  close before the verdict: a verdict is refused
+PASS  close before the verdict: the server's bytes are dropped
+PASS  close before the verdict: still closed
+PASS  close before the verdict: done
+PASS  refusal: the caller's alert
+PASS  refusal: failed
+PASS  refusal: the server reads it
+tls record client: 103 passed, 0 failed, 0 skipped

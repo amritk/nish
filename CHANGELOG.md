@@ -26,6 +26,56 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.25.0] - 2026-10-29
+
+### Added
+
+- runtime: SetNice and setIdlePriority in nish:process ([#985](https://github.com/amritk/nish/pull/985))
+- crypto: ECDSA verification over P-384 ([#1009](https://github.com/amritk/nish/pull/1009))
+- crypto: Load trust anchors from SSL_CERT_FILE, SSL_CERT_DIR and the system bundles ([#998](https://github.com/amritk/nish/pull/998))
+- runtime: RenameSync, unlinkSync and u8[] output in nish:fs and nish:io ([#1016](https://github.com/amritk/nish/pull/1016))
+- cli: ANSI colours and recolourable help roles on Style ([#1001](https://github.com/amritk/nish/pull/1001))
+- net: DNS message codec and resolv.conf / hosts parsers ([#1007](https://github.com/amritk/nish/pull/1007))
+- std: Write a JSON value as YAML (nish/yaml-write) ([#1000](https://github.com/amritk/nish/pull/1000))
+- stdlib: Parse absolute URLs and resolve references in nish/net/url ([#1017](https://github.com/amritk/nish/pull/1017))
+- runtime: NetSetOption with a whitelist of socket options ([#1014](https://github.com/amritk/nish/pull/1014))
+- std: Parse command-line flags from a declared table (nish/cli-flags) ([#1002](https://github.com/amritk/nish/pull/1002))
+- crypto: Read X.509 v3 extensions, names and every signature algorithm a Web PKI chain uses ([#1011](https://github.com/amritk/nish/pull/1011))
+- runtime: A wall clock in nish:process ([#1004](https://github.com/amritk/nish/pull/1004))
+- net: Nish/net/dns, a stub resolver on the caller's loop ([#1019](https://github.com/amritk/nish/pull/1019))
+- cli: Nish/cli-args, a command-tree parser for large CLIs ([#1003](https://github.com/amritk/nish/pull/1003))
+- crypto: RSA signature verification, PKCS#1 v1.5 and PSS ([#1006](https://github.com/amritk/nish/pull/1006))
+- net: The sans-IO TLS 1.3 client handshake and record layer ([#1018](https://github.com/amritk/nish/pull/1018))
+- crypto: RFC 5280 path validation and RFC 6125 hostname matching for TLS servers ([#1027](https://github.com/amritk/nish/pull/1027))
+- stdlib: Sans-IO HTTP/1.1 request writer and response parser ([#1013](https://github.com/amritk/nish/pull/1013))
+- net: The TLS client over TCP, server authentication and a blocking connect ([#1029](https://github.com/amritk/nish/pull/1029))
+
+### Fixed
+
+- runtime: Linger after a TLS close so a client never sees a reset ([#996](https://github.com/amritk/nish/pull/996))
+
+### Performance
+
+- compress: Faster gunzip, gzip and CRC-32, and two fixes from #984's review ([#1010](https://github.com/amritk/nish/pull/1010))
+
+### Documentation
+
+- Plan WebSocket client opening handshake (ws-client stage) ([#1015](https://github.com/amritk/nish/pull/1015))
+
+### Tests
+
+- crypto: Run the x509-limbo server-authentication cases against nish/crypto/pki ([#1030](https://github.com/amritk/nish/pull/1030))
+
+### Build
+
+- Regenerate package-lock.json for v0.24.0 ([#999](https://github.com/amritk/nish/pull/999))
+- cli: Link ELF binaries with a GNU build-id note ([#997](https://github.com/amritk/nish/pull/997))
+
+### CI
+
+- Deal the slow sections across the test shards and run the Nish runner on every core ([#1026](https://github.com/amritk/nish/pull/1026))
+
+
 ## [0.24.0] - 2026-10-28
 
 ### Breaking changes
@@ -1263,3 +1313,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.23.0]: https://github.com/amritk/nish/releases/tag/v0.23.0
 [0.23.1]: https://github.com/amritk/nish/releases/tag/v0.23.1
 [0.24.0]: https://github.com/amritk/nish/releases/tag/v0.24.0
+[0.25.0]: https://github.com/amritk/nish/releases/tag/v0.25.0

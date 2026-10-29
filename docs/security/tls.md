@@ -1,4 +1,4 @@
-# Security record: TLS 1.3 — the server handshake, its records and its TCP carrier
+# Security record: TLS 1.3 — the server and client handshakes, their records and the TCP carrier
 
 The record of `nish/net/tls`, WP34's lane T1, and of the record layer and the
 TCP carrier lane T2 put around it (`nish/net/tls/record`,
@@ -99,6 +99,19 @@ closed.
 ChaCha20-Poly1305 seal and open left a copy of its key in ChaCha20 state that
 nothing wiped. #639 closed it.
 
+**The client** (#480's tls-client-core stage) is recorded in "The client",
+below: `TlsClient` (`nish/net/tls/client`), the sans-IO handshake beside
+`TlsServer`, and `TlsRecordClient` (`nish/net/tls/record-client`), its record
+layer. It authenticates nothing itself: the caller judges the chain and the
+CertificateVerify signature at `WAIT_AUTH`, and nothing goes past it until
+the caller says so. Every malformed, out-of-order or unoffered server choice
+is refused with its RFC 8446 alert, the server's Finished is compared in
+constant time, and every secret is a `Secret` wiped on every path. Two Low
+findings are left open: TLS-7, TLS 1.2 and below refused by design; TLS-9, a
+fatal alert sent in the clear when the handshake fails within the `receive`
+that delivered the ServerHello. TLS-8, a server that selects secp256r1
+answered with `internal_error`, is closed by `p256Ecdh`.
+
 **Resumption** is built: `TlsServer`, `TlsRecordServer` and `TlsTcpServer`
 issue a ticket after a full handshake and resume with `psk_dhe_ke`.
 "Resumption" below records the threat model, the ticket-key and anti-replay
@@ -110,11 +123,14 @@ resumption", what the tests pin and where the code departs from the design.
 | File | Functions |
 | --- | --- |
 | `std/net/tls.ts` | `TlsServer` (`restart`, `receive`, `reserveInput`, `reserveOutput`, `handleMessage`, `handleClientHello`, `chooseSuite`, `chooseAlpn`, `takeServerName`, `exchangeKeys`, `writeServerFlight`, `signatureInput`, `sign`, `handleFinished`, `fail`, `wipeResumption`, `enableTickets`, `ticketFits`, `selectTicket`, `bindTicket`, `saltFromEarly`, `resume`, `writeResumedFlight`, `writeResumedHello`, `masterSecretStep`, `resumptionPsk`, `writeTicket`, `issue`, `sent`, `takeOutput`, `clearOutput`, `secrets`, `known`, `readKnown`, `writeKnown`, `wipeSecret`, `wipeEphemeral`, `wipe`), `TlsSecretPool` (`zero`, `wipe`), `tlsExchange` and its `TlsExchangeWords`, `tlsServerStrikeProbe`, `tlsServerTicketCapacity`, `tlsSignEcdsaP256`, `tlsEcdsaDerSignature`, `TlsP256Signer` (`sign`), and the in-place DER writers both encoders share (`tlsEcdsaDerLength`, `tlsEcdsaDerInto`, `tlsDerIntegerLength`, `tlsDerIntegerInto`) |
-| `std/net/tls/codec.ts` | `tlsReadClientHello` into a `TlsClientHelloView` and its readers (`tlsRead*`, `tlsReadServerName`, `tlsReadKeyShare`, `tlsReadAlpn`, `tlsReadExtension`, `tlsMarkSeen`), `tlsParseClientHello`, the six `tlsWrite*` writers with their `tlsEncode*` wrappers, and `tlsWriteCertificateVerifyContent` / `tlsCertificateVerifyContent` |
+| `std/net/tls/codec.ts` | `tlsReadClientHello` into a `TlsClientHelloView` and its readers (`tlsRead*`, `tlsReadServerName`, `tlsReadKeyShare`, `tlsReadAlpn`, `tlsReadExtension`, `tlsMarkSeen`), `tlsParseClientHello`, the six `tlsWrite*` writers with their `tlsEncode*` wrappers, and `tlsWriteCertificateVerifyContent` / `tlsCertificateVerifyContent`; for the client, `tlsWriteClientHello` / `tlsEncodeClientHello`, and the readers into a `TlsServerFlightView` (`tlsReadServerHello`, `tlsServerHelloDowngrade`, `tlsReadEncryptedExtensions`, `tlsReadCertificate`, `tlsReadCertificateVerify`, `tlsReadNewSessionTicket`, `tlsCopyCertificates`, and under them `tlsFlightOpen`, `tlsFlightClose`, `tlsFlightRefuseExtension`, `tlsReadServerHelloExtension`, `tlsReadEncryptedExtension`, `tlsReadServerExtensions`) |
 | `std/net/tls/schedule.ts` | the key schedule (`tlsEarlySecret`, `tlsHandshakeSecret`, `tlsMasterSecret`, `tlsDeriveSecret`, `tlsExpandLabel`, `tlsExtract`, `tlsFinishedVerifyData`, `tlsTrafficKey`, `tlsTrafficIv`), its in-place forms (`tlsDeriveSecretInto`, `tlsMasterSecretInto`, `tlsFinishedVerifyDataInto`, `tlsTrafficKeysInto`) and `TlsTranscript` |
 | `std/net/tls/record.ts` (T2) | `tlsRecordLength`, `TlsRecordReader`, `TlsRecordProtection` (`install`, `reserve`, `derive`, `clear`, `nonceInto`, `seal`, `open`), `tlsNextTrafficSecret` |
 | `std/net/tls/record-server.ts` (T2) | `TlsRecordServer`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sendKeyUpdate`, `keyUpdate`, `read`, `write`, `close`, `sealClose`, `sign`, `resume`, `issue`, `end`, `checkTruncation`, `abort`, `fail`, `wipeKeys`, `wipe`, `wipeTraffic`, `wipeRead`, `wipeWrite` |
-| `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close` |
+| `std/net/tls/client.ts` (the client) | `TlsClientConfig`, `tlsClientIsIpLiteral`, `TlsClient` (`start`, `writeHello`, `receive`, `drain`, `handleMessage`, `checkHello`, `handleServerHello`, `handleRetry`, `exchangeKeys`, `handleEncryptedExtensions`, `handleCertificate`, `handleCertificateVerify`, `authenticate`, `reject`, `handleFinished`, `handleTicket`, `peerCertificates`, `verifyScheme`, `verifyContent`, `verifySignature`, `alpn`, `expectedLevel`, `startTranscript`, `reserveInput`, `reserveOutput`, `takeOutput`, `clearOutput`, `sent`, `secrets`, `known`, `readKnown`, `writeKnown`, `fail`, `wipeKeys`, `wipeUnpicked`, `wipeSecret`, `wipe`) and the helpers under it (`tlsClientConfigFits`, `tlsClientKnowsSuite`, `tlsClientKnowsGroup`, `tlsClientIsAscii`; it shares `tlsIsZeroSecret` and `tlsZeroHeld` with `nish/net/tls` and `tlsCopyWindow` with the codec) |
+| `std/net/tls/record-client.ts` (the client) | `TlsRecordClient`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sealChangeCipherSpec`, `sealQueue`, `sealRecord`, `sealWith`, `sendKeyUpdate`, `keyUpdate`, `authenticate`, `reject`, `interest`, `read`, `write`, `consume`, `close`, `sealClose`, `sendAlert`, `end`, `checkTruncation`, `abort`, `fail`, `wipe`, `wipeRead`, `wipeWrite`; `tlsClientInstallHeld`, `tlsClientAdvanceHeld` |
+| `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close`; for the client, `TlsTcpClient` (`fd`, `open`, `failure`, `interest`, `connected`, `readable`, `writable`, `flush`, `read`, `write`, `keyUpdate`, `shutdown`, `close`), `tlsConnect` and `tlsConnectWith` |
+| `std/net/tls/verify.ts` (the client) | `tlsVerifyCertificateVerify`, `tlsVerifyKeyUsable`, `tlsClientChain`, `tlsClientVerdict`, `tlsClientAuthenticate`, `TlsClientTrust`, `tlsClientTrust`, `tlsClientSystemTrust` |
 
 Out of scope: the primitives underneath (`nish/crypto/*`, each with its own
 record in this directory, the HMAC and HKDF scratch the schedule runs in
@@ -141,6 +157,26 @@ memory or time a peer can make the server spend without bound, and a key or
 plaintext left readable after the connection is done with it. The program
 driving the carrier is trusted, as the caller of `TlsServer` is.
 
+For the client the roles turn round: the attacker is the server, or anyone on
+the path, and every byte handed to `TlsClient.receive` or
+`TlsRecordClient.receive` is theirs. A win is a panic, an unbounded
+allocation, a handshake completed past a server that was not authenticated
+or under a version, suite, group, extension or protocol the client did not
+offer, a Finished accepted without the handshake secret, or a secret left in
+memory or learned from timing. The caller — the configuration, the
+randomness, both private keys and the verdict on the server — is trusted.
+**Authentication is the caller's contract**: the client exposes the chain,
+the CertificateVerify scheme, the signed content and the signature at
+`WAIT_AUTH` and goes no further until `authenticate(true)`; a caller that
+answers it without checking the chain against its trust anchors, the host
+name and the signature under the leaf's key has authenticated nobody. The
+default API is `nish/net/tls/verify`'s `tlsClientAuthenticate`, which
+`TlsTcpClient` and `tlsConnect` call for the program: it checks the
+CertificateVerify under the leaf's key and then the chain, through
+`nish/crypto/pki`'s `pkiVerifyServer`, against the system's roots
+(`tlsClientSystemTrust`) or a store the caller names. A direct caller of `TlsRecordClient` still answers
+`WAIT_AUTH` itself.
+
 ## Findings
 
 | Id | Severity | Where | Description | Disposition |
@@ -151,17 +187,21 @@ driving the carrier is trusted, as the caller of `TlsServer` is.
 | TLS-4 | Low | `std/net/tls-tcp.ts` (`TlsTcpServer`) | The carrier has no clock: a client may hold a slot for as long as it keeps the TCP connection open, mid-handshake or idle, and once every slot is held new connections are accepted and closed at once (`TLS_TCP_POOL_FULL`). Memory stays bounded, since the pool never grows; availability does not. | **Open, the program's to decide.** The program owns the loop and `pollWait`'s timeout, so it closes slots that have gone quiet; a carrier-level idle timeout needs a clock argument the API does not take yet. |
 | TLS-5 | Low | `std/crypto/chacha20poly1305.ts` (`chacha20State`, `chacha20Poly1305Seal`, `chacha20Poly1305Open`), reached from `std/net/tls/record.ts` (`TlsRecordProtection.seal`, `open` under ChaCha20-Poly1305) and, once the ticket-seal stage lands, `std/net/tls/ticket.ts` | **What it was.** Every ChaCha20-Poly1305 seal and open copied its key's eight words into a fresh ChaCha20 state, and made a keystream block and a Poly1305 one-time key from it; none of them was zeroed before the arena released it, so a later memory disclosure could read the key from that memory until it was reused. That key was a ChaCha20-Poly1305 traffic key; under the resumption design (Resumption, below) it would also have been the ticket key. Found in review of that design, at b515c1b. Low on the README's scale, with TLS-1 and TLS-2: key material left in memory, not a forgery or a leak to the network. | **Closed** by #639 (ab9099e, the crypto-wipe stage of #430): every one-shot call wipes the ChaCha20 state, the keystream block, the Poly1305 key, `r` and the accumulator with `nish:secret`'s `wipe`, on the refusal path too, and `tests/wipes/crypto.js` pins each wipe after `-O2`. The ticket key's AEAD copies are wiped the same way, with nothing more from the resumption design. |
 | TLS-6 | Low | `std/net/tls-tcp.ts` (`TlsTcpServer`: `flush`, `readable`, `linger`, `drain`, `close`) | **What it was.** When the server ended a connection — the program's `shutdown`, or a carrier above it such as `Http2TlsServer` after an HTTP/2 `GOAWAY` — the slot sent its `close_notify`, its interest said `TLS_RECORD_DONE`, and the program closed the socket. A socket closed with bytes from the client still unread, or written to by the client after the close, answers with a TCP reset, and a client may report that reset in place of the response and `close_notify` it was already sent. Found in the interop job's Chromium resumption step (`tests/interop/chrome-resume.py`), which failed once with `net::ERR_CONNECTION_RESET` on its first navigation to the HTTP/2 port's `/close`: Chromium acknowledges the server's SETTINGS (a 31-byte TLS record) as the server answers and sends `GOAWAY`, and the server closed over it. Reproduced over loopback against the interop server, with Chromium driven to `/close` in a loop: 4 of 600 navigations reset, and the server found the client's bytes unread at 73% of its closes. Low on the README's scale: a peer sees a reset instead of a clean end, never a byte it should not; but every server-initiated close lost its response to that race. **What closes it.** RFC 9112 §9.6's staged close. Once a connection the server closed has sent everything, `flush` shuts the socket's write side with `netShutdown` (the client reads the response, the `close_notify` and then its end of stream), wipes the slot's keys and returns its record buffers, and answers `TLS_RECORD_WANT_READ`; from then on `readable` reads and discards what the client sends until the client's own end of stream, and only then answers `TLS_RECORD_DONE`, when the program closes a socket with nothing unread. A connection that failed, whose client sent its own `close_notify` (it writes nothing after it, RFC 8446 §6.1), whose client's stream had already ended, or whose shutdown fails, is done at once, as before. Past `TLS_TCP_LINGER_LIMIT` (64 KiB) discarded, the slot gives up and is done, so a client cannot keep a closed slot busy by sending. `close` closes at once, as it did, for a program that must. Measured after: 0 resets in 1,500 navigations of the same loop. A connection whose client's application data is decrypted and still unread when the server closes keeps it, and its keys, until the program has read it, and lingers after: lingering returns the buffer that holds it. `lingering` says whether a slot lingers, and `Http1TlsServer` does not count what a lingering slot drains as activity, so its `idleTimeout` bounds how long a client that trickles bytes can hold the slot. **What is left.** A client that neither sends nor hangs up keeps its lingering slot, as it keeps an open one: TLS-4, the program's timeout. **Tests.** In `net_tls_record_tcp` and `_f64`, a client whose last record is unread when the program shuts the connection down, the program closing the socket when the interest says done: `the program shuts the connection down with the client's last record unread: the slot waits to read`, `then the end of the stream, not a reset` (before: the client's read fails with `ECONNRESET`, in each of three runs), `the slot holds no key while it waits for the client to hang up` and `and, once the client hangs up, the program closes the socket`; in `net_http1_server` and `_f64`, over TLS after `Connection: close`, `a byte the client trickles to the lingering slot is drained without moving its idle clock`, `so idleTimeout still bounds the linger` and `a client that sends more than the linger limit after the close is closed anyway`. | **Closed.** What a lingering slot can be held for is TLS-4's. |
+| TLS-7 | Low | `std/net/tls/client.ts` (`checkHello`) | TLS 1.2 and below are not spoken. A ServerHello without `supported_versions` naming 0x0304 is refused with `protocol_version`, and one whose `server_random` ends in RFC 8446 §4.1.3's downgrade sentinel with `illegal_parameter`, so a client of this tree cannot reach a TLS 1.2-only server. Client certificates, 0-RTT and client-side resumption are left out in the same way: a CertificateRequest is `unexpected_message`, and a NewSessionTicket is read and dropped. Pinned by `net_tls_client_refusals` ("missing supported_versions", "downgrade sentinel", "a CertificateRequest", "a NewSessionTicket is dropped"). | **Open, by design** (#480): refusing the older protocol is the point. |
+| TLS-8 | Low | `std/net/tls/client.ts` (`exchangeKeys`) | A secp256r1 share could be configured and was sent, but `nish/crypto/p256` had no ECDH, so a server that selected secp256r1 — in its ServerHello, or in a HelloRetryRequest the client then answered — failed the handshake with `internal_error` after the client's key was wiped. A server that takes only P-256 could not be reached; nothing was weakened. | **Closed** by `p256Ecdh(priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> \| null` (`docs/security/crypto-ecc.md`): `exchangeKeys` computes a secp256r1 share with it, wipes both private keys as for x25519, and answers a share that is not an uncompressed point on the curve, with `illegal_parameter` (RFC 8446 §4.2.8.2; a product at infinity is refused the same way, defensively: the encoded identity is refused by its length, and a valid point times a key in [1, n) is never infinity). Before, `net_tls_client_refusals` held "a P-256 key share" to `internal_error`; after, it holds the handshake secret of a P-256 share, and of a HelloRetryRequest to P-256, to the one a server computes from the leaf's key ("a P-256 key share: the server's handshake secret", "a retry to P-256: the server's handshake secret"), and refuses "a P-256 share off the curve" and "a compressed P-256 share". |
+| TLS-9 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | `pump` installs the client's handshake write keys once `TlsClient` has the secret, after the records of a `receive` are processed. When the handshake fails within the same `receive` that delivered the ServerHello (bytes after it, an EncryptedExtensions that breaks a rule), `fail` seals its alert under the clear state, which a server that has moved to its handshake keys may not read. The connection ends either way and nothing secret is sent; the server only loses the alert's reason. | **Open**: install the write keys as soon as `TlsClient` derives them, before the next record is processed. |
 
 ## Fuzzing
 
-Fuzzed by `tests/fuzz/targets/tls-client-hello.ts`, `tests/fuzz/targets/tls-record.ts`.
+Fuzzed by `tests/fuzz/targets/tls-client-hello.ts`, `tests/fuzz/targets/tls-record.ts`, `tests/fuzz/targets/tls-server-flight.ts`.
 
 | Target | What it drives | Executions |
 | --- | --- | ---: |
 | `tls-client-hello` | `tlsReadClientHello` and `tlsParseClientHello` (the two must agree on the alert), `tlsWindowHasU16`, `tlsWindowString` and `tlsSelectPskIdentity` over the body at offsets and trims the first two bytes choose, checking every window lies inside the input | 266,879,554 |
 | `tls-record` | `TlsRecordReader` and `TlsRecordProtection` under the clear state and each of the three suites with RFC 8448's or a synthetic secret: raw bytes in chunks, or a script the writer seals (KeyUpdate included), checking `next()` against `tlsRecordLength` and what `open` answers | 395,065 (16 KiB buffers and a key install per input make it the slowest target) |
+| `tls-server-flight` | The client's readers into a `TlsServerFlightView` (`tlsReadServerHello`, `tlsReadEncryptedExtensions`, `tlsReadCertificate`, `tlsReadCertificateVerify`, `tlsReadNewSessionTicket`) at the offset and trim the first bytes choose, checking every window lies inside the input; and `TlsClient` fed a server's flight in chunks the input sizes, at the levels it chooses, checking a refusal is an alert and leaves the client failed | not yet run under libFuzzer; CI's fuzz smoke replays its 12-seed corpus |
 
-Each target ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
+`tls-client-hello` and `tls-record` each ran for 31 minutes (1,861 s, one core each, four at a time) on commit `b52b765`, starting from its seed corpus in `tests/fuzz/corpus/<target>/`, with libFuzzer's `-timeout=1 -rss_limit_mb=2048`; every panic, sanitizer report, timeout and OOM counts as a finding; `tls-server-flight`, added with the client, came later and has had only CI's replay. **None found**: no crash, timeout or OOM (a target's own contract check fails by panicking, so it counts too). The libFuzzer harness these targets build against lands with the harness stage of #888; a new finding adds a row to Findings above, with its input kept as a regression and a link check that replays it.
 
 ## Properties verified
 
@@ -816,12 +856,266 @@ built its connections on the first accept too (#767, measured in #787), that
 pool was 11.7 MB at 1,024 slots, 7 kB a slot where it was 23
 (`HTTP2_TLS_SERVER_START_BYTES` in `tests/runtime-budgets.js` records how).
 
+## The client
+
+`TlsClient` and `TlsRecordClient` (#480's tls-client-core stage). Each
+property below names the test that fails if it stops holding; what no test
+drives yet is listed last, under "Not pinned".
+
+**A full handshake against `TlsServer`, per suite** (`net_tls_client_handshake`,
+`net_tls_client_record`): the client's ClientHello is read by `TlsServer`,
+the server's flight by the client, both reach `CONNECTED` with the same
+application secrets and ALPN protocol; through `TlsRecordClient` and
+`TlsRecordServer`, AES-128-GCM, AES-256-GCM and ChaCha20-Poly1305 each carry
+application data both ways and close with `close_notify` both ways. A
+HelloRetryRequest (the server asks for a group the client did not share) is
+answered once, with the cookie echoed and the transcript restarted with
+`message_hash`; SNI reaches the server; a KeyUpdate the client asks for is
+answered, the sequence numbers reset, and the server's own is followed.
+
+**The ClientHello offers what this page says, and no more.**
+`net_tls_client_refusals` reads the first ClientHello back field by field:
+`legacy_version` 0x0303, the random, a 32-byte session id, the three suites
+in order, null compression only, and the extensions `server_name`,
+`supported_groups`, `signature_algorithms`, ALPN, `supported_versions` and
+`key_share` in that order, each byte for byte — `supported_versions` only
+0x0304, `signature_algorithms` exactly ECDSA P-256 and P-384 then RSA-PSS
+SHA-256, -384 and -512, one share of the configured group, no cookie
+("ClientHello: …"). `server_name` is left out for an IPv4 or IPv6 literal
+(RFC 6066 §3) and ALPN when none is configured ("ClientHello to an IPv4
+literal: no server_name", "ClientHello to an IPv6 literal: no server_name",
+"ClientHello with no ALPN: no ALPN extension").
+
+**Nothing past `WAIT_AUTH` without the caller.** The client stops after
+CertificateVerify (`TLS_RECORD_AUTH` in `TlsRecordClient.interest`), hands out
+the chain, scheme, signed content and signature, and reads no Finished until
+`authenticate(true)`. What it hands out is what a caller can check:
+`net_tls_client_refusals` finds the server's certificate as the leaf, the
+scheme `ecdsa_secp256r1_sha256`, and the content (64 spaces, the server's
+context string, a zero byte, the transcript hash) under which the DER
+signature, read as r and s, verifies with `p256VerifySha256` under the leaf's
+key, and with one byte of the content flipped does not ("at WAIT_AUTH: the
+signature verifies under the leaf's key", "at WAIT_AUTH: not over other
+content"). It holds a bad Finished at
+`WAIT_AUTH` ("a bad Finished is held", "waits on the caller"), and
+`authenticate(false)` sends `bad_certificate` ("the caller refuses the
+chain"); `reject(alert)` sends the caller's alert ("the caller's own alert"),
+`bad_certificate` for one outside 1 to 255 ("an alert out of range"), and
+`internal_error` before a verdict is due ("a refusal before one is due");
+through `TlsRecordClient` the server reads the caller's alert
+(`net_tls_client_record`, "refusal: the server reads it"). The states between
+are pinned one message at a time: `START` before `start()`,
+`WAIT_SERVER_HELLO` after it, then `WAIT_ENCRYPTED_EXTENSIONS`,
+`WAIT_CERTIFICATE` and `WAIT_CERTIFICATE_VERIFY` ("after the ServerHello: …",
+"after EncryptedExtensions: …", "after the Certificate: …"); a second
+`start()` or an `authenticate(true)` before `WAIT_AUTH` is `internal_error`,
+and a failed client answers its alert to both ("a second start", "a verdict
+before one is due"). `tlsClientIsIpLiteral`, which decides whether
+`server_name` is sent, is pinned on `127.0.0.1`, `::1`, `1234`, `localhost`,
+`a.b` and the empty name.
+
+**Every refusal is its RFC 8446 alert** (`net_tls_client_refusals`, 223 checks;
+each case checks the alert, that the client is `FAILED`, and that a later call
+answers the same alert):
+
+| Server's flight | Alert |
+| --- | --- |
+| Extensions cut short; a message longer than the input could hold; a Certificate with no entries; a CertificateVerify cut short or with bytes after it; a NewSessionTicket with no ticket | `decode_error` |
+| A duplicate extension; an unoffered suite; a share or retry for an unoffered group; a retry for the group already shared; the session id not echoed; a suite changed after the retry; an unoffered ALPN protocol; the TLS 1.2 or TLS 1.1 downgrade sentinel; a `legacy_version` other than 0x0303; `supported_versions` selecting anything but 0x0304; non-null compression; an extension known but out of place (ALPN in the ServerHello, `key_share` in EncryptedExtensions, RFC 8446 §4.2); a secp256r1 share off the curve or compressed; an all-zero x25519 share; a retry with neither `key_share` nor `cookie`; a Certificate with a request context; a CertificateVerify scheme the client did not offer | `illegal_parameter` |
+| No `supported_versions` | `protocol_version` |
+| No `key_share` | `missing_extension` |
+| `server_name` acknowledged when none was sent; ALPN when none was offered; an unknown extension in the ServerHello or EncryptedExtensions; a Certificate entry with an extension | `unsupported_extension` |
+| Bytes after the ServerHello at its level; a second retry; EncryptedExtensions at the Initial level; Certificate before EncryptedExtensions; a Finished first; a CertificateRequest | `unexpected_message` |
+| A retry cookie too long for the second ClientHello's extensions to hold; any message to a client already wiped; a second `start()`; a verdict before one is due | `internal_error` |
+| A bad server Finished | `decrypt_error` |
+
+**The Finished and the session id are compared with `timingSafeEqualAt`**
+(in `handleFinished` and `checkHello`; no test measures the timing), and an all-zero
+x25519 secret is `illegal_parameter` (`tlsIsZeroSecret`,
+`timingSafeEqual`; RFC 7748 §6.1; "an all-zero x25519 share"). A retry that
+changes only the cookie is answered with the same share and the cookie echoed
+("a retry with only a cookie"); a NewSessionTicket after the handshake is
+checked and dropped, the client staying `CONNECTED` ("a NewSessionTicket is
+dropped"). A secp256r1 share goes to `p256Ecdh`,
+which validates the point before it multiplies (RFC 8446 §4.2.8.2); its
+shared secret is the product's x, which SEC 1 lets be zero, so it has no
+all-zero check (TLS-8).
+
+**The record layer** mirrors `TlsRecordServer`: the compatibility
+`change_cipher_spec` is sent once, and the server's is tolerated only between
+its ServerHello and its Finished (every handshake in `net_tls_client_record`
+carries one, since the client sends a session id and `TlsRecordServer` answers
+it in compatibility mode), never mid-message, and counted with the
+other records that carry nothing (`idle`) (§D.4), against the server's
+`TLS_RECORD_IDLE_LIMIT`, a cap no client test drives — `net_tls_client_record`
+refuses one before any handshake record, one mid-message and one after the
+server's Finished with `unexpected_message` ("ccs before any handshake",
+"ccs mid-message", "ccs after the server's Finished"); a KeyUpdate from the server is answered, and no more than
+`TLS_RECORD_MAX_KEY_UPDATES` are taken; `close` seals `close_notify` and
+wipes the write direction; the server's `close_notify` ends reading and wipes
+the read direction once the handshake is done, and before that fails the
+connection like any other alert, so a handshake the caller never authenticated
+cannot end as a clean end of stream; a stream cut off without one is a
+truncation. `close` before the client's Finished is sealed wipes the read
+keys and everything `TlsClient` holds, which a wiped `TlsClient` answers with
+`internal_error` from then on ("close before the verdict", "a wiped client");
+the test closes at `WAIT_AUTH`, and the same path once the server's Finished
+has opened the connection, which needs a full output buffer to reach, is
+not driven.
+
+**Fuzzed** by `tls-server-flight` (Fuzzing, above), whose seeds are each
+message of a real server flight, a retry with and without a cookie, a
+downgraded ServerHello, and a ServerHello fed to `TlsClient` whole and byte by
+byte.
+
+**Not pinned.** The 2026-10 sweep of every public member against the tests
+left these with no check that fails if they break; each is a test to add, not
+a claim this page makes:
+- `TlsClient`'s constructor refusing a bad random or key length, an empty or
+  unknown group list, a `shareGroup` not in `groups`, or an over-long ALPN or
+  server name; and the caller's key arrays reading zero after it (only the
+  wipe count in `tests/wipes/tls.js` sees that);
+- a narrowed `config.suites`; a key share of the wrong length; an
+  EncryptedExtensions cut short or with a duplicate extension; `server_name`
+  acknowledged after one was sent; a Finished of the wrong length or with
+  bytes after it; a `receive` window outside its array;
+- the exporter secret compared with the server's (only the application and
+  handshake secrets are), and the secrets reading zero after a refusal
+  (only wipe counts);
+- in `TlsRecordClient`: `authenticate(true)`'s answer and
+  `authenticate(false)` reaching the server as `bad_certificate`; the count
+  of `change_cipher_spec` records the client sends; a malformed
+  `change_cipher_spec` and the idle cap; `user_canceled` and a malformed
+  alert; a KeyUpdate split across records or of the wrong length,
+  `keyUpdate(false)`; a NewSessionTicket at the record level; `write`
+  after `close` or failure, chunking past 2^14, the automatic KeyUpdate at
+  the record limit, `padding`; `read` and `receive` windows, back-pressure
+  with full buffers, `space()`; `TLS_RECORD_WANT_READ` and
+  `TLS_RECORD_WANT_WRITE` from `interest()`; data written before `close`
+  arriving ahead of its `close_notify`;
+- TLS-9's alert in the clear (open, above).
+
+**The wipes survive `opt -O2`.** `tls: the client's wipes survive opt -O2
+(both private keys, the ECDHE, early, handshake and traffic secrets, the
+Finished verify data, the caller's key arrays, the plaintext buffers)` in
+`tests/wipes/tls.js` counts each root's volatile wipes after `-O2`; each wipe
+was deleted in turn to show its root's count move (a `Secret` field's wipe
+cannot be deleted: NL2541 refuses the holder). Both private keys are copied
+into `Secret` fields and the caller's arrays zeroed in the constructor; the
+key of the group not picked is wiped when the server picks
+(`wipeUnpicked`), both once the exchange is done (`wipeKeys`); the ECDHE and
+early secrets are wiped before `exchangeKeys` returns; the handshake, traffic
+and exporter secrets are `Secret` fields `wipe` reaches, each wiped once the
+record layer has installed it; `fail` and `TlsRecordClient`'s `fail`,
+`abort`, `close` and `wipe` wipe everything left. What a `Secret` cannot
+reach is what TLS-1 lists for the server: registers and spills while HMAC,
+HKDF and AEAD run, and the plain clone `tlsClientInstallHeld` and
+`tlsClientAdvanceHeld` `secureZero` before their arena block ends.
+
+## The client carrier and verify
+
+`TlsTcpClient`, `tlsConnect` and `tlsConnectWith` (`nish/net/tls-tcp`) and
+`nish/net/tls/verify` (#480's tls-client-tcp stage). The carrier owns one
+non-blocking socket and a `TlsRecordClient`; at `TLS_RECORD_AUTH` it calls
+`tlsClientAuthenticate` itself with the wall clock, so no program reaches
+application data past an unauthenticated server and none can skip the step.
+
+**The CertificateVerify is checked under the leaf's key, before the chain**
+(`net_tls_client_tcp`): an ECDSA P-256 signature over the content verifies,
+and is refused over other content, under the P-384 or RSA-PSS scheme, under
+Ed25519 (never offered) and when empty; a server whose CertificateVerify
+signs other bytes is refused with `decrypt_error`, which the server
+reads. An empty chain is `bad_certificate`, and so is a self-signed leaf
+with no extensions that the store does not hold.
+
+**Against openssl s_server** (tests/run.js, "`nish/net/tls-tcp`'s client,
+against openssl s_server"; a CA and P-256, P-384 and RSA-2048 leaves made at
+run time): each of the three suites, an X25519 and a P-256 share, a
+HelloRetryRequest to P-256, ALPN `h2` and `http/1.1` chosen and a server
+with no common protocol answering `no_application_protocol`, SNI picking the
+second certificate and an unknown name answered `unrecognized_name`, the
+CertificateVerify under a P-384 leaf (ECDSA P-384) and an RSA leaf (RSA-PSS
+rsae), a P-256 leaf under a P-384 intermediate and an RSA-PSS leaf under an
+RSA intermediate (the intermediate sent as `-cert_chain`), and a TLS 1.2-only
+server refused with `protocol_version`, each against the run's CA as the
+client's only root, read through `tlsClientSystemTrust` from
+`SSL_CERT_FILE`; a name the leaf does not carry, and a leaf that names
+`localhost` in its CN alone with no subjectAltName, are refused with
+`bad_certificate` after the signature verified.
+
+**The blocking calls against openssl s_server** (the same block, "the
+blocking calls"): a program with no loop of its own runs `tlsConnect` (or
+`new TlsTcpClient` and a first `readWait`, which drives the handshake),
+`writeAll`, `keyUpdate` and `readWait` alone. Straight after `tlsConnect`
+nothing is still queued (`sending()` is false). A `readWait` with nothing
+to read answers `-110` after its timeout and the connection goes on to
+carry everything after it; a `writeAll` window past its data answers -22.
+It writes, sends a KeyUpdate asking for the server's and writes under its
+new key, which the server reads; it reads s_server's KeyUpdate asking for
+its own (`K`) and answers it, and the server reads the next line under
+that key — the harness requires every step it sends s_server to have
+fired, the last on that line; `-rev` answers the KeyUpdate it owed and the
+data, and its close_notify ends the client's stream as 0; the default
+mode's `q`, which closes TCP with no close_notify, is read as the failure
+it is, -104, not as an end. After `close`, `readWait` answers how the
+stream ended (-104 failed, -32 otherwise) and `writeAll` -32.
+
+**Against `TlsTcpServer` over loopback** (`net_tls_client_tcp`): the verdict
+reaches the server as an alert, ALPN and the name reach it, an IP literal
+sends no `server_name` and is matched against the leaf's iPAddress, a chain
+that also carries its root opens, application data goes both ways ("open:
+the server read all the client sent, across its key updates",
+"open: the client read the pong"), a KeyUpdate asking for the peer's goes
+each way and is answered ("keyupdate: the client read the server's answer
+and its request", "keyupdate: the server read the client's request and its
+answer"), the server's
+`close_notify` ends the client's stream ("open: close_notify ends the
+client's stream"), the client ends closed with `TLS_RECORD_DONE`, and a read
+after `close` answers -32. A
+wrong host, an untrusted root, an expired leaf and a forged CertificateVerify
+are refused with the alerts above, and the server reads each.
+
+**`tlsConnect` is bounded** (`net_tls_client_tcp`): a refused connection
+answers `-111`, an address shorter than `nish:net`'s answers `-22`, and a
+listener that never answers is given up on after the timeout (`-110`), with
+the elapsed time checked on both sides; the socket is closed on each.
+Against the same listener, a `readWait` straight after `new TlsTcpClient`
+and a `writeAll` before the handshake ends each answer `-110`. A
+config the client refuses (an empty ALPN protocol) is never dialled: it
+answers its alert, `internal_error`, with no socket.
+
+**Not exercised.** That the server reads the client's own `close_notify`
+(each test checks only that the client ends closed); the system's root
+store as `tlsConnect` finds it with no `SSL_CERT_FILE` (the distribution's
+bundle, or `SSL_CERT_DIR`), since no test dials a public host; an empty
+`serverName`; a leaf with no usable key (RSA under 2048 bits, Ed25519),
+which the code answers `bad_certificate`; that a forged CertificateVerify is
+refused with `decrypt_error` before a chain that would also fail is looked
+at (the forged case has a good chain); the rsa_pss_pss schemes, which are
+never offered and so refused; a KeyUpdate that does not ask for the
+peer's, from either end; name resolution, which the client does not do
+(the address is numeric and the TLS name is always the caller's); any
+public host; a `writeAll` that times out part way through a message, which
+leaves the stream unusable, as its comment says; and a refusal of the
+server's certificate whose alert cannot be flushed before the deadline,
+which `tlsConnect` answers with the alert, not `-110`; a `writeAll` that
+answers -104 because the connection fails during the call (the tests pin
+only the -32 of a call on a client already closed or failed); `shutdown`
+followed by `readWait`, which answers -32 once the `close_notify` is sent,
+and data already read off the socket still reading after `shutdown`; and
+`tlsConnect`'s wait for its last flight when that write would block
+(`-11`): the client's Finished always leaves in the same flush, so the
+tests pin that nothing is queued when `tlsConnect` returns, not that path.
+
 ## What is not checked here
 
 - The caller's signature. A wrong one is the caller's bug, and the client's
   verification catches it; the server does not hold the public key's
   algorithm to check it with.
 - The certificate chain. It is sent as configured; nothing here parses it.
+  On the client, the server's chain and its CertificateVerify signature are
+  the caller's to check at `WAIT_AUTH` (Threat model); the client copies them
+  out as the server sent them.
 - Constant-time properties of the primitives, which their own records cover.
   The handshake branches only on public values: lengths, types, the offered
   lists and the state. The record layer branches on record lengths, header

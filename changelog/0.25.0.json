@@ -1,0 +1,590 @@
+{
+  "version": "0.25.0",
+  "date": "2026-10-29",
+  "tag": "v0.25.0",
+  "range": {
+    "from": "v0.24.0",
+    "to": "5cdca9fe"
+  },
+  "entries": [
+    {
+      "id": "regenerate-package-lock-json-for-v0-24-0",
+      "type": "build",
+      "breaking": false,
+      "title": "regenerate package-lock.json for v0.24.0",
+      "body": "",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "89ba44b"
+      ],
+      "pr": 999,
+      "author": "github-actions[bot]",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "setnice-and-setidlepriority-in-nish-process-985",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "setNice and setIdlePriority in nish:process",
+      "body": "Two scheduling calls in nish:process, each also an ambient builtin, let a\nworker or background job lower its own priority without a wrapper script.\nsetNice(n) is setpriority(PRIO_PROCESS, 0, n); setIdlePriority() moves the\nprocess to SCHED_IDLE on Linux and answers -95 on Darwin, which has no idle\nclass. Both answer 0 or a negative errno and never abort, so an unprivileged\nsetNice(-20) is a value to branch on (-13).\n\nAn unprivileged process can never leave SCHED_IDLE, and an idle process can\nstarve on a saturated machine, so callers should keep a normal-priority\nfallback for work that must finish. Linux keeps both settings per thread, so\na scope() task that calls either is refused. Both are refused on wasm32 and\nthrow under Node, which has no SCHED_IDLE to model.",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md (Scheduling: setNice",
+        "setIdlePriority)"
+      ],
+      "tests": [
+        "tests/cases/os_nice",
+        "tests/cases/caps_process_nice",
+        "reject_os_nice_wasm",
+        "reject_os_idle_wasm",
+        "reject_os_nice_task"
+      ],
+      "commits": [
+        "b116907"
+      ],
+      "pr": 985,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "linger-after-a-tls-close-so-a-client",
+      "type": "fix",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "linger after a TLS close so a client never sees a reset",
+      "body": "Closing a socket while the client's bytes are still unread sends a TCP reset. After an HTTP/2 GOAWAY, Chromium's SETTINGS ACK was still unread when the server closed, so the reset could reach the client before the response and close_notify the server had already sent. TlsTcpServer now closes in stages (RFC 9112 §9.6): it shuts the write side, wipes the keys, then drains what the client sends until the client's end of stream or 64 KiB. Http1Server's idleTimeout bounds how long that drain can run. Recorded as TLS-6.",
+      "metrics": [
+        "4 of 600 Chromium navigations to /close reset before, 0 of 1500 after"
+      ],
+      "refs": [
+        "docs/security/tls.md#tls-6"
+      ],
+      "tests": [
+        "tests/link/net_tls_record_tcp",
+        "tests/link/net_http1_server"
+      ],
+      "commits": [
+        "e059870"
+      ],
+      "pr": 996,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "ecdsa-verification-over-p-384-1009",
+      "type": "feat",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "ECDSA verification over P-384",
+      "body": "nish/crypto/p384 verifies ECDSA signatures over P-384 under a 97-byte uncompressed SEC1 public key: p384Verify over a digest (truncated to 48 bytes per SEC 1 §4.1.4, zero-extended when shorter, so SHA-256 digests work) and p384VerifySha384 over a message. A malformed key, a coordinate at or above p, a point off the curve, the identity, r or s outside [1, n) or a wrong length answers false, never a panic. Verification only: every input is public, so nothing is held as a Secret.\n\nThe field and scalar arithmetic is fiat-crypto's p384 (32-bit limbs, Montgomery form), ported as crypto/p256.ts ported P-256's, with its MIT notice beside it. Point arithmetic uses the Renes–Costello–Batina complete formulas for a = −3, so doubling, inverse and identity inputs need no special cases; verification computes u1·G + u2·Q by Shamir's trick and reduces the affine x mod n before comparing it with r.\n\nTested against all 2,116 Wycheproof ecdsa_secp384r1 cases (SHA-384 and SHA-512, DER and P1363, and SHA-256) at the commit the repository already pins, plus a negative test per refusal. The security record is docs/security/crypto-p384.md.",
+      "metrics": [],
+      "refs": [
+        "#480",
+        "#987"
+      ],
+      "tests": [
+        "tests/link/crypto_p384",
+        "tests/link/crypto_wycheproof_p384"
+      ],
+      "commits": [
+        "d608ed8"
+      ],
+      "pr": 1009,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "link-elf-binaries-with-a-gnu-build-id",
+      "type": "build",
+      "scope": "cli",
+      "breaking": false,
+      "title": "link ELF binaries with a GNU build-id note",
+      "body": "Every native ELF binary `--link` makes (the debug, speed, size and napi profiles) now carries a 20-byte NT_GNU_BUILD_ID note. Before, scripts/build.sh passed -Wl,--build-id=none, so perf, gdb and debuginfod had nothing to match a stripped binary to its debug file by: `perf buildid-cache -a` refused it and `perf report` showed raw addresses.\n\nThe id is -Wl,--build-id=sha1, a hash of the output's own bytes in lld, GNU ld and gold. Two links of one input carry one id, so reproducible builds and the bootstrap's fixed point still hold. A -g link and a plain one are different bytes and get different ids. To keep a debug file for a stripped binary, link once with -g, then split it with objcopy --only-keep-debug and strip -g, both of which keep the note. docs/guide/using-nish/cli.md has the recipe. The flag is link-only: the IR and the compiled objects are byte-identical. Mach-O (which keeps LC_UUID) and the wasm and wasi profiles are unchanged.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/cli.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "tests": [
+        "tests/run.js build_id",
+        "scripts/build-id-smoke.sh"
+      ],
+      "commits": [
+        "5e99f9a"
+      ],
+      "pr": 997,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "load-trust-anchors-from-ssl-cert-file-ssl",
+      "type": "feat",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "load trust anchors from SSL_CERT_FILE, SSL_CERT_DIR and the system bundles",
+      "body": "nish/crypto/pki-roots (native only) answers the root certificates a program should trust. pkiLoadSystemRoots() reads SSL_CERT_FILE and SSL_CERT_DIR (a ':'-separated list). When either is set and non-empty, exactly those are used, with no fallback to the defaults. When neither is set, it takes the first existing system bundle among /etc/ssl/certs/ca-certificates.crt, /etc/pki/tls/certs/ca-bundle.crt, /etc/ssl/ca-bundle.pem, /etc/pki/tls/cacert.pem, /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem and /etc/ssl/cert.pem, plus the directory /etc/ssl/certs. pkiLoadRoots(file, dirs, bundles) takes explicit paths.\n\nA directory contributes regular files named *.pem, *.crt or OpenSSL's xxxxxxxx.N. Symlinks are resolved, and FIFOs, devices and directories are never read. Each file is split into PEM blocks locally. Every CERTIFICATE block that x509ParseCertificate accepts becomes a root. Every other block is skipped and counted, so one bad block never costs the whole store. Duplicate roots are dropped. Files, roots and bytes per file are capped. Nothing found is an empty store, never an exit.\n\ndocs/security/crypto-pki.md records the threat model (whoever controls the environment controls trust), the skip rule, and the differences from Go's loader. It also lists what this misses compared with the macOS Keychain: roots installed by an admin or an MDM profile, per-user and admin trust settings, Apple's partial distrust and per-root constraints, and the Keychain's revocation and CT policy. /etc/ssl/cert.pem is a static snapshot.",
+      "metrics": [],
+      "refs": [
+        "#480",
+        "#987"
+      ],
+      "tests": [
+        "tests/link/crypto_pki_roots",
+        "tests/link/crypto_pki_roots_wasm"
+      ],
+      "commits": [
+        "d7e5564"
+      ],
+      "pr": 998,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "renamesync-unlinksync-and-u8-output-in-nish-fs",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "renameSync, unlinkSync and u8[] output in nish:fs and nish:io",
+      "body": "nish:fs gains renameSync, unlinkSync and writeFileBytesSync, and nish:io\ngains writeBytes, so a program can write a file to a temporary path and\nrename it over its target, remove a file, and send raw bytes to stdout or a\nfile without shelling out. Each answers 0 (or the byte count) or a negative\nerrno and never exits; the only panic is writeBytes's range check, the same\n(buf, off, len) check netWrite has.\n\nrenameSync is atomic on one filesystem and answers -18 (EXDEV) across two.\nunlinkSync refuses a directory with the kernel's answer and never falls back\nto rmdir. writeFileBytesSync opens the file as writeFileSync does\n(O_NOFOLLOW, O_CLOEXEC, O_TRUNC, 0644) and reports a failed close, so a file\ncut short is never renamed into place. A path with an embedded NUL answers\n-22 before any system call, natively and on Node.\n\nA native string already carries arbitrary bytes: String.fromBytes keeps\nthem, and write and writeFileSync write a string's length, not up to a NUL.\nUnder --emit-ts String.fromBytes decodes UTF-8 and turns invalid sequences\ninto U+FFFD, so the u8[] writers are the route that is exact on every\ntarget. docs/LANGUAGE.md records both halves, and a round trip of all 256\nbyte values pins them natively and on Node.\n\nRUNTIME_OS_TEXT_BUDGET goes from 2,560 to 3,072 bytes: this change took\nruntime-os.c from 2,380 to 2,745 and, with setNice and setIdlePriority from\nmain, it measures 2,822 (clang 18.1.3 -Oz, linux-x64).",
+      "metrics": [],
+      "refs": [
+        "docs/LANGUAGE.md#file-io"
+      ],
+      "tests": [
+        "tests/cases/io_rename",
+        "tests/cases/io_unlink",
+        "tests/cases/io_write_file_bytes",
+        "tests/cases/io_write_bytes_bounds",
+        "tests/cases/caps_fs_replace"
+      ],
+      "commits": [
+        "fe02a75"
+      ],
+      "pr": 1016,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "ansi-colours-and-recolourable-help-roles-on-style",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "ANSI colours and recolourable help roles on Style",
+      "body": "`nish/cli`'s `Style` can now paint any text in the 16 ANSI colours (`red`, `brightRed`, …), their backgrounds (`bgRed`, `bgBrightRed`, …) and the common attributes (`bold`, `faint`, `italic`, `underline`, `inverse`, `strikethrough`). `sgr(text, codes)` paints with any SGR parameter list, which covers 256-colour and truecolor. The `SGR_*` constants name each code. All painters follow `styleFor`'s policy:\n- Off: the text is unchanged.\n- Monochrome failsafe: colours paint nothing and attributes still paint.\n- Theme: everything paints.\n\n`HelpMenu`'s roles (heading, name, flag, meta, dim) read a public `<role>Themed`/`<role>Mono` field pair, so a program can recolour its help. The defaults are the old codes, so `nish --help` and every existing menu print the same bytes.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/standard-library.md#nishcli"
+      ],
+      "tests": [
+        "tests/link/std_cli"
+      ],
+      "commits": [
+        "099b049"
+      ],
+      "pr": 1001,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "dns-message-codec-and-resolv-conf-hosts-parsers",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "DNS message codec and resolv.conf / hosts parsers",
+      "body": "Two pure modules, the first half of WP45's stub resolver. Neither imports nish:net, so both compile on wasm32 and a program that owns its loop, or a host that does its own transport, can use them.\n\nnish/net/dns-message builds a standard A or AAAA query into a caller-owned buffer. It also parses a reply against the query it answers. The parser checks the ID, QR, opcode, a single question matching the query, and the RCODE. It reports TC before anything else, so the caller can retry over TCP. It follows the CNAME chain from the question name and keeps at most 8 addresses, with TTLs, in the 18-byte address form. Every read is bounded by the message length:\n- compression pointers must go backwards, with a cap of 16 hops;\n- names are capped at 255 bytes;\n- counts are held to the bytes left;\n- RDLENGTH must be 4 for A and 16 for AAAA.\nNothing is allocated per reply.\n\nnish/net/dns-config parses resolv.conf (nameserver, search/domain, and the ndots, timeout and attempts options, each clamped) and hosts files from bytes the caller read. Both parsers fill fixed tables with documented caps and count what they drop. Literals are strict: no leading zeros, no zone ids, one `::`.\n\nThe security record docs/security/dns.md lists each bound with the test that pins it.",
+      "metrics": [],
+      "refs": [
+        "docs/wp45-name-resolution.md",
+        "docs/security/dns.md"
+      ],
+      "tests": [
+        "tests/link/std_dns_message",
+        "tests/link/std_dns_config"
+      ],
+      "commits": [
+        "c0ab2ce"
+      ],
+      "pr": 1007,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "write-a-json-value-as-yaml-nish-yaml",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "write a JSON value as YAML (nish/yaml-write)",
+      "body": "`nish/yaml-write` adds `stringifyYaml(doc, value)`, which writes a `nish/json-value` document as block-style YAML that `nish/yaml` reads back as the same tree. It indents by two spaces, writes empty containers as `{}` and `[]`, and leaves scalars plain wherever plain is unambiguous.\n\nEvery string that YAML would read as something else is double-quoted and escaped:\n- core-schema null, bool, int and float look-alikes, `.inf` and `.nan`\n- YAML 1.1's yes, no, on, off, y and n, in any case\n- a leading indicator, `: `, ` #` or a trailing `:`\n- leading or trailing whitespace, control characters and line breaks\n- a BOM, or a leading `---` or `...`\n- a `<<` key\n\nKeys follow the same rule. A key longer than the parser's 1024-byte implicit-key limit is written as an explicit `? key`. A tree deeper than `JSON_WRITER_MAX_DEPTH` writes nothing, as `stringify` does.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/standard-library.md#nishyaml"
+      ],
+      "tests": [
+        "tests/link/std_yaml_write",
+        "tests/link/std_yaml_conformance (every yaml-test-suite case with expected JSON round-trips JSON to YAML to parseYaml; 271",
+        "pinned)"
+      ],
+      "commits": [
+        "8d1dca3"
+      ],
+      "pr": 1000,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "parse-absolute-urls-and-resolve-references-in-nish",
+      "type": "feat",
+      "scope": "stdlib",
+      "breaking": false,
+      "title": "parse absolute URLs and resolve references in nish/net/url",
+      "body": "`nish/net/url` now reads a whole URL. `urlParse` splits an absolute URL into scheme, userinfo, host (reg-name, dotted IPv4 or IPv6), port, path, query and fragment. Anything ambiguous answers null rather than a guess: a control byte or space, a backslash, a second `@`, a percent-encoded or numeric-but-not-IPv4 host such as `127.1` or `0x7f.1`, an IPv6 zone, a port above 65535, or an empty host for http(s) and ws(s).\n\n`urlResolve` is RFC 3986 §5.2.2 with §5.2.4's remove_dot_segments and passes every §5.4 example. `urlSerialize` writes a URL back out. `urlOrigin` and `urlDefaultPort` give the scheme, host and effective port that same-origin decisions compare. The byte-level percent-decoding and query API is unchanged.\n\nThe security record (docs/security/url.md) lists what is refused and why, and records the accepted divergences: the IPv6 as-written origin, and a trailing-dot reg-name giving a distinct origin, which errs to the safe side.\n\nRefs: docs/security/url.md\nTests: tests/link/net_url_parse, tests/link/net_url_parse_f64\nPart of #994",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "8698235"
+      ],
+      "pr": 1017,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "faster-gunzip-gzip-and-crc-32-and-two",
+      "type": "perf",
+      "scope": "compress",
+      "breaking": false,
+      "title": "faster gunzip, gzip and CRC-32, and two fixes from #984's review",
+      "body": "gunzip of a 5 KB JSON body takes 8.2 us instead of 11.6 us: the decoder uses\n11-bit and 8-bit tables with subtables, looks up the next symbol before it\nrefills the bit buffer, and builds its tables by doubling. CRC-32 is\nslicing-by-8 braided five ways (0.8 us instead of 2.5 us for 5 KB), and the\nfast and lazy matchers do less per position, with the output unchanged byte\nfor byte. Measured against Go, Rust, Java, Node, Bun and Python as well as\nzlib and libdeflate (bench/gzip/compare), Nish now decompresses second only to\nlibdeflate and compresses fourth at levels 1 and 6.\n\nTwo fixes: Http1Connection.respondEncoded no longer queues already-sent bytes\nafter H1_AGAIN behind a half-sent response (COMP-11), and GzipWriter no longer\npanics on incompressible input written into exactly bound(len) (COMP-12).",
+      "metrics": [
+        "gunzip 11.6 us to 8.2 us, CRC-32 2.5 us to 0.8 us, 5,221-byte body, +-5 %"
+      ],
+      "refs": [
+        "bench/gzip/README.md",
+        "docs/security/compress.md"
+      ],
+      "tests": [
+        "tests/link/std_compress",
+        "tests/link/std_http_compress",
+        "tests/link/std_compress_node"
+      ],
+      "commits": [
+        "71ca720"
+      ],
+      "pr": 1010,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "netsetoption-with-a-whitelist-of-socket-options-1014",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "netSetOption with a whitelist of socket options",
+      "body": "`nish:net` gains `netSetOption(fd, option, value)`, which sets one socket option from a whitelist of five: `NET_TCP_NODELAY`, `NET_TCP_QUICKACK` (Linux only, -95 elsewhere), `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF` and `NET_SO_RCVBUF`. Any other id answers -22 before a syscall, so there is no raw passthrough. It answers 0 or a negative errno, is refused on wasm32 and the wasi profile, and throws under Node.",
+      "metrics": [],
+      "refs": [
+        "docs/security/runtime.md (RT-23)"
+      ],
+      "tests": [
+        "tests/cases/net_set_option",
+        "tests/cases/reject_net_set_option_wasm"
+      ],
+      "commits": [
+        "8713278"
+      ],
+      "pr": 1014,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-28"
+    },
+    {
+      "id": "parse-command-line-flags-from-a-declared-table",
+      "type": "feat",
+      "scope": "std",
+      "breaking": false,
+      "title": "parse command-line flags from a declared table (nish/cli-flags)",
+      "body": "`nish/cli-flags` adds `FlagTable`. A program declares its flags and subcommand paths once, as data with no function values. The table parses the command line into typed values, positionals and the matched command, and writes the same declarations as `--help` rows into a `nish/cli` `HelpMenu`, so the parser and the help cannot drift apart.\n\nFlags are string, number, boolean or repeatable, written as GNU long options:\n- `--name value` and `--name=value` (`--name=` is the empty string); `--name` and `--no-name` for a boolean\n- a repeatable flag keeps every value in order\n- `--` ends the flags, and a lone `-` is a word\n- the command is the longest declared path spelled by the leading words; flags may come before, between or after them\n\nA number is a plain ASCII decimal (sign, digits, fraction, exponent), checked before conversion, so a value means the same native and under Node.\n\nA usage error is data, with a `FLAG_ERR_*` code, a message and the offending argument:\n- an unknown flag, a missing value or a value that is not a number\n- a non-repeatable flag given twice, or a value on a boolean\n- an unknown command\n\n`exitUsage()` prints `<program>: <message>` and a usage line to stderr and exits 2. A table that can never match (a name with `=` or whitespace, a command word starting with `-`, a boolean `x` beside a flag `no-x`) panics when declared.",
+      "metrics": [],
+      "refs": [
+        "docs/guide/using-nish/standard-library.md#nishcli"
+      ],
+      "tests": [
+        "tests/link/std_cli_flags",
+        "tests/link/std_cli_flags_bad_* (exit 2 with exact stderr",
+        "and the declaration panics)"
+      ],
+      "commits": [
+        "858d9bd"
+      ],
+      "pr": 1002,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "plan-websocket-client-opening-handshake-ws-client-stage",
+      "type": "docs",
+      "breaking": false,
+      "title": "plan WebSocket client opening handshake (ws-client stage)",
+      "body": "* docs(plan): WebSocket client opening handshake\n\n* docs(plan): match the ws-client-handshake plan to the repo's plan layout\n\nUse the runtime scope that std/net work lands under, and add the Approach,\ntop-level Tests and Verification sections, run notes and acceptance criteria\nthe other plans carry.",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "dea4eaa"
+      ],
+      "pr": 1015,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "read-x-509-v3-extensions-names-and-every",
+      "type": "feat",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "read X.509 v3 extensions, names and every signature algorithm a Web PKI chain uses",
+      "body": "x509ParseCertificate now reports each certificate's version, signature algorithm and key type. The signature algorithms are ECDSA with SHA-256 or SHA-384, RSA PKCS#1 v1.5 with SHA-256, SHA-384 or SHA-512, RSA-PSS with its hash and salt length, Ed25519, and PKCS#1 SHA-1 (named only so a validator can refuse it). The key types are P-256, P-384, RSA and Ed25519. Anything else reads as unknown and still parses. PSS is accepted only with MGF1 over the same hash, an explicit salt and the default trailer, each in its single DER spelling. x509DerSignatureRSWidth converts a DER ECDSA signature for 32- or 48-byte halves.\n\nv3 extensions are decoded into fields a path validator reads:\n- subjectAltName: dNSName exactly as IA5, iPAddress, and a count of other forms.\n- basicConstraints: cA and pathLen.\n- keyUsage, as a bit mask.\n- extKeyUsage: serverAuth and anyExtendedKeyUsage.\n- nameConstraints: permitted and excluded dNSName, iPAddress and directoryName subtrees, with a flag for any other form.\n- The subject and authority key identifiers.\n- unknownCritical, set by a critical extension the module does not decode.\n\nA duplicate extension, a malformed value of a decoded extension, a non-DER spelling such as an explicit critical FALSE, or more than 64 extensions refuses the certificate. The cap keeps the duplicate check linear on a hostile peer certificate (X509-14). x509NameEqual compares Names byte for byte, and x509NameIsPrefix serves directoryName constraints. RFC 5280 §7.1's case-folding comparison is recorded as not done (X509-12).\n\nEvery refusal clause in the new code has a negative that is refused by that clause alone, and the clauses that cannot be isolated are listed in the record. A real system CA bundle (122 roots) parses with none refused. The module still does no path validation; that is the planned nish/crypto/pki.",
+      "metrics": [],
+      "refs": [
+        "#480",
+        "#987"
+      ],
+      "tests": [
+        "tests/link/crypto_x509",
+        "tests/link/crypto_x509_audit",
+        "tests/link/crypto_x509_malformed",
+        "tests/link/crypto_x509_f64"
+      ],
+      "commits": [
+        "cb253e9"
+      ],
+      "pr": 1011,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "a-wall-clock-in-nish-process-1004",
+      "type": "feat",
+      "scope": "runtime",
+      "breaking": false,
+      "title": "a wall clock in nish:process",
+      "body": "`wallClockNanos(): i64`, exported from `nish:process` and available as a global, reads CLOCK_REALTIME in nanoseconds since 1970-01-01 UTC. It is the clock `Date.now` reads, but as an exact `i64` at a nanosecond's grain, so a program can date an event (a certificate's validity, a log line) without an `f64` of milliseconds. Durations still belong to `monotonicNanos`.\n\nNatively it shares one static helper with `monotonicNanos` in runtime-os.c, which costs 6 bytes of the file's budget. The JS hosts (Node, browser) answer `BigInt(Date.now()) * 1000000n`, at a millisecond's grain. Like `monotonicNanos`, it is declared with a write effect so two reads never fold, carries the `clock` capability, and is not refused on wasm.\n\nTests: tests/cases/wall_clock (native round trip, plus a capability report pinning `clock`), tests/cases/reject_wall_clock_arity, and a browser-host assertion in tests/runtime/web-context.mjs\nRefs: docs/LANGUAGE.md (nish:process), docs/IR_COOKBOOK.md#the-wall-clock\nPart of #994",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "351a9a8"
+      ],
+      "pr": 1004,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "nish-net-dns-a-stub-resolver-on-the",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "nish/net/dns, a stub resolver on the caller's loop",
+      "body": "Name resolution for nish:net, built as WP45 recommends: a DNS stub resolver in the standard library, with no getaddrinfo and no NSS.\n\nnish/net/dns-resolver is the sans-IO core. It takes the time and the bytes from its caller, never blocks, reads no clock and no file, and imports no nish:net, so it builds for wasm32.\n- Names: localhost and *.localhost answer loopback, then the hosts table answers. A name is then tried against the search list by the resolv.conf ndots rule. NXDOMAIN moves to the next candidate, and SERVFAIL or a timeout to the next server, with `attempts` rounds of `timeout` seconds each.\n- Queries: A and AAAA are in flight together. A truncated reply is asked again over TCP, and CNAME chains are followed for up to 8 hops.\n- Replies: one from another address or port, or with the wrong ID or question, is dropped and counted.\n- Limits: pools are sized at construction and counters saturate.\n\nnish/net/dns drives the core over nish:net on the caller's own poll set. It opens a fresh port-0 UDP socket and draws a random ID from crypto.getRandomValues for every try. resolveHost(name, timeoutMs, …) is the blocking helper for CLIs and start-up: it reads /etc/resolv.conf and /etc/hosts and runs a poll loop of its own.\n\nThe capability report shows net and entropy for a program on its own loop. fs.read and clock appear only for resolveHost.\n\nThe security record docs/security/dns.md covers the resolver, with each property pinned by a test, and it records DNS-5 as fixed: a datagram flood could hold the caller's loop. The guide's networking and standard-library pages and LANGUAGE.md now describe name resolution through nish/net/dns. dnsLookup is still not a nish:net export.\n\nFixes #479",
+      "metrics": [],
+      "refs": [
+        "docs/wp45-name-resolution.md",
+        "docs/security/dns.md"
+      ],
+      "tests": [
+        "tests/link/std_dns",
+        "tests/link/std_dns_resolver",
+        "tests/link/std_dns_caps",
+        "tests/link/std_dns_soak"
+      ],
+      "commits": [
+        "2626864"
+      ],
+      "pr": 1019,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "nish-cli-args-a-command-tree-parser-for",
+      "type": "feat",
+      "scope": "cli",
+      "breaking": false,
+      "title": "nish/cli-args, a command-tree parser for large CLIs",
+      "body": "`nish/cli-args` declares a command-line tool's command tree once and parses argv against it. It is built for generated API clients with hundreds of nested commands. `parse(argv, start)` answers a `ParseResult`:\n- the `id` the program gave the leaf it reached, which `main` dispatches on with a `switch`;\n- every value, with its source: `SOURCE_ARGV`, `SOURCE_DEFAULT` or `SOURCE_UNSET`.\n\n`finish(r, outStyle, errStyle)` is the only part that prints or exits:\n- help or the version on stdout, then exit 0;\n- an error and a `Run '<path> --help' for usage.` hint on stderr, then exit 2.\n\n**Why a builder, not a table.** It is a builder on a `Cli` class that hands out `i32` handles, not a static table. Nish has no optional fields, so every table row would spell out every column. The builder takes Commander's flag specs (`-r, --raw-output`, `--name <v>`, `--name [v]`, `--no-x`) in one call and the rarer properties through modifiers, and every declaration mistake panics at the call that made it. Declaring is linear in the declarations, and a successful parse makes one map lookup per token.\n\n**What it supports:**\n- groups, commands and aliases at any depth;\n- global flags accepted before, between or after the verbs, and local flags refused elsewhere;\n- boolean, required-value and optional-value flags, with defaults, `required`, `repeatable` and `negatable`;\n- `--x=v`, a dashed value taken as a flag's value, `-abc` clusters and `--`;\n- required, optional and variadic positionals;\n- help at every level, and `help <path>`;\n- did-you-mean by edit distance (within 2, or a third of the name's length).\n\nHelp is built with `nish/cli`'s `HelpMenu`, so it follows `styleFor`. `examples/api-cli` is a nested API client that uses it.",
+      "metrics": [
+        "0.49–0.83 µs per parse of a 7-token argv against a 500-command tree with 8 flags each (30 runs of 50,000 parses; the top of the range came from runs that shared the CPU)"
+      ],
+      "refs": [
+        "docs/guide/using-nish/standard-library.md#nishcli-args"
+      ],
+      "tests": [
+        "tests/link/std_cli_args",
+        "tests/link/std_cli_args_exit",
+        "tests/link/std_cli_args_misuse*"
+      ],
+      "commits": [
+        "024cf17"
+      ],
+      "pr": 1003,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "deal-the-slow-sections-across-the-test-shards",
+      "type": "ci",
+      "breaking": false,
+      "title": "deal the slow sections across the test shards and run the Nish runner on every core",
+      "body": "CI's critical path was shard 1 of the `test` job, at 20 minutes against 7.8\nfor shard 4 (run 40820090678). Three causes, each fixed here:\n\n- Every shard ran `term-io` (56 s) and the `--emit-ts` corpus (110 s) before\n  its link programs. Both are now dealt sections: one shard runs each.\n- Shard 1's own tail had grown to 791 s, a floor no deal moved. The sanitizer\n  and fuzz replays, the Nish runner's `pop` run, WP9 bench, the runtime cache,\n  SQLite linking and the WP13 differential (344 s together) move before the\n  point where the other shards stop, and are dealt.\n- 632 of 806 link programs read 0 in tests/shard-costs.json or were missing\n  from it, so the greedy deal gave all of them to shard 2. A program now\n  costs at least half a second (a rejection a twentieth), and the table is\n  regenerated from that run.\n\nThe `runner` job ran one Nish runner per job on four-core machines.\nscripts/nish-runner-parallel.mjs runs one per core, each in a working\ndirectory of its own (two cases write one file by design), on exactly the\nslice `--shard i/n` names, so the job goes from four rows to two.",
+      "metrics": [
+        "test shards 20.0/14.8/11.6/7.8 min (run 40820090678) -> 12.8/12.2/11.5/9.2 min (run 40844788479); runner 4 jobs of 8.3-13.1 min -> 2 jobs of 9.1 and 13.4 min"
+      ],
+      "refs": [
+        "docs/wp10-ci.md#shards-and-time-limits"
+      ],
+      "tests": [
+        "tests/run.js --shard",
+        "scripts/nish-runner-parallel.mjs"
+      ],
+      "commits": [
+        "61ccc1c"
+      ],
+      "pr": 1026,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "rsa-signature-verification-pkcs-1-v1-5-and",
+      "type": "feat",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "RSA signature verification, PKCS#1 v1.5 and PSS",
+      "body": "nish/crypto/rsa verifies RSA signatures under a public key read from its PKCS#1 RSAPublicKey DER.\n\nAPI:\n- rsaParsePublicKey reads the key. It requires minimal positive INTEGERs, an odd modulus of 1024 to 8192 bits, and an odd exponent from 3 to 2^32 - 1.\n- rsaVerifyPkcs1v15(key, hash, msg, sig) verifies an RSASSA-PKCS1-v1_5 signature.\n- rsaVerifyPss(key, hash, saltLen, msg, sig) verifies an RSASSA-PSS signature with MGF1 over the same hash.\n- The hash is SHA-256, SHA-384 or SHA-512, named by the same ids as nish/crypto/x509's X509_HASH_*.\n\nPKCS#1 v1.5 builds the whole expected encoding, 00 01 FF… 00 DigestInfo digest, and compares it in full; the decrypted block is never parsed. The DigestInfo without its NULL parameters is refused. PSS follows RFC 8017 §9.1.2 exactly, including the case where emLen is one byte shorter than the modulus. A signature must be exactly the modulus length and below the modulus.\n\nThe arithmetic is 32-bit-limb Montgomery multiplication with square-and-multiply over the public exponent. It is variable-time by design, because every input is public. pki imposes the 2048-bit floor.\n\nTested against 4,189 Wycheproof PKCS#1 v1.5 and PSS cases from 2048 to 8192 bits, at the commit the repository already pins, and against hand-made keys covering each parse and verify refusal. The generators for both the Wycheproof files and the hand-made keys are committed, and they reproduce the committed vector files byte for byte. A mutation script removes each refusal rule in turn: 28 rules are caught, and 4 are recorded as unreachable. The security record is docs/security/crypto-rsa.md.",
+      "metrics": [],
+      "refs": [
+        "#480",
+        "#987"
+      ],
+      "tests": [
+        "tests/link/crypto_rsa",
+        "tests/link/crypto_wycheproof_rsa"
+      ],
+      "commits": [
+        "87898b0"
+      ],
+      "pr": 1006,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "the-sans-io-tls-1-3-client-handshake",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "the sans-IO TLS 1.3 client handshake and record layer",
+      "body": "nish/net/tls/client (TlsClient) is the client half of the TLS 1.3 handshake, beside TlsServer. nish/net/tls/record-client (TlsRecordClient) is the record layer around it. Both are sans-IO: bytes go in and come out, and the caller drives the socket.\n\nThe client:\n- offers the three TLS 1.3 suites, with x25519 and, when configured, secp256r1 key shares;\n- sends SNI for host names (never for IP literals), and ALPN;\n- answers one HelloRetryRequest, echoing its cookie;\n- refuses TLS 1.2 and below, and the downgrade sentinel, with protocol_version or illegal_parameter;\n- checks every server choice against what it offered.\n\nAuthentication is injected. The client stops in WAIT_AUTH with the server's chain, CertificateVerify scheme, signed content and signature, and goes no further until the caller calls authenticate(true) or reject(alert). Nothing in it reads a file or a clock.\n\nThe record layer handles the compatibility CCS, KeyUpdate both ways with a cap, close_notify and truncation. It never returns bytes it did not decrypt, and it answers every failure with the alert that caused it. Every ephemeral key and traffic secret is a Secret and is wiped on failure, close and wipe(); tests/wipes/tls.js pins this under -O2.\n\nnish/crypto/p256 gains p256Ecdh. It validates the peer point, multiplies in constant time and returns the shared x as a Secret; Wycheproof's ecdh_secp256r1 vectors pin it.\n\ndocs/security/tls.md records the client: its scope, a refusal table pinned by net_tls_client_refusals (223 checks), and an explicit list of what no test drives yet. TLS 1.2 refusal is recorded open by design (TLS-7). The user guide gains docs/guide/using-nish/tls-client.md.",
+      "metrics": [],
+      "refs": [
+        "#480",
+        "#993"
+      ],
+      "tests": [
+        "tests/link/net_tls_client_handshake",
+        "tests/link/net_tls_client_record",
+        "tests/link/net_tls_client_refusals",
+        "tests/link/crypto_p256_ecdh",
+        "tests/fuzz/targets/tls-server-flight.ts",
+        "tests/wipes/tls.js"
+      ],
+      "commits": [
+        "fb82ca3"
+      ],
+      "pr": 1018,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "rfc-5280-path-validation-and-rfc-6125-hostname",
+      "type": "feat",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "RFC 5280 path validation and RFC 6125 hostname matching for TLS servers",
+      "body": "nish/crypto/pki decides whether the certificate chain a TLS server sent leads to a trusted root and names the host the program dialled.\n\n- pkiVerifyServer(chain, hostname, nowMs, store) builds a path depth first from the leaf. It never uses a certificate twice, and it checks the signature on every link. Signatures may be ECDSA P-256 or P-384, Ed25519, RSA PKCS#1 v1.5 or RSA-PSS. SHA-1 and RSA keys under 2048 bits are refused.\n- Every certificate below the root is checked for validity, basicConstraints and pathLen, keyUsage, serverAuth EKU, unknown critical extensions, and dNSName, iPAddress and directoryName name constraints. A form it cannot evaluate fails closed.\n- The hostname is matched against SAN dNSName (a single leftmost-label wildcard) and iPAddress, never the CN.\n- Every input size is bounded by a named constant with its own refusal code.\n\nThe security record is docs/security/crypto-pki.md, with findings PKI-1 to PKI-20; revocation and a root's own constraints are recorded open. The guide page is docs/guide/using-nish/tls-certificates.md.",
+      "metrics": [],
+      "refs": [
+        "docs/security/crypto-pki.md"
+      ],
+      "tests": [
+        "tests/link/crypto_pki",
+        "tests/link/crypto_pki_f64"
+      ],
+      "commits": [
+        "50af350"
+      ],
+      "pr": 1027,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "sans-io-http-1-1-request-writer-and",
+      "type": "feat",
+      "scope": "stdlib",
+      "breaking": false,
+      "title": "sans-IO HTTP/1.1 request writer and response parser",
+      "body": "`nish/net/http1-client` is the client half of HTTP/1.1, with no I/O: the caller moves the bytes.\n\n`http1RequestHead` and `http1WriteRequestHead` write a request head with the same discipline as the response writer:\n- a token method, and a target in origin, absolute or authority form (CONNECT);\n- token field names and field-text values, so no CR, LF or NUL can split the request;\n- framing owned by the writer: a caller-supplied Content-Length or Transfer-Encoding, a second Host and `Connection: upgrade` are refused, and Host is required.\n\n`Http1ResponseParser` reads responses incrementally (`feed` / `next`) and gives the same events and error code however the input is cut. It reads:\n- the status line;\n- the fields;\n- Content-Length, chunked (with trailers) and read-until-close bodies.\n\nIt skips 1xx interim responses and refuses 101. HEAD, 204 and 304 responses have no body. A 2xx to CONNECT opens a tunnel. It refuses every framing shape RFC 9112 names as smuggling: Transfer-Encoding with Content-Length, a final coding other than chunked, differing or malformed lengths, bare LF, obs-fold and chunk-size overflow. The status line, field section, field count, body, trailers, chunk lines and interim count each have a cap, with a distinct, sticky error code.\n\nThe test suite is pinned by a mechanical mutation sweep. Every condition a test cannot observe is recorded with its argument in docs/security/http1-client.md, alongside the threat model and HC-1.\n\nTests: tests/link/net_http1_client (+ _f64, _feed_window, _feed_window_off, _feed_window_len), tests/fuzz/targets/http1-client.ts\nRefs: docs/security/http1-client.md, docs/guide/using-nish/http-client.md\nPart of #994",
+      "metrics": [],
+      "refs": [],
+      "tests": [],
+      "commits": [
+        "b21a21c"
+      ],
+      "pr": 1013,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "run-the-x509-limbo-server-authentication-cases-against",
+      "type": "test",
+      "scope": "crypto",
+      "breaking": false,
+      "title": "run the x509-limbo server-authentication cases against nish/crypto/pki",
+      "body": "Every server-validation case of a pinned x509-limbo (Apache-2.0) runs through pkiTrustStore and pkiVerifyServer. That is 670 cases, with BetterTLS sampled 1 in 20 and the full 9,572 BetterTLS cases run once, all agreeing. Two of nish's own anchored cases join them. Each case either matches limbo's verdict or is a divergence kept in divergences.ts, with its direction checked and its finding recorded.\n\npki.ts now refuses what limbo showed it accepted:\n- A root is checked as an issuer: validity, basicConstraints cA, unknown critical extensions, extKeyUsage, pathLenConstraint and name constraints.\n- Key identifiers are required below the root.\n- The web PKI's leaf profile is checked: subscriber key, serial, SAN dNSName syntax, EKU on the leaf, no keyCertSign or nameConstraints on an end entity, and RSA moduli in whole bytes.\n\nEach structural rule on a root was run over the 118 roots Debian ships from Mozilla's store. Only the subjectKeyIdentifier rule refuses one (TWCA Global Root CA), so a root may lack one (PKI-32).\n\nThirty divergences are kept and recorded in docs/security/crypto-pki.md (PKI-25 to PKI-32). Those that need x509 criticality, the AKI issuer and serial, AIA or a Public Suffix List are tracked in #1028.",
+      "metrics": [],
+      "refs": [
+        "docs/security/crypto-pki.md"
+      ],
+      "tests": [
+        "tests/link/crypto_pki_limbo",
+        "tests/link/crypto_pki"
+      ],
+      "commits": [
+        "ce39d4b"
+      ],
+      "pr": 1030,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    },
+    {
+      "id": "the-tls-client-over-tcp-server-authentication-and",
+      "type": "feat",
+      "scope": "net",
+      "breaking": false,
+      "title": "the TLS client over TCP, server authentication and a blocking connect",
+      "body": "nish/net/tls-tcp gains the client role over TCP:\n- TlsTcpClient is a carrier on tcpConnect and the poll loop, shaped like TlsTcpServer.\n- tlsConnect connects and completes the handshake for a program without a loop. It returns only once the handshake's last flight is sent.\n- writeAll and readWait are blocking writes and reads with a timeout.\n\nEvery connection authenticates the server. The new nish/net/tls/verify.ts checks two things:\n- The CertificateVerify under the leaf's own key, with a scheme the client offered: ECDSA P-256/SHA-256, ECDSA P-384/SHA-384, or RSA-PSS with a salt equal to the hash length. RSA PKCS#1 v1.5 is never accepted.\n- The chain, through nish/crypto/pki's pkiVerifyServer, for the name the caller gave. The trust store is the system's roots by default, or a store the caller names.\n\nThe client refuses a failed check with the RFC 8446 alert: bad_certificate, certificate_expired, unknown_ca or decrypt_error. There is no switch that skips verification, and an empty name or an empty store fails closed. Client random and key shares come from the CSPRNG, and every failure path closes the socket and wipes the keys.\n\ntests/link/net_tls_client_tcp runs the client against TlsServer over loopback: a round trip, KeyUpdate both ways, timeouts, and the four refusals. tests/run.js drives openssl s_server under a test CA generated at run time:\n- each suite, X25519 and P-256 shares, HelloRetryRequest, ALPN and SNI;\n- an RSA-PSS leaf under an RSA intermediate, and a P-384 intermediate;\n- a wrong name;\n- data with KeyUpdate both ways, and close with and without close_notify;\n- TLS 1.2 refused with protocol_version.\n\ndocs/security/tls.md records the carrier and verify.ts and lists what no test drives. The guide page docs/guide/using-nish/tls-client.md covers tlsConnect, writeAll and readWait.\n\nFixes #480",
+      "metrics": [],
+      "refs": [
+        "#993"
+      ],
+      "tests": [
+        "tests/link/net_tls_client_tcp",
+        "tests/run.js (net_tls_client_tcp)"
+      ],
+      "commits": [
+        "5cdca9f"
+      ],
+      "pr": 1029,
+      "author": "Amrit Kahlon",
+      "date": "2026-10-29"
+    }
+  ]
+}

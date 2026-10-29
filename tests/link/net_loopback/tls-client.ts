@@ -21,7 +21,7 @@ const SUITE: i32 = TLS_CHACHA20_POLY1305_SHA256;
 const RECORD: i32 = 16000;
 
 /** One client: its socket in the loop, its record keys, and what the server has sent it. */
-export class TlsClient {
+export class LoopbackTlsClient {
   lp: TcpLoop;
   index: i32 = -1;
   read: TlsRecordProtection;

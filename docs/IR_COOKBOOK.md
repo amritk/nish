@@ -23663,6 +23663,98 @@ attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 ```
 <!-- cookbook:end builtin-replace-bytes -->
 
+### A secret on disk, a lock file and a private directory
+
+`writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode` lower to one
+runtime call each, the mode passed as the `i32` it is and the answer the `i32`
+the program branches on: the `fchmod` that fixes the mode before the first
+byte is written, and the `O_NOFOLLOW` or `O_EXCL` that keeps a link from
+redirecting the write, are inside the runtime, not in the IR. The `0o600`
+literal is `384`, and the lock's `>= 0` is one `icmp sge`.
+
+<!-- cookbook:begin builtin-secret-file -->
+```ts
+export const storeSecret = (path: string, secret: string): number => {
+  const tmp = `${path}.tmp`
+  const written = writeFileSyncMode(tmp, secret, 0o600)
+  if (written < 0) {
+    unlinkSync(tmp)
+    return written
+  }
+  return renameSync(tmp, path)
+}
+
+export const lock = (path: string): boolean => createFileExclusiveSync(path, "", 0o600) >= 0
+
+export const privateDir = (path: string): number => mkdirSyncMode(path, 0o700)
+```
+
+```llvm
+@.str.0 = private unnamed_addr constant { i64, [5 x i8] } { i64 4, [5 x i8] c".tmp\00" }, align 8
+@.str.1 = private unnamed_addr constant { i64, [1 x i8] } { i64 0, [1 x i8] c"\00" }, align 8
+
+declare noundef i64 @nish_arena_mark() #1
+declare void @nish_arena_release(i64 noundef) #1
+declare noalias noundef nonnull align 8 i8* @nish_str_concat(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_rename(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_unlink(i8* noundef nonnull readonly align 8 nocapture) #0
+declare noundef i32 @nish_write_file_mode(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish_create_file_exclusive(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
+declare noundef i32 @nish_mkdir_mode(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #0
+
+define noundef i32 @storeSecret(i8* noundef nonnull noalias readonly align 8 nocapture %path, i8* noundef nonnull noalias readonly align 8 nocapture %secret) #0 {
+entry:
+  %tmp.addr = alloca i8*, align 8
+  %written.addr = alloca i32, align 4
+  %arena.mark = call i64 @nish_arena_mark()
+  %0 = call i8* @nish_str_concat(i8* %path, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*))
+  store i8* %0, i8** %tmp.addr, align 8
+  %1 = load i8*, i8** %tmp.addr, align 8
+  %2 = call i32 @nish_write_file_mode(i8* %1, i8* %secret, i32 384)
+  store i32 %2, i32* %written.addr, align 4
+  %3 = load i32, i32* %written.addr, align 4
+  %4 = icmp slt i32 %3, 0
+  br i1 %4, label %if.then, label %if.end
+
+if.then:
+  %5 = load i8*, i8** %tmp.addr, align 8
+  %6 = call i32 @nish_unlink(i8* %5)
+  %7 = load i32, i32* %written.addr, align 4
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %7
+
+if.end:
+  %8 = load i8*, i8** %tmp.addr, align 8
+  %9 = call i32 @nish_rename(i8* %8, i8* %path)
+  call void @nish_arena_release(i64 %arena.mark)
+  ret i32 %9
+}
+
+define noundef zeroext i1 @lock(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
+entry:
+  %0 = call i32 @nish_create_file_exclusive(i8* %path, i8* bitcast ({ i64, [1 x i8] }* @.str.1 to i8*), i32 384)
+  %1 = icmp sge i32 %0, 0
+  ret i1 %1
+}
+
+define noundef i32 @privateDir(i8* noundef nonnull noalias readonly align 8 nocapture %path) #0 {
+entry:
+  %0 = call i32 @nish_mkdir_mode(i8* %path, i32 448)
+  ret i32 %0
+}
+
+attributes #0 = { nounwind "probe-stack"="inline-asm" }
+attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-secret-file -->
+
 ### Capabilities: a report, not a lowering
 
 Every builtin carries one capability label (`docs/LANGUAGE.md` ->
@@ -24283,6 +24375,9 @@ declare void @nish_append_file(i8* noundef nonnull readonly align 8 nocapture, i
 declare noundef i32 @nish_rename(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_unlink(i8* noundef nonnull readonly align 8 nocapture) #3
 declare noundef i32 @nish_write_file_bytes(i8* noundef nonnull readonly align 8 nocapture, %struct.nish_array* noundef nonnull align 8 nocapture readonly) #3
+declare noundef i32 @nish_write_file_mode(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #3
+declare noundef i32 @nish_create_file_exclusive(i8* noundef nonnull readonly align 8 nocapture, i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #3
+declare noundef i32 @nish_mkdir_mode(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #3
 declare noundef i32 @nish_write_bytes(%struct.nish_array* noundef nonnull align 8 nocapture readonly, i64 noundef, i64 noundef) #3
 declare void @nish_argv_init(i32 noundef, i8** noundef nocapture readonly) #2
 declare noundef double @nish_parse_number(i8* noundef nonnull readonly align 8 nocapture, i32 noundef) #2

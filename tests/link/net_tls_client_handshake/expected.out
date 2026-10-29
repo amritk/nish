@@ -1,0 +1,15 @@
+PASS  start
+PASS  server reads CH
+PASS  sign
+PASS  client reads SH
+PASS  client reads flight
+PASS  wait auth
+PASS  certs
+PASS  authenticate
+PASS  connected
+PASS  alpn
+PASS  server reads Finished
+PASS  server connected
+PASS  c ap
+PASS  s ap
+tls client handshake: 14 passed, 0 failed, 0 skipped
