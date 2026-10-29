@@ -47,7 +47,9 @@ class Api {
   userId: i32
   scopes: i32
   dryRun: i32
+  projectsList: i32
   projectsAll: i32
+  summary: i32
   tagged: i32
 
   constructor() {
@@ -83,7 +85,9 @@ class Api {
     const projects = cli.group(ROOT, "projects", "Manage projects")
     cli.alias(projects, "p")
     const plist = cli.command(projects, "list", PROJECTS_LIST, "List projects")
+    this.projectsList = plist
     this.projectsAll = cli.flag(plist, "--all", "include archived projects")
+    this.summary = cli.flag(plist, "-s, --no-summary", "print a summary line")
     const ptag = cli.command(projects, "tag", PROJECTS_TAG, "Tag a project")
     cli.argument(ptag, "<project>", "the project")
     this.tagged = cli.argument(ptag, "<tag...>", "the tags to add")
@@ -189,6 +193,12 @@ const flagForms = (t: Suite, api: Api): void => {
   const wet = api.parse(["users", "keys", "create", "7", "-n", "ci", "--dry-run", "--no-dry-run"])
   t.eqBool("forms: --no-dry-run turns it off", wet.flag(api.dryRun), false)
   t.eqI32("forms: --no-dry-run from argv", wet.source(api.dryRun), SOURCE_ARGV)
+  const quiet = api.parse(["p", "list", "-s"])
+  t.eqBool("forms: -s, the short of --no-summary, turns it off", quiet.flag(api.summary), false)
+  t.eqI32("forms: -s from argv", quiet.source(api.summary), SOURCE_ARGV)
+  t.eqBool("forms: --no-summary turns it off", api.parse(["p", "list", "--no-summary"]).flag(api.summary), false)
+  t.eqBool("forms: --summary turns it on", api.parse(["p", "list", "-s", "--summary"]).flag(api.summary), true)
+  t.eqBool("forms: --no-summary left out is on", api.parse(["p", "list"]).flag(api.summary), true)
   t.eqBool("forms: negatable not given is off", none.flag(api.dryRun), false)
   t.eqI32("forms: negatable not given is unset", none.source(api.dryRun), SOURCE_UNSET)
 }
@@ -238,6 +248,8 @@ const errors = (t: Suite, api: Api): void => {
     ["users", "keys", "list", "1", "-ar=x"],
     ["p", "tag", "web"],
     ["p", "tag"],
+    ["users", "keys", "list", "1", "--lxyzt"],
+    ["users", "keys", "list", "1", "--rax-ouxpux"],
   ]
   const want: string[] = [
     "api users: unknown command 'kyes' (did you mean 'keys'?)",
@@ -265,6 +277,8 @@ const errors = (t: Suite, api: Api): void => {
     "api users keys list: -r takes no value",
     "api projects tag: missing argument <tag...>",
     "api projects tag: missing argument <project>",
+    "api users keys list: unknown flag --lxyzt",
+    "api users keys list: unknown flag --rax-ouxpux (did you mean --raw-output?)",
   ]
   const hints: string[] = [
     "Run 'api users --help' for usage.",
@@ -292,6 +306,8 @@ const errors = (t: Suite, api: Api): void => {
     "Run 'api users keys list --help' for usage.",
     "Run 'api projects tag --help' for usage.",
     "Run 'api projects tag --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
+    "Run 'api users keys list --help' for usage.",
   ]
   t.eqI32("errors: a message for every case", toI32(want.length), toI32(cases.length))
   t.eqI32("errors: a hint for every case", toI32(hints.length), toI32(cases.length))
@@ -311,6 +327,9 @@ const errors = (t: Suite, api: Api): void => {
   t.eqStr("errors: the first error wins", first.message, "api users keys list: unknown flag --zzzzz")
   const stuck = api.parse(["users", "kyes", "list"])
   t.eqStr("errors: an unknown command stops the descent", stuck.errorPath, "api users")
+  const onward = api.parse(["--bogus", "users", "list"])
+  t.eqStr("errors: a flag error keeps the descent, first error", onward.message, "api: unknown flag --bogus")
+  t.eqI32("errors: a flag error keeps the descent, command", onward.id, USERS_LIST)
 }
 
 const helpAndVersion = (t: Suite, api: Api): void => {
@@ -321,6 +340,9 @@ const helpAndVersion = (t: Suite, api: Api): void => {
   t.eqI32("help: --help", api.parse(["users", "--help"]).kind, PARSE_HELP)
   t.eqI32("help: in a cluster", api.parse(["users", "keys", "list", "-Vh"]).kind, PARSE_HELP)
   t.eqI32("help: wins over an error", api.parse(["users", "kyes", "--help"]).kind, PARSE_HELP)
+  const deep = api.parse(["--bogus", "users", "list", "-h"])
+  t.eqI32("help: after a flag error", deep.kind, PARSE_HELP)
+  t.eqI32("help: after a flag error, for the deepest command", deep.id, USERS_LIST)
   const path = api.parse(["help", "users", "keys"])
   t.eqI32("help: help <path>", path.kind, PARSE_HELP)
   t.eqI32("help: help <path> reaches it", path.command, api.keys)
@@ -422,19 +444,35 @@ const helpPages = (t: Suite, api: Api): void => {
     "  -r, --raw-output   print JSON as it arrives",
     "  --[no-]color       paint the output",
   ])
+  t.eqLines("help page: a short on a --no- flag", splitLines(api.cli.helpText(api.projectsList, plain)), [
+    "api 1.4.0  Talk to the Example API",
+    "",
+    "usage: api projects list [flags]   List projects",
+    "",
+    "Flags",
+    "  --all               include archived projects",
+    "  -s, --[no-]summary  print a summary line",
+    "  -h, --help          show help",
+    "",
+    "Global flags",
+    "  --base-url <url>    API base URL (default: https://api.example.com)",
+    "  --token <token>     the API token",
+    "  -r, --raw-output    print JSON as it arrives",
+    "  --[no-]color        paint the output",
+  ])
 }
 
 // A tree of 20 groups of 25 commands, each with 8 flags of its own.
 class Wide {
   cli: Cli
   lastLeaf: i32
-  lastFlag: i32
+  lastFlags: i32[]
 
   constructor() {
     const cli = new Cli("wide", "0.0.1", "five hundred commands")
     this.cli = cli
     this.lastLeaf = -1
-    this.lastFlag = -1
+    this.lastFlags = new Array<i32>(0)
     for (let g: i32 = 0; g < 20; g++) {
       this.addGroup(g)
     }
@@ -450,8 +488,9 @@ class Wide {
   addLeaf(group: i32, id: i32, c: i32): void {
     const leaf = this.cli.command(group, `cmd${c}`, id, `command ${id}`)
     this.lastLeaf = leaf
+    this.lastFlags = new Array<i32>(0)
     for (let f: i32 = 0; f < 8; f++) {
-      this.lastFlag = this.cli.flag(leaf, `--opt${f} <v>`, `option ${f}`)
+      this.lastFlags.push(this.cli.flag(leaf, `--opt${f} <v>`, `option ${f}`))
     }
   }
 }
@@ -461,7 +500,9 @@ const wideTree = (t: Suite): void => {
   const argv: string[] = ["wide", "group19", "cmd24", "--opt0", "a", "--opt7=b", "--opt3", "c"]
   const r = wide.cli.parse(argv, 1)
   t.eqI32("wide: the last leaf's id", r.id, 499)
-  t.eqStr("wide: its last flag", r.value(wide.lastFlag) ?? "-", "b")
+  t.eqStr("wide: its first flag", r.value(wide.lastFlags[0]) ?? "-", "a")
+  t.eqStr("wide: a middle flag", r.value(wide.lastFlags[3]) ?? "-", "c")
+  t.eqStr("wide: its last flag", r.value(wide.lastFlags[7]) ?? "-", "b")
   const runs: i32 = 10000
   let ok: i32 = 0
   const start = monotonicNanos()

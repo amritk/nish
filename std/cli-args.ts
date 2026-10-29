@@ -428,15 +428,23 @@ export class Cli {
     this.cmdAliases[h] = this.cmdAliases[h].length > 0 ? `${this.cmdAliases[h]}, ${name}` : name
   }
 
-  /** Whether `scope` (a command, or `GLOBAL`) already answers to `--long`, its negation, or `-short`. */
+  /** Whether a flag of `scope` (a command, or `GLOBAL`) answers to `key`, as itself or as a negation. */
+  taken(scope: i32, key: string): boolean {
+    const k = scopeKey(scope, key)
+    return this.flags.has(k) || this.negations.has(k)
+  }
+
+  /** Whether `scope` already answers to any of `--long`, its negation (for `--no-x`), or `-short`. */
   scopeHas(scope: i32, spec: FlagSpec): boolean {
-    if (
-      this.flags.has(scopeKey(scope, `--${spec.long}`)) ||
-      this.negations.has(scopeKey(scope, `--no-${spec.long}`))
-    ) {
+    if (this.taken(scope, `--${spec.long}`) || (spec.negated && this.taken(scope, `--no-${spec.long}`))) {
       return true
     }
-    return spec.short.length > 0 && this.flags.has(scopeKey(scope, `-${spec.short}`))
+    return spec.short.length > 0 && this.taken(scope, `-${spec.short}`)
+  }
+
+  /** Whether flag `f` answers to `--name`, as itself or, negatable, as its negation. */
+  answersTo(f: i32, name: string): boolean {
+    return this.flagLong[f] === name || (this.flagNegatable[f] && `no-${this.flagLong[f]}` === name)
   }
 
   /** A new flag in `scope` from `spec`; `call` names the declaration in a panic. */
@@ -452,7 +460,11 @@ export class Cli {
     if (scope === GLOBAL) {
       let clash: i32 = -1
       for (let f: i32 = 0; f < toI32(this.flagLong.length) && clash < 0; f++) {
-        if (this.flagLong[f] === s.long || (s.short.length > 0 && this.flagShort[f] === s.short)) {
+        if (
+          this.answersTo(f, s.long) ||
+          (s.negated && this.answersTo(f, `no-${s.long}`)) ||
+          (s.short.length > 0 && this.flagShort[f] === s.short)
+        ) {
           clash = f
         }
       }
@@ -503,6 +515,9 @@ export class Cli {
     if (this.flagValue[h] === VALUE_NONE) {
       panic(`cli-args: ${call}: --${this.flagLong[h]} takes no value`)
     }
+    if (this.flagRequired[h]) {
+      panic(`cli-args: ${call}: --${this.flagLong[h]} is required, so a default would never be read`)
+    }
     this.flagDefault[h] = value
     this.flagHasDefault[h] = true
   }
@@ -518,6 +533,9 @@ export class Cli {
       panic(
         `cli-args: required: ${this.pathOf(owner)} holds commands, so --${this.flagLong[h]} can never be checked`
       )
+    }
+    if (this.flagHasDefault[h]) {
+      panic(`cli-args: required: --${this.flagLong[h]} has a default, so it can never be missing`)
     }
     if (!this.flagRequired[h]) {
       this.flagRequired[h] = true
@@ -545,11 +563,16 @@ export class Cli {
     if (this.flagValue[h] !== VALUE_NONE || this.flagNegated[h]) {
       panic(`cli-args: ${call}: only a boolean flag declared '--name' can be negated`)
     }
-    const key = scopeKey(this.flagOwner[h], `--no-${this.flagLong[h]}`)
-    if (this.flags.has(key) || this.negations.has(key)) {
-      panic(`cli-args: ${call}: --no-${this.flagLong[h]} is already declared`)
+    const owner: i32 = this.flagOwner[h]
+    const name = `no-${this.flagLong[h]}`
+    let clash = this.taken(owner, `--${name}`) || (owner !== GLOBAL && this.taken(GLOBAL, `--${name}`))
+    for (let g: i32 = 0; g < toI32(this.flagLong.length) && owner === GLOBAL && !clash; g++) {
+      clash = this.answersTo(g, name)
     }
-    this.negations.set(key, h)
+    if (clash) {
+      panic(`cli-args: ${call}: --${name} is already declared`)
+    }
+    this.negations.set(scopeKey(owner, `--${name}`), h)
     this.flagNegatable[h] = true
   }
 
@@ -681,7 +704,7 @@ export class Cli {
         dashed = true
       } else if (token.length > 1 && toI32(token.charCodeAt(0)) === DASH) {
         i = token.startsWith("--") ? this.longFlag(r, argv, i, token) : this.shortFlags(r, argv, i, token)
-      } else if (this.cmdGroup[r.command] && r.message.length === 0) {
+      } else if (this.cmdGroup[r.command] && !r.badCommand) {
         const child = this.children.get(scopeKey(r.command, token)) ?? -1
         if (child >= 0) {
           r.command = child
@@ -776,7 +799,7 @@ export class Cli {
           r.fail(r.command, `-${letter} takes no value`)
           return next
         }
-        r.set(f, "true")
+        r.set(f, this.flagNegated[f] ? "false" : "true")
       }
     }
     return next
@@ -981,7 +1004,7 @@ export class ParseResult {
     if (this.message.length === 0) {
       this.errorPath = this.cli.pathOf(cmd)
       this.message = `${this.errorPath}: ${text}`
-      this.hint = `Run '${this.errorPath} --help' for usage.`
+      this.hint = usageHint(`${this.errorPath} --help`)
     }
   }
 
@@ -1168,6 +1191,9 @@ export class ParseResult {
   }
 }
 
+/** The pointer under an error line, naming `command` (`<path> --help`, painted or not). */
+const usageHint = (command: string): string => `Run '${command}' for usage.`
+
 /**
  * Acts on `r` for a program: help (painted with `outStyle`) or the version on
  * standard output and exit 0; an error line and the hint on standard error
@@ -1183,7 +1209,7 @@ export const finish = (r: ParseResult, outStyle: Style, errStyle: Style): i32 =>
     process.exit(0)
   } else if (r.kind === PARSE_ERROR) {
     console.error(r.message)
-    console.error(`Run '${errStyle.flag(`${r.errorPath} --help`)}' for usage.`)
+    console.error(usageHint(errStyle.flag(`${r.errorPath} --help`)))
     process.exit(2)
   }
   return 0

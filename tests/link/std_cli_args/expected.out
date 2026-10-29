@@ -59,6 +59,11 @@ PASS  forms: negatable --dry-run is on
 PASS  forms: negatable --dry-run from argv
 PASS  forms: --no-dry-run turns it off
 PASS  forms: --no-dry-run from argv
+PASS  forms: -s, the short of --no-summary, turns it off
+PASS  forms: -s from argv
+PASS  forms: --no-summary turns it off
+PASS  forms: --summary turns it on
+PASS  forms: --no-summary left out is on
 PASS  forms: negatable not given is off
 PASS  forms: negatable not given is unset
 PASS  globals: before the first verb
@@ -173,14 +178,26 @@ PASS  errors: p tag: kind
 PASS  errors: p tag: exit code
 PASS  errors: p tag: message
 PASS  errors: p tag: hint
+PASS  errors: users keys list 1 --lxyzt: kind
+PASS  errors: users keys list 1 --lxyzt: exit code
+PASS  errors: users keys list 1 --lxyzt: message
+PASS  errors: users keys list 1 --lxyzt: hint
+PASS  errors: users keys list 1 --rax-ouxpux: kind
+PASS  errors: users keys list 1 --rax-ouxpux: exit code
+PASS  errors: users keys list 1 --rax-ouxpux: message
+PASS  errors: users keys list 1 --rax-ouxpux: hint
 PASS  errors: the first error wins
 PASS  errors: an unknown command stops the descent
+PASS  errors: a flag error keeps the descent, first error
+PASS  errors: a flag error keeps the descent, command
 PASS  help: -h
 PASS  help: exit code
 PASS  help: for the command it reached
 PASS  help: --help
 PASS  help: in a cluster
 PASS  help: wins over an error
+PASS  help: after a flag error
+PASS  help: after a flag error, for the deepest command
 PASS  help: help <path>
 PASS  help: help <path> reaches it
 PASS  help: help alone
@@ -197,8 +214,11 @@ PASS  help page: root
 PASS  help page: group
 PASS  help page: leaf
 PASS  help page: required, variadic and negatable
+PASS  help page: a short on a --no- flag
 PASS  wide: the last leaf's id
+PASS  wide: its first flag
+PASS  wide: a middle flag
 PASS  wide: its last flag
 PASS  wide: every parse finds it
 PASS  wide: a parse is under 10 µs
-std/cli-args: 203 passed, 0 failed, 0 skipped
+std/cli-args: 223 passed, 0 failed, 0 skipped

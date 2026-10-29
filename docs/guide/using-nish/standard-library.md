@@ -1117,7 +1117,8 @@ by a name a typo could miss. Each command gets an id you choose, which a
 `switch` on `r.id` dispatches on. A mistake in the declarations — a flag
 declared twice in one scope, a bad spec, a required argument after an
 optional one, a command id used twice or negative, a required flag on a
-command that holds commands — panics at the call that made it, naming it. A module constant
+command that holds commands or with a default, a flag a `--no-` negation
+would shadow — panics at the call that made it, naming it. A module constant
 can only be a number, a boolean or a string, so build the tree in `main` or
 in a class's constructor.
 
@@ -1140,7 +1141,7 @@ the unknown-command error rather than help.
 | `-a, --all` | the same, also as `-a`; short flags cluster (`-ar`) |
 | `--limit <n>` | takes a value: `--limit 5`, `--limit=5`, `-l5`, `-l=5`, `-l 5`; `--limit=` and `-l=` give `""` |
 | `--format [fmt]` | the value is optional: `--format json`; given none, `""` |
-| `--no-color` | on by default; `--no-color` turns it off, `--color` back on |
+| `--no-color` | on by default; `--no-color` turns it off, `--color` back on; a short (`-C, --no-color`) turns it off |
 | `<id>` / `[id]` | a required / optional argument |
 | `<file...>` / `[file...]` | every argument left; only the last one |
 
@@ -1159,6 +1160,7 @@ a `ParseResult`.
 | `positional(a)`, `positionals(a)` | an argument's value; every value from it on |
 | `rest()` | the arguments after `--`, which are also positionals |
 | `message`, `exitCode` | the error or version line; 2 for an error, else 0 |
+| `hint`, `errorPath` | for an error, the pointer to the help and the command it names |
 | `help(style)` | the help of the reached command |
 
 `source` tells a value the user typed from a default, which is what a rule
@@ -1166,14 +1168,16 @@ the tree cannot state reads, such as two flags that may not be given
 together. `finish(r, outStyle, errStyle)` prints help or the version on
 standard output and exits 0, prints an error and a pointer to the help on
 standard error and exits 2, and returns for `PARSE_OK`. The error line is
-printed plain; `errStyle` paints only the command in the pointer:
+printed plain; `errStyle` paints only `<path> --help` in the pointer:
 
 ```text
 api users: unknown command 'kyes' (did you mean 'keys'?)
 Run 'api users --help' for usage.
 ```
 
-The first error wins and names the command it was found at. A misspelt
+The first error wins and names the command it was found at; after a flag
+error the walk still goes down the command words, so a later `-h` answers
+the deepest command, and only an unknown command stops it. A misspelt
 command or long flag gets the nearest declared one within two edits, or a
 third of its length if that is more (a swap of two letters is one edit), so
 `--lmt` finds `--limit`; an unknown short flag gets no guess. Help lists a
