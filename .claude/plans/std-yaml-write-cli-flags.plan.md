@@ -253,3 +253,12 @@ syncs `main` (keep both names, in sorted order). Because the file is in
 `src/`, each PR also runs `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`,
 reading its skip line) and `node tests/run.js performance` before it pushes,
 and regenerates `tests/self/goldens/checked/` (`CLAUDE.md`).
+
+## Amendment 2 (2026-10-29T00:56Z)
+
+A new `std/` module also has to appear in each of the three `for f in ...`
+presence lists in `.github/workflows/release.yml` (`tests/run.js`'s "release.yml's
+3 presence gates each name every std module" check). Each stage owns its own
+module's entry in those three lists and nothing else in the file; `cli-flags`
+resolves the same-line conflict at sync. Whether a PR that touches a workflow
+file may merge without a human is a merge-gate question put to the user.
