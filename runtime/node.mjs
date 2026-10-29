@@ -281,11 +281,18 @@ const PIPED_CAP = 16 * 1024 * 1024;
  */
 function spawnPiped(argv, input) {
   if (argv.length === 0) return [-1, [], []];
-  const r = child_process.spawnSync(argv[0], argv.slice(1), {
-    input: Uint8Array.from(input),
-    maxBuffer: PIPED_CAP,
-    killSignal: "SIGKILL",
-  });
+  let r;
+  // Node throws, rather than reporting, for an empty command or a NUL in any
+  // argument, which the runtime answers -1 for without starting a child.
+  try {
+    r = child_process.spawnSync(argv[0], argv.slice(1), {
+      input: Uint8Array.from(input),
+      maxBuffer: PIPED_CAP,
+      killSignal: "SIGKILL",
+    });
+  } catch {
+    return [-1, [], []];
+  }
   const bytes = (b) => (b === null || b === undefined ? [] : Array.from(b.subarray(0, PIPED_CAP)));
   const out = bytes(r.stdout);
   const err = bytes(r.stderr);

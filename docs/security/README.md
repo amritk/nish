@@ -101,10 +101,10 @@ the record that found it. The notes below the table name each such finding.
    owns (#861). RT-21 (Low), `nish_argv_init` testing `malloc`'s answer for
    null only after computing from it, was found by #888's harness stage while
    building the runtime under UBSan, fixed there, and is counted as a fixed
-   Low. RT-24, RT-25 and RT-27 (Medium) and RT-26 (Low), `spawnPiped`'s
+   Low. RT-27, RT-28 and RT-30 (Medium) and RT-29 (Low), `spawnPiped`'s
    deadlock, output cap, pipe descriptors and SIGPIPE, were found and fixed
-   by the stage that added it, and are counted as fixed; RT-27's Darwin
-   window is recorded in the row and is not counted. RT-28, the stdin
+   by the stage that added it, and are counted as fixed; RT-30's Darwin
+   window is recorded in the row and is not counted. RT-31, the stdin
    channel itself, is a decision and is not counted.
 5. CLI-6 (Medium) was fixed in the runtime as RT-4. The compiler is built by
    the last release, so `nish` itself has the fix from 0.16.0. CLI-8 (Low)

@@ -47,7 +47,7 @@ import { N_IDENT, Node } from "./nodes"
 import { Options } from "./options"
 import { CheckedProgram, FunctionSig } from "./program"
 import { isWasmBuild } from "./visibility"
-import { rangedStoreOf } from "./emit-util"
+import { builtinNameOf, rangedStoreOf } from "./emit-util"
 import { ARGV_GLOBAL, ARRAY_TYPE } from "./runtime"
 import { f64Hex } from "./strings"
 import {
@@ -1067,7 +1067,7 @@ export const isSpawnCall = (program: CheckedProgram, call: Node): boolean => {
   if (callee.kind !== N_IDENT || program.nodeCallees[call.id] !== null) {
     return false
   }
-  const name = callee.text
+  const name = builtinNameOf(program, call)
   return name === "spawnSync" || name === "spawnSyncTo" || name === "spawn" || name === "spawnPiped"
 }
 

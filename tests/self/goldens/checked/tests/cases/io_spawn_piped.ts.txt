@@ -19,7 +19,7 @@ function main(): i32 -> @nish_main [exported entry]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_spawn_piped
   calls: contains nish_array_grow nish_panic_index nish_panic_overflow nish_panic_slice nish_print nish_spawn_piped nish_str_concat nish_str_from_i32 nish_str_new same
-  stackSites=0 stackLocals=0
+  stackSites=1 stackLocals=1
   local +0:9 all: u8[] (const)
   local +1:12 i: i32 (let)
   local +4:9 echoed: u8[] (const)
@@ -39,12 +39,21 @@ function main(): i32 -> @nish_main [exported entry]
   local +34:9 out: u8[] (const)
   local +35:9 err: u8[] (const)
   local +36:9 split: i32 (const)
-  local +57:9 flood: u8[] (const)
-  local +58:9 floodStatus: i32 (const)
-  local +63:9 fds: u8[] (const)
-  local +64:9 probe: string (const)
-  local +70:9 secret: u8[] (const)
-  local +71:9 word: string (const)
-  local +72:12 i: i32 (let)
-  local +75:9 seen: u8[] (const)
-  callee +78:34 contains -> @contains
+  local +50:9 nul: string (const)
+  local +63:9 flood: u8[] (const)
+  local +64:9 floodStatus: i32 (const)
+  local +69:9 errFlood: u8[] (const)
+  local +70:9 errFloodStatus: i32 (const)
+  local +72:9 atCap: u8[] (const)
+  local +73:9 atCapStatus: i32 (const)
+  local +78:9 fds: u8[] (const)
+  local +79:9 probe: string (const)
+  local +86:9 secret: u8[] (const)
+  local +87:9 word: string (const)
+  local +88:12 i: i32 (let)
+  local +91:9 seen: u8[] (const)
+  local +93:9 marker: u8[] (const)
+  local +94:9 name: string (const)
+  local +95:12 i: i32 (let)
+  callee +98:34 contains -> @contains
+  callee +98:74 contains -> @contains

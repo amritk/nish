@@ -446,7 +446,8 @@ int32_t nish_spawn_child(const nish_array *argv);
  * 16 MiB: the child is killed with SIGKILL and reaped, and that array holds the
  * stream's first 16 MiB. The two output arrays grow as `push` grows them, so
  * the compiler treats both as pushed. `stdin` is read in place and never
- * copied; SIGPIPE is ignored for the call and restored after it. */
+ * copied; SIGPIPE is blocked on the calling thread for the call, a SIGPIPE the
+ * call raised is consumed, and the thread's mask is restored after it. */
 int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err);
 /* `kill(pid, sig)`: send `sig` to `pid` and answer 0, or a negative errno. Only
  * 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are sent; any other signal, and

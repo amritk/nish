@@ -77,6 +77,12 @@ export const main = (): number => {
   console.log(`missing: ${spawnPiped(["nish-no-such-program"], all, out, err)}`);
   console.log(`missing path: ${spawnPiped(["/nonexistent/nish-prog"], all, out, err)}`);
 
+  // An empty command and a NUL inside an argument are -1 too, with no child
+  // started: the NUL would cut the argument short to a different command line.
+  console.log(`empty command: ${spawnPiped([""], all, out, err)}`);
+  const nul = "a" + String.fromCharCode(0) + "b";
+  console.log(`nul argument: ${spawnPiped(["echo", nul], all, out, err)} ${spawnPiped([nul], all, out, err)}`);
+
   // A child that exits without reading its stdin: the write fails with
   // EPIPE, which is not fatal to this program, and the status is the child's.
   console.log(`unread: ${spawnPiped(["true"], big, out, err)}`);
@@ -91,6 +97,15 @@ export const main = (): number => {
   const floodStatus = spawnPiped(["yes"], none, flood, err);
   console.log(`flood: ${floodStatus} ${flood.length}`);
 
+  // The cap is the same on stderr, and a stream of exactly 16 MiB is kept
+  // whole: it is the byte past the cap that kills.
+  const errFlood: u8[] = [];
+  const errFloodStatus = spawnPiped(["sh", "-c", "yes >&2"], none, out, errFlood);
+  console.log(`stderr flood: ${errFloodStatus} ${errFlood.length}`);
+  const atCap: u8[] = [];
+  const atCapStatus = spawnPiped(["head", "-c", "16777216", "/dev/zero"], none, atCap, err);
+  console.log(`at cap: ${atCapStatus} ${atCap.length}`);
+
   // The pipes are close-on-exec: a child, started after every call above,
   // holds its three standard streams and no other descriptor of this process.
   const fds: u8[] = [];
@@ -98,16 +113,21 @@ export const main = (): number => {
   spawnPiped(["sh", "-c", probe], none, fds, err);
   console.log(`inherited: [${String.fromBytes(fds, 0, fds.length)}]`);
 
-  // The secret travels on stdin only: neither the child's command line nor
-  // its environment carries it.
+  // The secret travels on stdin only: the child prints its own argument
+  // vector and its environment, and neither carries it. The marker shows the
+  // child did print its arguments, so the check cannot pass on empty output.
   const secret: u8[] = [];
   const word = "hunter2-secret";
   for (let i = 0; i < word.length; i++) {
     secret.push(toU8(word.charCodeAt(i)));
   }
   const seen: u8[] = [];
-  spawnPiped(["cat", "/proc/self/cmdline"], secret, seen, err);
-  spawnPiped(["env"], secret, seen, err);
-  console.log(`secret visible: ${contains(seen, secret)}`);
+  spawnPiped(["sh", "-c", "printf '%s ' \"$0\" \"$@\"; env", "argv-marker", "x"], secret, seen, err);
+  const marker: u8[] = [];
+  const name = "argv-marker x";
+  for (let i = 0; i < name.length; i++) {
+    marker.push(toU8(name.charCodeAt(i)));
+  }
+  console.log(`secret visible: ${contains(seen, secret)} argv printed: ${contains(seen, marker)}`);
   return 0;
 };

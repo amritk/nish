@@ -13,7 +13,8 @@
 // here `checkStatement` records the expression it is about to check so the
 // builtin can compare against it. One field instead of a parent chain.
 
-import { readonlyWriteMessage } from "./arrays"
+import { typedArrayElement } from "./annotations"
+import { readonlyWriteMessage, typedArraySpelling } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
 import { internalErrorFor } from "./ice"
@@ -1273,7 +1274,22 @@ const checkBuffer = (
 ): void => {
   const want = ctx.table.arrayOf(element)
   const got = checkExpression(ctx, arg, scope, want)
-  if (got === T_ERROR || got === want) {
+  if (got === T_ERROR) {
+    return
+  }
+  // `spawnPiped` appends to its two output arrays, so one spelled with a
+  // typed-array name is refused as `push` refuses that receiver: the name
+  // promises a length that never changes, and the TypeScript the program is
+  // emitted to would throw on the append.
+  const alias = written && name === "spawnPiped" ? typedArraySpelling(ctx, arg, scope) : ""
+  if (typedArrayElement(alias) >= 0) {
+    ctx.error(
+      arg,
+      `\`${name}\` appends to this array, spelled \`${alias}\`, whose length is fixed: declare it \`u8[]\``
+    )
+    return
+  }
+  if (got === want) {
     return
   }
   const readonlyWant = ctx.table.isReadonlyArray(got) && ctx.table.refOf(got) === element

@@ -124,16 +124,16 @@ const RUNTIME_TEXT_BUDGET = 3698
  * `nish_set_idle_priority` 46, which fit the old 2,560 alone and the 2,816 above only
  * without each other's 77. The budget is the next 256-byte boundary, leaving 250.
  *
- * **Raised to 4,096 for `spawnPiped`**, measured **4,042 bytes** on 2026-10-29 with
- * clang 18.1.3 on linux-x64, from 2,822 on `main`: under `-ffunction-sections`,
- * `nish_spawn_piped` 1,054 (three pipes, the `poll` loop that writes stdin while it reads
+ * **Raised to 4,352 for `spawnPiped`**, measured **4,104 bytes** on 2026-10-29 with
+ * clang 18.1.3 on linux-x64, from 2,828 on `main`: under `-ffunction-sections`,
+ * `nish_spawn_piped` 1,082 (three pipes, the `poll` loop that writes stdin while it reads
  * both outputs, the 16 MiB cap and SIGPIPE blocked on the calling thread,
- * docs/security/runtime.md RT-24 to RT-28), `nish_pipe` 109 (close-on-exec ends off descriptors 0 to 2), and
- * `nish_spawn_start` 284 to 337 for the descriptors it now hands the child; the rest is
+ * docs/security/runtime.md RT-27 to RT-31), `nish_pipe` 109 (close-on-exec ends off descriptors 0 to 2), and
+ * `nish_spawn_start` 284 to 365 for the descriptors it now hands the child and the failed `dup2` action it refuses; the rest is
  * layout. The poll loop is the cost of not deadlocking against a child that writes before
- * it has read everything. The budget is the next 256-byte boundary, leaving 54.
+ * it has read everything. The budget is the next 256-byte boundary, leaving 248.
  */
-const RUNTIME_OS_TEXT_BUDGET = 4096
+const RUNTIME_OS_TEXT_BUDGET = 4352
 /**
  * Ceiling on the same `runtime.c` compiled with `-DNISH_THREADS=1`, which is the build
  * `--threads` links (WP20 T0): the arena and the RNG seed become `_Thread_local`.

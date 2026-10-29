@@ -326,7 +326,13 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
   posix_spawn_file_actions_t fa;
   int failed = posix_spawn_file_actions_init(&fa);
   if (failed) return -failed;
-  for (int k = 0; dup && k < 3; k++) posix_spawn_file_actions_adddup2(&fa, dup[k], k);
+  /* A `dup2` action that could not be recorded would start the child on this
+     process's own stream in its place, so it fails the spawn. */
+  for (int k = 0; dup && k < 3 && !failed; k++) failed = posix_spawn_file_actions_adddup2(&fa, dup[k], k);
+  if (failed) {
+    posix_spawn_file_actions_destroy(&fa);
+    return -failed;
+  }
   const nish_str *to[2] = { out, err };
   for (int k = 0; k < 2; k++) {
     /* The child opens the file, not this process: a redirect that this process
@@ -398,7 +404,7 @@ int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv,
    `dup2` onto itself would leave close-on-exec set and the child without
    that stream. Darwin has no `pipe2`, so there an end is close-on-exec only
    once `F_DUPFD_CLOEXEC` has moved it: a child another thread starts in
-   that window inherits it (docs/security/runtime.md, RT-27).
+   that window inherits it (docs/security/runtime.md, RT-30).
 
    One `poll` loop over non-blocking ends writes stdin and reads both outputs
    as each is ready, so a child that fills its stdout before it reads all its
@@ -407,7 +413,7 @@ int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv,
    with EPIPE rather than SIGPIPE: the signal is blocked on this thread once
    the child has started, the one a write raised is taken off the pending
    set, and the mask is put back before the answer (docs/security/runtime.md,
-   RT-26). Ignoring it instead would be process-wide, and every child
+   RT-29). Ignoring it instead would be process-wide, and every child
    started meanwhile, this one included, would inherit SIGPIPE ignored and
    never die of a reader that has gone.
 
@@ -467,13 +473,17 @@ int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_arra
   int queued = sigismember(&pending, SIGPIPE);
   struct pollfd f[3] = { { p[1], POLLOUT, 0 }, { p[2], POLLIN, 0 }, { p[4], POLLIN, 0 } };
   p[1] = p[2] = p[4] = -1;
-  for (int k = 0; k < 3; k++) fcntl(f[k].fd, F_SETFL, O_NONBLOCK);
+  /* A blocking end could stall the loop on one stream while the child fills
+     another, so an end that stays blocking fails the run: the loop is skipped
+     and the child killed. */
+  rc = 0;
+  for (int k = 0; k < 3; k++)
+    if (fcntl(f[k].fd, F_SETFL, O_NONBLOCK) < 0) rc = -1;
   if (!n) {
     close(f[0].fd);
     f[0].fd = -1;
   }
   nish_array *to[3] = { 0, out, err };
-  rc = 0;
   while (!rc && (f[0].fd >= 0 || f[1].fd >= 0 || f[2].fd >= 0)) {
     if (poll(f, 3, -1) < 0) {
       if (errno != EINTR) rc = -1;
