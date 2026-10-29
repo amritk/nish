@@ -93,6 +93,25 @@ likely to add to it:
   that stay on machines you know; ship anything else without it.
 - **`-g`** — DWARF debug info, so `gdb` and `lldb` step through your `.ts`
   source.
+
+  On Linux every native binary also carries a GNU build id (an
+  `NT_GNU_BUILD_ID` note; `readelf -n app` shows it), which `perf`, `gdb` and
+  debuginfod use to find a binary's debug information. The id is a hash of
+  the binary's bytes, so linking the same program twice gives the same id,
+  while a `-g` link and a plain link give different ones. To ship a stripped
+  binary and keep its debug information beside it, strip the `-g` build
+  rather than linking twice:
+
+  ```sh
+  nish app.ts --link app -g
+  objcopy --only-keep-debug app app.debug
+  strip -g app
+  objcopy --add-gnu-debuglink=app.debug app
+  ```
+
+  `app` and `app.debug` share one id, so after
+  `perf buildid-cache -a app.debug`, `perf report` on a profile of the
+  stripped `app` shows your functions by name.
 - **`--number-mode f64`** — makes a bare `number` a 64-bit float rather than
   the default `i32`. Code that spells its widths (`i32`, `f64`) means the same
   thing in both modes.

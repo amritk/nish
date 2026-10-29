@@ -7795,6 +7795,79 @@ if (!only || "speed-link".includes(only)) {
   )
 }
 
+// The GNU build-id note (scripts/build.sh, `--build-id=sha1`): what perf, gdb
+// and debuginfod match a stripped binary to its debug file by. Every native ELF
+// profile carries one, the debug profile's link included, and it is a hash of
+// the output's bytes, so two links of one input give one id -- the property the
+// bootstrap's `stage3 == stage2` rests on. The notes are read from the section
+// headers here rather than through readelf, so the check needs only a link.
+if (!only || "build_id".includes(only)) {
+  /** The NT_GNU_BUILD_ID descriptors of an ELF64 little-endian file, as hex. */
+  const gnuBuildIds = (file) => {
+    const elf = fs.readFileSync(file)
+    if (elf.readUInt32BE(0) !== 0x7f454c46 || elf[4] !== 2 || elf[5] !== 1) {
+      return null
+    }
+    const shoff = Number(elf.readBigUInt64LE(0x28))
+    const shentsize = elf.readUInt16LE(0x3a)
+    const ids = []
+    for (let i = 0; i < elf.readUInt16LE(0x3c); i++) {
+      const sh = shoff + i * shentsize
+      if (elf.readUInt32LE(sh + 4) !== 7) {
+        continue // not SHT_NOTE
+      }
+      const start = Number(elf.readBigUInt64LE(sh + 0x18))
+      const end = start + Number(elf.readBigUInt64LE(sh + 0x20))
+      const align = (n) => (n + 3) & ~3
+      for (let at = start; at + 12 <= end; ) {
+        const namesz = elf.readUInt32LE(at)
+        const descsz = elf.readUInt32LE(at + 4)
+        const name = elf.subarray(at + 12, at + 12 + namesz).toString("latin1")
+        const desc = at + 12 + align(namesz)
+        if (elf.readUInt32LE(at + 8) === 3 && name === "GNU\0") {
+          ids.push(elf.subarray(desc, desc + descsz).toString("hex"))
+        }
+        at = desc + align(descsz)
+      }
+    }
+    return ids
+  }
+  if (!HAS_CLANG) {
+    skip("build_id: the links need clang")
+  } else if (process.platform === "darwin" || process.platform === "win32") {
+    skip(`build_id: a GNU build-id is an ELF note, and ${process.platform} links another format`)
+  } else {
+    const idDir = path.join(buildDir, "build-id")
+    fs.rmSync(idDir, { recursive: true, force: true })
+    fs.mkdirSync(idDir, { recursive: true })
+    const src = path.join(linkDir, "build_id", "program.ts")
+    const link = (out, profile) =>
+      spawnSync(NISH, [src, "-o", path.join(idDir, `${out}.ll`), "--link", path.join(idDir, out), "--profile", profile], {
+        cwd: root,
+        encoding: "utf8",
+      })
+    const ids = {}
+    for (const [out, profile] of [
+      ["speed-a", "speed"],
+      ["speed-b", "speed"],
+      ["debug", "debug"],
+    ]) {
+      const built = link(out, profile)
+      ids[out] = built.status === 0 ? gnuBuildIds(path.join(idDir, out)) : null
+      check(
+        `build_id: --profile ${profile} links a binary with one 20-byte NT_GNU_BUILD_ID note (${out})`,
+        ids[out] !== null && ids[out].length === 1 && ids[out][0].length === 40,
+        built.status === 0 ? `notes: ${JSON.stringify(ids[out])}` : built.stderr
+      )
+    }
+    check(
+      "build_id: two speed links of one input carry the same build id",
+      ids["speed-a"]?.length === 1 && ids["speed-a"][0] === ids["speed-b"]?.[0],
+      `${ids["speed-a"]} against ${ids["speed-b"]}`
+    )
+  }
+}
+
 // X509-6: `nish/crypto/x509-random` draws from `crypto.getRandomValues`, so
 // `tests/link/crypto_x509_random_wasm` (a wasm32 build importing it) is refused
 // by the link loop above. This is the other half: `nish/crypto/x509` alone
