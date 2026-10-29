@@ -125,13 +125,13 @@ export class DnsConfig {
 export class DnsHosts {
   /** `entryCount` addresses of `DNS_ADDRESS_BYTES` each, port 0. */
   addresses: u8[]
-  entryCount: i32 = 0
   /** Every kept name, back to back, lowercase, without a trailing dot. */
   names: u8[]
   /** Where each of the `nameCount` names starts in `names`, its length, and its entry. */
   nameStart: i32[]
   nameLength: i32[]
   nameEntry: i32[]
+  entryCount: i32 = 0
   nameCount: i32 = 0
   nameBytes: i32 = 0
   /** Lines with an address past `DNS_HOSTS_MAX_ENTRIES`, read and not kept. */
@@ -181,6 +181,9 @@ const dnsHexValue = (b: i32): i32 => {
  * leading zero, so `010` is never read as octal 8 the way `inet_aton` reads it.
  */
 const dnsParseIpv4 = (b: u8[], from: i32, to: i32, out: u8[], at: i32): boolean => {
+  if (from < 0 || from > to || to > toI32(b.length)) {
+    panic("dnsParseIpv4: the window is outside the array")
+  }
   let i: i32 = from
   let part: i32 = 0
   while (part < 4) {
@@ -191,7 +194,8 @@ const dnsParseIpv4 = (b: u8[], from: i32, to: i32, out: u8[], at: i32): boolean 
       i += 1
     }
     const digits: i32 = i - start
-    if (digits === 0 || value > 255 || (digits > 1 && toI32(b[start]) === 48)) {
+    // A part of two or three digits worth less than 10 or 100 has a leading zero.
+    if (digits === 0 || value > 255 || (digits === 2 && value < 10) || (digits === 3 && value < 100)) {
       return false
     }
     out[at + part] = toU8(value)
@@ -213,6 +217,9 @@ const dnsParseIpv4 = (b: u8[], from: i32, to: i32, out: u8[], at: i32): boolean 
  * place of the last two groups.
  */
 const dnsParseIpv6 = (b: u8[], from: i32, to: i32, out: u8[], at: i32): boolean => {
+  if (from < 0 || from > to || to > toI32(b.length)) {
+    panic("dnsParseIpv6: the window is outside the array")
+  }
   let i: i32 = from
   let groups: i32 = 0
   let gap: i32 = -1
@@ -221,7 +228,7 @@ const dnsParseIpv6 = (b: u8[], from: i32, to: i32, out: u8[], at: i32): boolean 
     i += 2
   }
   while (i < to) {
-    if (groups === 8) {
+    if (groups === 8 || i < 0 || i >= toI32(b.length)) {
       return false
     }
     let j: i32 = i
@@ -245,7 +252,7 @@ const dnsParseIpv6 = (b: u8[], from: i32, to: i32, out: u8[], at: i32): boolean 
       groups += 1
       i = j
       if (i < to) {
-        if (toI32(b[i]) !== DNS_COLON) {
+        if (i < 0 || i >= toI32(b.length) || toI32(b[i]) !== DNS_COLON) {
           return false
         }
         i += 1
@@ -298,16 +305,17 @@ export const dnsParseAddress = (b: u8[], off: i32, len: i32, out: u8[], at: i32,
   }
   const parsed: u8[] = new Array<u8>(16)
   let ok: boolean = false
+  const end: i32 = off + len
   let i: i32 = off
-  while (i < off + len && toI32(b[i]) !== DNS_COLON) {
+  while (i >= 0 && i < end && i < toI32(b.length) && toI32(b[i]) !== DNS_COLON) {
     i += 1
   }
-  if (i === off + len) {
-    ok = dnsParseIpv4(b, off, off + len, parsed, 12)
+  if (i === end) {
+    ok = dnsParseIpv4(b, off, end, parsed, 12)
     parsed[10] = toU8(255)
     parsed[11] = toU8(255)
   } else {
-    ok = dnsParseIpv6(b, off, off + len, parsed, 0)
+    ok = dnsParseIpv6(b, off, end, parsed, 0)
   }
   if (!ok) {
     return false
@@ -338,6 +346,9 @@ const dnsIsIpv4 = (a: u8[], at: i32): boolean => {
  * newline, or `to`.
  */
 const dnsLineEnd = (b: u8[], from: i32, to: i32): i32 => {
+  if (from < 0 || from > to || to > toI32(b.length)) {
+    panic("dnsLineEnd: the window is outside the array")
+  }
   let i: i32 = from
   while (i < to && toI32(b[i]) !== DNS_NEWLINE) {
     i += 1
@@ -347,6 +358,9 @@ const dnsLineEnd = (b: u8[], from: i32, to: i32): i32 => {
 
 /** Where the line `b[from, to)` ends once a `#` or `;` comment is cut from it. */
 const dnsCommentCut = (b: u8[], from: i32, to: i32): i32 => {
+  if (from < 0 || from > to || to > toI32(b.length)) {
+    panic("dnsCommentCut: the window is outside the array")
+  }
   let i: i32 = from
   while (i < to && toI32(b[i]) !== DNS_HASH && toI32(b[i]) !== DNS_SEMICOLON) {
     i += 1
@@ -356,6 +370,9 @@ const dnsCommentCut = (b: u8[], from: i32, to: i32): i32 => {
 
 /** The end of the word that starts at `from`, before `to`. */
 const dnsWordEnd = (b: u8[], from: i32, to: i32): i32 => {
+  if (from < 0 || from > to || to > toI32(b.length)) {
+    panic("dnsWordEnd: the window is outside the array")
+  }
   let i: i32 = from
   while (i < to && !dnsIsBlank(toI32(b[i]))) {
     i += 1
@@ -385,6 +402,9 @@ const dnsWordIs = (b: u8[], from: i32, to: i32, word: string): boolean => {
  * count's fourth stops counting, so a hundred digits clamp rather than wrap.
  */
 const dnsOption = (b: u8[], from: i32, to: i32, prefix: string, low: i32, high: i32, fallback: i32): i32 => {
+  if (from < 0 || from > to || to > toI32(b.length)) {
+    panic("dnsOption: the window is outside the array")
+  }
   const n: i32 = toI32(prefix.length)
   if (to - from <= n || !dnsWordIs(b, from, from + n, prefix)) {
     return fallback
@@ -638,7 +658,7 @@ export const dnsHostsFind = (
     panic(`dnsHostsFind: the port ${port} is not 16 bits`)
   }
   let n: i32 = toI32(name.length)
-  if (n > 0 && name.charCodeAt(n - 1) === DNS_DOT) {
+  if (n > 0 && toI32(name.charCodeAt(n - 1)) === DNS_DOT) {
     n -= 1
   }
   let found: i32 = 0

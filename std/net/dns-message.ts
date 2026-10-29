@@ -225,6 +225,9 @@ export const dnsBuildQuery = (out: u8[], id: i32, name: string, qtype: i32): i32
       if (label > DNS_MAX_LABEL_BYTES) {
         return DNS_ERR_LABEL_LONG
       }
+      if (lengthAt < 0 || lengthAt >= toI32(out.length)) {
+        return DNS_ERR_SPACE
+      }
       out[lengthAt] = toU8(label)
       lengthAt = DNS_HEADER_BYTES + i + 1
     } else if (b < 33 || b > 126) {
@@ -256,18 +259,23 @@ const dnsReadName = (msg: u8[], len: i32, off: i32, out: u8[]): i32 => {
   let after: i32 = -1
   let hops: i32 = 0
   let w: i32 = 0
+  const msgLen: i32 = toI32(msg.length)
+  const outLen: i32 = toI32(out.length)
   while (true) {
-    if (pos >= len) {
+    if (pos < 0 || pos >= len || pos >= msgLen) {
       return DNS_ERR_SHORT
     }
     const b: i32 = toI32(msg[pos])
+    if (w < 0 || w >= outLen) {
+      return DNS_ERR_NAME_LONG
+    }
     if (b === 0) {
       out[w] = toU8(0)
       return after >= 0 ? after : pos + 1
     }
     const kind: i32 = b & 0xc0
     if (kind === 0xc0) {
-      if (pos + 1 >= len) {
+      if (pos + 1 >= len || pos + 1 >= msgLen) {
         return DNS_ERR_SHORT
       }
       const target: i32 = ((b & 0x3f) << 8) | toI32(msg[pos + 1])
@@ -308,7 +316,12 @@ const dnsReadName = (msg: u8[], len: i32, off: i32, out: u8[]): i32 => {
 /** Whether two names `dnsReadName` wrote are the same name. */
 const dnsSameName = (a: u8[], b: u8[]): boolean => {
   let i: i32 = 0
+  const aLen: i32 = toI32(a.length)
+  const bLen: i32 = toI32(b.length)
   while (true) {
+    if (i < 0 || i >= aLen || i >= bLen) {
+      return false
+    }
     const n: i32 = toI32(a[i])
     if (n !== toI32(b[i])) {
       return false
@@ -330,7 +343,11 @@ const dnsSameName = (a: u8[], b: u8[]): boolean => {
 /** Copies `name`, a name `dnsReadName` wrote, into `into`. */
 const dnsCopyName = (name: u8[], into: u8[]): void => {
   let i: i32 = 0
+  const nameLen: i32 = toI32(name.length)
   while (true) {
+    if (i < 0 || i >= nameLen) {
+      return
+    }
     const n: i32 = toI32(name[i])
     let k: i32 = 0
     while (k <= n) {
