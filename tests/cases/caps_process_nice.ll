@@ -17,14 +17,26 @@ entry:
 
 define noundef i32 @nish_main() #0 {
 entry:
+  %r.addr = alloca i32, align 4
   %arena.mark = call i64 @nish_arena_mark()
   %0 = call i32 @lower()
   %1 = call i8* @nish_str_from_i32(i32 %0)
   call void @nish_print(i8* %1)
   %2 = call i32 @nish_set_idle_priority()
-  %3 = icmp sle i32 %2, 0
-  %4 = select i1 %3, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
-  call void @nish_print(i8* %4)
+  store i32 %2, i32* %r.addr, align 4
+  %3 = load i32, i32* %r.addr, align 4
+  %4 = icmp eq i32 %3, 0
+  br i1 %4, label %lor.end, label %lor.rhs
+
+lor.rhs:
+  %5 = load i32, i32* %r.addr, align 4
+  %6 = icmp eq i32 %5, -95
+  br label %lor.end
+
+lor.end:
+  %7 = phi i1 [ true, %entry ], [ %6, %lor.rhs ]
+  %8 = select i1 %7, i8* bitcast ({ i64, [5 x i8] }* @.str.0 to i8*), i8* bitcast ({ i64, [6 x i8] }* @.str.1 to i8*)
+  call void @nish_print(i8* %8)
   call void @nish_arena_release(i64 %arena.mark)
   ret i32 0
 }

@@ -4,6 +4,7 @@ export const lower = (): i32 => setNice(19);
 
 export const main = (): number => {
   console.log(lower());
-  console.log(setIdlePriority() <= 0);
+  const r = setIdlePriority();
+  console.log(r === 0 || r === -95);
   return 0;
 };

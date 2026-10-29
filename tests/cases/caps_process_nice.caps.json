@@ -29,7 +29,7 @@
               "capabilities": ["process.spawn"],
               "witnesses": {
                 "process.spawn": [
-                  { "function": "main", "at": "caps_process_nice.ts:7:15", "calls": "setIdlePriority" }
+                  { "function": "main", "at": "caps_process_nice.ts:7:13", "calls": "setIdlePriority" }
                 ]
               },
               "panics": [

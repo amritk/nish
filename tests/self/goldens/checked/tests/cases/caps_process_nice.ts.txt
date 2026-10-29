@@ -12,3 +12,4 @@ function main(): i32 -> @nish_main [exported entry]
   calls: lower nish_arena_mark nish_arena_release nish_print nish_set_idle_priority nish_str_from_i32
   stackSites=0 stackLocals=0
   callee +0:15 lower -> @lower
+  local +1:9 r: i32 (const)
