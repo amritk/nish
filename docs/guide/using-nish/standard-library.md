@@ -1010,6 +1010,50 @@ program free of both, make the style yourself: `new Style(on, colour)`, where
 `on` turns painting on and `colour` picks the theme's colours over the
 monochrome failsafe.
 
+### Colours
+
+A `Style` also paints any text, not only a menu, with the same policy: plain
+when `on` is false, and the theme's colours only when `colour` is true.
+
+| group | methods | under the failsafe |
+| --- | --- | --- |
+| foreground | `black` `red` `green` `yellow` `blue` `magenta` `cyan` `white`, and `brightBlack` (gray) through `brightWhite` | plain |
+| background | `bgBlack` through `bgWhite`, and `bgBrightBlack` through `bgBrightWhite` | plain |
+| attributes | `bold` `faint` `italic` `underline` `inverse` `strikethrough` | painted |
+| raw | `sgr(text, codes)`, any SGR parameter list: `"1;31"`, `"38;5;208"`, `"38;2;255;128;0"` | plain |
+
+Each answers `text` between its escape and a reset, or `text` unchanged when
+it paints nothing. The sixteen colours are the ones your terminal theme
+redefines; a 256-colour or truecolor tone ignores the theme, so it goes
+through `sgr`, where you ask for it on purpose. The `SGR_` constants
+(`SGR_RED`, `SGR_BRIGHT_BLACK`, `SGR_BG_BLUE`, `SGR_BOLD`, ...) spell the
+codes, so `` s.sgr(text, `${SGR_BOLD};${SGR_RED}`) `` combines them without
+numbers. Nesting works too, but every painter ends with a full reset, so
+text after an inner painted part loses the outer marks: join the codes for
+anything longer than one part.
+
+**The menu's roles can be recoloured.** Each role a `HelpMenu` paints keeps
+two SGR lists, one for the theme and one for the failsafe:
+`headingThemed`/`headingMono`, `nameThemed`/`nameMono`,
+`flagThemed`/`flagMono`, `metaThemed`/`metaMono` and `dimThemed`/`dimMono`.
+Set a pair before you build the menu; an empty list leaves that role plain.
+The defaults are the ones described above.
+
+```ts nish:ok
+import { HelpMenu, SGR_BOLD, SGR_GREEN, agentDriven, styleFor } from "nish/cli";
+
+export const main = (): i32 => {
+  const style = styleFor(1, agentDriven());
+  style.flagThemed = `${SGR_BOLD};${SGR_GREEN}`;
+  const menu = new HelpMenu(style, "greet", 24, 30);
+  menu.header("1.2.0", "say hello");
+  menu.row("--shout", "", "in capitals");
+  console.log(menu.text());
+  console.log(`${style.red("error:")} ${style.bold("no name given")}`);
+  return 0;
+};
+```
+
 ## `nish/term`
 
 `nish/term` is for a program that draws the whole terminal, many times a
