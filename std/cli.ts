@@ -165,12 +165,18 @@ export class Style {
     return this.paint(text, this.headingThemed, this.headingMono)
   }
 
-  /** The tool's own name where it opens a line, in `nameThemed` or `nameMono`. */
+  /**
+   * The tool's own name where it opens a line, in `nameThemed` or
+   * `nameMono`.
+   */
   name(text: string): string {
     return this.paint(text, this.nameThemed, this.nameMono)
   }
 
-  /** A flag, or a command a person would type, in `flagThemed` or `flagMono`. */
+  /**
+   * A flag, or a command a person would type, in `flagThemed` or
+   * `flagMono`.
+   */
   flag(text: string): string {
     return this.paint(text, this.flagThemed, this.flagMono)
   }
