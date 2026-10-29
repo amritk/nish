@@ -132,4 +132,8 @@ PASS  hosts: the names past the byte cap counted
 PASS  hosts: a new parse has no entries
 PASS  hosts: a new parse has no names
 PASS  hosts: a new parse finds nothing
-dns-config: 134 passed, 0 failed, 0 skipped
+PASS  flat arena: 1000 nameserver lines and 1501 hosts lines allocate nothing
+PASS  flat arena: no nameserver parsed, so the two fallbacks
+PASS  flat arena: the first fallback is 127.0.0.1:53
+PASS  flat arena: the second fallback is [::1]:53
+dns-config: 138 passed, 0 failed, 0 skipped

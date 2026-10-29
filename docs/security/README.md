@@ -68,7 +68,7 @@ the record that found it. The notes below the table name each such finding.
 | PostgreSQL client | [postgres.md](postgres.md) | `std/net/postgres.ts` | 0 / 0 / 2 / 3 | 0 / 0 / 0 / 0 ¹⁷ |
 | bcrypt | [crypto-bcrypt.md](crypto-bcrypt.md) | `std/crypto/bcrypt.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁸ |
 | Compression and HTTP content coding | [compress.md](compress.md) | `std/compress/deflate.ts`, `gzip.ts`, `zlib.ts`, `checksum.ts`, `std/net/http-compress.ts`, `Http1Connection.acceptEncoding` and `respondEncoded` in `std/net/http1-server.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ¹⁹ |
-| DNS message codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 |
+| DNS message codec, `resolv.conf` and `hosts` | [dns.md](dns.md) | `std/net/dns-message.ts`, `std/net/dns-config.ts` | 0 / 0 / 0 / 0 | 0 / 0 / 0 / 0 ²⁰ |
 | **Total** ⁸ | | | **3 / 10 / 30 / 118** | **0 / 0 / 0 / 10** |
 
 1. K1-6 (High) was found by the K1 stage and fixed by the two after it: `push`
@@ -224,6 +224,10 @@ the record that found it. The notes below the table name each such finding.
     rebuilding the decoder's tables and the BREACH class of length leaks, are
     accepted, with the reason in their record, and are not counted. COMP-1 to
     COMP-7 and COMP-10 are properties checked and found to hold.
+20. DNS-1 to DNS-4 (Low) are accepted, with the reason in their record, and
+    are not counted: DNS-1 to DNS-3 are the trust a stub resolver places in
+    its recursive server, as glibc's and musl's do, and DNS-4 is the second
+    literal reader a module that compiles on `wasm32` needs.
 
 ## Fuzzed
 

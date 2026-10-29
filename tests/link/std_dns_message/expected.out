@@ -41,6 +41,9 @@ PASS  built example.com AAAA: the sixteen bytes and port
 PASS  built TC reply: the rcode stands
 PASS  built TC reply: truncated
 PASS  built TC reply: no record read
+PASS  built TC reply, 255 answers claimed: the rcode stands
+PASS  built TC reply, 255 answers claimed: truncated
+PASS  built TC reply, 255 answers claimed: no record read
 PASS  built SERVFAIL
 PASS  built REFUSED
 PASS  built FORMERR
@@ -87,5 +90,5 @@ PASS  malformed: a name past 255 bytes by a pointer
 PASS  built: a name of 16 hops
 PASS  malformed: a name of 17 hops
 mutation tally: 0=795 2=3 5=1 -7=140 -8=50 -9=46 -10=221 -11=1196 -12=248 -13=494 -14=231 -16=249 -17=15 -18=269 -19=42
-PASS  mutation: no reply keeps more than DNS_MAX_ANSWERS
-dns-message: 89 passed, 0 failed, 0 skipped
+PASS  mutation: every round answers a status or a documented code
+dns-message: 92 passed, 0 failed, 0 skipped

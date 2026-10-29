@@ -233,6 +233,10 @@ export const main = (): number => {
   t.eqI32("built TC reply: the rcode stands", parse(patched(example, 2, 0x83), qa, reply), DNS_NOERROR)
   t.eqBool("built TC reply: truncated", reply.truncated, true)
   t.eqI32("built TC reply: no record read", reply.count, 0)
+  // TC set with an answer count no bytes back: the counts are not checked.
+  t.eqI32("built TC reply, 255 answers claimed: the rcode stands", parse(patched(patched(example, 2, 0x83), 7, 0xff), qa, reply), DNS_NOERROR)
+  t.eqBool("built TC reply, 255 answers claimed: truncated", reply.truncated, true)
+  t.eqI32("built TC reply, 255 answers claimed: no record read", reply.count, 0)
 
   t.eqI32("built SERVFAIL", parse(patched(example, 3, 0x82), qa, reply), DNS_SERVFAIL)
   t.eqI32("built REFUSED", parse(patched(example, 3, 0x85), qa, reply), DNS_REFUSED)
@@ -390,13 +394,14 @@ export const main = (): number => {
   // --- mutation pass -----------------------------------------------------------
   // Each round copies one captured reply, sets one to four bytes at random
   // offsets to random values, sometimes cuts it short, and parses it. What is
-  // pinned is the tally: no round panics, every answer is a status or a code,
-  // and no reply keeps more than DNS_MAX_ANSWERS addresses.
+  // pinned is the tally: no round panics, and every answer is a reply status
+  // or one of the codes dnsParseReply documents (DNS_ERR_NAME_LONG, or
+  // DNS_ERR_HEADER through DNS_ERR_RCODE).
   const seeds: u8[][] = [example, microsoft, outlook, aaaa, other]
   const queries: u8[][] = [qa, query("www.microsoft.com", DNS_TYPE_A), query("outlook.com", DNS_TYPE_A), qaaaa, qa]
   const rng: Lcg = new Lcg(toI64(20261029))
   const tally: i32[] = new Array<i32>(32)
-  let overfull: i32 = 0
+  let answered: i32 = 0
   let round: i32 = 0
   while (round < 4000) {
     const pick: i32 = rng.next(5)
@@ -415,8 +420,15 @@ export const main = (): number => {
     const status: i32 = dnsParseReply(msg, len, queries[pick], toI32(queries[pick].length), 53, reply)
     const slot: i32 = status < 0 ? 12 - status : status
     tally[slot] = tally[slot] + 1
-    if (reply.count > DNS_MAX_ANSWERS) {
-      overfull += 1
+    if (
+      status === DNS_NOERROR ||
+      status === DNS_SERVFAIL ||
+      status === DNS_NXDOMAIN ||
+      status === DNS_REFUSED ||
+      status === DNS_ERR_NAME_LONG ||
+      (status <= DNS_ERR_HEADER && status >= DNS_ERR_RCODE)
+    ) {
+      answered += 1
     }
     round += 1
   }
@@ -429,6 +441,6 @@ export const main = (): number => {
     s += 1
   }
   console.log(line)
-  t.eqI32("mutation: no reply keeps more than DNS_MAX_ANSWERS", overfull, 0)
+  t.eqI32("mutation: every round answers a status or a documented code", answered, 4000)
   return t.done()
 }

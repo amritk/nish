@@ -369,5 +369,30 @@ export const main = (): number => {
   t.eqI32("hosts: a new parse has no entries", hosts.entryCount, 0)
   t.eqI32("hosts: a new parse has no names", hosts.nameCount, 0)
   t.eqStr("hosts: a new parse finds nothing", find(hosts, "n1", DNS_TYPE_A), "")
+  // --- a flat arena ------------------------------------------------------------
+  // Parsing leaves the arena where it found it: the inputs and the tables are
+  // built first, and the arena is read around the two parses alone. Every line
+  // holds a literal, some not addresses, and the first file leaves no server,
+  // so the fallback runs too.
+  let manyConf: string = ""
+  let manyHosts: string = ""
+  let copies: i32 = 0
+  while (copies < 500) {
+    manyConf = manyConf + "nameserver 10.0.0.300\nnameserver fe80::1::2\n"
+    manyHosts = manyHosts + "10.1.2.3 a\n::1 b\n10.0.0.300 c\n"
+    copies += 1
+  }
+  const confBytes: u8[] = ascii(manyConf)
+  const hostsBytes: u8[] = ascii(manyHosts + "192.0.2.7 last\n")
+  const flatConfig: DnsConfig = new DnsConfig()
+  const flatHosts: DnsHosts = new DnsHosts()
+  const before: i64 = Arena.used()
+  dnsParseResolvConf(confBytes, 0, toI32(confBytes.length), flatConfig)
+  dnsParseHosts(hostsBytes, 0, toI32(hostsBytes.length), flatHosts)
+  const grew: i64 = Arena.used() - before
+  t.eqI64("flat arena: 1000 nameserver lines and 1501 hosts lines allocate nothing", grew, toI64(0))
+  t.eqI32("flat arena: no nameserver parsed, so the two fallbacks", flatConfig.serverCount, 2)
+  t.eqStr("flat arena: the first fallback is 127.0.0.1:53", toHex(flatConfig.servers, 0, DNS_ADDRESS_BYTES), "00000000000000000000ffff7f0000010035")
+  t.eqStr("flat arena: the second fallback is [::1]:53", toHex(flatConfig.servers, DNS_ADDRESS_BYTES, DNS_ADDRESS_BYTES), "000000000000000000000000000000010035")
   return t.done()
 }

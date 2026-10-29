@@ -14,7 +14,10 @@ name past 255 bytes, a count larger than the message holds, a record whose
 RDATA runs past the end or has the wrong length for its type, and a reply that
 answers another question are each a negative `DNS_ERR_*` code, and the work is
 linear in the reply's length. Both files are read into tables of fixed size
-whose overflow is dropped and counted. Only the program's own mistakes — a
+whose overflow is dropped and counted, and a literal is parsed into the
+table's own sixteen-byte buffer, so a file of any length leaves the arena where
+it found it (`flat arena: 1000 nameserver lines and 1501 hosts lines allocate
+nothing`). Only the program's own mistakes — a
 window outside its array, a port or ID that is not 16 bits, a query
 `dnsBuildQuery` did not write — panic. Four properties are recorded as
 accepted (DNS-1 to DNS-4); none is counted. The panics are not yet pinned by a
@@ -100,8 +103,9 @@ bytes a record, so the answer loop runs at most `len / 11` times. A record's
 fixed fields or RDATA past the end is `DNS_ERR_SHORT` or `DNS_ERR_RDATA`
 (`a record's fixed fields cut short`, `the last RDATA one byte past the end`,
 `RDLENGTH 65,535`); an A that is not 4 bytes or an AAAA that is not 16 is
-`DNS_ERR_RDLENGTH`, and a CNAME's target must fill its RDATA exactly and is
-read inside it (`a CNAME whose target does not fill its RDATA`,
+`DNS_ERR_RDLENGTH`, and a CNAME on the chain (its owner the chain's end) must
+have a target that fills its RDATA exactly and is read inside it; a CNAME off
+the chain is read past by its RDLENGTH like any other record (`a CNAME whose target does not fill its RDATA`,
 `… runs past its RDATA`, `… points forwards`).
 
 **Only the chain's addresses are kept** (`captured www.microsoft.com A`,
@@ -115,14 +119,16 @@ first `DNS_MAX_ANSWERS` (8) addresses are kept and the rest counted
 nxdomain.invalid A`, `built SERVFAIL`, `built REFUSED`, `built TC reply`).
 NXDOMAIN, SERVFAIL and REFUSED are answered as themselves with no record read;
 FORMERR, NOTIMP and every other RCODE are `DNS_ERR_RCODE`; TC set reads no
-record and sets `truncated`.
+record and sets `truncated`, and its counts are not held to the bytes that
+arrived, since they describe the records the server could not fit (`built TC
+reply, 255 answers claimed`).
 
-**Mutation does not break a bound** (`mutation: no reply keeps more than
-DNS_MAX_ANSWERS`). 4000 seeded mutations of the captured replies (one to
-four bytes set at random, the copy sometimes cut short) each answer a status
-or a code; the tally of codes is pinned
-line for line in `expected.out`, so a change in what any mutation answers is
-seen.
+**Mutation does not break a bound** (`mutation: every round answers a status
+or a documented code`). 4000 seeded mutations of the captured replies (one to
+four bytes set at random, the copy sometimes cut short) each answer a reply
+status or a code `dnsParseReply` documents, and none panics; the tally of
+statuses and codes is the one `mutation tally:` line in `expected.out`, so a
+change in what any mutation answers is seen.
 
 **An address literal is strict** (`ipv4: *`, `ipv6: *`, `literal: *`).
 `010.0.0.1`, `1.2.3`, `256.0.0.1`, a sign, `fe80::1%eth0`, `[::1]`, two `::`

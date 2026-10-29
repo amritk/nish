@@ -93,6 +93,8 @@ const DNS_SEMICOLON: i32 = 59
 export class DnsConfig {
   /** `serverCount` addresses of `DNS_ADDRESS_BYTES` each, on `DNS_PORT`. */
   servers: u8[]
+  /** Sixteen bytes a literal is parsed into before it is kept, so a parse allocates nothing. */
+  scratch: u8[]
   serverCount: i32 = 0
   /** Nameserver lines past `DNS_MAX_SERVERS`, read and not kept. */
   droppedServers: i32 = 0
@@ -105,19 +107,23 @@ export class DnsConfig {
   /** Search domains past `DNS_MAX_SEARCH` or `DNS_MAX_SEARCH_BYTES`, read and not kept. */
   droppedSearch: i32 = 0
   /** Dots a name needs to be tried as it stands before the search list. */
-  ndots: i32 = 1
+  ndots: i32
   /** Seconds to wait for one server's reply. */
-  timeout: i32 = 5
+  timeout: i32
   /** Rounds through the servers before giving up. */
-  attempts: i32 = 2
+  attempts: i32
   /** Lines longer than `DNS_CONFIG_MAX_LINE`, skipped whole. */
   skippedLines: i32 = 0
 
   constructor() {
     this.servers = new Array<u8>(DNS_MAX_SERVERS * DNS_ADDRESS_BYTES)
+    this.scratch = new Array<u8>(16)
     this.search = new Array<u8>(DNS_MAX_SEARCH_BYTES)
     this.searchStart = new Array<i32>(DNS_MAX_SEARCH)
     this.searchLength = new Array<i32>(DNS_MAX_SEARCH)
+    this.ndots = DNS_DEFAULT_NDOTS
+    this.timeout = DNS_DEFAULT_TIMEOUT
+    this.attempts = DNS_DEFAULT_ATTEMPTS
   }
 }
 
@@ -127,6 +133,8 @@ export class DnsHosts {
   addresses: u8[]
   /** Every kept name, back to back, lowercase, without a trailing dot. */
   names: u8[]
+  /** Sixteen bytes a literal is parsed into before it is kept, so a parse allocates nothing. */
+  scratch: u8[]
   /** Where each of the `nameCount` names starts in `names`, its length, and its entry. */
   nameStart: i32[]
   nameLength: i32[]
@@ -144,6 +152,7 @@ export class DnsHosts {
   constructor() {
     this.addresses = new Array<u8>(DNS_HOSTS_MAX_ENTRIES * DNS_ADDRESS_BYTES)
     this.names = new Array<u8>(DNS_HOSTS_MAX_NAME_BYTES)
+    this.scratch = new Array<u8>(16)
     this.nameStart = new Array<i32>(DNS_HOSTS_MAX_NAMES)
     this.nameLength = new Array<i32>(DNS_HOSTS_MAX_NAMES)
     this.nameEntry = new Array<i32>(DNS_HOSTS_MAX_NAMES)
@@ -294,8 +303,23 @@ const dnsParseIpv6 = (b: u8[], from: i32, to: i32, out: u8[], at: i32): boolean 
  * IPv4 as `::ffff:a.b.c.d`, with `port` big-endian after it, and answers
  * whether it was one. `out` is written only when it was. A zone (`%eth0`),
  * brackets and a port are not part of a literal.
+ *
+ * Each call allocates the sixteen bytes it parses into, released when it
+ * returns; the two file parsers reuse a buffer of their own instead.
  */
-export const dnsParseAddress = (b: u8[], off: i32, len: i32, out: u8[], at: i32, port: i32): boolean => {
+export const dnsParseAddress = (b: u8[], off: i32, len: i32, out: u8[], at: i32, port: i32): boolean =>
+  dnsParseAddressVia(b, off, len, out, at, port, new Array<u8>(16))
+
+/** `dnsParseAddress`, parsing into `parsed`, sixteen bytes the caller owns, so it allocates nothing. */
+const dnsParseAddressVia = (
+  b: u8[],
+  off: i32,
+  len: i32,
+  out: u8[],
+  at: i32,
+  port: i32,
+  parsed: u8[]
+): boolean => {
   dnsConfigCheckWindow(b, off, len, "dnsParseAddress")
   if (at < 0 || at > toI32(out.length) - DNS_ADDRESS_BYTES) {
     panic("dnsParseAddress: at is outside out")
@@ -303,7 +327,9 @@ export const dnsParseAddress = (b: u8[], off: i32, len: i32, out: u8[], at: i32,
   if (port < 0 || port > 0xffff) {
     panic(`dnsParseAddress: the port ${port} is not 16 bits`)
   }
-  const parsed: u8[] = new Array<u8>(16)
+  if (toI32(parsed.length) < 16) {
+    panic("dnsParseAddress: parsed is shorter than 16 bytes")
+  }
   let ok: boolean = false
   const end: i32 = off + len
   let i: i32 = off
@@ -311,6 +337,11 @@ export const dnsParseAddress = (b: u8[], off: i32, len: i32, out: u8[], at: i32,
     i += 1
   }
   if (i === end) {
+    let z: i32 = 0
+    while (z < 10) {
+      parsed[z] = toU8(0)
+      z += 1
+    }
     ok = dnsParseIpv4(b, off, end, parsed, 12)
     parsed[10] = toU8(255)
     parsed[11] = toU8(255)
@@ -470,7 +501,17 @@ const dnsResolvLine = (b: u8[], from: i32, to: i32, config: DnsConfig): void => 
       config.droppedServers += 1
       return
     }
-    if (dnsParseAddress(b, i, end - i, config.servers, config.serverCount * DNS_ADDRESS_BYTES, DNS_PORT)) {
+    if (
+      dnsParseAddressVia(
+        b,
+        i,
+        end - i,
+        config.servers,
+        config.serverCount * DNS_ADDRESS_BYTES,
+        DNS_PORT,
+        config.scratch
+      )
+    ) {
       config.serverCount += 1
     }
   } else if (dnsWordIs(b, keyStart, keyEnd, "search") || dnsWordIs(b, keyStart, keyEnd, "domain")) {
@@ -523,22 +564,28 @@ export const dnsParseResolvConf = (b: u8[], off: i32, len: i32, config: DnsConfi
     i = end + 1
   }
   if (config.serverCount === 0) {
-    const local: u8[] = [
-      toU8(49),
-      toU8(50),
-      toU8(55),
-      toU8(46),
-      toU8(48),
-      toU8(46),
-      toU8(48),
-      toU8(46),
-      toU8(49),
-    ]
-    dnsParseAddress(local, 0, 9, config.servers, 0, DNS_PORT)
-    const loop: u8[] = [toU8(DNS_COLON), toU8(DNS_COLON), toU8(49)]
-    dnsParseAddress(loop, 0, 3, config.servers, DNS_ADDRESS_BYTES, DNS_PORT)
+    dnsFallbackServers(config.servers)
     config.serverCount = 2
   }
+}
+
+/** Writes 127.0.0.1 and ::1, each on `DNS_PORT`, as the first two of `servers`, allocating nothing. */
+const dnsFallbackServers = (servers: u8[]): void => {
+  if (toI32(servers.length) < 2 * DNS_ADDRESS_BYTES) {
+    panic("dnsFallbackServers: servers has no room for two addresses")
+  }
+  let k: i32 = 0
+  while (k < 2 * DNS_ADDRESS_BYTES && k < toI32(servers.length)) {
+    servers[k] = toU8(0)
+    k += 1
+  }
+  servers[10] = toU8(255)
+  servers[11] = toU8(255)
+  servers[12] = toU8(127)
+  servers[15] = toU8(1)
+  setU16BE(servers, 16, toU16(DNS_PORT))
+  servers[DNS_ADDRESS_BYTES + 15] = toU8(1)
+  setU16BE(servers, DNS_ADDRESS_BYTES + 16, toU16(DNS_PORT))
 }
 
 /** Adds `b[from, to)` as a name of entry `entry`, lowercase, one trailing dot dropped, or counts it dropped. */
@@ -583,7 +630,7 @@ const dnsHostsLine = (b: u8[], from: i32, to: i32, hosts: DnsHosts): void => {
     return
   }
   const at: i32 = hosts.entryCount * DNS_ADDRESS_BYTES
-  if (!dnsParseAddress(b, addrStart, addrEnd - addrStart, hosts.addresses, at, 0)) {
+  if (!dnsParseAddressVia(b, addrStart, addrEnd - addrStart, hosts.addresses, at, 0, hosts.scratch)) {
     return
   }
   const entry: i32 = hosts.entryCount

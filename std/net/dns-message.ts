@@ -391,8 +391,9 @@ const dnsKeepAddress = (msg: u8[], at: i32, size: i32, port: i32, ttl: i32, repl
  * Answers `DNS_NOERROR`, `DNS_NXDOMAIN`, `DNS_SERVFAIL` or `DNS_REFUSED` for a
  * reply that answers the query, or a `DNS_ERR_*` code for one that is
  * malformed or answers another. The answer records are read only under
- * NOERROR and with TC clear; with TC set, `reply.truncated` says so and
- * `reply.count` is 0, and the caller asks again over TCP. The authority and
+ * NOERROR and with TC clear; with TC set, `reply.truncated` says so,
+ * `reply.count` is 0 whatever the counts claim, and the caller asks again
+ * over TCP. The authority and
  * additional sections are counted against the bytes left and never read.
  */
 export const dnsParseReply = (
@@ -455,12 +456,17 @@ export const dnsParseReply = (
   if (rcode !== DNS_NOERROR && rcode !== DNS_SERVFAIL && rcode !== DNS_NXDOMAIN && rcode !== DNS_REFUSED) {
     return DNS_ERR_RCODE
   }
+  // A truncated reply's counts describe the records the server could not fit,
+  // so they are not held to the bytes that arrived.
+  if (reply.truncated) {
+    return rcode
+  }
   let pos: i32 = named + 4
   const records: i32 = toI32(getU16BE(msg, 6)) + toI32(getU16BE(msg, 8)) + toI32(getU16BE(msg, 10))
   if (records > (len - pos) / DNS_MIN_RECORD_BYTES) {
     return DNS_ERR_COUNT
   }
-  if (rcode !== DNS_NOERROR || reply.truncated) {
+  if (rcode !== DNS_NOERROR) {
     return rcode
   }
   const answers: i32 = toI32(getU16BE(msg, 6))
