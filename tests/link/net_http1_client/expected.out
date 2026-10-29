@@ -1,0 +1,219 @@
+PASS  two kept-alive responses with Content-Length: transcript
+PASS  two kept-alive responses with Content-Length: the same cut at every byte and fed a byte at a time
+PASS  a chunked response with an extension and a trailer, then a 204: transcript
+PASS  a chunked response with an extension and a trailer, then a 204: the same cut at every byte and fed a byte at a time
+PASS  two interim responses, each with its fields, then the final one: transcript
+PASS  two interim responses, each with its fields, then the final one: the same cut at every byte and fed a byte at a time
+PASS  a body read until the server closes: transcript
+PASS  a body read until the server closes: the same cut at every byte and fed a byte at a time
+PASS  an HTTP/1.0 response kept alive, then one that is not: transcript
+PASS  an HTTP/1.0 response kept alive, then one that is not: the same cut at every byte and fed a byte at a time
+PASS  Connection: close ends the connection, and what follows is not read: transcript
+PASS  Connection: close ends the connection, and what follows is not read: the same cut at every byte and fed a byte at a time
+PASS  a response to HEAD and a 304 have no body, whatever their fields say: transcript
+PASS  a response to HEAD and a 304 have no body, whatever their fields say: the same cut at every byte and fed a byte at a time
+PASS  a 2xx to CONNECT is a tunnel, and its framing fields are ignored: transcript
+PASS  a 2xx to CONNECT is a tunnel, and its framing fields are ignored: the same cut at every byte and fed a byte at a time
+PASS  a 407 to CONNECT has a body like any other: transcript
+PASS  a 407 to CONNECT has a body like any other: the same cut at every byte and fed a byte at a time
+PASS  a body cut short by the close: transcript
+PASS  a body cut short by the close: the same cut at every byte and fed a byte at a time
+PASS  smuggling: Transfer-Encoding with Content-Length: transcript
+PASS  smuggling: Transfer-Encoding with Content-Length: the same cut at every byte and fed a byte at a time
+PASS  smuggling: two Content-Length fields that differ: transcript
+PASS  smuggling: two Content-Length fields that differ: the same cut at every byte and fed a byte at a time
+PASS  smuggling: a coding after chunked: transcript
+PASS  smuggling: a coding after chunked: the same cut at every byte and fed a byte at a time
+PASS  smuggling: a header line ended in a bare LF: transcript
+PASS  smuggling: a header line ended in a bare LF: the same cut at every byte and fed a byte at a time
+PASS  smuggling: an obs-fold continuing Transfer-Encoding: transcript
+PASS  smuggling: an obs-fold continuing Transfer-Encoding: the same cut at every byte and fed a byte at a time
+PASS  smuggling: whitespace before the colon: transcript
+PASS  smuggling: whitespace before the colon: the same cut at every byte and fed a byte at a time
+PASS  smuggling: chunk data longer than its size: transcript
+PASS  smuggling: chunk data longer than its size: the same cut at every byte and fed a byte at a time
+PASS  a 101 this client never asked for: transcript
+PASS  a 101 this client never asked for: the same cut at every byte and fed a byte at a time
+PASS  a status line over the limit, ended in a bare LF past it: transcript
+PASS  a status line over the limit, ended in a bare LF past it: the same cut at every byte and fed a byte at a time
+PASS  accepted: a status code with no reason or space after it
+PASS  accepted: an empty reason
+PASS  accepted: an HTTP/1.9 response, read as 1.1
+PASS  refused with 1 (a malformed status line): a two-digit status
+PASS  refused with 1 (a status code outside 100 to 599): a status above 599
+PASS  refused with 1 (a status code outside 100 to 599): a status below 100
+PASS  refused with 1 (a malformed status line): an empty line before the status line
+PASS  refused with 1 (a malformed status line): two spaces after the version
+PASS  refused with 1 (a malformed status line): a lowercase protocol name
+PASS  refused with 1 (a malformed status line): a status code run into its reason
+PASS  refused with 1 (a control character in the reason phrase): a control byte in the reason
+PASS  refused with 1 (a malformed status line): a non-digit minor version
+PASS  refused with 2 (an HTTP major version other than 1): HTTP/2.0
+PASS  refused with 2 (an HTTP major version other than 1): HTTP/0.9
+PASS  refused with 3 (a line ended in a bare LF): a status line ended in a bare LF
+PASS  refused with 5 (a 101 Switching Protocols this client never asks for): a 101
+PASS  refused with 5 (a 101 Switching Protocols this client never asks for): a 101 to CONNECT
+PASS  refused with 4 (a malformed field name): an empty field name
+PASS  refused with 4 (a malformed field name): a field line with no colon
+PASS  refused with 4 (a malformed field name): a non-token byte in a name
+PASS  refused with 4 (a control character in a field value): a NUL in a value
+PASS  refused with 4 (a control character in a field value): a CR inside a value
+PASS  refused with 4 (a field line that starts with whitespace (obs-fold)): an obs-fold in the first field
+PASS  refused with 3 (a line ended in a bare LF): a field line ended in a bare LF
+PASS  refused with 3 (a line ended in a bare LF): the empty line ended in a bare LF
+PASS  accepted: a Content-Length list of one value repeated
+PASS  accepted: two Content-Length fields that agree
+PASS  accepted: a Content-Length with leading zeros
+PASS  accepted: chunked in any case
+PASS  refused with 8 (a Content-Length that is not one run of digits): a Content-Length that is not digits
+PASS  refused with 8 (a Content-Length that is not one run of digits): a negative Content-Length
+PASS  refused with 8 (a Content-Length that is not one run of digits): an empty Content-Length
+PASS  refused with 8 (a Content-Length that is not one run of digits): a Content-Length list with an empty element
+PASS  refused with 8 (Content-Length values that differ): a Content-Length list whose values differ
+PASS  refused with 8 (Content-Length values that differ): two Content-Length fields that differ
+PASS  refused with 8 (a Content-Length that is not one run of digits): a Content-Length with a sign
+PASS  refused with 8 (a Content-Length that is not one run of digits): a malformed Content-Length on a 304 too
+PASS  refused with 8 (Content-Length values that differ): Content-Length values that differ, on a response to HEAD too
+PASS  refused with 6 (both Content-Length and Transfer-Encoding): Transfer-Encoding with Content-Length on a 204
+PASS  refused with 6 (both Content-Length and Transfer-Encoding): Content-Length before Transfer-Encoding
+PASS  refused with 7 (Transfer-Encoding in an HTTP/1.0 response): Transfer-Encoding in an HTTP/1.0 response
+PASS  refused with 7 (a transfer coding list that does not end in chunked): a coding other than chunked
+PASS  refused with 7 (a transfer coding other than chunked): gzip before chunked
+PASS  refused with 7 (a transfer coding other than chunked): gzip before chunked, in two fields
+PASS  refused with 7 (chunked applied twice): chunked twice
+PASS  refused with 7 (a transfer coding list that does not end in chunked): an empty Transfer-Encoding
+PASS  refused with 7 (a transfer coding list that does not end in chunked): a bad coding on a response to HEAD too
+PASS  accepted: a chunk size in uppercase hex with leading zeros
+PASS  accepted: a last chunk with an extension
+PASS  refused with 9 (a chunk size with no hex digits): a chunk size with no digits
+PASS  refused with 9 (a chunk size with no hex digits): an empty chunk-size line
+PASS  refused with 9 (a malformed chunk size): a 0x before the chunk size
+PASS  refused with 9 (a malformed chunk size): whitespace after the chunk size with no extension
+PASS  refused with 9 (a control character in a chunk extension): a control byte in a chunk extension
+PASS  refused with 9 (chunk data not followed by CRLF): chunk data followed by something else
+PASS  refused with 3 (a line ended in a bare LF): chunk data followed by a bare LF
+PASS  refused with 3 (a line ended in a bare LF): a chunk-size line ended in a bare LF
+PASS  refused with 4 (a field line that starts with whitespace (obs-fold)): a malformed trailer
+PASS  refused with 3 (a line ended in a bare LF): a trailer ended in a bare LF
+PASS  refused with 14 (a chunked body over the limit): a chunk size past 64 bits
+PASS  refused with 10 (the connection closed before the response ended): a close inside the status line
+PASS  refused with 10 (the connection closed before the response ended): a close inside the header section
+PASS  refused with 10 (the connection closed before the response ended): a close inside a chunk
+PASS  refused with 10 (the connection closed before the response ended): a close before the last chunk
+PASS  refused with 10 (the connection closed before the response ended): a close inside the trailers
+PASS  refused with 10 (the connection closed before the response ended): a close after an interim response
+PASS  a close after a whole response is no error
+PASS  a close with nothing fed is HTTP1_CLOSED
+PASS  and stays closed
+PASS  bytes fed after the close are dropped
+PASS  and the parser stays closed
+PASS  an error is final
+PASS  and the bytes fed after it are dropped
+PASS  errorText says why
+PASS  and keepAlive() is false
+PASS  a Connection: close response
+PASS  ends in HTTP1_CLOSED
+PASS  and drops what is fed after it
+PASS  a head
+PASS  expect inside a response does nothing: its body still comes
+PASS  and ends
+PASS  expect is forgotten after HTTP1_END: the next 200 has a body again
+PASS  a body the parser waits for
+PASS  an interim response
+PASS  its status
+PASS  its fields, by name in any case
+PASS  expect after an interim response does nothing: HEAD still holds
+PASS  so the 200 has no body
+PASS  a field that is not there is null
+PASS  the reason phrase
+PASS  a tunnel
+PASS  answers HTTP1_UPGRADE
+PASS  and again
+PASS  tunnelBytes() holds what was fed past the head, then and later
+PASS  a tunnel is not kept alive
+PASS  tunnelBytes() outside a tunnel is empty
+PASS  the status line: exactly at the limit
+PASS  the status line: one past it
+PASS  the header section: exactly at the limit
+PASS  the header section: one past it
+PASS  the field count: exactly at the limit
+PASS  the field count: one past it
+PASS  the field count, trailers included: exactly at the limit
+PASS  the field count, trailers included: one past it
+PASS  a Content-Length body: exactly at the limit
+PASS  a Content-Length body: one past it
+PASS  a chunked body: exactly at the limit
+PASS  a chunked body: one past it
+PASS  a body read until close: exactly at the limit
+PASS  a body read until close: one past it
+PASS  the trailer section: exactly at the limit
+PASS  the trailer section: one past it
+PASS  a Content-Length over the body limit on a response to HEAD is not refused
+PASS  a Content-Length past 2^63 is over the body limit, not wrapped
+PASS  negative limits are clamped to 0
+PASS  a chunk-size line of exactly HTTP1_MAX_CHUNK_LINE (4096) bytes
+PASS  one byte longer
+PASS  exactly HTTP1_MAX_INFORMATIONAL (32) interim responses
+PASS  one more
+PASS  the interim count starts again for each request
+PASS  a GET with no body has no framing field
+PASS  Host goes first, whatever its case and place
+PASS  an empty Host is written
+PASS  a POST with an empty body says Content-Length: 0
+PASS  a Content-Length past 32 bits
+PASS  a chunked body goes last, after the caller's fields
+PASS  absolute-form, for a proxy
+PASS  authority-form, for CONNECT
+PASS  authority-form with a bracketed IPv6 host
+PASS  asterisk-form, for OPTIONS
+PASS  a Connection: close is written
+PASS  refused: a method that is not a token
+PASS  refused: an empty method
+PASS  refused: an empty target
+PASS  refused: a space in the target
+PASS  refused: a CRLF in the target
+PASS  refused: a fragment
+PASS  refused: a DEL in the target
+PASS  refused: a byte above 0x7E in the target
+PASS  refused: a relative target
+PASS  refused: a target that starts with a digit
+PASS  refused: a scheme with a byte no scheme holds
+PASS  refused: an asterisk for GET
+PASS  refused: an asterisk with more after it
+PASS  refused: CONNECT with no port
+PASS  refused: CONNECT with an empty port
+PASS  refused: CONNECT with no host
+PASS  refused: CONNECT with a six-digit port
+PASS  refused: CONNECT with a letter in the port
+PASS  refused: CONNECT with userinfo
+PASS  refused: CONNECT with a path
+PASS  refused: CONNECT with a query
+PASS  refused: CONNECT with origin-form
+PASS  refused: a field name that is not a token
+PASS  refused: an empty field name
+PASS  refused: a CRLF in a value
+PASS  refused: a bare LF in a value
+PASS  refused: a NUL in a value
+PASS  refused: the caller's own Content-Length
+PASS  refused: the caller's own Transfer-Encoding, in any case
+PASS  refused: a Connection that lists upgrade
+PASS  refused: no Host
+PASS  refused: two Hosts
+PASS  refused: names and values of different lengths
+PASS  refused: a body length below -2
+PASS  http1WriteRequestHead fills a buffer exactly its size
+PASS  with the same bytes
+PASS  at an offset it answers where it ends
+PASS  and writes from there
+PASS  one byte short is HTTP1_NO_ROOM
+PASS  and writes nothing
+PASS  a negative offset is HTTP1_NO_ROOM
+PASS  an offset past the end is HTTP1_NO_ROOM
+PASS  a refusal is HTTP1_REFUSED, even with no room
+PASS  and writes nothing
+PASS  the server parser reads the head
+PASS  as a chunked POST
+PASS  with its body
+PASS  to its end
+PASS  HTTP1_E_NONE is 0, before anything goes wrong
+http1-client: 218 passed, 0 failed, 0 skipped
