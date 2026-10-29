@@ -240,3 +240,16 @@ row. Then `node tests/self/goldens.js --update` and read the diff.
    example, `std/README.md` lists both modules, and `node docs/check-links.mjs`
    passes.
 7. Every CI `test` shard is green on `main` after both merge.
+
+## Amendment (2026-10-29T00:40Z, during the run)
+
+The plan missed one shared file. `src/std-modules.ts`'s `stdModuleNames`
+literal lists every `std/` module, and `tests/run.js` fails when it disagrees
+with the files under `std/`, so both stages must add their module's name to
+that one line (sorted): `yaml-write` and `cli-flags`. Both stages now own
+**that literal only** in `src/std-modules.ts`. The two edits conflict on the
+same line by construction; `cli-flags` merges second and resolves it when it
+syncs `main` (keep both names, in sorted order). Because the file is in
+`src/`, each PR also runs `node tests/run.js wasi` (with `WASI_SYSROOT=/usr`,
+reading its skip line) and `node tests/run.js performance` before it pushes,
+and regenerates `tests/self/goldens/checked/` (`CLAUDE.md`).
