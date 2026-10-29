@@ -2164,7 +2164,7 @@ and their `.ll` goldens are byte-identical files.
   `` Module `nish/toml` is not part of the standard library (it has:
   collections, compress/checksum, compress/deflate, compress/gzip, compress/zlib, crypto/aes, crypto/base64url, crypto/chacha20poly1305,
   crypto/ct, crypto/ed25519, crypto/hkdf, crypto/hmac, crypto/p256,
-  crypto/pki, crypto/pki-roots, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
+  crypto/pki, crypto/pki-roots, crypto/rsa, crypto/sha256, crypto/sha512, crypto/x25519, crypto/x509, json, map, pair,
   testing, text, threads) ``
   (`reject_std_unknown_module`), and one that would leave the
   library — an empty segment, or a segment beginning with a `.` — is refused
@@ -2210,7 +2210,7 @@ and their `.ll` goldens are byte-identical files.
   `ct` (constant-time compare), `base64url`, `x25519`, `ed25519` (Ed25519
   signatures), `chacha20poly1305` (ChaCha20-Poly1305), `aes` (AES-128 and
   AES-256 with GCM), `p256` (P-256 ECDSA), `p384` (P-384 ECDSA
-  verification), `x509` (DER, PEM and
+  verification), `rsa` (RSA signature verification), `x509` (DER, PEM and
   self-signed P-256 certificates), `pki-roots` (the trust anchors from
   `SSL_CERT_FILE`, `SSL_CERT_DIR` or the system bundle; native only) and
   `pki` (RFC 5280 path validation and RFC 6125 hostname matching of a TLS

@@ -38,6 +38,7 @@
     "!scripts/sbom.mjs",
     "!scripts/rebuild-compare.sh",
     "!scripts/ddc-chain.sh",
+    "!scripts/nish-runner-parallel.mjs",
     "std",
     "README.md",
     "LICENSE",
