@@ -184,7 +184,7 @@ export class Crc32 {
       let b: u32 = 0
       let d: u32 = 0
       const stop: i32 = off + third
-      while (p < stop && p >= 0 && p <= 2147483639 - 2 * third) {
+      while (p < stop && p >= 0 && p <= toI32(2147483639) - 2 * third) {
         c = crc32Step(t, c, checksumLoad64(buf, p))
         b = crc32Step(t, b, checksumLoad64(buf, p + third))
         d = crc32Step(t, d, checksumLoad64(buf, p + 2 * third))
