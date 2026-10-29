@@ -2636,6 +2636,20 @@ the array open: end it and send the rest in the next statement. Every other
 guide's [PostgreSQL page](guide/using-nish/postgres.md#array-parameters) its
 walk-through.)
 
+**Read PostgreSQL ids, counts and times without parsing them** — there is no
+driver option for binary results: in `nish/net/postgres`, open the bind with
+`bindStartBinary(name)` instead of `bindStart(name)`, and every result column
+of that execution comes in binary. Read an `int2`/`int4`/`int8` with
+`binaryInt(c)`, a `bool` with `binaryBool(c)`, a `float8` with
+`binaryFloat(c)`, a `timestamptz` with `conn.binary.timestamp(conn.inputBuffer(),
+conn.colStart(c), conn.colLength(c), out, at)` (or its microseconds since 2000
+with `binaryInt(c)`, written out by `conn.binary.iso(micros, out, at)`), and a
+`text` column with `columnText(c)` as before. Cast anything else (`numeric`,
+`text[]`) to `text` in the SQL. (No block, as for `nish/text`;
+`tests/postgres/live`'s `binary` scenario runs it against a server, and the
+user guide's [PostgreSQL page](guide/using-nish/postgres.md#binary-results)
+its walk-through.)
+
 **Batch a server's keyed reads into one PostgreSQL query** — there is no
 DataLoader and no `setTimeout` to collect a tick's keys: in `nish/net/postgres`,
 a `PgBatcher` built from a `PgBatchConfig` (`name`, `select` reading the key as

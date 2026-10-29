@@ -26,6 +26,21 @@ hand — the git log is the working account until a release turns it into one.
 
 ## [Unreleased]
 
+## [0.26.0] - 2026-10-29
+
+### Added
+
+- runtime: Files and directories with an explicit mode, and exclusive create, in nish:fs ([#1020](https://github.com/amritk/nish/pull/1020))
+- runtime: SpawnPiped runs a child with stdin from memory and stdout/stderr captured ([#1025](https://github.com/amritk/nish/pull/1025))
+- runtime: A packing dispatch policy for nish/net/postgres's PgPool ([#1036](https://github.com/amritk/nish/pull/1036))
+- runtime: Binary result columns for nish/net/postgres ([#1037](https://github.com/amritk/nish/pull/1037))
+
+### Build
+
+- Regenerate package-lock.json for v0.25.0 ([#1035](https://github.com/amritk/nish/pull/1035))
+- deps: Bump github.com/klauspost/compress ([#1021](https://github.com/amritk/nish/pull/1021))
+
+
 ## [0.25.0] - 2026-10-29
 
 ### Added
@@ -1314,3 +1329,4 @@ hand — the git log is the working account until a release turns it into one.
 [0.23.1]: https://github.com/amritk/nish/releases/tag/v0.23.1
 [0.24.0]: https://github.com/amritk/nish/releases/tag/v0.24.0
 [0.25.0]: https://github.com/amritk/nish/releases/tag/v0.25.0
+[0.26.0]: https://github.com/amritk/nish/releases/tag/v0.26.0
