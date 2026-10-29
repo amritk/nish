@@ -9,12 +9,12 @@ import { Suite } from "nish/testing";
 import { ascii } from "../net_tls_record_common/bytes";
 import { h3IsPattern, h3Pattern } from "../net_http3/peer";
 import { CARRIER_TLS, TcpLoop } from "./tcp";
-import { TlsClient } from "./tls-client";
+import { LoopbackTlsClient } from "./tls-client";
 import { sameBytes } from "../crypto_x509/hex";
 import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
 /** One echo of `bytes` through client `c`; whether it came back whole. */
-const tlsEchoed = (c: TlsClient, bytes: u8[]): boolean => {
+const tlsEchoed = (c: LoopbackTlsClient, bytes: u8[]): boolean => {
   c.send(bytes);
   if (!c.awaitPlain(toI32(bytes.length))) {
     return false;
@@ -25,7 +25,7 @@ const tlsEchoed = (c: TlsClient, bytes: u8[]): boolean => {
 /** A connection from handshake to close, with one echo, under `m`; whether it all went as it should. */
 const tlsWholeConnection = (lp: TcpLoop, m: LbMeter): boolean => {
   lp.meter = m;
-  const c = new TlsClient(lp);
+  const c = new LoopbackTlsClient(lp);
   const noAlpn: string[] = [];
   const ok: boolean = c.handshake(noAlpn) && tlsEchoed(c, ascii("one more"));
   c.closeNotify();
@@ -38,7 +38,7 @@ const tlsWholeConnection = (lp: TcpLoop, m: LbMeter): boolean => {
 /** Every check of the TLS carrier. */
 export const tlsChecks = (t: Suite): void => {
   const lp = new TcpLoop(CARRIER_TLS);
-  const c = new TlsClient(lp);
+  const c = new LoopbackTlsClient(lp);
   const noAlpn: string[] = [];
   t.ok("tls: a Nish client completes the handshake across loopback, the server's signature and Finished verified", c.handshake(noAlpn));
   t.ok("tls: a request is echoed", tlsEchoed(c, ascii("GET / over tls")));

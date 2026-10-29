@@ -15,7 +15,7 @@ import { h3IsPattern, h3Pattern } from "../net_http3/peer";
 import { FrameLog, NO_PAD, Wire, getOf, postOf } from "../net_http2/peer";
 import { textOf } from "../crypto_x509/hex";
 import { CARRIER_H2, TcpLoop } from "./tcp";
-import { TlsClient } from "./tls-client";
+import { LoopbackTlsClient } from "./tls-client";
 import { LbMeter, ROUNDS, WARM, roundText } from "./common";
 
 /** The stream window the client's SETTINGS give the server. */
@@ -23,7 +23,7 @@ const CLIENT_WINDOW: i32 = 16384;
 
 /** The client: its TLS stream, what it writes, what it has read, and both sides' windows. */
 class H2Client {
-  c: TlsClient;
+  c: LoopbackTlsClient;
   wire: Wire;
   log: FrameLog;
   frame: Http2Frame;
@@ -39,7 +39,7 @@ class H2Client {
   serverRefills: i32 = 0;
   clientRefills: i32 = 0;
 
-  constructor(c: TlsClient) {
+  constructor(c: LoopbackTlsClient) {
     this.c = c;
     this.wire = new Wire();
     this.log = new FrameLog();
@@ -197,7 +197,7 @@ export const http2Checks = (t: Suite): void => {
   // The server's date, pinned so the head compares byte for byte.
   const noon: i64 = 1792138314000;
   lp.h2.date.pin(noon);
-  const c = new TlsClient(lp);
+  const c = new LoopbackTlsClient(lp);
   t.ok("http/2: a TLS handshake offering h2 across loopback", c.handshake([H2_ALPN, "http/1.1"]));
   t.eqStr("http/2: ALPN chose h2", lp.h2.alpn(ZERO), "h2");
   const h = new H2Client(c);
