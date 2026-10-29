@@ -56,6 +56,7 @@ export declare function arch(): string;
 export declare function getenv(name: string): string | null;
 export declare function spawnSync(argv: string[]): number;
 export declare function spawnSyncTo(argv: string[], stdoutPath: string, stderrPath: string): number;
+export declare function spawnPiped(argv: string[], stdin: readonly number[], stdout: number[], stderr: number[]): number;
 export declare function kill(pid: i32, sig: i32): i32;
 export declare function availableParallelism(): i32;
 export declare function totalMemory(): i64;

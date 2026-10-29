@@ -125,7 +125,7 @@ const AMBIENT_NAMES: string =
   " monotonicNanos statMtimeSync lstatOwnerModeSync geteuid isExecutableSync toI32 toI64" +
   " toF64 f64ToBits f32ToBits bitsToF64 ctSelect ctEq parseInt parseFloat secureZero" +
   " Ok Err arena readStdin waitStdin isTerminal terminalSize setRawMode" +
-  " setTerminalRestore renameSync unlinkSync writeFileBytesSync writeBytes "
+  " setTerminalRestore renameSync unlinkSync writeFileBytesSync writeBytes spawnPiped "
 
 /**
  * The width types `nish/runtime` declares (`runtime/core.d.ts`), and the

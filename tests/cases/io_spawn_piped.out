@@ -1,0 +1,9 @@
+cat: 0 256 true 0
+big: 0 1572864 true
+split: 3 out err
+appended: outmore
+missing: -1
+missing path: -1
+unread: 0
+flood: -2 16777216
+secret visible: false

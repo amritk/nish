@@ -438,6 +438,16 @@ int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_st
  * own error otherwise, and -ENOSYS under WASI. The child is reaped by
  * `nish_wait_pid`. */
 int32_t nish_spawn_child(const nish_array *argv);
+/* `spawnPiped(argv, stdin, stdout, stderr)`: start element 0 of `argv` as
+ * `nish_spawn` does, with the bytes of `stdin` (a `u8[]`) on its standard input
+ * and its standard output and error appended to `stdout` and `stderr`, wait for
+ * it, and answer `nish_spawn`'s status. -1 is `nish_spawn`'s -1, a pipe or
+ * `poll` that fails included, and always under WASI. -2 is a stream that passed
+ * 16 MiB: the child is killed with SIGKILL and reaped, and that array holds the
+ * stream's first 16 MiB. The two output arrays grow as `push` grows them, so
+ * the compiler treats both as pushed. `stdin` is read in place and never
+ * copied; SIGPIPE is ignored for the call and restored after it. */
+int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err);
 /* `kill(pid, sig)`: send `sig` to `pid` and answer 0, or a negative errno. Only
  * 0, 2 (SIGINT), 9 (SIGKILL) and 15 (SIGTERM) are sent; any other signal, and
  * a pid of 0 or below, is -EINVAL. -ESRCH when no process has the pid, -EPERM

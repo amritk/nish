@@ -268,6 +268,34 @@ function spawnSyncTo(argv, out, err) {
   return spawnImpl(argv, out, err);
 }
 
+/** The bytes `spawnPiped` keeps of one stream, as `runtime-os.c`'s `NISH_PIPED_CAP`. */
+const PIPED_CAP = 16 * 1024 * 1024;
+
+/**
+ * `spawnPiped(argv, stdin)`'s run, after the core took it apart: the status
+ * and the two streams' bytes, which the core appends to the caller's arrays.
+ * The status is `spawnImpl`'s, and -2 when a stream passed `PIPED_CAP`: Node
+ * then kills the child with `SIGKILL`, as the runtime does, and reports
+ * `ENOBUFS`, and what it read is cut to the cap here as the runtime keeps it.
+ * A child that exits without reading its stdin is not an error on either side.
+ */
+function spawnPiped(argv, input) {
+  if (argv.length === 0) return [-1, [], []];
+  const r = child_process.spawnSync(argv[0], argv.slice(1), {
+    input: Uint8Array.from(input),
+    maxBuffer: PIPED_CAP,
+    killSignal: "SIGKILL",
+  });
+  const bytes = (b) => (b === null || b === undefined ? [] : Array.from(b.subarray(0, PIPED_CAP)));
+  const out = bytes(r.stdout);
+  const err = bytes(r.stderr);
+  // `EPIPE` is the child closing its stdin unread, which Node reports with
+  // the status it still waited for; the runtime ignores it the same way.
+  if (r.error !== undefined && r.error.code !== "EPIPE") return [r.error.code === "ENOBUFS" ? -2 : -1, out, err];
+  if (r.signal !== null && r.signal !== undefined) return [128 + (os.constants.signals[r.signal] ?? 0), out, err];
+  return [r.status === null ? -1 : r.status, out, err];
+}
+
 /**
  * `kill(pid, sig)`: 0, or a negative errno, as `runtime-os.c`'s `nish_kill`
  * answers. Only 0, 2, 9 and 15 are sent and a pid of 0 or below is refused,
@@ -394,6 +422,7 @@ const CALLS = {
   getenv,
   spawnSync,
   spawnSyncTo,
+  spawnPiped,
   kill,
   availableParallelism,
   totalMemory,

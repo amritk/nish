@@ -179,7 +179,8 @@ export const isArrayWriteMethod = (name: string): boolean =>
  * `udpRecvFrom`'s `buf` and `from`, and whose `m` arguments are
  * `udpRecvFrom`'s `meta` and `pollWait`'s `ready`; `readStdin` is `netRead`'s
  * letters less the descriptor (`bufferSignature`); `uncheckedSet` is `w`, for its
- * receiver. A user function that shares a builtin's name wins it, as it wins
+ * receiver; `spawnPiped` is `rrww`, for the two arrays it appends the child's
+ * output to. A user function that shares a builtin's name wins it, as it wins
  * every identifier builtin, and writes nothing here. The parameter classification, the fact
  * collector and a scope's region rule ask this, each for the reason it asks
  * `isArrayWriteMethod`; a string rather than a list, because they ask it of
@@ -197,6 +198,11 @@ export const builtinArgumentLetters = (program: CheckedProgram, call: Node): str
     // `uncheckedSet(xs, i, v)` (`nish:unsafe`) writes an element of `xs`, as
     // `xs[i] = v` does; the index and the value are numbers.
     const name = builtinNameOf(program, call)
+    // `spawnPiped(argv, stdin, stdout, stderr)` reads the first two arrays and
+    // appends to the last two, which moves their headers as `push` does.
+    if (name === "spawnPiped") {
+      return "rrww"
+    }
     return name === "secureZero" || name === "uncheckedSet" ? "w" : bufferSignature(name)
   }
   const fills =

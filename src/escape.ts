@@ -344,8 +344,13 @@ class EscapeAnalysis {
   refLocals: Local[]
   refNodes: Node[][]
   declarations: Node[]
-  /** `push` receivers that are locals, checked against the site locals below. */
+  /**
+   * Calls that grow an array in the arena, checked against the site locals
+   * below: `xs.push(v)`, and `spawnPiped`, which appends to its `stdout` and
+   * `stderr` and so appears once for each. `pushReceivers` is parallel to it.
+   */
   pushes: Node[]
+  pushReceivers: Node[]
   /** Calls of a function that fills one of its parameters (`fillsParam`), decided last. */
   fills: Node[]
   logsNumbers: boolean
@@ -386,6 +391,7 @@ class EscapeAnalysis {
     this.refNodes = []
     this.declarations = []
     this.pushes = []
+    this.pushReceivers = []
     this.fills = []
     this.logsNumbers = false
     this.outcomeLocals = []
@@ -536,6 +542,7 @@ class EscapeAnalysis {
     }
     if (isPushCall(program, this.table, call)) {
       this.pushes.push(call)
+      this.pushReceivers.push(call.children[0].children[0])
       return
     }
     // WP14: `s.substring(...)`, `String.fromCharCode(c)` and `parts.join(s)`
@@ -576,8 +583,17 @@ class EscapeAnalysis {
       // identifier is the local name, so the builtin is the one the checker
       // recorded: `import { readFileBytesSync as bytesOf }` is the same
       // allocation spelled differently (`mem_read_import_scope`).
-      if (isAllocatingBuiltin(builtinNameOf(program, call))) {
+      const builtin = builtinNameOf(program, call)
+      if (isAllocatingBuiltin(builtin)) {
         this.sites.push(new Site(call, false))
+      }
+      // `spawnPiped` grows `stdout` and `stderr` with `nish_array_grow`, as
+      // `push` grows its receiver, so each is a push of the call's.
+      if (builtin === "spawnPiped" && call.children[1].children.length === 4) {
+        for (const k of [2, 3]) {
+          this.pushes.push(call)
+          this.pushReceivers.push(call.children[1].children[k])
+        }
       }
       return
     }
@@ -1469,8 +1485,9 @@ class EscapeAnalysis {
     // `xs.push(v)`: growth memory belongs to `xs`. Fine when `xs` is a local
     // allocation of this function that flows `local` (the growth dies with
     // it); a leak otherwise (a parameter, a field, an element, a returned array).
-    for (const push of this.pushes) {
-      const receiver = unwrapParens(push.children[0].children[0])
+    for (let k = 0; k < this.pushes.length; k++) {
+      const push = this.pushes[k]
+      const receiver = unwrapParens(this.pushReceivers[k])
       let v: Local | null = null
       if (receiver.kind === N_IDENT) {
         v = this.unit.program.nodeLocals[receiver.id]
@@ -2055,10 +2072,13 @@ class PassWalk {
     }
   }
 
-  /** `xs.push(v)` grows `xs` in the arena: fine for an array this pass made, a leak into any other. */
-  visitPush(call: Node): void {
+  /**
+   * `xs.push(v)` grows `xs` in the arena, and `spawnPiped` its `stdout` and
+   * `stderr`: fine for an array this pass made, a leak into any other.
+   */
+  visitPush(call: Node, grown: Node): void {
     const program = this.unit.program
-    const receiver = unwrapParens(call.children[0].children[0])
+    const receiver = unwrapParens(grown)
     const local: Local | null = receiver.kind === N_IDENT ? program.nodeLocals[receiver.id] : null
     if (local !== null && !local.mutable && this.declaredInPass(local) && this.freshArray(local)) {
       return
@@ -2115,7 +2135,10 @@ class PassWalk {
       if (callee !== null) {
         this.visitCallee(callee, node)
       } else if (isPushCall(program, this.table, node)) {
-        this.visitPush(node)
+        this.visitPush(node, node.children[0].children[0])
+      } else if (builtinNameOf(program, node) === "spawnPiped" && node.children[1].children.length === 4) {
+        this.visitPush(node, node.children[1].children[2])
+        this.visitPush(node, node.children[1].children[3])
       } else if (resultMethodName(program, this.table, node) === "orReturn") {
         // A block's release follows the packing of a register `Result`, whose
         // payloads are numbers; a pass's release does not wait for anything.

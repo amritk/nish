@@ -13,7 +13,8 @@
 // here `checkStatement` records the expression it is about to check so the
 // builtin can compare against it. One field instead of a parent chain.
 
-import { readonlyWriteMessage } from "./arrays"
+import { typedArrayElement } from "./annotations"
+import { readonlyWriteMessage, typedArraySpelling } from "./arrays"
 import { CheckContext } from "./context"
 import { checkExpression, literalOperand } from "./expressions"
 import { internalErrorFor } from "./ice"
@@ -183,6 +184,7 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "geteuid" ||
     name === "isExecutableSync" ||
     name === "spawn" ||
+    name === "spawnPiped" ||
     name === "kill" ||
     name === "waitPid" ||
     name === "availableParallelism" ||
@@ -1091,6 +1093,31 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
   if (name === "spawn") {
     if (checkBuiltinArity(ctx, call, name, args, 1) && !refuseOnWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING))
+    }
+    return T_I32
+  }
+  // `spawnSync` with the child's three streams on pipes: `stdin` is read and
+  // never written, so a `readonly u8[]` is accepted there, and the two output
+  // arrays are appended to, so they are written arrays as `push`'s receiver
+  // is. The status is `i32` in either number mode, as `spawn`'s pid is. On
+  // wasm there is no child to start.
+  if (name === "spawnPiped") {
+    if (checkBuiltinArity(ctx, call, name, args, 4) && !refuseOnWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, ctx.table.arrayOf(T_STRING))
+      checkBuffer(ctx, args.children[1], scope, name, T_U8, false)
+      for (const k of [2, 3]) {
+        const out = args.children[k]
+        checkBuffer(ctx, out, scope, name, T_U8, true)
+        // Appending moves the length, which a typed array's spelling fixes,
+        // so it is refused here as `push` is on one.
+        const alias = typedArraySpelling(ctx, out, scope)
+        if (typedArrayElement(alias) >= 0) {
+          ctx.error(
+            out,
+            `\`${name}\` appends to its output arrays, and \`${alias}\` has a fixed length: declare it \`u8[]\``
+          )
+        }
+      }
     }
     return T_I32
   }

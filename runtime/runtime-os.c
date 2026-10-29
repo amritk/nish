@@ -49,6 +49,7 @@
 #include <unistd.h>
 #ifndef __wasi__
 /* WASI has no processes, so `spawn.h` and `wait.h` do not exist there. */
+#include <poll.h>
 #include <signal.h>
 #include <spawn.h>
 #include <sys/resource.h>
@@ -290,17 +291,19 @@ _Bool nish_mkdir(const nish_str *path) {
    value rather than through a child that has already run.
 
    `out` and `err` are paths for the child's stdout and stderr, or NULL to let
-   it inherit this process's. Every spawn builtin starts its child here, so the
+   it inherit this process's; `dup`, when not NULL, is three descriptors the
+   child takes as its stdin, stdout and stderr instead (`spawnPiped`'s pipes). Every spawn builtin starts its child here, so the
    argv vector and the redirects are written once; it is `static`, so a program
    that spawns nothing loses it to `--gc-sections`. The answer is the child's
    pid, or a negative errno: -EINVAL for an empty argv or an argument holding a
    NUL, and `posix_spawnp`'s own error otherwise (-ENOENT for a command that is
    not on PATH, on glibc). */
-static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err) {
+static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, const nish_str *err, const int *dup) {
 #ifdef __wasi__
   (void)argv;
   (void)out;
   (void)err;
+  (void)dup;
   return -ENOSYS;
 #else
   if (!argv->len) return -EINVAL; /* argv[0] would read past an empty array */
@@ -323,6 +326,7 @@ static int32_t nish_spawn_start(const nish_array *argv, const nish_str *out, con
   posix_spawn_file_actions_t fa;
   int failed = posix_spawn_file_actions_init(&fa);
   if (failed) return -failed;
+  for (int k = 0; dup && k < 3; k++) posix_spawn_file_actions_adddup2(&fa, dup[k], k);
   const nish_str *to[2] = { out, err };
   for (int k = 0; k < 2; k++) {
     /* The child opens the file, not this process: a redirect that this process
@@ -348,7 +352,7 @@ static int32_t nish_exit_code(int status) {
 /* The two blocking builtins: start, then wait for that one child. A failed
    start is -1, the answer they have always given. */
 static int32_t nish_spawn_impl(const nish_array *argv, const nish_str *out, const nish_str *err) {
-  int32_t pid = nish_spawn_start(argv, out, err);
+  int32_t pid = nish_spawn_start(argv, out, err, 0);
   if (pid < 0) return -1;
 #ifdef __wasi__
   return -1;
@@ -379,7 +383,146 @@ int32_t nish_spawn_to(const nish_array *argv, const nish_str *out, const nish_st
 /* `spawn(argv)`: the child's pid, or a negative errno, without waiting. The
    child is this process's until a `waitPid` reaps it; one never reaped stays
    a zombie until the program exits, as it would in C. */
-int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv, 0, 0); }
+int32_t nish_spawn_child(const nish_array *argv) { return nish_spawn_start(argv, 0, 0, 0); }
+
+/* `spawnPiped(argv, stdin, stdout, stderr)`: run the child as `nish_spawn`
+   does, with `stdin`'s bytes on its standard input and its standard output
+   and error appended to `stdout` and `stderr`, and answer its status. -1 is
+   `nish_spawn`'s failure (an empty argv, a NUL, a child that cannot start or
+   be waited for, a pipe or `poll` that fails), and -2 is a stream that passed
+   NISH_PIPED_CAP bytes: the child is killed with SIGKILL and reaped, and the
+   array holds the first NISH_PIPED_CAP bytes of that stream.
+
+   The three pipes are close-on-exec, so no other child this process starts
+   inherits an end, and each end is moved off descriptors 0 to 2, where a
+   `dup2` onto itself would leave close-on-exec set and the child without
+   that stream. Darwin has no `pipe2`, so there an end is close-on-exec only
+   once `F_DUPFD_CLOEXEC` has moved it: a child another thread starts in
+   that window inherits it (docs/security/runtime.md, RT-25).
+
+   One `poll` loop over non-blocking ends writes stdin and reads both outputs
+   as each is ready, so a child that fills its stdout before it reads all its
+   stdin, or the reverse, cannot deadlock against this process. A child that
+   exits, or closes its stdin, before reading everything ends the writing
+   with EPIPE rather than SIGPIPE: the signal is ignored for the call and
+   the action it had is put back before the answer, so for that window a
+   write to a closed pipe on another thread of this process fails with EPIPE
+   too rather than ending the process.
+
+   The bytes are written from the caller's array as they stand, and nothing
+   copies them: the only copies are the kernel's pipe buffer and the child.
+   The pointer and length are read once, so `stdout` being the same array as
+   `stdin` appends to it without feeding the output back in. */
+#define NISH_PIPED_CAP (16u << 20)
+#ifndef __wasi__
+static int nish_pipe(int *p) {
+#ifdef __linux__
+  if (pipe2(p, O_CLOEXEC)) return -1;
+#else
+  if (pipe(p)) return -1;
+#endif
+  for (int k = 0; k < 2; k++) {
+#ifdef __linux__
+    if (p[k] > 2) continue;
+#endif
+    int moved = fcntl(p[k], F_DUPFD_CLOEXEC, 3);
+    close(p[k]);
+    p[k] = moved;
+    if (moved < 0) return -1;
+  }
+  return 0;
+}
+
+#endif
+
+int32_t nish_spawn_piped(const nish_array *argv, const nish_array *in, nish_array *out, nish_array *err) {
+#ifdef __wasi__
+  (void)argv;
+  (void)in;
+  (void)out;
+  (void)err;
+  return -1;
+#else
+  const char *src = in->data;
+  uint64_t n = in->len, sent = 0, got[3] = { 0, 0, 0 };
+  int p[6] = { -1, -1, -1, -1, -1, -1 };
+  int32_t rc = -1;
+  struct sigaction ignore, old;
+  memset(&ignore, 0, sizeof ignore);
+  ignore.sa_handler = SIG_IGN;
+  sigaction(SIGPIPE, &ignore, &old);
+  if (nish_pipe(p) || nish_pipe(p + 2) || nish_pipe(p + 4)) goto done;
+  int child[3] = { p[0], p[3], p[5] };
+  int32_t pid = nish_spawn_start(argv, 0, 0, child);
+  /* The child holds its ends now; this process keeps only its own. */
+  for (int k = 0; k < 3; k++) {
+    close(child[k]);
+    p[k ? 2 * k + 1 : 0] = -1;
+  }
+  if (pid < 0) goto done;
+  struct pollfd f[3] = { { p[1], POLLOUT, 0 }, { p[2], POLLIN, 0 }, { p[4], POLLIN, 0 } };
+  p[1] = p[2] = p[4] = -1;
+  for (int k = 0; k < 3; k++) fcntl(f[k].fd, F_SETFL, O_NONBLOCK);
+  if (!n) {
+    close(f[0].fd);
+    f[0].fd = -1;
+  }
+  nish_array *to[3] = { 0, out, err };
+  rc = 0;
+  while (!rc && (f[0].fd >= 0 || f[1].fd >= 0 || f[2].fd >= 0)) {
+    if (poll(f, 3, -1) < 0) {
+      if (errno != EINTR) rc = -1;
+      continue;
+    }
+    if (f[0].revents) {
+      ssize_t k = write(f[0].fd, src + sent, n - sent);
+      if (k > 0) sent += k;
+      if (sent == n || (k < 0 && errno != EINTR && errno != EAGAIN)) {
+        close(f[0].fd);
+        f[0].fd = -1;
+      }
+    }
+    for (int s = 1; s < 3 && !rc; s++) {
+      if (!f[s].revents) continue;
+      nish_array *a = to[s];
+      /* Grown as `push` grows it, so the array keeps the shape every other
+         array has, and an ASan build tracks the block the same way. */
+      if (a->len == a->cap) nish_array_grow(a, 1);
+      /* One byte past the cap at most, which is how a stream that ends at
+         exactly the cap is told from one that goes on. */
+      uint64_t room = a->cap - a->len, left = NISH_PIPED_CAP + 1 - got[s];
+      ssize_t k = read(f[s].fd, a->data + a->len, room < left ? room : left);
+      if (k > 0) {
+        a->len += k;
+        got[s] += k;
+        if (got[s] > NISH_PIPED_CAP) {
+          a->len--;
+          rc = -2;
+        }
+      } else if (!k || (errno != EINTR && errno != EAGAIN)) {
+        close(f[s].fd);
+        f[s].fd = -1;
+      }
+    }
+  }
+  if (rc) kill(pid, SIGKILL);
+  for (int k = 0; k < 3; k++)
+    if (f[k].fd >= 0) close(f[k].fd);
+  int status;
+  while (waitpid(pid, &status, 0) < 0) {
+    if (errno != EINTR) {
+      rc = -1;
+      break;
+    }
+  }
+  if (!rc) rc = nish_exit_code(status);
+done:
+  for (int k = 0; k < 6; k++)
+    if (p[k] >= 0) close(p[k]);
+  sigaction(SIGPIPE, &old, 0);
+  return rc;
+#endif
+}
 
 /* `kill(pid, sig)`: 0, or a negative errno. Only the four signals a program
    asks a child to stop or report with are sent -- 0 (is it there), SIGINT,

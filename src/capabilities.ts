@@ -281,6 +281,11 @@ export const builtinCapability = (name: string): i32 => {
   if (name === "spawn" || name === "kill" || name === "waitPid") {
     return CAP_PROCESS_SPAWN
   }
+  // The child of `spawnPiped` runs anything too; its streams come back into
+  // the program's own arrays rather than reaching a file or the network.
+  if (name === "spawnPiped") {
+    return CAP_PROCESS_SPAWN
+  }
   // Lowering this process's own priority reaches no other process, but it is
   // the scheduling `spawn`'s children inherit and a change the program cannot
   // always undo, so it is gated with the process calls rather than free.
