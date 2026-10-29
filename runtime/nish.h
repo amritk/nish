@@ -282,6 +282,20 @@ nish_array *nish_alloc_array(uint64_t elem_size, uint64_t len);
    Variable-time: never call it on a secret. */
 int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t depth, int64_t off, int64_t width,
                         int64_t from);
+/* `Math.floor`, `Math.ceil` and `Math.trunc`, and the floor `Math.round`
+   takes (#943): each answers as C's `floor`, `ceil` and `trunc` do, -0, the
+   infinities and NaN included. A module for x86-64 calls them and registers a
+   constructor in `@llvm.global_ctors` that passes `nish_round_init` libm's
+   `floor`, `ceil` and `trunc`; it asks the CPU for SSE4.1 once before `main`
+   and keeps them on a machine without it, or under `NISH_SIMD=scalar`. Each
+   is otherwise SSE4.1's `roundsd`, so the constructor must run first. The
+   runtime references no libm symbol: the module that rounds does. They live
+   in runtime/runtime-simd.c; runtime-wasm.c has the wasm32 ones for host IR
+   that `scripts/build.sh --profile wasm` links. */
+void nish_round_init(double (*floor_fn)(double), double (*ceil_fn)(double), double (*trunc_fn)(double));
+double nish_floor(double x);
+double nish_ceil(double x);
+double nish_trunc(double x);
 /* No array grows past 2^31 - 1 elements and no string past 2^31 - 1 bytes:
  * `nish_array_grow`, `nish_alloc_array` and `nish_str_concat` fail as an
  * allocation does (`nish: out of memory`, exit 1; a trap on wasm) rather than

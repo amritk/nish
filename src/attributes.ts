@@ -3112,7 +3112,7 @@ class FactCollector {
       !receiverIsValue(program, node.children[0].children[0])
     ) {
       const name = dottedName(node.children[0])
-      const dotted = builtinCalleesNamed(program, table, node, name)
+      const dotted = builtinCalleesNamed(program, table, this.opts, node, name)
       this.addCallees(dotted)
       this.noteWorld(node, dotted, name)
       if (this.known !== null) {
@@ -3583,7 +3583,7 @@ class FactCollector {
       const named =
         imported.indexOf(".") < 0
           ? identifierBuiltinCalleesNamed(this.unit.program, this.table, node, imported)
-          : builtinCalleesNamed(this.unit.program, this.table, node, imported)
+          : builtinCalleesNamed(this.unit.program, this.table, this.opts, node, imported)
       this.addCallees(named)
       this.noteWorld(node, named, imported)
     } else {

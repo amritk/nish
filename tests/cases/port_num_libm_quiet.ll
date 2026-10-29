@@ -1,15 +1,27 @@
+@llvm.global_ctors = appending global [1 x { i32, void ()*, i8* }] [{ i32, void ()*, i8* } { i32 101, void ()* @nish.round.init, i8* null }]
+
+declare double @floor(double)
+declare double @ceil(double)
+declare double @trunc(double)
 declare void @nish_free_arena() #1
 declare noundef i64 @nish_arena_mark() #1
 declare void @nish_arena_release(i64 noundef) #1
+declare double @nish_floor(double) #2
+declare void @nish_round_init(double (double)*, double (double)*, double (double)*) #1
 declare void @nish_print(i8* noundef nonnull readonly align 8 nocapture) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_i32(i32 noundef) #1
 declare noalias noundef nonnull align 8 i8* @nish_str_from_f64(double noundef) #1
-declare extern_weak void @nish_panic_overflow(i32 noundef) #2
-declare double @llvm.floor.f64(double) #3
-declare double @llvm.fabs.f64(double) #3
-declare i32 @llvm.smin.i32(i32, i32) #3
-declare i32 @llvm.smax.i32(i32, i32) #3
-declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #3
+declare extern_weak void @nish_panic_overflow(i32 noundef) #3
+declare double @llvm.fabs.f64(double) #2
+declare i32 @llvm.smin.i32(i32, i32) #2
+declare i32 @llvm.smax.i32(i32, i32) #2
+declare { i32, i1 } @llvm.sadd.with.overflow.i32(i32, i32) #2
+
+define internal void @nish.round.init() nounwind {
+entry:
+  call void @nish_round_init(double (double)* @floor, double (double)* @ceil, double (double)* @trunc)
+  ret void
+}
 
 define noundef i32 @nish_main() #0 {
 entry:
@@ -27,7 +39,7 @@ entry:
   %3 = call i32 @llvm.smax.i32(i32 %2, i32 7)
   store i32 %3, i32* %high.addr, align 4
   %4 = fneg double 0x4004000000000000
-  %5 = call double @llvm.floor.f64(double %4)
+  %5 = call double @nish_floor(double %4)
   store double %5, double* %down.addr, align 8
   %6 = fneg double 0x4004000000000000
   %7 = call double @llvm.fabs.f64(double %6)
@@ -64,8 +76,8 @@ entry:
 
 attributes #0 = { nounwind "probe-stack"="inline-asm" }
 attributes #1 = { nounwind willreturn "probe-stack"="inline-asm" }
-attributes #2 = { nounwind noreturn cold "probe-stack"="inline-asm" }
-attributes #3 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #2 = { nounwind willreturn readnone "probe-stack"="inline-asm" }
+attributes #3 = { nounwind noreturn cold "probe-stack"="inline-asm" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !0 = !{i32 8, !"cf-protection-branch", i32 1}

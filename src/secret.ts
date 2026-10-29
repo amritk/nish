@@ -2563,7 +2563,12 @@ export const isPureRuntime = (symbol: string): boolean =>
   symbol === "nish_str_from_f64" ||
   symbol === "nish_str_from_i64" ||
   symbol === "nish_str_from_u64" ||
-  symbol === "nish_parse_number"
+  symbol === "nish_parse_number" ||
+  // `Math.floor` and kin on x86-64 (#943). Without SSE4.1 each is libm's
+  // routine, whose time can say something about a secret operand.
+  symbol === "nish_floor" ||
+  symbol === "nish_ceil" ||
+  symbol === "nish_trunc"
 
 /** How `FunctionFacts.worldVia` names a `declare function`, which `src/attributes.ts` spells the same way. */
 const C_FUNCTION: string = "the C function "

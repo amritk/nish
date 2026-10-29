@@ -128,3 +128,21 @@ void nish_exit(int32_t code) { (void)code; __builtin_trap(); }
 void nish_panic(const void *s) { (void)s; __builtin_trap(); }
 /* Output has nowhere to go either. */
 void nish_write(const void *s, int32_t fd, _Bool newline) { (void)s; (void)fd; (void)newline; }
+
+/* ---- Rounding (#943): IR compiled for the host calls these and registers a
+ * constructor that passes `nish_round_init` libm's three routines
+ * (runtime-simd.c has the native ones). On wasm32 each is the one
+ * instruction, f64.floor, f64.ceil or f64.trunc, and there is no CPU to ask.
+ * The link is freestanding, so the libm names the constructor takes are
+ * defined here too, as the same instructions. */
+void nish_round_init(double (*floor_fn)(double), double (*ceil_fn)(double), double (*trunc_fn)(double)) {
+  (void)floor_fn;
+  (void)ceil_fn;
+  (void)trunc_fn;
+}
+double nish_floor(double x) { return __builtin_floor(x); }
+double nish_ceil(double x) { return __builtin_ceil(x); }
+double nish_trunc(double x) { return __builtin_trunc(x); }
+double floor(double x) { return __builtin_floor(x); }
+double ceil(double x) { return __builtin_ceil(x); }
+double trunc(double x) { return __builtin_trunc(x); }

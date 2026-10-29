@@ -10,7 +10,8 @@
 # threads, <dir>/runtime-cross.c, the copies that carry a string or an array
 # from one thread's arena to another's, <dir>/runtime-host.c, the wall clock, entropy, file times and
 # signals, <dir>/runtime-net.c, the sockets of `nish:net`,
-# <dir>/runtime-simd.c, the byte searches that read a vector at a time,
+# <dir>/runtime-simd.c, the byte searches that read a vector at a time and
+# the SSE4.1 rounding of `Math.floor` and its kin,
 # <dir>/runtime-aes.c, AES-GCM on the CPU's AES instructions,
 # <dir>/runtime-term.c, stdin and the terminal of `nish:term`, and
 # <dir>/runtime-bytes.c, the byte-class runs of `nish/bytes`. Each of those
@@ -664,6 +665,20 @@ case "$profile" in
     done
     if [ "$bytes_wanted" = 1 ] && [ "$bytes_named" = 0 ]; then
       inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-bytes.c")
+    fi
+    # IR compiled for the host rounds through runtime-simd.c's `nish_floor` and its
+    # kin behind the constructor `nish_round_init` (#943). runtime-wasm.c has their
+    # wasm32 bodies, and it is added the same way when such IR does not name it.
+    wasm_named=0
+    round_wanted=0
+    for i in ${inputs[@]+"${inputs[@]}"}; do
+      case "$i" in
+        */runtime-wasm.c|runtime-wasm.c) wasm_named=1 ;;
+        *.ll) if grep -q '@nish_round_init' "$i"; then round_wanted=1; fi ;;
+      esac
+    done
+    if [ "$round_wanted" = 1 ] && [ "$wasm_named" = 0 ]; then
+      inputs+=("$(cd "$(dirname "$0")/../runtime" && pwd)/runtime-wasm.c")
     fi
     # -mbulk-memory lowers llvm.memset/memcpy (`new Array<T>(n)`, `push` growth) to the
     # memory.fill/memory.copy instructions instead of libc calls the freestanding link lacks.

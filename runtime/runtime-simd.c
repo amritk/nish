@@ -1,5 +1,6 @@
 /* Nish runtime, the vector half: byte searches that read sixteen or thirty-two
- * bytes at a time (WP38 S1, docs/wp38-simd.md §3.1).
+ * bytes at a time (WP38 S1, docs/wp38-simd.md §3.1), and the SSE4.1 rounding
+ * behind `Math.floor`, `Math.ceil` and `Math.trunc` (#943, at the end).
  *
  * A translation unit of its own for the reason runtime-host.c is one: each file
  * carries its own measured `.text*` ceiling in tests/runtime-budgets.js, and
@@ -176,10 +177,17 @@ static int nish_cpu_has_avx2(void) {
    `base` never reads the CPU's feature bits at all. */
 enum { NISH_PATH_SCALAR, NISH_PATH_BASE, NISH_PATH_AVX2 };
 
-static int nish_simd_choose(void) {
+/* The path `NISH_SIMD` pins, or -1 when it pins none. */
+static int nish_simd_pin(void) {
   const char *pin = getenv("NISH_SIMD");
   if (pin != NULL && strcmp(pin, "scalar") == 0) return NISH_PATH_SCALAR;
   if (pin != NULL && strcmp(pin, "base") == 0) return NISH_PATH_BASE;
+  return -1;
+}
+
+static int nish_simd_choose(void) {
+  int pin = nish_simd_pin();
+  if (pin >= 0) return pin;
 #if defined(NISH_SIMD_SSE2)
   if (nish_cpu_has_avx2()) return NISH_PATH_AVX2;
 #endif
@@ -425,3 +433,56 @@ int64_t nish_regex_scan(const nish_str *s, const nish_array *masks, int64_t dept
                         int64_t from) {
   return __atomic_load_n(&nish_scan, __ATOMIC_RELAXED)(s, masks, depth, off, width, from);
 }
+
+/* `Math.floor`, `Math.ceil` and `Math.trunc`, and the floor `Math.round` takes
+   (#943), the contract in nish.h. SSE4.1's `roundsd` answers each in one
+   instruction, but the x86-64 baseline is SSE2, where LLVM lowers
+   `llvm.floor.f64` to a call of libm's `floor` through the GOT. So a module
+   for x86-64 calls these instead (`roundingCallee`, src/emit-builtins.ts) and
+   registers a constructor that hands `nish_round_init` libm's three routines;
+   it asks the CPU once, before `main`, and keeps them only when the answer is
+   no. The runtime names no libm symbol itself, so a link without `-lm` (a C
+   host, a program that never rounds) still resolves: the module that rounds
+   brings the reference, as it did before. A null slot is the instruction and
+   is never written after the constructor, so on a CPU without SSE4.1 each
+   call is an indirect jump to libm, the path a module took before.
+   `NISH_SIMD=scalar` keeps libm, the forced fallback a test runs. `base` does
+   not: the instruction gate counts under it, and glibc's own `floor` takes
+   `roundsd` there as well, so the count is of the instruction both call.
+   Built for a machine that has SSE4.1 already (`--cpu x86-64-v3`), or for any
+   other, each is the builtin, which is the one instruction there, and the
+   constructor keeps nothing. The immediate is the rounding mode, 1 down, 2 up,
+   3 toward zero, plus 8, which keeps the precision exception quiet as libm's
+   `floor` does. */
+#if defined(NISH_SIMD_SSE2) && !defined(__SSE4_1__)
+static double (*nish_round_libm[3])(double);
+
+void nish_round_init(double (*floor_fn)(double), double (*ceil_fn)(double), double (*trunc_fn)(double)) {
+  unsigned a, b, c, d;
+  if (nish_simd_pin() != NISH_PATH_SCALAR && __get_cpuid(1, &a, &b, &c, &d) && (c & bit_SSE4_1)) return;
+  nish_round_libm[0] = floor_fn;
+  nish_round_libm[1] = ceil_fn;
+  nish_round_libm[2] = trunc_fn;
+}
+
+#define NISH_ROUNDING(name, base, slot, mode)                                                                \
+  double name(double x) {                                                                                    \
+    double (*libm)(double) = nish_round_libm[slot];                                                          \
+    if (libm) return libm(x);                                                                                \
+    __asm__("roundsd $" #mode ", %0, %0" : "+x"(x));                                                         \
+    return x;                                                                                                \
+  }
+#else
+void nish_round_init(double (*floor_fn)(double), double (*ceil_fn)(double), double (*trunc_fn)(double)) {
+  (void)floor_fn;
+  (void)ceil_fn;
+  (void)trunc_fn;
+}
+
+#define NISH_ROUNDING(name, base, slot, mode)                                                                \
+  double name(double x) { return __builtin_##base(x); }
+#endif
+
+NISH_ROUNDING(nish_floor, floor, 0, 9)
+NISH_ROUNDING(nish_ceil, ceil, 1, 10)
+NISH_ROUNDING(nish_trunc, trunc, 2, 11)

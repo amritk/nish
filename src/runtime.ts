@@ -336,6 +336,32 @@ export class RuntimeTable {
         EFFECT_READ
       )
     )
+    // #943: `Math.floor`, `ceil` and `trunc` on x86-64, beside them in
+    // runtime-simd.c (`roundingCallee` in src/emit-builtins.ts). Each answers
+    // what the `llvm.*.f64` it stands in for answers, for every operand: the
+    // flag it tests picks only which instruction computes that, and is written
+    // once, by `nish_round_init` before `main`. So the result depends on no
+    // memory a program can see, and `readnone` and `EFFECT_NONE` are the
+    // intrinsic's, which keeps every caller's attributes where they were.
+    for (const name of ["nish_floor", "nish_ceil", "nish_trunc"]) {
+      this.add(
+        new RuntimeFunction(
+          name,
+          `declare double @${name}(double)`,
+          attrs3("nounwind", "willreturn", "readnone"),
+          EFFECT_NONE
+        )
+      )
+    }
+    // Their setup, which only the module's constructor calls: it asks the CPU
+    // and keeps the libm routines it is passed when the answer is no.
+    this.add(
+      plain(
+        "nish_round_init",
+        "declare void @nish_round_init(double (double)*, double (double)*, double (double)*)",
+        EFFECT_WRITE
+      )
+    )
     this.add(
       new RuntimeFunction(
         "nish_str_index_of_from",

@@ -429,6 +429,13 @@ const NET_TEXT_BUDGET = 2816
  * is the same subject as `indexOfAny` -- a byte search a vector at a time, on the same
  * CPU question and `NISH_SIMD` pin -- so it raised this ceiling with a measurement in
  * docs/wp7-runtime.md rather than opening a file of its own.
+ *
+ * Measured **2,495 bytes** on 2026-10-29 once `Math.floor`, `ceil` and `trunc` took
+ * SSE4.1's `roundsd` behind a CPU question (#943): `nish_round_init`, the
+ * `NISH_SIMD` pin and the `cpuid` leaf it reads and the three libm pointers it
+ * keeps on a CPU without SSE4.1, and the three entry points, each the pointer
+ * test, `roundsd` and the indirect jump to libm. It is the same CPU question and pin
+ * as the kernels above, so it lives here, inside the ceiling.
  */
 const RUNTIME_SIMD_TEXT_BUDGET = 2560
 /**
