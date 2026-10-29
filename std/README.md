@@ -486,7 +486,7 @@ have, and all three have since landed as builtins:
 | Was missing | Now |
 | --- | --- |
 | a directory listing | `readdirSync(path): string[] \| null`, sorted by bytes, because there is no `sort` for a caller to reach for |
-| a child's **output** — `spawnSync` answers a status and nothing else | `spawnSyncTo(argv, stdoutPath, stderrPath)`, each stream to a file, an empty path inheriting |
+| a child's **output** — `spawnSync` answers a status and nothing else | `spawnSyncTo(argv, stdoutPath, stderrPath)`, each stream to a file, an empty path inheriting; `spawnPiped(argv, stdin, stdout, stderr)`, stdin from a `u8[]` and both outputs into `u8[]`s, for a secret the child reads on stdin |
 | a clock | `monotonicNanos(): i64` |
 
 So the driver exists, in the language, and it is

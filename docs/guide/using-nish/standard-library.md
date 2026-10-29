@@ -35,6 +35,33 @@ normal-priority fallback for work that must finish, and call either at the top
 of `main`, before any thread starts. See
 [Scheduling](../../LANGUAGE.md#scheduling-setnice-setidlepriority).
 
+`spawnPiped(argv, stdin, stdout, stderr)` runs a child with every stream in
+memory: the child reads `stdin`'s bytes and then end of file, and what it
+writes is appended to `stdout` and `stderr`. It answers the exit status (128
+plus the signal for one killed by a signal), -1 when the child cannot start,
+and -2 when either output passes 16 MiB, after which the child is killed. It is
+how a program hands a child a secret, since a child's argument vector and
+environment are readable by other processes and a file outlives the run:
+
+```ts
+const token = "ghp_example"
+const request = `protocol=https\nhost=github.com\nusername=bot\npassword=${token}\n\n`
+const input: u8[] = []
+for (let i = 0; i < request.length; i++) {
+  input.push(toU8(request.charCodeAt(i)))
+}
+const out: u8[] = []
+const err: u8[] = []
+const status = spawnPiped(["git", "credential", "approve"], input, out, err)
+if (status !== 0) {
+  console.log(`git credential failed (${status}): ${String.fromBytes(err, 0, err.length)}`)
+}
+```
+
+It is `process.spawn` in the capability report, and refused when compiling for
+WebAssembly. See
+[Directories and subprocesses](../../LANGUAGE.md#directories-and-subprocesses).
+
 `nish:fs` is where a program replaces a file in one step: write the new
 contents beside the target, then `renameSync` the temporary over it, so a
 reader sees the old file or the new one and never half of either.

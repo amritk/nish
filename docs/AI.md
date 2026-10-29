@@ -2142,6 +2142,9 @@ as it is, the length or a negative errno; the range panics like
 `netWrite`'s), `mkdirSync(path)` (one level, `boolean`),
 `isDirectorySync(path)`, `readdirSync(path)` (`string[] | null`, sorted by
 bytes, no `.`/`..`), `spawnSync(argv)`, `spawnSyncTo(argv, outPath, errPath)`,
+`spawnPiped(argv, stdin, stdout, stderr)` (stdin from a `u8[]`, both outputs
+appended to `u8[]`s, the status; `-2` past 16 MiB; the way to hand a child a
+secret, never argv or the environment),
 `getenv(name)` (`string | null` — unset and empty are different answers),
 `realpathSync(path)` (`string | null`; symbolic links resolved, absolute, and
 `null` when it does not resolve),

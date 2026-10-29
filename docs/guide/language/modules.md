@@ -111,7 +111,7 @@ local name:
 | Module | What it has |
 | --- | --- |
 | `nish:fs` | reading and writing files and directories: `readFileSync`, `writeFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `readdirSync`, … |
-| `nish:process` | `exit`, `argv`, `getenv`, `spawnSync`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `platform`, `arch`, … |
+| `nish:process` | `exit`, `argv`, `getenv`, `spawnSync`, `spawnPiped`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `platform`, `arch`, … |
 | `nish:io` | `write` and `writeError` (stdout and stderr without a newline), `writeBytes` (bytes from a `u8[]` to stdout, as they are), `panic` |
 | `nish:net` | TCP and UDP sockets and a readiness loop ([Networking](../using-nish/networking.md)) |
 | `nish:secret` | the `Secret<T>` wrapper for keys and other secret values |
