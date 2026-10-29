@@ -157,6 +157,18 @@ export function unlinkSync(path) {
   return host.call("unlinkSync", [path]);
 }
 
+export function writeFileSyncMode(path, data, mode) {
+  return host.call("writeFileSyncMode", [path, data, mode]);
+}
+
+export function createFileExclusiveSync(path, data, mode) {
+  return host.call("createFileExclusiveSync", [path, data, mode]);
+}
+
+export function mkdirSyncMode(path, mode) {
+  return host.call("mkdirSyncMode", [path, mode]);
+}
+
 export function mkdirSync(path) {
   return host.call("mkdirSync", [path]);
 }

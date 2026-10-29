@@ -116,7 +116,7 @@ export const isBuiltinSpecifier = (specifier: string): boolean =>
 /** The names one module exports, in table order, for the diagnostic that lists them. */
 export const nishModuleExports = (specifier: string): string => {
   if (specifier === `${BUILTIN_SCHEME}fs`) {
-    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync"
+    return "readFileSync, readFileSyncOrNull, readFileBytesSync, writeFileSync, appendFileSync, mkdirSync, isDirectorySync, readdirSync, realpathSync, statMtimeSync, renameSync, unlinkSync, writeFileBytesSync, writeFileSyncMode, createFileExclusiveSync, mkdirSyncMode"
   }
   if (specifier === `${BUILTIN_SCHEME}process`) {
     return "exit, getenv, spawnSync, spawnSyncTo, spawn, kill, waitPid, availableParallelism, totalMemory, setNice, setIdlePriority, monotonicNanos, signalFd, readSignal, argv, platform, arch"
@@ -298,7 +298,10 @@ export const nishExport = (specifier: string, name: string): BuiltinExport | nul
       name === "statMtimeSync" ||
       name === "renameSync" ||
       name === "unlinkSync" ||
-      name === "writeFileBytesSync"
+      name === "writeFileBytesSync" ||
+      name === "writeFileSyncMode" ||
+      name === "createFileExclusiveSync" ||
+      name === "mkdirSyncMode"
     ) {
       return new BuiltinExport("", name, false)
     }

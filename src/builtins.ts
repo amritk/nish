@@ -189,6 +189,9 @@ export const isBuiltinFunction = (name: string): boolean => {
     name === "renameSync" ||
     name === "unlinkSync" ||
     name === "writeFileBytesSync" ||
+    name === "writeFileSyncMode" ||
+    name === "createFileExclusiveSync" ||
+    name === "mkdirSyncMode" ||
     name === "writeBytes" ||
     name === "setNice" ||
     name === "setIdlePriority" ||
@@ -1183,6 +1186,23 @@ export const checkBuiltinFunctionNamed = (ctx: CheckContext, call: Node, scope: 
     if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnFreestandingWasm(ctx, call, name)) {
       checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
       checkBuffer(ctx, args.children[1], scope, name, T_U8, false)
+    }
+    return T_I32
+  }
+  // A file or directory with an explicit mode (runtime-os.c): an `i32` as
+  // above, the mode an `i32` the runtime range-checks.
+  if (name === "writeFileSyncMode" || name === "createFileExclusiveSync") {
+    if (checkBuiltinArity(ctx, call, name, args, 3) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+      checkArgumentType(ctx, args.children[1], scope, name, T_STRING)
+      checkArgumentType(ctx, args.children[2], scope, name, T_I32)
+    }
+    return T_I32
+  }
+  if (name === "mkdirSyncMode") {
+    if (checkBuiltinArity(ctx, call, name, args, 2) && !refuseOnFreestandingWasm(ctx, call, name)) {
+      checkArgumentType(ctx, args.children[0], scope, name, T_STRING)
+      checkArgumentType(ctx, args.children[1], scope, name, T_I32)
     }
     return T_I32
   }

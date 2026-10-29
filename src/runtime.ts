@@ -457,6 +457,25 @@ export class RuntimeTable {
         EFFECT_WRITE
       )
     )
+    // `writeFileSyncMode`, `createFileExclusiveSync` and `mkdirSyncMode`: an
+    // errno for an answer as above, the mode a plain `i32`.
+    this.add(
+      mayNotReturn(
+        "nish_write_file_mode",
+        `declare noundef i32 @nish_write_file_mode(${STR_NOCAP}, ${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn(
+        "nish_create_file_exclusive",
+        `declare noundef i32 @nish_create_file_exclusive(${STR_NOCAP}, ${STR_NOCAP}, i32 noundef)`,
+        EFFECT_WRITE
+      )
+    )
+    this.add(
+      mayNotReturn("nish_mkdir_mode", `declare noundef i32 @nish_mkdir_mode(${STR_NOCAP}, i32 noundef)`, EFFECT_WRITE)
+    )
     this.add(
       mayNotReturn(
         "nish_write_bytes",

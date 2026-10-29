@@ -2137,7 +2137,11 @@ a `\u` escape `nish/json` decodes) is one unit per byte, and counts its bytes.
 it is; `i32`: the length, or a negative errno), `renameSync(from, to)` (`0` or
 a negative errno; atomic on one filesystem, `-18` across two, so write the
 temporary beside the target), `unlinkSync(path)` (`0` or a negative errno; a
-directory is refused), `writeBytes(bytes, off, len)` (a `u8[]` range to stdout
+directory is refused), `writeFileSyncMode(path, data, mode)` (the file left
+at exactly `mode`, set before the first byte; a symbolic link refused; the
+length or a negative errno), `createFileExclusiveSync(path, data, mode)` (the
+same, but `-17` when the name exists: a lock file), `mkdirSyncMode(path, mode)`
+(`0`, `-17` when it exists, the umask applies), `writeBytes(bytes, off, len)` (a `u8[]` range to stdout
 as it is, the length or a negative errno; the range panics like
 `netWrite`'s), `mkdirSync(path)` (one level, `boolean`),
 `isDirectorySync(path)`, `readdirSync(path)` (`string[] | null`, sorted by

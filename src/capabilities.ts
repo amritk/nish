@@ -261,7 +261,10 @@ export const builtinCapability = (name: string): i32 => {
     name === "mkdirSync" ||
     name === "writeFileBytesSync" ||
     name === "renameSync" ||
-    name === "unlinkSync"
+    name === "unlinkSync" ||
+    name === "writeFileSyncMode" ||
+    name === "createFileExclusiveSync" ||
+    name === "mkdirSyncMode"
   ) {
     return CAP_FS_WRITE
   }

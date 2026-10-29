@@ -276,6 +276,28 @@ declare function writeFileBytesSync(path: string, bytes: readonly u8[]): i32;
 declare function renameSync(from: string, to: string): i32;
 /** The name `path` removed: 0, or a negative errno. A directory is refused, not removed. */
 declare function unlinkSync(path: string): i32;
+/**
+ * `writeFileSync` with an explicit `mode`: the file is exactly `mode`
+ * (`0o600` for a secret) before a byte of `data` is in it, whatever the umask
+ * or a file already there had, and a symbolic link at the path is refused
+ * (-40). The byte count, or a negative errno: -22 for a mode outside
+ * 0..0o7777. Written to a temporary name and moved with `renameSync`, a crash
+ * leaves the old file or the new one. Never an exit.
+ */
+declare function writeFileSyncMode(path: string, data: string, mode: i32): i32;
+/**
+ * `data` in a new file of exactly `mode`, created only if nothing is at `path`:
+ * -17 when something is, a dangling symbolic link included. Of several
+ * processes racing for one path exactly one succeeds, so it takes a lock. The
+ * byte count, or a negative errno. Never an exit.
+ */
+declare function createFileExclusiveSync(path: string, data: string, mode: i32): i32;
+/**
+ * One directory made with `mode` less the umask (`0o700` is exact under any
+ * umask that leaves the owner's bits): 0, or a negative errno. A path already
+ * there is -17 and its mode is not changed.
+ */
+declare function mkdirSyncMode(path: string, mode: i32): i32;
 /** One directory, not recursive; whether a directory is there afterwards. */
 declare function mkdirSync(path: string): boolean;
 /** Whether a directory is at `path` right now. One `stat`, and never an exit. */
@@ -467,6 +489,9 @@ declare var crypto: {
 //
 // `docs/LANGUAGE.md` -> Builtins -> Builtin modules is the normative list.
 
+// Every negative errno a file call answers is the platform's own, untranslated:
+// the numbers shown here are Linux's (-2 ENOENT, -17 EEXIST, -18 EXDEV, -22
+// EINVAL, -40 ELOOP), and Darwin's differ (ELOOP is -62 there).
 declare module "nish:fs" {
   export function readFileSync(path: string): string;
   export function readFileSyncOrNull(path: string): string | null;
@@ -481,6 +506,12 @@ declare module "nish:fs" {
   export function renameSync(from: string, to: string): i32;
   /** 0, or a negative errno: a directory is refused, not removed. */
   export function unlinkSync(path: string): i32;
+  /** The byte count, or a negative errno; the file is exactly `mode` before it holds a byte, a link refused. */
+  export function writeFileSyncMode(path: string, data: string, mode: i32): i32;
+  /** As `writeFileSyncMode`, but -17 when anything is at `path`: one racer wins. */
+  export function createFileExclusiveSync(path: string, data: string, mode: i32): i32;
+  /** 0, or a negative errno: -17 for a path already there, whose mode is left alone. */
+  export function mkdirSyncMode(path: string, mode: i32): i32;
   /** `true` when the directory was created, `false` when it already existed. */
   export function mkdirSync(path: string): boolean;
   export function isDirectorySync(path: string): boolean;

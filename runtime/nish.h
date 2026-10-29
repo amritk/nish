@@ -403,10 +403,22 @@ nish_array *nish_read_file_bytes(const nish_str *path);
  * errno — -EXDEV for a rename across file systems, which moves nothing, and
  * -EISDIR or -EPERM for a directory handed to `nish_unlink`, which never calls
  * rmdir. A path holding a NUL answers -EINVAL, not -ENOENT, so a program can
- * tell a malformed path from a missing file. */
+ * tell a malformed path from a missing file. The numbers are the platform's
+ * errno values, untranslated: -ELOOP is -40 on Linux and -62 on Darwin. */
 int32_t nish_rename(const nish_str *from, const nish_str *to);
 int32_t nish_unlink(const nish_str *path);
 int32_t nish_write_file_bytes(const nish_str *path, const nish_array *bytes);
+/* `writeFileSyncMode(path, data, mode)`, `createFileExclusiveSync(path, data,
+ * mode)` and `mkdirSyncMode(path, mode)`: a file written, or created only if
+ * nothing is at the path (`O_EXCL`), then `fchmod`ed to exactly `mode` before a
+ * byte is written; a directory made with `mode & ~umask`. A link at a file's
+ * path is refused. The file writers answer the byte count and `nish_mkdir_mode`
+ * 0, or a negative platform errno: -EEXIST for an exclusive create or a mkdir
+ * that finds the path taken (a directory's mode is then left alone), -EINVAL
+ * for a mode outside 0..07777 or a path holding a NUL, -ENOSYS under WASI. */
+int32_t nish_write_file_mode(const nish_str *path, const nish_str *data, int32_t mode);
+int32_t nish_create_file_exclusive(const nish_str *path, const nish_str *data, int32_t mode);
+int32_t nish_mkdir_mode(const nish_str *path, int32_t mode);
 /* `writeBytes(bytes, off, len)` (nish:io), in runtime-os.c: the bytes
  * `[off, off + len)` of a `u8[]` on stdout, a short write finished and `EINTR`
  * retried. The caller has range-checked `off` and `len`. Answers `len`, or the

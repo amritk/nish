@@ -1,0 +1,5 @@
+first: 0
+second: -17
+a directory: true
+bad mode: -22
+missing parent: -2
