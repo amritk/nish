@@ -6377,7 +6377,7 @@ and `io_nish_import_global` and comparing the two bodies.
 | Module | Exports |
 | --- | --- |
 | `nish:fs` | `readFileSync`, `readFileSyncOrNull`, `readFileBytesSync`, `writeFileSync`, `appendFileSync`, `writeFileBytesSync`, `renameSync`, `unlinkSync`, `mkdirSync`, `isDirectorySync`, `readdirSync`, `realpathSync`, `statMtimeSync` |
-| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
+| `nish:process` | `exit` (the global `process.exit`), `getenv`, `spawnSync`, `spawnSyncTo`, `spawn`, `kill`, `waitPid`, `availableParallelism`, `totalMemory`, `setNice`, `setIdlePriority`, `monotonicNanos`, `wallClockNanos`, `signalFd`, `readSignal`, `argv`, `platform`, `arch` |
 | `nish:io` | `write`, `writeError`, `writeBytes`, `panic` |
 | `nish:secret` | `Secret`, `secret`, `expose`, `exposeWith`, `wipe` — the one module with source behind it ([Secrets](#secrets-nishsecret)) |
 | `nish:net` | `netAddress`, `netLocalPort`, `tcpListen`, `tcpListenFlags`, `tcpAccept`, `netRead`, `netWrite`, `netShutdown`, `netClose`, `netSetOption` and its option ids `NET_TCP_NODELAY`, `NET_TCP_QUICKACK`, `NET_SO_KEEPALIVE`, `NET_SO_SNDBUF`, `NET_SO_RCVBUF`, `tcpConnect`, `connectResult`, `udpBind`, `udpSendTo`, `udpRecvFrom`, `pollCreate`, `pollAdd`, `pollModify`, `pollRemove`, `pollWait` — each a global too ([`nish:net`](#nishnet-addresses-non-blocking-tcp-and-udp-and-the-readiness-loop)) |
@@ -7321,6 +7321,7 @@ something that is not valid UTF-8 comes back as those bytes, exactly as
 | Signature | Semantics | Effect | Test |
 | --- | --- | --- | --- |
 | `monotonicNanos(): i64` | `CLOCK_MONOTONIC` in nanoseconds. The origin is arbitrary, so only the **difference** between two reads means anything: it is not comparable between two processes or two machines, and it is not a date | write | `io_monotonic`; `reject_monotonic_arity` |
+| `wallClockNanos(): i64` | `CLOCK_REALTIME` in nanoseconds since 1970-01-01 UTC: a timestamp, `Date.now`'s clock at a nanosecond's grain and as an `i64`. It can go backwards when the system time is set, so a duration is `monotonicNanos`'s job, not this one's. Not refused on wasm, as the monotonic clock is not | write | `wall_clock`; `reject_wall_clock_arity` |
 
 It is an `i64` in both number modes and not a `number`, because a `number` is an
 `i32` by default and would overflow inside a tenth of a second, and an `f64`
@@ -9099,7 +9100,7 @@ policy](#the-capability-policy); without one, the set is a report.
 
 | Capability | Builtins |
 | --- | --- |
-| `clock` | `Date.now`, `monotonicNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
+| `clock` | `Date.now`, `monotonicNanos`, `wallClockNanos`, `statMtimeSync` (`tests/cases/caps_clock`) |
 | `entropy` | `crypto.getRandomValues`, `Math.random` (`caps_entropy`) |
 | `env` | `getenv`, `geteuid` (`caps_env`) |
 | `exit` | `process.exit`, and `exit` from `nish:process` (`caps_exit`) |
