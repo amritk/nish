@@ -91,6 +91,8 @@ export class DnsClient {
   from: u8[]
   recvMeta: i32[]
   idBytes: u8[]
+  /** Whether `idBytes` holds an ID no send has used yet. */
+  idFresh: boolean = false
   loop: i32 = 0
   tokenBase: i32 = 0
   /** Sockets that could not be opened, written or connected, each a failed try. */
@@ -223,11 +225,22 @@ export class DnsClient {
     }
   }
 
-  /** The core's next piece of work, with a fresh random ID. */
+  /**
+   * The core's next piece of work, with a random ID no send has used: one is
+   * drawn only after the last went out, so an empty call or a close costs no
+   * `getRandomValues`.
+   */
   nextOutgoing(): i32 {
-    crypto.getRandomValues(this.idBytes)
+    if (!this.idFresh) {
+      crypto.getRandomValues(this.idBytes)
+      this.idFresh = true
+    }
     const id: i32 = (toI32(this.idBytes[0]) << 8) | toI32(this.idBytes[1])
-    return this.resolver.nextOutgoing(this.out, this.to, this.meta, id)
+    const q: i32 = this.resolver.nextOutgoing(this.out, this.to, this.meta, id)
+    if (q >= 0 && this.meta.length > 0 && this.meta[0] !== DNS_CLOSE) {
+      this.idFresh = false
+    }
+    return q
   }
 }
 
@@ -241,7 +254,7 @@ const dnsClientClose = (c: DnsClient, q: i32): void => {
   }
 }
 
-/** Fails query `q`'s try because its socket did: closes it and tells the core. */
+/** Fails query `q`'s try because its socket did: closes it, if it opened, and tells the core. */
 const dnsClientFail = (c: DnsClient, q: i32, nowNanos: i64): void => {
   c.socketFailures += 1
   dnsClientClose(c, q)
@@ -264,8 +277,7 @@ const dnsClientIsV4 = (to: u8[]): boolean => {
 const dnsClientSendUdp = (c: DnsClient, q: i32, nowNanos: i64): void => {
   const fd: i32 = udpBind(dnsClientIsV4(c.to) ? "0.0.0.0" : "::", 0, 0)
   if (fd < 0) {
-    c.socketFailures += 1
-    c.resolver.fail(q, nowNanos)
+    dnsClientFail(c, q, nowNanos)
     return
   }
   c.fds[q] = fd
@@ -283,8 +295,7 @@ const dnsClientSendUdp = (c: DnsClient, q: i32, nowNanos: i64): void => {
 const dnsClientOpenTcp = (c: DnsClient, q: i32, nowNanos: i64): void => {
   const fd: i32 = tcpConnect(c.to)
   if (fd < 0) {
-    c.socketFailures += 1
-    c.resolver.fail(q, nowNanos)
+    dnsClientFail(c, q, nowNanos)
     return
   }
   c.fds[q] = fd
