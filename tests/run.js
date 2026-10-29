@@ -23247,8 +23247,8 @@ if (!only || "package".includes(only) || "wp12".includes(only)) {
     // release bump read `optionalDependencies` at the top level and a lockfile keeps the
     // root package under `packages[""]`. Nothing was red -- `npm ci` tolerates it and
     // `npm install` rewrites the file under whoever runs it next, which is how it stayed
-    // invisible. `release-pr.yml` moves both now, and this is the check that would have
-    // noticed whatever moved them apart.
+    // invisible. `scripts/pin-platform-packages.mjs` moves both now, and this is the check
+    // that would have noticed whatever moved them apart.
     const lockRoot = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8")).packages?.[""]
       ?.optionalDependencies
     const lockDisagrees = Object.entries(optional).filter(([k, v]) => (lockRoot ?? {})[k] !== v)
@@ -23913,11 +23913,16 @@ if (!only || "pin-platform".includes(only) || "wp12".includes(only)) {
       pinSets.every(([, deps]) => Object.keys(deps).length > 0) && stale.length === 0,
       stale.join("\n")
     )
+    // The lockfile job commits and merges whatever this writes, so a rewrite that
+    // touched anything else would land on main with nobody reading it.
     const original = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"))
+    const originalLock = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
+    lock.packages[""].optionalDependencies = originalLock.packages[""].optionalDependencies
     check(
-      "pin-platform-packages: changes nothing in package.json but the pins",
-      JSON.stringify({ ...pinned, optionalDependencies: original.optionalDependencies }) === JSON.stringify(original),
-      "package.json differs from the original outside optionalDependencies"
+      "pin-platform-packages: changes nothing in either file but the pins",
+      JSON.stringify({ ...pinned, optionalDependencies: original.optionalDependencies }) === JSON.stringify(original) &&
+        JSON.stringify(lock) === JSON.stringify(originalLock),
+      "package.json or package-lock.json differs from the original outside the pins"
     )
   }
   const refused = spawnSync(process.execPath, [script, "v9.9.9", "--dir", work], { encoding: "utf8" })
@@ -23926,17 +23931,49 @@ if (!only || "pin-platform".includes(only) || "wp12".includes(only)) {
     refused.status === 2,
     `exit ${refused.status}: ${refused.stderr}`
   )
+  // An empty `--dir "$X"` must not mean the current directory, which here is the checkout.
+  const noDir = spawnSync(process.execPath, [script, "9.9.9", "--dir"], { encoding: "utf8", cwd: work })
+  check(
+    "pin-platform-packages: refuses a `--dir` with nothing after it",
+    noDir.status === 2,
+    `exit ${noDir.status}: ${noDir.stderr}`
+  )
+  // A lockfile without the root copy of the pins is refused before either file is written,
+  // so a failed run never leaves package.json moved and the lockfile not.
+  const half = path.join(work, "half")
+  fs.mkdirSync(half, { recursive: true })
+  fs.copyFileSync(path.join(root, "package.json"), path.join(half, "package.json"))
+  const bare = JSON.parse(fs.readFileSync(path.join(root, "package-lock.json"), "utf8"))
+  delete bare.packages[""].optionalDependencies
+  fs.writeFileSync(path.join(half, "package-lock.json"), `${JSON.stringify(bare, null, 2)}\n`)
+  const halfRun = spawnSync(process.execPath, [script, "9.9.9", "--dir", half], { encoding: "utf8" })
+  check(
+    "pin-platform-packages: a lockfile with no root pins fails it before package.json is written",
+    halfRun.status === 1 &&
+      fs.readFileSync(path.join(half, "package.json"), "utf8") ===
+        fs.readFileSync(path.join(root, "package.json"), "utf8"),
+    `exit ${halfRun.status}: ${halfRun.stderr}`
+  )
   const release = fs.readFileSync(path.join(root, ".github", "workflows", "release.yml"), "utf8")
-  // Line numbers, not offsets: the lockfile pull request's body names the script too.
+  // Line numbers, not offsets: the lockfile pull request's body names the script too. Each
+  // call is held to its job, because one moved into `binaries` would pin a checkout on
+  // another runner and leave the `release` job packing the previous release's pins.
   const lines = release.split("\n")
   const lineOf = (text) => lines.findIndex((l) => l.includes(text))
+  const jobOf = (at) => lines.slice(0, at + 1).findLast((l) => /^ {2}[a-z][a-z0-9-]*:\s*$/.test(l))?.trim()
   const calls = lines.flatMap((l, i) => (l.includes('node scripts/pin-platform-packages.mjs "${GITHUB_REF_NAME#v}"') ? [i] : []))
+  const pack = lineOf("npm pack --pack-destination build/release")
+  const relock = lineOf("npm install --package-lock-only")
   check(
     "pin-platform-packages: release.yml calls it twice, before `npm pack` and in the lockfile job",
     calls.length === 2 &&
-      calls[0] < lineOf("npm pack --pack-destination build/release") &&
-      calls[1] < lineOf("npm install --package-lock-only"),
-    `found calls on lines ${calls.map((i) => i + 1).join(", ")}`
+      jobOf(calls[0]) === "release:" &&
+      jobOf(pack) === "release:" &&
+      calls[0] < pack &&
+      jobOf(calls[1]) === "lockfile:" &&
+      jobOf(relock) === "lockfile:" &&
+      calls[1] < relock,
+    `found calls on lines ${calls.map((i) => `${i + 1} (${jobOf(i)})`).join(", ")}`
   )
 }
 

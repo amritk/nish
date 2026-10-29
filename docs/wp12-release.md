@@ -148,6 +148,12 @@ them, twice per release:
   the lockfile's `packages[""]` and the platform packages' entries in one
   commit, then squash-merges it itself.
 
+The price is that a tag's own `package.json` pins the release before it: the
+published main package differs from its tagged commit in those four values and
+nowhere else, and an `npm pack` of the tag by hand packs the previous release's
+pins unless the script runs first. The alternative, pins on the release commit
+without their entries, is the red `main` this replaced.
+
 The script moves both copies of the pins, because v0.4.0 shipped with the
 lockfile still pinning 0.3.0 when the bump read only the top-level field.
 `tests/run.js` allows a pin equal to this version or to the release before it,
