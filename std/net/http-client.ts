@@ -780,7 +780,13 @@ export class HttpClient {
       const name: string = names[i]
       const value: string = values[i]
       hasHost = hasHost || httpClientNameIs(name, "host")
-      hasProxyAuth = hasProxyAuth || httpClientNameIs(name, "proxy-authorization")
+      const proxyAuth: boolean = httpClientNameIs(name, "proxy-authorization")
+      if (proxyAuth && !viaProxy) {
+        // Only an http proxy reads it: sent direct or through a tunnel, it
+        // would hand the proxy's credentials to the origin.
+        continue
+      }
+      hasProxyAuth = hasProxyAuth || proxyAuth
       sendNames.push(name)
       sendValues.push(value)
     }
@@ -1054,7 +1060,7 @@ export class HttpClient {
     const budget: i32 = this.options.connectTimeoutMs
     let until: i64 = budget > 0 ? start + toI64(budget) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
     let code: i32 = HTTP_E_CONNECT_TIMEOUT
-    if (this.deadline <= until) {
+    if (this.deadline < HTTP_CLIENT_NEVER && this.deadline <= until) {
       until = this.deadline
       code = HTTP_E_TOTAL_TIMEOUT
     }
@@ -1071,8 +1077,8 @@ export class HttpClient {
     const addresses: u8[] = new Array<u8>(DNS_RESOLVE_MAX_ADDRESSES * DNS_ADDRESS_BYTES)
     const ttls: i32[] = new Array<i32>(DNS_RESOLVE_MAX_ADDRESSES)
     const count: i32 = resolveHost(host, toI32(lookupMs), port, addresses, ttls)
-    if (count === DNS_RESOLVE_TIMEOUT && code === HTTP_E_TOTAL_TIMEOUT) {
-      this.fail(code, `the fetch ran past ${this.options.totalTimeoutMs} ms looking up ${host}`)
+    if (count === DNS_RESOLVE_TIMEOUT && until < HTTP_CLIENT_NEVER) {
+      this.failWait(code, `${host} was not looked up within ${budget} ms`)
       return -1
     }
     if (count <= 0) {
@@ -1095,11 +1101,7 @@ export class HttpClient {
       if (waited !== HTTP_E_NONE) {
         this.unwatch(fd)
         netClose(fd)
-        if (waited === HTTP_E_IO) {
-          this.fail(HTTP_E_IO, "the poll loop failed")
-        } else {
-          this.fail(waited, `no address of ${host} answered on port ${port} within ${budget} ms`)
-        }
+        this.failWait(waited, `no address of ${host} answered on port ${port} within ${budget} ms`)
         return -1
       }
       const result: i32 = connectResult(fd)
@@ -1198,6 +1200,10 @@ export class HttpClient {
       this.fd = -1
     }
     this.route = ""
+    if (this.bodyOpen) {
+      // Closed before its end, the body was cut short: never a whole one.
+      this.bodyError = HTTP_E_IO
+    }
     this.bodyOpen = false
     this.pendLen = 0
   }
@@ -1226,7 +1232,7 @@ export class HttpClient {
   /** `HttpBodyReader.read` for the response numbered `generation`. */
   readBody(generation: i32, buf: u8[], off: i32, n: i32): i32 {
     if (generation !== this.generation) {
-      this.fail(HTTP_E_IO, "the body was read after the client's next fetch")
+      // The client's error is the later fetch's; a stale reader leaves it be.
       return -HTTP_E_IO
     }
     if (!this.bodyOpen) {
@@ -1439,7 +1445,7 @@ const httpClientIdempotent = (method: string): boolean =>
 const httpClientDropField = (names: string[], values: string[], lower: string): void => {
   let i: i32 = 0
   while (i < toI32(names.length) && i < toI32(values.length)) {
-    if (httpClientLower(names[i]) === lower) {
+    if (httpClientNameIs(names[i], lower)) {
       for (let k: i32 = i; k + 1 < toI32(names.length) && k + 1 < toI32(values.length); k += 1) {
         names[k] = names[k + 1]
         values[k] = values[k + 1]

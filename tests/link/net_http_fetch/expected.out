@@ -27,9 +27,12 @@ PASS  a 103 before the response is read past
 PASS  a POST body goes with its Content-Length
 PASS  an empty body sends Content-Length: 0, and no body sends none
 PASS  a caller's Host is sent in place of the URL's
+PASS  a caller's Proxy-Authorization never goes to an origin fetched directly
 PASS  a body left unread answers an error once the next fetch starts
 PASS  and the next fetch went on a new connection
 PASS  a body read to its end answers 0 again
+PASS  a stale body's read leaves the later fetch's error in place
+PASS  a body its client closed before its end answers an error, never 0
 PASS  a read asking for two bytes of a longer body answers two
 PASS  a body read two bytes at a time is read whole
 PASS  a response that says Connection: close is read
@@ -90,4 +93,4 @@ PASS  a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED
 PASS  an https server that hangs up on the ClientHello is HTTP_E_TLS
 PASS  an event stream's first event is read while the server holds the stream open
 PASS  and the next one, the stream ending with the connection
-http fetch: 92 passed, 0 failed, 0 skipped
+http fetch: 95 passed, 0 failed, 0 skipped

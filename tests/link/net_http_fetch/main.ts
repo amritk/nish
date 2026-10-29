@@ -419,6 +419,10 @@ const runClient = (portA: i32, portB: i32): i32 => {
   const hostReq: HttpRequest = get(`${base}/echo`);
   hostReq.header("Host", "named.test");
   t.check(bodyOf(client.fetch(hostReq)).indexOf("\r\nHost: named.test\r\n") >= 0, "a caller's Host is sent in place of the URL's");
+  const proxyAuthReq: HttpRequest = get(`${base}/echo`);
+  proxyAuthReq.header("Proxy-Authorization", "Basic c2VjcmV0");
+  const direct: string = bodyOf(client.fetch(proxyAuthReq));
+  t.check(direct.startsWith("GET /echo HTTP/1.1\r\n") && direct.indexOf("c2VjcmV0") < 0, "a caller's Proxy-Authorization never goes to an origin fetched directly");
 
   // --- a fetch while a body is unread
   const open: HttpResponse | null = client.fetch(get(`${base}/hello`));
@@ -427,6 +431,14 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t.check(open !== null && open.body.read(buf, 0, 16) === -HTTP_E_IO, "a body left unread answers an error once the next fetch starts");
   t.check(after !== null && bodyOf(after) === "hello" && conn(after) !== conn(open), "and the next fetch went on a new connection");
   t.check(after !== null && after.body.read(buf, 0, 16) === 0, "a body read to its end answers 0 again");
+  const stale: HttpResponse | null = client.fetch(get(`${base}/hello`));
+  const urlFailed: boolean = fails(client, client.fetch(get("ftp://127.0.0.1/")), HTTP_E_URL);
+  t.check(urlFailed && stale !== null && stale.body.read(buf, 0, 16) === -HTTP_E_IO && client.error === HTTP_E_URL, "a stale body's read leaves the later fetch's error in place");
+  const cutter: HttpClient = new HttpClient(options);
+  const cut: HttpResponse | null = cutter.fetch(get(`${base}/big`));
+  const cutRead: i32 = cut !== null ? cut.body.read(buf, 0, 4) : -1;
+  cutter.close();
+  t.check(cutRead === 4 && cut !== null && cut.body.read(buf, 0, 16) === -HTTP_E_IO, "a body its client closed before its end answers an error, never 0");
   const pieces: HttpResponse | null = client.fetch(get(`${base}/hello`));
   let pieced: string = "";
   let piece: i32 = pieces !== null ? pieces.body.read(buf, 0, 2) : -1;

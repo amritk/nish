@@ -1481,16 +1481,17 @@ function HttpClient.send(this: HttpClient, url: Url, method: string, names: stri
   pointer values: size=0 writesThrough=false captured=false
   pointer body: size=0 writesThrough=false captured=false passedTo=nish.HttpClient.writeAll#1
   stackSites=2 stackLocals=2
-  local -47:11 viaProxy: boolean (const)
-  local -46:11 sendNames: string[] (const)
-  local -45:11 sendValues: string[] (const)
-  local -44:9 hasHost: boolean (let)
-  local -43:9 hasProxyAuth: boolean (let)
-  local -42:14 i: i32 (let)
-  local -40:13 name: string (const)
-  local -39:13 value: string (const)
-  callee -38:28 httpClientNameIs -> @nish.httpClientNameIs
-  callee -37:38 httpClientNameIs -> @nish.httpClientNameIs
+  local -53:11 viaProxy: boolean (const)
+  local -52:11 sendNames: string[] (const)
+  local -51:11 sendValues: string[] (const)
+  local -50:9 hasHost: boolean (let)
+  local -49:9 hasProxyAuth: boolean (let)
+  local -48:14 i: i32 (let)
+  local -46:13 name: string (const)
+  local -45:13 value: string (const)
+  callee -44:28 httpClientNameIs -> @nish.httpClientNameIs
+  local -43:13 proxyAuth: boolean (const)
+  callee -43:34 httpClientNameIs -> @nish.httpClientNameIs
   local -33:11 hostText: string (const)
   callee -33:30 httpClientHostText -> @nish.httpClientHostText
   local -32:11 authority: string (const)
@@ -1646,8 +1647,8 @@ function HttpClient.dial(this: HttpClient, host: string, port: i32): i32 -> @nis
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: via nish_monotonic_nanos
   escaping: host port
-  calls: nish.HttpClient.fail nish.HttpClient.unwatch nish.HttpClient.wait nish.copyBytes nish.resolveHost nish_connect_result nish_monotonic_nanos nish_net_close nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 nish_tcp_connect
-  pointer this: size=152 writesThrough=true captured=false passedTo=nish.HttpClient.fail#0 nish.HttpClient.fail#0 nish.HttpClient.fail#0 nish.HttpClient.wait#0 nish.HttpClient.unwatch#0 nish.HttpClient.fail#0 nish.HttpClient.fail#0 nish.HttpClient.unwatch#0 nish.HttpClient.fail#0
+  calls: nish.HttpClient.fail nish.HttpClient.failWait nish.HttpClient.unwatch nish.HttpClient.wait nish.copyBytes nish.resolveHost nish_connect_result nish_monotonic_nanos nish_net_close nish_panic nish_panic_overflow nish_str_concat nish_str_from_i32 nish_tcp_connect
+  pointer this: size=152 writesThrough=true captured=false passedTo=nish.HttpClient.fail#0 nish.HttpClient.failWait#0 nish.HttpClient.fail#0 nish.HttpClient.wait#0 nish.HttpClient.unwatch#0 nish.HttpClient.failWait#0 nish.HttpClient.unwatch#0 nish.HttpClient.fail#0
   stackSites=0 stackLocals=0
   local +0:11 start: i64 (const)
   local +1:11 budget: i32 (const)
@@ -1659,7 +1660,7 @@ function HttpClient.dial(this: HttpClient, host: string, port: i32): i32 -> @nis
   local +19:11 ttls: i32[] (const)
   local +20:11 count: i32 (const)
   callee +20:24 resolveHost -> @nish.resolveHost
-  callee +22:7 HttpClient.fail -> @nish.HttpClient.fail
+  callee +22:7 HttpClient.failWait -> @nish.HttpClient.failWait
   callee +26:7 HttpClient.fail -> @nish.HttpClient.fail
   local +32:11 one: u8[] (const)
   local +33:9 last: i32 (let)
@@ -1669,11 +1670,10 @@ function HttpClient.dial(this: HttpClient, host: string, port: i32): i32 -> @nis
   local +41:13 waited: i32 (const)
   callee +41:27 HttpClient.wait -> @nish.HttpClient.wait
   callee +43:9 HttpClient.unwatch -> @nish.HttpClient.unwatch
-  callee +46:11 HttpClient.fail -> @nish.HttpClient.fail
-  callee +48:11 HttpClient.fail -> @nish.HttpClient.fail
-  local +52:13 result: i32 (const)
-  callee +56:7 HttpClient.unwatch -> @nish.HttpClient.unwatch
-  callee +60:5 HttpClient.fail -> @nish.HttpClient.fail
+  callee +45:9 HttpClient.failWait -> @nish.HttpClient.failWait
+  local +48:13 result: i32 (const)
+  callee +52:7 HttpClient.unwatch -> @nish.HttpClient.unwatch
+  callee +56:5 HttpClient.fail -> @nish.HttpClient.fail
 function HttpClient.wait(this: HttpClient, fd: i32, events: i32, until: i64, code: i32): i32 -> @nish.HttpClient.wait [exported method]
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:7
@@ -1724,11 +1724,10 @@ function HttpClient.readBody(this: HttpClient, generation: i32, buf: u8[], off: 
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
   escaping: n off
-  calls: nish.Http1ResponseParser.keepAlive nish.HttpClient.fail nish.HttpClient.pump nish.HttpClient.release nish.copyBytes nish_panic_overflow
-  pointer this: size=152 writesThrough=true captured=false passedTo=nish.HttpClient.fail#0 nish.HttpClient.pump#0 nish.HttpClient.release#0 nish.HttpClient.release#0
+  calls: nish.Http1ResponseParser.keepAlive nish.HttpClient.pump nish.HttpClient.release nish.copyBytes nish_panic_overflow
+  pointer this: size=152 writesThrough=true captured=false passedTo=nish.HttpClient.pump#0 nish.HttpClient.release#0 nish.HttpClient.release#0
   pointer buf: size=0 writesThrough=true captured=false passedTo=nish.copyBytes#0
   stackSites=0 stackLocals=0
-  callee -10:7 HttpClient.fail -> @nish.HttpClient.fail
   local -3:13 event: i32 (const)
   callee -3:26 HttpClient.pump -> @nish.HttpClient.pump
   callee -1:9 HttpClient.release -> @nish.HttpClient.release
@@ -1832,14 +1831,15 @@ function httpClientIdempotent(method: string): boolean -> @nish.httpClientIdempo
   calls: nish_str_eq
   stackSites=0 stackLocals=0
 function httpClientDropField(names: string[], values: string[], lower: string): void -> @nish.httpClientDropField
-  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=true freshThis=false sharedWrite=true
+  facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:9
-  calls: nish.httpClientLower nish_arena_mark nish_arena_release nish_panic_index nish_panic_overflow nish_str_eq
+  escaping: lower
+  calls: nish.httpClientNameIs nish_panic_index nish_panic_overflow
   pointer names: size=0 writesThrough=true captured=false
   pointer values: size=0 writesThrough=true captured=false
   stackSites=0 stackLocals=0
   local -4:7 i: i32 (let)
-  callee -2:9 httpClientLower -> @nish.httpClientLower
+  callee -2:9 httpClientNameIs -> @nish.httpClientNameIs
   local -1:16 k: i32 (let)
 function httpClientNameIs(name: string, lower: string): boolean -> @nish.httpClientNameIs
   facts: effect=read willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=false allocates=false arenaScope=false freshThis=false sharedWrite=false
