@@ -9,8 +9,10 @@
 // and sees that a refused fetch never opened one. `/cut` sends half a body
 // and drops the TCP connection without a close_notify: a truncation.
 // `/until-close` sends a body that ends at the server's close_notify,
-// `/stale` drops the connection after a whole reply, and `/notified-N` says
-// whether connection N ended with the client's close_notify.
+// `/stale` drops the connection after a whole reply, `/then-notify` ends it
+// with a close_notify after one, `/alert-once` answers its first request with
+// a fatal alert, and `/notified-N` says whether connection N ended with the
+// client's close_notify.
 
 import { HTTP_E_CERTIFICATE, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_E_TLS, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
 import { netAddress, netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpAccept, tcpConnect, tcpListen } from "nish:net";
@@ -214,6 +216,11 @@ class Servers {
         this.alerted = true;
         site.server.connection(slot).fail(80);
         site.server.flush(slot);
+        site.server.close(slot);
+        return false;
+      }
+      if (line.startsWith("GET /then-notify ")) {
+        this.reply(site, slot, "kept");
         site.server.close(slot);
         return false;
       }
@@ -517,6 +524,14 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   t.check(a1Body === "GET /warm HTTP/1.1" && bodyOf(a2) === "GET /alert-once HTTP/1.1" && conn(a2) !== conn(a1), "a pooled TLS connection the server ends with an alert is retried on a new one");
   if (a2 === null) {
     console.log(`  error ${alerting.error}: ${alerting.errorText}`);
+  }
+  const idle: HttpClient = new HttpClient(options);
+  const n1: HttpResponse | null = idle.fetch(get(`${good}/then-notify`));
+  const n1Body: string = bodyOf(n1);
+  const n2: HttpResponse | null = idle.fetch(get(`${good}/after-notify`));
+  t.check(n1Body === "kept" && bodyOf(n2) === "GET /after-notify HTTP/1.1" && conn(n2) !== conn(n1), "a pooled TLS connection the server ended with a close_notify is retried on a new one");
+  if (n2 === null) {
+    console.log(`  error ${idle.error}: ${idle.errorText}`);
   }
   const silent: i32 = tcpListen("127.0.0.1", 0, 8);
   const quiet: HttpOptions = trusting(trusted);
