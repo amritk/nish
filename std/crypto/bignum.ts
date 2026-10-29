@@ -64,8 +64,8 @@ export const bnFromBytes = (bytes: u8[], at: i32, length: i32, limbs: i32): u32[
   const size: i32 = toI32(bytes.length)
   for (let i: i32 = 0; i < length && i < limbs * 4; i++) {
     const j: i32 = at + length - 1 - i
-    if (j >= 0 && j < size) {
-      const limb: i32 = i >> 2
+    const limb: i32 = i >> 2
+    if (j >= 0 && j < size && limb < toI32(out.length)) {
       out[limb] = out[limb] | (toU32(bytes[j]) << toU32((i & 3) * 8))
     }
   }
@@ -91,7 +91,7 @@ export const bnCompare = (a: u32[], b: u32[]): i32 => {
   if (toI32(b.length) !== limbs) {
     return toI32(a.length) < toI32(b.length) ? -1 : 1
   }
-  for (let i: i32 = limbs - 1; i >= 0; i--) {
+  for (let i: i32 = limbs - 1; i >= 0 && i < toI32(b.length); i--) {
     if (a[i] !== b[i]) {
       return a[i] < b[i] ? -1 : 1
     }
@@ -191,10 +191,13 @@ export const bnModulus = (m: u32[]): BnModulus | null => {
 export const bnMontMul = (out: u32[], a: u32[], b: u32[], mod: BnModulus): void => {
   const k: i32 = mod.limbs
   const m: u32[] = mod.m
-  if (toI32(a.length) < k || toI32(b.length) < k || toI32(out.length) < k) {
+  if (toI32(a.length) < k || toI32(b.length) < k || toI32(out.length) < k || toI32(m.length) < k) {
     return
   }
   const t: u32[] = new Array<u32>(k + 2)
+  if (k < 1 || toI32(t.length) < k + 2) {
+    return
+  }
   for (let i: i32 = 0; i < k; i++) {
     const bi: u64 = toU64(b[i])
     let c: u64 = 0
@@ -320,7 +323,7 @@ export const bnMontPow = (out: u32[], a: u32[], e: u32[], mod: BnModulus): void 
       bnMontMul(acc, acc, acc, mod)
     }
     const limb: i32 = i >> 5
-    if (((e[limb] >> toU32(i & 31)) & 1) === 1) {
+    if (limb < toI32(e.length) && ((e[limb] >> toU32(i & 31)) & 1) === 1) {
       if (started) {
         bnMontMul(acc, acc, base, mod)
       } else {

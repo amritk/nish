@@ -364,7 +364,7 @@ export const rsaVerifyPkcs1 = (key: RsaPublicKey, hashId: i32, msg: u8[], sig: u
   const ff: u8 = 0xff
   const expected: u8[] = new Array<u8>(key.size)
   expected[1] = 0x01
-  for (let i: i32 = 2; i < key.size - pLength - hLength - 1; i++) {
+  for (let i: i32 = 2; i < key.size - pLength - hLength - 1 && i < toI32(expected.length); i++) {
     expected[i] = ff
   }
   copyBytes(expected, key.size - hLength - pLength, prefix, 0, pLength)
@@ -431,13 +431,16 @@ export const rsaVerifyPss = (key: RsaPublicKey, hashId: i32, msg: u8[], sig: u8[
   const h: u8[] = new Array<u8>(hLength)
   copyBytes(h, 0, opened, skip + dbLength, hLength)
   const db: u8[] = rsaMgf1(hashId, h, dbLength)
+  if (toI32(db.length) < dbLength) {
+    return false
+  }
   for (let i: i32 = 0; i < dbLength; i++) {
     db[i] = db[i] ^ opened[skip + i]
   }
   db[0] = toU8(toI32(db[0]) & topMask)
   // DB = PS (zeros) || 0x01 || salt.
   const psLength: i32 = dbLength - sLength - 1
-  for (let i: i32 = 0; i < psLength; i++) {
+  for (let i: i32 = 0; i < psLength && i < toI32(db.length); i++) {
     if (toI32(db[i]) !== 0) {
       return false
     }
