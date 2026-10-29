@@ -17,7 +17,8 @@
  * errno to it: where `signalFd` and `readSignal` answer a plain -1, a call
  * here answers the failure's errno, negated. The codes a loop branches on are Linux's numbers on every platform (-11
  * would block, -95 unsupported, -32 the peer is gone, -104 reset, -98 the
- * address is in use, -111 refused, -110 timed out, -22 a bad argument), so
+ * address is in use, -111 refused, -110 timed out, -22 a bad argument, -88
+ * not a socket), so
  * `nish_net_err` translates Darwin's; any other failure is the host's own
  * `-errno`. Nothing here allocates: the addresses a call reads or writes are
  * the caller's `u8[]`.
@@ -29,13 +30,14 @@
  * (`EAFNOSUPPORT`, as in many containers) `::` falls back to IPv4's
  * `0.0.0.0`.
  *
- * Linux and Darwin differ in five places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
+ * Linux and Darwin differ in six places: `SOCK_NONBLOCK | SOCK_CLOEXEC` and
  * `accept4` against a `socket` or `accept` followed by `fcntl`, `MSG_NOSIGNAL`
  * against the `SO_NOSIGPIPE` socket option (a write to a gone peer is -32 on
  * both, never SIGPIPE), the errno numbers, UDP's segmentation offload
  * (`UDP_SEGMENT`, `UDP_GRO`) and ECN marks, which Linux has and for which
  * Darwin answers -95, and the readiness loop, which is epoll on Linux and
- * kqueue on Darwin. Only the sending side and the GRO bind say -95 there: a
+ * kqueue on Darwin, and `TCP_QUICKACK`, which only Linux has (-95 on
+ * Darwin). Only the sending side and the GRO bind say -95 there: a
  * receive leaves `meta` at 0, 0, and a `meta[1]` of 0 is also what a real
  * Not-ECT datagram reads as, so a program learns that Darwin has no ECN from
  * the send, never from the receive. The Darwin branch is compiled by CI's Darwin bootstrap
@@ -100,6 +102,7 @@ static int32_t nish_net_err(int e) {
   if (e == EADDRINUSE) return -98;
   if (e == ECONNREFUSED) return -111;
   if (e == ETIMEDOUT) return -110;
+  if (e == ENOTSOCK) return -88;
 #endif
   return -e;
 }
@@ -382,6 +385,44 @@ int32_t nish_net_shutdown(int32_t fd, int32_t how) {
 /* `netClose(fd)`. The descriptor is gone whatever this answers, as `close`
    promises on Linux, so a failure is information rather than a retry. */
 int32_t nish_net_close(int32_t fd) { return close(fd) != 0 ? nish_net_fail() : 0; }
+
+/* `netSetOption(fd, option, value)`: one option from a whitelist, named by
+   the runtime's own id rather than a level and an option number, so a
+   program can set these five and nothing else. `value` is 0 or 1 for the
+   flags and a byte count for the buffers, passed to the kernel as it is
+   (Linux stores twice a buffer size, to cover its bookkeeping). Linux does
+   not keep quick-ACK mode: the kernel leaves it of its own accord, so a
+   server that wants it on or off sets it again after each response. */
+int32_t nish_net_set_option(int32_t fd, int32_t option, int32_t value) {
+  int level = SOL_SOCKET;
+  int name;
+  switch (option) {
+  case 1:
+    level = IPPROTO_TCP;
+    name = TCP_NODELAY;
+    break;
+  case 2:
+#if defined(__linux__)
+    level = IPPROTO_TCP;
+    name = TCP_QUICKACK;
+    break;
+#else
+    return -95;
+#endif
+  case 3:
+    name = SO_KEEPALIVE;
+    break;
+  case 4:
+    name = SO_SNDBUF;
+    break;
+  case 5:
+    name = SO_RCVBUF;
+    break;
+  default:
+    return -22;
+  }
+  return setsockopt(fd, level, name, &value, sizeof value) != 0 ? nish_net_fail() : 0;
+}
 
 /* `udpBind(host, port, flags)`: a datagram socket, non-blocking and
    close-on-exec, bound like `tcpListen`'s, with `SO_REUSEPORT` for flag 1

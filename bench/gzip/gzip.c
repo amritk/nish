@@ -1,6 +1,8 @@
 // The C twin of main.ts: one-shot gzip of the same body with zlib (a reused
 // z_stream, deflateReset between calls) and libdeflate (a reused compressor),
-// at level 1 and level 6, and gunzip back. Same row format as main.ts.
+// at level 1 and level 6, and gunzip back: each library's own output, or the
+// gzip -1 and gzip -6 streams argv[3] and argv[4] name. Same arguments and
+// row format as main.ts.
 // libdeflate's header is not always installed beside its library, so the four
 // functions used are declared here; build.mjs links the shared object.
 #include <stdio.h>
@@ -48,9 +50,16 @@ int main(int argc, char **argv) {
   int calls = argc > 2 ? atoi(argv[2]) : 20000;
   FILE *f = fopen(path, "rb");
   if (!f) return 1;
-  static unsigned char body[1 << 24], out[1 << 24], back[1 << 24];
+  static unsigned char body[1 << 24], out[1 << 24], back[1 << 24], given[2][1 << 20];
   size_t n = fread(body, 1, sizeof body, f);
   fclose(f);
+  size_t givenLen[2] = {0, 0};
+  for (int k = 0; argc > 4 && k < 2; k++) {
+    FILE *g = fopen(argv[3 + k], "rb");
+    if (!g) return 1;
+    givenLen[k] = fread(given[k], 1, sizeof given[k], g);
+    fclose(g);
+  }
   int levels[2] = {1, 6};
   for (int k = 0; k < 2; k++) {
     int level = levels[k];
@@ -62,12 +71,14 @@ int main(int argc, char **argv) {
     long long t = now();
     for (int i = 0; i < calls; i++) end = zlib_gzip(&s, body, n, out, sizeof out);
     printf("zlib gzip -%d %zu %zu %lld %d\n", level, n, end, now() - t, calls);
+    const unsigned char *stream = givenLen[k] ? given[k] : out;
+    size_t streamLen = givenLen[k] ? givenLen[k] : end;
     z_stream d;
     memset(&d, 0, sizeof d);
     inflateInit2(&d, 31);
     t = now();
-    for (int i = 0; i < calls; i++) zlib_gunzip(&d, out, end, back, sizeof back);
-    printf("zlib gunzip -%d %zu %zu %lld %d\n", level, n, end, now() - t, calls);
+    for (int i = 0; i < calls; i++) zlib_gunzip(&d, stream, streamLen, back, sizeof back);
+    printf("zlib gunzip -%d %zu %zu %lld %d\n", level, n, streamLen, now() - t, calls);
     deflateEnd(&s);
     inflateEnd(&d);
 
@@ -76,11 +87,15 @@ int main(int argc, char **argv) {
     t = now();
     for (int i = 0; i < calls; i++) end = libdeflate_gzip_compress(c, body, n, out, sizeof out);
     printf("libdeflate gzip -%d %zu %zu %lld %d\n", level, n, end, now() - t, calls);
+    stream = givenLen[k] ? given[k] : out;
+    streamLen = givenLen[k] ? givenLen[k] : end;
     struct libdeflate_decompressor *dd = libdeflate_alloc_decompressor();
     size_t got = 0;
     t = now();
-    for (int i = 0; i < calls; i++) libdeflate_gzip_decompress(dd, out, end, back, sizeof back, &got);
-    printf("libdeflate gunzip -%d %zu %zu %lld %d\n", level, n, end, now() - t, calls);
+    for (int i = 0; i < calls; i++) {
+      if (libdeflate_gzip_decompress(dd, stream, streamLen, back, sizeof back, &got) != 0 || got != n) abort();
+    }
+    printf("libdeflate gunzip -%d %zu %zu %lld %d\n", level, n, streamLen, now() - t, calls);
   }
   return 0;
 }

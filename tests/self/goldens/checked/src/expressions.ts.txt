@@ -36,6 +36,7 @@ import cryptoRefusal from "./builtins" -> function @cryptoRefusal
 import dateRefusal from "./builtins" -> function @dateRefusal
 import isBuiltinFunction from "./builtins" -> function @isBuiltinFunction
 import BuiltinExport from "./nish-modules" -> struct BuiltinExport
+import netOption from "./nish-modules" -> function @netOption
 import checkResultConstructor from "./result" -> function @checkResultConstructor
 import isResultConstructor from "./result" -> function @isResultConstructor
 import narrowResultTest from "./result" -> function @narrowResultTest
@@ -587,7 +588,7 @@ function unproven(ctx: CheckContext, type: i32): i32 -> @unproven [exported]
 function checkIdentifier(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @checkIdentifier
   facts: effect=write willReturn=false hasLoops=false loopsBounded=true readsMemory=true hasTrap=false callsNoReturn=true allocates=true arenaScope=false freshThis=false sharedWrite=true
   sharedWrite: +0:5
-  calls: CheckContext.capturesOuter CheckContext.errorType CheckedProgram.builtinImport CheckedProgram.constant FunctionBindings.get Scope.exhausted Scope.heldBy Scope.lookup Scope.typeOf captureOuter checkNamespaceProperty cryptoRefusal dateRefusal exhaustedMessage namesMembers nish_panic_index nish_str_concat nish_str_eq refuseOnce
+  calls: CheckContext.capturesOuter CheckContext.errorType CheckedProgram.builtinImport CheckedProgram.constant FunctionBindings.get Scope.exhausted Scope.heldBy Scope.lookup Scope.typeOf captureOuter checkNamespaceProperty cryptoRefusal dateRefusal exhaustedMessage namesMembers netOption nish_panic_index nish_str_concat nish_str_eq refuseOnce
   pointer ctx: size=280 writesThrough=true captured=false passedTo=CheckContext.errorType#0 CheckContext.capturesOuter#0 captureOuter#0 refuseOnce#0 CheckContext.errorType#0 checkNamespaceProperty#0 CheckContext.errorType#0 CheckContext.errorType#0
   pointer expr: size=40 writesThrough=false captured=false passedTo=CheckContext.errorType#1 captureOuter#1 refuseOnce#1 CheckContext.errorType#1 checkNamespaceProperty#1 CheckContext.errorType#1 CheckContext.errorType#1
   pointer scope: size=56 writesThrough=false captured=false passedTo=Scope.lookup#0 Scope.exhausted#0 Scope.heldBy#0 Scope.typeOf#0
@@ -616,10 +617,11 @@ function checkIdentifier(ctx: CheckContext, expr: Node, scope: Scope): i32 -> @c
   callee +46:20 CheckedProgram.builtinImport -> @CheckedProgram.builtinImport
   callee +49:14 CheckContext.errorType -> @CheckContext.errorType
   callee +52:12 checkNamespaceProperty -> @checkNamespaceProperty
-  callee +57:12 CheckContext.errorType -> @CheckContext.errorType
-  callee +57:55 dateRefusal -> @dateRefusal
-  callee +57:77 cryptoRefusal -> @cryptoRefusal
-  callee +59:10 CheckContext.errorType -> @CheckContext.errorType
+  callee +56:7 netOption -> @netOption
+  callee +63:12 CheckContext.errorType -> @CheckContext.errorType
+  callee +63:55 dateRefusal -> @dateRefusal
+  callee +63:77 cryptoRefusal -> @cryptoRefusal
+  callee +65:10 CheckContext.errorType -> @CheckContext.errorType
 function isCapture(ctx: CheckContext, local: Local | null): boolean -> @isCapture
   facts: effect=write willReturn=false hasLoops=true loopsBounded=false readsMemory=true hasTrap=false callsNoReturn=true allocates=false arenaScope=false freshThis=false sharedWrite=false
   calls: FunctionSig.writtenArity nish_panic_index nish_str_eq

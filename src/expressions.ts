@@ -51,7 +51,7 @@ import {
   dateRefusal,
   isBuiltinFunction,
 } from "./builtins"
-import { BuiltinExport } from "./nish-modules"
+import { BuiltinExport, netOption } from "./nish-modules"
 import { checkResultConstructor, isResultConstructor, narrowResultTest } from "./result"
 import {
   checkMember,
@@ -928,6 +928,12 @@ const checkIdentifier = (ctx: CheckContext, expr: Node, scope: Scope): i32 => {
     }
     ctx.program.nodeBuiltins[expr.id] = imported.canonical
     return checkNamespaceProperty(ctx, expr, imported.namespace, imported.member)
+  }
+  // The global spelling of a `nish:net` socket option id, as every `nish:`
+  // export is a global too.
+  if (netOption(expr.text) > 0) {
+    ctx.program.nodeBuiltins[expr.id] = expr.text
+    return T_I32
   }
   // WP34 N3: `Date` and `crypto` are namespaces, reached only through their
   // one member each; as a value either is named by its rule.
