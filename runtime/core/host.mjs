@@ -221,6 +221,10 @@ export function monotonicNanos() {
   return host.call("monotonicNanos", []);
 }
 
+export function wallClockNanos() {
+  return host.call("wallClockNanos", []);
+}
+
 export function statMtimeSync(path) {
   return host.call("statMtimeSync", [path]);
 }

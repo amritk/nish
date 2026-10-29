@@ -83,7 +83,7 @@ numbers are the platform's errno values (Linux's shown).
 | [`nish/base64`](#nishbase64) | `base64Encode` and `base64EncodeInto`: standard base64 with `=` padding, into a string or straight into a byte buffer |
 | [`nish/bytes`](#nishbytes) | `getU32LE`, `setU16BE` and the rest: integers and doubles read from and written into a `u8[]` at an offset, in either byte order; `skipBlank`, `skipDigits`, `skipJsonText`, `skipJsonPlain` and `copyBytes` for the runs a parser skips and a writer copies |
 | [`nish/random`](#nishrandom) | `Rng`, a seeded generator of random numbers and dice (`nextInt`) that answers the same under Node |
-| [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped |
+| [`nish/cli`](#nishcli) | `HelpMenu` and `styleFor`: a `--help` menu in the terminal theme's own colours, plain when piped; `nish/cli-flags`' `FlagTable` parses the flags, positionals and subcommand that menu lists |
 | [`nish/term`](#nishterm) | `Screen`, `Canvas` and `KeyDecoder`: a terminal UI drawn as cells or half-block pixels, sent as only what changed, and what it reads — keys, mouse, paste, focus and the terminal's replies — decoded as `TermEvent`s; `KeyState` for which keys are held |
 | [`nish/term-io`](terminal.md) | `runTerminal` and `openTerminal`: open the terminal, find out what it can draw, and run a frame loop whose rate and detail adapt to the link; `nish/term-probe`, `nish/term-rate` and [`nish/term-pixels`](#nishterm-pixels) are its pure parts |
 | [`nish/sqlite`](#nishsqlite) | `openDatabase`, `Database` and `Statement`: a SQLite database, with statements prepared once and rows read without allocating |
@@ -95,6 +95,8 @@ numbers are the platform's errno values (Linux's shown).
 | [`nish/net/url`](#nishneturl) | `urlQueryGet` and `urlDecode` for one value; `UrlPathSegments`, `UrlQuery` and `percentDecode` to read a request target in place, allocating nothing; `urlParse`, `urlResolve` and `urlOrigin` for a whole URL |
 | [`nish/net/dns-message`](#nishnetdns-message) | `dnsBuildQuery` and `dnsParseReply`: one DNS question as bytes, and the A or AAAA addresses a reply gives it, following its CNAME chain, with every count and pointer bounded |
 | [`nish/net/dns-config`](#nishnetdns-config) | `dnsParseResolvConf` and `dnsParseHosts`: `/etc/resolv.conf` and `/etc/hosts` read into fixed tables; `dnsHostsFind` and `dnsParseAddress` |
+| [`nish/net/dns-resolver`](#nishnetdns-resolver) | `DnsResolver`: a DNS stub resolver with no I/O of its own, which says what to send and reads what came back; it builds for `wasm32` |
+| [`nish/net/dns`](#nishnetdns) | `DnsClient`, the resolver on your own `pollWait` loop, and `resolveHost`, a blocking lookup for a CLI or start-up |
 
 ## `nish/testing`
 
@@ -1145,6 +1147,113 @@ export const main = (): i32 => {
 };
 ```
 
+### Parsing flags
+
+`nish/cli-flags` reads a command line against a table of flags you declare
+once. The same table writes the help rows, so the two cannot drift apart.
+
+```ts nish:ok
+import { HelpMenu, Style } from "nish/cli";
+import { FlagTable } from "nish/cli-flags";
+
+export const main = (): i32 => {
+  const flags = new FlagTable("git-lite");
+  flags.command("remote add", "<name> <url>", "add a remote");
+  flags.string("output", "<file>", "where to write");
+  flags.number("jobs", "<n>", "parallel jobs");
+  flags.boolean("verbose", "say more");
+  flags.repeatable("include", "<dir>", "search here too");
+  const got = flags.parseFrom(process.argv, 1);
+  if (!got.ok) {
+    got.exitUsage();
+  }
+  if (got.command === "") {
+    const menu = new HelpMenu(new Style(false, true), "git-lite", 28, 30);
+    menu.usage("<command> [flags]", "a small git");
+    flags.writeHelp(menu);
+    console.log(menu.text());
+    return 0;
+  }
+  console.log(`${got.command}: ${got.positionals.join(" ")} jobs ${got.num("jobs")}`);
+  return 0;
+};
+```
+
+`git-lite --jobs 4 remote add origin https://example.org --include a
+--include b` runs `remote add` with positionals `origin` and the URL, `jobs`
+4 and `include` `a` then `b`. With no arguments it prints:
+
+```text
+usage: git-lite <command> [flags]  a small git
+
+Commands
+  remote add <name> <url>   add a remote
+
+Flags
+  --output <file>           where to write
+  --jobs <n>                parallel jobs
+  --verbose                 say more
+  --include <dir>           search here too
+```
+
+**Declare** each flag by its name without the dashes, a placeholder for the
+help and a description: `string`, `number` and `repeatable` take a value,
+`boolean` does not. `command(path, shape, description)` declares a
+subcommand of one or more words, with what follows it in the help. A name
+declared twice panics, because the table is your program's own text, and so
+does one no command line could match: a flag name with a leading `-`, an `=`
+or whitespace, a command word with a leading `-`, or a flag `no-x` beside a
+boolean `x`, whose `--no-x` it would be.
+`parseFrom(process.argv, 1)` reads the command line after the program's own
+path, and `parse(args)` reads every string in `args`.
+
+**The grammar** is the long-option one most tools share, without short
+options:
+
+- `--name value` and `--name=value` give a value; `--name=` gives the empty
+  string. The next argument is the value whatever it looks like, so
+  `--jobs -1` is minus one and `--output --` writes to a file named `--`.
+- `--name` sets a boolean and `--no-name` clears it. A boolean takes no
+  `=value`.
+- A repeatable flag keeps every value in the order given. Any other flag
+  given twice is an error.
+- `--` ends the flags: everything after it is a positional, even `--verbose`
+  and a second `--`. A positional that starts with `-`, such as a negative
+  number, needs a `--` before it, or it reads as a flag.
+  A lone `-` is an ordinary word, as for a tool that reads `-` as stdin.
+- The words that are not flags may come before, between or after them. The
+  leading ones choose the command, the longest declared path they spell, and
+  the rest are `positionals`. A flag belongs to the whole table, not to one
+  command: check `got.command` to refuse one where it does not apply.
+
+**Reading the answer.** `got.command` is the matched path, or `""` when no
+words were given. `str`, `num`, `bool` and `all` read a flag of that kind by
+name; a flag that was not given reads as `""`, `0`, `false` or no values,
+and `has(name)` tells that apart from one given as such. A number is a
+finite `f64` written in decimal: an optional sign, digits with an optional
+fraction, and an optional exponent (`-2.5`, `.5`, `1e3`), in ASCII. Hex and
+binary, `Infinity`, an empty value, spaces round it, and a value too large
+for an `f64` (`1e999`) are refused, the same natively as under Node. Asking for a name the table does not declare, or
+as the wrong kind, panics.
+
+**A usage error is data.** `parse` stops at the first one: an unknown flag
+(any `-x` with one dash is one), a flag missing its value, a number that is
+not one, a flag given twice, a value on a boolean, or words that spell no
+declared command once any is declared. `got.ok` is false, and `got.code`
+(a `FLAG_ERR_*` constant), `got.message` and `got.argument` say what went
+wrong, so a program can word it its own way. `got.exitUsage()` is the usual
+ending: it writes
+
+```text
+git-lite: --jobs needs a number, not "four"
+usage: git-lite remote add <name> <url> [flags]
+```
+
+to stderr and exits 2, the status `nish` itself uses for a usage error.
+`usageError()` answers those two lines without printing them. `exitUsage`
+reaches `exit`; the rest of the module reaches no
+[capability](../../LANGUAGE.md#capabilities).
+
 ## `nish/term`
 
 `nish/term` is for a program that draws the whole terminal, many times a
@@ -1728,7 +1837,7 @@ test vectors. A byte string is a `u8[]`.
 | `nish/crypto/ed25519` | Ed25519 signatures (RFC 8032): `ed25519PublicKey(seed)`, `ed25519Sign(seed, msg)` and `ed25519Verify(pub, msg, sig)`; the seed is a 32-byte `Secret<u8[]>`, and a message longer than 2^31 − 1 bytes panics; verification does not refuse a public key of small order |
 | `nish/crypto/p256` | P-256 ECDSA signing and verification |
 | `nish/crypto/p384` | P-384 ECDSA verification |
-| `nish/crypto/x509` | DER and PEM, and self-signed P-256 certificates |
+| `nish/crypto/x509` | DER and PEM, X.509 certificates read with their signature algorithm, key type and v3 extensions, and self-signed P-256 certificates |
 | `nish/crypto/x509-random` | a random P-256 key and certificate serial for `x509`; native only, so a program that imports it does not build for WebAssembly |
 | `nish/crypto/pki-roots` | `pkiLoadSystemRoots()`, the root certificates to trust, parsed: those `SSL_CERT_FILE` and `SSL_CERT_DIR` name when either is set, with no fallback, and otherwise the first system bundle (`pkiSystemBundles()`) and `/etc/ssl/certs`. A block or file it cannot use is counted in `skipped`, never fatal, and only regular files are read; on macOS it reads `/etc/ssl/cert.pem`, not the Keychain, so roots and trust settings added there are missed. Native only |
 | `nish/crypto/sha1` | `sha1(data)`, **not for security**: it is here only because the WebSocket handshake is defined on it |
@@ -2294,6 +2403,160 @@ and a line over 1024 bytes is skipped whole and counted in `skippedLines`. An
 address is a strict literal: `010.0.0.1` and `fe80::1%eth0` are refused, not
 read as octal or with a zone. `dnsParseAddress` is the same reader, for a
 literal anywhere in your own bytes.
+
+## `nish/net/dns-resolver`
+
+`DnsResolver` is a stub resolver: it asks the servers in a `DnsConfig` for a
+name's A and AAAA records and gives you the addresses. It opens no socket,
+reads no clock and reads no file, so it builds for `wasm32` too; you, or
+[`nish/net/dns`](#nishnetdns), move its bytes. `new DnsResolver(config, hosts,
+maxLookups)` makes every buffer it will need, for up to `maxLookups` lookups at
+once (1 to 64), so a lookup allocates only the sixteen bytes an address
+literal is parsed into.
+
+`start(name, port, nowNanos)` begins a lookup and answers its slot.
+`nextOutgoing(out, to, meta, id)` says what to do next, a query to send over
+UDP or TCP or a socket to close, with `id` a fresh random 16-bit number each
+time; `receive` and `receiveStream` take what came back; `tick(nowNanos)` moves
+on from a server that did not answer by `nextDeadlineNanos()`. `result(lookup,
+out, ttls)` answers `DNS_RESOLVE_PENDING` while the lookup runs, then the
+address count, A first, 18 bytes each with `port` written in, and each TTL in
+seconds: the smallest TTL of the address records, not of the CNAMEs that led to
+them. A failure is `DNS_RESOLVE_NOT_FOUND` (the name has no address: NXDOMAIN,
+or NODATA, a name with no A or AAAA record), `DNS_RESOLVE_NO_ANSWER` (no server
+answered) or `DNS_RESOLVE_CNAME` (an alias chain ran past 8, or led back to
+the name asked across replies; a loop inside one reply is
+`DNS_RESOLVE_NOT_FOUND`). `start` itself answers a negative code when it
+cannot begin: `DNS_RESOLVE_BUSY` when every slot is taken, or the `DNS_ERR_*`
+code of `nish/net/dns-message` for a name that is not one, such as `""` or a
+label over 63 bytes. Check it before you pass it to `result`, which panics on a
+number that is not a lookup.
+
+`localhost`, an address literal and a name your hosts table has answer at once,
+with no packet sent:
+
+```ts nish:ok
+import { DnsResolver } from "nish/net/dns-resolver";
+import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config";
+import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";
+
+export const main = (): i32 => {
+  const config = new DnsConfig();
+  dnsParseResolvConf(new Array<u8>(0), 0, 0, config);
+  const resolver = new DnsResolver(config, null, 1);
+  const lookup: i32 = resolver.start("localhost", 443, toI64(0));
+  const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
+  const ttls: i32[] = new Array<i32>(16);
+  console.log(`${resolver.result(lookup, out, ttls)} addresses, 127.0.0.${out[15]} first`);
+  return 0;
+};
+```
+
+```console
+$ nish run local.ts
+2 addresses, 127.0.0.1 first
+```
+
+**A forged reply cannot end a lookup.** A reply from another address or port
+than the server's, or with another ID or question, is dropped and counted
+(`droppedSource`, `droppedId`, `droppedQuestion`), and the lookup keeps
+waiting for the true one. A truncated reply is asked again over TCP, once; a
+server that does not answer in `timeout` seconds gives way to the next, for
+`attempts` rounds; a name with fewer dots than `ndots` is tried with each
+`search` domain. When one family answers NXDOMAIN and the other reached no
+server, the next candidate is tried, and if none answers the lookup ends with
+the unreachable family's error. Every counter stops at 2,147,483,647 rather
+than wrapping. Every lookup ends.
+
+## `nish/net/dns`
+
+`nish/net/dns` drives a `DnsResolver` over `nish:net` sockets on the loop your
+program already runs, so a lookup never stops a server from serving. `new
+DnsClient(resolver, loop, tokenBase)` joins your `pollCreate` loop under the
+tokens `tokenBase` to `tokenBase + client.tokens() - 1`. Start a lookup with
+`client.start(name, port, now)`, pass `client.timeoutMs(now, yours)` to
+`pollWait`, hand every ready token `client.owns(token)` claims to
+`client.ready(token, events, now)`, call `client.tick(now)` after each wake,
+and read `client.result(lookup, out, ttls)` until it is not
+`DNS_RESOLVE_PENDING`. Each query goes out on a fresh socket with a random ID,
+and one `ready` reads at most `DNS_CLIENT_MAX_DATAGRAMS` (32) datagrams, so a
+flood on the port cannot keep your loop inside the client.
+
+```ts nish:ok
+import { DnsClient } from "nish/net/dns";
+import { DNS_RESOLVE_PENDING, DnsResolver } from "nish/net/dns-resolver";
+import { DnsConfig, dnsParseResolvConf } from "nish/net/dns-config";
+import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";
+import { pollCreate, pollWait } from "nish:net";
+import { monotonicNanos } from "nish:process";
+
+export const main = (): i32 => {
+  const config = new DnsConfig();
+  const conf: u8[] = [];
+  const text = "nameserver 192.0.2.53\n";
+  for (let i: i32 = 0; i < toI32(text.length); i++) {
+    conf.push(toU8(text.charCodeAt(i)));
+  }
+  dnsParseResolvConf(conf, 0, toI32(conf.length), config);
+  const loop: i32 = pollCreate();
+  const client = new DnsClient(new DnsResolver(config, null, 4), loop, 100);
+  const lookup: i32 = client.start("example.com", 443, monotonicNanos());
+  if (lookup < 0) {
+    console.log(`not started: ${lookup}`);
+    return 1;
+  }
+  const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
+  const ttls: i32[] = new Array<i32>(16);
+  const ready: i32[] = new Array<i32>(16);
+  let status: i32 = client.result(lookup, out, ttls);
+  while (status === DNS_RESOLVE_PENDING) {
+    // Your own sockets share this loop; -1 means you have no timer of your own.
+    const count: i32 = pollWait(loop, ready, client.timeoutMs(monotonicNanos(), -1));
+    const now: i64 = monotonicNanos();
+    for (let k: i32 = 0; k < count; k++) {
+      if (client.owns(ready[2 * k])) {
+        client.ready(ready[2 * k], ready[2 * k + 1], now);
+      }
+    }
+    client.tick(now);
+    status = client.result(lookup, out, ttls);
+  }
+  console.log(`${status}`);
+  return 0;
+};
+```
+
+`resolveHost(name, timeoutMs, port, out, ttls)` is the same lookup with
+`/etc/resolv.conf` and `/etc/hosts` read for you, on a loop of its own: **it
+blocks** until the lookup ends or `timeoutMs` passes
+(`DNS_RESOLVE_TIMEOUT`), so it is for a command-line tool or a program's
+start-up, not a server's loop. It waits for both the A and the AAAA answer, so
+a family that answered is not returned on its own when `timeoutMs` passes. A
+`pollWait` that fails cancels the lookup and its negative errno is the answer;
+a name `start` refuses answers `start`'s code. `dnsLookupWith` is the same with a
+configuration you give it.
+
+```ts nish:ok
+import { resolveHost } from "nish/net/dns";
+import { DNS_ADDRESS_BYTES } from "nish/net/dns-message";
+
+export const main = (): i32 => {
+  const out: u8[] = new Array<u8>(16 * DNS_ADDRESS_BYTES);
+  const ttls: i32[] = new Array<i32>(16);
+  console.log(`${resolveHost("localhost", 2000, 80, out, ttls)} addresses`);
+  return 0;
+};
+```
+
+```console
+$ nish run host.ts
+2 addresses
+```
+
+A program that uses `DnsClient` reports `net` and `entropy` under
+`--emit-capabilities`, the IDs being random; `resolveHost` adds `fs.read` for
+the two files and `clock` for its deadline. Both are native only, as every
+`nish:net` call is.
 
 The [library's README](../../../std/README.md) lists every module, every
 export and the specification each one reproduces. How `nish/` imports

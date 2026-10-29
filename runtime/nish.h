@@ -524,6 +524,10 @@ const nish_str *nish_arch(void);
  * purpose: `readnone` would let LLVM fold the two reads around a measured
  * region into one and measure zero. */
 int64_t nish_monotonic_nanos(void);
+/* `wallClockNanos()`: `CLOCK_REALTIME` in nanoseconds since the epoch, the
+ * clock `Date.now` reads at a millisecond's grain. It steps when the system
+ * time is set, so it dates an event and measures nothing. */
+int64_t nish_wall_clock_nanos(void);
 
 /* ---- The host (WP34 N3), runtime/runtime-host.c --------------------------
  * `Date.now()`: the wall clock, `CLOCK_REALTIME`, in whole milliseconds since

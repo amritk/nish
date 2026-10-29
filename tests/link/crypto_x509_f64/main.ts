@@ -2,15 +2,20 @@
 // every bare `number` and every unannotated literal is an `f64`. The module
 // spells its widths, so its answers must not move: the golden certificate
 // minted byte for byte, its hash, its times read back and its signature
-// verified, days 15 refused, OpenSSL's PKCS#8 key parsed, and the PEM codec's
-// round trip. `crypto_x509` has the rest, and the fixtures and hex helper both
+// verified, days 15 refused, OpenSSL's PKCS#8 key parsed, the PEM codec's
+// round trip, and the shifts and widths of the extension and algorithm reader:
+// keyUsage's bit mask, a path length, a PSS salt and a P-384 r || s. `crypto_x509` has the rest, and the fixtures and hex helper both
 // programs share.
 import { Suite } from "nish/testing"
 import {
+  X509_KU_DIGITAL_SIGNATURE,
+  X509_KU_KEY_CERT_SIGN,
+  X509_SIG_RSA_PSS,
   X509Certificate,
   derToPem,
   pemToDer,
   x509CertificateHash,
+  x509DerSignatureRSWidth,
   x509ParseCertificate,
   x509ParseChain,
   x509VerifySignature,
@@ -18,6 +23,7 @@ import {
 import { x509MintSelfSignedPlain as x509MintSelfSigned, x509ParseP256PrivateKeyPlain as x509ParseP256PrivateKey } from "../crypto_x509/plain"
 import { CA_PEM, CA_PKCS8_PEM, CA_PRIVATE, GOLDEN_PEM } from "../crypto_x509/fixtures"
 import { fromHex, toHex } from "../crypto_x509/hex"
+import { FULL_DER, PSS_DER } from "../crypto_x509/webpki"
 
 const GOLDEN: string =
   "308201453081eca00302010202100123456789abcdef0123456789abcdef300a06082a8648ce3d04030230143112301006035504030c096c6f63616c686f7374301e170d3236303130313030303030305a170d3236303131353030303030305a30143112301006035504030c096c6f63616c686f73743059301306072a8648ce3d020106082a8648ce3d0301070342000460fed4ba255a9d31c961eb74c6356d68c049b8923b61fa6ce669622e60f29fb67903fe1008b8bc99a41ae9e95628bc64f2f1b20c2d7e9f5177a3c294d4462299a320301e300c0603551d130101ff04023000300e0603551d0f0101ff040403020780300a06082a8648ce3d0403020348003045022100a708a4eb8898ea2351c1a76ca2f914da495b96ac707062954b80d61dbee83d0202206457036311441990e3383c81d9cd9ae4f72d634da7b6d89ca2834b13b3bde147"
@@ -58,5 +64,17 @@ export const main = (): i32 => {
   t.eqStr("OpenSSL's PKCS#8 key", toHex(x509ParseP256PrivateKey(CA_PKCS8_PEM)), CA_PRIVATE)
   const chain: X509Certificate[] | null = x509ParseChain(CA_PEM)
   t.ok("OpenSSL's CA verifies under itself", chain !== null && x509VerifySignature(chain[0], chain[0]))
+  const full: X509Certificate | null = x509ParseCertificate(fromHex(FULL_DER))
+  const pss: X509Certificate | null = x509ParseCertificate(fromHex(PSS_DER))
+  if (full !== null && pss !== null) {
+    t.eqI32("keyUsage's mask", full.keyUsage, X509_KU_DIGITAL_SIGNATURE | X509_KU_KEY_CERT_SIGN)
+    t.eqI32("pathLenConstraint 0", full.bcPathLen, toI32(0))
+    t.eqStr("a nameConstraints iPAddress mask", toHex(full.ncPermitted[1].mask), "ffffff00")
+    const rs: u8[] | null = x509DerSignatureRSWidth(full.signature, 48)
+    t.ok("a P-384 r || s", rs !== null && toI32(rs.length) === 96)
+    t.ok("RSASSA-PSS with a 32-octet salt", pss.sigAlg === X509_SIG_RSA_PSS && pss.pssSaltLen === 32)
+  } else {
+    t.fail("the Web PKI fixtures parse", "null")
+  }
   return t.done()
 }

@@ -51,4 +51,30 @@ PASS  v1 with its own point but 1 unused bit answers null
 PASS  v1 with the point cut to 64 octets answers null
 PASS  v1 with no outer public key still reads
 X509-8: a PKCS#8 v1 key's outer public key is its own: 7 passed, 0 failed, 0 skipped
+PASS  one basicConstraints reads
+PASS  basicConstraints twice is refused
+PASS  one private extension reads
+PASS  a private extension twice is refused
+PASS  basicConstraints with a NULL after its SEQUENCE is refused
+PASS  basicConstraints with cA FALSE written out, a DEFAULT DER omits, is refused
+PASS  keyUsage critical and then again non-critical is refused
+PASS  cA TRUE reads as a CA with no path length
+X509-10: each extension once, and each known one whole: 8 passed, 0 failed, 0 skipped
+PASS  32 distinct extensions read
+PASS  64 distinct extensions read
+PASS  65 distinct extensions are refused
+PASS  127 distinct extensions are refused
+X509-14: at most 64 extensions: 4 passed, 0 failed, 0 skipped
+PASS  a non-critical private extension leaves unknownCritical clear
+PASS  a critical private extension reads, with unknownCritical set
+PASS  a critical basicConstraints leaves it clear
+PASS  the golden P-256 certificate leaves it clear
+X509-11: an unknown critical extension is reported: 4 passed, 0 failed, 0 skipped
+PASS  a Name equals itself
+PASS  open, X509-12: a PrintableString spelling does not match a UTF8String
+PASS  open, X509-12: nor does another case
+PASS  open, X509-13: an RDN out of SET OF order is still a Name
+PASS  open, X509-13: and does not match the sorted one
+PASS  nor is it a prefix of it
+X509-12 and X509-13: Names compare byte for byte: 6 passed, 0 failed, 0 skipped
 

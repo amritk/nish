@@ -939,6 +939,9 @@ export const emitIdentifierBuiltinCall = (emitter: Emitter, expr: Node, name: st
   if (name === "monotonicNanos") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_monotonic_nanos")}()`)
   }
+  if (name === "wallClockNanos") {
+    return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_wall_clock_nanos")}()`)
+  }
   // The mark a `using a = arena()` block releases to (`openScope`).
   if (name === "arena") {
     return emitter.fn.emitValue(`call i64 ${emitter.useRuntime("nish_arena_mark")}()`)
@@ -1201,6 +1204,10 @@ export const identifierBuiltinCalleesNamed = (
   }
   if (name === "monotonicNanos") {
     out.push("nish_monotonic_nanos")
+    return out
+  }
+  if (name === "wallClockNanos") {
+    out.push("nish_wall_clock_nanos")
     return out
   }
   // The release every exit of the block makes. The mark the call itself takes

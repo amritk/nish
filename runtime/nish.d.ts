@@ -371,6 +371,11 @@ declare function getenv(name: string): string | null;
  */
 declare function monotonicNanos(): i64;
 /**
+ * The wall clock in nanoseconds since the Unix epoch, for dating an event. It
+ * steps when the system time is set, so a duration is `monotonicNanos`'s.
+ */
+declare function wallClockNanos(): i64;
+/**
  * The modification time of `path` in milliseconds since the epoch, with the
  * sub-millisecond fraction the file system keeps (Node's `mtimeMs`), or NaN
  * when it cannot be stat'd. Follows a symbolic link; a directory has one too.
@@ -584,6 +589,8 @@ declare module "nish:process" {
    * difference between two reads is meaningful.
    */
   export function monotonicNanos(): i64;
+  /** The wall clock in nanoseconds since the Unix epoch; it steps when the system time is set. */
+  export function wallClockNanos(): i64;
   /** A descriptor readable when SIGTERM or SIGINT arrives; the same one every call, or -1. */
   export function signalFd(): i32;
   /** Block until SIGTERM or SIGINT arrives: 15 or 2, or -1 for a descriptor that is not `signalFd()`'s. */

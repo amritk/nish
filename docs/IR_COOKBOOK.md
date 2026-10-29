@@ -23026,6 +23026,43 @@ attributes #5 = { alwaysinline nounwind willreturn allocsize(0) "probe-stack"="i
 ```
 <!-- cookbook:end builtin-driver -->
 
+### The wall clock
+
+`wallClockNanos` is `monotonicNanos` on `CLOCK_REALTIME`: one call answering an
+`i64`, `willreturn` and a write, so two reads never fold into one. The division
+is the checked `i64` one, with nothing to check: the divisor is a constant that
+is neither zero nor `-1`.
+
+<!-- cookbook:begin builtin-wall-clock -->
+```ts
+// `wallClockNanos`, `CLOCK_REALTIME` in nanoseconds since the epoch: the same
+// one call as `monotonicNanos`, on the other clock.
+import { wallClockNanos } from "nish:process"
+
+export const seconds = (): i64 => wallClockNanos() / 1000000000
+```
+
+```llvm
+declare i64 @nish_wall_clock_nanos() #0
+
+define noundef i64 @seconds() #0 {
+entry:
+  %0 = call i64 @nish_wall_clock_nanos()
+  %1 = sdiv i64 %0, 1000000000
+  ret i64 %1
+}
+
+attributes #0 = { nounwind willreturn "probe-stack"="inline-asm" }
+
+!llvm.module.flags = !{!0, !1, !2, !3, !4}
+!0 = !{i32 8, !"cf-protection-branch", i32 1}
+!1 = !{i32 8, !"cf-protection-return", i32 1}
+!2 = !{i32 8, !"branch-target-enforcement", i32 1}
+!3 = !{i32 8, !"sign-return-address", i32 1}
+!4 = !{i32 4, !"probe-stack", !"inline-asm"}
+```
+<!-- cookbook:end builtin-wall-clock -->
+
 ### Reading the environment
 
 `getenv` is the only environment read the language has, and it is a call rather
@@ -24114,6 +24151,7 @@ declare noundef i32 @nish_kill(i32 noundef, i32 noundef) #3
 declare noalias noundef nonnull align 8 %struct.nish_array* @nish_wait_pid(i32 noundef, i32 noundef) #3
 declare noalias align 8 %struct.nish_array* @nish_readdir(i8* noundef nonnull readonly align 8 nocapture) #2
 declare i64 @nish_monotonic_nanos() #2
+declare i64 @nish_wall_clock_nanos() #2
 declare noalias noundef align 8 i8* @nish_getenv(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias noundef align 8 i8* @nish_realpath(i8* noundef nonnull readonly align 8 nocapture) #2
 declare noalias align 8 %struct.nish_array* @nish_read_file_bytes(i8* noundef nonnull readonly align 8 nocapture) #3

@@ -79,6 +79,7 @@ core.write("50% of ");
 core.write("%d\nno newline");
 assert.deepEqual([...core.argv()], ["main"]);
 assert.equal(typeof core.monotonicNanos(), "bigint");
+assert.ok(core.wallClockNanos() / 1000000000n > 1577836800n); // after 2020, in nanoseconds
 assert.equal(core.getenv("HOME"), null);
 assert.equal(exitOf(() => core.panic("boom")), 1);
 assert.equal(exitOf(() => core.exit(259)), 3);
