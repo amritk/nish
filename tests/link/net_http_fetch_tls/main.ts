@@ -11,8 +11,11 @@
 // `/until-close` sends a body that ends at the server's close_notify,
 // `/stale` drops the connection after a whole reply, `/then-notify` ends it
 // with a close_notify after one, `/alert-once` answers its first request with
-// a fatal alert and `/alert` every request with one, and `/notified-N` says
-// whether connection N ended with the client's close_notify.
+// a fatal alert and `/alert` every request with one, `/notified-N` says
+// whether connection N ended with the client's close_notify, `/head` echoes
+// the whole request head and `/connect-head` the proxy's last CONNECT head.
+// A CONNECT from proxy user `alert` is answered with the 200 and a fatal
+// alert in one segment, and nothing after.
 
 import { HTTP_E_CERTIFICATE, HTTP_E_READ_TIMEOUT, HTTP_E_REDIRECT_REFUSED, HTTP_E_TLS, HttpClient, HttpOptions, HttpRequest, HttpResponse, httpFetch } from "nish/net/http-client";
 import { netAddress, netClose, netLocalPort, netRead, netWrite, pollAdd, pollCreate, pollModify, pollRemove, pollWait, tcpAccept, tcpConnect, tcpListen } from "nish:net";
@@ -96,6 +99,10 @@ class Servers {
   /** What the proxy has read of the CONNECT head; empty once the tunnel is open. */
   head: string = "";
   tunnel: boolean = false;
+  /** The last whole CONNECT head the proxy read, which `/connect-head` answers with. */
+  connectHead: string = "";
+  /** Set once the proxy has answered a CONNECT with a 200 and an alert: it then only drains. */
+  mute: boolean = false;
   connections: i32 = 0;
   /** Whether `/alert-once` has answered with an alert yet. */
   alerted: boolean = false;
@@ -236,8 +243,18 @@ class Servers {
         end = toI32(site.got[slot].indexOf("\r\n\r\n"));
         continue;
       }
+      if (line.startsWith("GET /head ")) {
+        this.reply(site, slot, head);
+        end = toI32(site.got[slot].indexOf("\r\n\r\n"));
+        continue;
+      }
+      if (line.startsWith("GET /connect-head ")) {
+        this.reply(site, slot, this.connectHead);
+        end = toI32(site.got[slot].indexOf("\r\n\r\n"));
+        continue;
+      }
       if (line.startsWith("GET /tohttp ")) {
-        const moved: u8[] = asciiBytes("HTTP/1.1 301 Moved Permanently\r\nLocation: http://localhost:1/\r\nContent-Length: 0\r\n\r\n");
+        const moved: u8[] = asciiBytes("HTTP/1.1 301 Moved Permanently\r\nLocation: http://who:hunter2@localhost:1/?token=s3cr3t\r\nContent-Length: 0\r\n\r\n");
         site.server.write(slot, moved, 0, toI32(moved.length));
         end = toI32(site.got[slot].indexOf("\r\n\r\n"));
         continue;
@@ -256,13 +273,12 @@ class Servers {
     if (fd < 0) {
       return;
     }
-    if (this.down >= 0) {
-      netClose(fd);
-      return;
-    }
+    // One tunnel at a time: a new client takes over from the last.
+    this.proxyEnd();
     this.down = fd;
     this.head = "";
     this.tunnel = false;
+    this.mute = false;
     pollAdd(this.loop, fd, 1, PROXY_DOWN);
   }
 
@@ -271,6 +287,9 @@ class Servers {
     const n: i32 = netRead(this.down, this.buf, 0, toI32(this.buf.length));
     if (n <= 0) {
       this.proxyEnd();
+      return;
+    }
+    if (this.mute) {
       return;
     }
     this.head = this.head + String.fromBytes(this.buf, 0, n);
@@ -284,6 +303,19 @@ class Servers {
     }
     if (!this.head.startsWith(`CONNECT localhost:${this.sites[GOOD].port} HTTP/1.1\r\n`)) {
       this.proxyEnd();
+      return;
+    }
+    this.connectHead = this.head;
+    if (this.head.indexOf("Proxy-Authorization: Basic YWxlcnQ6eA==\r\n") >= 0) {
+      // User "alert": the 200 and a fatal handshake_failure alert record in
+      // one segment, then silence, so only the bytes after the head can end it.
+      const both: u8[] = asciiBytes("HTTP/1.1 200 Connection established\r\n\r\n");
+      const alert: u8[] = [0x15, 0x03, 0x03, 0x00, 0x02, 0x02, 0x28];
+      for (let i: i32 = 0; i < toI32(alert.length); i++) {
+        both.push(alert[i]);
+      }
+      this.mute = true;
+      this.send(this.down, both, 0, toI32(both.length));
       return;
     }
     const addr: u8[] = new Array<u8>(18);
@@ -555,7 +587,7 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   downgrade.crossOriginRedirects = true;
   const down: HttpClient = new HttpClient(downgrade);
   t.check(fails(down, down.fetch(get(`${good}/tohttp`)), HTTP_E_REDIRECT_REFUSED), "a redirect from https to http is refused even with crossOriginRedirects");
-  t.check(down.errorText.indexOf("from https to http") >= 0, "and the error says why");
+  t.check(down.errorText.endsWith("from https to http (http://localhost:1/?...)"), "and the error says why, naming the Location without its password or query");
 
   // --- through a proxy
   const tunnelled: HttpClient = new HttpClient(options);
@@ -567,6 +599,25 @@ const runClient = (ports: i32[], proxy: i32, trusted: string, stranger: string, 
   }
   const p2: HttpResponse | null = tunnelled.fetch(get(`${good}/tunnel2`));
   t.check(bodyOf(p2) === "GET /tunnel2 HTTP/1.1" && conn(p2) === conn(p), "and the tunnelled connection is reused");
+  tunnelled.close();
+  const authed: HttpClient = new HttpClient(options);
+  authed.setProxies("", `http://user:pass@127.0.0.1:${proxy}`, "");
+  const headReq: HttpRequest = get(`${good}/head`);
+  headReq.header("Proxy-Authorization", "Basic c2VjcmV0");
+  const sent: HttpResponse | null = authed.fetch(headReq);
+  const originHead: string = bodyOf(sent);
+  t.check(originHead.startsWith("GET /head HTTP/1.1") && originHead.indexOf("roxy-") < 0, "through a tunnel the origin is sent no Proxy-Authorization, not even the caller's");
+  if (sent === null) {
+    console.log(`  error ${authed.error}: ${authed.errorText}`);
+  }
+  const asked: string = bodyOf(authed.fetch(get(`${good}/connect-head`)));
+  t.check(asked.indexOf("Proxy-Authorization: Basic dXNlcjpwYXNz\r\n") >= 0, "and the CONNECT carries the proxy URL's user and password");
+  authed.close();
+  const coalescing: HttpOptions = trusting(trusted);
+  coalescing.readTimeoutMs = 300;
+  const alerting2: HttpClient = new HttpClient(coalescing);
+  alerting2.setProxies("", `http://alert:x@127.0.0.1:${proxy}`, "");
+  t.check(fails(alerting2, alerting2.fetch(get(`${good}/never`)), HTTP_E_TLS), "an alert the proxy sends in the same segment as its 200 is read by TLS, not lost");
 
   console.log(`http fetch tls: ${t.passed} passed, ${t.failed} failed, 0 skipped`);
   return t.failed;

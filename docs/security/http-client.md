@@ -16,9 +16,11 @@ wait has a deadline, and `totalTimeoutMs` bounds a whole fetch, so a server
 that drips its body cannot hold one forever. A body is capped by
 `maxBodyBytes` and by what `readAll` is asked for. A redirect is followed only
 when asked, never from https to http, and to another origin only when asked
-too, without the caller's credentials. `HTTP_PROXY` is ignored under CGI. Four
-findings were fixed while the module was written (HF-1, HF-4, HF-5 and HF-6,
-Low); two are open (HF-2 and HF-3, Low). https is TLS 1.3 through `TlsRecordClient`: the
+too, without the caller's credentials. `HTTP_PROXY` is ignored under CGI. A
+connection holding a byte past its last response is never used again, and an
+error names a URL without its password or query. Seven findings were fixed
+while the module was written (HF-1 and HF-4 to HF-9, Low); two are open (HF-2
+and HF-3, Low). https is TLS 1.3 through `TlsRecordClient`: the
 server's chain is checked under the caller's roots, or the system's, at the
 wall clock's time and for the URL's host before a byte of the request is
 sent; no root to trust is a refusal before any connection; there is no switch
@@ -30,7 +32,7 @@ that turns the check off; and a body is whole only once the server's
 
 | File | Functions |
 | --- | --- |
-| `std/net/http-client.ts` | `httpFetch`, `httpErrorName`, `httpChooseProxy`, `httpProxyFor`, `httpNoProxyMatch`; `HttpRequest` (`header`), `HttpOptions`, `HttpResponse` (`header`), `HttpBodyReader` (`read`, `readAll`); `HttpClient` (`setProxies`, `fetch`, `close`, `exchange`, `open`, `tunnel`, `send`, `head`, `pump`, `fill`, `writeAll`, `dial`, `wait`, `unwatch`, `readDeadline`, `drop`, `drain`, `readBody`, `refuseBody`, `failWait`, `refuse`, `fail`, `loadTrust`, `secure`, `receiveTls`, `flushTls`, `failTls`, `readRaw`, `writeRaw`); and the helpers (`httpClientParser`, `httpClientIsRedirect`, `httpClientIdempotent`, `httpClientDropField`, `httpClientLower`, `httpClientTrim`, `httpClientTrimDots`, `httpClientPort`, `httpClientHostText`, `httpClientUrlText`, `httpClientProxyUrl`, `httpClientProxyAuth`) |
+| `std/net/http-client.ts` | `httpFetch`, `httpErrorName`, `httpChooseProxy`, `httpProxyFor`, `httpNoProxyMatch`; `HttpRequest` (`header`), `HttpOptions`, `HttpResponse` (`header`), `HttpBodyReader` (`read`, `readAll`); `HttpClient` (`setProxies`, `fetch`, `close`, `exchange`, `open`, `tunnel`, `send`, `head`, `pump`, `fill`, `writeAll`, `dial`, `wait`, `watch`, `unwatch`, `quiet`, `leftover`, `overdue`, `readDeadline`, `drop`, `drain`, `readBody`, `refuseBody`, `failWait`, `refuse`, `fail`, `loadTrust`, `secure`, `receiveTls`, `flushTls`, `failTls`, `readRaw`, `writeRaw`); and the helpers (`httpClientParser`, `httpClientIsRedirect`, `httpClientIdempotent`, `httpClientDropField`, `httpClientLower`, `httpClientTrim`, `httpClientTrimDots`, `httpClientPort`, `httpClientHostText`, `httpClientUrlText`, `httpClientRedact`, `httpClientProxyUrl`, `httpClientProxyAuth`) |
 
 Out of scope: the request writer and response parser of
 `std/net/http1-client.ts` ([`http1-client.md`](http1-client.md)), the URL
@@ -72,6 +74,9 @@ for the end of a body.
 | HF-4 | Low | `std/net/http-client.ts` (`httpFetch`) | `httpFetch` closed its client only when the fetch failed. After a success its connection stayed open, over https without a `close_notify`, until the process exited, and nothing could reach the client to close it: a CLI looping over `httpFetch` held a socket for every fetch, and the server never learned the session ended cleanly. | **Fixed** before the module shipped: `httpFetch`'s client is marked `once` and `release` closes it whole when its body ends, fails, or is refused past `readAll`'s limit. Before, `and once its body is read, it ends the connection with a close_notify` (in `net_http_fetch_tls`) failed; after, it passes. |
 | HF-5 | Low | `std/net/http-client.ts` (`HttpClient.send`) | A `Proxy-Authorization` the caller set went to the origin whenever the request did not go through an http proxy: fetched directly, or inside a CONNECT tunnel, whose CONNECT carries only the proxy URL's own userinfo. The proxy's credentials reached a server that has no use for them. | **Fixed** before the module shipped: `send` drops the caller's `Proxy-Authorization` unless the request goes to an http proxy. Before, `a caller's Proxy-Authorization never goes to an origin fetched directly` failed; after, it passes. |
 | HF-6 | Low | `std/net/http-client.ts` (`HttpClient.drop`) | A body whose client closed it before its end (`close()` on a cancel path, or any drop that keeps the generation) answered 0 on its next `read`, so `readAll` took the bytes read so far for the whole body. A stale reader also overwrote the client's error with its own, losing the later fetch's failure before the program reported it. | **Fixed** before the module shipped: `drop` sets the open body's `bodyError` to `HTTP_E_IO`, and a stale reader answers `-HTTP_E_IO` without touching the client. Before, `a body its client closed before its end answers an error, never 0` and `a stale body's read leaves the later fetch's error in place` failed; after, they pass. |
+| HF-7 | Low | `std/net/http-client.ts` (`HttpClient.readBody`, `open`) | A kept connection was used again with bytes past its last response on it: sent in the same segment as the response, or by the server while the connection sat idle. The next fetch on it read those bytes as its own response, one the server wrote before it saw the request, so a server out of step answered each request with the one before's answer. | **Fixed** before the module shipped: `release` closes a connection on which `leftover` finds a byte held by the parser or the TLS layer, and `open` reuses one only when `quiet`, a poll that does not wait, finds nothing to read on it. Before, `a response followed in its segment by another nobody asked for is read, and its connection dropped` and `and so is one whose server spoke while it sat idle` failed (the next fetch read the unasked-for `evil!`); after, they pass. |
+| HF-8 | Low | `std/net/http-client.ts` (`HttpClient.fetch`, `open`) | `errorText` named a request URL, a redirect's `Location` and a proxy setting whole, so a password in the userinfo or a token in the query went wherever a program reports its errors, a log or a CI transcript. | **Fixed** before the module shipped: `httpClientRedact` cuts the userinfo, the query and the fragment from every URL an error names, and marks the cut with `?...`. Before, `and the error names it without its password or query` (for a request URL and for a proxy setting) and `a refused Location is named without its password or query` failed; after, they pass. |
+| HF-9 | Low | `std/net/http-client.ts` (`HttpClient.fill`, `writeRaw`) | `totalTimeoutMs` was checked only by a wait. A body whose next bytes were always on the socket before the client asked for them never waited, so a fetch read on past its deadline. | **Fixed** before the module shipped: `overdue` fails the fetch with `HTTP_E_TOTAL_TIMEOUT` before every read and every write once the deadline has passed. Before, `a body whose rest is already waiting is still cut off once totalTimeoutMs has passed` failed; after, it passes. |
 | HF-3 | Low | `std/net/http-client.ts` (`HttpClient.fetch`, `send`, `dial`) | Each fetch makes its field arrays, its response, the response's copies of the parser's fields, the lookup's address arrays and its error text afresh, so they stay in the arena until the program resets it, as HC-1 records for the parser beneath. Bounded for each fetch by `maxRedirects + 1` heads of `HTTP_CLIENT_MAX_HEADERS` fields within the parser's caps. | **Open, accepted for now.** A long-running program fetches inside an arena it resets; a per-connection arena closes it with HC-1. |
 
 ## Fuzzing
@@ -85,10 +90,11 @@ variables and `NO_PROXY`, pinned by the checks below.
 ## Properties verified
 
 Each property below is pinned by a check that fails if it stops holding. The
-checks are in `tests/link/net_http_fetch/main.ts`, run as
+checks are in `tests/link/net_http_fetch/checks.ts`, run as
 `link/net_http_fetch: exits with 0 and stdout matches expected.out` (the
 template `link/${name}: exits with ${wantCode} and stdout matches
-expected.out` in `tests/run.js`); each check's own line is in `expected.out`.
+expected.out` in `tests/run.js`), and again under `--number-mode f64` as
+`link/net_http_fetch_f64`; each check's own line is in `expected.out`.
 The test is its own server: it listens on two loopback ports and runs itself
 again as the client, so every byte both ways is the test's.
 
@@ -110,6 +116,9 @@ Content-Length fields that disagree are HTTP_E_PROTOCOL`, `and errorText
 names the parser's code`); a body cut short by the close is an error, never a
 whole body (`a body cut short by the close is an error, never a whole body`);
 an interim response is read past (`a 103 before the response is read past`).
+A response head past `maxHeaderBytes` is `HTTP_E_PROTOCOL`, and the same head
+is read under a limit above it (`a response head past maxHeaderBytes is
+HTTP_E_PROTOCOL`, `and read under a limit above it`).
 
 **Every wait ends.** A server that never answers is `HTTP_E_READ_TIMEOUT`
 after `readTimeoutMs` (`a server that never answers is HTTP_E_READ_TIMEOUT`,
@@ -117,11 +126,16 @@ after `readTimeoutMs` (`a server that never answers is HTTP_E_READ_TIMEOUT`,
 read timeout, is cut off by `totalTimeoutMs`, counted from the start of the
 fetch (`a body dripped a byte at a time is cut off by totalTimeoutMs`, `after
 totalTimeoutMs, counted from the start of the fetch`, `and the error says the
-fetch ran past totalTimeoutMs`); a listener that never
+fetch ran past totalTimeoutMs`), and so is one whose rest is on the socket
+before it is asked for (HF-9); a listener that never
 accepts is `HTTP_E_CONNECT_TIMEOUT` (`a listener whose backlog is full is
 HTTP_E_CONNECT_TIMEOUT`). A refused port and an unknown name have their own
 codes (`a port nothing listens on is HTTP_E_REFUSED`, `a name that does not
-exist is HTTP_E_DNS`).
+exist is HTTP_E_DNS`). The connect budget is the lookup's and every address's
+together, tried in turn: an address that drops the SYN uses up the whole
+budget, so the addresses after it are never tried. A name whose first address
+is black-holed fails with `HTTP_E_CONNECT_TIMEOUT` though a later one would
+answer; `connectTimeoutMs` bounds that wait, and nothing races the addresses.
 
 **Every body is capped.** A declared length past `maxBodyBytes` fails before a
 byte of the body is read, and a chunked body as it passes the cap (`a
@@ -133,7 +147,8 @@ A body that failed, cut short or refused, answers the same error on every later
 read (`and the body answers that error again when read after it`, twice), and
 a read never writes past the count it asked for (`a read asking for two bytes
 of a longer body answers two`, `a body read two bytes at a time is read
-whole`). A stream is handed out as it arrives (`an event stream's first event is read
+whole`), and a read of none answers 0 without waiting (`an empty read answers
+0 at once, waiting for nothing`). A stream is handed out as it arrives (`an event stream's first event is read
 while the server holds the stream open`).
 
 **Keep-alive cannot mix responses.** A second fetch reuses the connection
@@ -144,9 +159,18 @@ left unread answers an error once the next fetch starts`, `and the next fetch
 went on a new connection`); a body read to its end answers 0 again (HF-1). A
 stale reader leaves the later fetch's error alone, and a body its client
 closed early answers an error (HF-6). A
-kept connection the server closed is retried once for a GET and never for a
-POST (`a GET on it is sent again on a fresh connection`, `a POST on it is not
-sent twice: it fails with HTTP_E_IO`). A response that says `Connection:
+kept connection the server closed while idle is seen closed before a request
+is written on it, so the request goes on a new one, a POST included (`the
+close is seen before a GET is sent, and it goes on a fresh connection`, `and
+so does a POST, which no retry could send`). One the server closes under a
+request, before a byte of the answer, is retried once on a new connection for
+an idempotent method and never for a POST (`a GET a kept connection closes
+under, before any byte of answer, is sent again on a new one`, the same for a
+PUT and a DELETE, `a POST is not sent twice: it fails with HTTP_E_IO`); a
+request whose answer was cut off part way, or that a kept connection never
+answers, is not sent again (`a GET whose answer was cut off part way is not
+sent again`, `nor one a kept connection never answers: it is
+HTTP_E_READ_TIMEOUT`). Bytes past a response close its connection (HF-7). A response that says `Connection:
 close` ends its connection even when the server leaves the socket open (`a
 response that says Connection: close is read`, `and its connection is not used
 again, though the server left it open`), so a POST after it is sent once, on a
@@ -167,8 +191,10 @@ from https to http is refused whatever the options say (`a redirect from
 https to http is refused even with crossOriginRedirects`, below). The method and body
 change as RFC 9110 §15.4 says (`a POST redirected by 303 becomes a GET without
 its body`, `and so does one redirected by 302`, `307 keeps the method and the
-body`, `and so does 308, its relative Location resolved`), and a HEAD stays a
-HEAD through a 303 (`a HEAD redirected by 303 stays a HEAD`).
+body`, `and so does 308, its relative Location resolved`), a 302 turns only a POST
+into a GET (`a 302 turns only a POST into a GET: a PUT keeps its method and
+body`), and a HEAD stays a HEAD through a 303 (`a HEAD redirected by 303 stays
+a HEAD`). A refused `Location` is named without its userinfo or query (HF-8).
 
 **Proxies.** `HTTP_PROXY` is ignored under CGI (`proxy variables: HTTP_PROXY
 is ignored under CGI (httpoxy)`); https never falls back to the http proxy
@@ -180,7 +206,11 @@ suffix`); a proxy that is not `http://` is `HTTP_E_PROXY`; an https fetch
 goes through `CONNECT` with the proxy's credentials, and a refused `CONNECT`
 is `HTTP_E_PROXY_REFUSED` (`a proxy that is not http:// is HTTP_E_PROXY`, `an
 https fetch through a proxy is tunnelled with CONNECT, the proxy authorised`,
-`a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED`).
+`a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED`). Through an
+http proxy, a caller's `Proxy-Authorization` is sent in place of the one made
+from the proxy URL's userinfo (`a caller's Proxy-Authorization goes to the
+proxy in place of the userinfo's`); a proxy setting an error names loses its
+password and query (HF-8).
 
 **https.** The checks are in `tests/link/net_http_fetch_tls/main.ts`, run as
 `link/net_http_fetch_tls: exits with 0 and stdout matches expected.out`. Its
@@ -221,7 +251,13 @@ A redirect from https to http is refused even
 when cross-origin hops are allowed (`a redirect from https to http is refused
 even with crossOriginRedirects`), and https through a proxy is a `CONNECT`
 tunnel with TLS to the origin inside it (`https through an http proxy is a
-CONNECT tunnel, then TLS to the origin`).
+CONNECT tunnel, then TLS to the origin`). The origin inside the tunnel is sent
+no `Proxy-Authorization`, the caller's included, while the `CONNECT` carries
+the proxy URL's (`through a tunnel the origin is sent no Proxy-Authorization,
+not even the caller's`, `and the CONNECT carries the proxy URL's user and
+password`). Bytes the proxy sends in the segment of its `200` belong to the
+tunnel, so an alert there ends the handshake at once (`an alert the proxy sends
+in the same segment as its 200 is read by TLS, not lost`).
 
 **What no check reaches.** A failure of the poll loop itself (`pollCreate` or
 `pollAdd` failing), a write that fails with an errno other than a reset, the
@@ -229,3 +265,27 @@ wiping of a closed connection's TLS keys (`drop` calls `wipe`; nothing a test
 can read sees the keys), the freshness of the handshake's random values, and
 a TLS record buffer that fills with no room for a read, which the record
 layer's sizes keep from happening.
+
+**Mutation sweep.** Hand-placed mutants of `std/net/http-client.ts`, each run
+against `link/net_http_fetch`, `link/net_http_fetch_f64` and
+`link/net_http_fetch_tls`, show which lines the checks above pin. Every
+mutant of the retry rule (a dropped `reused`, `lost` or `gotByte` term, POST
+made idempotent), of HF-7's `leftover` and `quiet` taken out together, of
+HF-8's redaction at each of its six call sites and in each of its cuts, of
+`fill`'s `overdue`, of `maxHeaderBytes`, of the empty read, and of the TLS
+read of bytes that arrive with a proxy's `200` (T9) is killed. These survive,
+and stay:
+
+- `L1`, `L2`, `L12`: HF-7 is closed twice, by `release` dropping a connection
+  that holds a byte and by `open` reusing one only when `quiet`. Either alone
+  keeps the next response clean, so taking one out is caught by the other;
+  both are kept, since `quiet` is also what sees bytes the server sends while
+  the connection sits idle, and `release` frees the socket at once.
+- `O2`: `writeRaw`'s `overdue`. A write that never waits ends in a moment,
+  and one that waits is cut by `wait` at the same deadline, so no loopback
+  peer makes the two differ.
+- `T10`: the handshake loop's wait for its last flight to leave. The request
+  is written behind it in order, so a missing flush is made up by the next.
+- `T15`: `conn.abort` on a read error. `drop` wipes and discards the
+  connection anyway.
+- `T19`: `writeTls`'s final flush. The read that follows flushes first.

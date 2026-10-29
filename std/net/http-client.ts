@@ -294,11 +294,16 @@ export class HttpBodyReader {
    * Up to `n` body bytes into `buf[off ..]`: how many (at least one), 0 at
    * the end of the body, or a negated `HTTP_E_*` code, the client's
    * `errorText` saying why. It waits for at least one byte, no more, so an
-   * event stream is read event by event. A window outside `buf` panics.
+   * event stream is read event by event. A window outside `buf` panics; an
+   * empty one answers 0 at once, reading nothing, so 0 means the end only
+   * when `n` is positive.
    */
   read(buf: u8[], off: i32, n: i32): i32 {
-    if (off < 0 || n < 0 || off + n > toI32(buf.length)) {
+    if (off < 0 || n < 0 || toI64(off) + toI64(n) > toI64(buf.length)) {
       panic("HttpBodyReader.read: the window is outside the buffer")
+    }
+    if (n === 0) {
+      return 0
     }
     return this.client.readBody(this.generation, buf, off, n)
   }
@@ -440,7 +445,7 @@ export class HttpClient {
     this.deadline = total > 0 ? monotonicNanos() + toI64(total) * HTTP_CLIENT_NS_PER_MS : HTTP_CLIENT_NEVER
     let url: Url | null = urlParse(req.url)
     if (url === null || (url.scheme !== "http" && url.scheme !== "https")) {
-      this.fail(HTTP_E_URL, `not an absolute http or https URL: ${req.url}`)
+      this.fail(HTTP_E_URL, `not an absolute http or https URL: ${httpClientRedact(req.url)}`)
       return null
     }
     let method: string = req.method
@@ -464,24 +469,30 @@ export class HttpClient {
       if (hops >= this.options.maxRedirects) {
         return this.refuse(
           HTTP_E_TOO_MANY_REDIRECTS,
-          `more than ${this.options.maxRedirects} redirects, the last to ${location}`
+          `more than ${this.options.maxRedirects} redirects, the last to ${httpClientRedact(location)}`
         )
       }
       const next: Url | null = urlResolve(url, location)
       if (next === null || (next.scheme !== "http" && next.scheme !== "https")) {
         return this.refuse(
           HTTP_E_REDIRECT_REFUSED,
-          `a redirect to ${location}, which is not an http or https URL`
+          `a redirect to ${httpClientRedact(location)}, which is not an http or https URL`
         )
       }
       if (url.scheme === "https" && next.scheme === "http") {
-        return this.refuse(HTTP_E_REDIRECT_REFUSED, `a redirect from https to http (${location})`)
+        return this.refuse(
+          HTTP_E_REDIRECT_REFUSED,
+          `a redirect from https to http (${httpClientRedact(location)})`
+        )
       }
       const from: string | null = urlOrigin(url)
       const to: string | null = urlOrigin(next)
       if (from === null || to === null || from !== to) {
         if (!this.options.crossOriginRedirects) {
-          return this.refuse(HTTP_E_REDIRECT_REFUSED, `a redirect to another origin (${location})`)
+          return this.refuse(
+            HTTP_E_REDIRECT_REFUSED,
+            `a redirect to another origin (${httpClientRedact(location)})`
+          )
         }
         // Credentials were meant for the first origin, not for wherever it points.
         httpClientDropField(names, values, "authorization")
@@ -564,7 +575,10 @@ export class HttpClient {
     if (proxyText !== "") {
       proxy = httpClientProxyUrl(proxyText)
       if (proxy === null) {
-        this.fail(HTTP_E_PROXY, `the proxy setting is not an http:// URL with a host: ${proxyText}`)
+        this.fail(
+          HTTP_E_PROXY,
+          `the proxy setting is not an http:// URL with a host: ${httpClientRedact(proxyText)}`
+        )
         return false
       }
     }
@@ -575,7 +589,7 @@ export class HttpClient {
     } else if (proxy !== null) {
       route = `${origin} via ${httpClientHostText(proxy.host)}:${proxy.port}`
     }
-    if (this.fd >= 0 && this.route === route) {
+    if (this.fd >= 0 && this.route === route && this.quiet()) {
       this.reused = true
       return true
     }
@@ -866,6 +880,9 @@ export class HttpClient {
 
   /** One read of the response into the parser, waiting up to `readTimeoutMs`; false with the error set. */
   fill(): boolean {
+    if (this.overdue()) {
+      return false
+    }
     const conn: TlsRecordClient | null = this.tls
     if (conn === null) {
       const n: i32 = this.readRaw(HTTP_CLIENT_READ_BYTES)
@@ -998,6 +1015,9 @@ export class HttpClient {
     let at: i32 = off
     const end: i32 = off + len
     while (at < end) {
+      if (this.overdue()) {
+        return false
+      }
       const n: i32 = netWrite(this.fd, bytes, at, end - at)
       if (n > 0) {
         at += n
@@ -1077,7 +1097,7 @@ export class HttpClient {
       netClose(fd)
       last = result
     }
-    this.fail(HTTP_E_REFUSED, `${host} port ${port} refused the connection (errno ${-last})`)
+    this.fail(HTTP_E_REFUSED, `could not connect to ${host} port ${port} (errno ${-last})`)
     return -1
   }
 
@@ -1088,25 +1108,8 @@ export class HttpClient {
    * the poll loop cannot be made.
    */
   wait(fd: i32, events: i32, until: i64, code: i32): i32 {
-    if (this.loop < 0) {
-      this.loop = pollCreate()
-      if (this.loop < 0) {
-        return HTTP_E_IO
-      }
-    }
-    if (this.watched !== fd) {
-      if (this.watched >= 0) {
-        pollRemove(this.loop, this.watched)
-      }
-      if (pollAdd(this.loop, fd, events, 0) < 0) {
-        this.watched = -1
-        return HTTP_E_IO
-      }
-      this.watched = fd
-      this.watchedEvents = events
-    } else if (this.watchedEvents !== events) {
-      pollModify(this.loop, fd, events, 0)
-      this.watchedEvents = events
+    if (!this.watch(fd, events)) {
+      return HTTP_E_IO
     }
     let end: i64 = until
     let which: i32 = code
@@ -1130,6 +1133,54 @@ export class HttpClient {
       now = monotonicNanos()
     }
     return which
+  }
+
+  /** Puts `fd` in the poll loop, waiting for `events`: false when the loop cannot be made. */
+  watch(fd: i32, events: i32): boolean {
+    if (this.loop < 0) {
+      this.loop = pollCreate()
+      if (this.loop < 0) {
+        return false
+      }
+    }
+    if (this.watched !== fd) {
+      if (this.watched >= 0) {
+        pollRemove(this.loop, this.watched)
+      }
+      if (pollAdd(this.loop, fd, events, 0) < 0) {
+        this.watched = -1
+        return false
+      }
+      this.watched = fd
+      this.watchedEvents = events
+    } else if (this.watchedEvents !== events) {
+      pollModify(this.loop, fd, events, 0)
+      this.watchedEvents = events
+    }
+    return true
+  }
+
+  /**
+   * Whether the kept connection has said nothing since its last response
+   * ended: no byte and no close waiting on the socket, none held unread. A
+   * server that spoke while idle answered nothing yet asked, and is closing
+   * or out of step, so the connection is not reused.
+   */
+  quiet(): boolean {
+    return (
+      !this.leftover() &&
+      this.watch(this.fd, HTTP_CLIENT_READABLE) &&
+      pollWait(this.loop, this.ready, 0) === 0
+    )
+  }
+
+  /** Whether bytes past the last response are held, in the parser or the TLS layer. */
+  leftover(): boolean {
+    const conn: TlsRecordClient | null = this.tls
+    if (conn !== null && (conn.plainEnd > conn.plainStart || conn.reader.end > conn.reader.start)) {
+      return true
+    }
+    return this.parser.buffered() > 0
   }
 
   /** Takes `fd` out of the poll loop before it is closed. */
@@ -1212,7 +1263,9 @@ export class HttpClient {
       }
       if (event === HTTP1_END) {
         this.bodyOpen = false
-        if (this.once || !this.parser.keepAlive()) {
+        // Bytes past the end are no answer to anything yet asked: a server
+        // that sends them cannot be trusted with the next request.
+        if (this.once || !this.parser.keepAlive() || this.leftover()) {
           this.release()
         }
         return 0
@@ -1243,6 +1296,18 @@ export class HttpClient {
     this.release()
     this.fail(HTTP_E_BODY_TOO_LARGE, `the body is larger than the ${limit} bytes asked for`)
     this.bodyError = HTTP_E_BODY_TOO_LARGE
+  }
+
+  /**
+   * Fails with `HTTP_E_TOTAL_TIMEOUT` once the fetch's deadline has passed:
+   * a server that always has the next byte ready never lets a wait see it.
+   */
+  overdue(): boolean {
+    if (this.deadline < HTTP_CLIENT_NEVER && monotonicNanos() >= this.deadline) {
+      this.failWait(HTTP_E_TOTAL_TIMEOUT, "")
+      return true
+    }
+    return false
   }
 
   /** Sets the error for a wait that ended with `code`, `text` saying what timed out. */
@@ -1519,6 +1584,38 @@ const httpClientUrlText = (url: Url): string => {
   const authority: string = url.port >= 0 ? `${host}:${url.port}` : host
   const query: string | null = url.query
   return `${url.scheme}://${authority}${url.path === "" ? "/" : url.path}${query !== null ? "?" + query : ""}`
+}
+
+/**
+ * A URL as an error may echo it: without the userinfo, which can hold a
+ * password, nor the query and fragment, which can hold a token; `?...` marks
+ * where they were cut. Works on the text, so a URL that does not parse is
+ * cut too: everything before the last `@` after the scheme goes, a password
+ * with a raw `/` in it included, at the cost of a host when a path has one.
+ */
+const httpClientRedact = (text: string): string => {
+  let cut: i32 = toI32(text.length)
+  const query: i32 = toI32(text.indexOf("?"))
+  if (query >= 0) {
+    cut = query
+  }
+  const fragment: i32 = toI32(text.indexOf("#"))
+  if (fragment >= 0 && fragment < cut) {
+    cut = fragment
+  }
+  let head: string = text.slice(0, cut)
+  const scheme: i32 = toI32(head.indexOf("://"))
+  const start: i32 = scheme >= 0 ? scheme + 3 : 0
+  let at: i32 = -1
+  for (let i: i32 = start; i < toI32(head.length); i += 1) {
+    if (head.charCodeAt(i) === 64) {
+      at = i
+    }
+  }
+  if (at >= 0) {
+    head = head.slice(0, start) + head.slice(at + 1)
+  }
+  return cut < toI32(text.length) ? head + "?..." : head
 }
 
 /**

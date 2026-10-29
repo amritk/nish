@@ -40,7 +40,8 @@ the response's head is in: `status`, `reason`, the `url` that answered and
 `header(name)`, in any case. The body is read through `res.body`:
 `readAll(limit)` answers it whole, or null past `limit` or on a failure, and
 `read(buf, off, n)` answers the next bytes as they arrive, 0 at the end and a
-negative code on a failure, for a stream you want as it comes. Once the body
+negative code on a failure, for a stream you want as it comes; a read of 0
+bytes answers 0 at once. Once the body
 ends or fails, `httpFetch` closes its connection; read it to the end, or, when
 you only want the status, close it with `res.body.client.close()`, since an
 unread body holds its socket open until the program exits. A request
@@ -52,8 +53,10 @@ refused before a byte is sent.
 
 `httpFetch` answers null with no reason. An `HttpClient` does the same work,
 says why in `error` (an `HTTP_E_*` code; `httpErrorName` names it) and
-`errorText` (a sentence), and keeps the connection alive between fetches to
-the same place:
+`errorText` (a sentence, such as `could not connect to example.com port 80
+(errno 111)`), and keeps the connection alive between fetches to the same
+place. A URL that `errorText` names loses its password and its query, so the
+sentence is safe to log:
 
 ```ts nish:ok
 import { HttpClient, HttpOptions, HttpRequest, HttpResponse, httpErrorName } from "nish/net/http-client";
@@ -75,9 +78,15 @@ export const main = (): i32 => {
 
 Read each body to its end before the next fetch: the next fetch on a
 connection with an unread body closes it, and the old body's reader then
-answers an error rather than the next response's bytes. A kept connection the
-server closed while it sat idle is tried once more on a fresh one for a GET,
-HEAD, OPTIONS, TRACE, PUT or DELETE, never for a POST.
+answers an error rather than the next response's bytes. A connection is kept
+only when nothing is left on it past the response: a server that sends more
+than was asked for, or speaks while the connection sits idle, has it closed,
+and the next fetch opens a new one. A kept connection the server has closed is
+seen before the request is sent, and the request goes on a fresh one. If the
+server closes it under the request, before a byte of the answer, the request
+is sent once more on a fresh one for a GET, HEAD, OPTIONS, TRACE, PUT or
+DELETE, never for a POST; a request whose answer was cut off part way, or that
+was never answered, is not sent again.
 
 ## Options
 
@@ -98,6 +107,10 @@ HEAD, OPTIONS, TRACE, PUT or DELETE, never for a POST.
 
 A server that sends its body a byte at a time, each inside `readTimeoutMs`,
 holds a fetch until `totalTimeoutMs`: set it when the server is not yours.
+The addresses a name has are tried one after another inside
+`connectTimeoutMs`: an address that drops the connection attempt without an
+answer uses up the whole budget, so the addresses after it are not tried and
+the fetch fails with `HTTP_E_CONNECT_TIMEOUT`.
 
 **Redirects** are followed only when you set `followRedirects`, and only
 within the origin unless you set `crossOriginRedirects` too. A hop to another
@@ -113,7 +126,8 @@ directly. `HTTP_PROXY` is ignored when the program runs as a CGI script,
 where a request's `Proxy:` header arrives under that name. Only an `http://`
 proxy is used; an https request goes through it in a `CONNECT` tunnel. The
 proxy's user name and password come from its URL; a `Proxy-Authorization`
-you set yourself goes only to an http proxy, never to the server.
+you set yourself goes only to an http proxy, in place of the one from its URL,
+and never to the server.
 
 **https** is TLS 1.3, and the server's certificate is always checked: its
 chain must end at a root you trust, it must be valid now by the wall clock,

@@ -25,7 +25,10 @@ PASS  and the error names the alert the server sent
 PASS  a pooled TLS connection the server ended with a close_notify is retried on a new one
 PASS  a server that never answers the handshake is HTTP_E_READ_TIMEOUT
 PASS  a redirect from https to http is refused even with crossOriginRedirects
-PASS  and the error says why
+PASS  and the error says why, naming the Location without its password or query
 PASS  https through an http proxy is a CONNECT tunnel, then TLS to the origin
 PASS  and the tunnelled connection is reused
-http fetch tls: 30 passed, 0 failed, 0 skipped
+PASS  through a tunnel the origin is sent no Proxy-Authorization, not even the caller's
+PASS  and the CONNECT carries the proxy URL's user and password
+PASS  an alert the proxy sends in the same segment as its 200 is read by TLS, not lost
+http fetch tls: 33 passed, 0 failed, 0 skipped
