@@ -624,6 +624,11 @@ const X509_CE_NAME_CONSTRAINTS: i32 = 30
 const X509_CE_AUTHORITY_KEY_ID: i32 = 35
 const X509_CE_EXT_KEY_USAGE: i32 = 37
 
+/** What `x509ReadExtension` answers: an extension it does not decode, one it decoded, one that is malformed. */
+const X509_EXT_UNKNOWN: i32 = 0
+const X509_EXT_SOUND: i32 = 1
+const X509_EXT_MALFORMED: i32 = 2
+
 /** id-kp-serverAuth, 1.3.6.1.5.5.7.3.1 (RFC 5280 §4.2.1.12). */
 const x509OidServerAuth = (): u8[] => x509DerOidContents([1, 3, 6, 1, 5, 5, 7, 3, 1])
 
@@ -1428,13 +1433,7 @@ const x509DerIa5Name = (der: u8[], e: X509DerElement): boolean => {
 }
 
 /** `der[e.start .. e.end)` as a string, one character per octet, as `x509Bytes` reads one back. */
-const x509DerText = (der: u8[], e: X509DerElement): string => {
-  let out: string = ""
-  for (let k: i32 = e.start; k < e.end; k++) {
-    out = out + String.fromCharCode(toI32(der[k]))
-  }
-  return out
-}
+const x509DerText = (der: u8[], e: X509DerElement): string => String.fromBytes(der, e.start, e.end)
 
 /**
  * The form of one GeneralName (RFC 5280 §4.2.1.6), its IMPLICIT tag checked
@@ -1614,15 +1613,17 @@ const x509ReadExtKeyUsage = (der: u8[], start: i32, end: i32, out: X509Certifica
   if (seq === null || seq.end !== end || seq.end === seq.start) {
     return false
   }
+  const serverAuth: u8[] = x509OidServerAuth()
+  const anyEku: u8[] = x509OidAnyEku()
   let at: i32 = seq.start
   while (at < seq.end) {
     const purpose: X509DerElement | null = x509DerExpect(der, at, seq.end, X509_TAG_OID)
     if (purpose === null || !x509DerOidSound(der, purpose)) {
       return false
     }
-    if (x509DerContentsAre(der, purpose, x509OidServerAuth())) {
+    if (x509DerContentsAre(der, purpose, serverAuth)) {
       out.ekuServerAuth = true
-    } else if (x509DerContentsAre(der, purpose, x509OidAnyEku())) {
+    } else if (x509DerContentsAre(der, purpose, anyEku)) {
       out.ekuAny = true
     }
     at = purpose.end
@@ -1828,44 +1829,32 @@ const x509ReadAuthorityKeyId = (der: u8[], start: i32, end: i32, out: X509Certif
 
 /**
  * One extension's value, the contents of its extnValue OCTET STRING, decoded
- * into `out` by the arc `ce` it has under 2.5.29; `false` when it is
- * malformed. An extension this module does not decode answers `true`
- * untouched, and `ce` is -1 for one outside the arc.
+ * into `out` by the arc `ce` it has under 2.5.29: `X509_EXT_SOUND`, or
+ * `X509_EXT_MALFORMED`. An extension this module does not decode answers
+ * `X509_EXT_UNKNOWN` with `out` untouched, and `ce` is -1 for one outside the
+ * arc.
  */
-const x509ReadExtension = (der: u8[], ce: i32, start: i32, end: i32, out: X509Certificate): boolean => {
+const x509ReadExtension = (der: u8[], ce: i32, start: i32, end: i32, out: X509Certificate): i32 => {
+  let sound: boolean = false
   if (ce === X509_CE_SUBJECT_ALT_NAME) {
-    return x509ReadSubjectAltName(der, start, end, out)
+    sound = x509ReadSubjectAltName(der, start, end, out)
+  } else if (ce === X509_CE_BASIC_CONSTRAINTS) {
+    sound = x509ReadBasicConstraints(der, start, end, out)
+  } else if (ce === X509_CE_KEY_USAGE) {
+    sound = x509ReadKeyUsage(der, start, end, out)
+  } else if (ce === X509_CE_EXT_KEY_USAGE) {
+    sound = x509ReadExtKeyUsage(der, start, end, out)
+  } else if (ce === X509_CE_NAME_CONSTRAINTS) {
+    sound = x509ReadNameConstraints(der, start, end, out)
+  } else if (ce === X509_CE_SUBJECT_KEY_ID) {
+    sound = x509ReadSubjectKeyId(der, start, end, out)
+  } else if (ce === X509_CE_AUTHORITY_KEY_ID) {
+    sound = x509ReadAuthorityKeyId(der, start, end, out)
+  } else {
+    return X509_EXT_UNKNOWN
   }
-  if (ce === X509_CE_BASIC_CONSTRAINTS) {
-    return x509ReadBasicConstraints(der, start, end, out)
-  }
-  if (ce === X509_CE_KEY_USAGE) {
-    return x509ReadKeyUsage(der, start, end, out)
-  }
-  if (ce === X509_CE_EXT_KEY_USAGE) {
-    return x509ReadExtKeyUsage(der, start, end, out)
-  }
-  if (ce === X509_CE_NAME_CONSTRAINTS) {
-    return x509ReadNameConstraints(der, start, end, out)
-  }
-  if (ce === X509_CE_SUBJECT_KEY_ID) {
-    return x509ReadSubjectKeyId(der, start, end, out)
-  }
-  if (ce === X509_CE_AUTHORITY_KEY_ID) {
-    return x509ReadAuthorityKeyId(der, start, end, out)
-  }
-  return true
+  return sound ? X509_EXT_SOUND : X509_EXT_MALFORMED
 }
-
-/** Whether `ce` is an arc under 2.5.29 that `x509ReadExtension` decodes. */
-const x509ExtensionKnown = (ce: i32): boolean =>
-  ce === X509_CE_SUBJECT_ALT_NAME ||
-  ce === X509_CE_BASIC_CONSTRAINTS ||
-  ce === X509_CE_KEY_USAGE ||
-  ce === X509_CE_EXT_KEY_USAGE ||
-  ce === X509_CE_NAME_CONSTRAINTS ||
-  ce === X509_CE_SUBJECT_KEY_ID ||
-  ce === X509_CE_AUTHORITY_KEY_ID
 
 /** The arc under 2.5.29 an extnID names, 1 to 127 (one octet), or -1 for an OID outside it. */
 const x509ExtensionArc = (der: u8[], id: X509DerElement): i32 => {
@@ -1924,11 +1913,12 @@ const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate):
     if (value === null || value.end !== ext.end) {
       return false
     }
-    const ce: i32 = x509ExtensionArc(der, id)
-    if (!x509ExtensionKnown(ce)) {
-      out.unknownCritical = out.unknownCritical || critical
-    } else if (!x509ReadExtension(der, ce, value.start, value.end, out)) {
+    const read: i32 = x509ReadExtension(der, x509ExtensionArc(der, id), value.start, value.end, out)
+    if (read === X509_EXT_MALFORMED) {
       return false
+    }
+    if (read === X509_EXT_UNKNOWN) {
+      out.unknownCritical = out.unknownCritical || critical
     }
     at = ext.end
   }
@@ -2083,11 +2073,11 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   out.issuer = x509DerWhole(der, issuer)
   out.subject = x509DerWhole(der, subject)
   out.publicKey = publicKey
-  out.p256 = x509DerIsAlgorithm(der, keyAlg, x509OidEcPublicKey(), x509OidPrime256v1())
+  out.p256 = out.keyType === X509_KEY_P256
   out.notBefore = before
   out.notAfter = after
   out.signature = signature
-  out.ecdsaSha256 = x509DerIsAlgorithm(der, outerAlg, x509OidEcdsaSha256(), [])
+  out.ecdsaSha256 = out.sigAlg === X509_SIG_ECDSA_SHA256
   return out
 }
 
