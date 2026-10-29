@@ -310,18 +310,23 @@ const rsaRecover = (key: RsaPublicKey, sig: u8[]): u8[] | null => {
 }
 
 /** The digest length of `hash`, or 0 when it names no hash this module has. */
-const rsaDigestSize = (hash: i32): i32 =>
-  hash === RSA_SHA256
-    ? SHA256_SIZE
-    : hash === RSA_SHA384
-      ? SHA384_SIZE
-      : hash === RSA_SHA512
-        ? SHA512_SIZE
-        : 0
+const rsaDigestSize = (hash: i32): i32 => {
+  if (hash === RSA_SHA256) {
+    return SHA256_SIZE
+  }
+  if (hash === RSA_SHA384) {
+    return SHA384_SIZE
+  }
+  return hash === RSA_SHA512 ? SHA512_SIZE : 0
+}
 
 /** The digest of `data` under `hash`, which `rsaDigestSize` already found to be one of the three. */
-const rsaHash = (hash: i32, data: u8[]): u8[] =>
-  hash === RSA_SHA256 ? sha256(data) : hash === RSA_SHA384 ? sha384(data) : sha512(data)
+const rsaHash = (hash: i32, data: u8[]): u8[] => {
+  if (hash === RSA_SHA256) {
+    return sha256(data)
+  }
+  return hash === RSA_SHA384 ? sha384(data) : sha512(data)
+}
 
 /** Whether `digest` is a digest of `hash`'s length, for a `hash` this module has. */
 const rsaDigestOk = (hash: i32, digest: u8[]): boolean => {
@@ -516,7 +521,7 @@ export const rsaVerifyPss = (key: RsaPublicKey, hash: i32, saltLen: i32, msg: u8
  * the key policy: n odd with 2048 to 4096 bits, e odd with 3 <= e < 2^32.
  */
 export const rsaPublicKeyFromParts = (n: u8[], e: u8[]): RsaPublicKey | null => {
-  if (e.length < 1 || e.length > 4 || e[0] === 0) {
+  if (e.length === 0 || e.length > 4 || e[0] === 0) {
     return null
   }
   let exponent: u32 = 0
@@ -556,7 +561,12 @@ const rsaDerLength = (der: u8[], at: i32, end: i32, tag: u8): i32 => {
 }
 
 /** The identifier and length octets in front of contents of `length` bytes, given minimal DER. */
-const rsaDerHeader = (length: i32): i32 => (length < 0x80 ? 2 : length < 0x100 ? 3 : 4)
+const rsaDerHeader = (length: i32): i32 => {
+  if (length < 0x80) {
+    return 2
+  }
+  return length < 0x100 ? 3 : 4
+}
 
 /**
  * The magnitude of the DER INTEGER whose `length` contents start at
