@@ -73,7 +73,7 @@ the tests call with fixture paths in place of the environment and `/etc`:
    what they name. The file's roots come first. Then come the roots of every
    directory in the `:`-separated `SSL_CERT_DIR` list, with empty components
    passed over. A variable set to the empty string counts as unset, as it does
-   for OpenSSL.
+   for Go.
 2. **Otherwise**, the first file of `pkiSystemBundles()` that reads as a
    regular file, and then the directory `/etc/ssl/certs`. A root found in both
    is kept once, from the bundle.
@@ -93,17 +93,19 @@ cited as facts, not copied code:
 A bundle that exists but holds no root still counts as the one found, so the
 search stops there, as Go's does.
 
-Two choices differ from Go:
+Like Go's `loadSystemRoots` (`crypto/x509/root_unix.go`), the defaults read
+the first bundle found and then the directory beside it, with duplicates
+dropped. Two choices differ from Go:
 
 - **The variables move together.** Go replaces its file list when
   `SSL_CERT_FILE` is set and its directory list when `SSL_CERT_DIR` is set,
-  each on its own. Here, setting either one replaces both. An operator who
-  names one file gets that file and nothing from `/etc`.
-- **The defaults are additive.** Go reads the directories only when no bundle
-  was found. Here, `/etc/ssl/certs` is read beside the bundle, with
-  duplicates dropped. On Debian the directory and the bundle hold the same
-  roots, so this adds nothing there. A distribution whose bundle is not a
-  superset of its directory gets the directory's roots too.
+  each on its own, so with only `SSL_CERT_FILE` set it still walks its
+  default directories. Here, setting either one replaces both, with no
+  fallback. An operator who names one file gets that file and nothing from
+  `/etc`.
+- **One default directory.** Go's default directories on Linux are
+  `/etc/ssl/certs` and `/etc/pki/tls/certs`. Here the only one is
+  `/etc/ssl/certs`.
 
 In a directory, an entry is read when it is named `*.pem` or `*.crt`, or has
 OpenSSL's hash name, eight lower-case hex digits, a dot and digits
