@@ -115,7 +115,7 @@ export const HTTP1_E_SWITCH: i32 = 5
 export const HTTP1_E_FRAMING: i32 = 6
 /** `error`: a transfer coding list that is not one `chunked`, or one in an HTTP/1.0 response. */
 export const HTTP1_E_CODING: i32 = 7
-/** `error`: a `Content-Length` that is not a run of digits, or values that differ. */
+/** `error`: a `Content-Length` that is not a run of digits, or values that differ (a value past 2^53 differs from any). */
 export const HTTP1_E_LENGTH: i32 = 8
 /** `error`: a malformed chunk size, chunk extension or chunk terminator (RFC 9112 §7.1). */
 export const HTTP1_E_CHUNK: i32 = 9
@@ -168,9 +168,10 @@ const http1ClientIsSchemeByte = (c: i32): boolean =>
  * Whether `target` is a request target `method` may send (RFC 9112 §3.2):
  * authority-form (`host:port`) for CONNECT and for nothing else, `*` for
  * OPTIONS only, and otherwise origin-form (`/path?query`) or absolute-form
- * (`scheme:...`). No form holds a byte at or below SP, DEL, a non-ASCII byte
- * or a `#`: a fragment is never sent, and the others would end the target or
- * the line early.
+ * (`scheme:...`). A `host:port` sent with another method is well-formed
+ * absolute-form, the host its scheme, so it is not refused. No form holds a
+ * byte at or below SP, DEL, a non-ASCII byte or a `#`: a fragment is never
+ * sent, and the others would end the target or the line early.
  */
 const http1ClientTargetOk = (method: string, target: string): boolean => {
   const n: i32 = toI32(target.length)
@@ -664,7 +665,7 @@ const http1ClientReserve = (p: Http1ResponseParser, len: i32): void => {
   let size: i32 = capacity < HTTP1_FIRST_INPUT ? HTTP1_FIRST_INPUT : capacity
   while (size - live < len) {
     if (size > 1073741823) {
-      panic("Http1ResponseParser: more than 2^31 - 1 bytes buffered")
+      panic("Http1ResponseParser: more than 2^30 bytes buffered")
     }
     size = size * 2
   }
@@ -986,7 +987,11 @@ const http1ClientEndOfHead = (p: Http1ResponseParser): i32 => {
     } else if (names[i] === "content-length") {
       length = http1ClientLengthList(p.values[i], length)
       if (length === toI64(-2)) {
-        return http1ClientFail(p, HTTP1_E_LENGTH, "Content-Length values that differ")
+        return http1ClientFail(
+          p,
+          HTTP1_E_LENGTH,
+          "Content-Length values that differ, or one past 2^53 given twice"
+        )
       }
       if (length < toI64(0)) {
         return http1ClientFail(p, HTTP1_E_LENGTH, "a Content-Length that is not one run of digits")

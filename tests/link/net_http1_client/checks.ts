@@ -289,6 +289,21 @@ const accepted = (t: Suite, name: string, text: string, a: Ask): void => {
   t.eqStr(`accepted: ${name}`, outcomeOf(smallParser(), text, a), "ends 1, error 0");
 };
 
+/** The transcript of `text` fed whole to `p`, then a close when `a` asks for one. */
+const transcriptWith = (p: Http1ResponseParser, text: string, a: Ask): string => {
+  const data: u8[] = bytesOf(text);
+  const t: Transcript = new Transcript();
+  const start: i32 = 0;
+  p.expect(a.head, a.connect);
+  p.feed(data, start, toI32(data.length));
+  drain(p, t, a.head, a.connect);
+  if (a.close) {
+    p.finish();
+    drain(p, t, a.head, a.connect);
+  }
+  return ending(p, t);
+};
+
 /** A parser with the corpus's limits but for `which` (0 to 4, in the constructor's order) set to `value`. */
 const limitedParser = (which: i32, value: i32): Http1ResponseParser => {
   const maxStatusLine: i32 = which === 0 ? value : 64;
@@ -577,6 +592,14 @@ export const http1ClientChecks = (): i32 => {
     `200 1.1 keep length 600 [content-length=600]\nbody "${repeat("x", toI32(600))}"\n` +
       `200 1.1 keep chunked [transfer-encoding=chunked]\nbody "${repeat("y", toI32(500))}"\nneeds more`
   );
+  const growPieces: i32[] = [300, 2000];
+  piecesCase(
+    t,
+    "a head left part-read when a feed outgrows the buffer",
+    `HTTP/1.1 200 OK\r\nX-Pad: ${repeat("p", toI32(300))}\r\nContent-Length: 3000\r\n\r\n${repeat("abc", toI32(1000))}`,
+    growPieces,
+    `200 1.1 keep length 3000 [x-pad=${repeat("p", toI32(300))}; content-length=3000]\nbody "${repeat("abc", toI32(1000))}"\nneeds more`
+  );
 
   // --- The status line --------------------------------------------------------
   accepted(t, "a status code with no reason or space after it", "HTTP/1.1 204\r\n\r\n", plain());
@@ -631,10 +654,22 @@ export const http1ClientChecks = (): i32 => {
   refused(t, "gzip before chunked, in two fields", "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n", plain(), HTTP1_E_CODING);
   refused(t, "chunked twice", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked, chunked\r\n\r\n0\r\n\r\n", plain(), HTTP1_E_CODING);
   refused(t, "an empty Transfer-Encoding", "HTTP/1.1 200 OK\r\nTransfer-Encoding: \r\n\r\n", plain(), HTTP1_E_CODING);
+  readAs(t, "OWS around a Content-Length", "HTTP/1.1 200 OK\r\nContent-Length:\t5 \r\n\r\nhello", plain(), '200 1.1 keep length 5 [content-length=5]\nbody "hello"\nneeds more');
+  readAs(t, "OWS inside a Content-Length list", "HTTP/1.1 200 OK\r\nContent-Length: 5 ,\t5\r\n\r\nhello", plain(), '200 1.1 keep length 5 [content-length=5 ,\t5]\nbody "hello"\nneeds more');
+  readAs(t, "OWS after chunked", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked \t\r\n\r\n0\r\n\r\n", plain(), '200 1.1 keep chunked [transfer-encoding=chunked]\nbody ""\nneeds more');
+  readAs(t, "OWS inside a transfer coding list", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked , \r\n\r\n0\r\n\r\n", plain(), '200 1.1 keep chunked [transfer-encoding=chunked ,]\nbody ""\nneeds more');
+  readAs(t, "OWS after close", "HTTP/1.1 204 No Content\r\nConnection: close \r\n\r\n", plain(), '204 1.1 close length -1 [connection=close]\nbody ""\nclosed');
+  readAs(t, "OWS inside a Connection list", "HTTP/1.1 204 No Content\r\nConnection: keep-alive , close\r\n\r\n", plain(), '204 1.1 close length -1 [connection=keep-alive , close]\nbody ""\nclosed');
   refused(t, "a bad coding on a response to HEAD too", "HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\n", toHead(), HTTP1_E_CODING);
 
   // --- Chunks ----------------------------------------------------------------
-  accepted(t, "a chunk size in uppercase hex with leading zeros", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n00A\r\n0123456789\r\n0\r\n\r\n", plain());
+  readAs(
+    t,
+    "a chunk size in uppercase hex with leading zeros",
+    "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n00A\r\n0123456789\r\n0\r\n\r\n",
+    plain(),
+    '200 1.1 keep chunked [transfer-encoding=chunked]\nbody "0123456789"\nneeds more'
+  );
   accepted(t, "a last chunk with an extension", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0;last\r\n\r\n", plain());
   refused(t, "a chunk size with no digits", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n;x\r\n", plain(), HTTP1_E_CHUNK);
   refused(t, "an empty chunk-size line", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n\r\n", plain(), HTTP1_E_CHUNK);
@@ -655,7 +690,9 @@ export const http1ClientChecks = (): i32 => {
   refused(t, "a close before the last chunk", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n", closing(), HTTP1_E_TRUNCATED);
   refused(t, "a close inside the trailers", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\nX: y\r\n", closing(), HTTP1_E_TRUNCATED);
   refused(t, "a close after an interim response", "HTTP/1.1 100 Continue\r\n\r\n", closing(), HTTP1_E_TRUNCATED);
-  t.eqStr("a close after a whole response is no error", outcomeOf(smallParser(), "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok", closing()), "ends 1, error 0");
+  const whole: Http1ResponseParser = smallParser();
+  t.eqStr("a close after a whole response is no error", outcomeOf(whole, "HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok", closing()), "ends 1, error 0");
+  t.eqI32("and the parser answers HTTP1_CLOSED", whole.next(), HTTP1_CLOSED);
 
   const idle: Http1ResponseParser = smallParser();
   idle.finish();
@@ -730,6 +767,13 @@ export const http1ClientChecks = (): i32 => {
   atCap(t, "a Content-Length body", toI32(3), toI32(5), "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", plain(), HTTP1_E_BODY_LIMIT);
   atCap(t, "a chunked body", toI32(3), toI32(11), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n", plain(), HTTP1_E_BODY_LIMIT);
   atCap(t, "a body read until close", toI32(3), toI32(5), "HTTP/1.1 200 OK\r\n\r\nhello", closing(), HTTP1_E_BODY_LIMIT);
+  t.eqStr("the Content-Length body at the limit, whole", transcriptWith(limitedParser(toI32(3), toI32(5)), "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello", plain()), '200 1.1 keep length 5 [content-length=5]\nbody "hello"\nneeds more');
+  t.eqStr(
+    "the chunked body at the limit, whole",
+    transcriptWith(limitedParser(toI32(3), toI32(11)), "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nhello\r\n6\r\n world\r\n0\r\n\r\n", plain()),
+    '200 1.1 keep chunked [transfer-encoding=chunked]\nbody "hello world"\nneeds more'
+  );
+  t.eqStr("the body read until close at the limit, whole", transcriptWith(limitedParser(toI32(3), toI32(5)), "HTTP/1.1 200 OK\r\n\r\nhello", closing()), '200 1.1 close length -1 []\nbody "hello"\nclosed');
   const trailer1: string = "Expires: never\r\n\r\n";
   atCap(t, "the trailer section", toI32(4), toI32(trailer1.length), `HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n${trailer1}`, plain(), HTTP1_E_TRAILER_LIMIT);
   t.eqStr(
@@ -744,6 +788,26 @@ export const http1ClientChecks = (): i32 => {
   );
   const zeroLimits: Http1ResponseParser = new Http1ResponseParser(toI32(-5), toI32(-5), toI32(-5), toI64(-5), toI32(-5));
   t.eqStr("negative limits are clamped to 0", outcomeOf(zeroLimits, "HTTP/1.1 204 No Content\r\n\r\n", plain()), `ends 0, error ${HTTP1_E_STATUS_LINE_LIMIT}`);
+
+  // The upper clamps: an i32 limit to 2^30, so that a line's limit plus one
+  // does not wrap, and maxBody to 2^53.
+  const most: i32 = 2147483647;
+  const huge: i64 = toI64(1) << toI64(62);
+  t.eqStr(
+    "the largest limits read an ordinary response",
+    transcriptWith(new Http1ResponseParser(most, most, most, huge, most), "HTTP/1.1 200 OK\r\nX-A: b\r\nContent-Length: 2\r\n\r\nok", plain()),
+    '200 1.1 keep length 2 [x-a=b; content-length=2]\nbody "ok"\nneeds more'
+  );
+  t.eqStr(
+    "a Content-Length of 2^53 is under a clamped maxBody",
+    transcriptWith(new Http1ResponseParser(most, most, most, huge, most), "HTTP/1.1 200 OK\r\nContent-Length: 9007199254740992\r\n\r\n", plain()),
+    '200 1.1 keep length 9007199254740992 [content-length=9007199254740992]\nneeds more'
+  );
+  t.eqStr(
+    "one of 2^53 + 1 is over it",
+    transcriptWith(new Http1ResponseParser(most, most, most, huge, most), "HTTP/1.1 200 OK\r\nContent-Length: 9007199254740993\r\n\r\n", plain()),
+    `error ${HTTP1_E_BODY_LIMIT}`
+  );
 
   const chunkLine: string = `1;${repeat("a", HTTP1_MAX_CHUNK_LINE - 2)}`;
   const chunkHead: string = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n";
@@ -795,6 +859,8 @@ export const http1ClientChecks = (): i32 => {
     "POST /upload HTTP/1.1\r\nHost: example.com\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n"
   );
   t.eqStr("absolute-form, for a proxy", requestWith("GET", "http://example.com/x", "", "", none), "GET http://example.com/x HTTP/1.1\r\nHost: example.com\r\n\r\n");
+  t.eqStr("absolute-form with an uppercase scheme", requestWith("GET", "HTTP://example.com/", "", "", none), "GET HTTP://example.com/ HTTP/1.1\r\nHost: example.com\r\n\r\n");
+  t.eqStr("a host and port for GET is well-formed absolute-form", requestWith("GET", "example.com:80", "", "", none), "GET example.com:80 HTTP/1.1\r\nHost: example.com\r\n\r\n");
   t.eqStr("authority-form, for CONNECT", requestWith("CONNECT", "example.com:443", "", "", none), "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com\r\n\r\n");
   t.eqStr("authority-form with a bracketed IPv6 host", requestWith("CONNECT", "[::1]:8443", "", "", none), "CONNECT [::1]:8443 HTTP/1.1\r\nHost: example.com\r\n\r\n");
   t.eqStr("asterisk-form, for OPTIONS", requestWith("OPTIONS", "*", "", "", none), "OPTIONS * HTTP/1.1\r\nHost: example.com\r\n\r\n");

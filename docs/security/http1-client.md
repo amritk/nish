@@ -12,7 +12,7 @@ starts from evidence. Anchors are at `7417fbe`, on `main` at `2cdef4f`.
 repaired, with its own `HTTP1_E_` code, and a refusal is final. The events,
 the de-chunked body and the error code are the same however the input is cut.
 A panic is only ever the program's own mistake (a `feed` window outside its
-buffer, more than 2^31 - 1 bytes fed and not read). Every cap is a number the
+buffer, more than 2^30 bytes fed and not read). Every cap is a number the
 program passes to the constructor, or a constant of the module. The writer
 counts and checks the whole head before it writes a byte, so a caller's
 string cannot end a line or frame the body. One finding is open: HC-1 (Low),
@@ -131,26 +131,40 @@ nothing: HEAD still holds`).
 header section (`maxHeaderBytes`), the fields of a response, its trailers
 included (`maxHeaders`), the body however it is framed (`maxBody`, checked
 against a declared length before a byte of it is read), the trailer section
-(`maxTrailerBytes`), each pinned exactly at its limit and one past it; a
+(`maxTrailerBytes`), each pinned exactly at its limit and one past it, and
+a body exactly at `maxBody` handed out whole however it is framed (`… at the
+limit, whole`); a
 chunk-size line (`HTTP1_MAX_CHUNK_LINE`, 4,096 bytes) and the interim
 responses to one request (`HTTP1_MAX_INFORMATIONAL`, 32, counted again for
 each request). Negative limits are clamped to 0, each `i32` limit to 2^30 and
-`maxBody` to 2^53, so that no sum the parser makes overflows; a length past
-2^63 or a chunk size past 64 bits is over the body limit, not wrapped. A
-`Content-Length` past 2^53 seen with another value is refused as values that
-differ, since two saturated values cannot be compared, on a 304 too. A
+`maxBody` to 2^53, so that no sum the parser makes overflows: with every
+`i32` limit at 2^31 - 1 and `maxBody` at 2^62 an ordinary response is read,
+a `Content-Length` of 2^53 is a head and one of 2^53 + 1 is over the body
+limit (`the largest limits read an ordinary response`, `one of 2^53 + 1 is
+over it`). A length past 2^63 or a chunk size past 64 bits is over the body
+limit, not wrapped. A `Content-Length` past 2^53 given more than once is
+refused as values that differ, whatever the values, since two saturated
+values cannot be compared, on a 304 too. A
 `Content-Length` over `maxBody` on a response to HEAD is not refused, since
 no body is read. What is buffered is the input fed and not yet read: a line
 in progress is held only up to its limit, body bytes are handed out as they
 arrive, and the program decides how much it feeds before it reads; a tunnel
 keeps what is fed after it for `tunnelBytes()` until the program stops
-feeding.
+feeding. A feed that outgrows the buffer while a head is part-read moves the
+live bytes into the larger one (`a head left part-read when a feed outgrows
+the buffer`).
+
+**OWS is trimmed before a field is judged.** A `Content-Length`,
+`Transfer-Encoding` or `Connection` value is trimmed at both ends, and each
+element of its list too, before its framing or the connection's fate is
+decided (`read: OWS …`).
 
 **What the program writes is checked** (`refused: …`). The writer refuses,
 with `HTTP1_REFUSED` and nothing written, a method that is not a token, a
 target that is not a form the method may send (origin-form or absolute-form,
 authority-form for CONNECT with a port of at most five digits and no
-userinfo, `*` for OPTIONS) or that holds a space, a control byte, DEL, a
+userinfo, `*` for OPTIONS; a `host:port` with another method is well-formed
+absolute-form, the host its scheme, and is sent) or that holds a space, a control byte, DEL, a
 non-ASCII byte or a `#`; a field name that is not a token; a value holding CR,
 LF or another control byte; not exactly one `Host`; the caller's own
 `Content-Length` or `Transfer-Encoding`; a `Connection` that lists `upgrade`;
@@ -166,3 +180,13 @@ array is the program's mistake and panics before anything is read:
 `tests/link/net_http1_client_feed_window`, run as
 `link/net_http1_client_feed_window: exits with 1 and stdout matches
 expected.out`.
+
+**What no check reaches.** Every branch of `std/net/http1-client.ts` is run
+by the checks above but these, measured with V8 coverage on the module's
+`--emit-ts` output. The panic when more than 2^30 bytes are fed and not read
+would need a feed past 1 GiB. The rest are invariant guards that no input
+can reach and that let the compiler drop a bounds check: the
+return of `http1ClientPutField` for a field index out of range, whose
+callers pass only indexes they loop over, and the `: buf.length` arm of the
+line-end clamps in `http1ClientStatusLine`, `http1ClientFieldLine` and
+`http1ClientChunkSize`, whose line end the parser found inside the buffer.

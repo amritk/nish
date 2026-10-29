@@ -46,6 +46,8 @@ PASS  a 1500-byte body fed in uneven pieces: in pieces
 PASS  a 1500-byte body fed in uneven pieces: a byte at a time
 PASS  two pipelined responses over 1 KiB together: in pieces
 PASS  two pipelined responses over 1 KiB together: a byte at a time
+PASS  a head left part-read when a feed outgrows the buffer: in pieces
+PASS  a head left part-read when a feed outgrows the buffer: a byte at a time
 PASS  accepted: a status code with no reason or space after it
 PASS  accepted: an empty reason
 PASS  read: an HTTP/1.9 response, read as 1.1
@@ -79,13 +81,13 @@ PASS  refused with 8 (a Content-Length that is not one run of digits): a Content
 PASS  refused with 8 (a Content-Length that is not one run of digits): a negative Content-Length
 PASS  refused with 8 (a Content-Length that is not one run of digits): an empty Content-Length
 PASS  refused with 8 (a Content-Length that is not one run of digits): a Content-Length list with an empty element
-PASS  refused with 8 (Content-Length values that differ): a Content-Length list whose values differ
-PASS  refused with 8 (Content-Length values that differ): two Content-Length fields that differ
+PASS  refused with 8 (Content-Length values that differ, or one past 2^53 given twice): a Content-Length list whose values differ
+PASS  refused with 8 (Content-Length values that differ, or one past 2^53 given twice): two Content-Length fields that differ
 PASS  refused with 8 (a Content-Length that is not one run of digits): a Content-Length with a sign
-PASS  refused with 8 (Content-Length values that differ): two Content-Length values past 2^53 that differ, on a 304
-PASS  refused with 8 (Content-Length values that differ): a Content-Length past 2^53 repeated, which saturation cannot compare
+PASS  refused with 8 (Content-Length values that differ, or one past 2^53 given twice): two Content-Length values past 2^53 that differ, on a 304
+PASS  refused with 8 (Content-Length values that differ, or one past 2^53 given twice): a Content-Length past 2^53 repeated, which saturation cannot compare
 PASS  refused with 8 (a Content-Length that is not one run of digits): a malformed Content-Length on a 304 too
-PASS  refused with 8 (Content-Length values that differ): Content-Length values that differ, on a response to HEAD too
+PASS  refused with 8 (Content-Length values that differ, or one past 2^53 given twice): Content-Length values that differ, on a response to HEAD too
 PASS  refused with 6 (both Content-Length and Transfer-Encoding): Transfer-Encoding with Content-Length on a 204
 PASS  refused with 6 (both Content-Length and Transfer-Encoding): Content-Length before Transfer-Encoding
 PASS  refused with 7 (Transfer-Encoding in an HTTP/1.0 response): Transfer-Encoding in an HTTP/1.0 response
@@ -94,8 +96,14 @@ PASS  refused with 7 (a transfer coding other than chunked): gzip before chunked
 PASS  refused with 7 (a transfer coding other than chunked): gzip before chunked, in two fields
 PASS  refused with 7 (chunked applied twice): chunked twice
 PASS  refused with 7 (a transfer coding list that does not end in chunked): an empty Transfer-Encoding
+PASS  read: OWS around a Content-Length
+PASS  read: OWS inside a Content-Length list
+PASS  read: OWS after chunked
+PASS  read: OWS inside a transfer coding list
+PASS  read: OWS after close
+PASS  read: OWS inside a Connection list
 PASS  refused with 7 (a transfer coding list that does not end in chunked): a bad coding on a response to HEAD too
-PASS  accepted: a chunk size in uppercase hex with leading zeros
+PASS  read: a chunk size in uppercase hex with leading zeros
 PASS  accepted: a last chunk with an extension
 PASS  refused with 9 (a chunk size with no hex digits): a chunk size with no digits
 PASS  refused with 9 (a chunk size with no hex digits): an empty chunk-size line
@@ -115,6 +123,7 @@ PASS  refused with 10 (the connection closed before the response ended): a close
 PASS  refused with 10 (the connection closed before the response ended): a close inside the trailers
 PASS  refused with 10 (the connection closed before the response ended): a close after an interim response
 PASS  a close after a whole response is no error
+PASS  and the parser answers HTTP1_CLOSED
 PASS  a close with nothing fed is HTTP1_CLOSED
 PASS  and stays closed
 PASS  bytes fed after the close are dropped
@@ -158,11 +167,17 @@ PASS  a chunked body: exactly at the limit
 PASS  a chunked body: one past it
 PASS  a body read until close: exactly at the limit
 PASS  a body read until close: one past it
+PASS  the Content-Length body at the limit, whole
+PASS  the chunked body at the limit, whole
+PASS  the body read until close at the limit, whole
 PASS  the trailer section: exactly at the limit
 PASS  the trailer section: one past it
 PASS  a Content-Length over the body limit on a response to HEAD is not refused
 PASS  a Content-Length past 2^63 is over the body limit, not wrapped
 PASS  negative limits are clamped to 0
+PASS  the largest limits read an ordinary response
+PASS  a Content-Length of 2^53 is under a clamped maxBody
+PASS  one of 2^53 + 1 is over it
 PASS  a chunk-size line of exactly HTTP1_MAX_CHUNK_LINE (4096) bytes
 PASS  one byte longer
 PASS  exactly HTTP1_MAX_INFORMATIONAL (32) interim responses
@@ -175,6 +190,8 @@ PASS  a POST with an empty body says Content-Length: 0
 PASS  a Content-Length past 32 bits
 PASS  a chunked body goes last, after the caller's fields
 PASS  absolute-form, for a proxy
+PASS  absolute-form with an uppercase scheme
+PASS  a host and port for GET is well-formed absolute-form
 PASS  authority-form, for CONNECT
 PASS  authority-form with a bracketed IPv6 host
 PASS  asterisk-form, for OPTIONS
@@ -228,4 +245,4 @@ PASS  as a chunked POST
 PASS  with its body
 PASS  to its end
 PASS  HTTP1_E_NONE is 0, before anything goes wrong
-http1-client: 230 passed, 0 failed, 0 skipped
+http1-client: 247 passed, 0 failed, 0 skipped

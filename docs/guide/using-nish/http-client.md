@@ -94,7 +94,9 @@ the body on its own:
 - a method that is not a token;
 - a target that is not a form the method may send: a path starting with `/`
   or an absolute URL, `host:port` for `CONNECT`, `*` for `OPTIONS`; a target
-  holding a space, a control byte, a non-ASCII byte or a `#`;
+  holding a space, a control byte, a non-ASCII byte or a `#` (a `host:port`
+  sent with `GET` is not refused: it is a well-formed absolute URL whose
+  scheme is the host);
 - a field name that is not a token, or a value holding CR, LF or another
   control byte;
 - anything but exactly one `Host` field;
@@ -115,7 +117,8 @@ the body on its own:
 | `HTTP1_ERROR` | the response is refused: `error` holds the code and `errorText` says why |
 
 `HTTP1_UPGRADE`, `HTTP1_CLOSED` and `HTTP1_ERROR` are final: every later call
-answers them again, and what is fed after them is dropped.
+answers them again. What is fed after `HTTP1_CLOSED` or `HTTP1_ERROR` is
+dropped; what is fed after `HTTP1_UPGRADE` is kept for `tunnelBytes()`.
 
 ## How a response ends
 
