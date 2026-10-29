@@ -180,6 +180,22 @@ import the files, in both number modes.
 Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_wycheproof_aead/LICENSE-wycheproof.
 ```
 
+### `tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof`
+
+More of [Project Wycheproof](https://github.com/C2SP/wycheproof)'s test
+vectors, under the same Apache License, Version 2.0, with its own copy of the
+licence text beside them. Each file in
+[`tests/link/crypto_wycheproof_rsa/`](tests/link/crypto_wycheproof_rsa/)
+holds the RSA PKCS #1 v1.5 or RSA-PSS signature cases, rewritten from
+upstream's JSON as Nish source; it names the upstream files and commit it was
+taken from and says what was changed, as the licence's section 4 asks of a
+modified file. The directory has no `main.ts`: `tests/link/crypto_rsa` and
+`tests/link/crypto_rsa_f64` import the files.
+
+```notice
+Test vectors from Project Wycheproof (https://github.com/C2SP/wycheproof). Copyright 2016-2026 The Wycheproof Authors. Used under the Apache License, Version 2.0; see tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof.
+```
+
 ### `std/crypto/LICENSE-bearssl`
 
 [BearSSL](https://www.bearssl.org/), Copyright (c) 2016 Thomas Pornin, under
@@ -368,6 +384,8 @@ Copyright (c) 2026 arjaythedev and the challenge contributors. MIT License; see 
 | `tests/link/crypto_wycheproof/x25519.ts` | Wycheproof `testvectors_v1/x25519_test.json` at `3fa63dd`: all 518 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_aead/chacha20_poly1305.ts` | Wycheproof `testvectors_v1/chacha20_poly1305_test.json` at `3fa63dd`: all 325 cases, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_aead/LICENSE-wycheproof` |
 | `tests/link/crypto_wycheproof_aead/aes_gcm_192.ts` | Wycheproof `testvectors_v1/aes_gcm_test.json` at `3fa63dd`: the 103 cases with a 192-bit key, which `tests/link/crypto_wycheproof/aes_gcm.ts` leaves out, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_aead/LICENSE-wycheproof` |
+| `tests/link/crypto_wycheproof_rsa/rsa_signature.ts` | Wycheproof `testvectors_v1/rsa_signature_{2048,3072,4096}_sha{256,384,512}_test.json` at `3fa63dd`: all 2,330 cases of the nine files and their group keys, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof` |
+| `tests/link/crypto_wycheproof_rsa/rsa_pss.ts` | Wycheproof `testvectors_v1/` at `3fa63dd`: all 1,215 cases and the group keys of the seven `rsa_pss_{2048,3072,4096}_sha*_mgf1_*_test.json` files and `rsa_pss_misc_test.json`, as Nish source | Apache-2.0 | `tests/link/crypto_wycheproof_rsa/LICENSE-wycheproof` |
 | `tests/json-suite/test-parsing.txt` | JSONTestSuite `test_parsing/` at `1ef36fa`: all 318 files (95 `y_`, 188 `n_`, 35 `i_`), packed one per line by `tests/json-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/json-suite/LICENSE-jsontestsuite` |
 | `tests/yaml-suite/cases.txt` | yaml-test-suite (npm `yaml-test-suite@0.1.0`): all 402 cases (350 files), packed one per line by `tests/yaml-suite/pack.js`, each byte outside `!` to `~` and each `%` written as `%XX` | MIT | `tests/yaml-suite/LICENSE-yaml-test-suite` |
 | `tests/json-conformance/test262.txt` | test262 `test/built-ins/JSON/parse` and `test/built-ins/JSON/stringify` at `2e0a567`: the 772 `JSON.parse` and `JSON.stringify` calls of 64 files that are about JSON text, each with the answer the file's assertions require, extracted by `tests/json-conformance/extract.js` | BSD-3-Clause | `tests/json-conformance/LICENSE-test262` |
@@ -385,6 +403,10 @@ notice, and each is marked public domain where its constants appear:
 - MurmurHash3's `fmix32` and `fmix64` finalisers (`src/emit-map.ts`,
   `std/collections.ts`, and `fmix32` in `std/random.ts`).
 - xorshift64* in `nish_random` (`runtime/runtime.c`).
+- NIST CAVP's FIPS 186-3 RSA signature-verification vectors,
+  `SigVer15_186-3.rsp` and `SigVerPSS_186-3.rsp`, a work of the United States
+  Government (`tests/link/crypto_cavp_rsa/sigver15.ts` and `sigver_pss.ts`,
+  each of which names the archive, its SHA-256 and what was changed).
 - dudect's cropping schedule, its 100 percentiles and the 10,000-measurement
   gate on its second-order test (`tests/ct-timing/dudect.c`), from
   `src/dudect.h` in oreparaz/dudect, which is public domain under the
