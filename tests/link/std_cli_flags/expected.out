@@ -1,0 +1,66 @@
+grammar:
+[] -> command "" {} []
+["--output" "a.txt" "--jobs" "4" "--verbose" "--include" "x" "--include" "y"] -> command "" {output="a.txt" jobs=4 verbose=true include=["x" "y"]} []
+["--output=a=b" "--jobs=-2.5" "--include="] -> command "" {output="a=b" jobs=-2.5 include=[""]} []
+["--output=" "--no-verbose"] -> command "" {output="" verbose=false} []
+["--jobs" "-1" "--output" "--verbose"] -> command "" {output="--verbose" jobs=-1} []
+["--jobs" "0x1A"] -> command "" {jobs=26} []
+["one" "--verbose" "two" "-" "three"] -> command "" {verbose=true} ["one" "two" "-" "three"]
+["a" "--" "--verbose" "-x" "--"] -> command "" {} ["a" "--verbose" "-x" "--"]
+parseFrom 1 -> command "" {verbose=true} ["x"]
+parseFrom 3 -> command "" {} []
+absent:
+"" 0 false 0
+commands:
+[] -> command "" {} []
+["status"] -> command "status" {} []
+["remote"] -> command "remote" {} []
+["remote" "add" "origin" "u"] -> command "remote add" {} ["origin" "u"]
+["--verbose" "remote" "--include" "i" "add" "origin"] -> command "remote add" {verbose=true include=["i"]} ["origin"]
+["remote" "remove" "old"] -> command "remote remove" {} ["old"]
+["remote" "--" "add"] -> command "remote" {} ["add"]
+["remote" "rename" "a"] -> command "remote" {} ["rename" "a"]
+errors:
+["--colour"] -> error 1 at "--colour": tool: unknown flag --colour / usage: tool [flags]
+["-v"] -> error 1 at "-v": tool: unknown flag -v / usage: tool [flags]
+["--no-output"] -> error 1 at "--no-output": tool: unknown flag --no-output / usage: tool [flags]
+["--output"] -> error 2 at "--output": tool: --output needs <file> / usage: tool [flags]
+["--jobs"] -> error 2 at "--jobs": tool: --jobs needs <n> / usage: tool [flags]
+["--jobs" "many"] -> error 3 at "many": tool: --jobs needs a number, not "many" / usage: tool [flags]
+["--jobs" ""] -> error 3 at "": tool: --jobs needs a number, not "" / usage: tool [flags]
+["--jobs" " 4"] -> error 3 at " 4": tool: --jobs needs a number, not " 4" / usage: tool [flags]
+["--jobs=4 "] -> error 3 at "4 ": tool: --jobs needs a number, not "4 " / usage: tool [flags]
+["--jobs" "Infinity"] -> error 3 at "Infinity": tool: --jobs needs a number, not "Infinity" / usage: tool [flags]
+["--jobs" "NaN"] -> error 3 at "NaN": tool: --jobs needs a number, not "NaN" / usage: tool [flags]
+["--output" "a" "--output=b"] -> error 4 at "--output=b": tool: --output is given twice / usage: tool [flags]
+["--verbose" "--no-verbose"] -> error 4 at "--no-verbose": tool: --verbose is given twice / usage: tool [flags]
+["--jobs" "1" "--jobs" "1"] -> error 4 at "--jobs": tool: --jobs is given twice / usage: tool [flags]
+["--verbose=yes"] -> error 5 at "--verbose=yes": tool: --verbose takes no value / usage: tool [flags]
+["--no-verbose=1"] -> error 5 at "--no-verbose=1": tool: --no-verbose takes no value / usage: tool [flags]
+["push"] -> error 6 at "push": git-lite: unknown command "push" / usage: git-lite <command> [flags]
+["remote" "rename" "a"] -> error 6 at "remote rename": remotes: unknown command "remote rename" / usage: remotes <command> [flags]
+["remote"] -> error 6 at "remote": remotes: unknown command "remote" / usage: remotes <command> [flags]
+["remote" "add" "origin"] -> command "remote add" {} ["origin"]
+["remote" "add" "--jobs" "x"] -> error 3 at "x": git-lite: --jobs needs a number, not "x" / usage: git-lite remote add <name> <url> [flags]
+["--bogus" "push"] -> error 1 at "--bogus": git-lite: unknown flag --bogus / usage: git-lite <command> [flags]
+help:
+usage: git-lite <command> [flags]  a small git
+
+Commands
+  status                    show the state
+  remote                    list remotes
+  remote add <name> <url>   add a remote
+  remote remove <name>      drop a remote
+
+Flags
+  --output <file>           where to write
+  --jobs <n>                parallel jobs
+  --verbose                 say more
+  --include <dir>           search here too
+
+Flags
+  --output <file>           where to write
+  --jobs <n>                parallel jobs
+  --verbose                 say more
+  --include <dir>           search here too
+
