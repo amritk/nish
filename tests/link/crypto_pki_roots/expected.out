@@ -1,3 +1,10 @@
+PASS  SSL_CERT_FILE alone
+PASS  SSL_CERT_DIR alone
+PASS  both, the file first
+PASS  SSL_CERT_FILE set, SSL_CERT_DIR empty
+PASS  neither set: the system defaults
+PASS  both empty: the system defaults
+pki-roots: pkiLoadSystemRoots reads the environment: 6 passed, 0 failed, 0 skipped
 PASS  both set: the file, then the directory, and no default: roots
 PASS  both set: the file, then the directory, and no default: sources
 PASS  both set: the file, then the directory, and no default: skipped
@@ -62,14 +69,14 @@ PASS  a root in the file and the bundle is kept once, from the file: skipped
 PASS  nothing found is an empty store: roots
 PASS  nothing found is an empty store: sources
 PASS  nothing found is an empty store: skipped
-PASS  six system bundles
-PASS  Debian's first
-PASS  Alpine's, macOS's and the BSDs' last
-pki-roots: bundles: 18 passed, 0 failed, 0 skipped
+PASS  the six system bundles, in order
+PASS  the system directory
+pki-roots: bundles: 17 passed, 0 failed, 0 skipped
 PASS  a file one byte past the cap is not parsed: roots
 PASS  a file one byte past the cap is not parsed: sources
 PASS  a file one byte past the cap is not parsed: skipped
 PASS  a file at the cap is parsed
+PASS  mkfifo makes the FIFO
 PASS  a FIFO is not read: roots
 PASS  a FIFO is not read: sources
 PASS  a FIFO is not read: skipped
@@ -78,4 +85,6 @@ PASS  a FIFO is not the bundle found: sources
 PASS  a FIFO is not the bundle found: skipped
 PASS  the files cap: files read
 PASS  the files cap: the one past it skipped
-pki-roots: a FIFO, and the caps: 12 passed, 0 failed, 0 skipped
+PASS  the roots cap: roots kept
+PASS  the roots cap: the one past it skipped, the duplicate not
+pki-roots: a FIFO, and the caps: 15 passed, 0 failed, 0 skipped

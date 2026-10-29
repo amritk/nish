@@ -148,8 +148,16 @@ const pkiRootsSplit = (load: PkiRootsLoad, text: string): void => {
       lineEnd = lineEnd + 1
     }
     const next: i32 = lineEnd < n ? lineEnd + 1 : n
+    // A carriage return, space or tab before the line feed is no part of the
+    // line, so a BEGIN with trailing whitespace still opens a block and is
+    // counted when `pemToDer` refuses it, rather than lost unseen.
     let end: i32 = lineEnd
-    if (end > lineStart && toI32(text.charCodeAt(end - 1)) === 13) {
+    while (
+      end > lineStart &&
+      (toI32(text.charCodeAt(end - 1)) === 13 ||
+        toI32(text.charCodeAt(end - 1)) === 32 ||
+        toI32(text.charCodeAt(end - 1)) === 9)
+    ) {
       end = end - 1
     }
     const line: string = text.slice(lineStart, end)

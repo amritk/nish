@@ -17,22 +17,33 @@
 // fixtures/bundle-mixed.pem is A, a CERTIFICATE block with broken base64, a
 // stray END, A as TRUSTED CERTIFICATE, a BEGIN with no END before the next
 // BEGIN, B with CRLF line ends, A again, a well-formed block that is not a
-// certificate, and a block cut off by the end of the file. bundle-second.pem is
+// certificate, D with a space and a tab after its BEGIN line, and a block cut
+// off by the end of the file. bundle-second.pem is
 // C, bundle-third.pem is D, bundle-empty.pem has no PEM at all.
 //
 // A root is named below by the last letter of its subject, so "AB" is roots A
-// then B. A FIFO and the two caps on files are checked against trees written
-// under build/ as the program runs; the cap on roots is not (it takes 4097
-// distinct certificates).
-import { mkdirSync, readFileSyncOrNull, writeFileSync } from "nish:fs"
-import { spawnSync } from "nish:process"
+// then B. A FIFO and the caps are checked against trees written under build/
+// as the program runs; the 4097 distinct roots for the roots cap are A with
+// the last two bytes of its signature changed, which the parser does not check.
+//
+// `pkiLoadSystemRoots` reads the environment, so it is checked in a child: this
+// program run again as `env -u SSL_CERT_FILE -u SSL_CERT_DIR [VAR=value...]
+// <self> env-child`, which prints what it loaded on one line. With neither
+// variable set the child is compared with the parent's own load of the system
+// defaults, so the check holds whatever the host's /etc holds.
+import { mkdirSync, readFileSyncOrNull, realpathSync, writeFileSync } from "nish:fs"
+import { spawnSync, spawnSyncTo } from "nish:process"
 import { Suite } from "nish/testing"
+import { derToPem, pemToDer } from "nish/crypto/x509"
 import {
   PKI_ROOTS_MAX_FILE_BYTES,
   PKI_ROOTS_MAX_FILES,
+  PKI_ROOTS_MAX_ROOTS,
+  PKI_SYSTEM_DIR,
   PkiRoots,
   pkiLoadRoots,
   pkiLoadRootsFor,
+  pkiLoadSystemRoots,
   pkiRootsDirEntry,
   pkiSystemBundles,
 } from "nish/crypto/pki-roots"
@@ -53,6 +64,57 @@ const shape = (t: Suite, what: string, store: PkiRoots, roots: string, sources: 
   t.eqStr(`${what}: roots`, names(store), roots)
   t.eqStr(`${what}: sources`, store.sources.join(" "), sources)
   t.eqI32(`${what}: skipped`, store.skipped, skipped)
+}
+
+/** A store on one line, as the child prints it. */
+const line = (store: PkiRoots): string => `${names(store)}|${store.sources.join(" ")}|${store.skipped}`
+
+/** This program's path, for running it again. */
+const selfPath = (): string => {
+  const exe: string | null = realpathSync("/proc/self/exe")
+  return exe !== null ? exe : process.argv[0]
+}
+
+/** The child's line for `pkiLoadSystemRoots` under `vars` (`NAME=value`), or why there is none. */
+const child = (tag: string, vars: string[]): string => {
+  mkdirSync("build/pki-roots-env")
+  const out: string = `build/pki-roots-env/${tag}.out`
+  const argv: string[] = ["env", "-u", "SSL_CERT_FILE", "-u", "SSL_CERT_DIR"]
+  for (let i: i32 = 0; i < toI32(vars.length); i = i + 1) {
+    argv.push(vars[i])
+  }
+  argv.push(selfPath())
+  argv.push("env-child")
+  const code: i32 = spawnSyncTo(argv, out, "")
+  const text: string | null = readFileSyncOrNull(out)
+  if (code !== 0 || text === null) {
+    return `the child exited ${code}`
+  }
+  return text.endsWith("\n") ? text.slice(0, text.length - 1) : text
+}
+
+const systemSuite = (): i32 => {
+  const t = new Suite("pki-roots: pkiLoadSystemRoots reads the environment")
+  t.eqStr("SSL_CERT_FILE alone", child("file", [`SSL_CERT_FILE=${F}env-file.pem`]), `A|${F}env-file.pem|0`)
+  t.eqStr(
+    "SSL_CERT_DIR alone",
+    child("dir", [`SSL_CERT_DIR=${F}env-dir`]),
+    `BC|${F}env-dir/1a2b3c4d.0 ${F}env-dir/root-c-copy.crt ${F}env-dir/root-c.pem|0`
+  )
+  t.eqStr(
+    "both, the file first",
+    child("both", [`SSL_CERT_FILE=${F}env-file.pem`, `SSL_CERT_DIR=${F}dir-two`]),
+    `AD|${F}env-file.pem ${F}dir-two/root-d.pem|0`
+  )
+  t.eqStr(
+    "SSL_CERT_FILE set, SSL_CERT_DIR empty",
+    child("file-dir-empty", [`SSL_CERT_FILE=${F}env-file.pem`, "SSL_CERT_DIR="]),
+    `A|${F}env-file.pem|0`
+  )
+  const defaults: string = line(pkiLoadRootsFor(null, null, [PKI_SYSTEM_DIR], pkiSystemBundles()))
+  t.eqStr("neither set: the system defaults", child("neither", []), defaults)
+  t.eqStr("both empty: the system defaults", child("both-empty", ["SSL_CERT_FILE=", "SSL_CERT_DIR="]), defaults)
+  return t.done()
 }
 
 const envSuite = (): i32 => {
@@ -147,7 +209,7 @@ const bundleSuite = (): i32 => {
     pkiLoadRoots(`${F}bundle-mixed.pem`, [], []),
     "AB",
     `${F}bundle-mixed.pem`,
-    5
+    6
   )
   shape(
     t,
@@ -171,7 +233,7 @@ const bundleSuite = (): i32 => {
     pkiLoadRoots(`${F}env-file.pem`, [], [`${F}bundle-mixed.pem`]),
     "AB",
     `${F}env-file.pem ${F}bundle-mixed.pem`,
-    5
+    6
   )
   shape(
     t,
@@ -182,9 +244,19 @@ const bundleSuite = (): i32 => {
     0
   )
   const system: string[] = pkiSystemBundles()
-  t.eqI32("six system bundles", toI32(system.length), 6)
-  t.eqStr("Debian's first", system[0], "/etc/ssl/certs/ca-certificates.crt")
-  t.eqStr("Alpine's, macOS's and the BSDs' last", system[5], "/etc/ssl/cert.pem")
+  t.eqStr(
+    "the six system bundles, in order",
+    system.join(" "),
+    [
+      "/etc/ssl/certs/ca-certificates.crt",
+      "/etc/pki/tls/certs/ca-bundle.crt",
+      "/etc/ssl/ca-bundle.pem",
+      "/etc/pki/tls/cacert.pem",
+      "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+      "/etc/ssl/cert.pem",
+    ].join(" ")
+  )
+  t.eqStr("the system directory", PKI_SYSTEM_DIR, "/etc/ssl/certs")
   return t.done()
 }
 
@@ -224,12 +296,9 @@ const capSuite = (): i32 => {
   // one would hang the load; it is not a regular file, so it is never opened.
   const fifo: string = "build/pki-roots-caps/fifo.pem"
   spawnSync(["rm", "-f", fifo])
-  if (spawnSync(["mkfifo", fifo]) === 0) {
-    shape(t, "a FIFO is not read", pkiLoadRoots(fifo, [], []), "", "", 0)
-    shape(t, "a FIFO is not the bundle found", pkiLoadRoots(null, [], [fifo, `${F}bundle-second.pem`]), "C", `${F}bundle-second.pem`, 0)
-  } else {
-    t.skip("a FIFO is not read", "mkfifo is not on PATH")
-  }
+  t.eqI32("mkfifo makes the FIFO", spawnSync(["mkfifo", fifo]), 0)
+  shape(t, "a FIFO is not read", pkiLoadRoots(fifo, [], []), "", "", 0)
+  shape(t, "a FIFO is not the bundle found", pkiLoadRoots(null, [], [fifo, `${F}bundle-second.pem`]), "C", `${F}bundle-second.pem`, 0)
 
   mkdirSync("build/pki-roots-caps/many")
   for (let i: i32 = 0; i <= PKI_ROOTS_MAX_FILES; i = i + 1) {
@@ -238,7 +307,34 @@ const capSuite = (): i32 => {
   const many: PkiRoots = pkiLoadRoots(null, ["build/pki-roots-caps/many"], [])
   t.eqI32("the files cap: files read", toI32(many.sources.length), PKI_ROOTS_MAX_FILES)
   t.eqI32("the files cap: the one past it skipped", many.skipped, 1)
+
+  // One past the roots cap, then the first again: the cap counts the new root
+  // it turns away, and a duplicate of a kept root is dropped as ever.
+  const ders: u8[][] | null = pemToDer(a, "CERTIFICATE")
+  if (ders === null || ders.length !== 1) {
+    t.fail("root A decodes", "fixtures/env-file.pem is not one CERTIFICATE")
+    return t.done()
+  }
+  const der: u8[] = ders[0]
+  const n: i32 = toI32(der.length)
+  const blocks: string[] = []
+  for (let i: i32 = 0; i <= PKI_ROOTS_MAX_ROOTS; i = i + 1) {
+    der[n - 2] = toU8((i >> 8) & 255)
+    der[n - 1] = toU8(i & 255)
+    blocks.push(derToPem(der, "CERTIFICATE"))
+  }
+  blocks.push(blocks[0])
+  writeFileSync("build/pki-roots-caps/roots.pem", blocks.join(""))
+  const capped: PkiRoots = pkiLoadRoots("build/pki-roots-caps/roots.pem", [], [])
+  t.eqI32("the roots cap: roots kept", toI32(capped.roots.length), PKI_ROOTS_MAX_ROOTS)
+  t.eqI32("the roots cap: the one past it skipped, the duplicate not", capped.skipped, 1)
   return t.done()
 }
 
-export const main = (): i32 => envSuite() + dirSuite() + bundleSuite() + capSuite()
+export const main = (): i32 => {
+  if (toI32(process.argv.length) > 1 && process.argv[1] === "env-child") {
+    console.log(line(pkiLoadSystemRoots()))
+    return 0
+  }
+  return systemSuite() + envSuite() + dirSuite() + bundleSuite() + capSuite()
+}

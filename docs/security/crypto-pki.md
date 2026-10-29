@@ -128,6 +128,8 @@ Each of these counts one in `skipped` and loading moves on:
   auxiliary trust settings are not read, so such a block is not taken as a
   plain root;
 - a BEGIN line with no END line before the next BEGIN;
+- a BEGIN line with trailing spaces or tabs: the splitter opens a block for
+  it, and `pemToDer`, which reads such a line as no BEGIN, refuses the block;
 - a block still open at the end of the file;
 - a file larger than `PKI_ROOTS_MAX_FILE_BYTES`;
 - an entry past `PKI_ROOTS_MAX_FILES`;
@@ -137,7 +139,8 @@ These cost nothing:
 
 - text outside a block, a stray END line among it, since bundles carry
   comments there;
-- a CR before a line's LF;
+- a CR before a line's LF, and spaces or tabs before either, as far as the
+  splitter is concerned;
 - a path that is missing, unreadable, a directory or not a regular file;
 - a certificate whose DER was already kept.
 
@@ -168,8 +171,11 @@ Tests:
   `: skipped`
 - `a file at the cap is parsed`
 - `the files cap: files read` and `the files cap: the one past it skipped`
-
-The roots cap is not tested: reaching it takes 4097 distinct certificates.
+- `the roots cap: roots kept` and
+  `the roots cap: the one past it skipped, the duplicate not`, over a bundle
+  written as the program runs: root A with the last two bytes of its
+  signature changed 4097 ways, which the parser does not check, then the
+  first of those again
 
 ### PKI-R2: only a regular file is opened
 
@@ -184,7 +190,9 @@ Tests:
 - `a FIFO is not read: roots`, `: sources` and `: skipped`
 - `a FIFO is not the bundle found: roots`, `: sources` and `: skipped`
 
-The FIFO checks call `t.skip` where `mkfifo` is not on `PATH`.
+The FIFO is what pins the rule: a directory named as a file is refused by the
+read itself, with or without it. `mkfifo makes the FIFO` fails, rather than
+skips, where `mkfifo` is not on `PATH`.
 
 ### PKI-R3: a bad block costs only itself
 
@@ -199,9 +207,10 @@ Every case in [the skip rule](#the-skip-rule) is in one fixture,
 - root B with CRLF line ends
 - A again
 - a well-formed block that is not a certificate
+- root D whose BEGIN line ends in a space and a tab
 - a block cut off at the end of the file
 
-The load gives A then B, with five skipped. Duplicate keys are dropped
+The load gives A then B, with six skipped. Duplicate keys are dropped
 across files as well as within one.
 
 Tests:
@@ -222,9 +231,18 @@ Test: ``link/crypto_pki_roots_wasm: rejected with "`lstatOwnerModeSync` reaches 
 ### PKI-R5: a variable that is set is never widened
 
 When either variable is set and not empty, no system bundle or directory is
-read. A file or directory that is missing therefore trusts nothing.
+read. A file or directory that is missing therefore trusts nothing. That
+`pkiLoadSystemRoots` passes the two variables, each in its place, is checked
+by running the test program again under `env` with the variables set as
+named; with neither set, the child is compared with the parent's own load of
+the defaults, so the check does not depend on the host's `/etc`.
 
 Tests:
+
+- `SSL_CERT_FILE alone`, `SSL_CERT_DIR alone`, `both, the file first` and
+  `SSL_CERT_FILE set, SSL_CERT_DIR empty`
+- `neither set: the system defaults` and `both empty: the system defaults`
+- `the six system bundles, in order` and `the system directory`
 
 - `a missing file is no fallback: roots`
 - `a missing directory is no fallback: roots`
