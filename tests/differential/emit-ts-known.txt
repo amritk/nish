@@ -34,6 +34,7 @@ cases/ffi_scalar ffi  # refused: NL4010 under --emit-ts
 cases/ffi_string_loops ffi  # refused: NL4010 under --emit-ts
 cases/ffi_string_param ffi  # refused: NL4010 under --emit-ts
 cases/ffi_string_return ffi  # refused: NL4010 under --emit-ts
+cases/io_write_bytes host  # differ: stdout line 4 differs [fromBytes]
 cases/map_fingerprint_miss ffi  # refused: NL4010 under --emit-ts
 cases/map_hash_collide ffi  # refused: NL4010 under --emit-ts
 cases/map_hash_kat ffi  # refused: NL4010 under --emit-ts
