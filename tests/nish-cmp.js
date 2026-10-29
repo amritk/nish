@@ -623,6 +623,9 @@ const ROUTER_NEW = [
   "tests/link/net_router_negative_too_many_params/main.ts",
 ]
 
+/** Programs new with `nish/crypto/x509-path` (#480), which the reference refuses: its std/ has no such module. */
+const X509_PATH_NEW = ["tests/link/crypto_x509_path/main.ts"]
+
 const DECLARED = [
   {
     program: "tests/link/par_map_new/main.ts",
@@ -3093,6 +3096,11 @@ const DECLARED = [
     ROUTER_NEW,
     "HTTP router in nish/net/router",
     "a new program: it imports `nish/net/router`, which the reference compiler's standard library does not have"
+  ),
+  ...declareMoved(
+    X509_PATH_NEW,
+    "RFC 5280 path validation",
+    "a new program: it imports `nish/crypto/x509-path`, which the reference compiler's standard library does not have"
   ),
   {
     program: "tests/cases/str_index_of_from.ts",

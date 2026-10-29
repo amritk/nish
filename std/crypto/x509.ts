@@ -30,8 +30,10 @@
  * certificate must end where its outer SEQUENCE does. Anything else answers
  * `null`, never a panic. The reader looks at what this module uses — the
  * version, serial, algorithms, names as opaque bytes, validity, the subject
- * public key and the signature — and checks the order of what follows the key
- * (`[1]`, `[2]`, `[3]`) without parsing extensions; the mint writes two of its
+ * public key and the signature — checks the order of what follows the key
+ * (`[1]`, `[2]`, `[3]`), and reads the extensions path validation needs
+ * (basicConstraints, keyUsage, extKeyUsage, subjectAltName, nameConstraints)
+ * into fields `nish/crypto/x509-path` decides on; the mint writes two of its
  * own (below).
  *
  * **PEM is RFC 7468's strict grammar**, with standard base64 (`+` and `/`,
@@ -115,15 +117,50 @@ const X509_NO_TIME: i64 = -1000000000000
 const X509_MS_PER_DAY: i64 = 86400000
 
 // DER tags (X.690 §8, and the context tags RFC 5280 gives them).
+const X509_TAG_BOOLEAN: i32 = 0x01
 const X509_TAG_INTEGER: i32 = 0x02
 const X509_TAG_BIT_STRING: i32 = 0x03
 const X509_TAG_OCTET_STRING: i32 = 0x04
+const X509_TAG_NULL: i32 = 0x05
 const X509_TAG_OID: i32 = 0x06
 const X509_TAG_UTF8_STRING: i32 = 0x0c
 const X509_TAG_UTC_TIME: i32 = 0x17
 const X509_TAG_GENERALIZED_TIME: i32 = 0x18
 const X509_TAG_SEQUENCE: i32 = 0x30
 const X509_TAG_SET: i32 = 0x31
+
+/** `X509Certificate.keyAlgorithm`: a key this module does not name. */
+export const X509_KEY_OTHER: i32 = 0
+/** id-ecPublicKey on prime256v1: `publicKey` is the 65-byte uncompressed point (RFC 5480 §2.1.1). */
+export const X509_KEY_P256: i32 = 1
+/** id-ecPublicKey on secp384r1: `publicKey` is the 97-byte uncompressed point (RFC 5480 §2.1.1). */
+export const X509_KEY_P384: i32 = 2
+/** rsaEncryption with NULL parameters: `publicKey` is the RSAPublicKey DER (RFC 3279 §2.3.1). */
+export const X509_KEY_RSA: i32 = 3
+
+/** `X509Certificate.signatureAlgorithm`: an algorithm this module does not name. */
+export const X509_SIG_OTHER: i32 = 0
+/** ecdsa-with-SHA256, parameters absent (RFC 5758 §3.2). */
+export const X509_SIG_ECDSA_SHA256: i32 = 1
+/** ecdsa-with-SHA384, parameters absent (RFC 5758 §3.2). */
+export const X509_SIG_ECDSA_SHA384: i32 = 2
+/** sha256WithRSAEncryption, NULL parameters (RFC 4055 §5). */
+export const X509_SIG_RSA_PKCS1_SHA256: i32 = 3
+/** sha384WithRSAEncryption, NULL parameters (RFC 4055 §5). */
+export const X509_SIG_RSA_PKCS1_SHA384: i32 = 4
+/** sha512WithRSAEncryption, NULL parameters (RFC 4055 §5). */
+export const X509_SIG_RSA_PKCS1_SHA512: i32 = 5
+/** RSASSA-PSS with SHA-256, MGF1 with SHA-256 and a 32-byte salt (RFC 4055 §3.1). */
+export const X509_SIG_RSA_PSS_SHA256: i32 = 6
+/** RSASSA-PSS with SHA-384, MGF1 with SHA-384 and a 48-byte salt. */
+export const X509_SIG_RSA_PSS_SHA384: i32 = 7
+/** RSASSA-PSS with SHA-512, MGF1 with SHA-512 and a 64-byte salt. */
+export const X509_SIG_RSA_PSS_SHA512: i32 = 8
+
+/** keyUsage digitalSignature, named bit 0 (RFC 5280 §4.2.1.3), as `X509Certificate.keyUsage` holds it. */
+export const X509_KU_DIGITAL_SIGNATURE: i32 = 1
+/** keyUsage keyCertSign, named bit 5. */
+export const X509_KU_KEY_CERT_SIGN: i32 = 32
 
 /**
  * One certificate, as `x509ParseCertificate` and `x509ParseChain` read it.
@@ -149,11 +186,60 @@ export class X509Certificate {
   notBefore: i64 = 0
   /** The last instant it is valid, inclusive. */
   notAfter: i64 = 0
+
+  // The fields run widest first, so the extensions' (RFC 5280 §4.2) are spread
+  // through the rest. The parser records what an extension says rather than
+  // refusing it; `nish/crypto/x509-path` refuses a certificate with
+  // `extensionsMalformed` or `unknownCriticalExtension` set.
+
+  /** Each dNSName in subjectAltName, as its IA5String octets. */
+  dnsNames: u8[][]
+  /** Each iPAddress in subjectAltName: 4 octets for IPv4, 16 for IPv6. */
+  ipAddresses: u8[][]
+  /** Permitted dNSName subtrees, as IA5String octets. */
+  permittedDns: u8[][]
+  /** Excluded dNSName subtrees. */
+  excludedDns: u8[][]
+  /** Permitted iPAddress subtrees: address then mask, 8 octets for IPv4, 32 for IPv6. */
+  permittedIp: u8[][]
+  /** Excluded iPAddress subtrees. */
+  excludedIp: u8[][]
+  /** 1, 2 or 3: the version, v1 when the field is absent. */
+  version: i32 = 1
+  /** One of the `X509_KEY_*` constants. */
+  keyAlgorithm: i32 = 0
+  /** One of the `X509_SIG_*` constants: the AlgorithmIdentifier compared whole, parameters and all. */
+  signatureAlgorithm: i32 = 0
+  /** basicConstraints' pathLenConstraint, capped at 255, or `-1` when absent. */
+  pathLenConstraint: i32 = -1
+  /** keyUsage's named bits: bit `n` of this is named bit `n` (`X509_KU_*`). */
+  keyUsage: i32 = 0
   /** Whether the key is id-ecPublicKey on prime256v1 (RFC 5480 §2.1.1), so `publicKey` is a P-256 point. */
   p256: boolean = false
   /** Whether the signature algorithm is ecdsa-with-SHA256 with its parameters absent (RFC 5758 §3.2). */
   ecdsaSha256: boolean = false
-
+  /** An extension this module reads is not DER of its grammar, an OID repeats, or `critical` is spelt FALSE. */
+  extensionsMalformed: boolean = false
+  /** An extension marked critical is not one this module reads (§4.2: it must then be rejected). */
+  unknownCriticalExtension: boolean = false
+  /** basicConstraints is present (§4.2.1.9). */
+  hasBasicConstraints: boolean = false
+  /** basicConstraints says cA TRUE. */
+  isCa: boolean = false
+  /** keyUsage is present (§4.2.1.3). */
+  hasKeyUsage: boolean = false
+  /** extKeyUsage is present (§4.2.1.12). */
+  hasExtKeyUsage: boolean = false
+  /** extKeyUsage lists id-kp-serverAuth. */
+  ekuServerAuth: boolean = false
+  /** extKeyUsage lists anyExtendedKeyUsage. */
+  ekuAny: boolean = false
+  /** subjectAltName is present (§4.2.1.6). */
+  hasSubjectAltName: boolean = false
+  /** nameConstraints is present (§4.2.1.10). */
+  hasNameConstraints: boolean = false
+  /** nameConstraints names a form other than dNSName and iPAddress, which no name is checked against. */
+  nameConstraintsUnsupported: boolean = false
   constructor() {
     this.der = []
     this.tbs = []
@@ -162,6 +248,12 @@ export class X509Certificate {
     this.subject = []
     this.publicKey = []
     this.signature = []
+    this.dnsNames = []
+    this.ipAddresses = []
+    this.permittedDns = []
+    this.excludedDns = []
+    this.permittedIp = []
+    this.excludedIp = []
   }
 }
 
@@ -245,6 +337,22 @@ const x509DerPeek = (der: u8[], at: i32, limit: i32): i32 => {
     return -1
   }
   return toI32(der[at])
+}
+
+/**
+ * Where the contents of the element `x509DerExpect` reads at `der[at]` start,
+ * or `-1`. An index, not an element, so a loop walking a SEQUENCE with it
+ * keeps nothing per pass (NL9011) when the loop also stores what it reads.
+ */
+const x509DerStartOf = (der: u8[], at: i32, limit: i32, tag: i32): i32 => {
+  const e: X509DerElement | null = x509DerExpect(der, at, limit, tag)
+  return e === null ? -1 : e.start
+}
+
+/** Where that element ends, or `-1`. */
+const x509DerEndOf = (der: u8[], at: i32, limit: i32, tag: i32): i32 => {
+  const e: X509DerElement | null = x509DerExpect(der, at, limit, tag)
+  return e === null ? -1 : e.end
 }
 
 /** A copy of `der[from .. to)`. */
@@ -978,18 +1086,459 @@ export const x509ParseP256PrivateKey = (pem: string): Secret<u8[]> | null => {
 }
 
 // ---------------------------------------------------------------------------
-// Certificates (RFC 5280 §4.1)
+// Algorithms and extensions (RFC 5280 §4.1.1.2, §4.1.2.7 and §4.2)
 // ---------------------------------------------------------------------------
+
+/** secp384r1, 1.3.132.0.34 (RFC 5480 §2.1.1.1). */
+const x509OidSecp384r1 = (): u8[] => x509DerOidContents([1, 3, 132, 0, 34])
+
+/** The PKCS #1 arc 1.2.840.113549.1.1.`last` (RFC 4055 §2.1 and §5). */
+const x509OidPkcs1 = (last: i32): u8[] => x509DerOidContents([1, 2, 840, 113549, 1, 1, last])
+
+/** The NIST hash arc 2.16.840.1.101.3.4.2.`last`: 1 SHA-256, 2 SHA-384, 3 SHA-512. */
+const x509OidNistHash = (last: i32): u8[] => x509DerOidContents([2, 16, 840, 1, 101, 3, 4, 2, last])
+
+/** The certificate extension arc 2.5.29.`last` (RFC 5280 §4.2.1). */
+const x509OidCe = (last: i32): u8[] => x509DerOidContents([2, 5, 29, last])
+
+/** An AlgorithmIdentifier, whole: `SEQUENCE { oid, params... }`. */
+const x509DerAlgorithm = (oid: u8[], params: u8[][]): u8[] => {
+  const parts: u8[][] = [x509DerTlv(X509_TAG_OID, oid)]
+  for (const p of params) {
+    parts.push(p)
+  }
+  return x509DerWrap(X509_TAG_SEQUENCE, parts)
+}
+
+/**
+ * RSASSA-PSS's AlgorithmIdentifier for hash `h` (1 to 3, `x509OidNistHash`'s
+ * arc) whose digest is `bytes` long: the hash, MGF1 over the same hash, a salt
+ * as long as the digest and the trailer left at its DEFAULT (RFC 4055 §3.1,
+ * and RFC 8446 §4.2.3's profile). `nullParams` spells the hash
+ * AlgorithmIdentifiers with NULL parameters, as OpenSSL writes them; without,
+ * absent, which RFC 4055 §2.1 also allows.
+ */
+const x509PssAlgorithm = (h: i32, bytes: i32, nullParams: boolean): u8[] => {
+  const params0: u8[][] = nullParams ? [x509DerTlv(X509_TAG_NULL, [])] : []
+  const hash: u8[] = x509DerAlgorithm(x509OidNistHash(h), params0)
+  const params: u8[] = x509DerWrap(X509_TAG_SEQUENCE, [
+    x509DerWrap(0xa0, [hash]),
+    x509DerWrap(0xa1, [x509DerAlgorithm(x509OidPkcs1(8), [hash])]),
+    x509DerWrap(0xa2, [x509DerTlv(X509_TAG_INTEGER, [toU8(bytes)])]),
+  ])
+  return x509DerAlgorithm(x509OidPkcs1(10), [params])
+}
+
+/**
+ * Whether the AlgorithmIdentifier `alg` is `X509_SIG_*` `code`'s single DER
+ * spelling (either of two for PSS). A boolean, so the loop asking it of each
+ * code keeps none of the spellings it builds.
+ */
+const x509SignatureIs = (alg: u8[], code: i32): boolean => {
+  if (code <= X509_SIG_ECDSA_SHA384) {
+    const oid: u8[] = x509DerOidContents([1, 2, 840, 10045, 4, 3, code + 1])
+    return x509BytesEqual(alg, x509DerAlgorithm(oid, []))
+  }
+  if (code <= X509_SIG_RSA_PKCS1_SHA512) {
+    const k: i32 = code - X509_SIG_RSA_PKCS1_SHA256
+    return x509BytesEqual(alg, x509DerAlgorithm(x509OidPkcs1(11 + k), [x509DerTlv(X509_TAG_NULL, [])]))
+  }
+  const k: i32 = code - X509_SIG_RSA_PSS_SHA256
+  const bytes: i32 = k * 16 + 32
+  return x509BytesEqual(alg, x509PssAlgorithm(k + 1, bytes, true)) || x509BytesEqual(alg, x509PssAlgorithm(k + 1, bytes, false))
+}
+
+/**
+ * Which `X509_SIG_*` the AlgorithmIdentifier `alg` is, compared whole against
+ * each one's DER spelling, so a parameter this module does not expect makes it
+ * `X509_SIG_OTHER` rather than something read past.
+ */
+const x509SignatureAlgorithm = (alg: u8[]): i32 => {
+  for (let code: i32 = X509_SIG_ECDSA_SHA256; code <= X509_SIG_RSA_PSS_SHA512; code++) {
+    if (x509SignatureIs(alg, code)) {
+      return code
+    }
+  }
+  return X509_SIG_OTHER
+}
+
+/** Which `X509_KEY_*` the SubjectPublicKeyInfo's AlgorithmIdentifier `alg` names. */
+const x509KeyAlgorithm = (der: u8[], alg: X509DerElement): i32 => {
+  if (x509DerIsAlgorithm(der, alg, x509OidEcPublicKey(), x509OidPrime256v1())) {
+    return X509_KEY_P256
+  }
+  if (x509DerIsAlgorithm(der, alg, x509OidEcPublicKey(), x509OidSecp384r1())) {
+    return X509_KEY_P384
+  }
+  const rsa: u8[] = x509DerAlgorithm(x509OidPkcs1(1), [x509DerTlv(X509_TAG_NULL, [])])
+  return x509BytesEqual(x509DerWhole(der, alg), rsa) ? X509_KEY_RSA : X509_KEY_OTHER
+}
+
+/**
+ * Each element directly inside `der[start .. end)`, or `null` unless they fill
+ * it exactly and there is at least one: a `SEQUENCE SIZE (1..MAX) OF`'s items.
+ */
+const x509DerItems = (der: u8[], start: i32, end: i32): X509DerElement[] | null => {
+  const out: X509DerElement[] = []
+  let at: i32 = start
+  while (at < end) {
+    const e: X509DerElement | null = x509DerRead(der, at, end)
+    if (e === null) {
+      return null
+    }
+    out.push(e)
+    at = e.end
+  }
+  return toI32(out.length) === 0 ? null : out
+}
+
+/**
+ * The one element filling `der[start .. end)` with tag `tag`, or `null`: what
+ * an extension's OCTET STRING must hold.
+ */
+const x509DerOnly = (der: u8[], start: i32, end: i32, tag: i32): X509DerElement | null => {
+  const e: X509DerElement | null = x509DerExpect(der, start, end, tag)
+  return e !== null && e.end === end ? e : null
+}
+
+/**
+ * basicConstraints' `SEQUENCE { cA BOOLEAN DEFAULT FALSE, pathLenConstraint
+ * INTEGER (0..MAX) OPTIONAL }` into `out`, or `false` unless it is DER: cA
+ * present only as TRUE (X.690 §11.5 drops a DEFAULT), a minimal non-negative
+ * pathLen, and pathLen only beside cA (§4.2.1.9).
+ */
+const x509ReadBasicConstraints = (der: u8[], seq: X509DerElement, out: X509Certificate): boolean => {
+  let at: i32 = seq.start
+  if (x509DerPeek(der, at, seq.end) === X509_TAG_BOOLEAN) {
+    const ca: X509DerElement | null = x509DerRead(der, at, seq.end)
+    if (ca === null || ca.end - ca.start !== 1 || toI32(der[ca.start]) !== 0xff) {
+      return false
+    }
+    out.isCa = true
+    at = ca.end
+  }
+  if (at < seq.end) {
+    const len: X509DerElement | null = x509DerOnly(der, at, seq.end, X509_TAG_INTEGER)
+    if (len === null || !out.isCa || !x509DerIntegerMinimal(der, len) || toI32(der[len.start]) >= 0x80) {
+      return false
+    }
+    const total: i32 = toI32(der.length)
+    let value: i32 = 0
+    for (let k: i32 = len.start; k >= 0 && k < len.end && k < total; k++) {
+      value = value > 255 ? 256 : (value << 8) | toI32(der[k])
+    }
+    out.pathLenConstraint = value > 255 ? 255 : value
+  }
+  out.hasBasicConstraints = true
+  return true
+}
+
+/**
+ * keyUsage's named BIT STRING into `out.keyUsage`, or `false` unless it is a
+ * sound BIT STRING with at least one bit set (§4.2.1.3). Bits past
+ * decipherOnly (8) are read and ignored.
+ */
+const x509ReadKeyUsage = (der: u8[], bits: X509DerElement, out: X509Certificate): boolean => {
+  if (bits.tag !== X509_TAG_BIT_STRING || !x509DerBitStringSound(der, bits)) {
+    return false
+  }
+  let usage: i32 = 0
+  let any: boolean = false
+  const total: i32 = toI32(der.length)
+  for (let k: i32 = bits.start + 1; k >= 0 && k < bits.end && k < total; k++) {
+    const octet: i32 = toI32(der[k])
+    any = any || octet !== 0
+    let bit: i32 = (k - bits.start - 1) * 8
+    for (let mask: i32 = 0x80; mask > 0 && bit < 9; mask = mask >> 1) {
+      if ((octet & mask) !== 0) {
+        usage = usage | (X509_KU_DIGITAL_SIGNATURE << bit)
+      }
+      bit = bit + 1
+    }
+  }
+  out.hasKeyUsage = true
+  out.keyUsage = usage
+  return any
+}
+
+/** extKeyUsage's `SEQUENCE SIZE (1..MAX) OF KeyPurposeId` into `out`, or `false` unless it is one. */
+const x509ReadExtKeyUsage = (der: u8[], seq: X509DerElement, out: X509Certificate): boolean => {
+  const items: X509DerElement[] | null = x509DerItems(der, seq.start, seq.end)
+  if (items === null) {
+    return false
+  }
+  const serverAuth: u8[] = x509DerOidContents([1, 3, 6, 1, 5, 5, 7, 3, 1])
+  const anyPurpose: u8[] = x509DerOidContents([2, 5, 29, 37, 0])
+  for (const item of items) {
+    if (item.tag !== X509_TAG_OID || item.end === item.start) {
+      return false
+    }
+    out.ekuServerAuth = out.ekuServerAuth || x509DerContentsAre(der, item, serverAuth)
+    out.ekuAny = out.ekuAny || x509DerContentsAre(der, item, anyPurpose)
+  }
+  out.hasExtKeyUsage = true
+  return true
+}
+
+/**
+ * subjectAltName's `SEQUENCE SIZE (1..MAX) OF GeneralName` into `out`, or
+ * `false` unless it is one: a dNSName (`[2]`) is kept as its octets, an
+ * iPAddress (`[7]`) must be 4 or 16 octets and is kept, and the other forms
+ * need only be well-formed elements.
+ */
+const x509ReadSubjectAltName = (der: u8[], seq: X509DerElement, out: X509Certificate): boolean => {
+  const items: X509DerElement[] | null = x509DerItems(der, seq.start, seq.end)
+  if (items === null) {
+    return false
+  }
+  for (const item of items) {
+    const n: i32 = item.end - item.start
+    if (item.tag === 0x82) {
+      out.dnsNames.push(x509DerSlice(der, item.start, item.end))
+    } else if (item.tag === 0x87) {
+      if (n !== 4 && n !== 16) {
+        return false
+      }
+      out.ipAddresses.push(x509DerSlice(der, item.start, item.end))
+    }
+  }
+  out.hasSubjectAltName = true
+  return true
+}
+
+/**
+ * One `GeneralSubtrees` (`[0]` permitted or `[1]` excluded) into `dns` and
+ * `ip`, or `false` unless each subtree is `SEQUENCE { base }` with minimum and
+ * maximum absent (§4.2.1.10: minimum MUST be zero, which DER omits, and
+ * maximum MUST be absent) and an iPAddress base is 8 or 32 octets. A base of
+ * any other form sets `nameConstraintsUnsupported`.
+ */
+const x509ReadSubtrees = (der: u8[], trees: X509DerElement, dns: u8[][], ip: u8[][], out: X509Certificate): boolean => {
+  const items: X509DerElement[] | null = x509DerItems(der, trees.start, trees.end)
+  if (items === null) {
+    return false
+  }
+  for (const item of items) {
+    if (item.tag !== X509_TAG_SEQUENCE) {
+      return false
+    }
+    const tag: i32 = x509DerPeek(der, item.start, item.end)
+    const start: i32 = x509DerStartOf(der, item.start, item.end, tag)
+    if (start < 0 || x509DerEndOf(der, item.start, item.end, tag) !== item.end) {
+      return false
+    }
+    const n: i32 = item.end - start
+    if (tag === 0x82) {
+      dns.push(x509DerSlice(der, start, item.end))
+    } else if (tag === 0x87) {
+      if (n !== 8 && n !== 32) {
+        return false
+      }
+      ip.push(x509DerSlice(der, start, item.end))
+    } else {
+      out.nameConstraintsUnsupported = true
+    }
+  }
+  return true
+}
+
+/**
+ * nameConstraints' `SEQUENCE { permittedSubtrees [0] OPTIONAL,
+ * excludedSubtrees [1] OPTIONAL }` into `out`, or `false` unless it is one
+ * with at least one of the two (§4.2.1.10: an empty sequence MUST NOT be).
+ */
+const x509ReadNameConstraints = (der: u8[], seq: X509DerElement, out: X509Certificate): boolean => {
+  if (seq.end === seq.start) {
+    return false
+  }
+  let at: i32 = seq.start
+  if (x509DerPeek(der, at, seq.end) === 0xa0) {
+    const permitted: X509DerElement | null = x509DerRead(der, at, seq.end)
+    if (permitted === null || !x509ReadSubtrees(der, permitted, out.permittedDns, out.permittedIp, out)) {
+      return false
+    }
+    at = permitted.end
+  }
+  if (at < seq.end) {
+    const excluded: X509DerElement | null = x509DerOnly(der, at, seq.end, 0xa1)
+    if (excluded === null || !x509ReadSubtrees(der, excluded, out.excludedDns, out.excludedIp, out)) {
+      return false
+    }
+  }
+  out.hasNameConstraints = true
+  return true
+}
+
+/** Where the extnValue OCTET STRING's contents start in the `Extension` at `der[at .. end)`, or `-1`. */
+const x509ExtensionValueStart = (der: u8[], at: i32, end: i32): i32 => {
+  const ext: X509DerElement | null = x509DerExpect(der, at, end, X509_TAG_SEQUENCE)
+  if (ext === null) {
+    return -1
+  }
+  let next: i32 = x509DerEndOf(der, ext.start, ext.end, X509_TAG_OID)
+  if (x509DerPeek(der, next, ext.end) === X509_TAG_BOOLEAN) {
+    next = x509DerEndOf(der, next, ext.end, X509_TAG_BOOLEAN)
+  }
+  const value: X509DerElement | null = x509DerOnly(der, next, ext.end, X509_TAG_OCTET_STRING)
+  return value === null || value.end !== end ? -1 : value.start
+}
+
+/**
+ * The value of the known `Extension` at `der[at .. end)`, which
+ * `x509ExtensionKind` has read as `which` (`x509OidCe`'s last arc), into `out`,
+ * or `false` unless the element inside its OCTET STRING is DER of that
+ * extension's grammar. The OCTET STRING is the Extension's last element, so
+ * its contents end where the Extension does.
+ */
+const x509ReadExtension = (der: u8[], which: i32, at: i32, end: i32, out: X509Certificate): boolean => {
+  const start: i32 = x509ExtensionValueStart(der, at, end)
+  if (start < 0) {
+    return false
+  }
+  if (which === 15) {
+    const bits: X509DerElement | null = x509DerOnly(der, start, end, X509_TAG_BIT_STRING)
+    return bits !== null && x509ReadKeyUsage(der, bits, out)
+  }
+  const seq: X509DerElement | null = x509DerOnly(der, start, end, X509_TAG_SEQUENCE)
+  if (seq === null) {
+    return false
+  }
+  if (which === 19) {
+    return x509ReadBasicConstraints(der, seq, out)
+  }
+  if (which === 37) {
+    return x509ReadExtKeyUsage(der, seq, out)
+  }
+  if (which === 17) {
+    return x509ReadSubjectAltName(der, seq, out)
+  }
+  return x509ReadNameConstraints(der, seq, out)
+}
 
 /**
  * Whether a `[3]` extensions wrapper holds one non-empty SEQUENCE and nothing
- * after it (RFC 5280 §4.1's `SIZE (1..MAX)`). What an extension says is not
- * read.
+ * after it (RFC 5280 §4.1's `SIZE (1..MAX)`); what the extensions say goes
+ * into `out` (`x509ReadExtensions`).
  */
 const x509DerExtensionsSound = (der: u8[], e: X509DerElement): boolean => {
   const seq: X509DerElement | null = x509DerExpect(der, e.start, e.end, X509_TAG_SEQUENCE)
   return seq !== null && seq.end === e.end && seq.end > seq.start
 }
+
+/** What `x509ExtensionKind` answers for an extension this module does not read. */
+const X509_EXT_UNKNOWN: i32 = -1
+/** The same, for one marked critical. */
+const X509_EXT_UNKNOWN_CRITICAL: i32 = -2
+/** The same, for one that is not `Extension`'s shape or repeats an extnID. */
+const X509_EXT_MALFORMED: i32 = -3
+
+/**
+ * Whether an extension in `der[first .. before)`, the ones ahead of this one,
+ * has the extnID `der[idStart .. idEnd)` (§4.2: at most one of each).
+ */
+const x509ExtensionSeen = (der: u8[], first: i32, before: i32, idStart: i32, idEnd: i32): boolean => {
+  let at: i32 = first
+  while (at < before) {
+    const ext: X509DerElement | null = x509DerExpect(der, at, before, X509_TAG_SEQUENCE)
+    if (ext === null) {
+      return false
+    }
+    const id: X509DerElement | null = x509DerExpect(der, ext.start, ext.end, X509_TAG_OID)
+    if (id !== null && id.end - id.start === idEnd - idStart) {
+      const total: i32 = toI32(der.length)
+      let same: boolean = true
+      for (let k: i32 = 0; k < id.end - id.start; k++) {
+        const i: i32 = id.start + k
+        const j: i32 = idStart + k
+        if (i >= 0 && i < total && j >= 0 && j < total && der[i] !== der[j]) {
+          same = false
+        }
+      }
+      if (same) {
+        return true
+      }
+    }
+    at = ext.end
+  }
+  return false
+}
+
+/**
+ * The `Extension` at `der[at]`, inside the extensions SEQUENCE whose first
+ * extension is at `first` and which ends at `limit`: `SEQUENCE { extnID OID,
+ * critical BOOLEAN DEFAULT FALSE, extnValue OCTET STRING }`. Answers the extnID's
+ * last arc under 2.5.29 for one this module reads, else an `X509_EXT_*`: a
+ * critical flag spelt FALSE (DER omits a DEFAULT) or an extnID seen before is
+ * malformed. Allocates nothing that outlives it, so the walk calling it per
+ * extension keeps nothing per pass.
+ */
+const x509ExtensionKind = (der: u8[], first: i32, at: i32, limit: i32): i32 => {
+  const ext: X509DerElement | null = x509DerExpect(der, at, limit, X509_TAG_SEQUENCE)
+  if (ext === null) {
+    return X509_EXT_MALFORMED
+  }
+  const id: X509DerElement | null = x509DerExpect(der, ext.start, ext.end, X509_TAG_OID)
+  if (id === null || id.end === id.start || x509ExtensionSeen(der, first, at, id.start, id.end)) {
+    return X509_EXT_MALFORMED
+  }
+  let next: i32 = id.end
+  let critical: boolean = false
+  if (x509DerPeek(der, next, ext.end) === X509_TAG_BOOLEAN) {
+    const flag: X509DerElement | null = x509DerRead(der, next, ext.end)
+    if (flag === null || flag.end - flag.start !== 1 || toI32(der[flag.start]) !== 0xff) {
+      return X509_EXT_MALFORMED
+    }
+    critical = true
+    next = flag.end
+  }
+  if (x509DerOnly(der, next, ext.end, X509_TAG_OCTET_STRING) === null) {
+    return X509_EXT_MALFORMED
+  }
+  const oid: u8[] = x509DerSlice(der, id.start, id.end)
+  const known: i32[] = [19, 15, 37, 17, 30]
+  for (const k of known) {
+    if (x509BytesEqual(oid, x509OidCe(k))) {
+      return k
+    }
+  }
+  return critical ? X509_EXT_UNKNOWN_CRITICAL : X509_EXT_UNKNOWN
+}
+
+/**
+ * The `Extensions` inside the sound `[3]` wrapper `e`, read into `out`:
+ * basicConstraints, keyUsage, extKeyUsage, subjectAltName and nameConstraints
+ * are read, any other is skipped unless it is critical, which sets
+ * `unknownCriticalExtension`. An extension `x509ExtensionKind` calls malformed,
+ * or a known one whose value is not its grammar, sets `extensionsMalformed`
+ * and stops the reading; it does not refuse the certificate, which stays a
+ * parse a caller can look at.
+ */
+const x509ReadExtensions = (der: u8[], e: X509DerElement, out: X509Certificate): void => {
+  const seq: X509DerElement | null = x509DerExpect(der, e.start, e.end, X509_TAG_SEQUENCE)
+  if (seq === null) {
+    return
+  }
+  let at: i32 = seq.start
+  while (at < seq.end) {
+    const end: i32 = x509DerEndOf(der, at, seq.end, X509_TAG_SEQUENCE)
+    const which: i32 = x509ExtensionKind(der, seq.start, at, seq.end)
+    if (end < 0 || which === X509_EXT_MALFORMED) {
+      out.extensionsMalformed = true
+      return
+    }
+    if (which === X509_EXT_UNKNOWN_CRITICAL) {
+      out.unknownCriticalExtension = true
+    } else if (which > 0 && !x509ReadExtension(der, which, at, end, out)) {
+      out.extensionsMalformed = true
+      return
+    }
+    at = end
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Certificates (RFC 5280 §4.1)
+// ---------------------------------------------------------------------------
 
 /**
  * `der` read as one Certificate (RFC 5280 §4.1), or `null` unless it is
@@ -1006,9 +1555,10 @@ const x509DerExtensionsSound = (der: u8[], e: X509DerElement): boolean => {
  * **A parser, not a validator.** It checks that the bytes are one certificate
  * and nothing else. It does not check the signature (`x509VerifySignature`
  * does), that `notBefore` is not after `notAfter` or that either is near any
- * clock, and it does not read extensions — basicConstraints, keyUsage,
- * subjectAltName and the critical flag RFC 5280 §4.2 obliges a verifier to
- * honour are neither checked nor exposed.
+ * clock. It reads basicConstraints, keyUsage, extKeyUsage, subjectAltName
+ * and nameConstraints into their fields, and records a malformed extension or
+ * an unknown critical one rather than refusing the certificate:
+ * `nish/crypto/x509-path`'s `x509ValidatePath` is what honours them.
  */
 export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   const total: i32 = toI32(der.length)
@@ -1097,8 +1647,9 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   at = spki.end
   // [1] issuerUniqueID and [2] subjectUniqueID are IMPLICIT BIT STRINGs (so
   // primitive, 0x81 and 0x82) from v2; [3] extensions is explicit (0xa3), v3.
-  // Each is held to its outer shape; what it says is not read.
+  // Each is held to its outer shape; the extensions are read after (x509ReadExtensions).
   const trailing: i32[] = [0x81, 0x82, 0xa3]
+  let extensions: X509DerElement | null = null
   for (let i: i32 = 0; i < 3; i++) {
     if (x509DerPeek(der, at, tbs.end) === trailing[i]) {
       const e: X509DerElement | null = x509DerRead(der, at, tbs.end)
@@ -1107,6 +1658,9 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
       }
       if (i === 2 ? !x509DerExtensionsSound(der, e) : !x509DerBitStringSound(der, e)) {
         return null
+      }
+      if (i === 2) {
+        extensions = e
       }
       at = e.end
     }
@@ -1132,6 +1686,12 @@ export const x509ParseCertificate = (der: u8[]): X509Certificate | null => {
   out.notAfter = after
   out.signature = signature
   out.ecdsaSha256 = x509DerIsAlgorithm(der, outerAlg, x509OidEcdsaSha256(), [])
+  out.version = version + 1
+  out.keyAlgorithm = x509KeyAlgorithm(der, keyAlg)
+  out.signatureAlgorithm = x509SignatureAlgorithm(x509DerWhole(der, outerAlg))
+  if (extensions !== null) {
+    x509ReadExtensions(der, extensions, out)
+  }
   return out
 }
 
@@ -1170,9 +1730,9 @@ export const x509ParseChain = (pem: string): X509Certificate[] | null => {
  * as both. `false` for any other algorithm or key, and for a signature that is
  * not a DER ECDSA-Sig-Value. Only the signature: that `cert.issuer` is
  * `issuer.subject` and that the times hold are fields the caller compares, and
- * whether `issuer` may issue at all (basicConstraints, keyUsage) is in
- * extensions this module does not read, so a `true` here is not path
- * validation.
+ * whether `issuer` may issue at all (basicConstraints, keyUsage) is
+ * `x509ValidatePath`'s to decide (`nish/crypto/x509-path`), so a `true` here
+ * is not path validation.
  */
 export const x509VerifySignature = (cert: X509Certificate, issuer: X509Certificate): boolean => {
   if (!cert.ecdsaSha256 || !issuer.p256) {

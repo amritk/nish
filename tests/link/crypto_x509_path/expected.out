@@ -1,0 +1,101 @@
+PASS  example.com
+PASS  EXAMPLE.Com, case ignored
+PASS  example.com. with its root dot
+PASS  a.example.org under *.example.org
+PASS  the IPv4 address 192.0.2.1
+PASS  192.0.2.1. read as the address
+PASS  the IPv6 address 2001:db8::1
+PASS  the IPv6 address bracketed and spelled out
+PASS  the root sent too
+PASS  at the first second
+PASS  at the last second
+PASS  an anchor among others
+PASS  extKeyUsage anyExtendedKeyUsage
+PASS  a leaf with neither keyUsage nor extKeyUsage
+PASS  an unknown non-critical extension
+PASS  two CAs under a pathLen 1
+PASS  a leaf with an RSA key
+x509-path: the good path: 17 passed, 0 failed, 0 skipped
+PASS  "" is not a name of the leaf
+PASS  "." is not a name of the leaf
+PASS  "example.org" is not a name of the leaf
+PASS  "b.a.example.org" is not a name of the leaf
+PASS  ".example.org" is not a name of the leaf
+PASS  "*.example.org" is not a name of the leaf
+PASS  "a..example.org" is not a name of the leaf
+PASS  "www.example.com" is not a name of the leaf
+PASS  "example.com.." is not a name of the leaf
+PASS  "example.co" is not a name of the leaf
+PASS  "xample.com" is not a name of the leaf
+PASS  "192.0.2.2" is not a name of the leaf
+PASS  "192.0.2.01" is not a name of the leaf
+PASS  "192.0.2" is not a name of the leaf
+PASS  "2001:db8::2" is not a name of the leaf
+PASS  "2001:db8:::1" is not a name of the leaf
+PASS  "2001:db8::1%eth0" is not a name of the leaf
+PASS  "exa mple.com" is not a name of the leaf
+PASS  "exämple.com" is not a name of the leaf
+PASS  the common name is not read
+PASS  an A-label matches as ASCII
+x509-path: names: 21 passed, 0 failed, 0 skipped
+PASS  no certificate
+PASS  nine certificates
+PASS  a truncated intermediate
+PASS  basicConstraints holding NULL
+PASS  an unknown critical extension
+PASS  a second after notAfter
+PASS  a second before notBefore
+PASS  extKeyUsage clientAuth only
+PASS  keyUsage keyEncipherment only
+PASS  an issuer with cA false
+PASS  the leaf as its own issuer's issuer
+PASS  a CA under pathLen 0
+PASS  an issuer without keyUsage
+PASS  the intermediate left out
+PASS  another CA's leaf
+PASS  a leaf signature with a byte changed
+PASS  a root of the right name and another key
+PASS  an ECDSA signature claimed under an RSA key
+PASS  no anchor of the issuer's name
+PASS  the leaf alone
+PASS  a CA certificate sent as the leaf
+x509-path: refusals: 21 passed, 0 failed, 0 skipped
+PASS  inside every permitted subtree
+PASS  the host a.example.org inside .example.org
+PASS  the host 192.0.2.1 inside 192.0.2.0/24
+PASS  example.com outside a permitted example.net
+PASS  192.0.2.1 inside an excluded 192.0.2.0/28
+PASS  an rfc822Name subtree
+x509-path: nameConstraints: 6 passed, 0 failed, 0 skipped
+PASS  sha256WithRSAEncryption
+PASS  RSASSA-PSS with SHA-256
+PASS  ecdsa-with-SHA384 under P-384
+PASS  ecdsa-with-SHA384 under P-256
+x509-path: algorithms not yet checked: 4 passed, 0 failed, 0 skipped
+PASS  a bundle with a bad block reads
+PASS  its two certificates
+PASS  its bad block skipped
+PASS  and anchors the good path
+PASS  an unterminated block is skipped
+PASS  no block answers null
+PASS  only bad blocks answer null
+PASS  an empty string answers null
+PASS  the system store, if any, holds anchors
+x509-path: trust stores: 9 passed, 0 failed, 0 skipped
+PASS  the leaf is v3
+PASS  not a CA
+PASS  keyUsage digitalSignature alone
+PASS  extKeyUsage serverAuth
+PASS  two dNSNames
+PASS  two iPAddresses
+PASS  the second 16 octets
+PASS  the intermediate is a CA with pathLen 0
+PASS  keyCertSign and cRLSign
+PASS  no subjectAltName
+PASS  nameConstraints read
+PASS  two permitted dNSNames
+PASS  two permitted iPAddresses
+PASS  an rfc822Name is unsupported
+PASS  the unknown critical extension is flagged
+PASS  the NULL basicConstraints is flagged
+x509-path: the extensions read: 16 passed, 0 failed, 0 skipped
