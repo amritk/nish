@@ -1,0 +1,269 @@
+PASS  AES-128-GCM: client open
+PASS  AES-128-GCM: server open
+PASS  AES-128-GCM: suite
+PASS  AES-128-GCM: one chain check
+PASS  AES-128-GCM: one signature check
+PASS  AES-128-GCM: 40000 bytes reach the server whole
+PASS  AES-128-GCM: 50000 bytes reach the client whole
+PASS  AES-128-GCM: nothing waits to be read
+PASS  AES-128-GCM: wants to read
+PASS  AES-128-GCM: not done
+PASS  AES-256-GCM: client open
+PASS  AES-256-GCM: server open
+PASS  AES-256-GCM: suite
+PASS  AES-256-GCM: one chain check
+PASS  AES-256-GCM: one signature check
+PASS  AES-256-GCM: 40000 bytes reach the server whole
+PASS  AES-256-GCM: 50000 bytes reach the client whole
+PASS  AES-256-GCM: nothing waits to be read
+PASS  AES-256-GCM: wants to read
+PASS  AES-256-GCM: not done
+PASS  ChaCha20-Poly1305: client open
+PASS  ChaCha20-Poly1305: server open
+PASS  ChaCha20-Poly1305: suite
+PASS  ChaCha20-Poly1305: one chain check
+PASS  ChaCha20-Poly1305: one signature check
+PASS  ChaCha20-Poly1305: 40000 bytes reach the server whole
+PASS  ChaCha20-Poly1305: 50000 bytes reach the client whole
+PASS  ChaCha20-Poly1305: nothing waits to be read
+PASS  ChaCha20-Poly1305: wants to read
+PASS  ChaCha20-Poly1305: not done
+PASS  before start: write waits
+PASS  start
+PASS  start: the ClientHello waits to be sent
+PASS  start: the ClientHello goes in the clear
+PASS  start: during the handshake keyUpdate waits
+PASS  the client waits for the verdict
+PASS  waiting: still in the handshake
+PASS  the verdict, through the pinned leaf
+PASS  after the verdict: open
+PASS  a second verdict is refused
+PASS  the server reads the Finished
+PASS  a refused chain: client failed
+PASS  a refused chain: alert
+PASS  a refused chain: read keys cleared
+PASS  a refused chain: write keys cleared
+PASS  a refused chain: no signature check
+PASS  a refused chain: the server reads the alert
+PASS  a refused chain: authenticate answers its alert
+PASS  a bad signature
+PASS  a bad signature: client failed
+PASS  a bad signature: alert
+PASS  a bad signature: read keys cleared
+PASS  a bad signature: write keys cleared
+PASS  retry: client open
+PASS  retry: server open
+PASS  retry: data flows
+PASS  client keyUpdate asking the server
+PASS  the server's answer is taken
+PASS  data up after the client's update
+PASS  data down after the client's update
+PASS  server keyUpdate asking the client
+PASS  the client takes the server's update
+PASS  the client's answer is sent
+PASS  data up after the server's update
+PASS  data down after the server's update
+PASS  data across a scheduled update
+PASS  the scheduled update reset the sequence
+PASS  a KeyUpdate not ending its record: client failed
+PASS  a KeyUpdate not ending its record: alert
+PASS  a KeyUpdate not ending its record: read keys cleared
+PASS  a KeyUpdate not ending its record: write keys cleared
+PASS  a KeyUpdate asking 2: client failed
+PASS  a KeyUpdate asking 2: alert
+PASS  a KeyUpdate asking 2: read keys cleared
+PASS  a KeyUpdate asking 2: write keys cleared
+PASS  a KeyUpdate of two bytes: client failed
+PASS  a KeyUpdate of two bytes: alert
+PASS  a KeyUpdate of two bytes: read keys cleared
+PASS  a KeyUpdate of two bytes: write keys cleared
+PASS  64 KeyUpdates are taken
+PASS  the 65th KeyUpdate: client failed
+PASS  the 65th KeyUpdate: alert
+PASS  the 65th KeyUpdate: read keys cleared
+PASS  the 65th KeyUpdate: write keys cleared
+PASS  the 65th KeyUpdate: the server reads the alert
+PASS  a ticket in three records is dropped
+PASS  data after a ticket
+PASS  a ticket then a KeyUpdate in one record
+PASS  a ticket then a KeyUpdate: still open
+PASS  the longest ticket is dropped
+PASS  a ticket of 13 bytes: client failed
+PASS  a ticket of 13 bytes: alert
+PASS  a ticket of 13 bytes: read keys cleared
+PASS  a ticket of 13 bytes: write keys cleared
+PASS  a ticket one byte too long: client failed
+PASS  a ticket one byte too long: alert
+PASS  a ticket one byte too long: read keys cleared
+PASS  a ticket one byte too long: write keys cleared
+PASS  a CertificateRequest: client failed
+PASS  a CertificateRequest: alert
+PASS  a CertificateRequest: read keys cleared
+PASS  a CertificateRequest: write keys cleared
+PASS  an empty handshake record: client failed
+PASS  an empty handshake record: alert
+PASS  an empty handshake record: read keys cleared
+PASS  an empty handshake record: write keys cleared
+PASS  application data inside a ticket: client failed
+PASS  application data inside a ticket: alert
+PASS  application data inside a ticket: read keys cleared
+PASS  application data inside a ticket: write keys cleared
+PASS  an alert inside a KeyUpdate: client failed
+PASS  an alert inside a KeyUpdate: alert
+PASS  an alert inside a KeyUpdate: read keys cleared
+PASS  an alert inside a KeyUpdate: write keys cleared
+PASS  a protected change_cipher_spec: client failed
+PASS  a protected change_cipher_spec: alert
+PASS  a protected change_cipher_spec: read keys cleared
+PASS  a protected change_cipher_spec: write keys cleared
+PASS  a change_cipher_spec after the handshake: client failed
+PASS  a change_cipher_spec after the handshake: alert
+PASS  a change_cipher_spec after the handshake: read keys cleared
+PASS  a change_cipher_spec after the handshake: write keys cleared
+PASS  an inner type nobody defined: client failed
+PASS  an inner type nobody defined: alert
+PASS  an inner type nobody defined: read keys cleared
+PASS  an inner type nobody defined: write keys cleared
+PASS  a record of 2^14 + 257 bytes: client failed
+PASS  a record of 2^14 + 257 bytes: alert
+PASS  a record of 2^14 + 257 bytes: read keys cleared
+PASS  a record of 2^14 + 257 bytes: write keys cleared
+PASS  record_overflow: the alert waits to be sent
+PASS  record_overflow: the server reads it
+PASS  record_overflow: done once it is sent
+PASS  a header of type 19: client failed
+PASS  a header of type 19: alert
+PASS  a header of type 19: read keys cleared
+PASS  a header of type 19: write keys cleared
+PASS  a tag that does not verify: client failed
+PASS  a tag that does not verify: alert
+PASS  a tag that does not verify: read keys cleared
+PASS  a tag that does not verify: write keys cleared
+PASS  after a failure read resets
+PASS  after a failure write resets
+PASS  after a failure keyUpdate is a pipe
+PASS  after a failure bytes are taken and dropped
+PASS  sixteen empty records pass
+PASS  data starts the count again
+PASS  the data before them reads
+PASS  the seventeenth idle record: client failed
+PASS  the seventeenth idle record: alert
+PASS  the seventeenth idle record: read keys cleared
+PASS  the seventeenth idle record: write keys cleared
+PASS  receive past the end
+PASS  receive at a negative offset
+PASS  read past the end
+PASS  write of a negative length
+PASS  read of nothing
+PASS  windows refused, nothing failed
+PASS  a full buffer stops the client reading
+PASS  read a byte at a time, it all arrives
+PASS  a change_cipher_spec before the ServerHello is dropped
+PASS  a change_cipher_spec of two bytes: client failed
+PASS  a change_cipher_spec of two bytes: alert
+PASS  a change_cipher_spec of two bytes: read keys cleared
+PASS  a change_cipher_spec of two bytes: write keys cleared
+PASS  a change_cipher_spec of 2: client failed
+PASS  a change_cipher_spec of 2: alert
+PASS  a change_cipher_spec of 2: read keys cleared
+PASS  a change_cipher_spec of 2: write keys cleared
+PASS  seventeen change_cipher_specs: client failed
+PASS  seventeen change_cipher_specs: alert
+PASS  seventeen change_cipher_specs: read keys cleared
+PASS  seventeen change_cipher_specs: write keys cleared
+PASS  a change_cipher_spec inside a message: client failed
+PASS  a change_cipher_spec inside a message: alert
+PASS  a change_cipher_spec inside a message: read keys cleared
+PASS  a change_cipher_spec inside a message: write keys cleared
+PASS  an alert inside a message: client failed
+PASS  an alert inside a message: alert
+PASS  an alert inside a message: read keys cleared
+PASS  an alert inside a message: write keys cleared
+PASS  application data in the clear: client failed
+PASS  application data in the clear: alert
+PASS  application data in the clear: read keys cleared
+PASS  application data in the clear: write keys cleared
+PASS  an empty handshake record: client failed
+PASS  an empty handshake record: alert
+PASS  an empty handshake record: read keys cleared
+PASS  an empty handshake record: write keys cleared
+PASS  a server's handshake_failure: failed
+PASS  a server's handshake_failure: its alert
+PASS  a server's handshake_failure: none sent
+PASS  a server's handshake_failure: nothing to send
+PASS  a close_notify during the handshake fails it
+PASS  a close_notify during the handshake: read resets
+PASS  an alert of one byte: client failed
+PASS  an alert of one byte: alert
+PASS  an alert of one byte: read keys cleared
+PASS  an alert of one byte: write keys cleared
+PASS  midway: the ServerHello is read
+PASS  midway: the flight is one more record
+PASS  application data under the handshake keys: client failed
+PASS  application data under the handshake keys: alert
+PASS  application data under the handshake keys: read keys cleared
+PASS  application data under the handshake keys: write keys cleared
+PASS  the server opens the alert under the client's handshake keys
+PASS  a protected change_cipher_spec in the handshake: client failed
+PASS  a protected change_cipher_spec in the handshake: alert
+PASS  a protected change_cipher_spec in the handshake: read keys cleared
+PASS  a protected change_cipher_spec in the handshake: write keys cleared
+PASS  a handshake record in the clear after the ServerHello: client failed
+PASS  a handshake record in the clear after the ServerHello: alert
+PASS  a handshake record in the clear after the ServerHello: read keys cleared
+PASS  a handshake record in the clear after the ServerHello: write keys cleared
+PASS  a protected alert inside a message: client failed
+PASS  a protected alert inside a message: alert
+PASS  a protected alert inside a message: read keys cleared
+PASS  a protected alert inside a message: write keys cleared
+PASS  a change_cipher_spec after the ServerHello is dropped
+PASS  and the handshake still completes
+PASS  a flight with a byte changed: client failed
+PASS  a flight with a byte changed: alert
+PASS  a flight with a byte changed: read keys cleared
+PASS  a flight with a byte changed: write keys cleared
+PASS  a record during the verdict waits
+PASS  and is judged after it: client failed
+PASS  and is judged after it: alert
+PASS  and is judged after it: read keys cleared
+PASS  and is judged after it: write keys cleared
+PASS  close: closed
+PASS  close: the write keys go once close_notify is sealed
+PASS  close: the read keys stay
+PASS  close: write is a pipe
+PASS  close: keyUpdate is a pipe
+PASS  close: the data before it arrives
+PASS  close: the server sees the end
+PASS  close: the server's last data arrives
+PASS  close: then the end of the stream
+PASS  close: the read keys go at the server's close_notify
+PASS  close: done
+PASS  close: the socket's end after both is no failure
+PASS  server first: the client sees the end
+PASS  server first: read is the end
+PASS  server first: wants no more reading
+PASS  server first: the client still writes
+PASS  server first: bytes after it are taken and dropped
+PASS  server first: done after the client closes
+PASS  server first: done once it is sent
+PASS  truncation: failed
+PASS  truncation: keys wiped
+PASS  truncation: nothing sent
+PASS  truncation: what was opened still reads
+PASS  truncation: then a reset
+PASS  truncation inside a record: failed
+PASS  truncation in the handshake: failed
+PASS  close in the handshake: failed
+PASS  close in the handshake: the close_notify waits
+PASS  abort: failed
+PASS  abort: nothing to send
+PASS  abort: keys wiped
+PASS  abort: done
+PASS  a server's internal_error: failed
+PASS  a server's internal_error: its alert
+PASS  a server's internal_error: none sent
+PASS  an alert of three bytes: client failed
+PASS  an alert of three bytes: alert
+PASS  an alert of three bytes: read keys cleared
+PASS  an alert of three bytes: write keys cleared
+nish/net/tls/record-client: 268 passed, 0 failed, 0 skipped
