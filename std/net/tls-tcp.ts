@@ -966,9 +966,10 @@ export class TlsTcpClient {
  * system's roots, and waits in a loop of its own until the handshake is done
  * or fails, or `timeoutMs` milliseconds pass. Answers the client either way:
  * `open()` says whether it opened; otherwise `failure()` says why — the TCP
- * failure, the alert, or `TLS_TCP_TIMED_OUT`, the client closed. A name is
- * resolved first, with `nish/net/dns`'s `resolveHost`; the name the
- * certificate must carry is always `serverName`. The open client's socket is
+ * failure, the alert, or `TLS_TCP_TIMED_OUT`, the client closed. Nothing is
+ * looked up: to reach a name, resolve it first with `nish/net/dns`'s
+ * `resolveHost`; the name the certificate must carry is always `serverName`,
+ * never one taken from `addr`. The open client's socket is
  * in no loop: the program adds it to its own.
  */
 export const tlsConnect = (addr: u8[], serverName: string, alpn: string[], timeoutMs: i32): TlsTcpClient =>

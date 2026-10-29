@@ -10,6 +10,67 @@ socket or a clock, so you drive them from your own loop over
 other library module
 ([`export` and `import`](../../LANGUAGE.md#export-and-import)).
 
+Most programs want neither directly: `nish/net/tls-tcp`'s `tlsConnect` opens
+a TCP connection, runs the handshake, checks the server and hands you a
+connected client (below). The rest of the page is for a program that drives
+TLS from its own loop or over another transport.
+
+## Connecting: `tlsConnect`
+
+`tlsConnect(addr, serverName, alpn, timeoutMs)` blocks until the handshake
+has ended or the time has run out. `addr` is the 18-byte address
+[`nish:net`](networking.md) writes with `netAddress`; it is never looked up,
+so resolve a name first with [`nish/net/dns`](networking.md#names-nishnetdns).
+`serverName` is what the server is checked against and is sent as SNI unless
+it is an IP literal; it is always yours, never taken from the address.
+
+```ts nish:ok
+import { netAddress } from "nish:net";
+import { tlsConnect } from "nish/net/tls-tcp";
+
+export const main = (): number => {
+  const addr: u8[] = new Array<u8>(18);
+  netAddress(addr, "127.0.0.1", 8443);
+  const client = tlsConnect(addr, "localhost", ["http/1.1"], 5000);
+  if (!client.open()) {
+    console.log(`no connection: ${client.failure()}`);
+    return 1;
+  }
+  const request: u8[] = [71, 69, 84, 32, 47, 10];
+  client.write(request, 0, request.length);
+  client.close();
+  return 0;
+};
+```
+
+The client it answers is a `TlsTcpClient`. `open()` says whether the
+handshake finished; if not, `failure()` says why, and the socket is already
+closed:
+
+| `failure()` | Meaning |
+| --- | --- |
+| `-110` | the time ran out |
+| `-111`, `-22`, other negatives | `nish:net`'s error from connecting or reading |
+| `42` `bad_certificate` | no certificate, or a leaf whose key is not P-256, P-384 or RSA of 2048 bits or more |
+| `45` `certificate_expired` | a certificate in the chain is outside its validity |
+| `48` `unknown_ca` | the chain does not reach a root you trust |
+| `51` `decrypt_error` | the server's signature does not verify under its certificate's key |
+| another alert | the server's own, such as `120` when it speaks none of your ALPN protocols |
+
+Once open, `read`, `write`, `keyUpdate`, `shutdown` and `close` answer as the
+`nish:net` calls do, and `interest()`, `readable()` and `writable()` let the
+client join your own loop (`fd()` is its socket). `tlsConnectWith(addr,
+config, trust, timeoutMs)` takes a whole `TlsClientConfig` (to offer P-256,
+say) and the roots to trust. `new TlsTcpClient(addr, config, trust)` starts
+the same connection without blocking, for a loop you already run.
+
+**The server is always checked, and for now always refused.** The roots are
+the system's (`tlsClientSystemTrust()`, which honours `SSL_CERT_FILE` and
+`SSL_CERT_DIR`). The signature check is complete, but the chain check waits
+on the PKI module: until it ships, every server is refused with `48`
+`unknown_ca`, so `tlsConnect` opens no connection yet. There is no option to
+skip the check.
+
 ## Starting a handshake
 
 A `TlsClientConfig` names the server (sent as SNI) and the ALPN protocols to
@@ -78,12 +139,31 @@ has failed, data you have not read is gone: `read` answers
 
 The handshake stops after the server's CertificateVerify, in
 `TLS_CLIENT_STATE_WAIT_AUTH`, and nothing more is read until you decide.
-Checking that the certificate chain leads to a root you trust, that the leaf
-names the server, and that `verifySignature()` is a valid signature of
-`verifyScheme()` over `verifyContent()` under the leaf's key is your job:
-`peerCertificates()` hands you the chain, leaf first. Then call
-`authenticate(true)`, or `reject(alert)` to fail the connection with that
-alert sent:
+`nish/net/tls/verify`'s `tlsClientAuthenticate(conn, trust, nowMs)` makes
+that decision the way `TlsTcpClient` does: the signature under the leaf's
+key, then the chain to a root in `trust` for the server's name at `nowMs`,
+and the verdict sent. Use it unless you have your own check.
+
+```ts nish:ok
+import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client";
+import { TlsClientTrust, tlsClientAuthenticate } from "nish/net/tls/verify";
+
+export const decide = (conn: TlsRecordClient, trust: TlsClientTrust): i32 => {
+  if ((conn.interest() & TLS_RECORD_AUTH) === 0) {
+    return 0;
+  }
+  return tlsClientAuthenticate(conn, trust, toI64(Date.now()));
+};
+
+export const main = (): number => 0;
+```
+
+A check of your own has to do all of it: that the certificate chain leads
+to a root you trust, that the leaf names the server, and that
+`verifySignature()` is a valid signature of `verifyScheme()` over
+`verifyContent()` under the leaf's key; `peerCertificates()` hands you the
+chain, leaf first. Then call `authenticate(true)`, or `reject(alert)` to
+fail the connection with that alert sent:
 
 ```ts nish:ok
 import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client";

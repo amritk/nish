@@ -129,7 +129,8 @@ resumption", what the tests pin and where the code departs from the design.
 | `std/net/tls/record-server.ts` (T2) | `TlsRecordServer`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sendKeyUpdate`, `keyUpdate`, `read`, `write`, `close`, `sealClose`, `sign`, `resume`, `issue`, `end`, `checkTruncation`, `abort`, `fail`, `wipeKeys`, `wipe`, `wipeTraffic`, `wipeRead`, `wipeWrite` |
 | `std/net/tls/client.ts` (the client) | `TlsClientConfig`, `tlsClientIsIpLiteral`, `TlsClient` (`start`, `writeHello`, `receive`, `drain`, `handleMessage`, `checkHello`, `handleServerHello`, `handleRetry`, `exchangeKeys`, `handleEncryptedExtensions`, `handleCertificate`, `handleCertificateVerify`, `authenticate`, `reject`, `handleFinished`, `handleTicket`, `peerCertificates`, `verifyScheme`, `verifyContent`, `verifySignature`, `alpn`, `expectedLevel`, `startTranscript`, `reserveInput`, `reserveOutput`, `takeOutput`, `clearOutput`, `sent`, `secrets`, `known`, `readKnown`, `writeKnown`, `fail`, `wipeKeys`, `wipeUnpicked`, `wipeSecret`, `wipe`) and the helpers under it (`tlsClientConfigFits`, `tlsClientKnowsSuite`, `tlsClientKnowsGroup`, `tlsClientIsAscii`; it shares `tlsIsZeroSecret` and `tlsZeroHeld` with `nish/net/tls` and `tlsCopyWindow` with the codec) |
 | `std/net/tls/record-client.ts` (the client) | `TlsRecordClient`: `receive`, `process`, `handleRecord`, `handleChangeCipherSpec`, `handleHandshake`, `handleApplicationRecord`, `handleAlert`, `handlePostHandshake`, `updateReadKeys`, `advance`, `pump`, `sealChangeCipherSpec`, `sealQueue`, `sealRecord`, `sealWith`, `sendKeyUpdate`, `keyUpdate`, `authenticate`, `reject`, `interest`, `read`, `write`, `consume`, `close`, `sealClose`, `sendAlert`, `end`, `checkTruncation`, `abort`, `fail`, `wipe`, `wipeRead`, `wipeWrite`; `tlsClientInstallHeld`, `tlsClientAdvanceHeld` |
-| `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close` |
+| `std/net/tls-tcp.ts` (T2) | `TlsTcpServer`: `accept`, `readable`, `writable`, `flush`, `read`, `write`, `sign`, `signP256`, `enableTickets`, `resume`, `issue`, `keyUpdate`, `close`; for the client, `TlsTcpClient` (`fd`, `open`, `failure`, `interest`, `connected`, `readable`, `writable`, `flush`, `read`, `write`, `keyUpdate`, `shutdown`, `close`), `tlsConnect` and `tlsConnectWith` |
+| `std/net/tls/verify.ts` (the client) | `tlsVerifyCertificateVerify`, `tlsVerifyKeyUsable`, `tlsClientChain` (a stub until #1027), `tlsClientVerdict`, `tlsClientAuthenticate`, `TlsClientTrust`, `tlsClientTrust`, `tlsClientSystemTrust` |
 
 Out of scope: the primitives underneath (`nish/crypto/*`, each with its own
 record in this directory, the HMAC and HKDF scratch the schedule runs in
@@ -169,8 +170,12 @@ the CertificateVerify scheme, the signed content and the signature at
 `WAIT_AUTH` and goes no further until `authenticate(true)`; a caller that
 answers it without checking the chain against its trust anchors, the host
 name and the signature under the leaf's key has authenticated nobody. The
-default API that calls `authenticate` for the program lands with #480's
-tls-client-tcp stage; until then every caller is a direct one.
+default API is `nish/net/tls/verify`'s `tlsClientAuthenticate`, which
+`TlsTcpClient` and `tlsConnect` call for the program: it checks the
+CertificateVerify under the leaf's key and then the chain, and until
+`nish/crypto/pki` lands (#1027) its chain step refuses every server with
+`unknown_ca` (TLS-10). A direct caller of `TlsRecordClient` still answers
+`WAIT_AUTH` itself.
 
 ## Findings
 
@@ -185,6 +190,7 @@ tls-client-tcp stage; until then every caller is a direct one.
 | TLS-7 | Low | `std/net/tls/client.ts` (`checkHello`) | TLS 1.2 and below are not spoken. A ServerHello without `supported_versions` naming 0x0304 is refused with `protocol_version`, and one whose `server_random` ends in RFC 8446 §4.1.3's downgrade sentinel with `illegal_parameter`, so a client of this tree cannot reach a TLS 1.2-only server. Client certificates, 0-RTT and client-side resumption are left out in the same way: a CertificateRequest is `unexpected_message`, and a NewSessionTicket is read and dropped. Pinned by `net_tls_client_refusals` ("missing supported_versions", "downgrade sentinel", "a CertificateRequest", "a NewSessionTicket is dropped"). | **Open, by design** (#480): refusing the older protocol is the point. |
 | TLS-8 | Low | `std/net/tls/client.ts` (`exchangeKeys`) | A secp256r1 share could be configured and was sent, but `nish/crypto/p256` had no ECDH, so a server that selected secp256r1 — in its ServerHello, or in a HelloRetryRequest the client then answered — failed the handshake with `internal_error` after the client's key was wiped. A server that takes only P-256 could not be reached; nothing was weakened. | **Closed** by `p256Ecdh(priv: Secret<u8[]>, peerPoint: u8[]): Secret<u8[]> \| null` (`docs/security/crypto-ecc.md`): `exchangeKeys` computes a secp256r1 share with it, wipes both private keys as for x25519, and answers a share that is not an uncompressed point on the curve, with `illegal_parameter` (RFC 8446 §4.2.8.2; a product at infinity is refused the same way, defensively: the encoded identity is refused by its length, and a valid point times a key in [1, n) is never infinity). Before, `net_tls_client_refusals` held "a P-256 key share" to `internal_error`; after, it holds the handshake secret of a P-256 share, and of a HelloRetryRequest to P-256, to the one a server computes from the leaf's key ("a P-256 key share: the server's handshake secret", "a retry to P-256: the server's handshake secret"), and refuses "a P-256 share off the curve" and "a compressed P-256 share". |
 | TLS-9 | Low | `std/net/tls/record-client.ts` (`fail`, `pump`) | `pump` installs the client's handshake write keys once `TlsClient` has the secret, after the records of a `receive` are processed. When the handshake fails within the same `receive` that delivered the ServerHello (bytes after it, an EncryptedExtensions that breaks a rule), `fail` seals its alert under the clear state, which a server that has moved to its handshake keys may not read. The connection ends either way and nothing secret is sent; the server only loses the alert's reason. | **Open**: install the write keys as soon as `TlsClient` derives them, before the next record is processed. |
+| TLS-10 | Low | `std/net/tls/verify.ts` (`tlsClientChain`) | The chain step is a stub until `nish/crypto/pki` (#1027) is in the tree: it answers `bad_certificate` for an empty chain and `unknown_ca` for every other, so `TlsTcpClient` and `tlsConnect` authenticate no server and open no connection. It fails closed — there is no switch that skips the step — so nothing is accepted that should not be; what is lost is every connection. The CertificateVerify is checked before it, so a forged signature still reads as `decrypt_error` (`net_tls_client_tcp`, "forged: decrypt_error"; `chain: the stub refuses`). | Open: closed by the stage that wires `pkiVerifyServer` in, with the chain tests (an RSA-PSS leaf under an RSA intermediate, a P-384 intermediate, a wrong host, an expired leaf, an untrusted root). |
 
 ## Fuzzing
 
@@ -1006,6 +1012,48 @@ record layer has installed it; `fail` and `TlsRecordClient`'s `fail`,
 reach is what TLS-1 lists for the server: registers and spills while HMAC,
 HKDF and AEAD run, and the plain clone `tlsClientInstallHeld` and
 `tlsClientAdvanceHeld` `secureZero` before their arena block ends.
+
+## The client carrier and verify
+
+`TlsTcpClient`, `tlsConnect` and `tlsConnectWith` (`nish/net/tls-tcp`) and
+`nish/net/tls/verify` (#480's tls-client-tcp stage). The carrier owns one
+non-blocking socket and a `TlsRecordClient`; at `TLS_RECORD_AUTH` it calls
+`tlsClientAuthenticate` itself with the wall clock, so no program reaches
+application data past an unauthenticated server and none can skip the step.
+
+**The CertificateVerify is checked under the leaf's key, before the chain**
+(`net_tls_client_tcp`): an ECDSA P-256 signature over the content verifies,
+and is refused over other content, under the P-384 or RSA-PSS scheme, under
+Ed25519 (never offered) and when empty; a server whose CertificateVerify
+signs other bytes is refused with `decrypt_error`, which the server reads,
+before the chain is looked at. A leaf with no usable key (not P-256, P-384
+or RSA of at least 2048 bits) is `bad_certificate`, as is an empty chain.
+
+**Against openssl s_server** (tests/run.js, "`nish/net/tls-tcp`'s client,
+against openssl s_server"; a CA and P-256, P-384 and RSA-2048 leaves made at
+run time): each of the three suites, an X25519 and a P-256 share, a
+HelloRetryRequest to P-256, ALPN `h2` and `http/1.1` chosen and a server
+with no common protocol answering `no_application_protocol`, SNI picking the
+second certificate and an unknown name answered `unrecognized_name`, the
+CertificateVerify under a P-384 leaf (ECDSA P-384) and an RSA leaf (RSA-PSS
+rsae), and a TLS 1.2-only server refused with `protocol_version`. Every
+handshake that reaches the verdict ends in the stub's `unknown_ca` (TLS-10),
+which proves the signature verified first.
+
+**Against `TlsTcpServer` over loopback** (`net_tls_client_tcp`): the verdict
+reaches the server as an alert, ALPN and the name reach it, an IP literal
+sends no `server_name`, and the client ends closed with `TLS_RECORD_DONE`.
+
+**`tlsConnect` is bounded** (`net_tls_client_tcp`): a refused connection
+answers `-111`, an address shorter than `nish:net`'s answers `-22`, and a
+listener that never answers is given up on after the timeout (`-110`), with
+the elapsed time checked on both sides; the socket is closed on each.
+
+**Not exercised.** Application data, KeyUpdate (`k`/`K` from s_server) and
+`close_notify` through `TlsTcpClient`, each of which needs an accepted chain
+and so waits on TLS-10; name resolution, which the client does not do (the
+address is numeric and the TLS name is always the caller's); and any public
+host.
 
 ## What is not checked here
 
