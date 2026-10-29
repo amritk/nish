@@ -482,6 +482,9 @@ const extensionSuite = (): i32 => {
   const goodBc: string = ext(OID_BC, true, bc)
   t.ok("one extension alone reads", reads(withExtensions(goodBc)))
   refuses(t, "an empty extensions SEQUENCE", reads(withExtensions(goodBc)), reads(withExtensions("")))
+  // Neither can hold a tag and a length octet: the read must answer null, not load past the end.
+  refuses(t, "an empty certificate", reads(withExtensions(goodBc)), reads(""))
+  refuses(t, "a one-byte certificate", reads(withExtensions(goodBc)), reads("30"))
   refuses(
     t,
     "an extnID with a padded subidentifier",

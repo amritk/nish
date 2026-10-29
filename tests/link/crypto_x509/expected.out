@@ -275,6 +275,10 @@ x509 signature algorithms and key types: 46 passed, 0 failed, 0 skipped
 PASS  one extension alone reads
 PASS  an empty extensions SEQUENCE: the sound encoding reads
 PASS  an empty extensions SEQUENCE: refused
+PASS  an empty certificate: the sound encoding reads
+PASS  an empty certificate: refused
+PASS  a one-byte certificate: the sound encoding reads
+PASS  a one-byte certificate: refused
 PASS  an extnID with a padded subidentifier: the sound encoding reads
 PASS  an extnID with a padded subidentifier: refused
 PASS  an extnID whose last octet continues: the sound encoding reads
@@ -452,7 +456,7 @@ PASS  an authorityKeyIdentifier with trailing bytes: the sound encoding reads
 PASS  an authorityKeyIdentifier with trailing bytes: refused
 PASS  an authorityKeyIdentifier that is not a SEQUENCE: the sound encoding reads
 PASS  an authorityKeyIdentifier that is not a SEQUENCE: refused
-x509 extension refusals: 180 passed, 0 failed, 0 skipped
+x509 extension refusals: 184 passed, 0 failed, 0 skipped
 PASS  an issuer with an empty RDN: the sound encoding reads
 PASS  an issuer with an empty RDN: refused
 PASS  a subject with an empty RDN: the sound encoding reads
