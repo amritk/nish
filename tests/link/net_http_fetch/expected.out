@@ -76,7 +76,7 @@ PASS  a host in NO_PROXY is fetched directly
 PASS  a proxy that is not http:// is HTTP_E_PROXY
 PASS  an https fetch through a proxy is tunnelled with CONNECT, the proxy authorised
 PASS  a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED
-PASS  https is refused with HTTP_E_TLS until TLS lands
+PASS  an https server that hangs up on the ClientHello is HTTP_E_TLS
 PASS  an event stream's first event is read while the server holds the stream open
 PASS  and the next one, the stream ending with the connection
 http fetch: 81 passed, 0 failed, 0 skipped

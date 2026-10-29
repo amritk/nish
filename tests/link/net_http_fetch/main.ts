@@ -125,7 +125,9 @@ class Server {
     if (method === "CONNECT") {
       const auth: boolean = lower(head + "\r\n").indexOf("\r\nproxy-authorization: basic dxnlcjpwyxnz\r\n") >= 0;
       if (target === "example.test:443" && auth) {
+        // The tunnel opens and closes at once: the TLS handshake over it fails.
         this.send(c, "HTTP/1.1 200 Connection established\r\n\r\n");
+        this.close(c);
       } else {
         this.send(c, "HTTP/1.1 407 Proxy Authentication Required\r\nContent-Length: 0\r\n\r\n");
       }
@@ -209,6 +211,11 @@ class Server {
         return;
       }
       c.len += n;
+      if (c.buf[0] === 0x16) {
+        // A TLS ClientHello: this server speaks only plain HTTP, so it hangs up.
+        this.close(c);
+        return;
+      }
       let text: string = String.fromBytes(c.buf, 0, c.len);
       let end: i32 = toI32(text.indexOf("\r\n\r\n"));
       while (end >= 0 && c.open) {
@@ -550,7 +557,7 @@ const runClient = (portA: i32, portB: i32): i32 => {
   t.check(fails(viaProxy, viaProxy.fetch(get("https://example.test/")), HTTP_E_TLS), "an https fetch through a proxy is tunnelled with CONNECT, the proxy authorised");
   viaProxy.setProxies("", `http://user:pass@127.0.0.1:${portA}`, "");
   t.check(fails(viaProxy, viaProxy.fetch(get("https://deny.test/")), HTTP_E_PROXY_REFUSED), "a CONNECT the proxy answers with 407 is HTTP_E_PROXY_REFUSED");
-  t.check(fails(client, client.fetch(get(`https://127.0.0.1:${portA}/`)), HTTP_E_TLS), "https is refused with HTTP_E_TLS until TLS lands");
+  t.check(fails(client, client.fetch(get(`https://127.0.0.1:${portA}/`)), HTTP_E_TLS), "an https server that hangs up on the ClientHello is HTTP_E_TLS");
 
   // --- an event stream
   const sse: HttpResponse | null = client.fetch(get(`${base}/sse`));

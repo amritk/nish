@@ -93,7 +93,12 @@ import {
   pollWait,
   tcpConnect,
 } from "nish:net"
-import { getenv, monotonicNanos } from "nish:process"
+import { getenv, monotonicNanos, wallClockNanos } from "nish:process"
+import { PkiRoots, pkiLoadRoots, pkiLoadSystemRoots } from "nish/crypto/pki-roots"
+import { TlsClient, TlsClientConfig } from "nish/net/tls/client"
+import { TLS_RECORD_AUTH, TlsRecordClient } from "nish/net/tls/record-client"
+import { TLS_RECORD_AGAIN, TLS_RECORD_STATE_FAILED, TLS_RECORD_STATE_OPEN } from "nish/net/tls/record-server"
+import { TlsClientTrust, tlsClientTrust, tlsClientVerdict } from "nish/net/tls/verify"
 
 /** No error. */
 export const HTTP_E_NONE: i32 = 0
@@ -154,6 +159,8 @@ const HTTP_CLIENT_WOULD_BLOCK: i32 = -11
 /** pollAdd's events: readable, writable. */
 const HTTP_CLIENT_READABLE: i32 = 1
 const HTTP_CLIENT_WRITABLE: i32 = 2
+/** The size of the client random and of each ephemeral private key a TLS handshake draws. */
+const HTTP_CLIENT_TLS_KEY_BYTES: i32 = 32
 
 /** A short name for an `HTTP_E_*` code, for messages: "dns", "read timeout", ... */
 export const httpErrorName = (code: i32): string => {
@@ -389,8 +396,14 @@ export class HttpClient {
   /** Where `fd` leads: an origin, or the proxy an http request went through. */
   route: string = ""
   parser: Http1ResponseParser
+  /** The TLS connection over `fd` to an https origin; null over plain http. */
+  tls: TlsRecordClient | null = null
+  /** The roots an https server's chain must end at, read on the client's first https fetch. */
+  trust: TlsClientTrust | null = null
   ready: i32[]
   rbuf: u8[]
+  /** Where TLS application data is read before the parser takes it; empty until the first https connection. */
+  plain: u8[]
   /** The fetch's end in monotonic nanoseconds; `HTTP_CLIENT_NEVER` for none. */
   deadline: i64 = 0
   /** The last failure's `HTTP_E_*` code; `HTTP_E_NONE` after a fetch that answered. */
@@ -421,6 +434,7 @@ export class HttpClient {
     this.parser = httpClientParser(options)
     this.ready = new Array<i32>(8)
     this.rbuf = new Array<u8>(HTTP_CLIENT_READ_BYTES)
+    this.plain = []
     if (options.useEnvProxy) {
       const cgi: boolean = getenv("REQUEST_METHOD") !== null
       this.httpProxy = httpChooseProxy(getenv("http_proxy"), getenv("HTTP_PROXY"), !cgi)
@@ -600,6 +614,10 @@ export class HttpClient {
     }
     this.drop()
     this.reused = false
+    // The roots come first, so a client with none never reaches the network.
+    if (url.scheme === "https" && !this.loadTrust()) {
+      return false
+    }
     const dialHost: string = proxy !== null ? proxy.host : url.host
     const dialPort: i32 = proxy !== null ? proxy.port : port
     const fd: i32 = this.dial(dialHost, dialPort)
@@ -610,13 +628,96 @@ export class HttpClient {
     this.route = route
     this.parser = httpClientParser(this.options)
     if (url.scheme === "https") {
-      if (proxy !== null && !this.tunnel(url.host, port, proxy)) {
+      let early: u8[] = []
+      if (proxy !== null) {
+        if (!this.tunnel(url.host, port, proxy)) {
+          this.drop()
+          return false
+        }
+        early = this.parser.tunnelBytes()
+        this.parser = httpClientParser(this.options)
+      }
+      if (!this.secure(url.host, early)) {
         this.drop()
         return false
       }
-      this.drop()
-      this.fail(HTTP_E_TLS, `https is not supported yet (${origin})`)
+    }
+    return true
+  }
+
+  /**
+   * Reads the roots an https server's chain must end at, once per client:
+   * the PEM file `rootsPemPath` names, else the system's. False, with the
+   * error set, when none could be read, since no server could then be trusted.
+   */
+  loadTrust(): boolean {
+    if (this.trust !== null) {
+      return true
+    }
+    const path: string | null = this.options.rootsPemPath
+    const roots: PkiRoots = path !== null ? pkiLoadRoots(path, [], []) : pkiLoadSystemRoots()
+    if (toI32(roots.roots.length) === 0) {
+      const where: string = path !== null ? path : "SSL_CERT_FILE, SSL_CERT_DIR or the system's bundle"
+      this.fail(HTTP_E_CERTIFICATE, `no trusted root certificate could be read from ${where}`)
       return false
+    }
+    this.trust = tlsClientTrust(roots)
+    return true
+  }
+
+  /**
+   * Runs a TLS 1.3 handshake for `host` over the fresh `fd`, `early` being
+   * what the proxy sent past its CONNECT answer. The server's chain and
+   * CertificateVerify are checked under the client's roots at the wall
+   * clock's time before its Finished is read. True once the connection is
+   * open and the client's last flight sent; false with the error set.
+   */
+  secure(host: string, early: u8[]): boolean {
+    const trust: TlsClientTrust | null = this.trust
+    if (trust === null) {
+      this.fail(HTTP_E_CERTIFICATE, "no trusted root certificates are loaded")
+      return false
+    }
+    const random: u8[] = new Array<u8>(HTTP_CLIENT_TLS_KEY_BYTES)
+    const x25519: u8[] = new Array<u8>(HTTP_CLIENT_TLS_KEY_BYTES)
+    const p256: u8[] = new Array<u8>(HTTP_CLIENT_TLS_KEY_BYTES)
+    crypto.getRandomValues(random)
+    crypto.getRandomValues(x25519)
+    crypto.getRandomValues(p256)
+    // `TlsClient` copies both keys and zeroes these arrays.
+    const conn: TlsRecordClient = new TlsRecordClient(
+      new TlsClient(new TlsClientConfig(host, ["http/1.1"]), random, x25519, p256)
+    )
+    this.tls = conn
+    if (toI32(this.plain.length) === 0) {
+      this.plain = new Array<u8>(HTTP_CLIENT_READ_BYTES)
+    }
+    if (toI32(early.length) > 0) {
+      conn.receive(early, HTTP_CLIENT_ZERO, toI32(early.length))
+    }
+    // The connection opens on the server's Finished, with the client's own
+    // perhaps still queued: it is sent before the request is.
+    while (conn.state !== TLS_RECORD_STATE_OPEN || conn.outputEnd > conn.outputStart) {
+      if ((conn.interest() & TLS_RECORD_AUTH) !== 0) {
+        const verdict: i32 = tlsClientVerdict(conn.tls, trust, wallClockNanos() / HTTP_CLIENT_NS_PER_MS)
+        if (verdict !== 0) {
+          conn.reject(verdict)
+          this.fail(
+            HTTP_E_CERTIFICATE,
+            `the certificate ${host} presented was refused (TLS alert ${verdict})`
+          )
+          return false
+        }
+        conn.authenticate(true)
+      }
+      if (conn.state === TLS_RECORD_STATE_FAILED) {
+        this.failTls(conn)
+        return false
+      }
+      const moved: boolean = conn.outputEnd > conn.outputStart ? this.flushTls(conn) : this.receiveTls(conn)
+      if (!moved) {
+        return false
+      }
     }
     return true
   }
@@ -790,34 +891,137 @@ export class HttpClient {
     return event
   }
 
-  /** One read from `fd` into the parser, waiting up to `readTimeoutMs`; false with the error set. */
+  /** One read of the response into the parser, waiting up to `readTimeoutMs`; false with the error set. */
   fill(): boolean {
-    const until: i64 = this.readDeadline()
-    let n: i32 = netRead(this.fd, this.rbuf, 0, HTTP_CLIENT_READ_BYTES)
-    while (n === HTTP_CLIENT_WOULD_BLOCK) {
-      const waited: i32 = this.wait(this.fd, HTTP_CLIENT_READABLE, until, HTTP_E_READ_TIMEOUT)
-      if (waited !== HTTP_E_NONE) {
-        this.failWait(waited, `the server sent nothing for ${this.options.readTimeoutMs} ms`)
+    const conn: TlsRecordClient | null = this.tls
+    if (conn === null) {
+      const n: i32 = this.readRaw(HTTP_CLIENT_READ_BYTES)
+      if (n > 0) {
+        this.gotByte = true
+        this.parser.feed(this.rbuf, HTTP_CLIENT_ZERO, n)
+      } else if (n === 0) {
+        this.parser.finish()
+      }
+      return n >= 0
+    }
+    let got: i32 = conn.read(this.plain, HTTP_CLIENT_ZERO, toI32(this.plain.length))
+    while (got === TLS_RECORD_AGAIN) {
+      if (!this.flushTls(conn) || !this.receiveTls(conn)) {
         return false
       }
-      n = netRead(this.fd, this.rbuf, 0, HTTP_CLIENT_READ_BYTES)
+      got = conn.read(this.plain, HTTP_CLIENT_ZERO, toI32(this.plain.length))
     }
-    if (n > 0) {
+    if (got > 0) {
       this.gotByte = true
-      this.parser.feed(this.rbuf, HTTP_CLIENT_ZERO, n)
+      this.parser.feed(this.plain, HTTP_CLIENT_ZERO, got)
       return true
     }
-    if (n === 0) {
+    if (got === 0) {
+      // The server's close_notify: the orderly end of its stream.
       this.parser.finish()
       return true
     }
     this.lost = true
-    this.fail(HTTP_E_IO, `reading from the server failed (errno ${-n})`)
+    this.failTls(conn)
     return false
   }
 
-  /** Writes `bytes[off, off + len)` to `fd`, waiting up to `readTimeoutMs` each time it is full. */
+  /**
+   * One read of up to `want` bytes from `fd` into `rbuf`, waiting up to
+   * `readTimeoutMs`: the count, 0 at the end of the stream, or -1 with the
+   * error set.
+   */
+  readRaw(want: i32): i32 {
+    const until: i64 = this.readDeadline()
+    let n: i32 = netRead(this.fd, this.rbuf, 0, want)
+    while (n === HTTP_CLIENT_WOULD_BLOCK) {
+      const waited: i32 = this.wait(this.fd, HTTP_CLIENT_READABLE, until, HTTP_E_READ_TIMEOUT)
+      if (waited !== HTTP_E_NONE) {
+        this.failWait(waited, `the server sent nothing for ${this.options.readTimeoutMs} ms`)
+        return -1
+      }
+      n = netRead(this.fd, this.rbuf, 0, want)
+    }
+    if (n >= 0) {
+      return n
+    }
+    this.lost = true
+    this.fail(HTTP_E_IO, `reading from the server failed (errno ${-n})`)
+    return -1
+  }
+
+  /** One read of the socket into the TLS connection `conn`, waiting up to `readTimeoutMs`; false with the error set. */
+  receiveTls(conn: TlsRecordClient): boolean {
+    const room: i32 = conn.space()
+    const want: i32 = room < HTTP_CLIENT_READ_BYTES ? room : HTTP_CLIENT_READ_BYTES
+    if (want <= 0) {
+      this.fail(HTTP_E_TLS, "the TLS connection has no room for the server's next record")
+      return false
+    }
+    const n: i32 = this.readRaw(want)
+    if (n < 0) {
+      conn.abort()
+      return false
+    }
+    if (n === 0) {
+      // Before the server's close_notify this is truncation, which fails `conn`.
+      conn.end()
+    } else {
+      conn.receive(this.rbuf, HTTP_CLIENT_ZERO, n)
+    }
+    return true
+  }
+
+  /** Sends everything `conn` has sealed, waiting as `writeRaw` does; false with the error set. */
+  flushTls(conn: TlsRecordClient): boolean {
+    while (conn.outputEnd > conn.outputStart) {
+      const len: i32 = conn.outputEnd - conn.outputStart
+      if (!this.writeRaw(conn.output, conn.outputStart, len)) {
+        conn.abort()
+        return false
+      }
+      conn.consume(len)
+    }
+    return true
+  }
+
+  /** Sets the error for the failed TLS connection `conn`, saying how it failed. */
+  failTls(conn: TlsRecordClient): void {
+    if (conn.ended && !conn.peerClosed) {
+      this.fail(HTTP_E_TLS, "the server closed the connection without a TLS close_notify")
+    } else if (conn.peerAlert > 0) {
+      this.fail(HTTP_E_TLS, `the server sent TLS alert ${conn.peerAlert}`)
+    } else {
+      this.fail(HTTP_E_TLS, `the TLS connection failed (alert ${conn.failure()})`)
+    }
+  }
+
+  /** Writes `bytes[off, off + len)` on the connection, through TLS for an https origin; false with the error set. */
   writeAll(bytes: u8[], off: i32, len: i32): boolean {
+    const conn: TlsRecordClient | null = this.tls
+    if (conn === null) {
+      return this.writeRaw(bytes, off, len)
+    }
+    let at: i32 = off
+    const end: i32 = off + len
+    while (at < end) {
+      const n: i32 = conn.write(bytes, at, end - at)
+      if (n > 0) {
+        at += n
+      } else if (n !== TLS_RECORD_AGAIN || conn.outputEnd === conn.outputStart) {
+        this.lost = true
+        this.failTls(conn)
+        return false
+      }
+      if (!this.flushTls(conn)) {
+        return false
+      }
+    }
+    return this.flushTls(conn)
+  }
+
+  /** Writes `bytes[off, off + len)` to `fd`, waiting up to `readTimeoutMs` each time it is full. */
+  writeRaw(bytes: u8[], off: i32, len: i32): boolean {
     let at: i32 = off
     const end: i32 = off + len
     while (at < end) {
@@ -975,6 +1179,17 @@ export class HttpClient {
 
   /** Closes the connection, if any, and forgets the open body. */
   drop(): void {
+    const conn: TlsRecordClient | null = this.tls
+    if (conn !== null) {
+      conn.close()
+      // One try, without waiting, so the server sees the close_notify, or
+      // the alert a refusal sealed, when the socket has room for it.
+      if (this.fd >= 0 && conn.outputEnd > conn.outputStart) {
+        netWrite(this.fd, conn.output, conn.outputStart, conn.outputEnd - conn.outputStart)
+      }
+      conn.wipe()
+      this.tls = null
+    }
     if (this.fd >= 0) {
       this.unwatch(this.fd)
       netClose(this.fd)
