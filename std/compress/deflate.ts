@@ -1064,38 +1064,50 @@ export class Deflater {
   longest(src: u8[], p: i32, end: i32, histStart: i32): i32 {
     const head: i32[] = this.head
     const prev: i32[] = this.prev
-    if (toI32(head.length) !== DEFLATE_HASH_SIZE || toI32(prev.length) !== DEFLATE_WINDOW) {
+    if (
+      toI32(head.length) !== DEFLATE_HASH_SIZE ||
+      toI32(prev.length) !== DEFLATE_WINDOW ||
+      p < 0 ||
+      p > end - 4 ||
+      end > toI32(src.length)
+    ) {
       panic("Deflater.longest: a table is not its size")
     }
-    const word: u32 = deflateLoad32(src, p)
+    const delta: i32 = this.delta
+    const minMatch: i32 = this.minMatch
+    const at: integer<0, 2147483639> = p
+    const word: u32 = deflateLoad32(src, at)
     const h: i32 =
-      this.minMatch === 3
+      minMatch === 3
         ? toI32(((word << 8) * toU32(DEFLATE_HASH_MUL)) >>> 17)
         : toI32((word * toU32(DEFLATE_HASH_MUL)) >>> 17)
-    const v: i32 = p + this.delta
+    const v: i32 = wrappingAdd(p, delta)
     let cand: i32 = uncheckedGet(head, h)
     uncheckedSet(head, h, v)
     uncheckedSet(prev, v & (DEFLATE_WINDOW - 1), cand)
-    let maxLen: i32 = end - p
-    if (maxLen > DEFLATE_MAX_MATCH) {
-      maxLen = DEFLATE_MAX_MATCH
-    }
-    let best: i32 = this.minMatch - 1
+    // Where a whole longest match fits, eight bytes past `p` can be read
+    // whatever the match, and nothing is clamped.
+    const roomy: boolean = p <= end - DEFLATE_MAX_MATCH
+    const maxLen: i32 = roomy ? DEFLATE_MAX_MATCH : end - p
+    let best: i32 = minMatch - 1
     let bestDist: i32 = 0
     const limit: i32 = v - DEFLATE_WINDOW
+    const floor: i32 = limit > histStart + delta ? limit : histStart + delta
     const nice: i32 = this.niceLength < maxLen ? this.niceLength : maxLen
-    const lo: i32 = histStart + this.delta
-    const mask: u32 = this.minMatch === 3 ? toU32(0xffffff) : ~toU32(0)
+    const mask: u32 = minMatch === 3 ? toU32(0xffffff) : ~toU32(0)
     let chain: i32 = this.maxChain
-    while (cand >= limit && cand >= lo && cand < v && chain > 0) {
-      const ci: i32 = cand - this.delta
-      if (
-        uncheckedGet(src, ci + best) === uncheckedGet(src, p + best) &&
-        ci >= 0 &&
-        ci <= 2147483639 &&
-        ((deflateLoad32(src, ci) ^ word) & mask) === 0
-      ) {
-        const l: i32 = deflateMatchLength(src, ci, p, maxLen)
+    while (cand >= floor && cand < v && chain > 0) {
+      const ci: integer<0, 2147483639> = cand - delta
+      // The byte that would make this match the longest yet, first: most
+      // candidates fail on it.
+      if (uncheckedGet(src, ci + best) === uncheckedGet(src, p + best)) {
+        let l: i32 = 0
+        if (roomy) {
+          const x: u64 = deflateLoad64(src, ci) ^ deflateLoad64(src, at)
+          l = x !== toU64(0) ? deflateCtz64(x) >> 3 : toI32(8) + deflateMatchLength(src, ci + 8, p + 8, maxLen - 8)
+        } else if (((deflateLoad32(src, ci) ^ word) & mask) === 0) {
+          l = deflateMatchLength(src, ci, p, maxLen)
+        }
         if (l > best) {
           best = l
           bestDist = v - cand
@@ -1107,7 +1119,7 @@ export class Deflater {
       cand = uncheckedGet(prev, cand & (DEFLATE_WINDOW - 1))
       chain -= 1
     }
-    if (bestDist === 0 || best < this.minMatch) {
+    if (bestDist === 0 || best < minMatch) {
       return 0
     }
     // A three-byte match far back costs more than its three literals.
